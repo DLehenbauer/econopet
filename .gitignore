@@ -1,1 +1,23 @@
+#
+# KiCad
+#
+
+# KiCad local settings
+hw/**/*.kicad_prl
+
+# KiCad backup files
+hw/**/*-bak
+hw/**/_autosave-*
+hw/**/*.bck
+hw/**/*-backups/*.zip
+hw/*/#auto_saved_files#
+
+# KiCad footprint cache
+hw/**/fp-info-cache
+
+#
+# Site
+#
+
+# Ignore node_modules
 site/node_modules
