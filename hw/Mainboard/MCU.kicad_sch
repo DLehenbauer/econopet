@@ -1993,8 +1993,8 @@
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 1bdff47b-90aa-4ae2-90d4-3006d3881ba1)
   )
-  (text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when updating\nthe FPGA to avoid contention on SPI pins.\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
-    (at 44.45 149.86 0)
+  (text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when updating\nthe FPGA.  Aside from being a convenience, this avoids\ncontention on SPI0_~{CS}, which the T8Q144 requires to\nbe driven low (even when using JTAG).\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
+    (at 44.45 152.4 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 5e212df6-fe8c-49fb-9ba7-f277a9a19cab)
   )
