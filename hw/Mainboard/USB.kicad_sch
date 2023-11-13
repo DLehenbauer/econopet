@@ -695,8 +695,8 @@
     (uuid f037dcfc-f3af-448b-9f19-d259f8940eea)
   )
 
-  (text "USB 2.0 Host over USB-C connector\n\nThe 56k pullups on CC1 and CC2 identify as a\ndownstream facing port supplying 5V @ 900ma."
-    (at 83.82 114.3 0)
+  (text "USB 1.1 Host over USB-C connector\n\nThe 56k pullups on CC1 and CC2 identify the\nport as downstream facing, supplying 5V/900ma.\n\nThe diode prevents connected devices from\ninadvertently backpowering the EconoPET.\n\nV_{F} < 0.5V should be within USB spec of\n5V +/-10%.\n\nAn independently powered USB hub is recommended\nas an extra layer of protection against devices\nthat incorrectly draw excessive current.\n"
+    (at 80.01 133.35 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 8e708561-1ee2-45fa-87f1-e6b7b76c40dd)
   )
@@ -767,7 +767,7 @@
     (property "Reference" "J24" (id 0) (at 163.83 90.8049 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
-    (property "Value" "USB2.0_HOST_TYPE_C" (id 1) (at 163.83 93.3449 0)
+    (property "Value" "USB1.1_HOST_TYPE_C" (id 1) (at 163.83 93.3449 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
     (property "Footprint" "JLCPCB:USB-C_SMD-TYPE-C-31-M-12" (id 2) (at 148.59 92.71 0)
