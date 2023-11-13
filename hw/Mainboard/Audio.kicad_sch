@@ -852,7 +852,7 @@
     (uuid f6afaabf-ee2b-4fe8-ab49-2c9883e65219)
   )
 
-  (text "The AUDIO source is a 3.3V square wave.  (It is 3.3V instead of\n5V as a consequence of using the FPGA to implement the NAND gate\nbetween CB2 and DIAG to save an IC.)\n\nLine-level audio for consumer electronics targets a voltage\nof +/- 0.5V.  This is achieved by a voltage divider where\nthe output provides R1 in series and the input (powered\nspeakers) provides a 10k resistor between the signal and ground.\n\nVOUT = VIN * (R2 / (R1 + R2)\nVIN = +/-1.5V\nR1 = 22k - 1%\nR2 = 10k + 1%\nVOUT = +/-0.47V"
+  (text "The AUDIO source is the ΔΣ encoded 1-bit output from the FPGA (3.3V),\nnot the CB2 signal from the VIA.  This gives the FPGA the opportunity\nto filter the audio and/or mix additional sources, such as an FPGA\nemulated SID.\n\n(See PETSID: http://www.cbmhardware.de/show.php?r=14&id=71/PETSID)\n\nThe FPGA to implements the NAND gate between CB2 and DIAG to save an IC.\n\nLine-level audio for consumer electronics targets a voltage\nof +/- 0.5V.  This is achieved by a voltage divider where\nthe output provides R1 in series and the input (powered\nspeakers) provides a 10k resistor between the signal and ground."
     (at 62.23 139.7 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid e485e01f-61a7-4709-9f89-841e091c66eb)
