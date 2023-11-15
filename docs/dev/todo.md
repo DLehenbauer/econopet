@@ -4,7 +4,6 @@
   * Consider [SMD SRAM](https://jlcpcb.com/partdetail/444095-IS61WV1288EEBLL10TLI/C443418) such as the IS61WV1288EEBLL-10TLI.
 * Layout
   * Move PMOD connectors closer to board edge.
-  * Programming connector is rotated 180 degrees.
 * Footprints
   * Remove in-pad vias from RP2040 and LM317 (solder bleeds through)
 * Silkscreen
