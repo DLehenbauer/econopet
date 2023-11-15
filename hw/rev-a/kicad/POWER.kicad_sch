@@ -3414,7 +3414,7 @@
     (property "Datasheet" "~" (id 3) (at 95.25 41.91 0)
       (effects (font (size 1.27 1.27)) hide)
     )
-    (property "MOUSER" "649-1012937893602BLF" (id 4) (at 95.25 41.91 0)
+    (property "MOUSER" "649-1012937891002BLF" (id 4) (at 95.25 41.91 0)
       (effects (font (size 1.27 1.27)) hide)
     )
     (pin "1" (uuid 49777683-b1c2-43f5-99e6-936460418cfc))
