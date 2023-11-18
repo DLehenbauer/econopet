@@ -16,6 +16,23 @@ hw/*/#auto_saved_files#
 hw/**/fp-info-cache
 
 #
+# Efinity
+#
+
+gw/EconoPET/.lock
+gw/EconoPET/*.vdb
+gw/EconoPET/debug_profile.wizard.json
+gw/EconoPET/efinity_dbg.jtag.log*
+gw/EconoPET/*.gtkw
+gw/EconoPET/*.vcd
+gw/EconoPET/outflow/**/*
+gw/EconoPET/work_dbg/**/*
+gw/EconoPET/work_pnr/**/*
+gw/EconoPET/work_pt/**/*
+gw/EconoPET/work_sim/**/*
+gw/EconoPET/work_syn/**/*
+
+#
 # Site
 #
 
