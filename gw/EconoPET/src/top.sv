@@ -11,7 +11,7 @@
  * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
-
+ 
  module top(
     // FPGA
     input  logic         clk_i,             // 64 MHz clock (from PLL)
@@ -19,9 +19,16 @@
     
     // Config
     input  logic         config_crt_i,      // (0 = 12", 1 = 9")
-    input  logic         config_kbd_i       // (0 = Business, 1 = Graphics)
+    input  logic         config_kbd_i,      // (0 = Business, 1 = Graphics)
+    
+    // Spare pins
+    output logic  [9:0]  spare_o
 );
+    initial begin
+        spare_o = '0;
+    end
+
     always_ff @(posedge clk_i) begin
-        status_no = config_crt_i & config_kbd_i;
+        spare_o <= spare_o + 1'b1;
     end
 endmodule
