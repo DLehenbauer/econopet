@@ -6,8 +6,8 @@
 
   (title_block
     (title "EconoPET 40/8096")
-    (date "2023-10-01")
-    (rev "A")
+    (date "2023-11-21")
+    (rev "B")
   )
 
   (lib_symbols

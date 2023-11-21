@@ -6,8 +6,8 @@
 
   (title_block
     (title "EconoPET 40/8096")
-    (date "2023-10-01")
-    (rev "A")
+    (date "2023-11-21")
+    (rev "B")
   )
 
   (lib_symbols
@@ -2471,6 +2471,9 @@
     )
     (path "/00000000-0000-0000-0000-000061ed99de/9eecefbb-31ce-4475-a5d9-89abd7cfddb2"
       (reference "SYM4") (unit 1) (value "SYM_Arrow_Small") (footprint "Symbol:OSHW-Logo2_7.3x6mm_SilkScreen")
+    )
+    (path "/00000000-0000-0000-0000-000061ed99de/8c8ebb2a-b70a-49b7-88b9-bd89aa178a1c"
+      (reference "SYM?") (unit 1) (value "SYM_Arrow_Small") (footprint "PET:CC0_PublicDomain_Logo")
     )
     (path "/00000000-0000-0000-0000-0000614e685e/00000000-0000-0000-0000-0000614e6908"
       (reference "U1") (unit 1) (value "W65C02S") (footprint "Package_DIP:DIP-40_W15.24mm_Socket")
