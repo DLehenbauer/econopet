@@ -1,0 +1,32 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/debian
+{
+	"name": "EconoPET",
+    
+	"build": {
+        "dockerfile": "Dockerfile"
+    },
+
+    "customizations": {
+        "vscode": {           
+            // Add the IDs of extensions you want installed when the container is created.
+            "extensions": [
+                "DavidAnson.vscode-markdownlint",
+                "marus25.cortex-debug",
+                "ms-vscode.cpptools-extension-pack",
+                "mshr-h.veriloghdl",
+                "mutantdino.resourcemonitor",
+                "streetsidesoftware.code-spell-checker",
+                "xaver.clang-format"
+            ]
+        }
+    },
+
+    "runArgs": [
+        "--privileged",             // Required to access Picoprobe SWD from dev container
+        "--device=/dev/ttyACM0"     // Expose Picoprobe URT to dev container
+    ],
+
+    // TODO: Figure out how to connect to Picoprobe as a non-root user.
+    "remoteUser": "root"
+}

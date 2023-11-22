@@ -33,6 +33,12 @@ gw/EconoPET/work_sim/**/*
 gw/EconoPET/work_syn/**/*
 
 #
+# CMake
+#
+
+build/
+
+#
 # Site
 #
 
