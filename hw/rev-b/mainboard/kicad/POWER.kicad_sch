@@ -3947,7 +3947,7 @@
   (symbol (lib_id "Graphic:SYM_Arrow_Small") (at 19.05 49.53 0) (unit 1)
     (in_bom yes) (on_board yes) (fields_autoplaced)
     (uuid 8c8ebb2a-b70a-49b7-88b9-bd89aa178a1c)
-    (property "Reference" "SYM?" (id 0) (at 19.05 48.006 0)
+    (property "Reference" "SYM5" (id 0) (at 19.05 48.006 0)
       (effects (font (size 1.27 1.27)) hide)
     )
     (property "Value" "SYM_Arrow_Small" (id 1) (at 19.304 50.8 0)
