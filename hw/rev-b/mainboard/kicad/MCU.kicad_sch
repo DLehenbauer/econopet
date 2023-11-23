@@ -1998,6 +1998,11 @@
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 5e212df6-fe8c-49fb-9ba7-f277a9a19cab)
   )
+  (text "Load capacitor calculation:\n\nC = 2*C_{L} - 2*C_{stray}\nC_{L} = 20pf, C_{stray} = 2-5pF\nC = 30-36pF"
+    (at 17.78 92.71 0)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid d0af88c8-026a-446e-b016-9ee3f0cb32db)
+  )
   (text "DVDD Decoupling" (at 82.55 22.86 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid df7313a6-3f7d-427e-9e58-97e2be295ae2)
