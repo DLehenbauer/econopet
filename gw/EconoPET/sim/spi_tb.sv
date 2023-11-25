@@ -12,12 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
- `include "./sim/assert.svh"
+`timescale 1ns / 1ps
+`include "./sim/assert.svh"
 
-module spi_tb(
-    input logic clk_i
-);
+module spi_tb;
     logic sck;
     logic cs;
     logic pico;
@@ -84,15 +82,11 @@ module spi_tb(
 
     always @(posedge sck) begin
         if (cs) begin
-            bit_count <= bit_count + 1;
-
             $display("[%t]     Rising edge of SCK shifts SDI into 'data_i[0]'", $time);
-            
-            #1;
             `assert_equal(ci[0], poci);
-            `assert_equal(pi[0], pico);
-
-            if (bit_count != 0) begin
+            `assert_equal(pi[0], pico);            
+            
+            if (bit_count != 7) begin
                 $display("[%t]     'cycle_o' must not be asserted until last bit received", $time);
                 `assert_equal(c_cycle, '0);
                 `assert_equal(p_cycle, '0);
@@ -106,6 +100,8 @@ module spi_tb(
                 `assert_equal(pi, expected_pi);
             end
         end
+
+        bit_count <= bit_count + 1;
     end
 
     always @(negedge sck) begin
@@ -129,8 +125,9 @@ module spi_tb(
 
         // Check power on state prior to setting cs_n
         $display("[%t]   Vet power on state", $time);
-        #1 `assert_equal(c_cycle, '0);
-        #1 `assert_equal(p_cycle, '0);
+        #1;
+        `assert_equal(c_cycle, '0);
+        `assert_equal(p_cycle, '0);
 
         $display("[%t]   Drive cs_n and sck", $time);
         sck = '0;

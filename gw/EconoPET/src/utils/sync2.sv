@@ -12,23 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
-
-module sim #(
-    parameter CLK_MHZ = 64
+ module sync2 (
+    input logic clk_i,          // Destination clock
+    input logic data_i,         // Input data in source clock domain
+    output logic data_o = '0    // Synchronized output in destination clock domain
 );
-    spi_tb spi_tb();
-    spi1_tb spi1_tb();
-
-    initial begin
-        $dumpfile("work_sim/out.vcd");
-        $dumpvars(0, sim);
-
-        spi_tb.run();
-        spi1_tb.run();
-
-        $display("[%t] Simulation Complete", $time);
-        $finish;
+    logic q = '0; // 1st stage FF output
+    
+    always_ff @(posedge clk_i) begin
+        { data_o, q } <= { q, data_i };
     end
- endmodule
- 
+endmodule

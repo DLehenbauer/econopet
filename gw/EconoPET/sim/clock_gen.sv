@@ -14,21 +14,31 @@
 
  `timescale 1ns / 1ps
 
-module sim #(
-    parameter CLK_MHZ = 64
+module clock_gen #(
+    parameter MHZ = 24      // Clock speed in MHz
+) (
+    output logic clock_o    // Destination clock
 );
-    spi_tb spi_tb();
-    spi1_tb spi1_tb();
+    localparam PERIOD = 1000 / MHZ;
 
-    initial begin
-        $dumpfile("work_sim/out.vcd");
-        $dumpvars(0, sim);
+    bit enable = '0;
 
-        spi_tb.run();
-        spi1_tb.run();
-
-        $display("[%t] Simulation Complete", $time);
-        $finish;
+    always @(posedge enable) begin
+        while (enable) begin
+            #(PERIOD / 4);
+            clock_o <= 1'b1;
+            #(PERIOD / 2);
+            clock_o <= '0;
+            #(PERIOD / 4);
+        end
     end
- endmodule
- 
+
+    task start;
+        clock_o  = '0;
+        enable   = 1'b1;
+    endtask
+
+    task stop;
+        enable = '0;
+    endtask
+endmodule

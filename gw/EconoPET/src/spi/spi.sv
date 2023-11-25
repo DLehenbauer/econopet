@@ -33,22 +33,30 @@
     logic [$clog2(DATA_WIDTH - 1) - 1:0] bit_count = '0;
     
     initial begin
-        cycle_o   <= '0;
         bit_count <= '0;
+    end
+
+    // 'cycle_o' and 'data_o' must be valid on the rising edge of 'spi_sck_i'.  This requires combinitorial
+    // logic.
+
+    assign cycle_o = bit_count == DATA_WIDTH - 1;
+
+    logic [DATA_WIDTH - 2:0] dout_q;
+
+    always_latch begin
+        if (!spi_sck_i) data_o <= { dout_q, spi_sd_i };
     end
 
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting CS_N indicates the transfer has ended.
-            data_o    <= 'x;
-            cycle_o   <= '0;
             bit_count <= '0;
+            dout_q <= 'x;
         end else begin
             // Positive edge of SCK indicates SDI is valid.  Shift SDI into the LSB of 'data_o' and
             // increment the bit count.  If this was the last bit of the current cycle assert 'cycle_o'.
-            data_o    <= { data_o[DATA_WIDTH - 2:0], spi_sd_i };
-            cycle_o   <= bit_count == DATA_WIDTH - 1;
             bit_count <= bit_count + 1'b1;
+            dout_q <= data_o[DATA_WIDTH - 2:0];
         end
     end
 

@@ -12,23 +12,18 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
-
-module sim #(
-    parameter CLK_MHZ = 64
+module edge_detect(
+    input  logic clk_i,     // Sampling clock
+    input  logic data_i,    // Input signal
+    output logic pe_o,      // Pulse for rising edge
+    output logic ne_o       // Pulse for falling edge
 );
-    spi_tb spi_tb();
-    spi1_tb spi1_tb();
+    logic q = '0;
 
-    initial begin
-        $dumpfile("work_sim/out.vcd");
-        $dumpvars(0, sim);
+    assign pe_o =  data_i && !q;
+    assign ne_o = !data_i &&  q;
 
-        spi_tb.run();
-        spi1_tb.run();
-
-        $display("[%t] Simulation Complete", $time);
-        $finish;
+    always @(posedge clk_i) begin
+        q <= data_i;
     end
- endmodule
- 
+endmodule
