@@ -76,8 +76,8 @@ module spi1_controller #(
     // transition through READ_ADDR_*_ARG.
     logic cmd_rd_a;
 
-    always_ff @(negedge spi_cs_ni or posedge spi_sck_i) begin
-        if (!spi_sck_i) begin
+    always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
+        if (spi_cs_ni) begin
             // Deasserting CS_N asynchronously resets the FSM.
             spi_state <= READ_CMD;
         end else begin
