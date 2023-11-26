@@ -12,18 +12,20 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module edge_detect(
-    input  logic clk_i,     // Sampling clock
+module edge_detect #(
+    INITAL_DATA_I = '0
+)(
+    input  logic clock_i,   // Sampling clock
     input  logic data_i,    // Input signal
     output logic pe_o,      // Pulse for rising edge
     output logic ne_o       // Pulse for falling edge
 );
-    logic q = '0;
+    logic q = INITAL_DATA_I;
 
     assign pe_o =  data_i && !q;
     assign ne_o = !data_i &&  q;
 
-    always @(posedge clk_i) begin
+    always @(posedge clock_i) begin
         q <= data_i;
     end
 endmodule

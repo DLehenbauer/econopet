@@ -12,14 +12,16 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- module sync2 (
-    input logic clk_i,          // Destination clock
-    input logic data_i,         // Input data in source clock domain
+module sync2 #(
+    INITAL_DATA_I = '0
+) (
+    input  logic clock_i,       // Destination clock
+    input  logic data_i,        // Input data in source clock domain
     output logic data_o = '0    // Synchronized output in destination clock domain
 );
-    logic q = '0; // 1st stage FF output
+    logic q = INITAL_DATA_I;    // 1st stage FF output
     
-    always_ff @(posedge clk_i) begin
+    always_ff @(posedge clock_i) begin
         { data_o, q } <= { q, data_i };
     end
 endmodule

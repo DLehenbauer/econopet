@@ -55,7 +55,7 @@ module spi1_tb #(
         .spi_sd_o(spi_poci),
         .spi_stall_o(spi_stall),
 
-        .clk_i(clk),
+        .clock_i(clk),
         .wb_addr_o(addr),
         .wb_data_i(rd_data),
         .wb_data_o(wr_data),
