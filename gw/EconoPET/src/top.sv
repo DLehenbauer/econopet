@@ -14,14 +14,15 @@
  
  module top(
     // FPGA
+    input  logic         fpga_clk_i,
     input  logic         clock_i,           // 64 MHz clock (from PLL)
     output logic         status_no,         // NSTATUS LED (0 = On, 1 = Off)
     
     // SPI1 bus
     input  logic         spi1_cs_ni,        // (CS)  Chip Select (active low)
     input  logic         spi1_sck_i,        // (SCK) Serial Clock
-    input  logic         spi1_sd_i,         // (SDI) Serial Data In (rx)
-    output logic         spi1_sd_o,         // (SDO) Serial Data Out (tx)
+    input  logic         spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic         spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
     output logic         spi_stall_o,
 
     // Config
@@ -35,6 +36,7 @@
     logic  [7:0] spi1_data_rx;
     logic  [7:0] spi1_data_tx;
     logic        spi1_cycle;
+    logic        spi1_ack;
 
     spi1_controller spi1(
         .clock_i(clock_i),
@@ -48,9 +50,14 @@
         .wb_addr_o(spi1_addr),
         .wb_data_o(spi1_data_rx),
         .wb_data_i(spi1_data_tx),
-        .wb_cycle_o(spi1_cycle)
+        .wb_cycle_o(spi1_cycle),
+        .wb_ack_i(spi1_ack)
     );
-
+    
+    always @(posedge clock_i) begin
+        spi1_ack <= spi1_cycle;
+    end
+    
     assign spare_o[7:0] = spi1_data_rx;
     assign spare_o[8]   = spi1_cycle;
     assign spare_o[9]   = spi_stall_o;

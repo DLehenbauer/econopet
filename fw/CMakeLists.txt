@@ -15,6 +15,7 @@ target_link_libraries(
     pico_stdlib
     pico_multicore
     pico_util
+    hardware_pwm
     hardware_spi
 )
 
