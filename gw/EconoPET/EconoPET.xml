@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change_date="Mon November 27 2023 17:32:25" location="D:/gh/econopet/gw/EconoPET" sw_version="2023.1.150.3.11" last_run_state="pass" last_run_tool="efx_pgm" last_run_flow="bitstream" config_result_in_sync="true" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change_date="Wed November 29 2023 07:21:53" location="D:/gh/econopet/gw/EconoPET" sw_version="2023.1.150.3.11" last_run_state="pass" last_run_tool="efx_pgm" last_run_flow="bitstream" config_result_in_sync="true" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -13,6 +13,7 @@
         <efx:design_file name="src/utils/sync2_edge.sv" version="default" library="default"/>
         <efx:design_file name="src/utils/edge_detect.sv" version="default" library="default"/>
         <efx:design_file name="src/utils/sync2.sv" version="default" library="default"/>
+        <efx:design_file name="src/bram.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
     <efx:constraint_info>
@@ -29,6 +30,8 @@
         <efx:sim_file name="sim/spi1_driver.sv"/>
         <efx:sim_file name="sim/clock_gen.sv"/>
         <efx:sim_file name="sim/top_tb.sv"/>
+        <efx:sim_file name="sim/bram_tb.sv"/>
+        <efx:sim_file name="sim/wb_driver.sv"/>
     </efx:sim_info>
     <efx:misc_info/>
     <efx:ip_info/>

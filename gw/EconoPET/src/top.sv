@@ -14,7 +14,6 @@
  
  module top(
     // FPGA
-    input  logic         fpga_clk_i,
     input  logic         clock_i,           // 64 MHz clock (from PLL)
     output logic         status_no,         // NSTATUS LED (0 = On, 1 = Off)
     
@@ -32,11 +31,14 @@
     // Spare pins
     output logic  [9:0]  spare_o
 );
+    logic        reset = '0;
+
     logic [17:0] spi1_addr;
     logic  [7:0] spi1_data_rx;
     logic  [7:0] spi1_data_tx;
+    logic        spi1_we;
     logic        spi1_cycle;
-    logic        spi1_ack;
+    logic        bram_ack;
 
     spi1_controller spi1(
         .clock_i(clock_i),
@@ -50,15 +52,24 @@
         .wb_addr_o(spi1_addr),
         .wb_data_o(spi1_data_rx),
         .wb_data_i(spi1_data_tx),
+        .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
-        .wb_ack_i(spi1_ack)
+        .wb_ack_i(bram_ack)
     );
-    
-    always @(posedge clock_i) begin
-        spi1_ack <= spi1_cycle;
-    end
+
+    bram bram(
+        .wb_clock_i(clock_i),
+        .wb_reset_i(reset),
+        .wb_addr_i(spi1_addr),
+        .wb_data_i(spi1_data_rx),
+        .wb_data_o(spi1_data_tx),
+        .wb_we_i(spi1_we),
+        .wb_cycle_i(spi1_cycle),
+        .wb_strobe_i(1'b1),
+        .wb_ack_o(bram_ack)
+    );
     
     assign spare_o[7:0] = spi1_data_rx;
     assign spare_o[8]   = spi1_cycle;
-    assign spare_o[9]   = spi_stall_o;
+    assign spare_o[9]   = bram_ack;
 endmodule
