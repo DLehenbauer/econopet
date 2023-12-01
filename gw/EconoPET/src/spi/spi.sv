@@ -75,8 +75,8 @@
                 tx_buffer <= { tx_buffer[DATA_WIDTH - 2:0], 1'bx };
             end
 
-            // When the final bit of 'data_i' has been shifted into 'spi_sd_o', the we know the following positive
-            // SCK transfers edge will transfer the final bits of 'data_i' and 'data_o'.
+            // When the final bit of 'data_i' has been shifted into 'spi_sd_o', we know the next positive
+            // SCK edge will transfer the final bits of 'data_i' and 'data_o'.
             cycle_o <= bit_count == DATA_WIDTH - 1;
         end;
     end

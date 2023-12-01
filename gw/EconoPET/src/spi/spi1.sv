@@ -16,14 +16,16 @@ module spi1_controller #(
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 17
 ) (
-    input  logic                    clock_i,      // Bus clock
-    
-    output logic [ADDR_WIDTH-1:0]   wb_addr_o,  // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [DATA_WIDTH-1:0]   wb_data_o,  // Data received from MCU to write (valid when 'cycle_o' asserted)
-    input  logic [DATA_WIDTH-1:0]   wb_data_i,  // Data to transmit to MCU (captured on 'clock_i' when 'wb_ack_i' asserted)
-    output logic                    wb_we_o,    // Direction of bus transfer (0 = reading, 1 = writing)
-    output logic                    wb_cycle_o, // Requests a bus cycle from the arbiter
-    input  logic                    wb_ack_i,   // Signals termination of cycle ('data_i' valid)
+    // Wishbone B4 pipelined controller
+    // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
+    input  logic                    wb_clock_i,  // Bus clock    
+    output logic [ADDR_WIDTH-1:0]   wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [DATA_WIDTH-1:0]   wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic [DATA_WIDTH-1:0]   wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
+    output logic                    wb_we_o,     // Direction of bus transfer (0 = reading, 1 = writing)
+    output logic                    wb_cycle_o,  // Requests a bus cycle from the arbiter
+    output logic                    wb_strobe_o, // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
+    input  logic                    wb_ack_i,    // Signals termination of cycle ('data_i' valid)
 
     // SPI
     input  logic spi_cs_ni,         // (CS)  Chip Select (active low)
@@ -31,7 +33,7 @@ module spi1_controller #(
     input  logic spi_sd_i,          // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi_sd_o,          // (SDO) Serial Data Out (FPGA -> MCU)
     
-    output logic spi_stall_o        // Flow control: Signal to SPI controller (MCU) that previous command is in progress.
+    output logic spi_stall_o        // Flow control: When asserted, MCU should wait to send further commands.
 );
     //
     // SCK clock domain signals
@@ -78,7 +80,7 @@ module spi1_controller #(
 
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
-            // Deasserting CS_N asynchronously resets the FSM.
+            // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
             spi_state <= READ_CMD;
         end else begin
             // 'spi_cycle' indicates the FPGA has received a full byte from the MCU.  We decode it synchronously
@@ -130,13 +132,13 @@ module spi1_controller #(
         end
     end
     
-    // CDC from SCK to 'clock_i'
+    // CDC from SCK to 'wb_clock_i'
 
     logic spi_selected_pulse;
     logic spi_deselected_pulse;
 
-    sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'clock_i' domain
-        .clock_i(clock_i),
+    sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'wb_clock_i' domain
+        .clock_i(wb_clock_i),
         .data_i(spi_cs_ni),
         .ne_o(spi_selected_pulse),
         .pe_o(spi_deselected_pulse)
@@ -144,13 +146,17 @@ module spi1_controller #(
 
     logic spi_cmd_pulse;
 
-    sync2_edge_detect sync_valid(   // Cross from SCK to 'clock_i' domain
-        .clock_i(clock_i),
+    sync2_edge_detect sync_valid(   // Cross from SCK to 'wb_clock_i' domain
+        .clock_i(wb_clock_i),
         .data_i(spi_state[2]),      // 'spi_state[2]' bit indicates 'state == VALID'.
         .pe_o(spi_cmd_pulse)
     );
 
-    // Wishbone controller state machine ('clock_i' domain)
+    // Wishbone controller state machine ('wb_clock_i' domain)
+
+    initial begin
+        wb_strobe_o = '0;
+    end
 
     // MCU/FPGA handshake works as follows:
     // - MCU waits for FPGA to deassert 'spi_stall_o'
@@ -165,24 +171,39 @@ module spi1_controller #(
     //  C = cycle   (requesting bus cycle)
     //
     //                               CS
-    localparam READY            = 2'b00,
-               RECEIVING_CMD    = 2'b01,
-               PROCESSING_CMD   = 2'b11;
+    localparam READY            = 2'b00,    // 'spi_cs_ni' deasserted
+               RECEIVING_CMD    = 2'b01,    // 'spi_cs_ni' asserted
+               PROCESSING_CMD   = 2'b11;    // Received 'spi_data_o' is valid
 
     logic [1:0] wb_state = READY;
     assign spi_stall_o = wb_state[0];
     assign wb_cycle_o  = wb_state[1];
 
-    always_ff @(posedge clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (spi_deselected_pulse) begin
-            wb_state <= READY;
+            // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
+            wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o' 
+            wb_strobe_o <= '0;
         end else begin
             unique casez(wb_state)
-                READY:          if (spi_selected_pulse) wb_state <= RECEIVING_CMD;
-                RECEIVING_CMD:  if (spi_cmd_pulse)      wb_state <= PROCESSING_CMD;
-                PROCESSING_CMD: if (wb_ack_i) begin
-                    spi_data_tx <= wb_data_i;
-                    wb_state    <= READY;
+                READY: begin
+                    if (spi_selected_pulse) begin
+                        wb_state <= RECEIVING_CMD;
+                    end
+                end
+                RECEIVING_CMD: begin
+                    if (spi_cmd_pulse) begin
+                        wb_strobe_o <= 1'b1;
+                        wb_state <= PROCESSING_CMD;
+                    end
+                end
+                PROCESSING_CMD: begin
+                    wb_strobe_o <= '0;
+
+                    if (wb_ack_i) begin
+                        spi_data_tx <= wb_data_i;
+                        wb_state    <= READY;
+                    end
                 end
             endcase
         end

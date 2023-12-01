@@ -18,10 +18,10 @@
 module spi1_tb #(
     parameter CLK_MHZ = 64
 );
-    bit clk;
+    bit clock;
 
     clock_gen#(CLK_MHZ) fpga_clk(
-        .clock_o(clk)
+        .clock_o(clock)
     );
 
     initial fpga_clk.start;
@@ -33,7 +33,7 @@ module spi1_tb #(
     logic spi_stall;
 
     spi1_driver spi1_driver(
-        .clk_i(clk),
+        .clk_i(clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
         .spi_pico_o(spi_pico),
@@ -49,19 +49,20 @@ module spi1_tb #(
     logic        ack = '0;
 
     spi1_controller spi1(
-        .spi_sck_i(spi_sck),
-        .spi_cs_ni(spi_cs_n),
-        .spi_sd_i(spi_pico),
-        .spi_sd_o(spi_poci),
-        .spi_stall_o(spi_stall),
-
-        .clock_i(clk),
+        .wb_clock_i(clock),
         .wb_addr_o(addr),
         .wb_data_i(rd_data),
         .wb_data_o(wr_data),
         .wb_we_o(we),
         .wb_cycle_o(cycle),
-        .wb_ack_i(ack)
+        .wb_ack_i(ack),
+
+        .spi_sck_i(spi_sck),
+        .spi_cs_ni(spi_cs_n),
+        .spi_sd_i(spi_pico),
+        .spi_sd_o(spi_poci),
+
+        .spi_stall_o(spi_stall)
     );
 
     logic [16:0] expected_addr;
@@ -99,9 +100,9 @@ module spi1_tb #(
     endtask
 
     always @(posedge spi_cs_n) begin
-        @(posedge clk)  // 2FF stage 1
-        @(posedge clk)  // 2FF stage 2
-        @(posedge clk)  // Edge detect
+        @(posedge clock)  // 2FF stage 1
+        @(posedge clock)  // 2FF stage 2
+        @(posedge clock)  // Edge detect
         
         #1;
 
@@ -109,9 +110,9 @@ module spi1_tb #(
     end
 
     always @(negedge spi_cs_n) begin
-        @(posedge clk)  // 2FF stage 1
-        @(posedge clk)  // 2FF stage 2
-        @(posedge clk)  // Edge detect
+        @(posedge clock)  // 2FF stage 1
+        @(posedge clock)  // 2FF stage 2
+        @(posedge clock)  // Edge detect
         
         #1;
         
@@ -121,12 +122,12 @@ module spi1_tb #(
 
     always @(posedge ack) begin
         // Setting ack clears cycle on next clock edge.
-        @(posedge clk) begin
+        @(posedge clock) begin
             `assert_equal(cycle, '1);
             ack <= '0;
         end
 
-        @(posedge clk) begin
+        @(posedge clock) begin
             `assert_equal(cycle, '0);
             `assert_equal(ack, '0);
         end
@@ -139,7 +140,7 @@ module spi1_tb #(
         `assert_equal(we, expected_we);
         if (we) `assert_equal(wr_data, expected_data);
 
-        @(posedge clk) ack <= 1'b1;
+        @(posedge clock) ack <= 1'b1;
         #1 $display("[%t]        (stall=%b, cycle=%b, ack=%b)", $time, spi_stall, cycle, ack);
         @(negedge spi_stall);
         $display("[%t]        (stall=%b, cycle=%b, ack=%b)", $time, spi_stall, cycle, ack);
