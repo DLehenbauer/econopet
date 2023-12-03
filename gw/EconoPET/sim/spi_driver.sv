@@ -18,7 +18,7 @@
 module spi_driver #(
     parameter SCK_MHZ = 24          // SPI baud rate
 ) (
-    input  logic clk_i,             // Destination clock
+    input  logic clock_i,           // Destination clock
     
     // SPI bus signals (see https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/)
     output logic spi_cs_no,         // (CS)  Chip Select (active low)
@@ -33,7 +33,7 @@ module spi_driver #(
     task reset;
         spi_sck.stop;
         spi_cs_no = '1;
-        @(posedge clk_i);           // Hold long enough for destination clock to detect edge.
+        @(posedge clock_i);         // Hold long enough for destination clock to detect edge.
     endtask
 
     task send(
@@ -72,7 +72,7 @@ module spi_driver #(
     task complete;
         `assert_equal(spi_cs_no, '0);
         spi_cs_no = 1'b1;
-        @(posedge clk_i);           // Hold CS_N long enough for destination clock to detect edge.
+        @(posedge clock_i);         // Hold CS_N long enough for destination clock to detect edge.
     endtask;
 
     logic       rx_valid;

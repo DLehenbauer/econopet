@@ -15,7 +15,7 @@
 module spi1_driver #(
     parameter SCK_MHZ = 24          // SPI baud rate
 ) (
-    input  logic clk_i,
+    input  logic clock_i,
 
     output logic spi_sck_o,
     output logic spi_cs_no,
@@ -25,7 +25,7 @@ module spi1_driver #(
     input  logic spi_stall_i
 );
     spi_driver #(SCK_MHZ) spi(
-        .clk_i(clk_i),
+        .clock_i(clock_i),
         .spi_sck_o(spi_sck_o),
         .spi_cs_no(spi_cs_no),
         .spi_sd_i(spi_poci_i),

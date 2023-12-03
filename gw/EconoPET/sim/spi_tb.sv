@@ -21,16 +21,16 @@ module spi_tb;
     logic pico;
     logic poci;
 
-    logic [7:0] pi;
+    logic [7:0] pi;             // Controller (tx) -> Peripheral (rx)
     logic [7:0] expected_pi;
-    logic [7:0] po;
+    logic [7:0] po;             // Peripheral (tx) -> Controller (rx)
 
-    logic [7:0] ci;
+    logic [7:0] ci;             // Peripheral (tx) -> Controller (rx)
     logic [7:0] expected_ci;
-    logic [7:0] co;
+    logic [7:0] co;             // Controller (tx) -> Peripheral (rx)
 
-    logic c_cycle;
-    logic p_cycle;
+    logic c_cycle;              // Controller output (co) is valid
+    logic p_cycle;              // Peripheral output (po) is valid
 
     spi dut_spi_controller(
         .spi_sck_i(sck),

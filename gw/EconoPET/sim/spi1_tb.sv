@@ -33,7 +33,7 @@ module spi1_tb #(
     logic spi_stall;
 
     spi1_driver spi1_driver(
-        .clk_i(clock),
+        .clock_i(clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
         .spi_pico_o(spi_pico),

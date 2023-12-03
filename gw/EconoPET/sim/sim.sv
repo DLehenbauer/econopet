@@ -17,7 +17,7 @@
 module sim #(
     parameter CLK_MHZ = 64
 );
-    // top_tb top_tb();
+    top_tb top_tb();
     spi_tb spi_tb();
     spi1_tb spi1_tb();
     bram_tb bram_tb();
@@ -26,7 +26,7 @@ module sim #(
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
-        // top_tb.run();
+        //top_tb.run();
         spi_tb.run();
         spi1_tb.run();
         bram_tb.run();
