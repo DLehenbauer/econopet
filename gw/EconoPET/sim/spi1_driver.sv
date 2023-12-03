@@ -15,21 +15,25 @@
 module spi1_driver #(
     parameter SCK_MHZ = 24          // SPI baud rate
 ) (
-    input  logic clock_i,
+    input  logic       clock_i,
 
-    output logic spi_sck_o,
-    output logic spi_cs_no,
-    output logic spi_pico_o,
-    input  logic spi_poci_i,
+    output logic       spi_sck_o,
+    output logic       spi_cs_no,
+    output logic       spi_pico_o,
+    input  logic       spi_poci_i,
 
-    input  logic spi_stall_i
+    input  logic       spi_stall_i,
+    output logic [7:0] spi_data_o
 );
+    logic [7:0] spi_rx_data;
+
     spi_driver #(SCK_MHZ) spi(
         .clock_i(clock_i),
         .spi_sck_o(spi_sck_o),
         .spi_cs_no(spi_cs_no),
         .spi_sd_i(spi_poci_i),
-        .spi_sd_o(spi_pico_o)
+        .spi_sd_o(spi_pico_o),
+        .spi_data_o(spi_rx_data)
     );
 
     task reset;
@@ -63,6 +67,10 @@ module spi1_driver #(
         spi.send(tx, /* complete: */ '0);
         
         @(negedge spi_stall_i);
+
+        $display("[%t]      SPI1 Received: [ %2h ]", $time, spi_rx_data);
+        spi_data_o <= spi_rx_data;
+
         spi.complete;
     endtask
 
@@ -90,7 +98,7 @@ module spi1_driver #(
         logic [7:0] ah;
         logic [7:0] al;
 
-        $display("[%t]    spi1.read_at(%x, %x)", $time, addr_i);
+        $display("[%t]    spi1.read_at(%x)", $time, addr_i);
 
         c = cmd(/* we: */ '0, /* set_addr: */ 1'b1, addr_i);
         ah = addr_hi(addr_i);

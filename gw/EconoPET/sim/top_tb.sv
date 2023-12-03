@@ -31,6 +31,7 @@ module top_tb #(
     logic spi_pico;
     logic spi_poci;
     logic spi_stall;
+    logic [7:0] spi_rx_data;
 
     spi1_driver spi1(
         .clock_i(clock),
@@ -38,7 +39,8 @@ module top_tb #(
         .spi_cs_no(spi_cs_n),
         .spi_pico_o(spi_pico),
         .spi_poci_i(spi_poci),
-        .spi_stall_i(spi_stall)
+        .spi_stall_i(spi_stall),
+        .spi_data_o(spi_rx_data)
     );
 
     top dut(
@@ -46,15 +48,28 @@ module top_tb #(
         .spi1_cs_ni(spi_cs_n),
         .spi1_sck_i(spi_sck),
         .spi1_sd_i(spi_pico),
-        .spi1_sd_o(spi_poci)
+        .spi1_sd_o(spi_poci),
+        .spi_stall_o(spi_stall)
     );
+
+    task test_rw(
+        logic [16:0] addr_i,
+        logic  [7:0] data_i
+    );
+        spi1.write_at(addr_i, data_i);
+        spi1.read_at(addr_i);
+        spi1.read_next();
+        `assert_equal(spi_rx_data, data_i);
+    endtask
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
         spi1.reset;
-        spi1.write_at(17'h00000, 8'h00);
-
+        test_rw(17'h00000, 8'h55);
+        test_rw(17'h00001, 8'haa);
+        test_rw(17'h00001, 8'h7e);
+        test_rw(17'h00001, 8'h81);
         #1 $display("[%t] END %m", $time);
     endtask
 endmodule

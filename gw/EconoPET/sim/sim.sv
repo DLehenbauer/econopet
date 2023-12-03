@@ -26,7 +26,7 @@ module sim #(
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
-        //top_tb.run();
+        top_tb.run();
         spi_tb.run();
         spi1_tb.run();
         bram_tb.run();

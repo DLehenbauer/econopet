@@ -24,7 +24,10 @@ module spi_driver #(
     output logic spi_cs_no,         // (CS)  Chip Select (active low)
     output logic spi_sck_o,         // (SCK) Serial Clock
     input  logic spi_sd_i,          // (SDI) Serial Data In (rx)
-    output logic spi_sd_o           // (SDO) Serial Data Out (tx)
+    output logic spi_sd_o,          // (SDO) Serial Data Out (tx)
+
+    output logic [7:0] spi_data_o,  // Last received (valid when 'spi_ack_o' asserted)
+    output logic       spi_ack_o    // 'spi_data_o' valid pulse
 );
     clock_gen#(SCK_MHZ) spi_sck(
         .clock_o(spi_sck_o)
@@ -75,9 +78,9 @@ module spi_driver #(
         @(posedge clock_i);         // Hold CS_N long enough for destination clock to detect edge.
     endtask;
 
-    logic       rx_valid;
+    logic [7:0] spi_rx_data;
+    logic       spi_cycle;
     logic [7:0] tx_byte = 8'hxx;
-    logic [7:0] rx_byte_d, rx_byte_q;
 
     spi spi_tx(
         .spi_sck_i(spi_sck_o),
@@ -85,11 +88,17 @@ module spi_driver #(
         .spi_sd_i(spi_sd_i),
         .spi_sd_o(spi_sd_o),
         .data_i(tx_byte),
-        .data_o(rx_byte_d),
-        .cycle_o(rx_valid)
+        .data_o(spi_rx_data),
+        .cycle_o(spi_cycle)
     );
 
     always_ff @(posedge spi_sck_o) begin
-        if (rx_valid) rx_byte_q <= rx_byte_d;
+        if (spi_cycle) spi_data_o <= spi_rx_data;
     end
+
+    sync2_edge_detect sync_valid(
+        .clock_i(clock_i),
+        .data_i(spi_cycle),
+        .pe_o(spi_ack_o)
+    );
 endmodule
