@@ -53,12 +53,12 @@ create_clock -name "spi1_sck_i" -period $spi1_sck_period_ns -waveform [list [exp
 set_clock_groups -asynchronous -group {spi1_sck_v spi1_sck_i}
 
 # Assume RX transitions within +/- 250ps of virtual data clock edge
-set_input_delay -max -clock spi1_sck_v 0.250 [get_ports {spi1_sd_i}]
-set_input_delay -min -clock spi1_sck_v -0.250 [get_ports {spi1_sd_i}]
+set_input_delay -clock spi1_sck_v -min -0.250 [get_ports {spi1_sd_i}]
+set_input_delay -clock spi1_sck_v -max  0.250 [get_ports {spi1_sd_i}]
 
 # Assume the required TX data valid window is 1/2 the SCK period, centered on the sampling edge.
-set_output_delay -clock spi1_sck_i -max [expr { $spi1_sck_period_ns * 0.25 }] [get_ports {spi1_sd_o}]
 set_output_delay -clock spi1_sck_i -min [expr { $spi1_sck_period_ns * -0.25 }] [get_ports {spi1_sd_o}]
+set_output_delay -clock spi1_sck_i -max [expr { $spi1_sck_period_ns *  0.25 }] [get_ports {spi1_sd_o}]
 
 # Assume CS_N transitions centered on data clock
 #
@@ -67,7 +67,7 @@ set_output_delay -clock spi1_sck_i -min [expr { $spi1_sck_period_ns * -0.25 }] [
 #
 # Under software control, CS_N is unsynchronized, but generally delayed more than a clock period
 # at 4 MHz or above.
-set_input_delay -clock spi1_sck_v -max [expr { $spi1_sck_period_ns * 0.25 }] [get_ports {spi1_cs_ni}]
 set_input_delay -clock spi1_sck_v -min [expr { $spi1_sck_period_ns * -0.25 }] [get_ports {spi1_cs_ni}]
+set_input_delay -clock spi1_sck_v -max [expr { $spi1_sck_period_ns *  0.25 }] [get_ports {spi1_cs_ni}]
 
 # (See also generated file: outflow\PET.pt.sdc)

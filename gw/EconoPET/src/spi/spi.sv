@@ -39,45 +39,39 @@
     end
 
     // 'data_o' is latched on the rising edge of SCK.
-    logic [DATA_WIDTH - 2:0] dout_q;
+    logic [DATA_WIDTH - 2:0] rx_buffer;
 
     always_latch begin
-        if (!spi_sck_i) data_o <= { dout_q, spi_sd_i };
+        if (!spi_sck_i) data_o <= { rx_buffer, spi_sd_i };
     end
 
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting 'spi_cs_ni' indicates the transfer has ended.
             bit_count <= '0;
-            dout_q <= 'x;
+            rx_buffer <= 'x;
         end else begin
             // Positive edge of SCK indicates SDI is valid.  Shift SDI into the LSB of 'data_o' and
             // increment the bit count.  If this was the last bit of the current cycle assert 'cycle_o'.
             bit_count <= bit_count + 1'b1;
-            dout_q <= { dout_q[DATA_WIDTH - 3:0], spi_sd_i };
+            rx_buffer <= { rx_buffer[DATA_WIDTH - 3:0], spi_sd_i };
         end
     end
 
-    logic [DATA_WIDTH - 1:0] tx_buffer;
-    assign spi_sd_o = tx_buffer[DATA_WIDTH - 1];
+    logic [DATA_WIDTH - 2:0] tx_buffer;
 
     always_ff @(negedge spi_cs_ni or negedge spi_sck_i) begin
-        if (spi_sck_i) begin
-            tx_buffer <= data_i;
-            cycle_o <= '0;
-        end else begin
-            // Negative edge of SCK indicates we've finished transmitting a bit.  Load the next bit to transmit.
-            if (bit_count == '0) begin
-                // We've already transmitted the last bit of 'tx_buffer'.  Capture the next bits for trasmission.
-                tx_buffer <= data_i;
-            end else begin
-                // Otherwise shift out the MSB from 'tx_buffer'.
-                tx_buffer <= { tx_buffer[DATA_WIDTH - 2:0], 1'bx };
-            end
+        // The below if-condition avoids the following error:
+        // 'ERROR: if-condition does not match any sensitivity list edge (VERI-1167)'
+        if (!spi_cs_ni || !spi_sck_i) begin
+            // We've already transmitted the last bit of 'tx_buffer'.  Capture the next bits for trasmission.
+            { spi_sd_o, tx_buffer } <= bit_count == '0
+                ? data_i
+                : { tx_buffer, 1'bx };
 
             // When the final bit of 'data_i' has been shifted into 'spi_sd_o', we know the next positive
             // SCK edge will transfer the final bits of 'data_i' and 'data_o'.
             cycle_o <= bit_count == DATA_WIDTH - 1;
-        end;
+        end
     end
 endmodule
