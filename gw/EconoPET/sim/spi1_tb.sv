@@ -16,7 +16,9 @@
  `include "./sim/assert.svh"
 
 module spi1_tb #(
-    parameter CLK_MHZ = 64
+    parameter CLK_MHZ = 64,
+    parameter WB_DATA_WIDTH = 8,
+    parameter WB_ADDR_WIDTH = 20
 );
     bit clock;
 
@@ -41,12 +43,12 @@ module spi1_tb #(
         .spi_stall_i(spi_stall)
     );
 
-    logic [16:0] addr;
-    logic  [7:0] rd_data;
-    logic  [7:0] wr_data;
-    logic        we;
-    logic        cycle;
-    logic        ack = '0;
+    logic [WB_ADDR_WIDTH-1:0] addr;
+    logic [WB_DATA_WIDTH-1:0] rd_data;
+    logic [WB_DATA_WIDTH-1:0] wr_data;
+    logic                     we;
+    logic                     cycle;
+    logic                     ack = '0;
 
     spi1_controller spi1(
         .wb_clock_i(clock),
@@ -65,14 +67,14 @@ module spi1_tb #(
         .spi_stall_o(spi_stall)
     );
 
-    logic [16:0] expected_addr;
-    logic        expected_we;
-    logic [7:0]  expected_data;
+    logic [WB_ADDR_WIDTH-1:0] expected_addr;
+    logic                     expected_we;
+    logic [WB_DATA_WIDTH-1:0] expected_data;
 
     task set_expected(
-        input [16:0] addr_i,
-        input        we_i,
-        input [7:0]  data_i = 8'hxx
+        input logic [WB_ADDR_WIDTH-1:0] addr_i,
+        input logic                     we_i,
+        input logic [WB_DATA_WIDTH-1:0] data_i = 8'hxx
     );
         expected_addr <= addr_i;
         expected_data <= data_i;
@@ -80,15 +82,15 @@ module spi1_tb #(
     endtask
 
     task write_at(
-        input [16:0] addr_i,
-        input [7:0] data_i
+        input logic [WB_ADDR_WIDTH-1:0] addr_i,
+        input logic [WB_DATA_WIDTH-1:0] data_i
     );
         set_expected(/* addr: */ addr_i, /* we: */ 1'b1, /* data: */ data_i);
         spi1_driver.write_at(addr_i, data_i);
     endtask
 
     task read_at(
-        input [16:0] addr_i
+        input logic [WB_ADDR_WIDTH-1:0] addr_i
     );
         set_expected(/* addr: */ addr_i, /* we: */ '0);
         spi1_driver.read_at(addr_i);
@@ -150,12 +152,13 @@ module spi1_tb #(
     task run;
         spi1_driver.reset();
 
-        write_at(17'h00000, 8'h00);
+        write_at(20'h00000, 8'h00);
         read_next(8'h01);
         read_next(8'h01);
         read_next(8'h01);
         read_next(8'h01);
         read_next(8'h01);
+        write_at(20'hFFFFF, 8'h00);
     endtask
  endmodule
  

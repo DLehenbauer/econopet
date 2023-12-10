@@ -13,19 +13,19 @@
  */
 
 module spi1_controller #(
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 17
+    parameter WB_DATA_WIDTH = 8,
+    parameter WB_ADDR_WIDTH = 20
 ) (
     // Wishbone B4 pipelined controller
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                    wb_clock_i,  // Bus clock    
-    output logic [ADDR_WIDTH-1:0]   wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [DATA_WIDTH-1:0]   wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
-    input  logic [DATA_WIDTH-1:0]   wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
-    output logic                    wb_we_o,     // Direction of bus transfer (0 = reading, 1 = writing)
-    output logic                    wb_cycle_o,  // Requests a bus cycle from the arbiter
-    output logic                    wb_strobe_o, // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
-    input  logic                    wb_ack_i,    // Signals termination of cycle ('data_i' valid)
+    input  logic                     wb_clock_i,  // Bus clock    
+    output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [WB_DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic [WB_DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
+    output logic                     wb_we_o,     // Direction of bus transfer (0 = reading, 1 = writing)
+    output logic                     wb_cycle_o,  // Requests a bus cycle from the arbiter
+    output logic                     wb_strobe_o, // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
+    input  logic                     wb_ack_i,    // Signals termination of cycle ('data_i' valid)
 
     // SPI
     input  logic spi_cs_ni,         // (CS)  Chip Select (active low)
@@ -39,11 +39,11 @@ module spi1_controller #(
     // SCK clock domain signals
     //
 
-    logic                    spi_cycle;      // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
-                                             // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
+    logic                     spi_cycle;      // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
+                                              // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
 
-    logic [DATA_WIDTH - 1:0] spi_data_rx;    // Byte received from SPI (see also 'spi_cycle').
-    logic [DATA_WIDTH - 1:0] spi_data_tx;    // Next byte to transmit to SPI (see also 'spi_cycle').
+    logic [WB_DATA_WIDTH-1:0] spi_data_rx;    // Byte received from SPI (see also 'spi_cycle').
+    logic [WB_DATA_WIDTH-1:0] spi_data_tx;    // Next byte to transmit to SPI (see also 'spi_cycle').
 
     spi spi(
         .spi_cs_ni(spi_cs_ni),
@@ -93,7 +93,7 @@ module spi1_controller #(
 
                         if (spi_data_rx[6]) begin
                             // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
-                            wb_addr_o <= { spi_data_rx[0], 16'hxxxx };
+                            wb_addr_o <= { spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx };
                         end else begin
                             // Otherwise increment the previous address.
                             wb_addr_o <= wb_addr_o + 1'b1;

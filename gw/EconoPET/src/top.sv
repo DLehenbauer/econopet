@@ -12,7 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
  
- module top(
+ module top #(
+    parameter WB_DATA_WIDTH = 8,
+    parameter WB_ADDR_WIDTH = 20
+) (
     // FPGA
     input  logic         clock_i,           // 64 MHz clock (from PLL)
     output logic         status_no,         // NSTATUS LED (0 = On, 1 = Off)
@@ -33,13 +36,13 @@
 );
     logic        reset = '0;
 
-    logic [17:0] spi1_addr;
-    logic  [7:0] spi1_data_rx;
-    logic  [7:0] spi1_data_tx;
-    logic        spi1_we;
-    logic        spi1_cycle;
-    logic        spi1_strobe;
-    logic        bram_ack;
+    logic [WB_ADDR_WIDTH-1:0] spi1_addr;
+    logic [WB_DATA_WIDTH-1:0] spi1_data_rx;
+    logic [WB_DATA_WIDTH-1:0] spi1_data_tx;
+    logic                     spi1_we;
+    logic                     spi1_cycle;
+    logic                     spi1_strobe;
+    logic                     bram_ack;
 
     spi1_controller spi1(
         .wb_clock_i(clock_i),
@@ -71,7 +74,7 @@
         .wb_ack_o(bram_ack)
     );
     
-    assign spare_o[7:0] = spi1_data_rx;
-    assign spare_o[8]   = spi1_cycle;
-    assign spare_o[9]   = bram_ack;
+    assign spare_o[WB_DATA_WIDTH-1:0] = spi1_data_rx;
+    assign spare_o[8]                 = spi1_cycle;
+    assign spare_o[9]                 = bram_ack;
 endmodule

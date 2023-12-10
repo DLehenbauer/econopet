@@ -13,19 +13,21 @@
  */
 
 module spi1_driver #(
-    parameter SCK_MHZ = 24          // SPI baud rate
+    parameter SCK_MHZ = 24,         // SPI baud rate
+    parameter WB_DATA_WIDTH = 8,
+    parameter WB_ADDR_WIDTH = 20
 ) (
-    input  logic       clock_i,
+    input  logic                     clock_i,
 
-    output logic       spi_sck_o,
-    output logic       spi_cs_no,
-    output logic       spi_pico_o,
-    input  logic       spi_poci_i,
+    output logic                     spi_sck_o,
+    output logic                     spi_cs_no,
+    output logic                     spi_pico_o,
+    input  logic                     spi_poci_i,
 
-    input  logic       spi_stall_i,
-    output logic [7:0] spi_data_o
+    input  logic                     spi_stall_i,
+    output logic [WB_DATA_WIDTH-1:0] spi_data_o
 );
-    logic [7:0] spi_rx_data;
+    logic [WB_DATA_WIDTH-1:0] spi_rx_data;
 
     spi_driver #(SCK_MHZ) spi(
         .clock_i(clock_i),
@@ -41,20 +43,20 @@ module spi1_driver #(
         spi.reset();
     endtask
 
-    function [7:0] cmd(input bit we, input bit set_addr, input logic [16:0] addr = 17'hx_xxxx);
-        return { we, set_addr, 5'bxxxxx, addr[16] };
+    function [WB_DATA_WIDTH-1:0] cmd(input bit we, input bit set_addr, input logic [WB_ADDR_WIDTH-1:0] addr = 17'hx_xxxx);
+        return { we, set_addr, 2'bxx, addr[WB_ADDR_WIDTH-1:16] };
     endfunction
 
-    function [7:0] addr_hi(input logic [16:0] addr);
+    function [WB_DATA_WIDTH-1:0] addr_hi(input logic [WB_ADDR_WIDTH-1:0] addr);
         return addr[15:8];
     endfunction
 
-    function [7:0] addr_lo(input logic [16:0] addr);
-        return addr[7:0];
+    function [WB_DATA_WIDTH-1:0] addr_lo(input logic [WB_ADDR_WIDTH-1:0] addr);
+        return addr[WB_DATA_WIDTH-1:0];
     endfunction
 
     task send(
-        input logic unsigned [7:0] tx[]
+        input logic unsigned [WB_DATA_WIDTH-1:0] tx[]
     );
         string s;
         s = "";
@@ -75,12 +77,12 @@ module spi1_driver #(
     endtask
 
     task write_at(
-        input [16:0] addr_i,
-        input [7:0]  data_i
+        input [WB_ADDR_WIDTH-1:0] addr_i,
+        input [WB_DATA_WIDTH-1:0]  data_i
     );
-        logic [7:0] c;
-        logic [7:0] ah;
-        logic [7:0] al;
+        logic [WB_DATA_WIDTH-1:0] c;
+        logic [WB_DATA_WIDTH-1:0] ah;
+        logic [WB_DATA_WIDTH-1:0] al;
 
         $display("[%t]    spi1.write_at(%x, %x)", $time, addr_i, data_i);
 
@@ -92,11 +94,11 @@ module spi1_driver #(
     endtask
 
     task read_at(
-        input [16:0] addr_i
+        input [WB_ADDR_WIDTH-1:0] addr_i
     );
-        logic [7:0] c;
-        logic [7:0] ah;
-        logic [7:0] al;
+        logic [WB_DATA_WIDTH-1:0] c;
+        logic [WB_DATA_WIDTH-1:0] ah;
+        logic [WB_DATA_WIDTH-1:0] al;
 
         $display("[%t]    spi1.read_at(%x)", $time, addr_i);
 
@@ -108,21 +110,12 @@ module spi1_driver #(
     endtask
 
     task read_next();
-        logic [7:0] c;
+        logic [WB_DATA_WIDTH-1:0] c;
 
         $display("[%t]    spi1.read_next()", $time);
 
         c = cmd(/* we: */ '0, /* set_addr: */ '0, 6'bxxxxxx);
 
         send('{ c });
-    endtask
-
-    task set_cpu(
-        input reset,
-        input ready
-    );
-        $display("[%t]    spi1.set_cpu(reset = %d, ready = %d)", $time, reset, ready);
-
-        write_at(17'he80f, { 6'h00, ready, !reset });
     endtask
 endmodule
