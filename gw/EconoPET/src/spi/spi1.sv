@@ -74,10 +74,6 @@ module spi1_controller #(
 
     logic [2:0] spi_state = READ_CMD;   // Current state of FSM
 
-    // Asserted if current CMD reads the target address, in which case FSM will
-    // transition through READ_ADDR_*_ARG.
-    logic cmd_rd_a;
-
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
@@ -89,28 +85,18 @@ module spi1_controller #(
                 unique case (spi_state)
                     READ_CMD: begin
                         wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
-                        cmd_rd_a <= spi_data_rx[6];  // Bit 6: Update 'wb_addr_o' (0 = increment, 1 = set)
 
                         if (spi_data_rx[6]) begin
                             // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
                             wb_addr_o <= { spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx };
+                            spi_state <= READ_ADDR_HI_ARG;
                         end else begin
                             // Otherwise increment the previous address.
                             wb_addr_o <= wb_addr_o + 1'b1;
+                            spi_state <= spi_data_rx[7]
+                                ? READ_DATA_ARG
+                                : VALID;
                         end
-
-                        unique casez(spi_data_rx)
-                            8'b1???????: spi_state <= READ_DATA_ARG;
-                            8'b01??????: spi_state <= READ_ADDR_HI_ARG;
-                            default:     spi_state <= VALID;
-                        endcase
-                    end
-
-                    READ_DATA_ARG: begin
-                        wb_data_o <= spi_data_rx;
-                        spi_state <= cmd_rd_a
-                            ? READ_ADDR_HI_ARG
-                            : VALID;
                     end
 
                     READ_ADDR_HI_ARG: begin
@@ -120,7 +106,14 @@ module spi1_controller #(
 
                     READ_ADDR_LO_ARG: begin
                         wb_addr_o[7:0] <= spi_data_rx;
-                        spi_state      <= VALID;
+                        spi_state      <= wb_we_o
+                            ? READ_DATA_ARG
+                            : VALID;
+                    end
+
+                    READ_DATA_ARG: begin
+                        wb_data_o <= spi_data_rx;
+                        spi_state <= VALID;
                     end
 
                     VALID: begin

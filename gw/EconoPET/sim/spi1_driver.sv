@@ -90,7 +90,7 @@ module spi1_driver #(
         ah = addr_hi(addr_i);
         al = addr_lo(addr_i);
 
-        send('{ c, data_i, ah, al });
+        send('{ c, ah, al, data_i });
     endtask
 
     task read_at(
