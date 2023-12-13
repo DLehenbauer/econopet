@@ -39,10 +39,19 @@
     end
 
     // 'data_o' is latched on the rising edge of SCK.
-    logic [DATA_WIDTH - 2:0] rx_buffer;
+    logic [DATA_WIDTH-2:0] rx_buffer;
+    logic [DATA_WIDTH-2:0] tx_buffer;
 
     always_latch begin
-        if (!spi_sck_i) data_o <= { rx_buffer, spi_sd_i };
+        if (!spi_sck_i) begin
+            data_o    <= { rx_buffer, spi_sd_i };
+
+            if (bit_count == '0) begin
+                { spi_sd_o, tx_buffer } <= data_i;
+            end else begin
+                spi_sd_o = tx_buffer[3'd7 - bit_count];
+            end
+        end
     end
 
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
@@ -58,16 +67,10 @@
         end
     end
 
-    logic [DATA_WIDTH - 2:0] tx_buffer;
-
     always_ff @(negedge spi_cs_ni or negedge spi_sck_i) begin
         // The below if-condition avoids the following error:
         // 'ERROR: if-condition does not match any sensitivity list edge (VERI-1167)'
         if (!spi_cs_ni || !spi_sck_i) begin
-            // We've already transmitted the last bit of 'tx_buffer'.  Capture the next bits for trasmission.
-            { spi_sd_o, tx_buffer } <= bit_count == '0
-                ? data_i
-                : { tx_buffer, 1'bx };
 
             // When the final bit of 'data_i' has been shifted into 'spi_sd_o', we know the next positive
             // SCK edge will transfer the final bits of 'data_i' and 'data_o'.

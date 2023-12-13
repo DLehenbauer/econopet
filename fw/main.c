@@ -14,13 +14,7 @@
 
 #include "pch.h"
 #include "hw.h"
-
-//                           WA
-#define SPI_CMD_READ_AT    0b01000000
-#define SPI_CMD_READ_NEXT  0b00000000
-#define SPI_CMD_WRITE_AT   0b11000000
-#define SPI_CMD_WRITE_NEXT 0b10000000
-
+#include "driver.h"
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -90,15 +84,13 @@ int main() {
 
     printf("    spi1     = %d Bd\n", baudrate);
 
-    uint8_t count = 0;
+    uint8_t expected = 0x10;
 
     while (1) {
-        const uint8_t tx[] = { SPI_CMD_WRITE_NEXT, count++ };
-
-        while (gpio_get(SPI_STALL_GP));
-        gpio_put(SPI_CS_GP, 0);
-        spi_write_blocking(SPI_INSTANCE, tx, sizeof(tx));
-        while (gpio_get(SPI_STALL_GP));
-        gpio_put(SPI_CS_GP, 1);
+        spi_write_at(0, expected);
+        spi_read_at(0);
+        const uint8_t actual = spi_read_next();
+        assert(actual == expected);
+        expected++;
     }
 }

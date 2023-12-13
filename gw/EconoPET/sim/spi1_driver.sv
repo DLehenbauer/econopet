@@ -43,16 +43,16 @@ module spi1_driver #(
         spi.reset();
     endtask
 
-    function [WB_DATA_WIDTH-1:0] cmd(input bit we, input bit set_addr, input logic [WB_ADDR_WIDTH-1:0] addr = 17'hx_xxxx);
+    function [7:0] cmd(input bit we, input bit set_addr, input logic [WB_ADDR_WIDTH-1:0] addr = 20'hx_xxxx);
         return { we, set_addr, 2'bxx, addr[WB_ADDR_WIDTH-1:16] };
     endfunction
 
-    function [WB_DATA_WIDTH-1:0] addr_hi(input logic [WB_ADDR_WIDTH-1:0] addr);
+    function [7:0] addr_hi(input logic [WB_ADDR_WIDTH-1:0] addr);
         return addr[15:8];
     endfunction
 
-    function [WB_DATA_WIDTH-1:0] addr_lo(input logic [WB_ADDR_WIDTH-1:0] addr);
-        return addr[WB_DATA_WIDTH-1:0];
+    function [7:0] addr_lo(input logic [WB_ADDR_WIDTH-1:0] addr);
+        return addr[7:0];
     endfunction
 
     task send(
@@ -78,11 +78,11 @@ module spi1_driver #(
 
     task write_at(
         input [WB_ADDR_WIDTH-1:0] addr_i,
-        input [WB_DATA_WIDTH-1:0]  data_i
+        input [WB_DATA_WIDTH-1:0] data_i
     );
-        logic [WB_DATA_WIDTH-1:0] c;
-        logic [WB_DATA_WIDTH-1:0] ah;
-        logic [WB_DATA_WIDTH-1:0] al;
+        logic [7:0] c;
+        logic [7:0] ah;
+        logic [7:0] al;
 
         $display("[%t]    spi1.write_at(%x, %x)", $time, addr_i, data_i);
 
@@ -96,9 +96,9 @@ module spi1_driver #(
     task read_at(
         input [WB_ADDR_WIDTH-1:0] addr_i
     );
-        logic [WB_DATA_WIDTH-1:0] c;
-        logic [WB_DATA_WIDTH-1:0] ah;
-        logic [WB_DATA_WIDTH-1:0] al;
+        logic [7:0] c;
+        logic [7:0] ah;
+        logic [7:0] al;
 
         $display("[%t]    spi1.read_at(%x)", $time, addr_i);
 
@@ -110,7 +110,7 @@ module spi1_driver #(
     endtask
 
     task read_next();
-        logic [WB_DATA_WIDTH-1:0] c;
+        logic [7:0] c;
 
         $display("[%t]    spi1.read_next()", $time);
 

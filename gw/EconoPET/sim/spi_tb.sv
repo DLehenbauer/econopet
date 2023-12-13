@@ -155,12 +155,12 @@ module spi_tb;
 
         #1 cs = '1;
 
-        $display("[%t]   'data_i' must be captured when CS asserted", $time);
-        #1;
+        transfer_bit;
+
+        $display("[%t]   'data_i' must be captured once first bit is transfered", $time);
         co = 8'h7e;
         po = 8'h81;
 
-        transfer_bit;
         transfer_bit;
         transfer_bit;
         transfer_bit;

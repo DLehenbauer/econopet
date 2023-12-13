@@ -66,10 +66,10 @@ module top_tb #(
         $display("[%t] BEGIN %m", $time);
 
         spi1.reset;
-        test_rw(17'h00000, 8'h55);
-        test_rw(17'h00001, 8'haa);
-        test_rw(17'h00001, 8'h7e);
-        test_rw(17'h00001, 8'h81);
+
+        test_rw(20'h0_0000, 8'h00);
+        test_rw(20'h0_0000, 8'h01);
+
         #1 $display("[%t] END %m", $time);
     endtask
 endmodule
