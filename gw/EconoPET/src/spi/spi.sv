@@ -23,19 +23,19 @@
     output logic spi_sd_o,              // (SDO) Serial Data Out (tx)
     
     // Relevant WB bus signals in SCK domain.
-    input  logic [DATA_WIDTH - 1:0] data_i,     // Data to transmit.  Captured on falling edge of CS_N and
-                                                // falling edge of SCK for LSB.
+    input  logic [DATA_WIDTH-1:0] data_i,     // Data to transmit.  Captured on falling edge of CS_N and
+                                              // falling edge of SCK for LSB.
 
-    output logic [DATA_WIDTH - 1:0] data_o,     // Data received.  Shifted in from SDO on each positive edge of SCK.
+    output logic [DATA_WIDTH-1:0] data_o,     // Data received.  Shifted in from SDO on each positive edge of SCK.
     
-    output logic                    cycle_o     // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
-                                                // is captured on the following negative SCK edege.
+    output logic                  cycle_o     // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
+                                              // is captured on the following negative SCK edege.
 );
-    logic [$clog2(DATA_WIDTH - 1) - 1:0] bit_count = '0;
+    logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH-1;
     
     initial begin
-        cycle_o   <= '0;
-        bit_count <= '0;
+        cycle_o        <= '0;
+        bits_remaining <= DATA_WIDTH-1;
     end
 
     // 'data_o' is latched on the rising edge of SCK.
@@ -46,10 +46,10 @@
         if (!spi_sck_i) begin
             data_o    <= { rx_buffer, spi_sd_i };
 
-            if (bit_count == '0) begin
+            if (bits_remaining == DATA_WIDTH-1) begin
                 { spi_sd_o, tx_buffer } <= data_i;
             end else begin
-                spi_sd_o = tx_buffer[3'd7 - bit_count];
+                spi_sd_o = tx_buffer[bits_remaining];
             end
         end
     end
@@ -57,13 +57,13 @@
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting 'spi_cs_ni' indicates the transfer has ended.
-            bit_count <= '0;
+            bits_remaining <= DATA_WIDTH-1;
             rx_buffer <= 'x;
         end else begin
             // Positive edge of SCK indicates SDI is valid.  Shift SDI into the LSB of 'data_o' and
             // increment the bit count.  If this was the last bit of the current cycle assert 'cycle_o'.
-            bit_count <= bit_count + 1'b1;
-            rx_buffer <= { rx_buffer[DATA_WIDTH - 3:0], spi_sd_i };
+            bits_remaining <= bits_remaining - 1'b1;
+            rx_buffer <= { rx_buffer[DATA_WIDTH-3:0], spi_sd_i };
         end
     end
 
@@ -74,7 +74,7 @@
 
             // When the final bit of 'data_i' has been shifted into 'spi_sd_o', we know the next positive
             // SCK edge will transfer the final bits of 'data_i' and 'data_o'.
-            cycle_o <= bit_count == DATA_WIDTH - 1;
+            cycle_o <= bits_remaining == 0;
         end
     end
 endmodule
