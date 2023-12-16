@@ -31,10 +31,10 @@ module ram #(
 
     output logic                      ram_oe_o,
     output logic                      ram_we_o,
-    output logic [RAM_ADDR_WIDTH-1:0] ram_addr_o,
+    output logic [ADDR_WIDTH-1:0]     ram_addr_o,
     input  logic [DATA_WIDTH-1:0]     ram_data_i,
     output logic [DATA_WIDTH-1:0]     ram_data_o,
-    output logic                      ram_data_oe,
+    output logic                      ram_data_oe
 );
     // Timing for AS6C1008-55PCN
     // (See: https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008feb2007.pdf)
@@ -96,20 +96,56 @@ module ram #(
     //                           |
     //  DIN  ----------------<_​̅_​̅_​​>-----
 
-    initial begin
-        wb_ack_o   = '0;
-        wb_stall_o = '0;
-    end
+    //                      AWOS
+    localparam READY   = 4'b0000,
+               READING = 4'b0011,
+               HIGHZ   = 4'b0001,
+               WRITING = 4'b0101,
+               DONE    = 4'b1000;
+
+    logic [3:0] state = READY;
+    logic [1:0] clk_counter = '0;
+
+    assign wb_stall_o  = state[0];
+    assign ram_oe_o    = state[1];
+    assign ram_data_oe = state[1];
+    assign ram_we_o    = state[2];
+    assign wb_ack_o    = state[3];
 
     always_ff @(posedge wb_clock_i) begin
-        if (!wb_reset_i && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= mem[wb_addr_i];
-            if (wb_we_i) begin
-                mem[wb_addr_i] <= wb_data_i;
-            end
-            wb_ack_o <= 1'b1;
+        if (wb_reset_i) begin
+            state <= READY;
+            clk_counter <= '0;
         end else begin
-            wb_ack_o <= '0;
+            unique case (state)
+                READY: begin
+                    if (wb_cycle_i && wb_strobe_i) begin
+                        clk_counter <= '0;
+                        ram_data_o <= wb_data_i;
+                        state <= wb_we_i
+                            ? WRITING
+                            : READING;
+                    end
+                end
+                READING: begin
+                    if (clk_counter == 3'd3) begin
+                        clk_counter <= '0;
+                        wb_data_o <= ram_data_i;
+                        state <= HIGHZ;
+                    end else clk_counter <= clk_counter + 1'b1;
+                end
+                HIGHZ: begin
+                    if (clk_counter == 3'd1) state <= DONE;
+                    else clk_counter <= clk_counter + 1'b1;
+                end
+                WRITING: begin
+                    if (clk_counter == 3'd3) state <= DONE;
+                    else clk_counter <= clk_counter + 1'b1;
+                end
+                DONE : begin
+                    state <= READY;
+                end
+            endcase
         end
     end
 endmodule
