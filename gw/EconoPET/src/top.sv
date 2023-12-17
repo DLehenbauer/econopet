@@ -19,6 +19,8 @@
     parameter RAM_ADDR_WIDTH = 17
 ) (
     // CPU
+    output logic                       cpu_be_o,
+
     input  logic [CPU_ADDR_WIDTH-1:0]  cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0]  cpu_addr_o,
     output logic [CPU_ADDR_WIDTH-1:0]  cpu_addr_oe,
@@ -34,6 +36,12 @@
     output logic ram_addr_a16_o,
     output logic ram_oe_n_o,
     output logic ram_we_n_o,
+
+    // IO
+    output logic io_oe_n_o,
+    output logic pia1_cs_n_o,
+    output logic pia2_cs_n_o,
+    output logic via_cs_n_o,
 
     // FPGA
     input  logic         clock_i,           // 64 MHz clock (from PLL)
@@ -53,9 +61,55 @@
     // Spare pins
     output logic  [9:0]  spare_o
 );
+    // Efinity Interface Designer generates a separate output enable for each bus signal.
+    // Create a combined logic signal to control OE for bus_addr_o[15:0].  Note that the
+    // 6502 is a 16b bus, so the 17th bit (bus_addr_o[16]) is always an output.
+    logic cpu_addr_merged_oe;
+
+    assign cpu_addr_oe = {
+        cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe,
+        cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe,
+        cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe,
+        cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe
+    };
+
+    // Efinity Interface Designer generates a separate output enable for each bus signal.
+    // Create a combined logic signal to control OE for bus_data_o[7:0].
+    logic cpu_data_merged_oe;
+    
+    assign cpu_data_oe = {
+        cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe,
+        cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe
+    };
+
+    initial begin
+        // Avoid contention
+        cpu_be_o           = '0;
+        io_oe_n_o          = 1'b1;
+        pia1_cs_n_o        = 1'b1;
+        pia2_cs_n_o        = 1'b1;
+        via_cs_n_o         = 1'b1;
+    end
+
+    assign ram_oe_n_o = !ram_oe_o;
+    assign ram_we_n_o = !ram_we_o;
+
     main main(
         .clock_i(clock_i),
         .status_no(status_no),
+
+        .cpu_addr_oe(cpu_addr_merged_oe),
+
+        .cpu_data_i(cpu_data_i),
+        .cpu_data_o(cpu_data_o),
+        .cpu_data_oe(cpu_data_merged_oe),
+    
+        .ram_addr_o({
+            ram_addr_a16_o, ram_addr_a15_o, cpu_addr_o[14:12], ram_addr_a11_o, ram_addr_a10_o, cpu_addr_o[9:0]
+        }),
+        .ram_oe_o(ram_oe_o),
+        .ram_we_o(ram_we_o),
+
         .spi1_cs_ni(spi1_cs_ni),
         .spi1_sck_i(spi1_sck_i),
         .spi1_sd_i(spi1_sd_i),

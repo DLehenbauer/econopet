@@ -15,7 +15,7 @@
 module ram #(
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 17
-) (
+)(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                      wb_clock_i,
@@ -104,13 +104,13 @@ module ram #(
                DONE    = 4'b1000;
 
     logic [3:0] state = READY;
-    logic [1:0] clk_counter = '0;
+    logic [2:0] clk_counter = '0;
 
     assign wb_stall_o  = state[0];
     assign ram_oe_o    = state[1];
-    assign ram_data_oe = state[1];
     assign ram_we_o    = state[2];
     assign wb_ack_o    = state[3];
+    assign ram_data_oe = ram_we_o;
 
     always_ff @(posedge wb_clock_i) begin
         if (wb_reset_i) begin
@@ -121,6 +121,7 @@ module ram #(
                 READY: begin
                     if (wb_cycle_i && wb_strobe_i) begin
                         clk_counter <= '0;
+                        ram_addr_o <= wb_addr_i;
                         ram_data_o <= wb_data_i;
                         state <= wb_we_i
                             ? WRITING
@@ -128,7 +129,7 @@ module ram #(
                     end
                 end
                 READING: begin
-                    if (clk_counter == 3'd3) begin
+                    if (clk_counter == 3'd4) begin
                         clk_counter <= '0;
                         wb_data_o <= ram_data_i;
                         state <= HIGHZ;
@@ -139,7 +140,7 @@ module ram #(
                     else clk_counter <= clk_counter + 1'b1;
                 end
                 WRITING: begin
-                    if (clk_counter == 3'd3) state <= DONE;
+                    if (clk_counter == 3'd4) state <= DONE;
                     else clk_counter <= clk_counter + 1'b1;
                 end
                 DONE : begin
