@@ -42,13 +42,16 @@
     logic [DATA_WIDTH-2:0] rx_buffer;
     logic [DATA_WIDTH-2:0] tx_buffer;
 
+    // Load 'data_i' and 'data_o' while SCK is low.  Hold while SCK is high.
     always_latch begin
         if (!spi_sck_i) begin
-            data_o    <= { rx_buffer, spi_sd_i };
+            data_o <= { rx_buffer, spi_sd_i };
 
             if (bits_remaining == DATA_WIDTH-1) begin
+                // We've finished transmitting the last bit of 'tx_buffer'.  Latch the next byte to transmit.
                 { spi_sd_o, tx_buffer } <= data_i;
             end else begin
+                // Prepare to transmit the next bit of 'tx_buffer'.
                 spi_sd_o = tx_buffer[bits_remaining];
             end
         end
@@ -60,10 +63,9 @@
             bits_remaining <= DATA_WIDTH-1;
             rx_buffer <= 'x;
         end else begin
-            // Positive edge of SCK indicates SDI is valid.  Shift SDI into the LSB of 'data_o' and
-            // increment the bit count.  If this was the last bit of the current cycle assert 'cycle_o'.
-            bits_remaining <= bits_remaining - 1'b1;
+            // SDI is valid on positive edge of SCK.
             rx_buffer <= { rx_buffer[DATA_WIDTH-3:0], spi_sd_i };
+            bits_remaining <= bits_remaining - 1'b1;
         end
     end
 
@@ -71,9 +73,7 @@
         // The below if-condition avoids the following error:
         // 'ERROR: if-condition does not match any sensitivity list edge (VERI-1167)'
         if (!spi_cs_ni || !spi_sck_i) begin
-
-            // When the final bit of 'data_i' has been shifted into 'spi_sd_o', we know the next positive
-            // SCK edge will transfer the final bits of 'data_i' and 'data_o'.
+            // The next positive SCK edge will transfer the final bits of 'data_i' and 'data_o'.
             cycle_o <= bits_remaining == 0;
         end
     end

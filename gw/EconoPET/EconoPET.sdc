@@ -10,6 +10,13 @@
 # @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
 # @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
 
+# Efinity Timing Closure User Guide
+# https://www.efinixinc.com/docs/efinity-timing-closure-v5.0.pdf
+#
+# reset_timing; delete_timing_results; read_sdc; report_timing_summary
+# report_timing -from_clock clock_i -to_clock clock_i -setup
+# report_timing -from_clock clock_i -to_clock clock_i -hold
+
 # Helpers
 
 # Calculate period in nanoseconds from frequency in megahertz.
@@ -19,8 +26,10 @@ proc ns_from_mhz { mhz } {
 }
 
 # PLL Constraints
+
 set clock_mhz 64
-create_clock -period [ns_from_mhz $clock_mhz] clock_i
+set clock_period [ns_from_mhz $spi1_sck_period_mhz]
+create_clock -period [$clock_period] clock_i
 
 # SPI1 Constraints
 
