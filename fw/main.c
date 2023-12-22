@@ -14,6 +14,7 @@
 
 #include "pch.h"
 #include "hw.h"
+#include "test/mem.h"
 #include "driver.h"
 
 void measure_freqs(uint fpga_div) {
@@ -84,13 +85,5 @@ int main() {
 
     printf("    spi1     = %d Bd\n", baudrate);
 
-    uint8_t expected = 0x10;
-
-    while (1) {
-        spi_write_at(0, expected);
-        spi_read_at(0);
-        const uint8_t actual = spi_read_next();
-        assert(actual == expected);
-        expected++;
-    }
+    test_ram();
 }

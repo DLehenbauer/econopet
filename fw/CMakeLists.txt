@@ -6,6 +6,7 @@ set(BOARD pico_sdk)
 add_executable(firmware
     main.c
     driver.c
+    test/mem.c
 )
 
 target_precompile_headers(firmware PRIVATE pch.h)
