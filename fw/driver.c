@@ -31,7 +31,7 @@ void cmd_end() {
     gpio_put(SPI_CS_GP, 1);
 }
 
-uint8_t spi_read_at(uint32_t addr) {
+void spi_read_seek(uint32_t addr) {
     const uint8_t cmd = SPI_CMD_READ_AT | (addr >> 16);
     const uint8_t addr_hi = addr >> 8;
     const uint8_t addr_lo = addr;
@@ -40,6 +40,11 @@ uint8_t spi_read_at(uint32_t addr) {
     cmd_start();
     spi_write_blocking(SPI_INSTANCE, tx, sizeof(tx));
     cmd_end();
+}
+
+uint8_t spi_read_at(uint32_t addr) {
+    spi_read_seek(addr);
+    return spi_read_next();
 }
 
 uint8_t spi_read_next() {

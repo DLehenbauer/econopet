@@ -19,6 +19,7 @@
 void driver_init();
 
 void spi_read(uint32_t addr, uint32_t byteLength, uint8_t* pDest);
+void spi_read_seek(uint32_t addr);
 uint8_t spi_read_at(uint32_t addr);
 uint8_t spi_read_next();
 

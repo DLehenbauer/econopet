@@ -18,26 +18,54 @@
 const int32_t addr_min = 0x00000;
 const int32_t addr_max = 0x1FFFF;
 
-void check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
+bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
     if (actual != expected) {
-        printf("$%x: Expected %d, but got %d\n", addr, expected, actual);
-        panic("");
+        printf("$%05x: Expected %08b, but got %08b\n", addr, expected, actual);
+        return false;
     }
+    return true;
 }
 
-uint8_t toggle_bit(uint32_t addr, uint8_t bit, uint8_t expected) {
+void fix_byte(uint32_t addr, uint8_t expected) {
+    int i = 0;
+
+    for (; i < 8; i++) {
+        spi_write_at(addr, expected);
+        if (check_byte(addr, spi_read_at(addr), expected)) {
+            return;
+        }
+    }
+
+    printf("$%05x: Correction failed after %d attempts.\n", addr, i);
+    panic("");
+}
+
+uint8_t check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit, uint8_t expected_bit) {
+    uint8_t actual_bit = (actual_byte >> bit) & 1;
+    
+    if (actual_bit != expected_bit) {
+        printf("$%05x[%d]: Expected %d, but got %d (actual byte read %08b)\n", addr, bit, expected_bit, actual_bit, actual_byte);
+
+        sleep_ms(1);
+        uint8_t byte2 = spi_read_at(addr);
+
+        if (byte2 != actual_byte) {
+            printf("Inconsistent read result (attempt 1: %08b, attempt 2: %08b)\n", actual_byte, byte2);
+        }
+
+        // Correct the error before continuing:
+        actual_byte = actual_byte ^ (1 << bit);
+        fix_byte(addr, actual_byte);
+    }
+
+    return actual_byte;
+}
+
+uint8_t toggle_bit(uint32_t addr, uint8_t bit, uint8_t expected_bit) {
     assert(addr_min <= addr && addr <= addr_max);
     assert(0 <= bit && bit <= 7);
 
-    spi_read_at(addr);
-    uint8_t byte = spi_read_next();
-    uint8_t actual = (byte >> bit) & 1;
-    
-    if (actual != expected) {
-        printf("$%x[%d]: Expected %d, but got %d (actual byte read %08b)\n", addr, bit, expected, actual, byte);
-        panic("");
-    }
-
+    uint8_t byte = check_bit(addr, spi_read_at(addr), bit, expected_bit);
     byte = byte ^ (1 << bit);
     spi_write_at(addr, byte);
     return byte;
@@ -61,6 +89,11 @@ void test_each_bit_descending(march_element_fn* pFn) {
     }
 }
 
+void r0w1r1(int32_t addr, int8_t bit) {
+    toggle_bit(addr, bit, /* expected: */ 0);
+    check_bit(addr, spi_read_at(addr), bit, /* expected: */ 1);
+}
+
 void r0w1(int32_t addr, int8_t bit) {
     toggle_bit(addr, bit, /* expected: */ 0);
 }
@@ -69,9 +102,11 @@ void r1w0(int32_t addr, int8_t bit) {
     toggle_bit(addr, bit, /* expected: */ 1);
 }
 
+// Uses Extended March C- algorithm
+// See: https://booksite.elsevier.com/9780123705976/errata/13~Chapter%2008%20MBIST.pdf
 void test_ram() {
     for (uint32_t iteration = 1;; iteration++) {
-        printf("\nRAM Test (March C-): $%05x-$%05x -- Iteration #%d:\n", addr_min, addr_max, iteration);
+        printf("\nRAM Test (Extended March C-): $%05x-$%05x -- Iteration #%d:\n", addr_min, addr_max, iteration);
 
         printf("⇕(w0): ");
         spi_write_at(addr_min, 0);
@@ -80,8 +115,8 @@ void test_ram() {
         }
         puts("OK");
 
-        printf("⇑(r0,w1): ");
-        test_each_bit_ascending(r0w1);
+        printf("⇑(r0,w1,r1): ");
+        test_each_bit_ascending(r0w1r1);
         puts("OK");
 
         printf("⇑(r1,w0): ");
@@ -97,7 +132,7 @@ void test_ram() {
         puts("OK");
 
         printf("⇕(r0): ");
-        spi_read_at(addr_min);
+        spi_read_seek(addr_min);
         for (int32_t addr = addr_min; addr <= addr_max; addr++) {
             check_byte(addr, spi_read_next(), 0);
         }
