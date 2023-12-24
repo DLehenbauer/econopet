@@ -82,9 +82,9 @@ module spi_tb;
 
     always @(posedge sck) begin
         if (cs) begin
-            $display("[%t]     Rising edge of SCK shifts SDI into 'data_i[0]'", $time);
+            $display("[%t]     Rising edge of SCK shifts SDI into 'data_o[0]'", $time);
             `assert_equal(ci[0], poci);
-            `assert_equal(pi[0], pico);            
+            `assert_equal(pi[0], pico);
             
             if (bit_count != 7) begin
                 $display("[%t]     'cycle_o' must not be asserted until last bit received", $time);
@@ -95,7 +95,7 @@ module spi_tb;
                 `assert_equal(c_cycle, 1'b1);
                 `assert_equal(p_cycle, 1'b1);
 
-                $display("[%t]     'data_i' must contain transmitted data.", $time);
+                $display("[%t]     'data_o' must contain received data.", $time);
                 `assert_equal(ci, expected_ci);
                 `assert_equal(pi, expected_pi);
             end
@@ -105,7 +105,7 @@ module spi_tb;
     end
 
     always @(negedge sck) begin
-        $display("[%t]     Falling edge of SCK shifts 'data_o[%0d]' out to SDO", $time, 7 - bit_count);
+        $display("[%t]     Falling edge of SCK shifts 'data_i[%0d]' out to SDO", $time, 7 - bit_count);
 
         #1;
         `assert_equal(poci, expected_ci[7 - bit_count]);
