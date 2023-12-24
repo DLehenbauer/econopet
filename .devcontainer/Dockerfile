@@ -1,8 +1,8 @@
 ARG VARIANT="bookworm"
 FROM mcr.microsoft.com/devcontainers/base:bookworm
 
-# Currently targetted SDK version
 ARG PICO_SDK_VERSION="1.5.0"
+ARG VERIBLE_VERSION="v0.0-3471-g9cb45092"
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -10,17 +10,32 @@ ARG DEBIAN_FRONTEND="noninteractive"
 # Required by VS Code "xaver.clang-format" extension
 RUN apt-get update && apt-get -y install --no-install-recommends \
     clang-format
+#
+# Tools for simulating/linting RTL
+#
 
-# Tools for building / verifying RTL
+# Install Icarus Verilog
 RUN apt-get update && apt-get -y install --no-install-recommends \
     iverilog
+
+# Install Verible
+ARG VERIBLE_ARCHIVE=verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz
+RUN mkdir -p /opt/verible && \
+    wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/${VERIBLE_ARCHIVE} -P /tmp && \
+    tar -x -f /tmp/${VERIBLE_ARCHIVE} -C /opt/verible --strip-components 1 && \
+    rm -rf /tmp/${VERIBLE_ARCHIVE}
+ENV PATH "/opt/verible/bin:${PATH}"
+
+#
+# Tools for building/debugging RP2040 binaries
+#
 
 # Raspberry Pi Pico SDK
 ARG PICO_PATH="/opt/pico"
 WORKDIR $PICO_PATH
 
-# Install cross toolchain for Raspberry Pi Pico.  Note that we also need
-# the native toolchain in order to build the 'pioasm' and 'elf2uf2' tools.
+# We need the arm toolchain for building RP2040 binaries as well as the native toolchain
+# in order to build the 'pioasm' and 'elf2uf2' tools.
 RUN apt-get update && apt-get -y install --no-install-recommends \
     build-essential \
     cmake \
