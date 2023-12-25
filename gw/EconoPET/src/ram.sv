@@ -117,7 +117,7 @@ module ram #(
             state <= READY;
             clk_counter <= '0;
         end else begin
-            unique case (state)
+            case (state)
                 READY: begin
                     if (wb_cycle_i && wb_strobe_i) begin
                         clk_counter <= '0;

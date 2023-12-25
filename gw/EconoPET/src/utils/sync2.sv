@@ -13,12 +13,17 @@
  */
 
 module sync2 #(
-    INITAL_DATA_I = '0
+    INITAL_DATA_I = '0,
+    INITAL_DATA_O = INITAL_DATA_I
 ) (
     input  logic clock_i,       // Destination clock
     input  logic data_i,        // Input data in source clock domain
-    output logic data_o = '0    // Synchronized output in destination clock domain
+    output logic data_o         // Synchronized output in destination clock domain
 );
+    initial begin
+        data_o = INITAL_DATA_O;
+    end
+
     logic q = INITAL_DATA_I;    // 1st stage FF output
     
     always_ff @(posedge clock_i) begin

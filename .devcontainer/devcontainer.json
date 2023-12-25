@@ -11,14 +11,15 @@
         "vscode": {           
             // Add the IDs of extensions you want installed when the container is created.
             "extensions": [
-                "DavidAnson.vscode-markdownlint",
-                "marus25.cortex-debug",
-                "ms-vscode.cpptools-extension-pack",
-                "mshr-h.veriloghdl",
-                "mutantdino.resourcemonitor",
-                "streetsidesoftware.code-spell-checker",
-                "xaver.clang-format"
-            ]
+				"DavidAnson.vscode-markdownlint",
+				"marus25.cortex-debug",
+				"ms-azuretools.vscode-docker",
+				"ms-vscode.cpptools-extension-pack",
+				"mshr-h.veriloghdl",
+				"mutantdino.resourcemonitor",
+				"streetsidesoftware.code-spell-checker",
+				"xaver.clang-format"
+			]
         }
     },
 

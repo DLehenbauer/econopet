@@ -82,7 +82,7 @@ module spi1_controller #(
             // 'spi_cycle' indicates the FPGA has received a full byte from the MCU.  We decode it synchronously
             // on the positive SCK edge before the next incoming SPI bit shifts 'spi_data_rx'.
             if (spi_cycle) begin
-                unique case (spi_state)
+                case (spi_state)
                     READ_CMD: begin
                         wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
 
@@ -133,6 +133,7 @@ module spi1_controller #(
     sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
         .data_i(spi_cs_ni),
+        .data_o(),                  // Unused: Only need edge detection
         .ne_o(spi_selected_pulse),
         .pe_o(spi_deselected_pulse)
     );
@@ -142,7 +143,9 @@ module spi1_controller #(
     sync2_edge_detect sync_valid(   // Cross from SCK to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
         .data_i(spi_state[2]),      // 'spi_state[2]' bit indicates 'state == VALID'.
-        .pe_o(spi_cmd_pulse)
+        .data_o(),                  // Unused: Only need positive edge detection
+        .pe_o(spi_cmd_pulse),
+        .ne_o()                     // Unused: Only need positive edge detection
     );
 
     // Wishbone controller state machine ('wb_clock_i' domain)
@@ -178,7 +181,7 @@ module spi1_controller #(
             wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o' 
             wb_strobe_o <= '0;
         end else begin
-            unique casez(wb_state)
+            case (wb_state)
                 READY: begin
                     if (spi_selected_pulse) begin
                         wb_state <= RECEIVING_CMD;
