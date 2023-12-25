@@ -29,7 +29,7 @@ proc ns_from_mhz { mhz } {
 
 set clock_mhz 64
 set clock_period [ns_from_mhz $spi1_sck_period_mhz]
-create_clock -period [$clock_period] clock_i
+create_clock -period $clock_period clock_i
 
 # SPI1 Constraints
 
