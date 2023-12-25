@@ -19,34 +19,37 @@
     parameter RAM_ADDR_WIDTH = 17
 )(
     // FPGA
-    input  logic         clock_i,           // 64 MHz clock (from PLL)
-    output logic         status_no,         // NSTATUS LED (0 = On, 1 = Off)
+    input  logic                        clock_i,           // 64 MHz clock (from PLL)
+    output logic                        status_no,         // NSTATUS LED (0 = On, 1 = Off)
 
     // CPU
-    output logic                       cpu_be_o,
+    output logic                        cpu_be_o,
 
-    input  logic [CPU_ADDR_WIDTH-1:0]  cpu_addr_i,
-    output logic [CPU_ADDR_WIDTH-1:0]  cpu_addr_o,
-    output logic                       cpu_addr_oe,
+    input  logic [CPU_ADDR_WIDTH-1:0]   cpu_addr_i,
+    output logic [CPU_ADDR_WIDTH-1:0]   cpu_addr_o,
+    output logic                        cpu_addr_oe,
 
-    input  logic [DATA_WIDTH-1:0]      cpu_data_i,
-    output logic [DATA_WIDTH-1:0]      cpu_data_o,
-    output logic                       cpu_data_oe,
+    input  logic [DATA_WIDTH-1:0]       cpu_data_i,
+    output logic [DATA_WIDTH-1:0]       cpu_data_o,
+    output logic                        cpu_data_oe,
 
     // RAM
-    output logic [RAM_ADDR_WIDTH-1:0]  ram_addr_o,
-    output logic ram_oe_o,
-    output logic ram_we_o,
+    output logic                        ram_addr_a10_o,
+    output logic                        ram_addr_a11_o,
+    output logic                        ram_addr_a15_o,
+    output logic                        ram_addr_a16_o,
+    output logic                        ram_oe_o,
+    output logic                        ram_we_o,
 
     // SPI1 bus
-    input  logic         spi1_cs_ni,        // (CS)  Chip Select (active low)
-    input  logic         spi1_sck_i,        // (SCK) Serial Clock
-    input  logic         spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
-    output logic         spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
-    output logic         spi_stall_o,
+    input  logic                        spi1_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic                        spi1_sck_i,        // (SCK) Serial Clock
+    input  logic                        spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic                        spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
+    output logic                        spi_stall_o,
     
     // Spare pins
-    output logic  [9:0]  spare_o
+    output logic  [9:0]                 spare_o
 );
     assign reset     = '0;
 
@@ -99,14 +102,17 @@
 
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
-        .ram_addr_o(ram_addr_o),
+        .ram_addr_o({
+            ram_addr_a16_o, cpu_addr_o
+        }),
         .ram_data_i(cpu_data_i),
         .ram_data_o(cpu_data_o),
         .ram_data_oe(cpu_data_oe)
     );
 
-    assign cpu_addr_o[11:10] = ram_addr_o[11:10];
-    assign cpu_addr_o[15]    = ram_addr_o[15];
+    assign ram_addr_a10_o = cpu_addr_o[10];
+    assign ram_addr_a11_o = cpu_addr_o[11];
+    assign ram_addr_a15_o = cpu_addr_o[15];
 
     assign spare_o[DATA_WIDTH-1:0] = spi1_data_rx;
     assign spare_o[8]              = spi1_cycle;

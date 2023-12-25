@@ -5,12 +5,8 @@ set PROJNAME=EconoPET
 set PROJDIR=%~dp0\gw\%PROJNAME%
 set BINDIR=C:\Efinity\2023.1\bin
 
-:: Move to the root of the Efinity project so that 'efx_run' artifacts are generated
-:: within the \work_sim\ subdirectory.
-pushd %PROJDIR%
-rd /q /s outflow
-cmd /c %BINDIR%\efx_run %PROJNAME%.xml -f map
-type outflow\EconoPET.warn.log
-type outflow\EconoPET.err.log
-popd
+rd /q /s %PROJDIR%\outflow 2>NUL
+call %~dp0efx.bat -f map
+type %PROJDIR%\outflow\EconoPET.warn.log
+type %PROJDIR%\outflow\EconoPET.err.log
 echo.

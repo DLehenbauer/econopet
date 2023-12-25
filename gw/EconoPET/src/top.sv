@@ -108,9 +108,11 @@
         .cpu_data_o(cpu_data_o),
         .cpu_data_oe(cpu_data_merged_oe),
     
-        .ram_addr_o({
-            ram_addr_a16_o, ram_addr_a15_o, cpu_addr_o[14:12], ram_addr_a11_o, ram_addr_a10_o, cpu_addr_o[9:0]
-        }),
+
+        .ram_addr_a16_o(ram_addr_a16_o),
+        .ram_addr_a15_o(ram_addr_a15_o),
+        .ram_addr_a11_o(ram_addr_a11_o),
+        .ram_addr_a10_o(ram_addr_a10_o),
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
 
