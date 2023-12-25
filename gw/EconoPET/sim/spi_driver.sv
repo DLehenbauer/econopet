@@ -79,7 +79,7 @@ module spi_driver #(
     endtask;
 
     logic [7:0] spi_rx_data;
-    logic       spi_cycle;
+    logic       spi_strobe;
     logic [7:0] tx_byte = 8'hxx;
 
     spi spi_tx(
@@ -89,16 +89,16 @@ module spi_driver #(
         .spi_sd_o(spi_sd_o),
         .data_i(tx_byte),
         .data_o(spi_rx_data),
-        .cycle_o(spi_cycle)
+        .strobe_o(spi_strobe)
     );
 
     always_ff @(posedge spi_sck_o) begin
-        if (spi_cycle) spi_data_o <= spi_rx_data;
+        if (spi_strobe) spi_data_o <= spi_rx_data;
     end
 
     sync2_edge_detect sync_valid(
         .clock_i(clock_i),
-        .data_i(spi_cycle),
+        .data_i(spi_strobe),
         .pe_o(spi_ack_o)
     );
 endmodule

@@ -39,11 +39,11 @@ module spi1_controller #(
     // SCK clock domain signals
     //
 
-    logic                     spi_cycle;      // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
-                                              // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
+    logic                     spi_strobe;   // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
+                                            // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
 
-    logic [WB_DATA_WIDTH-1:0] spi_data_rx;    // Byte received from SPI (see also 'spi_cycle').
-    logic [WB_DATA_WIDTH-1:0] spi_data_tx;    // Next byte to transmit to SPI (see also 'spi_cycle').
+    logic [WB_DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
+    logic [WB_DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
 
     spi spi(
         .spi_cs_ni(spi_cs_ni),
@@ -52,7 +52,7 @@ module spi1_controller #(
         .spi_sd_o(spi_sd_o),
         .data_i(spi_data_tx),
         .data_o(spi_data_rx),
-        .cycle_o(spi_cycle)
+        .strobe_o(spi_strobe)
     );
 
     //
@@ -79,9 +79,9 @@ module spi1_controller #(
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
             spi_state <= READ_CMD;
         end else begin
-            // 'spi_cycle' indicates the FPGA has received a full byte from the MCU.  We decode it synchronously
+            // 'spi_strobe' indicates the FPGA has received a full byte from the MCU.  We decode it synchronously
             // on the positive SCK edge before the next incoming SPI bit shifts 'spi_data_rx'.
-            if (spi_cycle) begin
+            if (spi_strobe) begin
                 case (spi_state)
                     READ_CMD: begin
                         wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)

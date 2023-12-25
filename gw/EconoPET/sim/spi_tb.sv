@@ -29,8 +29,8 @@ module spi_tb;
     logic [7:0] expected_ci;
     logic [7:0] co;             // Controller (tx) -> Peripheral (rx)
 
-    logic c_cycle;              // Controller output (co) is valid
-    logic p_cycle;              // Peripheral output (po) is valid
+    logic c_strobe;             // Controller output (co) is valid
+    logic p_strobe;             // Peripheral output (po) is valid
 
     spi dut_spi_controller(
         .spi_sck_i(sck),
@@ -39,7 +39,7 @@ module spi_tb;
         .spi_sd_o(pico),
         .data_o(ci),
         .data_i(co),
-        .cycle_o(c_cycle)
+        .strobe_o(c_strobe)
     );
 
     spi dut_spi_peripheral(
@@ -49,7 +49,7 @@ module spi_tb;
         .spi_sd_o(poci),
         .data_o(pi),
         .data_i(po),
-        .cycle_o(p_cycle)
+        .strobe_o(p_strobe)
     );
 
     logic [2:0] bit_count = '0;
@@ -59,13 +59,13 @@ module spi_tb;
         bit_count = '0;
         
         #1;
-        `assert_equal(c_cycle, '0);
-        `assert_equal(p_cycle, '0);
+        `assert_equal(c_strobe, '0);
+        `assert_equal(p_strobe, '0);
     end
 
     always @(posedge cs) begin
-        `assert_equal(c_cycle, '0);
-        `assert_equal(p_cycle, '0);
+        `assert_equal(c_strobe, '0);
+        `assert_equal(p_strobe, '0);
 
         $display("[%t]     Asserting CS_N loads MSB of 'data_i' to SDO", $time);
         #1;
@@ -87,13 +87,13 @@ module spi_tb;
             `assert_equal(pi[0], pico);
             
             if (bit_count != 7) begin
-                $display("[%t]     'cycle_o' must not be asserted until last bit received", $time);
-                `assert_equal(c_cycle, '0);
-                `assert_equal(p_cycle, '0);
+                $display("[%t]     'strobe_o' must not be asserted until last bit received", $time);
+                `assert_equal(c_strobe, '0);
+                `assert_equal(p_strobe, '0);
             end else begin
-                $display("[%t]     'cycle_o' must be asserted on rising SCK of last bit", $time);
-                `assert_equal(c_cycle, 1'b1);
-                `assert_equal(p_cycle, 1'b1);
+                $display("[%t]     'strobe_o' must be asserted on rising SCK of last bit", $time);
+                `assert_equal(c_strobe, 1'b1);
+                `assert_equal(p_strobe, 1'b1);
 
                 $display("[%t]     'data_o' must contain received data.", $time);
                 `assert_equal(ci, expected_ci);
@@ -126,8 +126,8 @@ module spi_tb;
         // Check power on state prior to setting cs_n
         $display("[%t]   Vet power on state", $time);
         #1;
-        `assert_equal(c_cycle, '0);
-        `assert_equal(p_cycle, '0);
+        `assert_equal(c_strobe, '0);
+        `assert_equal(p_strobe, '0);
 
         $display("[%t]   Drive cs_n and sck", $time);
         sck = '0;

@@ -28,13 +28,13 @@
 
     output logic [DATA_WIDTH-1:0] data_o,     // Data received.  Shifted in from SDO on each positive edge of SCK.
     
-    output logic                  cycle_o     // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
+    output logic                  strobe_o    // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
                                               // is captured on the following negative SCK edege.
 );
     logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH-1;
     
     initial begin
-        cycle_o        <= '0;
+        strobe_o       <= '0;
         bits_remaining <= DATA_WIDTH-1;
     end
 
@@ -73,10 +73,10 @@
         if (spi_cs_ni) begin
             // Desserting 'spi_cs_ni' asynchronously resets the SPI state machine, terminating
             // any cycle that is currently in progress.
-            cycle_o <= '0;
+            strobe_o <= '0;
         end else begin
             // The next positive SCK edge will transfer the final bits of 'data_i' and 'data_o'.
-            cycle_o <= bits_remaining == 0;
+            strobe_o <= bits_remaining == 0;
         end
     end
 endmodule
