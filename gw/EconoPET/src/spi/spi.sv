@@ -69,10 +69,12 @@
         end
     end
 
-    always_ff @(negedge spi_cs_ni or negedge spi_sck_i) begin
-        // The below if-condition avoids the following error:
-        // 'ERROR: if-condition does not match any sensitivity list edge (VERI-1167)'
-        if (!spi_cs_ni || !spi_sck_i) begin
+    always_ff @(posedge spi_cs_ni or negedge spi_sck_i) begin
+        if (spi_cs_ni) begin
+            // Desserting 'spi_cs_ni' asynchronously resets the SPI state machine, terminating
+            // any cycle that is currently in progress.
+            cycle_o <= '0;
+        end else begin
             // The next positive SCK edge will transfer the final bits of 'data_i' and 'data_o'.
             cycle_o <= bits_remaining == 0;
         end
