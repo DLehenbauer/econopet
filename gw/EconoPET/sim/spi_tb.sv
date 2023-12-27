@@ -82,9 +82,7 @@ module spi_tb;
 
     always @(posedge sck) begin
         if (cs) begin
-            $display("[%t]     Rising edge of SCK shifts SDI into 'data_o[0]'", $time);
-            `assert_equal(ci[0], poci);
-            `assert_equal(pi[0], pico);
+            #1;
             
             if (bit_count != 7) begin
                 $display("[%t]     'strobe_o' must not be asserted until last bit received", $time);
@@ -94,14 +92,20 @@ module spi_tb;
                 $display("[%t]     'strobe_o' must be asserted on rising SCK of last bit", $time);
                 `assert_equal(c_strobe, 1'b1);
                 `assert_equal(p_strobe, 1'b1);
-
-                $display("[%t]     'data_o' must contain received data.", $time);
-                `assert_equal(ci, expected_ci);
-                `assert_equal(pi, expected_pi);
             end
         end
 
         bit_count <= bit_count + 1;
+    end
+
+    always @(posedge c_strobe) begin
+        $display("[%t]     'ci' must contain received data.", $time);
+        `assert_equal(ci, expected_ci);
+    end
+
+    always @(posedge p_strobe) begin
+        $display("[%t]     'pi' must contain received data.", $time);
+        `assert_equal(pi, expected_pi);
     end
 
     always @(negedge sck) begin
@@ -116,8 +120,8 @@ module spi_tb;
         `assert_equal(cs, '1);
         `assert_equal(sck, '0);
 
-        #1 sck = 1'b1;
-        #1 sck = '0;
+        #10 sck = 1'b1;
+        #10 sck = '0;
     endtask
     
     task run;
@@ -181,7 +185,6 @@ module spi_tb;
         #1 cs = '0;
 
         #1 $display("[%t]   END: Transfer 2 bytes", $time);
-
         #1 $display("[%t] END %m", $time);
     endtask
 endmodule

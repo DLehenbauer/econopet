@@ -55,9 +55,28 @@ module spi1_controller #(
         .strobe_o(spi_strobe)
     );
 
-    //
-    // SCK domain state machine
-    //
+    // CDC from SCK to 'wb_clock_i'
+
+    logic spi_start_pulse;
+    logic spi_reset_pulse;
+
+    sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'wb_clock_i' domain
+        .clock_i(wb_clock_i),
+        .data_i(spi_cs_ni),
+        .data_o(),                  // Unused: Only need edge detection
+        .ne_o(spi_start_pulse),
+        .pe_o(spi_reset_pulse)
+    );
+
+    logic spi_strobe_pulse;
+
+    sync2_edge_detect sync_valid(   // Cross from SCK to 'wb_clock_i' domain
+        .clock_i(wb_clock_i),
+        .data_i(spi_strobe),
+        .data_o(),                  // Unused: Only need positive edge detection
+        .pe_o(spi_strobe_pulse),
+        .ne_o()                     // Unused: Only need positive edge detection
+    );
 
     // State encoding for our FSM:
     //
@@ -73,81 +92,55 @@ module spi1_controller #(
                VALID            = 3'b100;
 
     logic [2:0] spi_state = READ_CMD;   // Current state of FSM
+    wire spi_valid = spi_state[2];
 
-    always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
-        if (spi_cs_ni) begin
+    always_ff @(posedge wb_clock_i) begin
+        if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
             spi_state <= READ_CMD;
-        end else begin
-            // 'spi_strobe' indicates the FPGA has received a full byte from the MCU.  We decode it synchronously
-            // on the positive SCK edge before the next incoming SPI bit shifts 'spi_data_rx'.
-            if (spi_strobe) begin
-                case (spi_state)
-                    READ_CMD: begin
-                        wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
+        end else if (spi_strobe_pulse) begin
+            case (spi_state)
+                READ_CMD: begin
+                    wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
 
-                        if (spi_data_rx[6]) begin
-                            // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
-                            wb_addr_o <= { spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx };
-                            spi_state <= READ_ADDR_HI_ARG;
-                        end else begin
-                            // Otherwise increment the previous address.
-                            wb_addr_o <= wb_addr_o + 1'b1;
-                            spi_state <= spi_data_rx[7]
-                                ? READ_DATA_ARG
-                                : VALID;
-                        end
-                    end
-
-                    READ_ADDR_HI_ARG: begin
-                        wb_addr_o[15:8] <= spi_data_rx;
-                        spi_state       <= READ_ADDR_LO_ARG;
-                    end
-
-                    READ_ADDR_LO_ARG: begin
-                        wb_addr_o[7:0] <= spi_data_rx;
-                        spi_state      <= wb_we_o
+                    if (spi_data_rx[6]) begin
+                        // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
+                        wb_addr_o <= { spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx };
+                        spi_state <= READ_ADDR_HI_ARG;
+                    end else begin
+                        // Otherwise increment the previous address.
+                        wb_addr_o <= wb_addr_o + 1'b1;
+                        spi_state <= spi_data_rx[7]
                             ? READ_DATA_ARG
                             : VALID;
                     end
+                end
 
-                    READ_DATA_ARG: begin
-                        wb_data_o <= spi_data_rx;
-                        spi_state <= VALID;
-                    end
+                READ_ADDR_HI_ARG: begin
+                    wb_addr_o[15:8] <= spi_data_rx;
+                    spi_state       <= READ_ADDR_LO_ARG;
+                end
 
-                    VALID: begin
-                        // Remain in the valid state until negative CS_N edge resets the FSM.
-                        spi_state <= VALID;
-                    end
-                endcase
-            end
+                READ_ADDR_LO_ARG: begin
+                    wb_addr_o[7:0] <= spi_data_rx;
+                    spi_state      <= wb_we_o
+                        ? READ_DATA_ARG
+                        : VALID;
+                end
+
+                READ_DATA_ARG: begin
+                    wb_data_o <= spi_data_rx;
+                    spi_state <= VALID;
+                end
+
+                VALID: begin
+                    // Remain in the valid state until negative CS_N edge resets the FSM.
+                    spi_state <= VALID;
+                end
+            endcase
         end
     end
     
-    // CDC from SCK to 'wb_clock_i'
-
-    logic spi_selected_pulse;
-    logic spi_deselected_pulse;
-
-    sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'wb_clock_i' domain
-        .clock_i(wb_clock_i),
-        .data_i(spi_cs_ni),
-        .data_o(),                  // Unused: Only need edge detection
-        .ne_o(spi_selected_pulse),
-        .pe_o(spi_deselected_pulse)
-    );
-
-    logic spi_cmd_pulse;
-
-    sync2_edge_detect sync_valid(   // Cross from SCK to 'wb_clock_i' domain
-        .clock_i(wb_clock_i),
-        .data_i(spi_state[2]),      // 'spi_state[2]' bit indicates 'state == VALID'.
-        .data_o(),                  // Unused: Only need positive edge detection
-        .pe_o(spi_cmd_pulse),
-        .ne_o()                     // Unused: Only need positive edge detection
-    );
-
     // Wishbone controller state machine ('wb_clock_i' domain)
 
     initial begin
@@ -176,19 +169,19 @@ module spi1_controller #(
     assign wb_cycle_o  = wb_state[1];
 
     always_ff @(posedge wb_clock_i) begin
-        if (spi_deselected_pulse) begin
+        if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
             wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o' 
             wb_strobe_o <= '0;
         end else begin
             case (wb_state)
                 READY: begin
-                    if (spi_selected_pulse) begin
+                    if (spi_start_pulse) begin
                         wb_state <= RECEIVING_CMD;
                     end
                 end
                 RECEIVING_CMD: begin
-                    if (spi_cmd_pulse) begin
+                    if (spi_valid) begin
                         wb_strobe_o <= 1'b1;
                         wb_state <= PROCESSING_CMD;
                     end

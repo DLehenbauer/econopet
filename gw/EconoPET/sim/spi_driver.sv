@@ -57,11 +57,11 @@ module spi_driver #(
             for (bit_index = 0; bit_index < 8; bit_index++) begin
                 @(posedge spi_sck_o);
     
-                // 'tx_byte' is loaded on falling edge of spi_sck_o when the last bit is transfered.
-                // However, we update 'tx_byte' after every bit to verify that 'tx_byte' is held
-                // between loads.
+                // 'tx_byte' is latched after first rising edge of spi_sck_o.  To test this, we
+                // load the next byte to transfer into 'spi_data_i' just afterwards.
+                #1;
                 tx_byte = tx[byte_index + 1];
-            end    
+            end
         end
 
         @(negedge spi_sck_o);
@@ -88,13 +88,9 @@ module spi_driver #(
         .spi_sd_i(spi_sd_i),
         .spi_sd_o(spi_sd_o),
         .data_i(tx_byte),
-        .data_o(spi_rx_data),
+        .data_o(spi_data_o),
         .strobe_o(spi_strobe)
     );
-
-    always_ff @(posedge spi_sck_o) begin
-        if (spi_strobe) spi_data_o <= spi_rx_data;
-    end
 
     sync2_edge_detect sync_valid(
         .clock_i(clock_i),

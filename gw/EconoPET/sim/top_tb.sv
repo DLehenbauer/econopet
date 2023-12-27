@@ -91,7 +91,7 @@ module top_tb #(
         .ram_oe_n_i(ram_oe_n_o)
     );
 
-    spi1_driver spi1(
+    spi1_driver spi1_driver(
         .clock_i(clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
@@ -105,16 +105,16 @@ module top_tb #(
         logic [16:0] addr_i,
         logic  [7:0] data_i
     );
-        spi1.write_at(addr_i, data_i);
-        spi1.read_at(addr_i);
-        spi1.read_next();
+        spi1_driver.write_at(addr_i, data_i);
+        spi1_driver.read_at(addr_i);
+        spi1_driver.read_next();
         `assert_equal(spi_rx_data, data_i);
     endtask
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
-        spi1.reset;
+        spi1_driver.reset;
 
         test_rw(20'h0_0000, 8'h00);
         test_rw(20'h0_0000, 8'h01);

@@ -51,23 +51,21 @@ create_clock -period $clock_period clock_i
 set spi1_sck_period_mhz 24
 set spi1_sck_period_ns [ns_from_mhz $spi1_sck_period_mhz]
 
-# 'spi1_sck_v' is a virtual clock that models the edges at which TX and RX transition
-create_clock -name spi1_sck_v -period $spi1_sck_period_ns
-
-# 'spi1_sck_i' is the incoming SCK used to sample TX/RX between transitions.  Note that
-# SCK is center-aligned (phase-shifted 90 degrees from 'spi1_sck_v'.)
-create_clock -name "spi1_sck_i" -period $spi1_sck_period_ns -waveform [list [expr { $spi1_sck_period_ns * 0.25 }] [expr { $spi1_sck_period_ns * 0.75 }]] [get_ports spi1_sck_i]
+# 'spi1_sck_i' is the incoming SCK used to sample TX/RX between transitions.
+create_clock -name spi1_sck_i -period $spi1_sck_period_ns [get_ports spi1_sck_i]
 
 # SPI sampling and data clocks are asynchronous/unrelated to other clocks in the design.
-set_clock_groups -asynchronous -group {spi1_sck_v spi1_sck_i}
+set_clock_groups -asynchronous -group {spi1_sck_i}
 
-# Assume RX transitions within +/- 250ps of virtual data clock edge
-set_input_delay -clock spi1_sck_v -min -0.250 [get_ports {spi1_sd_i}]
-set_input_delay -clock spi1_sck_v -max  0.250 [get_ports {spi1_sd_i}]
+# SDO/SDI are sampled on the rising edge of SCK and transition on the falling edge of SCK.
 
-# Assume the required TX data valid window is 1/8 the SCK period, centered on the sampling edge.
-set_output_delay -clock spi1_sck_i -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_o}]
-set_output_delay -clock spi1_sck_i -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_o}]
+# We assume incoming transitions may be skewed +/-1/4th the SCK period.
+set_input_delay  -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_i}]
+set_input_delay  -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_i}]
+
+# We allow outgoing transitions to be skewed by +/-1/8th the SCK period.
+set_output_delay -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_o}]
+set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_o}]
 
 # Assume CS_N transitions centered on data clock
 #

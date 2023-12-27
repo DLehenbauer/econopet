@@ -29,7 +29,7 @@ module spi1_driver #(
 );
     logic [WB_DATA_WIDTH-1:0] spi_rx_data;
 
-    spi_driver #(SCK_MHZ) spi(
+    spi_driver #(SCK_MHZ) spi_driver(
         .clock_i(clock_i),
         .spi_sck_o(spi_sck_o),
         .spi_cs_no(spi_cs_no),
@@ -40,7 +40,7 @@ module spi1_driver #(
 
     task reset;
         $display("[%t]    spi1.reset()", $time);
-        spi.reset();
+        spi_driver.reset();
     endtask
 
     function [7:0] cmd(input bit we, input bit set_addr, input logic [WB_ADDR_WIDTH-1:0] addr = 20'hx_xxxx);
@@ -66,14 +66,14 @@ module spi1_driver #(
         end
         $display("[%t]      SPI1 Send: [ %s]", $time, s);
 
-        spi.send(tx, /* complete: */ '0);
+        spi_driver.send(tx, /* complete: */ '0);
         
         @(negedge spi_stall_i);
 
         $display("[%t]      SPI1 Received: [ %2h ]", $time, spi_rx_data);
         spi_data_o <= spi_rx_data;
 
-        spi.complete;
+        spi_driver.complete;
     endtask
 
     task write_at(
