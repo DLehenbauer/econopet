@@ -40,7 +40,7 @@
     logic [DATA_WIDTH-1:0] rx_buffer_d, rx_buffer_q;
     assign rx_buffer_d = { rx_buffer_q[DATA_WIDTH-2:0], spi_sd_i };
 
-    logic [DATA_WIDTH-1:0] tx_buffer_q;
+    logic [DATA_WIDTH-2:0] tx_buffer_q;
     logic preload = 1'b1;
 
     logic spi_sd_q;
@@ -62,10 +62,13 @@
             // SDI is valid on positive edge of SCK.
             rx_buffer_q <= rx_buffer_d;
 
-            if (msb) tx_buffer_q    <= data_i;
+            tx_buffer_q <= msb
+                ? data_i[6:0]
+                : { tx_buffer_q[DATA_WIDTH-3:0], 1'bx };
+
             if (lsb) data_o         <= rx_buffer_d;
 
-            strobe_o         <= lsb;
+            strobe_o       <= lsb;
             bits_remaining <= bits_remaining - 1'b1;
         end
     end
@@ -74,7 +77,7 @@
         if (spi_cs_ni) begin
             preload     <= 1'b1;
         end else begin
-            spi_sd_q    <= tx_buffer_q[bits_remaining];
+            spi_sd_q    <= tx_buffer_q[DATA_WIDTH-2];
             preload     <= msb;
         end
     end
