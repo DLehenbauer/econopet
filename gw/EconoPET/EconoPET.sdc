@@ -39,10 +39,10 @@ create_clock -period $clock_period clock_i
 #        /CS  ‾‾‾\_______________________________________________________________________/‾‾‾
 #              . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : .  
 #        SCK  ___________/‾‾‾\___/‾‾‾\___/‾‾‾\___/‾‾‾\___/‾‾‾\___/‾‾‾\___/‾‾‾\___/‾‾‾\_______
-#              . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : .  
-#         TX  -------<​_​̅_​̅_​̅7​̅_​̅_​̅_X_​̅_​̅_​̅6​̅_​̅_​̅_X_​̅_​̅_​̅5​̅_​̅_​̅_X_​̅_​̅_​̅4​̅_​̅_​̅_X_​̅_​̅_​̅3​̅_​̅_​̅_X_​̅_​̅_​̅2​̅_​̅_​̅_X_​̅_​̅_​̅1​̅_​̅_​̅_X_​̅_​̅_​̅0​̅_​̅_​̅_>-------
 #              . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . 
-#         RX  ----<​_​̅_​̅_​̅_​̅_​̅_​̅7​̅_​̅_​̅_X_​̅_​̅_​̅6​̅_​̅_​̅_X_​̅_​̅_​̅5​̅_​̅_​̅_X_​̅_​̅_​̅4​̅_​̅_​̅_X_​̅_​̅_​̅3​̅_​̅_​̅_X_​̅_​̅_​̅2​̅_​̅_​̅_X_​̅_​̅_​̅1​̅_​̅_​̅_X_​̅_​̅_​̅0​̅_​̅_​̅_​̅_​̅_​̅_​̅_>---
+#        SDI  -------<​_​̅_​̅_​̅7​̅_​̅_​̅_X_​̅_​̅_​̅6​̅_​̅_​̅_X_​̅_​̅_​̅5​̅_​̅_​̅_X_​̅_​̅_​̅4​̅_​̅_​̅_X_​̅_​̅_​̅3​̅_​̅_​̅_X_​̅_​̅_​̅2​̅_​̅_​̅_X_​̅_​̅_​̅1​̅_​̅_​̅_X_​̅_​̅_​̅0​̅_​̅_​̅_>-------
+#              . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : .  
+#        SDO  -------<​_​̅_​̅_​̅7​̅_​̅_​̅_X_​̅_​̅_​̅6​̅_​̅_​̅_X_​̅_​̅_​̅5​̅_​̅_​̅_X_​̅_​̅_​̅4​̅_​̅_​̅_X_​̅_​̅_​̅3​̅_​̅_​̅_X_​̅_​̅_​̅2​̅_​̅_​̅_X_​̅_​̅_​̅1​̅_​̅_​̅_X_​̅_​̅_​̅0​̅_​̅_​̅_>-------
 #              . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : . : .  
 #      STALL  ________/‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\___
 
@@ -55,15 +55,15 @@ set spi1_sck_period_ns [ns_from_mhz $spi1_sck_period_mhz]
 create_clock -name spi1_sck_i -period $spi1_sck_period_ns [get_ports spi1_sck_i]
 
 # SPI sampling and data clocks are asynchronous/unrelated to other clocks in the design.
-set_clock_groups -asynchronous -group {spi1_sck_i}
+set_clock_groups -asynchronous -group { spi1_sck_i }
 
 # SDO/SDI are sampled on the rising edge of SCK and transition on the falling edge of SCK.
 
-# We assume incoming transitions may be skewed +/-1/4th the SCK period.
+# We assume incoming transitions may be skewed +/- 1/8th the SCK period.
 set_input_delay  -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_i}]
 set_input_delay  -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_i}]
 
-# We allow outgoing transitions to be skewed by +/-1/8th the SCK period.
+# We allow outgoing transitions to be skewed by +/- 1/8th the SCK period.
 set_output_delay -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_o}]
 set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_o}]
 
@@ -72,7 +72,7 @@ set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns 
 # Under hardware control CS_N asserts on what would be the rising SCK edge prior the first bit
 # and deasserts on the rising SCK edge after the last bit (if SCK weren't disabled).
 #
-# Under software control, CS_N is unsynchronized, but generally delayed more than a clock period
+# Under software control, CS_N is unsynchronized, but generally delayed more than an SCK period
 # at 4 MHz or above.
 set_false_path -from [get_ports spi1_cs_ni]
 

@@ -37,47 +37,45 @@
         strobe_o <= '0;
     end
 
-    logic [DATA_WIDTH-1:0] rx_buffer_d, rx_buffer_q;
-    assign rx_buffer_d = { rx_buffer_q[DATA_WIDTH-2:0], spi_sd_i };
-
-    logic [DATA_WIDTH-2:0] tx_buffer_q;
-    logic preload = 1'b1;
-
-    logic spi_sd_q;
-    assign spi_sd_o = preload
-        ? data_i[DATA_WIDTH-1]
-        : spi_sd_q;
-    
     wire msb = bits_remaining == DATA_WIDTH-1;
     wire lsb = bits_remaining == '0;
 
+    logic [DATA_WIDTH:0] buffer_d, buffer_q;
+    assign buffer_d = msb
+        ? { data_i[6:0], 1'bx, spi_sd_i }
+        : { buffer_q[DATA_WIDTH-1:0], spi_sd_i };
+
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
-            // Deasserting 'spi_cs_ni' indicates the transfer has ended.
+            // Deasserting 'spi_cs_ni' completes or aborts the current transfer.
             bits_remaining <= DATA_WIDTH-1;
-            rx_buffer_q    <= 'x;
-            tx_buffer_q    <= 'x;
+            buffer_q       <= 'x;
             strobe_o       <= '0;
         end else begin
             // SDI is valid on positive edge of SCK.
-            rx_buffer_q <= rx_buffer_d;
+            buffer_q <= buffer_d;
 
-            tx_buffer_q <= msb
-                ? data_i[6:0]
-                : { tx_buffer_q[DATA_WIDTH-3:0], 1'bx };
-
-            if (lsb) data_o         <= rx_buffer_d;
+            if (lsb) data_o <= buffer_d[DATA_WIDTH-1:0];
 
             strobe_o       <= lsb;
             bits_remaining <= bits_remaining - 1'b1;
         end
     end
 
+    logic preload = 1'b1;
+
+    logic spi_sd_q;
+    assign spi_sd_o = preload
+        ? data_i[DATA_WIDTH-1]
+        : spi_sd_q;
+
     always_ff @(posedge spi_cs_ni or negedge spi_sck_i) begin
         if (spi_cs_ni) begin
+            // Deasserting 'spi_cs_ni' completes or aborts the current transfer.
+            spi_sd_q    <= 'x;
             preload     <= 1'b1;
         end else begin
-            spi_sd_q    <= tx_buffer_q[DATA_WIDTH-2];
+            spi_sd_q    <= buffer_q[DATA_WIDTH];
             preload     <= msb;
         end
     end
