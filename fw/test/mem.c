@@ -15,13 +15,19 @@
 #include "../driver.h"
 #include "mem.h"
 
+//#define CONTINUE_ON_ERROR
+
 const int32_t addr_min = 0x00000;
 const int32_t addr_max = 0x1FFFF;
 
 bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
     if (actual != expected) {
         printf("$%05x: Expected %08b, but got %08b\n", addr, expected, actual);
-        return false;
+        #ifdef CONTINUE_ON_ERROR
+            return false;
+        #else
+            panic("");
+        #endif
     }
     return true;
 }
@@ -53,9 +59,13 @@ uint8_t check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit, uint8_t expec
             printf("Inconsistent read result (attempt 1: %08b, attempt 2: %08b)\n", actual_byte, byte2);
         }
 
-        // Correct the error before continuing:
-        actual_byte = actual_byte ^ (1 << bit);
-        fix_byte(addr, actual_byte);
+        #ifdef CONTINUE_ON_ERROR
+            // Correct the error before continuing:
+            actual_byte = actual_byte ^ (1 << bit);
+            fix_byte(addr, actual_byte);
+        #else
+            panic("");
+        #endif
     }
 
     return actual_byte;

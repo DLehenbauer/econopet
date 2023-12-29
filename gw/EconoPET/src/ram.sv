@@ -13,6 +13,7 @@
  */
 
 module ram #(
+    parameter WB_CLOCK_MHZ = 64,
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 17
 )(
@@ -39,20 +40,30 @@ module ram #(
     // Timing for AS6C1008-55PCN
     // (See: https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008feb2007.pdf)
     //
-    // Read cycle when Address and OE are coincident:
-    //
-    //   DOUT valid 55ns after coincident ADDR and OE.
-    //   Pevious DOUT held 10ns after ADDR changes.
-    //   Requires 20ns to return to High-Z after OE deasserted.
-    //
     //              |<-- 55ns -->|     |<-- 20ns ->|
     //              |            |     |           |
     // ADDR  -------<_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​​​̅_​​>----------------
     //                           |     |           |
     //   OE  _______/‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\________________
     //                           |     |           |
-    // DOUT  --------------------<_​̅_​̅_​​̅_​​​̅_​X_​̅_​̅_​̅_​​​​̅_​X_​̅_​̅_​̅_​​̅_​​​>----
+    // DOUT  -------------------<​̅_​̅_​̅_​̅_​​̅_​​​̅_​X_​̅_​̅_​̅_​​​​̅_​X_​̅_​̅_​̅_​​̅_​​​>----
+
+    localparam clock_ns = 1000 / WB_CLOCK_MHZ;
+    
+    // DOUT valid 55ns after coincident ADDR and OE: max(tAA, tOE, tOLZ)
     //
+    //   Address Access Time (tAA)               : 55 ns
+    //   Output Enable Access Time (tOE)         : 30 ns
+    //   Output Enable to Output in Low-Z (tOLZ) :  5 ns
+    localparam read_setup_count = $ceil(55 / clock_ns);
+
+    // DOUT held 10ns after ADDR changes.
+    // DOUT returns to High-Z 20ns after OE deasserted.
+    //
+    //   Output Hold from Address Change (tOH)   : 10 ns
+    //   
+    localparam read_hold_count = $ceil(20 / clock_ns);
+
     // Write cycle when Address, WE, and DIN are coincident:
     //   
     //   Requires 45ns pulse width.
@@ -64,37 +75,9 @@ module ram #(
     //                           |
     //   WE  _______/‾‾‾‾‾‾‾‾‾‾‾‾\_____
     //                           |
-    //  DIN  ----------------<_​̅_​̅_​​>-----
+    //  DIN  ----------------<​̅_​̅_​̅_​​>-----
 
-    // Timing for IS61WV1288EEBLL-10TLI
-    // (See: https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)
-    //
-    // Read cycle when Address and OE are coincident:
-    //
-    //   DOUT valid 10ns after coincident ADDR and OE.
-    //   Pevious DOUT held 2ns after ADDR changes.
-    //   Requires 4ns to return to High-Z after OE deasserted.
-    //
-    //              |<-- 10ns -->|    |<- 4ns ->|
-    //              |            |    |         |
-    // ADDR  -------<_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​​>----------------
-    //                           |    |         |
-    //   OE  _______/‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\________________
-    //                           |    |         |
-    // DOUT  --------------------<_​̅_​̅_​​̅_​X_​̅_​̅_​̅_​​X_​̅_​̅_​̅_​​>------
-    //
-    // Write cycle when Address, WE, and DIN are coincident:
-    //   
-    //   Requires 10ns pulse width (8ns if OE deasserted)
-    //   ADDR setup time and DIN hold times are both 0.
-    //
-    //              |<-- 10ns -->|
-    //              |            |
-    // ADDR  -------<_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​̅_​>-----
-    //                           |
-    //   WE  _______/‾‾‾‾‾‾‾‾‾‾‾‾\_____
-    //                           |
-    //  DIN  ----------------<_​̅_​̅_​​>-----
+    localparam write_hold_count = $ceil(45 / clock_ns);
 
     //                      AWOS
     localparam READY   = 4'b0000,
@@ -129,18 +112,18 @@ module ram #(
                     end
                 end
                 READING: begin
-                    if (clk_counter == 3'd4) begin
+                    if (clk_counter == read_setup_count) begin
                         clk_counter <= '0;
                         wb_data_o <= ram_data_i;
                         state <= HIGHZ;
                     end else clk_counter <= clk_counter + 1'b1;
                 end
                 HIGHZ: begin
-                    if (clk_counter == 3'd1) state <= DONE;
+                    if (clk_counter == read_hold_count) state <= DONE;
                     else clk_counter <= clk_counter + 1'b1;
                 end
                 WRITING: begin
-                    if (clk_counter == 3'd4) state <= DONE;
+                    if (clk_counter == write_hold_count) state <= DONE;
                     else clk_counter <= clk_counter + 1'b1;
                 end
                 DONE : begin
