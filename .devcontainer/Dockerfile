@@ -1,8 +1,9 @@
-ARG VARIANT="bookworm"
-FROM mcr.microsoft.com/devcontainers/base:bookworm
+ARG VARIANT="jammy"
+FROM mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 ARG PICO_SDK_VERSION="1.5.0"
 ARG VERIBLE_VERSION="v0.0-3471-g9cb45092"
+ARG EFINITY_VERSION="2023.2.307"
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -11,12 +12,38 @@ ARG DEBIAN_FRONTEND="noninteractive"
 RUN apt-get update && apt-get -y install --no-install-recommends \
     clang-format
 #
-# Tools for simulating/linting RTL
+# Tools for simulating/linting/synthesizing RTL
 #
+
+# Install Efinity -- Requires a free license from Efinix.
+# See: https://www.efinixinc.com/support/efinity.php
+ARG EFINITY_ARCHIVE="efinity-${EFINITY_VERSION}-ubuntu-x64.tar.bz2"
+RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp && \
+    tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
+    rm -rf /tmp/${EFINITY_ARCHIVE} && \
+    chmod +x /opt/efinity/2023.2/bin/setup.sh
 
 # Install Icarus Verilog
 RUN apt-get update && apt-get -y install --no-install-recommends \
-    iverilog
+    autoconf \
+    bison \
+    flex \
+    g++ \
+    gcc \
+    gperf \
+    make
+
+RUN cd /tmp && \
+    git clone https://github.com/steveicarus/iverilog.git && \
+    cd iverilog && \
+    git checkout --track -b v12-branch origin/v12-branch && \
+    git pull && \
+    sh autoconf.sh && \
+    sh configure && \
+    make && \
+    make install && \
+    cd /tmp && \
+    rm -rf iverilog
 
 # Install Verible
 ARG VERIBLE_ARCHIVE=verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz
