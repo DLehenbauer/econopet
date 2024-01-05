@@ -3,7 +3,6 @@ setlocal EnableDelayedExpansion
 
 set PROJNAME=EconoPET
 set PROJDIR=%~dp0\gw\%PROJNAME%
-set BINDIR=C:\Efinity\2023.1\bin
 
 :Parse
     if /I "%~1" == "" (
@@ -22,16 +21,11 @@ set BINDIR=C:\Efinity\2023.1\bin
     )
 
 :Update
-    :: Move to the root of the Efinity project so that 'efx_run' artifacts are generated
-    :: within the \work_sim\ subdirectory.
-    pushd %PROJDIR%
-
     :: Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
     :: the resulting Python exception which occures due to lack of SystemVerilog support.
     :: 
     :: (See https://www.efinixinc.com/support/forum.php?cid=6&pid=932)
-    cmd /c %BINDIR%\efx_run %PROJNAME%.xml --flow rtlsim 2> NUL
-    popd
+    call %~dp0efx.bat --flow rtlsim 2> NUL
     echo.
 
 :Run
