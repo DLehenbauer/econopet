@@ -4316,6 +4316,11 @@
     (effects (font (size 1.27 1.27)) (justify right bottom))
     (uuid 065d0ec4-9a8e-46c1-b5cc-051990b6ad02)
   )
+  (text "During configuration, all GPIO pins (excluding LVDS\nas GPIO) are configured in weak pull-up mode.\n\nThis applies to ~{IO_OE}, ~{PIA1_CS}, ~{PIA2_CS}, ~{VIA_CS}.\n\nThe LVDS as GPIO pins are tri-stated without a pull-up.\n\nThis applies to ~{RAM_OE}, ~{RAM_WE}, PHI2, R~{W}\n"
+    (at 345.44 142.24 0)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid 17ab7169-7715-4669-9693-5636847d03e7)
+  )
   (text "BD2" (at 140.97 54.61 180)
     (effects (font (size 1.27 1.27)) (justify right bottom))
     (uuid 26ce1118-ce2f-4c86-808d-b74a9b58b087)
