@@ -2043,6 +2043,9 @@
     (path "/00000000-0000-0000-0000-000061b3f8ab/93b516f6-6792-4975-ad0b-3754b210d423"
       (reference "C104") (unit 1) (value "4.7u 10V") (footprint "Capacitor_SMD:C_0402_1005Metric")
     )
+    (path "/00000000-0000-0000-0000-0000614e685e/1437a595-7a3f-4aa3-a5f5-4cb947456f5c"
+      (reference "C105") (unit 1) (value "100n") (footprint "Capacitor_SMD:C_0402_1005Metric")
+    )
     (path "/00000000-0000-0000-0000-000061ed99de/00000000-0000-0000-0000-000062e92074"
       (reference "D1") (unit 1) (value "SS54") (footprint "Diode_SMD:D_SMA")
     )
@@ -2394,6 +2397,9 @@
     (path "/00000000-0000-0000-0000-0000617d6918/b70241ab-8a5c-42d5-a1ab-8f4bc50a1197/3b6d0c70-6282-4619-97c5-f97c852cfe84/715235fe-7199-4036-aa32-f022017e5449"
       (reference "R59") (unit 1) (value "10k") (footprint "Resistor_SMD:R_0402_1005Metric")
     )
+    (path "/00000000-0000-0000-0000-0000614e685e/5a9c91ee-df75-4f6b-b1b7-f13e92ccf6f9"
+      (reference "R60") (unit 1) (value "100k") (footprint "Resistor_SMD:R_0402_1005Metric")
+    )
     (path "/00000000-0000-0000-0000-00006151ec26/95315324-189d-4b93-a14a-13e28eb2e3e7"
       (reference "RN1") (unit 1) (value "4k7") (footprint "Resistor_SMD:R_Array_Convex_4x0603")
     )
@@ -2478,8 +2484,8 @@
     (path "/00000000-0000-0000-0000-0000614e685e/00000000-0000-0000-0000-0000614e6908"
       (reference "U1") (unit 1) (value "W65C02S") (footprint "Package_DIP:DIP-40_W15.24mm_Socket")
     )
-    (path "/00000000-0000-0000-0000-0000614e685e/00000000-0000-0000-0000-0000615a86ae"
-      (reference "U2") (unit 1) (value "AS6C1008") (footprint "Package_DIP:DIP-32_W15.24mm_Socket")
+    (path "/00000000-0000-0000-0000-0000614e685e/40498b05-60b4-42cf-b02e-272b1e9c0de4"
+      (reference "U2") (unit 1) (value "IS61WV1288EEBLL") (footprint "JLCPCB:SOP-32_L20.7-W11.3-P1.27-LS14.1-BL")
     )
     (path "/00000000-0000-0000-0000-000061ed99de/2e06288d-7b74-4d8b-b901-edb4f523f28a"
       (reference "U3") (unit 1) (value "AMS1117-3.3") (footprint "Package_TO_SOT_SMD:SOT-223-3_TabPin2")
