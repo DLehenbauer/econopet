@@ -58,9 +58,23 @@
     input  logic                        config_crt_i,      // (0 = 12", 1 = 9")
     input  logic                        config_kbd_i,      // (0 = Business, 1 = Graphics)
     
+    // PMOD
+    input  logic [8:1]                  pmod1_i,
+    output logic [8:1]                  pmod1_o,
+    output logic [8:1]                  pmod1_oe,
+
+    input  logic [8:1]                  pmod2_i,
+    output logic [8:1]                  pmod2_o,
+    output logic [8:1]                  pmod2_oe,
+
     // Spare pins
     output logic  [9:0]                 spare_o
 );
+    // Test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
+    assign pmod1_o[8:1] = pmod2_i[8:1];
+    assign pmod1_oe[8:1] = '1;
+    assign pmod2_oe[8:1] = '0;
+
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for bus_addr_o[15:0].
     logic cpu_addr_merged_oe;
