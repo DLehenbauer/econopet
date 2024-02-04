@@ -58,6 +58,9 @@
     input  logic                        config_crt_i,      // (0 = 12", 1 = 9")
     input  logic                        config_kbd_i,      // (0 = Business, 1 = Graphics)
     
+    // Audio
+    output logic                        audio_o,
+
     // PMOD
     input  logic [8:1]                  pmod1_i,
     output logic [8:1]                  pmod1_o,
@@ -70,6 +73,8 @@
     // Spare pins
     output logic  [9:0]                 spare_o
 );
+    assign audio_o = '0;
+
     // Test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
     assign pmod1_o[8:1] = pmod2_i[8:1];
     assign pmod1_oe[8:1] = '1;
