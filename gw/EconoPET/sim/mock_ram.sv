@@ -19,7 +19,6 @@
     input  logic [ADDR_WIDTH-1:0]  ram_addr_i,
     input  logic [DATA_WIDTH-1:0]  ram_data_i,
     output logic [DATA_WIDTH-1:0]  ram_data_o,
-    input  logic                   ram_data_oe,
     input  logic                   ram_we_n_i,
     input  logic                   ram_oe_n_i
 );
