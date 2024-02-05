@@ -1,0 +1,5 @@
+[submodule "fw/external/PicoDVI"]
+	path = fw/external/PicoDVI
+	url = https://github.com/Wren6991/PicoDVI.git
+[submodule "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico"]
+	path = fw/external/no-OS-FatFS-SD-SPI-RPi-Pico
