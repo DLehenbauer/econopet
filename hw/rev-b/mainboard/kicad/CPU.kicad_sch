@@ -1663,7 +1663,7 @@
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 76aa4ab6-4d6c-492e-a178-9d92d42e7c7f)
   )
-  (text "Pull-down on BE ensures\nW65C02S does not content\nwith other signals on POR."
+  (text "Pull-down on BE ensures\nW65C02S does not contend\nwith other signals on POR."
     (at 27.94 147.32 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 78f1ed81-3d4f-4594-9283-fcd325773ba3)
