@@ -4,6 +4,6 @@
 
 pushd PicoDVI/software && rm -rf build && mkdir build
 cd build
-cmake -DPICO_XOSC_STARTUP_DELAY_MULTIPLIER=64 -DPICO_COPY_TO_RAM=1 -DDVI_DEFAULT_SERIAL_CONFIG=micromod_cfg ..
+cmake -DCMAKE_BUILD_TYPE=Release -DPICO_COPY_TO_RAM=1 -DDVI_DEFAULT_SERIAL_CONFIG=micromod_cfg ..
 make -j$(nproc)
 pushd
