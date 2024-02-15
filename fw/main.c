@@ -12,10 +12,11 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "pch.h"
-#include "hw.h"
-#include "test/mem.h"
 #include "driver.h"
+#include "hw.h"
+#include "pch.h"
+#include "test/mem.h"
+#include "video/video.h"
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -82,8 +83,10 @@ int main() {
     gpio_set_function(SPI_SCK_GP, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SDO_GP, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SDI_GP, GPIO_FUNC_SPI);
-
     printf("    spi1     = %d Bd\n", baudrate);
 
+    video_init();
     test_ram();
+
+    __builtin_unreachable();
 }

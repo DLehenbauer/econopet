@@ -12,12 +12,29 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+/**
+ * PET Clone - Open hardware implementation of the Commodore PET
+ * by Daniel Lehenbauer and contributors.
+ * 
+ * https://github.com/DLehenbauer/commodore-pet-clone
+ *
+ * To the extent possible under law, I, Daniel Lehenbauer, have waived all
+ * copyright and related or neighboring rights to this project. This work is
+ * published from the United States.
+ *
+ * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
+ */
+
 #pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
+// SDK
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pwm.h"
@@ -30,3 +47,9 @@
 #include "pico/multicore.h"
 #include "pico/sem.h"
 #include "pico/stdlib.h"
+
+// PicoDVI
+#include "common_dvi_pin_configs.h"
+#include "dvi_serialiser.h"
+#include "dvi.h"
+#include "tmds_encode.h"
