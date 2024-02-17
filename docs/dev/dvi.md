@@ -1,5 +1,8 @@
 # PicoDVI library experiments
 
+* Must queue one scanline before starting core1 loop or get a red screen
+* Interrupt driven output avoids corruption of left edge.
+
 # 80 columns w/palette
 Hacking the 'mandel-full' example, even with vertical doubling, consumes nearly 100% of core to display a static scanline.
 
