@@ -67,14 +67,13 @@ module ram #(
     //                           |
     //  DIN  ----------------<_​̅_​̅_​​>-----
 
-    //                      AWOS
-    localparam READY   = 3'b000,
-               READING = 3'b011,
-               WRITING = 3'b101;
+    //                      S
+    localparam READY   = 1'b0,
+               READING = 1'b1;
 
-    logic [2:0] state = READY;
+    logic [0:0] state = READY;
 
-    assign wb_stall_o  = state[0];
+    assign wb_stall_o = state[0];
 
     initial begin
         ram_oe_o    = '0;
@@ -85,7 +84,7 @@ module ram #(
 
     always_ff @(posedge wb_clock_i) begin
         if (wb_reset_i) begin
-            state <= READY;
+            state       <= READY;
             ram_oe_o    <= '0;
             ram_we_o    <= '0;
             ram_data_oe <= '0;
