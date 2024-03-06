@@ -114,3 +114,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     cd /usr/bin && \
     ln -s /usr/bin/objdump objdump-multiarch && \
     ln -s /usr/bin/nm nm-multiarch
+
+# Verilog-HDL/SystemVerilog/Bluespec SystemVerilog extension dependencies
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    universal-ctags \
+    verilator
