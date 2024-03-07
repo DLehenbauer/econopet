@@ -119,3 +119,12 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 RUN apt-get update && apt-get -y install --no-install-recommends \
     universal-ctags \
     verilator
+
+# TerosHDL dependencies
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    make \
+    python3 \
+    python3-pip \
+    verilator
+
+RUN pip install teroshdl cocotb
