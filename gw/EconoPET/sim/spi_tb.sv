@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -16,10 +16,10 @@
 `include "./sim/assert.svh"
 
 module spi_tb;
-    logic sck;
-    logic cs;
-    logic pico;
-    logic poci;
+    logic       sck;
+    logic       cs;
+    logic       pico;
+    logic       poci;
 
     logic [7:0] pi;             // Controller (tx) -> Peripheral (rx)
     logic [7:0] expected_pi;
@@ -32,7 +32,7 @@ module spi_tb;
     logic c_strobe;             // Controller output (co) is valid
     logic p_strobe;             // Peripheral output (po) is valid
 
-    spi dut_spi_controller(
+    spi dut_spi_controller (
         .spi_sck_i(sck),
         .spi_cs_ni(!cs),
         .spi_sd_i(poci),
@@ -42,7 +42,7 @@ module spi_tb;
         .strobe_o(c_strobe)
     );
 
-    spi dut_spi_peripheral(
+    spi dut_spi_peripheral (
         .spi_sck_i(sck),
         .spi_cs_ni(!cs),
         .spi_sd_i(pico),
@@ -57,7 +57,7 @@ module spi_tb;
     always @(negedge cs) begin
         $display("[%t]     Deasserting CS resets SPI", $time);
         bit_count = '0;
-        
+
         #1;
         `assert_equal(c_strobe, '0);
         `assert_equal(p_strobe, '0);
@@ -83,7 +83,7 @@ module spi_tb;
     always @(posedge sck) begin
         if (cs) begin
             #1;
-            
+
             if (bit_count != 7) begin
                 $display("[%t]     'strobe_o' must not be asserted until last bit received", $time);
                 `assert_equal(c_strobe, '0);
@@ -123,7 +123,7 @@ module spi_tb;
         #10 sck = 1'b1;
         #10 sck = '0;
     endtask
-    
+
     task run;
         $display("[%t] BEGIN %m", $time);
 

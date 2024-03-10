@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -12,15 +12,15 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
+`timescale 1ns / 1ps
 
 module sim #(
     parameter CLK_MHZ = 64
 );
-    spi_tb spi_tb();
-    spi1_tb spi1_tb();
-    bram_tb bram_tb();
-    top_tb top_tb();
+    spi_tb spi_tb ();
+    spi1_tb spi1_tb ();
+    bram_tb bram_tb ();
+    top_tb top_tb ();
 
     initial begin
         $dumpfile("work_sim/out.vcd");
@@ -34,5 +34,4 @@ module sim #(
         $display("[%t] Simulation Complete", $time);
         $finish;
     end
- endmodule
- 
+endmodule

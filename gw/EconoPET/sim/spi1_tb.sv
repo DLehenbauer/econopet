@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -12,8 +12,8 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
- `include "./sim/assert.svh"
+`timescale 1ns / 1ps
+`include "./sim/assert.svh"
 
 module spi1_tb #(
     parameter CLK_MHZ = 64,
@@ -22,9 +22,7 @@ module spi1_tb #(
 );
     bit clock;
 
-    clock_gen#(CLK_MHZ) fpga_clk(
-        .clock_o(clock)
-    );
+    clock_gen #(CLK_MHZ) fpga_clk (.clock_o(clock));
 
     initial fpga_clk.start;
 
@@ -34,7 +32,7 @@ module spi1_tb #(
     logic spi_poci;
     logic spi_stall;
 
-    spi1_driver spi1_driver(
+    spi1_driver spi1_driver (
         .clock_i(clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
@@ -50,7 +48,7 @@ module spi1_tb #(
     logic                     cycle;
     logic                     ack = '0;
 
-    spi1_controller spi1(
+    spi1_controller spi1 (
         .wb_clock_i(clock),
         .wb_addr_o(addr),
         .wb_data_i(rd_data),
@@ -61,8 +59,8 @@ module spi1_tb #(
 
         .spi_sck_i(spi_sck),
         .spi_cs_ni(spi_cs_n),
-        .spi_sd_i(spi_pico),
-        .spi_sd_o(spi_poci),
+        .spi_sd_i (spi_pico),
+        .spi_sd_o (spi_poci),
 
         .spi_stall_o(spi_stall)
     );
@@ -71,11 +69,9 @@ module spi1_tb #(
     logic                     expected_we;
     logic [WB_DATA_WIDTH-1:0] expected_data;
 
-    task set_expected(
-        input logic [WB_ADDR_WIDTH-1:0] addr_i,
-        input logic                     we_i,
-        input logic [WB_DATA_WIDTH-1:0] data_i = 8'hxx
-    );
+    task set_expected(input logic [WB_ADDR_WIDTH-1:0] addr_i,
+                      input logic we_i,
+                      input logic [WB_DATA_WIDTH-1:0] data_i = 8'hxx);
         expected_addr <= addr_i;
         expected_data <= data_i;
         expected_we   <= we_i;
@@ -105,7 +101,7 @@ module spi1_tb #(
         @(posedge clock)  // 2FF stage 1
         @(posedge clock)  // 2FF stage 2
         @(posedge clock)  // Edge detect
-        
+
         #1;
 
         `assert_equal(spi_stall, '0);
@@ -115,9 +111,9 @@ module spi1_tb #(
         @(posedge clock)  // 2FF stage 1
         @(posedge clock)  // 2FF stage 2
         @(posedge clock)  // Edge detect
-        
+
         #1;
-        
+
         // An in-progress cycle is terminated if 'spi_cs_n' is deasserted.
         `assert_equal(cycle, '0);
     end
@@ -136,7 +132,8 @@ module spi1_tb #(
     end
 
     always @(posedge cycle) begin
-        $display("[%t]        (stall=%b, cycle=%b, ack=%b, addr=%x, we=%b, wr_data=%x)", $time, spi_stall, cycle, ack, addr, we, wr_data);
+        $display("[%t]        (stall=%b, cycle=%b, ack=%b, addr=%x, we=%b, wr_data=%x)", $time,
+                 spi_stall, cycle, ack, addr, we, wr_data);
 
         `assert_equal(addr, expected_addr);
         `assert_equal(we, expected_we);
@@ -160,5 +157,4 @@ module spi1_tb #(
         read_next(8'h01);
         write_at(20'hFFFFF, 8'h00);
     endtask
- endmodule
- 
+endmodule

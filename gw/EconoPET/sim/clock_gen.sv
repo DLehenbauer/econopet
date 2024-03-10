@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -12,12 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- `timescale 1ns / 1ps
+`timescale 1ns / 1ps
 
 module clock_gen #(
-    parameter MHZ = 24      // Clock speed in MHz
+    parameter MHZ = 24    // Clock speed in MHz
 ) (
-    output logic clock_o    // Destination clock
+    output logic clock_o  // Destination clock
 );
     localparam PERIOD = 1000 / MHZ;
 
@@ -34,8 +34,8 @@ module clock_gen #(
     end
 
     task start;
-        clock_o  = '0;
-        enable   = 1'b1;
+        clock_o = '0;
+        enable  = 1'b1;
     endtask
 
     task stop;

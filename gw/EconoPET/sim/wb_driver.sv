@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -19,16 +19,16 @@ module wb_driver #(
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 10
 ) (
-    input  logic                    wb_clock_i,
-    
-    output logic [ADDR_WIDTH-1:0]   wb_addr_o,
-    input  logic [DATA_WIDTH-1:0]   wb_data_i,
-    output logic [DATA_WIDTH-1:0]   wb_data_o,
-    output logic                    wb_we_o,
-    output logic                    wb_cycle_o,
-    output logic                    wb_strobe_o,
-    input  logic                    wb_stall_i,
-    input  logic                    wb_ack_i
+    input logic                   wb_clock_i,
+
+    output logic [ADDR_WIDTH-1:0] wb_addr_o,
+    input  logic [DATA_WIDTH-1:0] wb_data_i,
+    output logic [DATA_WIDTH-1:0] wb_data_o,
+    output logic                  wb_we_o,
+    output logic                  wb_cycle_o,
+    output logic                  wb_strobe_o,
+    input  logic                  wb_stall_i,
+    input  logic                  wb_ack_i
 );
     task reset;
         wb_cycle_o  = '0;
@@ -39,8 +39,8 @@ module wb_driver #(
     task start_bus_cycle;
         // Driver does not yet handle pipelined requests
         `assert_equal(wb_strobe_o, '0);
-        
-        wb_cycle_o <= 1'b1;
+
+        wb_cycle_o  <= 1'b1;
         wb_strobe_o <= 1'b1;
 
         @(posedge wb_clock_i) wb_strobe_o <= '0;

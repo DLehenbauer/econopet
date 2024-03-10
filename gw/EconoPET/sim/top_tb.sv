@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -24,9 +24,7 @@ module top_tb #(
 );
     bit clock;
 
-    clock_gen#(CLK_MHZ) fpga_clock(
-        .clock_o(clock)
-    );
+    clock_gen #(CLK_MHZ) fpga_clock (.clock_o(clock));
 
     initial fpga_clock.start;
 
@@ -55,16 +53,16 @@ module top_tb #(
     logic spi_stall;
     logic [7:0] spi_rx_data;
 
-    top dut(
+    top dut (
         .clock_i(clock),
 
-        .cpu_addr_i(cpu_addr_i),
-        .cpu_addr_o(cpu_addr_o),
+        .cpu_addr_i (cpu_addr_i),
+        .cpu_addr_o (cpu_addr_o),
         .cpu_addr_oe(cpu_addr_oe),
-        .cpu_data_i(cpu_data_i),
-        .cpu_data_o(cpu_data_o),
+        .cpu_data_i (cpu_data_i),
+        .cpu_data_o (cpu_data_o),
         .cpu_data_oe(cpu_data_oe),
-        
+
         .ram_addr_a10_o(ram_addr_a10_o),
         .ram_addr_a11_o(ram_addr_a11_o),
         .ram_addr_a15_o(ram_addr_a15_o),
@@ -72,18 +70,23 @@ module top_tb #(
         .ram_oe_n_o(ram_oe_n_o),
         .ram_we_n_o(ram_we_n_o),
 
-        .spi1_cs_ni(spi_cs_n),
-        .spi1_sck_i(spi_sck),
-        .spi1_sd_i(spi_pico),
-        .spi1_sd_o(spi_poci),
+        .spi1_cs_ni (spi_cs_n),
+        .spi1_sck_i (spi_sck),
+        .spi1_sd_i  (spi_pico),
+        .spi1_sd_o  (spi_poci),
         .spi_stall_o(spi_stall)
     );
 
     wire [RAM_ADDR_WIDTH-1:0] ram_addr = {
-        ram_addr_a16_o, ram_addr_a15_o, cpu_addr_o[14:12], ram_addr_a11_o, ram_addr_a10_o, cpu_addr_o[9:0]
+        ram_addr_a16_o,
+        ram_addr_a15_o,
+        cpu_addr_o[14:12],
+        ram_addr_a11_o,
+        ram_addr_a10_o,
+        cpu_addr_o[9:0]
     };
 
-    mock_ram mock_ram(
+    mock_ram mock_ram (
         .ram_addr_i(ram_addr),
         .ram_data_i(cpu_data_o),
         .ram_data_o(cpu_data_i),
@@ -91,7 +94,7 @@ module top_tb #(
         .ram_oe_n_i(ram_oe_n_o)
     );
 
-    spi1_driver spi1_driver(
+    spi1_driver spi1_driver (
         .clock_i(clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
