@@ -6,7 +6,7 @@ PROJDIR="$(readlink -f $(dirname "$0"))/gw/$PROJNAME"
 # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
 # the resulting Python exception which occurs due to lack of SystemVerilog support.
 # (See https://www.efinixinc.com/support/forum.php?cid=6&pid=932)
-"$0/efx.sh" --flow rtlsim 2> /dev/null
+"$(dirname "$0")/efx.sh" --flow rtlsim 2> /dev/null
 echo
 
 # 'efx_run' produces relative paths to simulation files. Therefore, we must execute
