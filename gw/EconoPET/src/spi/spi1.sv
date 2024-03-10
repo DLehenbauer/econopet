@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -18,34 +18,34 @@ module spi1_controller #(
 ) (
     // Wishbone B4 pipelined controller
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                     wb_clock_i,  // Bus clock    
+    input  logic wb_clock_i,                      // Bus clock
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
     output logic [WB_DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
     input  logic [WB_DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
-    output logic                     wb_we_o,     // Direction of bus transfer (0 = reading, 1 = writing)
-    output logic                     wb_cycle_o,  // Requests a bus cycle from the arbiter
-    output logic                     wb_strobe_o, // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
-    input  logic                     wb_ack_i,    // Signals termination of cycle ('data_i' valid)
+    output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
+    output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
+    output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
+    input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
     // SPI
-    input  logic spi_cs_ni,         // (CS)  Chip Select (active low)
-    input  logic spi_sck_i,         // (SCK) Serial Clock
-    input  logic spi_sd_i,          // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi_sd_o,          // (SDO) Serial Data Out (FPGA -> MCU)
-    
+    input  logic spi_cs_ni,  // (CS)  Chip Select (active low)
+    input  logic spi_sck_i,  // (SCK) Serial Clock
+    input  logic spi_sd_i,   // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi_sd_o,   // (SDO) Serial Data Out (FPGA -> MCU)
+
     output logic spi_stall_o        // Flow control: When asserted, MCU should wait to send further commands.
 );
     //
     // SCK clock domain signals
     //
 
-    logic                     spi_strobe;   // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
-                                            // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
+    logic spi_strobe;  // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
+                       // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
 
     logic [WB_DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
     logic [WB_DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
 
-    spi spi(
+    spi spi (
         .spi_cs_ni(spi_cs_ni),
         .spi_sck_i(spi_sck_i),
         .spi_sd_i(spi_sd_i),
@@ -60,22 +60,22 @@ module spi1_controller #(
     logic spi_start_pulse;
     logic spi_reset_pulse;
 
-    sync2_edge_detect sync_cs_n(    // Cross from CS_N to 'wb_clock_i' domain
+    sync2_edge_detect sync_cs_n (  // Cross from CS_N to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
-        .data_i(spi_cs_ni),
-        .data_o(),                  // Unused: Only need edge detection
-        .ne_o(spi_start_pulse),
-        .pe_o(spi_reset_pulse)
+        .data_i (spi_cs_ni),
+        .data_o (),                 // Unused: Only need edge detection
+        .ne_o   (spi_start_pulse),
+        .pe_o   (spi_reset_pulse)
     );
 
     logic spi_strobe_pulse;
 
-    sync2_edge_detect sync_valid(   // Cross from SCK to 'wb_clock_i' domain
+    sync2_edge_detect sync_valid (  // Cross from SCK to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
-        .data_i(spi_strobe),
-        .data_o(),                  // Unused: Only need positive edge detection
-        .pe_o(spi_strobe_pulse),
-        .ne_o()                     // Unused: Only need positive edge detection
+        .data_i (spi_strobe),
+        .data_o (),                  // Unused: Only need positive edge detection
+        .pe_o   (spi_strobe_pulse),
+        .ne_o   ()                   // Unused: Only need positive edge detection
     );
 
     // State encoding for our FSM:
@@ -91,7 +91,7 @@ module spi1_controller #(
                READ_ADDR_LO_ARG = 3'b011,
                VALID            = 3'b100;
 
-    logic [2:0] spi_state = READ_CMD;   // Current state of FSM
+    logic [2:0] spi_state = READ_CMD;  // Current state of FSM
     wire spi_valid = spi_state[2];
 
     always_ff @(posedge wb_clock_i) begin
@@ -105,7 +105,7 @@ module spi1_controller #(
 
                     if (spi_data_rx[6]) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
-                        wb_addr_o <= { spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx };
+                        wb_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
                         spi_state <= READ_ADDR_HI_ARG;
                     end else begin
                         // Otherwise increment the previous address.
@@ -140,7 +140,7 @@ module spi1_controller #(
             endcase
         end
     end
-    
+
     // Wishbone controller state machine ('wb_clock_i' domain)
 
     initial begin
@@ -160,9 +160,9 @@ module spi1_controller #(
     //  C = cycle   (requesting bus cycle)
     //
     //                               CS
-    localparam READY            = 2'b00,    // 'spi_cs_ni' deasserted
-               RECEIVING_CMD    = 2'b01,    // 'spi_cs_ni' asserted
-               PROCESSING_CMD   = 2'b11;    // Received 'spi_data_o' is valid
+    localparam READY          = 2'b00,  // 'spi_cs_ni' deasserted
+               RECEIVING_CMD  = 2'b01,  // 'spi_cs_ni' asserted
+               PROCESSING_CMD = 2'b11;  // Received 'spi_data_o' is valid
 
     logic [1:0] wb_state = READY;
     assign spi_stall_o = wb_state[0];

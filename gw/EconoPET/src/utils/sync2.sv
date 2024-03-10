@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -16,17 +16,17 @@ module sync2 #(
     INITAL_DATA_I = '0,
     INITAL_DATA_O = INITAL_DATA_I
 ) (
-    input  logic clock_i,       // Destination clock
-    input  logic data_i,        // Input data in source clock domain
-    output logic data_o         // Synchronized output in destination clock domain
+    input  logic clock_i,  // Destination clock
+    input  logic data_i,   // Input data in source clock domain
+    output logic data_o    // Synchronized output in destination clock domain
 );
     initial begin
         data_o = INITAL_DATA_O;
     end
 
-    logic q = INITAL_DATA_I;    // 1st stage FF output
-    
+    logic q = INITAL_DATA_I;  // 1st stage FF output
+
     always_ff @(posedge clock_i) begin
-        { data_o, q } <= { q, data_i };
+        {data_o, q} <= {q, data_i};
     end
 endmodule
