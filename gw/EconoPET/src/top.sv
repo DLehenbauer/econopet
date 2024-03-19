@@ -39,9 +39,9 @@ module top #(
 
     // IO
     output logic io_oe_n_o,
-    output logic pia1_cs_n_o,
-    output logic pia2_cs_n_o,
-    output logic via_cs_n_o,
+    output logic pia1_cs_n_o,   // (CS2B)
+    output logic pia2_cs_n_o,   // (CS2B)
+    output logic via_cs_n_o,    // (CS2B)
 
     // FPGA
     input  logic clock_i,   // 64 MHz clock (from PLL)
@@ -100,18 +100,24 @@ module top #(
         cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe
     };
 
-    // Avoid contention
-    assign io_oe_n_o    = 1'b1;
-    assign pia1_cs_n_o  = 1'b1;
-    assign pia2_cs_n_o  = 1'b1;
-    assign via_cs_n_o   = 1'b1;
-
     // For consistency, convert active low signals to active high signals.
     logic ram_oe_o;
-    assign ram_oe_n_o = !ram_oe_o;
+    assign ram_oe_n_o  = !ram_oe_o;
 
     logic ram_we_o;
-    assign ram_we_n_o = !ram_we_o;
+    assign ram_we_n_o  = !ram_we_o;
+
+    logic io_oe_o;
+    assign io_oe_n_o   = !io_oe_o;
+
+    logic pia1_cs_o;
+    assign pia1_cs_n_o = !pia1_cs_o;
+
+    logic pia2_cs_o;
+    assign pia2_cs_n_o = !pia2_cs_o;
+
+    logic via_cs_o;
+    assign via_cs_n_o  = !via_cs_o;
 
     main main (
         .clock_i(clock_i),
@@ -133,6 +139,11 @@ module top #(
         .ram_addr_a10_o(ram_addr_a10_o),
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
+
+        .io_oe_o(io_oe_o),
+        .pia1_cs_o(pia1_cs_o),
+        .pia2_cs_o(pia2_cs_o),
+        .via_cs_o(via_cs_o),
 
         .spi1_cs_ni(spi1_cs_ni),
         .spi1_sck_i(spi1_sck_i),

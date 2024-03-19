@@ -41,6 +41,11 @@ module main #(
     output logic ram_oe_o,
     output logic ram_we_o,
 
+    output logic io_oe_o,
+    output logic pia1_cs_o,
+    output logic pia2_cs_o,
+    output logic via_cs_o,
+
     // SPI1 bus
     input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
     input  logic spi1_sck_i,  // (SCK) Serial Clock

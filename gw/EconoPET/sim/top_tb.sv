@@ -18,7 +18,6 @@
 module top_tb #(
     parameter CLK_MHZ = 64,
     parameter DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20,
     parameter CPU_ADDR_WIDTH = 16,
     parameter RAM_ADDR_WIDTH = 17
 );
