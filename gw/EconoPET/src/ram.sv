@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -14,28 +14,28 @@
 
 module ram #(
     parameter WB_CLOCK_MHZ = 64,
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 17
-)(
+    parameter DATA_WIDTH   = 8,
+    parameter ADDR_WIDTH   = 17
+) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                      wb_clock_i,
-    input  logic                      wb_reset_i,
-    input  logic [ADDR_WIDTH-1:0]     wb_addr_i,
-    input  logic [DATA_WIDTH-1:0]     wb_data_i,
-    output logic [DATA_WIDTH-1:0]     wb_data_o,
-    input  logic                      wb_we_i,
-    input  logic                      wb_cycle_i,
-    input  logic                      wb_strobe_i,
-    output logic                      wb_stall_o,
-    output logic                      wb_ack_o,
+    input  logic                  wb_clock_i,
+    input  logic                  wb_reset_i,
+    input  logic [ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [DATA_WIDTH-1:0] wb_data_i,
+    output logic [DATA_WIDTH-1:0] wb_data_o,
+    input  logic                  wb_we_i,
+    input  logic                  wb_cycle_i,
+    input  logic                  wb_strobe_i,
+    output logic                  wb_stall_o,
+    output logic                  wb_ack_o,
 
-    output logic                      ram_oe_o,
-    output logic                      ram_we_o,
-    output logic [ADDR_WIDTH-1:0]     ram_addr_o,
-    input  logic [DATA_WIDTH-1:0]     ram_data_i,
-    output logic [DATA_WIDTH-1:0]     ram_data_o,
-    output logic                      ram_data_oe
+    output logic                  ram_oe_o,
+    output logic                  ram_we_o,
+    output logic [ADDR_WIDTH-1:0] ram_addr_o,
+    input  logic [DATA_WIDTH-1:0] ram_data_i,
+    output logic [DATA_WIDTH-1:0] ram_data_o,
+    output logic                  ram_data_oe
 );
     // Timing for IS61WV1288EEBLL-10TLI
     // (See: https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)
@@ -55,7 +55,7 @@ module ram #(
     // DOUT  --------------------<_​̅_​̅_​​̅_​X_​̅_​̅_​̅_​​X_​̅_​̅_​̅_​​>------
     //
     // Write cycle when Address, WE, and DIN are coincident:
-    //   
+    //
     //   Requires 10ns pulse width (8ns if OE deasserted)
     //   ADDR setup time and DIN hold times are both 0.
     //
@@ -105,7 +105,7 @@ module ram #(
                         ram_oe_o    <= !wb_we_i;
                         ram_we_o    <= wb_we_i;
                         ram_data_oe <= wb_we_i;
-                    
+
                         state <= wb_we_i
                             ? READY
                             : READING;

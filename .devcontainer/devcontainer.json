@@ -15,9 +15,10 @@
 				"marus25.cortex-debug",
 				"ms-azuretools.vscode-docker",
 				"ms-vscode.cpptools-extension-pack",
-				"mshr-h.veriloghdl",
+				// "mshr-h.veriloghdl",
 				"mutantdino.resourcemonitor",
 				"streetsidesoftware.code-spell-checker",
+				"teros-technology.teroshdl",
 				"xaver.clang-format"
 			]
         }

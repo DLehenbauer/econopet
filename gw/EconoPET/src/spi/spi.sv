@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -13,42 +13,42 @@
  */
 
 // Implements core of SPI Mode 0 transfers in a controller/peripheral agnostic way.
- module spi #(
+module spi #(
     parameter DATA_WIDTH = 8
 ) (
     // SPI bus signals (see https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/)
-    input  logic spi_cs_ni,             // (CS)  Chip Select (active low)
-    input  logic spi_sck_i,             // (SCK) Serial Clock
-    input  logic spi_sd_i,              // (SDI) Serial Data In (rx)
-    output logic spi_sd_o,              // (SDO) Serial Data Out (tx)
-    
-    // Relevant WB bus signals in SCK domain.
-    input  logic [DATA_WIDTH-1:0] data_i,     // Data to transmit.  Captured on falling edge of CS_N and
-                                              // falling edge of SCK for LSB.
+    input  logic spi_cs_ni,  // (CS)  Chip Select (active low)
+    input  logic spi_sck_i,  // (SCK) Serial Clock
+    input  logic spi_sd_i,   // (SDI) Serial Data In (rx)
+    output logic spi_sd_o,   // (SDO) Serial Data Out (tx)
 
-    output logic [DATA_WIDTH-1:0] data_o,     // Data received.  Shifted in from SDO on each positive edge of SCK.
-    
-    output logic                  strobe_o    // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
-                                              // is captured on the following negative SCK edege.
+    // Relevant WB bus signals in SCK domain.
+    input logic [DATA_WIDTH-1:0] data_i,  // Data to transmit.  Captured on falling edge of CS_N and
+                                          // falling edge of SCK for LSB.
+
+    output logic [DATA_WIDTH-1:0] data_o, // Data received.  Shifted in from SDO on each positive edge of SCK.
+
+    output logic strobe_o  // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
+                           // is captured on the following negative SCK edege.
 );
-    logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH-1;
+    logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH - 1;
 
     initial begin
         strobe_o <= '0;
     end
 
-    wire msb = bits_remaining == DATA_WIDTH-1;
+    wire msb = bits_remaining == DATA_WIDTH - 1;
     wire lsb = bits_remaining == '0;
 
     logic [DATA_WIDTH:0] buffer_d, buffer_q;
     assign buffer_d = msb
-        ? { data_i[6:0], 1'bx, spi_sd_i }
-        : { buffer_q[DATA_WIDTH-1:0], spi_sd_i };
+        ? {data_i[6:0], 1'bx, spi_sd_i}
+        : {buffer_q[DATA_WIDTH-1:0], spi_sd_i};
 
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting 'spi_cs_ni' completes or aborts the current transfer.
-            bits_remaining <= DATA_WIDTH-1;
+            bits_remaining <= DATA_WIDTH - 1;
             buffer_q       <= 'x;
             strobe_o       <= '0;
         end else begin
@@ -72,11 +72,11 @@
     always_ff @(posedge spi_cs_ni or negedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting 'spi_cs_ni' completes or aborts the current transfer.
-            spi_sd_q    <= 'x;
-            preload     <= 1'b1;
+            spi_sd_q <= 'x;
+            preload  <= 1'b1;
         end else begin
-            spi_sd_q    <= buffer_q[DATA_WIDTH];
-            preload     <= msb;
+            spi_sd_q <= buffer_q[DATA_WIDTH];
+            preload  <= msb;
         end
     end
 endmodule

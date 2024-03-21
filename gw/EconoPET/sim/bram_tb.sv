@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -20,22 +20,20 @@ module bram_tb #(
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = $clog2(1024 - 1)
 );
-    logic                    clock;
-    logic [ADDR_WIDTH-1:0]   addr;
-    logic [DATA_WIDTH-1:0]   poci;
-    logic [DATA_WIDTH-1:0]   pico;
-    logic                    we;
-    logic                    cycle;
-    logic                    strobe;
-    logic                    ack;
+    logic                  clock;
+    logic [ADDR_WIDTH-1:0] addr;
+    logic [DATA_WIDTH-1:0] poci;
+    logic [DATA_WIDTH-1:0] pico;
+    logic                  we;
+    logic                  cycle;
+    logic                  strobe;
+    logic                  ack;
 
-    clock_gen#(CLK_MHZ) clock_gen(
-        .clock_o(clock)
-    );
+    clock_gen #(CLK_MHZ) clock_gen (.clock_o(clock));
 
     initial clock_gen.start;
 
-    bram mem(
+    bram mem (
         .wb_clock_i(clock),
         .wb_reset_i('0),
         .wb_addr_i(addr),
@@ -47,7 +45,7 @@ module bram_tb #(
         .wb_ack_o(ack)
     );
 
-    wb_driver wb(
+    wb_driver wb (
         .wb_clock_i(clock),
         .wb_addr_o(addr),
         .wb_data_i(poci),
@@ -58,8 +56,8 @@ module bram_tb #(
         .wb_ack_i(ack)
     );
 
-    logic [DATA_WIDTH-1:0]   data_rd;
-    logic                    ack_rd;
+    logic [DATA_WIDTH-1:0] data_rd;
+    logic                  ack_rd;
 
     task run;
         $display("[%t] BEGIN %m", $time);

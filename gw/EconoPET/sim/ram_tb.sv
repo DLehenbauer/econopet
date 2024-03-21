@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -19,19 +19,17 @@ module ram_tb #(
     parameter CLK_MHZ = 64,
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 17
- );
-    logic                    clock;
-    logic [ADDR_WIDTH-1:0]   addr;
-    logic [DATA_WIDTH-1:0]   poci;
-    logic [DATA_WIDTH-1:0]   pico;
-    logic                    we;
-    logic                    cycle;
-    logic                    strobe;
-    logic                    ack;
+);
+    logic                  clock;
+    logic [ADDR_WIDTH-1:0] addr;
+    logic [DATA_WIDTH-1:0] poci;
+    logic [DATA_WIDTH-1:0] pico;
+    logic                  we;
+    logic                  cycle;
+    logic                  strobe;
+    logic                  ack;
 
-    clock_gen#(CLK_MHZ) clock_gen(
-        .clock_o(clock)
-    );
+    clock_gen #(CLK_MHZ) clock_gen (.clock_o(clock));
 
     initial clock_gen.start;
     logic                  ram_oe_o;
@@ -40,8 +38,8 @@ module ram_tb #(
     logic [DATA_WIDTH-1:0] ram_data_i;
     logic [DATA_WIDTH-1:0] ram_data_o;
     logic                  ram_data_oe;
-    
-    ram ram(
+
+    ram ram (
         .wb_clock_i(clock),
         .wb_reset_i('0),
         .wb_addr_i(addr),
@@ -59,7 +57,7 @@ module ram_tb #(
         .ram_data_oe(ram_data_oe)
     );
 
-    mock_ram mock_ram(
+    mock_ram mock_ram (
         .ram_oe_n_i(!ram_oe_o),
         .ram_we_n_i(!ram_we_o),
         .ram_addr_i(ram_addr_o),
@@ -67,7 +65,7 @@ module ram_tb #(
         .ram_data_o(ram_data_i)
     );
 
-    wb_driver wb(
+    wb_driver wb (
         .wb_clock_i(clock),
         .wb_addr_o(addr),
         .wb_data_i(poci),
@@ -78,8 +76,8 @@ module ram_tb #(
         .wb_ack_i(ack)
     );
 
-    logic [DATA_WIDTH-1:0]   data_rd;
-    logic                    ack_rd;
+    logic [DATA_WIDTH-1:0] data_rd;
+    logic                  ack_rd;
 
     task run;
         $display("[%t] BEGIN %m", $time);
@@ -92,4 +90,3 @@ module ram_tb #(
         #1 $display("[%t] END %m", $time);
     endtask
 endmodule
- 

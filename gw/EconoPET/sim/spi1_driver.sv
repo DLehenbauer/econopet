@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -13,23 +13,23 @@
  */
 
 module spi1_driver #(
-    parameter SCK_MHZ = 24,         // SPI baud rate
+    parameter SCK_MHZ       = 24,  // SPI baud rate
     parameter WB_DATA_WIDTH = 8,
     parameter WB_ADDR_WIDTH = 20
 ) (
-    input  logic                     clock_i,
+    input logic clock_i,
 
-    output logic                     spi_sck_o,
-    output logic                     spi_cs_no,
-    output logic                     spi_pico_o,
-    input  logic                     spi_poci_i,
+    output logic spi_sck_o,
+    output logic spi_cs_no,
+    output logic spi_pico_o,
+    input  logic spi_poci_i,
 
     input  logic                     spi_stall_i,
     output logic [WB_DATA_WIDTH-1:0] spi_data_o
 );
     logic [WB_DATA_WIDTH-1:0] spi_rx_data;
 
-    spi_driver #(SCK_MHZ) spi_driver(
+    spi_driver #(SCK_MHZ) spi_driver (
         .clock_i(clock_i),
         .spi_sck_o(spi_sck_o),
         .spi_cs_no(spi_cs_no),
@@ -55,19 +55,17 @@ module spi1_driver #(
         return addr[7:0];
     endfunction
 
-    task send(
-        input logic unsigned [WB_DATA_WIDTH-1:0] tx[]
-    );
+    task send(input logic unsigned [WB_DATA_WIDTH-1:0] tx[]);
         string s;
         s = "";
         foreach (tx[i]) begin
-            if (i == '0) s = { s, $sformatf("%8b ", tx[i]) };
-            else s = { s, $sformatf("%2h ", tx[i]) };
+            if (i == '0) s = {s, $sformatf("%8b ", tx[i])};
+            else s = {s, $sformatf("%2h ", tx[i])};
         end
         $display("[%t]      SPI1 Send: [ %s]", $time, s);
 
-        spi_driver.send(tx, /* complete: */ '0);
-        
+        spi_driver.send(tx,  /* complete: */ '0);
+
         @(negedge spi_stall_i);
 
         $display("[%t]      SPI1 Received: [ %2h ]", $time, spi_rx_data);
@@ -86,27 +84,25 @@ module spi1_driver #(
 
         $display("[%t]    spi1.write_at(%x, %x)", $time, addr_i, data_i);
 
-        c = cmd(/* we: */ 1'b1, /* set_addr: */ 1'b1, addr_i);
+        c  = cmd(/* we: */ 1'b1, /* set_addr: */ 1'b1, addr_i);
         ah = addr_hi(addr_i);
         al = addr_lo(addr_i);
 
-        send('{ c, ah, al, data_i });
+        send('{c, ah, al, data_i});
     endtask
 
-    task read_at(
-        input [WB_ADDR_WIDTH-1:0] addr_i
-    );
+    task read_at(input [WB_ADDR_WIDTH-1:0] addr_i);
         logic [7:0] c;
         logic [7:0] ah;
         logic [7:0] al;
 
         $display("[%t]    spi1.read_at(%x)", $time, addr_i);
 
-        c = cmd(/* we: */ '0, /* set_addr: */ 1'b1, addr_i);
+        c  = cmd(/* we: */ '0, /* set_addr: */ 1'b1, addr_i);
         ah = addr_hi(addr_i);
         al = addr_lo(addr_i);
 
-        send('{ c, ah, al });
+        send('{c, ah, al});
     endtask
 
     task read_next();
@@ -116,6 +112,6 @@ module spi1_driver #(
 
         c = cmd(/* we: */ '0, /* set_addr: */ '0, 6'bxxxxxx);
 
-        send('{ c });
+        send('{c});
     endtask
 endmodule
