@@ -114,3 +114,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     cd /usr/bin && \
     ln -s /usr/bin/objdump objdump-multiarch && \
     ln -s /usr/bin/nm nm-multiarch
+
+# Install Universal Ctags for Verilog-HDL/SystemVerilog/Bluespec SystemVerilog
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    universal-ctags
