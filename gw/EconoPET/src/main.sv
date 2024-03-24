@@ -56,10 +56,14 @@ module main #(
     // Spare pins
     output logic [9:0] spare_o
 );
-    assign reset    = '0;
+    logic reset = '0;
 
     // Avoid contention
     assign cpu_be_o = '0;
+    assign io_oe_o = '0;
+    assign pia1_cs_o = '0;
+    assign pia2_cs_o = '0;
+    assign via_cs_o = '0;
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_data_rx;
