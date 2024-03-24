@@ -6,24 +6,6 @@
 #define FONT_N_CHARS 95
 #define FONT_FIRST_ASCII 32
 
-// CEA Mode 2: 720x480p @ 60 Hz (270 MHz)
-// Required for EDTV/HDTV displays.
-const struct dvi_timing __not_in_flash_func(dvi_timing_720x480p_60hz) = {
-	.h_sync_polarity   = false,
-	.h_front_porch     = 16,
-	.h_sync_width      = 62,
-	.h_back_porch      = 60,
-	.h_active_pixels   = 720,
-
-	.v_sync_polarity   = false,
-	.v_front_porch     = 9,
-	.v_sync_width      = 6,
-	.v_back_porch      = 30,
-	.v_active_lines    = 480,
-
-	.bit_clk_khz       = 270000
-};
-
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
 #define DVI_TIMING dvi_timing_720x480p_60hz
