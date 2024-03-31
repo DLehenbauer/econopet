@@ -16,15 +16,14 @@
 `include "./sim/assert.svh"
 
 module top_tb #(
-    parameter CLK_MHZ = 64,
-    parameter DATA_WIDTH = 8,
-    parameter CPU_ADDR_WIDTH = 16,
-    parameter RAM_ADDR_WIDTH = 17
+    parameter integer unsigned CLK_MHZ = 64,
+    parameter integer unsigned DATA_WIDTH = 8,
+    parameter integer unsigned CPU_ADDR_WIDTH = 16,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17
 );
+    // Clock
     bit clock;
-
     clock_gen #(CLK_MHZ) fpga_clock (.clock_o(clock));
-
     initial fpga_clock.start;
 
     // CPU
@@ -103,17 +102,14 @@ module top_tb #(
         .spi_data_o(spi_rx_data)
     );
 
-    task test_rw(
-        logic [16:0] addr_i,
-        logic  [7:0] data_i
-    );
+    task static test_rw(logic [16:0] addr_i, logic [7:0] data_i);
         spi1_driver.write_at(addr_i, data_i);
-        spi1_driver.read_at(addr_i);
-        spi1_driver.read_next();
+        spi1_driver.read_at(addr_i);            // Seek for next read
+        spi1_driver.read_next;                  // 'read_next' required to actually retrieve the data.
         `assert_equal(spi_rx_data, data_i);
     endtask
 
-    task run;
+    task static run;
         $display("[%t] BEGIN %m", $time);
 
         spi1_driver.reset;
