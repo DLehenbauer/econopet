@@ -13,9 +13,9 @@
  */
 
 module ram #(
-    parameter WB_CLOCK_MHZ = 64,
-    parameter DATA_WIDTH   = 8,
-    parameter ADDR_WIDTH   = 17
+    parameter integer unsigned WB_CLOCK_MHZ = 64,
+    parameter integer unsigned DATA_WIDTH   = 8,
+    parameter integer unsigned ADDR_WIDTH   = 17
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
@@ -68,14 +68,15 @@ module ram #(
     //  DIN  ----------------<_​̅_​̅_​​>-----
 
     //                      S
-    localparam READY   = 1'b0,
-               READING = 1'b1;
+    localparam bit [1:0] READY   = 2'd0,
+                         READ    = 2'd1,
+                         WRITE   = 2'd2,
+                         WAIT    = 2'd3;
 
-    logic [0:0] state = READY;
-
-    assign wb_stall_o = state[0];
+    logic [1:0] state = READY;
 
     initial begin
+        state       = READY;
         ram_oe_o    = '0;
         ram_we_o    = '0;
         ram_data_oe = '0;
@@ -89,6 +90,7 @@ module ram #(
             ram_we_o    <= '0;
             ram_data_oe <= '0;
             wb_ack_o    <= '0;
+            wb_stall_o  <= '0;
         end else begin
             case (state)
                 READY: begin
@@ -102,18 +104,33 @@ module ram #(
                     if (wb_cycle_i && wb_strobe_i) begin
                         ram_addr_o  <= wb_addr_i;
                         ram_data_o  <= wb_data_i;
-                        ram_oe_o    <= !wb_we_i;
-                        ram_we_o    <= wb_we_i;
                         ram_data_oe <= wb_we_i;
+                        ram_oe_o    <= !wb_we_i;
+                        wb_stall_o  <= 1'b1;
 
                         state <= wb_we_i
-                            ? READY
-                            : READING;
+                            ? WRITE
+                            : READ;
                     end
                 end
 
-                READING: begin
-                    state <= READY;
+                READ: begin
+                    wb_data_o   <= ram_data_i;
+                    state       <= WAIT;
+                end
+
+                WRITE: begin
+                    ram_we_o    <= 1'b1;
+                    state       <= WAIT;
+                end
+
+                WAIT: begin
+                    ram_oe_o    <= '0;
+                    ram_we_o    <= '0;
+                    ram_data_oe <= '0;
+                    wb_stall_o  <= '0;
+                    wb_ack_o    <= '1;
+                    state       <= READY;
                 end
             endcase
         end
