@@ -13,8 +13,8 @@
  */
 
 module mock_ram #(
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 17
+    parameter integer unsigned DATA_WIDTH = 8,
+    parameter integer unsigned ADDR_WIDTH = 17
 ) (
     input  logic [ADDR_WIDTH-1:0] ram_addr_i,
     input  logic [DATA_WIDTH-1:0] ram_data_i,
@@ -22,13 +22,15 @@ module mock_ram #(
     input  logic                  ram_we_n_i,
     input  logic                  ram_oe_n_i
 );
-    logic [DATA_WIDTH - 1:0] mem[(2 ** ADDR_WIDTH) - 1:0];
+    logic [DATA_WIDTH - 1:0] mem[(2 ** ADDR_WIDTH) - 1];
 
-    always_ff @(negedge ram_we_n_i or negedge ram_oe_n_i) begin
+    always @(negedge ram_we_n_i or negedge ram_oe_n_i) begin
         if (!ram_we_n_i) begin
             mem[ram_addr_i] <= ram_data_i;
+            $display("[%t]        RAM[%h] <- %h", $time, ram_addr_i, ram_data_i);
         end else if (!ram_oe_n_i) begin
             ram_data_o <= mem[ram_addr_i];
+            $display("[%t]        RAM[%h] -> %h", $time, ram_addr_i, mem[ram_addr_i]);
         end
     end
 endmodule
