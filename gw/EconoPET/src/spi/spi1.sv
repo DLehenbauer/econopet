@@ -25,6 +25,7 @@ module spi1_controller #(
     output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
     output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
     output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
+    input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
     input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
     // SPI
@@ -85,11 +86,11 @@ module spi1_controller #(
     //  V = valid   (a command has been received, request cycle from bus arbiter)
     //
     //                               VAD
-    localparam READ_CMD         = 3'b000,
-               READ_DATA_ARG    = 3'b001,
-               READ_ADDR_HI_ARG = 3'b010,
-               READ_ADDR_LO_ARG = 3'b011,
-               VALID            = 3'b100;
+    localparam bit [2:0] READ_CMD         = 3'b000,
+                         READ_DATA_ARG    = 3'b001,
+                         READ_ADDR_HI_ARG = 3'b010,
+                         READ_ADDR_LO_ARG = 3'b011,
+                         VALID            = 3'b100;
 
     logic [2:0] spi_state = READ_CMD;  // Current state of FSM
     wire spi_valid = spi_state[2];
@@ -160,9 +161,9 @@ module spi1_controller #(
     //  C = cycle   (requesting bus cycle)
     //
     //                               CS
-    localparam READY          = 2'b00,  // 'spi_cs_ni' deasserted
-               RECEIVING_CMD  = 2'b01,  // 'spi_cs_ni' asserted
-               PROCESSING_CMD = 2'b11;  // Received 'spi_data_o' is valid
+    localparam bit [1:0] READY          = 2'b00,  // 'spi_cs_ni' deasserted
+                         RECEIVING_CMD  = 2'b01,  // 'spi_cs_ni' asserted
+                         PROCESSING_CMD = 2'b11;  // Received 'spi_data_o' is valid
 
     logic [1:0] wb_state = READY;
     assign spi_stall_o = wb_state[0];
@@ -171,11 +172,13 @@ module spi1_controller #(
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
-            wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o' 
+            wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o'
             wb_strobe_o <= '0;
         end else begin
             case (wb_state)
                 READY: begin
+                    wb_strobe_o <= 0;
+
                     if (spi_start_pulse) begin
                         wb_state <= RECEIVING_CMD;
                     end
@@ -187,7 +190,8 @@ module spi1_controller #(
                     end
                 end
                 PROCESSING_CMD: begin
-                    wb_strobe_o <= '0;
+                    // Continue asserting wb_strobe_o while the bus is stalled.
+                    if (!wb_stall_i) wb_strobe_o <= '0;
 
                     if (wb_ack_i) begin
                         spi_data_tx <= wb_data_i;

@@ -13,10 +13,10 @@
  */
 
 module main #(
-    parameter DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20,
-    parameter CPU_ADDR_WIDTH = 16,
-    parameter RAM_ADDR_WIDTH = 17
+    parameter integer unsigned DATA_WIDTH = 8,
+    parameter integer unsigned WB_ADDR_WIDTH = 20,
+    parameter integer unsigned CPU_ADDR_WIDTH = 16,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17
 ) (
     // FPGA
     input  logic clock_i,   // 64 MHz clock (from PLL)
@@ -57,9 +57,19 @@ module main #(
     output logic [9:0] spare_o
 );
     assign reset    = '0;
+    assign status_no = !ram_ack;
 
     // Avoid contention
-    assign cpu_be_o = '0;
+    assign cpu_be_o     = '0;
+    assign io_oe_o      = '0;
+    assign pia1_cs_o    = '0;
+    assign pia2_cs_o    = '0;
+    assign via_cs_o     = '0;
+
+    logic [5:0] clock_counter = '0;
+    always_ff @(posedge clock_i or posedge reset) begin
+        clock_counter <= reset ? '0 : clock_counter + 1'b1;
+    end
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_data_rx;
@@ -67,11 +77,8 @@ module main #(
     logic                     spi1_we;
     logic                     spi1_cycle;
     logic                     spi1_strobe;
-
-    logic                     ram_ack;
-    logic                     ram_stall;
-
-    assign status_no = !ram_ack;
+    logic                     spi1_stall;
+    logic                     spi1_ack;
 
     spi1_controller spi1 (
         .wb_clock_i(clock_i),
@@ -81,7 +88,8 @@ module main #(
         .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
-        .wb_ack_i(ram_ack),
+        .wb_stall_i(spi1_stall),
+        .wb_ack_i(spi1_ack),
 
         .spi_cs_ni(spi1_cs_ni),
         .spi_sck_i(spi1_sck_i),
@@ -93,6 +101,30 @@ module main #(
 
     assign cpu_addr_oe = 1'b1;
 
+    wire ram_grant = clock_counter == 6'h3F;
+
+    logic ram_cycle;
+    logic ram_strobe;
+    logic ram_ack;
+    logic ram_stall;
+
+    arbiter abriter (
+        .wb_clock_i(clock_i),
+        .wb_reset_i(reset),
+
+        .wbc_cycle_i(spi1_cycle),
+        .wbc_strobe_i(spi1_strobe),
+        .wbc_stall_o(spi1_stall),
+        .wbc_ack_o(spi1_ack),
+
+        .wbp_cycle_o(ram_cycle),
+        .wbp_strobe_o(ram_strobe),
+        .wbp_stall_i(ram_stall),
+        .wbp_ack_i(ram_ack),
+
+        .grant_i(ram_grant)
+    );
+
     ram ram (
         .wb_clock_i(clock_i),
         .wb_reset_i(reset),
@@ -100,8 +132,8 @@ module main #(
         .wb_data_i(spi1_data_rx),
         .wb_data_o(spi1_data_tx),
         .wb_we_i(spi1_we),
-        .wb_cycle_i(spi1_cycle),
-        .wb_strobe_i(spi1_strobe),
+        .wb_cycle_i(ram_cycle),
+        .wb_strobe_i(ram_strobe),
         .wb_stall_o(ram_stall),
         .wb_ack_o(ram_ack),
 
