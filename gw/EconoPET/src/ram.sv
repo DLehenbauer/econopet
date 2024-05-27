@@ -67,7 +67,6 @@ module ram #(
     //                           |
     //  DIN  ----------------<_​̅_​̅_​​>-----
 
-    //                      S
     localparam bit [1:0] READY   = 2'd0,
                          READ    = 2'd1,
                          WRITE   = 2'd2,
@@ -81,6 +80,7 @@ module ram #(
         ram_we_o    = '0;
         ram_data_oe = '0;
         wb_ack_o    = '0;
+        wb_stall_o  = '0;
     end
 
     always_ff @(posedge wb_clock_i) begin

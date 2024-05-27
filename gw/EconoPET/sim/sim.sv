@@ -15,11 +15,12 @@
 `timescale 1ns / 1ps
 
 module sim #(
-    parameter CLK_MHZ = 64
+    parameter integer unsigned CLK_MHZ = 64
 );
     spi_tb spi_tb ();
     spi1_tb spi1_tb ();
     bram_tb bram_tb ();
+    arbiter_tb arbiter_tb ();
     top_tb top_tb ();
 
     initial begin
@@ -29,6 +30,7 @@ module sim #(
         spi_tb.run();
         spi1_tb.run();
         bram_tb.run();
+        arbiter_tb.run();
         top_tb.run();
 
         $display("[%t] Simulation Complete", $time);

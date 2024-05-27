@@ -1,5 +1,5 @@
 ARG VARIANT="jammy"
-FROM mcr.microsoft.com/devcontainers/base:${VARIANT}
+FROM --platform=linux/amd64 mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 ARG PICO_SDK_VERSION="1.5.0"
 ARG VERIBLE_VERSION="v0.0-3471-g9cb45092"
@@ -127,4 +127,5 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     python3-pip \
     verilator
 
-RUN pip install teroshdl cocotb
+RUN pip install teroshdl
+RUN pip install cocotb

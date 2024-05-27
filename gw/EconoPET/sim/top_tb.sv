@@ -51,7 +51,7 @@ module top_tb #(
     logic spi_stall;
     logic [7:0] spi_rx_data;
 
-    top dut (
+    top top (
         .clock_i(clock),
 
         .cpu_addr_i (cpu_addr_i),
