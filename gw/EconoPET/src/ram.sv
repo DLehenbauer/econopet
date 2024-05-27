@@ -94,9 +94,8 @@ module ram #(
         end else begin
             case (state)
                 READY: begin
-                    wb_data_o <= ram_data_i;
-                    wb_ack_o  <= ram_oe_o | ram_we_o;
-
+                    wb_ack_o    <= '0;
+                    wb_stall_o  <= '0;
                     ram_oe_o    <= '0;
                     ram_we_o    <= '0;
                     ram_data_oe <= '0;
@@ -115,7 +114,6 @@ module ram #(
                 end
 
                 READ: begin
-                    wb_data_o   <= ram_data_i;
                     state       <= WAIT;
                 end
 
@@ -125,6 +123,7 @@ module ram #(
                 end
 
                 WAIT: begin
+                    wb_data_o   <= ram_data_i;
                     ram_oe_o    <= '0;
                     ram_we_o    <= '0;
                     ram_data_oe <= '0;
