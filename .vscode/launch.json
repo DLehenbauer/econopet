@@ -6,7 +6,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Pico Debug",
+            "name": "Firmware",
             "cwd": "${workspaceRoot}",
             "executable": "${command:cmake.launchTargetPath}",
             "request": "launch",
@@ -36,13 +36,44 @@
             ]
         },
         {
-            "name": "PicoDVI Example Debug",
+            "name": "PicoDVI Example",
             "cwd": "${workspaceRoot}",
             "executable": "${workspaceRoot}/fw/external/PicoDVI/software/build/apps/hello_dvi/hello_dvi.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
             // This may need to be arm-none-eabi-gdb depending on your system
+            "gdbPath" : "gdb-multiarch",
+            "device": "RP2040",
+            "configFiles": [
+                // Change interface to "interface/picoprobe.cfg" if using older Picoprobe firmware.
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            // Reduce the adapter speed if 'openocd' reports the following error:
+            // 
+            //    Error: Failed to connect multidrop rp2040.dap0
+            //
+            // Picoprobe documentation uses 5000 Hz:
+            // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
+            "serverArgs": ["-c", "adapter speed 31249"],
+            "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
+            "runToEntryPoint": "main",
+            // Work around for stopping at main on restart
+            "postRestartCommands": [
+                "break main",
+                "continue"
+            ]
+        },
+        {
+            "name": "FatFS SPI Example",
+            "cwd": "${workspaceRoot}",
+            //"executable": "${workspaceRoot}/fw/external/no-OS-FatFS-SD-SPI-RPi-Pico/example/build/FatFS_SPI_example.elf",
+            "executable": "${workspaceRoot}/fw/external/no-OS-FatFS-SD-SPI-RPi-Pico/simple_example/build/simple_example.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            // Change 'gpbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
             "gdbPath" : "gdb-multiarch",
             "device": "RP2040",
             "configFiles": [
