@@ -34,7 +34,7 @@ module spi #(
     logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH - 1;
 
     initial begin
-        strobe_o <= '0;
+        strobe_o = '0;
     end
 
     wire msb = bits_remaining == DATA_WIDTH - 1;
