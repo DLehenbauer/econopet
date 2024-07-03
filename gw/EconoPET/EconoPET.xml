@@ -8,11 +8,11 @@
     <efx:design_info def_veri_version="sv_09" def_vhdl_version="vhdl_2008">
         <efx:top_module name="top"/>
         <efx:design_file name="src/top.sv" version="default" library="default"/>
-        <efx:design_file name="src/spi/spi.sv" version="default" library="default"/>
-        <efx:design_file name="src/spi/spi1.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/sync2_edge.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/edge_detect.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/sync2.sv" version="default" library="default"/>
+        <efx:design_file name="src/spi.sv" version="default" library="default"/>
+        <efx:design_file name="src/spi1_controller.sv" version="default" library="default"/>
+        <efx:design_file name="src/sync2_edge_detect.sv" version="default" library="default"/>
+        <efx:design_file name="src/edge_detect.sv" version="default" library="default"/>
+        <efx:design_file name="src/sync2.sv" version="default" library="default"/>
         <efx:design_file name="src/bram.sv" version="default" library="default"/>
         <efx:design_file name="src/ram.sv" version="default" library="default"/>
         <efx:design_file name="src/main.sv" version="default" library="default"/>
