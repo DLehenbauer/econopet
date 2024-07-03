@@ -56,7 +56,7 @@ module main #(
     // Spare pins
     output logic [9:0] spare_o
 );
-    assign reset    = '0;
+    logic  reset     = '0;
     assign status_no = !ram_ack;
 
     // Avoid contention
