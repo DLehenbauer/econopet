@@ -1,9 +1,12 @@
-ARG VARIANT="jammy"
+# Default to latest Ubuntu LTS.
+# (See https://hub.docker.com/r/microsoft/devcontainers-base)
+ARG VARIANT="ubuntu"
 FROM --platform=linux/amd64 mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 ARG PICO_SDK_VERSION="1.5.0"
 ARG VERIBLE_VERSION="v0.0-3471-g9cb45092"
-ARG EFINITY_VERSION="2023.2.307"
+ARG EFINITY_VERSION="2024.1.163"
+ARG EFINITY_PATH="2024.1"
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -21,7 +24,7 @@ ARG EFINITY_ARCHIVE="efinity-${EFINITY_VERSION}-ubuntu-x64.tar.bz2"
 RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp && \
     tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
     rm -rf /tmp/${EFINITY_ARCHIVE} && \
-    chmod +x /opt/efinity/2023.2/bin/setup.sh
+    chmod +x /opt/efinity/${EFINITY_PATH}/bin/setup.sh
 
 # Install Icarus Verilog
 RUN apt-get update && apt-get -y install --no-install-recommends \
