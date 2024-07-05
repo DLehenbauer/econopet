@@ -15,10 +15,9 @@
 				"marus25.cortex-debug",
 				"ms-azuretools.vscode-docker",
 				"ms-vscode.cpptools-extension-pack",
-				// "mshr-h.veriloghdl",
+				"mshr-h.veriloghdl",
 				"mutantdino.resourcemonitor",
 				"streetsidesoftware.code-spell-checker",
-				"teros-technology.teroshdl",
 				"xaver.clang-format"
 			]
         }
@@ -28,7 +27,7 @@
         "--privileged",             // Required to access Picoprobe SWD from dev container
         "--device=/dev/ttyACM0"     // Expose Picoprobe URT to dev container
     ],
-
+    
     // TODO: Figure out how to connect to Picoprobe as a non-root user.
     "remoteUser": "root"
 }
