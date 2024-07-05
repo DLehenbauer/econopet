@@ -56,7 +56,7 @@ module main #(
     // Spare pins
     output logic [9:0] spare_o
 );
-    logic  reset     = '0;
+    wire   reset     = '0;
     assign status_no = !ram_ack;
 
     // Avoid contention
@@ -67,7 +67,7 @@ module main #(
     assign via_cs_o     = '0;
 
     logic [5:0] clock_counter = '0;
-    always_ff @(posedge clock_i or posedge reset) begin
+    always_ff @(posedge clock_i) begin
         clock_counter <= reset ? '0 : clock_counter + 1'b1;
     end
 
