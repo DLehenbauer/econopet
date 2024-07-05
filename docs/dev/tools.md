@@ -24,9 +24,9 @@
 
 ## FPGA & Verilog
 
-* [Quartus II Web Edition 13.0 SP1](https://fpgasoftware.intel.com/13.0sp1/?edition=web)
+* [Efinity IDE](https://www.efinixinc.com/support/efinity.php)
+  * Requires [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 * [Icarus Verilog & GTKWave](http://bleyer.org/icarus/)
-* [vhd2vl](https://github.com/ldoolitt/vhd2vl)
 
 ## Logic Analyzer
 
