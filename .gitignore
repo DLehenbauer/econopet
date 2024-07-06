@@ -12,6 +12,9 @@ hw/**/*.bck
 hw/**/*-backups/*.zip
 hw/**/#auto_saved_files#
 
+# KiCad lock files
+hw/**/*.lck
+
 # KiCad footprint cache
 hw/**/fp-info-cache
 
