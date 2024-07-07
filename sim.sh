@@ -3,11 +3,26 @@
 PROJNAME="EconoPET"
 PROJDIR="$(readlink -f $(dirname "$0"))/gw/$PROJNAME"
 
-# Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
-# the resulting Python exception which occurs due to lack of SystemVerilog support.
-# (See https://www.efinixinc.com/support/forum.php?cid=6&pid=932)
-"$(dirname "$0")/efx.sh" --flow rtlsim 2> /dev/null
-echo
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -u|--update)
+        UPDATE_F_FILE=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        exit 1
+        ;;
+  esac
+done
+
+if [ -n "$UPDATE_F_FILE" ]; then
+    # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
+    # the resulting Python exception which occurs due to lack of SystemVerilog support.
+    # (See https://www.efinixinc.com/support/forum.php?cid=6&pid=932)
+    "$(dirname "$0")/efx.sh" --flow rtlsim 2> /dev/null
+    echo
+fi
 
 # 'efx_run' produces relative paths to simulation files. Therefore, we must execute
 # iverilog from the root of the project directory.
