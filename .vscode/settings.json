@@ -2,5 +2,5 @@
     "verilog.formatting.veribleVerilogFormatter.arguments": "--indentation_spaces 4",
     "verilog.linting.iverilog.arguments": "-Y .sv -y gw/EconoPET/src",
     "verilog.linting.linter": "verilator",
-    "verilog.linting.verilator.arguments": "-y gw/EconoPET/src"
+    "verilog.linting.verilator.arguments": "-y gw/EconoPET -y gw/EconoPET/src"
 }
