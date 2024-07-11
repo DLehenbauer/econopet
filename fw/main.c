@@ -17,6 +17,7 @@
 #include "pch.h"
 #include "test/mem.h"
 #include "video/video.h"
+#include "sd/sd.h"
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -28,15 +29,15 @@ void measure_freqs(uint fpga_div) {
     uint32_t f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
     uint32_t f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
 
-    printf("    pll_sys  = %d kHz\n", f_pll_sys);
-    printf("    pll_usb  = %d kHz\n", f_pll_usb);
-    printf("    rosc     = %d kHz\n", f_rosc);
-    printf("    clk_sys  = %d kHz\n", f_clk_sys);
-    printf("    clk_peri = %d kHz\n", f_clk_peri);
-    printf("    clk_usb  = %d kHz\n", f_clk_usb);
-    printf("    clk_adc  = %d kHz\n", f_clk_adc);
-    printf("    clk_rtc  = %d kHz\n", f_clk_rtc);
-    printf("    clk_fpga = %d kHz\n", f_clk_sys / fpga_div);
+    printf("    pll_sys  = %lu kHz\n", f_pll_sys);
+    printf("    pll_usb  = %lu kHz\n", f_pll_usb);
+    printf("    rosc     = %lu kHz\n", f_rosc);
+    printf("    clk_sys  = %lu kHz\n", f_clk_sys);
+    printf("    clk_peri = %lu kHz\n", f_clk_peri);
+    printf("    clk_usb  = %lu kHz\n", f_clk_usb);
+    printf("    clk_adc  = %lu kHz\n", f_clk_adc);
+    printf("    clk_rtc  = %lu kHz\n", f_clk_rtc);
+    printf("    clk_fpga = %lu kHz\n", f_clk_sys / fpga_div);
 }
 
 void fpga_init() {
@@ -70,8 +71,19 @@ void fpga_init() {
 }
 
 int main() {
+    // Turn on LED at start of config to signal that the RP2040 has booted and FPGA
+    // configuration has started (sd_init will turn LED off.)
+    gpio_init(PICO_DEFAULT_LED_PIN);
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    gpio_put(PICO_DEFAULT_LED_PIN, 1);
+
     fpga_init();
 
+    // Deassert SD CS
+    gpio_init(SD_CSN_GP);
+    gpio_set_dir(SD_CSN_GP, GPIO_OUT);
+    gpio_put(SD_CSN_GP, 1);
+    
     gpio_init(SPI_CS_GP);
     gpio_set_dir(SPI_CS_GP, GPIO_OUT);
     gpio_put(SPI_CS_GP, 1);
@@ -83,9 +95,15 @@ int main() {
     gpio_set_function(SPI_SCK_GP, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SDO_GP, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SDI_GP, GPIO_FUNC_SPI);
-    printf("    spi1     = %d Bd\n", baudrate);
+    printf("    spi1     = %u Bd\n", baudrate);
 
+    // 'sd_init()' prior to 'video_init()' to avoid a hardfault in 'ff_memfree()'.
+    sd_init();
     video_init();
+
+    // Quick test of SD card before entering RAM test.
+    sd_read_file("filename.txt");
+
     test_ram();
 
     __builtin_unreachable();

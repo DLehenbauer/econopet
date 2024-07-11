@@ -4,10 +4,12 @@ set(FAMILY rp2040)
 set(BOARD pico_sdk)
 
 add_subdirectory("external/PicoDVI/software/libdvi")
+add_subdirectory("external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI")
 
 add_executable(firmware
     driver.c
     main.c
+    sd/sd.c
     test/mem.c
     video/video.c
 )
@@ -31,6 +33,7 @@ target_link_libraries(
     pico_multicore
     pico_stdlib
     pico_util
+    FatFs_SPI
 )
 
 # We have a lot in SRAM4 (particularly TMDS LUT) but don't need much stack on
