@@ -13,7 +13,7 @@ echo
 # iverilog from the root of the project directory.
 pushd "$PROJDIR" || exit 1
 
-iverilog -g2009 -s "sim" -o"$PROJDIR/work_sim/$PROJNAME.vvp" -f"$PROJDIR/work_sim/$PROJNAME.f"
+iverilog -g2009 -s "sim" -o"$PROJDIR/work_sim/$PROJNAME.vvp" -f"$PROJDIR/work_sim/$PROJNAME.f" -f"$PROJDIR/work_sim/timescale.f"
 if [ $? -ne 0 ]; then
     popd && exit $?
 fi

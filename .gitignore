@@ -12,6 +12,9 @@ hw/**/*.bck
 hw/**/*-backups/*.zip
 hw/**/#auto_saved_files#
 
+# KiCad lock files
+hw/**/*.lck
+
 # KiCad footprint cache
 hw/**/fp-info-cache
 
@@ -31,6 +34,9 @@ gw/EconoPET/work_pnr/**/*
 gw/EconoPET/work_pt/**/*
 gw/EconoPET/work_sim/**/*
 gw/EconoPET/work_syn/**/*
+
+# Keep handcoded 'timescale.f' which sets the default simulation timescale
+!gw/EconoPET/work_sim/timescale.f
 
 #
 # CMake

@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`timescale 1ns / 1ps
-
 module sim #(
     parameter integer unsigned CLK_MHZ = 64
 );

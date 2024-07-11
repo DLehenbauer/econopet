@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1716823492" sw_version="2023.2.307" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="true" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1720194441" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="true" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -8,11 +8,11 @@
     <efx:design_info def_veri_version="sv_09" def_vhdl_version="vhdl_2008">
         <efx:top_module name="top"/>
         <efx:design_file name="src/top.sv" version="default" library="default"/>
-        <efx:design_file name="src/spi/spi.sv" version="default" library="default"/>
-        <efx:design_file name="src/spi/spi1.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/sync2_edge.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/edge_detect.sv" version="default" library="default"/>
-        <efx:design_file name="src/utils/sync2.sv" version="default" library="default"/>
+        <efx:design_file name="src/spi.sv" version="default" library="default"/>
+        <efx:design_file name="src/spi1_controller.sv" version="default" library="default"/>
+        <efx:design_file name="src/sync2_edge_detect.sv" version="default" library="default"/>
+        <efx:design_file name="src/edge_detect.sv" version="default" library="default"/>
+        <efx:design_file name="src/sync2.sv" version="default" library="default"/>
         <efx:design_file name="src/bram.sv" version="default" library="default"/>
         <efx:design_file name="src/ram.sv" version="default" library="default"/>
         <efx:design_file name="src/main.sv" version="default" library="default"/>
@@ -70,6 +70,7 @@
         <efx:param name="mult-auto-pipeline" value="0" value_type="e_option"/>
         <efx:param name="use-logic-for-small-mem" value="64" value_type="e_integer"/>
         <efx:param name="use-logic-for-small-rom" value="64" value_type="e_integer"/>
+        <efx:param name="bram-push-tco-outreg" value="0" value_type="e_option"/>
     </efx:synthesis>
     <efx:place_and_route tool_name="efx_pnr">
         <efx:param name="work_dir" value="work_pnr" value_type="e_string"/>

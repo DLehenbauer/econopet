@@ -12,7 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`timescale 1ns / 1ps
 `include "./sim/assert.svh"
 
 module wb_driver #(

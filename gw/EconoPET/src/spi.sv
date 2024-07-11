@@ -29,17 +29,21 @@ module spi #(
     output logic [DATA_WIDTH-1:0] data_o, // Data received.  Shifted in from SDO on each positive edge of SCK.
 
     output logic strobe_o  // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
-                           // is captured on the following negative SCK edege.
+                           // is captured on the following negative SCK edge.
 );
-    logic [$clog2(DATA_WIDTH-1)-1:0] bits_remaining = DATA_WIDTH - 1;
+    localparam BIT_COUNTER_WIDTH = $clog2(DATA_WIDTH-1);
+    localparam BIT_COUNTER_MAX   = (1 << BIT_COUNTER_WIDTH) - 1;    // Same as DATA_WIDTH-1, but typed as BIT_COUNTER_WIDTH bits.
+
+    logic [BIT_COUNTER_WIDTH-1:0] bits_remaining = BIT_COUNTER_MAX;
 
     initial begin
-        strobe_o <= '0;
+        strobe_o = '0;
     end
 
-    wire msb = bits_remaining == DATA_WIDTH - 1;
+    wire msb = bits_remaining == BIT_COUNTER_MAX;
     wire lsb = bits_remaining == '0;
 
+    // Note that buffer is one bit wider than DATA_WIDTH to hold the incoming SDI bit.
     logic [DATA_WIDTH:0] buffer_d, buffer_q;
     assign buffer_d = msb
         ? {data_i[6:0], 1'bx, spi_sd_i}
@@ -48,7 +52,7 @@ module spi #(
     always_ff @(posedge spi_cs_ni or posedge spi_sck_i) begin
         if (spi_cs_ni) begin
             // Deasserting 'spi_cs_ni' completes or aborts the current transfer.
-            bits_remaining <= DATA_WIDTH - 1;
+            bits_remaining <= BIT_COUNTER_MAX;
             buffer_q       <= 'x;
             strobe_o       <= '0;
         end else begin

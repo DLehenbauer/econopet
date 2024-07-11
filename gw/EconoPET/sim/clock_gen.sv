@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`timescale 1ns / 1ps
-
 module clock_gen #(
     parameter MHZ = 24    // Clock speed in MHz
 ) (
