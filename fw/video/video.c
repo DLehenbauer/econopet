@@ -10,8 +10,6 @@
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
 #define DVI_TIMING dvi_timing_720x480p_60hz
 
-#define LED_PIN 16
-
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
