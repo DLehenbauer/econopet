@@ -15,8 +15,8 @@
 `include "./sim/assert.svh"
 
 module wb_driver #(
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 10
+    parameter ADDR_WIDTH = 20,
+    parameter DATA_WIDTH = 8
 ) (
     input logic                   wb_clock_i,
 
@@ -42,6 +42,7 @@ module wb_driver #(
         wb_cycle_o  <= 1'b1;
         wb_strobe_o <= 1'b1;
 
+        while (wb_stall_i) @(posedge wb_clock_i);
         @(posedge wb_clock_i) wb_strobe_o <= '0;
     endtask
 
