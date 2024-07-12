@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#pragma region // SPI
-
 // SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO for SPI.
 // (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
 #define SPI_MHZ 24
@@ -33,9 +31,13 @@
 // STALL until the full command has been received and processed.
 #define SPI_STALL_GP 10
 
-#pragma endregion
-
-#pragma region // FPGA
+// SD card reader shares SPI1 bus
+#define SD_SPI_INSTANCE SPI_INSTANCE
+#define SD_CLK_GP SPI_SCK_GP
+#define SD_CMD_GP SPI_SDO_GP
+#define SD_DAT_GP SPI_SDI_GP
+#define SD_CSN_GP 9
+#define SD_DETECT 8
 
 // Pulsing CRESET initiates FPGA configuration.  After the CRESET signal is de-asserted,
 // the MCU uploads the FPGA binary via SPI0.
@@ -43,5 +45,3 @@
 
 // PWM output used to generate the PLL input for FPGA.
 #define FPGA_CLK_GP 15
-
-#pragma endregion
