@@ -23,6 +23,6 @@ void spi_read_seek(uint32_t addr);
 uint8_t spi_read_at(uint32_t addr);
 uint8_t spi_read_next();
 
-void spi_write(uint32_t addr, uint32_t byteLength, const uint8_t const* pSrc);
+void spi_write(uint32_t addr, uint32_t byteLength, const uint8_t* const pSrc);
 void spi_write_at(uint32_t addr, uint8_t data);
 void spi_write_next(uint8_t data);
