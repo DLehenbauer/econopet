@@ -31,8 +31,8 @@ module spi #(
     output logic strobe_o  // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
                            // is captured on the following negative SCK edge.
 );
-    localparam BIT_COUNTER_WIDTH = $clog2(DATA_WIDTH-1);
-    localparam BIT_COUNTER_MAX   = (1 << BIT_COUNTER_WIDTH) - 1;    // Same as DATA_WIDTH-1, but typed as BIT_COUNTER_WIDTH bits.
+    localparam BIT_COUNTER_WIDTH = $clog2(DATA_WIDTH-1),
+               BIT_COUNTER_MAX   = (1 << BIT_COUNTER_WIDTH) - 1;    // Same as DATA_WIDTH-1, but typed as BIT_COUNTER_WIDTH bits.
 
     logic [BIT_COUNTER_WIDTH-1:0] bits_remaining = BIT_COUNTER_MAX;
 

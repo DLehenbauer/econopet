@@ -19,17 +19,19 @@ module sim #(
     spi1_tb spi1_tb ();
     bram_tb bram_tb ();
     arbiter_tb arbiter_tb ();
+    system_tb system_tb ();
     top_tb top_tb ();
 
     initial begin
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
-        spi_tb.run();
-        spi1_tb.run();
-        bram_tb.run();
-        arbiter_tb.run();
-        top_tb.run();
+        // spi_tb.run();
+        // spi1_tb.run();
+        // bram_tb.run();
+        // arbiter_tb.run();
+        system_tb.run();
+        // top_tb.run();
 
         $display("[%t] Simulation Complete", $time);
         $finish;

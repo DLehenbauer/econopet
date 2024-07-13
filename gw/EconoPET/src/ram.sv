@@ -22,8 +22,8 @@ module ram #(
     input  logic                  wb_clock_i,
     input  logic                  wb_reset_i,
     input  logic [ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,
-    output logic [DATA_WIDTH-1:0] wb_data_o,
+    input  logic [DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
+    output logic [DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
     input  logic                  wb_we_i,
     input  logic                  wb_cycle_i,
     input  logic                  wb_strobe_i,

@@ -12,27 +12,29 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- module system #(
-    parameter DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20,
-    parameter CPU_ADDR_WIDTH = 16,
-    parameter RAM_ADDR_WIDTH = 17
+module system #(
+    parameter integer unsigned WB_CLOCK_MHZ = 64,
+    parameter integer unsigned DATA_WIDTH = 8,
+    parameter integer unsigned WB_ADDR_WIDTH = 20,
+    parameter integer unsigned CPU_ADDR_WIDTH = 16,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                  wb_clock_i,
-    input  logic                  wb_reset_i,
-    input  logic [ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,
-    output logic [DATA_WIDTH-1:0] wb_data_o,
-    input  logic                  wb_we_i,
-    input  logic                  wb_cycle_i,
-    input  logic                  wb_strobe_i,
-    output logic                  wb_stall_o,
-    output logic                  wb_ack_o,
+    input  logic                     wb_clock_i,
+    input  logic                     wb_reset_i,
+    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,
+    output logic [   DATA_WIDTH-1:0] wb_data_o,
+    input  logic                     wb_we_i,
+    input  logic                     wb_cycle_i,
+    input  logic                     wb_strobe_i,
+    output logic                     wb_stall_o,
+    output logic                     wb_ack_o,
 
     // CPU
     output logic cpu_be_o,
+    output logic cpu_clock_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
@@ -41,6 +43,10 @@
     input  logic [DATA_WIDTH-1:0] cpu_data_i,
     output logic [DATA_WIDTH-1:0] cpu_data_o,
     output logic                  cpu_data_oe,
+
+    output logic cpu_we_i,
+    output logic cpu_we_o,
+    output logic cpu_we_oe,
 
     // RAM
     output logic ram_addr_a10_o,
@@ -56,37 +62,141 @@
     output logic pia2_cs_o,
     output logic via_cs_o
 );
-    logic grant_wb = '0;
-
     initial begin
-        cpu_be_o  = '0;
-        ram_oe_o  = '0;
-        ram_we_o  = '0;
-        io_oe_o   = '0;
+        cpu_clock_o = '0;
+
+        // Avoid contention on startup
+        cpu_be_o = '0;
+        cpu_we_o = '0;
+        cpu_we_oe = '0;
+        
+        io_oe_o = '0;
         pia1_cs_o = '0;
         pia2_cs_o = '0;
-        via_cs_o  = '0;
-        wb_stall_o = 1'b1;
+        via_cs_o = '0;
     end
 
     logic [5:0] clock_counter = '0;
 
-    always_ff @(posedge clock_i or posedge wb_reset_i) begin
-        if (wb_reset_i) begin
-            clock_counter <= '0;
-        end else begin
-            clock_counter <= clock_counter + 1'b1;
-        end
+    always_ff @(posedge wb_clock_i) begin
+        clock_counter <= clock_counter + 1'b1;
     end
 
-    always_comb begin
-        wb_permitted = (clock_counter < 48);
+    // Timing for W65C02S
+    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
+    //
+    // Minumum Phi2 pulse width is high 62ms and low 63ms (tPWH, tPWL)
+    //
+    // Rising Phi2 edge latches triggers bus transfer:
+    //  - BE must be asserted 45ns before rising Phi2 edge (tBVD + tDSR)
+    //  - DIN must be stable 15ns before rising Phi2 edge (tDSR)
+    //  - DIN must be held 10ns after rising Phi2 edge (tDHR)
+    //  - BE must be held 10ns after rising Phi2 edge (tDHR, tDHW)
+    //  
+    // Falling Phi2 edge advances CPU to next state:
+    //  - Previous ADDR, RWB, DOUT held 10ns after falling Phi2 edge (tAH, tDHW)
+    //  - Next ADDR, RWB, DOUT valid 40ns after falling Phi2 edge (tADS, tMDS)
+    //
+    // Other:
+    //  - 
+    //  - At maximum clock rate, RAM has 70ns between ADDR stabilizing and the
+    //    the beginning of the read setup time (tACC).
+
+    function bit [5:0] ns_to_cycles(input int time_ns);
+        // Note: We conservatively add 1 cycle (15.625ns) to account for propagation delay.
+        return 6'(int'($ceil(time_ns / (1000.0 / WB_CLOCK_MHZ)) + 1));
+    endfunction
+
+    // Maximum number of 'wb_clock_i' cycles required to complete an in-progress
+    // wishbone transaction with RAM.
+    localparam MAX_WB_CYCLES = 3,
+               CPU_tBVD      = 30,   // CPU BE to Valid Data (tBVD)
+               CPU_tPWH      = 62,   // CPU Clock Pulse Width High (tPWH)
+               CPU_tDSR      = 15,   // CPU Data Setup Time (tDSR)
+               CPU_tDHx      = 10,   // CPU Data Hold Time (tDHR, tDHW)
+               RAM_tAA       = 10;   // RAM Address Access Time (tAA)
+
+    localparam bit [5:0] WB_READY_END     = 0,
+                         CPU_BE_START     = MAX_WB_CYCLES,                                      // Assert BE at beginning of CPU cycle
+                         RAM_OE_START     = CPU_BE_START + ns_to_cycles(CPU_tBVD),              // Assert RAM OE after ADDR is stable
+                         CPU_PHI_START    = RAM_OE_START + ns_to_cycles(RAM_tAA + CPU_tDSR),    // Wait until DIN is stable and CPU setup time met before starting transaction
+                         CPU_PHI_END      = CPU_PHI_START + ns_to_cycles(CPU_tPWH),             // Hold Phi2 high for the required time
+                         CPU_BE_END       = CPU_PHI_END + ns_to_cycles(CPU_tDHx),               // Hold data for required time before beginning transition to high-z
+                         WB_READY_START   = CPU_BE_END + ns_to_cycles(CPU_tBVD);                // Wait until CPU transitions to high-Z before granting control to wishbone
+
+    logic wb_ready = '0;
+    logic cpu_ram_oe = '0;
+    logic cpu_ram_we = '0;
+
+    always_ff @(posedge wb_clock_i) begin
+        case (clock_counter)
+            WB_READY_END: begin
+                wb_ready    <= 0;
+            end
+            CPU_BE_START: begin
+                cpu_be_o    <= 1;
+            end
+            RAM_OE_START: begin
+                cpu_ram_oe  <= 1;
+            end
+            CPU_PHI_START: begin
+                cpu_clock_o <= 1;
+            end
+            CPU_PHI_END: begin
+                cpu_clock_o <= 0;
+            end
+            CPU_BE_END: begin
+                cpu_ram_oe  <= 0;
+                cpu_be_o    <= 0;
+            end
+            WB_READY_START: begin
+                wb_ready    <= 1;
+            end
+            default: begin
+            end
+        endcase
     end
 
-    always_ff @(posedge clock_i) begin
-        if (wb_cycle_i && wb_strobe_i) begin
-            
-        end
-    end
+    // Wishbone interface should only accept transactions when 'wb_ready' is high.
+    wire ram_ctl_cycle  = wb_ready & wb_cycle_i;
+    wire ram_ctl_strobe = wb_ready & wb_strobe_i;
+    
+    logic ram_ctl_stall;
+    assign wb_stall_o   = ~wb_ready | ram_ctl_stall;
 
+    logic wb_ram_oe;
+    logic wb_ram_we;
+    logic [RAM_ADDR_WIDTH-1:0] wb_ram_addr;
+
+    ram ram (
+        .wb_clock_i(wb_clock_i),
+        .wb_reset_i(wb_reset_i),
+        .wb_addr_i(wb_addr_i[16:0]),
+        .wb_data_i(wb_data_i),
+        .wb_data_o(wb_data_o),
+        .wb_we_i(wb_we_i),
+
+        .wb_cycle_i(ram_ctl_cycle),
+        .wb_strobe_i(ram_ctl_strobe),
+        .wb_stall_o(ram_ctl_stall),
+        .wb_ack_o(wb_ack_o),
+
+        .ram_oe_o(wb_ram_oe),
+        .ram_we_o(wb_ram_we),
+        .ram_addr_o(wb_ram_addr),
+        .ram_data_i(cpu_data_i),
+        .ram_data_o(cpu_data_o),
+        .ram_data_oe(cpu_data_oe)
+    );
+
+    assign ram_we_o         = cpu_be_o ? cpu_we_i : wb_ram_we;
+    assign ram_oe_o         = cpu_ram_oe | wb_ram_oe;
+
+    assign cpu_addr_oe      = ~cpu_be_o;
+    assign cpu_addr_o       = wb_ram_addr[15:0];
+
+    assign ram_addr_a10_o   = cpu_addr_o[10];
+    assign ram_addr_a11_o   = cpu_addr_o[11];
+    assign ram_addr_a15_o   = cpu_addr_o[15];
+    assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : wb_ram_addr[16];
 endmodule

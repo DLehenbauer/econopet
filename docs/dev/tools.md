@@ -26,7 +26,8 @@
 
 * [Efinity IDE](https://www.efinixinc.com/support/efinity.php)
   * Requires [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
-* [Icarus Verilog & GTKWave](http://bleyer.org/icarus/)
+* [Icarus Verilog](http://bleyer.org/icarus/)
+* [GtkWave](https://sourceforge.net/projects/gtkwave/files/)
 
 ## Logic Analyzer
 
