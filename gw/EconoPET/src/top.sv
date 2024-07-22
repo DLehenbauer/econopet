@@ -12,6 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+// Top module encapsulates/normalizes platform and hardware quirks before connecting
+// signals to the main module.  This includes:
+//
+//  - Normalizing signals to be active high signals.
+//  - Combining OE signals into a single bus-wide OE signal.
+//  - Driving unused signals to a known state.
 module top #(
     parameter DATA_WIDTH     = 8,
     parameter WB_ADDR_WIDTH  = 20,
@@ -44,19 +50,19 @@ module top #(
     output logic via_cs_n_o,    // (CS2B)
 
     // FPGA
-    input  logic clock_i,   // 64 MHz clock (from PLL)
-    output logic status_no, // NSTATUS LED (0 = On, 1 = Off)
+    input  logic clock_i,       // 64 MHz clock (from PLL)
+    output logic status_no,     // NSTATUS LED (0 = On, 1 = Off)
 
     // SPI1 bus
-    input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,  // (SCK) Serial Clock
-    input  logic spi1_sd_i,   // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,   // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,    // (SCK) Serial Clock
+    input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
     output logic spi_stall_o,
 
     // Config
-    input logic config_crt_i,  // (0 = 12", 1 = 9")
-    input logic config_kbd_i,  // (0 = Business, 1 = Graphics)
+    input logic config_crt_i,   // (0 = 12", 1 = 9")
+    input logic config_kbd_i,   // (0 = Business, 1 = Graphics)
 
     // Audio
     output logic audio_o,
@@ -73,6 +79,7 @@ module top #(
     // Spare pins
     output logic [9:0] spare_o
 );
+    // Disable audio output for now.
     assign audio_o = '0;
 
     // Test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
@@ -81,7 +88,7 @@ module top #(
     assign pmod2_oe[8:1] = '0;
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
-    // Create a combined logic signal to control OE for bus_addr_o[15:0].
+    // Create a combined logic signal to control OE for cpu_addr_o[15:0].
     logic cpu_addr_merged_oe;
 
     assign cpu_addr_oe = {
@@ -92,7 +99,7 @@ module top #(
     };
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
-    // Create a combined logic signal to control OE for bus_data_o[7:0].
+    // Create a combined logic signal to control OE for cpu_data_o[7:0].
     logic cpu_data_merged_oe;
 
     assign cpu_data_oe = {
@@ -100,7 +107,7 @@ module top #(
         cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe
     };
 
-    // For consistency, convert active low signals to active high signals.
+    // For consistency and simplicity, convert active low signals to active high signals.
     logic ram_oe_o;
     assign ram_oe_n_o  = !ram_oe_o;
 
