@@ -4,3 +4,6 @@
 [submodule "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico"]
 	path = fw/external/no-OS-FatFS-SD-SPI-RPi-Pico
 	url = https://github.com/carlk3/no-OS-FatFS-SD-SPI-RPi-Pico.git
+[submodule "gw/EconoPET/external/verilog-6502"]
+	path = gw/EconoPET/external/verilog-6502
+	url = https://github.com/Arlet/verilog-6502.git

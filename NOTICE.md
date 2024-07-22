@@ -66,6 +66,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
+## verilog-6502
+
+**source:** <https://github.com/Arlet/verilog-6502>
+
+```text
+/*
+ * verilog model of 6502 CPU.
+ *
+ * (C) Arlet Ottens, <arlet@c-scape.nl>
+ *
+ * Feel free to use this code in any project (commercial or not), as long as you
+ * keep this message, and the copyright notice. This code is provided "as is", 
+ * without any warranties of any kind. 
+ * 
+ */
+```
+
 ## IceSID
 
 **source:** <https://github.com/bit-hack/icesid>
