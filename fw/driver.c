@@ -85,7 +85,7 @@ void spi_write_next(uint8_t data) {
     cmd_end();
 }
 
-void spi_write(uint32_t addr, uint32_t byteLength, const uint8_t const* pSrc) {
+void spi_write(uint32_t addr, uint32_t byteLength, const uint8_t* const pSrc) {
     const uint8_t* p = pSrc;
     
     if (byteLength--) {
