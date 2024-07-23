@@ -15,11 +15,11 @@
 module sim #(
     parameter integer unsigned CLK_MHZ = 64
 );
-    spi_tb spi_tb ();
-    spi1_tb spi1_tb ();
-    bram_tb bram_tb ();
-    arbiter_tb arbiter_tb ();
-    system_tb system_tb ();
+    // spi_tb spi_tb ();
+    // spi1_tb spi1_tb ();
+    // bram_tb bram_tb ();
+    // arbiter_tb arbiter_tb ();
+    // system_tb system_tb ();
     top_tb top_tb ();
 
     initial begin
@@ -30,8 +30,8 @@ module sim #(
         // spi1_tb.run();
         // bram_tb.run();
         // arbiter_tb.run();
-        system_tb.run();
-        // top_tb.run();
+        // system_tb.run();
+        top_tb.run();
 
         $display("[%t] Simulation Complete", $time);
         $finish;

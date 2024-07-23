@@ -26,13 +26,15 @@ module top_tb #(
     initial fpga_clock.start;
 
     // CPU
-    logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i;
-    logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o;
-    logic [CPU_ADDR_WIDTH-1:0] cpu_addr_oe;
+    logic cpu_be;
 
-    logic [DATA_WIDTH-1:0] cpu_data_i;
-    logic [DATA_WIDTH-1:0] cpu_data_o;
-    logic [DATA_WIDTH-1:0] cpu_data_oe;
+    logic [CPU_ADDR_WIDTH-1:0] top_addr_i;
+    logic [CPU_ADDR_WIDTH-1:0] top_addr_o;
+    logic [CPU_ADDR_WIDTH-1:0] top_addr_oe;
+
+    logic [DATA_WIDTH-1:0] top_data_i;
+    logic [DATA_WIDTH-1:0] top_data_o;
+    logic [DATA_WIDTH-1:0] top_data_oe;
 
     // RAM
     logic ram_addr_a10_o;
@@ -53,12 +55,13 @@ module top_tb #(
     top top (
         .clock_i(clock),
 
-        .cpu_addr_i (cpu_addr_i),
-        .cpu_addr_o (cpu_addr_o),
-        .cpu_addr_oe(cpu_addr_oe),
-        .cpu_data_i (cpu_data_i),
-        .cpu_data_o (cpu_data_o),
-        .cpu_data_oe(cpu_data_oe),
+        .cpu_be_o(cpu_be),
+        .cpu_addr_i (top_addr_i),
+        .cpu_addr_o (top_addr_o),
+        .cpu_addr_oe(top_addr_oe),
+        .cpu_data_i (top_data_i),
+        .cpu_data_o (top_data_o),
+        .cpu_data_oe(top_data_oe),
 
         .ram_addr_a10_o(ram_addr_a10_o),
         .ram_addr_a11_o(ram_addr_a11_o),
@@ -74,19 +77,53 @@ module top_tb #(
         .spi_stall_o(spi_stall)
     );
 
+    logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
+    logic [DATA_WIDTH-1:0] cpu_data_i;
+    logic [DATA_WIDTH-1:0] cpu_data_o;
+    logic cpu_we_n;
+    logic cpu_reset_n;
+
+    mock_cpu mock_cpu(
+        .clock_i(clock),            // TODO: Use generated 'cpu_clock' from top module.
+        .reset_n_i(cpu_reset_n),    // TODO: Use generated 'cpu_reset_n' from top module.
+        .addr_o(cpu_addr),
+        .data_i(cpu_data_i),
+        .data_o(cpu_data_o),
+        .we_n_o(cpu_we_n),
+        .irq_n_i(1'b1),
+        .nmi_n_i(1'b1),
+        .ready_i(1'b1)
+    );
+
+    logic [CPU_ADDR_WIDTH-1:0] bus_addr;
+    logic [DATA_WIDTH-1:0]     bus_data;
+    logic [DATA_WIDTH-1:0]     bus_we_n;
+
+    wire cpu_driving_data = cpu_be && !cpu_we_n;
+    wire ram_driving_data = !ram_oe_n_o && ram_we_n_o;
+    wire fpga_driving_data = top_data_oe;
+    wire [2:0] driving = {cpu_driving_data, ram_driving_data, fpga_driving_data};
+
+    always @(*) begin
+        // Only one driver allowed.
+        if (!$onehot0(driving)) begin
+            $fatal(1, "[%0t] Multiple drivers on data bus. (fpga=%d, cpu=%d, ram=%d)", $time, fpga_driving_data, cpu_driving_data, ram_driving_data);
+        end
+    end
+
     wire [RAM_ADDR_WIDTH-1:0] ram_addr = {
         ram_addr_a16_o,
         ram_addr_a15_o,
-        cpu_addr_o[14:12],
+        top_addr_o[14:12],
         ram_addr_a11_o,
         ram_addr_a10_o,
-        cpu_addr_o[9:0]
+        top_addr_o[9:0]
     };
 
     mock_ram mock_ram (
         .ram_addr_i(ram_addr),
-        .ram_data_i(cpu_data_o),
-        .ram_data_o(cpu_data_i),
+        .ram_data_i(top_data_o),
+        .ram_data_o(top_data_i),
         .ram_we_n_i(ram_we_n_o),
         .ram_oe_n_i(ram_oe_n_o)
     );
@@ -109,7 +146,20 @@ module top_tb #(
     endtask
 
     task static run;
+        mock_ram.load_rom(16'h8800, "characters-2.901447-10.bin");
+        mock_ram.load_rom(16'hb000, "basic-4-b000.901465-23.bin");
+        mock_ram.load_rom(16'hc000, "basic-4-c000.901465-20.bin");
+        mock_ram.load_rom(16'hd000, "basic-4-d000.901465-21.bin");
+        mock_ram.load_rom(16'he000, "edit-4-40-n-60Hz.901499-01.bin");
+        mock_ram.load_rom(16'hf000, "kernal-4.901465-22.bin");
+
         $display("[%t] BEGIN %m", $time);
+
+        cpu_reset_n = 1;
+        @(posedge clock);
+        cpu_reset_n = 0;
+        @(posedge clock);
+        cpu_reset_n = 1;
 
         spi1_driver.reset;
 
