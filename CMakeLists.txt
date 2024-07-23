@@ -31,3 +31,4 @@ pico_sdk_init()
 
 # Add projects
 add_subdirectory("./fw")
+add_subdirectory("./roms")
