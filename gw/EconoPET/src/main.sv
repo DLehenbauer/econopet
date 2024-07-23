@@ -13,10 +13,10 @@
  */
 
 module main #(
-    parameter integer unsigned DATA_WIDTH = 8,
     parameter integer unsigned WB_ADDR_WIDTH = 20,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17,
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned RAM_ADDR_WIDTH = 17
+    parameter integer unsigned DATA_WIDTH = 8
 ) (
     // FPGA
     input  logic clock_i,   // 64 MHz clock (from PLL)

@@ -44,7 +44,7 @@ module system #(
     output logic [DATA_WIDTH-1:0] cpu_data_o,
     output logic                  cpu_data_oe,
 
-    output logic cpu_we_i,
+    input  logic cpu_we_i,
     output logic cpu_we_o,
     output logic cpu_we_oe,
 
@@ -66,14 +66,13 @@ module system #(
         cpu_clock_o = '0;
 
         // Avoid contention on startup
-        cpu_be_o = '0;
-        cpu_we_o = '0;
-        cpu_we_oe = '0;
-        
-        io_oe_o = '0;
-        pia1_cs_o = '0;
-        pia2_cs_o = '0;
-        via_cs_o = '0;
+        cpu_be_o    = '0;
+        cpu_we_o    = '0;
+        cpu_we_oe   = '0;
+        io_oe_o     = '0;
+        pia1_cs_o   = '0;
+        pia2_cs_o   = '0;
+        via_cs_o    = '0;
     end
 
     logic [5:0] clock_counter = '0;
@@ -87,7 +86,7 @@ module system #(
     //
     // Minumum Phi2 pulse width is high 62ms and low 63ms (tPWH, tPWL)
     //
-    // Rising Phi2 edge latches triggers bus transfer:
+    // Rising Phi2 edge triggers bus transfer:
     //  - BE must be asserted 45ns before rising Phi2 edge (tBVD + tDSR)
     //  - DIN must be stable 15ns before rising Phi2 edge (tDSR)
     //  - DIN must be held 10ns after rising Phi2 edge (tDHR)
@@ -98,7 +97,6 @@ module system #(
     //  - Next ADDR, RWB, DOUT valid 40ns after falling Phi2 edge (tADS, tMDS)
     //
     // Other:
-    //  - 
     //  - At maximum clock rate, RAM has 70ns between ADDR stabilizing and the
     //    the beginning of the read setup time (tACC).
 
@@ -118,11 +116,11 @@ module system #(
 
     localparam bit [5:0] WB_READY_END     = 0,
                          CPU_BE_START     = MAX_WB_CYCLES,                                      // Assert BE at beginning of CPU cycle
-                         RAM_OE_START     = CPU_BE_START + ns_to_cycles(CPU_tBVD),              // Assert RAM OE after ADDR is stable
-                         CPU_PHI_START    = RAM_OE_START + ns_to_cycles(RAM_tAA + CPU_tDSR),    // Wait until DIN is stable and CPU setup time met before starting transaction
+                         RAM_OE_START     = CPU_BE_START  + ns_to_cycles(CPU_tBVD),             // Assert RAM OE after ADDR is stable
+                         CPU_PHI_START    = RAM_OE_START  + ns_to_cycles(RAM_tAA + CPU_tDSR),   // Wait until DIN is stable and CPU setup time met before starting transaction
                          CPU_PHI_END      = CPU_PHI_START + ns_to_cycles(CPU_tPWH),             // Hold Phi2 high for the required time
-                         CPU_BE_END       = CPU_PHI_END + ns_to_cycles(CPU_tDHx),               // Hold data for required time before beginning transition to high-z
-                         WB_READY_START   = CPU_BE_END + ns_to_cycles(CPU_tBVD);                // Wait until CPU transitions to high-Z before granting control to wishbone
+                         CPU_BE_END       = CPU_PHI_END   + ns_to_cycles(CPU_tDHx),             // Hold data for required time before beginning transition to high-z
+                         WB_READY_START   = CPU_BE_END    + ns_to_cycles(CPU_tBVD);             // Wait until CPU transitions to high-Z before granting control to wishbone
 
     logic wb_ready = '0;
     logic cpu_ram_oe = '0;

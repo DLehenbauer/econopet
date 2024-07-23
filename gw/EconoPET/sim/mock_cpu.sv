@@ -13,8 +13,8 @@
  */
 
 module mock_cpu #(
-    parameter integer unsigned DATA_WIDTH = 8,
-    parameter integer unsigned ADDR_WIDTH = 16
+    parameter integer unsigned ADDR_WIDTH = 16,
+    parameter integer unsigned DATA_WIDTH = 8
 ) (
     input  logic clock_i,
     input  logic reset_n_i,
@@ -34,7 +34,7 @@ module mock_cpu #(
         .AB(addr_o),            // address bus
         .DI(data_i),            // data in, read bus
         .DO(data_o),            // data out, write bus
-        .WE(we),           // write enable (0 = read, 1 = write)
+        .WE(we),                // write enable (0 = read, 1 = write)
         .IRQ(!irq_n_i),         // interrupt request (0 = normal, 1 = interrupt)
         .NMI(!nmi_n_i),         // non-maskable interrupt request  (0 = normal, 1 = interrupt)
         .RDY(ready_i)           // Ready signal (0 = pause, 1 = ready)

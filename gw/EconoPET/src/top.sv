@@ -19,10 +19,10 @@
 //  - Combining OE signals into a single bus-wide OE signal.
 //  - Driving unused signals to a known state.
 module top #(
-    parameter DATA_WIDTH     = 8,
-    parameter WB_ADDR_WIDTH  = 20,
-    parameter CPU_ADDR_WIDTH = 16,
-    parameter RAM_ADDR_WIDTH = 17
+    parameter integer unsigned WB_ADDR_WIDTH = 20,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17,
+    parameter integer unsigned CPU_ADDR_WIDTH = 16,
+    parameter integer unsigned DATA_WIDTH = 8
 ) (
     // CPU
     output logic cpu_be_o,
@@ -58,7 +58,7 @@ module top #(
     input  logic spi1_sck_i,    // (SCK) Serial Clock
     input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
-    output logic spi_stall_o,
+    output logic spi_stall_o,   // Flow control for SPI1 (0 = Ready, 1 = Busy)
 
     // Config
     input logic config_crt_i,   // (0 = 12", 1 = 9")
