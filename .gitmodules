@@ -7,3 +7,6 @@
 [submodule "gw/EconoPET/external/verilog-6502"]
 	path = gw/EconoPET/external/verilog-6502
 	url = https://github.com/Arlet/verilog-6502.git
+[submodule "gw/EconoPET/external/65xx"]
+	path = gw/EconoPET/external/65xx
+	url = https://github.com/kdyke/65xx.git
