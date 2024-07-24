@@ -50,3 +50,9 @@ build/
 
 # Ignore node_modules
 site/node_modules
+
+#
+# ROMs
+#
+
+fw/roms/*.h
