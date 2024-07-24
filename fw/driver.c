@@ -58,8 +58,8 @@ uint8_t spi_read_next() {
     return rx[0];
 }
 
-void spi_read(uint32_t addr, uint32_t byteLength, uint8_t* pDest) {
-    spi_read_at(addr);
+void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
+    spi_read_seek(addr);
 
     while (byteLength--) {
         *pDest++ = spi_read_next();
@@ -85,7 +85,7 @@ void spi_write_next(uint8_t data) {
     cmd_end();
 }
 
-void spi_write(uint32_t addr, uint32_t byteLength, const uint8_t* const pSrc) {
+void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
     const uint8_t* p = pSrc;
     
     if (byteLength--) {
