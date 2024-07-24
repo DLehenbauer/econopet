@@ -9,6 +9,7 @@ add_subdirectory("external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI")
 add_executable(firmware
     driver.c
     main.c
+    pet.c
     sd/sd.c
     test/mem.c
     video/video.c

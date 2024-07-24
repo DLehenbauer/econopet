@@ -12,9 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "driver.h"
 #include "hw.h"
-#include "pch.h"
+#include "pet.h"
 #include "test/mem.h"
 #include "video/video.h"
 #include "sd/sd.h"
@@ -104,7 +105,20 @@ int main() {
     // Quick test of SD card before entering RAM test.
     sd_read_file("filename.txt");
 
-    test_ram();
+    // test_ram();
+    pet_init_roms();
+
+    while (1) {
+        const uint8_t cols = 80;
+        const uint8_t rows = 25;
+        char video_char_buffer[rows * cols];
+        spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
+        printf("\e[2J");
+        for (int i = 0; i < sizeof(video_char_buffer); i += cols) {
+            printf("%.*s\n", cols, video_char_buffer + i);
+        }
+        sleep_ms(250);
+    }
 
     __builtin_unreachable();
 }
