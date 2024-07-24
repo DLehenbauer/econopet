@@ -26,8 +26,6 @@ module top #(
 ) (
     // CPU
     output logic cpu_be_o,
-
-    // TODO: Assign pins in Efinity
     output logic cpu_clock_o,
     output logic cpu_ready_o,
 
@@ -39,7 +37,6 @@ module top #(
     output logic [DATA_WIDTH-1:0] cpu_data_o,
     output logic [DATA_WIDTH-1:0] cpu_data_oe,
 
-    // TODO: Assign pins in Efinity
     input  logic cpu_we_n_i,
     output logic cpu_we_n_o,
     output logic cpu_we_n_oe,
