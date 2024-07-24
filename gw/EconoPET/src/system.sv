@@ -126,9 +126,9 @@ module system #(
                          CPU_BE_END       = CPU_PHI_END   + ns_to_cycles(CPU_tDHx),             // Hold data for required time before beginning transition to high-z
                          WB_READY_START   = CPU_BE_END    + ns_to_cycles(CPU_tBVD);             // Wait until CPU transitions to high-Z before granting control to wishbone
 
-    logic wb_ready = '0;
-    logic cpu_ram_oe = '0;
-    logic cpu_ram_we = '0;
+    logic wb_ready  = '0;
+    logic cpu_rd_en = '0;
+    logic cpu_wr_en = '0;
 
     always_ff @(posedge wb_clock_i) begin
         case (clock_counter)
@@ -139,16 +139,18 @@ module system #(
                 cpu_be_o    <= 1;
             end
             RAM_OE_START: begin
-                cpu_ram_oe  <= 1;
+                cpu_rd_en   <= 1;
             end
             CPU_PHI_START: begin
                 cpu_clock_o <= 1;
+                cpu_wr_en   <= 1;
             end
             CPU_PHI_END: begin
                 cpu_clock_o <= 0;
+                cpu_wr_en   <= 0;
+                cpu_rd_en   <= 0;
             end
             CPU_BE_END: begin
-                cpu_ram_oe  <= 0;
                 cpu_be_o    <= 0;
             end
             WB_READY_START: begin
@@ -191,8 +193,8 @@ module system #(
         .ram_data_oe(cpu_data_oe)
     );
 
-    assign ram_we_o         = cpu_be_o ? cpu_we_i : wb_ram_we;
-    assign ram_oe_o         = cpu_ram_oe | wb_ram_oe;
+    assign ram_oe_o         = (cpu_rd_en & !cpu_we_i) | wb_ram_oe;
+    assign ram_we_o         = (cpu_wr_en &  cpu_we_i) | wb_ram_we;
 
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
