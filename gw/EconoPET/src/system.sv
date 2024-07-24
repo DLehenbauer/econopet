@@ -14,10 +14,10 @@
 
 module system #(
     parameter integer unsigned WB_CLOCK_MHZ = 64,
-    parameter integer unsigned DATA_WIDTH = 8,
     parameter integer unsigned WB_ADDR_WIDTH = 20,
+    parameter integer unsigned RAM_ADDR_WIDTH = 17,
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned RAM_ADDR_WIDTH = 17
+    parameter integer unsigned DATA_WIDTH = 8
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
@@ -34,6 +34,7 @@ module system #(
 
     // CPU
     output logic cpu_be_o,
+    output logic cpu_ready_o,
     output logic cpu_clock_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
@@ -62,6 +63,9 @@ module system #(
     output logic pia2_cs_o,
     output logic via_cs_o
 );
+    // For now, CPU is always ready.
+    assign cpu_ready_o = 1;
+
     initial begin
         cpu_clock_o = '0;
 
@@ -193,8 +197,8 @@ module system #(
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
 
-    assign ram_addr_a10_o   = cpu_addr_o[10];
-    assign ram_addr_a11_o   = cpu_addr_o[11];
-    assign ram_addr_a15_o   = cpu_addr_o[15];
+    assign ram_addr_a10_o   = cpu_be_o ? cpu_addr_i[10] : cpu_addr_o[10];
+    assign ram_addr_a11_o   = cpu_be_o ? cpu_addr_i[11] : cpu_addr_o[11];
+    assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
     assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : wb_ram_addr[16];
 endmodule

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1721692376" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="true" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1721837237" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="true" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -17,7 +17,6 @@
         <efx:design_file name="src/ram.sv" version="default" library="default"/>
         <efx:design_file name="src/main.sv" version="default" library="default"/>
         <efx:design_file name="sim/ram_tb.sv" version="default" library="default"/>
-        <efx:design_file name="src/arbiter.sv" version="default" library="default"/>
         <efx:design_file name="src/system.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
@@ -29,7 +28,6 @@
         <efx:sim_file name="sim/sim.sv"/>
         <efx:sim_file name="sim/spi_driver.sv"/>
         <efx:sim_file name="sim/spi_tb.sv"/>
-        <efx:sim_file name="sim/assert.sv"/>
         <efx:sim_file name="sim/spi1_tb.sv"/>
         <efx:sim_file name="sim/assert.svh"/>
         <efx:sim_file name="sim/spi1_driver.sv"/>
@@ -38,11 +36,10 @@
         <efx:sim_file name="sim/bram_tb.sv"/>
         <efx:sim_file name="sim/wb_driver.sv"/>
         <efx:sim_file name="sim/mock_ram.sv"/>
-        <efx:sim_file name="sim/arbiter_tb.sv"/>
-        <efx:sim_file name="sim/system_tb.sv"/>
         <efx:sim_file name="external/verilog-6502/ALU.v"/>
         <efx:sim_file name="external/verilog-6502/cpu.v"/>
         <efx:sim_file name="sim/mock_cpu.sv"/>
+        <efx:sim_file name="sim/mock_bus.sv"/>
     </efx:sim_info>
     <efx:misc_info/>
     <efx:ip_info/>

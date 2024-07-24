@@ -27,6 +27,10 @@ module top #(
     // CPU
     output logic cpu_be_o,
 
+    // TODO: Assign pins in Efinity
+    output logic cpu_clock_o,
+    output logic cpu_ready_o,
+
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_oe,
@@ -34,6 +38,11 @@ module top #(
     input  logic [DATA_WIDTH-1:0] cpu_data_i,
     output logic [DATA_WIDTH-1:0] cpu_data_o,
     output logic [DATA_WIDTH-1:0] cpu_data_oe,
+
+    // TODO: Assign pins in Efinity
+    input  logic cpu_we_n_i,
+    output logic cpu_we_n_o,
+    output logic cpu_we_n_oe,
 
     // RAM
     output logic ram_addr_a10_o,
@@ -126,11 +135,17 @@ module top #(
     logic via_cs_o;
     assign via_cs_n_o  = !via_cs_o;
 
+    logic cpu_we_o, cpu_we_i;
+    assign cpu_we_i    = !cpu_we_n_i;
+    assign cpu_we_n_o  = !cpu_we_o;
+
     main main (
         .clock_i(clock_i),
         .status_no(status_no),
 
         .cpu_be_o(cpu_be_o),
+        .cpu_ready_o(cpu_ready_o),
+        .cpu_clock_o(cpu_clock_o),
 
         .cpu_addr_i(cpu_addr_i),
         .cpu_addr_o(cpu_addr_o),
@@ -139,6 +154,10 @@ module top #(
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(cpu_data_o),
         .cpu_data_oe(cpu_data_merged_oe),
+
+        .cpu_we_i(cpu_we_i),
+        .cpu_we_o(cpu_we_o),
+        .cpu_we_oe(cpu_we_n_oe),
 
         .ram_addr_a16_o(ram_addr_a16_o),
         .ram_addr_a15_o(ram_addr_a15_o),

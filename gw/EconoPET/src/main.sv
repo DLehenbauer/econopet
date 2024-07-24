@@ -24,6 +24,8 @@ module main #(
 
     // CPU
     output logic cpu_be_o,
+    output logic cpu_ready_o,
+    output logic cpu_clock_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
@@ -32,6 +34,10 @@ module main #(
     input  logic [DATA_WIDTH-1:0] cpu_data_i,
     output logic [DATA_WIDTH-1:0] cpu_data_o,
     output logic                  cpu_data_oe,
+
+    input  logic cpu_we_i,
+    output logic cpu_we_o,
+    output logic cpu_we_oe,
 
     // RAM
     output logic ram_addr_a10_o,
@@ -56,20 +62,10 @@ module main #(
     // Spare pins
     output logic [9:0] spare_o
 );
-    wire   reset     = '0;
-    assign status_no = !ram_ack;
+    // Currently, there is no wishbone reset.
+    wire reset       = '0;
 
-    // Avoid contention
-    assign cpu_be_o     = '0;
-    assign io_oe_o      = '0;
-    assign pia1_cs_o    = '0;
-    assign pia2_cs_o    = '0;
-    assign via_cs_o     = '0;
-
-    logic [5:0] clock_counter = '0;
-    always_ff @(posedge clock_i) begin
-        clock_counter <= reset ? '0 : clock_counter + 1'b1;
-    end
+    assign status_no   = '0;
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_data_rx;
@@ -99,57 +95,48 @@ module main #(
         .spi_stall_o(spi_stall_o)
     );
 
-    assign cpu_addr_oe = 1'b1;
-
-    wire ram_grant = clock_counter == 6'h3F;
-
-    logic ram_cycle;
-    logic ram_strobe;
-    logic ram_ack;
-    logic ram_stall;
-
-    arbiter abriter (
+    system system (
         .wb_clock_i(clock_i),
         .wb_reset_i(reset),
-
-        .wbc_cycle_i(spi1_cycle),
-        .wbc_strobe_i(spi1_strobe),
-        .wbc_stall_o(spi1_stall),
-        .wbc_ack_o(spi1_ack),
-
-        .wbp_cycle_o(ram_cycle),
-        .wbp_strobe_o(ram_strobe),
-        .wbp_stall_i(ram_stall),
-        .wbp_ack_i(ram_ack),
-
-        .grant_i(ram_grant)
-    );
-
-    ram ram (
-        .wb_clock_i(clock_i),
-        .wb_reset_i(reset),
-        .wb_addr_i(spi1_addr[16:0]),
+        .wb_addr_i(spi1_addr),
         .wb_data_i(spi1_data_rx),
         .wb_data_o(spi1_data_tx),
         .wb_we_i(spi1_we),
-        .wb_cycle_i(ram_cycle),
-        .wb_strobe_i(ram_strobe),
-        .wb_stall_o(ram_stall),
-        .wb_ack_o(ram_ack),
+        .wb_cycle_i(spi1_cycle),
+        .wb_strobe_i(spi1_strobe),
+        .wb_stall_o(spi1_stall),
+        .wb_ack_o(spi1_ack),
 
+        .cpu_be_o(cpu_be_o),
+        .cpu_ready_o(cpu_ready_o),
+        .cpu_clock_o(cpu_clock_o),
+        .cpu_addr_i(cpu_addr_i),
+        .cpu_addr_o(cpu_addr_o),
+        .cpu_addr_oe(cpu_addr_oe),
+        .cpu_data_i(cpu_data_i),
+        .cpu_data_o(cpu_data_o),
+        .cpu_data_oe(cpu_data_oe),
+        
+        .cpu_we_i(cpu_we_i),
+        .cpu_we_o(cpu_we_o),
+        .cpu_we_oe(cpu_we_oe),
+        
+        // RAM
+        .ram_addr_a10_o(ram_addr_a10_o),
+        .ram_addr_a11_o(ram_addr_a11_o),
+        .ram_addr_a15_o(ram_addr_a15_o),
+        .ram_addr_a16_o(ram_addr_a16_o),
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
-        .ram_addr_o({ram_addr_a16_o, cpu_addr_o}),
-        .ram_data_i(cpu_data_i),
-        .ram_data_o(cpu_data_o),
-        .ram_data_oe(cpu_data_oe)
-    );
 
-    assign ram_addr_a10_o          = cpu_addr_o[10];
-    assign ram_addr_a11_o          = cpu_addr_o[11];
-    assign ram_addr_a15_o          = cpu_addr_o[15];
+        // IO
+        .io_oe_o(io_oe_o),
+        .pia1_cs_o(pia1_cs_o),
+        .pia2_cs_o(pia2_cs_o),
+        .via_cs_o(via_cs_o)
+    );
 
     assign spare_o[DATA_WIDTH-1:0] = spi1_data_rx;
     assign spare_o[8]              = spi1_cycle;
-    assign spare_o[9]              = ram_ack;
+    assign spare_o[9]              = '0;
 endmodule

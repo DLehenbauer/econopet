@@ -13,9 +13,9 @@
  */
 
 module bram #(
-    parameter DATA_WIDTH = 8,
     parameter DATA_DEPTH = 1024,
-    parameter ADDR_WIDTH = $clog2(DATA_DEPTH - 1)
+    parameter ADDR_WIDTH = $clog2(DATA_DEPTH - 1),
+    parameter DATA_WIDTH = 8
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
@@ -30,7 +30,7 @@ module bram #(
     output logic                  wb_stall_o,
     output logic                  wb_ack_o
 );
-    logic [DATA_WIDTH - 1:0] mem[(2 ** ADDR_WIDTH) - 1:0];
+    logic [DATA_WIDTH-1:0] mem[(2 ** ADDR_WIDTH)-1:0];
 
     initial begin
         wb_ack_o   = '0;

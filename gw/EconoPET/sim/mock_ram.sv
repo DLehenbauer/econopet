@@ -16,6 +16,7 @@ module mock_ram #(
     parameter integer unsigned ADDR_WIDTH = 17,
     parameter integer unsigned DATA_WIDTH = 8
 ) (
+    input  logic                  clock_i,
     input  logic [ADDR_WIDTH-1:0] ram_addr_i,
     input  logic [DATA_WIDTH-1:0] ram_data_i,
     output logic [DATA_WIDTH-1:0] ram_data_o,
@@ -44,13 +45,17 @@ module mock_ram #(
         $fclose(file);
     endtask
 
-    always @(negedge ram_we_n_i or negedge ram_oe_n_i) begin
+    always @(posedge clock_i) begin
         if (!ram_we_n_i) begin
+            if (mem[ram_addr_i] !== ram_data_i) begin
+                $display("[%t]        RAM[%h] <- %h", $time, ram_addr_i, ram_data_i);
+            end
             mem[ram_addr_i] <= ram_data_i;
-            $display("[%t]        RAM[%h] <- %h", $time, ram_addr_i, ram_data_i);
         end else if (!ram_oe_n_i) begin
+            if (ram_data_o !== mem[ram_addr_i]) begin
+                $display("[%t]        RAM[%h] -> %h", $time, ram_addr_i, mem[ram_addr_i]);
+            end
             ram_data_o <= mem[ram_addr_i];
-            $display("[%t]        RAM[%h] -> %h", $time, ram_addr_i, mem[ram_addr_i]);
         end
     end
 endmodule
