@@ -22,7 +22,13 @@ const int32_t addr_max = 0x1FFFF;
 
 bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
     if (actual != expected) {
-        printf("$%05x: Expected %08b, but got %08b\n", addr, expected, actual);
+        // GCC doesn't recognize the %b format until v12.  (However, the runtime supports it.)
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wformat"
+        #pragma GCC diagnostic ignored "-Wformat-extra-args"
+        printf("$%05lx: Expected %08b, but got %08b\n", addr, expected, actual);
+        #pragma GCC diagnostic pop
+
         #ifdef CONTINUE_ON_ERROR
             return false;
         #else
@@ -42,7 +48,7 @@ void fix_byte(uint32_t addr, uint8_t expected) {
         }
     }
 
-    printf("$%05x: Correction failed after %d attempts.\n", addr, i);
+    printf("$%05lx: Correction failed after %d attempts.\n", addr, i);
     panic("");
 }
 
@@ -50,13 +56,21 @@ uint8_t check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit, uint8_t expec
     uint8_t actual_bit = (actual_byte >> bit) & 1;
     
     if (actual_bit != expected_bit) {
-        printf("$%05x[%d]: Expected %d, but got %d (actual byte read %08b)\n", addr, bit, expected_bit, actual_bit, actual_byte);
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wformat"
+        #pragma GCC diagnostic ignored "-Wformat-extra-args"
+        printf("$%05lx[%d]: Expected %d, but got %d (actual byte read %08b)\n", addr, bit, expected_bit, actual_bit, actual_byte);
+        #pragma GCC diagnostic pop
 
         sleep_ms(1);
         uint8_t byte2 = spi_read_at(addr);
 
         if (byte2 != actual_byte) {
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wformat"
+            #pragma GCC diagnostic ignored "-Wformat-extra-args"
             printf("Inconsistent read result (attempt 1: %08b, attempt 2: %08b)\n", actual_byte, byte2);
+            #pragma GCC diagnostic pop
         }
 
         #ifdef CONTINUE_ON_ERROR
@@ -116,7 +130,7 @@ void r1w0(int32_t addr, int8_t bit) {
 // See: https://booksite.elsevier.com/9780123705976/errata/13~Chapter%2008%20MBIST.pdf
 void test_ram() {
     for (uint32_t iteration = 1;; iteration++) {
-        printf("\nRAM Test (Extended March C-): $%05x-$%05x -- Iteration #%d:\n", addr_min, addr_max, iteration);
+        printf("\nRAM Test (Extended March C-): $%05lx-$%05lx -- Iteration #%ld:\n", addr_min, addr_max, iteration);
 
         printf("⇕(w0): ");
         spi_write_at(addr_min, 0);
