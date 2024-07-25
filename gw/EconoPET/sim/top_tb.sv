@@ -93,7 +93,8 @@ module top_tb #(
     logic cpu_reset_n = 0;
 
     mock_cpu mock_cpu(
-        .clock_i(cpu_clock),
+        .sys_clock_i(clock),
+        .cpu_clock_i(cpu_clock),
         .reset_n_i(cpu_reset_n),    // TODO: Use generated 'cpu_reset_n' from top module.
         .addr_o(cpu_addr),
         .data_i(bus_data),

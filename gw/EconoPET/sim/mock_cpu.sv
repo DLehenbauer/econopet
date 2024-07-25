@@ -15,12 +15,15 @@
 // Thin wrapper around Kenneth C. Dyke's 6502 core.
 // https://github.com/kdyke/65xx
 //
-// This wrapper inverts WE, IRQ, NMI and RES to match the silicon.
+// This wrapper inverts WE, IRQ, NMI and RES to match the silicon.  It also delays
+// the transition of ADDR, DOUT, and WE until one sys_clock cycle after the negative
+// cpu_clock edge to mimic the timing of the 65C02.
 module mock_cpu #(
     parameter integer unsigned ADDR_WIDTH = 16,
     parameter integer unsigned DATA_WIDTH = 8
 ) (
-    input  logic clock_i,
+    input  logic sys_clock_i,               // FPGA system clock
+    input  logic cpu_clock_i,               // CPU clock (PHI2)
     input  logic reset_n_i,
     output logic [ADDR_WIDTH-1:0] addr_o,
     input  logic [DATA_WIDTH-1:0] data_i,
@@ -30,21 +33,41 @@ module mock_cpu #(
     input  logic nmi_n_i,
     input  logic ready_i
 );
-    logic [ADDR_WIDTH-1:0] cpu_addr_o;
-    logic [DATA_WIDTH-1:0] cpu_data_o;
-    logic cpu_we;
+    logic [ADDR_WIDTH-1:0] addr_next;
+    logic [DATA_WIDTH-1:0] data_next;
+    logic we_next;
 
     cpu6502 cpu(
-        .clk(clock_i),
+        .clk(cpu_clock_i),
         .reset(!reset_n_i),
         .nmi(!nmi_n_i),
         .irq(!irq_n_i),
         .ready(ready_i),
-        .write(cpu_we),
-        .address(addr_o),
+        .write(we_next),
+        .address(addr_next),
         .data_i(data_i),
-        .data_o(data_o)
+        .data_o(data_next)
     );
 
-    assign we_n_o = !cpu_we;
+    logic cpu_clock_ne;
+
+    // The 65C02 delays the transition of ADDR, DOUT, and WE until >10ns after the negative
+    // clock edge.  We simulate this by capturing the next ADDR, DOUT, and WE one sys_clock
+    // cycle after the negative cpu_clock dege.
+    //
+    // See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf, page 26
+
+    edge_detect #(/* INITAL_DATA_I */ 0) clock_edge (
+        .clock_i(sys_clock_i),
+        .data_i(cpu_clock_i),
+        .ne_o(cpu_clock_ne)
+    );
+
+    always_ff @(posedge sys_clock_i) begin
+        if (cpu_clock_ne) begin
+            addr_o <= addr_next;
+            data_o <= data_next;
+            we_n_o <= !we_next;
+        end
+    end
 endmodule
