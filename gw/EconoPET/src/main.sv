@@ -51,6 +51,9 @@ module main #(
     output logic pia2_cs_o,
     output logic via_cs_o,
 
+    // Video
+    output logic v_sync_o,
+
     // SPI1 bus
     input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
     input  logic spi1_sck_i,  // (SCK) Serial Clock
@@ -131,6 +134,11 @@ module main #(
         .pia1_cs_o(pia1_cs_o),
         .pia2_cs_o(pia2_cs_o),
         .via_cs_o(via_cs_o)
+    );
+
+    vsync vsync (
+        .cpu_clock_i(cpu_clock_o),
+        .v_sync_o(v_sync_o)
     );
 
     assign spare_o[DATA_WIDTH-1:0] = spi1_data_rx;

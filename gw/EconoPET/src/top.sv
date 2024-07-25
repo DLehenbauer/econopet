@@ -70,6 +70,9 @@ module top #(
     input logic config_crt_i,   // (0 = 12", 1 = 9")
     input logic config_kbd_i,   // (0 = Business, 1 = Graphics)
 
+    // Video
+    output logic v_sync_o,       // TODO: Assign pin
+
     // Audio
     output logic audio_o,
 
@@ -169,6 +172,8 @@ module top #(
         .pia1_cs_o(pia1_cs_o),
         .pia2_cs_o(pia2_cs_o),
         .via_cs_o(via_cs_o),
+
+        .v_sync_o(v_sync_o),
 
         .spi1_cs_ni(spi1_cs_ni),
         .spi1_sck_i(spi1_sck_i),
