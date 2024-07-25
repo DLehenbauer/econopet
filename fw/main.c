@@ -108,6 +108,7 @@ int main() {
     // test_ram();
     pet_init_roms();
 
+    printf("\e[2J");
     while (1) {
         char video_char_buffer[2000];
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);

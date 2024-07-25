@@ -26,9 +26,11 @@ static const char __in_flash(".term_chars_lower") term_chars_lower[] = {
     /* 70 */ '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_'
 };
 
-static const char* clear = "\e[2J";
+static const char* home = "\e[H";
 static const char* reverse_off = "\e[m";
 static const char* reverse_on = "\e[7m";
+static const char* cursor_off = "\e[?25l";
+//static const char* cursor_on = "\e[?25h";
 
 bool reverse = false;
 
@@ -44,8 +46,9 @@ void term_put_char(uint8_t ch) {
 void term_display(const uint8_t* const pSrc, uint8_t cols, uint8_t rows) {
     const uint8_t* p = pSrc;
 
-    printf(clear);
+    printf(home);
     printf(reverse_off);
+    printf(cursor_off);
     reverse = false;
 
     for (int r = 0; r < rows; r++) {
