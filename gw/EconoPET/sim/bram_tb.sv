@@ -16,17 +16,18 @@
 
 module bram_tb #(
     parameter CLK_MHZ = 64,
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = $clog2(1024 - 1)
+    parameter WB_ADDR_WIDTH = 20,
+    parameter RAM_ADDR_WIDTH = $clog2(1024 - 1),
+    parameter DATA_WIDTH = 8
 );
-    logic                  clock;
-    logic [ADDR_WIDTH-1:0] addr;
-    logic [DATA_WIDTH-1:0] poci;
-    logic [DATA_WIDTH-1:0] pico;
-    logic                  we;
-    logic                  cycle;
-    logic                  strobe;
-    logic                  ack;
+    logic                     clock;
+    logic [WB_ADDR_WIDTH-1:0] addr;
+    logic [   DATA_WIDTH-1:0] poci;
+    logic [   DATA_WIDTH-1:0] pico;
+    logic                     we;
+    logic                     cycle;
+    logic                     strobe;
+    logic                     ack;
 
     clock_gen #(CLK_MHZ) clock_gen (.clock_o(clock));
 
@@ -35,7 +36,7 @@ module bram_tb #(
     bram mem (
         .wb_clock_i(clock),
         .wb_reset_i('0),
-        .wb_addr_i(addr),
+        .wb_addr_i(addr[RAM_ADDR_WIDTH-1:0]),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
