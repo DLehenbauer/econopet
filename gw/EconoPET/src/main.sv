@@ -20,7 +20,6 @@ module main #(
 ) (
     // FPGA
     input  logic clock_i,   // 64 MHz clock (from PLL)
-    output logic status_no, // NSTATUS LED (0 = On, 1 = Off)
 
     // CPU
     output logic cpu_be_o,
@@ -64,8 +63,6 @@ module main #(
 );
     // Currently, there is no wishbone reset.
     wire reset       = '0;
-
-    assign status_no   = '0;
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_data_rx;

@@ -24,6 +24,10 @@ module top #(
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
     parameter integer unsigned DATA_WIDTH = 8
 ) (
+    // FPGA
+    input  logic clock_i,       // 64 MHz clock (from PLL)
+    output logic status_no,     // Red NSTATUS LED (0 = On, 1 = Off)
+
     // CPU
     output logic cpu_be_o,
     output logic cpu_clock_o,
@@ -55,10 +59,6 @@ module top #(
     output logic pia2_cs_n_o,   // (CS2B)
     output logic via_cs_n_o,    // (CS2B)
 
-    // FPGA
-    input  logic clock_i,       // 64 MHz clock (from PLL)
-    output logic status_no,     // NSTATUS LED (0 = On, 1 = Off)
-
     // SPI1 bus
     input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
     input  logic spi1_sck_i,    // (SCK) Serial Clock
@@ -85,6 +85,9 @@ module top #(
     // Spare pins
     output logic [9:0] spare_o
 );
+    // Turn off red NSTATUS LED to indicate programming was successful.
+    assign status_no = 1'b1;
+
     // Disable audio output for now.
     assign audio_o = '0;
 
@@ -138,7 +141,6 @@ module top #(
 
     main main (
         .clock_i(clock_i),
-        .status_no(status_no),
 
         .cpu_be_o(cpu_be_o),
         .cpu_ready_o(cpu_ready_o),
