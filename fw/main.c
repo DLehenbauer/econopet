@@ -109,14 +109,9 @@ int main() {
     pet_init_roms();
 
     while (1) {
-        const uint8_t cols = 80;
-        const uint8_t rows = 25;
-        char video_char_buffer[rows * cols];
+        char video_char_buffer[2000];
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
-        printf("\e[2J");
-        for (int i = 0; i < sizeof(video_char_buffer); i += cols) {
-            printf("%.*s\n", cols, video_char_buffer + i);
-        }
+        term_display(video_char_buffer, /* cols: */ 80, /* rows: */ 25);
         sleep_ms(250);
     }
 

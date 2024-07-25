@@ -11,6 +11,7 @@ add_executable(firmware
     main.c
     pet.c
     sd/sd.c
+    term.c
     test/mem.c
     video/video.c
 )
