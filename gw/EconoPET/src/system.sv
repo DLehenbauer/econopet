@@ -73,10 +73,6 @@ module system #(
         cpu_be_o    = '0;
         cpu_we_o    = '0;
         cpu_we_oe   = '0;
-        io_oe_o     = '0;
-        pia1_cs_o   = '0;
-        pia2_cs_o   = '0;
-        via_cs_o    = '0;
     end
 
     logic [5:0] clock_counter = '0;
@@ -193,8 +189,32 @@ module system #(
         .ram_data_oe(cpu_data_oe)
     );
 
-    assign ram_oe_o         = (cpu_rd_en & !cpu_we_i) | wb_ram_oe;
-    assign ram_we_o         = (cpu_wr_en &  cpu_we_i) | wb_ram_we;
+    //
+    // Address Decoding
+    //
+
+    logic ram_en;
+    logic pia1_en;
+    logic pia2_en;
+    logic via_en;
+    logic io_en;
+
+    address_decoding address_decoding(
+        .addr_i(cpu_addr_i),
+        .ram_en_o(ram_en),
+        .pia1_en_o(pia1_en),
+        .pia2_en_o(pia2_en),
+        .via_en_o(via_en),
+        .io_en_o(io_en)
+    );
+
+    assign pia1_cs_o = pia1_en && cpu_be_o;
+    assign pia2_cs_o = pia2_en && cpu_be_o;
+    assign via_cs_o  =  via_en && cpu_be_o;
+    assign io_oe_o   =   io_en && cpu_be_o;
+
+    assign ram_oe_o         = (ram_en && cpu_rd_en && !cpu_we_i) | wb_ram_oe;
+    assign ram_we_o         = (ram_en && cpu_wr_en &&  cpu_we_i) | wb_ram_we;
 
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
