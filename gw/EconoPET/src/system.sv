@@ -137,17 +137,17 @@ module system #(
             RAM_OE_START: begin
                 cpu_rd_en   <= 1;
             end
-            CPU_PHI_START: begin
+            CPU_PHI_START: begin        // Setup time met.   Begin bus transaction.
                 cpu_clock_o <= 1;
                 cpu_wr_en   <= 1;
             end
             CPU_PHI_END: begin
                 cpu_clock_o <= 0;
                 cpu_wr_en   <= 0;
-                cpu_rd_en   <= 0;
             end
-            CPU_BE_END: begin
+            CPU_BE_END: begin           // Hold time met.  Start transition to high-Z.
                 cpu_be_o    <= 0;
+                cpu_rd_en   <= 0;
             end
             WB_READY_START: begin
                 wb_ready    <= 1;
