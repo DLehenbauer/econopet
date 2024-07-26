@@ -208,10 +208,10 @@ module system #(
         .io_en_o(io_en)
     );
 
-    assign pia1_cs_o = pia1_en && cpu_be_o;
-    assign pia2_cs_o = pia2_en && cpu_be_o;
-    assign via_cs_o  =  via_en && cpu_be_o;
-    assign io_oe_o   =   io_en && cpu_be_o;
+    assign pia1_cs_o = pia1_en && cpu_rd_en;
+    assign pia2_cs_o = pia2_en && cpu_rd_en;
+    assign via_cs_o  =  via_en && cpu_rd_en;
+    assign io_oe_o   =   io_en && cpu_rd_en;
 
     assign ram_oe_o         = (ram_en && cpu_rd_en && !cpu_we_i) | wb_ram_oe;
     assign ram_we_o         = (ram_en && cpu_wr_en &&  cpu_we_i) | wb_ram_we;
