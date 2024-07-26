@@ -77,3 +77,12 @@ set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns 
 set_false_path -from [get_ports spi1_cs_ni]
 
 # (See also generated file: outflow\PET.pt.sdc)
+
+set_output_delay -clock clock_i -min 0 [get_ports {cpu_clock_o}]
+set_output_delay -clock clock_i -max 1 [get_ports {cpu_clock_o}]
+
+set_output_delay -clock clock_i -min 0 [get_ports {ram_we_n_o}]
+set_output_delay -clock clock_i -max 1 [get_ports {ram_we_n_o}]
+
+set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
+set_output_delay -clock clock_i -max 1 [get_ports {ram_oe_n_o}]
