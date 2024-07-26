@@ -134,6 +134,7 @@ module system #(
     logic wb_ready  = '0;
     logic io_valid  = '0;
     logic bus_valid = '0;
+    logic cpu_ram_we = '0;
 
     always_ff @(posedge wb_clock_i) begin
         case (clock_counter)
@@ -151,9 +152,11 @@ module system #(
             end
             CPU_PHI_START: begin        // CPU setup time met.
                 cpu_clock_o <= 1;
+                cpu_ram_we  <= ram_en && cpu_we_i;
             end
             CPU_PHI_END: begin          // CPU mimimum clock pulse width met.
                 cpu_clock_o <= 0;
+                cpu_ram_we  <= 0;
             end
             CPU_BE_END: begin           // CPU and I/O hold times met.  Start transition to high-Z.
                 cpu_be_o    <= 0;
@@ -224,8 +227,8 @@ module system #(
     assign pia2_cs_o = pia2_en && io_valid;
     assign via_cs_o  =  via_en && io_valid;
 
-    assign ram_oe_o         = (ram_en && io_valid    && !cpu_we_i) | wb_ram_oe;
-    assign ram_we_o         = (ram_en && cpu_clock_o &&  cpu_we_i) | wb_ram_we;
+    assign ram_oe_o         = (ram_en && io_valid && !cpu_we_i) | wb_ram_oe;
+    assign ram_we_o         = cpu_ram_we | wb_ram_we;
 
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
