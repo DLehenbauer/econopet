@@ -1,10 +1,19 @@
-#include "../pch.h"
-#include "font.h"
+/**
+ * PET Clone - Open hardware implementation of the Commodore PET
+ * by Daniel Lehenbauer and contributors.
+ * 
+ * https://github.com/DLehenbauer/commodore-pet-clone
+ *
+ * To the extent possible under law, I, Daniel Lehenbauer, have waived all
+ * copyright and related or neighboring rights to this project. This work is
+ * published from the United States.
+ *
+ * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
+ */
 
-#define FONT_CHAR_WIDTH 8
-#define FONT_CHAR_HEIGHT 8
-#define FONT_N_CHARS 95
-#define FONT_FIRST_ASCII 32
+#include "video.h"
+#include "font.h"
 
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
@@ -13,9 +22,15 @@
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
-#define CHAR_COLS (FRAME_WIDTH / 8)
-#define CHAR_ROWS (FRAME_HEIGHT / 8)
-char charbuf[CHAR_ROWS * CHAR_COLS];
+uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
+
+const uint8_t char_pixel_width  = 8;
+const uint8_t chars_displayed_x = 80;
+const uint8_t chars_start_x     = (FRAME_WIDTH - (char_pixel_width * chars_displayed_x)) >> 1;
+const uint8_t char_pixel_height = 8;
+const uint8_t chars_displayed_y = 25;
+const uint8_t video_start_y     = (FRAME_HEIGHT - char_pixel_height * chars_displayed_y) >> 1;
+const uint8_t video_height      = chars_displayed_y * char_pixel_height;
 
 static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
     x = (x | (x << 4)) & 0x0F0F;
@@ -27,25 +42,30 @@ static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
 
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
 
-static inline void __not_in_flash_func(prepare_scanline)(const char* chars, uint16_t y) {
-	const uint8_t cy = y / FONT_CHAR_HEIGHT * CHAR_COLS;
-	
-	for (uint i = 0, x = 0; i < CHAR_COLS; i++) {
-		uint c = chars[i + cy];
+static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, uint16_t y) {
+    y -= video_start_y;
+    if (y >= video_height) {
+        memset(scanline, 0, sizeof(scanline));
+    } else {
+		const uint16_t cy = y / char_pixel_height * chars_displayed_x;
 		
-		bool reverse = c & 0x80;
-		c &= 0x7f;
+		for (uint16_t cx = 0; cx < chars_displayed_x; cx++) {
+			uint c = chars[cy + cx];
+			
+			bool reverse = c & 0x80;
+			c &= 0x7f;
 
-		uint8_t p8 = rom_chars_8800[c * FONT_CHAR_HEIGHT + (y % FONT_CHAR_HEIGHT)];
+			uint8_t p8 = rom_chars_8800[c * char_pixel_height + (y % char_pixel_height)];
 
-		// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
-		p8 = ((p8 * 0x0802LU & 0x22110LU) | (p8 * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
+			// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
+			p8 = ((p8 * 0x0802LU & 0x22110LU) | (p8 * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
 
-		if (reverse) {
-			p8 ^= 0xff;
+			if (reverse) {
+				p8 ^= 0xff;
+			}
+			
+			scanline[cx] = p8;
 		}
-		
-		scanline[x++] = p8;
 	}
 
 	uint32_t *tmdsbuf;
@@ -55,8 +75,8 @@ static inline void __not_in_flash_func(prepare_scanline)(const char* chars, uint
 }
 
 void __not_in_flash_func(core1_scanline_callback)() {
-	static uint y = 1;
-	prepare_scanline(charbuf, y);
+	static uint16_t y = 1;
+	prepare_scanline(video_char_buffer, y);
 	y = (y + 1) % FRAME_HEIGHT;
 }
 
@@ -82,11 +102,7 @@ void video_init() {
 	dvi0.scanline_callback = core1_scanline_callback;
 	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
 
-	for (int i = 0; i < CHAR_ROWS * CHAR_COLS; i++) {
-		charbuf[i] = i;
-	}
-
-	prepare_scanline(charbuf, 0);
+	prepare_scanline(video_char_buffer, 0);
 
 	sem_init(&dvi_start_sem, 0, 1);
 	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);

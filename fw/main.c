@@ -16,9 +16,10 @@
 #include "driver.h"
 #include "hw.h"
 #include "pet.h"
+#include "sd/sd.h"
+#include "term.h"
 #include "test/mem.h"
 #include "video/video.h"
-#include "sd/sd.h"
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -110,7 +111,6 @@ int main() {
 
     printf("\e[2J");
     while (1) {
-        char video_char_buffer[2000];
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
         term_display(video_char_buffer, /* cols: */ 80, /* rows: */ 25);
         sleep_ms(250);

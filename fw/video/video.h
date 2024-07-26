@@ -14,4 +14,9 @@
 
 #pragma once
 
+#include "../pch.h"
+
+#define VIDEO_CHAR_BUFFER_BYTE_SIZE 2000
+extern uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
+
 void video_init();
