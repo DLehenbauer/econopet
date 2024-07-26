@@ -109,11 +109,8 @@ int main() {
     // test_ram();
     pet_init_roms();
 
-    printf("\e[2J");
     while (1) {
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
-        term_display(video_char_buffer, /* cols: */ 80, /* rows: */ 25);
-        sleep_ms(250);
     }
 
     __builtin_unreachable();
