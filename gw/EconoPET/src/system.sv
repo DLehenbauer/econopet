@@ -88,7 +88,7 @@ module system #(
     //
     // Rising Phi2 edge triggers bus transfer:
     //  - BE must be asserted 45ns before rising Phi2 edge (tBVD + tDSR)
-    //  - DIN must be stable 15ns before rising Phi2 edge (tDSR)
+    //  - DIN must be valid 15ns before rising Phi2 edge (tDSR)
     //  - DIN must be held 10ns after rising Phi2 edge (tDHR)
     //  - BE must be held 10ns after rising Phi2 edge (tDHR, tDHW)
     //  
@@ -99,6 +99,13 @@ module system #(
     // Other:
     //  - At maximum clock rate, RAM has 70ns between ADDR stabilizing and the
     //    the beginning of the read setup time (tACC).
+    //
+    // Timing for W65C21
+    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf)
+    //
+    // - ADDR, RWB and CS2B must be valid 8ns before rising Phi2 edge (tACR, tACW)
+    // - DOUT->DIN is valid 20ns after rising edge, well before CPU's falling edge (tCDR)
+    // - DIN<-DOUT is required 10ns before falling edge and must be held 5ns after (tCDW, tHW)
 
     function bit [5:0] ns_to_cycles(input int time_ns);
         // Note: We conservatively add 1 cycle (15.625ns) to account for propagation delay.
@@ -108,48 +115,52 @@ module system #(
     // Maximum number of 'wb_clock_i' cycles required to complete an in-progress
     // wishbone transaction with RAM.
     localparam MAX_WB_CYCLES = 3,
-               CPU_tBVD      = 30,   // CPU BE to Valid Data (tBVD)
-               CPU_tPWH      = 62,   // CPU Clock Pulse Width High (tPWH)
-               CPU_tDSR      = 15,   // CPU Data Setup Time (tDSR)
-               CPU_tDHx      = 10,   // CPU Data Hold Time (tDHR, tDHW)
-               RAM_tAA       = 10;   // RAM Address Access Time (tAA)
+               CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
+               CPU_tPWH      = 62,  // CPU Clock Pulse Width High (tPWH)
+               CPU_tDSR      = 15,  // CPU Data Setup Time (tDSR)
+               CPU_tDHx      = 10,  // CPU Data Hold Time (tDHR, tDHW)
+               RAM_tAA       = 10,  // RAM Address Access Time (tAA)
+               IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
 
     localparam bit [5:0] WB_READY_END     = 0,
-                         CPU_BE_START     = MAX_WB_CYCLES,                                      // Assert BE at beginning of CPU cycle
-                         RAM_OE_START     = CPU_BE_START  + ns_to_cycles(CPU_tBVD),             // Assert RAM OE after ADDR is stable
-                         CPU_PHI_START    = RAM_OE_START  + ns_to_cycles(RAM_tAA + CPU_tDSR),   // Wait until DIN is stable and CPU setup time met before starting transaction
-                         CPU_PHI_END      = CPU_PHI_START + ns_to_cycles(CPU_tPWH),             // Hold Phi2 high for the required time
-                         CPU_BE_END       = CPU_PHI_END   + ns_to_cycles(CPU_tDHx),             // Hold data for required time before beginning transition to high-z
-                         WB_READY_START   = CPU_BE_END    + ns_to_cycles(CPU_tBVD);             // Wait until CPU transitions to high-Z before granting control to wishbone
+                         CPU_BE_START     = MAX_WB_CYCLES,                                                          // Assert BE at beginning of CPU grant
+                         BUS_VALID_START  = CPU_BE_START    + ns_to_cycles(CPU_tBVD),                               // ADDR, RWB, DOUT now valid
+                         IO_VALID_START   = BUS_VALID_START + ns_to_cycles(IOTX_t > RAM_tAA ? IOTX_t : RAM_tAA),
+                         CPU_PHI_START    = IO_VALID_START  + ns_to_cycles(CPU_tDSR),               // Wait until DIN is valid and CPU setup time met before starting transaction
+                         CPU_PHI_END      = CPU_PHI_START   + ns_to_cycles(CPU_tPWH),               // Hold Phi2 high for the required time
+                         CPU_BE_END       = CPU_PHI_END     + ns_to_cycles(CPU_tDHx),               // Hold data for required time before beginning transition to high-z
+                         WB_READY_START   = CPU_BE_END      + ns_to_cycles(CPU_tBVD);               // Wait until CPU transitions to high-Z before granting control to wishbone
 
     logic wb_ready  = '0;
-    logic cpu_rd_en = '0;
-    logic cpu_wr_en = '0;
+    logic io_valid  = '0;
+    logic bus_valid = '0;
 
     always_ff @(posedge wb_clock_i) begin
         case (clock_counter)
-            WB_READY_END: begin
+            WB_READY_END: begin         // Stop admitting new Wishbone requests
                 wb_ready    <= 0;
             end
-            CPU_BE_START: begin
-                cpu_be_o    <= 1;
+            CPU_BE_START: begin         // In-progress transactions have drained.
+                cpu_be_o    <= 1;       // CPU begins transition out of high-z state.
             end
-            RAM_OE_START: begin
-                cpu_rd_en   <= 1;
+            BUS_VALID_START: begin      // CPU now driving ADDR, WE, and DOUT.
+                bus_valid   <= 1;       // Address decoding done.
             end
-            CPU_PHI_START: begin        // Setup time met.   Begin bus transaction.
+            IO_VALID_START: begin       // RAM access or IO transceiver delay met.
+                io_valid    <= 1;
+            end
+            CPU_PHI_START: begin        // CPU setup time met.
                 cpu_clock_o <= 1;
-                cpu_wr_en   <= 1;
             end
-            CPU_PHI_END: begin
+            CPU_PHI_END: begin          // CPU mimimum clock pulse width met.
                 cpu_clock_o <= 0;
-                cpu_wr_en   <= 0;
             end
-            CPU_BE_END: begin           // Hold time met.  Start transition to high-Z.
+            CPU_BE_END: begin           // CPU and I/O hold times met.  Start transition to high-Z.
                 cpu_be_o    <= 0;
-                cpu_rd_en   <= 0;
+                bus_valid   <= 0;
+                io_valid    <= 0;
             end
-            WB_READY_START: begin
+            WB_READY_START: begin       // Begin accepting new Wishbone requests
                 wb_ready    <= 1;
             end
             default: begin
@@ -208,13 +219,13 @@ module system #(
         .io_en_o(io_en)
     );
 
-    assign pia1_cs_o = pia1_en && cpu_rd_en;
-    assign pia2_cs_o = pia2_en && cpu_rd_en;
-    assign via_cs_o  =  via_en && cpu_rd_en;
-    assign io_oe_o   =   io_en && cpu_rd_en;
+    assign io_oe_o   =   io_en && bus_valid;
+    assign pia1_cs_o = pia1_en && io_valid;
+    assign pia2_cs_o = pia2_en && io_valid;
+    assign via_cs_o  =  via_en && io_valid;
 
-    assign ram_oe_o         = (ram_en && cpu_rd_en && !cpu_we_i) | wb_ram_oe;
-    assign ram_we_o         = (ram_en && cpu_wr_en &&  cpu_we_i) | wb_ram_we;
+    assign ram_oe_o         = (ram_en && io_valid    && !cpu_we_i) | wb_ram_oe;
+    assign ram_we_o         = (ram_en && cpu_clock_o &&  cpu_we_i) | wb_ram_we;
 
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
