@@ -156,6 +156,11 @@
             <efxpt:output_config name="cpu_data_o[7]" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
             <efxpt:output_enable_config name="cpu_data_oe[7]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
+        <efxpt:gpio name="cpu_irq_n" gpio_def="GPIOB_TXP09" mode="inout" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
+            <efxpt:input_config name="cpu_irq_n_i" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="none" is_schmitt_trigger="false" ddio_type="none"/>
+            <efxpt:output_config name="cpu_irq_n_o" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
+            <efxpt:output_enable_config name="cpu_irq_n_oe" is_register="false" clock_name="" is_clock_inverted="false"/>
+        </efxpt:gpio>
         <efxpt:gpio name="cpu_ready" gpio_def="GPIOB_TXN04" mode="output" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:output_config name="cpu_ready_o" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
         </efxpt:gpio>

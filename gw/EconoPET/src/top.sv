@@ -45,6 +45,10 @@ module top #(
     output logic cpu_we_n_o,
     output logic cpu_we_n_oe,
 
+    input  logic cpu_irq_n_i,
+    output logic cpu_irq_n_o,
+    output logic cpu_irq_n_oe,
+
     // RAM
     output logic ram_addr_a10_o,
     output logic ram_addr_a11_o,
@@ -141,6 +145,14 @@ module top #(
     logic cpu_we_o, cpu_we_i;
     assign cpu_we_i    = !cpu_we_n_i;
     assign cpu_we_n_o  = !cpu_we_o;
+
+    // RES, IRQ, and NMI are active low open drain wire-or signals.  For consistency
+    // and convenience we convert these to active high outputs and handle OE here.
+    logic cpu_irq_i, cpu_irq_o;
+    assign cpu_irq_i    = !cpu_irq_n_i;
+    assign cpu_irq_n_o  = !cpu_irq_o;
+    assign cpu_irq_n_oe = cpu_irq_o;    // Only drive open drain wired-or when asserting IRQ
+
 
     main main (
         .clock_i(clock_i),
