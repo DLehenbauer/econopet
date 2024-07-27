@@ -131,10 +131,12 @@ module system #(
                          CPU_BE_END       = CPU_PHI_END     + ns_to_cycles(CPU_tDHx),               // Hold data for required time before beginning transition to high-z
                          WB_READY_START   = CPU_BE_END      + ns_to_cycles(CPU_tBVD);               // Wait until CPU transitions to high-Z before granting control to wishbone
 
-    logic wb_ready  = '0;
-    logic io_valid  = '0;
-    logic bus_valid = '0;
-    logic cpu_ram_we = '0;
+    logic wb_ready   = 0;
+    logic io_valid   = 0;
+    logic bus_valid  = 0;
+    logic cpu_ram_we = 0;
+    logic cpu_ram_oe = 0;
+    logic cpu_io_oe  = 0;
 
     always_ff @(posedge wb_clock_i) begin
         case (clock_counter)
@@ -146,6 +148,8 @@ module system #(
             end
             BUS_VALID_START: begin      // CPU now driving ADDR, WE, and DOUT.
                 bus_valid   <= 1;       // Address decoding done.
+                cpu_ram_oe  <= ram_en && !cpu_we_i;
+                cpu_io_oe   <= io_en;
             end
             IO_VALID_START: begin       // RAM access or IO transceiver delay met.
                 io_valid    <= 1;
@@ -162,6 +166,8 @@ module system #(
                 cpu_be_o    <= 0;
                 bus_valid   <= 0;
                 io_valid    <= 0;
+                cpu_ram_oe  <= 0;
+                cpu_io_oe   <= 0;
             end
             WB_READY_START: begin       // Begin accepting new Wishbone requests
                 wb_ready    <= 1;
@@ -222,13 +228,13 @@ module system #(
         .io_en_o(io_en)
     );
 
-    assign io_oe_o   =   io_en && bus_valid;
-    assign pia1_cs_o = pia1_en && io_valid;
-    assign pia2_cs_o = pia2_en && io_valid;
-    assign via_cs_o  =  via_en && io_valid;
+    assign io_oe_o   = cpu_io_oe;
+    assign pia1_cs_o = pia1_en && io_valid && cpu_io_oe;
+    assign pia2_cs_o = pia2_en && io_valid && cpu_io_oe;
+    assign via_cs_o  =  via_en && io_valid && cpu_io_oe;
 
-    assign ram_oe_o         = (ram_en && io_valid && !cpu_we_i) | wb_ram_oe;
-    assign ram_we_o         = cpu_ram_we | wb_ram_we;
+    assign ram_oe_o         = (cpu_ram_oe && !cpu_we_i) || wb_ram_oe;
+    assign ram_we_o         = cpu_ram_we || wb_ram_we;
 
     assign cpu_addr_oe      = ~cpu_be_o;
     assign cpu_addr_o       = wb_ram_addr[15:0];
