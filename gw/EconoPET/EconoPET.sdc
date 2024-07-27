@@ -11,7 +11,7 @@
 # @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
 
 # Efinity Timing Closure User Guide
-# https://www.efinixinc.com/docs/efinity-timing-closure-v5.0.pdf
+# https://www.efinixinc.com/docs/efinity-timing-closure-v6.0.pdf
 #
 # reset_timing; delete_timing_results; read_sdc; report_timing_summary
 # report_timing -from_clock clock_i -to_clock clock_i -setup

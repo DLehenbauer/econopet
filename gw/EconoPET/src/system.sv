@@ -129,7 +129,8 @@ module system #(
                          CPU_PHI_START    = IO_VALID_START  + ns_to_cycles(CPU_tDSR),               // Wait until DIN is valid and CPU setup time met before starting transaction
                          CPU_PHI_END      = CPU_PHI_START   + ns_to_cycles(CPU_tPWH),               // Hold Phi2 high for the required time
                          CPU_BE_END       = CPU_PHI_END     + ns_to_cycles(CPU_tDHx),               // Hold data for required time before beginning transition to high-z
-                         WB_READY_START   = CPU_BE_END      + ns_to_cycles(CPU_tBVD);               // Wait until CPU transitions to high-Z before granting control to wishbone
+                         WB_BE_START      = CPU_BE_END      + ns_to_cycles(CPU_tBVD),               // Wait until CPU transitions to high-Z before granting control to wishbone
+                         WB_READY_START   = WB_BE_START     + 1;                                    // WB now driving ADDR.  Begin accepting new transactions
 
     logic wb_ready   = 0;
     logic io_valid   = 0;
@@ -137,6 +138,7 @@ module system #(
     logic cpu_ram_we = 0;
     logic cpu_ram_oe = 0;
     logic cpu_io_oe  = 0;
+    logic wb_addr_oe = 0;
 
     always_ff @(posedge wb_clock_i) begin
         case (clock_counter)
@@ -145,6 +147,7 @@ module system #(
             end
             CPU_BE_START: begin         // In-progress transactions have drained.
                 cpu_be_o    <= 1;       // CPU begins transition out of high-z state.
+                wb_addr_oe  <= 0;
             end
             BUS_VALID_START: begin      // CPU now driving ADDR, WE, and DOUT.
                 bus_valid   <= 1;       // Address decoding done.
@@ -168,6 +171,9 @@ module system #(
                 io_valid    <= 0;
                 cpu_ram_oe  <= 0;
                 cpu_io_oe   <= 0;
+            end
+            WB_BE_START: begin          // FPGA begins transition to high-Z.
+                wb_addr_oe  <= 1;
             end
             WB_READY_START: begin       // Begin accepting new Wishbone requests
                 wb_ready    <= 1;
@@ -236,7 +242,7 @@ module system #(
     assign ram_oe_o         = (cpu_ram_oe && !cpu_we_i) || wb_ram_oe;
     assign ram_we_o         = cpu_ram_we || wb_ram_we;
 
-    assign cpu_addr_oe      = ~cpu_be_o;
+    assign cpu_addr_oe      = wb_addr_oe;
     assign cpu_addr_o       = wb_ram_addr[15:0];
 
     assign ram_addr_a10_o   = cpu_be_o ? cpu_addr_i[10] : cpu_addr_o[10];
