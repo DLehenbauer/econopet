@@ -21,12 +21,14 @@ module sync2 #(
     output logic data_o    // Synchronized output in destination clock domain
 );
     initial begin
-        data_o = INITAL_DATA_O;
+        q[1:0] = { INITAL_DATA_O, INITAL_DATA_I };
     end
 
-    logic q = INITAL_DATA_I;  // 1st stage FF output
+    (* async_reg = "true" *) reg [1:0] q;
 
     always_ff @(posedge clock_i) begin
-        {data_o, q} <= {q, data_i};
+        {q[1], q[0]} <= {q[0], data_i};
     end
+
+    assign data_o = q[1];
 endmodule
