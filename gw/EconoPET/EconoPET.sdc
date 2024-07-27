@@ -16,6 +16,7 @@
 # reset_timing; delete_timing_results; read_sdc; report_timing_summary
 # report_timing -from_clock clock_i -to_clock clock_i -setup
 # report_timing -from_clock clock_i -to_clock clock_i -hold
+# sdc_write out.sdc
 
 # Helpers
 
@@ -85,29 +86,16 @@ set_output_delay -clock clock_i -max 1 [get_ports {cpu_be_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {cpu_be_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {cpu_ready_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {cpu_ready_o}]
-
-for {set a 0} {$a < 16} {incr a} {
-    set_output_delay -clock clock_i -max 1 [get_ports "cpu_addr_o[$a]"]
-    set_output_delay -clock clock_i -min 0 [get_ports "cpu_addr_o[$a]"]
-}
-
-for {set a 0} {$a < 8} {incr a} {
-    set_output_delay -clock clock_i -max 1 [get_ports "cpu_data_o[$a]"]
-    set_output_delay -clock clock_i -min 0 [get_ports "cpu_data_o[$a]"]
-}
-
+set_output_delay -clock clock_i -max 1 [get_ports {cpu_addr_o[*]}]
+set_output_delay -clock clock_i -min 0 [get_ports {cpu_addr_o[*]}]
+set_output_delay -clock clock_i -max 1 [get_ports {cpu_data_o[*]}]
+set_output_delay -clock clock_i -min 0 [get_ports {cpu_data_o[*]}]
 set_output_delay -clock clock_i -max 1 [get_ports {cpu_we_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {cpu_we_n_o}]
 
 # RAM
-set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a10_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a10_o}]
-set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a11_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a11_o}]
-set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a15_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a15_o}]
-set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a16_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a16_o}]
+set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a*_o}]
+set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a*_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {ram_oe_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {ram_we_n_o}]
