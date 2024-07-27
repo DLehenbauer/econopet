@@ -49,6 +49,12 @@ module top_tb #(
     logic ram_oe_n_o;
     logic ram_we_n_o;
 
+    // IO
+    logic io_oe_n;
+    logic pia1_cs_n;
+    logic pia2_cs_n;
+    logic via_cs_n;
+
     // SPI
     logic spi_sck;
     logic spi_cs_n;
@@ -79,6 +85,11 @@ module top_tb #(
         .ram_addr_a16_o(ram_addr_a16_o),
         .ram_oe_n_o(ram_oe_n_o),
         .ram_we_n_o(ram_we_n_o),
+
+        .io_oe_n_o(io_oe_n),
+        .pia1_cs_n_o(pia1_cs_n),
+        .pia2_cs_n_o(pia2_cs_n),
+        .via_cs_n_o(via_cs_n),
 
         .spi1_cs_ni (spi_cs_n),
         .spi1_sck_i (spi_sck),
@@ -147,6 +158,10 @@ module top_tb #(
         .ram_oe_n_o(ram_oe_n_o),
         .ram_we_n_o(ram_we_n_o),
 
+        // Incoming bus outputs from 'mock_io' module
+        .io_data_i(8'h10),
+        .io_oe_n_i(io_oe_n),
+
         .bus_addr_o(bus_addr),
         .bus_data_o(bus_data),
         .bus_we_n_o(bus_we_n)
@@ -170,6 +185,8 @@ module top_tb #(
     endtask
 
     task static run;
+        int count;
+
         // Load ROMs matching dissassembly at:
         // https://www.zimmers.net/anonftp/pub/cbm/src/pet/pet_rom4_disassembly.txt
         //
@@ -198,7 +215,10 @@ module top_tb #(
         test_rw(20'h0_4000, 8'h00);
         test_rw(20'h0_4000, 8'h01);
 
-        #100000;
+        spi1_driver.read_at(16'h8000);
+        for (count = 0; count <= 2000; count = count + 1) begin
+            spi1_driver.read_next;
+        end
 
         #1 $display("[%t] END %m", $time);
     endtask
