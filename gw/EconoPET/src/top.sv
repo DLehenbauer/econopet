@@ -17,7 +17,7 @@
 //
 //  - Normalizing signals to be active high signals.
 //  - Combining OE signals into a single bus-wide OE signal.
-//  - Driving unused signals to a known state.
+//  - Drive currently unused signals to a known state.
 module top #(
     parameter integer unsigned WB_ADDR_WIDTH = 20,
     parameter integer unsigned RAM_ADDR_WIDTH = 17,
@@ -75,7 +75,7 @@ module top #(
     input logic config_kbd_i,   // (0 = Business, 1 = Graphics)
 
     // Video
-    output logic v_sync_o,       // TODO: Assign pin
+    output logic v_sync_o,
 
     // Audio
     output logic audio_o,
@@ -123,7 +123,7 @@ module top #(
         cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe
     };
 
-    // For consistency and simplicity, convert active low signals to active high signals.
+    // For consistency and simplicity, convert active-low signals to active-high signals.
     logic ram_oe_o;
     assign ram_oe_n_o  = !ram_oe_o;
 
@@ -146,13 +146,12 @@ module top #(
     assign cpu_we_i    = !cpu_we_n_i;
     assign cpu_we_n_o  = !cpu_we_o;
 
-    // RES, IRQ, and NMI are active low open drain wire-or signals.  For consistency
-    // and convenience we convert these to active high outputs and handle OE here.
+    // RES, IRQ, and NMI are active-low open-drain wire-or signals.  For consistency
+    // and simplicity we convert these to active-high outputs and handle OE here.
     logic cpu_irq_i, cpu_irq_o;
     assign cpu_irq_i    = !cpu_irq_n_i;
     assign cpu_irq_n_o  = !cpu_irq_o;
-    assign cpu_irq_n_oe = cpu_irq_o;    // Only drive open drain wired-or when asserting IRQ
-
+    assign cpu_irq_n_oe = cpu_irq_o;    // Only drive open-drain wire-or when asserted.
 
     main main (
         .clock_i(clock_i),
