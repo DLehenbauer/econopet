@@ -98,10 +98,21 @@ module top #(
     // Disable audio output for now.
     assign audio_o = '0;
 
-    // Test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
-    assign pmod1_o[8:1] = pmod2_i[8:1];
+    // Debug: Temporarily test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
+    assign pmod1_o [8:1] = pmod2_i[8:1];
     assign pmod1_oe[8:1] = '1;
     assign pmod2_oe[8:1] = '0;
+
+    // Debug: Temporarily use spare pins to break out some signals for a logic analyzer.
+    assign spare_o[0] = ram_oe_n_o;
+    assign spare_o[1] = ram_we_n_o;
+    assign spare_o[2] = io_oe_n_o;
+    assign spare_o[3] = pia1_cs_n_o;
+    assign spare_o[4] = pia2_cs_n_o;
+    assign spare_o[5] = via_cs_n_o;
+    assign spare_o[7] = ram_addr_a10_o;
+    assign spare_o[8] = ram_addr_a11_o;
+    assign spare_o[9] = ram_addr_a15_o;
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for cpu_addr_o[15:0].
@@ -190,7 +201,6 @@ module top #(
         .spi1_sck_i(spi1_sck_i),
         .spi1_sd_i(spi1_sd_i),
         .spi1_sd_o(spi1_sd_o),
-        .spi_stall_o(spi_stall_o),
-        .spare_o(spare_o)
+        .spi_stall_o(spi_stall_o)
     );
 endmodule

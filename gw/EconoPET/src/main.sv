@@ -59,10 +59,7 @@ module main #(
     input  logic spi1_sck_i,  // (SCK) Serial Clock
     input  logic spi1_sd_i,   // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi1_sd_o,   // (SDO) Serial Data Out (FPGA -> MCU)
-    output logic spi_stall_o,
-
-    // Spare pins
-    output logic [9:0] spare_o
+    output logic spi_stall_o
 );
     // Currently, there is no wishbone reset.
     wire reset       = '0;
@@ -140,8 +137,4 @@ module main #(
         .cpu_clock_i(cpu_clock_o),
         .v_sync_o(v_sync_o)
     );
-
-    assign spare_o[DATA_WIDTH-1:0] = spi1_data_rx;
-    assign spare_o[8]              = spi1_cycle;
-    assign spare_o[9]              = '0;
 endmodule
