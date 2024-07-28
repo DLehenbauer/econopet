@@ -22,7 +22,7 @@
 
 # Calculate period in nanoseconds from frequency in megahertz.
 proc ns_from_mhz { mhz } {
-    set result [expr { 1000 / $mhz }]
+    set result [expr { 1000.0 / $mhz }]
     return $result
 }
 
