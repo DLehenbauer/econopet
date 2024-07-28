@@ -30,7 +30,8 @@ proc ns_from_mhz { mhz } {
 
 set clock_mhz 64
 set clock_period [ns_from_mhz $clock_mhz]
-create_clock -period $clock_period clock_i
+create_clock -period $clock_period -target clock_i
+create_clock -period $clock_period -name v_ram_clock
 
 # SPI1 Constraints
 
@@ -80,6 +81,13 @@ set_false_path -from [get_ports spi1_cs_ni]
 # (See also generated file: outflow\PET.pt.sdc)
 
 # CPU
+# create_generated_clock -name "cpu_clock" -source clock_i -edges { 21 31 127 } [get_ports {cpu_clock_o}]
+
+# set cpu_tAH 10
+# set cpu_tADS 40
+# set_input_delay -clock cpu_clock -clock_fall -min $cpu_tAH  [get_ports {cpu_addr_i[*] cpu_we_n_i}]
+# set_input_delay -clock cpu_clock -clock_fall -max $cpu_tADS [get_ports {cpu_addr_i[*] cpu_we_n_i}]
+
 set_output_delay -clock clock_i -max 1 [get_ports {cpu_clock_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {cpu_clock_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {cpu_be_o}]
@@ -93,14 +101,6 @@ set_output_delay -clock clock_i -min 0 [get_ports {cpu_data_o[*]}]
 set_output_delay -clock clock_i -max 1 [get_ports {cpu_we_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {cpu_we_n_o}]
 
-# RAM
-set_output_delay -clock clock_i -max 1 [get_ports {ram_addr_a*_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a*_o}]
-set_output_delay -clock clock_i -max 1 [get_ports {ram_oe_n_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
-set_output_delay -clock clock_i -max 1 [get_ports {ram_we_n_o}]
-set_output_delay -clock clock_i -min 0 [get_ports {ram_we_n_o}]
-
 # I/O
 set_output_delay -clock clock_i -max 1 [get_ports {io_oe_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {io_oe_n_o}]
@@ -110,3 +110,15 @@ set_output_delay -clock clock_i -max 1 [get_ports {pia2_cs_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {pia2_cs_n_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {via_cs_n_o}]
 set_output_delay -clock clock_i -min 0 [get_ports {via_cs_n_o}]
+
+
+# RAM
+set tPCB      2.5
+set ram_tAA  10.0
+set ram_tOHA  2.0
+
+set_input_delay  -clock v_ram_clock -max [expr $ram_tAA + 2*$tPCB]  [get_ports {cpu_data_i[*]}]
+set_input_delay  -clock v_ram_clock -min [expr $ram_tOHA + 2*$tPCB] [get_ports {cpu_data_i[*]}]
+
+set_output_delay -clock v_ram_clock -max [expr $ram_tAA]   [get_ports {ram_oe_n_o ram_we_n_o ram_addr_a*_o cpu_addr_o[*] cpu_data_o[*]}]
+set_output_delay -clock v_ram_clock -min [expr -$ram_tOHA] [get_ports {ram_oe_n_o ram_we_n_o ram_addr_a*_o cpu_addr_o[*] cpu_data_o[*]}]
