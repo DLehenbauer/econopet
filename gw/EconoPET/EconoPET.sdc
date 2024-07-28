@@ -82,7 +82,7 @@ set_false_path -from [get_ports spi1_cs_ni]
 # CPU
 # create_generated_clock -name "cpu_clock" -source clock_i -edges { 21 31 127 } [get_ports {cpu_clock_o}]
 
-# set cpu_tAH 10
+set cpu_tAH 10
 # set cpu_tADS 40
 # set_input_delay -clock cpu_clock -clock_fall -min $cpu_tAH  [get_ports {cpu_addr_i[*] cpu_we_n_i}]
 # set_input_delay -clock cpu_clock -clock_fall -max $cpu_tADS [get_ports {cpu_addr_i[*] cpu_we_n_i}]
@@ -131,18 +131,21 @@ set ram_tSD  6
 set ram_tHD  0
 set ram_tPWE 8
 
-set ram_addr_max_delay [expr $clock_period - $ram_tAA - $tPCB]
+set ram_addr_min_delay [expr $ram_tHA]
+set ram_addr_max_delay [expr $clock_period - $ram_tAA]
 
-set_output_delay -clock clock_i -min $ram_tSA [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
+set_output_delay -clock clock_i -min $ram_addr_min_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 set_output_delay -clock clock_i -max $ram_addr_max_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 
 set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
-set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + $ram_tDOE] [get_ports {ram_oe_n_o}]
+set_output_delay -clock clock_i -max [expr $clock_period - $ram_tAA + $ram_tDOE] [get_ports {ram_oe_n_o}]
 
 # Note: Minimum WE delay must be >= max address output delay to meet 0ns setup
 #       Maximum WE delay should be tightly constrained
 set_output_delay -clock clock_i -min $ram_addr_max_delay [get_ports {ram_we_n_o}]
-set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + 0.25] [get_ports {ram_we_n_o}]
+set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + 0.05] [get_ports {ram_we_n_o}]
 
 set_output_delay -clock clock_i -min $ram_tHD [get_ports {cpu_data_o[*]}]
 set_output_delay -clock clock_i -max [expr $clock_period - $ram_tSD] [get_ports {cpu_data_o[*]}]
+
+# reset_timing; delete_timing_results; read_sdc; report_timing_summary
