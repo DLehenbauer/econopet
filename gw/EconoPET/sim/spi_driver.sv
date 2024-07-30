@@ -13,10 +13,11 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module spi_driver #(
-    parameter SCK_MHZ = 24   // SPI baud rate
-) (
+import common_pkg::*;
+
+module spi_driver(
     input logic clock_i,     // Destination clock
 
     // SPI bus signals (see https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/)
@@ -28,7 +29,7 @@ module spi_driver #(
     output logic [7:0] spi_data_o,  // Last received (valid when 'spi_ack_o' asserted)
     output logic       spi_ack_o    // 'spi_data_o' valid pulse
 );
-    clock_gen #(SCK_MHZ) spi_sck (.clock_o(spi_sck_o));
+    clock_gen #(SPI_SCK_MHZ) spi_sck (.clock_o(spi_sck_o));
 
     task reset;
         spi_sck.stop;

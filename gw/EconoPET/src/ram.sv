@@ -12,30 +12,30 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module ram #(
-    parameter integer unsigned WB_CLOCK_MHZ = 64,
-    parameter integer unsigned DATA_WIDTH   = 8,
-    parameter integer unsigned ADDR_WIDTH   = 17
-) (
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module ram(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                  wb_clock_i,
-    input  logic                  wb_reset_i,
-    input  logic [ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
-    output logic [DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
-    input  logic                  wb_we_i,
-    input  logic                  wb_cycle_i,
-    input  logic                  wb_strobe_i,
-    output logic                  wb_stall_o,
-    output logic                  wb_ack_o,
+    input  logic                      wb_clock_i,
+    input  logic                      wb_reset_i,
+    input  logic [RAM_ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [    DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
+    output logic [    DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
+    input  logic                      wb_we_i,
+    input  logic                      wb_cycle_i,
+    input  logic                      wb_strobe_i,
+    output logic                      wb_stall_o,
+    output logic                      wb_ack_o,
 
-    output logic                  ram_oe_o,
-    output logic                  ram_we_o,
-    output logic [ADDR_WIDTH-1:0] ram_addr_o,
-    input  logic [DATA_WIDTH-1:0] ram_data_i,
-    output logic [DATA_WIDTH-1:0] ram_data_o,
-    output logic                  ram_data_oe
+    output logic                      ram_oe_o,
+    output logic                      ram_we_o,
+    output logic [RAM_ADDR_WIDTH-1:0] ram_addr_o,
+    input  logic [    DATA_WIDTH-1:0] ram_data_i,
+    output logic [    DATA_WIDTH-1:0] ram_data_o,
+    output logic                      ram_data_oe
 );
     // Timing for IS61WV1288EEBLL-10TLI
     // (See: https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)

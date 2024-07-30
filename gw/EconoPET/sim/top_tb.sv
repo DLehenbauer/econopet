@@ -13,16 +13,14 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module top_tb #(
-    parameter integer unsigned CLK_MHZ = 64,
-    parameter integer unsigned DATA_WIDTH = 8,
-    parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned RAM_ADDR_WIDTH = 17
-);
+import common_pkg::*;
+
+module top_tb;
     // Clock
     bit clock;
-    clock_gen #(CLK_MHZ) fpga_clock (.clock_o(clock));
+    clock_gen #(SYS_CLOCK_MHZ) fpga_clock (.clock_o(clock));
     initial fpga_clock.start;
 
     // Bus

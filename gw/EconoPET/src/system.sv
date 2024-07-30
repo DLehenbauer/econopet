@@ -12,13 +12,11 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module system #(
-    parameter integer unsigned WB_CLOCK_MHZ = 64,
-    parameter integer unsigned WB_ADDR_WIDTH = 20,
-    parameter integer unsigned RAM_ADDR_WIDTH = 17,
-    parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned DATA_WIDTH = 8
-) (
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module system (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                     wb_clock_i,
@@ -118,7 +116,7 @@ module system #(
 
     function bit [5:0] ns_to_cycles(input int time_ns);
         // Note: We conservatively add 1 cycle (15.625ns) to account for propagation delay.
-        return 6'(int'($ceil(time_ns / (1000.0 / WB_CLOCK_MHZ)) + 1));
+        return 6'(int'($ceil(time_ns / (1000.0 / SYS_CLOCK_MHZ)) + 1));
     endfunction
 
     // Maximum number of 'wb_clock_i' cycles required to complete an in-progress

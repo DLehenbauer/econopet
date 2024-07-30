@@ -13,30 +13,29 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module ram_tb #(
-    parameter CLK_MHZ = 64,
-    parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 17
-);
-    logic                  clock;
-    logic [ADDR_WIDTH-1:0] addr;
-    logic [DATA_WIDTH-1:0] poci;
-    logic [DATA_WIDTH-1:0] pico;
-    logic                  we;
-    logic                  cycle;
-    logic                  strobe;
-    logic                  ack;
+import common_pkg::*;
 
-    clock_gen #(CLK_MHZ) clock_gen (.clock_o(clock));
+module ram_tb;
+    logic                      clock;
+    logic [RAM_ADDR_WIDTH-1:0] addr;
+    logic [    DATA_WIDTH-1:0] poci;
+    logic [    DATA_WIDTH-1:0] pico;
+    logic                      we;
+    logic                      cycle;
+    logic                      strobe;
+    logic                      ack;
+
+    clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
 
     initial clock_gen.start;
-    logic                  ram_oe_o;
-    logic                  ram_we_o;
-    logic [ADDR_WIDTH-1:0] ram_addr_o;
-    logic [DATA_WIDTH-1:0] ram_data_i;
-    logic [DATA_WIDTH-1:0] ram_data_o;
-    logic                  ram_data_oe;
+    logic                      ram_oe_o;
+    logic                      ram_we_o;
+    logic [RAM_ADDR_WIDTH-1:0] ram_addr_o;
+    logic [    DATA_WIDTH-1:0] ram_data_i;
+    logic [    DATA_WIDTH-1:0] ram_data_o;
+    logic                      ram_data_oe;
 
     ram ram (
         .wb_clock_i(clock),

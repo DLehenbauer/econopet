@@ -13,12 +13,12 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
 
 module bram_tb #(
-    parameter CLK_MHZ = 64,
-    parameter WB_ADDR_WIDTH = 20,
-    parameter RAM_ADDR_WIDTH = $clog2(1024 - 1),
-    parameter DATA_WIDTH = 8
+    parameter RAM_ADDR_WIDTH = $clog2(1024 - 1)
 );
     logic                     clock;
     logic [WB_ADDR_WIDTH-1:0] addr;
@@ -29,7 +29,7 @@ module bram_tb #(
     logic                     strobe;
     logic                     ack;
 
-    clock_gen #(CLK_MHZ) clock_gen (.clock_o(clock));
+    clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
 
     initial clock_gen.start;
 

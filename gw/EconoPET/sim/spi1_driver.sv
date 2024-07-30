@@ -12,24 +12,24 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module spi1_driver #(
-    parameter SCK_MHZ       = 24,  // SPI baud rate
-    parameter WB_DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20
-) (
-    input logic clock_i,
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module spi1_driver(
+    input  logic clock_i,
 
     output logic spi_sck_o,
     output logic spi_cs_no,
     output logic spi_pico_o,
     input  logic spi_poci_i,
 
-    input  logic                     spi_stall_i,
-    output logic [WB_DATA_WIDTH-1:0] spi_data_o
+    input  logic spi_stall_i,
+    output logic [DATA_WIDTH-1:0] spi_data_o
 );
-    logic [WB_DATA_WIDTH-1:0] spi_rx_data;
+    logic [DATA_WIDTH-1:0] spi_rx_data;
 
-    spi_driver #(SCK_MHZ) spi_driver (
+    spi_driver spi_driver (
         .clock_i(clock_i),
         .spi_sck_o(spi_sck_o),
         .spi_cs_no(spi_cs_no),
@@ -55,7 +55,7 @@ module spi1_driver #(
         return addr[7:0];
     endfunction
 
-    task send(input logic unsigned [WB_DATA_WIDTH-1:0] tx[]);
+    task send(input logic unsigned [DATA_WIDTH-1:0] tx[]);
         string s;
         s = "";
         foreach (tx[i]) begin
@@ -76,7 +76,7 @@ module spi1_driver #(
 
     task write_at(
         input [WB_ADDR_WIDTH-1:0] addr_i,
-        input [WB_DATA_WIDTH-1:0] data_i
+        input [   DATA_WIDTH-1:0] data_i
     );
         logic [7:0] c;
         logic [7:0] ah;

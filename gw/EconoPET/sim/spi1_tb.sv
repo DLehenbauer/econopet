@@ -13,15 +13,14 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module spi1_tb #(
-    parameter CLK_MHZ = 64,
-    parameter WB_DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20
-);
+import common_pkg::*;
+
+module spi1_tb;
     bit clock;
 
-    clock_gen #(CLK_MHZ) fpga_clk (.clock_o(clock));
+    clock_gen #(SYS_CLOCK_MHZ) fpga_clk (.clock_o(clock));
 
     initial fpga_clk.start;
 
@@ -41,8 +40,8 @@ module spi1_tb #(
     );
 
     logic [WB_ADDR_WIDTH-1:0] addr;
-    logic [WB_DATA_WIDTH-1:0] rd_data;
-    logic [WB_DATA_WIDTH-1:0] wr_data;
+    logic [   DATA_WIDTH-1:0] rd_data;
+    logic [   DATA_WIDTH-1:0] wr_data;
     logic                     we;
     logic                     cycle;
     logic                     ack = '0;
@@ -66,11 +65,11 @@ module spi1_tb #(
 
     logic [WB_ADDR_WIDTH-1:0] expected_addr;
     logic                     expected_we;
-    logic [WB_DATA_WIDTH-1:0] expected_data;
+    logic [DATA_WIDTH-1:0] expected_data;
 
     task set_expected(input logic [WB_ADDR_WIDTH-1:0] addr_i,
                       input logic we_i,
-                      input logic [WB_DATA_WIDTH-1:0] data_i = 8'hxx);
+                      input logic [DATA_WIDTH-1:0] data_i = 8'hxx);
         expected_addr <= addr_i;
         expected_data <= data_i;
         expected_we   <= we_i;
@@ -78,7 +77,7 @@ module spi1_tb #(
 
     task write_at(
         input logic [WB_ADDR_WIDTH-1:0] addr_i,
-        input logic [WB_DATA_WIDTH-1:0] data_i
+        input logic [DATA_WIDTH-1:0] data_i
     );
         set_expected(/* addr: */ addr_i, /* we: */ 1'b1, /* data: */ data_i);
         spi1_driver.write_at(addr_i, data_i);

@@ -12,9 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module sim #(
-    parameter integer unsigned CLK_MHZ = 64
-);
+module sim;
     spi_tb spi_tb ();
     spi1_tb spi1_tb ();
     bram_tb bram_tb ();
