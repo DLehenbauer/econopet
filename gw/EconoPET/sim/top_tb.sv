@@ -15,7 +15,7 @@
 `include "./sim/assert.svh"
 
 module top_tb #(
-    parameter integer unsigned CLK_MHZ = 64,
+    parameter integer unsigned CLK_MHZ = 32,
     parameter integer unsigned DATA_WIDTH = 8,
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
     parameter integer unsigned RAM_ADDR_WIDTH = 17

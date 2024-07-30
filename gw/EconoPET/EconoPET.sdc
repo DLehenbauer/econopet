@@ -28,7 +28,7 @@ proc ns_from_mhz { mhz } {
 
 # PLL Constraints
 
-set clock_mhz 64
+set clock_mhz 32
 set clock_period [ns_from_mhz $clock_mhz]
 create_clock -period $clock_period -target clock_i
 
@@ -123,21 +123,21 @@ set ram_tSD  6          ;# Data Setup to Write End
 set ram_tHD  0          ;# Data Hold from Write End
 set ram_tPWE 8          ;# WE Pulse Width
 
-set ram_addr_min_delay [expr $ram_tHA]
-set ram_addr_max_delay [expr $clock_period - $ram_tAA]
+set ram_addr_min_delay [expr $ram_tHA + $tPCB]
+set ram_addr_max_delay [expr $ram_tAA - $tPCB]
 
 set_output_delay -clock clock_i -min $ram_addr_min_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 set_output_delay -clock clock_i -max $ram_addr_max_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 
-set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
-set_output_delay -clock clock_i -max [expr $clock_period - $ram_tAA + $ram_tDOE] [get_ports {ram_oe_n_o}]
+set_output_delay -clock clock_i -min $tPCB [get_ports {ram_oe_n_o}]
+set_output_delay -clock clock_i -max [expr $ram_tAA + $ram_tDOE] [get_ports {ram_oe_n_o}]
 
 # Note: Minimum WE delay must be >= max address output delay to meet 0ns setup
 #       Maximum WE delay should be tightly constrained
 set_output_delay -clock clock_i -min $ram_addr_max_delay [get_ports {ram_we_n_o}]
-set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + 0.05] [get_ports {ram_we_n_o}]
+set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + 0.25] [get_ports {ram_we_n_o}]
 
 set_output_delay -clock clock_i -min $ram_tHD [get_ports {cpu_data_o[*]}]
-set_output_delay -clock clock_i -max [expr $clock_period - $ram_tSD] [get_ports {cpu_data_o[*]}]
+set_output_delay -clock clock_i -max [expr $ram_tSD] [get_ports {cpu_data_o[*]}]
 
 # reset_timing; delete_timing_results; read_sdc; report_timing_summary

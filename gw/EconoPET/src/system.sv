@@ -13,7 +13,7 @@
  */
 
 module system #(
-    parameter integer unsigned WB_CLOCK_MHZ = 64,
+    parameter integer unsigned WB_CLOCK_MHZ = 32,
     parameter integer unsigned WB_ADDR_WIDTH = 20,
     parameter integer unsigned RAM_ADDR_WIDTH = 17,
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
