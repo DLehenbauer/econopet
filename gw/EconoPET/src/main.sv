@@ -22,9 +22,15 @@ module main #(
     input  logic clock_i,   // 64 MHz clock (from PLL)
 
     // CPU
+    input  logic cpu_reset_i,
+    output logic cpu_reset_o,
     output logic cpu_be_o,
     output logic cpu_ready_o,
     output logic cpu_clock_o,
+    input  logic cpu_irq_i,
+    output logic cpu_irq_o,
+    input  logic cpu_nmi_i,
+    output logic cpu_nmi_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
@@ -93,6 +99,7 @@ module main #(
     );
 
     system system (
+        // Wishbone
         .wb_clock_i(clock_i),
         .wb_reset_i(reset),
         .wb_addr_i(spi1_addr),
@@ -104,16 +111,22 @@ module main #(
         .wb_stall_o(spi1_stall),
         .wb_ack_o(spi1_ack),
 
+        // CPU
+        .cpu_reset_i(cpu_reset_i),
+        .cpu_reset_o(cpu_reset_o),
         .cpu_be_o(cpu_be_o),
         .cpu_ready_o(cpu_ready_o),
         .cpu_clock_o(cpu_clock_o),
+        .cpu_irq_i(cpu_irq_i),
+        .cpu_irq_o(cpu_irq_o),
+        .cpu_nmi_i(cpu_nmi_i),
+        .cpu_nmi_o(cpu_nmi_o),
         .cpu_addr_i(cpu_addr_i),
         .cpu_addr_o(cpu_addr_o),
         .cpu_addr_oe(cpu_addr_oe),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(cpu_data_o),
-        .cpu_data_oe(cpu_data_oe),
-        
+        .cpu_data_oe(cpu_data_oe),        
         .cpu_we_i(cpu_we_i),
         .cpu_we_o(cpu_we_o),
         .cpu_we_oe(cpu_we_oe),

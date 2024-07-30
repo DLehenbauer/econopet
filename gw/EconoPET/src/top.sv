@@ -29,6 +29,10 @@ module top #(
     output logic status_no,     // Red NSTATUS LED (0 = On, 1 = Off)
 
     // CPU
+    input  logic cpu_reset_n_i,
+    output logic cpu_reset_n_o,
+    output logic cpu_reset_n_oe,
+
     output logic cpu_be_o,
     output logic cpu_clock_o,
     output logic cpu_ready_o,
@@ -48,6 +52,10 @@ module top #(
     input  logic cpu_irq_n_i,
     output logic cpu_irq_n_o,
     output logic cpu_irq_n_oe,
+
+    input  logic cpu_nmi_n_i,
+    output logic cpu_nmi_n_o,
+    output logic cpu_nmi_n_oe,
 
     // RAM
     output logic ram_addr_a10_o,
@@ -159,17 +167,33 @@ module top #(
 
     // RES, IRQ, and NMI are active-low open-drain wire-or signals.  For consistency
     // and simplicity we convert these to active-high outputs and handle OE here.
+    logic cpu_reset_i, cpu_reset_o;
+    assign cpu_reset_i    = !cpu_reset_n_i;
+    assign cpu_reset_n_o  = 0;          // Wire-or only driven when asserted.
+    assign cpu_reset_n_oe = cpu_reset_o;
+
     logic cpu_irq_i, cpu_irq_o;
     assign cpu_irq_i    = !cpu_irq_n_i;
-    assign cpu_irq_n_o  = !cpu_irq_o;
-    assign cpu_irq_n_oe = cpu_irq_o;    // Only drive open-drain wire-or when asserted.
+    assign cpu_irq_n_o  = 0;            // Wire-or only driven when asserted.
+    assign cpu_irq_n_oe = cpu_irq_o;
+
+    logic cpu_nmi_i, cpu_nmi_o;
+    assign cpu_nmi_i    = !cpu_nmi_n_i;
+    assign cpu_nmi_n_o  = 0;            // Wire-or only driven when asserted.
+    assign cpu_nmi_n_oe = cpu_nmi_o;
 
     main main (
         .clock_i(clock_i),
 
+        .cpu_reset_i(cpu_reset_i),
+        .cpu_reset_o(cpu_reset_o),
         .cpu_be_o(cpu_be_o),
         .cpu_ready_o(cpu_ready_o),
         .cpu_clock_o(cpu_clock_o),
+        .cpu_irq_i(cpu_irq_i),
+        .cpu_irq_o(cpu_irq_o),
+        .cpu_nmi_i(cpu_nmi_i),
+        .cpu_nmi_o(cpu_nmi_o),
 
         .cpu_addr_i(cpu_addr_i),
         .cpu_addr_o(cpu_addr_o),

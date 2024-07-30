@@ -33,9 +33,15 @@ module system #(
     output logic                     wb_ack_o,
 
     // CPU
+    input  logic cpu_reset_i,
+    output logic cpu_reset_o,
     output logic cpu_be_o,
     output logic cpu_ready_o,
     output logic cpu_clock_o,
+    input  logic cpu_irq_i,
+    output logic cpu_irq_o,
+    input  logic cpu_nmi_i,
+    output logic cpu_nmi_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
@@ -63,8 +69,11 @@ module system #(
     output logic pia2_cs_o,
     output logic via_cs_o
 );
-    // For now, CPU is always ready.
+    // For now, outgoing CPU control signals are constant.
     assign cpu_ready_o = 1;
+    assign cpu_reset_o = 0;
+    assign cpu_irq_o   = 0;
+    assign cpu_nmi_o   = 0;
 
     initial begin
         cpu_clock_o = '0;
