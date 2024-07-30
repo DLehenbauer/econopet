@@ -13,7 +13,6 @@
  */
 
 module ram #(
-    parameter integer unsigned WB_CLOCK_MHZ = 64,
     parameter integer unsigned DATA_WIDTH   = 8,
     parameter integer unsigned ADDR_WIDTH   = 17
 ) (
