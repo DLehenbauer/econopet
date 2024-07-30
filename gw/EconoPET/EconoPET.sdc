@@ -108,28 +108,20 @@ set_output_delay -clock clock_i -min 1 [get_ports {via_cs_n_o}]
 
 # Read Timing for IS61WV1288EEBLL-10TLI
 # (See: https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)
-#
-# READ
-#   Address Access Time (tAA)               = 10
-#   OE Access Time (tDOE)                   = 4.5
-#
-# WRITE
-#   Address Setup Time to Write Start (tSA) = 0
-#   Address Setup Time to Write End (tAW)   = 8
-#   Address Hold Time from Write End (tHA)  = 0
-#   Data Setup to Write End (tSD)           = 6
-#   Data Hold from Write End (tHD)          = 0
-#   WE Pulse Width (tPWE)                   = 8
 
-set tPCB 2.5
-set ram_tAA 10
-set ram_tDOE 4.5
-set ram_tSA  0
-set ram_tAW  8
-set ram_tHA  0
-set ram_tSD  6
-set ram_tHD  0
-set ram_tPWE 8
+set tPCB 2.5            ;# PCB trace delay
+
+# READ
+set ram_tAA 10          ;# Address Access Time
+set ram_tDOE 4.5        ;# OE Access Time
+
+# WRITE
+set ram_tSA  0          ;# Address Setup Time to Write Start
+set ram_tAW  8          ;# Address Setup Time to Write End
+set ram_tHA  0          ;# Address Hold Time from Write End
+set ram_tSD  6          ;# Data Setup to Write End
+set ram_tHD  0          ;# Data Hold from Write End
+set ram_tPWE 8          ;# WE Pulse Width
 
 set ram_addr_min_delay [expr $ram_tHA]
 set ram_addr_max_delay [expr $clock_period - $ram_tAA]
