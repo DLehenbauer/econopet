@@ -121,7 +121,7 @@ module system (
 
     // Maximum number of 'wb_clock_i' cycles required to complete an in-progress
     // wishbone transaction with RAM.
-    localparam MAX_WB_CYCLES = 6,
+    localparam MAX_WB_CYCLES = 8,
                CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
                CPU_tPWH      = 62,  // CPU Clock Pulse Width High (tPWH)
                CPU_tDSR      = 15,  // CPU Data Setup Time (tDSR)
@@ -258,7 +258,7 @@ module system (
     assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : wb_ram_addr[16];
 
     // synthesis off
-    always @(*) begin
+    always_ff @(posedge wb_clock_i or negedge wb_clock_i) begin
         assert(!cpu_be_o || !ram_ctl_stall) else $fatal(1, "cpu_ram_oe and ram_ctl_stall cannot be asserted simultaneously");
         assert(!cpu_be_o || !wb_ram_oe) else $fatal(1, "cpu_ram_oe and wb_ram_oe cannot be asserted simultaneously");
         assert(!io_oe_o  || !wb_ram_oe) else $fatal(1, "io_oe_o and wb_ram_oe cannot be asserted simultaneously");
