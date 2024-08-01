@@ -15,6 +15,7 @@
 module sim;
     spi_tb spi_tb ();
     spi1_tb spi1_tb ();
+    ram_tb ram_tb ();
     bram_tb bram_tb ();
     top_tb top_tb ();
 
@@ -24,6 +25,7 @@ module sim;
 
         spi_tb.run();
         spi1_tb.run();
+        ram_tb.run();
         bram_tb.run();
         top_tb.run();
 

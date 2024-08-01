@@ -67,15 +67,36 @@ module ram(
     //                           |
     //  DIN  ----------------<_​̅_​̅_​​>-----
 
+    localparam RAM_tAA       = 55,  // RAM Address Access Time
+               RAM_tOE       = 30,  // Output Enable Access Time
+               RAM_tOLZ      = 5,   // Output Enable to Output in Low-Z
+               RAM_tOHZ      = 20,  // Output Disable to Output in High-Z
+               RAM_tOH       = 10;  // Output Hold from Address Change
+
+    localparam RAM_tAW       = 50,  // Address Valid to End of Write
+               RAM_tAS       = 0,   // Address Setup Time
+               RAM_tWP       = 45,  // Write Pulse Width
+               RAM_tWR       = 0,   // Write Recovery Time
+               RAM_tDW       = 25,  // Data to Write Time Overlap
+               RAM_tDH       = 0,   // Data Hold from End of Write Time
+               RAM_tOW       = 5,   // Output Active from End of Write
+               RAM_tWHZ      = 20;  // Write to Output in High-Z
+
+
+    localparam bit [2:0] READ_DONE  = common_pkg::ns_to_cycles(RAM_tAA),
+                         WRITE_DONE = common_pkg::ns_to_cycles(RAM_tAA);
+
     localparam bit [1:0] READY   = 2'd0,
                          READ    = 2'd1,
                          WRITE   = 2'd2,
-                         WAIT    = 2'd3;
+                         DONE    = 2'd3;
 
-    logic [1:0] state = READY;
+    logic [2:0] count;
+    logic [1:0] state;
 
     initial begin
         state       = READY;
+        count       = '0;
         ram_oe_o    = '0;
         ram_we_o    = '0;
         ram_data_oe = '0;
@@ -91,6 +112,7 @@ module ram(
             ram_data_oe <= '0;
             wb_ack_o    <= '0;
             wb_stall_o  <= '0;
+            count       <= '0;
         end else begin
             case (state)
                 READY: begin
@@ -99,6 +121,10 @@ module ram(
                     ram_oe_o    <= '0;
                     ram_we_o    <= '0;
                     ram_data_oe <= '0;
+                                            
+                    count <= wb_we_i
+                        ? WRITE_DONE - 2
+                        : READ_DONE - 2;
 
                     if (wb_cycle_i && wb_strobe_i) begin
                         ram_addr_o  <= wb_addr_i;
@@ -114,15 +140,28 @@ module ram(
                 end
 
                 READ: begin
-                    state       <= WAIT;
+                    if (count == 0) begin
+                        state       <= DONE;
+                    end else begin
+                        state       <= READ;
+                    end
+
+                    count <= count - 1'b1;
                 end
 
                 WRITE: begin
                     ram_we_o    <= 1'b1;
-                    state       <= WAIT;
+
+                    if (count == 0) begin
+                        state       <= DONE;
+                    end else begin
+                        state       <= WRITE;
+                    end
+
+                    count <= count - 1'b1;
                 end
 
-                WAIT: begin
+                DONE: begin
                     wb_data_o   <= ram_data_i;
                     ram_oe_o    <= '0;
                     ram_we_o    <= '0;

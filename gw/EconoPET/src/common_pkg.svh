@@ -22,13 +22,17 @@ package common_pkg;
     //   2.  In the *.sdc
     //   3.  In the interface designer (*.peri.xml)
     //
-    localparam integer unsigned SYS_CLOCK_MHZ = 64;
-    localparam integer unsigned SPI_SCK_MHZ = 24;
+    localparam int unsigned SYS_CLOCK_MHZ = 64;
+    localparam int unsigned SPI_SCK_MHZ = 24;
 
-    localparam integer unsigned WB_ADDR_WIDTH = 20;
-    localparam integer unsigned RAM_ADDR_WIDTH = 17;
-    localparam integer unsigned CPU_ADDR_WIDTH = 16;
-    localparam integer unsigned DATA_WIDTH = 8;
+    localparam int unsigned WB_ADDR_WIDTH = 20;
+    localparam int unsigned RAM_ADDR_WIDTH = 17;
+    localparam int unsigned CPU_ADDR_WIDTH = 16;
+    localparam int unsigned DATA_WIDTH = 8;
+
+    function int ns_to_cycles(input int time_ns);
+        return int'($ceil(time_ns / (1000.0 / SYS_CLOCK_MHZ)));
+    endfunction
 endpackage
 
 `endif

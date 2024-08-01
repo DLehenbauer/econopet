@@ -18,14 +18,14 @@
 import common_pkg::*;
 
 module ram_tb;
-    logic                      clock;
-    logic [RAM_ADDR_WIDTH-1:0] addr;
-    logic [    DATA_WIDTH-1:0] poci;
-    logic [    DATA_WIDTH-1:0] pico;
-    logic                      we;
-    logic                      cycle;
-    logic                      strobe;
-    logic                      ack;
+    logic                     clock;
+    logic [WB_ADDR_WIDTH-1:0] addr;
+    logic [   DATA_WIDTH-1:0] poci;
+    logic [   DATA_WIDTH-1:0] pico;
+    logic                     we;
+    logic                     cycle;
+    logic                     strobe;
+    logic                     ack;
 
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
 
@@ -40,7 +40,7 @@ module ram_tb;
     ram ram (
         .wb_clock_i(clock),
         .wb_reset_i('0),
-        .wb_addr_i(addr),
+        .wb_addr_i(addr[RAM_ADDR_WIDTH-1:0]),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
@@ -56,6 +56,7 @@ module ram_tb;
     );
 
     mock_ram mock_ram (
+        .clock_i(clock),
         .ram_oe_n_i(!ram_oe_o),
         .ram_we_n_i(!ram_we_o),
         .ram_addr_i(ram_addr_o),
