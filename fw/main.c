@@ -50,8 +50,8 @@ void fpga_init() {
 	sleep_ms(10);
  	set_sys_clock_khz(270000, true);
 
-    // FPGA CLK: 270 MHz / 6 = 45 MHz
-    const uint16_t fpga_div = 6;
+    // FPGA CLK: 270 MHz / 15 = 18 MHz
+    const uint16_t fpga_div = 15;
 
     const uint slice = pwm_gpio_to_slice_num(FPGA_CLK_GP);
     const uint channel = pwm_gpio_to_channel(FPGA_CLK_GP);

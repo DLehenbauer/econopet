@@ -106,46 +106,18 @@ set_output_delay -clock clock_i -min 1 [get_ports {pia2_cs_n_o}]
 set_output_delay -clock clock_i -max 1 [get_ports {via_cs_n_o}]
 set_output_delay -clock clock_i -min 1 [get_ports {via_cs_n_o}]
 
-# Read Timing for IS61WV1288EEBLL-10TLI
-# (See: https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)
-#
-# READ
-#   Address Access Time (tAA)               = 10
-#   OE Access Time (tDOE)                   = 4.5
-#
-# WRITE
-#   Address Setup Time to Write Start (tSA) = 0
-#   Address Setup Time to Write End (tAW)   = 8
-#   Address Hold Time from Write End (tHA)  = 0
-#   Data Setup to Write End (tSD)           = 6
-#   Data Hold from Write End (tHD)          = 0
-#   WE Pulse Width (tPWE)                   = 8
-
-set tPCB 2.5
-set ram_tAA 10
-set ram_tDOE 4.5
-set ram_tSA  0
-set ram_tAW  8
-set ram_tHA  0
-set ram_tSD  6
-set ram_tHD  0
-set ram_tPWE 8
-
-set ram_addr_min_delay [expr $ram_tHA]
-set ram_addr_max_delay [expr $clock_period - $ram_tAA]
-
-set_output_delay -clock clock_i -min $ram_addr_min_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
-set_output_delay -clock clock_i -max $ram_addr_max_delay [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
+set_output_delay -clock clock_i -min 0 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
+set_output_delay -clock clock_i -max 8.125 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 
 set_output_delay -clock clock_i -min 0 [get_ports {ram_oe_n_o}]
-set_output_delay -clock clock_i -max [expr $clock_period - $ram_tAA + $ram_tDOE] [get_ports {ram_oe_n_o}]
+set_output_delay -clock clock_i -max 8.125 [get_ports {ram_oe_n_o}]
 
 # Note: Minimum WE delay must be >= max address output delay to meet 0ns setup
 #       Maximum WE delay should be tightly constrained
-set_output_delay -clock clock_i -min $ram_addr_max_delay [get_ports {ram_we_n_o}]
-set_output_delay -clock clock_i -max [expr $ram_addr_max_delay + 0.05] [get_ports {ram_we_n_o}]
+set_output_delay -clock clock_i -min 0 [get_ports {ram_we_n_o}]
+set_output_delay -clock clock_i -max 8.125 [get_ports {ram_we_n_o}]
 
-set_output_delay -clock clock_i -min $ram_tHD [get_ports {cpu_data_o[*]}]
-set_output_delay -clock clock_i -max [expr $clock_period - $ram_tSD] [get_ports {cpu_data_o[*]}]
+set_output_delay -clock clock_i -min 0     [get_ports {cpu_data_o[*]}]
+set_output_delay -clock clock_i -max 8.125 [get_ports {cpu_data_o[*]}]
 
 # reset_timing; delete_timing_results; read_sdc; report_timing_summary
