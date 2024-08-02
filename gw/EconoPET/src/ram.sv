@@ -77,57 +77,67 @@ module ram(
 
     localparam write_hold_count = common_pkg::ns_to_cycles(45);
 
-    //                      AWOS
-    localparam READY   = 4'b0000,
-               READING = 4'b0011,
-               HIGHZ   = 4'b0001,
-               WRITING = 4'b0101,
-               DONE    = 4'b1000;
+    localparam bit [3:0] READY   = 4'b0001,
+                         READING = 4'b0010,
+                         HIGHZ   = 4'b0100,
+                         WRITING = 4'b1000;
 
     logic [3:0] state = READY;
-    logic [2:0] clk_counter = '0;
+    logic [2:0] cycle_count = '0;
 
-    assign wb_stall_o  = state[0];
-    assign ram_oe_o    = state[1];
-    assign ram_we_o    = state[2];
-    assign wb_ack_o    = state[3];
     assign ram_data_oe = ram_we_o;
 
+    initial begin
+        wb_ack_o   = 0;
+        wb_stall_o = 0;
+        ram_oe_o   = 0;
+        ram_we_o   = 0;
+    end
+
     always_ff @(posedge wb_clock_i) begin
-        if (wb_reset_i) begin
-            state <= READY;
-            clk_counter <= '0;
-        end else begin
-            case (state)
-                READY: begin
-                    if (wb_cycle_i && wb_strobe_i) begin
-                        clk_counter <= '0;
-                        ram_addr_o <= wb_addr_i;
-                        ram_data_o <= wb_data_i;
-                        state <= wb_we_i
-                            ? WRITING
-                            : READING;
-                    end
+        case (state)
+            READY: begin
+                wb_ack_o   <= 0;
+                wb_stall_o <= 0;
+                ram_oe_o   <= 0;
+                ram_we_o   <= 0;
+
+                if (wb_cycle_i && wb_strobe_i) begin
+                    cycle_count <= '0;
+                    ram_addr_o  <= wb_addr_i;
+                    ram_data_o  <= wb_data_i;
+                    wb_ack_o    <= 0;
+                    wb_stall_o  <= 1;
+                    ram_oe_o    <= !wb_we_i;
+                    ram_we_o    <=  wb_we_i;
+                    state <= wb_we_i
+                        ? WRITING
+                        : READING;
                 end
-                READING: begin
-                    if (clk_counter == read_setup_count) begin
-                        clk_counter <= '0;
-                        wb_data_o <= ram_data_i;
-                        state <= HIGHZ;
-                    end else clk_counter <= clk_counter + 1'b1;
-                end
-                HIGHZ: begin
-                    if (clk_counter == read_hold_count) state <= DONE;
-                    else clk_counter <= clk_counter + 1'b1;
-                end
-                WRITING: begin
-                    if (clk_counter == write_hold_count) state <= DONE;
-                    else clk_counter <= clk_counter + 1'b1;
-                end
-                DONE : begin
+            end
+            READING: begin
+                if (cycle_count == 3) begin
+                    cycle_count <= '0;
+                    wb_data_o <= ram_data_i;
+                    wb_ack_o  <= 1;
+                    ram_oe_o  <= 0;
+                    state <= HIGHZ;
+                end else cycle_count <= cycle_count + 1'b1;
+            end
+            HIGHZ: begin
+                wb_ack_o <= 0;
+                wb_stall_o <= 0;
+                state <= READY;
+            end
+            WRITING: begin
+                if (cycle_count == write_hold_count) begin
+                    wb_ack_o <= 1;
+                    wb_stall_o <= 0;
+                    ram_we_o  <= 0;
                     state <= READY;
                 end
-            endcase
-        end
+                else cycle_count <= cycle_count + 1'b1;
+            end
+        endcase
     end
 endmodule

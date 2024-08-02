@@ -20,7 +20,6 @@ module system (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                     wb_clock_i,
-    input  logic                     wb_reset_i,
     input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
     input  logic [   DATA_WIDTH-1:0] wb_data_i,
     output logic [   DATA_WIDTH-1:0] wb_data_o,
@@ -121,7 +120,7 @@ module system (
 
     // Maximum number of 'wb_clock_i' cycles required to complete an in-progress
     // wishbone transaction with RAM.
-    localparam MAX_WB_CYCLES = 8,
+    localparam MAX_WB_CYCLES = 5,
                CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
                CPU_tPWH      = 62,  // CPU Clock Pulse Width High (tPWH)
                CPU_tDSR      = 15,  // CPU Data Setup Time (tDSR)
@@ -203,7 +202,6 @@ module system (
 
     ram ram (
         .wb_clock_i(wb_clock_i),
-        .wb_reset_i(wb_reset_i),
         .wb_addr_i(wb_addr_i[16:0]),
         .wb_data_i(wb_data_i),
         .wb_data_o(wb_data_o),

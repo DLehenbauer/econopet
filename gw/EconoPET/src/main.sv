@@ -67,9 +67,6 @@ module main #(
     output logic spi1_sd_o,   // (SDO) Serial Data Out (FPGA -> MCU)
     output logic spi_stall_o
 );
-    // Currently, there is no wishbone reset.
-    wire reset       = '0;
-
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_data_rx;
     logic [   DATA_WIDTH-1:0] spi1_data_tx;
@@ -101,7 +98,6 @@ module main #(
     system system (
         // Wishbone
         .wb_clock_i(clock_i),
-        .wb_reset_i(reset),
         .wb_addr_i(spi1_addr),
         .wb_data_i(spi1_data_rx),
         .wb_data_o(spi1_data_tx),
