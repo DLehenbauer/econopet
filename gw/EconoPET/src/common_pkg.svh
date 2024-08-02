@@ -22,8 +22,8 @@ package common_pkg;
     //   2.  In the *.sdc
     //   3.  In the interface designer (*.peri.xml)
     //
-    localparam int unsigned SYS_CLOCK_MHZ = 64;
-    localparam int unsigned SPI_SCK_MHZ = 24;
+    localparam real SYS_CLOCK_MHZ = 64;
+    localparam real SPI_SCK_MHZ = 24;
 
     localparam int unsigned WB_ADDR_WIDTH = 20;
     localparam int unsigned RAM_ADDR_WIDTH = 17;
@@ -32,6 +32,10 @@ package common_pkg;
 
     function int ns_to_cycles(input int time_ns);
         return int'($ceil(time_ns / (1000.0 / SYS_CLOCK_MHZ)));
+    endfunction
+
+    function real mhz_to_ns(input real freq_mhz);
+        return 1000.0 / freq_mhz;
     endfunction
 endpackage
 

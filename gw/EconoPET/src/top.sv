@@ -25,7 +25,7 @@ module top #(
     parameter integer unsigned DATA_WIDTH = 8
 ) (
     // FPGA
-    input  logic clock_i,       // 64 MHz clock (from PLL)
+    input  logic sys_clock_i,   // 64 MHz clock (from PLL)
     output logic status_no,     // Red NSTATUS LED (0 = On, 1 = Off)
 
     // CPU
@@ -183,7 +183,7 @@ module top #(
     assign cpu_nmi_n_oe = cpu_nmi_o;
 
     main main (
-        .clock_i(clock_i),
+        .sys_clock_i(sys_clock_i),
 
         .cpu_reset_i(cpu_reset_i),
         .cpu_reset_o(cpu_reset_o),

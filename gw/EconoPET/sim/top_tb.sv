@@ -19,9 +19,9 @@ import common_pkg::*;
 
 module top_tb;
     // Clock
-    bit clock;
-    clock_gen #(SYS_CLOCK_MHZ) fpga_clock (.clock_o(clock));
-    initial fpga_clock.start;
+    bit sys_clock;
+    clock_gen #(SYS_CLOCK_MHZ) sys_clock_gen (.clock_o(sys_clock));
+    initial sys_clock_gen.start;
 
     // Bus
     logic [CPU_ADDR_WIDTH-1:0] bus_addr;
@@ -62,7 +62,7 @@ module top_tb;
     logic [7:0] spi_rx_data;
 
     top top (
-        .clock_i(clock),
+        .sys_clock_i(sys_clock),
 
         .cpu_be_o(cpu_be),
         .cpu_ready_o(cpu_ready),
@@ -102,7 +102,7 @@ module top_tb;
     logic cpu_reset_n = 0;
 
     mock_cpu mock_cpu(
-        .sys_clock_i(clock),
+        .sys_clock_i(sys_clock),
         .cpu_clock_i(cpu_clock),
         .reset_n_i(cpu_reset_n),    // TODO: Use generated 'cpu_reset_n' from top module.
         .addr_o(cpu_addr),
@@ -126,7 +126,7 @@ module top_tb;
     };
 
     mock_ram mock_ram (
-        .clock_i(clock),
+        .clock_i(sys_clock),
         .ram_addr_i(ram_addr),
         .ram_data_i(bus_data),
         .ram_data_o(ram_data),
@@ -135,7 +135,7 @@ module top_tb;
     );
 
     mock_bus mock_bus (
-        .clock_i(clock),
+        .clock_i(sys_clock),
 
         // Incoming bus outputs from FPGA 'top' module
         .top_addr_i(top_addr),
@@ -166,7 +166,7 @@ module top_tb;
     );
 
     spi1_driver spi1_driver (
-        .clock_i(clock),
+        .clock_i(sys_clock),
         .spi_sck_o(spi_sck),
         .spi_cs_no(spi_cs_n),
         .spi_pico_o(spi_pico),

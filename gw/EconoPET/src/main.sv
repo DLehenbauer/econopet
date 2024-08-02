@@ -19,7 +19,7 @@ module main #(
     parameter integer unsigned DATA_WIDTH = 8
 ) (
     // FPGA
-    input  logic clock_i,   // 64 MHz clock (from PLL)
+    input  logic sys_clock_i,   // 64 MHz clock (from PLL)
 
     // CPU
     input  logic cpu_reset_i,
@@ -80,7 +80,7 @@ module main #(
     logic                     spi1_ack;
 
     spi1_controller spi1 (
-        .wb_clock_i(clock_i),
+        .wb_clock_i(sys_clock_i),
         .wb_addr_o(spi1_addr),
         .wb_data_o(spi1_data_rx),
         .wb_data_i(spi1_data_tx),
@@ -100,7 +100,7 @@ module main #(
 
     system system (
         // Wishbone
-        .wb_clock_i(clock_i),
+        .wb_clock_i(sys_clock_i),
         .wb_reset_i(reset),
         .wb_addr_i(spi1_addr),
         .wb_data_i(spi1_data_rx),
