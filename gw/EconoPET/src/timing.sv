@@ -12,26 +12,11 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module sim;
-    timing_tb timing_tb ();
-    spi_tb spi_tb ();
-    spi1_tb spi1_tb ();
-    ram_tb ram_tb ();
-    bram_tb bram_tb ();
-    top_tb top_tb ();
+`include "./src/common_pkg.svh"
 
-    initial begin
-        $dumpfile("work_sim/out.vcd");
-        $dumpvars(0, sim);
+import common_pkg::*;
 
-        timing_tb.run();
-        spi_tb.run();
-        spi1_tb.run();
-        ram_tb.run();
-        bram_tb.run();
-        top_tb.run();
-
-        $display("[%t] Simulation Complete", $time);
-        $finish;
-    end
+module timing (
+    input logic clock_i
+);
 endmodule
