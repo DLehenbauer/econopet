@@ -17,6 +17,27 @@
 import common_pkg::*;
 
 module timing (
-    input logic clock_i
+    input  logic clock_i,
+    output logic cpu_grant_o,
+    output logic wb_grant_o
 );
+    logic [5:0] cycle_count = '0;
+
+    always_ff @(posedge clock_i) begin
+        cycle_count <= cycle_count + 1'b1;
+    end
+
+    logic cpu_grant;
+    logic wb_grant;
+
+    always_comb begin
+        cpu_grant_o = cycle_count == 6'd0;
+
+        wb_grant_o  = cycle_count == 6'd16
+            || cycle_count == 6'd24
+            || cycle_count == 6'd32
+            || cycle_count == 6'd40
+            || cycle_count == 6'd48
+            || cycle_count == 6'd56;
+    end
 endmodule

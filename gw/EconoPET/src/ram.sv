@@ -53,14 +53,12 @@ module ram(
     //   Address Access Time (tAA)               : 55 ns
     //   Output Enable Access Time (tOE)         : 30 ns
     //   Output Enable to Output in Low-Z (tOLZ) :  5 ns
-    localparam read_setup_count = common_pkg::ns_to_cycles(55);
 
     // DOUT held 10ns after ADDR changes.
     // DOUT returns to High-Z 20ns after OE deasserted.
     //
     //   Output Hold from Address Change (tOH)   : 10 ns
     //   
-    localparam read_hold_count = common_pkg::ns_to_cycles(20);
 
     // Write cycle when Address, WE, and DIN are coincident:
     //
