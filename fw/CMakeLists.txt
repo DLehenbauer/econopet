@@ -6,6 +6,11 @@ set(BOARD pico_sdk)
 add_subdirectory("external/PicoDVI/software/libdvi")
 add_subdirectory("external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI")
 
+# EconoPET 40/8096 Rev. A: xosc requires a little extra time to stabilize.
+# On tested sample (45240-60), 8ms was intermittent and 16ms was reliable.
+# 64ms provides a large tolerance.
+add_compile_definitions(PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
+
 add_executable(firmware
     driver.c
     main.c
