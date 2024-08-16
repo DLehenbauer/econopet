@@ -28,6 +28,7 @@
   * Requires [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 * [Icarus Verilog](http://bleyer.org/icarus/)
 * [GtkWave](https://sourceforge.net/projects/gtkwave/files/)
+* [Timing Constraints Visualizer](https://juj.github.io/gowin_fpga_code_generators/timing_constraints.html)
 
 ## Logic Analyzer
 
