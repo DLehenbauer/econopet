@@ -15,5 +15,6 @@ With PIA1 (or a kludge to return 1xxx_xxxx) the boot will continue to the BASIC 
 However, there will be no cursor.
 This is because the PET relies an V-Sync to trigger interrupts (again via PIA, IIRC).
 Here are options are:
+
 * Generate IRQBs.
 * Generate V-Sync so that PIA1 produces the IRQBs.
