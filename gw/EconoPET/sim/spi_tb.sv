@@ -55,7 +55,7 @@ module spi_tb;
 
     always @(negedge cs) begin
         $display("[%t]     Deasserting CS resets SPI", $time);
-        bit_count = '0;
+        bit_count <= '0;
 
         #1;
         `assert_equal(c_strobe, '0);

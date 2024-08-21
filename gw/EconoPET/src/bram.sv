@@ -12,10 +12,13 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
 module bram #(
     parameter DATA_DEPTH = 1024,
-    parameter ADDR_WIDTH = $clog2(DATA_DEPTH - 1),
-    parameter DATA_WIDTH = 8
+    parameter ADDR_WIDTH = $clog2(DATA_DEPTH - 1)
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
