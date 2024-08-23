@@ -13,11 +13,11 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module mock_bus #(
-    parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned DATA_WIDTH = 8
-) (
+import common_pkg::*;
+
+module mock_bus (
     input logic clock_i,
 
     // Incoming bus signals from FPGA 'top' module

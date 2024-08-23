@@ -12,21 +12,22 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module mock_ram #(
-    parameter integer unsigned ADDR_WIDTH = 17,
-    parameter integer unsigned DATA_WIDTH = 8
-) (
-    input  logic                  clock_i,
-    input  logic [ADDR_WIDTH-1:0] ram_addr_i,
-    input  logic [DATA_WIDTH-1:0] ram_data_i,
-    output logic [DATA_WIDTH-1:0] ram_data_o,
-    input  logic                  ram_we_n_i,
-    input  logic                  ram_oe_n_i
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module mock_ram (
+    input  logic                      clock_i,
+    input  logic [RAM_ADDR_WIDTH-1:0] ram_addr_i,
+    input  logic     [DATA_WIDTH-1:0] ram_data_i,
+    output logic     [DATA_WIDTH-1:0] ram_data_o,
+    input  logic                      ram_we_n_i,
+    input  logic                      ram_oe_n_i
 );
-    logic [DATA_WIDTH - 1:0] mem[(2 ** ADDR_WIDTH) - 1];
+    logic [DATA_WIDTH - 1:0] mem[(2 ** RAM_ADDR_WIDTH) - 1];
 
     task automatic load_rom(
-        input bit [ADDR_WIDTH-1:0] address,
+        input bit [RAM_ADDR_WIDTH-1:0] address,
         input string filename
     );
         int file, status;
@@ -41,7 +42,7 @@ module mock_ram #(
             $fatal(1, "Error reading file '%s' (status=%0d).", filename, status);
         end
 
-        $display("[%t] Loaded ROM '%s' ($%x-%x, %0d bytes)", $time, filename, address, address + ADDR_WIDTH'(status - 1), status);
+        $display("[%t] Loaded ROM '%s' ($%x-%x, %0d bytes)", $time, filename, address, address + RAM_ADDR_WIDTH'(status - 1), status);
         $fclose(file);
     endtask
 

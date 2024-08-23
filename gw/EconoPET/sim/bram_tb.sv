@@ -18,7 +18,8 @@
 import common_pkg::*;
 
 module bram_tb #(
-    parameter RAM_ADDR_WIDTH = $clog2(1024 - 1)
+    parameter DATA_DEPTH = 1024,
+    parameter RAM_ADDR_WIDTH = $clog2(DATA_DEPTH - 1)
 );
     logic                     clock;
     logic [WB_ADDR_WIDTH-1:0] addr;

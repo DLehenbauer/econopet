@@ -12,29 +12,30 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
 // Thin wrapper around Kenneth C. Dyke's 6502 core.
 // https://github.com/kdyke/65xx
 //
 // This wrapper inverts WE, IRQ, NMI and RES to match the silicon.  It also delays
 // the transition of ADDR, DOUT, and WE until one sys_clock cycle after the negative
 // cpu_clock edge to mimic the timing of the 65C02.
-module mock_cpu #(
-    parameter integer unsigned ADDR_WIDTH = 16,
-    parameter integer unsigned DATA_WIDTH = 8
-) (
+module mock_cpu (
     input  logic sys_clock_i,               // FPGA system clock
     input  logic cpu_clock_i,               // CPU clock (PHI2)
     input  logic reset_n_i,
-    output logic [ADDR_WIDTH-1:0] addr_o,
-    input  logic [DATA_WIDTH-1:0] data_i,
-    output logic [DATA_WIDTH-1:0] data_o,
+    output logic [CPU_ADDR_WIDTH-1:0] addr_o,
+    input  logic     [DATA_WIDTH-1:0] data_i,
+    output logic     [DATA_WIDTH-1:0] data_o,
     output logic we_n_o,
     input  logic irq_n_i,
     input  logic nmi_n_i,
     input  logic ready_i
 );
-    logic [ADDR_WIDTH-1:0] addr_next;
-    logic [DATA_WIDTH-1:0] data_next;
+    logic [CPU_ADDR_WIDTH-1:0] addr_next;
+    logic     [DATA_WIDTH-1:0] data_next;
     logic we_next;
 
     cpu6502 cpu(

@@ -13,21 +13,20 @@
  */
 
 `include "./sim/assert.svh"
+`include "./src/common_pkg.svh"
 
-module wb_driver #(
-    parameter ADDR_WIDTH = 20,
-    parameter DATA_WIDTH = 8
-) (
-    input logic                   wb_clock_i,
+import common_pkg::*;
 
-    output logic [ADDR_WIDTH-1:0] wb_addr_o,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,
-    output logic [DATA_WIDTH-1:0] wb_data_o,
-    output logic                  wb_we_o,
-    output logic                  wb_cycle_o,
-    output logic                  wb_strobe_o,
-    input  logic                  wb_stall_i,
-    input  logic                  wb_ack_i
+module wb_driver (
+    input logic                      wb_clock_i,
+    output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,
+    input  logic    [DATA_WIDTH-1:0] wb_data_i,
+    output logic    [DATA_WIDTH-1:0] wb_data_o,
+    output logic                     wb_we_o,
+    output logic                     wb_cycle_o,
+    output logic                     wb_strobe_o,
+    input  logic                     wb_stall_i,
+    input  logic                     wb_ack_i
 );
     task reset;
         wb_cycle_o  = '0;
@@ -58,8 +57,8 @@ module wb_driver #(
     endtask
 
     task write(
-        input logic [ADDR_WIDTH-1:0] addr_i,
-        input logic [DATA_WIDTH-1:0] data_i
+        input logic [WB_ADDR_WIDTH-1:0] addr_i,
+        input logic    [DATA_WIDTH-1:0] data_i
     );
         wb_addr_o = addr_i;
         wb_data_o = data_i;
@@ -71,9 +70,9 @@ module wb_driver #(
     endtask
 
     task read(
-        input  logic [ADDR_WIDTH-1:0] addr_i,
-        output logic [DATA_WIDTH-1:0] data_o,
-        output logic                  ack_o
+        input  logic [WB_ADDR_WIDTH-1:0] addr_i,
+        output logic    [DATA_WIDTH-1:0] data_o,
+        output logic                     ack_o
     );
         wb_addr_o = addr_i;
         wb_data_o = 8'hxx;
