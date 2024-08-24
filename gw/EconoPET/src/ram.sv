@@ -20,7 +20,6 @@ module ram(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                      wb_clock_i,
-    input  logic                      wb_reset_i,
     input  logic [RAM_ADDR_WIDTH-1:0] wb_addr_i,
     input  logic [    DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
     output logic [    DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM

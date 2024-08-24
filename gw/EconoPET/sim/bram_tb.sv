@@ -36,7 +36,6 @@ module bram_tb #(
 
     bram mem (
         .wb_clock_i(clock),
-        .wb_reset_i('0),
         .wb_addr_i(addr[RAM_ADDR_WIDTH-1:0]),
         .wb_data_i(pico),
         .wb_data_o(poci),

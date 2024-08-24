@@ -23,7 +23,6 @@ module bram #(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                  wb_clock_i,
-    input  logic                  wb_reset_i,
     input  logic [ADDR_WIDTH-1:0] wb_addr_i,
     input  logic [DATA_WIDTH-1:0] wb_data_i,
     output logic [DATA_WIDTH-1:0] wb_data_o,
@@ -41,7 +40,7 @@ module bram #(
     end
 
     always_ff @(posedge wb_clock_i) begin
-        if (!wb_reset_i && wb_cycle_i && wb_strobe_i) begin
+        if (wb_cycle_i && wb_strobe_i) begin
             wb_data_o <= mem[wb_addr_i];
             if (wb_we_i) begin
                 mem[wb_addr_i] <= wb_data_i;
