@@ -17,7 +17,7 @@
 import common_pkg::*;
 
 module bram #(
-    parameter DATA_DEPTH = 1024,
+    parameter DATA_DEPTH = 512,
     parameter ADDR_WIDTH = $clog2(DATA_DEPTH - 1)
 ) (
     // Wishbone B4 peripheral
@@ -35,8 +35,15 @@ module bram #(
     logic [DATA_WIDTH-1:0] mem[(2 ** ADDR_WIDTH)-1:0];
 
     initial begin
+        integer i;
+
         wb_ack_o   = '0;
         wb_stall_o = '0;
+
+        // Per T8 datasheet: block RAM content is random and undefined if not initialized.
+        for (i = 0; i < DATA_DEPTH; i = i + 1) begin
+            mem[i] = '0;
+        end
     end
 
     always_ff @(posedge wb_clock_i) begin

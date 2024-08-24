@@ -18,7 +18,7 @@
 import common_pkg::*;
 
 module bram_tb #(
-    parameter DATA_DEPTH = 1024,
+    parameter DATA_DEPTH = 512,
     parameter RAM_ADDR_WIDTH = $clog2(DATA_DEPTH - 1)
 );
     logic                     clock;
@@ -29,6 +29,7 @@ module bram_tb #(
     logic                     cycle;
     logic                     strobe;
     logic                     ack;
+    logic                     stall;
 
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
 
@@ -42,7 +43,8 @@ module bram_tb #(
         .wb_we_i(we),
         .wb_cycle_i(cycle),
         .wb_strobe_i(strobe),
-        .wb_ack_o(ack)
+        .wb_ack_o(ack),
+        .wb_stall_o(stall)
     );
 
     wb_driver wb (
@@ -53,11 +55,16 @@ module bram_tb #(
         .wb_we_o(we),
         .wb_cycle_o(cycle),
         .wb_strobe_o(strobe),
-        .wb_ack_i(ack)
+        .wb_ack_i(ack),
+        .wb_stall_i(stall)
     );
 
     logic [DATA_WIDTH-1:0] data_rd;
     logic                  ack_rd;
+
+    always @(posedge clock or negedge clock) begin
+        assert (stall == 0) else $fatal(1, "BRAM access must not stall Wishbone bus");
+    end
 
     task run;
         $display("[%t] BEGIN %m", $time);
