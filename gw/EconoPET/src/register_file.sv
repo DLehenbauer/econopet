@@ -16,23 +16,23 @@
 
 import common_pkg::*;
 
-module bram #(
-    parameter DATA_DEPTH = 512,
-    parameter ADDR_WIDTH = common_pkg::bit_width(DATA_DEPTH-1)
-) (
+module register_file(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                  wb_clock_i,
-    input  logic [ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,
-    output logic [DATA_WIDTH-1:0] wb_data_o,
-    input  logic                  wb_we_i,
-    input  logic                  wb_cycle_i,
-    input  logic                  wb_strobe_i,
-    output logic                  wb_stall_o,
-    output logic                  wb_ack_o
+    input  logic                      wb_clock_i,
+    input  logic [REG_ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [DATA_WIDTH-1:0]     wb_data_i,
+    output logic [DATA_WIDTH-1:0]     wb_data_o,
+    input  logic                      wb_we_i,
+    input  logic                      wb_cycle_i,
+    input  logic                      wb_strobe_i,
+    output logic                      wb_stall_o,
+    output logic                      wb_ack_o,
+
+    output logic                      cpu_ready_o,
+    output logic                      cpu_reset_o
 );
-    (* syn_ramstyle = "block_ram" *) reg [DATA_WIDTH-1:0] mem[DATA_DEPTH-1:0];
+    (* syn_ramstyle = "registers" *) reg [DATA_WIDTH-1:0] register[REG_COUNT:0];
 
     initial begin
         integer i;
@@ -40,21 +40,22 @@ module bram #(
         wb_ack_o   = '0;
         wb_stall_o = '0;
 
-        // Per T8 datasheet: block RAM content is random and undefined if not initialized.
-        for (i = 0; i < DATA_DEPTH; i = i + 1) begin
-            mem[i] = '0;
-        end
+        register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;
+        register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;
     end
 
     always_ff @(posedge wb_clock_i) begin
         if (wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= mem[wb_addr_i];
+            wb_data_o <= register[wb_addr_i];
             if (wb_we_i) begin
-                mem[wb_addr_i] <= wb_data_i;
+                register[wb_addr_i] <= wb_data_i;
             end
             wb_ack_o <= 1'b1;
         end else begin
             wb_ack_o <= '0;
         end
     end
+
+    assign cpu_ready_o = register[REG_CPU][REG_CPU_READY_BIT];
+    assign cpu_reset_o = register[REG_CPU][REG_CPU_RESET_BIT];
 endmodule

@@ -12,12 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module main #(
-    parameter integer unsigned WB_ADDR_WIDTH = 20,
-    parameter integer unsigned RAM_ADDR_WIDTH = 17,
-    parameter integer unsigned CPU_ADDR_WIDTH = 16,
-    parameter integer unsigned DATA_WIDTH = 8
-) (
+
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module main (
     // FPGA
     input  logic sys_clock_i,   // 64 MHz clock (from PLL)
 
@@ -119,8 +119,6 @@ module main #(
     assign spi1_stall   = wb_stall;
 
     // For now, outgoing CPU control signals are constant.
-    assign cpu_ready_o = 1;
-    assign cpu_reset_o = 0;
     assign cpu_irq_o   = 0;
     assign cpu_nmi_o   = 0;
 
@@ -148,23 +146,15 @@ module main #(
     // Wishbone <-> RAM Bridge
     //
 
-    logic [RAM_ADDR_WIDTH-1:0] ram_wb_addr;
-    logic [    DATA_WIDTH-1:0] ram_wb_din;
-    logic [    DATA_WIDTH-1:0] ram_wb_dout;
-    logic                      ram_wb_we;
-    logic                      ram_wb_cycle;
-    logic                      ram_wb_strobe;
-    logic                      ram_wb_stall;
-    logic                      ram_wb_ack;
+    logic [DATA_WIDTH-1:0] ram_wb_dout;
+    logic                  ram_wb_strobe;
+    logic                  ram_wb_stall;
+    logic                  ram_wb_ack;
 
-    assign ram_wb_addr   = wb_addr[RAM_ADDR_WIDTH-1:0];
-    assign ram_wb_din    = wb_din;
     assign wb_dout       = ram_wb_dout;
-    assign ram_wb_we     = wb_we;
-    assign ram_wb_cycle  = wb_cycle;
-    assign ram_wb_strobe = wb_grant & wb_strobe;
-    assign wb_stall      = ~wb_grant | ram_wb_stall;
-    assign wb_ack        = ram_wb_ack;
+    assign ram_wb_strobe = wb_grant & wb_strobe & ram_en;
+    assign wb_stall      = ~wb_grant | ram_wb_stall | reg_wb_stall;
+    assign wb_ack        = ram_wb_ack | reg_wb_ack;
 
     logic [RAM_ADDR_WIDTH-1:0] ram_ctl_addr;    // Captured address for read/write cycle
     logic                      ram_ctl_oe;      // OE signal for read cycle
@@ -172,11 +162,11 @@ module main #(
 
     ram ram (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(ram_wb_addr),
-        .wb_data_i(ram_wb_din),
+        .wb_addr_i(wb_addr[RAM_ADDR_WIDTH-1:0]),
+        .wb_data_i(wb_din),
         .wb_data_o(ram_wb_dout),
-        .wb_we_i(ram_wb_we),
-        .wb_cycle_i(ram_wb_cycle),
+        .wb_we_i(wb_we),
+        .wb_cycle_i(wb_cycle),
         .wb_strobe_i(ram_wb_strobe),
         .wb_stall_o(ram_wb_stall),
         .wb_ack_o(ram_wb_ack),
@@ -190,6 +180,32 @@ module main #(
     );
 
     //
+    // Register File
+    //
+
+    logic [DATA_WIDTH-1:0] reg_wb_dout;
+    logic reg_wb_strobe;
+    logic reg_wb_stall;
+    logic reg_wb_ack;
+
+    assign reg_wb_strobe = wb_grant & wb_strobe & reg_en;
+
+    register_file register_file (
+        .wb_clock_i(sys_clock_i),
+        .wb_addr_i(wb_addr[REG_ADDR_WIDTH-1:0]),
+        .wb_data_i(wb_din),
+        .wb_data_o(reg_wb_dout),
+        .wb_we_i(wb_we),
+        .wb_cycle_i(wb_cycle),
+        .wb_strobe_i(reg_wb_strobe),
+        .wb_ack_o(reg_wb_ack),
+        .wb_stall_o(reg_wb_stall),
+
+        .cpu_ready_o(cpu_ready_o),
+        .cpu_reset_o(cpu_reset_o)
+    );
+
+    //
     // Address Decoding
     //
 
@@ -198,9 +214,12 @@ module main #(
     logic pia2_en;
     logic via_en;
     logic io_en;
+    logic reg_en;
 
     address_decoding address_decoding(
-        .addr_i(cpu_addr_i),
+        .addr_i(
+            cpu_be_o ? { 4'b0010, cpu_addr_i } : wb_addr
+        ),
         .ram_en_o(ram_en),
         .pia1_en_o(pia1_en),
         .pia2_en_o(pia2_en),
@@ -212,7 +231,8 @@ module main #(
         .magic_en_o(),
         .crtc_en_o(),
         .is_mirrored_o(),
-        .is_readonly_o()
+        .is_readonly_o(),
+        .reg_en_o(reg_en)
     );
 
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;

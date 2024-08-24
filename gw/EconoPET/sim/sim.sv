@@ -13,6 +13,7 @@
  */
 
 module sim;
+    register_file_tb register_file_tb ();
     timing_tb timing_tb ();
     spi_tb spi_tb ();
     spi1_tb spi1_tb ();
@@ -24,6 +25,7 @@ module sim;
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
+        register_file_tb.run();
         timing_tb.run();
         spi_tb.run();
         spi1_tb.run();

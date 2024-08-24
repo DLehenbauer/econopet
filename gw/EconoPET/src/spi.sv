@@ -12,10 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
 // Implements core of SPI Mode 0 transfers in a controller/peripheral agnostic way.
-module spi #(
-    parameter DATA_WIDTH = 8
-) (
+module spi (
     // SPI bus signals (see https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/)
     input  logic spi_cs_ni,  // (CS)  Chip Select (active low)
     input  logic spi_sck_i,  // (SCK) Serial Clock
@@ -31,7 +33,7 @@ module spi #(
     output logic strobe_o  // Asserted on rising SCK when 'data_o' is valid.  The next 'data_i'
                            // is captured on the following negative SCK edge.
 );
-    localparam BIT_COUNTER_WIDTH = $clog2(DATA_WIDTH-1),
+    localparam BIT_COUNTER_WIDTH = common_pkg::bit_width(DATA_WIDTH-1),
                BIT_COUNTER_MAX   = (1 << BIT_COUNTER_WIDTH) - 1;    // Same as DATA_WIDTH-1, but typed as BIT_COUNTER_WIDTH bits.
 
     logic [BIT_COUNTER_WIDTH-1:0] bits_remaining = BIT_COUNTER_MAX;

@@ -17,10 +17,7 @@
 
 import common_pkg::*;
 
-module bram_tb #(
-    parameter DATA_DEPTH = 512,
-    parameter BRAM_ADDR_WIDTH = common_pkg::bit_width(DATA_DEPTH-1)
-);
+module register_file_tb;
     logic                     clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
@@ -34,16 +31,22 @@ module bram_tb #(
     logic                     ack;
     logic                     stall;
 
-    bram mem (
+    logic cpu_ready;
+    logic cpu_reset;
+
+    register_file register_file (
         .wb_clock_i(clock),
-        .wb_addr_i(addr[BRAM_ADDR_WIDTH-1:0]),
+        .wb_addr_i(addr[REG_ADDR_WIDTH-1:0]),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
         .wb_cycle_i(cycle),
         .wb_strobe_i(strobe),
         .wb_ack_o(ack),
-        .wb_stall_o(stall)
+        .wb_stall_o(stall),
+
+        .cpu_ready_o(cpu_ready),
+        .cpu_reset_o(cpu_reset)
     );
 
     wb_driver wb (
@@ -62,16 +65,29 @@ module bram_tb #(
     logic                  ack_rd;
 
     always @(posedge clock or negedge clock) begin
-        assert (stall == 0) else $fatal(1, "BRAM access must not stall Wishbone bus");
+        assert (stall == 0) else $fatal(1, "Register access must not stall Wishbone bus");
     end
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
-        wb.write(10'h00, 8'h55);
+
+        `assert_equal(cpu_ready, 1'b0);
+        `assert_equal(cpu_reset, 1'b1);
+
+        wb.write(10'h00, 8'b0000_0001);
+        `assert_equal(cpu_ready, 1'b1);
+        `assert_equal(cpu_reset, 1'b0);
+
         wb.read(10'h00, data_rd, ack_rd);
-        `assert_equal(data_rd, 8'h55);
+        `assert_equal(data_rd, 8'b0000_0001);
+
+        wb.write(10'h00, 8'b0000_0010);
+        wb.read(10'h00, data_rd, ack_rd);
+        `assert_equal(cpu_ready, 1'b0);
+        `assert_equal(cpu_reset, 1'b1);
+        `assert_equal(data_rd, 8'b0000_0010);
 
         #1 $display("[%t] END %m", $time);
     endtask

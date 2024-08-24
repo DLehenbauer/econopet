@@ -31,6 +31,12 @@ module top_tb;
     // CPU
     logic cpu_be;
     logic cpu_ready;
+
+    // Convert wire-or with pullup to a single wire.
+    logic cpu_reset_n_pin;
+    logic cpu_reset_n_pin_oe;
+    wire  cpu_reset_n = cpu_reset_n_pin_oe ? cpu_reset_n_pin : 1'b1;
+
     logic cpu_clock;
     logic [CPU_ADDR_WIDTH-1:0] top_addr;
     logic [CPU_ADDR_WIDTH-1:0] top_addr_oe;
@@ -66,6 +72,8 @@ module top_tb;
 
         .cpu_be_o(cpu_be),
         .cpu_ready_o(cpu_ready),
+        .cpu_reset_n_o(cpu_reset_n_pin),
+        .cpu_reset_n_oe(cpu_reset_n_pin_oe),
         .cpu_clock_o(cpu_clock),
         .cpu_addr_i (bus_addr),
         .cpu_addr_o (top_addr),
@@ -99,7 +107,6 @@ module top_tb;
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
     logic [DATA_WIDTH-1:0] cpu_data;
     logic cpu_we_n;
-    logic cpu_reset_n = 0;
 
     mock_cpu mock_cpu(
         .sys_clock_i(sys_clock),
@@ -202,13 +209,25 @@ module top_tb;
 
         $display("[%t] BEGIN %m", $time);
 
-        cpu_reset_n = 0;
-        // Verilog-6502 requires two cycles to reset.
-        @(posedge cpu_clock);
-        @(posedge cpu_clock);
-        cpu_reset_n = 1;
+        #1;
+        $display("[%t]   CPU must be in RESET / not READY state", $time);
+        `assert_equal(cpu_ready, 1'b0);
+        `assert_equal(cpu_reset_n, 1'b0);
 
         spi1_driver.reset;
+
+        $display("[%t]   Perform CPU reset", $time);
+        spi1_driver.write_at({3'b010, 17'h00000}, 8'b0000_0010);
+        `assert_equal(cpu_ready, 1'b0);
+        `assert_equal(cpu_reset_n, 1'b0);
+        // Verilog-6502 requires two cycles to reset.
+        @(cpu_clock);
+        @(cpu_clock);
+
+        $display("[%t]   Start CPU", $time);
+        spi1_driver.write_at({3'b010, 17'h00000}, 8'b0000_0001);
+        `assert_equal(cpu_ready, 1'b1);
+        `assert_equal(cpu_reset_n, 1'b1);
 
         test_rw(20'h0_4000, 8'h00);
         test_rw(20'h0_4000, 8'h01);

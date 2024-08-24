@@ -18,7 +18,7 @@
 import common_pkg::*;
 
 module address_decoding(
-    input  logic [CPU_ADDR_WIDTH-1:0] addr_i,
+    input  logic [WB_ADDR_WIDTH-1:0] addr_i,
     output logic ram_en_o,
     output logic sid_en_o,
     output logic magic_en_o,
@@ -28,10 +28,9 @@ module address_decoding(
     output logic crtc_en_o,
     output logic io_en_o,
     output logic is_mirrored_o,
-    output logic is_readonly_o
+    output logic is_readonly_o,
+    output logic reg_en_o
 );
-    localparam NUM_BITS         = 10;
-
     localparam RAM_EN_BIT       = 0,
                SID_EN_BIT       = 1,
                MAGIC_EN_BIT     = 2,
@@ -41,7 +40,10 @@ module address_decoding(
                CRTC_EN_BIT      = 6,
                IO_EN_BIT        = 7,
                RAM_READONLY_BIT = 8,
-               RAM_MIRRORED_BIT = 9;
+               RAM_MIRRORED_BIT = 9,
+               REG_EN_BIT       = 10;
+
+    localparam NUM_BITS         = 11;
 
     localparam RAM_EN_MASK       = NUM_BITS'(1'b1) << RAM_EN_BIT,
                SID_EN_MASK       = NUM_BITS'(1'b1) << SID_EN_BIT,
@@ -52,7 +54,8 @@ module address_decoding(
                CRTC_EN_MASK      = NUM_BITS'(1'b1) << CRTC_EN_BIT,
                IO_EN_MASK        = NUM_BITS'(1'b1) << IO_EN_BIT,
                RAM_READONLY_MASK = NUM_BITS'(1'b1) << RAM_READONLY_BIT,
-               RAM_MIRRORED_MASK = NUM_BITS'(1'b1) << RAM_MIRRORED_BIT;
+               RAM_MIRRORED_MASK = NUM_BITS'(1'b1) << RAM_MIRRORED_BIT,
+               REG_EN_MASK       = NUM_BITS'(1'b1) << REG_EN_BIT;
 
     localparam RAM   = RAM_EN_MASK,
                VRAM  = RAM_EN_MASK  | RAM_MIRRORED_MASK,
@@ -62,21 +65,29 @@ module address_decoding(
                PIA1  = PIA1_EN_MASK | IO_EN_MASK,
                PIA2  = PIA2_EN_MASK | IO_EN_MASK,
                VIA   = VIA_EN_MASK  | IO_EN_MASK,
-               CRTC  = CRTC_EN_MASK;                // No IO_EN: CRTC implemented on FPGA
+               CRTC  = CRTC_EN_MASK,                // No IO_EN: CRTC implemented on FPGA
+               REG   = REG_EN_MASK;
 
     logic [NUM_BITS-1:0] select = NUM_BITS'('hxxx);
 
     always_comb begin
         priority casez (addr_i)
-            'b0???_????_????_????: select = RAM;    // RAM   : 0000-7FFF
-            'b1000_1111_????_????: select = SID;    // SID   : 8F00-8FFF
-            'b1000_????_????_????: select = VRAM;   // VRAM  : 8000-8F00
-            'b1110_1000_0000_????: select = MAGIC;  // MAGIC : E800-E80F
-            'b1110_1000_0001_????: select = PIA1;   // PIA1  : E810-E81F
-            'b1110_1000_001?_????: select = PIA2;   // PIA2  : E820-E83F
-            'b1110_1000_01??_????: select = VIA;    // VIA   : E840-E87F
-            'b1110_1000_1???_????: select = CRTC;   // CRTC  : E880-E8FF
-            default:               select = ROM;    // ROM   : 9000-E800, E900-FFFF
+            // 010 prefix for register file
+            'b010?_????_????_????_????: select = REG;    // REG   : Register File
+
+            // 000 prefix for flat memory model
+            'b000?_????_????_????_????: select = RAM;    // RAM   : 00000-1FFFF
+
+            // 001 prefix for CPU memory model
+            'b0010_0???_????_????_????: select = RAM;    // RAM   : 0000-7FFF
+            'b0010_1000_1111_????_????: select = SID;    // SID   : 8F00-8FFF
+            'b0010_1000_????_????_????: select = VRAM;   // VRAM  : 8000-8F00
+            'b0010_1110_1000_0000_????: select = MAGIC;  // MAGIC : E800-E80F
+            'b0010_1110_1000_0001_????: select = PIA1;   // PIA1  : E810-E81F
+            'b0010_1110_1000_001?_????: select = PIA2;   // PIA2  : E820-E83F
+            'b0010_1110_1000_01??_????: select = VIA;    // VIA   : E840-E87F
+            'b0010_1110_1000_1???_????: select = CRTC;   // CRTC  : E880-E8FF
+            default:                    select = ROM;    // ROM   : 9000-E800, E900-FFFF
         endcase
     end
 
@@ -91,4 +102,5 @@ module address_decoding(
     assign pia2_en_o      = select[PIA2_EN_BIT];
     assign via_en_o       = select[VIA_EN_BIT];
     assign crtc_en_o      = select[CRTC_EN_BIT];
+    assign reg_en_o       = select[REG_EN_BIT];
 endmodule
