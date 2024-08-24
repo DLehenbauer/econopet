@@ -18,7 +18,6 @@
         <efx:design_file name="src/cpu.sv" version="default" library="default"/>
         <efx:design_file name="src/timing.sv" version="default" library="default"/>
         <efx:design_file name="src/main.sv" version="default" library="default"/>
-        <efx:design_file name="src/system.sv" version="default" library="default"/>
         <efx:design_file name="src/address_decoding.sv" version="default" library="default"/>
         <efx:design_file name="src/vsync.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
