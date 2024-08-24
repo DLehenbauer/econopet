@@ -92,31 +92,46 @@ module system (
         .cpu_clock_o(cpu_clock_o)
     );
 
-    wire ram_ctl_cycle  = wb_cycle_i;
-    wire ram_ctl_strobe = wb_grant & wb_strobe_i;
-    
-    logic ram_ctl_stall;
-    assign wb_stall_o   = ~wb_grant | ram_ctl_stall;
+    //
+    // Wishbone <-> RAM Bridge
+    //
 
-    logic wb_ram_oe;
-    logic wb_ram_we;
-    logic [RAM_ADDR_WIDTH-1:0] wb_ram_addr;
+    logic [RAM_ADDR_WIDTH-1:0] ram_wb_addr;
+    logic [    DATA_WIDTH-1:0] ram_wb_din;
+    logic [    DATA_WIDTH-1:0] ram_wb_dout;
+    logic                      ram_wb_we;
+    logic                      ram_wb_cycle;
+    logic                      ram_wb_strobe;
+    logic                      ram_wb_stall;
+    logic                      ram_wb_ack;
+
+    assign ram_wb_addr   = wb_addr_i[RAM_ADDR_WIDTH-1:0];
+    assign ram_wb_din    = wb_data_i;
+    assign wb_data_o     = ram_wb_dout;
+    assign ram_wb_we     = wb_we_i;
+    assign ram_wb_cycle  = wb_cycle_i;
+    assign ram_wb_strobe = wb_grant & wb_strobe_i;
+    assign wb_stall_o    = ~wb_grant | ram_wb_stall;
+    assign wb_ack_o      = ram_wb_ack;
+
+    logic [RAM_ADDR_WIDTH-1:0] ram_ctl_addr;    // Captured address for read/write cycle
+    logic                      ram_ctl_oe;      // OE signal for read cycle
+    logic                      ram_ctl_we;      // WE signal for write cycle
 
     ram ram (
         .wb_clock_i(wb_clock_i),
-        .wb_addr_i(wb_addr_i[16:0]),
-        .wb_data_i(wb_data_i),
-        .wb_data_o(wb_data_o),
-        .wb_we_i(wb_we_i),
+        .wb_addr_i(ram_wb_addr),
+        .wb_data_i(ram_wb_din),
+        .wb_data_o(ram_wb_dout),
+        .wb_we_i(ram_wb_we),
+        .wb_cycle_i(ram_wb_cycle),
+        .wb_strobe_i(ram_wb_strobe),
+        .wb_stall_o(ram_wb_stall),
+        .wb_ack_o(ram_wb_ack),
 
-        .wb_cycle_i(ram_ctl_cycle),
-        .wb_strobe_i(ram_ctl_strobe),
-        .wb_stall_o(ram_ctl_stall),
-        .wb_ack_o(wb_ack_o),
-
-        .ram_oe_o(wb_ram_oe),
-        .ram_we_o(wb_ram_we),
-        .ram_addr_o(wb_ram_addr),
+        .ram_oe_o(ram_ctl_oe),
+        .ram_we_o(ram_ctl_we),
+        .ram_addr_o(ram_ctl_addr),
         .ram_data_i(cpu_data_i),
         .ram_data_o(cpu_data_o),
         .ram_data_oe(cpu_data_oe)
@@ -156,22 +171,24 @@ module system (
     assign pia2_cs_o = pia2_en && cpu_be_o;
     assign via_cs_o  =  via_en && cpu_be_o;
 
-    assign ram_oe_o         = (cpu_rd_strobe && ram_en) || wb_ram_oe;
-    assign ram_we_o         = (cpu_wr_strobe && ram_en) || wb_ram_we;
+    assign ram_oe_o         = (cpu_rd_strobe && ram_en) || ram_ctl_oe;
+    assign ram_we_o         = (cpu_wr_strobe && ram_en) || ram_ctl_we;
 
     assign cpu_addr_oe      = !cpu_be_o;
-    assign cpu_addr_o       = wb_ram_addr[15:0];
+    assign cpu_addr_o       = ram_ctl_addr[15:0];
 
     assign ram_addr_a10_o   = cpu_be_o ? cpu_addr_i[10] : cpu_addr_o[10];
     assign ram_addr_a11_o   = cpu_be_o ? cpu_addr_i[11] : cpu_addr_o[11];
     assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
-    assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : wb_ram_addr[16];
+    assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : ram_ctl_addr[16];
 
     // synthesis off
     always_ff @(posedge wb_clock_i or negedge wb_clock_i) begin
-        assert(!cpu_be_o || !ram_ctl_stall) else $fatal(1, "cpu_ram_oe and ram_ctl_stall cannot be asserted simultaneously");
-        assert(!cpu_be_o || !wb_ram_oe) else $fatal(1, "cpu_ram_oe and wb_ram_oe cannot be asserted simultaneously");
-        assert(!io_oe_o  || !wb_ram_oe) else $fatal(1, "io_oe_o and wb_ram_oe cannot be asserted simultaneously");
+        assert(!cpu_be_o || !ram_wb_stall) else $fatal(1, "WB<->RAM bridge must be stalled when CPU is driving bus");
+        assert(!cpu_be_o || !ram_ctl_oe) else $fatal(1, "WB<->RAM bridge must not assert OE when CPU is driving bus");
+        assert(!cpu_be_o || !ram_ctl_we) else $fatal(1, "WB<->RAM bridge must not assert WE when CPU is driving bus");
+        assert(!cpu_be_o || !ram_wb_ack) else $fatal(1, "WB<->RAM bridge must not assert ACK when CPU is driving bus");
+        assert(!io_oe_o  ||  cpu_be_o) else $fatal(1, "IO must not be active unless CPU is driving bus");
     end
     // synthesis on
 endmodule
