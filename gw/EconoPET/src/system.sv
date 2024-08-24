@@ -138,7 +138,14 @@ module system (
         .pia1_en_o(pia1_en),
         .pia2_en_o(pia2_en),
         .via_en_o(via_en),
-        .io_en_o(io_en)
+        .io_en_o(io_en),
+
+        // Not yet used
+        .sid_en_o(),
+        .magic_en_o(),
+        .crtc_en_o(),
+        .is_mirrored_o(),
+        .is_readonly_o()
     );
 
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;
