@@ -11,11 +11,14 @@
  * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
-module address_decoding #(
-    parameter integer unsigned ADDR_WIDTH = 16
-) (
-    input  logic [ADDR_WIDTH-1:0] addr_i,
 
+
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module address_decoding(
+    input  logic [CPU_ADDR_WIDTH-1:0] addr_i,
     output logic ram_en_o,
     output logic sid_en_o,
     output logic magic_en_o,
@@ -64,7 +67,7 @@ module address_decoding #(
     logic [NUM_BITS-1:0] select = NUM_BITS'('hxxx);
 
     always_comb begin
-        priority casez (addr_i[ADDR_WIDTH-1:0])
+        priority casez (addr_i)
             'b0???_????_????_????: select = RAM;    // RAM   : 0000-7FFF
             'b1000_1111_????_????: select = SID;    // SID   : 8F00-8FFF
             'b1000_????_????_????: select = VRAM;   // VRAM  : 8000-8F00
