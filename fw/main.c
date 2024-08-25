@@ -50,7 +50,8 @@ void fpga_init() {
 	sleep_ms(10);
  	set_sys_clock_khz(270000, true);
 
-    // FPGA CLK: 270 MHz / 15 = 18 MHz
+    // Use PWM to generate 18 MHz clock for FPGA PLL input:
+    //     270 MHz / 15 = 18 MHz
     const uint16_t fpga_div = 15;
 
     const uint slice = pwm_gpio_to_slice_num(FPGA_CLK_GP);
@@ -70,6 +71,34 @@ void fpga_init() {
     printf("\e[2J");
     printf("Clocks initialized:\n");
     measure_freqs(fpga_div);
+}
+
+void reset() {
+    // Per the W65C02S datasheet (sections 3.10 - 3.11):
+    //
+    //  * The CPU requires a minimum of 2 clock cycles to reset.  The CPU clock is 1 MHz (1 us period).
+    //  * Deasserting RDY prevents the CPU from advancing it's state on negative PHI2 edges.
+    // 
+    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
+
+    // Out of paranoia, deassert CPU 'reset' to ensure the CPU observes a clean reset pulse.
+    // (We set 'ready' to false to prevent the CPU from executing instructions.)
+    set_cpu(/* ready: */ false, /* reset: */ false);
+    sleep_us(4);
+    
+    // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
+    set_cpu(/* ready: */ false, /* reset: */ true);
+    sleep_us(4);
+    
+    // While the CPU is held in reset:
+    // * Perform a RAM test
+    // * Initialize the ROM region of our SRAM
+
+    // test_ram();
+    pet_init_roms();
+
+    // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
+    set_cpu(/* ready: */ true,  /* reset: */ false);
 }
 
 int main() {
@@ -93,6 +122,7 @@ int main() {
     gpio_init(SPI_STALL_GP);
     gpio_set_dir(SPI_STALL_GP, GPIO_IN);
 
+    // Initialize SPI1 at 24 MHz.
     uint baudrate = spi_init(SPI_INSTANCE, SPI_MHZ * 1000 * 1000);
     gpio_set_function(SPI_SCK_GP, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SDO_GP, GPIO_FUNC_SPI);
@@ -104,10 +134,9 @@ int main() {
     video_init();
 
     // Quick test of SD card before entering RAM test.
-    sd_read_file("filename.txt");
+    // sd_read_file("filename.txt");
 
-    // test_ram();
-    pet_init_roms();
+    reset();
 
     while (1) {
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);

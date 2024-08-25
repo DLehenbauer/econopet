@@ -21,6 +21,9 @@
 #define SPI_CMD_WRITE_AT   0b11000000
 #define SPI_CMD_WRITE_NEXT 0b10000000
 
+#define ADDR_REG (0b010 << 17)
+#define REG_CPU  (ADDR_REG | 0x00000)
+
 void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
     gpio_put(SPI_CS_GP, 0);
@@ -95,4 +98,11 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
             spi_write_next(*p++);
         }
     }
+}
+
+void set_cpu(bool ready, bool reset) {
+    uint8_t cpu_state = 0;
+    if (ready) { cpu_state |= (1 << 0); }
+    if (reset) { cpu_state |= (1 << 1); }
+    spi_write_at(REG_CPU, cpu_state);
 }
