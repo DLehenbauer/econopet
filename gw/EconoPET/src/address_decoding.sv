@@ -57,7 +57,8 @@ module address_decoding(
                RAM_MIRRORED_MASK = NUM_BITS'(1'b1) << RAM_MIRRORED_BIT,
                REG_EN_MASK       = NUM_BITS'(1'b1) << REG_EN_BIT;
 
-    localparam RAM   = RAM_EN_MASK,
+    localparam NONE  = NUM_BITS'('0),
+               RAM   = RAM_EN_MASK,
                VRAM  = RAM_EN_MASK  | RAM_MIRRORED_MASK,
                SID   = SID_EN_MASK,
                MAGIC = MAGIC_EN_MASK,
@@ -72,22 +73,24 @@ module address_decoding(
 
     always_comb begin
         priority casez (addr_i)
-            // 010 prefix for register file
-            'b010?_????_????_????_????: select = REG;    // REG   : Register File
+            // Register file
+            { WB_REG_PREFIX, RAM_ADDR_WIDTH'('b?_????_????_????_????) }: select = REG;    // REG   : Register File
 
-            // 000 prefix for flat memory model
-            'b000?_????_????_????_????: select = RAM;    // RAM   : 00000-1FFFF
+            // Flat access to SRAM
+            { WB_RAM_PREFIX, RAM_ADDR_WIDTH'('b?_????_????_????_????) }: select = RAM;    // RAM   : 00000-1FFFF
 
-            // 001 prefix for CPU memory model
-            'b0010_0???_????_????_????: select = RAM;    // RAM   : 0000-7FFF
-            'b0010_1000_1111_????_????: select = SID;    // SID   : 8F00-8FFF
-            'b0010_1000_????_????_????: select = VRAM;   // VRAM  : 8000-8F00
-            'b0010_1110_1000_0000_????: select = MAGIC;  // MAGIC : E800-E80F
-            'b0010_1110_1000_0001_????: select = PIA1;   // PIA1  : E810-E81F
-            'b0010_1110_1000_001?_????: select = PIA2;   // PIA2  : E820-E83F
-            'b0010_1110_1000_01??_????: select = VIA;    // VIA   : E840-E87F
-            'b0010_1110_1000_1???_????: select = CRTC;   // CRTC  : E880-E8FF
-            default:                    select = ROM;    // ROM   : 9000-E800, E900-FFFF
+            // PET memory map
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_0???_????_????_????) }: select = RAM;    // RAM   : 0000-7FFF
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1000_1111_????_????) }: select = SID;    // SID   : 8F00-8FFF
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1000_????_????_????) }: select = VRAM;   // VRAM  : 8000-8F00
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1110_1000_0000_????) }: select = MAGIC;  // MAGIC : E800-E80F
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1110_1000_0001_????) }: select = PIA1;   // PIA1  : E810-E81F
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1110_1000_001?_????) }: select = PIA2;   // PIA2  : E820-E83F
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1110_1000_01??_????) }: select = VIA;    // VIA   : E840-E87F
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b0_1110_1000_1???_????) }: select = CRTC;   // CRTC  : E880-E8FF
+            { WB_CPU_PREFIX, RAM_ADDR_WIDTH'('b?_????_????_????_????) }: select = ROM;    // ROM   : 9000-E800, E900-FFFF
+
+            default: select = NONE;
         endcase
     end
 

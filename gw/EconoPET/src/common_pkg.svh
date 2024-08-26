@@ -60,6 +60,10 @@ package common_pkg;
     localparam int unsigned CPU_ADDR_WIDTH = 16;
     localparam int unsigned REG_ADDR_WIDTH = bit_width(REG_COUNT);
     localparam int unsigned DATA_WIDTH     = 8;
+
+    localparam bit[ 2:0] WB_RAM_PREFIX = 3'b000;
+    localparam bit[ 2:0] WB_CPU_PREFIX = 3'b001;
+    localparam bit[ 2:0] WB_REG_PREFIX = 3'b010;
 endpackage
 
 `endif
