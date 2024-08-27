@@ -36,7 +36,11 @@ module ram(
     output logic [    DATA_WIDTH-1:0] ram_data_o,
     output logic                      ram_data_oe
 );
-    wire wb_select = wb_addr_i[WB_ADDR_WIDTH-1:WB_ADDR_WIDTH-$bits(WB_RAM_BASE)] == WB_RAM_BASE;
+    logic wb_select;
+    wb_decode #(WB_RAM_BASE) wb_decode (
+        .wb_addr_i(wb_addr_i),
+        .selected_o(wb_select)
+    );
 
     // Timing for AS6C1008-55PCN
     // (See: https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008feb2007.pdf)

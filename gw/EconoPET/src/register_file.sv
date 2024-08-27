@@ -16,25 +16,6 @@
 
 import common_pkg::*;
 
-// Register file layout:
-//
-// 0000: Key0
-// 0001: Key1
-// 0010: Key2
-// 0011: Key3
-// 0100: Key4
-// 0101: Key5
-// 0110: Key6
-// 0111: Key7
-// 1000: Key8
-// 1001: Key9
-// 1010:
-// 1011:
-// 1100: CPU
-// 1101:
-// 1110:
-// 1111:
-
 module register_file(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
@@ -54,8 +35,6 @@ module register_file(
     (* syn_ramstyle = "registers" *) reg [DATA_WIDTH-1:0] register[REG_COUNT:0];
 
     initial begin
-        integer i;
-
         wb_ack_o   = '0;
         wb_stall_o = '0;
 
@@ -63,7 +42,12 @@ module register_file(
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;
     end
 
-    wire wb_select = wb_addr_i[WB_ADDR_WIDTH-1:WB_ADDR_WIDTH-$bits(WB_REG_BASE)] == WB_REG_BASE;
+    logic wb_select;
+    wb_decode #(WB_REG_BASE) wb_decode (
+        .wb_addr_i(wb_addr_i),
+        .selected_o(wb_select)
+    );
+
     wire [REG_ADDR_WIDTH-1:0] reg_addr = wb_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin

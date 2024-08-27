@@ -1,4 +1,4 @@
-<efx:project xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="EconoPET" description="" last_change="1724539459" sw_version="2024.1.163" last_run_state="pass" last_run_flow="syn" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="EconoPET" description="" last_change="1724772966" sw_version="2024.1.163" last_run_state="pass" last_run_flow="syn" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion" />
         <efx:device name="T8Q144" />
@@ -20,6 +20,7 @@
         <efx:design_file name="src/address_decoding.sv" version="default" library="default" />
         <efx:design_file name="src/vsync.sv" version="default" library="default" />
         <efx:design_file name="src/register_file.sv" version="default" library="default" />
+        <efx:design_file name="src/wb_decode.sv" version="default" library="default" />
         <efx:top_vhdl_arch name="" />
     </efx:design_info>
     <efx:constraint_info>
