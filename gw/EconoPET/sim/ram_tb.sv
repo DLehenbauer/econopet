@@ -25,6 +25,7 @@ module ram_tb;
     logic                     we;
     logic                     cycle;
     logic                     strobe;
+    logic                     stall;
     logic                     ack;
 
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
@@ -39,12 +40,13 @@ module ram_tb;
 
     ram ram (
         .wb_clock_i(clock),
-        .wb_addr_i(addr[RAM_ADDR_WIDTH-1:0]),
+        .wb_addr_i(common_pkg::wb_ram_addr(addr)),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
         .wb_cycle_i(cycle),
         .wb_strobe_i(strobe),
+        .wb_stall_o(stall),
         .wb_ack_o(ack),
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
@@ -71,7 +73,8 @@ module ram_tb;
         .wb_we_o(we),
         .wb_cycle_o(cycle),
         .wb_strobe_o(strobe),
-        .wb_ack_i(ack)
+        .wb_ack_i(ack),
+        .wb_stall_i(stall)
     );
 
     logic [DATA_WIDTH-1:0] data_rd;

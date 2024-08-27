@@ -36,7 +36,7 @@ module register_file_tb;
 
     register_file register_file (
         .wb_clock_i(clock),
-        .wb_addr_i(addr[REG_ADDR_WIDTH-1:0]),
+        .wb_addr_i(common_pkg::wb_reg_addr(addr)),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),

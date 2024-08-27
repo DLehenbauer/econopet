@@ -61,9 +61,17 @@ package common_pkg;
     localparam int unsigned REG_ADDR_WIDTH = bit_width(REG_COUNT);
     localparam int unsigned DATA_WIDTH     = 8;
 
-    localparam bit[ 2:0] WB_RAM_PREFIX = 3'b000;
-    localparam bit[ 2:0] WB_CPU_PREFIX = 3'b001;
-    localparam bit[ 2:0] WB_REG_PREFIX = 3'b010;
+    localparam WB_RAM_BASE = 3'b000;
+    localparam WB_REG_BASE = 3'b010;
+
+    // TODO: Move these address helpers to ../sim?
+    function bit[WB_ADDR_WIDTH-1:0] wb_ram_addr(input bit[RAM_ADDR_WIDTH-1:0] address);
+        return { WB_RAM_BASE, address };
+    endfunction
+
+    function bit[WB_ADDR_WIDTH-1:0] wb_reg_addr(input bit[REG_ADDR_WIDTH-1:0] register);
+        return { WB_REG_BASE, (WB_ADDR_WIDTH - REG_ADDR_WIDTH - $bits(WB_REG_BASE))'('x), register };
+    endfunction
 endpackage
 
 `endif

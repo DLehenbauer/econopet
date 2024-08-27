@@ -12,7 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-
 `include "./src/common_pkg.svh"
 
 import common_pkg::*;
@@ -147,12 +146,10 @@ module main (
     //
 
     logic [DATA_WIDTH-1:0] ram_wb_dout;
-    logic                  ram_wb_strobe;
     logic                  ram_wb_stall;
     logic                  ram_wb_ack;
 
     assign wb_dout       = ram_wb_dout;
-    assign ram_wb_strobe = wb_grant & wb_strobe & ram_en;
     assign wb_stall      = ~wb_grant | ram_wb_stall | reg_wb_stall;
     assign wb_ack        = ram_wb_ack | reg_wb_ack;
 
@@ -162,12 +159,12 @@ module main (
 
     ram ram (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(wb_addr[RAM_ADDR_WIDTH-1:0]),
+        .wb_addr_i(wb_addr),
         .wb_data_i(wb_din),
         .wb_data_o(ram_wb_dout),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(ram_wb_strobe),
+        .wb_strobe_i(wb_grant & wb_strobe),
         .wb_stall_o(ram_wb_stall),
         .wb_ack_o(ram_wb_ack),
 
@@ -184,20 +181,17 @@ module main (
     //
 
     logic [DATA_WIDTH-1:0] reg_wb_dout;
-    logic reg_wb_strobe;
     logic reg_wb_stall;
     logic reg_wb_ack;
 
-    assign reg_wb_strobe = wb_grant & wb_strobe & reg_en;
-
     register_file register_file (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(wb_addr[REG_ADDR_WIDTH-1:0]),
+        .wb_addr_i(wb_addr),
         .wb_data_i(wb_din),
         .wb_data_o(reg_wb_dout),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(reg_wb_strobe),
+        .wb_strobe_i(wb_grant & wb_strobe),
         .wb_ack_o(reg_wb_ack),
         .wb_stall_o(reg_wb_stall),
 
@@ -214,12 +208,11 @@ module main (
     logic pia2_en;
     logic via_en;
     logic io_en;
-    logic reg_en;
 
     address_decoding address_decoding(
-        .addr_i(
-            cpu_be_o ? { 4'b0010, cpu_addr_i } : wb_addr
-        ),
+        .cpu_be_i(cpu_be_o),
+        .addr_i(cpu_addr_i),
+
         .ram_en_o(ram_en),
         .pia1_en_o(pia1_en),
         .pia2_en_o(pia2_en),
@@ -231,8 +224,7 @@ module main (
         .magic_en_o(),
         .crtc_en_o(),
         .is_mirrored_o(),
-        .is_readonly_o(),
-        .reg_en_o(reg_en)
+        .is_readonly_o()
     );
 
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;

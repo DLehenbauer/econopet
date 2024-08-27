@@ -217,7 +217,7 @@ module top_tb;
         spi1_driver.reset;
 
         $display("[%t]   Perform CPU reset", $time);
-        spi1_driver.write_at({3'b010, 17'h00000}, 8'b0000_0010);
+        spi1_driver.write_at(common_pkg::wb_reg_addr(0), 8'b0000_0010);
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset_n, 1'b0);
         // Verilog-6502 requires two cycles to reset.
@@ -225,7 +225,7 @@ module top_tb;
         @(cpu_clock);
 
         $display("[%t]   Start CPU", $time);
-        spi1_driver.write_at({3'b010, 17'h00000}, 8'b0000_0001);
+        spi1_driver.write_at(common_pkg::wb_reg_addr(0), 8'b0000_0001);
         `assert_equal(cpu_ready, 1'b1);
         `assert_equal(cpu_reset_n, 1'b1);
 

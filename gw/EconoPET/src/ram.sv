@@ -19,15 +19,15 @@ import common_pkg::*;
 module ram(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                      wb_clock_i,
-    input  logic [RAM_ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [    DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
-    output logic [    DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
-    input  logic                      wb_we_i,
-    input  logic                      wb_cycle_i,
-    input  logic                      wb_strobe_i,
-    output logic                      wb_stall_o,
-    output logic                      wb_ack_o,
+    input  logic                     wb_clock_i,
+    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
+    output logic [   DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
+    input  logic                     wb_we_i,
+    input  logic                     wb_cycle_i,
+    input  logic                     wb_strobe_i,
+    output logic                     wb_stall_o,
+    output logic                     wb_ack_o,
 
     output logic                      ram_oe_o,
     output logic                      ram_we_o,
@@ -36,6 +36,8 @@ module ram(
     output logic [    DATA_WIDTH-1:0] ram_data_o,
     output logic                      ram_data_oe
 );
+    wire wb_select = wb_addr_i[WB_ADDR_WIDTH-1:WB_ADDR_WIDTH-$bits(WB_RAM_BASE)] == WB_RAM_BASE;
+
     // Timing for AS6C1008-55PCN
     // (See: https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008feb2007.pdf)
     //
@@ -99,9 +101,9 @@ module ram(
                 ram_oe_o   <= 0;
                 ram_we_o   <= 0;
 
-                if (wb_cycle_i && wb_strobe_i) begin
+                if (wb_select && wb_cycle_i && wb_strobe_i) begin
                     cycle_count <= '0;
-                    ram_addr_o  <= wb_addr_i;
+                    ram_addr_o  <= wb_addr_i[RAM_ADDR_WIDTH-1:0];
                     ram_data_o  <= wb_data_i;
                     wb_ack_o    <= 0;
                     wb_stall_o  <= 1;
