@@ -61,7 +61,8 @@ module mock_cpu (
     edge_detect #(/* INITAL_DATA_I */ 0) clock_edge (
         .clock_i(sys_clock_i),
         .data_i(cpu_clock_i),
-        .ne_o(cpu_clock_ne)
+        .ne_o(cpu_clock_ne),
+        .pe_o()
     );
 
     always_ff @(posedge sys_clock_i) begin
