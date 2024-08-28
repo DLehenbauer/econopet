@@ -13,6 +13,7 @@
  */
 
 module sim;
+    keyboard_tb keyboard_tb ();
     register_file_tb register_file_tb ();
     timing_tb timing_tb ();
     spi_tb spi_tb ();
@@ -25,6 +26,7 @@ module sim;
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
+        keyboard_tb.run();
         register_file_tb.run();
         timing_tb.run();
         spi_tb.run();

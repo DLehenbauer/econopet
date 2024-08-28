@@ -21,6 +21,7 @@
         <efx:design_file name="src/vsync.sv" version="default" library="default" />
         <efx:design_file name="src/register_file.sv" version="default" library="default" />
         <efx:design_file name="src/wb_decode.sv" version="default" library="default" />
+        <efx:design_file name="src/keyboard.sv" version="default" library="default" />
         <efx:top_vhdl_arch name="" />
     </efx:design_info>
     <efx:constraint_info>
@@ -40,6 +41,7 @@
         <efx:sim_file name="sim/ram_tb.sv" />
         <efx:sim_file name="sim/timing_tb.sv" />
         <efx:sim_file name="sim/register_file_tb.sv" />
+        <efx:sim_file name="sim/keyboard_tb.sv" />
         <efx:sim_file name="sim/wb_driver.sv" />
         <efx:sim_file name="sim/mock_ram.sv" />
         <efx:sim_file name="sim/mock_cpu.sv" />

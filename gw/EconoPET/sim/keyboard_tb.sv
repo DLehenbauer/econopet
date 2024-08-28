@@ -17,7 +17,7 @@
 
 import common_pkg::*;
 
-module ram_tb;
+module keyboard_tb;
     logic                     clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
@@ -31,16 +31,9 @@ module ram_tb;
     logic                     stall;
     logic                     ack;
 
-    logic                      ram_oe_o;
-    logic                      ram_we_o;
-    logic [RAM_ADDR_WIDTH-1:0] ram_addr_o;
-    logic [    DATA_WIDTH-1:0] ram_data_i;
-    logic [    DATA_WIDTH-1:0] ram_data_o;
-    logic                      ram_data_oe;
-
-    ram ram (
+    keyboard keyboard (
         .wb_clock_i(clock),
-        .wb_addr_i(common_pkg::wb_ram_addr(addr)),
+        .wb_addr_i(common_pkg::wb_kbd_addr(addr)),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
@@ -48,21 +41,9 @@ module ram_tb;
         .wb_strobe_i(strobe),
         .wb_stall_o(stall),
         .wb_ack_o(ack),
-        .ram_oe_o(ram_oe_o),
-        .ram_we_o(ram_we_o),
-        .ram_addr_o(ram_addr_o),
-        .ram_data_i(ram_data_i),
-        .ram_data_o(ram_data_o),
-        .ram_data_oe(ram_data_oe)
-    );
 
-    mock_ram mock_ram (
-        .clock_i(clock),
-        .ram_oe_n_i(!ram_oe_o),
-        .ram_we_n_i(!ram_we_o),
-        .ram_addr_i(ram_addr_o),
-        .ram_data_i(ram_data_o),
-        .ram_data_o(ram_data_i)
+        .pia1_rs_i(),
+        .pia1_cs_i()
     );
 
     wb_driver wb (
@@ -81,12 +62,33 @@ module ram_tb;
     logic                  ack_rd;
 
     task run;
+        integer row;
+
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
-        wb.write(common_pkg::wb_ram_addr(17'h00000), 8'h55);
-        wb.read(common_pkg::wb_ram_addr(17'h00000), data_rd, ack_rd);
-        `assert_equal(data_rd, 8'h55);
+
+        $display("[%t]   Keyboard rows must be initialized to 8'hFF at power on.", $time);
+        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
+            wb.read(row, data_rd, ack_rd);
+            `assert_equal(data_rd, 8'hFF);
+        end
+
+        $display("[%t]   Wishbone must be able to read/write all rows.", $time);
+
+        // First pass read/writes unique values to all rows.
+        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
+            wb.write(row, { 4'h5, row[3:0] });
+            wb.read(row, data_rd, ack_rd);
+            `assert_equal(data_rd, { 4'h5, row[3:0] });
+        end
+
+        // Second pass ensures unique values were not overwritten and resets all rows to 8'hFF.
+        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
+            wb.read(row, data_rd, ack_rd);
+            `assert_equal(data_rd, { 4'h5, row[3:0] });
+            wb.write(row, 8'hff);
+        end
 
         #1 $display("[%t] END %m", $time);
     endtask
