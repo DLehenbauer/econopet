@@ -84,8 +84,8 @@ module ram_tb;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
-        wb.write(10'h00, 8'h55);
-        wb.read(10'h00, data_rd, ack_rd);
+        wb.write(common_pkg::wb_ram_addr(17'h00000), 8'h55);
+        wb.read(common_pkg::wb_ram_addr(17'h00000), data_rd, ack_rd);
         `assert_equal(data_rd, 8'h55);
 
         #1 $display("[%t] END %m", $time);
