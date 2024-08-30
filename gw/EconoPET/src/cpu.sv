@@ -20,6 +20,8 @@ module cpu (
     input  logic sys_clock_i,
     input  logic cpu_grant_i,
     output logic cpu_be_o,
+    output logic cpu_valid_strobe_o,
+    output logic cpu_done_strobe_o,
     output logic cpu_clock_o
 );
     initial begin
@@ -77,6 +79,7 @@ module cpu (
 
     localparam bit [5:0] CPU_STALLED      = 0,
                          CPU_BE_START     = 1,
+                         CPU_VALID        = 3,
                          CPU_PHI_START    = 5,
                          CPU_PHI_END      = 9,
                          CPU_BE_END       = 13;
@@ -99,4 +102,7 @@ module cpu (
             end
         endcase
     end
+
+    assign cpu_valid_strobe_o = cycle_count == CPU_VALID;
+    assign cpu_done_strobe_o  = cycle_count == CPU_BE_END;
 endmodule

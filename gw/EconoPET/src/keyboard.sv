@@ -70,22 +70,20 @@ module keyboard(
         end
     end
 
-    logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
     wire writing_port_a =  cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTA;     // CPU is selecting next keyboard row
-    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of selected row
+    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected row
+
+    logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
     wire [DATA_WIDTH-1:0] current_row = matrix[selected_row];
 
     always_ff @(posedge wb_clock_i) begin
+        cpu_data_o  <= matrix[selected_row];
+        
         if (cpu_valid_strobe_i) begin
-            cpu_data_oe <= 1'b0;
+            cpu_data_oe <= reading_port_b && current_row !== 8'hff;
 
             if (writing_port_a) begin
                 selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
-            end
-
-            if (reading_port_b && current_row !== 8'hff) begin
-                cpu_data_o  <= matrix[selected_row];
-                cpu_data_oe <= 1'b1;
             end
         end
     end

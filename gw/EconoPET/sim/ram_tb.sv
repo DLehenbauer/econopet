@@ -18,18 +18,18 @@
 import common_pkg::*;
 
 module ram_tb;
-    logic                     clock;
+    logic clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
 
-    logic [WB_ADDR_WIDTH-1:0] addr;
-    logic [   DATA_WIDTH-1:0] poci;
-    logic [   DATA_WIDTH-1:0] pico;
-    logic                     we;
-    logic                     cycle;
-    logic                     strobe;
-    logic                     stall;
-    logic                     ack;
+    logic [ WB_ADDR_WIDTH-1:0] addr;
+    logic [    DATA_WIDTH-1:0] poci;
+    logic [    DATA_WIDTH-1:0] pico;
+    logic                      we;
+    logic                      cycle;
+    logic                      strobe;
+    logic                      stall;
+    logic                      ack;
 
     logic                      ram_oe_o;
     logic                      ram_we_o;

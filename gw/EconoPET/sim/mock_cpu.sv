@@ -34,21 +34,60 @@ module mock_cpu (
     input  logic nmi_n_i,
     input  logic ready_i
 );
-    logic [CPU_ADDR_WIDTH-1:0] addr_next;
-    logic     [DATA_WIDTH-1:0] data_next;
-    logic we_next;
+    bit manual_mode = '1;
+
+    logic [CPU_ADDR_WIDTH-1:0] cpu_addr_next;
+    logic     [DATA_WIDTH-1:0] cpu_data_next;
+    logic                      cpu_we_next;
 
     cpu6502 cpu(
         .clk(cpu_clock_i),
         .reset(!reset_n_i),
         .nmi(!nmi_n_i),
         .irq(!irq_n_i),
-        .ready(ready_i),
-        .write(we_next),
-        .address(addr_next),
+        .ready(ready_i && !manual_mode),   // Suspend CPU when manual_mode is asserted
+        .write(cpu_we_next),
+        .address(cpu_addr_next),
         .data_i(data_i),
-        .data_o(data_next)
+        .data_o(cpu_data_next)
     );
+
+    logic [CPU_ADDR_WIDTH-1:0] set_addr_next;
+    logic     [DATA_WIDTH-1:0] set_data_next;
+    logic                      set_we_next;
+
+    task manual_mode_on();
+        manual_mode = 1'b1;
+    endtask
+
+    task manual_mode_off();
+        manual_mode = 1'b0;
+    endtask
+
+    task write(
+        input  logic [CPU_ADDR_WIDTH-1:0] addr,
+        input  logic     [DATA_WIDTH-1:0] data
+    );
+        @(posedge cpu_clock_ne);
+
+        set_addr_next = addr;
+        set_data_next = data;
+        set_we_next   = 1'b1;
+
+        @(posedge sys_clock_i);
+    endtask
+
+    task read(
+        input  logic [CPU_ADDR_WIDTH-1:0] addr
+    );
+        @(posedge cpu_clock_ne);
+
+        set_addr_next = addr;
+        set_data_next = 'x;
+        set_we_next   = 1'b0;
+
+        @(posedge cpu_clock_i);
+    endtask
 
     logic cpu_clock_ne;
 
@@ -67,9 +106,9 @@ module mock_cpu (
 
     always_ff @(posedge sys_clock_i) begin
         if (cpu_clock_ne) begin
-            addr_o <= addr_next;
-            data_o <= data_next;
-            we_n_o <= !we_next;
+            addr_o <= manual_mode ? set_addr_next : cpu_addr_next;
+            data_o <= manual_mode ? set_data_next : cpu_data_next;
+            we_n_o <= !(manual_mode ? set_we_next : cpu_we_next);
         end
     end
 endmodule

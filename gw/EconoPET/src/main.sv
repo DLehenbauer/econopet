@@ -134,11 +134,16 @@ module main (
         .wb_grant_o(wb_grant)
     );
 
+    logic cpu_valid_strobe;
+    logic cpu_done_strobe;
+
     cpu cpu (
         .sys_clock_i(sys_clock_i),
         .cpu_grant_i(cpu_grant),
         .cpu_be_o(cpu_be_o),
-        .cpu_clock_o(cpu_clock_o)
+        .cpu_clock_o(cpu_clock_o),
+        .cpu_valid_strobe_o(cpu_valid_strobe),
+        .cpu_done_strobe_o(cpu_done_strobe)
     );
 
     //
@@ -149,13 +154,11 @@ module main (
     logic                  ram_wb_stall;
     logic                  ram_wb_ack;
 
-    assign wb_dout       = ram_wb_dout;
-    assign wb_stall      = ~wb_grant | ram_wb_stall | reg_wb_stall;
-    assign wb_ack        = ram_wb_ack | reg_wb_ack;
-
     logic [RAM_ADDR_WIDTH-1:0] ram_ctl_addr;    // Captured address for read/write cycle
     logic                      ram_ctl_oe;      // OE signal for read cycle
     logic                      ram_ctl_we;      // WE signal for write cycle
+    logic [    DATA_WIDTH-1:0] ram_ctl_dout;    // FPGA -> RAM
+    logic                      ram_ctl_doe;
 
     ram ram (
         .wb_clock_i(sys_clock_i),
@@ -172,8 +175,8 @@ module main (
         .ram_we_o(ram_ctl_we),
         .ram_addr_o(ram_ctl_addr),
         .ram_data_i(cpu_data_i),
-        .ram_data_o(cpu_data_o),
-        .ram_data_oe(cpu_data_oe)
+        .ram_data_o(ram_ctl_dout),
+        .ram_data_oe(ram_ctl_doe)
     );
 
     //
@@ -209,7 +212,7 @@ module main (
     logic via_en;
     logic io_en;
 
-    address_decoding address_decoding(
+    address_decoding address_decoding (
         .cpu_be_i(cpu_be_o),
         .addr_i(cpu_addr_i),
 
@@ -227,11 +230,71 @@ module main (
         .is_readonly_o()
     );
 
+    //
+    // USB Keyboard
+    //
+
+    logic                  kbd_wb_stall;
+    logic                  kbd_wb_ack;
+    logic [DATA_WIDTH-1:0] kbd_dout;
+    logic                  kbd_doe;
+
+    keyboard keyboard (
+        .wb_clock_i(sys_clock_i),
+        .wb_addr_i(wb_addr),
+        .wb_data_i(wb_din),
+        .wb_data_o(),           // We do not currently support reading back from the keyboard
+        .wb_we_i(wb_we),
+        .wb_cycle_i(wb_cycle),
+        .wb_strobe_i(wb_grant & wb_strobe),
+        .wb_stall_o(kbd_wb_stall),
+        .wb_ack_o(kbd_wb_ack),
+        .pia1_rs_i(cpu_addr_i[1:0]),
+        .pia1_cs_i(pia1_en),
+        .cpu_valid_strobe_i(cpu_valid_strobe),
+        .cpu_data_i(cpu_data_i),
+        .cpu_data_o(kbd_dout),
+        .cpu_data_oe(kbd_doe),
+        .cpu_we_i(cpu_we_i)
+    );
+
+    //
+    // Wishbone
+    //
+
+    assign wb_dout  = ram_wb_dout;
+    assign wb_stall = ~wb_grant | ram_wb_stall | reg_wb_stall | kbd_wb_stall;
+    assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
+
+    //
+    // Bus
+    //
+
+    always_comb begin
+        if (kbd_doe) begin
+            cpu_data_o = kbd_dout;
+        end else if (ram_ctl_doe) begin
+            cpu_data_o = ram_ctl_dout;
+        end else begin
+            cpu_data_o = 'x;
+        end
+    end
+
+    // FPGA drives the data bus when:
+    //
+    //   1. Responding to the CPU reading the keyboard matrix (kbd_doe)
+    //   2. Wishbone is writing to RAM (ram_ctl_doe)
+    //
+    // Note that when responding to the CPU reading the keyboard matrix, we need
+    // to ensure that the FPGA does not drive the bus as the CPU transitions RWB
+    // the falling PHI2 edge.
+    assign cpu_data_oe = (!cpu_we_i & kbd_doe) | ram_ctl_doe;
+
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;
     wire cpu_wr_strobe = cpu_be_o &&  cpu_we_i && cpu_clock_o;
 
-    assign io_oe_o   = io_en   && cpu_be_o;
-    assign pia1_cs_o = pia1_en && cpu_be_o;
+    assign io_oe_o   = io_en   && cpu_be_o && !kbd_doe;
+    assign pia1_cs_o = pia1_en && cpu_be_o && !kbd_doe;
     assign pia2_cs_o = pia2_en && cpu_be_o;
     assign via_cs_o  =  via_en && cpu_be_o;
 

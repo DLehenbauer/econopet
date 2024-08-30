@@ -18,7 +18,7 @@
 import common_pkg::*;
 
 module keyboard_tb;
-    logic                     clock;
+    logic clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
 
@@ -31,6 +31,15 @@ module keyboard_tb;
     logic                     stall;
     logic                     ack;
 
+    logic [ PIA_RS_WIDTH-1:0] pia1_rs;
+    logic                     pia1_cs;
+
+    logic [   DATA_WIDTH-1:0] cpu_din;
+    logic [   DATA_WIDTH-1:0] cpu_dout;
+    logic                     cpu_doe;
+    logic                     cpu_we     = '0;
+    logic                     cpu_strobe = '0;
+
     keyboard keyboard (
         .wb_clock_i(clock),
         .wb_addr_i(common_pkg::wb_kbd_addr(addr)),
@@ -42,8 +51,14 @@ module keyboard_tb;
         .wb_stall_o(stall),
         .wb_ack_o(ack),
 
-        .pia1_rs_i(),
-        .pia1_cs_i()
+        .pia1_rs_i(pia1_rs),
+        .pia1_cs_i(pia1_cs),
+
+        .cpu_valid_strobe_i(cpu_strobe),
+        .cpu_data_i(cpu_din),
+        .cpu_data_o(cpu_dout),
+        .cpu_data_oe(cpu_doe),
+        .cpu_we_i(cpu_we)
     );
 
     wb_driver wb (
@@ -61,8 +76,45 @@ module keyboard_tb;
     logic [DATA_WIDTH-1:0] data_rd;
     logic                  ack_rd;
 
+    task cpu_select_row(
+        input logic [DATA_WIDTH-1:0] row
+    );
+        @(negedge clock);
+
+        pia1_rs    = PIA_PORTA;
+        pia1_cs    = 1'b1;
+        cpu_din    = row;
+        cpu_we     = 1'b1;
+        cpu_strobe = 1'b1;
+        
+        @(negedge clock);
+        
+        pia1_cs    = 1'b0;
+        cpu_we     = 1'b0;
+        cpu_strobe = 1'b0;
+    endtask
+
+    task cpu_read_current_row (
+        output logic [DATA_WIDTH-1:0] data
+    );
+        @(negedge clock);
+
+        pia1_rs    = PIA_PORTB;
+        pia1_cs    = 1'b1;
+        cpu_we     = 1'b0;
+        cpu_strobe = 1'b1;
+
+        @(negedge clock);
+
+        data = cpu_dout;        
+        pia1_cs    = 1'b0;
+        cpu_strobe = 1'b0;
+    endtask
+
     task run;
         integer row;
+        logic [DATA_WIDTH-1:0] value;
+        logic [DATA_WIDTH-1:0] data;
 
         $display("[%t] BEGIN %m", $time);
 
@@ -78,9 +130,15 @@ module keyboard_tb;
 
         // First pass read/writes unique values to all rows.
         for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            wb.write(row, { 4'h5, row[3:0] });
+            value = { 4'h5, row[3:0] };
+            wb.write(row, value);
+
+            cpu_select_row(row);
+            cpu_read_current_row(data);
+            `assert_equal(data, value);
+            
             wb.read(row, data_rd, ack_rd);
-            `assert_equal(data_rd, { 4'h5, row[3:0] });
+            `assert_equal(data_rd, value);
         end
 
         // Second pass ensures unique values were not overwritten and resets all rows to 8'hFF.
