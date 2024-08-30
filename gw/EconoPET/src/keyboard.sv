@@ -33,6 +33,7 @@ module keyboard(
     input  logic                     pia1_cs_i,             // PIA chip select (from address_decoding)
 
     input  logic                     cpu_valid_strobe_i,
+    input  logic                     cpu_done_strobe_i,
     input  logic [   DATA_WIDTH-1:0] cpu_data_i,
     output logic [   DATA_WIDTH-1:0] cpu_data_o,
     output logic                     cpu_data_oe,           // Asserted when intercepting CPU read of keyboard matrix
@@ -78,13 +79,15 @@ module keyboard(
 
     always_ff @(posedge wb_clock_i) begin
         cpu_data_o  <= matrix[selected_row];
-        
+
         if (cpu_valid_strobe_i) begin
             cpu_data_oe <= reading_port_b && current_row !== 8'hff;
 
             if (writing_port_a) begin
                 selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
             end
+        end else if (cpu_done_strobe_i) begin
+            cpu_data_oe <= '0;
         end
     end
 endmodule

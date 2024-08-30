@@ -34,10 +34,10 @@ module mock_cpu (
     input  logic nmi_n_i,
     input  logic ready_i
 );
-    bit manual_mode = '1;
+    bit manual_mode = 1'b1;
 
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr_next;
-    logic     [DATA_WIDTH-1:0] cpu_data_next;
+    logic [    DATA_WIDTH-1:0] cpu_data_next;
     logic                      cpu_we_next;
 
     cpu6502 cpu(
@@ -53,20 +53,20 @@ module mock_cpu (
     );
 
     logic [CPU_ADDR_WIDTH-1:0] set_addr_next;
-    logic     [DATA_WIDTH-1:0] set_data_next;
+    logic [    DATA_WIDTH-1:0] set_data_next;
     logic                      set_we_next;
 
-    task manual_mode_on();
-        manual_mode = 1'b1;
+    task start();
+        manual_mode = 1'b0;
     endtask
 
-    task manual_mode_off();
-        manual_mode = 1'b0;
+    task stop();
+        manual_mode = 1'b1;
     endtask
 
     task write(
         input  logic [CPU_ADDR_WIDTH-1:0] addr,
-        input  logic     [DATA_WIDTH-1:0] data
+        input  logic [    DATA_WIDTH-1:0] data
     );
         @(posedge cpu_clock_ne);
 
@@ -74,11 +74,12 @@ module mock_cpu (
         set_data_next = data;
         set_we_next   = 1'b1;
 
-        @(posedge sys_clock_i);
+        @(posedge cpu_clock_i);
     endtask
 
     task read(
-        input  logic [CPU_ADDR_WIDTH-1:0] addr
+        input  logic [CPU_ADDR_WIDTH-1:0] addr,
+        output logic [    DATA_WIDTH-1:0] data
     );
         @(posedge cpu_clock_ne);
 
@@ -87,6 +88,8 @@ module mock_cpu (
         set_we_next   = 1'b0;
 
         @(posedge cpu_clock_i);
+
+        data = data_i;
     endtask
 
     logic cpu_clock_ne;

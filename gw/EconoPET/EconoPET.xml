@@ -46,6 +46,7 @@
         <efx:sim_file name="sim/mock_ram.sv" />
         <efx:sim_file name="sim/mock_cpu.sv" />
         <efx:sim_file name="sim/mock_bus.sv" />
+        <efx:sim_file name="sim/mock_system.sv" />
         <efx:sim_file name="external/65xx/6502_alu.v" />
         <efx:sim_file name="external/65xx/6502_inc.vh" />
         <efx:sim_file name="external/65xx/6502_ucode.v" />

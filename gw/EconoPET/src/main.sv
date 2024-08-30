@@ -252,6 +252,7 @@ module main (
         .pia1_rs_i(cpu_addr_i[1:0]),
         .pia1_cs_i(pia1_en),
         .cpu_valid_strobe_i(cpu_valid_strobe),
+        .cpu_done_strobe_i(cpu_done_strobe),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(kbd_dout),
         .cpu_data_oe(kbd_doe),
