@@ -95,6 +95,36 @@
                 "break main",
                 "continue"
             ]
+        },
+        {
+            "name": "TinyUSB Example",
+            "cwd": "${workspaceRoot}",
+            "executable": "/opt/pico/pico-examples/build/usb/host/host_cdc_msc_hid/host_cdc_msc_hid.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            // Change 'gpbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
+            "gdbPath" : "gdb-multiarch",
+            "device": "RP2040",
+            "configFiles": [
+                // Change interface to "interface/picoprobe.cfg" if using older Picoprobe firmware.
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            // Reduce the adapter speed if 'openocd' reports the following error:
+            // 
+            //    Error: Failed to connect multidrop rp2040.dap0
+            //
+            // Picoprobe documentation uses 5000 Hz:
+            // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
+            "serverArgs": ["-c", "adapter speed 31249"],
+            "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
+            "runToEntryPoint": "main",
+            // Work around for stopping at main on restart
+            "postRestartCommands": [
+                "break main",
+                "continue"
+            ]
         }
     ]
 }
