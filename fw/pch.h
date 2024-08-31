@@ -39,3 +39,7 @@
 #include "dvi_serialiser.h"
 #include "dvi.h"
 #include "tmds_encode.h"
+
+// TinyUSB
+#include "bsp/board.h"
+#include "tusb.h"
