@@ -19,6 +19,7 @@
 #include "sd/sd.h"
 #include "term.h"
 #include "test/mem.h"
+#include "usb/usb.h"
 #include "video/video.h"
 
 void measure_freqs(uint fpga_div) {
@@ -136,10 +137,17 @@ int main() {
     // Quick test of SD card before entering RAM test.
     // sd_read_file("filename.txt");
 
+    // Initialize TinyUSB
+    usb_init();
+
     reset();
 
     while (1) {
         spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
+
+        tuh_task();
+        cdc_app_task();
+        hid_app_task();
     }
 
     __builtin_unreachable();

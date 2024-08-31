@@ -58,8 +58,6 @@ sd_card_t* pSD;
 void sd_init() {
     time_init();
 
-    puts("Hello, world!");
-
     // See FatFs - Generic FAT Filesystem Module, "Application Interface",
     // http://elm-chan.org/fsw/ff/00index_e.html
     pSD = sd_get_by_num(0);
