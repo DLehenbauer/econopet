@@ -16,6 +16,7 @@
 
 #include "../pch.h"
 
-extern uint8_t key_matrix[10];
+#define KEY_ROW_COUNT 10
+extern uint8_t key_matrix[KEY_ROW_COUNT];
 
 void process_kbd_report(hid_keyboard_report_t const *report);

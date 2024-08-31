@@ -16,7 +16,7 @@ add_executable(${PROJECT_NAME}
     test/mem.c
     usb/cdc_app.c
     usb/hid_app.c
-    # usb/keyboard.c
+    usb/keyboard.c
     usb/msc_app.c
     usb/usb.c
     video/video.c

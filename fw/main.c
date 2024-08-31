@@ -148,6 +148,8 @@ int main() {
         tuh_task();
         cdc_app_task();
         hid_app_task();
+
+        sync_keyboard();
     }
 
     __builtin_unreachable();

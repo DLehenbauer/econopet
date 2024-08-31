@@ -139,6 +139,9 @@ static inline bool find_key_in_report(hid_keyboard_report_t const *report, uint8
   return false;
 }
 
+// Implementation moved to keyboard.c
+#if false
+
 static void process_kbd_report(hid_keyboard_report_t const *report)
 {
   static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key released
@@ -167,6 +170,8 @@ static void process_kbd_report(hid_keyboard_report_t const *report)
 
   prev_report = *report;
 }
+
+#endif
 
 //--------------------------------------------------------------------+
 // Mouse

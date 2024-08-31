@@ -14,12 +14,15 @@
 
 #include "driver.h"
 #include "hw.h"
+#include "usb/keyboard.h"
 
 //                           WS__AAAA
 #define SPI_CMD_READ_AT    0b01000000
 #define SPI_CMD_READ_NEXT  0b00000000
 #define SPI_CMD_WRITE_AT   0b11000000
 #define SPI_CMD_WRITE_NEXT 0b10000000
+
+#define ADDR_KBD (0b011 << 17)
 
 #define ADDR_REG (0b010 << 17)
 #define REG_CPU  (ADDR_REG | 0x00000)
@@ -105,4 +108,8 @@ void set_cpu(bool ready, bool reset) {
     if (ready) { cpu_state |= (1 << 0); }
     if (reset) { cpu_state |= (1 << 1); }
     spi_write_at(REG_CPU, cpu_state);
+}
+
+void sync_keyboard() {
+    spi_write(ADDR_KBD, key_matrix, KEY_ROW_COUNT);
 }

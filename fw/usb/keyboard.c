@@ -14,7 +14,7 @@
 
 #include "keyboard.h"
 
-uint8_t key_matrix[10] = {
+uint8_t key_matrix[KEY_ROW_COUNT] = {
     /* row 0: */ 0xff,
     /* row 1: */ 0xff,
     /* row 2: */ 0xff,
@@ -292,6 +292,7 @@ void key_down(uint8_t keycode) {
 
     if (col != 0 && (key_matrix[row] & col)) {
         key_matrix[row] &= ~col;
+        printf("USB: Key down: %d=(%d,%d)\n", keycode, row, col);
     }
 }
 
@@ -302,6 +303,7 @@ void key_up(uint8_t keycode) {
 
     if (col != 0 && !(key_matrix[row] & col)) {
         key_matrix[row] |= col;
+        printf("USB: Key up: %d=(%d,%d)\n", keycode, row, col);
     }
 }
 
