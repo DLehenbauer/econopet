@@ -1,9 +1,13 @@
 # Rev B. TODOs
 
 * HW Design
-  * 1K resistor likely too big for YSX321SL
-    * Try removing/shorting resistor to see if value too large.
+  * YSX321SL requires XOSC workaround:
+    * Most designs using YSX321L use 33pF
+    * Try removing/shorting resistor to see if value too large?
+    * Typical guidelines are 100 ohm + 1M parallel resistor to assist startup.
+    * Other recommendations include a "guard ring" of vias.
     * Possibly you can compare with recommended crystal to estimate new value?
+  * GPIO15 for fpga_clk conflicts USB reset fix for old RP2040 silicon
 * Silkscreen
   * Front:
     * Consider adding boxes for SSN (`[] [] [] [] [] - [] []`).
