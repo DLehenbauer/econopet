@@ -58,19 +58,6 @@ module keyboard(
     end
 
     wire [KBD_ADDR_WIDTH-1:0] row_addr = wb_addr_i[KBD_ADDR_WIDTH-1:0];
-
-    always_ff @(posedge wb_clock_i) begin
-        if (wb_select && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= matrix[row_addr];
-            if (wb_we_i) begin
-                matrix[row_addr] <= wb_data_i;
-            end
-            wb_ack_o <= 1'b1;
-        end else begin
-            wb_ack_o <= '0;
-        end
-    end
-
     wire writing_port_a =  cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTA;     // CPU is selecting next keyboard row
     wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected row
 
@@ -78,16 +65,20 @@ module keyboard(
     wire [DATA_WIDTH-1:0] current_row = matrix[selected_row];
 
     always_ff @(posedge wb_clock_i) begin
-        cpu_data_o  <= matrix[selected_row];
+        wb_ack_o <= '0;
 
-        if (cpu_valid_strobe_i) begin
-            cpu_data_oe <= reading_port_b && current_row !== 8'hff;
-
-            if (writing_port_a) begin
-                selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
+        if (wb_select && wb_cycle_i && wb_strobe_i) begin
+            if (wb_we_i) begin
+                matrix[row_addr] <= wb_data_i;
+            end else begin
+                wb_data_o <= matrix[row_addr];
             end
-        end else if (cpu_done_strobe_i) begin
-            cpu_data_oe <= '0;
+            wb_ack_o <= 1'b1;
+        end else begin
+            if (writing_port_a) selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
+            cpu_data_o <= matrix[selected_row];
         end
     end
+
+    assign cpu_data_oe = reading_port_b && current_row != 8'hff;
 endmodule

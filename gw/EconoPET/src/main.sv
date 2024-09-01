@@ -274,22 +274,15 @@ module main (
     always_comb begin
         if (kbd_doe) begin
             cpu_data_o = kbd_dout;
+            cpu_data_oe = !cpu_we_i;
         end else if (ram_ctl_doe) begin
             cpu_data_o = ram_ctl_dout;
+            cpu_data_oe = 1;
         end else begin
             cpu_data_o = 'x;
+            cpu_data_oe = 0;
         end
     end
-
-    // FPGA drives the data bus when:
-    //
-    //   1. Responding to the CPU reading the keyboard matrix (kbd_doe)
-    //   2. Wishbone is writing to RAM (ram_ctl_doe)
-    //
-    // Note that when responding to the CPU reading the keyboard matrix, we need
-    // to ensure that the FPGA does not drive the bus as the CPU transitions RWB
-    // the falling PHI2 edge.
-    assign cpu_data_oe = (!cpu_we_i & kbd_doe) | ram_ctl_doe;
 
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;
     wire cpu_wr_strobe = cpu_be_o &&  cpu_we_i && cpu_clock_o;

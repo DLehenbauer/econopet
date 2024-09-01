@@ -87,37 +87,37 @@ set cpu_tAH 10
 # set_input_delay -clock cpu_clock -clock_fall -min $cpu_tAH  [get_ports {cpu_addr_i[*] cpu_we_n_i}]
 # set_input_delay -clock cpu_clock -clock_fall -max $cpu_tADS [get_ports {cpu_addr_i[*] cpu_we_n_i}]
 
-set_output_delay -clock sys_clock_i -max 1 [get_ports {cpu_clock_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {cpu_clock_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {cpu_be_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {cpu_be_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {cpu_ready_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {cpu_ready_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {cpu_we_n_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {cpu_we_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {cpu_clock_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {cpu_clock_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {cpu_be_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {cpu_be_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {cpu_ready_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {cpu_ready_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {cpu_we_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {cpu_we_n_o}]
 
 # I/O
-set_output_delay -clock sys_clock_i -max 1 [get_ports {io_oe_n_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {io_oe_n_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {pia1_cs_n_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {pia1_cs_n_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {pia2_cs_n_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {pia2_cs_n_o}]
-set_output_delay -clock sys_clock_i -max 1 [get_ports {via_cs_n_o}]
-set_output_delay -clock sys_clock_i -min 1 [get_ports {via_cs_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {io_oe_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {io_oe_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {pia1_cs_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {pia1_cs_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {pia2_cs_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {pia2_cs_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {via_cs_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {via_cs_n_o}]
 
-set_output_delay -clock sys_clock_i -min 0 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
-set_output_delay -clock sys_clock_i -max 8.125 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {ram_addr_a*_o cpu_addr_o[*]}]
 
-set_output_delay -clock sys_clock_i -min 0 [get_ports {ram_oe_n_o}]
-set_output_delay -clock sys_clock_i -max 8.125 [get_ports {ram_oe_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {ram_oe_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {ram_oe_n_o}]
 
 # Note: Minimum WE delay must be >= max address output delay to meet 0ns setup
 #       Maximum WE delay should be tightly constrained
-set_output_delay -clock sys_clock_i -min 0 [get_ports {ram_we_n_o}]
-set_output_delay -clock sys_clock_i -max 8.125 [get_ports {ram_we_n_o}]
+set_output_delay -clock sys_clock_i -min -1 [get_ports {ram_we_n_o}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {ram_we_n_o}]
 
-set_output_delay -clock sys_clock_i -min 0     [get_ports {cpu_data_o[*]}]
-set_output_delay -clock sys_clock_i -max 8.125 [get_ports {cpu_data_o[*]}]
+set_output_delay -clock sys_clock_i -min -1     [get_ports {cpu_data_o[*]}]
+set_output_delay -clock sys_clock_i -max 5 [get_ports {cpu_data_o[*]}]
 
 # reset_timing; delete_timing_results; read_sdc; report_timing_summary

@@ -79,7 +79,7 @@ module cpu (
 
     localparam bit [5:0] CPU_STALLED      = 0,
                          CPU_BE_START     = 1,
-                         CPU_VALID        = 3,
+                         CPU_VALID        = 4,
                          CPU_PHI_START    = 5,
                          CPU_PHI_END      = 9,
                          CPU_BE_END       = 13;
@@ -104,5 +104,5 @@ module cpu (
     end
 
     assign cpu_valid_strobe_o = cycle_count == CPU_VALID;
-    assign cpu_done_strobe_o  = cycle_count == CPU_BE_END;
+    assign cpu_done_strobe_o  = cycle_count == CPU_BE_END - 1'b1;
 endmodule
