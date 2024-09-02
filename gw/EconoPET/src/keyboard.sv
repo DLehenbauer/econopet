@@ -62,7 +62,7 @@ module keyboard(
     wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected row
 
     logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
-    wire [DATA_WIDTH-1:0] current_row = matrix[selected_row];
+    logic [    DATA_WIDTH-1:0] current_row;
 
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o <= '0;
@@ -75,10 +75,12 @@ module keyboard(
             end
             wb_ack_o <= 1'b1;
         end else begin
+            // Pipeline reads from keyboard matrix
+            cpu_data_o  <= current_row;
+            current_row <= matrix[selected_row];
+            cpu_data_oe <= reading_port_b && matrix[selected_row] != 8'hff;
+
             if (writing_port_a) selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
-            cpu_data_o <= matrix[selected_row];
         end
     end
-
-    assign cpu_data_oe = reading_port_b && current_row != 8'hff;
 endmodule
