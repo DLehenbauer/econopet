@@ -6,7 +6,7 @@
     * Try removing/shorting resistor to see if value too large?
     * Typical guidelines are 100 ohm + 1M parallel resistor to assist startup.
     * Other recommendations include a "guard ring" of vias.
-    * Possibly you can compare with recommended crystal to estimate new value?
+    * [This project](https://github.com/Swyter/psdaptwor/tree/master) claims that 100 ohm + 33pF is "known good".
   * GPIO15 for fpga_clk conflicts USB reset fix for old RP2040 silicon
 * Silkscreen
   * Front:

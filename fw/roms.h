@@ -43,7 +43,10 @@ static const uint8_t __in_flash(".rom_edit_e000") rom_edit_e000[] = {
     // #include "roms/edit-4-40-n-50Hz.901498-01.h"
 
     // Edit 4.0, 80 column, Business Keyboard, 60 Hz, CRTC
-    #include "roms/edit-4-80-b-60Hz.901474-03.h"
+    // #include "roms/edit-4-80-b-60Hz.901474-03.h"
+
+    // Edit 4.0, 80 column, Graphics Keyboard, 60 Hz, CRTC
+    #include "roms/edit-4-80-n-60Hz.901474-03-h.h"
 };
 
 static const uint8_t __in_flash(".rom_kernal_f000") rom_kernal_f000[] = {
