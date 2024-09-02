@@ -38,6 +38,21 @@ module top_tb;
         `assert_equal(dout, data_i);
     endtask
 
+    task static cpu_ram_test;
+        integer i;
+        bit   [CPU_ADDR_WIDTH-2:0] addr;        // Constrain to RAM address space $0000-$7FFF
+        logic [    DATA_WIDTH-1:0] dout;
+        bit   [    DATA_WIDTH-1:0] value;
+
+        for (i = 0; i < 10; i = i + 1) begin
+            addr = $random();
+            value = $random();
+            mock_system.cpu_write({ 1'b0, addr }, value);
+            mock_system.cpu_read({ 1'b0, addr }, dout);
+            `assert_equal(dout, value);
+        end
+    endtask
+
     task static usb_keyboard_test;
         bit   [KBD_ADDR_WIDTH-1:0] row;
         logic [    DATA_WIDTH-1:0] dout;
@@ -72,6 +87,7 @@ module top_tb;
 
         mock_system.init;
 
+        cpu_ram_test;
         usb_keyboard_test;
 
         mock_system.rom_init;
