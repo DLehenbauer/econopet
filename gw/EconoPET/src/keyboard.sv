@@ -62,7 +62,7 @@ module keyboard(
     wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected row
 
     logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
-    logic [    DATA_WIDTH-1:0] current_row;
+    logic [    DATA_WIDTH-1:0] current_row  = 8'hff;
 
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o <= '0;
