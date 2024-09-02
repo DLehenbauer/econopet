@@ -25,17 +25,11 @@ module cpu (
     output logic cpu_clock_o
 );
     initial begin
-        cpu_be_o    = '0;
-        cpu_clock_o = '0;
+        cpu_be_o            = '0;
+        cpu_clock_o         = '0;
     end
 
-    logic [5:0] cycle_count = '0;
-
-    always_ff @(posedge sys_clock_i) begin
-        if (cycle_count != '0 || cpu_grant_i) begin
-            cycle_count <= cycle_count + 1'b1;
-        end
-    end
+    logic [3:0] cycle_count = '0;
 
     // Timing for W65C02S
     // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
@@ -63,8 +57,8 @@ module cpu (
     // - DOUT->DIN is valid 20ns after rising edge, well before CPU's falling edge (tCDR)
     // - DIN<-DOUT is required 10ns before falling edge and must be held 5ns after (tCDW, tHW)
 
-    function bit [5:0] ns_to_cycles(input int time_ns);
-        return 6'(int'($ceil(time_ns / common_pkg::mhz_to_ns(SYS_CLOCK_MHZ))));
+    function bit [$bits(cycle_count)-1:0] ns_to_cycles(input int time_ns);
+        return $bits(cycle_count)'(int'($ceil(time_ns / common_pkg::mhz_to_ns(SYS_CLOCK_MHZ))));
     endfunction
 
     // Maximum number of 'sys_clock_i' cycles required to complete an in-progress
@@ -77,12 +71,19 @@ module cpu (
                RAM_tAA       = 10,  // RAM Address Access Time (tAA)
                IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
 
-    localparam bit [5:0] CPU_STALLED      = 0,
-                         CPU_BE_START     = 1,
-                         CPU_VALID        = 4,
-                         CPU_PHI_START    = 5,
-                         CPU_PHI_END      = 9,
-                         CPU_BE_END       = 13;
+    localparam bit [$bits(cycle_count)-1:0] CPU_SUSPENDED    = 0,
+                                            CPU_BE_START     = 1,
+                                            CPU_VALID        = 4,
+                                            CPU_PHI_START    = 5,
+                                            CPU_PHI_END      = 9,
+                                            CPU_BE_END       = 13;
+
+    always_ff @(posedge sys_clock_i) begin
+        // CPU remains suspended until 'cpu_grant_i' is asserted.
+        if (cycle_count != CPU_SUSPENDED || cpu_grant_i) begin
+            cycle_count <= cycle_count + 1'b1;
+        end
+    end
 
     always_ff @(posedge sys_clock_i) begin
         case (cycle_count)
