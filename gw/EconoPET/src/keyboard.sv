@@ -78,7 +78,7 @@ module keyboard(
             // Pipeline reads from keyboard matrix
             cpu_data_o  <= current_row;
             current_row <= matrix[selected_row];
-            cpu_data_oe <= reading_port_b && matrix[selected_row] != 8'hff;
+            cpu_data_oe <= reading_port_b && current_row != 8'hff;
 
             if (writing_port_a) selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
         end
