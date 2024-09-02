@@ -306,10 +306,12 @@ module main (
     // synthesis off
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin
         assert(!cpu_be_o || !ram_wb_stall) else $fatal(1, "WB<->RAM bridge must be stalled when CPU is driving bus");
-        assert(!cpu_be_o || !ram_ctl_oe) else $fatal(1, "WB<->RAM bridge must not assert OE when CPU is driving bus");
-        assert(!cpu_be_o || !ram_ctl_we) else $fatal(1, "WB<->RAM bridge must not assert WE when CPU is driving bus");
-        assert(!cpu_be_o || !ram_wb_ack) else $fatal(1, "WB<->RAM bridge must not assert ACK when CPU is driving bus");
-        assert(!io_oe_o  ||  cpu_be_o) else $fatal(1, "IO must not be active unless CPU is driving bus");
+        assert(!cpu_be_o || !ram_ctl_oe)   else $fatal(1, "WB<->RAM bridge must not assert OE when CPU is driving bus");
+        assert(!cpu_be_o || !ram_ctl_we)   else $fatal(1, "WB<->RAM bridge must not assert WE when CPU is driving bus");
+        assert(!cpu_be_o || !ram_wb_ack)   else $fatal(1, "WB<->RAM bridge must not assert ACK when CPU is driving bus");
+        assert(!io_oe_o  ||  cpu_be_o)     else $fatal(1, "IO must not be active unless CPU is driving bus");
+        assert(!io_oe_o  || !ram_oe_o)     else $fatal(1, "IO and RAM_OE must not drive bus at same time");
+        assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
     end
     // synthesis on
 
