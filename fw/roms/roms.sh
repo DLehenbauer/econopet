@@ -4,3 +4,6 @@ do
     f="$(basename -- $r .bin).h"
     cat $r | xxd -i > $f
 done
+
+cp edit-4-80-b-60Hz.901474-03.h edit-4-80-n-60Hz.901474-03-hack.h
+patch edit-4-80-n-60Hz.901474-03-hack.h edit-4-80-n-60Hz.901474-03-hack.diff

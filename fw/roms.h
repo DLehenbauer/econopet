@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include "pch.h"
 
 static const uint8_t __in_flash(".rom_chars_8800") rom_chars_8800[] = {
     #include "roms/characters-2.901447-10.h"
@@ -46,7 +46,7 @@ static const uint8_t __in_flash(".rom_edit_e000") rom_edit_e000[] = {
     // #include "roms/edit-4-80-b-60Hz.901474-03.h"
 
     // Edit 4.0, 80 column, Graphics Keyboard, 60 Hz, CRTC
-    #include "roms/edit-4-80-n-60Hz.901474-03-h.h"
+    #include "roms/edit-4-80-n-60Hz.901474-03-hack.h"
 };
 
 static const uint8_t __in_flash(".rom_kernal_f000") rom_kernal_f000[] = {
