@@ -134,14 +134,17 @@ module main (
         .wb_grant_o(wb_grant)
     );
 
+    logic cpu_wr_strobe;
     logic cpu_valid_strobe;
     logic cpu_done_strobe;
 
     cpu cpu (
         .sys_clock_i(sys_clock_i),
         .cpu_grant_i(cpu_grant),
+        .cpu_we_i(cpu_we_i),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
+        .cpu_wr_strobe_o(cpu_wr_strobe),
         .cpu_valid_strobe_o(cpu_valid_strobe),
         .cpu_done_strobe_o(cpu_done_strobe)
     );
@@ -285,7 +288,6 @@ module main (
     end
 
     wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;
-    wire cpu_wr_strobe = cpu_be_o &&  cpu_we_i && cpu_clock_o;
 
     assign io_oe_o   = io_en   && cpu_be_o && !kbd_doe;
     assign pia1_cs_o = pia1_en && cpu_be_o && !kbd_doe;

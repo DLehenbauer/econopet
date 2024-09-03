@@ -19,7 +19,9 @@ import common_pkg::*;
 module cpu (
     input  logic sys_clock_i,
     input  logic cpu_grant_i,
+    input  logic cpu_we_i,
     output logic cpu_be_o,
+    output logic cpu_wr_strobe_o,
     output logic cpu_valid_strobe_o,
     output logic cpu_done_strobe_o,
     output logic cpu_clock_o
@@ -91,10 +93,12 @@ module cpu (
                 cpu_be_o <= 1'b1;
             end
             CPU_PHI_START: begin        // CPU setup time met.
-                cpu_clock_o <= 1'b1;
+                cpu_clock_o     <= 1'b1;
+                cpu_wr_strobe_o <= cpu_we_i;
             end
             CPU_PHI_END: begin          // CPU mimimum clock pulse width met.
-                cpu_clock_o <= '0;
+                cpu_clock_o     <= '0;
+                cpu_wr_strobe_o <= '0;
             end
             CPU_BE_END: begin           // CPU and I/O hold times met.  Start transition to high-Z.
                 cpu_be_o <= '0;
