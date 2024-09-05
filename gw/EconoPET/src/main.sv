@@ -300,10 +300,19 @@ module main (
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];
 
-    assign ram_addr_a10_o   = cpu_be_o ? cpu_addr_i[10] : cpu_addr_o[10];
-    assign ram_addr_a11_o   = cpu_be_o ? cpu_addr_i[11] : cpu_addr_o[11];
-    assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
-    assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : ram_ctl_addr[16];
+    always_ff @(posedge sys_clock_i) begin
+        if (cpu_be_o) begin
+            ram_addr_a10_o = cpu_addr_i[10];
+            ram_addr_a11_o = cpu_addr_i[11];
+            ram_addr_a15_o = cpu_addr_i[15];
+            ram_addr_a16_o = 1'b0;
+        end else begin
+            ram_addr_a10_o = wb_addr[10];
+            ram_addr_a11_o = wb_addr[11];
+            ram_addr_a15_o = wb_addr[15];
+            ram_addr_a16_o = wb_addr[16];
+        end
+    end
 
     // synthesis off
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin

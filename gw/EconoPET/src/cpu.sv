@@ -88,9 +88,14 @@ module cpu (
     end
 
     always_ff @(posedge sys_clock_i) begin
+        cpu_valid_strobe_o <= '0;
+
         case (cycle_count)
             CPU_BE_START: begin         // In-progress transactions have drained.
                 cpu_be_o <= 1'b1;
+            end
+            CPU_VALID: begin            // CPU setup time met.
+                cpu_valid_strobe_o <= 1'b1;
             end
             CPU_PHI_START: begin        // CPU setup time met.
                 cpu_clock_o     <= 1'b1;
@@ -108,6 +113,5 @@ module cpu (
         endcase
     end
 
-    assign cpu_valid_strobe_o = cycle_count == CPU_VALID;
     assign cpu_done_strobe_o  = cycle_count == CPU_BE_END - 1'b1;
 endmodule
