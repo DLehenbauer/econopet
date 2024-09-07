@@ -6,7 +6,7 @@
     * Try removing/shorting resistor to see if value too large?
     * Typical guidelines are 100 ohm + 1M parallel resistor to assist startup.
     * Other recommendations include a "guard ring" of vias.
-    * [This project](https://github.com/Swyter/psdaptwor/tree/master) claims that 100 ohm + 33pF is "known good".
+    * [This project](https://github.com/Swyter/psdaptwor/tree/master) claims that 100 ohm + 33pF is "known good".  (4-layer)
   * GPIO15 for fpga_clk conflicts USB reset fix for old RP2040 silicon
 * Silkscreen
   * Front:
