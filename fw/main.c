@@ -130,12 +130,11 @@ int main() {
     gpio_set_function(SPI_SDI_GP, GPIO_FUNC_SPI);
     printf("    spi1     = %u Bd\n", baudrate);
 
-    // 'sd_init()' prior to 'video_init()' to avoid a hardfault in 'ff_memfree()'.
-    sd_init();
-    video_init();
-
-    // Quick test of SD card before entering RAM test.
+    // Disable SD until we have a chance to debug hard fault in 'ff_memfree()'.
+    // sd_init();
     // sd_read_file("filename.txt");
+
+    video_init();
 
     // Initialize TinyUSB
     usb_init();
