@@ -12,16 +12,17 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-module spi1_controller #(
-    parameter WB_DATA_WIDTH = 8,
-    parameter WB_ADDR_WIDTH = 20
-) (
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
+module spi1_controller (
     // Wishbone B4 pipelined controller
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                      // Bus clock
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [WB_DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
-    input  logic [WB_DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
+    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
     output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
     output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
     output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
@@ -43,8 +44,8 @@ module spi1_controller #(
     logic spi_strobe;  // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
                        // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
 
-    logic [WB_DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
-    logic [WB_DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
+    logic [   DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
+    logic [   DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
 
     spi spi (
         .spi_cs_ni(spi_cs_ni),
