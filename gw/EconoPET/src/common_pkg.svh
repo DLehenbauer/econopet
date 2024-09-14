@@ -81,8 +81,8 @@ package common_pkg;
     localparam WB_RAM_BASE  = 3'b000;
     localparam WB_REG_BASE  = 3'b010;
     localparam WB_KBD_BASE  = 3'b011;
-    localparam WB_VRAM_BASE = { WB_RAM_BASE, 6'b100000 };   // SRAM: $8000-87FF
-    localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b100001 };   // SRAM: $8800-8FFF
+    localparam WB_VRAM_BASE = { WB_RAM_BASE, 6'b010000 };   // SRAM: $8000-87FF
+    localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b010001 };   // SRAM: $8800-8FFF
 
     // TODO: Move some of these address helpers to ../sim?
     function bit[WB_ADDR_WIDTH-1:0] wb_ram_addr(input bit[RAM_ADDR_WIDTH-1:0] address);
