@@ -69,18 +69,22 @@ package common_pkg;
         return $clog2(value + 1'b1);
     endfunction
 
-    localparam int unsigned WB_ADDR_WIDTH  = 20;
-    localparam int unsigned RAM_ADDR_WIDTH = 17;
-    localparam int unsigned CPU_ADDR_WIDTH = 16;
-    localparam int unsigned REG_ADDR_WIDTH = bit_width(REG_COUNT);              // TODO: Should be 'REG_COUNT - 1'b1', but with REG_COUNT=1, that results in 0 address lines.
-    localparam int unsigned KBD_ADDR_WIDTH = bit_width(KBD_ROW_COUNT - 1'b1);
-    localparam int unsigned DATA_WIDTH     = 8;
+    localparam int unsigned WB_ADDR_WIDTH   = 20;
+    localparam int unsigned RAM_ADDR_WIDTH  = 17;
+    localparam int unsigned VRAM_ADDR_WIDTH = 11;
+    localparam int unsigned VROM_ADDR_WIDTH = 11;
+    localparam int unsigned CPU_ADDR_WIDTH  = 16;
+    localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT);              // TODO: Should be 'REG_COUNT - 1'b1', but with REG_COUNT=1, that results in 0 address lines.
+    localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_ROW_COUNT - 1'b1);
+    localparam int unsigned DATA_WIDTH      = 8;
 
-    localparam WB_RAM_BASE = 3'b000;
-    localparam WB_REG_BASE = 3'b010;
-    localparam WB_KBD_BASE = 3'b011;
+    localparam WB_RAM_BASE  = 3'b000;
+    localparam WB_REG_BASE  = 3'b010;
+    localparam WB_KBD_BASE  = 3'b011;
+    localparam WB_VRAM_BASE = { WB_RAM_BASE, 6'b100000 };   // SRAM: $8000-87FF
+    localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b100001 };   // SRAM: $8800-8FFF
 
-    // TODO: Move these address helpers to ../sim?
+    // TODO: Move some of these address helpers to ../sim?
     function bit[WB_ADDR_WIDTH-1:0] wb_ram_addr(input bit[RAM_ADDR_WIDTH-1:0] address);
         return { WB_RAM_BASE, address };
     endfunction
@@ -91,6 +95,14 @@ package common_pkg;
 
     function bit[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input bit[KBD_ADDR_WIDTH-1:0] register);
         return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_ADDR_WIDTH - $bits(WB_KBD_BASE))'('x), register };
+    endfunction
+
+    function bit[WB_ADDR_WIDTH-1:0] wb_vram_addr(input bit[VRAM_ADDR_WIDTH-1:0] address);
+        return { WB_VRAM_BASE, address };
+    endfunction
+
+    function bit[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input bit[VROM_ADDR_WIDTH-1:0] address);
+        return { WB_VROM_BASE, address };
     endfunction
 endpackage
 
