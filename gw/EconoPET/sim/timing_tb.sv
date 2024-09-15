@@ -22,14 +22,23 @@ module timing_tb;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
 
+    logic cpu_grant;
+    logic video_grant;
+    logic spi_grant;
+    logic strobe;
+
     timing timing (
-        .clock_i(clock)
+        .clock_i(clock),
+        .cpu_grant_o(cpu_grant),
+        .video_grant_o(video_grant),
+        .spi_grant_o(spi_grant),
+        .strobe_o(strobe)
     );
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
-        repeat (128) @(posedge clock);
+        repeat (1024) @(posedge clock);
 
         #1 $display("[%t] END %m", $time);
     endtask

@@ -57,7 +57,9 @@ module main (
     output logic via_cs_o,
 
     // Video
+    input  logic graphic_i,     // VIA CA2 pin 39: Character ROM A10 (0 = graphics, 1 = text)
     output logic v_sync_o,
+    output logic h_sync_o,
 
     // SPI1 bus
     input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
@@ -93,7 +95,7 @@ module main (
         .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
-        .wb_stall_i(wb_stall),
+        .wb_stall_i(!(spi_grant & grant_strobe) | wb_stall),
         .wb_ack_i(wb_ack),
 
         .spi_cs_ni(spi1_cs_ni),     // SPI CS_N
@@ -112,12 +114,16 @@ module main (
     assign cpu_we_oe   = 0;
 
     logic cpu_grant;
-    logic wb_grant;
+    logic spi_grant;
+    logic video_grant;
+    logic grant_strobe;
 
     timing timing (
         .clock_i(sys_clock_i),
         .cpu_grant_o(cpu_grant),
-        .wb_grant_o(wb_grant)
+        .video_grant_o(video_grant),
+        .spi_grant_o(spi_grant),
+        .strobe_o(grant_strobe)
     );
 
     logic cpu_valid_strobe;
@@ -125,7 +131,7 @@ module main (
 
     cpu cpu (
         .sys_clock_i(sys_clock_i),
-        .cpu_grant_i(cpu_grant),
+        .cpu_grant_i(cpu_grant && grant_strobe),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
         .cpu_valid_strobe_o(cpu_valid_strobe),
@@ -153,7 +159,7 @@ module main (
         .wb_data_o(ram_wb_dout),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_grant & wb_strobe),
+        .wb_strobe_i(wb_strobe),
         .wb_stall_o(ram_wb_stall),
         .wb_ack_o(ram_wb_ack),
 
@@ -180,7 +186,7 @@ module main (
         .wb_data_o(reg_wb_dout),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_grant & wb_strobe),
+        .wb_strobe_i(wb_strobe),
         .wb_ack_o(reg_wb_ack),
         .wb_stall_o(reg_wb_stall),
 
@@ -197,6 +203,7 @@ module main (
     logic pia2_en;
     logic via_en;
     logic io_en;
+    logic crtc_en;
 
     address_decoding address_decoding (
         .cpu_be_i(cpu_be_o),
@@ -207,13 +214,54 @@ module main (
         .pia2_en_o(pia2_en),
         .via_en_o(via_en),
         .io_en_o(io_en),
+        .crtc_en_o(crtc_en),
 
         // Not yet used
         .sid_en_o(),
         .magic_en_o(),
-        .crtc_en_o(),
         .is_mirrored_o(),
         .is_readonly_o()
+    );
+
+    //
+    // Video
+    //
+
+    logic [WB_ADDR_WIDTH-1:0] video_addr;    // Captured address for read
+    logic [   DATA_WIDTH-1:0] video_dout;    // Video -> FPGA
+    logic                     video_we;
+    logic                     video_cycle;
+    logic                     video_strobe;
+
+    logic [   DATA_WIDTH-1:0] crtc_dout;     // CRTC -> CPU
+    logic                     crtc_oe;
+    logic                     col_80_mode_i = 1'b1;     // TODO: Use register file
+
+    video video (
+        // Wishbone controller used to fetch VRAM/VROM from Wishbone bus
+        .wb_clock_i(sys_clock_i),
+        .wb_addr_o(video_addr),
+        .wb_data_i(wb_din),
+        .wb_data_o(video_dout),
+        .wb_we_o(video_we),
+        .wb_cycle_o(video_cycle),
+        .wb_strobe_o(video_strobe),
+        .wb_stall_i(!(video_grant & video_strobe) | wb_stall),
+        .wb_ack_i(wb_ack),
+
+        .cpu_reset_i(cpu_reset_i),
+        .wr_strobe_i(cpu_valid_strobe),     // Clock enable to capture address/data from CPU -> CRTC
+        .cclk_en_i(cpu_valid_strobe),       // Clock enable for 1 MHz character clock
+        .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
+        .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
+        .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
+        .crtc_data_i(cpu_data_o),           // CPU -> CRTC
+        .crtc_data_o(crtc_dout),            // CRTC -> CPU
+        .crtc_data_oe(crtc_oe),             // Asserted when CPU is reading from CRTC
+        .col_80_mode_i(col_80_mode_i),      // 0 = 40 column mode, 1 = 80 column mode
+        .graphic_i(graphic_i),
+        .h_sync_o(h_sync_o),
+        .v_sync_o(v_sync_o)
     );
 
     //
@@ -232,7 +280,7 @@ module main (
         .wb_data_o(),           // We do not currently support reading back from the keyboard
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_grant & wb_strobe),
+        .wb_strobe_i(wb_strobe),
         .wb_stall_o(kbd_wb_stall),
         .wb_ack_o(kbd_wb_ack),
         .pia1_rs_i(cpu_addr_i[1:0]),
@@ -254,10 +302,11 @@ module main (
     assign wb_din       = spi1_dout;
     assign wb_we        = spi1_we;
     assign wb_cycle     = spi1_cycle;
-    assign wb_strobe    = spi1_strobe;
+    assign wb_strobe    = (spi_grant & grant_strobe & spi1_strobe)
+                        | (video_grant & grant_strobe & video_strobe);
 
     assign wb_dout  = ram_wb_dout;
-    assign wb_stall = ~wb_grant | ram_wb_stall | reg_wb_stall | kbd_wb_stall;
+    assign wb_stall = ram_wb_stall | reg_wb_stall | kbd_wb_stall;
     assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
 
     //
@@ -307,9 +356,4 @@ module main (
         assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
     end
     // synthesis on
-
-    vsync vsync (
-        .cpu_clock_i(cpu_clock_o),
-        .v_sync_o(v_sync_o)
-    );
 endmodule

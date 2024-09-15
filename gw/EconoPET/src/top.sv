@@ -83,6 +83,8 @@ module top #(
     input logic config_kbd_i,   // (0 = Business, 1 = Graphics)
 
     // Video
+    input  logic graphic_i,
+    output logic h_sync_o,
     output logic v_sync_o,
 
     // Audio
@@ -219,6 +221,8 @@ module top #(
         .pia2_cs_o(pia2_cs_o),
         .via_cs_o(via_cs_o),
 
+        .graphic_i(graphic_i),
+        .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),
 
         .spi1_cs_ni(spi1_cs_ni),

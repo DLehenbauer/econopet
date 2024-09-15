@@ -28,8 +28,22 @@ module video_tb;
     logic                      we;
     logic                      cycle;
     logic                      strobe;
-    logic                      stall;
-    logic                      ack;
+    logic                      stall = 1'b0;
+    logic                      ack   = 1'b1;
+
+    logic                      v_sync;
+    logic                      h_sync;
+
+    logic                     cpu_grant;
+    logic                     video_grant;
+    logic                     spi_grant;
+
+    timing timing (
+        .clock_i(clock),
+        .cpu_grant_o(cpu_grant),
+        .video_grant_o(video_grant),
+        .spi_grant_o(spi_grant)
+    );
 
     video video (
         .wb_clock_i(clock),
@@ -41,15 +55,21 @@ module video_tb;
         .wb_strobe_o(strobe),
         .wb_stall_i(stall),
         .wb_ack_i(ack),
+
+        .cclk_en_i(cpu_grant),
+        .wr_strobe_i(cpu_grant),
+
         .col_80_mode_i(1'b0),
-        .gfx_mode_i(1'b0)
+        .graphic_i(1'b1),
+        .v_sync_o(v_sync),
+        .h_sync_o(h_sync)
     );
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
-        #10000;
-        
+        //@(posedge v_sync);
+
         #1 $display("[%t] END %m", $time);
     endtask
 endmodule

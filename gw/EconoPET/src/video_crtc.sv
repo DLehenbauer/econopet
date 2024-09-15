@@ -14,8 +14,9 @@
 
 module video_crtc(
     input  logic        reset_i,
-    input  logic        strobe_clk_i,           // Triggers data transfers on bus
-    input  logic        setup_clk_i,            // Triggers data transfers on bus
+    input  logic        sys_clock_i,            // FPGA System clock
+    input  logic        wr_strobe_i,            // Gates writes to CRTC registers
+    input  logic        cclk_en_i,              // Gates system clock to 1 MHz character clock
     input  logic        cs_i,                   // CRTC selected for data transfer (driven by address decoding)
     input  logic        rw_ni,                  // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
 
@@ -24,8 +25,6 @@ module video_crtc(
     input  logic  [7:0] data_i,                 // Transfer data written from CPU to CRTC when CS asserted and /RW is low
     output logic  [7:0] data_o,                 // Transfer data read by CPU from CRTC when CS asserted and /RW is high
     output logic        data_oe,                // Asserted when CPU is reading from CRTC
-
-    input  logic        cclk_en_i,              // Enables character clock (always 1 MHz)
 
     output logic        h_sync_o,               // Horizontal sync
     output logic        v_sync_o,               // Vertical sync
@@ -95,8 +94,8 @@ module video_crtc(
         r[R13_START_ADDR_LO]    = 8'h00;
     end
 
-    always_ff @(negedge strobe_clk_i) begin
-        if (cs_i && !rw_ni) begin
+    always_ff @(posedge sys_clock_i) begin
+        if (wr_strobe_i && cs_i && !rw_ni) begin
             if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register
             else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (R0..17)
         end
@@ -124,7 +123,7 @@ module video_crtc(
     wire last_column = h_total_counter == h_displayed;
     wire line_ending = h_total_counter == h_total;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_total_counter <= '0;
         else if (cclk_en_i) begin
             if (line_ending) h_total_counter <= '0;
@@ -132,19 +131,19 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_display = 1'b1;
         else if (last_column) h_display <= '0;
         else if (h_total_counter == '0) h_display <= 1'b1;
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_sync <= '0;
         else if (h_sync_counter == h_sync_width) h_sync <= 1'b0;
         else if (h_total_counter == h_sync_pos) h_sync <= 1'b1;
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_sync_counter <= '0;
         else if (cclk_en_i) begin            
             if (h_sync) h_sync_counter <= h_sync_counter + 1'b1;
@@ -158,7 +157,7 @@ module video_crtc(
     wire last_line  = line_counter == max_scan_line;
     wire row_ending = last_line && line_ending;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) line_counter <= '0;
         else if (cclk_en_i) begin
             if (frame_start) line_counter <= '0;
@@ -176,7 +175,7 @@ module video_crtc(
 
     wire last_row    = v_total_counter == v_total;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_total_counter <= '0;
         else if (cclk_en_i) begin
             if (frame_start) v_total_counter <= '0;
@@ -184,7 +183,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_display =1'b1;
         else if (cclk_en_i) begin
             if (v_total_counter == v_displayed) v_display <= '0;
@@ -194,7 +193,7 @@ module video_crtc(
 
     logic v_sync_latched = '0;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) begin
             v_sync <= '0;
             v_sync_latched <= '0;
@@ -208,7 +207,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_sync_counter <= '0;
         else if (cclk_en_i) begin
             if (line_ending) begin
@@ -218,7 +217,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_sync_counter <= '0;
         else if (cclk_en_i) begin
             if (line_ending) begin
@@ -234,7 +233,7 @@ module video_crtc(
     wire adjusting     = frame_state_d == ADJUSTING;
     wire adjust_ending = line_ending && adjust_counter == v_adjust;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) adjust_counter <= '0;
         else if (cclk_en_i) begin
             if (adjust_ending) adjust_counter <= '0;
@@ -269,7 +268,7 @@ module video_crtc(
         endcase
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) frame_state_q <= NORMAL;
         else if (cclk_en_i)frame_state_q <= frame_state_d;
     end
@@ -278,7 +277,7 @@ module video_crtc(
 
     logic [13:0] row_addr = '0;
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) row_addr <= '0;
         else if (cclk_en_i) begin
             if (frame_start) row_addr <= start_addr;
@@ -286,7 +285,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge setup_clk_i) begin
+    always_ff @(posedge sys_clock_i) begin
         if (reset_i) ma_o <= '0;
         else if (cclk_en_i) begin
             if (frame_start) ma_o <= start_addr;
