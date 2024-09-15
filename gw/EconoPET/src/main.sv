@@ -81,41 +81,27 @@ module main (
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_dout;
-    logic [   DATA_WIDTH-1:0] spi1_din;
     logic                     spi1_we;
     logic                     spi1_cycle;
     logic                     spi1_strobe;
-    logic                     spi1_stall;
-    logic                     spi1_ack;
 
     spi1_controller spi1 (
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(spi1_addr),
         .wb_data_o(spi1_dout),
-        .wb_data_i(spi1_din),
+        .wb_data_i(wb_dout),
         .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
-        .wb_stall_i(spi1_stall),
-        .wb_ack_i(spi1_ack),
+        .wb_stall_i(wb_stall),
+        .wb_ack_i(wb_ack),
 
-        .spi_cs_ni(spi1_cs_ni),
-        .spi_sck_i(spi1_sck_i),
-        .spi_sd_i (spi1_sd_i),
-        .spi_sd_o (spi1_sd_o),
-
-        .spi_stall_o(spi_stall_o)
+        .spi_cs_ni(spi1_cs_ni),     // SPI CS_N
+        .spi_sck_i(spi1_sck_i),     // SPI SCK
+        .spi_sd_i (spi1_sd_i),      // SPI MCU TX  -> FPGA RX
+        .spi_sd_o (spi1_sd_o),      // SPI FPGA TX -> MCU RX
+        .spi_stall_o(spi_stall_o)   // Backpressure to MCU
     );
-
-    // For now, SPI1 is the only controller on the Wishbone bus.
-    assign wb_addr      = spi1_addr;
-    assign wb_din       = spi1_dout;
-    assign spi1_din     = wb_dout;
-    assign wb_we        = spi1_we;
-    assign wb_cycle     = spi1_cycle;
-    assign wb_strobe    = spi1_strobe;
-    assign spi1_ack     = wb_ack;
-    assign spi1_stall   = wb_stall;
 
     // For now, outgoing CPU control signals are constant.
     assign cpu_irq_o   = 0;
@@ -262,6 +248,13 @@ module main (
     //
     // Wishbone
     //
+
+    // For now, SPI1 is the only controller on the Wishbone bus.
+    assign wb_addr      = spi1_addr;
+    assign wb_din       = spi1_dout;
+    assign wb_we        = spi1_we;
+    assign wb_cycle     = spi1_cycle;
+    assign wb_strobe    = spi1_strobe;
 
     assign wb_dout  = ram_wb_dout;
     assign wb_stall = ~wb_grant | ram_wb_stall | reg_wb_stall | kbd_wb_stall;
