@@ -1,6 +1,8 @@
 # Video
 
-## Non-CRTC Timing
+## Non-CRTC
+
+### Timing (Non-CRTC)
 
 Measurements from a 2001-32N (1979):
 
@@ -26,7 +28,14 @@ Register | Value | Description
  R7      |   28  | V_SYNC_POS
  R9      |    7  | SCAN_LINE = 8 pixel character height (-1)
 
-## CRTC Timing
+## CRTC
+
+### Address decoding
+
+Address decoding selects asserts the CRTC's CS line (Chip Select) for $E880-E8FF.
+The CRTC has a single RS (Register Select) input that is tied to A0.
+
+### Timing (CRTC)
 
 Measurements from 8032 power on:
 
