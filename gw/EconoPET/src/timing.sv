@@ -23,7 +23,7 @@ module timing (
     output logic spi_grant_o,
     output logic strobe_o
 );
-    logic [5:0] cycle_count = '0;
+    logic [2:0] cycle_count = '0;
 
     always_ff @(posedge clock_i) begin
         cycle_count <= cycle_count + 1'b1;
