@@ -84,12 +84,12 @@ module video_crtc(
         r[R0_H_TOTAL]           = 8'd63;
         r[R1_H_DISPLAYED]       = 8'd40;
         r[R2_H_SYNC_POS]        = 8'd48;
-        r[R3_SYNC_WIDTH]        = 8'h01;
-        r[R4_V_TOTAL]           = { 1'b0, 7'd32 };
-        r[R5_V_ADJUST]          = { 3'b0, 5'd05 };
-        r[R6_V_DISPLAYED]       = { 1'b0, 7'd25 };
-        r[R7_V_SYNC_POS]        = { 1'b0, 7'd28 };
-        r[R9_MAX_SCAN_LINE]     = { 3'b0, 5'd07 };
+        r[R3_SYNC_WIDTH]        = 8'h51;
+        r[R4_V_TOTAL]           = { 1'd0, 7'd32 };
+        r[R5_V_ADJUST]          = { 3'd0, 5'd05 };
+        r[R6_V_DISPLAYED]       = { 1'd0, 7'd25 };
+        r[R7_V_SYNC_POS]        = { 1'd0, 7'd28 };
+        r[R9_MAX_SCAN_LINE]     = { 3'd0, 5'd07 };
         r[R12_START_ADDR_HI]    = 8'h10;
         r[R13_START_ADDR_LO]    = 8'h00;
     end
@@ -247,6 +247,9 @@ module video_crtc(
     wire frame_start = frame_ending && adjust_ending;
 
     always_comb begin
+        // Do not move into 'default' case.
+        frame_state_d = frame_state_q;
+        
         unique case (frame_state_q)
             NORMAL: if (last_row && last_line) frame_state_d = FRAME_ENDING;
 
@@ -257,8 +260,11 @@ module video_crtc(
 
             ADJUST_PENDING: if (line_ending) frame_state_d = ADJUSTING;
             ADJUSTING: if (adjust_ending) frame_state_d = NORMAL;
-
-            default: frame_state_d = frame_state_q;
+            default: begin
+                // synthesis off
+                $fatal(1, "Illegal 'frame_state_q' value: %0d", frame_state_q);
+                // synthesis on
+            end
         endcase
     end
 
@@ -289,7 +295,7 @@ module video_crtc(
     end
 
     assign h_sync_o = h_sync;
-    assign v_sync_o = v_sync;
+    assign v_sync_o = v_sync; 
     assign de_o     = h_display && v_display;
     assign ra_o     = line_counter;
 endmodule
