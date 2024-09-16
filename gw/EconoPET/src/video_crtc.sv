@@ -85,11 +85,11 @@ module video_crtc(
         r[R1_H_DISPLAYED]       = 8'd40;
         r[R2_H_SYNC_POS]        = 8'd48;
         r[R3_SYNC_WIDTH]        = 8'h01;
-        r[R4_V_TOTAL]           = 7'd32;
-        r[R5_V_ADJUST]          = 5'd05;
-        r[R6_V_DISPLAYED]       = 7'd25;
-        r[R7_V_SYNC_POS]        = 7'd28;
-        r[R9_MAX_SCAN_LINE]     = 5'd07;
+        r[R4_V_TOTAL]           = { 1'b0, 7'd32 };
+        r[R5_V_ADJUST]          = { 3'b0, 5'd05 };
+        r[R6_V_DISPLAYED]       = { 1'b0, 7'd25 };
+        r[R7_V_SYNC_POS]        = { 1'b0, 7'd28 };
+        r[R9_MAX_SCAN_LINE]     = { 3'b0, 5'd07 };
         r[R12_START_ADDR_HI]    = 8'h10;
         r[R13_START_ADDR_LO]    = 8'h00;
     end
@@ -105,7 +105,9 @@ module video_crtc(
     wire  [7:0] h_displayed     = r[R1_H_DISPLAYED];
     wire  [7:0] h_sync_pos      = r[R2_H_SYNC_POS];
     wire  [3:0] h_sync_width    = r[R3_SYNC_WIDTH][3:0];
-    wire  [4:0] v_sync_width    = r[R3_SYNC_WIDTH][7:4] == 0 ? 5'h10 : r[R3_SYNC_WIDTH][7:4];
+    wire  [4:0] v_sync_width    = r[R3_SYNC_WIDTH][7:4] == 0            // Per Datasheet, when bits 4-7 are all
+                                    ? 5'h10                             // "0", VSYNC will be 16 scan lines wide.
+                                    : { 1'b0, r[R3_SYNC_WIDTH][7:4] };
     wire  [6:0] v_total         = r[R4_V_TOTAL][6:0];
     wire  [4:0] v_adjust        = r[R5_V_ADJUST][4:0];
     wire  [6:0] v_displayed     = r[R6_V_DISPLAYED][6:0];
@@ -117,7 +119,7 @@ module video_crtc(
 
     logic [7:0] h_total_counter = '0;
     logic [3:0] h_sync_counter  = '0;
-    logic       h_display        = '1;
+    logic       h_display       = 1'b1;
     logic       h_sync          = '0;
 
     wire last_column = h_total_counter == h_displayed;
@@ -132,7 +134,7 @@ module video_crtc(
     end
 
     always_ff @(posedge sys_clock_i) begin
-        if (reset_i) h_display = 1'b1;
+        if (reset_i) h_display <= 1'b1;
         else if (last_column) h_display <= '0;
         else if (h_total_counter == '0) h_display <= 1'b1;
     end
@@ -169,11 +171,11 @@ module video_crtc(
     // Vertical
 
     logic [6:0] v_total_counter = '0;
-    logic [5:0] v_sync_counter  = '0;
+    logic [4:0] v_sync_counter  = '0;
     logic       v_display       = 1'b1;
     logic       v_sync          = '0;
 
-    wire last_row    = v_total_counter == v_total;
+    wire last_row = v_total_counter == v_total;
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_total_counter <= '0;
@@ -184,13 +186,15 @@ module video_crtc(
     end
 
     always_ff @(posedge sys_clock_i) begin
-        if (reset_i) v_display =1'b1;
+        if (reset_i) v_display <= 1'b1;
         else if (cclk_en_i) begin
             if (v_total_counter == v_displayed) v_display <= '0;
             else if (frame_start) v_display <= 1'b1;
         end
     end
 
+    // TODO: 'v_sync_latched' appears to prevent multiple VSYNC pulses if v_total_counter/v_sync_pos
+    //       change during the current frame.  Why?
     logic v_sync_latched = '0;
 
     always_ff @(posedge sys_clock_i) begin
@@ -203,16 +207,6 @@ module video_crtc(
             else if (v_total_counter == v_sync_pos && !v_sync_latched) begin
                 v_sync_latched <= 1'b1;
                 v_sync <= 1'b1;
-            end
-        end
-    end
-
-    always_ff @(posedge sys_clock_i) begin
-        if (reset_i) v_sync_counter <= '0;
-        else if (cclk_en_i) begin
-            if (line_ending) begin
-                if (v_sync) v_sync_counter <= v_sync_counter + 1'b1;
-                else v_sync_counter <= '0;
             end
         end
     end
@@ -253,8 +247,6 @@ module video_crtc(
     wire frame_start = frame_ending && adjust_ending;
 
     always_comb begin
-        frame_state_d = frame_state_q;
-
         unique case (frame_state_q)
             NORMAL: if (last_row && last_line) frame_state_d = FRAME_ENDING;
 
@@ -265,6 +257,8 @@ module video_crtc(
 
             ADJUST_PENDING: if (line_ending) frame_state_d = ADJUSTING;
             ADJUSTING: if (adjust_ending) frame_state_d = NORMAL;
+
+            default: frame_state_d = frame_state_q;
         endcase
     end
 
@@ -295,7 +289,7 @@ module video_crtc(
     end
 
     assign h_sync_o = h_sync;
-    assign v_sync_o = v_sync; 
+    assign v_sync_o = v_sync;
     assign de_o     = h_display && v_display;
     assign ra_o     = line_counter;
 endmodule
