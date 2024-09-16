@@ -81,6 +81,8 @@ module video_crtc(
         : r[ar];                                // RS = 1: Read addressed register R0..17 (TODO: Allow this?  Infers dual-port RAM?)
 
     initial begin
+        // Power-on state emulates a non-CRTC PET (15kHz, 60Hz)
+        // The appropriate Editor ROM will reconfigure the CRTC for later models.
         r[R0_H_TOTAL]           = 8'd63;
         r[R1_H_DISPLAYED]       = 8'd40;
         r[R2_H_SYNC_POS]        = 8'd48;
@@ -90,7 +92,7 @@ module video_crtc(
         r[R6_V_DISPLAYED]       = { 1'd0, 7'd25 };
         r[R7_V_SYNC_POS]        = { 1'd0, 7'd28 };
         r[R9_MAX_SCAN_LINE]     = { 3'd0, 5'd07 };
-        r[R12_START_ADDR_HI]    = 8'h10;
+        r[R12_START_ADDR_HI]    = 8'h00;    // TA12 inverts video ('h00 = 9" monitor, 'h10 = 12" monitor)
         r[R13_START_ADDR_LO]    = 8'h00;
     end
 

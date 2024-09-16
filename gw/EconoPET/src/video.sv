@@ -73,6 +73,20 @@ module video (
         .ra_o(ra)                     // Raster address lines
     );
 
+    // TODO: CRTC TA12 is used to invert video:
+    //
+    //     poke 59520, 12 : rem Select R12 (START_ADDR_HI)
+    //     poke 59521, 0  : rem Clear TA12
+    //
+    // To return to normal video:
+    //
+    //     poke 59521, 16 : rem Set TA12
+    //
+    // wire invert = ma[12];
+
+    // TODO: TA13 disables the character ROM for international character sets.
+    // wire chr_option = ma[13];
+
     localparam EVEN_RAM = 0,
                EVEN_ROM = 1,
                ODD_RAM  = 2,

@@ -13,6 +13,7 @@
  */
 
 module sim;
+    video_crtc_tb video_crtc_tb ();
     video_tb video_tb ();
     keyboard_tb keyboard_tb ();
     register_file_tb register_file_tb ();
@@ -27,6 +28,7 @@ module sim;
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
+        video_crtc_tb.run();
         video_tb.run();
         keyboard_tb.run();
         register_file_tb.run();
