@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "JLCPCB")(type "KiCad")(uri "${KIPRJMOD}/jlcpcb-import/Schematic/default_lib.kicad_sym")(options "")(descr ""))
+)
