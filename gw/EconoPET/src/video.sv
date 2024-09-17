@@ -73,19 +73,8 @@ module video (
         .ra_o(ra)                     // Raster address lines
     );
 
-    // TODO: CRTC TA12 is used to invert video:
-    //
-    //     poke 59520, 12 : rem Select R12 (START_ADDR_HI)
-    //     poke 59521, 0  : rem Clear TA12
-    //
-    // To return to normal video:
-    //
-    //     poke 59521, 16 : rem Set TA12
-    //
-    // wire invert = ma[12];
-
-    // TODO: TA13 disables the character ROM for international character sets.
-    // wire chr_option = ma[13];
+    wire crtc_invert     = ma[12];   // TA12 inverts the video signal (0 = inverted, 1 = normal)
+    wire crtc_chr_option = ma[13];   // TA13 selects an alternative character rom (0 = normal, 1 = international)
 
     localparam EVEN_RAM = 0,
                EVEN_ROM = 1,
@@ -97,9 +86,9 @@ module video (
         addrs[EVEN_RAM] = common_pkg::wb_vram_addr(col_80_mode_i
             ? { ma[9:0], 1'b0 }     // 80 column mode
             : { 1'b0, ma[9:0] });   // 40 column mode
-        addrs[EVEN_ROM] = common_pkg::wb_vrom_addr({ graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
+        addrs[EVEN_ROM] = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
         addrs[ODD_RAM]  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
-        addrs[ODD_ROM]  = common_pkg::wb_vrom_addr({ graphic_i, data[ODD_RAM][6:0], ra[2:0] });
+        addrs[ODD_ROM]  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
     end
 
     logic [DATA_WIDTH-1:0] data [3:0];

@@ -72,7 +72,7 @@ package common_pkg;
     localparam int unsigned WB_ADDR_WIDTH   = 20;
     localparam int unsigned RAM_ADDR_WIDTH  = 17;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
-    localparam int unsigned VROM_ADDR_WIDTH = 11;
+    localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
     localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT);              // TODO: Should be 'REG_COUNT - 1'b1', but with REG_COUNT=1, that results in 0 address lines.
     localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_ROW_COUNT - 1'b1);
@@ -85,24 +85,30 @@ package common_pkg;
     localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b010001 };   // SRAM: $8800-8FFF
 
     // TODO: Move some of these address helpers to ../sim?
-    function bit[WB_ADDR_WIDTH-1:0] wb_ram_addr(input bit[RAM_ADDR_WIDTH-1:0] address);
+    function logic[WB_ADDR_WIDTH-1:0] wb_ram_addr(input logic[RAM_ADDR_WIDTH-1:0] address);
         return { WB_RAM_BASE, address };
     endfunction
 
-    function bit[WB_ADDR_WIDTH-1:0] wb_reg_addr(input bit[REG_ADDR_WIDTH-1:0] register);
+    function logic[WB_ADDR_WIDTH-1:0] wb_reg_addr(input logic[REG_ADDR_WIDTH-1:0] register);
         return { WB_REG_BASE, (WB_ADDR_WIDTH - REG_ADDR_WIDTH - $bits(WB_REG_BASE))'('x), register };
     endfunction
 
-    function bit[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input bit[KBD_ADDR_WIDTH-1:0] register);
+    function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_ADDR_WIDTH-1:0] register);
         return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_ADDR_WIDTH - $bits(WB_KBD_BASE))'('x), register };
     endfunction
 
-    function bit[WB_ADDR_WIDTH-1:0] wb_vram_addr(input bit[VRAM_ADDR_WIDTH-1:0] address);
+    function logic[WB_ADDR_WIDTH-1:0] wb_vram_addr(input logic[VRAM_ADDR_WIDTH-1:0] address);
         return { WB_VRAM_BASE, address };
     endfunction
 
-    function bit[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input bit[VROM_ADDR_WIDTH-1:0] address);
-        return { WB_VROM_BASE, address };
+    function logic[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input logic[VROM_ADDR_WIDTH-1:0] address);
+        // TODO: We currently only have 2KB of VROM mapped at $8800-$8FFF.
+        //       Therefore, we ignore the CHR_OPTION passed as the msb of the address.
+        //       (See 'CHR_OPTION' signal on sheets 8 and 10 of Universal Dynamic PET.)
+        logic [VROM_ADDR_WIDTH-2:0] truncated_address = address[VROM_ADDR_WIDTH-2:0];
+
+        // Note: Intermediate 'truncated_address' avoids hang in iverilog v12.0
+        return { WB_VROM_BASE, truncated_address };
     endfunction
 endpackage
 
