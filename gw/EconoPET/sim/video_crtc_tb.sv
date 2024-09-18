@@ -22,6 +22,8 @@ module video_crtc_tb;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
 
+    stopwatch stopwatch();
+
     logic cpu_grant;
     logic spi_grant;
     logic video_grant;
@@ -133,14 +135,6 @@ module video_crtc_tb;
         res = '0;
     endtask
 
-    function real to_hz(input real elapsed);
-        real s, hz;
-
-        s = elapsed * (1.0e3 / 1.0e12);
-        hz = 1.0 / s;
-        return hz;
-    endfunction
-
     task run;
         bit [63:0] start_time, elapsed_time;
 
@@ -188,17 +182,17 @@ module video_crtc_tb;
 
         // Measure Horizontal Sync Frequency
         @(posedge h_sync);
-        start_time = $time;
+        stopwatch.start();
 
         @(posedge h_sync);
-        $display("[%t] HSYNC at %0.2f kHz", $time, to_hz($time - start_time)/1000.0);
+        $display("[%t] HSYNC at %0.2f kHz", $time, stopwatch.freq_khz());
 
         // Measure Vertical Sync Frequency
         @(posedge v_sync);
-        start_time = $time;
+        stopwatch.start();
 
         @(posedge v_sync);
-        $display("[%t] VSYNC at %0.2f Hz", $time, to_hz($time - start_time));
+        $display("[%t] VSYNC at %0.2f Hz", $time, stopwatch.freq_hz());
 
         #1 $display("[%t] END %m", $time);
     endtask
