@@ -21,7 +21,9 @@ module timing (
     output logic cpu_grant_o,
     output logic video_grant_o,
     output logic spi_grant_o,
-    output logic strobe_o
+    output logic strobe_o,
+    output logic clk8_en_o,
+    output logic clk16_en_o
 );
     logic [2:0] cycle_count = '0;
 
@@ -41,11 +43,18 @@ module timing (
     logic [2:0] grant = '0;
 
     always_ff @(posedge clock_i) begin
-        strobe_o <= '0;
+        strobe_o   <= '0;
+        clk8_en_o  <= '0;
+        clk16_en_o <= '0;
         
-        if (cycle_count == '0) begin
-            strobe_o <= !(grant == CPU_1);
-            grant    <= grant + 1'b1;
+        if (cycle_count[1:0] == '0) begin
+            clk16_en_o <= 1'b1;
+
+            if (cycle_count[2] == '0) begin
+                clk8_en_o <= 1'b1;
+                strobe_o  <= !(grant == CPU_1);
+                grant     <= grant + 1'b1;
+            end
         end
     end
 
