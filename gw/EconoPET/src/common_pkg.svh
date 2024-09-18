@@ -105,10 +105,7 @@ package common_pkg;
         // TODO: We currently only have 2KB of VROM mapped at $8800-$8FFF.
         //       Therefore, we ignore the CHR_OPTION passed as the msb of the address.
         //       (See 'CHR_OPTION' signal on sheets 8 and 10 of Universal Dynamic PET.)
-        logic [VROM_ADDR_WIDTH-2:0] truncated_address = address[VROM_ADDR_WIDTH-2:0];
-
-        // Note: Intermediate 'truncated_address' avoids hang in iverilog v12.0
-        return { WB_VROM_BASE, truncated_address };
+        return { WB_VROM_BASE, address[VROM_ADDR_WIDTH-2:0] };
     endfunction
 endpackage
 

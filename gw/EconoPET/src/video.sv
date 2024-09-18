@@ -81,14 +81,19 @@ module video (
                ODD_RAM  = 2,
                ODD_ROM  = 3;
 
-    logic [WB_ADDR_WIDTH-1:0] addrs [3:0];
-    always_comb begin
-        addrs[EVEN_RAM] = common_pkg::wb_vram_addr(col_80_mode_i
+    wire [WB_ADDR_WIDTH-1:0] even_ram_addr = common_pkg::wb_vram_addr(col_80_mode_i
             ? { ma[9:0], 1'b0 }     // 80 column mode
             : { 1'b0, ma[9:0] });   // 40 column mode
-        addrs[EVEN_ROM] = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
-        addrs[ODD_RAM]  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
-        addrs[ODD_ROM]  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
+    wire [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
+    wire [WB_ADDR_WIDTH-1:0] odd_ram_addr  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
+    wire [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
+    logic [WB_ADDR_WIDTH-1:0] addrs [3:0];
+
+    always_comb begin
+        addrs[EVEN_RAM] = even_ram_addr;
+        addrs[EVEN_ROM] = even_rom_addr;
+        addrs[ODD_RAM]  =  odd_ram_addr;
+        addrs[ODD_ROM]  =  odd_rom_addr;
     end
 
     logic [DATA_WIDTH-1:0] data [3:0];
