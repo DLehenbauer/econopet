@@ -25,6 +25,7 @@
         <efx:design_file name="src/keyboard.sv" version="default" library="default"/>
         <efx:design_file name="src/video.sv" version="default" library="default"/>
         <efx:design_file name="src/video_crtc.sv" version="default" library="default"/>
+        <efx:design_file name="src/video_dotgen.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
     <efx:constraint_info>
