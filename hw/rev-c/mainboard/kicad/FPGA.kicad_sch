@@ -12821,13 +12821,13 @@
 		(uuid "1d5b7557-d7d1-44e2-b01c-82330c6c0e86")
 	)
 	(label "PMOD1_8"
-		(at 303.53 190.5 0)
+		(at 248.92 162.56 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "1e6d3c77-7668-4f35-8479-6b27e7006aad")
 	)
@@ -12898,7 +12898,7 @@
 		(uuid "2954bb2f-143d-45b6-8f7a-5ad70ec2a02e")
 	)
 	(label "PMOD2_6"
-		(at 242.57 198.12 180)
+		(at 242.57 195.58 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -12953,13 +12953,13 @@
 		(uuid "369ae55d-12d1-4e39-91d2-a81f31c0d91f")
 	)
 	(label "PMOD1_7"
-		(at 303.53 198.12 0)
+		(at 248.92 157.48 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "38bcd2e8-3917-40de-805c-81ea56908318")
 	)
@@ -13053,13 +13053,13 @@
 		(uuid "49fc6838-0f26-473b-bcd2-9c67cb0d7c63")
 	)
 	(label "PMOD1_1"
-		(at 248.92 165.1 180)
+		(at 303.53 195.58 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "4a09b4ad-44d1-466d-9d3c-3987ce2fd3b1")
 	)
@@ -13163,13 +13163,13 @@
 		(uuid "5aebb9e9-4b1d-461d-b3e6-777d4552c17c")
 	)
 	(label "PMOD2_1"
-		(at 242.57 200.66 180)
+		(at 205.74 93.98 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "5c52a79b-959a-4fe3-b391-d6c51ad2a176")
 	)
@@ -13218,13 +13218,13 @@
 		(uuid "621c1dd0-3a06-4b3b-a7e6-f1c7603da9a9")
 	)
 	(label "PMOD1_2"
-		(at 248.92 160.02 180)
+		(at 303.53 203.2 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "6310cf76-23b9-4459-8aec-5cc57a6772b5")
 	)
@@ -13395,13 +13395,13 @@
 		(uuid "7cb27c27-6fa5-4e82-9a0c-859b4f90388f")
 	)
 	(label "PMOD1_3"
-		(at 303.53 203.2 0)
+		(at 248.92 160.02 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "7e790b36-162a-4c00-ab1d-fefd2187d687")
 	)
@@ -13560,7 +13560,7 @@
 		(uuid "8e1cac6c-0850-4549-a0ff-df0038bb4b5e")
 	)
 	(label "PMOD2_3"
-		(at 242.57 190.5 180)
+		(at 242.57 193.04 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -13648,7 +13648,7 @@
 		(uuid "a15f3896-43eb-4ead-9cba-be168082419d")
 	)
 	(label "PMOD2_7"
-		(at 242.57 195.58 180)
+		(at 242.57 198.12 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -13967,7 +13967,7 @@
 		(uuid "ca2a78c1-2059-4398-9117-78c51a26b1e1")
 	)
 	(label "PMOD2_2"
-		(at 242.57 193.04 180)
+		(at 242.57 190.5 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -13978,13 +13978,13 @@
 		(uuid "ca581a44-e9d9-469b-be28-dd726ab2938c")
 	)
 	(label "PMOD1_6"
-		(at 248.92 157.48 180)
+		(at 303.53 198.12 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "cc5db3d8-5c8b-46cf-af4c-2f44b61e20c6")
 	)
@@ -14000,13 +14000,13 @@
 		(uuid "d21b6c61-38fb-41e0-99a1-c27f299e044f")
 	)
 	(label "PMOD1_5"
-		(at 248.92 162.56 180)
+		(at 303.53 190.5 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "d4d4226a-32a0-4be3-a7cd-98a6bde5b659")
 	)
@@ -14033,13 +14033,13 @@
 		(uuid "d6b7b83c-b9b6-4638-9722-2e3e811a9ae9")
 	)
 	(label "PMOD1_4"
-		(at 303.53 195.58 0)
+		(at 248.92 165.1 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "d9c68f67-71ab-43e8-8656-d73cfc808fa9")
 	)
@@ -14066,7 +14066,7 @@
 		(uuid "dce9554a-283d-4fdd-a6e0-6bff8b32983c")
 	)
 	(label "PMOD2_5"
-		(at 242.57 203.2 180)
+		(at 154.94 96.52 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -14110,13 +14110,13 @@
 		(uuid "e2d85002-a1b8-4721-a70e-e28334b4af41")
 	)
 	(label "PMOD2_8"
-		(at 205.74 93.98 0)
+		(at 242.57 203.2 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "e4559e79-2e2a-4806-8db9-a2f8ef15e824")
 	)
@@ -14165,7 +14165,7 @@
 		(uuid "e9cec018-570f-462f-808f-461bb8f35c85")
 	)
 	(label "PMOD2_4"
-		(at 154.94 96.52 180)
+		(at 242.57 200.66 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -16193,7 +16193,7 @@
 				)
 			)
 		)
-		(property "Footprint" "PET:PMOD_Socket_2x06_P2.54mm_Horizontal"
+		(property "Footprint" "EconoPET:PMOD_Socket_2x06_P2.54mm_Horizontal"
 			(at 316.23 2.54 0)
 			(effects
 				(font
@@ -16202,7 +16202,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.we-online.com/components/products/datasheet/613012243121.pdf"
 			(at 316.23 2.54 0)
 			(effects
 				(font
@@ -23140,7 +23140,7 @@
 				)
 			)
 		)
-		(property "Footprint" "PET:PMOD_Socket_2x06_P2.54mm_Horizontal"
+		(property "Footprint" "EconoPET:PMOD_Socket_2x06_P2.54mm_Horizontal"
 			(at 381 2.54 0)
 			(effects
 				(font
@@ -23149,7 +23149,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.we-online.com/components/products/datasheet/613012243121.pdf"
 			(at 381 2.54 0)
 			(effects
 				(font
