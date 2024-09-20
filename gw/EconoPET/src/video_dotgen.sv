@@ -38,7 +38,7 @@ module video_dotgen(
             display_en_d = display_en_i;
         end else begin
             pixel_ctr_d = pixel_ctr_q + 1'b1;
-            sr_out_d = { sr_out_q[14:0], 1'b0 };
+            sr_out_d = { sr_out_q[14:0], 1'b0 };    // TODO: Use 1'bx?
             reverse_d = reverse_q;
             display_en_d = display_en_q;    // TODO: Was 'display_en_i'?
         end

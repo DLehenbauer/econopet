@@ -29,9 +29,12 @@ module video (
     input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
     input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
+    input  logic cclk_en_i,                       // 1 MHz character clock enable
+    input  logic clk8_en_i,                       // 8 MHz clock enable
+    input  logic clk16_en_i,                      // 16 MHz clock enable
+
     input  logic cpu_reset_i,
     input  logic wr_strobe_i,
-    input  logic cclk_en_i,
     input  logic crtc_cs_i,                       // CRTC selected for data transfer (driven by address decoding)
     input  logic crtc_we_i,                       // Direction of data transfer (0 = writing to CRTC, 1 = reading from CRTC)
     input  logic crtc_rs_i,                       // Register select (0 = write address/read status, 1 = read addressed register)
@@ -43,13 +46,18 @@ module video (
     input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
 
     output logic h_sync_o,                        // Horizontal sync
-    output logic v_sync_o                         // Vertical sync
+    output logic v_sync_o,                        // Vertical sync
+    output logic video_o                          // Video output
 );
     initial begin
         wb_we_o     = '0;
         wb_cycle_o  = '0;
         wb_strobe_o = '0;
     end
+
+    //
+    // CRTC
+    //
 
     logic        de;    // Display enable
     logic [13:0] ma;
@@ -75,6 +83,10 @@ module video (
 
     wire crtc_invert     = ma[12];   // TA12 inverts the video signal (0 = inverted, 1 = normal)
     wire crtc_chr_option = ma[13];   // TA13 selects an alternative character rom (0 = normal, 1 = international)
+
+    //
+    // Fetch
+    //
 
     localparam EVEN_RAM = 0,
                EVEN_ROM = 1,
@@ -126,4 +138,40 @@ module video (
             end
         endcase
     end
+
+    wire [7:0] even_char = data[EVEN_RAM];
+    wire [7:0] even_rom = data[EVEN_ROM];
+    wire [7:0] odd_char = data[ODD_RAM];
+    wire [7:0] odd_rom = data[ODD_ROM];
+    wire [15:0] pixels = { even_rom, odd_rom };
+
+    // Scanlines exceeding the 8 pixel high character ROM should be blanked.
+    // (See 'NO_ROW' signal on sheets 8 and 10 of Universal Dynamic PET.)
+    wire no_row = ra[3] || ra[4];
+
+    //
+    // Dotgen
+    //
+
+    logic video_latch = 1'b0;
+
+    always_ff @(posedge wb_clock_i) begin
+        if (cclk_en_i) begin
+            video_latch <= 1'b1;
+        end else begin
+            video_latch <= 1'b0;
+        end
+    end
+
+    logic pixel_clk_en = col_80_mode_i ? clk16_en_i : clk8_en_i;
+
+    video_dotgen video_dotgen (
+        .sys_clock_i(wb_clock_i),
+        .pixel_clk_en(pixel_clk_en),
+        .video_latch(video_latch),
+        .pixels_i(pixels),
+        .reverse_i({ even_char[7], odd_char[7] }),
+        .display_en_i(de && !no_row),
+        .video_o(video_o)
+    );
 endmodule
