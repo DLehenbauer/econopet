@@ -31,18 +31,24 @@ module video_tb;
     logic                      stall = 1'b0;
     logic                      ack   = 1'b1;
 
-    logic                      v_sync;
-    logic                      h_sync;
+    logic cpu_grant;
+    logic video_grant;
+    logic spi_grant;
+    logic cclk_en;
+    logic clk8_en;
+    logic clk16_en;
 
-    logic                     cpu_grant;
-    logic                     video_grant;
-    logic                     spi_grant;
+    logic v_sync;
+    logic h_sync;
+    logic video_o;
 
     timing timing (
         .clock_i(clock),
         .cpu_grant_o(cpu_grant),
         .video_grant_o(video_grant),
-        .spi_grant_o(spi_grant)
+        .spi_grant_o(spi_grant),
+        .clk8_en_o(clk8_en),
+        .clk16_en_o(clk16_en)
     );
 
     video video (
@@ -56,19 +62,26 @@ module video_tb;
         .wb_stall_i(stall),
         .wb_ack_i(ack),
 
+        .clk8_en_i(clk8_en),
+        .clk16_en_i(clk16_en),
         .cclk_en_i(cpu_grant),
         .wr_strobe_i(cpu_grant),
 
         .col_80_mode_i(1'b0),
         .graphic_i(1'b1),
         .v_sync_o(v_sync),
-        .h_sync_o(h_sync)
+        .h_sync_o(h_sync),
+        .video_o(video_o)
     );
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
-        //@(posedge v_sync);
+        @(posedge v_sync);
+        @(posedge v_sync);
+        @(posedge v_sync);
+        @(posedge v_sync);
+        @(posedge v_sync);
 
         #1 $display("[%t] END %m", $time);
     endtask

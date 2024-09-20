@@ -163,7 +163,9 @@ module video (
         end
     end
 
-    logic pixel_clk_en = col_80_mode_i ? clk16_en_i : clk8_en_i;
+    wire pixel_clk_en = col_80_mode_i
+        ? clk16_en_i
+        : clk8_en_i;
 
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
