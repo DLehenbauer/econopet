@@ -86,6 +86,7 @@ module top #(
     input  logic graphic_i,
     output logic h_sync_o,
     output logic v_sync_o,
+    output logic video_o,
 
     // Audio
     output logic audio_o,
@@ -224,6 +225,7 @@ module top #(
         .graphic_i(graphic_i),
         .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),
+        .video_o(video_o),
 
         .spi1_cs_ni(spi1_cs_ni),
         .spi1_sck_i(spi1_sck_i),

@@ -60,6 +60,7 @@ module main (
     input  logic graphic_i,     // VIA CA2 pin 39: Character ROM A10 (0 = graphics, 1 = text)
     output logic v_sync_o,
     output logic h_sync_o,
+    output logic video_o,
 
     // SPI1 bus
     input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
@@ -261,7 +262,8 @@ module main (
         .col_80_mode_i(col_80_mode_i),      // 0 = 40 column mode, 1 = 80 column mode
         .graphic_i(graphic_i),
         .h_sync_o(h_sync_o),
-        .v_sync_o(v_sync_o)
+        .v_sync_o(v_sync_o),
+        .video_o(video_o)
     );
 
     //
