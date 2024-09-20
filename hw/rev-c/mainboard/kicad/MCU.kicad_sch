@@ -5294,6 +5294,17 @@
 		)
 		(uuid "1bdff47b-90aa-4ae2-90d4-3006d3881ba1")
 	)
+	(text "Oscillator Specs:\n\nC_{L}=20pF\nC_{0}=7pF\nDL=1-200μW (100uW typical)\nESR=80Ω\n\nLoad capacitor calculation:\n\nC = 2*C_{L} - 2*C_{stray}\nC_{L} = 20pf, C_{stray} = 2-5pF\nC = 30-36pF"
+		(exclude_from_sim no)
+		(at 16.002 99.314 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "33b8f586-7f31-4322-a766-79b248b0ab22")
+	)
 	(text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when updating\nthe FPGA.  Aside from being a convenience, this avoids\ncontention on SPI0_~{CS}, which the T8Q144 requires to\nbe driven low (even when using JTAG).\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
 		(exclude_from_sim no)
 		(at 44.45 152.4 0)
@@ -5961,7 +5972,7 @@
 				)
 			)
 		)
-		(property "Value" "30p"
+		(property "Value" "33p"
 			(at 53.3463 91.44 90)
 			(effects
 				(font
@@ -5978,7 +5989,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG300J500NT_C1570.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 53.34 95.25 0)
 			(effects
 				(font
@@ -5996,7 +6007,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1570"
+		(property "LCSC" "C1562"
 			(at 53.34 95.25 0)
 			(effects
 				(font
@@ -6386,7 +6397,7 @@
 				)
 			)
 		)
-		(property "Value" "30p"
+		(property "Value" "33p"
 			(at 53.3463 76.2 90)
 			(effects
 				(font
@@ -6403,7 +6414,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG300J500NT_C1570.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 53.34 80.01 0)
 			(effects
 				(font
@@ -6421,7 +6432,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1570"
+		(property "LCSC" "C1562"
 			(at 53.34 80.01 0)
 			(effects
 				(font
@@ -8210,8 +8221,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1k"
-			(at 81.28 95.25 90)
+		(property "Value" "100"
+			(at 82.042 95.25 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8228,7 +8239,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF1000TCE_C25076.pdf"
 			(at 80.01 95.25 0)
 			(effects
 				(font
@@ -8246,7 +8257,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C11702"
+		(property "LCSC" "C25076"
 			(at 80.01 95.25 0)
 			(effects
 				(font
