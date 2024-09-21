@@ -104,7 +104,9 @@ module mock_system (
         .spi1_sck_i (spi_sck),
         .spi1_sd_i  (spi_pico),
         .spi1_sd_o  (spi_poci),
-        .spi_stall_o(spi_stall)
+        .spi_stall_o(spi_stall),
+
+        .graphic_i(1'b0)
     );
 
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;

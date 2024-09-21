@@ -20,51 +20,23 @@ module timing (
     input  logic clock_i,
     output logic clk1_en_o,
     output logic clk8_en_o,
-    output logic clk16_en_o,
-    output logic cpu_grant_o,
-    output logic video_grant_o,
-    output logic spi_grant_o,
-    output logic strobe_o
+    output logic clk16_en_o
 );
+    initial begin
+        clk1_en_o  = '0;
+        clk8_en_o  = '0;
+        clk16_en_o = '0;
+    end
+
     logic [5:0] cycle_count = '0;
 
     always_ff @(posedge clock_i) begin
         cycle_count <= cycle_count + 1'b1;
     end
 
-    localparam CPU_1   = 3'b000,
-               CPU_2   = 3'b001,
-               VIDEO_1 = 3'b010,
-               SPI_1   = 3'b011,
-               VIDEO_2 = 3'b100,
-               VIDEO_3 = 3'b101,
-               VIDEO_4 = 3'b110,
-               SPI_2   = 3'b111;
-
-    logic [2:0] grant = '0;
-
     always_ff @(posedge clock_i) begin
-        strobe_o   <= '0;
-        clk1_en_o  <= '0;
-        clk8_en_o  <= '0;
-        clk16_en_o <= '0;
-        
-        if (cycle_count[1:0] == '0) begin
-            clk16_en_o <= 1'b1;
-
-            if (cycle_count[2] == '0) begin
-                clk8_en_o <= 1'b1;
-                strobe_o  <= !(grant == CPU_1);
-                grant     <= grant + 1'b1;
-
-                if (cycle_count[5:3] == '0) begin
-                    clk1_en_o <= 1'b1;
-                end
-            end
-        end
+        clk1_en_o  <= cycle_count[5:0] == 6'b000000;
+        clk8_en_o  <= cycle_count[2:0] == 3'b000;
+        clk16_en_o <= cycle_count[1:0] == 2'b00;
     end
-
-    assign cpu_grant_o   = grant == CPU_1   || grant == CPU_2;
-    assign video_grant_o = grant == VIDEO_1 || grant == VIDEO_2 || grant == VIDEO_3 || grant == VIDEO_4;
-    assign spi_grant_o   = grant == SPI_1   || grant == SPI_2;
 endmodule

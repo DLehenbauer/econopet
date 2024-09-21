@@ -94,7 +94,7 @@ module top_tb;
         $display("[%t] BEGIN %m", $time);
 
         mock_system.init;
-        mock_system.ram_fill(17'h08000, 17'h08fff, 8'hff);      // Fill VRAM with test pattern
+        mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
         cpu_ram_test;
         usb_keyboard_test;

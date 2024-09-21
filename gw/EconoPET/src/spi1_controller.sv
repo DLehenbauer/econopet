@@ -194,7 +194,9 @@ module spi1_controller (
                     // Continue asserting wb_strobe_o while the bus is stalled.
                     if (!wb_stall_i) wb_strobe_o <= '0;
 
-                    if (wb_ack_i) begin
+                    // The '!wb_strobe_o' prevents the SPI1 controller for accepting ACKs
+                    // before it's request has been accepted.
+                    if (!wb_strobe_o && wb_ack_i) begin
                         spi_data_tx <= wb_data_i;
                         wb_state    <= READY;
                     end

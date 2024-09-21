@@ -46,7 +46,7 @@ module mock_ram (
         $fclose(file);
     endtask
 
-    task fill(
+    task automatic fill(
         input bit [RAM_ADDR_WIDTH-1:0] start_addr,
         input bit [RAM_ADDR_WIDTH-1:0] stop_addr,
         input bit [DATA_WIDTH-1:0] data

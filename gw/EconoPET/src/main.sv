@@ -87,6 +87,7 @@ module main (
     logic                     spi1_we;
     logic                     spi1_cycle;
     logic                     spi1_strobe;
+    logic                     spi1_stall;
 
     spi1_controller spi1 (
         .wb_clock_i(sys_clock_i),
@@ -96,7 +97,7 @@ module main (
         .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
-        .wb_stall_i(!(spi_grant & grant_strobe) | wb_stall),
+        .wb_stall_i(spi1_stall),
         .wb_ack_i(wb_ack),
 
         .spi_cs_ni(spi1_cs_ni),     // SPI CS_N
@@ -114,11 +115,6 @@ module main (
     assign cpu_we_o    = 0;
     assign cpu_we_oe   = 0;
 
-    logic cpu_grant;
-    logic spi_grant;
-    logic video_grant;
-    logic grant_strobe;
-
     logic clk1_en;
     logic clk8_en;
     logic clk16_en;
@@ -127,19 +123,16 @@ module main (
         .clock_i(sys_clock_i),
         .clk1_en_o(clk1_en),
         .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en),
-        .cpu_grant_o(cpu_grant),
-        .video_grant_o(video_grant),
-        .spi_grant_o(spi_grant),
-        .strobe_o(grant_strobe)
+        .clk16_en_o(clk16_en)
     );
 
     logic cpu_valid_strobe;
     logic cpu_done_strobe;
+    logic cpu_grant_en;
 
     cpu cpu (
         .sys_clock_i(sys_clock_i),
-        .cpu_grant_i(cpu_grant && grant_strobe),
+        .cpu_grant_i(cpu_grant_en),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
         .cpu_valid_strobe_o(cpu_valid_strobe),
@@ -240,6 +233,7 @@ module main (
     logic                     video_we;
     logic                     video_cycle;
     logic                     video_strobe;
+    logic                     video_stall;
 
     logic [   DATA_WIDTH-1:0] crtc_dout;     // CRTC -> CPU
     logic                     crtc_oe;
@@ -254,15 +248,15 @@ module main (
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(video_addr),
-        .wb_data_i(wb_din),
+        .wb_data_i(wb_dout),
         .wb_data_o(video_dout),
         .wb_we_o(video_we),
         .wb_cycle_o(video_cycle),
         .wb_strobe_o(video_strobe),
-        .wb_stall_i(!(video_grant & grant_strobe) | wb_stall),
+        .wb_stall_i(video_stall),
         .wb_ack_i(wb_ack),
 
-        .cpu_reset_i(cpu_reset_i),
+        .cpu_reset_i(cpu_reset),
         .wr_strobe_i(cpu_valid_strobe),     // Clock enable to capture address/data from CPU -> CRTC
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
@@ -310,17 +304,37 @@ module main (
     // Wishbone
     //
 
-    // For now, SPI1 is the only controller on the Wishbone bus.
-    assign wb_addr      = spi1_addr;
-    assign wb_din       = spi1_dout;
-    assign wb_we        = spi1_we;
-    assign wb_cycle     = spi1_cycle | video_cycle;
-    assign wb_strobe    = (spi_grant & grant_strobe & spi1_strobe)
-                        | (video_grant & grant_strobe & video_strobe);
-
     assign wb_dout  = ram_wb_dout;
     assign wb_stall = ram_wb_stall | reg_wb_stall | kbd_wb_stall;
     assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
+
+    arbiter arbiter (
+        .wb_clock_i(sys_clock_i),
+        .wb_addr_o(wb_addr),
+        .wb_data_o(wb_din),
+        .wb_we_o(wb_we),
+        .wb_cycle_o(wb_cycle),
+        .wb_strobe_o(wb_strobe),
+        .wb_stall_i(wb_stall),
+        .wb_ack_i(wb_ack),
+
+        .spi1_addr_i(spi1_addr),
+        .spi1_data_i(spi1_dout),
+        .spi1_we_i(spi1_we),
+        .spi1_cycle_i(spi1_cycle),
+        .spi1_strobe_i(spi1_strobe),
+        .spi1_stall_o(spi1_stall),
+
+        .video_addr_i(video_addr),
+        .video_data_i(wb_din),
+        .video_we_i(video_we),
+        .video_cycle_i(video_cycle),
+        .video_strobe_i(video_strobe),
+        .video_stall_o(video_stall),
+
+        .clk8_en_i(clk8_en),
+        .cpu_grant_en_o(cpu_grant_en)
+    );
 
     //
     // Bus

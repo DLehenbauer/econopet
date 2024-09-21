@@ -75,7 +75,7 @@ module video (
         .data_i(crtc_data_i),         // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high
         .data_oe(crtc_data_oe),       // Asserted when CPU is reading from CRTC
-        .cclk_en_i(clk1_en_i),        // Character clock enable (always 1 MHz)
+        .cclk_en_i(cclk_en),          // Character clock enable (always 1 MHz)
         .h_sync_o(h_sync_o),          // Horizontal sync
         .v_sync_o(v_sync_o),          // Vertical sync
         .de_o(de),                    // Display enable
@@ -117,15 +117,18 @@ module video (
 
     logic [1:0] fetch_stage = EVEN_RAM;
     logic [0:0] wb_state    = WB_IDLE;
+    logic cclk_en           = 1'b0;
 
     always_ff @(posedge wb_clock_i) begin
+        cclk_en <= 1'b0;
+
         case (wb_state)
             WB_IDLE: begin
                 wb_strobe_o <= 1'b1;
-                wb_cycle_o <= 1'b1;
+                wb_cycle_o  <= 1'b1;
+                wb_addr_o   <= addrs[fetch_stage];
 
                 if (!wb_stall_i) begin
-                    wb_addr_o   <= addrs[fetch_stage];
                     wb_state    <= WB_AWAIT_ACK;
                 end
             end
@@ -134,6 +137,7 @@ module video (
                 wb_strobe_o <= 1'b0;
 
                 if (wb_ack_i) begin
+                    cclk_en           <= fetch_stage == ODD_ROM;
                     data[fetch_stage] <= wb_data_i;
                     fetch_stage       <= fetch_stage + 1'b1;
                     wb_state          <= WB_IDLE;
