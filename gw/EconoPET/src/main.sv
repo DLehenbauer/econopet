@@ -259,7 +259,7 @@ module main (
         .wb_we_o(video_we),
         .wb_cycle_o(video_cycle),
         .wb_strobe_o(video_strobe),
-        .wb_stall_i(!(video_grant & video_strobe) | wb_stall),
+        .wb_stall_i(!(video_grant & grant_strobe) | wb_stall),
         .wb_ack_i(wb_ack),
 
         .cpu_reset_i(cpu_reset_i),
@@ -314,7 +314,7 @@ module main (
     assign wb_addr      = spi1_addr;
     assign wb_din       = spi1_dout;
     assign wb_we        = spi1_we;
-    assign wb_cycle     = spi1_cycle;
+    assign wb_cycle     = spi1_cycle | video_cycle;
     assign wb_strobe    = (spi_grant & grant_strobe & spi1_strobe)
                         | (video_grant & grant_strobe & video_strobe);
 

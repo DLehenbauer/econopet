@@ -46,6 +46,19 @@ module mock_ram (
         $fclose(file);
     endtask
 
+    task fill(
+        input bit [RAM_ADDR_WIDTH-1:0] start_addr,
+        input bit [RAM_ADDR_WIDTH-1:0] end_addr,
+        input bit [DATA_WIDTH-1:0] data
+    );
+        bit [RAM_ADDR_WIDTH-1:0] addr = start_addr;
+
+        while (addr <= end_addr) begin
+            mem[addr] = data;
+            addr = addr + 1;
+        end
+    endtask
+
     always @(posedge clock_i) begin
         if (!ram_we_n_i) begin
             if (mem[ram_addr_i] !== ram_data_i) begin

@@ -119,19 +119,21 @@ module video (
     logic [0:0] wb_state    = WB_IDLE;
 
     always_ff @(posedge wb_clock_i) begin
-        wb_strobe_o <= '0;
         
         case (wb_state)
             WB_IDLE: begin
+                wb_strobe_o <= 1'b1;
+                wb_cycle_o <= 1'b1;
+
                 if (!wb_stall_i) begin
                     wb_addr_o   <= addrs[fetch_stage];
-                    wb_cycle_o  <= 1'b1;
-                    wb_strobe_o <= 1'b1;
                     wb_state    <= WB_AWAIT_ACK;
                 end
             end
 
             WB_AWAIT_ACK: begin
+                wb_strobe_o <= 1'b0;
+                
                 if (wb_ack_i) begin
                     data[fetch_stage] <= wb_data_i;
                     fetch_stage       <= fetch_stage + 1'b1;

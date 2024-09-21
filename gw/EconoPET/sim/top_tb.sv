@@ -86,6 +86,7 @@ module top_tb;
         $display("[%t] BEGIN %m", $time);
 
         mock_system.init;
+        mock_system.ram_fill(17'h08000, 17'h09000, 8'hFF);      // Fill VRAM with test pattern
 
         cpu_ram_test;
         usb_keyboard_test;
@@ -101,7 +102,9 @@ module top_tb;
         mock_system.wb_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0010);
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset_n, 1'b0);
-        // Verilog-6502 requires two cycles to reset.
+        
+        // Like the W65C02S, the Verilog-6502 core requires that RESB be held low for two
+        // clock cycles after power on.
         @(cpu_clock);
         @(cpu_clock);
 

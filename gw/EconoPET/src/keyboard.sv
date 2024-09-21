@@ -66,6 +66,7 @@ module keyboard(
 
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o <= '0;
+        wb_stall_o <= '0;   // WB operations always complete in one cycle
 
         if (wb_select && wb_cycle_i && wb_strobe_i) begin
             if (wb_we_i) begin

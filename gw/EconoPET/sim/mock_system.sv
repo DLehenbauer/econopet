@@ -202,6 +202,14 @@ module mock_system (
         mock_ram.load_rom(16'hf000, "kernal-4.901465-22.bin");
     endtask
 
+    task static ram_fill(
+        input logic [RAM_ADDR_WIDTH-1:0] start_addr,
+        input logic [RAM_ADDR_WIDTH-1:0] end_addr,
+        input logic [DATA_WIDTH-1:0] data
+    );
+        mock_ram.fill(start_addr, end_addr, data);
+    endtask
+
     task static wb_read (
         output logic [DATA_WIDTH-1:0] data_o
     );
