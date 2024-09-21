@@ -44,6 +44,8 @@ module top_tb;
         logic [    DATA_WIDTH-1:0] dout;
         bit   [    DATA_WIDTH-1:0] value;
 
+        $display("[%t] Begin CPU/RAM Test", $time);
+
         for (i = 0; i < 10; i = i + 1) begin
             addr = $random();
             value = $random();
@@ -51,12 +53,16 @@ module top_tb;
             mock_system.cpu_read({ 1'b0, addr }, dout);
             `assert_equal(dout, value);
         end
+
+        $display("[%t] End CPU/RAM Test", $time);
     endtask
 
     task static usb_keyboard_test;
         bit   [KBD_ADDR_WIDTH-1:0] row;
         logic [    DATA_WIDTH-1:0] dout;
         bit   [    DATA_WIDTH-1:0] value;
+
+        $display("[%t] Begin USB Keyboard Test", $time);
 
         for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
             value = { 4'b1011, row };
@@ -77,6 +83,8 @@ module top_tb;
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
             `assert_equal(dout, value);
         end
+
+        $display("[%t] End USB Keyboard Test", $time);
     endtask
 
     task static run;
@@ -86,7 +94,7 @@ module top_tb;
         $display("[%t] BEGIN %m", $time);
 
         mock_system.init;
-        mock_system.ram_fill(17'h08000, 17'h09000, 8'hFF);      // Fill VRAM with test pattern
+        mock_system.ram_fill(17'h08000, 17'h08fff, 8'hff);      // Fill VRAM with test pattern
 
         cpu_ram_test;
         usb_keyboard_test;

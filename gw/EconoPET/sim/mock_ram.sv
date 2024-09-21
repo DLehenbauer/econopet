@@ -48,15 +48,17 @@ module mock_ram (
 
     task fill(
         input bit [RAM_ADDR_WIDTH-1:0] start_addr,
-        input bit [RAM_ADDR_WIDTH-1:0] end_addr,
+        input bit [RAM_ADDR_WIDTH-1:0] stop_addr,
         input bit [DATA_WIDTH-1:0] data
     );
         bit [RAM_ADDR_WIDTH-1:0] addr = start_addr;
 
-        while (addr <= end_addr) begin
+        while (addr <= stop_addr) begin
             mem[addr] = data;
             addr = addr + 1;
         end
+        
+        $display("[%t] Filled RAM $[%x-$%x] with $%h", $time, start_addr, stop_addr, data);
     endtask
 
     always @(posedge clock_i) begin
