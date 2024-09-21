@@ -18,44 +18,36 @@ import common_pkg::*;
 
 module video_dotgen(
     input  logic        sys_clock_i,            // FPGA System clock
-    input  logic        pixel_clk_en,           // Pixel clock enable
-    input  logic        video_latch,
+    input  logic        pixel_clk_en_i,         // Pixel clock enable
+    input  logic        cclk_en_i,              // Character clock enable
     input  logic [15:0] pixels_i,
     input  logic [1:0]  reverse_i,
     input  logic        display_en_i,
     output logic        video_o
 );
-    logic [3:0]  pixel_ctr_d, pixel_ctr_q;
-    logic [15:0] sr_out_d, sr_out_q;
-    logic [1:0]  reverse_d, reverse_q;
-    logic        display_en_d, display_en_q;
-
-    always_comb begin
-        if (video_latch) begin
-            pixel_ctr_d = '0;
-            sr_out_d = pixels_i;
-            reverse_d = reverse_i;
-            display_en_d = display_en_i;
-        end else begin
-            pixel_ctr_d = pixel_ctr_q + 1'b1;
-            sr_out_d = { sr_out_q[14:0], 1'b0 };    // TODO: Use 1'bx?
-            reverse_d = reverse_q;
-            display_en_d = display_en_q;    // TODO: Was 'display_en_i'?
-        end
-    end
+    // TODO: The 'pixel_ctr' counter is only used to select the 'reverse' bit.
+    //       This can be avoided if we use a 2 MHz CLK in 80 col mode.
+    logic [3:0]  pixel_ctr;
+    logic [15:0] sr_out;
+    logic [1:0]  reverse;
+    logic        display_en;
 
     always_ff @(posedge sys_clock_i) begin
-        if (pixel_clk_en) begin
-            pixel_ctr_q  <= pixel_ctr_d;
-            sr_out_q     <= sr_out_d;
-            reverse_q    <= reverse_d;
-            display_en_q <= display_en_d;
+        if (cclk_en_i) begin
+            pixel_ctr  <= '0;
+            sr_out     <= pixels_i;
+            reverse    <= reverse_i;
+            display_en <= display_en_i;
+        end else if (pixel_clk_en_i) begin
+            pixel_ctr  <= pixel_ctr + 1'b1;
+            sr_out     <= { sr_out[14:0], 1'b0 };
+            display_en <= display_en_i;             // TODO: Why isn't this captured on cclk?
         end
     end
 
-    // 'pixels_i' contains pixels for two characters.  The high bit of 'pixel_ctr_q' selects
+    // 'pixels_i' contains pixels for two characters.  The high bit of 'pixel_ctr' selects
     // which 'reverse_i' bit to use.
     //
     // TODO: Can avoid the '~' by reversing the order of the bits passed to 'reverse_i' at the caller.
-    assign video_o = display_en_q & (sr_out_q[15] ^ reverse_q[~pixel_ctr_q[3]]);
+    assign video_o = display_en & (sr_out[15] ^ reverse[~pixel_ctr[3]]);
 endmodule

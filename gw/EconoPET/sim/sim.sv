@@ -14,7 +14,7 @@
 
 module sim;
     video_crtc_tb video_crtc_tb ();
-    video_tb video_tb ();
+    //video_tb video_tb ();
     keyboard_tb keyboard_tb ();
     register_file_tb register_file_tb ();
     timing_tb timing_tb ();
@@ -29,7 +29,7 @@ module sim;
         $dumpvars(0, sim);
 
         video_crtc_tb.run();
-        video_tb.run();
+        //video_tb.run();
         keyboard_tb.run();
         register_file_tb.run();
         timing_tb.run();

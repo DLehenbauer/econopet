@@ -18,14 +18,15 @@ import common_pkg::*;
 
 module timing (
     input  logic clock_i,
+    output logic clk1_en_o,
+    output logic clk8_en_o,
+    output logic clk16_en_o,
     output logic cpu_grant_o,
     output logic video_grant_o,
     output logic spi_grant_o,
-    output logic strobe_o,
-    output logic clk8_en_o,
-    output logic clk16_en_o
+    output logic strobe_o
 );
-    logic [2:0] cycle_count = '0;
+    logic [5:0] cycle_count = '0;
 
     always_ff @(posedge clock_i) begin
         cycle_count <= cycle_count + 1'b1;
@@ -44,6 +45,7 @@ module timing (
 
     always_ff @(posedge clock_i) begin
         strobe_o   <= '0;
+        clk1_en_o  <= '0;
         clk8_en_o  <= '0;
         clk16_en_o <= '0;
         
@@ -54,6 +56,10 @@ module timing (
                 clk8_en_o <= 1'b1;
                 strobe_o  <= !(grant == CPU_1);
                 grant     <= grant + 1'b1;
+
+                if (cycle_count[5:3] == '0) begin
+                    clk1_en_o <= 1'b1;
+                end
             end
         end
     end

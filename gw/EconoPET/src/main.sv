@@ -119,8 +119,15 @@ module main (
     logic video_grant;
     logic grant_strobe;
 
+    logic clk1_en;
+    logic clk8_en;
+    logic clk16_en;
+
     timing timing (
         .clock_i(sys_clock_i),
+        .clk1_en_o(clk1_en),
+        .clk8_en_o(clk8_en),
+        .clk16_en_o(clk16_en),
         .cpu_grant_o(cpu_grant),
         .video_grant_o(video_grant),
         .spi_grant_o(spi_grant),
@@ -239,7 +246,12 @@ module main (
     logic                     col_80_mode_i = 1'b1;     // TODO: Use register file
 
     video video (
-        // Wishbone controller used to fetch VRAM/VROM from Wishbone bus
+        // Video timing
+        .clk1_en_i(clk1_en),                // 1 MHz character clock enable
+        .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
+        .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
+
+        // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(video_addr),
         .wb_data_i(wb_din),
@@ -252,7 +264,6 @@ module main (
 
         .cpu_reset_i(cpu_reset_i),
         .wr_strobe_i(cpu_valid_strobe),     // Clock enable to capture address/data from CPU -> CRTC
-        .cclk_en_i(cpu_valid_strobe),       // Clock enable for 1 MHz character clock
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)

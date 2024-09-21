@@ -17,7 +17,12 @@
 import common_pkg::*;
 
 module video (
-    // Wishbone B4 controller
+    // Video timing signals
+    input  logic clk1_en_i,                       // 1 MHz character clock enable
+    input  logic clk8_en_i,                       // 8 MHz pixel clock for 40 column mode
+    input  logic clk16_en_i,                      // 16 MHz pixel clock for 80 column mode
+
+    // Wishbone B4 controller to fetch character and pixel data from VRAM and VROM.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                      // Bus clock
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
@@ -29,10 +34,7 @@ module video (
     input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
     input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
-    input  logic cclk_en_i,                       // 1 MHz character clock enable
-    input  logic clk8_en_i,                       // 8 MHz clock enable
-    input  logic clk16_en_i,                      // 16 MHz clock enable
-
+    // CRTC interface to CPU bus
     input  logic cpu_reset_i,
     input  logic wr_strobe_i,
     input  logic crtc_cs_i,                       // CRTC selected for data transfer (driven by address decoding)
@@ -73,7 +75,7 @@ module video (
         .data_i(crtc_data_i),         // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high
         .data_oe(crtc_data_oe),       // Asserted when CPU is reading from CRTC
-        .cclk_en_i(cclk_en_i),        // Enables character clock (always 1 MHz)
+        .cclk_en_i(clk1_en_i),        // Character clock enable (always 1 MHz)
         .h_sync_o(h_sync_o),          // Horizontal sync
         .v_sync_o(v_sync_o),          // Vertical sync
         .de_o(de),                    // Display enable
@@ -153,24 +155,14 @@ module video (
     // Dotgen
     //
 
-    logic video_latch = 1'b0;
-
-    always_ff @(posedge wb_clock_i) begin
-        if (cclk_en_i) begin
-            video_latch <= 1'b1;
-        end else begin
-            video_latch <= 1'b0;
-        end
-    end
-
     wire pixel_clk_en = col_80_mode_i
         ? clk16_en_i
         : clk8_en_i;
 
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
-        .pixel_clk_en(pixel_clk_en),
-        .video_latch(video_latch),
+        .pixel_clk_en_i(pixel_clk_en),
+        .cclk_en_i(clk1_en_i),
         .pixels_i(pixels),
         .reverse_i({ even_char[7], odd_char[7] }),
         .display_en_i(de && !no_row),
