@@ -24,25 +24,24 @@ module timing_tb;
 
     stopwatch stopwatch();
 
-    logic cpu_grant;
-    logic video_grant;
-    logic spi_grant;
-    logic strobe;
+    logic clk1_en;
     logic clk8_en;
     logic clk16_en;
 
     timing timing (
         .clock_i(clock),
-        .cpu_grant_o(cpu_grant),
-        .video_grant_o(video_grant),
-        .spi_grant_o(spi_grant),
-        .strobe_o(strobe),
+        .clk1_en_o(clk1_en),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en)
     );
 
     task run;
         $display("[%t] BEGIN %m", $time);
+
+        @(posedge clk1_en);
+        stopwatch.start();
+        @(posedge clk1_en);
+        $display("[%t] clk1_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         @(posedge clk8_en);
         stopwatch.start();

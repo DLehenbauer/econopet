@@ -24,21 +24,17 @@ module video_crtc_tb;
 
     stopwatch stopwatch();
 
-    logic cpu_grant;
-    logic spi_grant;
-    logic video_grant;
-    logic grant_strobe;
+    logic clk1_en;
+    logic clk8_en;
+    logic clk16_en;
 
     timing timing (
         .clock_i(clock),
-        .cpu_grant_o(cpu_grant),
-        .video_grant_o(video_grant),
-        .spi_grant_o(spi_grant),
-        .strobe_o(grant_strobe)
+        .clk1_en_o(clk1_en),
+        .clk8_en_o(clk8_en),
+        .clk16_en_o(clk16_en)
     );
     
-    wire cclk_en = cpu_grant & grant_strobe;
-
     logic        res;
     logic        cs;
     logic        we;
@@ -55,8 +51,8 @@ module video_crtc_tb;
     video_crtc video_crtc (
         .reset_i(res),
         .sys_clock_i(clock),
-        .wr_strobe_i(cclk_en),
-        .cclk_en_i(cclk_en),
+        .cclk_en_i(clk1_en),
+        .wr_strobe_i(clk1_en),
         .cs_i(cs),                      // CRTC selected for data transfer (driven by address decoding)
         .rw_ni(!we),                    // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
         .rs_i(rs),                      // Register select (0 = write address/read status, 1 = read addressed register)
@@ -75,17 +71,17 @@ module video_crtc_tb;
         input logic we_i,
         input logic [7:0] data_i = 8'hxx
     );
-        @(posedge cclk_en);
+        @(posedge clk1_en);
         cs = 1'b1;
         rs = rs_i;
         we = we_i;
         crtc_data_i = data_i;
 
-        @(posedge cclk_en);
+        @(posedge clk1_en);
     endtask
 
     task crtc_end;
-        if (cclk_en) @(negedge cclk_en);
+        if (clk1_en) @(negedge clk1_en);
 
         #1;
 
@@ -128,10 +124,10 @@ module video_crtc_tb;
     endtask
 
     task reset;
-        @(negedge cclk_en);
+        @(negedge clk1_en);
         res = 1'b1;
-        @(posedge cclk_en);
-        @(negedge cclk_en);
+        @(posedge clk1_en);
+        @(negedge clk1_en);
         res = '0;
     endtask
 
