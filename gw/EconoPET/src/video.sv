@@ -44,6 +44,7 @@ module video (
     output logic [DATA_WIDTH-1:0] crtc_data_o,    // Transfer data read by CPU from CRTC when CS asserted and /RW is high
     output logic crtc_data_oe,                    // CRTC drives data lines (CPU is reading from CRTC)
 
+    input  logic config_crt_i,                    // Adjusts polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic col_80_mode_i,                   // (0 = 40 col, 1 = 80 col)
     input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
 
@@ -64,6 +65,8 @@ module video (
     logic        de;    // Display enable
     logic [13:0] ma;
     logic [ 4:0] ra;
+    logic        crtc_h_sync;
+    logic        crtc_v_sync;
 
     video_crtc video_crtc (
         .reset_i(cpu_reset_i),
@@ -76,8 +79,8 @@ module video (
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high
         .data_oe(crtc_data_oe),       // Asserted when CPU is reading from CRTC
         .cclk_en_i(cclk_en),          // Character clock enable (always 1 MHz)
-        .h_sync_o(h_sync_o),          // Horizontal sync
-        .v_sync_o(v_sync_o),          // Vertical sync
+        .h_sync_o(crtc_h_sync),       // Horizontal sync (active high)
+        .v_sync_o(crtc_v_sync),       // Vertical sync (active high)
         .de_o(de),                    // Display enable
         .ma_o(ma),                    // Refresh RAM address lines
         .ra_o(ra)                     // Raster address lines
@@ -164,6 +167,8 @@ module video (
         ? clk16_en_i
         : clk8_en_i;
 
+    logic dotgen_video;
+
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
         .pixel_clk_en_i(pixel_clk_en),
@@ -171,6 +176,14 @@ module video (
         .pixels_i(pixels),
         .reverse_i({ even_char[7], odd_char[7] }),
         .display_en_i(de && !no_row),
-        .video_o(video_o)
+        .video_o(dotgen_video)
     );
+
+    // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
+    // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
+    //
+    //                                                  9" CRT    12" CRT
+    assign video_o  = config_crt_i ^ dotgen_video;  // Active-L   Active-H
+    assign h_sync_o = config_crt_i ^ !crtc_h_sync;  // Active-H   Active-L
+    assign v_sync_o = config_crt_i ^ !crtc_v_sync;  // Active-H   Active-L
 endmodule

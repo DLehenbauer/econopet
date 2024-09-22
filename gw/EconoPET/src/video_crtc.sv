@@ -81,8 +81,12 @@ module video_crtc(
         : r[ar];                                // RS = 1: Read addressed register R0..17 (TODO: Allow this?  Infers dual-port RAM?)
 
     initial begin
+`ifdef DEFAULT_15KHZ
         // Power-on state emulates a non-CRTC PET (15kHz, 60Hz)
         // The appropriate Editor ROM will reconfigure the CRTC for later models.
+        //
+        // Note that the parent module handles inverting the video signal according
+        // to 'config_crtc_i'.  Therefore, we continue to set TA12 to '1'.
         r[R0_H_TOTAL]           = 8'd63;
         r[R1_H_DISPLAYED]       = 8'd40;
         r[R2_H_SYNC_POS]        = 8'd48;
@@ -92,8 +96,22 @@ module video_crtc(
         r[R6_V_DISPLAYED]       = { 1'd0, 7'd25 };
         r[R7_V_SYNC_POS]        = { 1'd0, 7'd28 };
         r[R9_MAX_SCAN_LINE]     = { 3'd0, 5'd07 };
-        r[R12_START_ADDR_HI]    = 8'h00;    // TA12 inverts video ('h00 = 9" monitor, 'h10 = 12" monitor)
+        r[R12_START_ADDR_HI]    = 8'h10;    // TA12 inverts video (1 = normal, 0 = inverted)
         r[R13_START_ADDR_LO]    = 8'h00;
+`else
+        // 8032 Power-On State
+        r[R0_H_TOTAL]           = 8'h31;
+        r[R1_H_DISPLAYED]       = 8'h28;
+        r[R2_H_SYNC_POS]        = 8'h29;
+        r[R3_SYNC_WIDTH]        = 8'h0f;
+        r[R4_V_TOTAL]           = 8'h20;
+        r[R5_V_ADJUST]          = 8'h03;
+        r[R6_V_DISPLAYED]       = 8'h19;
+        r[R7_V_SYNC_POS]        = 8'h1d;
+        r[R9_MAX_SCAN_LINE]     = 8'h09;
+        r[R12_START_ADDR_HI]    = 8'h10;    // TA12 inverts video (1 = normal, 0 = inverted)
+        r[R13_START_ADDR_LO]    = 8'h00;
+`endif
     end
 
     always_ff @(posedge sys_clock_i) begin

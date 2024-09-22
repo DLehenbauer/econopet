@@ -57,6 +57,7 @@ module main (
     output logic via_cs_o,
 
     // Video
+    input  logic config_crt_i,  // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic graphic_i,     // VIA CA2 pin 39: Character ROM A10 (0 = graphics, 1 = text)
     output logic v_sync_o,
     output logic h_sync_o,
@@ -245,6 +246,8 @@ module main (
         .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
         .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
 
+        .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
+
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(video_addr),
@@ -256,7 +259,7 @@ module main (
         .wb_stall_i(video_stall),
         .wb_ack_i(wb_ack),
 
-        .cpu_reset_i(cpu_reset),
+        .cpu_reset_i(cpu_reset_i),
         .wr_strobe_i(cpu_valid_strobe),     // Clock enable to capture address/data from CPU -> CRTC
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
