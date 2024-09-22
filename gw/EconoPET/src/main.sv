@@ -264,7 +264,7 @@ module main (
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
-        .crtc_data_i(cpu_data_o),           // CPU -> CRTC
+        .crtc_data_i(cpu_data_i),           // CPU -> CRTC
         .crtc_data_o(crtc_dout),            // CRTC -> CPU
         .crtc_data_oe(crtc_oe),             // Asserted when CPU is reading from CRTC
         .col_80_mode_i(col_80_mode_i),      // 0 = 40 column mode, 1 = 80 column mode
