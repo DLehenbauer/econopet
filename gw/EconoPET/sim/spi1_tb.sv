@@ -44,7 +44,8 @@ module spi1_tb;
     logic [   DATA_WIDTH-1:0] wr_data;
     logic                     we;
     logic                     cycle;
-    logic                     ack = '0;
+    logic                     stall = 1'b0;
+    logic                     ack   = 1'b0;
 
     spi1_controller spi1 (
         .wb_clock_i(clock),
@@ -53,6 +54,7 @@ module spi1_tb;
         .wb_data_o(wr_data),
         .wb_we_o(we),
         .wb_cycle_o(cycle),
+        .wb_stall_i(stall),
         .wb_ack_i(ack),
 
         .spi_sck_i(spi_sck),
@@ -65,7 +67,7 @@ module spi1_tb;
 
     logic [WB_ADDR_WIDTH-1:0] expected_addr;
     logic                     expected_we;
-    logic [DATA_WIDTH-1:0] expected_data;
+    logic [   DATA_WIDTH-1:0] expected_data;
 
     task set_expected(input logic [WB_ADDR_WIDTH-1:0] addr_i,
                       input logic we_i,
