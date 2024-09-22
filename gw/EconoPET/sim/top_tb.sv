@@ -66,7 +66,7 @@ module top_tb;
 
         for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
             value = { 4'b1011, row };
-            mock_system.wb_write_at(common_pkg::wb_kbd_addr(row), { 4'b1011, row });
+            mock_system.wb_write_at(common_pkg::wb_kbd_addr(row), value);
             $display("[%t]   WB Keyboard[%d] <- %02x", $time, row, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
@@ -87,6 +87,25 @@ module top_tb;
         $display("[%t] End USB Keyboard Test", $time);
     endtask
 
+    task static crtc_write_test;
+        bit   [               3:0] r;
+        logic [    DATA_WIDTH-1:0] dout;
+        bit   [    DATA_WIDTH-1:0] value;
+
+        $display("[%t] Begin CRTC Write Test", $time);
+
+        for (r = 0; r <= 13; r = r + 1) begin
+            mock_system.cpu_write(16'hE880, r);
+            value = { 4'b1011, r };
+            mock_system.cpu_write(16'hE881, value);
+            $display("[%t]   CRTC[%d] -> %02x", $time, r, value);
+
+            // TODO: Read back CRTC registers with SPI
+        end
+
+        $display("[%t] End CRTC Write Test", $time);
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] cpu_dout;
         int count;
@@ -98,6 +117,7 @@ module top_tb;
 
         cpu_ram_test;
         usb_keyboard_test;
+        crtc_write_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;

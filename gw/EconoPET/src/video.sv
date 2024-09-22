@@ -36,7 +36,7 @@ module video (
 
     // CRTC interface to CPU bus
     input  logic cpu_reset_i,
-    input  logic wr_strobe_i,
+    input  logic crtc_clk_en_i,
     input  logic crtc_cs_i,                       // CRTC selected for data transfer (driven by address decoding)
     input  logic crtc_we_i,                       // Direction of data transfer (0 = writing to CRTC, 1 = reading from CRTC)
     input  logic crtc_rs_i,                       // Register select (0 = write address/read status, 1 = read addressed register)
@@ -71,14 +71,13 @@ module video (
     video_crtc video_crtc (
         .reset_i(cpu_reset_i),
         .sys_clock_i(wb_clock_i),     // System clock
-        .wr_strobe_i(wr_strobe_i),    // Write strobe from CPU
+        .clk_en_i(crtc_clk_en_i),     // 1 MHz clock enable for 'sys_clock_i'
         .cs_i(crtc_cs_i),             // CRTC selected for data transfer (driven by address decoding)
         .rw_ni(!crtc_we_i),           // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
         .rs_i(crtc_rs_i),             // Register select (0 = write address/read status, 1 = read addressed register)
         .data_i(crtc_data_i),         // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high
         .data_oe(crtc_data_oe),       // Asserted when CPU is reading from CRTC
-        .cclk_en_i(cclk_en),          // Character clock enable (always 1 MHz)
         .h_sync_o(crtc_h_sync),       // Horizontal sync (active high)
         .v_sync_o(crtc_v_sync),       // Vertical sync (active high)
         .de_o(de),                    // Display enable

@@ -20,8 +20,7 @@ module cpu (
     input  logic sys_clock_i,
     input  logic cpu_grant_i,
     output logic cpu_be_o,
-    output logic cpu_valid_strobe_o,
-    output logic cpu_done_strobe_o,
+    output logic cpu_strobe_o,
     output logic cpu_clock_o
 );
     initial begin
@@ -86,12 +85,15 @@ module cpu (
     end
 
     always_ff @(posedge sys_clock_i) begin
+        cpu_strobe_o <= 1'b0;
+
         case (cycle_count)
             CPU_BE_START: begin         // In-progress transactions have drained.
                 cpu_be_o <= 1'b1;
             end
             CPU_PHI_START: begin        // CPU setup time met.
-                cpu_clock_o <= 1'b1;
+                cpu_strobe_o <= 1'b1;
+                cpu_clock_o       <= 1'b1;
             end
             CPU_PHI_END: begin          // CPU mimimum clock pulse width met.
                 cpu_clock_o <= '0;
@@ -103,7 +105,4 @@ module cpu (
             end
         endcase
     end
-
-    assign cpu_valid_strobe_o = cycle_count == CPU_VALID;
-    assign cpu_done_strobe_o  = cycle_count == CPU_BE_END - 1'b1;
 endmodule

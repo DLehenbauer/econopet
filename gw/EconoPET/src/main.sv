@@ -127,8 +127,7 @@ module main (
         .clk16_en_o(clk16_en)
     );
 
-    logic cpu_valid_strobe;
-    logic cpu_done_strobe;
+    logic cpu_strobe;
     logic cpu_grant_en;
 
     cpu cpu (
@@ -136,8 +135,7 @@ module main (
         .cpu_grant_i(cpu_grant_en),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
-        .cpu_valid_strobe_o(cpu_valid_strobe),
-        .cpu_done_strobe_o(cpu_done_strobe)
+        .cpu_strobe_o(cpu_strobe)
     );
 
     //
@@ -260,7 +258,7 @@ module main (
         .wb_ack_i(wb_ack),
 
         .cpu_reset_i(cpu_reset_i),
-        .wr_strobe_i(cpu_valid_strobe),     // Clock enable to capture address/data from CPU -> CRTC
+        .crtc_clk_en_i(cpu_strobe),         // 1 MHz clock enable for 'sys_clock_i'
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
@@ -356,16 +354,16 @@ module main (
         end
     end
 
-    wire cpu_rd_strobe = cpu_be_o && !cpu_we_i;
-    wire cpu_wr_strobe = cpu_be_o &&  cpu_we_i && cpu_clock_o;
+    wire cpu_rd_en = cpu_be_o && !cpu_we_i;
+    wire cpu_wr_en = cpu_be_o &&  cpu_we_i && cpu_clock_o;
 
     assign io_oe_o   = io_en   && cpu_be_o && !kbd_doe;
     assign pia1_cs_o = pia1_en && cpu_be_o && !kbd_doe;
     assign pia2_cs_o = pia2_en && cpu_be_o;
     assign via_cs_o  =  via_en && cpu_be_o;
 
-    assign ram_oe_o         = (cpu_rd_strobe && ram_en) || ram_ctl_oe;
-    assign ram_we_o         = (cpu_wr_strobe && ram_en) || ram_ctl_we;
+    assign ram_oe_o         = (cpu_rd_en && ram_en) || ram_ctl_oe;
+    assign ram_we_o         = (cpu_wr_en && ram_en) || ram_ctl_we;
 
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];

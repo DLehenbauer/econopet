@@ -15,8 +15,7 @@
 module video_crtc(
     input  logic        reset_i,
     input  logic        sys_clock_i,            // FPGA System clock
-    input  logic        wr_strobe_i,            // Gates writes to CRTC registers
-    input  logic        cclk_en_i,              // Gates system clock to 1 MHz character clock
+    input  logic        clk_en_i,               // Gates 'sys_clock_i' to advance CRTC state
     input  logic        cs_i,                   // CRTC selected for data transfer (driven by address decoding)
     input  logic        rw_ni,                  // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
 
@@ -115,7 +114,7 @@ module video_crtc(
     end
 
     always_ff @(posedge sys_clock_i) begin
-        if (wr_strobe_i && cs_i && !rw_ni) begin
+        if (clk_en_i && cs_i && !rw_ni) begin
             if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register
             else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (R0..17)
         end
@@ -147,7 +146,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_total_counter <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (line_ending) h_total_counter <= '0;
             else h_total_counter <= h_total_counter + 1'b1;
         end
@@ -167,7 +166,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) h_sync_counter <= '0;
-        else if (cclk_en_i) begin            
+        else if (clk_en_i) begin            
             if (h_sync) h_sync_counter <= h_sync_counter + 1'b1;
             else h_sync_counter <= '0;
         end
@@ -181,7 +180,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) line_counter <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (frame_start) line_counter <= '0;
             else if (row_ending) line_counter <= '0;
             else if (line_ending) line_counter <= line_counter + 1'b1;
@@ -199,7 +198,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_total_counter <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (frame_start) v_total_counter <= '0;
             else if (row_ending) v_total_counter <= v_total_counter + 1'b1;
         end
@@ -207,7 +206,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_display <= 1'b1;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (v_total_counter == v_displayed) v_display <= '0;
             else if (frame_start) v_display <= 1'b1;
         end
@@ -233,7 +232,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) v_sync_counter <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (line_ending) begin
                 if (v_sync) v_sync_counter <= v_sync_counter + 1'b1;
                 else v_sync_counter <= '0;
@@ -249,7 +248,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) adjust_counter <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (adjust_ending) adjust_counter <= '0;
             else if (adjusting && line_ending) adjust_counter <= adjust_counter + 1'b1;
         end
@@ -290,7 +289,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) frame_state_q <= NORMAL;
-        else if (cclk_en_i)frame_state_q <= frame_state_d;
+        else if (clk_en_i)frame_state_q <= frame_state_d;
     end
 
     // Linear address generator
@@ -299,7 +298,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) row_addr <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (frame_start) row_addr <= start_addr;
             else if (last_line && last_column) row_addr <= ma_o;
         end
@@ -307,7 +306,7 @@ module video_crtc(
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) ma_o <= '0;
-        else if (cclk_en_i) begin
+        else if (clk_en_i) begin
             if (frame_start) ma_o <= start_addr;
             else if (line_ending) ma_o <= row_addr;
             else ma_o <= ma_o + 1'b1;
