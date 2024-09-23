@@ -17,7 +17,7 @@ module video_crtc(
     input  logic        sys_clock_i,            // FPGA System clock
     input  logic        clk_en_i,               // Gates 'sys_clock_i' to advance CRTC state
     input  logic        cs_i,                   // CRTC selected for data transfer (driven by address decoding)
-    input  logic        rw_ni,                  // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
+    input  logic        we_i,                   // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
 
     input  logic        rs_i,                   // Register select (0 = write address/read status, 1 = read addressed register)
 
@@ -74,7 +74,7 @@ module video_crtc(
     //
     // (See http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf, pg. 3)
 
-    assign data_oe = rw_ni && cs_i;
+    assign data_oe = cs_i && !we_i;             // CRTC drives data bus when selected and CPU is reading
     assign data_o  = rs_i == '0
         ? { 2'b0, v_sync, 5'b0 }                // RS = 0: Read status register
         : r[ar];                                // RS = 1: Read addressed register R0..17 (TODO: Allow this?  Infers dual-port RAM?)
@@ -114,7 +114,7 @@ module video_crtc(
     end
 
     always_ff @(posedge sys_clock_i) begin
-        if (clk_en_i && cs_i && !rw_ni) begin
+        if (clk_en_i && cs_i && we_i) begin
             if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register
             else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (R0..17)
         end

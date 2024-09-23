@@ -74,6 +74,7 @@ module mock_bus (
 
     always_comb begin
         case (we_drivers)
+            // CT  C = CPU driving, T = FPGA driving
             2'b00: bus_we_n_o = 'z;
             2'b01: bus_we_n_o = top_we_n_i;
             2'b10: bus_we_n_o = cpu_we_n_i;

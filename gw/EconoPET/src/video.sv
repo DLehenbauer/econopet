@@ -73,7 +73,7 @@ module video (
         .sys_clock_i(wb_clock_i),     // System clock
         .clk_en_i(crtc_clk_en_i),     // 1 MHz clock enable for 'sys_clock_i'
         .cs_i(crtc_cs_i),             // CRTC selected for data transfer (driven by address decoding)
-        .rw_ni(!crtc_we_i),           // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
+        .we_i(crtc_we_i),             // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
         .rs_i(crtc_rs_i),             // Register select (0 = write address/read status, 1 = read addressed register)
         .data_i(crtc_data_i),         // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high

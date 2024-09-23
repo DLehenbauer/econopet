@@ -51,10 +51,9 @@ module video_crtc_tb;
     video_crtc video_crtc (
         .reset_i(res),
         .sys_clock_i(clock),
-        .cclk_en_i(clk1_en),
-        .wr_strobe_i(clk1_en),
+        .clk_en_i(clk1_en),
         .cs_i(cs),                      // CRTC selected for data transfer (driven by address decoding)
-        .rw_ni(!we),                    // Direction of date transfers (0 = writing to CRTC, 1 = reading from CRTC)
+        .we_i(we),                      // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
         .rs_i(rs),                      // Register select (0 = write address/read status, 1 = read addressed register)
         .data_i(crtc_data_i),           // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),           // Transfer data read by CPU from CRTC when CS asserted and /RW is high
