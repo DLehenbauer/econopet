@@ -9,12 +9,21 @@ while [[ $# -gt 0 ]]; do
         UPDATE_F_FILE=1
         shift
         ;;
+    -v|--view)
+        VIEW_WAVE=1
+        shift
+        ;;
     *)
         echo "Unknown option: $1"
         exit 1
         ;;
   esac
 done
+
+if [ -n "$VIEW_WAVE" ]; then
+    gtkwave "$PROJDIR/work_sim/out.vcd" &
+    exit $?
+fi
 
 if [ -n "$UPDATE_F_FILE" ]; then
     # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
