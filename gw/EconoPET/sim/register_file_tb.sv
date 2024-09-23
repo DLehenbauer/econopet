@@ -62,7 +62,6 @@ module register_file_tb;
     );
 
     logic [DATA_WIDTH-1:0] data_rd;
-    logic                  ack_rd;
 
     always @(posedge clock or negedge clock) begin
         assert (stall == 0) else $fatal(1, "Register access must not stall Wishbone bus");
@@ -80,11 +79,11 @@ module register_file_tb;
         `assert_equal(cpu_ready, 1'b1);
         `assert_equal(cpu_reset, 1'b0);
 
-        wb.read(10'h00, data_rd, ack_rd);
+        wb.read(10'h00, data_rd);
         `assert_equal(data_rd, 8'b0000_0001);
 
         wb.write(10'h00, 8'b0000_0010);
-        wb.read(10'h00, data_rd, ack_rd);
+        wb.read(10'h00, data_rd);
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset, 1'b1);
         `assert_equal(data_rd, 8'b0000_0010);

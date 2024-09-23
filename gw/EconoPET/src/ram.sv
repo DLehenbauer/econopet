@@ -16,18 +16,18 @@
 
 import common_pkg::*;
 
-module ram(
+module ram (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                     wb_clock_i,
+    input  logic wb_clock_i,
     input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,    // Incoming data to write to RAM
-    output logic [   DATA_WIDTH-1:0] wb_data_o,    // Outgoing data read from RAM
-    input  logic                     wb_we_i,
-    input  logic                     wb_cycle_i,
-    input  logic                     wb_strobe_i,
-    output logic                     wb_stall_o,
-    output logic                     wb_ack_o,
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,     // Incoming data to write to RAM
+    output logic [   DATA_WIDTH-1:0] wb_data_o,     // Outgoing data read from RAM
+    input  logic wb_we_i,                           // Direction of transaction (0 = read , 1 = write)
+    input  logic wb_cycle_i,                        // Bus cycle is active
+    input  logic wb_strobe_i,                       // New transaction requested (address, data, and control signals are valid)
+    output logic wb_stall_o,                        // Peripheral is not ready to accept the request
+    output logic wb_ack_o,                          // Indicates success termination of cycle (data_o is valid)
 
     output logic                      ram_oe_o,
     output logic                      ram_we_o,

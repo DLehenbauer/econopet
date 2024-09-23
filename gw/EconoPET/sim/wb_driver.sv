@@ -71,8 +71,7 @@ module wb_driver (
 
     task read(
         input  logic [WB_ADDR_WIDTH-1:0] addr_i,
-        output logic    [DATA_WIDTH-1:0] data_o,
-        output logic                     ack_o
+        output logic    [DATA_WIDTH-1:0] data_o
     );
         wb_addr_o = addr_i;
         wb_data_o = 8'hxx;

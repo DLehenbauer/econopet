@@ -74,7 +74,6 @@ module keyboard_tb;
     );
 
     logic [DATA_WIDTH-1:0] data_rd;
-    logic                  ack_rd;
 
     task cpu_select_row(
         input logic [DATA_WIDTH-1:0] row
@@ -122,7 +121,7 @@ module keyboard_tb;
 
         $display("[%t]   Keyboard rows must be initialized to 8'hFF at power on.", $time);
         for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            wb.read(row, data_rd, ack_rd);
+            wb.read(row, data_rd);
             `assert_equal(data_rd, 8'hFF);
         end
 
@@ -137,13 +136,13 @@ module keyboard_tb;
             cpu_read_current_row(data);
             `assert_equal(data, value);
             
-            wb.read(row, data_rd, ack_rd);
+            wb.read(row, data_rd);
             `assert_equal(data_rd, value);
         end
 
         // Second pass ensures unique values were not overwritten and resets all rows to 8'hFF.
         for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            wb.read(row, data_rd, ack_rd);
+            wb.read(row, data_rd);
             `assert_equal(data_rd, { 4'h5, row[3:0] });
             wb.write(row, 8'hff);
         end

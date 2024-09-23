@@ -59,7 +59,6 @@ module bram_tb #(
     );
 
     logic [DATA_WIDTH-1:0] data_rd;
-    logic                  ack_rd;
 
     always @(posedge clock or negedge clock) begin
         assert (stall == 0) else $fatal(1, "BRAM access must not stall Wishbone bus");
@@ -70,7 +69,7 @@ module bram_tb #(
 
         wb.reset;
         wb.write(10'h00, 8'h55);
-        wb.read(10'h00, data_rd, ack_rd);
+        wb.read(10'h00, data_rd);
         `assert_equal(data_rd, 8'h55);
 
         #1 $display("[%t] END %m", $time);

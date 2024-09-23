@@ -78,14 +78,13 @@ module ram_tb;
     );
 
     logic [DATA_WIDTH-1:0] data_rd;
-    logic                  ack_rd;
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
         wb.write(common_pkg::wb_ram_addr(17'h00000), 8'h55);
-        wb.read(common_pkg::wb_ram_addr(17'h00000), data_rd, ack_rd);
+        wb.read(common_pkg::wb_ram_addr(17'h00000), data_rd);
         `assert_equal(data_rd, 8'h55);
 
         #1 $display("[%t] END %m", $time);
