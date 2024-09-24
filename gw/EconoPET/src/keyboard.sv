@@ -29,15 +29,13 @@ module keyboard(
     output logic                     wb_stall_o,
     output logic                     wb_ack_o,
 
-    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i,             // PIA register select (cpu_addr[1:0])
-    input  logic                     pia1_cs_i,             // PIA chip select (from address_decoding)
-
-    input  logic                     cpu_valid_strobe_i,
-    input  logic                     cpu_done_strobe_i,
     input  logic [   DATA_WIDTH-1:0] cpu_data_i,
     output logic [   DATA_WIDTH-1:0] cpu_data_o,
     output logic                     cpu_data_oe,           // Asserted when intercepting CPU read of keyboard matrix
-    input  logic                     cpu_we_i
+    input  logic                     cpu_we_i,
+
+    input  logic                     pia1_cs_i,             // PIA chip select (from address_decoding)
+    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i              // PIA register select (cpu_addr[1:0])
 );
     logic wb_select;
     wb_decode #(WB_KBD_BASE) wb_decode (
@@ -64,9 +62,11 @@ module keyboard(
     logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
     logic [    DATA_WIDTH-1:0] current_row  = 8'hff;
 
+    // This peripheral always completes WB operations in a single cycle.
+    assign wb_stall_o = 1'b0;
+
     always_ff @(posedge wb_clock_i) begin
-        wb_ack_o <= '0;
-        wb_stall_o <= '0;   // WB operations always complete in one cycle
+        wb_ack_o   <= '0;
 
         if (wb_select && wb_cycle_i && wb_strobe_i) begin
             if (wb_we_i) begin
@@ -76,10 +76,10 @@ module keyboard(
             end
             wb_ack_o <= 1'b1;
         end else begin
-            // Pipeline reads from keyboard matrix
+            // To relax timing, we pipeline reads from the 'matrix' block ram.
             cpu_data_o  <= current_row;
-            current_row <= matrix[selected_row];
             cpu_data_oe <= reading_port_b && current_row != 8'hff;
+            current_row <= matrix[selected_row];
 
             if (writing_port_a) selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
         end

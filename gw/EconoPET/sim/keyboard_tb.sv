@@ -51,14 +51,13 @@ module keyboard_tb;
         .wb_stall_o(stall),
         .wb_ack_o(ack),
 
-        .pia1_rs_i(pia1_rs),
-        .pia1_cs_i(pia1_cs),
-
-        .cpu_valid_strobe_i(cpu_strobe),
         .cpu_data_i(cpu_din),
         .cpu_data_o(cpu_dout),
         .cpu_data_oe(cpu_doe),
-        .cpu_we_i(cpu_we)
+        .cpu_we_i(cpu_we),
+
+        .pia1_cs_i(pia1_cs),
+        .pia1_rs_i(pia1_rs)
     );
 
     wb_driver wb (
