@@ -12,25 +12,31 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
 module video_crtc(
-    input  logic        reset_i,
-    input  logic        sys_clock_i,            // FPGA System clock
-    input  logic        clk_en_i,               // Gates 'sys_clock_i' to advance CRTC state
-    input  logic        cs_i,                   // CRTC selected for data transfer (driven by address decoding)
-    input  logic        we_i,                   // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
+    input  logic reset_i,
+    input  logic sys_clock_i,               // FPGA System clock
+    input  logic clk_en_i,                  // Gates 'sys_clock_i' to advance CRTC state
+    input  logic cs_i,                      // CRTC selected for data transfer (driven by address decoding)
+    input  logic we_i,                      // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
 
-    input  logic        rs_i,                   // Register select (0 = write address/read status, 1 = read addressed register)
+    input  logic rs_i,                      // Register select (0 = write address/read status, 1 = read addressed register)
 
-    input  logic  [7:0] data_i,                 // Transfer data written from CPU to CRTC when CS asserted and /RW is low
-    output logic  [7:0] data_o,                 // Transfer data read by CPU from CRTC when CS asserted and /RW is high
-    output logic        data_oe,                // Asserted when CPU is reading from CRTC
+    input  logic [DATA_WIDTH-1:0] data_i,   // Transfer data written from CPU to CRTC when CS asserted and /RW is low
+    output logic [DATA_WIDTH-1:0] data_o,   // Transfer data read by CPU from CRTC when CS asserted and /RW is high
+    output logic                  data_oe,  // Asserted when CPU is reading from CRTC
 
-    output logic        h_sync_o,               // Horizontal sync
-    output logic        v_sync_o,               // Vertical sync
-    output logic        de_o,                   // Display enable
+    output logic h_sync_o,                  // Horizontal sync
+    output logic v_sync_o,                  // Vertical sync
+    output logic de_o,                      // Display enable
 
-    output logic [13:0] ma_o,                   // Refresh RAM address lines
-    output logic  [4:0] ra_o                    // Raster address lines
+    output logic [13:0] ma_o,               // Refresh RAM address lines
+    output logic  [4:0] ra_o,               // Raster address lines
+
+    output logic [DATA_WIDTH-1:0] registers_o [CRTC_REG_COUNT-1:0] // CRTC registers
 );
     localparam R0_H_TOTAL           = 0,    // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
                                             //       The frequency of HSYNC is thus determined by this register.
@@ -63,8 +69,8 @@ module video_crtc(
                R12_START_ADDR_HI    = 12,   // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
                R13_START_ADDR_LO    = 13;   // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
 
-    logic [4:0] ar = '0;                    // Address register used to select R0..17
-    logic [7:0] r[31:0];                    // Storage for R0..17 (extended to next power of 2)
+    logic [CRTC_ADDR_WIDTH-1:0] ar = '0;            // Address register used to select R0..17
+    logic [DATA_WIDTH-1:0] r[CRTC_REG_COUNT-1:0];   // Storage for R0..17
 
     // CRTC drives data when the current data transfer is reading from the CRTC
     //
@@ -313,8 +319,9 @@ module video_crtc(
         end
     end
 
-    assign h_sync_o = h_sync;
-    assign v_sync_o = v_sync; 
-    assign de_o     = h_display && v_display;
-    assign ra_o     = line_counter;
+    assign h_sync_o    = h_sync;
+    assign v_sync_o    = v_sync; 
+    assign de_o        = h_display && v_display;
+    assign ra_o        = line_counter;
+    assign registers_o = r;
 endmodule

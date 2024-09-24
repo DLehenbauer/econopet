@@ -61,6 +61,12 @@ package common_pkg;
     localparam int unsigned REG_COUNT         = 1;
 
     //
+    // CRTC
+    //
+
+    localparam int unsigned CRTC_REG_COUNT = 32;
+
+    //
     // Bus
     //
 
@@ -76,10 +82,12 @@ package common_pkg;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
     localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT);              // TODO: Should be 'REG_COUNT - 1'b1', but with REG_COUNT=1, that results in 0 address lines.
     localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_ROW_COUNT - 1'b1);
+    localparam int unsigned CRTC_ADDR_WIDTH = bit_width(CRTC_REG_COUNT - 1'b1);
     localparam int unsigned DATA_WIDTH      = 8;
 
     localparam WB_RAM_BASE  = 3'b000;
-    localparam WB_REG_BASE  = 3'b010;
+    localparam WB_REG_BASE  = 4'b0100;
+    localparam WB_CRTC_BASE = 4'b0101;
     localparam WB_KBD_BASE  = 3'b011;
     localparam WB_VRAM_BASE = { WB_RAM_BASE, 6'b010000 };   // SRAM: $8000-87FF
     localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b010001 };   // SRAM: $8800-8FFF
@@ -91,6 +99,10 @@ package common_pkg;
 
     function logic[WB_ADDR_WIDTH-1:0] wb_reg_addr(input logic[REG_ADDR_WIDTH-1:0] register);
         return { WB_REG_BASE, (WB_ADDR_WIDTH - REG_ADDR_WIDTH - $bits(WB_REG_BASE))'('x), register };
+    endfunction
+
+    function logic[WB_ADDR_WIDTH-1:0] wb_crtc_addr(input logic[CRTC_ADDR_WIDTH-1:0] register);
+        return { WB_CRTC_BASE, (WB_ADDR_WIDTH - CRTC_ADDR_WIDTH - $bits(WB_CRTC_BASE))'('x), register };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_ADDR_WIDTH-1:0] register);

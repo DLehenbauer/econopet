@@ -22,14 +22,21 @@ module video_tb;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
     initial clock_gen.start;
 
-    logic [ WB_ADDR_WIDTH-1:0] addr;
-    logic [    DATA_WIDTH-1:0] dout;
-    logic [    DATA_WIDTH-1:0] din;
-    logic                      we;
-    logic                      cycle;
-    logic                      strobe;
-    logic                      stall = 1'b0;
-    logic                      ack   = 1'b1;
+    logic [ WB_ADDR_WIDTH-1:0] wbc_addr;
+    logic [    DATA_WIDTH-1:0] wbc_din      = 8'h55;    // Test pattern
+    logic                      wbc_we;
+    logic                      wbc_cycle;
+    logic                      wbc_strobe;
+    logic                      wbc_stall    = 1'b0;
+    logic                      wbc_ack      = 1'b1;
+
+    logic [ WB_ADDR_WIDTH-1:0] wbp_addr;
+    logic [    DATA_WIDTH-1:0] wbp_dout;
+    logic                      wbp_we;
+    logic                      wbp_cycle;
+    logic                      wbp_strobe;
+    logic                      wbp_stall;
+    logic                      wbp_ack;
 
     logic clk1_en;
     logic clk8_en;
@@ -53,15 +60,24 @@ module video_tb;
 
         .config_crt_i(1'b0),    // 0 = 12"/CRTC, 1 = 9"/non-CRTC
 
+        // Wishbone controller
         .wb_clock_i(clock),
-        .wb_addr_o(addr),
-        .wb_data_i(8'h55),      // Test pattern
-        .wb_data_o(din),
-        .wb_we_o(we),
-        .wb_cycle_o(cycle),
-        .wb_strobe_o(strobe),
-        .wb_stall_i(stall),
-        .wb_ack_i(ack),
+        .wb_addr_o(wbc_addr),
+        .wb_data_i(wbc_din),
+        .wb_we_o(wbc_we),
+        .wb_cycle_o(wbc_cycle),
+        .wb_strobe_o(wbc_strobe),
+        .wb_stall_i(wbc_stall),
+        .wb_ack_i(wbc_ack),
+
+        // Wishbone peripheral
+        .wb_addr_i(wbp_addr),
+        .wb_data_o(wbp_dout),
+        .wb_we_i(wbp_we),
+        .wb_cycle_i(wbp_cycle),
+        .wb_strobe_i(wbp_strobe),
+        .wb_stall_o(wbp_stall),
+        .wb_ack_o(wbp_ack),
 
         // We leave CRTC at it's default settings for this testbench.
         .cpu_reset_i(1'b0),
@@ -81,8 +97,33 @@ module video_tb;
         .video_o(video_o)
     );
 
+    wb_driver wb (
+        .wb_clock_i(clock),
+        .wb_addr_o(wbp_addr),
+        .wb_data_i(wbp_dout),
+        .wb_data_o(),
+        .wb_we_o(wbp_we),
+        .wb_cycle_o(wbp_cycle),
+        .wb_strobe_o(wbp_strobe),
+        .wb_ack_i(wbp_ack),
+        .wb_stall_i(wbp_stall)
+    );
+
     task run;
+        integer r;
+        bit [DATA_WIDTH-1:0] value;
+
         $display("[%t] BEGIN %m", $time);
+
+        wb.reset;
+
+        for (r = 0; r <= 13; r = r + 1) begin
+            $display("reading %d", r);
+            wb.read(common_pkg::wb_crtc_addr(r), value);
+            $display("[%t]   R%d = %d", $time, r, value);
+        end
+
+        $finish;
 
         @(posedge v_sync);
         @(posedge v_sync);

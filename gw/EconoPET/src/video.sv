@@ -26,13 +26,22 @@ module video (
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                      // Bus clock
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
     input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
     output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
     output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
     output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
     input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
     input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
+
+    // Wishbone B4 peripheral to read current CRTC register values.
+    // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
+    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic wb_we_i,                         // Direction of transaction (0 = read , 1 = write)
+    input  logic wb_cycle_i,                      // Bus cycle is active
+    input  logic wb_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
+    output logic wb_stall_o,                      // Peripheral is not ready to accept the request
+    output logic wb_ack_o,                        // Indicates success termination of cycle (data_o is valid)
 
     // CRTC interface to CPU bus
     input  logic cpu_reset_i,
@@ -67,6 +76,7 @@ module video (
     logic [ 4:0] ra;
     logic        crtc_h_sync;
     logic        crtc_v_sync;
+    logic [DATA_WIDTH-1:0] crtc_registers [CRTC_REG_COUNT-1:0];
 
     video_crtc video_crtc (
         .reset_i(cpu_reset_i),
@@ -82,11 +92,38 @@ module video (
         .v_sync_o(crtc_v_sync),       // Vertical sync (active high)
         .de_o(de),                    // Display enable
         .ma_o(ma),                    // Refresh RAM address lines
-        .ra_o(ra)                     // Raster address lines
+        .ra_o(ra),                    // Raster address lines
+        .registers_o(crtc_registers)  // CRTC register values
     );
 
     wire crtc_invert     = ma[12];   // TA12 inverts the video signal (0 = inverted, 1 = normal)
     wire crtc_chr_option = ma[13];   // TA13 selects an alternative character rom (0 = normal, 1 = international)
+
+    //
+    // Wishbone peripheral
+    //
+
+    // TODO: Need CRTC addr base
+
+    logic wb_select;
+    wb_decode #(WB_CRTC_BASE) wb_decode (
+        .wb_addr_i(wb_addr_i),
+        .selected_o(wb_select)
+    );
+
+    wire [CRTC_ADDR_WIDTH-1:0] crtc_addr = wb_addr_i[CRTC_ADDR_WIDTH-1:0];
+
+    always_ff @(posedge wb_clock_i) begin
+        if (wb_select && wb_cycle_i && wb_strobe_i) begin
+            wb_data_o <= crtc_registers[crtc_addr];
+            wb_ack_o <= 1'b1;
+        end else begin
+            wb_ack_o <= '0;
+        end
+    end
+
+    // Wishbone peripheral always completes in a single cycle.
+    assign wb_stall_o = 1'b0;
 
     //
     // Fetch
