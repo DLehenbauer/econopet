@@ -123,10 +123,8 @@ module video_tb;
             $display("[%t]   R%d = %d", $time, r, value);
         end
 
-        $finish;
-
-        @(posedge v_sync);
-        @(posedge v_sync);
+        // @(posedge v_sync);
+        // @(posedge v_sync);
 
         #1 $display("[%t] END %m", $time);
     endtask
