@@ -12,33 +12,83 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`define TEST_VIDEO
+`define TEST_VIDEO_CRTC
+`define TEST_KEYBOARD
+`define TEST_REGISTER_FILE
+`define TEST_TIMING
+`define TEST_SPI
+`define TEST_SPI1
+`define TEST_RAM
+`define TEST_BRAM
+`define TEST_TOP
+
 module sim;
+`ifdef TEST_VIDEO
+    video_tb video_tb ();
+`endif
+`ifdef TEST_VIDEO_CRTC
     video_crtc_tb video_crtc_tb ();
-    //video_tb video_tb ();
+`endif
+`ifdef TEST_KEYBOARD
     keyboard_tb keyboard_tb ();
+`endif
+`ifdef TEST_REGISTER_FILE
     register_file_tb register_file_tb ();
+`endif
+`ifdef TEST_TIMING
     timing_tb timing_tb ();
+`endif
+`ifdef TEST_SPI
     spi_tb spi_tb ();
+`endif
+`ifdef TEST_SPI1
     spi1_tb spi1_tb ();
+`endif
+`ifdef TEST_RAM
     ram_tb ram_tb ();
+`endif
+`ifdef TEST_BRAM
     bram_tb bram_tb ();
+`endif 
+`ifdef TEST_TOP
     top_tb top_tb ();
+`endif
 
     initial begin
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
-        video_crtc_tb.run();
-        //video_tb.run();
-        keyboard_tb.run();
-        register_file_tb.run();
-        timing_tb.run();
-        spi_tb.run();
-        spi1_tb.run();
-        ram_tb.run();
-        bram_tb.run();
-        top_tb.run();
-
+`ifdef TEST_VIDEO
+        video_tb.run;
+`endif
+`ifdef TEST_VIDEO_CRTC
+        video_crtc_tb.run;
+`endif
+`ifdef TEST_KEYBOARD
+        keyboard_tb.run;
+`endif
+`ifdef TEST_REGISTER_FILE
+        register_file_tb.run;
+`endif
+`ifdef TEST_TIMING
+        timing_tb.run;
+`endif
+`ifdef TEST_SPI
+        spi_tb.run;
+`endif
+`ifdef TEST_SPI1
+        spi1_tb.run;
+`endif
+`ifdef TEST_RAM
+        ram_tb.run;
+`endif
+`ifdef TEST_BRAM
+        bram_tb.run;
+`endif 
+`ifdef TEST_TOP
+        top_tb.run;
+`endif
         $display("[%t] Simulation Complete", $time);
         $finish;
     end
