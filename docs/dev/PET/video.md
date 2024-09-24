@@ -2,6 +2,12 @@
 
 ## Non-CRTC
 
+PETs without a CRTC chip used 9" are equipped with 9" monitors, which require:
+
+* HSync frequency is 15.632 KHz (~NTSC)
+* H/VSync are active high
+* Video is active low
+
 ### Timing (Non-CRTC)
 
 Measurements from a 2001-32N (1979):
@@ -30,17 +36,24 @@ Register | Value | Description
  R12[4]  |    0  | TA12 inverts video: 0 = 9" monitor, 1 = 12" monitor
 
 From [SJGray's cbm-edit-rom](https://github.com/sjgray/cbm-edit-rom/blob/master/crtc-reg-normal.asm):
+
 ```asm
 ;---------------------- 40/80x25, 60 Hz, 15.748 kHz (NTSC) for External Monitor (inverted video)
 !IF REFRESH=3 {
 ;                             0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17
-CRT_CONFIG_TEXT:	    !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
+CRT_CONFIG_TEXT:     !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
 ; Decimal                    63  40  50 1/2  30   6  25  28   0   7   0   0  16   0   0   0   0   0
-CRT_CONFIG_GRAPHICS:	!byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
+CRT_CONFIG_GRAPHICS: !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
 }
 ```
 
 ## CRTC
+
+PETs with a CRTC chip are equipped with 12" monitors, which require:
+
+* HSync frequency is 20 KHz
+* H/VSync are active low
+* Video is active high
 
 ### Address decoding
 
