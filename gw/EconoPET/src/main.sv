@@ -325,7 +325,7 @@ module main (
         .spi1_stall_o(spi1_stall),
 
         .video_addr_i(video_addr),
-        .video_data_i(wb_din),
+        .video_data_i(video_dout),
         .video_we_i(video_we),
         .video_cycle_i(video_cycle),
         .video_strobe_i(video_strobe),
