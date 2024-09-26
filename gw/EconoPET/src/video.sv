@@ -53,10 +53,10 @@ module video (
     output logic [DATA_WIDTH-1:0] crtc_data_o,    // Transfer data read by CPU from CRTC when CS asserted and /RW is high
     output logic crtc_data_oe,                    // CRTC drives data lines (CPU is reading from CRTC)
 
+    // DotGen
     input  logic config_crt_i,                    // Adjusts polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic col_80_mode_i,                   // (0 = 40 col, 1 = 80 col)
     input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
-
     output logic h_sync_o,                        // Horizontal sync
     output logic v_sync_o,                        // Vertical sync
     output logic video_o                          // Video output
@@ -76,11 +76,18 @@ module video (
     logic [ 4:0] ra;
     logic        crtc_h_sync;
     logic        crtc_v_sync;
-    logic [DATA_WIDTH-1:0] crtc_registers [CRTC_REG_COUNT-1:0];
 
     video_crtc video_crtc (
+        .wb_clock_i(wb_clock_i),
+        .wb_addr_i(wb_addr_i),
+        .wb_data_o(wb_data_o),
+        .wb_we_i(wb_we_i),
+        .wb_cycle_i(wb_cycle_i),
+        .wb_strobe_i(wb_strobe_i),
+        .wb_stall_o(wb_stall_o),
+        .wb_ack_o(wb_ack_o),
+
         .reset_i(cpu_reset_i),
-        .sys_clock_i(wb_clock_i),     // System clock
         .clk_en_i(crtc_clk_en_i),     // 1 MHz clock enable for 'sys_clock_i'
         .cs_i(crtc_cs_i),             // CRTC selected for data transfer (driven by address decoding)
         .we_i(crtc_we_i),             // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
@@ -92,38 +99,11 @@ module video (
         .v_sync_o(crtc_v_sync),       // Vertical sync (active high)
         .de_o(de),                    // Display enable
         .ma_o(ma),                    // Refresh RAM address lines
-        .ra_o(ra),                    // Raster address lines
-        .registers_o(crtc_registers)  // CRTC register values
+        .ra_o(ra)                     // Raster address lines
     );
 
     wire crtc_invert     = ma[12];   // TA12 inverts the video signal (0 = inverted, 1 = normal)
     wire crtc_chr_option = ma[13];   // TA13 selects an alternative character rom (0 = normal, 1 = international)
-
-    //
-    // Wishbone peripheral
-    //
-
-    // TODO: Need CRTC addr base
-
-    logic wb_select;
-    wb_decode #(WB_CRTC_BASE) wb_decode (
-        .wb_addr_i(wb_addr_i),
-        .selected_o(wb_select)
-    );
-
-    wire [CRTC_ADDR_WIDTH-1:0] crtc_addr = wb_addr_i[CRTC_ADDR_WIDTH-1:0];
-
-    always_ff @(posedge wb_clock_i) begin
-        if (wb_select && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= crtc_registers[crtc_addr];
-            wb_ack_o <= 1'b1;
-        end else begin
-            wb_ack_o <= '0;
-        end
-    end
-
-    // Wishbone peripheral always completes in a single cycle.
-    assign wb_stall_o = 1'b0;
 
     //
     // Fetch
@@ -134,12 +114,12 @@ module video (
                ODD_RAM  = 2,
                ODD_ROM  = 3;
 
-    wire [WB_ADDR_WIDTH-1:0] even_ram_addr = common_pkg::wb_vram_addr(col_80_mode_i
-            ? { ma[9:0], 1'b0 }     // 80 column mode
-            : { 1'b0, ma[9:0] });   // 40 column mode
-    wire [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
-    wire [WB_ADDR_WIDTH-1:0] odd_ram_addr  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
-    wire [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
+    wire  [WB_ADDR_WIDTH-1:0] even_ram_addr = common_pkg::wb_vram_addr(col_80_mode_i
+                                                ? { ma[9:0], 1'b0 }     // 80 column mode
+                                                : { 1'b0, ma[9:0] });   // 40 column mode
+    wire  [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
+    wire  [WB_ADDR_WIDTH-1:0] odd_ram_addr  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
+    wire  [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
     logic [WB_ADDR_WIDTH-1:0] addrs [3:0];
 
     always_comb begin

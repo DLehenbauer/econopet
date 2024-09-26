@@ -49,20 +49,28 @@ module video_crtc_tb;
     logic        v_sync;
 
     video_crtc video_crtc (
+        .wb_clock_i(clock),
+        .wb_addr_i(),           // Wishbone unused for this testbench
+        .wb_data_o(),
+        .wb_we_i(),
+        .wb_cycle_i(),
+        .wb_strobe_i(),
+        .wb_stall_o(),
+        .wb_ack_o(),
+
         .reset_i(res),
-        .sys_clock_i(clock),
         .clk_en_i(clk1_en),
-        .cs_i(cs),                      // CRTC selected for data transfer (driven by address decoding)
-        .we_i(we),                      // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
-        .rs_i(rs),                      // Register select (0 = write address/read status, 1 = read addressed register)
-        .data_i(crtc_data_i),           // Transfer data written from CPU to CRTC when CS asserted and /RW is low
-        .data_o(crtc_data_o),           // Transfer data read by CPU from CRTC when CS asserted and /RW is high
-        .data_oe(crtc_data_oe),         // Asserted when CPU is reading from CRTC
-        .h_sync_o(h_sync),              // Horizontal sync
-        .v_sync_o(v_sync),              // Vertical sync
-        .de_o(de),                      // Display enable
-        .ma_o(ma),                      // Refresh RAM address lines
-        .ra_o(ra)                       // Raster address lines
+        .cs_i(cs),
+        .we_i(we),
+        .rs_i(rs),
+        .data_i(crtc_data_i),
+        .data_o(crtc_data_o),
+        .data_oe(crtc_data_oe),
+        .h_sync_o(h_sync),
+        .v_sync_o(v_sync),
+        .de_o(de),
+        .ma_o(ma),
+        .ra_o(ra)
     );
 
     task crtc_begin(
@@ -131,8 +139,6 @@ module video_crtc_tb;
     endtask
 
     task run;
-        bit [63:0] start_time, elapsed_time;
-
         $display("[%t] BEGIN %m", $time);
 
         reset();

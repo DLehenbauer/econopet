@@ -12,8 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`define TEST_WB_MUX
 `define TEST_VIDEO
 `define TEST_VIDEO_CRTC
+`define TEST_VIDEO_CRTC_REG
 `define TEST_KEYBOARD
 `define TEST_REGISTER_FILE
 `define TEST_TIMING
@@ -24,11 +26,17 @@
 `define TEST_TOP
 
 module sim;
+`ifdef TEST_WB_MUX
+    wb_mux_tb wb_mux_tb ();
+`endif
 `ifdef TEST_VIDEO
     video_tb video_tb ();
 `endif
 `ifdef TEST_VIDEO_CRTC
     video_crtc_tb video_crtc_tb ();
+`endif
+`ifdef TEST_VIDEO_CRTC_REG
+    video_crtc_reg_tb video_crtc_reg_tb ();
 `endif
 `ifdef TEST_KEYBOARD
     keyboard_tb keyboard_tb ();
@@ -59,11 +67,17 @@ module sim;
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
+`ifdef TEST_WB_MUX
+        wb_mux_tb.run;
+`endif
 `ifdef TEST_VIDEO
         video_tb.run;
 `endif
 `ifdef TEST_VIDEO_CRTC
         video_crtc_tb.run;
+`endif
+`ifdef TEST_VIDEO_CRTC_REG
+        video_crtc_reg_tb.run;
 `endif
 `ifdef TEST_KEYBOARD
         keyboard_tb.run;

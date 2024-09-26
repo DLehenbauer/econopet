@@ -88,19 +88,20 @@ module top_tb;
     endtask
 
     task static crtc_write_test;
-        bit   [               3:0] r;
-        logic [    DATA_WIDTH-1:0] dout;
-        bit   [    DATA_WIDTH-1:0] value;
+        bit   [CRTC_ADDR_WIDTH-1:0] r;
+        logic [     DATA_WIDTH-1:0] dout;
+        bit   [     DATA_WIDTH-1:0] value;
 
         $display("[%t] Begin CRTC Write Test", $time);
 
-        for (r = 0; r <= 13; r = r + 1) begin
+        for (r = 0; r <= CRTC_REG_COUNT; r = r + 1) begin
             mock_system.cpu_write(16'hE880, r);
-            value = { 4'b1011, r };
+            value = { 3'b101, r };
             mock_system.cpu_write(16'hE881, value);
             $display("[%t]   CRTC[%d] -> %02x", $time, r, value);
 
-            // TODO: Read back CRTC registers with SPI
+            mock_system.wb_read_at(common_pkg::wb_crtc_addr(r), dout);
+            `assert_equal(dout, value);
         end
 
         $display("[%t] End CRTC Write Test", $time);

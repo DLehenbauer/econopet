@@ -239,13 +239,6 @@ module main (
     logic                     col_80_mode_i = 1'b1;     // TODO: Use register file
 
     video video (
-        // Video timing
-        .clk1_en_i(clk1_en),                // 1 MHz character clock enable
-        .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
-        .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
-
-        .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
-
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(video_addr),
@@ -256,6 +249,13 @@ module main (
         .wb_strobe_o(video_strobe),
         .wb_stall_i(video_stall),
         .wb_ack_i(wb_ack),
+
+        // Video timing
+        .clk1_en_i(clk1_en),                // 1 MHz character clock enable
+        .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
+        .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
+
+        .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
 
         .cpu_reset_i(cpu_reset_i),
         .crtc_clk_en_i(cpu_strobe),         // 1 MHz clock enable for 'sys_clock_i'

@@ -17,9 +17,19 @@
 import common_pkg::*;
 
 module video_crtc(
+    // Wishbone B4 peripheral to read current CRTC register values.
+    // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
+    input  logic wb_clock_i,
+    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
+    output logic [   DATA_WIDTH-1:0] wb_data_o,
+    input  logic wb_we_i,
+    input  logic wb_cycle_i,
+    input  logic wb_strobe_i,
+    output logic wb_stall_o,
+    output logic wb_ack_o,
+    
     input  logic reset_i,
-    input  logic sys_clock_i,               // FPGA System clock
-    input  logic clk_en_i,                  // Gates 'sys_clock_i' to advance CRTC state
+    input  logic clk_en_i,                  // Gates 'wb_clock_i' to advance CRTC state
     input  logic cs_i,                      // CRTC selected for data transfer (driven by address decoding)
     input  logic we_i,                      // Direction of date transfers (0 = reading from CRTC, 1 = writing to CRTC)
 
@@ -34,111 +44,48 @@ module video_crtc(
     output logic de_o,                      // Display enable
 
     output logic [13:0] ma_o,               // Refresh RAM address lines
-    output logic  [4:0] ra_o,               // Raster address lines
-
-    output logic [DATA_WIDTH-1:0] registers_o [CRTC_REG_COUNT-1:0] // CRTC registers
+    output logic [ 4:0] ra_o                // Raster address lines
 );
-    localparam R0_H_TOTAL           = 0,    // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
-                                            //       The frequency of HSYNC is thus determined by this register.
-                
-               R1_H_DISPLAYED       = 1,    // [7:0] Number of displayed characters per horizontal line.
-                
-               R2_H_SYNC_POS        = 2,    // [7:0] Position of the HSYNC on the horizontal line, in terms of the character location number on the line.
-                                            //       The position of the HSYNC determines the left-to-right location of the displayed text on the video screen.
-                                            //       In this way, the side margins are adjusted.
+    logic [ 7:0] h_total;
+    logic [ 7:0] h_displayed;
+    logic [ 7:0] h_sync_pos;
+    logic [ 3:0] h_sync_width;
+    logic [ 4:0] v_sync_width;
+    logic [ 6:0] v_total;
+    logic [ 4:0] v_adjust;
+    logic [ 6:0] v_displayed;
+    logic [ 6:0] v_sync_pos;
+    logic [ 4:0] max_scan_line;
+    logic [13:0] start_addr;
 
-               R3_SYNC_WIDTH        = 3,    // [3:0] Width of HSYNC in character clock times (0 = HSYNC off)
-                                            // [7:4] Width of VSYNC in scan lines (0 = 16 scanlines)
+    video_crtc_reg video_crtc_reg (
+        .wb_clock_i(wb_clock_i),
+        .wb_addr_i(wb_addr_i),
+        .wb_data_o(wb_data_o),
+        .wb_we_i(wb_we_i),
+        .wb_cycle_i(wb_cycle_i),
+        .wb_strobe_i(wb_strobe_i),
+        .wb_stall_o(wb_stall_o),
+        .wb_ack_o(wb_ack_o),
 
-               R4_V_TOTAL           = 4,    // [6:0] Total number of character rows in a frame, minus one. This register, along with R5,
-                                            //       determines the overall frame rate, which should be close to the line frequency to
-                                            //       ensure flicker-free appearance. If the frame time is adjusted to be longer than the
-                                            //       period of the line frequency, then /RES may be used to provide absolute synchronism.
-
-               R5_V_ADJUST          = 5,    // [4:0] Number of additional scan lines needed to complete an entire frame scan and is intended
-                                            //       as a fine adjustment for the video frame time.
-
-               R6_V_DISPLAYED       = 6,    // [6:0] Number of displayed character rows in each frame. In this way, the vertical size of the
-                                            //       displayed text is determined.
-            
-               R7_V_SYNC_POS        = 7,    // [6:0] Selects the character row time at which the VSYNC pulse is desired to occur and, thus,
-                                            //       is used to position the displayed text in the vertical direction.
-
-               R9_MAX_SCAN_LINE     = 9,    // [4:0] Number of scan lines per character row, including spacing.
-
-               R12_START_ADDR_HI    = 12,   // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
-               R13_START_ADDR_LO    = 13;   // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
-
-    logic [CRTC_ADDR_WIDTH-1:0] ar = '0;            // Address register used to select R0..17
-    logic [DATA_WIDTH-1:0] r[CRTC_REG_COUNT-1:0];   // Storage for R0..17
-
-    // CRTC drives data when the current data transfer is reading from the CRTC
-    //
-    // TODO:
-    //  - Status register POR state should be 'x01xxxxx'
-    //  - Vertical retrace status bit should fall to 0 cclk ticks before retrace ends
-    //
-    // (See http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf, pg. 3)
-
-    assign data_oe = cs_i && !we_i;             // CRTC drives data bus when selected and CPU is reading
-    assign data_o  = rs_i == '0
-        ? { 2'b0, v_sync, 5'b0 }                // RS = 0: Read status register
-        : r[ar];                                // RS = 1: Read addressed register R0..17 (TODO: Allow this?  Infers dual-port RAM?)
-
-    initial begin
-`ifdef DEFAULT_15KHZ
-        // Power-on state emulates a non-CRTC PET (15kHz, 60Hz)
-        // The appropriate Editor ROM will reconfigure the CRTC for later models.
-        //
-        // Note that the parent module handles inverting the video signal according
-        // to 'config_crtc_i'.  Therefore, we continue to set TA12 to '1'.
-        r[R0_H_TOTAL]           = 8'd63;
-        r[R1_H_DISPLAYED]       = 8'd40;
-        r[R2_H_SYNC_POS]        = 8'd48;
-        r[R3_SYNC_WIDTH]        = 8'h51;
-        r[R4_V_TOTAL]           = { 1'd0, 7'd32 };
-        r[R5_V_ADJUST]          = { 3'd0, 5'd05 };
-        r[R6_V_DISPLAYED]       = { 1'd0, 7'd25 };
-        r[R7_V_SYNC_POS]        = { 1'd0, 7'd28 };
-        r[R9_MAX_SCAN_LINE]     = { 3'd0, 5'd07 };
-        r[R12_START_ADDR_HI]    = 8'h10;    // TA12 inverts video (1 = normal, 0 = inverted)
-        r[R13_START_ADDR_LO]    = 8'h00;
-`else
-        // 8032 Power-On State
-        r[R0_H_TOTAL]           = 8'h31;
-        r[R1_H_DISPLAYED]       = 8'h28;
-        r[R2_H_SYNC_POS]        = 8'h29;
-        r[R3_SYNC_WIDTH]        = 8'h0f;
-        r[R4_V_TOTAL]           = 8'h20;
-        r[R5_V_ADJUST]          = 8'h03;
-        r[R6_V_DISPLAYED]       = 8'h19;
-        r[R7_V_SYNC_POS]        = 8'h1d;
-        r[R9_MAX_SCAN_LINE]     = 8'h09;
-        r[R12_START_ADDR_HI]    = 8'h10;    // TA12 inverts video (1 = normal, 0 = inverted)
-        r[R13_START_ADDR_LO]    = 8'h00;
-`endif
-    end
-
-    always_ff @(posedge sys_clock_i) begin
-        if (clk_en_i && cs_i && we_i) begin
-            if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register
-            else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (R0..17)
-        end
-    end
-
-    wire  [7:0] h_total         = r[R0_H_TOTAL];
-    wire  [7:0] h_displayed     = r[R1_H_DISPLAYED];
-    wire  [7:0] h_sync_pos      = r[R2_H_SYNC_POS];
-    wire  [3:0] h_sync_width    = r[R3_SYNC_WIDTH][3:0];
-    wire  [4:0] v_sync_width    = r[R3_SYNC_WIDTH][7:4] == 0            // Per Datasheet, when bits 4-7 are all
-                                    ? 5'h10                             // "0", VSYNC will be 16 scan lines wide.
-                                    : { 1'b0, r[R3_SYNC_WIDTH][7:4] };
-    wire  [6:0] v_total         = r[R4_V_TOTAL][6:0];
-    wire  [4:0] v_adjust        = r[R5_V_ADJUST][4:0];
-    wire  [6:0] v_displayed     = r[R6_V_DISPLAYED][6:0];
-    wire  [6:0] v_sync_pos      = r[R7_V_SYNC_POS][6:0];
-    wire  [4:0] max_scan_line   = r[R9_MAX_SCAN_LINE][4:0];
-    wire [13:0] start_addr      = { r[R12_START_ADDR_HI][5:0], r[R13_START_ADDR_LO] };
+        .clk_en_i(clk_en_i),
+        .data_i(data_i),
+        .cs_i(cs_i),
+        .we_i(we_i),
+        .rs_i(rs_i),
+        
+        .r0_h_total_o(h_total),
+        .r1_h_displayed_o(h_displayed),
+        .r2_h_sync_pos_o(h_sync_pos),
+        .r3_h_sync_width_o(h_sync_width),
+        .r3_v_sync_width_o(v_sync_width),
+        .r4_v_total_o(v_total),
+        .r5_v_adjust_o(v_adjust),
+        .r6_v_displayed_o(v_displayed),
+        .r7_v_sync_pos_o(v_sync_pos),
+        .r9_max_scan_line_o(max_scan_line),
+        .r1213_start_addr_o(start_addr)
+    );
 
     // Horizontal
 
@@ -150,7 +97,7 @@ module video_crtc(
     wire last_column = h_total_counter == h_displayed;
     wire line_ending = h_total_counter == h_total;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) h_total_counter <= '0;
         else if (clk_en_i) begin
             if (line_ending) h_total_counter <= '0;
@@ -158,19 +105,19 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) h_display <= 1'b1;
         else if (last_column) h_display <= '0;
         else if (h_total_counter == '0) h_display <= 1'b1;
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) h_sync <= '0;
         else if (h_sync_counter == h_sync_width) h_sync <= 1'b0;
         else if (h_total_counter == h_sync_pos) h_sync <= 1'b1;
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) h_sync_counter <= '0;
         else if (clk_en_i) begin            
             if (h_sync) h_sync_counter <= h_sync_counter + 1'b1;
@@ -184,7 +131,7 @@ module video_crtc(
     wire last_line  = line_counter == max_scan_line;
     wire row_ending = last_line && line_ending;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) line_counter <= '0;
         else if (clk_en_i) begin
             if (frame_start) line_counter <= '0;
@@ -202,7 +149,7 @@ module video_crtc(
 
     wire last_row = v_total_counter == v_total;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) v_total_counter <= '0;
         else if (clk_en_i) begin
             if (frame_start) v_total_counter <= '0;
@@ -210,7 +157,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) v_display <= 1'b1;
         else if (clk_en_i) begin
             if (v_total_counter == v_displayed) v_display <= '0;
@@ -222,7 +169,7 @@ module video_crtc(
     //       change during the current frame.  Why?
     logic v_sync_latched = '0;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) begin
             v_sync <= '0;
             v_sync_latched <= '0;
@@ -236,7 +183,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) v_sync_counter <= '0;
         else if (clk_en_i) begin
             if (line_ending) begin
@@ -252,7 +199,7 @@ module video_crtc(
     wire adjusting     = frame_state_d == ADJUSTING;
     wire adjust_ending = line_ending && adjust_counter == v_adjust;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) adjust_counter <= '0;
         else if (clk_en_i) begin
             if (adjust_ending) adjust_counter <= '0;
@@ -293,7 +240,7 @@ module video_crtc(
         endcase
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) frame_state_q <= NORMAL;
         else if (clk_en_i)frame_state_q <= frame_state_d;
     end
@@ -302,7 +249,7 @@ module video_crtc(
 
     logic [13:0] row_addr = '0;
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) row_addr <= '0;
         else if (clk_en_i) begin
             if (frame_start) row_addr <= start_addr;
@@ -310,7 +257,7 @@ module video_crtc(
         end
     end
 
-    always_ff @(posedge sys_clock_i) begin
+    always_ff @(posedge wb_clock_i) begin
         if (reset_i) ma_o <= '0;
         else if (clk_en_i) begin
             if (frame_start) ma_o <= start_addr;
@@ -323,5 +270,4 @@ module video_crtc(
     assign v_sync_o    = v_sync; 
     assign de_o        = h_display && v_display;
     assign ra_o        = line_counter;
-    assign registers_o = r;
 endmodule

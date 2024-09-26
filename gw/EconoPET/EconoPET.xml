@@ -25,8 +25,10 @@
         <efx:design_file name="src/keyboard.sv" version="default" library="default"/>
         <efx:design_file name="src/video.sv" version="default" library="default"/>
         <efx:design_file name="src/video_crtc.sv" version="default" library="default"/>
+        <efx:design_file name="src/video_crtc_reg.sv" version="default" library="default"/>
         <efx:design_file name="src/video_dotgen.sv" version="default" library="default"/>
         <efx:design_file name="src/arbiter.sv" version="default" library="default"/>
+        <efx:design_file name="src/wb_mux.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
     <efx:constraint_info>
@@ -50,6 +52,8 @@
         <efx:sim_file name="sim/keyboard_tb.sv"/>
         <efx:sim_file name="sim/video_tb.sv"/>
         <efx:sim_file name="sim/video_crtc_tb.sv"/>
+        <efx:sim_file name="sim/video_crtc_reg_tb.sv"/>
+        <efx:sim_file name="sim/wb_mux_tb.sv"/>
         <efx:sim_file name="sim/wb_driver.sv"/>
         <efx:sim_file name="sim/mock_ram.sv"/>
         <efx:sim_file name="sim/mock_cpu.sv"/>

@@ -64,6 +64,38 @@ package common_pkg;
     // CRTC
     //
 
+    localparam CRTC_R0_H_TOTAL           = 0,    // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
+                                                 //       The frequency of HSYNC is thus determined by this register.
+                
+               CRTC_R1_H_DISPLAYED       = 1,    // [7:0] Number of displayed characters per horizontal line.
+                
+               CRTC_R2_H_SYNC_POS        = 2,    // [7:0] Position of the HSYNC on the horizontal line, in terms of the character location number on the line.
+                                                 //       The position of the HSYNC determines the left-to-right location of the displayed text on the video screen.
+                                                 //       In this way, the side margins are adjusted.
+
+               CRTC_R3_SYNC_WIDTH        = 3,    // [3:0] Width of HSYNC in character clock times (0 = HSYNC off)
+                                                 // [7:4] Width of VSYNC in scan lines (0 = 16 scanlines)
+
+               CRTC_R4_V_TOTAL           = 4,    // [6:0] Total number of character rows in a frame, minus one. This register, along with R5,
+                                                 //       determines the overall frame rate, which should be close to the line frequency to
+                                                 //       ensure flicker-free appearance. If the frame time is adjusted to be longer than the
+                                                 //       period of the line frequency, then /RES may be used to provide absolute synchronism.
+
+               CRTC_R5_V_ADJUST          = 5,    // [4:0] Number of additional scan lines needed to complete an entire frame scan and is intended
+                                                 //       as a fine adjustment for the video frame time.
+
+               CRTC_R6_V_DISPLAYED       = 6,    // [6:0] Number of displayed character rows in each frame. In this way, the vertical size of the
+                                                 //       displayed text is determined.
+            
+               CRTC_R7_V_SYNC_POS        = 7,    // [6:0] Selects the character row time at which the VSYNC pulse is desired to occur and, thus,
+                                                 //       is used to position the displayed text in the vertical direction.
+
+               CRTC_R9_MAX_SCAN_LINE     = 9,    // [4:0] Number of scan lines per character row, including spacing.
+
+               CRTC_R12_START_ADDR_HI    = 12,   // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
+               CRTC_R13_START_ADDR_LO    = 13;   // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
+
+
     localparam int unsigned CRTC_REG_COUNT = 32;
 
     //
