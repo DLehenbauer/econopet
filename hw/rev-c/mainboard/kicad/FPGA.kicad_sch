@@ -8885,16 +8885,6 @@
 	)
 	(bus
 		(pts
-			(xy 496.57 125.73) (xy 497.84 125.73)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "08f10643-e8b0-477e-936e-311b6c037fcd")
-	)
-	(bus
-		(pts
 			(xy 482.6 138.43) (xy 483.87 138.43)
 		)
 		(stroke
