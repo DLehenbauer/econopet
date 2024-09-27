@@ -158,7 +158,7 @@ module video_crtc_reg_tb;
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             wb.read(common_pkg::wb_crtc_addr(r), data);
-            $display("[%t]   R%d = %d", $time, r, data);
+            $display("[%t]   R%0d = %d", $time, r, data);
         end
 
         #1 $display("[%t] END %m", $time);

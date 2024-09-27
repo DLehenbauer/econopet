@@ -40,6 +40,7 @@ module cpu (
     //  - DIN must be valid 15ns before rising Phi2 edge (tDSR)
     //  - DIN must be held 10ns after rising Phi2 edge (tDHR)
     //  - BE must be held 10ns after rising Phi2 edge (tDHR, tDHW)
+    //  - DOUT is valid 40ns after rising Phi2 edge (tMDS)
     //  
     // Falling Phi2 edge advances CPU to next state:
     //  - Previous ADDR, RWB, DOUT held 10ns after falling Phi2 edge (tAH, tDHW)
@@ -62,11 +63,11 @@ module cpu (
 
     // Maximum number of 'sys_clock_i' cycles required to complete an in-progress
     // wishbone transaction with RAM.
-    localparam MAX_WB_CYCLES = 5,
-               CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
+    localparam CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
                CPU_tPWH      = 62,  // CPU Clock Pulse Width High (tPWH)
                CPU_tDSR      = 15,  // CPU Data Setup Time (tDSR)
                CPU_tDHx      = 10,  // CPU Data Hold Time (tDHR, tDHW)
+               CPU_tMDS      = 40,  // CPU Write Data Delay Time (tMDS)
                RAM_tAA       = 10,  // RAM Address Access Time (tAA)
                IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
 

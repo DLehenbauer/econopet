@@ -78,19 +78,19 @@ module arbiter (
         video_stall_o = 1'b1;
 
         if (spi1_grant) begin
-            wb_addr_o    = spi1_addr_i;
-            wb_data_o    = spi1_data_i;
-            wb_we_o      = spi1_we_i;
-            wb_cycle_o   = spi1_cycle_i;
-            wb_strobe_o  = spi1_strobe_i & clk8_en_delay;
-            spi1_stall_o = !clk8_en_delay;
+            wb_addr_o     = spi1_addr_i;
+            wb_data_o     = spi1_data_i;
+            wb_we_o       = spi1_we_i;
+            wb_cycle_o    = spi1_cycle_i;
+            wb_strobe_o   = spi1_strobe_i & clk8_en_delay;
+            spi1_stall_o  = wb_stall_i | !clk8_en_delay;
         end else if (video_grant) begin
             wb_addr_o     = video_addr_i;
             wb_data_o     = video_data_i;
             wb_we_o       = video_we_i;
             wb_cycle_o    = video_cycle_i;
             wb_strobe_o   = video_strobe_i & clk8_en_delay;
-            video_stall_o = !clk8_en_delay;
+            video_stall_o = wb_stall_i | !clk8_en_delay;
         end
     end
 

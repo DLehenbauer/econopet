@@ -111,7 +111,7 @@ module video_tb;
 
     task run;
         integer r;
-        bit [DATA_WIDTH-1:0] value;
+        logic [DATA_WIDTH-1:0] value;
 
         $display("[%t] BEGIN %m", $time);
 
@@ -119,7 +119,7 @@ module video_tb;
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             wb.read(common_pkg::wb_crtc_addr(r), value);
-            $display("[%t]   R%d = %d", $time, r, value);
+            $display("[%t]   R%0d = %d", $time, r, value);
         end
 
         // @(posedge v_sync);
