@@ -13020,13 +13020,13 @@
 		(uuid "46380eb5-d6b8-4958-9014-4954c8aeb5db")
 	)
 	(label "CEC"
-		(at 217.17 66.04 0)
+		(at 204.47 66.04 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "4779ec14-ae3c-4f06-bd12-83f29d5ad477")
 	)
@@ -13549,13 +13549,13 @@
 		(uuid "8d50a357-aec7-46fa-bb71-dba7a701162d")
 	)
 	(label "SPI1_RX"
-		(at 204.47 66.04 180)
+		(at 217.17 66.04 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "8e1cac6c-0850-4549-a0ff-df0038bb4b5e")
 	)
