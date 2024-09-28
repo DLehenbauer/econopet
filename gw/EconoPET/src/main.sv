@@ -127,15 +127,22 @@ module main (
         .clk16_en_o(clk16_en)
     );
 
-    logic cpu_strobe;
+    logic cpu_addr_strobe;
+    logic cpu_data_strobe;
+    // logic cpu_rd_en;
+    // logic cpu_wr_en;
     logic cpu_grant_en;
 
     cpu cpu (
         .sys_clock_i(sys_clock_i),
         .cpu_grant_i(cpu_grant_en),
+        .cpu_we_i(cpu_we_i),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
-        .cpu_strobe_o(cpu_strobe)
+        .cpu_addr_strobe_o(cpu_addr_strobe),
+        .cpu_data_strobe_o(cpu_data_strobe)
+        // .cpu_rd_en_o(cpu_rd_en),
+        // .cpu_wr_en_o(cpu_wr_en)
     );
 
     //
@@ -258,7 +265,7 @@ module main (
         .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
 
         .cpu_reset_i(cpu_reset_i),
-        .crtc_clk_en_i(cpu_strobe),         // 1 MHz clock enable for 'sys_clock_i'
+        .crtc_clk_en_i(cpu_data_strobe),    // 1 MHz clock enable for 'sys_clock_i'
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
