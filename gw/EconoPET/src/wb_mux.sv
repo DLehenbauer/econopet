@@ -16,46 +16,49 @@
 
 import common_pkg::*;
 
+/**
+ * Wishbone Multiplexer (One Bus -> Many Peripherals)
+ *
+ * @param CONTROLLER_COUNT Number of Wishbone controllers
+ */
 module wb_mux #(
-    parameter CC = 2,  // Number of Wishbone controllers
-    parameter PC = 2   // Number of Wishbone peripherals
+    parameter COUNT = 2   // Number of Wishbone peripherals
 ) (
     input logic wb_clock_i,  // Clock
 
-    // Wishbone B4 controllers
+    // Wishbone Bus
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic [CC-1:0]                    wbc_cycle_i,   // Cycle request
-    input  logic [CC-1:0]                    wbc_strobe_i,  // Strobe
-    input  logic [CC-1:0][WB_ADDR_WIDTH-1:0] wbc_addr_i,    // Address bus
-    input  logic [CC-1:0][   DATA_WIDTH-1:0] wbc_data_i,    // Data bus
-    output logic [CC-1:0][   DATA_WIDTH-1:0] wbc_data_o,    // Data bus
-    input  logic [CC-1:0]                    wbc_we_i,      // Write enable
-    output logic [CC-1:0]                    wbc_stall_o,   // Stall
-    output logic [CC-1:0]                    wbc_ack_o,     // Acknowledge
+    input  logic                     wb_cycle_i,
+    input  logic                     wb_strobe_i,
+    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,
+    output logic [   DATA_WIDTH-1:0] wb_data_o,
+    input  logic                     wb_we_i,
+    output logic                     wb_stall_o,
+    output logic                     wb_ack_o,
 
-    // Wishbone B4 peripherals
+    // Wishbone Peripherals
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    output logic [PC-1:0]                    wbp_cycle_o,   // Cycle valid
-    output logic [PC-1:0]                    wbp_strobe_o,  // Strobe
-    output logic [PC-1:0][WB_ADDR_WIDTH-1:0] wbp_addr_o,    // Address bus
-    input  logic [PC-1:0][   DATA_WIDTH-1:0] wbp_data_i,    // Data bus
-    output logic [PC-1:0][   DATA_WIDTH-1:0] wbp_data_o,    // Data bus
-    output logic [PC-1:0]                    wbp_we_o,      // Write enable
-    input  logic [PC-1:0]                    wbp_stall_i,   // Stall
-    input  logic [PC-1:0]                    wbp_ack_i,     // Acknowledge
+    output logic [COUNT-1:0]                    wbp_cycle_o,   // Cycle valid
+    output logic [COUNT-1:0]                    wbp_strobe_o,  // Strobe
+    output logic [COUNT-1:0][WB_ADDR_WIDTH-1:0] wbp_addr_o,    // Address bus
+    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbp_data_i,    // Data bus
+    output logic [COUNT-1:0][   DATA_WIDTH-1:0] wbp_data_o,    // Data bus
+    output logic [COUNT-1:0]                    wbp_we_o,      // Write enable
+    input  logic [COUNT-1:0]                    wbp_stall_i,   // Stall
+    input  logic [COUNT-1:0]                    wbp_ack_i,     // Acknowledge
 
     // Control signals
-    input logic [$clog2(CC)-1:0] wbc_sel_i,  // Select controller
-    input logic [$clog2(PC)-1:0] wbp_sel_i   // Select peripheral
+    input logic [$clog2(COUNT)-1:0] wbp_sel_i   // Select peripheral
 );
     always_comb begin
-        wbp_cycle_o[wbp_sel_i] = wbc_cycle_i[wbc_sel_i];
-        wbp_strobe_o[wbp_sel_i] = wbc_strobe_i[wbc_sel_i];
-        wbp_addr_o[wbp_sel_i] = wbc_addr_i[wbc_sel_i];
-        wbp_data_o[wbp_sel_i] = wbc_data_i[wbc_sel_i];
-        wbc_data_o[wbc_sel_i] = wbp_data_i[wbp_sel_i];
-        wbp_we_o[wbp_sel_i] = wbc_we_i[wbc_sel_i];
-        wbc_stall_o[wbc_sel_i] = wbp_stall_i[wbp_sel_i];
-        wbc_ack_o[wbc_sel_i] = wbp_ack_i[wbp_sel_i];
+        wbp_cycle_o[wbp_sel_i] = wb_cycle_i;
+        wbp_strobe_o[wbp_sel_i] = wb_strobe_i;
+        wbp_addr_o[wbp_sel_i] = wb_addr_i;
+        wbp_data_o[wbp_sel_i] = wb_data_i;
+        wb_data_o = wbp_data_i[wbp_sel_i];
+        wbp_we_o[wbp_sel_i] = wb_we_i;
+        wb_stall_o = wbp_stall_i[wbp_sel_i];
+        wb_ack_o = wbp_ack_i[wbp_sel_i];
     end
 endmodule
