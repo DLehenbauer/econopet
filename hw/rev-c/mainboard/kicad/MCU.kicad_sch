@@ -6548,7 +6548,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "JLCPCB:LQFN-56_L7.0-W7.0-P0.4-EP"
+		(property "Footprint" "EconoPET:LQFN-56_L7.0-W7.0-P0.4-EP"
 			(at 164.465 142.24 0)
 			(effects
 				(font
