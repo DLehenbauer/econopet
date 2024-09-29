@@ -18,6 +18,26 @@ import common_pkg::*;
 
 module arbiter (
     input  logic wb_clock_i,
+    input  logic clk8_en_i,
+
+    // Wishbone controllers to demux
+    input  logic [WB_ADDR_WIDTH-1:0] spi1_addr_i,
+    input  logic [   DATA_WIDTH-1:0] spi1_data_i,
+    input  logic                     spi1_we_i,
+    input  logic                     spi1_cycle_i,
+    input  logic                     spi1_strobe_i,
+    output logic                     spi1_stall_o,
+    output logic                     spi1_ack_o,
+
+    input  logic [WB_ADDR_WIDTH-1:0] video_addr_i,
+    input  logic [   DATA_WIDTH-1:0] video_data_i,
+    input  logic                     video_we_i,
+    input  logic                     video_cycle_i,
+    input  logic                     video_strobe_i,
+    output logic                     video_stall_o,
+    output logic                     video_ack_o,
+
+    // Wishbone bus
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,
     output logic [   DATA_WIDTH-1:0] wb_data_o,
     output logic                     wb_we_o,
@@ -26,21 +46,6 @@ module arbiter (
     input  logic                     wb_stall_i,
     input  logic                     wb_ack_i,
 
-    input  logic [WB_ADDR_WIDTH-1:0] spi1_addr_i,
-    input  logic [   DATA_WIDTH-1:0] spi1_data_i,
-    input  logic                     spi1_we_i,
-    input  logic                     spi1_cycle_i,
-    input  logic                     spi1_strobe_i,
-    output logic                     spi1_stall_o,
-
-    input  logic [WB_ADDR_WIDTH-1:0] video_addr_i,
-    input  logic [   DATA_WIDTH-1:0] video_data_i,
-    input  logic                     video_we_i,
-    input  logic                     video_cycle_i,
-    input  logic                     video_strobe_i,
-    output logic                     video_stall_o,
-
-    input  logic clk8_en_i,
     output logic cpu_grant_en_o
 );
     logic clk8_en_delay;
@@ -67,32 +72,43 @@ module arbiter (
     wire video_grant = grant == VIDEO_1 || grant == VIDEO_2 || grant == VIDEO_3 || grant == VIDEO_4;
     wire spi1_grant  = grant == SPI_1   || grant == SPI_2;
 
+    logic [0:0] wbc_sel;
+
     always_comb begin
-        wb_addr_o   = 'x;
-        wb_data_o   = 'x;
-        wb_we_o     = '0;
-        wb_cycle_o  = '0;
-        wb_strobe_o = '0;
-
-        spi1_stall_o  = 1'b1;
-        video_stall_o = 1'b1;
-
         if (spi1_grant) begin
-            wb_addr_o     = spi1_addr_i;
-            wb_data_o     = spi1_data_i;
-            wb_we_o       = spi1_we_i;
-            wb_cycle_o    = spi1_cycle_i;
-            wb_strobe_o   = spi1_strobe_i & clk8_en_delay;
-            spi1_stall_o  = wb_stall_i | !clk8_en_delay;
-        end else if (video_grant) begin
-            wb_addr_o     = video_addr_i;
-            wb_data_o     = video_data_i;
-            wb_we_o       = video_we_i;
-            wb_cycle_o    = video_cycle_i;
-            wb_strobe_o   = video_strobe_i & clk8_en_delay;
-            video_stall_o = wb_stall_i | !clk8_en_delay;
+            wbc_sel = 1;
+        end else begin
+            wbc_sel = 0;
         end
     end
+
+    wb_demux #(
+        .COUNT(2)
+    ) wb_demux (
+        .wb_clock_i(wb_clock_i),
+
+        // Wishbone controllers to demux
+        .wbc_cycle_i({ video_cycle_i, spi1_cycle_i}),
+        .wbc_strobe_i({ video_strobe_i, spi1_strobe_i}),
+        .wbc_addr_i({ video_addr_i, spi1_addr_i}),
+        .wbc_data_i({ video_data_i, spi1_data_i}),
+        .wbc_we_i({ video_we_i, spi1_we_i}),
+        .wbc_stall_o({ video_stall_o, spi1_stall_o}),
+        .wbc_ack_o({ video_ack_o, spi1_ack_o}),
+
+        // Wishbone bus
+        .wb_cycle_o(wb_cycle_o),
+        .wb_strobe_o(wb_strobe_o),
+        .wb_addr_o(wb_addr_o),
+        .wb_data_o(wb_data_o),
+        .wb_we_o(wb_we_o),
+        .wb_stall_i(wb_stall_i),
+        .wb_ack_i(wb_ack_i),
+
+        // Control signals
+        .wbc_sel(wbc_sel), // Select controller
+        .wb_en_i(!cpu_grant && clk8_en_delay)
+    );
 
     assign cpu_grant_en_o = cpu_grant & clk8_en_delay;
 endmodule

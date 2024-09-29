@@ -19,7 +19,7 @@ import common_pkg::*;
 /**
  * Wishbone Multiplexer (One Bus -> Many Peripherals)
  *
- * @param CONTROLLER_COUNT Number of Wishbone controllers
+ * @param COUNT Number of Wishbone controllers
  */
 module wb_mux #(
     parameter COUNT = 2   // Number of Wishbone peripherals
