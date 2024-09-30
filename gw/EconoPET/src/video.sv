@@ -165,10 +165,10 @@ module video (
         endcase
     end
 
-    wire [7:0] even_char = data[EVEN_RAM];
-    wire [7:0] even_rom = data[EVEN_ROM];
-    wire [7:0] odd_char = data[ODD_RAM];
-    wire [7:0] odd_rom = data[ODD_ROM];
+    wire [ 7:0] even_char = data[EVEN_RAM];
+    wire [ 7:0] even_rom = data[EVEN_ROM];
+    wire [ 7:0] odd_char = data[ODD_RAM];
+    wire [ 7:0] odd_rom = data[ODD_ROM];
     wire [15:0] pixels = { even_rom, odd_rom };
 
     // Scanlines exceeding the 8 pixel high character ROM should be blanked.
