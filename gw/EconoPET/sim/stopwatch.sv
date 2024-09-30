@@ -32,7 +32,7 @@ module stopwatch;
     endtask
 
     function time elapsed;
-        elapsed = (running ? $time : stopTime) - startTime;
+        return (running ? $time : stopTime) - startTime;
     endfunction
 
     function real freq_hz();
