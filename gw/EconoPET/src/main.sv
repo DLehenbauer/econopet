@@ -116,13 +116,13 @@ module main (
     assign cpu_we_o    = 0;
     assign cpu_we_oe   = 0;
 
-    logic clk1_en;
+    logic clk1n_en;
     logic clk8_en;
     logic clk16_en;
 
     timing timing (
-        .clock_i(sys_clock_i),
-        .clk1_en_o(clk1_en),
+        .sys_clock_i(sys_clock_i),
+        .clk1n_en_o(clk1n_en),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en)
     );
@@ -258,7 +258,7 @@ module main (
         .wb_ack_i(wb_ack),
 
         // Video timing
-        .clk1_en_i(clk1_en),                // 1 MHz character clock enable
+        .clk1_en_i(clk1n_en),               // 1 MHz character clock enable
         .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
         .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
 

@@ -24,34 +24,48 @@ module timing_tb;
 
     stopwatch stopwatch();
 
-    logic clk1_en;
+    logic clk1n_en;
+    logic clk2n_en;
     logic clk8_en;
     logic clk16_en;
+    logic wb_grant;
 
     timing timing (
-        .clock_i(clock),
-        .clk1_en_o(clk1_en),
+        .sys_clock_i(clock),
+        .clk1n_en_o(clk1n_en),
+        .clk2n_en_o(clk2n_en),
         .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en)
+        .clk16_en_o(clk16_en),
+        .wb_grant_o(wb_grant)
     );
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
-        @(posedge clk1_en);
+        @(posedge clock);
         stopwatch.start();
-        @(posedge clk1_en);
-        $display("[%t] clk1_en at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge clock);
+        $display("[%t] sys_clock at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge clk16_en);
+        stopwatch.start();
+        @(posedge clk16_en);
+        $display("[%t] clk16_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         @(posedge clk8_en);
         stopwatch.start();
         @(posedge clk8_en);
         $display("[%t] clk8_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge clk16_en);
+        @(posedge clk2n_en);
         stopwatch.start();
-        @(posedge clk16_en);
-        $display("[%t] clk16_en at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge clk2n_en);
+        $display("[%t] clk1n_en at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge clk1n_en);
+        stopwatch.start();
+        @(posedge clk1n_en);
+        $display("[%t] clk1n_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         #1 $display("[%t] END %m", $time);
     endtask

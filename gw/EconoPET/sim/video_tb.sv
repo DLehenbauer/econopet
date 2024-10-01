@@ -38,7 +38,7 @@ module video_tb;
     logic                      wbp_stall;
     logic                      wbp_ack;
 
-    logic clk1_en;
+    logic clk1n_en;
     logic clk8_en;
     logic clk16_en;
 
@@ -47,14 +47,14 @@ module video_tb;
     logic video_o;
 
     timing timing (
-        .clock_i(clock),
-        .clk1_en_o(clk1_en),
+        .sys_clock_i(clock),
+        .clk1n_en_o(clk1n_en),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en)
     );
 
     video video (
-        .clk1_en_i(clk1_en),
+        .clk1_en_i(clk1n_en),
         .clk8_en_i(clk8_en),
         .clk16_en_i(clk16_en),
 
@@ -81,7 +81,7 @@ module video_tb;
 
         // We leave CRTC at it's default settings for this testbench.
         .cpu_reset_i(1'b0),
-        .crtc_clk_en_i(clk1_en),
+        .crtc_clk_en_i(clk1n_en),
         .crtc_cs_i(1'b0),
         .crtc_we_i(1'b0),
         .crtc_rs_i(1'b0),

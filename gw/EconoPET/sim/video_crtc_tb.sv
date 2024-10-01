@@ -24,13 +24,13 @@ module video_crtc_tb;
 
     stopwatch stopwatch();
 
-    logic clk1_en;
+    logic clk1n_en;
     logic clk8_en;
     logic clk16_en;
 
     timing timing (
-        .clock_i(clock),
-        .clk1_en_o(clk1_en),
+        .sys_clock_i(clock),
+        .clk1n_en_o(clk1n_en),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en)
     );
@@ -59,7 +59,7 @@ module video_crtc_tb;
         .wb_ack_o(),
 
         .reset_i(res),
-        .clk_en_i(clk1_en),
+        .clk_en_i(clk1n_en),
         .cs_i(cs),
         .we_i(we),
         .rs_i(rs),
@@ -78,17 +78,17 @@ module video_crtc_tb;
         input logic we_i,
         input logic [7:0] data_i = 8'hxx
     );
-        @(posedge clk1_en);
+        @(posedge clk1n_en);
         cs = 1'b1;
         rs = rs_i;
         we = we_i;
         crtc_data_i = data_i;
 
-        @(posedge clk1_en);
+        @(posedge clk1n_en);
     endtask
 
     task crtc_end;
-        if (clk1_en) @(negedge clk1_en);
+        if (clk1n_en) @(negedge clk1n_en);
 
         #1;
 
@@ -131,10 +131,10 @@ module video_crtc_tb;
     endtask
 
     task reset;
-        @(negedge clk1_en);
+        @(negedge clk1n_en);
         res = 1'b1;
-        @(posedge clk1_en);
-        @(negedge clk1_en);
+        @(posedge clk1n_en);
+        @(negedge clk1n_en);
         res = '0;
     endtask
 
