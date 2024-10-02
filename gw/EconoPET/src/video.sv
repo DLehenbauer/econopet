@@ -136,11 +136,8 @@ module video (
 
     logic [1:0] fetch_stage = EVEN_RAM;
     logic [0:0] wb_state    = WB_IDLE;
-    logic cclk_en           = 1'b0;
 
     always_ff @(posedge wb_clock_i) begin
-        cclk_en <= 1'b0;
-
         case (wb_state)
             WB_IDLE: begin
                 wb_strobe_o <= 1'b1;
@@ -156,7 +153,6 @@ module video (
                 wb_strobe_o <= 1'b0;
 
                 if (wb_ack_i) begin
-                    cclk_en           <= fetch_stage == ODD_ROM;
                     data[fetch_stage] <= wb_data_i;
                     fetch_stage       <= fetch_stage + 1'b1;
                     wb_state          <= WB_IDLE;
@@ -184,6 +180,22 @@ module video (
         : clk8_en_i;
 
     logic dotgen_video;
+    logic dotgen_en = '0;
+
+    always @(posedge wb_clock_i) begin
+        // Because we do not have dedicated VRAM/VROM, we need a CCLK after the CRTC produces the
+        // next MA/RA to fetch the pixels to rasterize.  To compensate, we delay the H/VSync and DE
+        // signals by a CCLK cycle.
+        if (crtc_clk_en_i) begin
+            // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
+            // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
+            //
+            //                                            9" CRT    12" CRT
+            h_sync_o  <= config_crt_i ^ !crtc_h_sync; // Active-H   Active-L
+            v_sync_o  <= config_crt_i ^ !crtc_v_sync; // Active-H   Active-L
+            dotgen_en <= de && !no_row;
+        end
+    end
 
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
@@ -191,15 +203,13 @@ module video (
         .cclk_en_i(clk1_en_i),
         .pixels_i(pixels),
         .reverse_i({ even_char[7], odd_char[7] }),
-        .display_en_i(de && !no_row),
+        .display_en_i(dotgen_en),
         .video_o(dotgen_video)
     );
 
     // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
     // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
     //
-    //                                                  9" CRT    12" CRT
-    assign video_o  = config_crt_i ^ dotgen_video;  // Active-L   Active-H
-    assign h_sync_o = config_crt_i ^ !crtc_h_sync;  // Active-H   Active-L
-    assign v_sync_o = config_crt_i ^ !crtc_v_sync;  // Active-H   Active-L
+    //                                                 9" CRT    12" CRT
+    assign video_o = config_crt_i ^ dotgen_video;  // Active-L   Active-H
 endmodule
