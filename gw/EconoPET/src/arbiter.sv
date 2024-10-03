@@ -20,9 +20,10 @@ module arbiter (
     input  logic wb_clock_i,
     input  logic clk8_en_i,
 
-    // Wishbone controllers to demux
+    // Wishbone controllers to arbitrate
     input  logic [WB_ADDR_WIDTH-1:0] spi1_addr_i,
-    input  logic [   DATA_WIDTH-1:0] spi1_data_i,
+    input  logic [   DATA_WIDTH-1:0] spi1_dout_i,
+    output logic [   DATA_WIDTH-1:0] spi1_din_o,
     input  logic                     spi1_we_i,
     input  logic                     spi1_cycle_i,
     input  logic                     spi1_strobe_i,
@@ -30,7 +31,8 @@ module arbiter (
     output logic                     spi1_ack_o,
 
     input  logic [WB_ADDR_WIDTH-1:0] video_addr_i,
-    input  logic [   DATA_WIDTH-1:0] video_data_i,
+    input  logic [   DATA_WIDTH-1:0] video_dout_i,
+    output logic [   DATA_WIDTH-1:0] video_din_o,
     input  logic                     video_we_i,
     input  logic                     video_cycle_i,
     input  logic                     video_strobe_i,
@@ -39,7 +41,8 @@ module arbiter (
 
     // Wishbone bus
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,
-    output logic [   DATA_WIDTH-1:0] wb_data_o,
+    output logic [   DATA_WIDTH-1:0] wb_dout_o,
+    input  logic [   DATA_WIDTH-1:0] wb_din_i,
     output logic                     wb_we_o,
     output logic                     wb_cycle_o,
     output logic                     wb_strobe_o,
@@ -91,7 +94,8 @@ module arbiter (
         .wbc_cycle_i({ video_cycle_i, spi1_cycle_i}),
         .wbc_strobe_i({ video_strobe_i, spi1_strobe_i}),
         .wbc_addr_i({ video_addr_i, spi1_addr_i}),
-        .wbc_data_i({ video_data_i, spi1_data_i}),
+        .wbc_din_o({ video_din_o, spi1_din_o}),
+        .wbc_dout_i({ video_dout_i, spi1_dout_i}),
         .wbc_we_i({ video_we_i, spi1_we_i}),
         .wbc_stall_o({ video_stall_o, spi1_stall_o}),
         .wbc_ack_o({ video_ack_o, spi1_ack_o}),
@@ -100,7 +104,8 @@ module arbiter (
         .wb_cycle_o(wb_cycle_o),
         .wb_strobe_o(wb_strobe_o),
         .wb_addr_o(wb_addr_o),
-        .wb_data_o(wb_data_o),
+        .wb_din_i(wb_din_i),
+        .wb_dout_o(wb_dout_o),
         .wb_we_o(wb_we_o),
         .wb_stall_i(wb_stall_i),
         .wb_ack_i(wb_ack_i),

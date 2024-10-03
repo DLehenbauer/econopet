@@ -31,7 +31,8 @@ module wb_demux #(
     input  logic [COUNT-1:0]                    wbc_cycle_i,
     input  logic [COUNT-1:0]                    wbc_strobe_i,
     input  logic [COUNT-1:0][WB_ADDR_WIDTH-1:0] wbc_addr_i,
-    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_data_i,
+    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_dout_i,
+    output logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_din_o,
     input  logic [COUNT-1:0]                    wbc_we_i,
     output logic [COUNT-1:0]                    wbc_stall_o,
     output logic [COUNT-1:0]                    wbc_ack_o,
@@ -41,7 +42,8 @@ module wb_demux #(
     output logic                     wb_cycle_o,
     output logic                     wb_strobe_o,
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,
-    output logic [   DATA_WIDTH-1:0] wb_data_o,
+    output logic [   DATA_WIDTH-1:0] wb_dout_o,
+    input  logic [   DATA_WIDTH-1:0] wb_din_i,
     output logic                     wb_we_o,
     input  logic                     wb_stall_i,
     input  logic                     wb_ack_i,
@@ -54,7 +56,7 @@ module wb_demux #(
         // Peripheral receives inputs from the selected controller
         wb_cycle_o  = wbc_cycle_i[wbc_sel];        
         wb_addr_o   = wbc_addr_i[wbc_sel];
-        wb_data_o   = wbc_data_i[wbc_sel];
+        wb_dout_o   = wbc_dout_i[wbc_sel];
         wb_we_o     = wbc_we_i[wbc_sel];
 
         // Deasserting 'wb_en_i' prevents new requests from being admitted by blocking the outgoing
@@ -62,6 +64,8 @@ module wb_demux #(
         wb_strobe_o = wb_en_i & wbc_strobe_i[wbc_sel];
 
         for (int i = 0; i < COUNT; i = i + 1) begin
+            wbc_din_o[i] = wb_din_i;
+
             if (i[$bits(wbc_sel)-1:0] == wbc_sel) begin
                 // Deliver stall and ack signals to selected controller.
                 wbc_stall_o[i] = !wb_en_i || wb_stall_i;

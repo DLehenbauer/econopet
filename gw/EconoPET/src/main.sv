@@ -71,8 +71,8 @@ module main (
     output logic spi_stall_o
 );
     logic [WB_ADDR_WIDTH-1:0] wb_addr;
-    logic [   DATA_WIDTH-1:0] wb_dout;
     logic [   DATA_WIDTH-1:0] wb_din;
+    logic [   DATA_WIDTH-1:0] wb_dout;
     logic                     wb_we;
     logic                     wb_cycle;
     logic                     wb_strobe;
@@ -84,7 +84,8 @@ module main (
     //
 
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
-    logic [   DATA_WIDTH-1:0] spi1_dout;
+    logic [   DATA_WIDTH-1:0] spi1_din;     // Peripheral -> SPI1 (WE=0)
+    logic [   DATA_WIDTH-1:0] spi1_dout;    // SPI1 -> Peripheral (WE=1)
     logic                     spi1_we;
     logic                     spi1_cycle;
     logic                     spi1_strobe;
@@ -94,8 +95,8 @@ module main (
     spi1_controller spi1 (
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(spi1_addr),
+        .wb_data_i(spi1_din),
         .wb_data_o(spi1_dout),
-        .wb_data_i(wb_dout),
         .wb_we_o(spi1_we),
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
@@ -150,7 +151,7 @@ module main (
     // Wishbone <-> RAM Bridge
     //
 
-    logic [DATA_WIDTH-1:0] ram_wb_dout;
+    logic [DATA_WIDTH-1:0] ram_wb_din;
     logic                  ram_wb_stall;
     logic                  ram_wb_ack;
 
@@ -163,8 +164,8 @@ module main (
     ram ram (
         .wb_clock_i(sys_clock_i),
         .wb_addr_i(wb_addr),
-        .wb_data_i(wb_din),
-        .wb_data_o(ram_wb_dout),
+        .wb_data_i(wb_dout),
+        .wb_data_o(ram_wb_din),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
         .wb_strobe_i(wb_strobe),
@@ -183,15 +184,15 @@ module main (
     // Register File
     //
 
-    logic [DATA_WIDTH-1:0] reg_wb_dout;
+    logic [DATA_WIDTH-1:0] reg_wb_din;
     logic reg_wb_stall;
     logic reg_wb_ack;
 
     register_file register_file (
         .wb_clock_i(sys_clock_i),
         .wb_addr_i(wb_addr),
-        .wb_data_i(wb_din),
-        .wb_data_o(reg_wb_dout),
+        .wb_data_i(wb_dout),
+        .wb_data_o(reg_wb_din),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
         .wb_strobe_i(wb_strobe),
@@ -236,7 +237,8 @@ module main (
     //
 
     logic [WB_ADDR_WIDTH-1:0] video_addr;    // Captured address for read
-    logic [   DATA_WIDTH-1:0] video_dout;    // Video -> FPGA
+    logic [   DATA_WIDTH-1:0] video_din;     // Peripheral -> Video (WE=0)
+    logic [   DATA_WIDTH-1:0] video_dout;    // Video -> Peripheral (WE=1)
     logic                     video_we;
     logic                     video_cycle;
     logic                     video_strobe;
@@ -251,7 +253,7 @@ module main (
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(video_addr),
-        .wb_data_i(wb_dout),
+        .wb_data_i(video_din),
         .wb_data_o(video_dout),
         .wb_we_o(video_we),
         .wb_cycle_o(video_cycle),
@@ -301,7 +303,7 @@ module main (
     keyboard keyboard (
         .wb_clock_i(sys_clock_i),
         .wb_addr_i(wb_addr),
-        .wb_data_i(wb_din),
+        .wb_data_i(wb_dout),
         .wb_data_o(),           // We do not currently support reading back from the keyboard
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
@@ -320,14 +322,15 @@ module main (
     // Wishbone
     //
 
-    assign wb_dout  = ram_wb_dout;
+    assign wb_din   = ram_wb_din;
     assign wb_stall = ram_wb_stall | reg_wb_stall | kbd_wb_stall;
     assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
 
     arbiter arbiter (
         .wb_clock_i(sys_clock_i),
         .wb_addr_o(wb_addr),
-        .wb_data_o(wb_din),
+        .wb_din_i(wb_din),
+        .wb_dout_o(wb_dout),
         .wb_we_o(wb_we),
         .wb_cycle_o(wb_cycle),
         .wb_strobe_o(wb_strobe),
@@ -335,7 +338,8 @@ module main (
         .wb_ack_i(wb_ack),
 
         .spi1_addr_i(spi1_addr),
-        .spi1_data_i(spi1_dout),
+        .spi1_din_o(spi1_din),
+        .spi1_dout_i(spi1_dout),
         .spi1_we_i(spi1_we),
         .spi1_cycle_i(spi1_cycle),
         .spi1_strobe_i(spi1_strobe),
@@ -343,7 +347,8 @@ module main (
         .spi1_ack_o(spi1_ack),
 
         .video_addr_i(video_addr),
-        .video_data_i(video_dout),
+        .video_din_o(video_din),
+        .video_dout_i(video_dout),
         .video_we_i(video_we),
         .video_cycle_i(video_cycle),
         .video_strobe_i(video_strobe),
