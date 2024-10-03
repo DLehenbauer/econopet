@@ -201,7 +201,7 @@ module video (
         .pixel_clk_en_i(pixel_clk_en),
         .cclk_en_i(crtc_clk_en_i),
         .pixels_i(pixels),
-        .reverse_i({ even_char[7], odd_char[7] }),
+        .reverse_i({ odd_char[7], even_char[7] }),
         .display_en_i(dotgen_en),
         .video_o(dotgen_video)
     );

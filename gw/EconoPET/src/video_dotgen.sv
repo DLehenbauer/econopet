@@ -47,7 +47,5 @@ module video_dotgen(
 
     // 'pixels_i' contains pixels for two characters.  The high bit of 'pixel_ctr' selects
     // which 'reverse_i' bit to use.
-    //
-    // TODO: Can avoid the '~' by reversing the order of the bits passed to 'reverse_i' at the caller.
-    assign video_o = display_en & (sr_out[15] ^ reverse[~pixel_ctr[3]]);
+    assign video_o = display_en & (sr_out[15] ^ reverse[pixel_ctr[3]]);
 endmodule
