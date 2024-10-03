@@ -167,10 +167,6 @@ module video (
     wire [ 7:0] odd_rom = data[ODD_ROM];
     wire [15:0] pixels = { even_rom, odd_rom };
 
-    // Scanlines exceeding the 8 pixel high character ROM should be blanked.
-    // (See 'NO_ROW' signal on sheets 8 and 10 of Universal Dynamic PET.)
-    wire no_row = ra[3] || ra[4];
-
     //
     // Dotgen
     //
@@ -181,6 +177,10 @@ module video (
 
     logic dotgen_video;
     logic dotgen_en = '0;
+
+    // Scanlines exceeding the 8 pixel high character ROM should be blanked.
+    // (See 'NO_ROW' signal on sheets 8 and 10 of Universal Dynamic PET.)
+    wire no_row = ra[3] || ra[4];
 
     always @(posedge wb_clock_i) begin
         // Because we do not have dedicated VRAM/VROM, we need a CCLK after the CRTC produces the
