@@ -89,6 +89,7 @@ module main (
     logic                     spi1_cycle;
     logic                     spi1_strobe;
     logic                     spi1_stall;
+    logic                     spi1_ack;
 
     spi1_controller spi1 (
         .wb_clock_i(sys_clock_i),
@@ -99,7 +100,7 @@ module main (
         .wb_cycle_o(spi1_cycle),
         .wb_strobe_o(spi1_strobe),
         .wb_stall_i(spi1_stall),
-        .wb_ack_i(wb_ack),
+        .wb_ack_i(spi1_ack),
 
         .spi_cs_ni(spi1_cs_ni),     // SPI CS_N
         .spi_sck_i(spi1_sck_i),     // SPI SCK
@@ -240,6 +241,7 @@ module main (
     logic                     video_cycle;
     logic                     video_strobe;
     logic                     video_stall;
+    logic                     video_ack;
 
     logic [   DATA_WIDTH-1:0] crtc_dout;     // CRTC -> CPU
     logic                     crtc_oe;
@@ -255,7 +257,15 @@ module main (
         .wb_cycle_o(video_cycle),
         .wb_strobe_o(video_strobe),
         .wb_stall_i(video_stall),
-        .wb_ack_i(wb_ack),
+        .wb_ack_i(video_ack),
+
+        // TODO: Wishbone peripheral to read back CRTC regs
+        .wb_addr_i(),
+        .wb_we_i(),
+        .wb_cycle_i(),
+        .wb_strobe_i(),
+        .wb_stall_o(),
+        .wb_ack_o(),
 
         // Video timing
         .clk1_en_i(clk1n_en),               // 1 MHz character clock enable
@@ -330,6 +340,7 @@ module main (
         .spi1_cycle_i(spi1_cycle),
         .spi1_strobe_i(spi1_strobe),
         .spi1_stall_o(spi1_stall),
+        .spi1_ack_o(spi1_ack),
 
         .video_addr_i(video_addr),
         .video_data_i(video_dout),
@@ -337,6 +348,7 @@ module main (
         .video_cycle_i(video_cycle),
         .video_strobe_i(video_strobe),
         .video_stall_o(video_stall),
+        .video_ack_o(video_ack),
 
         .clk8_en_i(clk8_en),
         .cpu_grant_en_o(cpu_grant_en)

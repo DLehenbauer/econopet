@@ -62,9 +62,9 @@ module wb_demux #(
         wb_strobe_o = wb_en_i & wbc_strobe_i[wbc_sel];
 
         for (int i = 0; i < COUNT; i = i + 1) begin
-            if (wb_en_i && i[$bits(wbc_sel)-1:0] == wbc_sel) begin
+            if (i[$bits(wbc_sel)-1:0] == wbc_sel) begin
                 // Deliver stall and ack signals to selected controller.
-                wbc_stall_o[i] = wb_stall_i;
+                wbc_stall_o[i] = !wb_en_i || wb_stall_i;
                 wbc_ack_o[i]   = wb_ack_i;
             end else begin
                 // All other controls are stalled and do not receive ack for current cycle.
