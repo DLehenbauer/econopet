@@ -270,7 +270,6 @@ module main (
         .wb_ack_o(),
 
         // Video timing
-        .clk1_en_i(clk1n_en),               // 1 MHz character clock enable
         .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
         .clk16_en_i(clk16_en),              // 16 MHz pixel clock for 80 column mode
 

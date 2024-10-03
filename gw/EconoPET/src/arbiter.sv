@@ -91,14 +91,14 @@ module arbiter (
         .wb_clock_i(wb_clock_i),
 
         // Wishbone controllers to demux
-        .wbc_cycle_i({ video_cycle_i, spi1_cycle_i}),
-        .wbc_strobe_i({ video_strobe_i, spi1_strobe_i}),
-        .wbc_addr_i({ video_addr_i, spi1_addr_i}),
-        .wbc_din_o({ video_din_o, spi1_din_o}),
-        .wbc_dout_i({ video_dout_i, spi1_dout_i}),
-        .wbc_we_i({ video_we_i, spi1_we_i}),
-        .wbc_stall_o({ video_stall_o, spi1_stall_o}),
-        .wbc_ack_o({ video_ack_o, spi1_ack_o}),
+        .wbc_cycle_i({ spi1_cycle_i, video_cycle_i }),
+        .wbc_strobe_i({ spi1_strobe_i, video_strobe_i }),
+        .wbc_addr_i({ spi1_addr_i, video_addr_i }),
+        .wbc_din_o({ spi1_din_o, video_din_o }),
+        .wbc_dout_i({ spi1_dout_i, video_dout_i }),
+        .wbc_we_i({ spi1_we_i, video_we_i }),
+        .wbc_stall_o({ spi1_stall_o, video_stall_o }),
+        .wbc_ack_o({ spi1_ack_o, video_ack_o }),
 
         // Wishbone bus
         .wb_cycle_o(wb_cycle_o),

@@ -63,7 +63,6 @@ module video_tb;
     video video (
         .clk8_en_i(clk8_en),
         .clk16_en_i(clk16_en),
-        .clk1_en_i(clk1n_en),
 
         .config_crt_i(1'b0),    // 0 = 12"/CRTC, 1 = 9"/non-CRTC
 

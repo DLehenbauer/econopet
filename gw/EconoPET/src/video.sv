@@ -18,7 +18,6 @@ import common_pkg::*;
 
 module video (
     // Video timing signals
-    input  logic clk1_en_i,                       // 1 MHz character clock enable
     input  logic clk8_en_i,                       // 8 MHz pixel clock for 40 column mode
     input  logic clk16_en_i,                      // 16 MHz pixel clock for 80 column mode
 
@@ -200,7 +199,7 @@ module video (
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
         .pixel_clk_en_i(pixel_clk_en),
-        .cclk_en_i(clk1_en_i),
+        .cclk_en_i(crtc_clk_en_i),
         .pixels_i(pixels),
         .reverse_i({ even_char[7], odd_char[7] }),
         .display_en_i(dotgen_en),
