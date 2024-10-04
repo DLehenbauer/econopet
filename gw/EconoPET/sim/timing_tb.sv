@@ -24,6 +24,8 @@ module timing_tb;
 
     stopwatch stopwatch();
 
+    logic cpu_clock;
+    logic cpu_be;
     logic clk1n_en;
     logic clk2n_en;
     logic clk8_en;
@@ -32,6 +34,8 @@ module timing_tb;
 
     timing timing (
         .sys_clock_i(clock),
+        .cpu_clock_o(cpu_clock),
+        .cpu_be_o(cpu_be),
         .clk1n_en_o(clk1n_en),
         .clk2n_en_o(clk2n_en),
         .clk8_en_o(clk8_en),

@@ -31,8 +31,8 @@ module wb_demux #(
     input  logic [COUNT-1:0]                    wbc_cycle_i,
     input  logic [COUNT-1:0]                    wbc_strobe_i,
     input  logic [COUNT-1:0][WB_ADDR_WIDTH-1:0] wbc_addr_i,
-    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_dout_i,
-    output logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_din_o,
+    output logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_din_o,      // Peripheral -> Controller (WE=0)
+    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbc_dout_i,     // Controller -> Peripheral (WE=1)
     input  logic [COUNT-1:0]                    wbc_we_i,
     output logic [COUNT-1:0]                    wbc_stall_o,
     output logic [COUNT-1:0]                    wbc_ack_o,
@@ -42,8 +42,8 @@ module wb_demux #(
     output logic                     wb_cycle_o,
     output logic                     wb_strobe_o,
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,
-    output logic [   DATA_WIDTH-1:0] wb_dout_o,
-    input  logic [   DATA_WIDTH-1:0] wb_din_i,
+    input  logic [   DATA_WIDTH-1:0] wb_din_i,                  // Peripheral -> Controller (WE=0)
+    output logic [   DATA_WIDTH-1:0] wb_dout_o,                 // Controller -> Peripheral (WE=1)
     output logic                     wb_we_o,
     input  logic                     wb_stall_i,
     input  logic                     wb_ack_i,
@@ -54,7 +54,7 @@ module wb_demux #(
 );
     always_comb begin
         // Peripheral receives inputs from the selected controller
-        wb_cycle_o  = wbc_cycle_i[wbc_sel];        
+        wb_cycle_o  = wbc_cycle_i[wbc_sel];
         wb_addr_o   = wbc_addr_i[wbc_sel];
         wb_dout_o   = wbc_dout_i[wbc_sel];
         wb_we_o     = wbc_we_i[wbc_sel];
@@ -71,7 +71,7 @@ module wb_demux #(
                 wbc_stall_o[i] = !wb_en_i || wb_stall_i;
                 wbc_ack_o[i]   = wb_ack_i;
             end else begin
-                // All other controls are stalled and do not receive ack for current cycle.
+                // All other controllers are stalled and do not receive ack for current cycle.
                 // We assert stall even if there is no active request.
                 wbc_stall_o[i] = 1'b1;
                 wbc_ack_o[i]   = 1'b0;

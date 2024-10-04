@@ -28,6 +28,8 @@ module timing (
 );
     initial begin
         cpu_clock_o = 1'b0;
+        cpu_be_o = 1'b0;
+        wb_grant_o = 1'b0;
         clk1n_en_o = 1'b0;
         clk2n_en_o = 1'b0;
         clk8_en_o  = '0;
