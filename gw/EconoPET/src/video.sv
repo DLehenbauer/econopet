@@ -114,8 +114,8 @@ module video (
                ODD_ROM  = 3;
 
     wire  [WB_ADDR_WIDTH-1:0] even_ram_addr = common_pkg::wb_vram_addr(col_80_mode_i
-                                                ? { ma[9:0], 1'b0 }     // 80 column mode
-                                                : { 1'b0, ma[9:0] });   // 40 column mode
+        ? { ma[9:0], 1'b0 }     // 80 column mode
+        : { 1'b0, ma[9:0] });   // 40 column mode
     wire  [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
     wire  [WB_ADDR_WIDTH-1:0] odd_ram_addr  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
     wire  [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
@@ -131,30 +131,44 @@ module video (
     logic [DATA_WIDTH-1:0] data [3:0];
 
     localparam WB_IDLE = 0,
-               WB_AWAIT_ACK = 1;
+               WB_REQ  = 1,
+               WB_WAIT = 2;
+
+    always_comb begin
+        wb_addr_o = addrs[fetch_stage];
+    end
 
     logic [1:0] fetch_stage = EVEN_RAM;
-    logic [0:0] wb_state    = WB_IDLE;
+    logic [1:0] wb_state    = WB_IDLE;
 
     always_ff @(posedge wb_clock_i) begin
         case (wb_state)
             WB_IDLE: begin
-                wb_strobe_o <= 1'b1;
-                wb_cycle_o  <= 1'b1;
-                wb_addr_o   <= addrs[fetch_stage];
+                wb_strobe_o <= 0;
+                wb_cycle_o  <= 0;
 
-                if (!wb_stall_i) begin
-                    wb_state    <= WB_AWAIT_ACK;
+                if (crtc_clk_en_i) begin
+                    wb_cycle_o  <= 1;
+                    wb_strobe_o <= 1;
+                    wb_state    <= WB_REQ;
                 end
             end
 
-            WB_AWAIT_ACK: begin
-                wb_strobe_o <= 1'b0;
+            WB_REQ: begin
+                if (!wb_stall_i) begin
+                    wb_strobe_o <= 0;
+                end
 
                 if (wb_ack_i) begin
                     data[fetch_stage] <= wb_data_i;
                     fetch_stage       <= fetch_stage + 1'b1;
-                    wb_state          <= WB_IDLE;
+                    wb_strobe_o       <= 1;
+                    
+                    if (fetch_stage == ODD_ROM) begin
+                        wb_cycle_o  <= 0;
+                        wb_strobe_o <= 0;
+                        wb_state    <= WB_IDLE;
+                    end
                 end
             end
         endcase
