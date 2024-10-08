@@ -59,14 +59,14 @@ module timing (
 
     assign grant_valid_o = grant != CPU_1 && grant != CPU_2 && clk8_en_o;
 
-    localparam CPU_1   = 3'd0,
-               CPU_2   = 3'd1,
-               VIDEO_1 = 3'd2,
-               VIDEO_2 = 3'd3,
-               SPI_1   = 3'd4,
-               VIDEO_3 = 3'd5,
-               VIDEO_4 = 3'd6,
-               SPI_2   = 3'd7;
+    localparam VIDEO_1 = 3'd0,
+               VIDEO_2 = 3'd1,
+               SPI_1   = 3'd2,
+               VIDEO_3 = 3'd3,
+               VIDEO_4 = 3'd4,
+               SPI_2   = 3'd5,
+               CPU_1   = 3'd6,
+               CPU_2   = 3'd7;
 
     assign grant_o = (grant == SPI_1 || grant == SPI_2) ? 1'b1 : 1'b0;
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
@@ -85,13 +85,13 @@ module timing (
                RAM_tAA       = 10,  // RAM Address Access Time (tAA)
                IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
 
-    localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START     = 0,
+    localparam bit [COUNTER_WIDTH-1:0] CPU_OFFSET = CPU_1 * 8;
+
+    localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START     = CPU_OFFSET,
                                        CPU_PHI_START    = COUNTER_WIDTH'(int'(CPU_BE_START) + ns_to_cycles(CPU_tBVD + IOTX_t)),
                                        CPU_WR_STROBE    = CPU_PHI_END - 2,
                                        CPU_PHI_END      = COUNTER_WIDTH'(int'(CPU_PHI_START) + ns_to_cycles(CPU_tPWH)),
-                                       CPU_BE_END       = COUNTER_WIDTH'(int'(CPU_PHI_END) + ns_to_cycles(CPU_tDHx)),
-                                       WB_START         = COUNTER_WIDTH'(int'(CPU_BE_END) + ns_to_cycles(CPU_tBVD)),
-                                       WB_END           = COUNTER_WIDTH'((1 << COUNTER_WIDTH) - 8);
+                                       CPU_BE_END       = COUNTER_WIDTH'(int'(CPU_PHI_END) + ns_to_cycles(CPU_tDHx));
 
     always_ff @(posedge sys_clock_i) begin
         cpu_wr_strobe_o <= '0;
