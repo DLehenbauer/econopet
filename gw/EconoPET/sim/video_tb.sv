@@ -44,7 +44,7 @@ module video_tb;
     );
 
     logic [ WB_ADDR_WIDTH-1:0] wbc_addr;
-    logic [    DATA_WIDTH-1:0] wbc_din      = 8'haa;    // Test pattern
+    logic [    DATA_WIDTH-1:0] wbc_din;
     logic                      wbc_we;
     logic                      wbc_cycle;
     logic                      wbc_strobe;
@@ -58,6 +58,14 @@ module video_tb;
     logic                      wbp_strobe;
     logic                      wbp_stall;
     logic                      wbp_ack;
+
+    always_comb begin
+        unique casez (wbc_addr[15:0])
+            16'b1000_0???_????_???0: wbc_din = 8'h00;   // Odd Char  : Bit 7 = 0 (Regular video)
+            16'b1000_0???_????_???1: wbc_din = 8'h81;   // Even Char : Bit 7 = 1 (Reverse video)
+            default: wbc_din = 8'haa;                   // ROM: Fine test pattern
+        endcase
+    end
 
     edge_detect edge_detect (
         .clock_i(sys_clock),
@@ -194,7 +202,7 @@ module video_tb;
             $display("[%t]   R%0d = %d", $time, r, value);
         end
 
-        if (0) begin
+        if (1) begin
             setup('{
                 8'd5,       // H Total:      Width of scanline in characters (-1)
                 8'd3,       // H Displayed:  Number of characters displayed per scanline
