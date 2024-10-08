@@ -18,17 +18,38 @@
 import common_pkg::*;
 
 module video_tb;
-    logic clock;
-    clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
+    stopwatch stopwatch();
+
+    logic sys_clock;
+    clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(sys_clock));
     initial clock_gen.start;
+
+    logic clk1n_en;
+    logic clk8_en;
+    logic clk16_en;
+    logic load_sr1;
+    logic load_sr2;
+    logic [0:0] grant;
+    logic grant_valid;
+
+    timing timing (
+        .sys_clock_i(sys_clock),
+        .cpu_wr_strobe_o(clk1n_en),
+        .clk8_en_o(clk8_en),
+        .clk16_en_o(clk16_en),
+        .load_sr1_o(load_sr1),
+        .load_sr2_o(load_sr2),
+        .grant_o(grant),
+        .grant_valid_o(grant_valid)
+    );
 
     logic [ WB_ADDR_WIDTH-1:0] wbc_addr;
     logic [    DATA_WIDTH-1:0] wbc_din      = 8'haa;    // Test pattern
     logic                      wbc_we;
     logic                      wbc_cycle;
     logic                      wbc_strobe;
-    logic                      wbc_stall    = 1'b0;
-    logic                      wbc_ack      = 1'b1;
+    wire                       wbc_stall    = !grant_valid || !grant == '0;
+    logic                      wbc_ack;
 
     logic [ WB_ADDR_WIDTH-1:0] wbp_addr;
     logic [    DATA_WIDTH-1:0] wbp_dout;
@@ -38,15 +59,11 @@ module video_tb;
     logic                      wbp_stall;
     logic                      wbp_ack;
 
-    logic clk1n_en;
-    logic clk8_en;
-    logic clk16_en;
-
-    timing timing (
-        .sys_clock_i(clock),
-        .cpu_wr_strobe_o(clk1n_en),
-        .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en)
+    edge_detect edge_detect (
+        .clock_i(sys_clock),
+        .data_i(wbc_strobe),
+        .pe_o(),
+        .ne_o(wbc_ack)
     );
 
     logic        crtc_res;
@@ -67,7 +84,7 @@ module video_tb;
         .config_crt_i(1'b0),    // 0 = 12"/CRTC, 1 = 9"/non-CRTC
 
         // Wishbone controller
-        .wb_clock_i(clock),
+        .wb_clock_i(sys_clock),
         .wb_addr_o(wbc_addr),
         .wb_data_i(wbc_din),
         .wb_we_o(wbc_we),
@@ -95,8 +112,11 @@ module video_tb;
         .crtc_data_o(crtc_data_o),
         .crtc_data_oe(crtc_data_oe),
 
+        // DotGen
         .col_80_mode_i(1'b1),
         .graphic_i(1'b0),
+        .load_sr1_i(load_sr1),
+        .load_sr2_i(load_sr2),
 
         .v_sync_o(v_sync),
         .h_sync_o(h_sync),
@@ -104,7 +124,7 @@ module video_tb;
     );
 
     wb_driver wb (
-        .wb_clock_i(clock),
+        .wb_clock_i(sys_clock),
         .wb_addr_o(wbp_addr),
         .wb_data_i(wbp_dout),
         .wb_data_o(),
@@ -174,25 +194,55 @@ module video_tb;
             $display("[%t]   R%0d = %d", $time, r, value);
         end
 
-        setup('{
-            8'd5,       // H Total:      Width of scanline in characters (-1)
-            8'd3,       // H Displayed:  Number of characters displayed per scanline
-            8'd4,       // H Sync Pos:   Start of horizontal sync pulse in characters
-            8'h11,      // Sync Width:   H. Sync = 1 char, V. Sync = 1 scanline
-            8'd4,       // V Total:      Height of frame in characters (-1)
-            8'd2,       // V Adjust:     Adjustment of frame height in scanlines
-            8'd2,       // V Displayed:  Number of characters displayed per frame
-            8'd3,       // V Sync Pos:   Position of vertical sync pulse in characters
-            8'h00,      // Mode Control: (Unused)
-            8'h02,      // Char Height:  Height of one character in scanlines (-1)
-            8'h00,      // Cursor Start: (Unused)
-            8'h00,      // Cursor End:   (Unused)
-            8'h00,      // Display H:    Display start address ([3:0] high bits)
-            8'h00       // Display L:    Display start address (low bits)
-        });
+        if (0) begin
+            setup('{
+                8'd5,       // H Total:      Width of scanline in characters (-1)
+                8'd3,       // H Displayed:  Number of characters displayed per scanline
+                8'd4,       // H Sync Pos:   Start of horizontal sync pulse in characters
+                8'h11,      // Sync Width:   H. Sync = 1 char, V. Sync = 1 scanline
+                8'd4,       // V Total:      Height of frame in characters (-1)
+                8'd2,       // V Adjust:     Adjustment of frame height in scanlines
+                8'd2,       // V Displayed:  Number of characters displayed per frame
+                8'd3,       // V Sync Pos:   Position of vertical sync pulse in characters
+                8'h00,      // Mode Control: (Unused)
+                8'h02,      // Char Height:  Height of one character in scanlines (-1)
+                8'h00,      // Cursor Start: (Unused)
+                8'h00,      // Cursor End:   (Unused)
+                8'h00,      // Display H:    Display start address ([3:0] high bits)
+                8'h00       // Display L:    Display start address (low bits)
+            });
+        end else begin
+            setup('{
+                8'd49,      // H Total:      Width of scanline in characters (-1)
+                8'd40,      // H Displayed:  Number of characters displayed per scanline
+                8'd41,      // H Sync Pos:   Start of horizontal sync pulse in characters
+                8'h0f,      // Sync Width:   H. Sync = 15 char, V. Sync = 16 scanline
+                8'd40,      // V Total:      Height of frame in characters (-1)
+                8'd05,      // V Adjust:     Adjustment of frame height in scanlines
+                8'd25,      // V Displayed:  Number of characters displayed per frame
+                8'd33,      // V Sync Pos:   Position of vertical sync pulse in characters
+                8'd00,      // Mode Control: (Unused)
+                8'd07,      // Char Height:  Height of one character in scanlines (-1)
+                8'h00,      // Cursor Start: (Unused)
+                8'h00,      // Cursor End:   (Unused)
+                8'h00,      // Display H:    Display start address ([3:0] high bits)
+                8'h00       // Display L:    Display start address (low bits)
+            });
+        end
+
+        // Measure Horizontal Sync Frequency
+        @(posedge h_sync);
+        stopwatch.start();
+
+        @(posedge h_sync);
+        $display("[%t] HSYNC at %0.2f kHz", $time, stopwatch.freq_khz());
+
+        // Measure Vertical Sync Frequency
+        @(posedge v_sync);
+        stopwatch.start();
 
         @(posedge v_sync);
-        @(posedge v_sync);
+        $display("[%t] VSYNC at %0.2f Hz", $time, stopwatch.freq_hz());
 
         #1 $display("[%t] END %m", $time);
     endtask

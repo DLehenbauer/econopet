@@ -40,7 +40,7 @@ module video_dotgen(
             display_en <= display_en_i;
         end else if (pixel_clk_en_i) begin
             pixel_ctr  <= pixel_ctr + 1'b1;
-            sr_out     <= { sr_out[14:0], 1'b0 };
+            sr_out     <= { sr_out[14:0], 1'bx };
             display_en <= display_en_i;             // TODO: Why isn't this captured on cclk?
         end
     end

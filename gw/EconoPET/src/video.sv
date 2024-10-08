@@ -201,7 +201,7 @@ module video (
         // Because we do not have dedicated VRAM/VROM, we need a CCLK after the CRTC produces the
         // next MA/RA to fetch the pixels to rasterize.  To compensate, we delay the H/VSync and DE
         // signals by a CCLK cycle.
-        if (crtc_clk_en_i) begin
+        if (load_sr1_i) begin
             // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
             // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
             //
