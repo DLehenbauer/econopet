@@ -24,23 +24,27 @@ module timing_tb;
 
     stopwatch stopwatch();
 
-    logic cpu_clock;
     logic cpu_be;
-    logic clk1n_en;
-    logic clk2n_en;
+    logic cpu_clock;
+    logic cpu_wr_strobe;
+    logic load_sr1;
+    logic load_sr2;
     logic clk8_en;
     logic clk16_en;
-    logic wb_grant;
+    logic [0:0] grant;
+    logic grant_valid;
 
     timing timing (
         .sys_clock_i(clock),
-        .cpu_clock_o(cpu_clock),
         .cpu_be_o(cpu_be),
-        .clk1n_en_o(clk1n_en),
-        .clk2n_en_o(clk2n_en),
+        .cpu_clock_o(cpu_clock),
+        .cpu_wr_strobe_o(cpu_wr_strobe),
+        .load_sr1_o(load_sr1),
+        .load_sr2_o(load_sr2),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en),
-        .wb_grant_o(wb_grant)
+        .grant_o(grant),
+        .grant_valid_o(grant_valid)
     );
 
     task run;
@@ -61,15 +65,30 @@ module timing_tb;
         @(posedge clk8_en);
         $display("[%t] clk8_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge clk2n_en);
+        @(posedge load_sr2);
         stopwatch.start();
-        @(posedge clk2n_en);
-        $display("[%t] clk1n_en at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge load_sr2);
+        $display("[%t] load_sr2 at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge clk1n_en);
+        @(posedge load_sr1);
         stopwatch.start();
-        @(posedge clk1n_en);
-        $display("[%t] clk1n_en at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge load_sr1);
+        $display("[%t] load_sr1 at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge cpu_be);
+        stopwatch.start();
+        @(posedge cpu_be);
+        $display("[%t] cpu_be at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge cpu_clock);
+        stopwatch.start();
+        @(posedge cpu_clock);
+        $display("[%t] cpu_clock at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge cpu_wr_strobe);
+        stopwatch.start();
+        @(posedge cpu_wr_strobe);
+        $display("[%t] cpu_wr_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         #1 $display("[%t] END %m", $time);
     endtask

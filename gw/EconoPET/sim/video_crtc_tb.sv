@@ -30,7 +30,7 @@ module video_crtc_tb;
 
     timing timing (
         .sys_clock_i(clock),
-        .clk1n_en_o(clk1n_en),
+        .cpu_wr_strobe_o(clk1n_en),
         .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en)
     );

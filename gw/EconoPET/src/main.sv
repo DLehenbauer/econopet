@@ -118,33 +118,25 @@ module main (
     assign cpu_we_o    = 0;
     assign cpu_we_oe   = 0;
 
-    logic clk1n_en;
+    logic cpu_wr_strobe;
     logic clk8_en;
     logic clk16_en;
+    logic load_sr1;
+    logic load_sr2;
+    logic [0:0] grant;
+    logic grant_valid;
 
     timing timing (
         .sys_clock_i(sys_clock_i),
-        .clk1n_en_o(clk1n_en),
-        .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en)
-    );
-
-    logic cpu_addr_strobe;
-    logic cpu_data_strobe;
-    // logic cpu_rd_en;
-    // logic cpu_wr_en;
-    logic cpu_grant_en;
-
-    cpu cpu (
-        .sys_clock_i(sys_clock_i),
-        .cpu_grant_i(cpu_grant_en),
-        .cpu_we_i(cpu_we_i),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
-        .cpu_addr_strobe_o(cpu_addr_strobe),
-        .cpu_data_strobe_o(cpu_data_strobe)
-        // .cpu_rd_en_o(cpu_rd_en),
-        // .cpu_wr_en_o(cpu_wr_en)
+        .cpu_wr_strobe_o(cpu_wr_strobe),
+        .clk8_en_o(clk8_en),
+        .clk16_en_o(clk16_en),
+        .load_sr1_o(load_sr1),
+        .load_sr2_o(load_sr2),
+        .grant_o(grant),
+        .grant_valid_o(grant_valid)
     );
 
     //
@@ -276,13 +268,17 @@ module main (
         .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
 
         .cpu_reset_i(cpu_reset_i),
-        .crtc_clk_en_i(cpu_data_strobe),    // 1 MHz clock enable for 'sys_clock_i'
+        .crtc_clk_en_i(cpu_wr_strobe),      // 1 MHz clock enable for 'sys_clock_i'
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
         .crtc_data_i(cpu_data_i),           // CPU -> CRTC
         .crtc_data_o(crtc_dout),            // CRTC -> CPU
         .crtc_data_oe(crtc_oe),             // Asserted when CPU is reading from CRTC
+
+        // Dot Gen
+        .load_sr1_i(load_sr1),
+        .load_sr2_i(load_sr2),
         .col_80_mode_i(col_80_mode_i),      // 0 = 40 column mode, 1 = 80 column mode
         .graphic_i(graphic_i),
         .h_sync_o(h_sync_o),
@@ -325,8 +321,22 @@ module main (
     assign wb_stall = ram_wb_stall | reg_wb_stall | kbd_wb_stall;
     assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
 
-    arbiter arbiter (
+    wb_demux #(
+        .COUNT(2)
+    ) wb_demux (
         .wb_clock_i(sys_clock_i),
+
+        // Wishbone controllers to demux
+        .wbc_cycle_i({ spi1_cycle, video_cycle }),
+        .wbc_strobe_i({ spi1_strobe, video_strobe }),
+        .wbc_addr_i({ spi1_addr, video_addr }),
+        .wbc_din_o({ spi1_din, video_din }),
+        .wbc_dout_i({ spi1_dout, video_dout }),
+        .wbc_we_i({ spi1_we, video_we }),
+        .wbc_stall_o({ spi1_stall, video_stall }),
+        .wbc_ack_o({ spi1_ack, video_ack }),
+
+        // Wishbone bus
         .wb_addr_o(wb_addr),
         .wb_din_i(wb_din),
         .wb_dout_o(wb_dout),
@@ -336,26 +346,9 @@ module main (
         .wb_stall_i(wb_stall),
         .wb_ack_i(wb_ack),
 
-        .spi1_addr_i(spi1_addr),
-        .spi1_din_o(spi1_din),
-        .spi1_dout_i(spi1_dout),
-        .spi1_we_i(spi1_we),
-        .spi1_cycle_i(spi1_cycle),
-        .spi1_strobe_i(spi1_strobe),
-        .spi1_stall_o(spi1_stall),
-        .spi1_ack_o(spi1_ack),
-
-        .video_addr_i(video_addr),
-        .video_din_o(video_din),
-        .video_dout_i(video_dout),
-        .video_we_i(video_we),
-        .video_cycle_i(video_cycle),
-        .video_strobe_i(video_strobe),
-        .video_stall_o(video_stall),
-        .video_ack_o(video_ack),
-
-        .clk8_en_i(clk8_en),
-        .cpu_grant_en_o(cpu_grant_en)
+        // Control signals
+        .wbc_grant_i(grant),
+        .wbc_grant_valid_i(grant_valid)
     );
 
     //

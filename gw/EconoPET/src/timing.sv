@@ -20,42 +20,63 @@ module timing (
     input  logic sys_clock_i,
     output logic cpu_be_o,
     output logic cpu_clock_o,
-    output logic clk1n_en_o,
-    output logic clk2n_en_o,
+    output logic cpu_wr_strobe_o,
+    output logic load_sr1_o,
+    output logic load_sr2_o,
     output logic clk8_en_o,
     output logic clk16_en_o,
-    output logic wb_grant_o
+    output logic [0:0] grant_o,
+    output logic grant_valid_o
 );
     initial begin
-        cpu_clock_o = 1'b0;
-        cpu_be_o = 1'b0;
-        wb_grant_o = 1'b0;
-        clk1n_en_o = 1'b0;
-        clk2n_en_o = 1'b0;
-        clk8_en_o  = '0;
-        clk16_en_o = '0;
+        cpu_clock_o     = 1'b0;
+        cpu_be_o        = 1'b0;
+        cpu_wr_strobe_o = 1'b0;
+        clk8_en_o       = '0;
+        clk16_en_o      = '0;
     end
 
     localparam COUNTER_WIDTH = 6;
 
-    logic [COUNTER_WIDTH-1:0] cycle_count = '0;
+    logic [COUNTER_WIDTH-1:0] cycle_count = 6'b111111;
 
     always_ff @(posedge sys_clock_i) begin
         cycle_count <= cycle_count + 1'b1;
     end
 
+    logic [2:0] grant = 3'b111;
+
     always_ff @(posedge sys_clock_i) begin
-        clk8_en_o  <= cycle_count[2:0] == 3'b000;
+        clk8_en_o <= '0;
+
+        if (cycle_count[2:0] == 3'b000) begin
+            clk8_en_o  <= 1'b1;
+            grant      <= grant + 1'b1;
+        end
+            
         clk16_en_o <= cycle_count[1:0] == 2'b00;
     end
+
+    assign grant_valid_o = grant != CPU_1 && grant != CPU_2 && clk8_en_o;
+
+    localparam CPU_1   = 3'd0,
+               CPU_2   = 3'd1,
+               VIDEO_1 = 3'd2,
+               VIDEO_2 = 3'd3,
+               SPI_1   = 3'd4,
+               VIDEO_3 = 3'd5,
+               VIDEO_4 = 3'd6,
+               SPI_2   = 3'd7;
+
+    assign grant_o = (grant == SPI_1 || grant == SPI_2) ? 1'b1 : 1'b0;
+    assign load_sr1_o = grant == CPU_1 && clk8_en_o;
+    assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
     function int ns_to_cycles(input int time_ns);
         // The '+1' is a conservative allowance for trace delay, etc.
         return int'($ceil(time_ns / common_pkg::mhz_to_ns(SYS_CLOCK_MHZ))) + 1;
     endfunction
 
-    // Maximum number of 'sys_sys_clock_i' cycles required to complete an in-progress
-    // wishbone transaction with RAM.
     localparam CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
                CPU_tPWH      = 62,  // CPU Clock Pulse Width High (tPWH)
                CPU_tDSR      = 15,  // CPU Data Setup Time (tDSR)
@@ -66,16 +87,14 @@ module timing (
 
     localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START     = 0,
                                        CPU_PHI_START    = COUNTER_WIDTH'(int'(CPU_BE_START) + ns_to_cycles(CPU_tBVD + IOTX_t)),
-                                       CLK1N            = CPU_PHI_END - 2,
+                                       CPU_WR_STROBE    = CPU_PHI_END - 2,
                                        CPU_PHI_END      = COUNTER_WIDTH'(int'(CPU_PHI_START) + ns_to_cycles(CPU_tPWH)),
                                        CPU_BE_END       = COUNTER_WIDTH'(int'(CPU_PHI_END) + ns_to_cycles(CPU_tDHx)),
                                        WB_START         = COUNTER_WIDTH'(int'(CPU_BE_END) + ns_to_cycles(CPU_tBVD)),
-                                       WB_END           = COUNTER_WIDTH'((1 << COUNTER_WIDTH) - 8),
-                                       CLK2N            = CLK1N + COUNTER_WIDTH'(1 << (COUNTER_WIDTH - 1));
+                                       WB_END           = COUNTER_WIDTH'((1 << COUNTER_WIDTH) - 8);
 
     always_ff @(posedge sys_clock_i) begin
-        clk1n_en_o <= 0;
-        clk2n_en_o <= 0;
+        cpu_wr_strobe_o <= '0;
 
         unique case (cycle_count)
             CPU_BE_START: begin
@@ -84,24 +103,14 @@ module timing (
             CPU_PHI_START: begin
                 cpu_clock_o <= 1'b1;
             end
-            CLK1N: begin
-                clk1n_en_o <= 1'b1;
-                clk2n_en_o <= 1'b1;
+            CPU_WR_STROBE: begin
+                cpu_wr_strobe_o <= 1'b1;
             end
             CPU_PHI_END: begin
                 cpu_clock_o <= 1'b0;
             end
             CPU_BE_END: begin
                 cpu_be_o <= 1'b0;
-            end
-            WB_START: begin
-                wb_grant_o <= 1'b1;
-            end
-            WB_END: begin
-                wb_grant_o <= 1'b0;
-            end
-            CLK2N: begin
-                clk2n_en_o <= 1'b1;
             end
             default: begin
             end

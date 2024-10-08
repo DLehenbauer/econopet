@@ -53,6 +53,8 @@ module video (
     output logic crtc_data_oe,                    // CRTC drives data lines (CPU is reading from CRTC)
 
     // DotGen
+    input  logic load_sr1_i,                      // 1 MHz clock user to load SR of dot generator
+    input  logic load_sr2_i,                      // 2 MHz clock used to load SR of dot generator
     input  logic config_crt_i,                    // Adjusts polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic col_80_mode_i,                   // (0 = 40 col, 1 = 80 col)
     input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
@@ -213,7 +215,7 @@ module video (
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
         .pixel_clk_en_i(pixel_clk_en),
-        .cclk_en_i(crtc_clk_en_i),
+        .load_sr_i(load_sr1_i),
         .pixels_i(pixels),
         .reverse_i({ odd_char[7], even_char[7] }),
         .display_en_i(dotgen_en),

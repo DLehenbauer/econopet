@@ -64,6 +64,7 @@ module sim;
 `endif
 
     initial begin
+        $printtimescale(sim);
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 

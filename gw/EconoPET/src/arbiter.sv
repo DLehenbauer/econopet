@@ -75,13 +75,13 @@ module arbiter (
     wire video_grant = grant == VIDEO_1 || grant == VIDEO_2 || grant == VIDEO_3 || grant == VIDEO_4;
     wire spi1_grant  = grant == SPI_1   || grant == SPI_2;
 
-    logic [0:0] wbc_sel;
+    logic [0:0] wbc_grant;
 
     always_comb begin
         if (spi1_grant) begin
-            wbc_sel = 1;
+            wbc_grant = 1;
         end else begin
-            wbc_sel = 0;
+            wbc_grant = 0;
         end
     end
 
@@ -111,8 +111,8 @@ module arbiter (
         .wb_ack_i(wb_ack_i),
 
         // Control signals
-        .wbc_sel(wbc_sel), // Select controller
-        .wb_en_i(!cpu_grant && clk8_en_delay)
+        .wbc_grant_i(wbc_grant), // Select controller
+        .wbc_grant_valid_i(!cpu_grant && clk8_en_delay)
     );
 
     assign cpu_grant_en_o = cpu_grant & clk8_en_delay;

@@ -19,7 +19,7 @@ import common_pkg::*;
 module video_dotgen(
     input  logic        sys_clock_i,            // FPGA System clock
     input  logic        pixel_clk_en_i,         // Pixel clock enable
-    input  logic        cclk_en_i,              // Character clock enable
+    input  logic        load_sr_i,
     input  logic [15:0] pixels_i,
     input  logic [1:0]  reverse_i,
     input  logic        display_en_i,
@@ -33,7 +33,7 @@ module video_dotgen(
     logic        display_en;
 
     always_ff @(posedge sys_clock_i) begin
-        if (cclk_en_i) begin
+        if (load_sr_i) begin
             pixel_ctr  <= '0;
             sr_out     <= pixels_i;
             reverse    <= reverse_i;
