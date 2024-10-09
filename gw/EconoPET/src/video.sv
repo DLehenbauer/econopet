@@ -208,7 +208,6 @@ module video (
             //                                            9" CRT    12" CRT
             h_sync_o  <= config_crt_i ^ !crtc_h_sync; // Active-H   Active-L
             v_sync_o  <= config_crt_i ^ !crtc_v_sync; // Active-H   Active-L
-            dotgen_en <= de && !no_row;
         end
     end
 
@@ -218,7 +217,7 @@ module video (
         .load_sr_i(load_sr1_i),
         .pixels_i(pixels),
         .reverse_i({ odd_char[7], even_char[7] }),
-        .display_en_i(dotgen_en),
+        .display_en_i(de && !no_row),
         .video_o(dotgen_video)
     );
 

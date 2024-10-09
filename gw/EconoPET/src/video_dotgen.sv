@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -32,20 +32,30 @@ module video_dotgen(
     logic [1:0]  reverse;
     logic        display_en;
 
+    logic v_out = '0;
+    logic d_out = '0;
+    logic r_out = '0;
+
     always_ff @(posedge sys_clock_i) begin
-        if (load_sr_i) begin
-            pixel_ctr  <= '0;
-            sr_out     <= pixels_i;
-            reverse    <= reverse_i;
-            display_en <= display_en_i;
-        end else if (pixel_clk_en_i) begin
-            pixel_ctr  <= pixel_ctr + 1'b1;
-            sr_out     <= { sr_out[14:0], 1'bx };
-            display_en <= display_en_i;             // TODO: Why isn't this captured on cclk?
+        if (pixel_clk_en_i) begin
+            if (load_sr_i) begin
+                v_out <= pixels_i[15];
+                d_out <= display_en_i;
+                r_out <= reverse_i[0];
+
+                pixel_ctr  <= '0;
+                sr_out     <= pixels_i;
+                reverse    <= reverse_i;
+                display_en <= display_en_i;
+            end else begin
+                v_out <= sr_out[14];
+                r_out <= reverse_i[pixel_ctr[3]];
+
+                pixel_ctr  <= pixel_ctr + 1'b1;
+                sr_out     <= { sr_out[14:0], 1'bx };
+            end
         end
     end
 
-    // 'pixels_i' contains pixels for two characters.  The high bit of 'pixel_ctr' selects
-    // which 'reverse_i' bit to use.
-    assign video_o = display_en & (sr_out[15] ^ reverse[pixel_ctr[3]]);
+    assign video_o = d_out & (v_out ^ r_out);
 endmodule
