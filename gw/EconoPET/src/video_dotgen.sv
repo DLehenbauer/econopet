@@ -17,20 +17,18 @@
 import common_pkg::*;
 
 module video_dotgen(
-    input  logic        sys_clock_i,            // FPGA System clock
-    input  logic        pixel_clk_en_i,         // Pixel clock enable
-    input  logic        load_sr_i,
-    input  logic [15:0] pixels_i,
-    input  logic [1:0]  reverse_i,
-    input  logic        display_en_i,
-    output logic        video_o
+    input  logic       sys_clock_i,            // FPGA System clock
+    input  logic       pixel_clk_en_i,         // Pixel clock enable
+    input  logic       load_sr_i,
+    input  logic [7:0] pixels_i,
+    input  logic       reverse_i,
+    input  logic       display_en_i,
+    output logic       video_o
 );
     // TODO: The 'pixel_ctr' counter is only used to select the 'reverse' bit.
     //       This can be avoided if we use a 2 MHz CLK in 80 col mode.
-    logic [3:0]  pixel_ctr;
-    logic [15:0] sr_out;
-    logic [1:0]  reverse;
-    logic        display_en;
+    logic [7:0] sr_out;
+    logic       display_en;
 
     logic v_out = '0;
     logic d_out = '0;
@@ -39,20 +37,15 @@ module video_dotgen(
     always_ff @(posedge sys_clock_i) begin
         if (pixel_clk_en_i) begin
             if (load_sr_i) begin
-                v_out <= pixels_i[15];
+                v_out <= pixels_i[7];
                 d_out <= display_en_i;
-                r_out <= reverse_i[0];
+                r_out <= reverse_i;
 
-                pixel_ctr  <= '0;
                 sr_out     <= pixels_i;
-                reverse    <= reverse_i;
                 display_en <= display_en_i;
             end else begin
-                v_out <= sr_out[14];
-                r_out <= reverse_i[pixel_ctr[3]];
-
-                pixel_ctr  <= pixel_ctr + 1'b1;
-                sr_out     <= { sr_out[14:0], 1'bx };
+                v_out      <= sr_out[6];
+                sr_out     <= { sr_out[6:0], 1'bx };
             end
         end
     end

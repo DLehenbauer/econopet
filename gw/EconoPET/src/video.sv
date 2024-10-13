@@ -180,7 +180,6 @@ module video (
     wire [ 7:0] even_rom = data[EVEN_ROM];
     wire [ 7:0] odd_char = data[ODD_RAM];
     wire [ 7:0] odd_rom = data[ODD_ROM];
-    wire [15:0] pixels = { even_rom, odd_rom };
 
     //
     // Dotgen
@@ -190,12 +189,38 @@ module video (
         ? clk16_en_i
         : clk8_en_i;
 
+    wire load_sr = col_80_mode_i
+        ? load_sr2_i
+        : load_sr1_i;
+
     logic dotgen_video;
     logic dotgen_en = '0;
 
     // Scanlines exceeding the 8 pixel high character ROM should be blanked.
     // (See 'NO_ROW' signal on sheets 8 and 10 of Universal Dynamic PET.)
     wire no_row = ra[3] || ra[4];
+
+    logic       odd = 1'b1;
+    logic [7:0] pixels;
+    logic       reverse;
+
+    always @(posedge wb_clock_i) begin
+        if (load_sr2_i) begin
+            odd <= ~odd;
+            pixels <= odd ? odd_rom : even_rom;
+            reverse <= odd ? odd_char[7] : even_char[7];
+        end
+    end
+
+    video_dotgen video_dotgen (
+        .sys_clock_i(wb_clock_i),
+        .pixel_clk_en_i(pixel_clk_en),
+        .load_sr_i(load_sr),
+        .pixels_i(pixels),
+        .reverse_i(reverse),
+        .display_en_i(de && !no_row),
+        .video_o(dotgen_video)
+    );
 
     always @(posedge wb_clock_i) begin
         // Because we do not have dedicated VRAM/VROM, we need a CCLK after the CRTC produces the
@@ -210,16 +235,6 @@ module video (
             v_sync_o  <= config_crt_i ^ !crtc_v_sync; // Active-H   Active-L
         end
     end
-
-    video_dotgen video_dotgen (
-        .sys_clock_i(wb_clock_i),
-        .pixel_clk_en_i(pixel_clk_en),
-        .load_sr_i(load_sr1_i),
-        .pixels_i(pixels),
-        .reverse_i({ odd_char[7], even_char[7] }),
-        .display_en_i(de && !no_row),
-        .video_o(dotgen_video)
-    );
 
     // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
     // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").

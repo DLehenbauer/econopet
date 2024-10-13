@@ -57,8 +57,6 @@ module timing (
         clk16_en_o <= cycle_count[1:0] == 2'b00;
     end
 
-    assign grant_valid_o = grant != CPU_1 && grant != CPU_2 && clk8_en_o;
-
     localparam VIDEO_1 = 3'd0,
                VIDEO_2 = 3'd1,
                SPI_1   = 3'd2,
@@ -68,7 +66,9 @@ module timing (
                CPU_1   = 3'd6,
                CPU_2   = 3'd7;
 
+    assign grant_valid_o = grant != CPU_1 && grant != CPU_2 && clk8_en_o;
     assign grant_o = (grant == SPI_1 || grant == SPI_2) ? 1'b1 : 1'b0;
+    
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
     assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
