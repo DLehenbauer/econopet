@@ -134,6 +134,11 @@ int main() {
     // sd_init();
     // sd_read_file("filename.txt");
 
+    // Initialize Menu button
+    gpio_init(MENU_BTN_GP);
+    gpio_set_dir(MENU_BTN_GP, GPIO_IN);
+    gpio_pull_up(MENU_BTN_GP); // Use pull-up resistor as the button is active low
+
     video_init();
 
     // Initialize TinyUSB
@@ -142,13 +147,18 @@ int main() {
     reset();
 
     while (1) {
-        spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
+        // Run PET loop until menu button is pressed.
+        while (gpio_get(MENU_BTN_GP)) {
+            spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
 
-        tuh_task();
-        cdc_app_task();
-        hid_app_task();
+            tuh_task();
+            cdc_app_task();
+            hid_app_task();
 
-        sync_keyboard();
+            sync_keyboard();
+        }
+
+        printf("MENU\n");
     }
 
     __builtin_unreachable();

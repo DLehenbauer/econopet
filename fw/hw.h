@@ -45,3 +45,6 @@
 
 // PWM output used to generate the PLL input for FPGA.
 #define FPGA_CLK_GP 15
+
+// Menu button (requires enabling pull-up)
+#define MENU_BTN_GP 27

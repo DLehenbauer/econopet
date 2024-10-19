@@ -10,6 +10,7 @@ add_subdirectory("external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI")
 add_executable(${PROJECT_NAME}
     driver.c
     main.c
+    menu/menu.c
     pet.c
     sd/sd.c
     term.c
