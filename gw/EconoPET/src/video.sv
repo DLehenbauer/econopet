@@ -212,33 +212,29 @@ module video (
         end
     end
 
+    logic dotgen_de = '0;
+
+    always @(posedge wb_clock_i) begin
+        if (load_sr1_i) begin
+            dotgen_de <= de && !no_row;
+        end
+    end
+
     video_dotgen video_dotgen (
         .sys_clock_i(wb_clock_i),
         .pixel_clk_en_i(pixel_clk_en),
         .load_sr_i(load_sr),
         .pixels_i(pixels),
         .reverse_i(reverse),
-        .display_en_i(de && !no_row),
+        .display_en_i(dotgen_de),
         .video_o(dotgen_video)
     );
-
-    always @(posedge wb_clock_i) begin
-        // Because we do not have dedicated VRAM/VROM, we need a CCLK after the CRTC produces the
-        // next MA/RA to fetch the pixels to rasterize.  To compensate, we delay the H/VSync and DE
-        // signals by a CCLK cycle.
-        if (load_sr1_i) begin
-            // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
-            // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
-            //
-            //                                            9" CRT    12" CRT
-            h_sync_o  <= config_crt_i ^ !crtc_h_sync; // Active-H   Active-L
-            v_sync_o  <= config_crt_i ^ !crtc_v_sync; // Active-H   Active-L
-        end
-    end
 
     // The 9" and 12" CRTs have different polarity requirements for video and sync signals.
     // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
     //
     //                                                 9" CRT    12" CRT
-    assign video_o = config_crt_i ^ dotgen_video;  // Active-L   Active-H
+    assign video_o  = config_crt_i ^ dotgen_video; // Active-L   Active-H
+    assign h_sync_o = config_crt_i ^ !crtc_h_sync; // Active-H   Active-L
+    assign v_sync_o = config_crt_i ^ !crtc_v_sync; // Active-H   Active-L
 endmodule
