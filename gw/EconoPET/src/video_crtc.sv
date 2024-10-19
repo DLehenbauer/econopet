@@ -148,19 +148,19 @@ module video_crtc(
     logic       v_sync          = '0;
 
     wire last_row = v_total_counter == v_total;
+    wire [6:0] next_v_total_counter = frame_start ? '0 : row_ending ? v_total_counter + 1'b1 : v_total_counter;
 
     always_ff @(posedge wb_clock_i) begin
         if (reset_i) v_total_counter <= '0;
         else if (clk_en_i) begin
-            if (frame_start) v_total_counter <= '0;
-            else if (row_ending) v_total_counter <= v_total_counter + 1'b1;
+            v_total_counter <= next_v_total_counter;
         end
     end
 
     always_ff @(posedge wb_clock_i) begin
         if (reset_i) v_display <= 1'b1;
         else if (clk_en_i) begin
-            if (v_total_counter == v_displayed) v_display <= '0;
+            if (next_v_total_counter == v_displayed) v_display <= '0;
             else if (frame_start) v_display <= 1'b1;
         end
     end
