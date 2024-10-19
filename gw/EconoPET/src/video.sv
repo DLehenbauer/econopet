@@ -205,10 +205,16 @@ module video (
     logic       reverse;
 
     always @(posedge wb_clock_i) begin
-        if (load_sr2_i) begin
-            odd <= ~odd;
+        // Latch pixel data and reverse bit on load_sr (1 or 2 MHz).
+        if (load_sr) begin
             pixels <= odd ? odd_rom : even_rom;
             reverse <= odd ? odd_char[7] : even_char[7];
+        end
+
+        // However, always toggle even/odd at 2 MHz.  In 40 column mode,
+        // the even characters will be ignored.
+        if (load_sr2_i) begin
+            odd <= ~odd;
         end
     end
 
