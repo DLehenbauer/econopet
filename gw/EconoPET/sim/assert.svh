@@ -18,6 +18,8 @@
 //`define TRACE
 
 // Note: Macro defined on a single line to prevent line numbers from changing during expansion [iverilog 12]
-`define assert_equal(ACTUAL, EXPECTED) assert(ACTUAL == EXPECTED) begin `ifdef TRACE $info("[%t] %m.ACTUAL=%0d ($%x)", $time, ACTUAL, ACTUAL); `endif end else begin $fatal(1, "[%0t] Expected 'ACTUAL=%0d ($%x)', but got 'ACTUAL=%0d ($%x)'.", $time, EXPECTED, EXPECTED, ACTUAL, ACTUAL); end
+`define assert_compare(ACTUAL, OP, EXPECTED) assert(ACTUAL OP EXPECTED) begin `ifdef TRACE $info("[%t] %m.ACTUAL=%0d ($%x %b)", $time, ACTUAL, ACTUAL, ACTUAL); `endif end else begin $fatal(1, "[%0t] %m expected 'ACTUAL=%0d ($%x %b)', but got 'ACTUAL=%0d ($%x %b)'.", $time, EXPECTED, EXPECTED, EXPECTED, ACTUAL, ACTUAL, ACTUAL); end
+`define assert_equal(ACTUAL, EXPECTED) `assert_compare(ACTUAL, ==, EXPECTED)
+`define assert_exact_equal(ACTUAL, EXPECTED) `assert_compare(ACTUAL, ===, EXPECTED)
 
 `endif

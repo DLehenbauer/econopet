@@ -33,6 +33,7 @@ module register_file_tb;
 
     logic cpu_ready;
     logic cpu_reset;
+    logic video_col_80_mode;
 
     register_file register_file (
         .wb_clock_i(clock),
@@ -46,7 +47,8 @@ module register_file_tb;
         .wb_stall_o(stall),
 
         .cpu_ready_o(cpu_ready),
-        .cpu_reset_o(cpu_reset)
+        .cpu_reset_o(cpu_reset),
+        .video_col_80_mode_o(video_col_80_mode)
     );
 
     wb_driver wb (
@@ -61,32 +63,46 @@ module register_file_tb;
         .wb_stall_i(stall)
     );
 
-    logic [DATA_WIDTH-1:0] data_rd;
-
     always @(posedge clock or negedge clock) begin
         assert (stall == 0) else $fatal(1, "Register access must not stall Wishbone bus");
     end
+
+    task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+        logic [DATA_WIDTH-1:0] data_rd;
+
+        wb.write(addr, data);
+        wb.read(addr, data_rd);
+        `assert_exact_equal(data_rd, data);
+    endtask
+
+    task test_cpu_reg(input logic reset, input logic ready);
+        test_reg(REG_CPU, {6'bxxxx_xx, reset, ready});
+        `assert_equal(cpu_reset, reset);
+        `assert_equal(cpu_ready, ready);
+    endtask
+
+    task test_video_reg(input logic col_80_mode);
+        test_reg(REG_VIDEO, {7'bxxxx_xxx, col_80_mode});
+        `assert_equal(video_col_80_mode, col_80_mode);
+    endtask
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
 
+        // Check power-on state
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset, 1'b1);
+        `assert_equal(video_col_80_mode, 1'b0);
 
-        wb.write(10'h00, 8'b0000_0001);
-        `assert_equal(cpu_ready, 1'b1);
-        `assert_equal(cpu_reset, 1'b0);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b1);
+        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b1);
 
-        wb.read(10'h00, data_rd);
-        `assert_equal(data_rd, 8'b0000_0001);
-
-        wb.write(10'h00, 8'b0000_0010);
-        wb.read(10'h00, data_rd);
-        `assert_equal(cpu_ready, 1'b0);
-        `assert_equal(cpu_reset, 1'b1);
-        `assert_equal(data_rd, 8'b0000_0010);
+        test_video_reg(/* col_80_mode: */ 1'b1);
+        test_video_reg(/* col_80_mode: */ 1'b0);
 
         #1 $display("[%t] END %m", $time);
     endtask

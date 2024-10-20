@@ -29,17 +29,25 @@ module register_file(
     output logic                     wb_stall_o,
     output logic                     wb_ack_o,
 
+    // CPU register
     output logic                     cpu_ready_o,
-    output logic                     cpu_reset_o
+    output logic                     cpu_reset_o,
+
+    // Video register
+    output logic                     video_col_80_mode_o
 );
-    (* syn_ramstyle = "registers" *) reg [DATA_WIDTH-1:0] register[REG_COUNT:0];
+    logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
     initial begin
         wb_ack_o   = '0;
         wb_stall_o = '0;
 
+        // CPU state at power on: CPU is not ready, CPU is reset
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;
+
+        // Video state at power on: 40 column mode
+        register[REG_VIDEO][REG_VIDEO_COL_80_BIT] = 1'b0;
     end
 
     logic wb_select;
@@ -62,6 +70,7 @@ module register_file(
         end
     end
 
-    assign cpu_ready_o = register[REG_CPU][REG_CPU_READY_BIT];
-    assign cpu_reset_o = register[REG_CPU][REG_CPU_RESET_BIT];
+    assign cpu_ready_o         = register[REG_CPU][REG_CPU_READY_BIT];
+    assign cpu_reset_o         = register[REG_CPU][REG_CPU_RESET_BIT];
+    assign video_col_80_mode_o = register[REG_VIDEO][REG_VIDEO_COL_80_BIT];
 endmodule

@@ -179,6 +179,7 @@ module main (
     logic [DATA_WIDTH-1:0] reg_wb_din;
     logic reg_wb_stall;
     logic reg_wb_ack;
+    logic video_col_80_mode;
 
     register_file register_file (
         .wb_clock_i(sys_clock_i),
@@ -192,7 +193,8 @@ module main (
         .wb_stall_o(reg_wb_stall),
 
         .cpu_ready_o(cpu_ready_o),
-        .cpu_reset_o(cpu_reset_o)
+        .cpu_reset_o(cpu_reset_o),
+        .video_col_80_mode_o(video_col_80_mode)
     );
 
     //
@@ -239,7 +241,6 @@ module main (
 
     logic [   DATA_WIDTH-1:0] crtc_dout;     // CRTC -> CPU
     logic                     crtc_oe;
-    logic                     col_80_mode_i = 1'b1;     // TODO: Use register file
 
     video video (
         // Wishbone controller used to fetch VRAM/VROM data
@@ -279,7 +280,7 @@ module main (
         // Dot Gen
         .load_sr1_i(load_sr1),
         .load_sr2_i(load_sr2),
-        .col_80_mode_i(col_80_mode_i),      // 0 = 40 column mode, 1 = 80 column mode
+        .col_80_mode_i(video_col_80_mode),  // 0 = 40 column mode, 1 = 80 column mode
         .graphic_i(graphic_i),
         .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),

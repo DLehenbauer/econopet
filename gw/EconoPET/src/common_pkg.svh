@@ -56,9 +56,13 @@ package common_pkg;
     //
 
     localparam int unsigned REG_CPU           = 0;
-    localparam int unsigned REG_CPU_READY_BIT = 0;
-    localparam int unsigned REG_CPU_RESET_BIT = 1;
-    localparam int unsigned REG_COUNT         = 1;
+    localparam int unsigned REG_VIDEO         = 1;
+    localparam int unsigned REG_COUNT         = 2;
+
+    localparam int unsigned REG_CPU_READY_BIT    = 0;
+    localparam int unsigned REG_CPU_RESET_BIT    = 1;
+
+    localparam int unsigned REG_VIDEO_COL_80_BIT = 0;
 
     //
     // CRTC
@@ -112,7 +116,7 @@ package common_pkg;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
-    localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT);              // TODO: Should be 'REG_COUNT - 1'b1', but with REG_COUNT=1, that results in 0 address lines.
+    localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT - 1'b1);
     localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_ROW_COUNT - 1'b1);
     localparam int unsigned CRTC_ADDR_WIDTH = bit_width(CRTC_REG_COUNT - 1'b1);
     localparam int unsigned DATA_WIDTH      = 8;
