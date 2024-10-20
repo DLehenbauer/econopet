@@ -167,6 +167,7 @@ int main() {
         // For now, the Menu button toggles between 40/80 columns.
         is80Columns = !is80Columns;
         pet_init_roms(is80Columns, isBusinessKeyboard);
+        set_video(is80Columns);
         
         // Wait until button is released to resume CPU.  Currently, we rely on the time required for
         // the above SPI operations to complete to debounce the button press.

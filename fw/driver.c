@@ -24,8 +24,9 @@
 
 #define ADDR_KBD (0b011 << 17)
 
-#define ADDR_REG (0b010 << 17)
-#define REG_CPU  (ADDR_REG | 0x00000)
+#define ADDR_REG  (0b010 << 17)
+#define REG_CPU   (ADDR_REG | 0x00000)
+#define REG_VIDEO (ADDR_REG | 0x00001)
 
 void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
@@ -104,10 +105,16 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
 }
 
 void set_cpu(bool ready, bool reset) {
-    uint8_t cpu_state = 0;
-    if (ready) { cpu_state |= (1 << 0); }
-    if (reset) { cpu_state |= (1 << 1); }
-    spi_write_at(REG_CPU, cpu_state);
+    uint8_t state = 0;
+    if (ready) { state |= (1 << 0); }
+    if (reset) { state |= (1 << 1); }
+    spi_write_at(REG_CPU, state);
+}
+
+void set_video(bool col80) {
+    uint8_t state = 0;
+    if (col80) { state |= (1 << 0); }
+    spi_write_at(REG_VIDEO, state);
 }
 
 void sync_keyboard() {

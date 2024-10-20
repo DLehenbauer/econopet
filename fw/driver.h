@@ -28,4 +28,5 @@ void spi_write_at(uint32_t addr, uint8_t data);
 void spi_write_next(uint8_t data);
 
 void set_cpu(bool ready, bool reset);
+void set_video(bool col80);
 void sync_keyboard();
