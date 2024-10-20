@@ -32,22 +32,28 @@ static const uint8_t __in_flash(".rom_basic_d000") rom_basic_d000[] = {
     #include "roms/basic-4-d000.901465-21.h"
 };
 
-static const uint8_t __in_flash(".rom_edit_e000") rom_edit_e000[] = {
-    // Edit 4.0, 40 column, Graphics Keyboard, no CRTC
-    // #include "roms/edit-4-n.901447-29.h"
+//
+// Edit Rom ($E000)
+//
 
-    // Edit 4.0, 40 column, Graphics Keyboard, 60 Hz, CRTC
-    // #include "roms/edit-4-40-n-60Hz.901499-01.h"
+// Edit 4.0, 40 column, Graphics Keyboard, 60 Hz, CRTC
+static const uint8_t __in_flash(".rom_edit_4_40_n_60Hz") rom_edit_4_40_n_60Hz[] = {
+    #include "roms/edit-4-40-n-60Hz.901499-01.h"
+};
 
-    // Edit 4.0, 40 column, Graphics Keyboard, 50 Hz, CRTC
-    // #include "roms/edit-4-40-n-50Hz.901498-01.h"
-
-    // Edit 4.0, 80 column, Business Keyboard, 60 Hz, CRTC
-    // #include "roms/edit-4-80-b-60Hz.901474-03.h"
-
-    // Edit 4.0, 80 column, Graphics Keyboard, 60 Hz, CRTC
+// Edit 4.0, 80 column, Graphics Keyboard, 60 Hz, CRTC
+static const uint8_t __in_flash(".rom_edit_4_80_n_60Hz") rom_edit_4_80_n_60Hz[] = {
     #include "roms/edit-4-80-n-60Hz.901474-03-hack.h"
 };
+
+// Edit 4.0, 80 column, Business Keyboard, 60 Hz, CRTC
+static const uint8_t __in_flash(".rom_edit_4_80_b_60Hz") rom_edit_4_80_b_60Hz[] = {
+    #include "roms/edit-4-80-b-60Hz.901474-03.h"
+};
+
+//
+// Kernal Rom ($F000)
+//
 
 static const uint8_t __in_flash(".rom_kernal_f000") rom_kernal_f000[] = {
     #include "roms/kernal-4.901465-22.h"

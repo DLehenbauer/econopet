@@ -22,6 +22,9 @@
 #include "usb/usb.h"
 #include "video/video.h"
 
+static bool is80Columns = false;
+static bool isBusinessKeyboard = false;
+
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
     uint32_t f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
@@ -96,7 +99,7 @@ void reset() {
     // * Initialize the ROM region of our SRAM
 
     // test_ram();
-    pet_init_roms();
+    pet_init_roms(is80Columns, isBusinessKeyboard);
 
     // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
     set_cpu(/* ready: */ true,  /* reset: */ false);
@@ -158,7 +161,18 @@ int main() {
             sync_keyboard();
         }
 
-        printf("MENU\n");
+        // Suspend CPU while handling menu button press.
+        set_cpu(/* ready: */ 0, /* reset: */ 0);
+        
+        // For now, the Menu button toggles between 40/80 columns.
+        is80Columns = !is80Columns;
+        pet_init_roms(is80Columns, isBusinessKeyboard);
+        
+        // Wait until button is released to resume CPU.  Currently, we rely on the time required for
+        // the above SPI operations to complete to debounce the button press.
+        while (!gpio_get(MENU_BTN_GP));
+
+        reset();
     }
 
     __builtin_unreachable();

@@ -16,4 +16,4 @@
 
 #include "pch.h"
 
-void pet_init_roms();
+void pet_init_roms(bool is80Columns, bool isBusinessKeyboard);

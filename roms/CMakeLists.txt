@@ -32,6 +32,7 @@ endfunction()
 
 # http://www.zimmers.net/anonftp/pub/cbm/firmware/ALLFILES.html
 # http://penguincentral.com/retrocomputing/PET/petroms.pdf
+# https://loadrun64.com/zimmers/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf
 
 # US Character Set
 download_rom(http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/characters-2.901447-10.bin 9880432E633B15998D58884FF34C4E70)
