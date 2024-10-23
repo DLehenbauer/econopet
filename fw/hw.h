@@ -16,26 +16,32 @@
 // (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
 #define SPI_MHZ 24
 
-#define SPI_INSTANCE spi1
+#define SPI0_CSN_GP 5
+#define SPI0_SCK_GP 6
+#define SPI0_SDO_GP 7
+#define SPI0_SDI_GP 4
 
-// SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP
-#define SPI_SCK_GP 14
-#define SPI_SDO_GP 11
-#define SPI_SDI_GP 12
-
-// The CS output is controlled via software to avoid de-asserting CS after each byte
-// is transmitted, which would asynchronously reset the FPGA's SPI state machine.
-#define SPI_CS_GP 13
+#define SPI1_CSN_GP 13
+#define SPI1_SCK_GP 14
+#define SPI1_SDO_GP 11
+#define SPI1_SDI_GP 12
 
 // When the MCU asserts CS (signalling the beginning of a new command), the FPGA asserts
 // STALL until the full command has been received and processed.
 #define SPI_STALL_GP 10
 
+// SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP
+#define SPI_INSTANCE spi0
+#define SPI_CSN_GP SPI0_CSN_GP
+#define SPI_SCK_GP SPI0_SCK_GP
+#define SPI_SDO_GP SPI0_SDO_GP
+#define SPI_SDI_GP SPI0_SDI_GP
+
 // SD card reader shares SPI1 bus
-#define SD_SPI_INSTANCE SPI_INSTANCE
-#define SD_CLK_GP SPI_SCK_GP
-#define SD_CMD_GP SPI_SDO_GP
-#define SD_DAT_GP SPI_SDI_GP
+#define SD_SPI_INSTANCE spi1
+#define SD_CLK_GP SPI1_SCK_GP
+#define SD_CMD_GP SPI1_SDO_GP
+#define SD_DAT_GP SPI1_SDI_GP
 #define SD_CSN_GP 9
 #define SD_DETECT 8
 

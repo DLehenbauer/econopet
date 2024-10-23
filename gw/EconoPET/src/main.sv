@@ -63,12 +63,18 @@ module main (
     output logic h_sync_o,
     output logic video_o,
 
-    // SPI1 bus
-    input  logic spi1_cs_ni,  // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,  // (SCK) Serial Clock
-    input  logic spi1_sd_i,   // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,   // (SDO) Serial Data Out (FPGA -> MCU)
-    output logic spi_stall_o
+    // SPI buses
+    input  logic spi0_cs_ni,    // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,    // (SCK) Serial Clock
+    input  logic spi0_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    
+    input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,    // (SCK) Serial Clock
+    input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+
+    output logic spi_stall_o    // Flow control for SPI (0 = Ready, 1 = Busy)
 );
     logic [WB_ADDR_WIDTH-1:0] wb_addr;
     logic [   DATA_WIDTH-1:0] wb_din;
@@ -103,10 +109,10 @@ module main (
         .wb_stall_i(spi1_stall),
         .wb_ack_i(spi1_ack),
 
-        .spi_cs_ni(spi1_cs_ni),     // SPI CS_N
-        .spi_sck_i(spi1_sck_i),     // SPI SCK
-        .spi_sd_i (spi1_sd_i),      // SPI MCU TX  -> FPGA RX
-        .spi_sd_o (spi1_sd_o),      // SPI FPGA TX -> MCU RX
+        .spi_cs_ni(spi0_cs_ni),     // SPI CS_N
+        .spi_sck_i(spi0_sck_i),     // SPI SCK
+        .spi_sd_i (spi0_sd_i),      // SPI MCU TX  -> FPGA RX
+        .spi_sd_o (spi0_sd_o),      // SPI FPGA TX -> MCU RX
         .spi_stall_o(spi_stall_o)   // Backpressure to MCU
     );
 

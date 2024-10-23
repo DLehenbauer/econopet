@@ -30,12 +30,24 @@
 
 void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
-    gpio_put(SPI_CS_GP, 0);
+
+    // The PrimeCell SSP deasserts CS after each byte is transmitted, which conflicts with the
+    // FPGA SPI state machine, which relies on CS for framing the command.
+    //
+    // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
+    // the other SPI signals.)
+    gpio_put(SPI_CSN_GP, 0);
 }
 
 void cmd_end() {
     while (gpio_get(SPI_STALL_GP));
-    gpio_put(SPI_CS_GP, 1);
+
+    // The PrimeCell SSP deasserts CS after each byte is transmitted, which conflicts with the
+    // FPGA SPI state machine, which relies on CS for framing the command.
+    //
+    // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
+    // the other SPI signals.)
+    gpio_put(SPI_CSN_GP, 1);
 }
 
 void spi_read_seek(uint32_t addr) {

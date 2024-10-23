@@ -71,12 +71,18 @@ module top #(
     output logic pia2_cs_n_o,   // (CS2B)
     output logic via_cs_n_o,    // (CS2B)
 
-    // SPI1 bus
+    // SPI buses
+    input  logic spi0_cs_ni,    // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,    // (SCK) Serial Clock
+    input  logic spi0_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    
     input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
     input  logic spi1_sck_i,    // (SCK) Serial Clock
     input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
-    output logic spi_stall_o,   // Flow control for SPI1 (0 = Ready, 1 = Busy)
+
+    output logic spi_stall_o,   // Flow control for SPI (0 = Ready, 1 = Busy)
 
     // Config
     input logic config_crt_i,   // (0 = 12", 1 = 9")
@@ -229,6 +235,11 @@ module top #(
         .v_sync_o(v_sync_o),
         .video_o(video_o),
 
+        // SPI
+        .spi0_cs_ni(spi0_cs_ni),
+        .spi0_sck_i(spi0_sck_i),
+        .spi0_sd_i(spi0_sd_i),
+        .spi0_sd_o(spi0_sd_o),
         .spi1_cs_ni(spi1_cs_ni),
         .spi1_sck_i(spi1_sck_i),
         .spi1_sd_i(spi1_sd_i),

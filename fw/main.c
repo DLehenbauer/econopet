@@ -119,9 +119,10 @@ int main() {
     gpio_set_dir(SD_CSN_GP, GPIO_OUT);
     gpio_put(SD_CSN_GP, 1);
     
-    gpio_init(SPI_CS_GP);
-    gpio_set_dir(SPI_CS_GP, GPIO_OUT);
-    gpio_put(SPI_CS_GP, 1);
+    // Deassert SPI CS
+    gpio_init(SPI_CSN_GP);
+    gpio_set_dir(SPI_CSN_GP, GPIO_OUT);
+    gpio_put(SPI_CSN_GP, 1);
 
     gpio_init(SPI_STALL_GP);
     gpio_set_dir(SPI_STALL_GP, GPIO_IN);

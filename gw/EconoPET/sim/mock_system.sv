@@ -100,10 +100,10 @@ module mock_system (
         .pia2_cs_n_o(pia2_cs_n),
         .via_cs_n_o(via_cs_n),
 
-        .spi1_cs_ni (spi_cs_n),
-        .spi1_sck_i (spi_sck),
-        .spi1_sd_i  (spi_pico),
-        .spi1_sd_o  (spi_poci),
+        .spi0_cs_ni (spi_cs_n),
+        .spi0_sck_i (spi_sck),
+        .spi0_sd_i  (spi_pico),
+        .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
         .graphic_i(1'b0)
