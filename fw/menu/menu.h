@@ -14,4 +14,8 @@
 
 #pragma once
 
-#include "pch.h"
+#include "../pch.h"
+
+void menu_init_start();
+void menu_init_end();
+bool menu_is_pressed();

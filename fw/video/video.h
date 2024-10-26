@@ -16,7 +16,15 @@
 
 #include "../pch.h"
 
+typedef enum {
+    VIDEO_MODE_40_COLUMNS,
+    VIDEO_MODE_80_COLUMNS
+} VideoMode;
+
 #define VIDEO_CHAR_BUFFER_BYTE_SIZE 2000
+
+extern VideoMode video_mode;
 extern uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 
 void video_init();
+static inline bool __not_in_flash_func(video_is_80_col)();

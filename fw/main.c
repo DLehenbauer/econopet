@@ -15,6 +15,7 @@
 #include "pch.h"
 #include "driver.h"
 #include "hw.h"
+#include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
 #include "term.h"
@@ -22,7 +23,6 @@
 #include "usb/usb.h"
 #include "video/video.h"
 
-static bool is80Columns = false;
 static bool isBusinessKeyboard = false;
 
 void measure_freqs(uint fpga_div) {
@@ -99,7 +99,7 @@ void reset() {
     // * Initialize the ROM region of our SRAM
 
     // test_ram();
-    pet_init_roms(is80Columns, isBusinessKeyboard);
+    pet_init_roms(video_is_80_col(), isBusinessKeyboard);
 
     // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
     set_cpu(/* ready: */ true,  /* reset: */ false);
@@ -111,6 +111,9 @@ int main() {
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
+
+    // Begin charging the debouncing capacitor for the menu button.
+    menu_init_start();
 
     fpga_init();
 
@@ -138,11 +141,6 @@ int main() {
     // sd_init();
     // sd_read_file("filename.txt");
 
-    // Initialize Menu button
-    gpio_init(MENU_BTN_GP);
-    gpio_set_dir(MENU_BTN_GP, GPIO_IN);
-    gpio_pull_up(MENU_BTN_GP); // Use pull-up resistor as the button is active low
-
     video_init();
 
     // Initialize TinyUSB
@@ -150,9 +148,11 @@ int main() {
 
     reset();
 
+    menu_init_end();
+
     while (1) {
         // Run PET loop until menu button is pressed.
-        while (gpio_get(MENU_BTN_GP)) {
+        do {
             spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
 
             tuh_task();
@@ -160,18 +160,30 @@ int main() {
             hid_app_task();
 
             sync_keyboard();
-        }
+        } while (!menu_is_pressed());
+
+        printf("Menu button pressed\n");
 
         // Suspend CPU while handling menu button press.
         set_cpu(/* ready: */ 0, /* reset: */ 0);
         
         // For now, the Menu button toggles between 40/80 columns.
-        is80Columns = !is80Columns;
-        pet_init_roms(is80Columns, isBusinessKeyboard);
-        set_video(is80Columns);
+        switch (video_mode) {
+            case VIDEO_MODE_40_COLUMNS:
+                video_mode = VIDEO_MODE_80_COLUMNS;
+                break;
+            case VIDEO_MODE_80_COLUMNS:
+                video_mode = VIDEO_MODE_40_COLUMNS;
+                break;
+        }
+
+        // Reinitialize ROMs to reflect new video mode.
+        pet_init_roms(video_is_80_col(), isBusinessKeyboard);
         
-        // Wait until button is released to resume CPU.  Currently, we rely on the time required for
-        // the above SPI operations to complete to debounce the button press.
+        // Tell FPGA to switch native PET video to 40/80 column mode.
+        set_video(video_is_80_col());
+        
+        // Wait until button is released to resume CPU.
         while (!gpio_get(MENU_BTN_GP));
 
         reset();

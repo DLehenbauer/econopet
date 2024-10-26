@@ -14,3 +14,21 @@
 
 #include "driver.h"
 #include "../hw.h"
+
+bool menu_is_pressed() {
+    return !gpio_get(MENU_BTN_GP);
+}
+
+void menu_init_start() {
+    gpio_init(MENU_BTN_GP);
+
+    // To accelerate charging the debouncing capacitor, we briefly drive the pin as an output
+    gpio_set_dir(MENU_BTN_GP, GPIO_OUT);
+    gpio_put(MENU_BTN_GP, 1);
+}
+
+void menu_init_end() {
+    // Enable pull-up resistor as the button is active low
+    gpio_pull_up(MENU_BTN_GP);
+    gpio_set_dir(MENU_BTN_GP, GPIO_IN);
+}
