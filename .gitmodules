@@ -10,3 +10,6 @@
 [submodule "gw/EconoPET/external/65xx"]
 	path = gw/EconoPET/external/65xx
 	url = https://github.com/kdyke/65xx.git
+[submodule "fw/external/pico-vfs"]
+	path = fw/external/pico-vfs
+	url = https://github.com/DLehenbauer/pico-vfs.git
