@@ -34,7 +34,8 @@ module register_file(
     output logic                     cpu_reset_o,
 
     // Video register
-    output logic                     video_col_80_mode_o
+    output logic                     video_col_80_mode_o,
+    output logic [11:10]             video_ram_mask_o
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
@@ -48,6 +49,8 @@ module register_file(
 
         // Video state at power on: 40 column mode
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT] = 1'b0;
+
+        video_ram_mask_o[11:10] = 2'b00;
     end
 
     logic wb_select;

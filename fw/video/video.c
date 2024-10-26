@@ -22,7 +22,7 @@
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
-VideoMode video_mode = VIDEO_MODE_40_COLUMNS;
+bool video_is_80_col = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // CRTC registers
@@ -47,26 +47,21 @@ static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
     return x | (x << 1);
 }
 
-static inline bool __not_in_flash_func(video_is_80_col)() {
-	return video_mode == VIDEO_MODE_80_COLUMNS;
-}
-
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
 
 static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, uint16_t y) {
 	static uint8_t chars_displayed_x = r1_h_displayed;
 
-	bool is_80_col = video_is_80_col();
     y -= video_start_y;
 
     if (y >= video_height) {
         memset(scanline, 0, sizeof(scanline));
 
 		chars_displayed_x = r1_h_displayed;
-		if (is_80_col) {
+		if (video_is_80_col) {
 			chars_displayed_x <<= 1;
 		}
-	} else if (is_80_col) {
+	} else if (video_is_80_col) {
 		const uint16_t cy = y / char_pixel_height * chars_displayed_x;
 		
 		for (uint16_t cx = 0; cx < chars_displayed_x;) {
@@ -107,13 +102,13 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 	queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
 }
 
-void __not_in_flash_func(core1_scanline_callback)() {
+static void __not_in_flash_func(core1_scanline_callback)() {
 	static uint16_t y = 1;
 	prepare_scanline(video_char_buffer, y);
 	y = (y + 1) % FRAME_HEIGHT;
 }
 
-void core1_main() {
+static void core1_main() {
 	dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
 	sem_acquire_blocking(&dvi_start_sem);
 	dvi_start(&dvi0);

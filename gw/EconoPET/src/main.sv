@@ -186,6 +186,7 @@ module main (
     logic reg_wb_stall;
     logic reg_wb_ack;
     logic video_col_80_mode;
+    logic [11:10] video_ram_mask;
 
     register_file register_file (
         .wb_clock_i(sys_clock_i),
@@ -200,7 +201,8 @@ module main (
 
         .cpu_ready_o(cpu_ready_o),
         .cpu_reset_o(cpu_reset_o),
-        .video_col_80_mode_o(video_col_80_mode)
+        .video_col_80_mode_o(video_col_80_mode),
+        .video_ram_mask_o(video_ram_mask)
     );
 
     //
@@ -213,6 +215,7 @@ module main (
     logic via_en;
     logic io_en;
     logic crtc_en;
+    logic is_vram;
 
     address_decoding address_decoding (
         .cpu_be_i(cpu_be_o),
@@ -224,12 +227,12 @@ module main (
         .via_en_o(via_en),
         .io_en_o(io_en),
         .crtc_en_o(crtc_en),
+        .is_vram_o(is_vram),
 
         // Not yet used
         .sid_en_o(),
         .magic_en_o(),
-        .is_mirrored_o(),
-        .is_readonly_o()
+        .is_rom_o()
     );
 
     //
@@ -389,8 +392,17 @@ module main (
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];
 
-    assign ram_addr_a10_o   = cpu_be_o ? cpu_addr_i[10] : cpu_addr_o[10];
-    assign ram_addr_a11_o   = cpu_be_o ? cpu_addr_i[11] : cpu_addr_o[11];
+    wire ram_addr_a10_mask = !is_vram | video_ram_mask[10] | video_col_80_mode;
+    wire ram_addr_a11_mask = !is_vram | video_ram_mask[11];
+
+    assign ram_addr_a10_o = cpu_be_o
+        ? cpu_addr_i[10] & ram_addr_a10_mask
+        : cpu_addr_o[10];
+
+    assign ram_addr_a11_o   = cpu_be_o
+        ? cpu_addr_i[11] & ram_addr_a11_mask
+        : cpu_addr_o[11];
+
     assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
     assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : ram_ctl_addr[16];
 

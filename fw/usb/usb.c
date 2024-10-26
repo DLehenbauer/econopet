@@ -15,6 +15,11 @@
 #include "usb.h"
 
 void usb_init() {
+    // Something in 'board_init()' interrupts the UART, losing characters pending in the FIFO.
+    // Wait for the FIFO to empty before continuing.
+    fflush(stdout);
+    uart_default_tx_wait_blocking();
+
     board_init();
 
     // init host stack on configured roothub port

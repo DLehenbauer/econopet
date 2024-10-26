@@ -28,8 +28,8 @@ module address_decoding(
     output logic via_en_o,
     output logic crtc_en_o,
     output logic io_en_o,
-    output logic is_mirrored_o,
-    output logic is_readonly_o
+    output logic is_vram_o,
+    output logic is_rom_o
 );
     localparam RAM_EN_BIT       = 0,
                SID_EN_BIT       = 1,
@@ -39,8 +39,8 @@ module address_decoding(
                VIA_EN_BIT       = 5,
                CRTC_EN_BIT      = 6,
                IO_EN_BIT        = 7,
-               RAM_READONLY_BIT = 8,
-               RAM_MIRRORED_BIT = 9;
+               IS_ROM_BIT       = 8,
+               IS_VRAM_BIT      = 9;
 
     localparam NUM_BITS         = 10;
 
@@ -52,15 +52,15 @@ module address_decoding(
                VIA_EN_MASK       = NUM_BITS'(1'b1) << VIA_EN_BIT,
                CRTC_EN_MASK      = NUM_BITS'(1'b1) << CRTC_EN_BIT,
                IO_EN_MASK        = NUM_BITS'(1'b1) << IO_EN_BIT,
-               RAM_READONLY_MASK = NUM_BITS'(1'b1) << RAM_READONLY_BIT,
-               RAM_MIRRORED_MASK = NUM_BITS'(1'b1) << RAM_MIRRORED_BIT;
+               IS_ROM_MASK       = NUM_BITS'(1'b1) << IS_ROM_BIT,
+               IS_VRAM_MASK      = NUM_BITS'(1'b1) << IS_VRAM_BIT;
 
     localparam NONE  = NUM_BITS'('0),
                RAM   = RAM_EN_MASK,
-               VRAM  = RAM_EN_MASK  | RAM_MIRRORED_MASK,
+               VRAM  = RAM_EN_MASK  | IS_VRAM_MASK,
                SID   = SID_EN_MASK,
                MAGIC = MAGIC_EN_MASK,
-               ROM   = RAM_EN_MASK  | RAM_READONLY_MASK,
+               ROM   = RAM_EN_MASK  | IS_ROM_MASK,
                PIA1  = PIA1_EN_MASK | IO_EN_MASK,
                PIA2  = PIA2_EN_MASK | IO_EN_MASK,
                VIA   = VIA_EN_MASK  | IO_EN_MASK,
@@ -88,8 +88,8 @@ module address_decoding(
     end
 
     assign ram_en_o       = select[RAM_EN_BIT];
-    assign is_readonly_o  = select[RAM_READONLY_BIT];
-    assign is_mirrored_o  = select[RAM_MIRRORED_BIT];
+    assign is_rom_o       = select[IS_ROM_BIT];
+    assign is_vram_o      = select[IS_VRAM_BIT];
 
     assign sid_en_o       = select[SID_EN_BIT];
     assign magic_en_o     = select[MAGIC_EN_BIT];

@@ -24,6 +24,7 @@
 #include "video/video.h"
 
 static bool isBusinessKeyboard = false;
+static bool is50Hz = true;
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -99,7 +100,7 @@ void reset() {
     // * Initialize the ROM region of our SRAM
 
     // test_ram();
-    pet_init_roms(video_is_80_col(), isBusinessKeyboard);
+    pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
 
     // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
     set_cpu(/* ready: */ true,  /* reset: */ false);
@@ -168,20 +169,13 @@ int main() {
         set_cpu(/* ready: */ 0, /* reset: */ 0);
         
         // For now, the Menu button toggles between 40/80 columns.
-        switch (video_mode) {
-            case VIDEO_MODE_40_COLUMNS:
-                video_mode = VIDEO_MODE_80_COLUMNS;
-                break;
-            case VIDEO_MODE_80_COLUMNS:
-                video_mode = VIDEO_MODE_40_COLUMNS;
-                break;
-        }
+        video_is_80_col = !video_is_80_col;
 
         // Reinitialize ROMs to reflect new video mode.
-        pet_init_roms(video_is_80_col(), isBusinessKeyboard);
+        pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
         
         // Tell FPGA to switch native PET video to 40/80 column mode.
-        set_video(video_is_80_col());
+        set_video(video_is_80_col);
         
         // Wait until button is released to resume CPU.
         while (!gpio_get(MENU_BTN_GP));
