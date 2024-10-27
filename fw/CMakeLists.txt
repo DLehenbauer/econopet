@@ -5,7 +5,7 @@ set(FAMILY rp2040)
 set(BOARD pico_sdk)
 
 add_subdirectory("external/PicoDVI/software/libdvi")
-add_subdirectory("external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI")
+add_subdirectory("external/pico-vfs")
 
 add_executable(${PROJECT_NAME}
     driver.c
@@ -54,7 +54,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     pico_multicore
     pico_stdlib
     pico_util
-    FatFs_SPI
     tinyusb_host
     tinyusb_board
 )
@@ -66,8 +65,9 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_CORE1_STACK_SIZE=0x200)
 # Include external libraries
 include_directories(
     "external/PicoDVI/software/assets"
-    "external/PicoDVI/software/include"
-    "external/no-OS-FatFS-SD-SPI-RPi-Pico/FatFS_SPI/include")
+    "external/PicoDVI/software/include")
+
+pico_enable_filesystem(${PROJECT_NAME})
 
 # create map/bin/hex/uf2 file etc.
 pico_add_extra_outputs(${PROJECT_NAME})

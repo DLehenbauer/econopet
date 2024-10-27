@@ -17,4 +17,3 @@
 #include "../pch.h"
 
 void sd_init();
-void sd_read_file(char* filename);

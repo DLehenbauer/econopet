@@ -31,6 +31,7 @@
 #include "hardware/uart.h"
 #include "hardware/vreg.h"
 #include "pico/binary_info.h"
+#include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/sem.h"
 #include "pico/stdlib.h"
