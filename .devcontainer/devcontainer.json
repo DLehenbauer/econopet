@@ -13,6 +13,7 @@
             "extensions": [
 				"DavidAnson.vscode-markdownlint",
 				"marus25.cortex-debug",
+				"mcu-debug.peripheral-viewer",  // Required by 'marus25.cortex-debug'
 				"ms-azuretools.vscode-docker",
 				"ms-vscode.cpptools-extension-pack",
 				"mshr-h.veriloghdl",
