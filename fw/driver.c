@@ -36,7 +36,7 @@ void cmd_start() {
     //
     // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
     // the other SPI signals.)
-    gpio_put(SPI_CSN_GP, 0);
+    gpio_put(FPGA_SPI_CSN_GP, 0);
 }
 
 void cmd_end() {
@@ -47,7 +47,7 @@ void cmd_end() {
     //
     // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
     // the other SPI signals.)
-    gpio_put(SPI_CSN_GP, 1);
+    gpio_put(FPGA_SPI_CSN_GP, 1);
 }
 
 void spi_read_seek(uint32_t addr) {
@@ -57,7 +57,7 @@ void spi_read_seek(uint32_t addr) {
     const uint8_t tx[] = { cmd, addr_hi, addr_lo };
 
     cmd_start();
-    spi_write_blocking(SPI_INSTANCE, tx, sizeof(tx));
+    spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));
     cmd_end();
 }
 
@@ -71,7 +71,7 @@ uint8_t spi_read_next() {
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
-    spi_write_read_blocking(SPI_INSTANCE, tx, rx, sizeof(tx));
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
     cmd_end();
     
     return rx[0];
@@ -92,7 +92,7 @@ void spi_write_at(uint32_t addr, uint8_t data) {
     const uint8_t tx[] = { cmd, addr_hi, addr_lo, data };
 
     cmd_start();
-    spi_write_blocking(SPI_INSTANCE, tx, sizeof(tx));
+    spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));
     cmd_end();
 }
 
@@ -100,7 +100,7 @@ void spi_write_next(uint8_t data) {
     const uint8_t tx [] = { SPI_CMD_WRITE_NEXT, data };
 
     cmd_start();
-    spi_write_blocking(SPI_INSTANCE, tx, sizeof(tx));
+    spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));
     cmd_end();
 }
 

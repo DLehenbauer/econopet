@@ -124,18 +124,18 @@ int main() {
     gpio_put(SD_CSN_GP, 1);
     
     // Deassert SPI CS
-    gpio_init(SPI_CSN_GP);
-    gpio_set_dir(SPI_CSN_GP, GPIO_OUT);
-    gpio_put(SPI_CSN_GP, 1);
+    gpio_init(FPGA_SPI_CSN_GP);
+    gpio_set_dir(FPGA_SPI_CSN_GP, GPIO_OUT);
+    gpio_put(FPGA_SPI_CSN_GP, 1);
 
     gpio_init(SPI_STALL_GP);
     gpio_set_dir(SPI_STALL_GP, GPIO_IN);
 
     // Initialize SPI1 at 24 MHz.
-    uint baudrate = spi_init(SPI_INSTANCE, SPI_MHZ * 1000 * 1000);
-    gpio_set_function(SPI_SCK_GP, GPIO_FUNC_SPI);
-    gpio_set_function(SPI_SDO_GP, GPIO_FUNC_SPI);
-    gpio_set_function(SPI_SDI_GP, GPIO_FUNC_SPI);
+    uint baudrate = spi_init(FPGA_SPI_INSTANCE, SPI_MHZ * MHZ);
+    gpio_set_function(FPGA_SPI_SCK_GP, GPIO_FUNC_SPI);
+    gpio_set_function(FPGA_SPI_SDO_GP, GPIO_FUNC_SPI);
+    gpio_set_function(FPGA_SPI_SDI_GP, GPIO_FUNC_SPI);
     printf("    spi1     = %u Bd\n", baudrate);
 
     // Disable SD until we have a chance to debug hard fault in 'ff_memfree()'.
