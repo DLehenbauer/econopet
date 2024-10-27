@@ -35,7 +35,7 @@ uint8_t key_matrix[KEY_ROW_COUNT] = {
 //
 // (See https://usb.org/sites/default/files/hut1_3_0.pdf chapter 10)
 
-const static uint8_t s_hidToKeyMatrix[][2] = {
+static const uint8_t s_hidToKeyMatrix[][2] = {
     /* 0x00: NONE                           */ M_NONE,
     /* 0x01: ERROR_ROLL_OVER                */ M_NONE,
     /* 0x02: POST_FAIL                      */ M_NONE,

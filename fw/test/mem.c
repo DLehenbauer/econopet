@@ -87,7 +87,7 @@ uint8_t check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit, uint8_t expec
 
 uint8_t toggle_bit(uint32_t addr, uint8_t bit, uint8_t expected_bit) {
     assert(addr_min <= addr && addr <= addr_max);
-    assert(0 <= bit && bit <= 7);
+    assert(bit <= 7);
 
     uint8_t byte = check_bit(addr, spi_read_at(addr), bit, expected_bit);
     byte = byte ^ (1 << bit);

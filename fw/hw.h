@@ -12,6 +12,8 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#pragma once
+
 // SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO for SPI.
 // (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
 #define SPI_MHZ 24
@@ -31,11 +33,11 @@
 #define SPI_STALL_GP 10
 
 // SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP
-#define SPI_INSTANCE spi0
-#define SPI_CSN_GP SPI0_CSN_GP
-#define SPI_SCK_GP SPI0_SCK_GP
-#define SPI_SDO_GP SPI0_SDO_GP
-#define SPI_SDI_GP SPI0_SDI_GP
+#define FPGA_SPI_INSTANCE spi0
+#define FPGA_SPI_CSN_GP SPI0_CSN_GP
+#define FPGA_SPI_SCK_GP SPI0_SCK_GP
+#define FPGA_SPI_SDO_GP SPI0_SDO_GP
+#define FPGA_SPI_SDI_GP SPI0_SDI_GP
 
 // SD card reader shares SPI1 bus
 #define SD_SPI_INSTANCE spi1

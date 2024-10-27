@@ -35,8 +35,6 @@
 
 #define MAX_REPORT  4
 
-static uint8_t const keycode2ascii[128][2] =  { HID_KEYCODE_TO_ASCII };
-
 // Each HID instance can has multiple reports
 static struct
 {
@@ -44,7 +42,7 @@ static struct
   tuh_hid_report_info_t report_info[MAX_REPORT];
 }hid_info[CFG_TUH_HID];
 
-static void process_kbd_report(hid_keyboard_report_t const *report);
+extern void process_kbd_report(hid_keyboard_report_t const *report);
 static void process_mouse_report(hid_mouse_report_t const * report);
 static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len);
 
@@ -162,7 +160,9 @@ static void process_kbd_report(hid_keyboard_report_t const *report)
         putchar(ch);
         if ( ch == '\r' ) putchar('\n'); // added new line for enter key
 
+        #ifndef __ICCARM__ // TODO IAR doesn't support stream control ?
         fflush(stdout); // flush right away, else nanolib will wait for newline
+        #endif
       }
     }
     // TODO example skips key released
@@ -267,7 +267,7 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
 
   if (!rpt_info)
   {
-    printf("Couldn't find the report info for this report !\r\n");
+    printf("Couldn't find report info !\r\n");
     return;
   }
 
