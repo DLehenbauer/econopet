@@ -143,12 +143,8 @@ int main() {
     // sd_read_file("filename.txt");
 
     video_init();
-
-    // Initialize TinyUSB
     usb_init();
-
     reset();
-
     menu_init_end();
 
     while (1) {

@@ -19,6 +19,8 @@
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
 #define DVI_TIMING dvi_timing_720x480p_60hz
 
+#define CHAR_PIXEL_WIDTH 8
+
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
@@ -26,14 +28,9 @@ bool video_is_80_col = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // CRTC registers
-const uint8_t r1_h_displayed = 40;
-
-const uint8_t char_pixel_width  = 8;
-//const uint8_t chars_start_x     = (FRAME_WIDTH - (char_pixel_width * chars_displayed_x)) >> 1;
-const uint8_t char_pixel_height = 8;
-const uint8_t chars_displayed_y = 25;
-const uint8_t video_start_y     = (FRAME_HEIGHT - char_pixel_height * chars_displayed_y) >> 1;
-const uint8_t video_height      = chars_displayed_y * char_pixel_height;
+const uint8_t r1_h_displayed   = 40;	// Horizontal displayed characters
+const uint8_t r6_v_displayed   = 25;	// Vertical displayed characters
+const uint8_t r9_max_scan_line = 8;		// Vertical scan lines per character
 
 static inline uint16_t __not_in_flash_func(flip_x)(uint8_t x) {
 	// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
@@ -51,48 +48,64 @@ static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
 
 static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, uint16_t y) {
 	static uint8_t chars_displayed_x = r1_h_displayed;
+	static uint8_t cx_start = 0;
+	static uint8_t y_start = 0;
+	static uint8_t y_visible = 0;
 
-    y -= video_start_y;
+    y -= y_start;
 
-    if (y >= video_height) {
+    if (y >= y_visible) {
+		// Blank scan line.  Because scan lines are recycled, this also clears the unused overscan
+		// area on the left/right of the visible region.
         memset(scanline, 0, sizeof(scanline));
 
-		chars_displayed_x = r1_h_displayed;
-		if (video_is_80_col) {
-			chars_displayed_x <<= 1;
-		}
-	} else if (video_is_80_col) {
-		const uint16_t cy = y / char_pixel_height * chars_displayed_x;
-		
-		for (uint16_t cx = 0; cx < chars_displayed_x;) {
-			uint c = chars[cy + cx];
-			
-			uint8_t p8 = rom_chars_8800[(c & 0x7f) * char_pixel_height + (y % char_pixel_height)];
-			if (c & 0x80) {
-				p8 ^= 0xff;
-			}
-			
-			p8 = flip_x(p8);
+		// Use blank scan lines to reload/recompute CRTC-dependent values.
 
-			scanline[cx++] = p8;
+		y_visible = r6_v_displayed * r9_max_scan_line;	// Total visible scan lines
+		y_start   = (FRAME_HEIGHT - y_visible) >> 1;	// Top margin in scan lines
+
+		chars_displayed_x = (r1_h_displayed << 1);		// Horizontal displayed characters (2x for 80-column mode)
+		cx_start = (FRAME_WIDTH - (CHAR_PIXEL_WIDTH * chars_displayed_x)) >> 4;	// Left margin in characters
+
+		// If in 40 column mode, divide the chars_displayed_x by 2.  We do not, however adjust, cx_start
+		if (!video_is_80_col) {
+			chars_displayed_x >>= 1;
 		}
 	} else {
-		const uint16_t cy = y / char_pixel_height * chars_displayed_x;
-		
-		for (uint16_t ci = 0, cx = 0; ci < chars_displayed_x; ci++) {
-			uint c = chars[cy + ci];
-			
-			uint8_t p8 = rom_chars_8800[(c & 0x7f) * char_pixel_height + (y % char_pixel_height)];
+		// 'cy' is the memory offset of first character in row
+		const uint16_t cy = y / r9_max_scan_line * chars_displayed_x;
 
-			if (c & 0x80) {
-				p8 ^= 0xff;
+		// 'cx' is the character position in the scanline to write to.
+		uint16_t cx = cx_start;
+
+		if (video_is_80_col) {
+			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
+				uint c = chars[cy + ci];
+				uint8_t p8 = rom_chars_8800[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
+				
+				if (c & 0x80) {
+					p8 ^= 0xff;
+				}
+				
+				p8 = flip_x(p8);
+
+				scanline[cx++] = p8;
 			}
+		} else {
+			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
+				uint c = chars[cy + ci];
+				uint8_t p8 = rom_chars_8800[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
 
-			p8 = flip_x(p8);
-			uint16_t p16 = stretch_x(p8);
+				if (c & 0x80) {
+					p8 ^= 0xff;
+				}
 
-			scanline[cx++] = p16;
-			scanline[cx++] = p16 >> 8;
+				p8 = flip_x(p8);
+				uint16_t p16 = stretch_x(p8);
+
+				scanline[cx++] = p16;
+				scanline[cx++] = p16 >> 8;
+			}
 		}
 	}
 
