@@ -38,9 +38,11 @@ typedef struct __attribute__((packed)) {
     unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
 } KeyInfo;
 
-static const KeyInfo s_keymap[] = {
+static const uint8_t keymap_raw[] = {
     #include "../keymaps/grus_pos.h"
 };
+
+static const KeyInfo* s_keymap = (KeyInfo*)((void*)keymap_raw);
 
 static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keycode) {
     for (uint8_t i = 0; i < 6; i++) {
