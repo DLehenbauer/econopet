@@ -24,12 +24,10 @@ void sd_init() {
         err = fs_format(fat, sd);
         if (err == -1) {
             printf("fs_format error: %s", strerror(errno));
-            return false;
         }
         err = fs_mount("/", fat, sd);
         if (err == -1) {
             printf("fs_mount error: %s", strerror(errno));
-            return false;
         }
     }
 }
