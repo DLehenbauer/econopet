@@ -138,8 +138,7 @@ int main() {
     gpio_set_function(FPGA_SPI_SDI_GP, GPIO_FUNC_SPI);
     printf("    spi1     = %u Bd\n", baudrate);
 
-    // Disable SD until we have a chance to debug hard fault in 'ff_memfree()'.
-    // sd_init();
+    sd_init();
     // sd_read_file("filename.txt");
 
     video_init();

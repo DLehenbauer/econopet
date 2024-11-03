@@ -16,4 +16,4 @@
 
 #include "../pch.h"
 
-void sd_init();
+bool sd_init();

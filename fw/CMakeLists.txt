@@ -56,6 +56,15 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     pico_util
     tinyusb_host
     tinyusb_board
+
+    # pico-vfs
+    blockdevice_flash
+    blockdevice_heap
+    blockdevice_loopback
+    blockdevice_sd
+    filesystem_fat
+    filesystem_littlefs
+    filesystem_vfs  
 )
 
 # We have a lot in SRAM4 (particularly TMDS LUT) but don't need much stack on
