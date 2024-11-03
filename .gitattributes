@@ -1,3 +1,6 @@
 # Avoid conflicting line endings when this project is simulteously edited by Windows and
 # a dev container via a shared folder.
 * text=auto eol=lf
+
+# Keymap files are binary
+fw/keymaps/*.bin binary
