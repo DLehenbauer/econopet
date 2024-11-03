@@ -21,6 +21,7 @@
 #include "term.h"
 #include "test/mem.h"
 #include "usb/usb.h"
+#include "usb/keyboard.h"
 #include "video/video.h"
 
 static bool isBusinessKeyboard = false;
@@ -154,6 +155,7 @@ int main() {
             tuh_task();
             cdc_app_task();
             hid_app_task();
+            dispatch_key_events();
 
             sync_keyboard();
         } while (!menu_is_pressed());

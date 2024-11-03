@@ -22,4 +22,5 @@
 #define KEY_COL_COUNT 10
 extern uint8_t key_matrix[KEY_COL_COUNT];
 
-void process_kbd_report(hid_keyboard_report_t const *report);
+//void process_kbd_report(hid_keyboard_report_t const *report);
+void dispatch_key_events();
