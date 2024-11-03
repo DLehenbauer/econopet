@@ -28,9 +28,12 @@ uint8_t key_matrix[KEY_COL_COUNT] = {
 };
 
 typedef struct __attribute__((packed)) {
-    unsigned int rowMask: 8;    // 1-bit mask for rows 0-7
-    unsigned int col: 4;        // 4-bit column index for cols 0-9
-    unsigned int reserved: 2;
+    // First byte contains row/col packed as nibbles
+    unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
+    unsigned int col: 4;        // Column : 0-9
+
+    // Second byte contains flags
+    unsigned int reserved: 6;
     unsigned int deshift: 1;    // 0 = Normal, 1 = Implicitly remove shift
     unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
 } KeyInfo;
@@ -51,13 +54,15 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
 
 void key_down(uint8_t keycode) {
     KeyInfo const key = s_keymap[keycode];
-    uint8_t rowMask = key.rowMask;
-    uint8_t col = key.col;
+    uint8_t row = key.row;
+    uint8_t rowMask = 1 << row;
 
-    if (col == 15) {
+    if (!rowMask) {
         printf("USB: Key down %d=(undefined)\n", keycode);
         return;
     }
+
+    uint8_t col = key.col;
 
     if (key_matrix[col] & rowMask) {
         key_matrix[col] &= ~rowMask;
@@ -67,13 +72,15 @@ void key_down(uint8_t keycode) {
 
 void key_up(uint8_t keycode) {
     KeyInfo const key = s_keymap[keycode];
-    uint8_t rowMask = key.rowMask;
-    uint8_t col = key.col;
+    uint8_t row = key.row;
+    uint8_t rowMask = 1 << row;
 
-    if (col == 15) {
+    if (!rowMask) {
         printf("USB: Key up %d=(undefined)\n", keycode);
         return;
     }
+
+    uint8_t col = key.col;
 
     if (key_matrix[col] & ~rowMask) {
         key_matrix[col] |= rowMask;
