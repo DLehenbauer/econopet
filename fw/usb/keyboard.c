@@ -14,21 +14,21 @@
 
 #include "keyboard.h"
 
-uint8_t key_matrix[KEY_ROW_COUNT] = {
-    /* row 0: */ 0xff,
-    /* row 1: */ 0xff,
-    /* row 2: */ 0xff,
-    /* row 3: */ 0xff,
-    /* row 4: */ 0xff,
-    /* row 5: */ 0xff,
-    /* row 6: */ 0xff,
-    /* row 7: */ 0xff,
-    /* row 8: */ 0xff,
-    /* row 9: */ 0xff,
+uint8_t key_matrix[KEY_COL_COUNT] = {
+    /* 0 */ 0xff,
+    /* 1 */ 0xff,
+    /* 2 */ 0xff,
+    /* 3 */ 0xff,
+    /* 4 */ 0xff,
+    /* 5 */ 0xff,
+    /* 6 */ 0xff,
+    /* 7 */ 0xff,
+    /* 8 */ 0xff,
+    /* 9 */ 0xff,
 };
 
 #define M_NONE { 0, 0 }
-#define M(row, col) { row, (1 << col) }
+#define M(row, col) { row, col }
 
 // Map HID codes to corresponding row/col on PET key matrix.
 // TODO: Key layout should be tied to ROM version
@@ -40,61 +40,61 @@ static const uint8_t s_hidToKeyMatrix[][2] = {
     /* 0x01: ERROR_ROLL_OVER                */ M_NONE,
     /* 0x02: POST_FAIL                      */ M_NONE,
     /* 0x03: ERROR_UNDEFINED                */ M_NONE,
-    /* 0x04: A -> 'A'                       */ M(4, 0),
-    /* 0x05: B -> 'B'                       */ M(6, 2),
-    /* 0x06: C -> 'C'                       */ M(6, 1),
-    /* 0x07: D -> 'D'                       */ M(4, 1),
-    /* 0x08: E -> 'E'                       */ M(2, 1),
-    /* 0x09: F -> 'F'                       */ M(5, 1),
-    /* 0x0A: G -> 'G'                       */ M(4, 2),
-    /* 0x0B: H -> 'H'                       */ M(5, 2),
+    /* 0x04: A -> 'A'                       */ M(0, 4),
+    /* 0x05: B -> 'B'                       */ M(2, 6),
+    /* 0x06: C -> 'C'                       */ M(1, 6),
+    /* 0x07: D -> 'D'                       */ M(1, 4),
+    /* 0x08: E -> 'E'                       */ M(1, 2),
+    /* 0x09: F -> 'F'                       */ M(1, 5),
+    /* 0x0A: G -> 'G'                       */ M(2, 4),
+    /* 0x0B: H -> 'H'                       */ M(2, 5),
     /* 0x0C: I -> 'I'                       */ M(3, 3),
-    /* 0x0D: J -> 'J'                       */ M(4, 3),
-    /* 0x0E: K -> 'K'                       */ M(5, 3),
+    /* 0x0D: J -> 'J'                       */ M(3, 4),
+    /* 0x0E: K -> 'K'                       */ M(3, 5),
     /* 0x0F: L -> 'L'                       */ M(4, 4),
-    /* 0x10: M -> 'M'                       */ M(6, 3),
-    /* 0x11: N -> 'N'                       */ M(7, 2),
-    /* 0x12: O -> 'O'                       */ M(2, 4),
-    /* 0x13: P -> 'P'                       */ M(3, 4),
-    /* 0x14: Q -> 'Q'                       */ M(2, 0),
-    /* 0x15: R -> 'R'                       */ M(3, 1),
-    /* 0x16: S -> 'S'                       */ M(5, 0),
+    /* 0x10: M -> 'M'                       */ M(3, 6),
+    /* 0x11: N -> 'N'                       */ M(2, 7),
+    /* 0x12: O -> 'O'                       */ M(4, 2),
+    /* 0x13: P -> 'P'                       */ M(4, 3),
+    /* 0x14: Q -> 'Q'                       */ M(0, 2),
+    /* 0x15: R -> 'R'                       */ M(1, 3),
+    /* 0x16: S -> 'S'                       */ M(0, 5),
     /* 0x17: T -> 'T'                       */ M(2, 2),
-    /* 0x18: U -> 'U'                       */ M(2, 3),
-    /* 0x19: V -> 'V'                       */ M(7, 1),
-    /* 0x1A: W -> 'W'                       */ M(3, 0),
-    /* 0x1B: X -> 'X'                       */ M(7, 0),
-    /* 0x1C: Y -> 'Y'                       */ M(3, 2),
-    /* 0x1D: Z -> 'Z'                       */ M(6, 0),
+    /* 0x18: U -> 'U'                       */ M(3, 2),
+    /* 0x19: V -> 'V'                       */ M(1, 7),
+    /* 0x1A: W -> 'W'                       */ M(0, 3),
+    /* 0x1B: X -> 'X'                       */ M(0, 7),
+    /* 0x1C: Y -> 'Y'                       */ M(2, 3),
+    /* 0x1D: Z -> 'Z'                       */ M(0, 6),
     /* 0x1E: 1 -> '!'                       */ M(0, 0),
-    /* 0x1F: 2 -> '"'                       */ M(1, 0),
-    /* 0x20: 3 -> '#'                       */ M(0, 1),
+    /* 0x1F: 2 -> '"'                       */ M(0, 1),
+    /* 0x20: 3 -> '#'                       */ M(1, 0),
     /* 0x21: 4 -> '$'                       */ M(1, 1),
-    /* 0x22: 5 -> '%'                       */ M(0, 2),
-    /* 0x23: 6 -> '''                       */ M(1, 2),
-    /* 0x24: 7 -> '&'                       */ M(0, 3),
-    /* 0x25: 8 -> '\'                       */ M(1, 3),
-    /* 0x26: 9 -> '('                       */ M(0, 4),
-    /* 0x27: 0 -> ')'                       */ M(1, 4),
+    /* 0x22: 5 -> '%'                       */ M(2, 0),
+    /* 0x23: 6 -> '''                       */ M(2, 1),
+    /* 0x24: 7 -> '&'                       */ M(3, 0),
+    /* 0x25: 8 -> '\'                       */ M(3, 1),
+    /* 0x26: 9 -> '('                       */ M(4, 0),
+    /* 0x27: 0 -> ')'                       */ M(4, 1),
 
-    /* 0x28: ENTER     -> Return            */ M(6, 5),
-    /* 0x29: ESCAPE    -> Run Stop          */ M(9, 4),
-    /* 0x2A: BACKSPACE -> Inst Del          */ M(1, 7),
-    /* 0x2B: TAB       -> RVS               */ M(9, 0),
-    /* 0x2C: SPACE     -> Space             */ M(9, 2),
+    /* 0x28: ENTER     -> Return            */ M(5, 6),
+    /* 0x29: ESCAPE    -> Run Stop          */ M(4, 9),
+    /* 0x2A: BACKSPACE -> Inst Del          */ M(7, 1),
+    /* 0x2B: TAB       -> RVS               */ M(0, 9),
+    /* 0x2C: SPACE     -> Space             */ M(2, 9),
 
-    /* 0x2D: MINUS ('-')         -> '-'     */ M(0, 5),
-    /* 0x2E: EQUAL ('=')         -> '='     */ M(9, 7),
-    /* 0x2F: BRACKET_LEFT ('[')  -> '['     */ M(9, 1),
-    /* 0x30: BRACKET_RIGHT (']') -> ']'     */ M(8, 2),
-    /* 0x31: BACKSLASH ('\')     -> '^'     */ M(2, 5),
-    /* 0x32: EUROPE_1 ('#')      -> '#'     */ M(0, 1),
-    /* 0x33: SEMICOLON (';')     -> ':'     */ M(5, 4),
-    /* 0x34: APOSTROPHE (''')    -> R/S     */ M(9, 4),
-    /* 0x35: GRAVE ('`')         -> '@'     */ M(8, 1),
-    /* 0x36: COMMA (',')         -> ','     */ M(7, 3),
-    /* 0x37: PERIOD ('.')        -> ';'     */ M(6, 4),
-    /* 0x38: SLASH ('/')         -> '?'     */ M(7, 4),
+    /* 0x2D: MINUS ('-')         -> '-'     */ M(5, 0),
+    /* 0x2E: EQUAL ('=')         -> '='     */ M(7, 9),
+    /* 0x2F: BRACKET_LEFT ('[')  -> '['     */ M(1, 9),
+    /* 0x30: BRACKET_RIGHT (']') -> ']'     */ M(2, 8),
+    /* 0x31: BACKSLASH ('\')     -> '^'     */ M(5, 2),
+    /* 0x32: EUROPE_1 ('#')      -> '#'     */ M(1, 0),
+    /* 0x33: SEMICOLON (';')     -> ':'     */ M(4, 5),
+    /* 0x34: APOSTROPHE (''')    -> R/S     */ M(4, 9),
+    /* 0x35: GRAVE ('`')         -> '@'     */ M(1, 8),
+    /* 0x36: COMMA (',')         -> ','     */ M(3, 7),
+    /* 0x37: PERIOD ('.')        -> ';'     */ M(4, 6),
+    /* 0x38: SLASH ('/')         -> '?'     */ M(4, 7),
 
     /* 0x39: CAPS_LOCK                      */ M_NONE,
     /* 0x3A: F1                             */ M_NONE,
@@ -113,32 +113,32 @@ static const uint8_t s_hidToKeyMatrix[][2] = {
     /* 0x47: SCROLL_LOCK                    */ M_NONE,
     /* 0x48: PAUSE                          */ M_NONE,
     /* 0x49: INSERT                         */ M_NONE,
-    /* 0x4A: HOME                           */ M(0, 6),
+    /* 0x4A: HOME                           */ M(6, 0),
     /* 0x4B: PAGE_UP                        */ M_NONE,
     /* 0x4C: DELETE                         */ M_NONE,
-    /* 0x4D: END                            */ M(9, 3),
-    /* 0x4E: PAGE_DOWN                      */ M(8, 4),
-    /* 0x4F: ARROW_RIGHT                    */ M(0, 7),
-    /* 0x50: ARROW_LEFT                     */ M(0, 7),     // Needs shift
-    /* 0x51: ARROW_DOWN                     */ M(1, 6),
-    /* 0x52: ARROW_UP                       */ M(1, 6),     // Needs shift
+    /* 0x4D: END                            */ M(3, 9),
+    /* 0x4E: PAGE_DOWN                      */ M(4, 8),
+    /* 0x4F: ARROW_RIGHT                    */ M(7, 0),
+    /* 0x50: ARROW_LEFT                     */ M(7, 0),     // Needs shift
+    /* 0x51: ARROW_DOWN                     */ M(6, 1),
+    /* 0x52: ARROW_UP                       */ M(6, 1),     // Needs shift
     /* 0x53: NUM_LOCK                       */ M_NONE,
-    /* 0x54: KEYPAD_DIVIDE ('/')            */ M(3, 7),
-    /* 0x55: KEYPAD_MULTIPLY ('*')          */ M(5, 7),
-    /* 0x56: KEYPAD_SUBTRACT ('-')          */ M(8, 7),
+    /* 0x54: KEYPAD_DIVIDE ('/')            */ M(7, 3),
+    /* 0x55: KEYPAD_MULTIPLY ('*')          */ M(7, 5),
+    /* 0x56: KEYPAD_SUBTRACT ('-')          */ M(7, 8),
     /* 0x57: KEYPAD_ADD ('+')               */ M(7, 7),
-    /* 0x58: KEYPAD_ENTER                   */ M(9, 7),
+    /* 0x58: KEYPAD_ENTER                   */ M(7, 9),
     /* 0x59: KEYPAD_1 ('1')                 */ M(6, 6),
-    /* 0x5A: KEYPAD_2 ('2')                 */ M(7, 6),
-    /* 0x5B: KEYPAD_3 ('3')                 */ M(6, 7),
-    /* 0x5C: KEYPAD_4 ('4')                 */ M(4, 6),
-    /* 0x5D: KEYPAD_5 ('5')                 */ M(5, 6),
-    /* 0x5E: KEYPAD_6 ('6')                 */ M(4, 7),
-    /* 0x5F: KEYPAD_7 ('7')                 */ M(2, 6),
-    /* 0x60: KEYPAD_8 ('8')                 */ M(3, 6),
-    /* 0x61: KEYPAD_9 ('9')                 */ M(2, 7),
-    /* 0x62: KEYPAD_0 ('0')                 */ M(8, 6),
-    /* 0x63: KEYPAD_DECIMAL ('.')           */ M(9, 6),
+    /* 0x5A: KEYPAD_2 ('2')                 */ M(6, 7),
+    /* 0x5B: KEYPAD_3 ('3')                 */ M(7, 6),
+    /* 0x5C: KEYPAD_4 ('4')                 */ M(6, 4),
+    /* 0x5D: KEYPAD_5 ('5')                 */ M(6, 5),
+    /* 0x5E: KEYPAD_6 ('6')                 */ M(7, 4),
+    /* 0x5F: KEYPAD_7 ('7')                 */ M(6, 2),
+    /* 0x60: KEYPAD_8 ('8')                 */ M(6, 3),
+    /* 0x61: KEYPAD_9 ('9')                 */ M(7, 2),
+    /* 0x62: KEYPAD_0 ('0')                 */ M(6, 8),
+    /* 0x63: KEYPAD_DECIMAL ('.')           */ M(6, 9),
     /* 0x64: EUROPE_2                       */ M_NONE,
     /* 0x65: APPLICATION                    */ M_NONE,
     /* 0x66: POWER                          */ M_NONE,
@@ -264,11 +264,11 @@ static const uint8_t s_hidToKeyMatrix[][2] = {
     /* 0xDE: RESERVED                       */ M_NONE,
     /* 0xDF: RESERVED                       */ M_NONE,
     /* 0xE0: CONTROL_LEFT                   */ M_NONE,
-    /* 0xE1: SHIFT_LEFT                     */ M(8,0),
+    /* 0xE1: SHIFT_LEFT                     */ M(0, 8),
     /* 0xE2: ALT_LEFT                       */ M_NONE,
     /* 0xE3: GUI_LEFT                       */ M_NONE,
     /* 0xE4: CONTROL_RIGHT                  */ M_NONE,
-    /* 0xE5: SHIFT_RIGHT                    */ M(8,5),
+    /* 0xE5: SHIFT_RIGHT                    */ M(5, 8),
     /* 0xE6: ALT_RIGHT                      */ M_NONE,
     /* 0xE7: GUI_RIGHT                      */ M_NONE,
 };
@@ -287,9 +287,10 @@ void key_down(uint8_t keycode) {
     uint8_t const* row_and_col = s_hidToKeyMatrix[keycode];
     uint8_t row = row_and_col[0];
     uint8_t col = row_and_col[1];
+    uint8_t rowMask = 1 << row;
 
-    if (col != 0 && (key_matrix[row] & col)) {
-        key_matrix[row] &= ~col;
+    if (col != 15 && (key_matrix[col] & rowMask)) {
+        key_matrix[col] &= ~rowMask;
         printf("USB: Key down: %d=(%d,%d)\n", keycode, row, col);
     }
 }
@@ -298,9 +299,10 @@ void key_up(uint8_t keycode) {
     uint8_t const* row_and_col = s_hidToKeyMatrix[keycode];
     uint8_t row = row_and_col[0];
     uint8_t col = row_and_col[1];
+    uint8_t rowMask = 1 << row;
 
-    if (col != 0 && !(key_matrix[row] & col)) {
-        key_matrix[row] |= col;
+    if (col != 15 && !(key_matrix[col] & rowMask)) {
+        key_matrix[col] |= rowMask;
         printf("USB: Key up: %d=(%d,%d)\n", keycode, row, col);
     }
 }

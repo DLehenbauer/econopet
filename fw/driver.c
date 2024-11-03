@@ -130,5 +130,5 @@ void set_video(bool col80) {
 }
 
 void sync_keyboard() {
-    spi_write(ADDR_KBD, key_matrix, KEY_ROW_COUNT);
+    spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
 }
