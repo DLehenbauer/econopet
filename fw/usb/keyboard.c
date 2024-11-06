@@ -75,11 +75,17 @@ static void dequeue_key_event() {
     key_buffer_tail = (key_buffer_tail + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
-static const uint8_t keymap_raw[] = {
+// Graphic US positional keymap
+static const uint8_t __in_flash(".keymap_grus_pos") keymap_grus_pos[] = {
     #include "../keymaps/grus_pos.h"
 };
 
-static const KeyInfo* s_keymap = (KeyInfo*)((void*)keymap_raw);
+// Graphic US symbolic keymap
+static const uint8_t __in_flash(".keymap_grus_sym") keymap_grus_sym[] = {
+    #include "../keymaps/grus_sym.h"
+};
+
+static const KeyInfo* s_keymap = (KeyInfo*)((void*) keymap_grus_sym);
 
 uint8_t key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -105,7 +111,7 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
 }
 
 void key_down(uint8_t keycode) {
-    KeyInfo const key = s_keymap[keycode];
+    KeyInfo key = s_keymap[keycode];
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
 
@@ -123,7 +129,7 @@ void key_down(uint8_t keycode) {
 }
 
 void key_up(uint8_t keycode) {
-    KeyInfo const key = s_keymap[keycode];
+    KeyInfo key = s_keymap[keycode];
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
 
@@ -140,7 +146,8 @@ void key_up(uint8_t keycode) {
     }
 }
 
-KeyInfo get_key_info(KeyEvent keyEvent) {
+uint8_t get_key_modifiers(KeyEvent keyEvent) {
+    uint8_t modifiers = keyEvent.modifiers;
     KeyInfo keyInfo = s_keymap[keyEvent.key];
 
     // If the key is pressed, apply shift/unshift modifiers.  We do not adjust
@@ -148,16 +155,16 @@ KeyInfo get_key_info(KeyEvent keyEvent) {
     // keyboard state before processing more keys.
     if (keyEvent.pressed) {
         if (keyInfo.shift) {
-            keyEvent.modifiers |= HID_KEY_SHIFT_LEFT;
+            modifiers |= HID_KEY_SHIFT_LEFT;
         }
 
         if (keyInfo.unshift) {
-            keyEvent.modifiers &= ~HID_KEY_SHIFT_LEFT;
-            keyEvent.modifiers &= ~HID_KEY_SHIFT_RIGHT;
+            modifiers &= ~HID_KEY_SHIFT_LEFT;
+            modifiers &= ~HID_KEY_SHIFT_RIGHT;
         }
     }
 
-    return keyInfo;
+    return modifiers;
 }
 
 void dispatch_key_events() {
@@ -180,36 +187,35 @@ void dispatch_key_events() {
         return;
     }
 
-    KeyInfo keyInfo = get_key_info(keyEvent);
+    {
+        uint8_t saved_modifiers = get_key_modifiers(keyEvent);
+        uint8_t current_modifiers = saved_modifiers;
 
-    uint8_t current_modifiers = keyEvent.modifiers;
-    if (current_modifiers != previous_modifiers) {
-        for (uint8_t i = 0; i < 8; i++) {
-            uint8_t current_modifier = current_modifiers & 0x01;
-            uint8_t previous_modifier = previous_modifiers & 0x01;
+        if (current_modifiers != previous_modifiers) {
+            for (uint8_t i = 0; i < 8; i++) {
+                uint8_t current_modifier = current_modifiers & 0x01;
+                uint8_t previous_modifier = previous_modifiers & 0x01;
 
-            if (current_modifier) {
-                if (!previous_modifier) {
-                    printf("USB: Modifier down: %s\n", modifiers[i]);
-                    key_down(HID_KEY_CONTROL_LEFT + i);
+                if (current_modifier) {
+                    if (!previous_modifier) {
+                        printf("USB: Modifier down: %s\n", modifiers[i]);
+                        key_down(HID_KEY_CONTROL_LEFT + i);
+                    }
+                } else if (previous_modifier) {
+                    printf("USB: Modifier up: %s\n", modifiers[i]);
+                    key_up(HID_KEY_CONTROL_LEFT + i);
                 }
-            } else if (previous_modifier) {
-                printf("USB: Modifier up: %s\n", modifiers[i]);
-                key_up(HID_KEY_CONTROL_LEFT + i);
+
+                current_modifiers >>= 1;
+                previous_modifiers >>= 1;
             }
 
-            current_modifiers >>= 1;
-            previous_modifiers >>= 1;
+            // Note that 'current_modifiers' has been cleared via >>= 1.
+            previous_modifiers = saved_modifiers;
         }
-
-        // Note that 'current_modifiers' has been cleared via >>= 1.  Therefore, we
-        // use 'keyEvent.modifiers' to set previous_modifiers.
-        previous_modifiers = keyEvent.modifiers;
     }
 
     do {
-        KeyInfo keyInfo = get_key_info(keyEvent);
-
         if (keyEvent.pressed) {
             key_down(keyEvent.key);
         } else {
@@ -217,7 +223,7 @@ void dispatch_key_events() {
         }
 
         dequeue_key_event();
-    } while (peek_key_event(&keyEvent) && keyEvent.modifiers == current_modifiers);
+    } while (peek_key_event(&keyEvent) && get_key_modifiers(keyEvent) == previous_modifiers);
 }
 
 void process_kbd_report(hid_keyboard_report_t const* report) {
