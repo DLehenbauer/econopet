@@ -14,6 +14,9 @@
 
 #pragma once
 
+// VIA CA2 (0 = graphics, 1 = text)
+#define REG_VIDEO_GRAPHICS (1 << 1)
+
 #include "pch.h"
 
 void driver_init();
@@ -29,4 +32,4 @@ void spi_write_next(uint8_t data);
 
 void set_cpu(bool ready, bool reset);
 void set_video(bool col80);
-void sync_keyboard();
+void sync_state();

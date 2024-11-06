@@ -13,7 +13,7 @@
  */
 
 #include "video.h"
-#include "font.h"
+#include "pet.h"
 
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
@@ -24,13 +24,14 @@
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
+bool video_graphics = false;
 bool video_is_80_col = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // CRTC registers
-const uint8_t r1_h_displayed   = 40;	// Horizontal displayed characters
-const uint8_t r6_v_displayed   = 25;	// Vertical displayed characters
-const uint8_t r9_max_scan_line = 8;		// Vertical scan lines per character
+static const uint8_t r1_h_displayed   = 40;	// Horizontal displayed characters
+static const uint8_t r6_v_displayed   = 25;	// Vertical displayed characters
+static const uint8_t r9_max_scan_line = 8;	// Vertical scan lines per character
 
 static inline uint16_t __not_in_flash_func(flip_x)(uint8_t x) {
 	// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
@@ -72,6 +73,11 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 			chars_displayed_x >>= 1;
 		}
 	} else {
+		// Select graphics/text character ROM
+		const uint8_t* const p_char_rom = video_graphics
+			? p_video_font_000
+			: p_video_font_400;
+
 		// 'cy' is the memory offset of first character in row
 		const uint16_t cy = y / r9_max_scan_line * chars_displayed_x;
 
@@ -81,7 +87,7 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 		if (video_is_80_col) {
 			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
 				uint c = chars[cy + ci];
-				uint8_t p8 = rom_chars_8800[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
+				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
 				
 				if (c & 0x80) {
 					p8 ^= 0xff;
@@ -94,7 +100,7 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 		} else {
 			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
 				uint c = chars[cy + ci];
-				uint8_t p8 = rom_chars_8800[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
+				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
 
 				if (c & 0x80) {
 					p8 ^= 0xff;

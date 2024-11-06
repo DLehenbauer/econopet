@@ -157,7 +157,8 @@ int main() {
             hid_app_task();
             dispatch_key_events();
 
-            sync_keyboard();
+            // Write USB keyboard state and read video graphics.
+            sync_state();
         } while (!menu_is_pressed());
 
         printf("Menu button pressed\n");

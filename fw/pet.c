@@ -63,8 +63,8 @@ static const uint8_t __in_flash(".rom_kernal_f000") rom_kernal_f000[] = {
     #include "roms/kernal-4.901465-22.h"
 };
 
-// static const uint8_t* const p_video_font_000 = rom_chars_8800;
-// static const uint8_t* const p_video_font_400 = rom_chars_8800 + 0x400;
+const uint8_t* const p_video_font_000 = rom_chars_8800;
+const uint8_t* const p_video_font_400 = rom_chars_8800 + 0x400;
 
 void pet_init_edit_rom(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     if (isBusinessKeyboard) {

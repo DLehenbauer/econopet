@@ -15,6 +15,7 @@
 #include "driver.h"
 #include "hw.h"
 #include "usb/keyboard.h"
+#include "video/video.h"
 
 //                           WS__AAAA
 #define SPI_CMD_READ_AT    0b01000000
@@ -129,6 +130,7 @@ void set_video(bool col80) {
     spi_write_at(REG_VIDEO, state);
 }
 
-void sync_keyboard() {
+void sync_state() {
     spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
+    video_graphics = (spi_read_at(REG_VIDEO) & REG_VIDEO_GRAPHICS) != 0;
 }
