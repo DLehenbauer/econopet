@@ -202,7 +202,9 @@ void dispatch_key_events() {
             previous_modifiers >>= 1;
         }
 
-        previous_modifiers = current_modifiers;
+        // Note that 'current_modifiers' has been cleared via >>= 1.  Therefore, we
+        // use 'keyEvent.modifiers' to set previous_modifiers.
+        previous_modifiers = keyEvent.modifiers;
     }
 
     do {
