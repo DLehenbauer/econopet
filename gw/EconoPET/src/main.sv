@@ -183,6 +183,7 @@ module main (
     //
 
     logic [DATA_WIDTH-1:0] reg_wb_din;
+    logic reg_wb_doe;
     logic reg_wb_stall;
     logic reg_wb_ack;
     logic video_col_80_mode;
@@ -193,6 +194,7 @@ module main (
         .wb_addr_i(wb_addr),
         .wb_data_i(wb_dout),
         .wb_data_o(reg_wb_din),
+        .wb_data_oe(reg_wb_doe),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
         .wb_strobe_i(wb_strobe),
@@ -201,6 +203,7 @@ module main (
 
         .cpu_ready_o(cpu_ready_o),
         .cpu_reset_o(cpu_reset_o),
+        .video_graphic_i(graphic_i),
         .video_col_80_mode_o(video_col_80_mode),
         .video_ram_mask_o(video_ram_mask)
     );
@@ -369,6 +372,9 @@ module main (
         if (kbd_doe) begin
             cpu_data_o = kbd_dout;
             cpu_data_oe = !cpu_we_i;
+        end else if (reg_wb_doe) begin
+            cpu_data_o = reg_wb_din;
+            cpu_data_oe = 1;
         end else if (ram_ctl_doe) begin
             cpu_data_o = ram_ctl_dout;
             cpu_data_oe = 1;

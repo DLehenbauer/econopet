@@ -32,7 +32,7 @@ set clock_mhz 64
 set clock_period [ns_from_mhz $clock_mhz]
 create_clock -period $clock_period -target sys_clock_i
 
-# SPI1 Constraints
+# SPI Constraints
 
 # SPI mode 0 (CPOL=0, CPHA=0) is a center-aligned source synchronous SDR interface.
 # Clock is low when idle.  Data is sampled on rising edge and shifted out on falling edge.
@@ -49,24 +49,24 @@ create_clock -period $clock_period -target sys_clock_i
 
 # (See https://www.intel.com/content/dam/altera-www/global/en_US/pdfs/literature/an/an433.pdf)
 
-set spi1_sck_period_mhz 24
-set spi1_sck_period_ns [ns_from_mhz $spi1_sck_period_mhz]
+set spi_sck_period_mhz 24
+set spi_sck_period_ns [ns_from_mhz $spi_sck_period_mhz]
 
-# 'spi1_sck_i' is the incoming SCK used to sample TX/RX between transitions.
-create_clock -name spi1_sck_i -period $spi1_sck_period_ns [get_ports spi1_sck_i]
+# 'spi0_sck_i' is the incoming SCK used to sample TX/RX between transitions.
+create_clock -name spi0_sck_i -period $spi_sck_period_ns [get_ports spi0_sck_i]
 
 # SPI sampling and data clocks are asynchronous/unrelated to other clocks in the design.
-set_clock_groups -asynchronous -group { spi1_sck_i }
+set_clock_groups -asynchronous -group { spi0_sck_i }
 
 # SDO/SDI are sampled on the rising edge of SCK and transition on the falling edge of SCK.
 
 # We assume incoming transitions may be skewed +/- 1/8th the SCK period.
-set_input_delay  -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_i}]
-set_input_delay  -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_i}]
+set_input_delay  -clock spi0_sck_i -clock_fall -min [expr { $spi_sck_period_ns * -0.0625 }] [get_ports {spi0_sd_i}]
+set_input_delay  -clock spi0_sck_i -clock_fall -max [expr { $spi_sck_period_ns *  0.0625 }] [get_ports {spi0_sd_i}]
 
 # We allow outgoing transitions to be skewed by +/- 1/8th the SCK period.
-set_output_delay -clock spi1_sck_i -clock_fall -min [expr { $spi1_sck_period_ns * -0.0625 }] [get_ports {spi1_sd_o}]
-set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns *  0.0625 }] [get_ports {spi1_sd_o}]
+set_output_delay -clock spi0_sck_i -clock_fall -min [expr { $spi_sck_period_ns * -0.0625 }] [get_ports {spi0_sd_o}]
+set_output_delay -clock spi0_sck_i -clock_fall -max [expr { $spi_sck_period_ns *  0.0625 }] [get_ports {spi0_sd_o}]
 
 # Assume CS_N transitions centered on data clock
 #
@@ -75,7 +75,7 @@ set_output_delay -clock spi1_sck_i -clock_fall -max [expr { $spi1_sck_period_ns 
 #
 # Under software control, CS_N is unsynchronized, but generally delayed more than an SCK period
 # at 4 MHz or above.
-set_false_path -from [get_ports spi1_cs_ni]
+set_false_path -from [get_ports spi0_cs_ni]
 
 # (See also generated file: outflow\PET.pt.sdc)
 

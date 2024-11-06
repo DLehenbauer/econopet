@@ -62,7 +62,8 @@ package common_pkg;
     localparam int unsigned REG_CPU_READY_BIT    = 0;
     localparam int unsigned REG_CPU_RESET_BIT    = 1;
 
-    localparam int unsigned REG_VIDEO_COL_80_BIT = 0;
+    localparam int unsigned REG_VIDEO_COL_80_BIT   = 0;
+    localparam int unsigned REG_VIDEO_GRAPHICS_BIT = 1;  // VIA CA2 (0 = graphics, 1 = text)
 
     //
     // CRTC

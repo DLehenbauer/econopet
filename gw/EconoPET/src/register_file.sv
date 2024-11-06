@@ -23,6 +23,7 @@ module register_file(
     input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
     input  logic [   DATA_WIDTH-1:0] wb_data_i,
     output logic [   DATA_WIDTH-1:0] wb_data_o,
+    output logic                     wb_data_oe,
     input  logic                     wb_we_i,
     input  logic                     wb_cycle_i,
     input  logic                     wb_strobe_i,
@@ -34,12 +35,14 @@ module register_file(
     output logic                     cpu_reset_o,
 
     // Video register
+    input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
     output logic                     video_col_80_mode_o,
     output logic [11:10]             video_ram_mask_o
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
     initial begin
+        wb_data_oe = '0;
         wb_ack_o   = '0;
         wb_stall_o = '0;
 
@@ -47,8 +50,9 @@ module register_file(
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;
 
-        // Video state at power on: 40 column mode
+        // Video state at power on: 40 column mode, graphics
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT] = 1'b0;
+        register[REG_VIDEO][REG_VIDEO_GRAPHICS_BIT] = 1'b0;
 
         video_ram_mask_o[11:10] = 2'b00;
     end
@@ -63,13 +67,20 @@ module register_file(
 
     always_ff @(posedge wb_clock_i) begin
         if (wb_select && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= register[reg_addr];
+            wb_data_o  <= register[reg_addr];
+            wb_data_oe <= !wb_we_i;
             if (wb_we_i) begin
                 register[reg_addr] <= wb_data_i;
             end
-            wb_ack_o <= 1'b1;
+            wb_ack_o   <= 1'b1;
         end else begin
-            wb_ack_o <= '0;
+            wb_data_oe <= '0;
+            wb_ack_o   <= '0;
+
+            // Refresh status registers while not in a wishbone cycle.  This happens at
+            // 64 MHz, which is guaranteed to restore overwritten status bits before
+            // we process the next SPI command.
+            register[REG_VIDEO][REG_VIDEO_GRAPHICS_BIT] <= video_graphic_i;
         end
     end
 

@@ -33,6 +33,7 @@ module register_file_tb;
 
     logic cpu_ready;
     logic cpu_reset;
+    logic video_graphics;
     logic video_col_80_mode;
 
     register_file register_file (
@@ -48,6 +49,7 @@ module register_file_tb;
 
         .cpu_ready_o(cpu_ready),
         .cpu_reset_o(cpu_reset),
+        .video_graphic_i(video_graphics),
         .video_col_80_mode_o(video_col_80_mode)
     );
 
@@ -81,9 +83,11 @@ module register_file_tb;
         `assert_equal(cpu_ready, ready);
     endtask
 
-    task test_video_reg(input logic col_80_mode);
-        test_reg(REG_VIDEO, {7'bxxxx_xxx, col_80_mode});
+    task test_video_reg(input logic graphics, input logic col_80_mode);
+        video_graphics = graphics;
+        test_reg(REG_VIDEO, {7'bxxxx_xx, graphics, col_80_mode});
         `assert_equal(video_col_80_mode, col_80_mode);
+        `assert_equal(video_graphics, graphics);
     endtask
 
     task run;
@@ -101,8 +105,10 @@ module register_file_tb;
         test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b0);
         test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b1);
 
-        test_video_reg(/* col_80_mode: */ 1'b1);
-        test_video_reg(/* col_80_mode: */ 1'b0);
+        test_video_reg(/* graphics: */ 1'b1, /* col_80_mode: */ 1'b1);
+        test_video_reg(/* graphics: */ 1'b1, /* col_80_mode: */ 1'b0);
+        test_video_reg(/* graphics: */ 1'b0, /* col_80_mode: */ 1'b1);
+        test_video_reg(/* graphics: */ 1'b0, /* col_80_mode: */ 1'b0);
 
         #1 $display("[%t] END %m", $time);
     endtask
