@@ -35,6 +35,7 @@ module register_file_tb;
     logic cpu_reset;
     logic video_graphics;
     logic video_col_80_mode;
+    logic [11:10] video_ram_mask;
 
     register_file register_file (
         .wb_clock_i(clock),
@@ -46,11 +47,13 @@ module register_file_tb;
         .wb_strobe_i(strobe),
         .wb_ack_o(ack),
         .wb_stall_o(stall),
+        .wb_sel_i(1'b1),
 
         .cpu_ready_o(cpu_ready),
         .cpu_reset_o(cpu_reset),
         .video_graphic_i(video_graphics),
-        .video_col_80_mode_o(video_col_80_mode)
+        .video_col_80_mode_o(video_col_80_mode),
+        .video_ram_mask_o(video_ram_mask)
     );
 
     wb_driver wb (

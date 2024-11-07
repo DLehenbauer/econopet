@@ -48,6 +48,7 @@ module ram_tb;
         .wb_strobe_i(strobe),
         .wb_stall_o(stall),
         .wb_ack_o(ack),
+        .wb_sel_i(1'b1),
         .ram_oe_o(ram_oe_o),
         .ram_we_o(ram_we_o),
         .ram_addr_o(ram_addr_o),

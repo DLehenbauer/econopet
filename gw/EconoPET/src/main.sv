@@ -76,6 +76,8 @@ module main (
 
     output logic spi_stall_o    // Flow control for SPI (0 = Ready, 1 = Busy)
 );
+    // WB Bus Declarations
+
     logic [WB_ADDR_WIDTH-1:0] wb_addr;
     logic [   DATA_WIDTH-1:0] wb_din;
     logic [   DATA_WIDTH-1:0] wb_dout;
@@ -84,6 +86,23 @@ module main (
     logic                     wb_strobe;
     logic                     wb_stall;
     logic                     wb_ack;
+
+    logic ram_wb_sel;
+    logic reg_wb_sel;
+    logic kbd_wb_sel;
+
+    always_comb begin
+        ram_wb_sel = 1'b0;
+        reg_wb_sel = 1'b0;
+        kbd_wb_sel = 1'b0;
+
+        unique casez (wb_addr)
+            {WB_RAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
+            {WB_REG_BASE, {(WB_ADDR_WIDTH - $bits(WB_REG_BASE)){1'b?}}}: reg_wb_sel = 1'b1;
+            {WB_KBD_BASE, {(WB_ADDR_WIDTH - $bits(WB_KBD_BASE)){1'b?}}}: kbd_wb_sel = 1'b1;
+            default: begin end
+        endcase
+    end
 
     //
     // SPI <-> Wishbone Bridge
@@ -169,6 +188,7 @@ module main (
         .wb_strobe_i(wb_strobe),
         .wb_stall_o(ram_wb_stall),
         .wb_ack_o(ram_wb_ack),
+        .wb_sel_i(ram_wb_sel),
 
         .ram_oe_o(ram_ctl_oe),
         .ram_we_o(ram_ctl_we),
@@ -198,6 +218,7 @@ module main (
         .wb_strobe_i(wb_strobe),
         .wb_ack_o(reg_wb_ack),
         .wb_stall_o(reg_wb_stall),
+        .wb_sel_i(reg_wb_sel),
 
         .cpu_ready_o(cpu_ready_o),
         .cpu_reset_o(cpu_reset_o),
@@ -316,6 +337,7 @@ module main (
         .wb_strobe_i(wb_strobe),
         .wb_stall_o(kbd_wb_stall),
         .wb_ack_o(kbd_wb_ack),
+        .wb_sel_i(kbd_wb_sel),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(kbd_dout),
         .cpu_data_oe(kbd_doe),
@@ -327,10 +349,6 @@ module main (
     //
     // Wishbone
     //
-
-    assign wb_din   = ram_wb_din;
-    assign wb_stall = ram_wb_stall | reg_wb_stall | kbd_wb_stall;
-    assign wb_ack   = ram_wb_ack | reg_wb_ack | kbd_wb_ack;
 
     wb_demux #(
         .COUNT(2)
@@ -360,6 +378,22 @@ module main (
         // Control signals
         .wbc_grant_i(grant),
         .wbc_grant_valid_i(grant_valid)
+    );
+
+    wb_mux #(
+        .COUNT(3)
+    ) wb_mux (
+        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel }),
+
+        // Wishbone Bus
+        .wb_din_o(wb_din),
+        .wb_stall_o(wb_stall),
+        .wb_ack_o(wb_ack),
+
+        // Wishbone peripherals to mux
+        .wbp_din_i({ ram_wb_din, reg_wb_din, 8'hx }),
+        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall }),
+        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack })
     );
 
     //

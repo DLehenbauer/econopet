@@ -28,6 +28,7 @@ module ram (
     input  logic wb_strobe_i,                       // New transaction requested (address, data, and control signals are valid)
     output logic wb_stall_o,                        // Peripheral is not ready to accept the request
     output logic wb_ack_o,                          // Indicates success termination of cycle (data_o is valid)
+    input  logic wb_sel_i,                          // Asserted when selected by 'wb_addr_i'
 
     output logic                      ram_oe_o,
     output logic                      ram_we_o,
@@ -36,12 +37,6 @@ module ram (
     output logic [    DATA_WIDTH-1:0] ram_data_o,
     output logic                      ram_data_oe
 );
-    logic wb_select;
-    wb_decode #(WB_RAM_BASE) wb_decode (
-        .wb_addr_i(wb_addr_i),
-        .selected_o(wb_select)
-    );
-
     // Timing for AS6C1008-55PCN
     // (See: https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008feb2007.pdf)
     //
@@ -105,7 +100,7 @@ module ram (
                 ram_oe_o   <= 0;
                 ram_we_o   <= 0;
 
-                if (wb_select && wb_cycle_i && wb_strobe_i) begin
+                if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
                     cycle_count <= '0;
                     ram_addr_o  <= wb_addr_i[RAM_ADDR_WIDTH-1:0];
                     ram_data_o  <= wb_data_i;

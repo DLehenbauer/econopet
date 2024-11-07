@@ -24,41 +24,38 @@ import common_pkg::*;
 module wb_mux #(
     parameter COUNT = 2   // Number of Wishbone peripherals
 ) (
-    input logic wb_clock_i,  // Clock
-
     // Wishbone Bus
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                     wb_cycle_i,
-    input  logic                     wb_strobe_i,
-    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,
-    output logic [   DATA_WIDTH-1:0] wb_data_o,
-    input  logic                     wb_we_i,
+    output logic [   DATA_WIDTH-1:0] wb_din_o,
     output logic                     wb_stall_o,
     output logic                     wb_ack_o,
 
     // Wishbone Peripherals
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    output logic [COUNT-1:0]                    wbp_cycle_o,   // Cycle valid
-    output logic [COUNT-1:0]                    wbp_strobe_o,  // Strobe
-    output logic [COUNT-1:0][WB_ADDR_WIDTH-1:0] wbp_addr_o,    // Address bus
-    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbp_data_i,    // Data bus
-    output logic [COUNT-1:0][   DATA_WIDTH-1:0] wbp_data_o,    // Data bus
-    output logic [COUNT-1:0]                    wbp_we_o,      // Write enable
+    input  logic [COUNT-1:0][   DATA_WIDTH-1:0] wbp_din_i,     // Data bus
     input  logic [COUNT-1:0]                    wbp_stall_i,   // Stall
     input  logic [COUNT-1:0]                    wbp_ack_i,     // Acknowledge
 
     // Control signals
-    input logic [$clog2(COUNT)-1:0] wbp_sel_i   // Select peripheral
+    input logic [COUNT-1:0] wbp_sel_i   // Select peripheral
 );
+    // Binary index corresponding to the one-hot position
+    logic [$clog2(COUNT)-1:0] sel_index;
+
+    // Convert the one-hot select signal to binary index
     always_comb begin
-        wbp_cycle_o[wbp_sel_i] = wb_cycle_i;
-        wbp_strobe_o[wbp_sel_i] = wb_strobe_i;
-        wbp_addr_o[wbp_sel_i] = wb_addr_i;
-        wbp_data_o[wbp_sel_i] = wb_data_i;
-        wb_data_o = wbp_data_i[wbp_sel_i];
-        wbp_we_o[wbp_sel_i] = wb_we_i;
-        wb_stall_o = wbp_stall_i[wbp_sel_i];
-        wb_ack_o = wbp_ack_i[wbp_sel_i];
+        sel_index = ($bits(sel_index-1))'(0);
+        
+        for (int i = 0; i < COUNT; i++) begin
+            if (wbp_sel_i[i]) begin
+                sel_index = i[$bits(sel_index)-1:0];
+            end
+        end
+    end
+
+    always_comb begin
+        wb_din_o   = wbp_din_i[sel_index];
+        wb_stall_o = wbp_stall_i[sel_index];
+        wb_ack_o   = wbp_ack_i[sel_index];
     end
 endmodule

@@ -28,6 +28,7 @@ module keyboard(
     input  logic                     wb_strobe_i,
     output logic                     wb_stall_o,
     output logic                     wb_ack_o,
+    input  logic                     wb_sel_i,              // Asserted when selected by 'wb_addr_i'
 
     input  logic [   DATA_WIDTH-1:0] cpu_data_i,
     output logic [   DATA_WIDTH-1:0] cpu_data_o,
@@ -37,12 +38,6 @@ module keyboard(
     input  logic                     pia1_cs_i,             // PIA chip select (from address_decoding)
     input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i              // PIA register select (cpu_addr[1:0])
 );
-    logic wb_select;
-    wb_decode #(WB_KBD_BASE) wb_decode (
-        .wb_addr_i(wb_addr_i),
-        .selected_o(wb_select)
-    );
-
     // PET keyboard matrix is 10x8.  When a key is pressed, the corresponding bit
     // in the matrix is cleared to 0.  When no key is pressed, the bit is set to 1.
     logic [DATA_WIDTH-1:0] matrix[KBD_ROW_COUNT-1:0];
@@ -68,7 +63,7 @@ module keyboard(
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o   <= '0;
 
-        if (wb_select && wb_cycle_i && wb_strobe_i) begin
+        if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
             if (wb_we_i) begin
                 matrix[row_addr] <= wb_data_i;
             end else begin

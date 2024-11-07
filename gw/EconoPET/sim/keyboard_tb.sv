@@ -50,6 +50,7 @@ module keyboard_tb;
         .wb_strobe_i(strobe),
         .wb_stall_o(stall),
         .wb_ack_o(ack),
+        .wb_sel_i(1'b1),
 
         .cpu_data_i(cpu_din),
         .cpu_data_o(cpu_dout),

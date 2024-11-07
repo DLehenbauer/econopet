@@ -28,6 +28,7 @@ module register_file(
     input  logic                     wb_strobe_i,
     output logic                     wb_stall_o,
     output logic                     wb_ack_o,
+    input  logic                     wb_sel_i,              // Asserted when selected by 'wb_addr_i'
 
     // CPU register
     output logic                     cpu_ready_o,
@@ -55,16 +56,10 @@ module register_file(
         video_ram_mask_o[11:10] = 2'b00;
     end
 
-    logic wb_select;
-    wb_decode #(WB_REG_BASE) wb_decode (
-        .wb_addr_i(wb_addr_i),
-        .selected_o(wb_select)
-    );
-
     wire [REG_ADDR_WIDTH-1:0] reg_addr = wb_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
-        if (wb_select && wb_cycle_i && wb_strobe_i) begin
+        if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
             wb_data_o  <= register[reg_addr];
             if (wb_we_i) begin
                 register[reg_addr] <= wb_data_i;
