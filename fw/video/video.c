@@ -75,8 +75,8 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 	} else {
 		// Select graphics/text character ROM
 		const uint8_t* const p_char_rom = video_graphics
-			? p_video_font_000
-			: p_video_font_400;
+			? p_video_font_400
+			: p_video_font_000;
 
 		// 'cy' is the memory offset of first character in row
 		const uint16_t cy = y / r9_max_scan_line * chars_displayed_x;

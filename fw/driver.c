@@ -29,6 +29,12 @@
 #define REG_CPU   (ADDR_REG | 0x00000)
 #define REG_VIDEO (ADDR_REG | 0x00001)
 
+#define REG_CPU_READY (1 << 0)
+#define REG_CPU_RESET (1 << 1)
+
+#define REG_VIDEO_80_COL_MODE (1 << 0)
+#define REG_VIDEO_GRAPHICS    (1 << 1)
+
 void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
 
@@ -119,18 +125,19 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
 
 void set_cpu(bool ready, bool reset) {
     uint8_t state = 0;
-    if (ready) { state |= (1 << 0); }
-    if (reset) { state |= (1 << 1); }
+    if (ready) { state |= REG_CPU_READY; }
+    if (reset) { state |= REG_CPU_RESET; }
     spi_write_at(REG_CPU, state);
 }
 
 void set_video(bool col80) {
     uint8_t state = 0;
-    if (col80) { state |= (1 << 0); }
+    if (col80) { state |= REG_VIDEO_80_COL_MODE; }
     spi_write_at(REG_VIDEO, state);
 }
 
 void sync_state() {
     spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
-    video_graphics = (spi_read_at(REG_VIDEO) & REG_VIDEO_GRAPHICS) != 0;
+    uint8_t video_state = spi_read_at(REG_VIDEO);
+    video_graphics = (video_state & REG_VIDEO_GRAPHICS) != 0;
 }

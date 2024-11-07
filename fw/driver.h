@@ -14,9 +14,6 @@
 
 #pragma once
 
-// VIA CA2 (0 = graphics, 1 = text)
-#define REG_VIDEO_GRAPHICS (1 << 1)
-
 #include "pch.h"
 
 void driver_init();

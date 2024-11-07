@@ -23,7 +23,6 @@ module register_file(
     input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
     input  logic [   DATA_WIDTH-1:0] wb_data_i,
     output logic [   DATA_WIDTH-1:0] wb_data_o,
-    output logic                     wb_data_oe,
     input  logic                     wb_we_i,
     input  logic                     wb_cycle_i,
     input  logic                     wb_strobe_i,
@@ -42,7 +41,6 @@ module register_file(
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
     initial begin
-        wb_data_oe = '0;
         wb_ack_o   = '0;
         wb_stall_o = '0;
 
@@ -68,13 +66,11 @@ module register_file(
     always_ff @(posedge wb_clock_i) begin
         if (wb_select && wb_cycle_i && wb_strobe_i) begin
             wb_data_o  <= register[reg_addr];
-            wb_data_oe <= !wb_we_i;
             if (wb_we_i) begin
                 register[reg_addr] <= wb_data_i;
             end
             wb_ack_o   <= 1'b1;
         end else begin
-            wb_data_oe <= '0;
             wb_ack_o   <= '0;
 
             // Refresh status registers while not in a wishbone cycle.  This happens at

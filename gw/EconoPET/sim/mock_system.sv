@@ -70,6 +70,9 @@ module mock_system (
     logic spi_stall;
     logic [7:0] spi_rx_data;
 
+    // Video
+    logic video_graphics = 1'b0;
+
     top top (
         .sys_clock_i(sys_clock),
 
@@ -106,7 +109,7 @@ module mock_system (
         .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
-        .graphic_i(1'b0)
+        .graphic_i(video_graphics)
     );
 
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
