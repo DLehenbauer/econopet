@@ -12690,13 +12690,13 @@
 		(uuid "03e8b855-544e-4f1a-b85b-5be242af9f8b")
 	)
 	(label "SPI1_~{READY}"
-		(at 204.47 60.96 180)
+		(at 217.17 60.96 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "045d7394-5196-4339-90ad-2814a222da2e")
 	)
@@ -13297,13 +13297,13 @@
 		(uuid "737d5793-84c5-4e6e-8c3d-a85b82645318")
 	)
 	(label "SPI1_SCK"
-		(at 217.17 60.96 0)
+		(at 204.47 60.96 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "75187c1d-9f7c-4619-82b4-318fb4c3f1f2")
 	)
