@@ -42,7 +42,7 @@ static struct
   tuh_hid_report_info_t report_info[MAX_REPORT];
 }hid_info[CFG_TUH_HID];
 
-extern void process_kbd_report(hid_keyboard_report_t const *report);
+extern void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *report);
 static void process_mouse_report(hid_mouse_report_t const * report);
 static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len);
 
@@ -101,7 +101,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   {
     case HID_ITF_PROTOCOL_KEYBOARD:
       TU_LOG2("HID receive boot keyboard report\r\n");
-      process_kbd_report( (hid_keyboard_report_t const*) report );
+      process_kbd_report(dev_addr, (hid_keyboard_report_t const*) report);
     break;
 
     case HID_ITF_PROTOCOL_MOUSE:
@@ -285,7 +285,7 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
       case HID_USAGE_DESKTOP_KEYBOARD:
         TU_LOG1("HID receive keyboard report\r\n");
         // Assume keyboard follow boot report layout
-        process_kbd_report( (hid_keyboard_report_t const*) report );
+        process_kbd_report(dev_addr, (hid_keyboard_report_t const*) report );
       break;
 
       case HID_USAGE_DESKTOP_MOUSE:

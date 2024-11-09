@@ -28,6 +28,7 @@ typedef struct __attribute__((packed)) {
 typedef struct {
     uint8_t key;
     uint8_t modifiers;
+    uint8_t dev_addr;
     bool pressed;
 } KeyEvent;
 
@@ -39,30 +40,26 @@ static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_head = 0;
 static uint8_t key_buffer_tail = 0;
 
-static void enqueue_key_event(KeyEvent keyEvent) {
+static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers, bool pressed) {
     uint8_t newHead = (key_buffer_head + 1) & KEY_BUFFER_CAPACITY_MASK;
     if (newHead != key_buffer_tail) {
+        KeyEvent keyEvent = {
+            .dev_addr = dev_addr,
+            .key = keycode,
+            .modifiers = modifiers,
+            .pressed = false,
+        };
         key_buffer[key_buffer_head] = keyEvent;
         key_buffer_head = newHead;
     }
 }
 
-static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
-    KeyEvent keyEvent = {
-        .key = keycode,
-        .pressed = false,
-        .modifiers = modifiers,
-    };
-    enqueue_key_event(keyEvent);
+static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+    enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ false);
 }
 
-static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
-    KeyEvent keyEvent = {
-        .key = keycode,
-        .pressed = true,
-        .modifiers = modifiers,
-    };
-    enqueue_key_event(keyEvent);
+static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+    enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ true);
 }
 
 static bool peek_key_event(KeyEvent* keyEvent) {
@@ -110,8 +107,14 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
     return false;
 }
 
+KeyInfo get_key_info(uint8_t keycode) {
+    return s_keymap[keycode];
+}
+
+static bool shift_lock_enabled = false;
+
 void key_down(uint8_t keycode) {
-    KeyInfo key = s_keymap[keycode];
+    KeyInfo key = get_key_info(keycode);
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
 
@@ -129,7 +132,7 @@ void key_down(uint8_t keycode) {
 }
 
 void key_up(uint8_t keycode) {
-    KeyInfo key = s_keymap[keycode];
+    KeyInfo key = get_key_info(keycode);
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
 
@@ -148,7 +151,7 @@ void key_up(uint8_t keycode) {
 
 uint8_t get_key_modifiers(KeyEvent keyEvent) {
     uint8_t modifiers = keyEvent.modifiers;
-    KeyInfo keyInfo = s_keymap[keyEvent.key];
+    KeyInfo keyInfo = get_key_info(keyEvent.key);
 
     // If the key is pressed, apply shift/unshift modifiers.  We do not adjust
     // modifiers when the key is released since we want to restore the original
@@ -162,6 +165,10 @@ uint8_t get_key_modifiers(KeyEvent keyEvent) {
             modifiers &= ~HID_KEY_SHIFT_LEFT;
             modifiers &= ~HID_KEY_SHIFT_RIGHT;
         }
+    }
+
+    if (shift_lock_enabled) {
+        modifiers |= HID_KEY_SHIFT_LEFT;
     }
 
     return modifiers;
@@ -188,6 +195,15 @@ void dispatch_key_events() {
     }
 
     {
+        if (keyEvent.key == HID_KEY_CAPS_LOCK && keyEvent.pressed) {
+            shift_lock_enabled = !shift_lock_enabled;
+            printf("USB: Shift lock %s\n", shift_lock_enabled ? "enabled" : "disabled");
+            uint8_t led_report = shift_lock_enabled ? KEYBOARD_LED_CAPSLOCK : 0;
+            tuh_hid_set_report(keyEvent.dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
+            dequeue_key_event();
+            return;
+        }
+
         uint8_t saved_modifiers = get_key_modifiers(keyEvent);
         uint8_t current_modifiers = saved_modifiers;
 
@@ -226,22 +242,22 @@ void dispatch_key_events() {
     } while (peek_key_event(&keyEvent) && get_key_modifiers(keyEvent) == previous_modifiers);
 }
 
-void process_kbd_report(hid_keyboard_report_t const* report) {
+void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     static hid_keyboard_report_t prev_report = {0, 0, {0}};
 
-    uint8_t modifiers = report->modifier;
+    const uint8_t modifiers = report->modifier;
 
     for (uint8_t i = 0; i < 6; i++) {
-        uint8_t keycode = prev_report.keycode[i];
+        const uint8_t keycode = prev_report.keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
-            enqueue_key_up(keycode, modifiers);
+            enqueue_key_up(dev_addr, keycode, modifiers);
         }
     }
 
     for (uint8_t i = 0; i < 6; i++) {
-        uint8_t keycode = report->keycode[i];
+        const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
-            enqueue_key_down(keycode, modifiers);
+            enqueue_key_down(dev_addr, keycode, modifiers);
         }
     }
 
