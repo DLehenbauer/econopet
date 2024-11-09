@@ -14,6 +14,9 @@
 
 #include "keyboard.h"
 
+#define MODIFIERS_SHIFT_MASK ((HID_KEY_CONTROL_LEFT - HID_KEY_SHIFT_LEFT) | (HID_KEY_CONTROL_LEFT - HID_KEY_SHIFT_RIGHT))
+
+
 typedef struct __attribute__((packed)) {
     // First byte contains row/col packed as nibbles
     unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
@@ -26,7 +29,7 @@ typedef struct __attribute__((packed)) {
 } KeyInfo;
 
 typedef struct {
-    uint8_t key;
+    uint16_t key;
     uint8_t modifiers;
     bool pressed;
 } KeyEvent;
@@ -67,6 +70,9 @@ static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
 
 static bool peek_key_event(KeyEvent* keyEvent) {
     *keyEvent = key_buffer[key_buffer_tail];
+    if (keyEvent->modifiers & MODIFIERS_SHIFT_MASK) {
+        keyEvent->key |= 0x0100;
+    }
     return key_buffer_head != key_buffer_tail;
 }
 
@@ -110,7 +116,7 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
     return false;
 }
 
-void key_down(uint8_t keycode) {
+void key_down(uint16_t keycode) {
     KeyInfo key = s_keymap[keycode];
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
@@ -128,7 +134,7 @@ void key_down(uint8_t keycode) {
     }
 }
 
-void key_up(uint8_t keycode) {
+void key_up(uint16_t keycode) {
     KeyInfo key = s_keymap[keycode];
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
@@ -155,12 +161,11 @@ uint8_t get_key_modifiers(KeyEvent keyEvent) {
     // keyboard state before processing more keys.
     if (keyEvent.pressed) {
         if (keyInfo.shift) {
-            modifiers |= HID_KEY_SHIFT_LEFT;
+            modifiers |= MODIFIERS_SHIFT_MASK;
         }
 
         if (keyInfo.unshift) {
-            modifiers &= ~HID_KEY_SHIFT_LEFT;
-            modifiers &= ~HID_KEY_SHIFT_RIGHT;
+            modifiers &= ~MODIFIERS_SHIFT_MASK;
         }
     }
 
