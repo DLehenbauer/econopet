@@ -13,3 +13,6 @@
 [submodule "fw/external/pico-vfs"]
 	path = fw/external/pico-vfs
 	url = https://github.com/dlehenbauer/pico-vfs.git
+[submodule "fw/external/sc"]
+	path = fw/external/sc
+	url = https://github.com/tezc/sc.git
