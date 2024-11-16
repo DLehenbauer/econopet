@@ -73,7 +73,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_CORE1_STACK_SIZE=0x200)
 
 # Include external libraries
 include_directories(
-    "external/PicoDVI/software/assets"
     "external/PicoDVI/software/include")
 
 pico_enable_filesystem(${PROJECT_NAME})

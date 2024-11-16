@@ -12,85 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+// https://vice-emu.sourceforge.io/vice_1.html#SEC26
+
 #include "keyboard.h"
-
-typedef struct __attribute__((packed)) {
-    // First byte contains row/col packed as nibbles
-    unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
-    unsigned int col: 4;        // Column : 0-9
-
-    // Second byte contains flags
-    unsigned int reserved: 6;
-    unsigned int unshift: 1;    // 0 = Normal, 1 = Implicitly remove shift
-    unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
-} KeyInfo;
-
-typedef struct {
-    uint16_t key;
-    uint8_t modifiers;
-    uint8_t dev_addr;
-    bool pressed;
-} KeyEvent;
-
-#define KEY_BUFFER_LOG2_CAPACITY 4
-#define KEY_BUFFER_CAPACITY (1 << KEY_BUFFER_LOG2_CAPACITY)
-#define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
-
-static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
-static uint8_t key_buffer_head = 0;
-static uint8_t key_buffer_tail = 0;
-
-static bool is_shifted(uint8_t modifiers) {
-    return ((modifiers & KEYBOARD_MODIFIER_LEFTSHIFT) | (modifiers & KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
-}
-
-static void enqueue_key_event(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers, bool pressed) {
-    uint8_t newHead = (key_buffer_head + 1) & KEY_BUFFER_CAPACITY_MASK;
-    if (newHead != key_buffer_tail) {
-        if (is_shifted(modifiers)) {
-            keycode |= 0x0100;
-        }
-
-        KeyEvent keyEvent = {
-            .dev_addr = dev_addr,
-            .key = keycode,
-            .modifiers = modifiers,
-            .pressed = pressed,
-        };
-        key_buffer[key_buffer_head] = keyEvent;
-        key_buffer_head = newHead;
-    }
-}
-
-static void enqueue_key_up(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers) {
-    enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ false);
-}
-
-static void enqueue_key_down(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers) {
-    enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ true);
-}
-
-static bool peek_key_event(KeyEvent* keyEvent) {
-    *keyEvent = key_buffer[key_buffer_tail];
-    return key_buffer_head != key_buffer_tail;
-}
-
-static void dequeue_key_event() {
-    assert(key_buffer_head != key_buffer_tail);
-    key_buffer_tail = (key_buffer_tail + 1) & KEY_BUFFER_CAPACITY_MASK;
-}
-
-// Graphic US positional keymap
-static const uint8_t __in_flash(".keymap_grus_pos") keymap_grus_pos[] = {
-    #include "../keymaps/grus_pos.h"
-};
-
-// Graphic US symbolic keymap
-static const uint8_t __in_flash(".keymap_grus_sym") keymap_grus_sym[] = {
-    #include "../keymaps/grus_sym.h"
-};
-
-static const KeyInfo* s_keymap = (KeyInfo*)((void*) keymap_grus_sym);
 
 uint8_t key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -105,33 +29,122 @@ uint8_t key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
-static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keycode) {
-    for (uint8_t i = 0; i < 6; i++) {
-        if (report->keycode[i] == keycode) {
-            return true;
+typedef struct __attribute__((packed)) {
+    // First byte contains row/col packed as nibbles
+    unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
+    unsigned int col: 4;        // Column : 0-9
+
+    // Second byte contains flags
+    unsigned int reserved: 6;
+    unsigned int unshift: 1;    // 0 = Normal, 1 = Implicitly remove shift
+    unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
+} KeyInfo;
+
+// Graphic US positional keymap
+static const uint8_t __in_flash(".keymap_grus_pos") keymap_grus_pos[] = {
+    #include "../keymaps/grus_pos.h"
+};
+
+// Graphic US symbolic keymap
+static const uint8_t __in_flash(".keymap_grus_sym") keymap_grus_sym[] = {
+    #include "../keymaps/grus_sym.h"
+};
+
+static const KeyInfo* s_keymap = (KeyInfo*)((void*) keymap_grus_sym);
+
+typedef struct {
+    uint8_t dev_addr;       // USB device address of keyboard
+    uint8_t key;            // USB HID keycode
+    uint8_t row;            // PET keyboard row
+    uint8_t col;            // PET keyboard column
+    uint8_t modifiers;      // USB HID modifier flags (e.g. shift)
+    bool pressed;           // true = key pressed, false = key released
+} KeyEvent;
+
+#define KEY_BUFFER_LOG2_CAPACITY 4
+#define KEY_BUFFER_CAPACITY (1 << KEY_BUFFER_LOG2_CAPACITY)
+#define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
+
+static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
+static uint8_t key_buffer_head = 0;
+static uint8_t key_buffer_tail = 0;
+
+static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
+    uint8_t newHead = (key_buffer_head + 1) & KEY_BUFFER_CAPACITY_MASK;
+    if (newHead != key_buffer_tail) {
+        KeyEvent keyEvent = {
+            .dev_addr = dev_addr,
+            .key = keycode,
+            .row = row,
+            .col = col,
+            .modifiers = modifiers,
+            .pressed = pressed,
+        };
+        key_buffer[key_buffer_head] = keyEvent;
+        key_buffer_head = newHead;
+    }
+}
+
+static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+    uint8_t i = key_buffer_head;
+    uint8_t end = key_buffer_tail;
+
+    // Scan backwards through the key_buffer to find the most recent key press event for the given key.
+    while (i != end) {
+        KeyEvent keyEvent = key_buffer[i];
+        if (key_buffer[i].key == keycode && key_buffer[i].pressed) {
+            enqueue_key_event(dev_addr, keycode, keyEvent.row, keyEvent.col, modifiers, /* pressed: */ false);
+            return;
         }
+
+        i = (i - 1) & KEY_BUFFER_CAPACITY_MASK;
     }
 
-    return false;
+    printf("USB: Key up %d=(not found)\n", keycode);
 }
 
-KeyInfo get_key_info(uint16_t keycode) {
-    return s_keymap[keycode];
-}
+static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+    bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
+    
+    KeyInfo keyInfo = s_keymap[
+        is_shifted
+            ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
+            : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
+            
+    uint8_t row = keyInfo.row;
 
-static bool shift_lock_enabled = false;
-
-void key_down(uint16_t keycode) {
-    KeyInfo key = get_key_info(keycode);
-    uint8_t row = key.row;
-    uint8_t rowMask = 1 << row;
-
-    if (!rowMask) {
+    if (row > 7) {
         printf("USB: Key down %d=(undefined)\n", keycode);
         return;
     }
 
-    uint8_t col = key.col;
+    uint8_t col = keyInfo.col;
+
+    if (keyInfo.shift) { 
+        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
+    }
+    
+    if (keyInfo.unshift) {
+        modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
+    }
+
+    enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ true);
+}
+
+static bool peek_key_event(KeyEvent* keyEvent) {
+    *keyEvent = key_buffer[key_buffer_tail];
+    return key_buffer_head != key_buffer_tail;
+}
+
+static void dequeue_key_event() {
+    assert(key_buffer_head != key_buffer_tail);
+    key_buffer_tail = (key_buffer_tail + 1) & KEY_BUFFER_CAPACITY_MASK;
+}
+
+static bool shift_lock_enabled = false;
+
+void key_down(uint8_t keycode, uint8_t col, uint8_t row) {
+    uint8_t rowMask = 1 << row;
 
     if (key_matrix[col] & rowMask) {
         key_matrix[col] &= ~rowMask;
@@ -139,17 +152,14 @@ void key_down(uint16_t keycode) {
     }
 }
 
-void key_up(uint16_t keycode) {
-    KeyInfo key = get_key_info(keycode);
-    uint8_t row = key.row;
+void modifier_down(uint8_t modifierMask) {
+    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
+    KeyInfo keyInfo = s_keymap[keycode];
+    key_down(keycode, keyInfo.col, keyInfo.row);
+}
+
+void key_up(uint8_t keycode, uint8_t col, uint8_t row) {
     uint8_t rowMask = 1 << row;
-
-    if (!rowMask) {
-        printf("USB: Key up %d=(undefined)\n", keycode);
-        return;
-    }
-
-    uint8_t col = key.col;
 
     if (key_matrix[col] & ~rowMask) {
         key_matrix[col] |= rowMask;
@@ -157,32 +167,31 @@ void key_up(uint16_t keycode) {
     }
 }
 
-uint8_t get_key_modifiers(KeyEvent keyEvent) {
+void modifier_up(uint8_t modifierMask) {
+    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
+    KeyInfo keyInfo = s_keymap[keycode];
+    key_up(keycode, keyInfo.col, keyInfo.row);
+}
+
+static void sync_leds(uint8_t dev_addr) {
+    static uint8_t led_report = 0;
+
+    led_report = shift_lock_enabled
+        ? KEYBOARD_LED_CAPSLOCK
+        : 0;
+
+    tuh_hid_set_report(dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
+}
+
+static uint8_t get_modifiers(KeyEvent keyEvent) {
     uint8_t modifiers = keyEvent.modifiers;
-    KeyInfo keyInfo = get_key_info(keyEvent.key);
-
-    // If the key is pressed, apply shift/unshift modifiers.  We do not adjust
-    // modifiers when the key is released since we want to restore the original
-    // keyboard state before processing more keys.
-    if (keyEvent.pressed) {
-        if (keyInfo.shift) {
-            modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
-        }
-
-        if (keyInfo.unshift) {
-            modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
-        }
-    }
 
     if (shift_lock_enabled) {
-        // Shift Lock key only presses left shift.
         modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
     }
 
     return modifiers;
 }
-
-static uint8_t led_report = 0;
 
 void dispatch_key_events() {
     static uint8_t previous_modifiers = 0;
@@ -205,17 +214,9 @@ void dispatch_key_events() {
     }
 
     {
-        if (keyEvent.key == HID_KEY_CAPS_LOCK && keyEvent.pressed) {
-            shift_lock_enabled = !shift_lock_enabled;
-            led_report = shift_lock_enabled ? KEYBOARD_LED_CAPSLOCK : 0;
-            printf("USB: Shift lock %s\n", shift_lock_enabled ? "enabled" : "disabled");
-            tuh_hid_set_report(keyEvent.dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
-            dequeue_key_event();
-            return;
-        }
-
-        uint8_t saved_modifiers = get_key_modifiers(keyEvent);
-        uint8_t current_modifiers = saved_modifiers;
+        // Synchronize modifier keys in the PET keyboard matrix with the USB HID keyboard state.
+        uint8_t active_modifiers = get_modifiers(keyEvent);
+        uint8_t current_modifiers = active_modifiers;
 
         if (current_modifiers != previous_modifiers) {
             for (uint8_t i = 0; i < 8; i++) {
@@ -225,11 +226,11 @@ void dispatch_key_events() {
                 if (current_modifier) {
                     if (!previous_modifier) {
                         printf("USB: Modifier down: %s\n", modifiers[i]);
-                        key_down(HID_KEY_CONTROL_LEFT + i);
+                        modifier_down(i);
                     }
                 } else if (previous_modifier) {
                     printf("USB: Modifier up: %s\n", modifiers[i]);
-                    key_up(HID_KEY_CONTROL_LEFT + i);
+                    modifier_up(i);
                 }
 
                 current_modifiers >>= 1;
@@ -237,19 +238,41 @@ void dispatch_key_events() {
             }
 
             // Note that 'current_modifiers' has been cleared via >>= 1.
-            previous_modifiers = saved_modifiers;
+            previous_modifiers = active_modifiers;
         }
     }
 
-    do {
+    while (true) {
         if (keyEvent.pressed) {
-            key_down(keyEvent.key);
+            switch (keyEvent.key) {
+                case HID_KEY_CAPS_LOCK:
+                    shift_lock_enabled = !shift_lock_enabled;                   
+                    printf("USB: Shift lock %s\n", shift_lock_enabled ? "enabled" : "disabled");
+                    sync_leds(keyEvent.dev_addr);
+                    break;
+                default:
+                    key_down(keyEvent.key, keyEvent.row, keyEvent.col);
+                    break;
+            }
         } else {
-            key_up(keyEvent.key);
+            key_up(keyEvent.key, keyEvent.row, keyEvent.col);
         }
 
         dequeue_key_event();
-    } while (peek_key_event(&keyEvent) && get_key_modifiers(keyEvent) == previous_modifiers);
+
+        // Continue updating the PET keyboard matrix as long as there are more events queued
+        // and the modifiers are consistent.
+    } while (peek_key_event(&keyEvent) && (get_modifiers(keyEvent) == previous_modifiers));
+}
+
+static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keycode) {
+    for (uint8_t i = 0; i < 6; i++) {
+        if (report->keycode[i] == keycode) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {

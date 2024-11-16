@@ -11,7 +11,10 @@
         "deasserting",
         "deasserts",
         "GPIO",
+        "leds",
+        "LEFTSHIFT",
         "Lehenbauer",
-        "PICO"
+        "PICO",
+        "RIGHTSHIFT"
     ]
 }
