@@ -26,7 +26,7 @@ typedef struct __attribute__((packed)) {
 } KeyInfo;
 
 typedef struct {
-    uint8_t key;
+    uint16_t key;
     uint8_t modifiers;
     uint8_t dev_addr;
     bool pressed;
@@ -40,25 +40,33 @@ static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_head = 0;
 static uint8_t key_buffer_tail = 0;
 
-static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers, bool pressed) {
+static bool is_shifted(uint8_t modifiers) {
+    return ((modifiers & KEYBOARD_MODIFIER_LEFTSHIFT) | (modifiers & KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
+}
+
+static void enqueue_key_event(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers, bool pressed) {
     uint8_t newHead = (key_buffer_head + 1) & KEY_BUFFER_CAPACITY_MASK;
     if (newHead != key_buffer_tail) {
+        if (is_shifted(modifiers)) {
+            keycode |= 0x0100;
+        }
+
         KeyEvent keyEvent = {
             .dev_addr = dev_addr,
             .key = keycode,
             .modifiers = modifiers,
-            .pressed = false,
+            .pressed = pressed,
         };
         key_buffer[key_buffer_head] = keyEvent;
         key_buffer_head = newHead;
     }
 }
 
-static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_up(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers) {
     enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ false);
 }
 
-static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_down(uint8_t dev_addr, uint16_t keycode, uint8_t modifiers) {
     enqueue_key_event(dev_addr, keycode, modifiers, /* pressed: */ true);
 }
 
@@ -107,13 +115,13 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
     return false;
 }
 
-KeyInfo get_key_info(uint8_t keycode) {
+KeyInfo get_key_info(uint16_t keycode) {
     return s_keymap[keycode];
 }
 
 static bool shift_lock_enabled = false;
 
-void key_down(uint8_t keycode) {
+void key_down(uint16_t keycode) {
     KeyInfo key = get_key_info(keycode);
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
@@ -131,7 +139,7 @@ void key_down(uint8_t keycode) {
     }
 }
 
-void key_up(uint8_t keycode) {
+void key_up(uint16_t keycode) {
     KeyInfo key = get_key_info(keycode);
     uint8_t row = key.row;
     uint8_t rowMask = 1 << row;
@@ -158,21 +166,23 @@ uint8_t get_key_modifiers(KeyEvent keyEvent) {
     // keyboard state before processing more keys.
     if (keyEvent.pressed) {
         if (keyInfo.shift) {
-            modifiers |= HID_KEY_SHIFT_LEFT;
+            modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
         }
 
         if (keyInfo.unshift) {
-            modifiers &= ~HID_KEY_SHIFT_LEFT;
-            modifiers &= ~HID_KEY_SHIFT_RIGHT;
+            modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
         }
     }
 
     if (shift_lock_enabled) {
-        modifiers |= HID_KEY_SHIFT_LEFT;
+        // Shift Lock key only presses left shift.
+        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
     }
 
     return modifiers;
 }
+
+static uint8_t led_report = 0;
 
 void dispatch_key_events() {
     static uint8_t previous_modifiers = 0;
@@ -197,8 +207,8 @@ void dispatch_key_events() {
     {
         if (keyEvent.key == HID_KEY_CAPS_LOCK && keyEvent.pressed) {
             shift_lock_enabled = !shift_lock_enabled;
+            led_report = shift_lock_enabled ? KEYBOARD_LED_CAPSLOCK : 0;
             printf("USB: Shift lock %s\n", shift_lock_enabled ? "enabled" : "disabled");
-            uint8_t led_report = shift_lock_enabled ? KEYBOARD_LED_CAPSLOCK : 0;
             tuh_hid_set_report(keyEvent.dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
             dequeue_key_event();
             return;
