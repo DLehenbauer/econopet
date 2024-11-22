@@ -51,15 +51,16 @@ module arbiter (
 
     output logic cpu_grant_en_o
 );
-    logic clk8_en_delay;
+    logic grant_valid_strobe;
     logic [2:0] grant = 3'b111;
 
     always_ff @(posedge wb_clock_i) begin
-        clk8_en_delay <= clk8_en_i;
-
         if (clk8_en_i) begin
             grant <= grant + 1'b1;
         end
+
+        // Grant valid strobe is asserted on the first clock cycle after the grant changes.
+        grant_valid_strobe <= clk8_en_i;
     end
 
     localparam VIDEO_1 = 3'b000,
@@ -79,9 +80,9 @@ module arbiter (
 
     always_comb begin
         if (spi1_grant) begin
-            wbc_grant = 1;
+            wbc_grant = 1'b1;
         end else begin
-            wbc_grant = 0;
+            wbc_grant = 1'b0;
         end
     end
 
@@ -111,9 +112,9 @@ module arbiter (
         .wb_ack_i(wb_ack_i),
 
         // Control signals
-        .wbc_grant_i(wbc_grant), // Select controller
-        .wbc_grant_valid_i(!cpu_grant && clk8_en_delay)
+        .wbc_grant_i(wbc_grant), // Currently selected controller
+        .wbc_grant_valid_i(!cpu_grant && grant_valid_strobe)
     );
 
-    assign cpu_grant_en_o = cpu_grant & clk8_en_delay;
+    assign cpu_grant_en_o = grant == CPU_1 && grant_valid_strobe;
 endmodule

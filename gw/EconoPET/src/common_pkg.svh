@@ -98,6 +98,7 @@ package common_pkg;
                CRTC_R9_MAX_SCAN_LINE     = 9,    // [4:0] Number of scan lines per character row, including spacing.
 
                CRTC_R12_START_ADDR_HI    = 12,   // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
+
                CRTC_R13_START_ADDR_LO    = 13;   // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
 
 

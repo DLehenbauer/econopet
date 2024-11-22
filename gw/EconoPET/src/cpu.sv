@@ -37,8 +37,6 @@ module cpu (
         cpu_data_strobe_o   = '0;
     end
 
-    logic [COUNTER_WIDTH-1:0] cycle_count = '0;
-
     // Timing for W65C02S
     // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
     //
@@ -94,12 +92,10 @@ module cpu (
     localparam bit [$bits(cycle_count)-1:0] CPU_PWH = CPU_PHI_END - CPU_PHI_START,
                                             CPU_DS = CPU_DATA_VALID - CPU_PHI_END;
 
+    logic [COUNTER_WIDTH-1:0] cycle_count = CPU_SUSPENDED;
+
     // synthesis off
     initial begin
-        if (int'(CPU_PWH) < ns_to_cycles(CPU_tPWH)) begin
-            $fatal(1, "Error: CPU pulse width (%d) is less than minimum sys_clock cycles (%d)", CPU_PWH, ns_to_cycles(CPU_tPWH));
-        end
-
         if (int'(CPU_PWH) < ns_to_cycles(CPU_tPWH)) begin
             $fatal(1, "Error: CPU pulse width (%d) is less than minimum sys_clock cycles (%d)", CPU_PWH, ns_to_cycles(CPU_tPWH));
         end
@@ -117,7 +113,7 @@ module cpu (
         cpu_addr_strobe_o <= 1'b0;
         cpu_data_strobe_o <= 1'b0;
 
-        case (cycle_count)
+        unique case (cycle_count)
             CPU_BE_START: begin             // In-progress transactions have drained.
                 cpu_be_o <= 1'b1;
             end

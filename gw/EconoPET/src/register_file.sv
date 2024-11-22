@@ -43,7 +43,6 @@ module register_file(
 
     initial begin
         wb_ack_o   = '0;
-        wb_stall_o = '0;
 
         // CPU state at power on: CPU is not ready, CPU is reset
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;
@@ -56,17 +55,20 @@ module register_file(
         video_ram_mask_o[11:10] = 2'b00;
     end
 
+    // This peripheral always completes WB operations in a single cycle.
+    assign wb_stall_o = 1'b0;
+
     wire [REG_ADDR_WIDTH-1:0] reg_addr = wb_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
         if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o  <= register[reg_addr];
+            wb_data_o <= register[reg_addr];
             if (wb_we_i) begin
                 register[reg_addr] <= wb_data_i;
             end
-            wb_ack_o   <= 1'b1;
+            wb_ack_o <= 1'b1;
         end else begin
-            wb_ack_o   <= '0;
+            wb_ack_o <= '0;
 
             // Refresh status registers while not in a wishbone cycle.  This happens at
             // 64 MHz, which is guaranteed to restore overwritten status bits before
