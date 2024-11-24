@@ -344,7 +344,9 @@ module main (
         .cpu_data_oe(kbd_doe),
         .cpu_we_i(cpu_we_i),
         .pia1_cs_i(pia1_en),
-        .pia1_rs_i(cpu_addr_i[1:0])
+        .pia2_cs_i(pia2_en),
+        .via_cs_i(via_en),
+        .rs_i(cpu_addr_i[VIA_RS_WIDTH-1:0])
     );
 
     //
