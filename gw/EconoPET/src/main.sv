@@ -322,6 +322,7 @@ module main (
     // USB Keyboard
     //
 
+    logic [DATA_WIDTH-1:0] kbd_wb_din;
     logic                  kbd_wb_stall;
     logic                  kbd_wb_ack;
     logic [DATA_WIDTH-1:0] kbd_dout;
@@ -331,7 +332,7 @@ module main (
         .wb_clock_i(sys_clock_i),
         .wb_addr_i(wb_addr),
         .wb_data_i(wb_dout),
-        .wb_data_o(),           // We do not currently support reading back from the keyboard
+        .wb_data_o(kbd_wb_din),
         .wb_we_i(wb_we),
         .wb_cycle_i(wb_cycle),
         .wb_strobe_i(wb_strobe),
@@ -391,7 +392,7 @@ module main (
         .wb_ack_o(wb_ack),
 
         // Wishbone peripherals to mux
-        .wbp_din_i({ ram_wb_din, reg_wb_din, 8'hx }),
+        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din }),
         .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall }),
         .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack })
     );

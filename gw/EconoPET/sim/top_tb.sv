@@ -69,8 +69,8 @@ module top_tb;
             mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
             $display("[%t]   WB Keyboard[%d] <- %02x", $time, col, value);
 
-            // mock_system.spi_read_at(common_pkg::wb_io_kbd_addr(col), dout);
-            // `assert_equal(dout, value);
+            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
+            `assert_equal(dout, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
