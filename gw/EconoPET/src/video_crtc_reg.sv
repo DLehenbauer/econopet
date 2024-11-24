@@ -46,7 +46,10 @@ module video_crtc_reg (
     output logic [ 4:0] r9_max_scan_line_o,
     output logic [13:0] r1213_start_addr_o
 );
-    logic [CRTC_ADDR_WIDTH-1:0] ar = '0;            // Address register used to select R0..17
+    // Storage for R0..17 is rounded up to the nearest power of 2.
+    localparam integer unsigned CRTC_REG_COUNT = (1 << CRTC_ADDR_REG_WIDTH);
+
+    logic [CRTC_ADDR_REG_WIDTH-1:0] ar = '0;        // Address register used to select R0..17
     logic [DATA_WIDTH-1:0] r[CRTC_REG_COUNT-1:0];   // Storage for R0..17
 
     initial begin
@@ -93,16 +96,22 @@ module video_crtc_reg (
 
     // Wishbone peripheral always completes in a single cycle.
     assign wb_stall_o = 1'b0;
-    wire [CRTC_ADDR_WIDTH-1:0] crtc_addr = wb_addr_i[CRTC_ADDR_WIDTH-1:0];
+    wire [CRTC_ADDR_REG_WIDTH-1:0] crtc_addr = wb_addr_i[CRTC_ADDR_REG_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o <= '0;
         if (wb_select && wb_cycle_i && wb_strobe_i) begin
             wb_data_o <= r[crtc_addr];
+            
+            // TODO: Support writes?
+            // if (wb_we_i) begin
+            //     r[crtc_addr] <= data_i;
+            // end
+            
             wb_ack_o <= 1'b1;
         end else if (clk_en_i && cs_i && we_i) begin
-            if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register
-            else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (R0..17)
+            if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register (select R0..17)
+            else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (set R0..17)
         end
     end
 
