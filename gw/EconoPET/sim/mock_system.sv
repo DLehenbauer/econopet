@@ -215,22 +215,22 @@ module mock_system (
         mock_ram.fill(start_addr, end_addr, data);
     endtask
 
-    task static wb_read (
+    task static spi_read (
         output logic [DATA_WIDTH-1:0] data_o
     );
         spi1_driver.read_next;
         data_o = spi_rx_data;
     endtask
 
-    task static wb_read_at (
+    task static spi_read_at (
         input  logic [WB_ADDR_WIDTH-1:0] addr_i,
         output logic [   DATA_WIDTH-1:0] data_o
     );
         spi1_driver.read_at(addr_i);            // Seek for next read
-        wb_read(data_o);                        // Read data
+        spi_read(data_o);                       // Read data
     endtask
 
-    task static wb_write_at (
+    task static spi_write_at (
         input logic [WB_ADDR_WIDTH-1:0] addr_i,
         input logic [   DATA_WIDTH-1:0] data_i
     );

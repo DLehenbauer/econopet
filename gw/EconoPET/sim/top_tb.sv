@@ -33,8 +33,8 @@ module top_tb;
         input logic [    DATA_WIDTH-1:0] data_i
     );
         logic [DATA_WIDTH-1:0] dout;
-        mock_system.wb_write_at(addr_i, data_i);
-        mock_system.wb_read_at(addr_i, dout);
+        mock_system.spi_write_at(addr_i, data_i);
+        mock_system.spi_read_at(addr_i, dout);
         `assert_equal(dout, data_i);
     endtask
 
@@ -66,10 +66,10 @@ module top_tb;
 
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'b1011, col };
-            mock_system.wb_write_at(common_pkg::wb_kbd_addr(col), value);
+            mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
             $display("[%t]   WB Keyboard[%d] <- %02x", $time, col, value);
 
-            // mock_system.wb_read_at(common_pkg::wb_io_kbd_addr(col), dout);
+            // mock_system.spi_read_at(common_pkg::wb_io_kbd_addr(col), dout);
             // `assert_equal(dout, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
@@ -104,7 +104,7 @@ module top_tb;
             $display("[%t]   CRTC[%0d] -> %02x", $time, r, value);
 
             // TODO: Implement read-back from CRTC registers.
-            // mock_system.wb_read_at(common_pkg::wb_crtc_addr(r), dout);
+            // mock_system.spi_read_at(common_pkg::wb_crtc_addr(r), dout);
             // `assert_equal(dout, value);
         end
 
@@ -132,7 +132,7 @@ module top_tb;
         `assert_equal(cpu_reset_n, 1'b0);
 
         $display("[%t]   Perform CPU reset", $time);
-        mock_system.wb_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0010);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0010);
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset_n, 1'b0);
         
@@ -142,13 +142,13 @@ module top_tb;
         @(cpu_clock);
 
         $display("[%t]   Start CPU", $time);
-        mock_system.wb_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0001);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0001);
         `assert_equal(cpu_ready, 1'b1);
         `assert_equal(cpu_reset_n, 1'b1);
 
-        mock_system.wb_read_at(16'h8000, cpu_dout);
+        mock_system.spi_read_at(16'h8000, cpu_dout);
         for (count = 0; count <= 2000; count = count + 1) begin
-            mock_system.wb_read(cpu_dout);
+            mock_system.spi_read(cpu_dout);
         end
 
         #1 $display("[%t] END %m", $time);
