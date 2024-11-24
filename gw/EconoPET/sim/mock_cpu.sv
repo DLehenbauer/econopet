@@ -74,6 +74,8 @@ module mock_cpu (
         set_data_next = data;
         set_we_next   = 1'b1;
 
+        $display("[%t]   CPU Write %04x <- %02x", $time, addr, data);
+
         @(posedge cpu_clock_i);
     endtask
 
@@ -90,6 +92,7 @@ module mock_cpu (
         @(posedge cpu_clock_i);
 
         data = data_i;
+        $display("[%t]   CPU Read %04x -> %02x", $time, addr, data);
     endtask
 
     logic cpu_clock_ne;

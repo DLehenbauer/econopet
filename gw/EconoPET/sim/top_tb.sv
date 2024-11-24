@@ -58,22 +58,25 @@ module top_tb;
     endtask
 
     task static usb_keyboard_test;
-        bit   [KBD_ADDR_WIDTH-1:0] row;
+        bit   [KBD_ADDR_WIDTH-1:0] col;
         logic [    DATA_WIDTH-1:0] dout;
         bit   [    DATA_WIDTH-1:0] value;
 
         $display("[%t] Begin USB Keyboard Test", $time);
 
-        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            value = { 4'b1011, row };
-            mock_system.wb_write_at(common_pkg::wb_kbd_addr(row), value);
-            $display("[%t]   WB Keyboard[%d] <- %02x", $time, row, value);
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            value = { 4'b1011, col };
+            mock_system.wb_write_at(common_pkg::wb_kbd_addr(col), value);
+            $display("[%t]   WB Keyboard[%d] <- %02x", $time, col, value);
+
+            // mock_system.wb_read_at(common_pkg::wb_io_kbd_addr(col), dout);
+            // `assert_equal(dout, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
             `assert_equal(dout, value);
 
-            $display("[%t]   Keyboard[%d] -> %02x", $time, row, dout);
+            $display("[%t]   Keyboard[%d] -> %02x", $time, col, dout);
 
             // Keyboard interception should not interfere with RAM access.
             test_rw(common_pkg::wb_ram_addr(17'h0E810 + PIA_PORTA), ~value);

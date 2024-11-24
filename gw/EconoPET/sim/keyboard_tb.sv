@@ -75,14 +75,14 @@ module keyboard_tb;
 
     logic [DATA_WIDTH-1:0] data_rd;
 
-    task cpu_select_row(
-        input logic [DATA_WIDTH-1:0] row
+    task cpu_select_col(
+        input logic [DATA_WIDTH-1:0] col
     );
         @(negedge clock);
 
         pia1_rs    = PIA_PORTA;
         pia1_cs    = 1'b1;
-        cpu_din    = row;
+        cpu_din    = col;
         cpu_we     = 1'b1;
         cpu_strobe = 1'b1;
         
@@ -93,7 +93,7 @@ module keyboard_tb;
         cpu_strobe = 1'b0;
     endtask
 
-    task cpu_read_current_row (
+    task cpu_read_current_col (
         output logic [DATA_WIDTH-1:0] data
     );
         @(negedge clock);
@@ -111,7 +111,7 @@ module keyboard_tb;
     endtask
 
     task run;
-        integer row;
+        integer col;
         logic [DATA_WIDTH-1:0] value;
         logic [DATA_WIDTH-1:0] data;
 
@@ -119,32 +119,32 @@ module keyboard_tb;
 
         wb.reset;
 
-        $display("[%t]   Keyboard rows must be initialized to 8'hFF at power on.", $time);
-        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            wb.read(row, data_rd);
+        $display("[%t]   Keyboard cols must be initialized to 8'hFF at power on.", $time);
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            wb.read(col, data_rd);
             `assert_equal(data_rd, 8'hFF);
         end
 
-        $display("[%t]   Wishbone must be able to read/write all rows.", $time);
+        $display("[%t]   Wishbone must be able to read/write all cols.", $time);
 
-        // First pass read/writes unique values to all rows.
-        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            value = { 4'h5, row[3:0] };
-            wb.write(row, value);
+        // First pass read/writes unique values to all cols.
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            value = { 4'h5, col[3:0] };
+            wb.write(col, value);
 
-            cpu_select_row(row);
-            cpu_read_current_row(data);
+            cpu_select_col(col);
+            cpu_read_current_col(data);
             `assert_equal(data, value);
             
-            wb.read(row, data_rd);
+            wb.read(col, data_rd);
             `assert_equal(data_rd, value);
         end
 
-        // Second pass ensures unique values were not overwritten and resets all rows to 8'hFF.
-        for (row = 0; row < KBD_ROW_COUNT; row = row + 1) begin
-            wb.read(row, data_rd);
-            `assert_equal(data_rd, { 4'h5, row[3:0] });
-            wb.write(row, 8'hff);
+        // Second pass ensures unique values were not overwritten and resets all cols to 8'hFF.
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            wb.read(col, data_rd);
+            `assert_equal(data_rd, { 4'h5, col[3:0] });
+            wb.write(col, 8'hff);
         end
 
         #1 $display("[%t] END %m", $time);

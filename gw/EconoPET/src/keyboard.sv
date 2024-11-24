@@ -38,45 +38,45 @@ module keyboard(
     input  logic                     pia1_cs_i,             // PIA chip select (from address_decoding)
     input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i              // PIA register select (cpu_addr[1:0])
 );
-    // PET keyboard matrix is 10x8.  When a key is pressed, the corresponding bit
+    // PET keyboard matrix is 8x10.  When a key is pressed, the corresponding bit
     // in the matrix is cleared to 0.  When no key is pressed, the bit is set to 1.
-    logic [DATA_WIDTH-1:0] matrix[KBD_ROW_COUNT-1:0];
+    logic [DATA_WIDTH-1:0] matrix[KBD_COL_COUNT-1:0];
 
     initial begin
-        integer i;
+        integer col;
 
-        for (i = 0; i < KBD_ROW_COUNT; i = i + 1) begin
-            matrix[i] = 8'hFF;
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            matrix[col] = 8'hFF;
         end
     end
 
-    wire [KBD_ADDR_WIDTH-1:0] row_addr = wb_addr_i[KBD_ADDR_WIDTH-1:0];
-    wire writing_port_a =  cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTA;     // CPU is selecting next keyboard row
-    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected row
+    wire [KBD_ADDR_WIDTH-1:0] col_addr = wb_addr_i[KBD_ADDR_WIDTH-1:0];
+    wire writing_port_a =  cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTA;     // CPU is selecting next keyboard col
+    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia1_rs_i == PIA_PORTB;     // CPU is reading state of currenly selected col
 
-    logic [KBD_ADDR_WIDTH-1:0] selected_row = '0;
-    logic [    DATA_WIDTH-1:0] current_row  = 8'hff;
+    logic [KBD_ADDR_WIDTH-1:0] selected_col = '0;
+    logic [    DATA_WIDTH-1:0] current_col  = 8'hff;
 
     // This peripheral always completes WB operations in a single cycle.
     assign wb_stall_o = 1'b0;
 
     always_ff @(posedge wb_clock_i) begin
-        wb_ack_o   <= '0;
+        wb_ack_o <= '0;
 
         if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
             if (wb_we_i) begin
-                matrix[row_addr] <= wb_data_i;
+                matrix[col_addr] <= wb_data_i;
             end else begin
-                wb_data_o <= matrix[row_addr];
+                wb_data_o <= matrix[col_addr];
             end
             wb_ack_o <= 1'b1;
         end else begin
             // To relax timing, we pipeline reads from the 'matrix' block ram.
-            cpu_data_o  <= current_row;
-            cpu_data_oe <= reading_port_b && current_row != 8'hff;
-            current_row <= matrix[selected_row];
+            cpu_data_o  <= current_col;
+            cpu_data_oe <= reading_port_b && current_col != 8'hff;
+            current_col <= matrix[selected_col];
 
-            if (writing_port_a) selected_row <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
+            if (writing_port_a) selected_col <= cpu_data_i[KBD_ADDR_WIDTH-1:0];
         end
     end
 endmodule

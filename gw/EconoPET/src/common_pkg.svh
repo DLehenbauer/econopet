@@ -37,19 +37,25 @@ package common_pkg;
         return int'($ceil(time_ns / mhz_to_ns(SYS_CLOCK_MHZ)));
     endfunction
 
+    // Calculates the required bit width to store the given value.
+    function int bit_width(input int value);
+        return $clog2(value + 1'b1);
+    endfunction
+
     //
     // PET
     //
 
-    // The PET keyboard matrix is 10 rows x 8 columns.
-    localparam int unsigned KBD_ROW_COUNT = 10;
-
+    // The PET keyboard matrix is 8 rows x 10 columns.
+    localparam int unsigned KBD_ROW_COUNT = 8;      // 0-7 (A-F,H-J)
+    localparam int unsigned KBD_COL_COUNT = 10;     // 0-9 (1-10)
+    
     localparam int unsigned PIA_RS_WIDTH = 2;
 
-    localparam PIA_PORTA = 2'd0,
-               PIA_CRA   = 2'd1,
-               PIA_PORTB = 2'd2,
-               PIA_CRB   = 2'd3;
+    localparam PIA_PORTA = 2'd0,    // PIBA: Peripheral Interface Buffer for Port A
+               PIA_CRA   = 2'd1,    // DDRA: Data Direction Register for Port A
+               PIA_PORTB = 2'd2,    // PIBB: Peripheral Interface Buffer for Port B
+               PIA_CRB   = 2'd3;    // DDRB: Data Direction Register for Port B
 
     //
     // Registers
@@ -108,18 +114,13 @@ package common_pkg;
     // Bus
     //
 
-    // Calculates the required bit width to store the given value.
-    function int bit_width(input int value);
-        return $clog2(value + 1'b1);
-    endfunction
-
     localparam int unsigned WB_ADDR_WIDTH   = 20;
     localparam int unsigned RAM_ADDR_WIDTH  = 17;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
     localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT - 1'b1);
-    localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_ROW_COUNT - 1'b1);
+    localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_COL_COUNT - 1'b1);
     localparam int unsigned CRTC_ADDR_WIDTH = bit_width(CRTC_REG_COUNT - 1'b1);
     localparam int unsigned DATA_WIDTH      = 8;
 
