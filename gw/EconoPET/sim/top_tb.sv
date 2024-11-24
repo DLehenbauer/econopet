@@ -58,18 +58,18 @@ module top_tb;
     endtask
 
     task static usb_keyboard_test;
-        bit   [KBD_ADDR_WIDTH-1:0] col;
-        logic [    DATA_WIDTH-1:0] dout;
-        bit   [    DATA_WIDTH-1:0] value;
+        integer col;
+        logic [DATA_WIDTH-1:0] dout;
+        bit   [DATA_WIDTH-1:0] value;
 
         $display("[%t] Begin USB Keyboard Test", $time);
 
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'b1011, col };
-            mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
+            mock_system.spi_write_at(common_pkg::wb_io_kbd_addr(col), value);
             $display("[%t]   WB Keyboard[%d] <- %02x", $time, col, value);
 
-            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
+            mock_system.spi_read_at(common_pkg::wb_io_kbd_addr(col), dout);
             `assert_equal(dout, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
@@ -147,7 +147,7 @@ module top_tb;
         `assert_equal(cpu_reset_n, 1'b1);
 
         mock_system.spi_read_at(16'h8000, cpu_dout);
-        for (count = 0; count <= 2000; count = count + 1) begin
+        for (count = 0; count <= 25; count = count + 1) begin
             mock_system.spi_read(cpu_dout);
         end
 

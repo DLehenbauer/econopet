@@ -66,8 +66,8 @@ package common_pkg;
                                          PIA_CRB   = 3;         // CRB: Control Register B.  (Bit 2 selects 0=DDRB or 1=PIBB.)
 
     // PIBA bit assignments.
-    localparam bit [BIT_INDEX_WIDTH-1:0] PIA_PORTA_KEY_A = 0,   // PIA_PORTA[3:0]: Drives Key A-D, which selects the
-                                         PIA_PORTA_KEY_D = 3;   // currently active column during a keyboard scan.
+    localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_PORTA_KEY_A = 0,  // PIA_PORTA[3:0]: Drives Key A-D, which selects the
+                                         PIA1_PORTA_KEY_D = 3;  // currently active column during a keyboard scan.
 
     // VIA: Versatile Interface Adapter
     // https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf
@@ -178,6 +178,8 @@ package common_pkg;
                             REG_IO_VIA_PORTB        = REG_IO_PIA2_CRB + 1'b1,
                             IO_REG_COUNT            = REG_IO_VIA_PORTB + 1'b1;
 
+    localparam int unsigned IO_REG_ADDR_WIDTH       = bit_width(IO_REG_COUNT - 1'b1);
+
     localparam int unsigned REG_CPU           = 0;
     localparam int unsigned REG_VIDEO         = 1;
     localparam int unsigned REG_COUNT         = 2;
@@ -198,7 +200,6 @@ package common_pkg;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
     localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT - 1'b1);
-    localparam int unsigned KBD_ADDR_WIDTH  = bit_width(KBD_COL_COUNT - 1'b1);
 
     localparam WB_RAM_BASE  = 3'b000;
     localparam WB_REG_BASE  = 4'b0100;
@@ -220,8 +221,12 @@ package common_pkg;
         return { WB_CRTC_BASE, (WB_ADDR_WIDTH - CRTC_ADDR_REG_WIDTH - $bits(WB_CRTC_BASE))'('0), register };
     endfunction
 
-    function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_ADDR_WIDTH-1:0] register);
-        return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_ADDR_WIDTH - $bits(WB_KBD_BASE))'('0), register };
+    function logic[WB_ADDR_WIDTH-1:0] wb_io_addr(input logic[IO_REG_ADDR_WIDTH-1:0] register);
+        return { WB_KBD_BASE, (WB_ADDR_WIDTH - IO_REG_ADDR_WIDTH - $bits(WB_KBD_BASE))'('0), register };
+    endfunction
+
+    function logic[WB_ADDR_WIDTH-1:0] wb_io_kbd_addr(input logic[bit_width(KBD_COL_COUNT - 1'b1)-1:0] col);
+        return wb_io_addr({ REG_IO_KBD, col });
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_vram_addr(input logic[VRAM_ADDR_WIDTH-1:0] address);

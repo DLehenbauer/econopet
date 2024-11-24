@@ -42,7 +42,7 @@ module keyboard_tb;
 
     keyboard keyboard (
         .wb_clock_i(clock),
-        .wb_addr_i(common_pkg::wb_kbd_addr(addr)),
+        .wb_addr_i(common_pkg::wb_io_kbd_addr(addr)),
         .wb_data_i(pico),
         .wb_data_o(poci),
         .wb_we_i(we),
@@ -121,7 +121,8 @@ module keyboard_tb;
 
         $display("[%t]   Keyboard cols must be initialized to 8'hFF at power on.", $time);
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
-            wb.read(col, data_rd);
+            wb.read(REG_IO_KEY_MATRIX_START + col, data_rd);
+            $display("[%t]     col %0d = %2h", $time, col, data_rd);
             `assert_equal(data_rd, 8'hFF);
         end
 
@@ -130,21 +131,21 @@ module keyboard_tb;
         // First pass read/writes unique values to all cols.
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'h5, col[3:0] };
-            wb.write(col, value);
+            wb.write(REG_IO_KEY_MATRIX_START + col, value);
 
             cpu_select_col(col);
             cpu_read_current_col(data);
             `assert_equal(data, value);
             
-            wb.read(col, data_rd);
+            wb.read(REG_IO_KEY_MATRIX_START + col, data_rd);
             `assert_equal(data_rd, value);
         end
 
         // Second pass ensures unique values were not overwritten and resets all cols to 8'hFF.
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
-            wb.read(col, data_rd);
+            wb.read(REG_IO_KEY_MATRIX_START + col, data_rd);
             `assert_equal(data_rd, { 4'h5, col[3:0] });
-            wb.write(col, 8'hff);
+            wb.write(REG_IO_KEY_MATRIX_START + col, 8'hff);
         end
 
         #1 $display("[%t] END %m", $time);
