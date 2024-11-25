@@ -30,6 +30,7 @@ module keyboard(
     output logic                     wb_ack_o,
     input  logic                     wb_sel_i,      // Asserted when selected by 'wb_addr_i'
 
+    input  logic                     cpu_be_i,
     input  logic [   DATA_WIDTH-1:0] cpu_data_i,
     output logic [   DATA_WIDTH-1:0] cpu_data_o,
     output logic                     cpu_data_oe,   // Asserted when intercepting CPU read of keyboard matrix
@@ -64,8 +65,31 @@ module keyboard(
 
     always_ff @(posedge wb_clock_i) begin
         wb_ack_o <= '0;
+        cpu_data_oe <= '0;
 
-        if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
+        if (cpu_be_i) begin
+            if (cpu_we_i) begin
+                unique case (1'b1)
+                    pia1_cs_i: register[{ REG_IO_PIA1, pia_rs }] <= cpu_data_i;
+                    pia2_cs_i: register[{ REG_IO_PIA2, pia_rs }] <= cpu_data_i;
+                    via_cs_i && rs_i == VIA_PORTB: register[REG_IO_VIA_PORTB] <= cpu_data_i;
+                    default: /* do nothing */ ;
+                endcase
+            end else begin
+                case (1'b1)
+                    pia1_cs_i: begin
+                        unique case (pia_rs)
+                            PIA_PORTB: begin
+                                cpu_data_o <= current_col;
+                                cpu_data_oe <= current_col != 8'hff;
+                            end
+                            default: /* do nothing */;
+                        endcase
+                    end
+                    default: /* do nothing */ ;
+                endcase
+            end
+        end else if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
             if (wb_we_i) begin
                 register[col_addr] <= wb_data_i;
             end else begin
@@ -74,11 +98,8 @@ module keyboard(
             wb_ack_o <= 1'b1;
         end else begin
             // To relax timing, we pipeline reads from the 'register' block ram.
-            cpu_data_o  <= current_col;
-            cpu_data_oe <= reading_port_b && current_col != 8'hff;
             current_col <= register[{ REG_IO_KBD, selected_col }];
-
-            if (writing_port_a) selected_col <= cpu_data_i[PIA1_PORTA_KEY_D:PIA1_PORTA_KEY_A];
+            selected_col <= register[REG_IO_PIA1_PORTA][PIA1_PORTA_KEY_D:PIA1_PORTA_KEY_A];
         end
     end
 endmodule

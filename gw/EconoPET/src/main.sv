@@ -339,6 +339,7 @@ module main (
         .wb_stall_o(kbd_wb_stall),
         .wb_ack_o(kbd_wb_ack),
         .wb_sel_i(kbd_wb_sel),
+        .cpu_be_i(cpu_be_o),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(kbd_dout),
         .cpu_data_oe(kbd_doe),

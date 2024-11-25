@@ -65,18 +65,19 @@ module top_tb;
         $display("[%t] Begin USB Keyboard Test", $time);
 
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
-            value = { 4'b1011, col };
+            value = { 4'b1011, col[3:0] };
+            
+            $display("[%t]   Keyboard[%0d] <- %02x (WB)", $time, col, value);
             mock_system.spi_write_at(common_pkg::wb_io_kbd_addr(col), value);
-            $display("[%t]   WB Keyboard[%d] <- %02x", $time, col, value);
 
             mock_system.spi_read_at(common_pkg::wb_io_kbd_addr(col), dout);
+            $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
             `assert_equal(dout, value);
 
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+            $display("[%t]   Keyboard[%0d] -> %02x (CPU)", $time, col, dout);
             `assert_equal(dout, value);
-
-            $display("[%t]   Keyboard[%d] -> %02x", $time, col, dout);
 
             // Keyboard interception should not interfere with RAM access.
             test_rw(common_pkg::wb_ram_addr(17'h0E810 + PIA_PORTA), ~value);
@@ -88,6 +89,7 @@ module top_tb;
         end
 
         $display("[%t] End USB Keyboard Test", $time);
+        $finish;
     endtask
 
     task static crtc_write_test;
