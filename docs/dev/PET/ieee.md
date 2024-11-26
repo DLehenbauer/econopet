@@ -144,6 +144,7 @@ Address | CRA (Bit 2) | CRB (Bit 2) | Read | Write
   * [Part 2: The TALK/LISTEN Layer](https://www.pagetable.com/?p=1031)
   * [Part 3: The Commodore DOS Layer](https://www.pagetable.com/?p=1038)
 * [PET and the IEEE488 Bus](http://www.primrosebank.net/computers/pet/documents/PET_and_the_IEEE488_Bus_text.pdf)
+* [The Hewlett-Packard Interface Bus (HP-IB)](https://www.hp9845.net/9845/tutorials/hpib/)
 * [ROM Disassembly](https://www.zimmers.net/anonftp/pub/cbm/src/pet/pet_rom4_disassembly.txt)
 * Datasheets
   * [Western Digital W65C21](https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf)
