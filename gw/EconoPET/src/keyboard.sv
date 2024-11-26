@@ -57,8 +57,8 @@ module keyboard(
     wire writing_port_a =  cpu_we_i && pia1_cs_i && pia_rs == PIA_PORTA;     // CPU is selecting next keyboard col
     wire reading_port_b = !cpu_we_i && pia1_cs_i && pia_rs == PIA_PORTB;     // CPU is reading state of currenly selected col
 
-    logic [PIA1_PORTA_KEY_D:PIA1_PORTA_KEY_A] selected_col = '0;
-    logic [DATA_WIDTH-1:0]                    current_col  = 8'hff;
+    logic [PIA1_PORTA_KEY_D_OUT:PIA1_PORTA_KEY_A_OUT] selected_col = '0;
+    logic [DATA_WIDTH-1:0]                            current_col  = 8'hff;
 
     // This peripheral always completes WB operations in a single cycle.
     assign wb_stall_o = 1'b0;
@@ -80,7 +80,7 @@ module keyboard(
                     pia1_cs_i: begin
                         unique case (pia_rs)
                             PIA_PORTB: begin
-                                cpu_data_o <= current_col;
+                                cpu_data_o  <= current_col;
                                 cpu_data_oe <= current_col != 8'hff;
                             end
                             default: /* do nothing */;
@@ -99,7 +99,7 @@ module keyboard(
         end else begin
             // To relax timing, we pipeline reads from the 'register' block ram.
             current_col <= register[{ REG_IO_KBD, selected_col }];
-            selected_col <= register[REG_IO_PIA1_PORTA][PIA1_PORTA_KEY_D:PIA1_PORTA_KEY_A];
+            selected_col <= register[REG_IO_PIA1_PORTA][PIA1_PORTA_KEY_D_OUT:PIA1_PORTA_KEY_A_OUT];
         end
     end
 endmodule

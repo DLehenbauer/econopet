@@ -60,14 +60,30 @@ package common_pkg;
     localparam int unsigned PIA_RS_WIDTH = 2;
 
     // PIA register addresses.
-    localparam bit [   PIA_RS_WIDTH-1:0] PIA_PORTA = 0,         // DDRA/PIBA: Data Direction / Peripheral Interface Buffer for Port A
-                                         PIA_CRA   = 1,         // CRA: Control Register A.  (Bit 2 selects 0=DDRA or 1=PIBA.)
-                                         PIA_PORTB = 2,         // DDRB/PIBB: Data Direction / Peripheral Interface Buffer for Port B
-                                         PIA_CRB   = 3;         // CRB: Control Register B.  (Bit 2 selects 0=DDRB or 1=PIBB.)
+    localparam bit [   PIA_RS_WIDTH-1:0] PIA_PORTA = 0,     // DDRA/PIBA: Data Direction / Peripheral Interface Buffer for Port A
+                                         PIA_CRA   = 1,     // CRA: Control Register A.  (Bit 2 selects 0=DDRA or 1=PIBA.)
+                                         PIA_PORTB = 2,     // DDRB/PIBB: Data Direction / Peripheral Interface Buffer for Port B
+                                         PIA_CRB   = 3;     // CRB: Control Register B.  (Bit 2 selects 0=DDRB or 1=PIBB.)
 
-    // PIBA bit assignments.
-    localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_PORTA_KEY_A = 0,  // PIA_PORTA[3:0]: Drives Key A-D, which selects the
-                                         PIA1_PORTA_KEY_D = 3;  // currently active column during a keyboard scan.
+    // PIA1 Port A bit assignments
+    localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_PORTA_KEY_A_OUT       = 0, // Key A..D selects column (0-9) for keyboard scan
+                                         PIA1_PORTA_KEY_D_OUT       = 3,
+                                         PIA1_PORTA_CASS1_SWITCH_IN = 4, // Cassette #1 switch (0 = Closed, 1 = Open)
+                                         PIA1_PORTA_CASS2_SWITCH_IN = 5, // Cassette #2 switch (0 = Closed, 1 = Open)
+                                         PIA1_PORTA_EOI_IN          = 6, // IEEE-488: (0 = last byte from device, 1 = device has more data)
+                                         PIA1_PORTA_DIAG_OUT        = 7; // Diagnostic sense (0 = TIM, 1 = BASIC)
+
+    localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_CRA_EOI_OUT           = 3; // IEEE-488: (0 = last byte from PET, 1 = PET has more data)
+
+    // PIA2 Port A is DIO1-8 (In)
+
+    localparam bit [BIT_INDEX_WIDTH-1:0] PIA2_CRA_NDAC_OUT          = 3, // IEEE-488: (0 = PET has not accepted data, 1 = PET has accepted data)
+                                         PIA2_CRA_ATN_IN            = 7; // IEEE-488: (0 = Device wants to send command, 1 = Idle)
+
+    // PIA2 Port B is DIO1-8 (Out)
+
+    localparam bit [BIT_INDEX_WIDTH-1:0] PIA2_CRB_DAV_OUT           = 3, // IEEE-488: (0 = DIO1-8 is valid, 1 = DIO1-8 is not valid)
+                                         PIA2_CRB_SRQ_IN            = 7; // IEEE-488: (0 = Device requesting service, 1 = No service requested)
 
     // VIA: Versatile Interface Adapter
     // https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf
@@ -90,6 +106,16 @@ package common_pkg;
                VIA_IFR   = 4'hD,    // IFR: Interrupt Flag Register 
                VIA_IER   = 4'hE,    // IER: Interrupt Enable Register 
                VIA_ORA   = 4'hF;    // IRA/ORA: Same as Reg 1 except no "Handshake"
+
+    // VIA Port B bit assignments
+    localparam bit [BIT_INDEX_WIDTH-1:0] VIA_PORTB_NDAC_IN         = 0,    // IEEE-488: (0 = Device has not accepted data, 1 = Device has accepted data)
+                                         VIA_PORTB_NRFD_OUT        = 1,    // IEEE-488: (0 = PET not ready for data, 1 = PET ready for data)
+                                         VIA_PORTB_ATN_OUT         = 2,    // IEEE-488: (0 = PET wants to send command, 1 = Idle)
+                                         VIA_PORTB_CASS_WRITE_OUT  = 3,    // Cassette Write Signal
+                                         VIA_PORTB_CASS2_MOTOR_OUT = 4,    // Cassette #2 Motor On (0 = On, 1 = Off)
+                                         VIA_PORTB_VERT_RETRACE_IN = 5,    // Vertical Retrace Detect
+                                         VIA_PORTB_NRFD_IN         = 6,    // IEEE-488: (0 = Device not ready for data, 1 = Device ready for data)
+                                         VIA_PORTB_DAV_IN          = 7;    // IEEE-488: (0 = DIO1-8 is valid, 1 = DIO1-8 is not valid)
 
     // CRTC: CRT Controller
     // http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf
