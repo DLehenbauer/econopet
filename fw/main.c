@@ -140,44 +140,34 @@ int main() {
     printf("    spi1     = %u Bd\n", baudrate);
 
     sd_init();
-    // sd_read_file("filename.txt");
-
     video_init();
     usb_init();
     reset();
     menu_init_end();
 
     while (1) {
-        // Run PET loop until menu button is pressed.
+        // Run PET loop until menu is entered.
         do {
+            // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
+            //       in a single SPI transaction?  Maybe even read/write simultaneously?
             spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
 
             tuh_task();
-            cdc_app_task();
-            hid_app_task();
+            cdc_app_task();     // TODO: USB serial console unused.  Remove?
+            hid_app_task();     // TODO: Remove empty HID task or merge with dispatch_key_events?
             dispatch_key_events();
 
             // Write USB keyboard state and read video graphics.
             sync_state();
-        } while (!menu_is_pressed());
+        } while (!menu_task());
 
-        printf("Menu button pressed\n");
-
-        // Suspend CPU while handling menu button press.
-        set_cpu(/* ready: */ 0, /* reset: */ 0);
-        
-        // For now, the Menu button toggles between 40/80 columns.
+        // Toggles between 40/80 columns.
         video_is_80_col = !video_is_80_col;
 
-        // Reinitialize ROMs to reflect new video mode.
-        pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
-        
         // Tell FPGA to switch native PET video to 40/80 column mode.
         set_video(video_is_80_col);
-        
-        // Wait until button is released to resume CPU.
-        while (!gpio_get(MENU_BTN_GP));
 
+        // Reset will reinitialize the ROM region of our SRAM.
         reset();
     }
 
