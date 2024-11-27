@@ -88,13 +88,15 @@ void directory() {
         return;
     }
 
+    uint y = 0;
     struct dirent *entry;
+
     while ((entry = readdir(dir)) != NULL) {
         printf("%s\n", entry->d_name);
         fflush(stdout);
         uart_default_tx_wait_blocking();
 
-        screen_print(0, 0, entry->d_name, false);
+        screen_print(0, y++, entry->d_name, false);
     }
 
     closedir(dir);

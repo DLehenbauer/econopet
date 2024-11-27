@@ -83,10 +83,12 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		uint dest = cx_start;									// Next byte offset to write in 'scanline'
 		uint remaining = chars_displayed_x;						// Remaining number of characters to display in row
 
+		const uint ra = y % r9_max_scan_line;
+
 		if (video_is_80_col) {
 			while (remaining--) {
 				uint c = video_char_buffer[src++];
-				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
+				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
 				
 				if (c & 0x80) {
 					p8 ^= 0xff;
@@ -99,7 +101,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		} else {
 			while (remaining--) {
 				uint c = video_char_buffer[src++];
-				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
+				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
 
 				if (c & 0x80) {
 					p8 ^= 0xff;
@@ -121,7 +123,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 }
 
 static void __not_in_flash_func(core1_scanline_callback)() {
-	static uint16_t y = 1;
+	static uint y = 1;
 	prepare_scanline(y);
 	y = (y + 1) % FRAME_HEIGHT;
 }
@@ -150,7 +152,7 @@ void video_init() {
 
 	prepare_scanline(0);
 
-	sem_init(&dvi_start_sem, 0, 1);
+	sem_init(&dvi_start_sem, /* initial_permits: */ 0, /* max_permits: */ 1);
 	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
 	multicore_launch_core1(core1_main);
 	sem_release(&dvi_start_sem);
