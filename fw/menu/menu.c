@@ -75,21 +75,32 @@ void screen_print(uint8_t x, uint8_t y, const char* str, bool reverse) {
 }
 
 void directory() {
-    char dir_path[] = "/";
+    screen_clear();
 
-    DIR *dir = opendir(dir_path);
+    DIR* dir = opendir("/");
+
+    printf("opendir\n");
+    fflush(stdout);
+    uart_default_tx_wait_blocking();
+
     if (dir == NULL) {
-        screen_clear();
         screen_print(0, 0, "Error opening directory", false);
         return;
     }
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
+        printf("%s\n", entry->d_name);
+        fflush(stdout);
+        uart_default_tx_wait_blocking();
+
         screen_print(0, 0, entry->d_name, false);
     }
 
     closedir(dir);
+    printf("closedir\n");
+    fflush(stdout);
+    uart_default_tx_wait_blocking();
 }
 
 bool menu_is_pressed() {
@@ -123,6 +134,9 @@ bool menu_task() {
 
     directory();
 
+    // Wait for another press/release before returning
     while (!menu_is_pressed());
+    while (menu_is_pressed());
+
     return true;
 }

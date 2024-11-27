@@ -47,7 +47,7 @@ static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
 
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
 
-static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, uint16_t y) {
+static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 	static uint8_t chars_displayed_x = r1_h_displayed;
 	static uint8_t cx_start = 0;
 	static uint8_t y_start = 0;
@@ -73,20 +73,19 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 			chars_displayed_x >>= 1;
 		}
 	} else {
+		// TODO: Copy into SRAM and precalculate flip/stretch? (PERF)
 		// Select graphics/text character ROM
 		const uint8_t* const p_char_rom = video_graphics
 			? p_video_font_400
 			: p_video_font_000;
 
-		// 'cy' is the memory offset of first character in row
-		const uint16_t cy = y / r9_max_scan_line * chars_displayed_x;
-
-		// 'cx' is the character position in the scanline to write to.
-		uint16_t cx = cx_start;
+		uint src = y / r9_max_scan_line * chars_displayed_x;	// Next offset to read from 'video_char_buffer'
+		uint dest = cx_start;									// Next byte offset to write in 'scanline'
+		uint remaining = chars_displayed_x;						// Remaining number of characters to display in row
 
 		if (video_is_80_col) {
-			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
-				uint c = chars[cy + ci];
+			while (remaining--) {
+				uint c = video_char_buffer[src++];
 				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
 				
 				if (c & 0x80) {
@@ -95,11 +94,11 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 				
 				p8 = flip_x(p8);
 
-				scanline[cx++] = p8;
+				scanline[dest++] = p8;
 			}
 		} else {
-			for (uint16_t ci = 0; ci < chars_displayed_x; ci++) {
-				uint c = chars[cy + ci];
+			while (remaining--) {
+				uint c = video_char_buffer[src++];
 				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + (y % r9_max_scan_line)];
 
 				if (c & 0x80) {
@@ -109,8 +108,8 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 				p8 = flip_x(p8);
 				uint16_t p16 = stretch_x(p8);
 
-				scanline[cx++] = p16;
-				scanline[cx++] = p16 >> 8;
+				scanline[dest++] = p16;
+				scanline[dest++] = p16 >> 8;
 			}
 		}
 	}
@@ -123,7 +122,7 @@ static inline void __not_in_flash_func(prepare_scanline)(const uint8_t* chars, u
 
 static void __not_in_flash_func(core1_scanline_callback)() {
 	static uint16_t y = 1;
-	prepare_scanline(video_char_buffer, y);
+	prepare_scanline(y);
 	y = (y + 1) % FRAME_HEIGHT;
 }
 
@@ -149,7 +148,7 @@ void video_init() {
 	dvi0.scanline_callback = core1_scanline_callback;
 	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
 
-	prepare_scanline(video_char_buffer, 0);
+	prepare_scanline(0);
 
 	sem_init(&dvi_start_sem, 0, 1);
 	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
