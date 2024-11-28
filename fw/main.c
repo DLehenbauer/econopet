@@ -145,30 +145,19 @@ int main() {
     reset();
     menu_init_end();
 
-    while (1) {
-        // Run PET loop until menu is entered.
-        do {
-            // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
-            //       in a single SPI transaction?  Maybe even read/write simultaneously?
-            spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
+    while (true) {
+        // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
+        //       in a single SPI transaction?  Maybe even read/write simultaneously?
+        spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
 
-            tuh_task();
-            cdc_app_task();     // TODO: USB serial console unused.  Remove?
-            hid_app_task();     // TODO: Remove empty HID task or merge with dispatch_key_events?
-            dispatch_key_events();
+        tuh_task();
+        cdc_app_task();     // TODO: USB serial console unused.  Remove?
+        hid_app_task();     // TODO: Remove empty HID task or merge with dispatch_key_events?
+        dispatch_key_events();
 
-            // Write USB keyboard state and read video graphics.
-            sync_state();
-        } while (!menu_task());
-
-        // Toggles between 40/80 columns.
-        video_is_80_col = !video_is_80_col;
-
-        // Tell FPGA to switch native PET video to 40/80 column mode.
-        set_video(video_is_80_col);
-
-        // Reset will reinitialize the ROM region of our SRAM.
-        reset();
+        // Write USB keyboard state and read video graphics.
+        sync_state();
+        menu_task();
     }
 
     __builtin_unreachable();

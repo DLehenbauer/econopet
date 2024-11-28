@@ -112,7 +112,7 @@ void screen_print(uint x, uint y, const char* str, bool reverse) {
     }
 }
 
-void screen_reverse_line(uint x, uint y, uint length) {
+void screen_reverse(uint x, uint y, uint length) {
     uint offset = screen_offset(x, y);
     
     assert((offset + length) <= (screen_width * screen_height));
@@ -123,6 +123,7 @@ void screen_reverse_line(uint x, uint y, uint length) {
 }
 
 static struct dirent file_slots[MAX_FILE_SLOTS] = { 0 };
+static char full_path [PATH_MAX + 1] = { 0 };
 
 typedef enum {
     STATUS_ERROR,
@@ -138,7 +139,7 @@ DirStatus file_slots_read(char* path, uint position) {
         goto Cleanup;
     }
 
-    struct dirent* entry;
+    struct dirent* entry = NULL;
 
     // Skip entries until we arrive at the desired position or reach the end of the directory.
     while (position--) {
@@ -175,6 +176,35 @@ Cleanup:
     return status;
 }
 
+int path_concat(char *dest, size_t dest_size, const char *path, const char *filename) {
+    if (!dest || !path || !filename) {
+        return -1; // Invalid arguments
+    }
+
+    // Check if dest_size is sufficient
+    size_t path_len = strlen(path);
+    size_t filename_len = strlen(filename);
+    size_t total_len = path_len + 1 + filename_len + 1; // 1 for '/', 1 for null terminator
+
+    if (total_len > dest_size) {
+        return -2; // Destination buffer too small
+    }
+
+    // Copy the path
+    strncpy(dest, path, dest_size);
+    dest[dest_size - 1] = '\0'; // Ensure null termination
+
+    // Append a separator if needed
+    if (path_len > 0 && path[path_len - 1] != '/') {
+        strncat(dest, "/", dest_size - strlen(dest) - 1);
+    }
+
+    // Append the filename
+    strncat(dest, filename, dest_size - strlen(dest) - 1);
+
+    return 0; // Success
+}
+
 char* directory() {
     screen_clear();
     file_slots_read("/", 0);
@@ -187,24 +217,66 @@ char* directory() {
     }
 
     uint selected = 0;
-    screen_reverse_line(selected, 0, screen_width);
+    screen_reverse(0, selected, screen_width);
 
     while (true) {
         ButtonAction action = get_button_action();
 
         switch (action) {
+            case None:
+                break;
             case ShortPress:
-                screen_reverse_line(selected, 0, screen_width);
+                screen_reverse(0, selected, screen_width);
                 selected++;
                 selected %= screen_height;
-                screen_reverse_line(selected, 0, screen_width);
+                screen_reverse(0, selected, screen_width);
                 break;
             case LongPress:
-                return file_slots[selected].d_name;
+                path_concat(full_path, sizeof(full_path), "/", file_slots[selected].d_name);
+                return full_path;
         }
     }
 
     __builtin_unreachable();
+}
+
+#define CHUNK_SIZE 2048
+
+void load_prg(const char *filename) {
+    FILE *file = fopen(filename, "rb"); // Open file in binary read mode
+    if (!file) {
+        perror("Failed to open file");
+        return;
+    }
+
+    uint16_t dest;
+    if (fread(&dest, 1, sizeof(dest), file) != sizeof(dest)) {
+        return;
+    }
+
+    uint8_t buffer[CHUNK_SIZE];
+    size_t bytes_read;
+    size_t total_bytes = 0;
+
+    while ((bytes_read = fread(buffer, 1, CHUNK_SIZE, file)) > 0) {
+        spi_write(dest, buffer, bytes_read);
+        dest += bytes_read;
+        total_bytes += bytes_read;
+
+        // Check for read errors (other than EOF)
+        if (bytes_read < CHUNK_SIZE && ferror(file)) {
+            perror("Error reading file");
+            break;
+        }
+    }
+
+    fclose(file);  // Close the file
+
+    uint16_t size = total_bytes + 0x3FF;
+    spi_write_at(0xc9, size & 0xFF);
+    spi_write_at(0x2a, size & 0xFF);
+    spi_write_at(0xca, size >> 8);
+    spi_write_at(0x2b, size >> 8);
 }
 
 void menu_init_start() {
@@ -231,6 +303,7 @@ bool menu_task() {
 
     // If short press, return 'true' which will cause a reset.
     if (action == ShortPress) {
+        reset();
         return true;
     }
 
@@ -240,11 +313,14 @@ bool menu_task() {
     set_cpu(/* ready */ false, /* reset */ false);
 
     screen_clear();
-    directory();
 
-    do {
-        action = get_button_action();
-    } while (action == None);
+    char* prgFile = directory();
+    if (prgFile != NULL) {
+        load_prg(prgFile);
+    }
+
+    // Resume CPU
+    set_cpu(/* ready */ true, /* reset */ false);
 
     printf("-- Exit Menu --\n");
 
