@@ -26,6 +26,39 @@ const uint8_t screen_height = 25;
 
 #define CH_SPACE 0x20
 
+static ButtonAction get_button_action() {
+    static bool is_pressed = true;
+    static bool was_handled = true;
+    static uint64_t press_start;
+
+    bool was_pressed = is_pressed;
+    is_pressed = !gpio_get(MENU_BTN_GP);
+    ButtonAction action = None;
+
+    if (!is_pressed) {
+        // Button is not current pressed.
+        if (was_pressed && !was_handled) {
+            // Button has just been released and did not previously exceed the
+            // long-press threshold.
+            action = ShortPress;
+            printf("MENU button: short press\n");
+        }
+    } else {
+        // The button is currently pressed.
+        if (!was_pressed) {
+            // Button has just been pressed.  Record the start time of the press.
+            press_start = time_us_64();
+        } else if (!was_handled && (time_us_64() - press_start > 500000)) {
+            // Button has been held for more that 500ms.  Consider this a long press.
+            was_handled = true;
+            action = LongPress;
+            printf("MENU button: long press\n");
+        }
+    }
+
+    return action;
+}
+
 // Lower-case (POKE 59468,14)
 // TODO: _`{}|~
 const uint8_t ascii_to_vrom[128] = {
@@ -105,10 +138,6 @@ void directory() {
     uart_default_tx_wait_blocking();
 }
 
-bool menu_is_pressed() {
-    return !gpio_get(MENU_BTN_GP);
-}
-
 void menu_init_start() {
     gpio_init(MENU_BTN_GP);
 
@@ -124,21 +153,27 @@ void menu_init_end() {
 }
 
 bool menu_task() {
-    if (!menu_is_pressed()) {
+    if (get_button_action() == None) {
         return false;
     }
 
-    // Wait for menu release
-    while (menu_is_pressed());
+    printf("-- Enter Menu --\n");
 
-    // CPU is suspended/reset while handling menu
-    set_cpu(/* ready */ false, /* reset */ true);
+    // Suspend CPU while inside menu
+    set_cpu(/* ready */ false, /* reset */ false);
 
-    directory();
+    // Force PET to 80-column lower-case mode
+    bool video_graphics = true;
+    bool video_is_80_col = true;
+    sync_state();
 
-    // Wait for another press/release before returning
-    while (!menu_is_pressed());
-    while (menu_is_pressed());
+    ButtonAction action = None;
+
+    while (action == None) {
+        action = get_button_action();
+    }
+
+    printf("-- Exit Menu --\n");
 
     return true;
 }

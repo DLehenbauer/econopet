@@ -16,6 +16,17 @@
 
 #include "../pch.h"
 
+typedef enum {
+    // Button is not pressed or currently being held.
+    None        = 0,
+
+    // Button has been released. Time held is below long press threshold.
+    ShortPress  = 1,
+
+    // Button has been held longer than long-press threshold.
+    LongPress   = 2
+} ButtonAction;
+
 void menu_init_start();
 void menu_init_end();
 bool menu_task();
