@@ -43,11 +43,13 @@ static ButtonAction get_button_action() {
             action = ShortPress;
             printf("MENU button: short press\n");
         }
+
     } else {
         // The button is currently pressed.
         if (!was_pressed) {
             // Button has just been pressed.  Record the start time of the press.
             press_start = time_us_64();
+            was_handled = false;
         } else if (!was_handled && (time_us_64() - press_start > 500000)) {
             // Button has been held for more that 500ms.  Consider this a long press.
             was_handled = true;
@@ -153,8 +155,16 @@ void menu_init_end() {
 }
 
 bool menu_task() {
-    if (get_button_action() == None) {
+    ButtonAction action = get_button_action();
+
+    // If no button action, return to normal PET loop.
+    if (action == None) {
         return false;
+    }
+
+    // If short press, return 'true' which will cause a reset.
+    if (action == ShortPress) {
+        return true;
     }
 
     printf("-- Enter Menu --\n");
@@ -162,16 +172,12 @@ bool menu_task() {
     // Suspend CPU while inside menu
     set_cpu(/* ready */ false, /* reset */ false);
 
-    // Force PET to 80-column lower-case mode
-    bool video_graphics = true;
-    bool video_is_80_col = true;
-    sync_state();
+    screen_clear();
+    directory();
 
-    ButtonAction action = None;
-
-    while (action == None) {
+    do {
         action = get_button_action();
-    }
+    } while (action == None);
 
     printf("-- Exit Menu --\n");
 
