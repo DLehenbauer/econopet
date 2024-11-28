@@ -21,8 +21,12 @@
 #include "../video/video.h"
 #include "menu.h"
 
-const uint8_t screen_width  = 40;
-const uint8_t screen_height = 25;
+// When navigating the SD card's file system, this is the maximum number
+// of we will display to the user/cache in memory.
+#define MAX_FILE_SLOTS 25
+
+const uint screen_width  = 40;
+const uint screen_height = 25;
 
 #define CH_SPACE 0x20
 
@@ -82,21 +86,20 @@ const uint8_t ascii_to_vrom[128] = {
     /*   x */ 0x18, /*   y */ 0x19, /*   z */ 0x1A, /*   { */ 0x6B, /*   | */ 0x5B, /*   } */ 0x73, /*   ~ */ 0x71, /* DEL */ 0x7F,
 };
 
-uint16_t screen_offset(uint8_t x, uint8_t y) {
-    uint16_t offset = y;
+uint screen_offset(uint x, uint y) {
+    assert(x < screen_width && y < screen_height);
+    uint offset = y;
     offset *= screen_width;
     offset += x;
     return offset;
 }
 
 void screen_clear() {
-    for (uint16_t i = 0; i < screen_width * screen_height; i++) {
-        video_char_buffer[i] = CH_SPACE;
-    }
+    memset(video_char_buffer, CH_SPACE, screen_width * screen_height);
 }
 
-void screen_print(uint8_t x, uint8_t y, const char* str, bool reverse) {
-    uint16_t offset = screen_offset(x, y);
+void screen_print(uint x, uint y, const char* str, bool reverse) {
+    uint offset = screen_offset(x, y);
     const uint8_t* pCh = (uint8_t*) str;
     if (reverse) {
         while (*pCh != 0) {
@@ -109,35 +112,99 @@ void screen_print(uint8_t x, uint8_t y, const char* str, bool reverse) {
     }
 }
 
-void directory() {
-    screen_clear();
-
-    DIR* dir = opendir("/");
-
-    printf("opendir\n");
-    fflush(stdout);
-    uart_default_tx_wait_blocking();
-
-    if (dir == NULL) {
-        screen_print(0, 0, "Error opening directory", false);
-        return;
+void screen_reverse_line(uint x, uint y, uint length) {
+    uint offset = screen_offset(x, y);
+    
+    assert((offset + length) <= (screen_width * screen_height));
+    
+    while (length--) {
+        video_char_buffer[offset++] ^= 0x80;
     }
+}
 
+static struct dirent file_slots[MAX_FILE_SLOTS] = { 0 };
+
+typedef enum {
+    STATUS_ERROR,
+    STATUS_SUCCESS_MORE_ENTRIES,
+    STATUS_SUCCESS_END_OF_DIR
+} DirStatus;
+
+DirStatus file_slots_read(char* path, uint position) {
     uint y = 0;
-    struct dirent *entry;
 
-    while ((entry = readdir(dir)) != NULL) {
-        printf("%s\n", entry->d_name);
-        fflush(stdout);
-        uart_default_tx_wait_blocking();
-
-        screen_print(0, y++, entry->d_name, false);
+    DIR* dir = opendir(path);
+    if (dir == NULL) {
+        goto Cleanup;
     }
 
-    closedir(dir);
-    printf("closedir\n");
-    fflush(stdout);
-    uart_default_tx_wait_blocking();
+    struct dirent* entry;
+
+    // Skip entries until we arrive at the desired position or reach the end of the directory.
+    while (position--) {
+        entry = readdir(dir);
+        if (entry == NULL) {
+            goto Cleanup;
+        }
+    }
+
+    while (((entry = readdir(dir)) != NULL) && (y < MAX_FILE_SLOTS)) {
+        memcpy(&file_slots[y++], entry, sizeof(struct dirent));
+    }
+
+Cleanup:
+    if (y < MAX_FILE_SLOTS) {
+        file_slots[y].d_name[0] = '\0';
+    }
+
+    DirStatus status;
+
+    if (errno != 0) {
+        status = STATUS_ERROR;
+        perror("readdir");
+    } else if (entry == NULL) {
+        status = STATUS_SUCCESS_END_OF_DIR;
+    } else {
+        status = STATUS_SUCCESS_MORE_ENTRIES;
+    }
+
+    if (dir != NULL) {
+        closedir(dir);
+    }
+
+    return status;
+}
+
+char* directory() {
+    screen_clear();
+    file_slots_read("/", 0);
+    
+    for (uint y = 0; y < MAX_FILE_SLOTS; y++) {
+        if (file_slots[y].d_name[0] == '\0') {
+            break;
+        }
+        screen_print(0, y, file_slots[y].d_name, false);
+    }
+
+    uint selected = 0;
+    screen_reverse_line(selected, 0, screen_width);
+
+    while (true) {
+        ButtonAction action = get_button_action();
+
+        switch (action) {
+            case ShortPress:
+                screen_reverse_line(selected, 0, screen_width);
+                selected++;
+                selected %= screen_height;
+                screen_reverse_line(selected, 0, screen_width);
+                break;
+            case LongPress:
+                return file_slots[selected].d_name;
+        }
+    }
+
+    __builtin_unreachable();
 }
 
 void menu_init_start() {
