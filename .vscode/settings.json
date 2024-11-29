@@ -16,5 +16,6 @@
         "Lehenbauer",
         "PICO",
         "RIGHTSHIFT"
-    ]
+    ],
+    "cortex-debug.variableUseNaturalFormat": false
 }
