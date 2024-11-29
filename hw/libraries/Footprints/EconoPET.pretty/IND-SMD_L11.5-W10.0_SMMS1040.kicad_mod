@@ -1,0 +1,66 @@
+(footprint "IND-SMD_L11.5-W10.0_SMMS1040" (version 20211014) (generator pcbnew)
+  (layer "F.Cu")
+  (tedit 63C87AFF)
+  (descr "IND-SMD_L11.5-W10.0_SMMS1040 footprint")
+  (tags "IND-SMD_L11.5-W10.0_SMMS1040 footprint")
+  (attr smd)
+  (fp_text reference "REF**" (at 0 -7.076226) (layer "F.SilkS")
+    (effects (font (size 1 1) (thickness 0.15)))
+    (tstamp 4f61ba6b-4d84-4544-9c46-f8530dcc6542)
+  )
+  (fp_text value "IND-SMD_L11.5-W10.0_SMMS1040" (at 0 7.076226) (layer "F.Fab")
+    (effects (font (size 1 1) (thickness 0.15)))
+    (tstamp 86bbefe6-3860-47e0-bd0f-370b350d60ea)
+  )
+  (fp_text user "REF**" (at 0 9.076226) (layer "F.Fab")
+    (effects (font (size 1 1) (thickness 0.15)))
+    (tstamp b5881879-5971-4099-9705-318c6a6e21aa)
+  )
+  (fp_line (start 5.85 5.3) (end -5.85 5.3) (layer "F.SilkS") (width 0.12) (tstamp 5057444e-c0f8-469a-b478-17b0878041f5))
+  (fp_line (start 5.85 2.8) (end 5.85 5.3) (layer "F.SilkS") (width 0.12) (tstamp 613bbec8-07e0-4431-ae34-cd33d7338a78))
+  (fp_line (start -5.85 -5.3) (end 5.85 -5.3) (layer "F.SilkS") (width 0.12) (tstamp 7c9a7649-c5f1-48e6-a5ef-4f53148d807f))
+  (fp_line (start -5.85 5.3) (end -5.85 2.8) (layer "F.SilkS") (width 0.12) (tstamp 82b73fd0-cad7-4bc4-a595-61acf6ca2c99))
+  (fp_line (start -5.85 -2.8) (end -5.85 -5.3) (layer "F.SilkS") (width 0.12) (tstamp 9edd18f0-ad47-4ca3-ba8d-00e89d4b27bd))
+  (fp_line (start 5.85 -5.3) (end 5.85 -2.8) (layer "F.SilkS") (width 0.12) (tstamp c1ed6ad7-1b2e-419c-8bdd-405da8e8c605))
+  (fp_line (start -7 -5.45) (end -7 5.45) (layer "F.CrtYd") (width 0.05) (tstamp 938057b5-5d0c-4b57-9922-90fa0b3190f8))
+  (fp_line (start 7 5.45) (end 7 -5.45) (layer "F.CrtYd") (width 0.05) (tstamp a6cc6594-7f43-4306-b796-5ac7d3b07709))
+  (fp_line (start -7 5.45) (end 7 5.45) (layer "F.CrtYd") (width 0.05) (tstamp b2852aee-fe16-4f8a-b57d-2780877d8ca4))
+  (fp_line (start 7 -5.45) (end -7 -5.45) (layer "F.CrtYd") (width 0.05) (tstamp f2aa9699-37c8-4f56-aca5-e902674eacc1))
+  (fp_line (start -5.75 -5.2) (end -5.75 -2.8) (layer "F.Fab") (width 0.1) (tstamp 448226eb-ad79-44e6-babc-2d65693b6f22))
+  (fp_line (start -5.75 5.2) (end 5.75 5.2) (layer "F.Fab") (width 0.1) (tstamp 81641355-afe9-4ea5-8974-fe7521a92423))
+  (fp_line (start -5.75 5.2) (end -5.75 2.8) (layer "F.Fab") (width 0.1) (tstamp 97dafd15-6528-499e-acf2-f2d92bb10a85))
+  (fp_line (start 5.75 -5.2) (end 5.75 -2.8) (layer "F.Fab") (width 0.1) (tstamp db5c21da-5bde-4d46-8c74-2b53e460ae48))
+  (fp_line (start -5.75 -5.2) (end 5.75 -5.2) (layer "F.Fab") (width 0.1) (tstamp f0711960-864d-418c-8c66-f2ead331e925))
+  (fp_line (start 5.75 5.2) (end 5.75 2.8) (layer "F.Fab") (width 0.1) (tstamp f7f58ae4-5bfd-42d5-a957-fe3a0dfbe422))
+  (fp_arc (start 3.17 3.17) (mid 0 4.483057) (end -3.17 3.17) (layer "F.Fab") (width 0.1) (tstamp 0a5d29e9-9553-4498-989b-fe0f8080e2cc))
+  (fp_arc (start -3.17 -3.17) (mid 0 -4.483057) (end 3.17 -3.17) (layer "F.Fab") (width 0.1) (tstamp 803d6d49-ed8e-45f5-a441-cf1be1dc451a))
+  (pad "1" smd rect (at -5.187351 0 180) (size 2.924003 3.5) (layers "F.Cu" "F.Paste" "F.Mask") (tstamp b0f83387-fe81-45f3-b81f-a31561f0bbde))
+  (pad "2" smd rect (at 5.17333 0 180) (size 2.924003 3.5) (layers "F.Cu" "F.Paste" "F.Mask") (tstamp e75cfe8d-e562-492c-84b1-2b744dcbee83))
+  (group "" (id 9232977b-f1ad-456b-a9b5-832d6c97f24c)
+    (members
+      0a5d29e9-9553-4498-989b-fe0f8080e2cc
+      448226eb-ad79-44e6-babc-2d65693b6f22
+      5057444e-c0f8-469a-b478-17b0878041f5
+      613bbec8-07e0-4431-ae34-cd33d7338a78
+      7c9a7649-c5f1-48e6-a5ef-4f53148d807f
+      803d6d49-ed8e-45f5-a441-cf1be1dc451a
+      81641355-afe9-4ea5-8974-fe7521a92423
+      82b73fd0-cad7-4bc4-a595-61acf6ca2c99
+      938057b5-5d0c-4b57-9922-90fa0b3190f8
+      97dafd15-6528-499e-acf2-f2d92bb10a85
+      9edd18f0-ad47-4ca3-ba8d-00e89d4b27bd
+      a6cc6594-7f43-4306-b796-5ac7d3b07709
+      b2852aee-fe16-4f8a-b57d-2780877d8ca4
+      c1ed6ad7-1b2e-419c-8bdd-405da8e8c605
+      db5c21da-5bde-4d46-8c74-2b53e460ae48
+      f0711960-864d-418c-8c66-f2ead331e925
+      f2aa9699-37c8-4f56-aca5-e902674eacc1
+      f7f58ae4-5bfd-42d5-a957-fe3a0dfbe422
+    )
+  )
+  (model "D:/gh/kicad-jlcpcb/./JLCPCB/packages3d/IND-SMD_L11.5-W10.0_SMMS1040.wrl"
+    (offset (xyz 0 0 0))
+    (scale (xyz 1 1 1))
+    (rotate (xyz 0 0 0))
+  )
+)
