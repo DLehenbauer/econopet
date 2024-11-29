@@ -2571,7 +2571,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "SnapEDA:CUI_SJ-43504-SMT-TR"
+		(property "Footprint" "EconoPET:CUI_SJ-43504-SMT-TR"
 			(at 118.11 85.09 0)
 			(effects
 				(font
