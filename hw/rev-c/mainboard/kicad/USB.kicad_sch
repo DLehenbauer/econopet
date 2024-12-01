@@ -2016,7 +2016,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "JLCPCB:USB-C_SMD-TYPE-C-31-M-12"
+		(property "Footprint" "EconoPET:USB-C_SMD-TYPE-C-31-M-12"
 			(at 148.59 92.71 0)
 			(effects
 				(font
