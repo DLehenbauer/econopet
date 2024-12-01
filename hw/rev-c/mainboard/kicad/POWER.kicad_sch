@@ -2598,102 +2598,6 @@
 				)
 			)
 		)
-		(symbol "PET:PD_GND"
-			(power)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "PD_GND"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"PD_GND\" , ground"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "power-flag"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "PD_GND_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "PD_GND_1_1"
-				(pin power_in line
-					(at 0 0 270)
-					(length 0) hide
-					(name "PD_GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
 		(symbol "PET:XL1509-5.0E1"
 			(pin_names
 				(offset 1.016)
@@ -6876,16 +6780,6 @@
 	)
 	(wire
 		(pts
-			(xy 247.65 58.42) (xy 252.73 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "ebe0c4bc-8621-4c6d-9ac9-a2a4508218b3")
-	)
-	(wire
-		(pts
 			(xy 153.67 140.97) (xy 170.18 140.97)
 		)
 		(stroke
@@ -8531,71 +8425,6 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
-		(at 247.65 58.42 270)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "0b17f8c5-2d91-4142-8ee5-70a9455bbff0")
-		(property "Reference" "#PWR028"
-			(at 241.3 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "PD_GND"
-			(at 243.205 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 247.65 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 247.65 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 247.65 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "7693d93e-cf33-4a66-98d8-b344471f7361")
-		)
-		(instances
-			(project ""
-				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "#PWR028")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:C_Small")
 		(at 119.38 99.06 0)
 		(unit 1)
@@ -8740,7 +8569,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 22.86 179.07 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -8758,7 +8587,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 22.86 184.15 0)
 			(effects
 				(font
@@ -8784,7 +8613,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 22.86 179.07 0)
 			(effects
 				(font
@@ -9645,7 +9474,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 135.89 107.95 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9662,7 +9491,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 135.89 112.395 0)
 			(effects
 				(font
@@ -9688,7 +9517,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 135.89 107.95 0)
 			(effects
 				(font
@@ -9710,7 +9539,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 90.17 49.53 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9728,7 +9557,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 90.17 54.61 0)
 			(effects
 				(font
@@ -9754,7 +9583,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 90.17 49.53 0)
 			(effects
 				(font
@@ -9842,7 +9671,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 247.65 151.13 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9859,7 +9688,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 247.65 155.575 0)
 			(effects
 				(font
@@ -9885,7 +9714,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 247.65 151.13 0)
 			(effects
 				(font
@@ -10560,7 +10389,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 40.64 44.45 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -10578,7 +10407,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 40.64 49.53 0)
 			(effects
 				(font
@@ -10604,7 +10433,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 40.64 44.45 0)
 			(effects
 				(font
@@ -11358,7 +11187,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 128.27 186.69 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -11375,7 +11204,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 128.27 191.135 0)
 			(effects
 				(font
@@ -11401,7 +11230,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 128.27 186.69 0)
 			(effects
 				(font
@@ -12545,7 +12374,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 49.53 82.55 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -12563,7 +12392,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 49.53 87.63 0)
 			(effects
 				(font
@@ -12589,7 +12418,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 49.53 82.55 0)
 			(effects
 				(font
@@ -12670,71 +12499,6 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "#FLG03")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 252.73 58.42 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "dd276f68-6985-42bb-82df-a6e3dc3d202a")
-		(property "Reference" "#PWR030"
-			(at 259.08 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "GND"
-			(at 257.1242 58.293 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 252.73 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 252.73 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 252.73 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "8b22afc5-06dc-4585-8e1e-64274dd36d03")
-		)
-		(instances
-			(project ""
-				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "#PWR030")
 					(unit 1)
 				)
 			)
@@ -13069,7 +12833,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 260.35 43.18 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -13086,7 +12850,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 260.35 47.625 0)
 			(effects
 				(font
@@ -13112,7 +12876,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 260.35 43.18 0)
 			(effects
 				(font
