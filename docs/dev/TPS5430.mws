@@ -1,0 +1,58 @@
+{VERSION 3 0 "IBM INTEL NT" "3.0" }
+{USTYLETAB {CSTYLE "Maple Input" -1 0 "Courier" 0 1 255 0 0 1 0 1 0 0 
+1 0 0 0 0 }{CSTYLE "2D Math" -1 2 "Times" 0 1 0 0 0 0 0 0 2 0 0 0 0 0 
+0 }{CSTYLE "2D Output" 2 20 "" 0 1 0 0 255 1 0 0 0 0 0 0 0 0 0 }
+{PSTYLE "Normal" -1 0 1 {CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 
+0 0 }0 0 0 -1 -1 -1 0 0 0 0 0 0 -1 0 }{PSTYLE "Maple Output" 0 11 1 
+{CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 }3 3 0 -1 -1 -1 0 0 
+0 0 0 0 -1 0 }}
+{SECT 0 {EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 253 "restart:\n# See htt
+ps://www.ti.com/lit/an/slva237c/slva237c.pdf\n\nq0 := R6 = (R4 * 1.221
+) / (VOUT - 1.221);\n\nR4 := 10 * 1000;\nR6 := 3.24;\n#R6 := (2.2 + 1)
+ * 1000;\nV_OUT := solve(q0, VOUT);\nevalf(%);\n \n# Inductor size\nL_
+O_uH := 15;\nL_O := L_O_uH * 10^(-6);" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%#q0G/%#R6G,$*&%#R4G\"\"\",&%%VOUTG\"\"\"$!%@7!\"$F-!\"\"$\"%@7F0
+" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R4G\"&++\"" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%#R6G$\"$C$!\"#" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&
+V_OUTG$\"+>&R(pP!\"'" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+>&R(pP!\"'
+" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'L_O_uHG\"#:" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#>%$L_OG#\"\"$\"'++?" }}}{EXCHG {PARA 0 "> " 0 "" 
+{MPLTEXT 1 0 168 "# LC resonant frequency should be <= 7 kHz.\n# Calcu
+late minimum output filter capacitor\n\nC_O_MIN := 1/((2*Pi * 6000)^2 \+
+* L_O);\nC_O_MIN_uF := C_O_MIN * 10^(6);\nevalf(%);" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#>%(C_O_MING,$*&\"\"\"F'*$)%#PiG\"\"#F'!\"\"#\"\"\"\"%
+g@" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%+C_O_MIN_uFG,$*&\"\"\"F'*$)%#P
+iG\"\"#F'!\"\"#\"&+D\"\"#F" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+Pbz!
+p%!\")" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 133 "# Filter resonan
+t frequency\n\nC_O_EFF_uF := 47 * 2;\nC_O_EFF := C_O_EFF_uF * 10^(-6);
+\nF_LC := 1 / (2*Pi*sqrt(L_O * C_O_EFF));\nevalf(%);" }}{PARA 11 "" 1 
+"" {XPPMATH 20 "6#>%+C_O_EFF_uFG\"#%*" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%(C_O_EFFG#\"#Z\"'++]" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%%F_LCG,
+$*&*$-%%sqrtG6#\"%59\"\"\"F,%#PiG!\"\"#\"&++&\"$T\"" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#$\"+mU[QU!\"'" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 
+1 0 139 "# Calculate pole and zeros\n\nFp1 := 500000 * (V_OUT / F_LC);
+\nevalf(%);\n\nFz2 := 0.7 * F_LC;\nevalf(%/1000);\n\nFz3 := 2.3 * F_LC
+;\nevalf(%/1000);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$Fp1G,$*&%#PiG
+\"\"\"-%%sqrtG6#\"%59\"\"\"$\"+=&R(pP!\"'" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+$HPqW%!\"%" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$Fz
+2G,$*&*$-%%sqrtG6#\"%59\"\"\"F,%#PiG!\"\"$\"+/&pA[#!\"(" }}{PARA 11 "
+" 1 "" {XPPMATH 20 "6#$\"+()*Qp'H!\"*" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%$Fz3G,$*&*$-%%sqrtG6#\"%59\"\"\"F,%#PiG!\"\"$\"+p$Gg:)!\"(" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+7Q^[(*!\"*" }}}{EXCHG {PARA 0 "> \+
+" 0 "" {MPLTEXT 1 0 147 "# Calculate caps\n\n# For C12, select next hi
+ghest standard value.\nC12 := 1 / (2*Pi * Fp1 * ((R4 * R6)/(R4 + R6)))
+;\nC12_uF := C12 * 10^(6);\nevalf(%);" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%$C12G,$*&*$-%%sqrtG6#\"%59\"\"\"F,*$)%#PiG\"\"#F,!\"\"$\"+D#eU!H!
+#<" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'C12_uFG,$*&*$-%%sqrtG6#\"%59
+\"\"\"F,*$)%#PiG\"\"#F,!\"\"$\"+D#eU!H!#6" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+Qh&\\5\"!#5" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 
+1 0 77 "# For R7, select closest standard value\nR7 := 1/(2*Pi * Fz2 *
+ C12);\nevalf(%);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R7G,$*$)%#PiG
+\"\"#\"\"\"$\"+7d))=\\!\")" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+4cua
+[!\"(" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 99 "# For C11, select \+
+closest standard value\nC11 := 1/(2*Pi*Fz3 * R4);\nC11_pF := C11 * 10^
+12;\nevalf(%);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$C11G,$*$-%%sqrtG6
+#\"%59\"\"\"$\"+&3EyM%!#?" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'C11_pF
+G,$*$-%%sqrtG6#\"%59\"\"\"$\"+&3EyM%!\")" }}{PARA 11 "" 1 "" {XPPMATH 
+20 "6#$\"+[sgK;!\"'" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 0 "" }}}
+}{MARK "6 3" 0 }{VIEWOPTS 1 1 0 1 1 1803 }
