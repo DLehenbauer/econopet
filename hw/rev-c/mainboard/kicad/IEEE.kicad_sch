@@ -2649,7 +2649,7 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:SN74LS07-PET"
+		(symbol "EconoPET:SN74LS07"
 			(pin_names
 				(offset 1.016)
 			)
@@ -2657,26 +2657,24 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -12.7 16.2306 0)
+				(at -11.43 16.51 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
 				)
 			)
-			(property "Value" "SN74LS07-PET"
-				(at -10.16 -2.7178 0)
+			(property "Value" "SN74LS07"
+				(at -5.08 -1.905 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 						(bold yes)
 						(italic yes)
 					)
-					(justify left bottom)
 				)
 			)
-			(property "Footprint" "SOIC127P600X175-14N"
+			(property "Footprint" "Package_SO:SOIC-14_3.9x8.7mm_P1.27mm"
 				(at -16.51 -10.16 0)
 				(effects
 					(font
@@ -2686,7 +2684,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2004251708_XINLUDA-XL74LS07_C513513.pdf"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2705,7 +2703,25 @@
 					(hide yes)
 				)
 			)
-			(symbol "SN74LS07-PET_0_0"
+			(property "LCSC" "C513513"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "SN74LS07_0_0"
 				(rectangle
 					(start -12.7 -7.62)
 					(end 2.54 15.24)
@@ -8921,7 +8937,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LS07-PET")
+		(lib_id "EconoPET:SN74LS07")
 		(at 69.85 182.88 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9569,7 +9585,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LS07-PET")
+		(lib_id "EconoPET:SN74LS07")
 		(at 69.85 101.6 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9694,7 +9710,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LS07-PET")
+		(lib_id "EconoPET:SN74LS07")
 		(at 69.85 55.88 0)
 		(unit 1)
 		(exclude_from_sim no)
