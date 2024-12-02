@@ -622,31 +622,32 @@
 				)
 			)
 		)
-		(symbol "SnapEDA:SJ-43504-SMT-TR"
+		(symbol "EconoPET:SJ-43504-SMT-TR"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at -8.9154 6.3754 0)
+				(at -10.16 -1.2701 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
+					(justify right)
 				)
 			)
-			(property "Value" "SJ-43504-SMT-TR"
-				(at -8.89 -11.43 0)
+			(property "Value" "AUDIO"
+				(at -10.16 -1.2701 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
+					(justify right)
+					(hide yes)
 				)
 			)
-			(property "Footprint" "SnapEDA:CUI_SJ-43504-SMT-TR"
+			(property "Footprint" "EconoPET:CUI_SJ-43504-SMT-TR"
 				(at 0 0 0)
 				(effects
 					(font
@@ -675,62 +676,23 @@
 					(hide yes)
 				)
 			)
-			(property "PARTREV" "10/08/2019"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "SNAPEDA_PN" "SJ-43504-SMT-TR"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "MANUFACTURER" "CUI Devices"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "MAXIMUM_PACKAGE_HEIGHT" "3.3 mm"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "STANDARD" "Manufacturer Recommendations"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
 			(property "MOUSER" "490-SJ-43504-SMT-TR"
+				(at -10.16 -0.0001 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify right)
+					(hide yes)
+				)
+			)
+			(property "Alt-LCSC" "C319101"
 				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
 			(symbol "SJ-43504-SMT-TR_0_0"
@@ -2457,7 +2419,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:SJ-43504-SMT-TR")
+		(lib_id "EconoPET:SJ-43504-SMT-TR")
 		(at 118.11 85.09 180)
 		(unit 1)
 		(exclude_from_sim no)

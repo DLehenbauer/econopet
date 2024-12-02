@@ -2579,7 +2579,7 @@
 				)
 			)
 			(property "Datasheet" "http://www.aosmd.com/pdfs/datasheet/AO3401A.pdf"
-				(at 0 0 0)
+				(at 5.08 -3.81 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -4820,7 +4820,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "-4.0A Id, -30V Vds, P-Channel MOSFET, SOT-23"
 			(at 213.36 95.25 0)
 			(effects
 				(font
@@ -4905,7 +4905,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "-4.0A Id, -30V Vds, P-Channel MOSFET, SOT-23"
 			(at 213.36 137.16 0)
 			(effects
 				(font
