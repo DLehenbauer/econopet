@@ -10,7 +10,7 @@
 		(rev "A")
 	)
 	(lib_symbols
-		(symbol "Connector:Conn_01x02_Male"
+		(symbol "Connector:Conn_01x02_Pin"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
@@ -24,7 +24,7 @@
 					)
 				)
 			)
-			(property "Value" "Conn_01x02_Male"
+			(property "Value" "Conn_01x02_Pin"
 				(at 0 -5.08 0)
 				(effects
 					(font
@@ -50,13 +50,21 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(property "Description" "Generic connector, single row, 01x02, script generated"
 				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 					(hide yes)
+				)
+			)
+			(property "ki_locked" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
 				)
 			)
 			(property "ki_keywords" "connector"
@@ -77,7 +85,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "Conn_01x02_Male_1_1"
+			(symbol "Conn_01x02_Pin_1_1"
 				(polyline
 					(pts
 						(xy 1.27 -2.54) (xy 0.8636 -2.54)
@@ -7612,7 +7620,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector:Conn_01x02_Male")
+		(lib_id "Connector:Conn_01x02_Pin")
 		(at 25.4 168.91 0)
 		(mirror x)
 		(unit 1)
@@ -7655,7 +7663,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Generic connector, single row, 01x02, script generated"
 			(at 25.4 168.91 0)
 			(effects
 				(font
