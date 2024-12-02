@@ -10,14 +10,14 @@
 		(rev "A")
 	)
 	(lib_symbols
-		(symbol "Retrocomputing:CBM_PET_VIDEO_Conn_Keyed"
+		(symbol "EconoPET:CBM_PET_VIDEO_Conn_Keyed"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
-			(property "Reference" "J9"
-				(at 1.27 1.2701 0)
+			(property "Reference" "J"
+				(at -1.27 1.2701 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -25,8 +25,8 @@
 					(justify right)
 				)
 			)
-			(property "Value" "CBM_PET_VIDEO_Conn_Keyed"
-				(at 1.27 -1.2699 0)
+			(property "Value" "VIDEO"
+				(at -1.27 -1.2699 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -52,7 +52,16 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Generic connector, single row, 01x07, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(property "Description" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" "649-1012937893603BLF"
 				(at 0 0 0)
 				(effects
 					(font
@@ -630,7 +639,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Retrocomputing:CBM_PET_VIDEO_Conn_Keyed")
+		(lib_id "EconoPET:CBM_PET_VIDEO_Conn_Keyed")
 		(at 146.05 92.71 0)
 		(mirror y)
 		(unit 1)

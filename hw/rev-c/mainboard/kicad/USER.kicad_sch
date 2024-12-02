@@ -864,22 +864,22 @@
 				)
 			)
 		)
-		(symbol "Retrocomputing:CBM_PET_USER_Conn_02x12_Card_Edge"
+		(symbol "EconoPET:CBM_PET_USER_Conn_02x12_Card_Edge"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at 1.27 15.24 0)
+				(at 1.27 18.2118 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Value" "CBM_PET_USER_Conn_02x12_Card_Edge"
-				(at 1.27 -17.78 0)
+			(property "Value" "USER"
+				(at 1.27 15.9004 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -895,7 +895,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "~"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3229,7 +3229,7 @@
 		(uuid "e0781b80-6f1b-4d08-b53f-b7d3f582e2ea")
 	)
 	(symbol
-		(lib_id "Retrocomputing:CBM_PET_USER_Conn_02x12_Card_Edge")
+		(lib_id "EconoPET:CBM_PET_USER_Conn_02x12_Card_Edge")
 		(at 106.68 93.98 0)
 		(unit 1)
 		(exclude_from_sim no)

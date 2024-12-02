@@ -3969,7 +3969,7 @@
 				)
 			)
 		)
-		(symbol "PET:FPGA_VCCA"
+		(symbol "EconoPET:FPGA_VCCA"
 			(power)
 			(pin_names
 				(offset 0)
@@ -3987,7 +3987,7 @@
 				)
 			)
 			(property "Value" "FPGA_VCCA"
-				(at 0 3.81 0)
+				(at 0 5.08 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -4012,7 +4012,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Power symbol creates a global label with name \"FPGA_VCCA\""
+			(property "Description" ""
 				(at 0 0 0)
 				(effects
 					(font
@@ -4089,7 +4089,7 @@
 				)
 			)
 		)
-		(symbol "SnapEDA:T8Q144C3"
+		(symbol "EconoPET:T8Q144C3"
 			(pin_names
 				(offset 1.016)
 			)
@@ -4097,21 +4097,19 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -10.16 19.05 0)
+				(at 0 29.21 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
 				)
 			)
 			(property "Value" "T8Q144C3"
-				(at -10.16 -19.05 0)
+				(at 0 26.67 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
 				)
 			)
 			(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
@@ -4124,7 +4122,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "~"
 				(at 0 0 0)
 				(effects
 					(font
@@ -4143,43 +4141,21 @@
 					(hide yes)
 				)
 			)
-			(property "MANUFACTURER" "Efinix"
+			(property "DIGI-KEY" "2134-T8Q144C3-ND"
 				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
 					(hide yes)
 				)
 			)
-			(property "PARTREV" "V3.6"
+			(property "LCSC" "C3278393"
 				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "STANDARD" "IPC-7351B"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "MAXIMUM_PACKAGE_HEIGHT" "1.6mm"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
 					(hide yes)
 				)
 			)
@@ -15184,7 +15160,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 279.4 165.1 0)
 		(unit 6)
 		(exclude_from_sim no)
@@ -16167,7 +16143,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 180.34 149.86 0)
 		(unit 12)
 		(exclude_from_sim no)
@@ -17527,7 +17503,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:FPGA_VCCA")
+		(lib_id "EconoPET:FPGA_VCCA")
 		(at 54.61 148.59 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -17593,7 +17569,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 278.13 143.51 0)
 		(unit 7)
 		(exclude_from_sim no)
@@ -18394,7 +18370,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 181.61 107.95 0)
 		(unit 3)
 		(exclude_from_sim no)
@@ -19143,7 +19119,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 273.05 195.58 0)
 		(unit 5)
 		(exclude_from_sim no)
@@ -20358,7 +20334,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 180.34 124.46 0)
 		(unit 2)
 		(exclude_from_sim no)
@@ -21189,7 +21165,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 287.02 110.49 0)
 		(unit 9)
 		(exclude_from_sim no)
@@ -22493,7 +22469,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 276.86 88.9 180)
 		(unit 10)
 		(exclude_from_sim no)
@@ -23192,7 +23168,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 82.55 57.15 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -24203,7 +24179,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 180.34 93.98 0)
 		(unit 4)
 		(exclude_from_sim no)
@@ -24979,7 +24955,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 78.74 167.64 0)
 		(unit 13)
 		(exclude_from_sim no)
@@ -25571,7 +25547,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 177.8 181.61 0)
 		(unit 11)
 		(exclude_from_sim no)
@@ -26380,7 +26356,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:T8Q144C3")
+		(lib_id "EconoPET:T8Q144C3")
 		(at 278.13 129.54 0)
 		(unit 8)
 		(exclude_from_sim no)

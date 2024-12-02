@@ -1437,26 +1437,28 @@
 				)
 			)
 		)
-		(symbol "Retrocomputing:CBM_PET_Keyboard_Conn_Keyed_20P"
+		(symbol "EconoPET:CBM_PET_Keyboard_Conn_Keyed_20P"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at 0 25.4 0)
+				(at -0.7112 -2.9972 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
-			(property "Value" "CBM_PET_Keyboard_Conn_Keyed_20P"
-				(at 0 -27.94 0)
+			(property "Value" "KEYBOARD"
+				(at -0.7112 -0.6858 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
 			(property "Footprint" "Retrocomputing:CBM_PET_KEYBOARD_KEYED_20P"
@@ -1477,7 +1479,16 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Generic connector, single row, 01x20, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(property "Description" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" "649-1012937893603BLF"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3963,7 +3974,7 @@
 		(uuid "d4ba07a9-3bc5-4c1c-82cb-05c5e060578c")
 	)
 	(symbol
-		(lib_id "Retrocomputing:CBM_PET_Keyboard_Conn_Keyed_20P")
+		(lib_id "EconoPET:CBM_PET_Keyboard_Conn_Keyed_20P")
 		(at 201.93 73.66 180)
 		(unit 1)
 		(exclude_from_sim no)

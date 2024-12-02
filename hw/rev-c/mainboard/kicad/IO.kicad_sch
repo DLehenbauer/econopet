@@ -145,7 +145,7 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:W65C21NxP-PET"
+		(symbol "EconoPET:W65C21N"
 			(pin_names
 				(offset 1.016)
 			)
@@ -153,16 +153,15 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -10.16 33.02 0)
+				(at -7.62 33.02 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
-			(property "Value" "W65C21NxP-PET"
-				(at 0 0 90)
+			(property "Value" "W65C21N"
+				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -171,7 +170,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Package_DIP:DIP-40_W15.24mm_Socket"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -180,7 +179,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://www.mouser.com/datasheet/2/436/w65c21-661.pdf"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -198,6 +197,15 @@
 					(hide yes)
 				)
 			)
+			(property "MOUSER" "955-W65C21N6TPG-14,571-1-2199299-5"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
 			(property "ki_fp_filters" "DIP-40_W15.24mm*"
 				(at 0 0 0)
 				(effects
@@ -207,7 +215,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "W65C21NxP-PET_0_1"
+			(symbol "W65C21N_0_1"
 				(rectangle
 					(start -10.16 31.75)
 					(end 10.16 -31.75)
@@ -220,7 +228,7 @@
 					)
 				)
 			)
-			(symbol "W65C21NxP-PET_1_1"
+			(symbol "W65C21N_1_1"
 				(pin power_in line
 					(at 0 -34.29 90)
 					(length 2.54)
@@ -943,7 +951,7 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:W65C22NxP-PET"
+		(symbol "EconoPET:W65C22N"
 			(pin_names
 				(offset 1.016)
 			)
@@ -951,16 +959,15 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -10.16 33.02 0)
+				(at -7.62 33.02 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
-			(property "Value" "W65C22NxP-PET"
-				(at 0 0 90)
+			(property "Value" "W65C22N"
+				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -969,7 +976,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Package_DIP:DIP-40_W15.24mm_Socket"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -978,7 +985,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://www.mouser.com/datasheet/2/436/w65c22-1197.pdf"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -996,6 +1003,15 @@
 					(hide yes)
 				)
 			)
+			(property "MOUSER" "955-W65C22N6TPG-14,571-1-2199299-5"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
 			(property "ki_fp_filters" "DIP-40_W15.24mm*"
 				(at 0 0 0)
 				(effects
@@ -1005,7 +1021,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "W65C22NxP-PET_0_1"
+			(symbol "W65C22N_0_1"
 				(rectangle
 					(start -10.16 31.75)
 					(end 10.16 -31.75)
@@ -1018,7 +1034,7 @@
 					)
 				)
 			)
-			(symbol "W65C22NxP-PET_1_1"
+			(symbol "W65C22N_1_1"
 				(pin power_in line
 					(at 0 -34.29 90)
 					(length 2.54)
@@ -6165,7 +6181,7 @@
 		(uuid "fc329e60-968a-4f61-ba77-53d29ff8c1c7")
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C21NxP-PET")
+		(lib_id "EconoPET:W65C21N")
 		(at 86.36 153.67 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -6357,7 +6373,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C22NxP-PET")
+		(lib_id "EconoPET:W65C22N")
 		(at 184.15 128.27 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -6549,7 +6565,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C21NxP-PET")
+		(lib_id "EconoPET:W65C21N")
 		(at 86.36 58.42 0)
 		(unit 1)
 		(exclude_from_sim no)
