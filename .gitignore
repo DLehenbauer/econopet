@@ -11,6 +11,7 @@ hw/**/_autosave-*
 hw/**/*.bck
 hw/**/*-backups/*.zip
 hw/**/#auto_saved_files#
+hw/libraries/Symbols/*.bak
 
 # KiCad lock files
 hw/**/*.lck
