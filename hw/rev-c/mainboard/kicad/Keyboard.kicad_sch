@@ -1128,7 +1128,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex*"
+			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex* MSOP*"
 				(at 0 0 0)
 				(effects
 					(font
@@ -5004,7 +5004,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 154.94 40.64 0)
 			(effects
 				(font
@@ -5100,7 +5100,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 172.72 40.64 0)
 			(effects
 				(font

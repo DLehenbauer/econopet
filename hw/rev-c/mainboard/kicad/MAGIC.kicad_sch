@@ -267,20 +267,20 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:SN74LVC8T245-PET"
+		(symbol "EconoPET:SN74LVC8T245"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -8.89 13.97 0)
+				(at 7.62 13.97 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Value" "SN74LVC8T245-PET"
-				(at 12.7 13.97 0)
+			(property "Value" "SN74LVC4245APWR"
+				(at -11.43 -17.78 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -296,7 +296,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1809192324_Texas-Instruments-SN74LVC4245APWR_C7859.pdf"
 				(at -1.27 -6.35 0)
 				(effects
 					(font
@@ -314,7 +314,16 @@
 					(hide yes)
 				)
 			)
-			(property "LCSC" "C27643"
+			(property "LCSC" "C7859"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" ""
 				(at 0 0 0)
 				(effects
 					(font
@@ -332,7 +341,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "SN74LVC8T245-PET_0_1"
+			(symbol "SN74LVC8T245_0_1"
 				(rectangle
 					(start -10.16 12.7)
 					(end 10.16 -15.24)
@@ -345,7 +354,7 @@
 					)
 				)
 			)
-			(symbol "SN74LVC8T245-PET_1_1"
+			(symbol "SN74LVC8T245_1_1"
 				(pin power_in line
 					(at -2.54 15.24 270)
 					(length 2.54)
@@ -4082,7 +4091,7 @@
 		(uuid "f574ee38-a23c-4d01-9afb-015518a85f40")
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 220.98 44.45 0)
 		(mirror y)
 		(unit 1)
@@ -4234,7 +4243,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 223.52 147.32 0)
 		(mirror y)
 		(unit 1)
@@ -4386,7 +4395,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 222.25 95.25 0)
 		(mirror y)
 		(unit 1)

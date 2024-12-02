@@ -3259,9 +3259,6 @@
 			)
 		)
 		(symbol "Regulator_Linear:AMS1117-3.3"
-			(pin_names
-				(offset 0.254)
-			)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -9029,7 +9026,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "1A Low Dropout regulator, positive, 3.3V fixed output, SOT-223"
 			(at 128.27 177.8 0)
 			(effects
 				(font

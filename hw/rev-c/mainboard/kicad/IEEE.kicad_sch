@@ -1282,7 +1282,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex*"
+			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex* MSOP*"
 				(at 0 0 0)
 				(effects
 					(font
@@ -10074,7 +10074,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 109.22 53.34 0)
 			(effects
 				(font
@@ -10170,7 +10170,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 170.18 139.7 0)
 			(effects
 				(font
@@ -10266,7 +10266,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 219.71 139.7 0)
 			(effects
 				(font
@@ -10751,7 +10751,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 219.71 78.74 0)
 			(effects
 				(font
@@ -10914,7 +10914,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 109.22 43.18 0)
 			(effects
 				(font
@@ -11010,7 +11010,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 186.69 139.7 0)
 			(effects
 				(font
@@ -11107,7 +11107,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 109.22 154.94 0)
 			(effects
 				(font
@@ -11346,7 +11346,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 186.69 78.74 0)
 			(effects
 				(font
@@ -11442,7 +11442,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 170.18 78.74 0)
 			(effects
 				(font
@@ -12142,7 +12142,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 203.2 139.7 0)
 			(effects
 				(font
@@ -12238,7 +12238,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 203.2 78.74 0)
 			(effects
 				(font
