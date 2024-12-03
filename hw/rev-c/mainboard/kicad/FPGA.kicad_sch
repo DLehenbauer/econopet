@@ -13636,17 +13636,6 @@
 		)
 		(uuid "b203deb0-acc8-4add-acd5-aab8814c0e47")
 	)
-	(label "HOLD"
-		(at 163.83 41.91 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "b4e8f3d2-2f13-49db-8bed-7794a1d110be")
-	)
 	(label "CBUS1"
 		(at 454.66 140.97 180)
 		(fields_autoplaced yes)
