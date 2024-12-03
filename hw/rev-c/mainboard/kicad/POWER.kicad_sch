@@ -9468,7 +9468,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "PET:EconoPET_Model"
+		(property "Footprint" "EconoPET:EconoPET_Model"
 			(at 19.05 44.45 0)
 			(effects
 				(font
@@ -12386,7 +12386,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "PET:EconoPET_QR"
+		(property "Footprint" "EconoPET:EconoPET_QR"
 			(at 19.05 41.91 0)
 			(effects
 				(font
