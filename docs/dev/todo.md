@@ -1,6 +1,7 @@
 # Rev B. TODOs
 
 * HW Design
+  * Swap HOLD and +5V on IDC so Pico programmer can power board?
   * YSX321SL requires XOSC workaround:
     * Most designs using YSX321L use 33pF
     * Try removing/shorting resistor to see if value too large?

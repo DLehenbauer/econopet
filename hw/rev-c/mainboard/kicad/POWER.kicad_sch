@@ -9733,7 +9733,7 @@
 		(lib_id "Graphic:SYM_Arrow_Small")
 		(at 19.05 44.45 0)
 		(unit 1)
-		(exclude_from_sim no)
+		(exclude_from_sim yes)
 		(in_bom no)
 		(on_board no)
 		(dnp no)
@@ -9776,15 +9776,6 @@
 			)
 		)
 		(property "Description" "Filled arrow, 160mil"
-			(at 19.05 44.45 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Enable" "0"
 			(at 19.05 44.45 0)
 			(effects
 				(font
@@ -10381,7 +10372,7 @@
 		(lib_id "Graphic:SYM_Arrow_Small")
 		(at 19.05 39.37 0)
 		(unit 1)
-		(exclude_from_sim no)
+		(exclude_from_sim yes)
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
@@ -10424,15 +10415,6 @@
 			)
 		)
 		(property "Description" "Filled arrow, 160mil"
-			(at 19.05 39.37 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Enable" "0"
 			(at 19.05 39.37 0)
 			(effects
 				(font
@@ -11677,7 +11659,7 @@
 		(lib_id "Graphic:SYM_Arrow_Small")
 		(at 19.05 46.99 0)
 		(unit 1)
-		(exclude_from_sim no)
+		(exclude_from_sim yes)
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
@@ -11720,15 +11702,6 @@
 			)
 		)
 		(property "Description" "Filled arrow, 160mil"
-			(at 19.05 46.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Enable" "0"
 			(at 19.05 46.99 0)
 			(effects
 				(font
@@ -12680,7 +12653,7 @@
 		(lib_id "Graphic:SYM_Arrow_Small")
 		(at 19.05 41.91 0)
 		(unit 1)
-		(exclude_from_sim no)
+		(exclude_from_sim yes)
 		(in_bom no)
 		(on_board no)
 		(dnp no)
@@ -12723,15 +12696,6 @@
 			)
 		)
 		(property "Description" "Filled arrow, 160mil"
-			(at 19.05 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Enable" "0"
 			(at 19.05 41.91 0)
 			(effects
 				(font
