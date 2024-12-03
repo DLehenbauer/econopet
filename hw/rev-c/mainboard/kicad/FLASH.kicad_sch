@@ -272,7 +272,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -8.89 8.89 0)
+				(at -6.35 11.43 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -280,7 +280,7 @@
 				)
 			)
 			(property "Value" "W25Q128JVS"
-				(at 7.62 8.89 0)
+				(at 7.62 11.43 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -288,7 +288,7 @@
 				)
 			)
 			(property "Footprint" "Package_SO:SOIC-8_5.23x5.23mm_P1.27mm"
-				(at 0 0 0)
+				(at 0 22.86 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -296,8 +296,8 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" "http://www.winbond.com/resource-files/w25q128jv_dtr%20revc%2003272018%20plus.pdf"
-				(at 0 0 0)
+			(property "Datasheet" "https://www.winbond.com/resource-files/w25q128jv_dtr%20revc%2003272018%20plus.pdf"
+				(at 0 25.4 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -306,7 +306,7 @@
 				)
 			)
 			(property "Description" "128Mb Serial Flash Memory, Standard/Dual/Quad SPI, SOIC-8"
-				(at 0 0 0)
+				(at 0 27.94 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -334,8 +334,8 @@
 			)
 			(symbol "W25Q128JVS_0_1"
 				(rectangle
-					(start -10.16 7.62)
-					(end 10.16 -7.62)
+					(start -7.62 10.16)
+					(end 7.62 -10.16)
 					(stroke
 						(width 0.254)
 						(type default)
@@ -347,7 +347,7 @@
 			)
 			(symbol "W25Q128JVS_1_1"
 				(pin input line
-					(at -12.7 2.54 0)
+					(at -10.16 7.62 0)
 					(length 2.54)
 					(name "~{CS}"
 						(effects
@@ -365,7 +365,7 @@
 					)
 				)
 				(pin bidirectional line
-					(at 12.7 2.54 180)
+					(at -10.16 0 0)
 					(length 2.54)
 					(name "DO(IO1)"
 						(effects
@@ -383,7 +383,7 @@
 					)
 				)
 				(pin bidirectional line
-					(at 12.7 -2.54 180)
+					(at -10.16 -2.54 0)
 					(length 2.54)
 					(name "IO2"
 						(effects
@@ -401,7 +401,7 @@
 					)
 				)
 				(pin power_in line
-					(at 0 -10.16 90)
+					(at 0 -12.7 90)
 					(length 2.54)
 					(name "GND"
 						(effects
@@ -419,7 +419,7 @@
 					)
 				)
 				(pin bidirectional line
-					(at 12.7 5.08 180)
+					(at -10.16 2.54 0)
 					(length 2.54)
 					(name "DI(IO0)"
 						(effects
@@ -437,7 +437,7 @@
 					)
 				)
 				(pin input line
-					(at -12.7 -2.54 0)
+					(at -10.16 5.08 0)
 					(length 2.54)
 					(name "CLK"
 						(effects
@@ -455,7 +455,7 @@
 					)
 				)
 				(pin bidirectional line
-					(at 12.7 -5.08 180)
+					(at -10.16 -5.08 0)
 					(length 2.54)
 					(name "IO3"
 						(effects
@@ -473,7 +473,7 @@
 					)
 				)
 				(pin power_in line
-					(at 0 10.16 270)
+					(at 0 12.7 270)
 					(length 2.54)
 					(name "VCC"
 						(effects
@@ -855,32 +855,32 @@
 		)
 	)
 	(junction
-		(at 127 93.98)
+		(at 123.19 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "8c71cadf-cbc6-4435-ac74-cdce57056f29")
+		(uuid "32bdb894-6e92-4f9e-82b3-ba0e457a85a1")
 	)
 	(junction
-		(at 116.84 93.98)
+		(at 113.03 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "96c05414-540f-472f-8a8f-ea46384b6f5b")
 	)
 	(junction
-		(at 142.24 114.3)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "dbd3d5da-44cc-467d-a5eb-6172b3772b6c")
-	)
-	(junction
 		(at 142.24 74.93)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "f7dd4a38-77d0-435c-aba7-bddcfb95d9f0")
+		(uuid "c6417c72-97df-4c82-864a-b5577c15cb46")
+	)
+	(junction
+		(at 142.24 114.3)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "e63779cd-b5ae-4b0a-b40f-00bc93bb2dec")
 	)
 	(wire
 		(pts
-			(xy 116.84 113.03) (xy 116.84 114.3)
+			(xy 113.03 113.03) (xy 113.03 114.3)
 		)
 		(stroke
 			(width 0)
@@ -900,7 +900,7 @@
 	)
 	(wire
 		(pts
-			(xy 156.21 93.98) (xy 154.94 93.98)
+			(xy 130.81 101.6) (xy 132.08 101.6)
 		)
 		(stroke
 			(width 0)
@@ -910,7 +910,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 93.98) (xy 116.84 96.52)
+			(xy 113.03 93.98) (xy 113.03 96.52)
 		)
 		(stroke
 			(width 0)
@@ -920,17 +920,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 93.98) (xy 129.54 93.98)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "30a87e95-e353-4f20-921f-175ed638a8fc")
-	)
-	(wire
-		(pts
-			(xy 127 91.44) (xy 127 93.98)
+			(xy 123.19 91.44) (xy 123.19 93.98)
 		)
 		(stroke
 			(width 0)
@@ -940,13 +930,13 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 74.93) (xy 142.24 86.36)
+			(xy 142.24 74.93) (xy 142.24 88.9)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "3a1e26e6-03fa-40ff-8277-6d1cf9ec74fa")
+		(uuid "3d9cbdbf-e6d2-4fd2-9a4b-7fed7088a46e")
 	)
 	(wire
 		(pts
@@ -960,17 +950,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 106.68) (xy 142.24 114.3)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "67bd0400-4264-439b-b74f-1cbcadc2a245")
-	)
-	(wire
-		(pts
-			(xy 156.21 101.6) (xy 154.94 101.6)
+			(xy 130.81 106.68) (xy 132.08 106.68)
 		)
 		(stroke
 			(width 0)
@@ -980,7 +960,7 @@
 	)
 	(wire
 		(pts
-			(xy 156.21 91.44) (xy 154.94 91.44)
+			(xy 130.81 99.06) (xy 132.08 99.06)
 		)
 		(stroke
 			(width 0)
@@ -990,7 +970,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 114.3) (xy 142.24 114.3)
+			(xy 113.03 114.3) (xy 142.24 114.3)
 		)
 		(stroke
 			(width 0)
@@ -1010,7 +990,7 @@
 	)
 	(wire
 		(pts
-			(xy 156.21 99.06) (xy 154.94 99.06)
+			(xy 130.81 104.14) (xy 132.08 104.14)
 		)
 		(stroke
 			(width 0)
@@ -1020,7 +1000,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 101.6) (xy 116.84 102.87)
+			(xy 113.03 101.6) (xy 113.03 102.87)
 		)
 		(stroke
 			(width 0)
@@ -1030,7 +1010,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 93.98) (xy 127 93.98)
+			(xy 113.03 93.98) (xy 123.19 93.98)
 		)
 		(stroke
 			(width 0)
@@ -1040,7 +1020,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 99.06) (xy 129.54 99.06)
+			(xy 130.81 96.52) (xy 132.08 96.52)
 		)
 		(stroke
 			(width 0)
@@ -1050,7 +1030,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 86.36) (xy 127 85.09)
+			(xy 123.19 86.36) (xy 123.19 85.09)
 		)
 		(stroke
 			(width 0)
@@ -1060,7 +1040,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 93.98) (xy 116.84 93.98)
+			(xy 109.22 93.98) (xy 113.03 93.98)
 		)
 		(stroke
 			(width 0)
@@ -1078,6 +1058,16 @@
 		)
 		(uuid "e211bc32-95dc-4aa9-9c6e-283e87b5f9e4")
 	)
+	(wire
+		(pts
+			(xy 123.19 93.98) (xy 132.08 93.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f19c3fed-8a67-4e63-9870-abda4c450af2")
+	)
 	(text "Flash"
 		(exclude_from_sim no)
 		(at 90.17 71.12 0)
@@ -1091,19 +1081,19 @@
 	)
 	(hierarchical_label "SD3"
 		(shape bidirectional)
-		(at 156.21 101.6 0)
+		(at 130.81 106.68 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "06f35efc-4229-47b0-a469-50941e3b3d79")
 	)
 	(hierarchical_label "SCK"
 		(shape input)
-		(at 127 99.06 180)
+		(at 130.81 96.52 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1115,43 +1105,43 @@
 	)
 	(hierarchical_label "SD1"
 		(shape bidirectional)
-		(at 156.21 93.98 0)
+		(at 130.81 101.6 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "5fe30473-5b17-448f-8610-b07287889799")
 	)
 	(hierarchical_label "SD0"
 		(shape bidirectional)
-		(at 156.21 91.44 0)
+		(at 130.81 99.06 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "79506ffa-370e-4101-9a2a-4a9e90d61c7e")
 	)
 	(hierarchical_label "SD2"
 		(shape bidirectional)
-		(at 156.21 99.06 0)
+		(at 130.81 104.14 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "81abc744-fd6e-4e95-bfb6-89748e89bfb3")
 	)
 	(hierarchical_label "~{CS}"
 		(shape input)
-		(at 113.03 93.98 180)
+		(at 109.22 93.98 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1163,7 +1153,7 @@
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
-		(at 116.84 107.95 90)
+		(at 113.03 107.95 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1171,7 +1161,7 @@
 		(dnp no)
 		(uuid "2e1ce5dc-103c-44fb-a2ce-b391647ce97d")
 		(property "Reference" "SW6"
-			(at 118.0592 106.7816 90)
+			(at 114.2492 106.7816 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1180,7 +1170,7 @@
 			)
 		)
 		(property "Value" "BOOTSEL"
-			(at 118.0592 109.093 90)
+			(at 114.2492 109.093 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1189,7 +1179,7 @@
 			)
 		)
 		(property "Footprint" "JLCPCB:SW-TH_L6.0-W3.5-P6.50"
-			(at 111.76 107.95 0)
+			(at 107.95 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1198,7 +1188,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 111.76 107.95 0)
+			(at 107.95 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1207,7 +1197,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 116.84 107.95 0)
+			(at 113.03 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1216,7 +1206,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 116.84 107.95 90)
+			(at 113.03 107.95 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1225,7 +1215,7 @@
 			)
 		)
 		(property "Amazon" "https://smile.amazon.com/dp/B008DS188Y"
-			(at 116.84 107.95 90)
+			(at 113.03 107.95 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1234,7 +1224,7 @@
 			)
 		)
 		(property "Alt-LCSC" "C457531"
-			(at 116.84 107.95 0)
+			(at 113.03 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1243,7 +1233,7 @@
 			)
 		)
 		(property "MOUSER" "611-PTS636SK43LFS"
-			(at 116.84 107.95 0)
+			(at 113.03 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1334,7 +1324,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 127 88.9 0)
+		(at 123.19 88.9 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1342,7 +1332,7 @@
 		(dnp no)
 		(uuid "715235fe-7199-4036-aa32-f022017e5449")
 		(property "Reference" "R59"
-			(at 125.095 90.805 90)
+			(at 121.285 90.805 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1351,7 +1341,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 127 90.805 90)
+			(at 123.19 90.805 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1360,7 +1350,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 127 88.9 0)
+			(at 123.19 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1369,7 +1359,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1002TCE_C25744.pdf"
-			(at 127 88.9 0)
+			(at 123.19 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1378,7 +1368,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 127 88.9 0)
+			(at 123.19 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1387,7 +1377,7 @@
 			)
 		)
 		(property "LCSC" "C25744"
-			(at 127 88.9 0)
+			(at 123.19 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1412,7 +1402,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 127 85.09 0)
+		(at 123.19 85.09 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1421,7 +1411,7 @@
 		(fields_autoplaced yes)
 		(uuid "8209f55c-f35b-4524-91d7-8bf4ef7a2b8a")
 		(property "Reference" "#PWR0174"
-			(at 127 88.9 0)
+			(at 123.19 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1430,7 +1420,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 127 80.01 0)
+			(at 123.19 80.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1438,7 +1428,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 127 85.09 0)
+			(at 123.19 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1447,7 +1437,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 127 85.09 0)
+			(at 123.19 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1456,7 +1446,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 127 85.09 0)
+			(at 123.19 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1478,7 +1468,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 116.84 99.06 180)
+		(at 113.03 99.06 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1486,7 +1476,7 @@
 		(dnp no)
 		(uuid "8d9523ed-5f4f-4c4b-9964-1475ead90e11")
 		(property "Reference" "R58"
-			(at 114.935 97.155 90)
+			(at 111.125 97.155 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1495,7 +1485,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 116.84 97.79 90)
+			(at 113.03 97.79 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1504,7 +1494,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 116.84 99.06 0)
+			(at 113.03 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1513,7 +1503,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
-			(at 116.84 99.06 0)
+			(at 113.03 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1522,7 +1512,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 116.84 99.06 0)
+			(at 113.03 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1531,7 +1521,7 @@
 			)
 		)
 		(property "LCSC" "C11702"
-			(at 116.84 99.06 0)
+			(at 113.03 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1634,7 +1624,7 @@
 	)
 	(symbol
 		(lib_id "Memory_Flash:W25Q128JVS")
-		(at 142.24 96.52 0)
+		(at 142.24 101.6 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1642,7 +1632,7 @@
 		(dnp no)
 		(uuid "946cbf38-e765-47d9-a77d-709a42611048")
 		(property "Reference" "U22"
-			(at 133.35 87.63 0)
+			(at 134.62 90.424 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1651,7 +1641,7 @@
 			)
 		)
 		(property "Value" "W25Q128JVS"
-			(at 135.89 96.52 0)
+			(at 143.256 113.03 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1660,7 +1650,7 @@
 			)
 		)
 		(property "Footprint" "Package_SO:SOIC-8_5.23x5.23mm_P1.27mm"
-			(at 142.24 96.52 0)
+			(at 142.24 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1669,7 +1659,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1811142111_Winbond-Elec-W25Q128JVSIQ_C97521.pdf"
-			(at 142.24 96.52 0)
+			(at 142.24 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1677,8 +1667,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 142.24 96.52 0)
+		(property "Description" "128Mb Serial Flash Memory, Standard/Dual/Quad SPI, SOIC-8"
+			(at 142.24 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1687,7 +1677,7 @@
 			)
 		)
 		(property "LCSC" "C97521"
-			(at 142.24 96.52 0)
+			(at 142.24 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
