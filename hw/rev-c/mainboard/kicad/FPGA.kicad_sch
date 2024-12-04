@@ -15174,7 +15174,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 279.4 165.1 0)
 			(effects
 				(font
@@ -16157,7 +16157,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 180.34 149.86 0)
 			(effects
 				(font
@@ -17583,7 +17583,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 278.13 143.51 0)
 			(effects
 				(font
@@ -18384,7 +18384,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 181.61 107.95 0)
 			(effects
 				(font
@@ -19133,7 +19133,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 273.05 195.58 0)
 			(effects
 				(font
@@ -20348,7 +20348,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 180.34 124.46 0)
 			(effects
 				(font
@@ -21179,7 +21179,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 287.02 110.49 0)
 			(effects
 				(font
@@ -22483,7 +22483,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 276.86 88.9 0)
 			(effects
 				(font
@@ -23184,7 +23184,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 82.55 57.15 0)
 			(effects
 				(font
@@ -24193,7 +24193,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 180.34 93.98 0)
 			(effects
 				(font
@@ -24969,7 +24969,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 78.74 167.64 0)
 			(effects
 				(font
@@ -25561,7 +25561,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 177.8 181.61 0)
 			(effects
 				(font
@@ -26369,7 +26369,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SnapEDA:QFP50P2200X2200X160-144N"
+		(property "Footprint" "Package_QFP:LQFP-144_20x20mm_P0.5mm"
 			(at 278.13 129.54 0)
 			(effects
 				(font

@@ -4799,7 +4799,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "JLCPCB:SOT-23_L2.9-W1.3-P1.90-LS2.4-BR"
+		(property "Footprint" "EconoPET:SOT-23_L2.9-W1.3-P1.90-LS2.4-BR"
 			(at 211.455 90.17 0)
 			(effects
 				(font
@@ -4884,7 +4884,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "JLCPCB:SOT-23_L2.9-W1.3-P1.90-LS2.4-BR"
+		(property "Footprint" "EconoPET:SOT-23_L2.9-W1.3-P1.90-LS2.4-BR"
 			(at 211.455 132.08 0)
 			(effects
 				(font
