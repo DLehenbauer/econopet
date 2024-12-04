@@ -115,13 +115,13 @@
 		(uuid "b1838115-dd6e-4fd5-b341-ab60bd1d6d27")
 	)
 	(fp_circle
-		(center -4.476048 -4.066116)
-		(end -4.44605 -4.066116)
+		(center -3.675 -3.85)
+		(end -3.6 -3.825)
 		(stroke
 			(width 0.059995)
 			(type solid)
 		)
-		(fill none)
+		(fill solid)
 		(layer "F.SilkS")
 		(uuid "a8e078e4-e8b6-405f-8ba4-ea9cd785435c")
 	)
@@ -138,7 +138,7 @@
 	)
 	(fp_circle
 		(center -2.90094 -2.515621)
-		(end -2.775972 -2.515621)
+		(end -2.77594 -2.515621)
 		(stroke
 			(width 0.250012)
 			(type solid)
@@ -149,7 +149,7 @@
 	)
 	(fp_circle
 		(center 2.898908 -2.515621)
-		(end 3.023876 -2.515621)
+		(end 3.023908 -2.515621)
 		(stroke
 			(width 0.250012)
 			(type solid)
@@ -171,15 +171,15 @@
 	)
 	(pad "" np_thru_hole circle
 		(at -2.90094 -2.515621)
-		(size 0.75 0.75)
-		(drill 0.75)
+		(size 0.725 0.725)
+		(drill 0.725)
 		(layers "F&B.Cu" "*.Mask")
 		(uuid "0670bcfa-51b6-40ae-bdea-490bf8ef93c5")
 	)
 	(pad "" np_thru_hole circle
 		(at 2.898908 -2.515621)
-		(size 0.75 0.75)
-		(drill 0.75)
+		(size 0.725 0.725)
+		(drill 0.725)
 		(layers "F&B.Cu" "*.Mask")
 		(uuid "03babf43-1f53-421c-8586-dae5d139c8ac")
 	)
@@ -291,7 +291,7 @@
 		(remove_unused_layers no)
 		(uuid "ba4a4894-9b85-4a6d-b4ba-ee667ab05abc")
 	)
-	(model "D:/gh/kicad-jlcpcb/./JLCPCB/packages3d/USB-C_SMD-TYPE-C-31-M-12.wrl"
+	(model "E:/econopet/hw/libraries/Footprints/EconoPET.pretty/packages3d/USB-C_SMD-TYPE-C-31-M-12.wrl"
 		(offset
 			(xyz 0 -1.14 -0)
 		)
