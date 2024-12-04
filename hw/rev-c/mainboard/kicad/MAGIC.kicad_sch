@@ -267,20 +267,20 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:SN74LVC8T245-PET"
+		(symbol "EconoPET:SN74LVC8T245"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -8.89 13.97 0)
+				(at 7.62 13.97 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Value" "SN74LVC8T245-PET"
-				(at 12.7 13.97 0)
+			(property "Value" "SN74LVC4245APWR"
+				(at -11.43 -17.78 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -296,7 +296,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1809192324_Texas-Instruments-SN74LVC4245APWR_C7859.pdf"
 				(at -1.27 -6.35 0)
 				(effects
 					(font
@@ -314,7 +314,16 @@
 					(hide yes)
 				)
 			)
-			(property "LCSC" "C27643"
+			(property "LCSC" "C7859"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" ""
 				(at 0 0 0)
 				(effects
 					(font
@@ -332,7 +341,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "SN74LVC8T245-PET_0_1"
+			(symbol "SN74LVC8T245_0_1"
 				(rectangle
 					(start -10.16 12.7)
 					(end 10.16 -15.24)
@@ -345,7 +354,7 @@
 					)
 				)
 			)
-			(symbol "SN74LVC8T245-PET_1_1"
+			(symbol "SN74LVC8T245_1_1"
 				(pin power_in line
 					(at -2.54 15.24 270)
 					(length 2.54)
@@ -782,9 +791,9 @@
 		)
 		(symbol "power:+3V3"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -832,7 +841,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -882,8 +891,8 @@
 			(symbol "+3V3_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+3V3"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -902,9 +911,9 @@
 		)
 		(symbol "power:+5V"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -952,7 +961,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1002,8 +1011,8 @@
 			(symbol "+5V_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+5V"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1022,9 +1031,9 @@
 		)
 		(symbol "power:GND"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1072,7 +1081,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1098,8 +1107,8 @@
 			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
-					(length 0) hide
-					(name "GND"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1136,7 +1145,7 @@
 		(uuid "2e5b0b65-ef0c-4419-8d6f-98380df6b0ee")
 	)
 	(junction
-		(at 92.71 124.46)
+		(at 91.44 124.46)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "382706fe-3d4a-4350-aa1c-211763883cd9")
@@ -1146,12 +1155,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "3e0042b2-3bee-4d99-9999-b2085a376382")
-	)
-	(junction
-		(at 88.9 104.14)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "49c66052-f717-41d2-9a5c-1787b19ddad9")
 	)
 	(junction
 		(at 207.01 20.32)
@@ -1166,18 +1169,6 @@
 		(uuid "4fe47f82-c04b-4223-b0c8-73e52b41bda1")
 	)
 	(junction
-		(at 92.71 110.49)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "7241e6ea-ced6-49a1-ac0b-0d8da86ba0d3")
-	)
-	(junction
-		(at 96.52 116.84)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "77d92256-cab4-41fb-8df6-87363d060901")
-	)
-	(junction
 		(at 219.71 71.12)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -1188,6 +1179,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a04c4be2-0852-44c0-bd7b-8a757d711801")
+	)
+	(junction
+		(at 91.44 110.49)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "a0c71984-6561-4339-ae2d-59479912e143")
 	)
 	(junction
 		(at 257.81 20.32)
@@ -1212,6 +1209,18 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c2acf48e-2bf2-4982-9484-3d985cf4eccc")
+	)
+	(junction
+		(at 95.25 116.84)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "c2befa49-fef0-4952-8c78-3acf1ad87e9b")
+	)
+	(junction
+		(at 87.63 104.14)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "cc42a942-fb8b-4407-9b8c-2bf98ee7c78c")
 	)
 	(junction
 		(at 240.03 123.19)
@@ -1455,16 +1464,6 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 104.14) (xy 99.695 104.14)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "01c39164-ed35-4760-9711-351485897136")
-	)
-	(wire
-		(pts
 			(xy 198.12 157.48) (xy 210.82 157.48)
 		)
 		(stroke
@@ -1515,7 +1514,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 116.84) (xy 96.52 116.84)
+			(xy 82.55 116.84) (xy 95.25 116.84)
 		)
 		(stroke
 			(width 0)
@@ -1595,7 +1594,7 @@
 	)
 	(wire
 		(pts
-			(xy 104.775 104.14) (xy 107.315 104.14)
+			(xy 102.87 104.14) (xy 104.14 104.14)
 		)
 		(stroke
 			(width 0)
@@ -1715,7 +1714,7 @@
 	)
 	(wire
 		(pts
-			(xy 104.775 110.49) (xy 107.315 110.49)
+			(xy 102.87 110.49) (xy 104.14 110.49)
 		)
 		(stroke
 			(width 0)
@@ -1725,7 +1724,7 @@
 	)
 	(wire
 		(pts
-			(xy 92.71 124.46) (xy 92.71 125.73)
+			(xy 91.44 124.46) (xy 91.44 125.73)
 		)
 		(stroke
 			(width 0)
@@ -1865,7 +1864,7 @@
 	)
 	(wire
 		(pts
-			(xy 96.52 123.19) (xy 96.52 124.46)
+			(xy 95.25 123.19) (xy 95.25 124.46)
 		)
 		(stroke
 			(width 0)
@@ -2005,6 +2004,26 @@
 	)
 	(wire
 		(pts
+			(xy 95.25 116.84) (xy 97.79 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "59988f3b-ff39-4797-a1cb-c1b76d6277b3")
+	)
+	(wire
+		(pts
+			(xy 91.44 110.49) (xy 97.79 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5a09a20d-07ac-4bfa-ab7e-72a2382b9e39")
+	)
+	(wire
+		(pts
 			(xy 45.72 77.47) (xy 52.07 77.47)
 		)
 		(stroke
@@ -2045,7 +2064,7 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 104.14) (xy 88.9 118.11)
+			(xy 87.63 104.14) (xy 87.63 118.11)
 		)
 		(stroke
 			(width 0)
@@ -2125,7 +2144,7 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 124.46) (xy 92.71 124.46)
+			(xy 87.63 124.46) (xy 91.44 124.46)
 		)
 		(stroke
 			(width 0)
@@ -2135,7 +2154,7 @@
 	)
 	(wire
 		(pts
-			(xy 104.775 116.84) (xy 107.315 116.84)
+			(xy 102.87 116.84) (xy 104.14 116.84)
 		)
 		(stroke
 			(width 0)
@@ -2215,7 +2234,7 @@
 	)
 	(wire
 		(pts
-			(xy 92.71 123.19) (xy 92.71 124.46)
+			(xy 91.44 123.19) (xy 91.44 124.46)
 		)
 		(stroke
 			(width 0)
@@ -2305,7 +2324,7 @@
 	)
 	(wire
 		(pts
-			(xy 92.71 124.46) (xy 96.52 124.46)
+			(xy 91.44 124.46) (xy 95.25 124.46)
 		)
 		(stroke
 			(width 0)
@@ -2332,6 +2351,16 @@
 			(type default)
 		)
 		(uuid "8d957aeb-515a-4f3d-a60a-c62b6c162a24")
+	)
+	(wire
+		(pts
+			(xy 87.63 104.14) (xy 97.79 104.14)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8e7660df-0579-4fa4-b493-7b515bb8e1ab")
 	)
 	(wire
 		(pts
@@ -2525,7 +2554,7 @@
 	)
 	(wire
 		(pts
-			(xy 96.52 116.84) (xy 96.52 118.11)
+			(xy 95.25 116.84) (xy 95.25 118.11)
 		)
 		(stroke
 			(width 0)
@@ -2585,7 +2614,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 110.49) (xy 92.71 110.49)
+			(xy 82.55 110.49) (xy 91.44 110.49)
 		)
 		(stroke
 			(width 0)
@@ -2652,16 +2681,6 @@
 			(type default)
 		)
 		(uuid "b7f8c947-298a-4be2-843f-893716995906")
-	)
-	(wire
-		(pts
-			(xy 96.52 116.84) (xy 99.695 116.84)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bb40206e-b1fa-4fc3-8124-3734a32b9ecb")
 	)
 	(wire
 		(pts
@@ -2785,7 +2804,7 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 123.19) (xy 88.9 124.46)
+			(xy 87.63 123.19) (xy 87.63 124.46)
 		)
 		(stroke
 			(width 0)
@@ -2825,7 +2844,7 @@
 	)
 	(wire
 		(pts
-			(xy 92.71 110.49) (xy 92.71 118.11)
+			(xy 91.44 110.49) (xy 91.44 118.11)
 		)
 		(stroke
 			(width 0)
@@ -2875,7 +2894,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 104.14) (xy 88.9 104.14)
+			(xy 82.55 104.14) (xy 87.63 104.14)
 		)
 		(stroke
 			(width 0)
@@ -2992,16 +3011,6 @@
 			(type default)
 		)
 		(uuid "ed265626-f6f5-4029-beb9-f6ad275e86b5")
-	)
-	(wire
-		(pts
-			(xy 92.71 110.49) (xy 99.695 110.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "ef7add85-f936-4ea4-a88e-f3613fb50f00")
 	)
 	(wire
 		(pts
@@ -3771,7 +3780,7 @@
 	)
 	(hierarchical_label "DIAG"
 		(shape input)
-		(at 107.315 116.84 0)
+		(at 104.14 116.84 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3915,7 +3924,7 @@
 	)
 	(hierarchical_label "VIA_CB2"
 		(shape input)
-		(at 107.315 110.49 0)
+		(at 104.14 110.49 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4071,7 +4080,7 @@
 	)
 	(hierarchical_label "GRAPHICS"
 		(shape input)
-		(at 107.315 104.14 0)
+		(at 104.14 104.14 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4082,7 +4091,7 @@
 		(uuid "f574ee38-a23c-4d01-9afb-015518a85f40")
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 220.98 44.45 0)
 		(mirror y)
 		(unit 1)
@@ -4234,7 +4243,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 223.52 147.32 0)
 		(mirror y)
 		(unit 1)
@@ -4386,7 +4395,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:SN74LVC8T245-PET")
+		(lib_id "EconoPET:SN74LVC8T245")
 		(at 222.25 95.25 0)
 		(mirror y)
 		(unit 1)
@@ -4582,7 +4591,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3V3\""
 			(at 207.01 71.12 0)
 			(effects
 				(font
@@ -4647,7 +4656,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 220.98 62.23 0)
 			(effects
 				(font
@@ -4713,7 +4722,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 222.25 113.03 0)
 			(effects
 				(font
@@ -4778,7 +4787,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 223.52 165.1 0)
 			(effects
 				(font
@@ -4844,7 +4853,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3V3\""
 			(at 207.01 20.32 0)
 			(effects
 				(font
@@ -4910,7 +4919,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 207.01 34.29 0)
 			(effects
 				(font
@@ -5132,7 +5141,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 209.55 137.16 0)
 			(effects
 				(font
@@ -5198,7 +5207,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 237.49 137.16 0)
 			(effects
 				(font
@@ -5264,7 +5273,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 234.95 34.29 0)
 			(effects
 				(font
@@ -5642,7 +5651,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 207.01 25.4 0)
 			(effects
 				(font
@@ -5665,7 +5674,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 102.235 116.84 90)
+		(at 100.33 116.84 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5673,7 +5682,7 @@
 		(dnp no)
 		(uuid "2f07f872-eaed-4d5c-b624-ebf8cb4ba6fd")
 		(property "Reference" "R16"
-			(at 104.14 113.03 90)
+			(at 102.235 113.03 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5682,7 +5691,7 @@
 			)
 		)
 		(property "Value" "5k6"
-			(at 104.14 114.935 90)
+			(at 102.235 114.935 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5691,7 +5700,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 102.235 116.84 0)
+			(at 100.33 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5700,7 +5709,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF5601TCE_C25908.pdf"
-			(at 102.235 116.84 0)
+			(at 100.33 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5709,7 +5718,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 102.235 116.84 0)
+			(at 100.33 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5718,7 +5727,7 @@
 			)
 		)
 		(property "LCSC" "C25908"
-			(at 102.235 116.84 0)
+			(at 100.33 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5786,7 +5795,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 257.81 123.19 0)
 			(effects
 				(font
@@ -5809,7 +5818,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 102.235 110.49 90)
+		(at 100.33 110.49 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5817,7 +5826,7 @@
 		(dnp no)
 		(uuid "38e88955-457e-4f4b-9bb3-f5b2a6742025")
 		(property "Reference" "R15"
-			(at 104.14 106.68 90)
+			(at 102.235 106.68 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5826,7 +5835,7 @@
 			)
 		)
 		(property "Value" "5k6"
-			(at 104.14 108.585 90)
+			(at 102.235 108.585 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5835,7 +5844,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 102.235 110.49 0)
+			(at 100.33 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5844,7 +5853,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF5601TCE_C25908.pdf"
-			(at 102.235 110.49 0)
+			(at 100.33 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5853,7 +5862,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 102.235 110.49 0)
+			(at 100.33 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5862,7 +5871,7 @@
 			)
 		)
 		(property "LCSC" "C25908"
-			(at 102.235 110.49 0)
+			(at 100.33 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5887,7 +5896,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 102.235 104.14 90)
+		(at 100.33 104.14 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5895,7 +5904,7 @@
 		(dnp no)
 		(uuid "38f14fef-501b-4af8-817f-2d405468b476")
 		(property "Reference" "R14"
-			(at 104.14 100.33 90)
+			(at 102.235 100.33 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5904,7 +5913,7 @@
 			)
 		)
 		(property "Value" "5k6"
-			(at 104.14 102.235 90)
+			(at 102.235 102.235 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5913,7 +5922,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 102.235 104.14 0)
+			(at 100.33 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5922,7 +5931,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF5601TCE_C25908.pdf"
-			(at 102.235 104.14 0)
+			(at 100.33 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5931,7 +5940,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 102.235 104.14 0)
+			(at 100.33 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5940,7 +5949,7 @@
 			)
 		)
 		(property "LCSC" "C25908"
-			(at 102.235 104.14 0)
+			(at 100.33 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5965,7 +5974,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 92.71 125.73 0)
+		(at 91.44 125.73 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5974,7 +5983,7 @@
 		(fields_autoplaced yes)
 		(uuid "4a3320ad-065c-4235-865e-fe14ae2cb2e8")
 		(property "Reference" "#PWR033"
-			(at 92.71 132.08 0)
+			(at 91.44 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5983,7 +5992,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 92.71 130.81 0)
+			(at 91.44 130.81 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5991,7 +6000,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 92.71 125.73 0)
+			(at 91.44 125.73 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6000,7 +6009,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 92.71 125.73 0)
+			(at 91.44 125.73 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6008,8 +6017,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 92.71 125.73 0)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 91.44 125.73 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6074,7 +6083,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 236.22 76.2 0)
 			(effects
 				(font
@@ -6097,7 +6106,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 96.52 120.65 0)
+		(at 95.25 120.65 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6105,7 +6114,7 @@
 		(dnp no)
 		(uuid "6d7e90d7-df29-42f3-ae26-2598ccf1fa31")
 		(property "Reference" "R13"
-			(at 94.615 122.555 90)
+			(at 93.345 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6114,7 +6123,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 96.52 122.555 90)
+			(at 95.25 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6123,7 +6132,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 96.52 120.65 0)
+			(at 95.25 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6132,7 +6141,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1002TCE_C25744.pdf"
-			(at 96.52 120.65 0)
+			(at 95.25 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6141,7 +6150,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 96.52 120.65 0)
+			(at 95.25 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6150,7 +6159,7 @@
 			)
 		)
 		(property "LCSC" "C25744"
-			(at 96.52 120.65 0)
+			(at 95.25 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6297,7 +6306,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 262.89 20.32 0)
 			(effects
 				(font
@@ -6363,7 +6372,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 236.22 25.4 0)
 			(effects
 				(font
@@ -6429,7 +6438,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3V3\""
 			(at 207.01 123.19 0)
 			(effects
 				(font
@@ -6495,7 +6504,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 207.01 128.27 0)
 			(effects
 				(font
@@ -6518,7 +6527,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 88.9 120.65 0)
+		(at 87.63 120.65 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6526,7 +6535,7 @@
 		(dnp no)
 		(uuid "bc9b3d7e-de34-4867-938e-5b6fb7c231ae")
 		(property "Reference" "R11"
-			(at 86.995 122.555 90)
+			(at 85.725 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6535,7 +6544,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 88.9 122.555 90)
+			(at 87.63 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6544,7 +6553,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 88.9 120.65 0)
+			(at 87.63 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6553,7 +6562,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1002TCE_C25744.pdf"
-			(at 88.9 120.65 0)
+			(at 87.63 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6562,7 +6571,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 88.9 120.65 0)
+			(at 87.63 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6571,7 +6580,7 @@
 			)
 		)
 		(property "LCSC" "C25744"
-			(at 88.9 120.65 0)
+			(at 87.63 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6639,7 +6648,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 207.01 76.2 0)
 			(effects
 				(font
@@ -6662,7 +6671,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 92.71 120.65 0)
+		(at 91.44 120.65 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6670,7 +6679,7 @@
 		(dnp no)
 		(uuid "f376cb5e-73ec-4083-b564-76558a12ca8f")
 		(property "Reference" "R12"
-			(at 90.805 122.555 90)
+			(at 89.535 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6679,7 +6688,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 92.71 122.555 90)
+			(at 91.44 122.555 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6688,7 +6697,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 92.71 120.65 0)
+			(at 91.44 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6697,7 +6706,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1002TCE_C25744.pdf"
-			(at 92.71 120.65 0)
+			(at 91.44 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6706,7 +6715,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 92.71 120.65 0)
+			(at 91.44 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6715,7 +6724,7 @@
 			)
 		)
 		(property "LCSC" "C25744"
-			(at 92.71 120.65 0)
+			(at 91.44 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6783,7 +6792,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 240.03 128.27 0)
 			(effects
 				(font

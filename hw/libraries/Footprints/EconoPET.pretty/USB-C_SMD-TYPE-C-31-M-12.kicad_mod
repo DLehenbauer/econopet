@@ -68,7 +68,7 @@
 		(start -4.470003 0.06571)
 		(end -4.470003 -1.797206)
 		(stroke
-			(width 0.254001)
+			(width 0.254)
 			(type solid)
 		)
 		(layer "F.SilkS")
@@ -78,7 +78,7 @@
 		(start -4.470003 3.7841)
 		(end -4.470003 2.302794)
 		(stroke
-			(width 0.254001)
+			(width 0.254)
 			(type solid)
 		)
 		(layer "F.SilkS")
@@ -88,7 +88,7 @@
 		(start 4.470003 0.066066)
 		(end 4.470003 -1.797562)
 		(stroke
-			(width 0.254001)
+			(width 0.254)
 			(type solid)
 		)
 		(layer "F.SilkS")
@@ -98,7 +98,7 @@
 		(start 4.470003 3.7841)
 		(end -4.470003 3.7841)
 		(stroke
-			(width 0.254001)
+			(width 0.254)
 			(type solid)
 		)
 		(layer "F.SilkS")
@@ -108,20 +108,20 @@
 		(start 4.470003 3.7841)
 		(end 4.470003 2.302438)
 		(stroke
-			(width 0.254001)
+			(width 0.254)
 			(type solid)
 		)
 		(layer "F.SilkS")
 		(uuid "b1838115-dd6e-4fd5-b341-ab60bd1d6d27")
 	)
 	(fp_circle
-		(center -4.476048 -4.066116)
-		(end -4.44605 -4.066116)
+		(center -3.675 -3.85)
+		(end -3.6 -3.825)
 		(stroke
 			(width 0.059995)
 			(type solid)
 		)
-		(fill none)
+		(fill solid)
 		(layer "F.SilkS")
 		(uuid "a8e078e4-e8b6-405f-8ba4-ea9cd785435c")
 	)
@@ -138,9 +138,9 @@
 	)
 	(fp_circle
 		(center -2.90094 -2.515621)
-		(end -2.775972 -2.515621)
+		(end -2.77594 -2.515621)
 		(stroke
-			(width 0.250013)
+			(width 0.250012)
 			(type solid)
 		)
 		(fill none)
@@ -149,9 +149,9 @@
 	)
 	(fp_circle
 		(center 2.898908 -2.515621)
-		(end 3.023876 -2.515621)
+		(end 3.023908 -2.515621)
 		(stroke
-			(width 0.250013)
+			(width 0.250012)
 			(type solid)
 		)
 		(fill none)
@@ -171,15 +171,15 @@
 	)
 	(pad "" np_thru_hole circle
 		(at -2.90094 -2.515621)
-		(size 0.75 0.75)
-		(drill 0.75)
+		(size 0.725 0.725)
+		(drill 0.725)
 		(layers "F&B.Cu" "*.Mask")
 		(uuid "0670bcfa-51b6-40ae-bdea-490bf8ef93c5")
 	)
 	(pad "" np_thru_hole circle
 		(at 2.898908 -2.515621)
-		(size 0.75 0.75)
-		(drill 0.75)
+		(size 0.725 0.725)
+		(drill 0.725)
 		(layers "F&B.Cu" "*.Mask")
 		(uuid "03babf43-1f53-421c-8586-dae5d139c8ac")
 	)
@@ -259,6 +259,7 @@
 		(at -4.326137 -3.015748)
 		(size 1.2 2)
 		(drill oval 0.8 1.600025)
+		(property pad_prop_heatsink)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
 		(uuid "518e5864-4759-4b93-aef9-955f77b4250c")
@@ -267,6 +268,7 @@
 		(at -4.326137 1.18415)
 		(size 1.2 1.8)
 		(drill oval 0.8 1.4)
+		(property pad_prop_heatsink)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
 		(uuid "f5d88302-6abf-4d99-be15-fb3a57ae2a11")
@@ -275,6 +277,7 @@
 		(at 4.324105 -3.015748)
 		(size 1.2 2)
 		(drill oval 0.8 1.599975)
+		(property pad_prop_heatsink)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
 		(uuid "0d2bd16c-58a6-47d2-80b2-59c026ea9969")
@@ -283,11 +286,12 @@
 		(at 4.324105 1.18415)
 		(size 1.2 1.8)
 		(drill oval 0.8 1.4)
+		(property pad_prop_heatsink)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
 		(uuid "ba4a4894-9b85-4a6d-b4ba-ee667ab05abc")
 	)
-	(model "D:/gh/kicad-jlcpcb/./JLCPCB/packages3d/USB-C_SMD-TYPE-C-31-M-12.wrl"
+	(model "E:/econopet/hw/libraries/Footprints/EconoPET.pretty/packages3d/USB-C_SMD-TYPE-C-31-M-12.wrl"
 		(offset
 			(xyz 0 -1.14 -0)
 		)

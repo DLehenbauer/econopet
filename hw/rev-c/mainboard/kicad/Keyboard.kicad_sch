@@ -1128,7 +1128,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex*"
+			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex* MSOP*"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1437,122 +1437,28 @@
 				)
 			)
 		)
-		(symbol "PET:PD_GND"
-			(power)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "PD_GND"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"PD_GND\" , ground"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "power-flag"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "PD_GND_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "PD_GND_1_1"
-				(pin power_in line
-					(at 0 0 270)
-					(length 0) hide
-					(name "PD_GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
-		(symbol "Retrocomputing:CBM_PET_Keyboard_Conn_Keyed_20P"
+		(symbol "EconoPET:CBM_PET_Keyboard_Conn_Keyed_20P"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at 0 25.4 0)
+				(at -0.7112 -2.9972 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
-			(property "Value" "CBM_PET_Keyboard_Conn_Keyed_20P"
-				(at 0 -27.94 0)
+			(property "Value" "KEYBOARD"
+				(at -0.7112 -0.6858 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
 			(property "Footprint" "Retrocomputing:CBM_PET_KEYBOARD_KEYED_20P"
@@ -1573,7 +1479,16 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Generic connector, single row, 01x20, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(property "Description" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MOUSER" "649-1012937893603BLF"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2384,9 +2299,9 @@
 		)
 		(symbol "power:+5V"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -2434,7 +2349,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2484,8 +2399,104 @@
 			(symbol "+5V_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+5V"
+					(length 0)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+		)
+		(symbol "power:GND"
+			(power)
+			(pin_numbers hide)
+			(pin_names
+				(offset 0) hide)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "#PWR"
+				(at 0 -6.35 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Value" "GND"
+				(at 0 -3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "GND_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "GND_1_1"
+				(pin power_in line
+					(at 0 0 270)
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3963,7 +3974,7 @@
 		(uuid "d4ba07a9-3bc5-4c1c-82cb-05c5e060578c")
 	)
 	(symbol
-		(lib_id "Retrocomputing:CBM_PET_Keyboard_Conn_Keyed_20P")
+		(lib_id "EconoPET:CBM_PET_Keyboard_Conn_Keyed_20P")
 		(at 201.93 73.66 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4214,7 +4225,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 215.9 124.46 0)
 			(effects
 				(font
@@ -4236,7 +4247,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 110.49 104.14 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4254,7 +4265,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 110.49 109.22 0)
 			(effects
 				(font
@@ -4280,7 +4291,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 110.49 104.14 0)
 			(effects
 				(font
@@ -4585,7 +4596,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 229.87 130.81 0)
 			(effects
 				(font
@@ -4607,7 +4618,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 194.31 97.79 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4625,7 +4636,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 194.31 102.87 0)
 			(effects
 				(font
@@ -4651,7 +4662,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 194.31 97.79 0)
 			(effects
 				(font
@@ -4751,7 +4762,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 212.09 146.05 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4769,7 +4780,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 212.09 151.13 0)
 			(effects
 				(font
@@ -4795,7 +4806,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 212.09 146.05 0)
 			(effects
 				(font
@@ -4861,7 +4872,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 110.49 29.21 0)
 			(effects
 				(font
@@ -4883,7 +4894,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 229.87 135.89 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4901,7 +4912,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 229.87 140.97 0)
 			(effects
 				(font
@@ -4927,7 +4938,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 229.87 135.89 0)
 			(effects
 				(font
@@ -4993,7 +5004,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 154.94 40.64 0)
 			(effects
 				(font
@@ -5089,7 +5100,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "4 resistor network, parallel topology"
 			(at 172.72 40.64 0)
 			(effects
 				(font

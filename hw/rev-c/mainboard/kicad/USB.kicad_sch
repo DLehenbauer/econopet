@@ -414,30 +414,32 @@
 				)
 			)
 		)
-		(symbol "JLCPCB:USB_C_Receptacle_USB2.0"
+		(symbol "EconoPET:USB_C_Receptacle_USB2.0"
 			(pin_names
 				(offset 1.016)
 			)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
-			(property "Reference" "J14"
-				(at 0 25.4 0)
+			(property "Reference" "J"
+				(at -11.43 1.9051 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
-			(property "Value" "USB2.0_HOST_TYPE_C"
-				(at 0 22.86 0)
+			(property "Value" "USB1.1_HOST_TYPE_C"
+				(at -11.43 -0.6349 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify right)
 				)
 			)
-			(property "Footprint" "JLCPCB:USB-C_SMD-TYPE-C-31-M-12"
+			(property "Footprint" "EconoPET:USB-C_SMD-TYPE-C-31-M-12"
 				(at 3.81 0 0)
 				(effects
 					(font
@@ -446,7 +448,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" "https://www.usb.org/sites/default/files/documents/usb_type-c.zip"
+			(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205251630_Korean-Hroparts-Elec-TYPE-C-31-M-12_C165948.pdf"
 				(at 3.81 0 0)
 				(effects
 					(font
@@ -455,7 +457,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "USB 2.0-only Type-C Receptacle connector"
+			(property "Description" ""
 				(at 0 0 0)
 				(effects
 					(font
@@ -465,15 +467,6 @@
 				)
 			)
 			(property "LCSC" "C165948"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Spec" "https://www.usb.org/sites/default/files/documents/usb_type-c.zip"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1050,107 +1043,11 @@
 				)
 			)
 		)
-		(symbol "PET:PD_GND"
-			(power)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "PD_GND"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"PD_GND\" , ground"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "power-flag"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "PD_GND_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "PD_GND_1_1"
-				(pin power_in line
-					(at 0 0 270)
-					(length 0) hide
-					(name "PD_GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
 		(symbol "power:+5V"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1198,7 +1095,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1248,8 +1145,8 @@
 			(symbol "+5V_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+5V"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1268,9 +1165,9 @@
 		)
 		(symbol "power:GND"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1318,7 +1215,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1344,8 +1241,8 @@
 			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
-					(length 0) hide
-					(name "GND"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1364,16 +1261,22 @@
 		)
 	)
 	(junction
+		(at 123.19 82.55)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "19c30127-0ea5-4de0-be9d-9003535d88f9")
+	)
+	(junction
 		(at 153.67 123.19)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "3789d269-3a26-40d8-a709-401d53fd2812")
 	)
 	(junction
-		(at 122.555 77.47)
+		(at 123.19 77.47)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "3c3de60f-f4bc-42ab-8da7-e6b96cfd8e4c")
+		(uuid "456466cd-ff7a-4268-bf6d-97b526a65ed6")
 	)
 	(junction
 		(at 83.82 78.74)
@@ -1406,16 +1309,10 @@
 		(uuid "b48aba92-8307-4652-87e4-bbc8b4c3dfcc")
 	)
 	(junction
-		(at 122.555 82.55)
+		(at 123.19 74.93)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "f991f982-a489-4a86-a20e-194641e3a0f7")
-	)
-	(junction
-		(at 122.555 74.93)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "fca14f68-560f-49c8-9231-1d7052c17957")
+		(uuid "f6939fd2-de97-4046-a3d7-bb1bdf10fe9e")
 	)
 	(no_connect
 		(at 137.16 105.41)
@@ -1447,6 +1344,16 @@
 	)
 	(wire
 		(pts
+			(xy 123.19 74.93) (xy 137.16 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "055b4041-9a0d-4f2c-be5c-a1ec0df6d3b3")
+	)
+	(wire
+		(pts
 			(xy 137.16 95.25) (xy 135.89 95.25)
 		)
 		(stroke
@@ -1457,13 +1364,13 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 77.47) (xy 137.16 77.47)
+			(xy 123.19 82.55) (xy 125.73 82.55)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "31aba4e6-51a5-43a3-b381-6e8a164475e3")
+		(uuid "39c6b000-a0ea-4ad6-b5a8-b7e5fd3d3125")
 	)
 	(wire
 		(pts
@@ -1517,7 +1424,7 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 82.55) (xy 122.555 77.47)
+			(xy 123.19 82.55) (xy 123.19 77.47)
 		)
 		(stroke
 			(width 0)
@@ -1537,7 +1444,7 @@
 	)
 	(wire
 		(pts
-			(xy 83.82 74.93) (xy 122.555 74.93)
+			(xy 83.82 74.93) (xy 123.19 74.93)
 		)
 		(stroke
 			(width 0)
@@ -1567,7 +1474,7 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 85.09) (xy 122.555 82.55)
+			(xy 123.19 85.09) (xy 123.19 82.55)
 		)
 		(stroke
 			(width 0)
@@ -1577,13 +1484,13 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 82.55) (xy 125.73 82.55)
+			(xy 123.19 77.47) (xy 137.16 77.47)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "8e7fa167-0794-4346-a331-b123a9e0b121")
+		(uuid "84b494cc-f47e-4cb3-9b0d-460ebfaf7d9d")
 	)
 	(wire
 		(pts
@@ -1627,7 +1534,7 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 77.47) (xy 122.555 74.93)
+			(xy 123.19 77.47) (xy 123.19 74.93)
 		)
 		(stroke
 			(width 0)
@@ -1707,16 +1614,6 @@
 	)
 	(wire
 		(pts
-			(xy 122.555 74.93) (xy 137.16 74.93)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bf536b4a-98de-4441-8db2-86db990cab69")
-	)
-	(wire
-		(pts
 			(xy 153.67 123.19) (xy 154.94 123.19)
 		)
 		(stroke
@@ -1757,7 +1654,7 @@
 	)
 	(wire
 		(pts
-			(xy 125.73 85.09) (xy 122.555 85.09)
+			(xy 125.73 85.09) (xy 123.19 85.09)
 		)
 		(stroke
 			(width 0)
@@ -1922,7 +1819,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 83.82 87.63 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -1940,7 +1837,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 83.82 92.71 0)
 			(effects
 				(font
@@ -1966,7 +1863,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 83.82 87.63 0)
 			(effects
 				(font
@@ -1988,7 +1885,7 @@
 		)
 	)
 	(symbol
-		(lib_id "JLCPCB:USB_C_Receptacle_USB2.0")
+		(lib_id "EconoPET:USB_C_Receptacle_USB2.0")
 		(at 152.4 92.71 0)
 		(mirror y)
 		(unit 1)
@@ -2379,7 +2276,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 83.82 62.23 0)
 			(effects
 				(font
@@ -2480,7 +2377,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 153.67 123.19 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -2498,7 +2395,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 153.67 128.27 0)
 			(effects
 				(font
@@ -2524,7 +2421,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 153.67 123.19 0)
 			(effects
 				(font
@@ -2590,7 +2487,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 160.02 123.19 0)
 			(effects
 				(font

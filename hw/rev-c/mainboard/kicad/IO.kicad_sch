@@ -145,7 +145,7 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:W65C21NxP-PET"
+		(symbol "EconoPET:W65C21N"
 			(pin_names
 				(offset 1.016)
 			)
@@ -153,16 +153,15 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -10.16 33.02 0)
+				(at -7.62 33.02 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
-			(property "Value" "W65C21NxP-PET"
-				(at 0 0 90)
+			(property "Value" "W65C21N"
+				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -171,7 +170,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Package_DIP:DIP-40_W15.24mm_Socket"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -180,7 +179,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://www.mouser.com/datasheet/2/436/w65c21-661.pdf"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -198,6 +197,15 @@
 					(hide yes)
 				)
 			)
+			(property "MOUSER" "955-W65C21N6TPG-14,571-1-2199299-5"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
 			(property "ki_fp_filters" "DIP-40_W15.24mm*"
 				(at 0 0 0)
 				(effects
@@ -207,7 +215,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "W65C21NxP-PET_0_1"
+			(symbol "W65C21N_0_1"
 				(rectangle
 					(start -10.16 31.75)
 					(end 10.16 -31.75)
@@ -220,7 +228,7 @@
 					)
 				)
 			)
-			(symbol "W65C21NxP-PET_1_1"
+			(symbol "W65C21N_1_1"
 				(pin power_in line
 					(at 0 -34.29 90)
 					(length 2.54)
@@ -943,7 +951,7 @@
 				)
 			)
 		)
-		(symbol "Mainboard-rescue:W65C22NxP-PET"
+		(symbol "EconoPET:W65C22N"
 			(pin_names
 				(offset 1.016)
 			)
@@ -951,16 +959,15 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -10.16 33.02 0)
+				(at -7.62 33.02 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
-			(property "Value" "W65C22NxP-PET"
-				(at 0 0 90)
+			(property "Value" "W65C22N"
+				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -969,7 +976,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Package_DIP:DIP-40_W15.24mm_Socket"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -978,7 +985,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Datasheet" "https://www.mouser.com/datasheet/2/436/w65c22-1197.pdf"
 				(at 0 3.81 0)
 				(effects
 					(font
@@ -996,6 +1003,15 @@
 					(hide yes)
 				)
 			)
+			(property "MOUSER" "955-W65C22N6TPG-14,571-1-2199299-5"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
 			(property "ki_fp_filters" "DIP-40_W15.24mm*"
 				(at 0 0 0)
 				(effects
@@ -1005,7 +1021,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "W65C22NxP-PET_0_1"
+			(symbol "W65C22N_0_1"
 				(rectangle
 					(start -10.16 31.75)
 					(end 10.16 -31.75)
@@ -1018,7 +1034,7 @@
 					)
 				)
 			)
-			(symbol "W65C22NxP-PET_1_1"
+			(symbol "W65C22N_1_1"
 				(pin power_in line
 					(at 0 -34.29 90)
 					(length 2.54)
@@ -1741,107 +1757,11 @@
 				)
 			)
 		)
-		(symbol "PET:PD_GND"
-			(power)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "PD_GND"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"PD_GND\" , ground"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "power-flag"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "PD_GND_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "PD_GND_1_1"
-				(pin power_in line
-					(at 0 0 270)
-					(length 0) hide
-					(name "PD_GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
 		(symbol "power:+5V"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1889,7 +1809,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1939,8 +1859,8 @@
 			(symbol "+5V_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+5V"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1959,9 +1879,9 @@
 		)
 		(symbol "power:GND"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -2009,7 +1929,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2035,8 +1955,8 @@
 			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
-					(length 0) hide
-					(name "GND"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -6261,7 +6181,7 @@
 		(uuid "fc329e60-968a-4f61-ba77-53d29ff8c1c7")
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C21NxP-PET")
+		(lib_id "EconoPET:W65C21N")
 		(at 86.36 153.67 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -6453,7 +6373,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C22NxP-PET")
+		(lib_id "EconoPET:W65C22N")
 		(at 184.15 128.27 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -6645,7 +6565,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mainboard-rescue:W65C21NxP-PET")
+		(lib_id "EconoPET:W65C21N")
 		(at 86.36 58.42 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7071,7 +6991,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 86.36 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7089,7 +7009,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 86.36 193.04 0)
 			(effects
 				(font
@@ -7115,7 +7035,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 86.36 187.96 0)
 			(effects
 				(font
@@ -7180,7 +7100,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 86.36 21.59 0)
 			(effects
 				(font
@@ -7245,7 +7165,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 101.6 118.11 0)
 			(effects
 				(font
@@ -7310,7 +7230,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 102.87 22.86 0)
 			(effects
 				(font
@@ -7332,7 +7252,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 184.15 162.56 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7350,7 +7270,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 184.15 167.64 0)
 			(effects
 				(font
@@ -7376,7 +7296,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 184.15 162.56 0)
 			(effects
 				(font
@@ -7398,7 +7318,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 86.36 92.71 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7416,7 +7336,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 86.36 97.79 0)
 			(effects
 				(font
@@ -7442,7 +7362,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 86.36 92.71 0)
 			(effects
 				(font
@@ -7507,7 +7427,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 86.36 116.84 0)
 			(effects
 				(font
@@ -7573,7 +7493,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 184.15 90.17 0)
 			(effects
 				(font
@@ -7638,7 +7558,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 200.66 91.44 0)
 			(effects
 				(font

@@ -39,7 +39,7 @@
         "pads": {
           "drill": 0.0,
           "height": 1.3,
-          "width": 0.599974
+          "width": 0.59997
         },
         "silk_line_width": 0.15,
         "silk_text_italic": false,
@@ -457,7 +457,7 @@
       "pin_to_pin": "error",
       "power_pin_not_driven": "error",
       "similar_labels": "warning",
-      "simulation_model_issue": "ignore",
+      "simulation_model_issue": "warning",
       "unannotated": "error",
       "unit_value_mismatch": "error",
       "unresolved_variable": "error",

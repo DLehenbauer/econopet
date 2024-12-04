@@ -622,127 +622,32 @@
 				)
 			)
 		)
-		(symbol "PET:PD_GND"
-			(power)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "PD_GND"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"PD_GND\" , ground"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "power-flag"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "PD_GND_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "PD_GND_1_1"
-				(pin power_in line
-					(at 0 0 270)
-					(length 0) hide
-					(name "PD_GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
-		(symbol "SnapEDA:SJ-43504-SMT-TR"
+		(symbol "EconoPET:SJ-43504-SMT-TR"
 			(pin_names
 				(offset 1.016) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at -8.9154 6.3754 0)
+				(at -10.16 -1.2701 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
+					(justify right)
 				)
 			)
-			(property "Value" "SJ-43504-SMT-TR"
-				(at -8.89 -11.43 0)
+			(property "Value" "AUDIO"
+				(at -10.16 -1.2701 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left bottom)
+					(justify right)
+					(hide yes)
 				)
 			)
-			(property "Footprint" "SnapEDA:CUI_SJ-43504-SMT-TR"
+			(property "Footprint" "EconoPET:CUI_SJ-43504-SMT-TR"
 				(at 0 0 0)
 				(effects
 					(font
@@ -771,62 +676,23 @@
 					(hide yes)
 				)
 			)
-			(property "PARTREV" "10/08/2019"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "SNAPEDA_PN" "SJ-43504-SMT-TR"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "MANUFACTURER" "CUI Devices"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "MAXIMUM_PACKAGE_HEIGHT" "3.3 mm"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
-			(property "STANDARD" "Manufacturer Recommendations"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left bottom)
-					(hide yes)
-				)
-			)
 			(property "MOUSER" "490-SJ-43504-SMT-TR"
+				(at -10.16 -0.0001 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify right)
+					(hide yes)
+				)
+			)
+			(property "Alt-LCSC" "C319101"
 				(at 0 0 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
 			(symbol "SJ-43504-SMT-TR_0_0"
@@ -1302,9 +1168,9 @@
 		)
 		(symbol "power:+6V"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1352,7 +1218,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1402,8 +1268,8 @@
 			(symbol "+6V_1_1"
 				(pin power_in line
 					(at 0 0 90)
-					(length 0) hide
-					(name "+6V"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1422,9 +1288,9 @@
 		)
 		(symbol "power:GND"
 			(power)
+			(pin_numbers hide)
 			(pin_names
-				(offset 0)
-			)
+				(offset 0) hide)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -1472,7 +1338,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1498,8 +1364,8 @@
 			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
-					(length 0) hide
-					(name "GND"
+					(length 0)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1530,16 +1396,16 @@
 		(uuid "472a8b16-d94f-4e44-9ae4-0bdc891ac07f")
 	)
 	(junction
+		(at 110.49 81.28)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6b5288ff-b08d-4464-bad8-6837310c522a")
+	)
+	(junction
 		(at 181.61 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7d9a6a30-23bb-407c-b3d9-8ef24f194635")
-	)
-	(junction
-		(at 112.395 81.28)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "8257b436-4501-4430-8194-d30c00454816")
 	)
 	(junction
 		(at 149.86 99.06)
@@ -1601,16 +1467,6 @@
 	)
 	(wire
 		(pts
-			(xy 112.395 80.01) (xy 113.03 80.01)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "032d5ea9-c0a3-439c-a9ab-422ab0d54955")
-	)
-	(wire
-		(pts
 			(xy 160.02 76.2) (xy 157.48 76.2)
 		)
 		(stroke
@@ -1621,7 +1477,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 82.55) (xy 112.395 82.55)
+			(xy 113.03 82.55) (xy 110.49 82.55)
 		)
 		(stroke
 			(width 0)
@@ -1781,13 +1637,23 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 71.12) (xy 142.24 71.12)
+			(xy 107.95 69.85) (xy 142.24 69.85)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "65d39d90-0116-485b-9745-b5e3c4c4e7c2")
+	)
+	(wire
+		(pts
+			(xy 110.49 80.01) (xy 110.49 81.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6f201972-b9ab-4e26-be0b-3e729558ff3c")
 	)
 	(wire
 		(pts
@@ -1811,7 +1677,17 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 81.28) (xy 107.95 71.12)
+			(xy 110.49 81.28) (xy 110.49 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7f37c453-2658-4198-9e0e-fc9c7c005f76")
+	)
+	(wire
+		(pts
+			(xy 107.95 81.28) (xy 107.95 69.85)
 		)
 		(stroke
 			(width 0)
@@ -1841,13 +1717,13 @@
 	)
 	(wire
 		(pts
-			(xy 112.395 81.28) (xy 112.395 80.01)
+			(xy 142.24 69.85) (xy 142.24 71.12)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "b5e01ab8-2bbf-4379-85a8-fbd4c932a30f")
+		(uuid "aab90893-25fd-4348-9b40-88ec8813fd4d")
 	)
 	(wire
 		(pts
@@ -1881,7 +1757,7 @@
 	)
 	(wire
 		(pts
-			(xy 112.395 81.28) (xy 107.95 81.28)
+			(xy 107.95 81.28) (xy 110.49 81.28)
 		)
 		(stroke
 			(width 0)
@@ -1901,13 +1777,13 @@
 	)
 	(wire
 		(pts
-			(xy 112.395 82.55) (xy 112.395 81.28)
+			(xy 110.49 80.01) (xy 113.03 80.01)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "d36cb771-473f-4ad9-9aef-d6fe02d11c97")
+		(uuid "d328f0b6-9fd6-4f09-afe2-6f80a5cfe355")
 	)
 	(wire
 		(pts
@@ -2232,7 +2108,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 113.03 90.17 0)
 			(effects
 				(font
@@ -2254,7 +2130,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PET:PD_GND")
+		(lib_id "power:GND")
 		(at 157.48 100.33 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -2272,7 +2148,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "PD_GND"
+		(property "Value" "GND"
 			(at 157.48 105.41 0)
 			(effects
 				(font
@@ -2298,7 +2174,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 157.48 100.33 0)
 			(effects
 				(font
@@ -2364,7 +2240,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+6V\""
 			(at 165.1 60.96 0)
 			(effects
 				(font
@@ -2543,7 +2419,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SnapEDA:SJ-43504-SMT-TR")
+		(lib_id "EconoPET:SJ-43504-SMT-TR")
 		(at 118.11 85.09 180)
 		(unit 1)
 		(exclude_from_sim no)
