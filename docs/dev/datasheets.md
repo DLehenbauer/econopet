@@ -35,3 +35,7 @@
 ## Other
 
 * [SN74LVC4245A](https://www.ti.com/lit/ds/symlink/sn74lvc4245a.pdf) Octal Bus Transceiver and 3.3-V to 5-V Shifter
+* TPS5430 3A Wide Input Range Step-Down Converter
+  * [Datasheet](https://www.ti.com/lit/ds/symlink/tps5430.pdf)
+  * [User's Guide](https://www.ti.com/lit/ug/slvu157a/slvu157a.pdf)
+  * [Application Report](https://www.ti.com/lit/an/slva237c/slva237c.pdf)
