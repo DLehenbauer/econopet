@@ -11858,7 +11858,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_SO:TI_SO-PowerPAD-8_ThermalVias"
+		(property "Footprint" "EconoPET:TI_SO-PowerPAD-8_ThermalVias"
 			(at 176.53 93.98 0)
 			(effects
 				(font
