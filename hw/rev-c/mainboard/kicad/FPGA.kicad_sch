@@ -8401,6 +8401,10 @@
 		(color 0 0 0 0)
 		(uuid "f640e26c-2af8-428f-a030-ec172d72f6e9")
 	)
+	(no_connect
+		(at 168.91 41.91)
+		(uuid "2a244d41-0a33-4020-98db-e9ec11088b75")
+	)
 	(bus_entry
 		(at 425.45 120.65)
 		(size 2.54 2.54)
@@ -8985,7 +8989,7 @@
 	)
 	(wire
 		(pts
-			(xy 153.67 41.91) (xy 163.83 41.91)
+			(xy 153.67 41.91) (xy 168.91 41.91)
 		)
 		(stroke
 			(width 0)
@@ -14197,6 +14201,17 @@
 		)
 		(uuid "fa4c0b8e-b97d-4567-9790-5bc77f3af45f")
 	)
+	(label "HOLD"
+		(at 167.64 41.91 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "fb84a2a2-ce08-4328-992d-8870f8dc8e48")
+	)
 	(label "PMOD2_3"
 		(at 375.92 2.54 180)
 		(fields_autoplaced yes)
@@ -15982,7 +15997,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 229.87 50.8 0)
 			(effects
 				(font
@@ -19995,7 +20010,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 477.52 93.98 0)
 			(effects
 				(font
@@ -22054,7 +22069,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 401.32 13.97 0)
 			(effects
 				(font
@@ -23839,7 +23854,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 440.69 96.52 0)
 			(effects
 				(font
@@ -27538,7 +27553,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 336.55 13.97 0)
 			(effects
 				(font
