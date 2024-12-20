@@ -95,6 +95,8 @@ module top #(
     output logic video_o,
 
     // Audio
+    input  logic diag_i,
+    input  logic via_cb2_i,
     output logic audio_o,
 
     // PMOD
@@ -111,9 +113,6 @@ module top #(
 );
     // Turn off red NSTATUS LED to indicate programming was successful.
     assign status_no = 1'b1;
-
-    // Disable audio output for now.
-    assign audio_o = '0;
 
     // Debug: Temporarily test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
     assign pmod1_o [8:1] = pmod2_i[8:1];
@@ -234,6 +233,11 @@ module top #(
         .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),
         .video_o(video_o),
+
+        // Audio
+        .diag_i(diag_i),
+        .via_cb2_i(via_cb2_i),
+        .audio_o(audio_o),
 
         // SPI
         .spi0_cs_ni(spi0_cs_ni),
