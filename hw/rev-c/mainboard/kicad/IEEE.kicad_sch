@@ -9460,7 +9460,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061923421")
-		(property "Reference" "J1"
+		(property "Reference" "J11"
 			(at 240.03 101.1682 0)
 			(effects
 				(font
@@ -9578,7 +9578,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "J1")
+					(reference "J11")
 					(unit 1)
 				)
 			)
@@ -9843,7 +9843,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "03f6403b-4e7b-4877-b98b-4e7942bf9ba2")
-		(property "Reference" "R23"
+		(property "Reference" "R28"
 			(at 102.87 161.29 90)
 			(effects
 				(font
@@ -9906,7 +9906,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "R23")
+					(reference "R28")
 					(unit 1)
 				)
 			)
@@ -10054,7 +10054,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "15a36902-479a-424e-a9f0-56c9b1c369d2")
-		(property "Reference" "RN12"
+		(property "Reference" "RN4"
 			(at 107.95 58.42 0)
 			(effects
 				(font
@@ -10135,7 +10135,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN12")
+					(reference "RN4")
 					(unit 1)
 				)
 			)
@@ -10150,7 +10150,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "1ec15054-6177-497a-91ee-c5fe842bb7db")
-		(property "Reference" "RN6"
+		(property "Reference" "RN7"
 			(at 158.75 138.43 0)
 			(effects
 				(font
@@ -10231,7 +10231,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN6")
+					(reference "RN7")
 					(unit 1)
 				)
 			)
@@ -10246,7 +10246,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "247d5a5f-bba8-42a5-8361-3bb7d794841f")
-		(property "Reference" "RN8"
+		(property "Reference" "RN13"
 			(at 208.28 138.43 0)
 			(effects
 				(font
@@ -10327,7 +10327,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN8")
+					(reference "RN13")
 					(unit 1)
 				)
 			)
@@ -10607,7 +10607,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "52090067-486f-45bf-85aa-f30d55abde57")
-		(property "Reference" "J14"
+		(property "Reference" "J10"
 			(at 212.09 17.78 0)
 			(effects
 				(font
@@ -10716,7 +10716,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "J14")
+					(reference "J10")
 					(unit 1)
 				)
 			)
@@ -10731,7 +10731,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5dd4899e-62e8-48f9-a50e-ad350a4e333e")
-		(property "Reference" "RN4"
+		(property "Reference" "RN12"
 			(at 208.28 77.47 0)
 			(effects
 				(font
@@ -10812,7 +10812,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN4")
+					(reference "RN12")
 					(unit 1)
 				)
 			)
@@ -10894,7 +10894,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "7c713405-2e70-41bc-90e0-6baf7a78bb52")
-		(property "Reference" "RN11"
+		(property "Reference" "RN3"
 			(at 107.95 31.75 0)
 			(effects
 				(font
@@ -10975,7 +10975,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN11")
+					(reference "RN3")
 					(unit 1)
 				)
 			)
@@ -10990,7 +10990,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "7d4a3f85-9d68-4f24-a031-5bdd55a3463b")
-		(property "Reference" "RN5"
+		(property "Reference" "RN9"
 			(at 175.26 138.43 0)
 			(effects
 				(font
@@ -11071,7 +11071,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN5")
+					(reference "RN9")
 					(unit 1)
 				)
 			)
@@ -11087,7 +11087,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "7dcf0c38-bd4c-47e4-beea-63f3376ccd30")
-		(property "Reference" "RN13"
+		(property "Reference" "RN5"
 			(at 107.95 143.51 0)
 			(effects
 				(font
@@ -11168,7 +11168,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN13")
+					(reference "RN5")
 					(unit 1)
 				)
 			)
@@ -11326,7 +11326,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "95315324-189d-4b93-a14a-13e28eb2e3e7")
-		(property "Reference" "RN1"
+		(property "Reference" "RN8"
 			(at 175.26 77.47 0)
 			(effects
 				(font
@@ -11407,7 +11407,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN1")
+					(reference "RN8")
 					(unit 1)
 				)
 			)
@@ -11422,7 +11422,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "9a01e495-06c4-4344-900c-0587b083e4bd")
-		(property "Reference" "RN2"
+		(property "Reference" "RN6"
 			(at 158.75 77.47 0)
 			(effects
 				(font
@@ -11503,7 +11503,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN2")
+					(reference "RN6")
 					(unit 1)
 				)
 			)
@@ -11650,7 +11650,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "a53ce0ac-8e39-4261-9caf-c440e4155c07")
-		(property "Reference" "R24"
+		(property "Reference" "R29"
 			(at 102.87 163.83 90)
 			(effects
 				(font
@@ -11713,7 +11713,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "R24")
+					(reference "R29")
 					(unit 1)
 				)
 			)
@@ -12122,7 +12122,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "c00fc3f9-502d-46c8-8e5b-307f2d3cce8c")
-		(property "Reference" "RN7"
+		(property "Reference" "RN11"
 			(at 191.77 138.43 0)
 			(effects
 				(font
@@ -12203,7 +12203,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN7")
+					(reference "RN11")
 					(unit 1)
 				)
 			)
@@ -12218,7 +12218,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "d274958a-11e0-4b46-9f0f-53c54a29ff64")
-		(property "Reference" "RN3"
+		(property "Reference" "RN10"
 			(at 191.77 77.47 0)
 			(effects
 				(font
@@ -12299,7 +12299,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-00006151ec26"
-					(reference "RN3")
+					(reference "RN10")
 					(unit 1)
 				)
 			)

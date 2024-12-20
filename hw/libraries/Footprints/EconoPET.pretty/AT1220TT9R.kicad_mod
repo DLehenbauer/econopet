@@ -1,0 +1,242 @@
+(footprint "AT1220TT9R"
+	(version 20240108)
+	(generator "pcbnew")
+	(generator_version "8.0")
+	(layer "F.Cu")
+	(descr "AT-1220-TT-9-R-1")
+	(tags "Loudspeaker or Buzzer")
+	(property "Reference" "LS1"
+		(at 0 3.25 180)
+		(layer "F.SilkS")
+		(uuid "60d0aa8a-afef-4e4f-9ad1-8fcac778f1ae")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.254)
+			)
+		)
+	)
+	(property "Value" "Speaker"
+		(at 0 3.25 180)
+		(layer "F.SilkS")
+		(hide yes)
+		(uuid "e611cdea-67fe-4a37-addf-0db9296f675c")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.254)
+			)
+		)
+	)
+	(property "Footprint" "SamacSys_Parts:AT1220TT9R"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "4b51deb6-5fb1-4999-b450-1de186aa96ed")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.mouser.com/datasheet/2/334/AT-1220-TT-9-R-532252.pdf"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "b27acf60-718b-4911-8e0c-585c8a89ad15")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "965d35b7-fb4e-4e9a-8cb6-fc5a4bce4325")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "MOUSER" "665-AT1220TT9R"
+		(at 222.068 457.902 90)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "8bf26ec7-16ce-40e8-807b-96dc2fd3cef5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(fp_line
+		(start -6 3.25)
+		(end -6 3.25)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "3dd4f111-5cd0-490d-a838-e449a10bc671")
+	)
+	(fp_line
+		(start 6 3.25)
+		(end 6 3.25)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "93d4af8e-f801-4f9b-b972-07ef12288d56")
+	)
+	(fp_arc
+		(start -6 3.25)
+		(mid 0 -2.75)
+		(end 6 3.25)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "1991ec2b-6369-4d9b-9e33-fe62fc7755a2")
+	)
+	(fp_arc
+		(start 6 3.25)
+		(mid 0 9.25)
+		(end -6 3.25)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "5b72203d-39d7-45ac-9814-fad9ef26b2eb")
+	)
+	(fp_line
+		(start -7 -3.75)
+		(end 7 -3.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "d0156f3e-ce7e-4e30-8c04-4b22f68386bf")
+	)
+	(fp_line
+		(start -7 10.25)
+		(end -7 -3.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "64bb83b3-c855-4ace-896e-c3d59747e8ff")
+	)
+	(fp_line
+		(start 7 -3.75)
+		(end 7 10.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "41947742-1c6c-4f29-85d0-470ef9b240b2")
+	)
+	(fp_line
+		(start 7 10.25)
+		(end -7 10.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "59cf4426-3f36-413c-abb5-79d6284fb4a5")
+	)
+	(fp_line
+		(start -6 3.25)
+		(end -6 3.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "90de2bb1-976c-4de7-ad07-d7e548b7720d")
+	)
+	(fp_line
+		(start 6 3.25)
+		(end 6 3.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "4f344e66-e730-40c0-a45e-df88175415a8")
+	)
+	(fp_arc
+		(start -6 3.25)
+		(mid 0 -2.75)
+		(end 6 3.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "c22a2930-a51e-45d6-b3d8-0f8cc788033a")
+	)
+	(fp_arc
+		(start 6 3.25)
+		(mid 0 9.25)
+		(end -6 3.25)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "87fee923-b41a-47f2-8146-94571b43b6e0")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 3.25 180)
+		(layer "F.Fab")
+		(uuid "2b937915-36c9-4361-907d-a9873cd0f3f3")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.254)
+			)
+		)
+	)
+	(pad "1" thru_hole circle
+		(at 0 0)
+		(size 1.3 1.3)
+		(drill 0.8)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "82c0582c-4a3d-4df0-b0eb-afe8562fd749")
+	)
+	(pad "2" thru_hole circle
+		(at 0 6.5)
+		(size 1.3 1.3)
+		(drill 0.8)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "5e5faba8-059a-4643-9824-b046e03e8e54")
+	)
+	(model "C:\\Users\\danle\\OneDrive\\Documents\\KiCad\\SamacSys_Parts\\SamacSys_Parts.3dshapes\\AT-1220-TT-9-R.stp"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)
