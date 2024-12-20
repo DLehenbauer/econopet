@@ -113,6 +113,26 @@ module top_tb;
         $display("[%t] End CRTC Write Test", $time);
     endtask
 
+    task static sid_write_test;
+        integer r;
+        logic [     DATA_WIDTH-1:0] dout;
+        logic [     DATA_WIDTH-1:0] value;
+
+        $display("[%t] Begin SID Write Test", $time);
+
+        for (r = 0; r < SID_REG_COUNT; r = r + 1) begin
+            value = { 3'b101, r };
+            mock_system.cpu_write(16'h8F00 + r, value);
+            $display("[%t]   SID[%0d] -> %02x", $time, r, value);
+
+            // TODO: Implement read-back from SID registers.
+            // mock_system.spi_read_at(common_pkg::wb_SID_addr(r), dout);
+            // `assert_equal(dout, value);
+        end
+
+        $display("[%t] End SID Write Test", $time);
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] cpu_dout;
         int count;
@@ -125,6 +145,7 @@ module top_tb;
         cpu_ram_test;
         usb_keyboard_test;
         crtc_write_test;
+        sid_write_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;

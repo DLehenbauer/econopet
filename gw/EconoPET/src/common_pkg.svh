@@ -183,6 +183,43 @@ package common_pkg;
     // Bit width of the CRTC's internal address register.
     localparam int unsigned CRTC_ADDR_REG_WIDTH = bit_width(CRTC_REG_COUNT - 1'b1);
 
+    // SID: Sound Interface Device
+    // https://archive.org/details/mos-6581-sid-data-sheet/page/n3/mode/2up
+    // http://www.cbmhardware.de/show.php?r=14&id=71/PETSID
+    
+    localparam SID_R0_VOICE1_FREQ_LO            = 0,
+               SID_R1_VOICE1_FREQ_HI            = 1,
+               SID_R2_VOICE1_PW_LO              = 2,
+               SID_R3_VOICE1_PW_HI              = 3,
+               SID_R4_VOICE1_CONTROL            = 4,
+               SID_R5_VOICE1_ATTACK_DECAY       = 5,
+               SID_R6_VOICE1_SUSTAIN_RELEASE    = 6,
+               SID_R7_VOICE2_FREQ_LO            = 7,
+               SID_R8_VOICE2_FREQ_HI            = 8,
+               SID_R9_VOICE2_PW_LO              = 9,
+               SID_R10_VOICE2_PW_HI             = 10,
+               SID_R11_VOICE2_CONTROL           = 11,
+               SID_R12_VOICE2_ATTACK_DECAY      = 12,
+               SID_R13_VOICE2_SUSTAIN_RELEASE   = 13,
+               SID_R14_VOICE3_FREQ_LO           = 14,
+               SID_R15_VOICE3_FREQ_HI           = 15,
+               SID_R16_VOICE3_PW_LO             = 16,
+               SID_R17_VOICE3_PW_HI             = 17,
+               SID_R18_VOICE3_CONTROL           = 18,
+               SID_R19_VOICE3_ATTACK_DECAY      = 19,
+               SID_R20_VOICE3_SUSTAIN_RELEASE   = 20,
+               SID_R21_FC_LO                    = 21,
+               SID_R22_FC_HI                    = 22,
+               SID_R23_RES_FILT                 = 23,
+               SID_R24_MODE_VOL                 = 24,
+               SID_R25_POTX                     = 25,
+               SID_R26_POTY                     = 26,
+               SID_R27_OSC3                     = 27,
+               SID_R28_ENV3                     = 28,
+               SID_REG_COUNT                    = SID_R28_ENV3 + 1'b1;
+    
+    localparam int unsigned SID_ADDR_REG_WIDTH = bit_width(SID_REG_COUNT - 1'b1);
+
     //
     // Registers
     //

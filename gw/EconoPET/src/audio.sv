@@ -12,6 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+`include "./src/common_pkg.svh"
+
+import common_pkg::*;
+
 module delta_sigma_dac (
     input  logic               clk_i,
     input  logic               reset_i,
@@ -37,14 +41,14 @@ module delta_sigma_dac (
 endmodule
 
 module audio (
-    input  logic       reset_i,
-    input  logic       sys_clock_i,
-    input  logic       clk1_en_i,
-    input  logic       sid_en_i,
-    input  logic       cpu_wr_en_i,
-    input  logic [4:0] addr_i,
-    input  logic [7:0] data_i,       // writing to SID
-    output logic [7:0] data_o,       // reading from SID
+    input  logic                          reset_i,
+    input  logic                          sys_clock_i,
+    input  logic                          clk1_en_i,
+    input  logic                          sid_en_i,
+    input  logic                          cpu_wr_en_i,
+    input  logic [SID_ADDR_REG_WIDTH-1:0] addr_i,
+    input  logic [                   7:0] data_i,       // writing to SID
+    output logic [                   7:0] data_o,       // reading from SID
 
     input  logic diag_i,
     input  logic via_cb2_i,
@@ -58,14 +62,14 @@ module audio (
     sid #(
         .POT_SUPPORT(0)
     ) sid (
-        .clk   (sys_clk_i),  // System clock
-        .clkEn (clk1_en_i),  // 1 MHz clock enable
-        .iRst  (reset_i),    // sync. reset (active high)
-        .iWE   (sid_wr_en),  // write enable (active high)
-        .iAddr (addr_i),     // sid address
-        .iDataW(data_i),     // writing to SID
-        .oDataR(data_o),     // reading from SID
-        .oOut  (sid_out)     // sid output
+        .clk   (sys_clock_i),  // System clock
+        .clkEn (clk1_en_i),    // 1 MHz clock enable
+        .iRst  (reset_i),      // sync. reset (active high)
+        .iWE   (sid_wr_en),    // write enable (active high)
+        .iAddr (addr_i),       // sid address
+        .iDataW(data_i),       // writing to SID
+        .oDataR(data_o),       // reading from SID
+        .oOut  (sid_out)       // sid output
     );
 
     wire signed [15:0] cb2_out = via_cb2_i && diag_i ? 16'h800 : -16'h800;
