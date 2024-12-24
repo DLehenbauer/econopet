@@ -3223,7 +3223,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061b3f9cf")
-		(property "Reference" "J12"
+		(property "Reference" "J2"
 			(at 124.46 82.1182 0)
 			(effects
 				(font
@@ -3341,7 +3341,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b3f8ab"
-					(reference "J12")
+					(reference "J2")
 					(unit 1)
 				)
 			)
@@ -3424,7 +3424,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "09d6b873-e963-4645-94eb-9a52c42c788f")
-		(property "Reference" "J13"
+		(property "Reference" "J14"
 			(at 194.31 82.55 0)
 			(effects
 				(font
@@ -3545,7 +3545,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b3f8ab"
-					(reference "J13")
+					(reference "J14")
 					(unit 1)
 				)
 			)
@@ -3626,7 +3626,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "93b516f6-6792-4975-ad0b-3754b210d423")
-		(property "Reference" "C75"
+		(property "Reference" "C76"
 			(at 218.2368 116.9416 0)
 			(effects
 				(font
@@ -3689,7 +3689,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b3f8ab"
-					(reference "C75")
+					(reference "C76")
 					(unit 1)
 				)
 			)
@@ -3771,7 +3771,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "c35bbe9d-13a2-45fc-b117-bef77a122f40")
-		(property "Reference" "J26"
+		(property "Reference" "J12"
 			(at 73.152 75.438 0)
 			(effects
 				(font
@@ -3787,7 +3787,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
+		(property "Footprint" "EconoPET:PinHeader_1x03_P2.54mm_Vertical_or_SolderJumper"
 			(at 76.2 83.82 0)
 			(effects
 				(font
@@ -3826,7 +3826,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b3f8ab"
-					(reference "J26")
+					(reference "J12")
 					(unit 1)
 				)
 			)
