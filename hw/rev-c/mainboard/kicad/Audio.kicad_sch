@@ -2540,7 +2540,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "SamacSys_Parts:AT1220TT9R"
+		(property "Footprint" "EconoPET:AT1220TT9R"
 			(at 209.55 78.74 0)
 			(effects
 				(font
