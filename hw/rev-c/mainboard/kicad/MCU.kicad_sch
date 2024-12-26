@@ -7204,7 +7204,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A225MQ5NSNC_C12530.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A225MQ5NSN.do"
 			(at 127 22.86 0)
 			(effects
 				(font
@@ -8187,7 +8187,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A225MQ5NSNC_C12530.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A225MQ5NSN.do"
 			(at 107.95 22.86 0)
 			(effects
 				(font
@@ -8861,7 +8861,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A225MQ5NSNC_C12530.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A225MQ5NSN.do"
 			(at 41.91 167.64 0)
 			(effects
 				(font

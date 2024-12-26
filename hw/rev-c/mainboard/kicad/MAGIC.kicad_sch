@@ -6219,7 +6219,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A475MP5NRNC_C23733.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 199.39 22.86 0)
 			(effects
 				(font

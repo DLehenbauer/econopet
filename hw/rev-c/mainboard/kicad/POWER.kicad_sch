@@ -4706,7 +4706,7 @@
 		(uuid "6133da8d-46e7-4e31-89fb-82e05f00fad5")
 	)
 	(junction
-		(at 53.34 36.83)
+		(at 59.69 36.83)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "64a702b9-a119-4462-8827-12af00fedfe2")
@@ -4754,7 +4754,7 @@
 		(uuid "790d79f8-ebb3-4372-9a78-c9838f98a23f")
 	)
 	(junction
-		(at 66.04 45.72)
+		(at 72.39 45.72)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "85b30b7b-b800-4884-bd21-9fc2cc96219a")
@@ -4808,22 +4808,10 @@
 		(uuid "adb9e0d5-e72c-483d-8177-8a2f9c9bfac0")
 	)
 	(junction
-		(at 78.74 45.72)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "af0ab394-b819-4811-bf27-a756e45f7629")
-	)
-	(junction
 		(at 255.27 142.24)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "b0e8c4b6-07c2-4e1f-b2a9-45e7518cf8c1")
-	)
-	(junction
-		(at 78.74 36.83)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "b2180c6f-ec5c-4453-9752-51e867776a30")
 	)
 	(junction
 		(at 137.16 181.61)
@@ -4868,7 +4856,7 @@
 		(uuid "c1c1e315-2ebc-4112-983a-4bf9b74f1c44")
 	)
 	(junction
-		(at 66.04 36.83)
+		(at 72.39 36.83)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c51d5b26-a76b-48e9-b7b2-cc3b789fee6a")
@@ -5011,7 +4999,7 @@
 	)
 	(wire
 		(pts
-			(xy 53.34 36.83) (xy 66.04 36.83)
+			(xy 59.69 36.83) (xy 72.39 36.83)
 		)
 		(stroke
 			(width 0)
@@ -5021,7 +5009,7 @@
 	)
 	(wire
 		(pts
-			(xy 66.04 44.45) (xy 66.04 45.72)
+			(xy 72.39 44.45) (xy 72.39 45.72)
 		)
 		(stroke
 			(width 0)
@@ -5761,7 +5749,7 @@
 	)
 	(wire
 		(pts
-			(xy 78.74 45.72) (xy 90.17 45.72)
+			(xy 72.39 45.72) (xy 90.17 45.72)
 		)
 		(stroke
 			(width 0)
@@ -6131,7 +6119,7 @@
 	)
 	(wire
 		(pts
-			(xy 66.04 36.83) (xy 66.04 39.37)
+			(xy 72.39 36.83) (xy 72.39 39.37)
 		)
 		(stroke
 			(width 0)
@@ -6341,16 +6329,6 @@
 	)
 	(wire
 		(pts
-			(xy 78.74 36.83) (xy 90.17 36.83)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7ef440c9-be4f-4432-ad42-9222a0532688")
-	)
-	(wire
-		(pts
 			(xy 213.36 87.63) (xy 220.98 87.63)
 		)
 		(stroke
@@ -6358,16 +6336,6 @@
 			(type default)
 		)
 		(uuid "808a9fd9-1dc2-4f95-812e-208f0c03398e")
-	)
-	(wire
-		(pts
-			(xy 78.74 44.45) (xy 78.74 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "811e015b-7879-4573-ba7d-67e91f27f807")
 	)
 	(wire
 		(pts
@@ -6541,7 +6509,7 @@
 	)
 	(wire
 		(pts
-			(xy 53.34 45.72) (xy 53.34 44.45)
+			(xy 59.69 45.72) (xy 59.69 44.45)
 		)
 		(stroke
 			(width 0)
@@ -6641,7 +6609,7 @@
 	)
 	(wire
 		(pts
-			(xy 49.53 36.83) (xy 53.34 36.83)
+			(xy 49.53 36.83) (xy 59.69 36.83)
 		)
 		(stroke
 			(width 0)
@@ -6821,7 +6789,7 @@
 	)
 	(wire
 		(pts
-			(xy 53.34 36.83) (xy 53.34 39.37)
+			(xy 59.69 36.83) (xy 59.69 39.37)
 		)
 		(stroke
 			(width 0)
@@ -6841,7 +6809,7 @@
 	)
 	(wire
 		(pts
-			(xy 53.34 45.72) (xy 66.04 45.72)
+			(xy 59.69 45.72) (xy 72.39 45.72)
 		)
 		(stroke
 			(width 0)
@@ -7211,23 +7179,13 @@
 	)
 	(wire
 		(pts
-			(xy 66.04 36.83) (xy 78.74 36.83)
+			(xy 72.39 36.83) (xy 90.17 36.83)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "e3dd29d7-6fb2-4edb-83ad-1bfe0848ced2")
-	)
-	(wire
-		(pts
-			(xy 78.74 36.83) (xy 78.74 39.37)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e5314f6c-1880-4a67-adc3-b2c9173037b5")
 	)
 	(wire
 		(pts
@@ -7328,16 +7286,6 @@
 			(type default)
 		)
 		(uuid "ee5e3aa5-81a5-4f97-8a0e-0e45d29ddc96")
-	)
-	(wire
-		(pts
-			(xy 66.04 45.72) (xy 78.74 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "eeb1562f-a6af-4c8f-a4ae-318e2e6fc0cc")
 	)
 	(wire
 		(pts
@@ -9991,7 +9939,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Polarized_Small")
-		(at 66.04 41.91 0)
+		(at 72.39 41.91 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -9999,7 +9947,7 @@
 		(dnp no)
 		(uuid "376a7382-da39-459d-b850-81b030fc254f")
 		(property "Reference" "C7"
-			(at 68.2752 40.7416 0)
+			(at 74.6252 40.7416 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10008,7 +9956,7 @@
 			)
 		)
 		(property "Value" "3900u"
-			(at 68.2752 43.053 0)
+			(at 74.6252 43.053 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10017,7 +9965,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_THT:CP_Radial_D12.5mm_P5.00mm"
-			(at 66.04 41.91 0)
+			(at 72.39 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10026,7 +9974,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.mouser.com/datasheet/2/420/Chemi_Con_KYBLL_e-3313623.pdf"
-			(at 66.04 41.91 0)
+			(at 72.39 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10035,7 +9983,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 66.04 41.91 0)
+			(at 72.39 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10044,7 +9992,7 @@
 			)
 		)
 		(property "MOUSER" "661-EKYB250E392MK40S"
-			(at 66.04 41.91 0)
+			(at 72.39 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10510,7 +10458,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A475MP5NRNC_C23733.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 195.58 134.62 0)
 			(effects
 				(font
@@ -12754,7 +12702,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Polarized_Small")
-		(at 53.34 41.91 0)
+		(at 59.69 41.91 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -12762,7 +12710,7 @@
 		(dnp no)
 		(uuid "a71bdd89-6b16-43f2-a51f-66dc152cf877")
 		(property "Reference" "C5"
-			(at 55.5752 40.7416 0)
+			(at 61.9252 40.7416 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12770,8 +12718,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "6800u"
-			(at 55.5752 43.053 0)
+		(property "Value" "15000u"
+			(at 61.9252 43.053 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12780,7 +12728,7 @@
 			)
 		)
 		(property "Footprint" "EconoPET:CP_Radial_D24.0mm_P5.00mm_P7.50mm_P10.00mm_SnapIn"
-			(at 53.34 41.91 0)
+			(at 59.69 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12788,8 +12736,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.mouser.com/datasheet/2/420/Chemi_Con_KYBLL_e-3313623.pdf"
-			(at 53.34 41.91 0)
+		(property "Datasheet" "https://www.chemi-con.co.jp/products/relatedfiles/capacitor/catalog/LBVLL-e.PDF"
+			(at 59.69 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12798,7 +12746,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 53.34 41.91 0)
+			(at 59.69 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12806,8 +12754,8 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "661-EKYB250E682ML40S"
-			(at 53.34 41.91 0)
+		(property "MOUSER" "661-BV250L153AM40S"
+			(at 59.69 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12903,84 +12851,6 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "R9")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C_Polarized_Small")
-		(at 78.74 41.91 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "b6d7534d-fe91-4b12-b2a7-3025a39ca509")
-		(property "Reference" "C8"
-			(at 80.9752 40.7416 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "3900u"
-			(at 80.9752 43.053 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "EconoPET:CP_Radial_D8.0mm_P3.50mm_P5.00mm"
-			(at 78.74 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "https://www.mouser.com/datasheet/2/420/Chemi_Con_KYBLL_e-3313623.pdf"
-			(at 78.74 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 78.74 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "MOUSER" "661-EKYB250E392MK40S"
-			(at 78.74 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "c8a7d3f7-ddc2-4d8b-8c2e-425f68322f4b")
-		)
-		(pin "2"
-			(uuid "f33b1a0c-320d-45d5-98a3-5f425659e0ea")
-		)
-		(instances
-			(project "Mainboard"
-				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "C8")
 					(unit 1)
 				)
 			)

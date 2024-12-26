@@ -1895,7 +1895,7 @@
 		)
 		(uuid "3b49edf3-df0b-435b-8fe2-88e1ea44cfed")
 	)
-	(text "CEC and I2C are for possible future use.\n\nDANGER: Closing the SCL/SDA jumpers pulls the\ncorresponding GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
+	(text "CEC and I2C are for possible future use.\n\nDANGER: Closing the SCL/SDA jumpers pulls the\ncorresponding RP2040 GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
 		(exclude_from_sim no)
 		(at 100.33 132.08 0)
 		(effects
