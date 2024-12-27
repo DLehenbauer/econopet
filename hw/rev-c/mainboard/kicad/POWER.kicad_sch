@@ -2059,18 +2059,6 @@
 				)
 				(polyline
 					(pts
-						(xy 1.27 -2.54) (xy 0.8636 -2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
 						(xy 1.27 0) (xy 0.8636 0)
 					)
 					(stroke
@@ -2143,17 +2131,6 @@
 				(rectangle
 					(start 0.8636 -7.493)
 					(end 0 -7.747)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -2.413)
-					(end 0 -2.667)
 					(stroke
 						(width 0.1524)
 						(type default)
@@ -2300,24 +2277,6 @@
 						)
 					)
 					(number "5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -2.54 180)
-					(length 3.81)
-					(name "GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "6"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -4670,12 +4629,6 @@
 		(uuid "596de991-32d7-4dec-88f6-3001810b197b")
 	)
 	(junction
-		(at 49.53 74.93)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "59cccb6f-852a-458e-b5a4-3849197c25f5")
-	)
-	(junction
 		(at 49.53 81.28)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5859,16 +5812,6 @@
 	)
 	(wire
 		(pts
-			(xy 35.56 74.93) (xy 49.53 74.93)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4d75a9e1-c10f-449b-9939-cfc5c3fb4a56")
-	)
-	(wire
-		(pts
 			(xy 128.27 87.63) (xy 137.16 87.63)
 		)
 		(stroke
@@ -5966,16 +5909,6 @@
 			(type default)
 		)
 		(uuid "56ccb8aa-b173-49b8-883d-01ef7ff37a14")
-	)
-	(wire
-		(pts
-			(xy 49.53 67.31) (xy 49.53 74.93)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5821604d-5ceb-420a-b7e4-ba8f3233a4b7")
 	)
 	(wire
 		(pts
@@ -6949,7 +6882,7 @@
 	)
 	(wire
 		(pts
-			(xy 49.53 74.93) (xy 49.53 81.28)
+			(xy 49.53 67.31) (xy 49.53 81.28)
 		)
 		(stroke
 			(width 0)
@@ -7651,17 +7584,6 @@
 			(justify left bottom)
 		)
 		(uuid "7834fc55-35da-4db5-ba8d-9378fcf868ea")
-	)
-	(label "GND"
-		(at 35.56 74.93 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7ff799ae-32a1-49b4-bc23-643b72f4e505")
 	)
 	(label "VAC1"
 		(at 35.56 62.23 0)
@@ -9964,7 +9886,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_THT:CP_Radial_D12.5mm_P5.00mm"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D16.0mm_P7.50mm"
 			(at 72.39 41.91 0)
 			(effects
 				(font
@@ -13895,9 +13817,6 @@
 		)
 		(pin "5"
 			(uuid "0b9669ee-ab48-4564-bfa9-f90e433cc89c")
-		)
-		(pin "6"
-			(uuid "b0acc2c7-d300-4aed-9200-37b8ffd492b3")
 		)
 		(pin "8"
 			(uuid "8eafe36b-338b-4330-bb20-7fcb10eefb5a")
