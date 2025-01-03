@@ -27198,7 +27198,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Button_Switch_THT:SW_DIP_SPSTx02_Slide_6.7x6.64mm_W7.62mm_P2.54mm_LowProfile"
+		(property "Footprint" "EconoPET:SW_DIP_SPSTx02_Slide_6.7x6.64mm_W7.62mm_P2.54mm_LowProfile_or_SolderJumper"
 			(at 386.08 194.31 0)
 			(effects
 				(font
