@@ -31,6 +31,7 @@ const uint screen_height = 25;
 #define CH_SPACE 0x20
 
 static ButtonAction get_button_action() {
+    // Initial state is pressed/handled to give debouncing capacitor time to charge.
     static bool is_pressed = true;
     static bool was_handled = true;
     static uint64_t press_start;
@@ -249,11 +250,13 @@ void load_prg(const char *filename) {
         return;
     }
 
+    // First two bytes contain the destination address
     uint16_t dest;
     if (fread(&dest, 1, sizeof(dest), file) != sizeof(dest)) {
         return;
     }
 
+    // Read remaining bytes to the destination address.
     uint8_t buffer[CHUNK_SIZE];
     size_t bytes_read;
     size_t total_bytes = 0;
@@ -272,6 +275,7 @@ void load_prg(const char *filename) {
 
     fclose(file);  // Close the file
 
+    // TODO: Review fixup of BASIC pointers
     uint16_t size = total_bytes + 0x3FF;
     spi_write_at(0xc9, size & 0xFF);
     spi_write_at(0x2a, size & 0xFF);
@@ -279,15 +283,9 @@ void load_prg(const char *filename) {
     spi_write_at(0x2b, size >> 8);
 }
 
-void menu_init_start() {
+void menu_init() {
     gpio_init(MENU_BTN_GP);
 
-    // To accelerate charging the debouncing capacitor, we briefly drive the pin as an output
-    gpio_set_dir(MENU_BTN_GP, GPIO_OUT);
-    gpio_put(MENU_BTN_GP, 1);
-}
-
-void menu_init_end() {
     // Enable pull-up resistor as the button is active low
     gpio_pull_up(MENU_BTN_GP);
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);

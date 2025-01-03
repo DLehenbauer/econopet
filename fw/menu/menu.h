@@ -27,6 +27,5 @@ typedef enum {
     LongPress   = 2
 } ButtonAction;
 
-void menu_init_start();
-void menu_init_end();
+void menu_init();
 bool menu_task();

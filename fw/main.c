@@ -114,9 +114,7 @@ int main() {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-    // Begin charging the debouncing capacitor for the menu button.
-    menu_init_start();
-
+    menu_init();    // Begin charging debouncing capacitor.
     fpga_init();
 
     // Deassert SD CS
@@ -143,7 +141,6 @@ int main() {
     video_init();
     usb_init();
     reset();
-    menu_init_end();
 
     while (true) {
         // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
