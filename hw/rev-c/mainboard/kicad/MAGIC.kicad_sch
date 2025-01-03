@@ -4949,7 +4949,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-00006193952e")
-		(property "Reference" "C32"
+		(property "Reference" "C33"
 			(at 209.3468 21.6916 0)
 			(effects
 				(font
@@ -5012,7 +5012,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C32")
+					(reference "C33")
 					(unit 1)
 				)
 			)
@@ -5027,7 +5027,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061939783")
-		(property "Reference" "C34"
+		(property "Reference" "C35"
 			(at 209.3468 124.5616 0)
 			(effects
 				(font
@@ -5090,7 +5090,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C34")
+					(reference "C35")
 					(unit 1)
 				)
 			)
@@ -5303,7 +5303,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f99143")
-		(property "Reference" "C35"
+		(property "Reference" "C36"
 			(at 238.5568 21.6916 0)
 			(effects
 				(font
@@ -5366,7 +5366,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C35")
+					(reference "C36")
 					(unit 1)
 				)
 			)
@@ -5381,7 +5381,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f9914a")
-		(property "Reference" "C37"
+		(property "Reference" "C38"
 			(at 242.3668 124.5616 0)
 			(effects
 				(font
@@ -5444,7 +5444,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C37")
+					(reference "C38")
 					(unit 1)
 				)
 			)
@@ -5459,7 +5459,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f99151")
-		(property "Reference" "C36"
+		(property "Reference" "C37"
 			(at 238.5568 72.4916 0)
 			(effects
 				(font
@@ -5522,7 +5522,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C36")
+					(reference "C37")
 					(unit 1)
 				)
 			)
@@ -5537,7 +5537,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-0000635f92b6")
-		(property "Reference" "C33"
+		(property "Reference" "C34"
 			(at 209.3468 72.4916 0)
 			(effects
 				(font
@@ -5600,7 +5600,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C33")
+					(reference "C34")
 					(unit 1)
 				)
 			)
@@ -5681,7 +5681,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "2f07f872-eaed-4d5c-b624-ebf8cb4ba6fd")
-		(property "Reference" "R21"
+		(property "Reference" "R23"
 			(at 102.235 113.03 90)
 			(effects
 				(font
@@ -5744,7 +5744,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R21")
+					(reference "R23")
 					(unit 1)
 				)
 			)
@@ -5825,7 +5825,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "38e88955-457e-4f4b-9bb3-f5b2a6742025")
-		(property "Reference" "R20"
+		(property "Reference" "R22"
 			(at 102.235 106.68 90)
 			(effects
 				(font
@@ -5888,7 +5888,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R20")
+					(reference "R22")
 					(unit 1)
 				)
 			)
@@ -5903,7 +5903,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "38f14fef-501b-4af8-817f-2d405468b476")
-		(property "Reference" "R19"
+		(property "Reference" "R21"
 			(at 102.235 100.33 90)
 			(effects
 				(font
@@ -5966,7 +5966,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R19")
+					(reference "R21")
 					(unit 1)
 				)
 			)
@@ -6113,7 +6113,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "6d7e90d7-df29-42f3-ae26-2598ccf1fa31")
-		(property "Reference" "R18"
+		(property "Reference" "R20"
 			(at 93.345 122.555 90)
 			(effects
 				(font
@@ -6176,7 +6176,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R18")
+					(reference "R20")
 					(unit 1)
 				)
 			)
@@ -6192,7 +6192,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "6e167e60-afa6-49ee-b9ee-69299fb8619f")
-		(property "Reference" "C31"
+		(property "Reference" "C32"
 			(at 197.0532 21.6916 0)
 			(effects
 				(font
@@ -6219,7 +6219,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A475MP5NRNC_C23733.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 199.39 22.86 0)
 			(effects
 				(font
@@ -6255,7 +6255,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "C31")
+					(reference "C32")
 					(unit 1)
 				)
 			)
@@ -6534,7 +6534,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "bc9b3d7e-de34-4867-938e-5b6fb7c231ae")
-		(property "Reference" "R16"
+		(property "Reference" "R18"
 			(at 85.725 122.555 90)
 			(effects
 				(font
@@ -6597,7 +6597,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R16")
+					(reference "R18")
 					(unit 1)
 				)
 			)
@@ -6678,7 +6678,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "f376cb5e-73ec-4083-b564-76558a12ca8f")
-		(property "Reference" "R17"
+		(property "Reference" "R19"
 			(at 89.535 122.555 90)
 			(effects
 				(font
@@ -6741,7 +6741,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918"
-					(reference "R17")
+					(reference "R19")
 					(unit 1)
 				)
 			)

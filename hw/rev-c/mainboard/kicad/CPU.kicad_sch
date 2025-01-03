@@ -5759,7 +5759,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f53899")
-		(property "Reference" "C14"
+		(property "Reference" "C1"
 			(at 37.8968 182.9816 0)
 			(effects
 				(font
@@ -5822,7 +5822,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "C14")
+					(reference "C1")
 					(unit 1)
 				)
 			)
@@ -5837,7 +5837,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f538a7")
-		(property "Reference" "C16"
+		(property "Reference" "C2"
 			(at 50.5968 182.9816 0)
 			(effects
 				(font
@@ -5900,7 +5900,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "C16")
+					(reference "C2")
 					(unit 1)
 				)
 			)
@@ -5980,7 +5980,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "1b18850d-5d93-4ec5-8465-0d8ccd0e8f20")
-		(property "Reference" "R11"
+		(property "Reference" "R4"
 			(at 74.295 73.025 90)
 			(effects
 				(font
@@ -6043,7 +6043,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "R11")
+					(reference "R4")
 					(unit 1)
 				)
 			)
@@ -6255,7 +6255,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5adfbe75-0f57-4bb2-a663-fab6b20ad684")
-		(property "Reference" "C28"
+		(property "Reference" "C3"
 			(at 110.2868 182.9816 0)
 			(effects
 				(font
@@ -6318,7 +6318,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "C28")
+					(reference "C3")
 					(unit 1)
 				)
 			)
@@ -6788,7 +6788,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "bc68d6d4-f945-497c-b7a1-b5400016cfe7")
-		(property "Reference" "C29"
+		(property "Reference" "C4"
 			(at 140.7668 182.9816 0)
 			(effects
 				(font
@@ -6851,7 +6851,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "C29")
+					(reference "C4")
 					(unit 1)
 				)
 			)

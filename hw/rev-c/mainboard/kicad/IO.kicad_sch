@@ -6765,7 +6765,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f67bca")
-		(property "Reference" "C66"
+		(property "Reference" "C67"
 			(at 97.79 111.76 90)
 			(effects
 				(font
@@ -6828,7 +6828,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b9c2eb"
-					(reference "C66")
+					(reference "C67")
 					(unit 1)
 				)
 			)
@@ -6843,7 +6843,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f67bd1")
-		(property "Reference" "C67"
+		(property "Reference" "C68"
 			(at 101.6 16.51 90)
 			(effects
 				(font
@@ -6906,7 +6906,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b9c2eb"
-					(reference "C67")
+					(reference "C68")
 					(unit 1)
 				)
 			)
@@ -6921,7 +6921,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f7149d")
-		(property "Reference" "C68"
+		(property "Reference" "C69"
 			(at 198.12 85.09 90)
 			(effects
 				(font
@@ -6984,7 +6984,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b9c2eb"
-					(reference "C68")
+					(reference "C69")
 					(unit 1)
 				)
 			)
