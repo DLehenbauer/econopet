@@ -122,3 +122,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 RUN apt-get update && apt-get -y install --no-install-recommends \
     universal-ctags \
     verilator
+
+# CC65
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    cc65
