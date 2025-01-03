@@ -654,7 +654,7 @@
 		(remove_unused_layers no)
 		(uuid "6947c4d8-0eb0-4dfe-93ce-c6c615b45585")
 	)
-	(model "D:/gh/kicad-jlcpcb/./JLCPCB/packages3d/LQFN-56_L7.0-W7.0-P0.4-EP.wrl"
+	(model "E:/econopet/hw/libraries/Footprints/EconoPET.pretty/packages3d/LQFN-56_L7.0-W7.0-P0.4-EP.wrl"
 		(offset
 			(xyz 0 0 0)
 		)

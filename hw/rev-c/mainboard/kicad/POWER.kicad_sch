@@ -9987,7 +9987,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_THT:CP_Radial_D16.0mm_P7.50mm"
+		(property "Footprint" "EconoPET:CP_Radial_D16.0mm_P7.50mm"
 			(at 72.39 41.91 0)
 			(effects
 				(font

@@ -2452,7 +2452,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "c3912545-a21c-46a7-aef8-9638ec7f494c")
-		(property "Reference" "C100"
+		(property "Reference" "C2"
 			(at 157.2768 68.6816 0)
 			(effects
 				(font
@@ -2515,7 +2515,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918/b70241ab-8a5c-42d5-a1ab-8f4bc50a1197/d7346628-bc14-4709-aafe-5231479d808e"
-					(reference "C100")
+					(reference "C2")
 					(unit 1)
 				)
 			)

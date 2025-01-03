@@ -4000,7 +4000,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Retrocomputing:CBM_PET_KEYBOARD_KEYED_20P"
+		(property "Footprint" "EconoPET:CBM_PET_KEYBOARD_KEYED_20P"
 			(at 201.93 73.66 0)
 			(effects
 				(font

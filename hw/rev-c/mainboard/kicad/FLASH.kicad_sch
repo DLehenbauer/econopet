@@ -1178,7 +1178,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "JLCPCB:SW-TH_L6.0-W3.5-P6.50"
+		(property "Footprint" "EconoPET:SW_PUSH_1P1T_6x3.5mm_H4.3_APEM_MJTP1243"
 			(at 107.95 107.95 0)
 			(effects
 				(font
@@ -1553,7 +1553,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "917bca46-fcaf-4280-a6d5-dcbf4d2fedb7")
-		(property "Reference" "C104"
+		(property "Reference" "C1"
 			(at 148.3868 77.5716 0)
 			(effects
 				(font
@@ -1616,7 +1616,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000617d6918/b70241ab-8a5c-42d5-a1ab-8f4bc50a1197/3b6d0c70-6282-4619-97c5-f97c852cfe84"
-					(reference "C104")
+					(reference "C1")
 					(unit 1)
 				)
 			)
@@ -1649,7 +1649,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_SO:SOIC-8_5.23x5.23mm_P1.27mm"
+		(property "Footprint" "EconoPET:SOIC-8_5.23x5.23mm_P1.27mm"
 			(at 142.24 101.6 0)
 			(effects
 				(font

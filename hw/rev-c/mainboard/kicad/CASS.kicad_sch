@@ -4558,7 +4558,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Retrocomputing:CBM_PET_CASS_EDGE_CON_12P"
+		(property "Footprint" "EconoPET:CBM_PET_CASS_EDGE_CON_12P"
 			(at 243.84 154.94 0)
 			(effects
 				(font
@@ -4639,7 +4639,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Retrocomputing:CBM_PET_CASS_EDGE_CON_12P"
+		(property "Footprint" "EconoPET:CBM_PET_CASS_EDGE_CON_12P"
 			(at 243.84 113.03 0)
 			(effects
 				(font

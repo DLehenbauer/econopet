@@ -667,7 +667,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "PET:PET_Video"
+		(property "Footprint" "EconoPET:PET_Video"
 			(at 146.05 92.71 0)
 			(effects
 				(font

@@ -3239,7 +3239,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Retrocomputing:CBM_PET_USER_EDGE_CON_24P"
+		(property "Footprint" "EconoPET:CBM_PET_USER_EDGE_CON_24P"
 			(at 123.19 100.33 0)
 			(effects
 				(font
