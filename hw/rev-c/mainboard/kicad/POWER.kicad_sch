@@ -4905,6 +4905,12 @@
 		(uuid "f71395bc-e4ab-440e-b42e-7da4bfb14363")
 	)
 	(junction
+		(at 152.4 29.21)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "f91272e8-c95e-4104-8dd5-04d0a9c12719")
+	)
+	(junction
 		(at 143.51 139.7)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5282,7 +5288,7 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 25.4) (xy 152.4 36.83)
+			(xy 152.4 25.4) (xy 152.4 29.21)
 		)
 		(stroke
 			(width 0)
@@ -5692,6 +5698,16 @@
 	)
 	(wire
 		(pts
+			(xy 152.4 29.21) (xy 165.1 29.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "40471958-a01b-413f-ab42-a6c6f26211e4")
+	)
+	(wire
+		(pts
 			(xy 170.18 128.27) (xy 170.18 129.54)
 		)
 		(stroke
@@ -5759,6 +5775,16 @@
 			(type default)
 		)
 		(uuid "48c77641-1046-44b0-bae8-52da953ea633")
+	)
+	(wire
+		(pts
+			(xy 152.4 29.21) (xy 152.4 36.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "49d4f843-735c-48cc-be44-b1e39e781de5")
 	)
 	(wire
 		(pts
@@ -6869,6 +6895,16 @@
 			(type default)
 		)
 		(uuid "c6bffe05-287c-429e-8165-8d37c0771b25")
+	)
+	(wire
+		(pts
+			(xy 165.1 31.75) (xy 165.1 33.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c72cf79b-ab45-4ba8-bc11-2af65a109b78")
 	)
 	(wire
 		(pts
@@ -9330,6 +9366,71 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "U3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 165.1 33.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "2e18d82c-b4f2-449b-83df-465d37bbc77f")
+		(property "Reference" "#PWR0181"
+			(at 165.1 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 165.1 36.83 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 165.1 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 165.1 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 165.1 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "58c15b65-a8aa-413c-aeb7-48062b2164cb")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "#PWR0181")
 					(unit 1)
 				)
 			)
@@ -14192,6 +14293,85 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "J10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:Conn_01x02_Pin")
+		(at 170.18 31.75 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f2ce8511-b4d8-4e18-b19b-dcd80e45d886")
+		(property "Reference" "J27"
+			(at 171.45 29.2099 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "6V POWER"
+			(at 171.45 31.7499 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+			(at 170.18 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 170.18 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x02, script generated"
+			(at 170.18 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "MOUSER" "649-1012937891002BLF"
+			(at 170.18 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "787ec08f-266c-422b-ae76-c371edbf152a")
+		)
+		(pin "2"
+			(uuid "af19a623-3ef4-411f-a6ae-80e08b7db744")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "J27")
 					(unit 1)
 				)
 			)
