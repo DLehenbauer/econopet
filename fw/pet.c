@@ -82,11 +82,52 @@ void pet_init_edit_rom(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     }
 }
 
+void pet_reset() {
+    // Per the W65C02S datasheet (sections 3.10 - 3.11):
+    //
+    //  * The CPU requires a minimum of 2 clock cycles to reset.  The CPU clock is 1 MHz (1 us period).
+    //  * Deasserting RDY prevents the CPU from advancing it's state on negative PHI2 edges.
+    // 
+    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
+
+    // Out of paranoia, deassert CPU 'reset' to ensure the CPU observes a clean reset pulse.
+    // (We set 'ready' to false to prevent the CPU from executing instructions.)
+    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    sleep_us(4);
+    
+    // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
+    set_cpu(/* ready: */ false, /* reset: */ true, /* nmi: */ false);
+    sleep_us(4);
+    
+    // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
+    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
+}
+
 void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
+    // Ensure CPU is suspended while initializing ROMs.
+    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    sleep_us(4);
+
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800,  sizeof(rom_chars_8800));
     spi_write(/* dest: */ 0xb000, /* pSrc: */ rom_basic_b000,  sizeof(rom_basic_b000));
     spi_write(/* dest: */ 0xc000, /* pSrc: */ rom_basic_c000,  sizeof(rom_basic_c000));
     spi_write(/* dest: */ 0xd000, /* pSrc: */ rom_basic_d000,  sizeof(rom_basic_d000));
     pet_init_edit_rom(is80Columns, isBusinessKeyboard, is50Hz);
     spi_write(/* dest: */ 0xf000, /* pSrc: */ rom_kernal_f000, sizeof(rom_kernal_f000));
+
+    pet_reset();
+}
+
+void pet_nmi() {
+    // Out of paranoia, deassert CPU 'NMI' to ensure the CPU observes a clean pulse.
+    // (We set 'ready' to false to prevent the CPU from executing instructions.)
+    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    sleep_us(4);
+    
+    // Assert CPU 'nmi'.  Execution continues to be suspended by deasserting 'ready'.
+    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ true);
+    sleep_us(4);
+    
+    // Finally, deassert CPU 'NMI' and assert 'ready' to allow the CPU to execute instructions.
+    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
 }

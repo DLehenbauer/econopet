@@ -79,34 +79,6 @@ void fpga_init() {
     measure_freqs(fpga_div);
 }
 
-void reset() {
-    // Per the W65C02S datasheet (sections 3.10 - 3.11):
-    //
-    //  * The CPU requires a minimum of 2 clock cycles to reset.  The CPU clock is 1 MHz (1 us period).
-    //  * Deasserting RDY prevents the CPU from advancing it's state on negative PHI2 edges.
-    // 
-    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
-
-    // Out of paranoia, deassert CPU 'reset' to ensure the CPU observes a clean reset pulse.
-    // (We set 'ready' to false to prevent the CPU from executing instructions.)
-    set_cpu(/* ready: */ false, /* reset: */ false);
-    sleep_us(4);
-    
-    // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
-    set_cpu(/* ready: */ false, /* reset: */ true);
-    sleep_us(4);
-    
-    // While the CPU is held in reset:
-    // * Perform a RAM test
-    // * Initialize the ROM region of our SRAM
-
-    // test_ram();
-    pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
-
-    // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
-    set_cpu(/* ready: */ true,  /* reset: */ false);
-}
-
 int main() {
     // Turn on LED at start of config to signal that the RP2040 has booted and FPGA
     // configuration has started (sd_init will turn LED off.)
@@ -140,7 +112,7 @@ int main() {
     sd_init();
     video_init();
     usb_init();
-    reset();
+    pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
 
     while (true) {
         // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file

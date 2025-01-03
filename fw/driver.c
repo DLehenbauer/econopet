@@ -31,6 +31,7 @@
 
 #define REG_CPU_READY (1 << 0)
 #define REG_CPU_RESET (1 << 1)
+#define REG_CPU_NMI   (1 << 2)
 
 #define REG_VIDEO_80_COL_MODE (1 << 0)
 #define REG_VIDEO_GRAPHICS    (1 << 1)
@@ -123,10 +124,11 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
     }
 }
 
-void set_cpu(bool ready, bool reset) {
+void set_cpu(bool ready, bool reset, bool nmi) {
     uint8_t state = 0;
     if (ready) { state |= REG_CPU_READY; }
     if (reset) { state |= REG_CPU_RESET; }
+    if (nmi)   { state |= REG_CPU_NMI; }
     spi_write_at(REG_CPU, state);
 }
 

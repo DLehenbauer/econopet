@@ -243,15 +243,23 @@ package common_pkg;
 
     localparam int unsigned IO_REG_ADDR_WIDTH       = bit_width(IO_REG_COUNT - 1'b1);
 
-    localparam int unsigned REG_CPU           = 0;
-    localparam int unsigned REG_VIDEO         = 1;
-    localparam int unsigned REG_COUNT         = 2;
+    //
+    // Register file
+    //
 
-    localparam int unsigned REG_CPU_READY_BIT    = 0;
-    localparam int unsigned REG_CPU_RESET_BIT    = 1;
+    // Register 0: CPU control
+    localparam int unsigned REG_CPU                 = 0;
+    localparam int unsigned REG_CPU_READY_BIT       = 0;
+    localparam int unsigned REG_CPU_RESET_BIT       = 1;
+    localparam int unsigned REG_CPU_NMI_BIT         = 2;
 
-    localparam int unsigned REG_VIDEO_COL_80_BIT   = 0;
-    localparam int unsigned REG_VIDEO_GRAPHICS_BIT = 1;  // VIA CA2 (0 = graphics, 1 = text)
+    
+    // Register 1: Video
+    localparam int unsigned REG_VIDEO               = 1;
+    localparam int unsigned REG_VIDEO_COL_80_BIT    = 0;
+    localparam int unsigned REG_VIDEO_GRAPHICS_BIT  = 1;  // VIA CA2 (0 = graphics, 1 = text)
+
+    localparam int unsigned REG_COUNT               = REG_VIDEO + 1'b1;
 
     //
     // Bus

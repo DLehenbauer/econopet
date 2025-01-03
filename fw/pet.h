@@ -16,7 +16,9 @@
 
 #include "pch.h"
 
+void pet_reset();
 void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz);
+void pet_nmi();
 
 extern const uint8_t* const p_video_font_000;
 extern const uint8_t* const p_video_font_400;

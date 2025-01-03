@@ -27,6 +27,6 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength);
 void spi_write_at(uint32_t addr, uint8_t data);
 void spi_write_next(uint8_t data);
 
-void set_cpu(bool ready, bool reset);
+void set_cpu(bool ready, bool reset, bool nmi);
 void set_video(bool col80);
 void sync_state();

@@ -140,9 +140,8 @@ module main (
         .spi_stall_o(spi_stall_o)   // Backpressure to MCU
     );
 
-    // For now, outgoing CPU control signals are constant.
+    // For now, IRQ is never driven by FPGA.
     assign cpu_irq_o   = 0;
-    assign cpu_nmi_o   = 0;
 
     // For now, CPU always drives RWB, which is independent from RAM OE/WE.
     assign cpu_we_o    = 0;
@@ -227,6 +226,7 @@ module main (
 
         .cpu_ready_o(cpu_ready_o),
         .cpu_reset_o(cpu_reset_o),
+        .cpu_nmi_o(cpu_nmi_o),
         .video_graphic_i(graphic_i),
         .video_col_80_mode_o(video_col_80_mode),
         .video_ram_mask_o(video_ram_mask)

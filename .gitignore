@@ -65,3 +65,9 @@ fw/roms/*.h
 rom/program.pet*
 rom/rom.bin
 rom/obj
+
+#
+# Core dump
+#
+
+core

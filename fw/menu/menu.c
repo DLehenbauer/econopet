@@ -17,6 +17,7 @@
 
 #include "../driver.h"
 #include "../hw.h"
+#include "../pet.h"
 #include "../sd/sd.h"
 #include "../video/video.h"
 #include "menu.h"
@@ -133,14 +134,13 @@ typedef enum {
 } DirStatus;
 
 DirStatus file_slots_read(char* path, uint position) {
+    struct dirent* entry = NULL;
     uint y = 0;
 
     DIR* dir = opendir(path);
     if (dir == NULL) {
         goto Cleanup;
     }
-
-    struct dirent* entry = NULL;
 
     // Skip entries until we arrive at the desired position or reach the end of the directory.
     while (position--) {
@@ -291,6 +291,14 @@ void menu_init() {
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
+//
+// Menu Rom ($F000)
+//
+
+static const uint8_t __in_flash(".rom_menu_f000") rom_menu_f000[] = {
+    #include "../roms/menu.h"
+};
+
 bool menu_task() {
     ButtonAction action = get_button_action();
 
@@ -301,14 +309,17 @@ bool menu_task() {
 
     // If short press, return 'true' which will cause a reset.
     if (action == ShortPress) {
-        reset();
+        pet_reset();
         return true;
     }
 
     printf("-- Enter Menu --\n");
 
-    // Suspend CPU while inside menu
-    set_cpu(/* ready */ false, /* reset */ false);
+    // Suspend CPU
+    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
+    spi_write(/* dest: */ 0xf000, /* pSrc: */ rom_menu_f000, sizeof(rom_menu_f000));
+    
+    pet_nmi();
 
     screen_clear();
 
@@ -318,7 +329,7 @@ bool menu_task() {
     }
 
     // Resume CPU
-    set_cpu(/* ready */ true, /* reset */ false);
+    set_cpu(/* ready */ true, /* reset */ false, /* nmi: */ false);
 
     printf("-- Exit Menu --\n");
 

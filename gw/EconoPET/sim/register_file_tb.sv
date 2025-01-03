@@ -33,6 +33,7 @@ module register_file_tb;
 
     logic cpu_ready;
     logic cpu_reset;
+    logic cpu_nmi;
     logic video_graphics;
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
@@ -51,6 +52,8 @@ module register_file_tb;
 
         .cpu_ready_o(cpu_ready),
         .cpu_reset_o(cpu_reset),
+        .cpu_nmi_o(cpu_nmi),
+        
         .video_graphic_i(video_graphics),
         .video_col_80_mode_o(video_col_80_mode),
         .video_ram_mask_o(video_ram_mask)
@@ -80,10 +83,11 @@ module register_file_tb;
         `assert_exact_equal(data_rd, data);
     endtask
 
-    task test_cpu_reg(input logic reset, input logic ready);
-        test_reg(REG_CPU, {6'bxxxx_xx, reset, ready});
+    task test_cpu_reg(input logic reset, input logic ready, input logic nmi);
+        test_reg(REG_CPU, {6'bxxxx_x, nmi, reset, ready});
         `assert_equal(cpu_reset, reset);
         `assert_equal(cpu_ready, ready);
+        `assert_equal(cpu_nmi, nmi);
     endtask
 
     task test_video_reg(input logic graphics, input logic col_80_mode);
@@ -103,10 +107,12 @@ module register_file_tb;
         `assert_equal(cpu_reset, 1'b1);
         `assert_equal(video_col_80_mode, 1'b0);
 
-        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0);
-        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b1);
-        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b0);
-        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b1);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b1, /* nmi: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b0, /* nmi: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b1, /* ready: */ 1'b1, /* nmi: */ 1'b0);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b1);
+        test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
 
         test_video_reg(/* graphics: */ 1'b1, /* col_80_mode: */ 1'b1);
         test_video_reg(/* graphics: */ 1'b1, /* col_80_mode: */ 1'b0);
