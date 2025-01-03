@@ -57,3 +57,11 @@ site/node_modules
 #
 
 fw/roms/*.h
+
+#
+# CC65
+# 
+
+rom/program.pet*
+rom/rom.bin
+rom/obj
