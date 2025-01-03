@@ -4702,7 +4702,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061bc62ff")
-		(property "Reference" "R25"
+		(property "Reference" "R32"
 			(at 51.435 106.045 90)
 			(effects
 				(font
@@ -4765,7 +4765,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "R25")
+					(reference "R32")
 					(unit 1)
 				)
 			)
@@ -4952,7 +4952,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "06c3a95f-0f13-439d-bd11-69e9daff534c")
-		(property "Reference" "J20"
+		(property "Reference" "J15"
 			(at 196.85 44.4499 0)
 			(effects
 				(font
@@ -5027,7 +5027,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "J20")
+					(reference "J15")
 					(unit 1)
 				)
 			)
@@ -5109,7 +5109,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0df00b32-fc43-4b8d-b2e6-2eec2e4ddb85")
-		(property "Reference" "JP6"
+		(property "Reference" "JP5"
 			(at 130.81 49.53 0)
 			(effects
 				(font
@@ -5164,7 +5164,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP6")
+					(reference "JP5")
 					(unit 1)
 				)
 			)
@@ -5245,7 +5245,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "2a95e86c-c6c0-46aa-b818-245b269c2229")
-		(property "Reference" "JP2"
+		(property "Reference" "JP1"
 			(at 54.61 88.9 0)
 			(effects
 				(font
@@ -5300,7 +5300,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP2")
+					(reference "JP1")
 					(unit 1)
 				)
 			)
@@ -5315,7 +5315,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "2d54c230-2a4c-4466-aea5-09fe1843ee3f")
-		(property "Reference" "R27"
+		(property "Reference" "R34"
 			(at 197.0786 95.3516 0)
 			(effects
 				(font
@@ -5378,7 +5378,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "R27")
+					(reference "R34")
 					(unit 1)
 				)
 			)
@@ -5460,7 +5460,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "325e9863-1136-4cb8-a83a-f6de85da234f")
-		(property "Reference" "JP4"
+		(property "Reference" "JP3"
 			(at 92.71 69.85 0)
 			(effects
 				(font
@@ -5515,7 +5515,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP4")
+					(reference "JP3")
 					(unit 1)
 				)
 			)
@@ -5531,7 +5531,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "3318a282-e92a-43ce-84c2-573900d94c83")
-		(property "Reference" "C75"
+		(property "Reference" "C77"
 			(at 36.6268 176.4284 0)
 			(effects
 				(font
@@ -5558,7 +5558,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL10A106MA8NRNC_C96446.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
 			(at 34.29 175.26 0)
 			(effects
 				(font
@@ -5594,7 +5594,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "C75")
+					(reference "C77")
 					(unit 1)
 				)
 			)
@@ -5610,7 +5610,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5bd4a830-73a3-4504-83ce-78525d450a97")
-		(property "Reference" "JP3"
+		(property "Reference" "JP2"
 			(at 74.93 88.9 0)
 			(effects
 				(font
@@ -5665,7 +5665,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP3")
+					(reference "JP2")
 					(unit 1)
 				)
 			)
@@ -6023,7 +6023,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "79fcdec0-4a21-4a6f-ab34-08f688656fbb")
-		(property "Reference" "J13"
+		(property "Reference" "J16"
 			(at 242.57 44.4499 0)
 			(effects
 				(font
@@ -6098,7 +6098,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "J13")
+					(reference "J16")
 					(unit 1)
 				)
 			)
@@ -6179,7 +6179,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "9071e66f-9b64-4952-9bf7-43694841cf35")
-		(property "Reference" "R28"
+		(property "Reference" "R35"
 			(at 197.0786 137.2616 0)
 			(effects
 				(font
@@ -6242,7 +6242,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "R28")
+					(reference "R35")
 					(unit 1)
 				)
 			)
@@ -6599,7 +6599,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "e1beb45f-c642-4d7d-901b-801c2a34e703")
-		(property "Reference" "JP7"
+		(property "Reference" "JP6"
 			(at 151.13 49.53 0)
 			(effects
 				(font
@@ -6654,7 +6654,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP7")
+					(reference "JP6")
 					(unit 1)
 				)
 			)
@@ -6735,7 +6735,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "e89efc89-706b-48c8-9641-f568279b760a")
-		(property "Reference" "R26"
+		(property "Reference" "R33"
 			(at 51.435 111.125 90)
 			(effects
 				(font
@@ -6798,7 +6798,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "R26")
+					(reference "R33")
 					(unit 1)
 				)
 			)
@@ -6814,7 +6814,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "eb8e7fc3-6929-4c77-b10b-8a2a52ad0c17")
-		(property "Reference" "JP5"
+		(property "Reference" "JP4"
 			(at 113.03 69.85 0)
 			(effects
 				(font
@@ -6869,7 +6869,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
-					(reference "JP5")
+					(reference "JP4")
 					(unit 1)
 				)
 			)

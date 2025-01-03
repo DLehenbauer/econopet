@@ -39,3 +39,6 @@
   * [Datasheet](https://www.ti.com/lit/ds/symlink/tps5430.pdf)
   * [User's Guide](https://www.ti.com/lit/ug/slvu157a/slvu157a.pdf)
   * [Application Report](https://www.ti.com/lit/an/slva237c/slva237c.pdf)
+  * [ROHM Layout Guide](https://fscdn.rohm.com/en/products/databook/applinote/ic/power/switching_regulator/converter_pcb_layout_appli-e.pdf)
+* Op Amps
+  * [How to Bias Op Amps Correctly](https://www.renesas.com/en/document/apn/r13an0003-how-bias-op-amps-correctly)

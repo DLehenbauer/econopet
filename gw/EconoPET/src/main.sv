@@ -63,6 +63,11 @@ module main (
     output logic h_sync_o,
     output logic video_o,
 
+    // Audio
+    input  logic diag_i,
+    input  logic via_cb2_i,
+    output logic audio_o,
+
     // SPI buses
     input  logic spi0_cs_ni,    // (CS)  Chip Select (active low)
     input  logic spi0_sck_i,    // (SCK) Serial Clock
@@ -143,7 +148,7 @@ module main (
     assign cpu_we_o    = 0;
     assign cpu_we_oe   = 0;
 
-    logic cpu_wr_strobe;
+    logic cpu_wr_strobe;    // TODO: Rename? This is a 1-cycle pulse at end of write cycle (but ignores cpu_we_i)
     logic clk8_en;
     logic clk16_en;
     logic load_sr1;
@@ -235,6 +240,7 @@ module main (
     logic pia1_en;
     logic pia2_en;
     logic via_en;
+    logic sid_en;
     logic io_en;
     logic crtc_en;
     logic is_vram;
@@ -247,12 +253,12 @@ module main (
         .pia1_en_o(pia1_en),
         .pia2_en_o(pia2_en),
         .via_en_o(via_en),
+        .sid_en_o(sid_en),
         .io_en_o(io_en),
         .crtc_en_o(crtc_en),
         .is_vram_o(is_vram),
 
         // Not yet used
-        .sid_en_o(),
         .magic_en_o(),
         .is_rom_o()
     );
@@ -285,7 +291,7 @@ module main (
         .wb_stall_i(video_stall),
         .wb_ack_i(video_ack),
 
-        // TODO: Wishbone peripheral to read back CRTC regs
+        // TODO: Wishbone peripheral to read back CRTC registers
         .wb_addr_i(),
         .wb_we_i(),
         .wb_cycle_i(),
@@ -316,6 +322,26 @@ module main (
         .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),
         .video_o(video_o)
+    );
+
+    //
+    // Audio
+    //
+
+    audio audio(
+        .reset_i(cpu_reset_i),
+        .sys_clock_i(sys_clock_i),
+        .clk1_en_i(load_sr1),
+        .cpu_wr_en_i(cpu_wr_strobe && cpu_we_i),
+        .sid_en_i(sid_en),
+        .addr_i(cpu_addr_i[4:0]),
+        .data_i(cpu_data_i),
+        .diag_i(diag_i),
+        .via_cb2_i(via_cb2_i),
+        .audio_o(audio_o),
+
+        // TODO: Read back from SID?
+        .data_o()
     );
 
     //

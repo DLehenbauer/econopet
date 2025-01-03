@@ -1637,7 +1637,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 69.85) (xy 142.24 69.85)
+			(xy 107.95 71.12) (xy 142.24 71.12)
 		)
 		(stroke
 			(width 0)
@@ -1687,7 +1687,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 81.28) (xy 107.95 69.85)
+			(xy 107.95 81.28) (xy 107.95 71.12)
 		)
 		(stroke
 			(width 0)
@@ -1714,16 +1714,6 @@
 			(type default)
 		)
 		(uuid "a33c6be6-797e-420d-8d2e-bd7834ea2b43")
-	)
-	(wire
-		(pts
-			(xy 142.24 69.85) (xy 142.24 71.12)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "aab90893-25fd-4348-9b40-88ec8813fd4d")
 	)
 	(wire
 		(pts
@@ -1917,7 +1907,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0b702c63-72a8-4494-80a9-b3c1b688e8da")
-		(property "Reference" "R29"
+		(property "Reference" "R36"
 			(at 79.375 82.55 90)
 			(effects
 				(font
@@ -1980,7 +1970,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "R29")
+					(reference "R36")
 					(unit 1)
 				)
 			)
@@ -1995,7 +1985,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0febfb15-f605-433c-a197-36dc4ad531c7")
-		(property "Reference" "C80"
+		(property "Reference" "C82"
 			(at 152.4 64.9986 0)
 			(effects
 				(font
@@ -2058,7 +2048,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "C80")
+					(reference "C82")
 					(unit 1)
 				)
 			)
@@ -2073,7 +2063,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "17901bd3-c5a3-491c-a16e-7680e0db4ff2")
-		(property "Reference" "#PWR0140"
+		(property "Reference" "#PWR0142"
 			(at 113.03 96.52 0)
 			(effects
 				(font
@@ -2123,7 +2113,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "#PWR0140")
+					(reference "#PWR0142")
 					(unit 1)
 				)
 			)
@@ -2139,7 +2129,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "188a6f43-29ff-458a-810a-3934a7f852ee")
-		(property "Reference" "#PWR0141"
+		(property "Reference" "#PWR0143"
 			(at 157.48 106.68 0)
 			(effects
 				(font
@@ -2189,7 +2179,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "#PWR0141")
+					(reference "#PWR0143")
 					(unit 1)
 				)
 			)
@@ -2205,7 +2195,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "46493044-582d-498c-97a5-0430c2cff05e")
-		(property "Reference" "#PWR0142"
+		(property "Reference" "#PWR0144"
 			(at 165.1 64.77 0)
 			(effects
 				(font
@@ -2255,7 +2245,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "#PWR0142")
+					(reference "#PWR0144")
 					(unit 1)
 				)
 			)
@@ -2270,7 +2260,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "4f7bd365-517d-411d-8bd4-23429a223700")
-		(property "Reference" "R31"
+		(property "Reference" "R38"
 			(at 183.1086 87.7316 0)
 			(effects
 				(font
@@ -2333,7 +2323,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "R31")
+					(reference "R38")
 					(unit 1)
 				)
 			)
@@ -2349,7 +2339,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "504943f1-2273-469c-a480-921d4818b10d")
-		(property "Reference" "C79"
+		(property "Reference" "C81"
 			(at 90.17 87.6362 0)
 			(effects
 				(font
@@ -2412,7 +2402,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "C79")
+					(reference "C81")
 					(unit 1)
 				)
 			)
@@ -2428,7 +2418,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "54611654-ef5e-404c-acdc-e5cf225cbf41")
-		(property "Reference" "J22"
+		(property "Reference" "J21"
 			(at 128.27 83.8199 0)
 			(effects
 				(font
@@ -2516,7 +2506,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "J22")
+					(reference "J21")
 					(unit 1)
 				)
 			)
@@ -2550,7 +2540,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "SamacSys_Parts:AT1220TT9R"
+		(property "Footprint" "EconoPET:AT1220TT9R"
 			(at 209.55 78.74 0)
 			(effects
 				(font
@@ -2704,7 +2694,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "a11fdd02-0d77-4069-b9e2-f5368a5d0dc1")
-		(property "Reference" "R30"
+		(property "Reference" "R37"
 			(at 140.335 85.725 90)
 			(effects
 				(font
@@ -2767,7 +2757,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "R30")
+					(reference "R37")
 					(unit 1)
 				)
 			)
@@ -2782,7 +2772,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "c0e1067e-438b-4f20-91d0-408044db35ba")
-		(property "Reference" "C78"
+		(property "Reference" "C80"
 			(at 72.39 80.01 90)
 			(effects
 				(font
@@ -2845,7 +2835,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "C78")
+					(reference "C80")
 					(unit 1)
 				)
 			)
@@ -2861,7 +2851,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f42ac844-6058-47e2-9fe9-dde4a7edc2f5")
-		(property "Reference" "C81"
+		(property "Reference" "C83"
 			(at 184.15 78.7462 0)
 			(effects
 				(font
@@ -2924,7 +2914,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "C81")
+					(reference "C83")
 					(unit 1)
 				)
 			)
@@ -2939,7 +2929,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "fac26dff-c8df-49f0-8639-d5d7aa565ae0")
-		(property "Reference" "C82"
+		(property "Reference" "C84"
 			(at 195.58 67.31 90)
 			(effects
 				(font
@@ -2966,7 +2956,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL31A476MPHNNNE_C96123.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL31A476MPHNNN.do"
 			(at 194.31 73.66 0)
 			(effects
 				(font
@@ -3002,7 +2992,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
-					(reference "C82")
+					(reference "C84")
 					(unit 1)
 				)
 			)
