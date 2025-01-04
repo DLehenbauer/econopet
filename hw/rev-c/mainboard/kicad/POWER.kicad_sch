@@ -9978,7 +9978,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "3900u"
+		(property "Value" "11000u"
 			(at 74.6252 43.053 0)
 			(effects
 				(font
@@ -9996,7 +9996,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.mouser.com/datasheet/2/420/Chemi_Con_KYBLL_e-3313623.pdf"
+		(property "Datasheet" "https://www.chemi-con.co.jp/products/relatedfiles/capacitor/catalog/LBVLL-e.PDF"
 			(at 72.39 41.91 0)
 			(effects
 				(font
@@ -10014,7 +10014,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "661-EKYB250E392MK40S"
+		(property "MOUSER" "661-BV250L113AL40S"
 			(at 72.39 41.91 0)
 			(effects
 				(font
