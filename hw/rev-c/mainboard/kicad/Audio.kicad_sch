@@ -1752,7 +1752,7 @@
 		(uuid "562bae94-6baa-458d-9097-475ed2e079a6")
 	)
 	(junction
-		(at 217.17 71.12)
+		(at 213.36 71.12)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "580a43c5-f757-4043-92f2-b562a5c4156e")
@@ -1764,7 +1764,7 @@
 		(uuid "5c04cb2d-1564-4cda-8183-c502d4daae61")
 	)
 	(junction
-		(at 209.55 71.12)
+		(at 205.74 71.12)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "5c576ca3-2590-4af2-9e7f-1ea1af5cc6e2")
@@ -1921,7 +1921,7 @@
 	)
 	(wire
 		(pts
-			(xy 191.77 71.12) (xy 209.55 71.12)
+			(xy 191.77 71.12) (xy 205.74 71.12)
 		)
 		(stroke
 			(width 0)
@@ -2001,7 +2001,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 74.93) (xy 210.82 74.93)
+			(xy 205.74 74.93) (xy 207.01 74.93)
 		)
 		(stroke
 			(width 0)
@@ -2041,7 +2041,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 74.93) (xy 209.55 71.12)
+			(xy 205.74 74.93) (xy 205.74 71.12)
 		)
 		(stroke
 			(width 0)
@@ -2131,7 +2131,7 @@
 	)
 	(wire
 		(pts
-			(xy 217.17 71.12) (xy 217.17 67.31)
+			(xy 213.36 71.12) (xy 213.36 67.31)
 		)
 		(stroke
 			(width 0)
@@ -2191,7 +2191,7 @@
 	)
 	(wire
 		(pts
-			(xy 217.17 67.31) (xy 215.9 67.31)
+			(xy 213.36 67.31) (xy 212.09 67.31)
 		)
 		(stroke
 			(width 0)
@@ -2241,7 +2241,7 @@
 	)
 	(wire
 		(pts
-			(xy 217.17 74.93) (xy 217.17 71.12)
+			(xy 213.36 74.93) (xy 213.36 71.12)
 		)
 		(stroke
 			(width 0)
@@ -2351,7 +2351,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 67.31) (xy 210.82 67.31)
+			(xy 205.74 67.31) (xy 207.01 67.31)
 		)
 		(stroke
 			(width 0)
@@ -2411,7 +2411,7 @@
 	)
 	(wire
 		(pts
-			(xy 217.17 71.12) (xy 220.98 71.12)
+			(xy 213.36 71.12) (xy 220.98 71.12)
 		)
 		(stroke
 			(width 0)
@@ -2421,7 +2421,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 71.12) (xy 209.55 67.31)
+			(xy 205.74 71.12) (xy 205.74 67.31)
 		)
 		(stroke
 			(width 0)
@@ -2641,7 +2641,7 @@
 	)
 	(wire
 		(pts
-			(xy 215.9 74.93) (xy 217.17 74.93)
+			(xy 212.09 74.93) (xy 213.36 74.93)
 		)
 		(stroke
 			(width 0)
@@ -4523,7 +4523,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 213.36 67.31 90)
+		(at 209.55 67.31 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -4531,7 +4531,7 @@
 		(dnp no)
 		(uuid "98f52f23-5ffd-4514-b279-767c57fb1f0e")
 		(property "Reference" "C8"
-			(at 213.36 60.96 90)
+			(at 209.55 60.96 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4540,7 +4540,7 @@
 			)
 		)
 		(property "Value" "47u 10V"
-			(at 218.948 63.754 90)
+			(at 215.138 63.754 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4549,7 +4549,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric"
-			(at 213.36 67.31 0)
+			(at 209.55 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4558,7 +4558,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL31A476MPHNNN.do"
-			(at 213.36 67.31 0)
+			(at 209.55 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4567,7 +4567,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 213.36 67.31 0)
+			(at 209.55 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4576,7 +4576,7 @@
 			)
 		)
 		(property "LCSC" "C96123"
-			(at 213.36 67.31 0)
+			(at 209.55 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5286,7 +5286,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 213.36 74.93 90)
+		(at 209.55 74.93 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5294,7 +5294,7 @@
 		(dnp no)
 		(uuid "fac26dff-c8df-49f0-8639-d5d7aa565ae0")
 		(property "Reference" "C84"
-			(at 214.63 78.74 90)
+			(at 210.82 78.74 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5303,7 +5303,7 @@
 			)
 		)
 		(property "Value" "47u 10V"
-			(at 219.075 81.28 90)
+			(at 215.265 81.28 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5312,7 +5312,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric"
-			(at 213.36 74.93 0)
+			(at 209.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5321,7 +5321,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL31A476MPHNNN.do"
-			(at 213.36 74.93 0)
+			(at 209.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5330,7 +5330,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 213.36 74.93 0)
+			(at 209.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5339,7 +5339,7 @@
 			)
 		)
 		(property "LCSC" "C96123"
-			(at 213.36 74.93 0)
+			(at 209.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)

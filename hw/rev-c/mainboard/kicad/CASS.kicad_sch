@@ -4240,7 +4240,7 @@
 	)
 	(text "Place decoupling cap near CASS_B connector.\nCASS_A has sufficient decoupling nearby. "
 		(exclude_from_sim no)
-		(at 45.72 176.53 0)
+		(at 28.956 190.246 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5524,15 +5524,14 @@
 	(symbol
 		(lib_id "Device:C_Small")
 		(at 34.29 175.26 0)
-		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "3318a282-e92a-43ce-84c2-573900d94c83")
+		(uuid "4c952f9b-4546-4f8f-838f-dcef5ef97855")
 		(property "Reference" "C77"
-			(at 36.6268 176.4284 0)
+			(at 36.6268 174.0916 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5540,8 +5539,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10u"
-			(at 36.6268 174.117 0)
+		(property "Value" "4.7u 10V"
+			(at 36.6268 176.403 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5549,7 +5548,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 34.29 175.26 0)
 			(effects
 				(font
@@ -5558,7 +5557,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL10A106MA8NRN.do"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 34.29 175.26 0)
 			(effects
 				(font
@@ -5576,7 +5575,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C23733"
 			(at 34.29 175.26 0)
 			(effects
 				(font
@@ -5586,13 +5585,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "3fad4422-bf48-4120-83bd-edb92baea1ca")
+			(uuid "9f2652e8-6142-44df-b4c8-40aaa8e40ca6")
 		)
 		(pin "2"
-			(uuid "3631dfd1-639b-4220-b20e-f84f0f1881e4")
+			(uuid "9dfbdfd5-3f34-4854-b5b7-cc0a49c78574")
 		)
 		(instances
-			(project ""
+			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061bef9ce"
 					(reference "C77")
 					(unit 1)
