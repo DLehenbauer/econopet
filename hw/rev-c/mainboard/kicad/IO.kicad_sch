@@ -145,6 +145,128 @@
 				)
 			)
 		)
+		(symbol "Device:R_Small"
+			(pin_numbers hide)
+			(pin_names
+				(offset 0.254) hide)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "R"
+				(at 0.762 0.508 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "R_Small"
+				(at 0.762 -1.016 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Resistor, small symbol"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "R resistor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "R_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_Small_0_1"
+				(rectangle
+					(start -0.762 1.778)
+					(end 0.762 -1.778)
+					(stroke
+						(width 0.2032)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_Small_1_1"
+				(pin passive line
+					(at 0 2.54 270)
+					(length 0.762)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -2.54 90)
+					(length 0.762)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+		)
 		(symbol "EconoPET:W65C21N"
 			(pin_names
 				(offset 1.016)
@@ -3140,16 +3262,6 @@
 	)
 	(wire
 		(pts
-			(xy 199.39 143.51) (xy 234.95 143.51)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "419715bf-ffaa-4f14-ba39-b7cca3633324")
-	)
-	(wire
-		(pts
 			(xy 55.88 78.74) (xy 71.12 78.74)
 		)
 		(stroke
@@ -3820,6 +3932,16 @@
 	)
 	(wire
 		(pts
+			(xy 199.39 143.51) (xy 222.25 143.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "883ebb32-4e29-4ba5-8bdd-588e22dbda3c")
+	)
+	(wire
+		(pts
 			(xy 111.76 73.66) (xy 101.6 73.66)
 		)
 		(stroke
@@ -3937,6 +4059,16 @@
 			(type default)
 		)
 		(uuid "9ba85d0a-e58f-45a8-9d86-ad6c976003b7")
+	)
+	(wire
+		(pts
+			(xy 227.33 143.51) (xy 234.95 143.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9bcae793-208b-4e80-93fe-6d18d04786d2")
 	)
 	(wire
 		(pts
@@ -4938,6 +5070,17 @@
 		)
 		(uuid "fed6a1e7-e233-4dff-87e0-8992a65c8dd0")
 	)
+	(text "470R mitigates \"killer poke\",\nwhich configures PB5 as an output.\n\nW65C22N drives 1 CMOS load\n(or two TTL loads).\n\nBVERT is driven high/low at\n+/- 24ma by SN74LVC4245APWR."
+		(exclude_from_sim no)
+		(at 220.472 159.258 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "38e0b56a-2fdd-4173-b415-9215dd24a0ee")
+	)
 	(text "PIA1"
 		(exclude_from_sim no)
 		(at 83.82 63.5 0)
@@ -4964,7 +5107,7 @@
 		)
 		(uuid "90283901-e984-455f-aff2-fd5e564473ae")
 	)
-	(text "Signals with a 'B' prefix have been level shifted from 3V3 to 5V\n\n~{IRQ} is wire-or'ed and pulled to 3V3 (not 5V)"
+	(text "Signals with a 'B' prefix have been level shifted from 3V3 to 5V\n\nNote that ~{IRQ} is wire-or'ed and pulled to 3V3 (not 5V)"
 		(exclude_from_sim no)
 		(at 146.05 46.99 0)
 		(effects
@@ -5570,6 +5713,17 @@
 			(justify left bottom)
 		)
 		(uuid "a7035c1b-863b-4bbf-a32a-6ebba2814e2c")
+	)
+	(label "BVERT"
+		(at 228.6 143.51 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "acffbf96-7c22-44fe-b3ed-6bf1bf2fb9a4")
 	)
 	(label "BD4"
 		(at 168.91 148.59 180)
@@ -6985,6 +7139,85 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b9c2eb"
 					(reference "C69")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Small")
+		(at 224.79 143.51 90)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "00960e07-c037-4556-806f-9baafc449772")
+		(property "Reference" "R38"
+			(at 226.822 146.05 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "470"
+			(at 226.822 148.082 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 224.79 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
+			(at 224.79 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 224.79 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C25117"
+			(at 224.79 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "01c472db-9cf4-4470-bc03-258e60d24a66")
+		)
+		(pin "2"
+			(uuid "be377605-0f26-47bd-840e-8eb6c3847f88")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061b9c2eb"
+					(reference "R38")
 					(unit 1)
 				)
 			)

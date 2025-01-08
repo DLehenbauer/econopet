@@ -7186,7 +7186,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2.2u 6.3V"
+		(property "Value" "2u2 6.3V"
 			(at 129.3368 24.003 0)
 			(effects
 				(font
@@ -8091,7 +8091,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2.2u 6.3V"
+		(property "Value" "2u2 6.3V"
 			(at 110.2868 24.003 0)
 			(effects
 				(font
@@ -8313,7 +8313,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7u 10V"
+		(property "Value" "4u7"
 			(at 64.5668 123.063 0)
 			(effects
 				(font
@@ -8331,7 +8331,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
 			(at 62.23 121.92 0)
 			(effects
 				(font
@@ -8349,7 +8349,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C23733"
+		(property "LCSC" "C1538"
 			(at 62.23 121.92 0)
 			(effects
 				(font
@@ -8843,7 +8843,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2.2u 6.3V"
+		(property "Value" "2u2 6.3V"
 			(at 44.2468 168.783 0)
 			(effects
 				(font

@@ -10385,7 +10385,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7u 10V"
+		(property "Value" "4u7"
 			(at 193.2432 135.763 0)
 			(effects
 				(font
@@ -10403,7 +10403,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
 			(at 195.58 134.62 0)
 			(effects
 				(font
@@ -10421,7 +10421,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C23733"
+		(property "LCSC" "C1538"
 			(at 195.58 134.62 0)
 			(effects
 				(font
@@ -11545,7 +11545,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "2k2"
 			(at 217.17 101.5999 0)
 			(effects
 				(font
@@ -13470,7 +13470,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7u 10V"
+		(property "Value" "4u7"
 			(at 252.9332 147.193 0)
 			(effects
 				(font
@@ -13488,7 +13488,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
 			(at 255.27 146.05 0)
 			(effects
 				(font
@@ -13506,7 +13506,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C23733"
+		(property "LCSC" "C1538"
 			(at 255.27 146.05 0)
 			(effects
 				(font
