@@ -6255,7 +6255,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5adfbe75-0f57-4bb2-a663-fab6b20ad684")
-		(property "Reference" "C89"
+		(property "Reference" "C5"
 			(at 110.2868 182.9816 0)
 			(effects
 				(font
@@ -6318,7 +6318,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-0000614e685e"
-					(reference "C89")
+					(reference "C5")
 					(unit 1)
 				)
 			)
