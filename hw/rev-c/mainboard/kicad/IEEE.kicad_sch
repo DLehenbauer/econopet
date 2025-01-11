@@ -7609,7 +7609,7 @@
 		)
 		(uuid "fe971b77-994c-417a-ba70-7aea2fb9bdba")
 	)
-	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute the more common values of 4.7k/10k.\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470 ohm resistors protect PIAs and VIA in case\n*_IN are accidentally configured as outputs."
+	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute the more common values of 4.7k/10k.\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470Ω resistors protect PIAs and VIA in case\n*_IN are accidentally configured as outputs."
 		(exclude_from_sim no)
 		(at 95.25 127 0)
 		(effects
@@ -10055,7 +10055,7 @@
 		(dnp no)
 		(uuid "15a36902-479a-424e-a9f0-56c9b1c369d2")
 		(property "Reference" "RN12"
-			(at 107.95 58.42 0)
+			(at 111.76 59.69 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10063,8 +10063,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470"
-			(at 110.49 58.42 0)
+		(property "Value" "470x4"
+			(at 112.268 62.23 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10895,7 +10895,7 @@
 		(dnp no)
 		(uuid "7c713405-2e70-41bc-90e0-6baf7a78bb52")
 		(property "Reference" "RN11"
-			(at 107.95 31.75 0)
+			(at 111.76 32.004 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10903,8 +10903,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470"
-			(at 110.49 31.75 0)
+		(property "Value" "470x4"
+			(at 112.268 34.544 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11088,7 +11088,7 @@
 		(dnp no)
 		(uuid "7dcf0c38-bd4c-47e4-beea-63f3376ccd30")
 		(property "Reference" "RN13"
-			(at 107.95 143.51 0)
+			(at 112.014 143.764 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11096,8 +11096,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470"
-			(at 110.49 143.51 0)
+		(property "Value" "470x4"
+			(at 112.268 146.304 90)
 			(effects
 				(font
 					(size 1.27 1.27)
