@@ -59,6 +59,12 @@ site/node_modules
 fw/roms/*.h
 
 #
+# FPGA Bitstream
+#
+
+fw/fpga/bitstream.h
+
+#
 # CC65
 # 
 
