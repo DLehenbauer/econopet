@@ -295,9 +295,12 @@ void menu_init() {
 // Menu Rom ($F000)
 //
 
-static const uint8_t __in_flash(".rom_menu_f000") rom_menu_f000[] = {
+static const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
     #include "../roms/menu.h"
 };
+
+static uint8_t zp_backup[0x100] = { 0 };
+static uint8_t rom_backup[0x100] = { 0 };
 
 bool menu_task() {
     ButtonAction action = get_button_action();
@@ -317,8 +320,11 @@ bool menu_task() {
 
     // Suspend CPU
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-    spi_write(/* dest: */ 0xf000, /* pSrc: */ rom_menu_f000, sizeof(rom_menu_f000));
-    
+
+    // Save a copy of kernel ROM.
+    spi_read(/* addr: */ 0x0000, sizeof(zp_backup), zp_backup);
+    spi_read(/* addr: */ 0xff00, sizeof(rom_backup), rom_backup);
+    spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_menu_ff00, sizeof(rom_menu_ff00));    
     pet_nmi();
 
     screen_clear();
@@ -329,7 +335,10 @@ bool menu_task() {
     }
 
     // Resume CPU
-    set_cpu(/* ready */ true, /* reset */ false, /* nmi: */ false);
+    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
+    spi_write(/* addr: */ 0x0000, /* pSrc: */ zp_backup, sizeof(zp_backup));
+    spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_backup, sizeof(rom_backup));
+    pet_nmi();
 
     printf("-- Exit Menu --\n");
 
