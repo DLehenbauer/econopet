@@ -1,13 +1,19 @@
-# Rev B. TODOs
+# TODOs
 
+* Before ordering:
+  * Config DIPs
+  * 40/80 Column Switching
+  * 96K RAM (?)
+  * Try removing current limiting resistor before crystal.
+* Firmware
+  * USB keyboard bug
+  * Menu:
+    * PET keyboard control
+    * USB keyboard control
+    * Enter/Exit without reset?
+  * Commit patched PicoDVI (?)
 * HW Design
   * Swap HOLD and +5V on IDC so Pico programmer can power board?
-  * YSX321SL requires XOSC workaround:
-    * Most designs using YSX321L use 33pF
-    * Try removing/shorting resistor to see if value too large?
-    * Typical guidelines are 100 ohm + 1M parallel resistor to assist startup.
-    * Other recommendations include a "guard ring" of vias.
-    * [This project](https://github.com/Swyter/psdaptwor/tree/master) claims that 100 ohm + 33pF is "known good".  (4-layer)
   * GPIO15 for fpga_clk conflicts USB reset fix for old RP2040 silicon
 * Silkscreen
   * Front:

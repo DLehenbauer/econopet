@@ -2,4 +2,7 @@
 
 ## Links
 
-Shortened URL for Model 40/8096 Rev A: [https://is.gd/6hpvh6](https://is.gd/6hpvh6)
+Page  | Short URL
+------|----------
+Home  | [https://is.gd/FjBm6R](https://is.gd/FjBm6R)
+Rev A | [https://is.gd/6hpvh6](https://is.gd/6hpvh6)
