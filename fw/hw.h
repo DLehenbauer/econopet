@@ -14,10 +14,6 @@
 
 #pragma once
 
-// SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO for SPI.
-// (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
-#define SPI_MHZ 24
-
 #define SPI0_CSN_GP 5
 #define SPI0_SCK_GP 6
 #define SPI0_SDO_GP 7
@@ -31,6 +27,11 @@
 // When the MCU asserts CS (signalling the beginning of a new command), the FPGA asserts
 // STALL until the full command has been received and processed.
 #define SPI_STALL_GP 10
+
+// SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO for SPI.
+// (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
+#define FPGA_SPI_MHZ 24
+#define SD_SPI_MHZ 24
 
 // SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP
 #define FPGA_SPI_INSTANCE spi0

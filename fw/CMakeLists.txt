@@ -28,6 +28,9 @@ add_executable(${PROJECT_NAME}
 # 64ms provides a large tolerance.
 target_compile_definitions(${PROJECT_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
 
+# The W25Q128JV has 65,536 programmable pages of 256-bytes each, for 16 MiB total.
+target_compile_definitions(${PROJECT_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216)
+
 # Not required for RP2040B2 silicon and conflicts with use of GPIO15 (FPGA_CLK)
 # (See https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf#errata-e5)
 # target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1)

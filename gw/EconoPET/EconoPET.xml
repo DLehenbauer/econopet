@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1734713661" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1736703291" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -137,7 +137,7 @@
         <efx:param name="generate_bit" value="on" value_type="e_bool"/>
         <efx:param name="generate_bitbin" value="off" value_type="e_bool"/>
         <efx:param name="generate_hex" value="on" value_type="e_bool"/>
-        <efx:param name="generate_hexbin" value="off" value_type="e_bool"/>
+        <efx:param name="generate_hexbin" value="on" value_type="e_bool"/>
         <efx:param name="cold_boot" value="off" value_type="e_bool"/>
         <efx:param name="cascade" value="off" value_type="e_option"/>
     </efx:bitstream_generation>

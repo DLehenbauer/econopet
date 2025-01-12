@@ -48,6 +48,10 @@ void measure_freqs(uint fpga_div) {
     printf("    clk_fpga = %lu kHz\n", f_clk_sys / fpga_div);
 }
 
+static const uint8_t __in_flash(".fpga_bitstream") bitstream[] = {
+    #include "./fpga/bitstream.h"
+};
+
 void fpga_init() {
     gpio_init(FPGA_CRESET_GP);
 
@@ -77,6 +81,76 @@ void fpga_init() {
     printf("\e[2J");
     printf("Clocks initialized:\n");
     measure_freqs(fpga_div);
+
+    // Initialize FPGA_SPI at 24 MHz (default format is to SPI mode 0).
+    uint baudrate = spi_init(FPGA_SPI_INSTANCE, FPGA_SPI_MHZ * MHZ);
+    gpio_set_function(FPGA_SPI_SCK_GP, GPIO_FUNC_SPI);
+    gpio_set_function(FPGA_SPI_SDO_GP, GPIO_FUNC_SPI);
+    gpio_set_function(FPGA_SPI_SDI_GP, GPIO_FUNC_SPI);
+    printf("    fpga_spi = %u Bd\n", baudrate);
+
+    // Configure and deassert CS_N.  We configure CS_N as GPIO_OUT rather than GPIO_FUNC_SPI
+    // so we can control via software.
+    gpio_init(FPGA_SPI_CSN_GP);
+    gpio_set_dir(FPGA_SPI_CSN_GP, GPIO_OUT);
+    gpio_put(FPGA_SPI_CSN_GP, 1);
+
+    // Configure STALL.  STALL is asserted by the FPGA while it is busy processing the last SPI command.
+    gpio_init(SPI_STALL_GP);
+    gpio_set_dir(SPI_STALL_GP, GPIO_IN);
+
+    // When no programmer is attached, the onboard 100k pull-down will hold the FPGA in reset.
+    // If CRESET_N is is high, we know a JTAG programmer is attached and skip FPGA configuration.
+    if (gpio_get(FPGA_CRESET_GP)) {
+        printf("FPGA config skipped: Programmer attached.\n");
+        return;
+    }
+
+    // Create a clean CRESET_N pulse to initiate FPGA configuration.
+    gpio_init(FPGA_CRESET_GP);
+    gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
+    gpio_put(FPGA_CRESET_GP, 1);
+    sleep_ms(1);  // t_CRESET_N = 320 ns
+    gpio_put(FPGA_CRESET_GP, 0);
+    sleep_ms(1);  // t_CRESET_N = 320 ns
+
+    // Efinix requires SPI mode 3 for configuration.
+    spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+
+    // We will use this buffer of 1,000 zero bits to generate extra clock cycles at the
+    // end of configuration.  Declaring it here lets us use it to to end a single byte below.
+    const uint8_t buffer[125] = { 0 };
+    
+    // Changes in clock polarity do not seem to take effect until the next write.  Send
+    // a single byte while CS_N is deasserted to transition SCK to high.
+    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, /* len: */ 1);
+    sleep_ms(1);  // t_CRESET_N = 320 ns
+
+    // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to select passive
+    // vs. active SPI configuration.  (0 = Passive, 1 = Active)
+    gpio_put(FPGA_SPI_CSN_GP, 0);
+
+    sleep_ms(1);  // t_CRESET_N = 320 ns
+    gpio_put(FPGA_CRESET_GP, 1);
+
+    printf("FPGA: Sending %d bytes\n", sizeof(bitstream));
+    spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
+
+    // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
+    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, sizeof(buffer));
+
+    // Deassert CS_N to signal end of configuration.
+    sleep_ms(1);  // t_CRESET_N = 320 ns
+    gpio_put(FPGA_SPI_CSN_GP, 1);
+
+    // Restore SPI mode 0
+    spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    // Changes in clock polarity do not seem to take effect until the next write.  Send
+    // a single byte while CS_N is deasserted to transition SCK to low.
+    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, /* len: */ 1);
+
+    printf("FPGA: DONE\n");
 }
 
 int main() {
@@ -87,28 +161,13 @@ int main() {
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
     menu_init();    // Begin charging debouncing capacitor.
-    fpga_init();
+    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.
 
     // Deassert SD CS
     gpio_init(SD_CSN_GP);
     gpio_set_dir(SD_CSN_GP, GPIO_OUT);
     gpio_put(SD_CSN_GP, 1);
     
-    // Deassert SPI CS
-    gpio_init(FPGA_SPI_CSN_GP);
-    gpio_set_dir(FPGA_SPI_CSN_GP, GPIO_OUT);
-    gpio_put(FPGA_SPI_CSN_GP, 1);
-
-    gpio_init(SPI_STALL_GP);
-    gpio_set_dir(SPI_STALL_GP, GPIO_IN);
-
-    // Initialize SPI1 at 24 MHz.
-    uint baudrate = spi_init(FPGA_SPI_INSTANCE, SPI_MHZ * MHZ);
-    gpio_set_function(FPGA_SPI_SCK_GP, GPIO_FUNC_SPI);
-    gpio_set_function(FPGA_SPI_SDO_GP, GPIO_FUNC_SPI);
-    gpio_set_function(FPGA_SPI_SDI_GP, GPIO_FUNC_SPI);
-    printf("    spi1     = %u Bd\n", baudrate);
-
     sd_init();
     video_init();
     usb_init();

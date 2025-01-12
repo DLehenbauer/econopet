@@ -14,7 +14,7 @@ bool sd_init() {
         /* rx: */ SD_DAT_GP,
         SD_CLK_GP,
         SD_CSN_GP,
-        SPI_MHZ * MHZ,
+        SD_SPI_MHZ * MHZ,
         /* enable_crc: */ false);
 
     filesystem_t* fat = filesystem_fat_create();
