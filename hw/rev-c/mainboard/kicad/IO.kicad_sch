@@ -3932,7 +3932,7 @@
 	)
 	(wire
 		(pts
-			(xy 199.39 143.51) (xy 222.25 143.51)
+			(xy 199.39 143.51) (xy 224.79 143.51)
 		)
 		(stroke
 			(width 0)
@@ -4062,7 +4062,7 @@
 	)
 	(wire
 		(pts
-			(xy 227.33 143.51) (xy 234.95 143.51)
+			(xy 229.87 143.51) (xy 234.95 143.51)
 		)
 		(stroke
 			(width 0)
@@ -5070,9 +5070,9 @@
 		)
 		(uuid "fed6a1e7-e233-4dff-87e0-8992a65c8dd0")
 	)
-	(text "470R mitigates \"killer poke\",\nwhich configures PB5 as an output.\n\nW65C22N drives 1 CMOS load\n(or two TTL loads).\n\nBVERT is driven high/low at\n+/- 24ma by SN74LVC4245APWR."
+	(text "\"Killer Poke\" puts PB5 in contention with BVERT.\n\nW65C22N drives 1 CMOS load (~3ma).\nBVERT is driven at ~24ma by level shifter.\nI_{MAX} is ~20ma per pin CMOS, ~16ma TTL?\nCMOS rule of thumb is 220-1K Ω.\n470Ω passes ~10ma, which is further reduced\nby built-in series resistors in the W65C22N."
 		(exclude_from_sim no)
-		(at 220.472 159.258 0)
+		(at 217.678 155.702 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5713,17 +5713,6 @@
 			(justify left bottom)
 		)
 		(uuid "a7035c1b-863b-4bbf-a32a-6ebba2814e2c")
-	)
-	(label "BVERT"
-		(at 228.6 143.51 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "acffbf96-7c22-44fe-b3ed-6bf1bf2fb9a4")
 	)
 	(label "BD4"
 		(at 168.91 148.59 180)
@@ -6920,7 +6909,7 @@
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f67bca")
 		(property "Reference" "C67"
-			(at 97.79 111.76 90)
+			(at 99.06 111.76 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7076,7 +7065,7 @@
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061f7149d")
 		(property "Reference" "C69"
-			(at 198.12 85.09 90)
+			(at 199.39 85.09 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7146,7 +7135,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 224.79 143.51 90)
+		(at 227.33 143.51 90)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7155,7 +7144,7 @@
 		(dnp no)
 		(uuid "00960e07-c037-4556-806f-9baafc449772")
 		(property "Reference" "R38"
-			(at 226.822 146.05 90)
+			(at 229.108 138.43 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7164,7 +7153,7 @@
 			)
 		)
 		(property "Value" "470"
-			(at 226.822 148.082 90)
+			(at 229.108 140.462 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7173,7 +7162,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 224.79 143.51 0)
+			(at 227.33 143.51 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7181,8 +7170,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
-			(at 224.79 143.51 0)
+		(property "Datasheet" ""
+			(at 227.33 143.51 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7191,7 +7180,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 224.79 143.51 0)
+			(at 227.33 143.51 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7200,7 +7189,7 @@
 			)
 		)
 		(property "LCSC" "C25117"
-			(at 224.79 143.51 0)
+			(at 227.33 143.51 0)
 			(effects
 				(font
 					(size 1.27 1.27)

@@ -11,9 +11,9 @@
 * [LTSpice](https://www.analog.com/en/design-center/design-tools-and-calculators/ltspice-simulator.html)
   * [Parts](https://www.diyaudio.com/community/threads/a-large-free-ltspice-model-library.360086/)
 * Online calculators
+  * [Ohm's Law](https://www.calculatorology.com/ohms-law-calculator/)
   * [VIA Size Calculator](https://j.mp/via-calc)
   * [VIA Size Calculator](http://circuitcalculator.com/wordpress/2006/03/12/pcb-via-calculator/)
-  * [Resistor Calculator](https://circuitdigest.com/calculators/lm317-resistor-voltage-calculator)
   * [LM317 Calculator](https://circuitdigest.com/calculators/lm317-resistor-voltage-calculator)
   * [Switch Debounce Calculator](https://clisystems.com/tool_debounce.php)
   * [Trace Width Calculator](https://www.digikey.com/en/resources/conversion-calculators/conversion-calculator-pcb-trace-width)
