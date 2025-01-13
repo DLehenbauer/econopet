@@ -23,15 +23,15 @@ module delta_sigma_dac (
     output logic               dac_o
 );
     // Convert signed 16-bit input to unsigned biased.
-    wire  [15:0] s16 = dac_i + 16'h8000;
+    wire  [15:0] u16 = dac_i + 16'h8000;
     logic [16:0] accumulator = '0;
 
     always_ff @(posedge clk_i) begin
         if (reset_i) begin
             accumulator <= '0;
         end else begin
-            // Add the current desired output 's16' to the accumulator's lower 16 bits.
-            accumulator <= accumulator[15:0] + s16;
+            // Add the current desired output 'u16' to the accumulator's lower 16 bits.
+            accumulator <= accumulator[15:0] + u16;
         end
     end
 
@@ -59,6 +59,7 @@ module audio (
     // See http://www.cbmhardware.de/show.php?r=14&id=71/PETSID
     logic signed [15:0] sid_out;
 
+    // TODO: 'iRst' doesn't seem to stop audio from playing?
     sid #(
         .POT_SUPPORT(0)
     ) sid (
