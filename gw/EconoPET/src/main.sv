@@ -56,9 +56,12 @@ module main (
     output logic pia2_cs_o,
     output logic via_cs_o,
 
+    // Config from DIP switch
+    input logic config_crt_i,       // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
+
     // Video
-    input  logic config_crt_i,  // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
-    input  logic graphic_i,     // VIA CA2 pin 39: Character ROM A10 (0 = graphics, 1 = text)
+    input  logic graphic_i,         // VIA CA2 pin 39: Character ROM A10 (0 = graphics, 1 = text)
     output logic v_sync_o,
     output logic h_sync_o,
     output logic video_o,
@@ -69,17 +72,17 @@ module main (
     output logic audio_o,
 
     // SPI buses
-    input  logic spi0_cs_ni,    // (CS)  Chip Select (active low)
-    input  logic spi0_sck_i,    // (SCK) Serial Clock
-    input  logic spi0_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi0_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi0_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,        // (SCK) Serial Clock
+    input  logic spi0_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
     
-    input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,    // (SCK) Serial Clock
-    input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,        // (SCK) Serial Clock
+    input  logic spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
 
-    output logic spi_stall_o    // Flow control for SPI (0 = Ready, 1 = Busy)
+    output logic spi_stall_o        // Flow control for SPI (0 = Ready, 1 = Busy)
 );
     // WB Bus Declarations
 
@@ -113,6 +116,7 @@ module main (
     // SPI <-> Wishbone Bridge
     //
 
+    // TODO: At the moment, this is actually connected to the RP2040's SPI0 bus.  Rename or move?
     logic [WB_ADDR_WIDTH-1:0] spi1_addr;
     logic [   DATA_WIDTH-1:0] spi1_din;     // Peripheral -> SPI1 (WE=0)
     logic [   DATA_WIDTH-1:0] spi1_dout;    // SPI1 -> Peripheral (WE=1)
@@ -224,11 +228,19 @@ module main (
         .wb_stall_o(reg_wb_stall),
         .wb_sel_i(reg_wb_sel),
 
+        // Status register
+        .video_graphic_i(graphic_i),
+        .config_crt_i(config_crt_i),
+        .config_keyboard_i(config_keyboard_i),
+
+        // CPU control register
         .cpu_ready_o(cpu_ready_o),
         .cpu_reset_o(cpu_reset_o),
         .cpu_nmi_o(cpu_nmi_o),
-        .video_graphic_i(graphic_i),
+
+        // Video control register
         .video_col_80_mode_o(video_col_80_mode),
+
         .video_ram_mask_o(video_ram_mask)
     );
 

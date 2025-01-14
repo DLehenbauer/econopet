@@ -146,7 +146,7 @@ package common_pkg;
                CRTC_R7_V_SYNC_POS         = 7,   // [6:0] Selects the character row time at which the VSYNC pulse is desired to occur and, thus,
                                                  //       is used to position the displayed text in the vertical direction.
 
-               CRTC_R8_MODE_CONTREL       = 8,   // [7:0] Selects operating mode [Not implemented]
+               CRTC_R8_MODE_CONTROL       = 8,   // [7:0] Selects operating mode [Not implemented]
                                                  //
                                                  //       [0] Must be 0
                                                  //       [1] Not used
@@ -247,17 +247,21 @@ package common_pkg;
     // Register file
     //
 
-    // Register 0: CPU control
-    localparam int unsigned REG_CPU                 = 0;
+    // Register 0: Status (Read-only)
+    localparam int unsigned REG_STATUS              = 0;
+    localparam int unsigned REG_STATUS_GRAPHICS_BIT = 0;    // VIA CA2 (0 = graphics, 1 = text)
+    localparam int unsigned REG_STATUS_CRT_BIT      = 1;    // Diagonal CRT size (0 = 12", 1 = 9")
+    localparam int unsigned REG_STATUS_KEYBOARD_BIT = 2;    // Keyboard Type (0 = Business, 1 = Graphics)
+
+    // Register 1: CPU control
+    localparam int unsigned REG_CPU                 = 1;
     localparam int unsigned REG_CPU_READY_BIT       = 0;
     localparam int unsigned REG_CPU_RESET_BIT       = 1;
     localparam int unsigned REG_CPU_NMI_BIT         = 2;
-
     
-    // Register 1: Video
-    localparam int unsigned REG_VIDEO               = 1;
+    // Register 2: Video Control
+    localparam int unsigned REG_VIDEO               = 2;
     localparam int unsigned REG_VIDEO_COL_80_BIT    = 0;
-    localparam int unsigned REG_VIDEO_GRAPHICS_BIT  = 1;  // VIA CA2 (0 = graphics, 1 = text)
 
     localparam int unsigned REG_COUNT               = REG_VIDEO + 1'b1;
 
@@ -272,6 +276,8 @@ package common_pkg;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
     localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT - 1'b1);
 
+    // TODO: Consider arranging our address space such that the MCU can read VRAM,
+    //       keyboard status, and the status register in a single SPI transaction.
     localparam WB_RAM_BASE  = 3'b000;
     localparam WB_REG_BASE  = 4'b0100;
     localparam WB_CRTC_BASE = 4'b0101;

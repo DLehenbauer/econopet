@@ -30,13 +30,17 @@ module register_file(
     output logic                     wb_ack_o,
     input  logic                     wb_sel_i,              // Asserted when selected by 'wb_addr_i'
 
+    // Status register
+    input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
+    input  logic                     config_crt_i,          // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    input  logic                     config_keyboard_i,     // Keyboard type (0 = Business, 1 = Graphics)
+
     // CPU register
     output logic                     cpu_ready_o,
     output logic                     cpu_reset_o,
     output logic                     cpu_nmi_o,
 
     // Video register
-    input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
     output logic                     video_col_80_mode_o,
     output logic [11:10]             video_ram_mask_o
 );
@@ -45,6 +49,10 @@ module register_file(
     initial begin
         wb_ack_o   = '0;
 
+        register[REG_STATUS][REG_STATUS_GRAPHICS_BIT] = 1'b0;
+        register[REG_STATUS][REG_STATUS_CRT_BIT]      = 1'b0;
+        register[REG_STATUS][REG_STATUS_KEYBOARD_BIT] = 1'b0;
+
         // CPU state at power on:
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;    // Not ready
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;    // Reset
@@ -52,7 +60,6 @@ module register_file(
 
         // Video state at power on: 40 column mode, graphics
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT] = 1'b0;
-        register[REG_VIDEO][REG_VIDEO_GRAPHICS_BIT] = 1'b0;
 
         video_ram_mask_o[11:10] = 2'b00;
     end
@@ -75,7 +82,9 @@ module register_file(
             // Refresh status registers while not in a wishbone cycle.  This happens at
             // 64 MHz, which is guaranteed to restore overwritten status bits before
             // we process the next SPI command.
-            register[REG_VIDEO][REG_VIDEO_GRAPHICS_BIT] <= video_graphic_i;
+            //
+            // Order must match bit order declared in common_pkg.svh.
+            register[REG_STATUS] <= { 5'b0000_0, config_keyboard_i, config_crt_i, video_graphic_i};
         end
     end
 

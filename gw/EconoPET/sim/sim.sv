@@ -12,18 +12,18 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`define TEST_WB_MUX
-`define TEST_VIDEO
-`define TEST_VIDEO_CRTC
-`define TEST_VIDEO_CRTC_REG
-`define TEST_KEYBOARD
+// `define TEST_WB_MUX
+// `define TEST_VIDEO
+// `define TEST_VIDEO_CRTC
+// `define TEST_VIDEO_CRTC_REG
+// `define TEST_KEYBOARD
 `define TEST_REGISTER_FILE
-`define TEST_TIMING
-`define TEST_SPI
-`define TEST_SPI1
-`define TEST_RAM
-`define TEST_BRAM
-`define TEST_TOP
+// `define TEST_TIMING
+// `define TEST_SPI
+// `define TEST_SPI1
+// `define TEST_RAM
+// `define TEST_BRAM
+// `define TEST_TOP
 
 module sim;
 `ifdef TEST_WB_MUX

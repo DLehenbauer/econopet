@@ -25,21 +25,29 @@
 
 #define ADDR_KBD (0b011 << 17)
 
-#define ADDR_REG  (0b010 << 17)
-#define REG_CPU   (ADDR_REG | 0x00000)
-#define REG_VIDEO (ADDR_REG | 0x00001)
+// Register File
+#define ADDR_REG    (0b010 << 17)
+#define REG_STATUS  (ADDR_REG | 0x00000)
+#define REG_CPU     (ADDR_REG | 0x00001)
+#define REG_VIDEO   (ADDR_REG | 0x00002)
 
+// Status Register
+#define REG_STATUS_GRAPHICS   (1 << 0)
+#define REG_STATUS_CRT        (1 << 1)
+#define REG_STATUS_KEYBOARD   (1 << 2)
+
+// CPU Control Register
 #define REG_CPU_READY (1 << 0)
 #define REG_CPU_RESET (1 << 1)
 #define REG_CPU_NMI   (1 << 2)
 
+// Video Control Register
 #define REG_VIDEO_80_COL_MODE (1 << 0)
-#define REG_VIDEO_GRAPHICS    (1 << 1)
 
 void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
 
-    // The PrimeCell SSP deasserts CS after each byte is transmitted, which conflicts with the
+    // The PrimeCell SSP deasserts CS after each byte is transmitted.  This conflicts with the
     // FPGA SPI state machine, which relies on CS for framing the command.
     //
     // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
@@ -50,7 +58,7 @@ void cmd_start() {
 void cmd_end() {
     while (gpio_get(SPI_STALL_GP));
 
-    // The PrimeCell SSP deasserts CS after each byte is transmitted, which conflicts with the
+    // The PrimeCell SSP deasserts CS after each byte is transmitted.  This conflicts with the
     // FPGA SPI state machine, which relies on CS for framing the command.
     //
     // As a workaround, we control the CS signal manually (but use the PrimeCell SSP for the
@@ -140,6 +148,6 @@ void set_video(bool col80) {
 
 void sync_state() {
     spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
-    uint8_t video_state = spi_read_at(REG_VIDEO);
-    video_graphics = (video_state & REG_VIDEO_GRAPHICS) != 0;
+    uint8_t status = spi_read_at(REG_STATUS);
+    video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
 }

@@ -67,26 +67,26 @@ module top #(
 
     // IO
     output logic io_oe_n_o,
-    output logic pia1_cs_n_o,   // (CS2B)
-    output logic pia2_cs_n_o,   // (CS2B)
-    output logic via_cs_n_o,    // (CS2B)
+    output logic pia1_cs_n_o,       // (CS2B)
+    output logic pia2_cs_n_o,       // (CS2B)
+    output logic via_cs_n_o,        // (CS2B)
 
     // SPI buses
-    input  logic spi0_cs_ni,    // (CS)  Chip Select (active low)
-    input  logic spi0_sck_i,    // (SCK) Serial Clock
-    input  logic spi0_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi0_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi0_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,        // (SCK) Serial Clock
+    input  logic spi0_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
     
-    input  logic spi1_cs_ni,    // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,    // (SCK) Serial Clock
-    input  logic spi1_sd_i,     // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,     // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,        // (SCK) Serial Clock
+    input  logic spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
 
-    output logic spi_stall_o,   // Flow control for SPI (0 = Ready, 1 = Busy)
+    output logic spi_stall_o,       // Flow control for SPI (0 = Ready, 1 = Busy)
 
-    // Config
-    input logic config_crt_i,   // (0 = 12", 1 = 9")
-    input logic config_kbd_i,   // (0 = Business, 1 = Graphics)
+    // Config from DIP switch
+    input logic config_crt_i,       // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
 
     // Video
     input  logic graphic_i,
@@ -238,6 +238,9 @@ module top #(
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
         .audio_o(audio_o),
+
+        // Keyboard
+        .config_keyboard_i(config_keyboard_i),
 
         // SPI
         .spi0_cs_ni(spi0_cs_ni),
