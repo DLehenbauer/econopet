@@ -25,6 +25,7 @@
 #include "video/video.h"
 
 static bool isBusinessKeyboard = false;
+static bool hasCRTC = true;
 static bool is50Hz = true;
 
 void measure_freqs(uint fpga_div) {
@@ -171,6 +172,10 @@ int main() {
     sd_init();
     video_init();
     usb_init();
+
+    get_model(&hasCRTC, &isBusinessKeyboard);
+    printf("Model: %s / %s\n", hasCRTC ? "CRTC" : "No CRTC", isBusinessKeyboard ? "Business Keyboard" : "Graphics Keyboard");
+
     pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
 
     while (true) {

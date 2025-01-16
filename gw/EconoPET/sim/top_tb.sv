@@ -89,7 +89,6 @@ module top_tb;
         end
 
         $display("[%t] End USB Keyboard Test", $time);
-        $finish;
     endtask
 
     task static crtc_write_test;
@@ -133,6 +132,34 @@ module top_tb;
         $display("[%t] End SID Write Test", $time);
     endtask
 
+    task static register_file_test;
+        logic [     DATA_WIDTH-1:0] dout;
+
+        $display("[%t] Begin RegisterFile Test", $time);
+
+        mock_system.set_config(/* crt */ 0, /* keyboard */ 0);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        `assert_equal(dout[REG_STATUS_CRT_BIT], 1'b0);
+        `assert_equal(dout[REG_STATUS_KEYBOARD_BIT], 1'b0);
+
+        mock_system.set_config(/* crt */ 1, /* keyboard */ 0);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        `assert_equal(dout[REG_STATUS_CRT_BIT], 1'b1);
+        `assert_equal(dout[REG_STATUS_KEYBOARD_BIT], 1'b0);
+
+        mock_system.set_config(/* crt */ 0, /* keyboard */ 1);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        `assert_equal(dout[REG_STATUS_CRT_BIT], 1'b0);
+        `assert_equal(dout[REG_STATUS_KEYBOARD_BIT], 1'b1);
+
+        mock_system.set_config(/* crt */ 1, /* keyboard */ 1);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        `assert_equal(dout[REG_STATUS_CRT_BIT], 1'b1);
+        `assert_equal(dout[REG_STATUS_KEYBOARD_BIT], 1'b1);
+
+        $display("[%t] End RegisterFile Test", $time);
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] cpu_dout;
         int count;
@@ -146,6 +173,7 @@ module top_tb;
         usb_keyboard_test;
         crtc_write_test;
         sid_write_test;
+        register_file_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;

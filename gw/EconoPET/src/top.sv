@@ -228,7 +228,7 @@ module top #(
         .via_cs_o(via_cs_o),
 
         // Video
-        .config_crt_i(1'b0),        // TODO: Connect to 'config_crt_i'.  Forcing CRTC for now.
+        .config_crt_i(config_crt_i),
         .graphic_i(graphic_i),
         .h_sync_o(h_sync_o),
         .v_sync_o(v_sync_o),

@@ -146,6 +146,14 @@ void set_video(bool col80) {
     spi_write_at(REG_VIDEO, state);
 }
 
+void get_model(bool* crtc, bool* business) {
+    uint8_t status = spi_read_at(REG_STATUS);
+
+    // DIP switch is active low
+    *crtc = (status & REG_STATUS_CRT) == 0;             // (0 = 12" / CRTC / 20kHz, 1 = 9" / NoCRTC / 15kHz)
+    *business = (status & REG_STATUS_KEYBOARD) == 0;    // (0 = Business Keyboard, 1 = Graphics Keyboard)
+}
+
 void sync_state() {
     spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
     uint8_t status = spi_read_at(REG_STATUS);

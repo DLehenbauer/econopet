@@ -30,3 +30,4 @@ void spi_write_next(uint8_t data);
 void set_cpu(bool ready, bool reset, bool nmi);
 void set_video(bool col80);
 void sync_state();
+void get_model(bool* crtc, bool* business);

@@ -73,6 +73,10 @@ module mock_system (
     // Video
     logic video_graphics = 1'b0;
 
+    // Config
+    logic config_crt = 1'b0;
+    logic config_keyboard = 1'b0;
+
     top top (
         .sys_clock_i(sys_clock),
 
@@ -109,7 +113,10 @@ module mock_system (
         .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
-        .graphic_i(video_graphics)
+        .graphic_i(video_graphics),
+
+        .config_crt_i(config_crt),
+        .config_keyboard_i(config_keyboard)
     );
 
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
@@ -267,6 +274,14 @@ module mock_system (
         input logic [    DATA_WIDTH-1:0] data_i
     );
         mock_cpu.write(addr_i, data_i);
+    endtask
+
+    task static set_config(
+        input logic crt,
+        input logic keyboard
+    );
+        config_crt = crt;
+        config_keyboard = keyboard;
     endtask
 
     task static init;
