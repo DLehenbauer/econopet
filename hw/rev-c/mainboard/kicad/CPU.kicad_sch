@@ -6253,7 +6253,7 @@
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "5adfbe75-0f57-4bb2-a663-fab6b20ad684")
 		(property "Reference" "C5"
 			(at 110.2868 182.9816 0)
@@ -6786,7 +6786,7 @@
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "bc68d6d4-f945-497c-b7a1-b5400016cfe7")
 		(property "Reference" "C4"
 			(at 140.7668 182.9816 0)

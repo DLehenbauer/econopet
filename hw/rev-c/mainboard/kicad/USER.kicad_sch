@@ -2258,7 +2258,7 @@
 	)
 	(wire
 		(pts
-			(xy 55.88 86.36) (xy 55.88 80.01)
+			(xy 82.55 77.47) (xy 82.55 74.93)
 		)
 		(stroke
 			(width 0)
@@ -2276,6 +2276,16 @@
 		)
 		(uuid "337d1242-91ab-4446-8b9e-7609c6a49e3c")
 	)
+	(wire
+		(pts
+			(xy 67.31 72.39) (xy 67.31 90.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "33d37282-df9b-450c-8206-94709f95eb56")
+	)
 	(bus
 		(pts
 			(xy 142.24 92.71) (xy 142.24 95.25)
@@ -2288,7 +2298,7 @@
 	)
 	(wire
 		(pts
-			(xy 71.12 86.36) (xy 55.88 86.36)
+			(xy 82.55 77.47) (xy 72.39 77.47)
 		)
 		(stroke
 			(width 0)
@@ -2398,7 +2408,7 @@
 	)
 	(wire
 		(pts
-			(xy 68.58 81.28) (xy 71.12 81.28)
+			(xy 69.85 69.85) (xy 72.39 69.85)
 		)
 		(stroke
 			(width 0)
@@ -2415,16 +2425,6 @@
 			(type default)
 		)
 		(uuid "7684f860-395c-40b3-8cc0-a644dcdbc220")
-	)
-	(wire
-		(pts
-			(xy 66.04 90.17) (xy 118.11 90.17)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7b38ffb5-6a61-4c8f-8406-5036824a9b06")
 	)
 	(wire
 		(pts
@@ -2468,7 +2468,7 @@
 	)
 	(wire
 		(pts
-			(xy 71.12 83.82) (xy 66.04 83.82)
+			(xy 72.39 72.39) (xy 67.31 72.39)
 		)
 		(stroke
 			(width 0)
@@ -2485,6 +2485,16 @@
 			(type default)
 		)
 		(uuid "a10bee50-c23b-4903-a3ec-c645408e26fa")
+	)
+	(wire
+		(pts
+			(xy 72.39 77.47) (xy 72.39 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a8157d8a-2194-446f-b31f-7c78a2197ae1")
 	)
 	(wire
 		(pts
@@ -2548,6 +2558,16 @@
 	)
 	(wire
 		(pts
+			(xy 67.31 90.17) (xy 118.11 90.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "babea624-593e-4ac9-a709-b36d7d770a10")
+	)
+	(wire
+		(pts
 			(xy 118.11 118.11) (xy 124.46 118.11)
 		)
 		(stroke
@@ -2565,16 +2585,6 @@
 			(type default)
 		)
 		(uuid "c592a574-7d29-4c5b-bd6e-fb4ec06e6722")
-	)
-	(wire
-		(pts
-			(xy 66.04 83.82) (xy 66.04 90.17)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "cbb194c7-9cb2-4d2c-b627-246ced538c98")
 	)
 	(wire
 		(pts
@@ -2718,7 +2728,7 @@
 	)
 	(text "The jumper allows partial compatibility with\nVIC-20 and C64 user port peripherals by\ndelivering +5V on PIN_2 instead of PET video."
 		(exclude_from_sim no)
-		(at 47.752 98.044 0)
+		(at 54.61 60.198 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -3060,7 +3070,7 @@
 	)
 	(hierarchical_label "BVIDEO"
 		(shape input)
-		(at 68.58 81.28 180)
+		(at 69.85 69.85 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3763,7 +3773,7 @@
 	)
 	(symbol
 		(lib_id "Connector:Conn_01x03_Pin")
-		(at 76.2 83.82 0)
+		(at 77.47 72.39 0)
 		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
@@ -3772,7 +3782,7 @@
 		(dnp no)
 		(uuid "c35bbe9d-13a2-45fc-b117-bef77a122f40")
 		(property "Reference" "J12"
-			(at 73.152 75.438 0)
+			(at 74.422 64.008 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3780,7 +3790,7 @@
 			)
 		)
 		(property "Value" "VIDEO_OR_5V"
-			(at 73.152 77.978 0)
+			(at 74.422 66.548 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3788,7 +3798,7 @@
 			)
 		)
 		(property "Footprint" "EconoPET:PinHeader_1x03_P2.54mm_Vertical_or_SolderJumper"
-			(at 76.2 83.82 0)
+			(at 77.47 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3797,7 +3807,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 76.2 83.82 0)
+			(at 77.47 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3806,7 +3816,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x03, script generated"
-			(at 76.2 83.82 0)
+			(at 77.47 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3900,7 +3910,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 55.88 80.01 0)
+		(at 82.55 74.93 0)
 		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
@@ -3909,7 +3919,7 @@
 		(dnp no)
 		(uuid "d50248b6-83ef-4da3-809d-d049b5613651")
 		(property "Reference" "#PWR0117"
-			(at 55.88 83.82 0)
+			(at 82.55 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3918,7 +3928,7 @@
 			)
 		)
 		(property "Value" "+5V"
-			(at 53.975 75.565 0)
+			(at 82.55 70.358 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3926,7 +3936,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 55.88 80.01 0)
+			(at 82.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3935,7 +3945,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 55.88 80.01 0)
+			(at 82.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3944,7 +3954,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 55.88 80.01 0)
+			(at 82.55 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
