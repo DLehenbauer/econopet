@@ -66,12 +66,12 @@ typedef struct {
 #define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
 
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
-static uint8_t key_buffer_head = 0;
-static uint8_t key_buffer_tail = 0;
+static uint8_t key_buffer_next_write_index = 0;
+static uint8_t key_buffer_next_read_index = 0;
 
 static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
-    uint8_t newHead = (key_buffer_head + 1) & KEY_BUFFER_CAPACITY_MASK;
-    if (newHead != key_buffer_tail) {
+    uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+    if (new_write_index != key_buffer_next_read_index) {
         KeyEvent keyEvent = {
             .dev_addr = dev_addr,
             .key = keycode,
@@ -80,13 +80,23 @@ static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t row, ui
             .modifiers = modifiers,
             .pressed = pressed,
         };
-        key_buffer[key_buffer_head] = keyEvent;
-        key_buffer_head = newHead;
+        key_buffer[key_buffer_next_write_index] = keyEvent;
+        key_buffer_next_write_index = new_write_index;
     }
 }
 
+static bool peek_key_event(KeyEvent* keyEvent) {
+    *keyEvent = key_buffer[key_buffer_next_read_index];
+    return key_buffer_next_write_index != key_buffer_next_read_index;
+}
+
+static void dequeue_key_event() {
+    assert(key_buffer_next_write_index != key_buffer_next_read_index);
+    key_buffer_next_read_index = (key_buffer_next_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+}
+
 static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
-    uint8_t i = (key_buffer_head - 1) & KEY_BUFFER_CAPACITY_MASK;
+    uint8_t i = (key_buffer_next_write_index - 1) & KEY_BUFFER_CAPACITY_MASK;
 
     // Scan backwards through the key_buffer to find the most recent key press event for the given key.
     do {
@@ -97,7 +107,7 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
         }
 
         i = (i - 1) & KEY_BUFFER_CAPACITY_MASK;
-    } while (i != key_buffer_head);
+    } while (i != key_buffer_next_write_index);
 
     printf("USB: Key up %d=(not found)\n", keycode);
 }
@@ -128,16 +138,6 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
     }
 
     enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ true);
-}
-
-static bool peek_key_event(KeyEvent* keyEvent) {
-    *keyEvent = key_buffer[key_buffer_tail];
-    return key_buffer_head != key_buffer_tail;
-}
-
-static void dequeue_key_event() {
-    assert(key_buffer_head != key_buffer_tail);
-    key_buffer_tail = (key_buffer_tail + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
 static bool shift_lock_enabled = false;
@@ -268,7 +268,7 @@ void dispatch_key_events() {
 }
 
 static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keycode) {
-    for (uint8_t i = 0; i < 6; i++) {
+    for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         if (report->keycode[i] == keycode) {
             return true;
         }
@@ -278,18 +278,22 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
 }
 
 void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
-    static hid_keyboard_report_t prev_report = {0, 0, {0}};
+    static hid_keyboard_report_t prev_report = {
+        .modifier = 0,
+        .reserved = 0,
+        .keycode = { 0, 0, 0, 0, 0, 0 },
+    };
 
     const uint8_t modifiers = report->modifier;
 
-    for (uint8_t i = 0; i < 6; i++) {
+    for (uint8_t i = 0; i < sizeof(prev_report.keycode); i++) {
         const uint8_t keycode = prev_report.keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
             enqueue_key_up(dev_addr, keycode, modifiers);
         }
     }
 
-    for (uint8_t i = 0; i < 6; i++) {
+    for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
             enqueue_key_down(dev_addr, keycode, modifiers);
