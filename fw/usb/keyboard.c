@@ -52,6 +52,34 @@ static const uint8_t __in_flash(".keymap_grus_sym") keymap_grus_sym[] = {
 
 static const KeyInfo* s_keymap = (KeyInfo*)((void*) keymap_grus_sym);
 
+typedef enum KeyStateFlags {
+    KEYSTATE_PRESSED_FLAG = (1 << 0),
+    KEYSTATE_SHIFTED_FLAG = (1 << 1),
+};
+
+static unsigned int key_state_vector[0x200 / (sizeof(unsigned int) * 4)] = { 0 };
+
+void reset_key_state(uint8_t keycode, bool* pressed, bool* shifted) {
+    unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
+    unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
+    unsigned int flags = key_state_vector[keycode / (sizeof(unsigned int) * 4)] >> bit_index;
+    pressed = flags & KEYSTATE_PRESSED_FLAG;
+    shifted = flags & KEYSTATE_SHIFTED_FLAG;
+    key_state_vector[keycode / (sizeof(unsigned int) * 4)] &= ~(0b11 << bit_index);
+}
+
+void set_key_state(uint8_t keycode, bool pressed, bool shifted) {
+    unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
+    unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
+
+    unsigned int flags = 0;
+    if (pressed) { flags |= KEYSTATE_PRESSED_FLAG; }
+    if (shifted) { flags |= KEYSTATE_SHIFTED_FLAG; }
+
+    key_state_vector[keycode / (sizeof(unsigned int) * 4)] &= ~(0b11 << bit_index);
+    key_state_vector[keycode / (sizeof(unsigned int) * 4)] |= flags << bit_index;
+}
+
 typedef struct {
     uint8_t dev_addr;       // USB device address of keyboard
     uint8_t key;            // USB HID keycode
@@ -96,20 +124,30 @@ static void dequeue_key_event() {
 }
 
 static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
-    uint8_t i = (key_buffer_next_write_index - 1) & KEY_BUFFER_CAPACITY_MASK;
+    bool is_shifted;
+    bool is_pressed;
+    reset_key_state(keycode, &is_pressed, &is_shifted);
 
-    // Scan backwards through the key_buffer to find the most recent key press event for the given key.
-    do {
-        KeyEvent keyEvent = key_buffer[i];
-        if (keyEvent.key == keycode && keyEvent.pressed) {
-            enqueue_key_event(dev_addr, keycode, keyEvent.row, keyEvent.col, modifiers, /* pressed: */ false);
-            return;
-        }
+    if (!is_pressed) {
+        printf("USB: Key up %d=(not found)\n", keycode);
+        return;
+    }
 
-        i = (i - 1) & KEY_BUFFER_CAPACITY_MASK;
-    } while (i != key_buffer_next_write_index);
+    KeyInfo keyInfo = s_keymap[
+        is_shifted
+            ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
+            : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
 
-    printf("USB: Key up %d=(not found)\n", keycode);
+    const uint8_t row = keyInfo.row;
+
+    if (row > 7) {
+        printf("USB: Key up %d=(undefined)\n", keycode);
+        return;
+    }
+
+    const uint8_t col = keyInfo.col;
+
+    enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ false);
 }
 
 static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
@@ -120,14 +158,14 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
             ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
             
-    uint8_t row = keyInfo.row;
+    const uint8_t row = keyInfo.row;
 
     if (row > 7) {
         printf("USB: Key down %d=(undefined)\n", keycode);
         return;
     }
 
-    uint8_t col = keyInfo.col;
+    const uint8_t col = keyInfo.col;
 
     if (keyInfo.shift) { 
         modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
@@ -138,6 +176,7 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
     }
 
     enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ true);
+    set_key_state(keycode, /* pressed: */ true, is_shifted);
 }
 
 static bool shift_lock_enabled = false;
