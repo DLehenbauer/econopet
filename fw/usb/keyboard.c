@@ -60,24 +60,24 @@ typedef enum KeyStateFlags {
 static unsigned int key_state_vector[0x200 / (sizeof(unsigned int) * 4)] = { 0 };
 
 void reset_key_state(uint8_t keycode, bool* pressed, bool* shifted) {
-    unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
-    unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
-    unsigned int flags = key_state_vector[keycode / (sizeof(unsigned int) * 4)] >> bit_index;
-    pressed = flags & KEYSTATE_PRESSED_FLAG;
-    shifted = flags & KEYSTATE_SHIFTED_FLAG;
+    const unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
+    const unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
+    const unsigned int flags = key_state_vector[vector_index] >> bit_index;
+    *pressed = flags & KEYSTATE_PRESSED_FLAG;
+    *shifted = flags & KEYSTATE_SHIFTED_FLAG;
     key_state_vector[keycode / (sizeof(unsigned int) * 4)] &= ~(0b11 << bit_index);
 }
 
 void set_key_state(uint8_t keycode, bool pressed, bool shifted) {
-    unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
-    unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
+    const unsigned int vector_index = keycode / (sizeof(unsigned int) * 4);
+    const unsigned int bit_index = keycode % (sizeof(unsigned int) * 4);
 
     unsigned int flags = 0;
     if (pressed) { flags |= KEYSTATE_PRESSED_FLAG; }
     if (shifted) { flags |= KEYSTATE_SHIFTED_FLAG; }
 
-    key_state_vector[keycode / (sizeof(unsigned int) * 4)] &= ~(0b11 << bit_index);
-    key_state_vector[keycode / (sizeof(unsigned int) * 4)] |= flags << bit_index;
+    key_state_vector[vector_index] &= ~(0b11 << bit_index);
+    key_state_vector[vector_index] |= flags << bit_index;
 }
 
 typedef struct {
