@@ -256,10 +256,16 @@ module main (
     logic io_en;
     logic crtc_en;
     logic is_vram;
+    logic decoded_a15;
+    logic decoded_a16;
 
     address_decoding address_decoding (
+        .sys_clock_i(sys_clock_i),
+        
         .cpu_be_i(cpu_be_o),
-        .addr_i(cpu_addr_i),
+        .cpu_wr_strobe_i(cpu_we_i && cpu_wr_strobe),
+        .cpu_addr_i(cpu_addr_i),
+        .cpu_data_i(cpu_data_i),
 
         .ram_en_o(ram_en),
         .pia1_en_o(pia1_en),
@@ -272,7 +278,10 @@ module main (
 
         // Not yet used
         .magic_en_o(),
-        .is_rom_o()
+        .is_rom_o(),
+
+        .decoded_a15_o(decoded_a15),
+        .decoded_a16_o(decoded_a16)
     );
 
     //
@@ -483,8 +492,8 @@ module main (
 
     // When the CPU is driving the bus, the control register at $FFF0 control
     // the memory mapping for the upper 64k expansion.
-    assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
-    assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : ram_ctl_addr[16];
+    assign ram_addr_a15_o   = cpu_be_o ? decoded_a15 : cpu_addr_o[15];
+    assign ram_addr_a16_o   = cpu_be_o ? decoded_a16 : ram_ctl_addr[16];
 
     // synthesis off
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin

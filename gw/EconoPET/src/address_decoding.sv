@@ -12,24 +12,31 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-
 `include "./src/common_pkg.svh"
 
 import common_pkg::*;
 
-module address_decoding(
-    input  logic cpu_be_i,
-    input  logic [CPU_ADDR_WIDTH-1:0] addr_i,
-    output logic ram_en_o,
-    output logic sid_en_o,
-    output logic magic_en_o,
-    output logic pia1_en_o,
-    output logic pia2_en_o,
-    output logic via_en_o,
-    output logic crtc_en_o,
-    output logic io_en_o,
-    output logic is_vram_o,
-    output logic is_rom_o
+module address_decoding (
+    input  logic                      sys_clock_i,
+
+    input  logic                      cpu_be_i,
+    input  logic                      cpu_wr_strobe_i,
+    input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
+    input  logic [    DATA_WIDTH-1:0] cpu_data_i,
+
+    output logic                      ram_en_o,
+    output logic                      sid_en_o,
+    output logic                      magic_en_o,
+    output logic                      pia1_en_o,
+    output logic                      pia2_en_o,
+    output logic                      via_en_o,
+    output logic                      crtc_en_o,
+    output logic                      io_en_o,
+    output logic                      is_vram_o,
+    output logic                      is_rom_o,
+
+    output logic                     decoded_a15_o,
+    output logic                     decoded_a16_o
 );
     localparam RAM_EN_BIT       = 0,
                SID_EN_BIT       = 1,
@@ -72,7 +79,7 @@ module address_decoding(
         if (!cpu_be_i) begin
             select = NONE;
         end else begin
-            priority casez (addr_i)
+            priority casez (cpu_addr_i)
                 // PET memory map
                 CPU_ADDR_WIDTH'('b0???_????_????_????): select = RAM;    // RAM   : 0000-7FFF
                 CPU_ADDR_WIDTH'('b1000_1111_????_????): select = SID;    // SID   : 8F00-8FFF
@@ -87,15 +94,18 @@ module address_decoding(
         end
     end
 
-    assign ram_en_o       = select[RAM_EN_BIT];
-    assign is_rom_o       = select[IS_ROM_BIT];
-    assign is_vram_o      = select[IS_VRAM_BIT];
+    assign ram_en_o         = select[RAM_EN_BIT];
+    assign is_rom_o         = select[IS_ROM_BIT];
+    assign is_vram_o        = select[IS_VRAM_BIT];
 
-    assign sid_en_o       = select[SID_EN_BIT];
-    assign magic_en_o     = select[MAGIC_EN_BIT];
-    assign io_en_o        = select[IO_EN_BIT];
-    assign pia1_en_o      = select[PIA1_EN_BIT];
-    assign pia2_en_o      = select[PIA2_EN_BIT];
-    assign via_en_o       = select[VIA_EN_BIT];
-    assign crtc_en_o      = select[CRTC_EN_BIT];
+    assign sid_en_o         = select[SID_EN_BIT];
+    assign magic_en_o       = select[MAGIC_EN_BIT];
+    assign io_en_o          = select[IO_EN_BIT];
+    assign pia1_en_o        = select[PIA1_EN_BIT];
+    assign pia2_en_o        = select[PIA2_EN_BIT];
+    assign via_en_o         = select[VIA_EN_BIT];
+    assign crtc_en_o        = select[CRTC_EN_BIT];
+
+    assign decoded_a15_o    = cpu_addr_i[15];
+    assign decoded_a16_o    = 1'b0;
 endmodule
