@@ -59,12 +59,12 @@ module memory_control (
 
         if (mem_ctl[MEM_CTL_ENABLE]) begin
             unique casez (cpu_addr_i)
-                CPU_ADDR_WIDTH'('b1000_????_????_????): begin   // $8000-$BFFF: Lower bank (0/1)
+                CPU_ADDR_WIDTH'('b10??_????_????_????): begin   // $8000-$BFFF: Lower bank (0/1)
                     bank_en_o  = !(screen_peek && mem_ctl[MEM_CTL_SCREEN_PEEK]);
                     bank_a15_o = mem_ctl[MEM_CTL_SELECT_LO];
                     bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_LO];
                 end
-                CPU_ADDR_WIDTH'('b1110_1???_????_????): begin   // $C000-$FFFF: Upper bank (2/3)
+                CPU_ADDR_WIDTH'('b11??_????_????_????): begin   // $C000-$FFFF: Upper bank (2/3)
                     bank_en_o  = !(io_peek && mem_ctl[MEM_CTL_IO_PEEK]);
                     bank_a15_o = mem_ctl[MEM_CTL_SELECT_HI];
                     bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_HI];
