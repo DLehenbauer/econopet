@@ -220,6 +220,19 @@ package common_pkg;
     
     localparam int unsigned SID_ADDR_REG_WIDTH = bit_width(SID_REG_COUNT - 1'b1);
 
+    // 64K RAM Expansion
+
+    // Memory control register at $FFF0.
+    // (See http://6502.org/users/andre/petindex/8x96.html)
+    localparam bit [BIT_INDEX_WIDTH-1:0] MEM_CTL_ENABLE           = 7,    // Enable expansion memory (1 = enabled, 0 = disabled)
+                                         MEM_CTL_IO_PEEK          = 6,    // I/O peek-through at $E800-$EFFF (1 = enabled, 0 = disabled)
+                                         MEM_CTL_SCREEN_PEEK      = 5,    // Screen peek-through at $8000-$8FFF (1 = enabled, 0 = disabled)
+                                         MEM_CTL_RESERVED         = 4,    // Reserved
+                                         MEM_CTL_SELECT_HI        = 3,    // Selects 16KB page at $C000-$FFFF (1 = block3, 0 = block2)
+                                         MEM_CTL_SELECT_LO        = 2,    // Selects 16KB page at $8000-$BFFF (1 = block1, 0 = block0)
+                                         MEM_CTL_WRITE_PROTECT_HI = 1,    // Write protects $C000-$FFFF excluding peek-through (1 = read only, 0 = read/write)
+                                         MEM_CTL_WRITE_PROTECT_LO = 0;    // Write protects $8000-$BFFF excluding peek-through (1 = read only, 0 = read/write)
+
     //
     // Registers
     //
