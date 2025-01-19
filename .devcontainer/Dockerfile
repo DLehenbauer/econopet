@@ -56,6 +56,10 @@ RUN mkdir -p /opt/verible && \
     rm -rf /tmp/${VERIBLE_ARCHIVE}
 ENV PATH "/opt/verible/bin:${PATH}"
 
+# Install GTKWave
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    gtkwave
+
 #
 # Tools for building/debugging RP2040 binaries
 #
