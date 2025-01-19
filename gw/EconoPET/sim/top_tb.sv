@@ -183,7 +183,7 @@ module top_tb;
         `assert_equal(cpu_reset_n, 1'b0);
 
         $display("[%t]   Perform CPU reset", $time);
-        mock_system.spi_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0010);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset_n, 1'b0);
         
@@ -193,7 +193,7 @@ module top_tb;
         @(cpu_clock);
 
         $display("[%t]   Start CPU", $time);
-        mock_system.spi_write_at(common_pkg::wb_reg_addr(0), 8'b0000_0001);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0001);
         `assert_equal(cpu_ready, 1'b1);
         `assert_equal(cpu_reset_n, 1'b1);
 
