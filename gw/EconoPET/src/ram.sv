@@ -16,6 +16,9 @@
 
 import common_pkg::*;
 
+// Wishbone peripheral that allows the MCU to access RAM (via SPI bridge).
+// The arbiter grants this peripheral control of the system bus between
+// video and CPU accesses.
 module ram (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)

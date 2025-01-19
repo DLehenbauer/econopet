@@ -303,7 +303,7 @@ module main (
         .wb_stall_i(video_stall),
         .wb_ack_i(video_ack),
 
-        // TODO: Wishbone peripheral to read back CRTC registers
+        // TODO: Wishbone peripheral to read back CRTC registers?
         .wb_addr_i(),
         .wb_we_i(),
         .wb_cycle_i(),
@@ -472,6 +472,7 @@ module main (
     wire ram_addr_a10_mask = !is_vram | video_ram_mask[10] | video_col_80_mode;
     wire ram_addr_a11_mask = !is_vram | video_ram_mask[11];
 
+    // When the CPU is driving the bus, apply masks to RAM A10/A11 to wrap video memory.
     assign ram_addr_a10_o = cpu_be_o
         ? cpu_addr_i[10] & ram_addr_a10_mask
         : cpu_addr_o[10];
@@ -480,6 +481,8 @@ module main (
         ? cpu_addr_i[11] & ram_addr_a11_mask
         : cpu_addr_o[11];
 
+    // When the CPU is driving the bus, the control register at $FFF0 control
+    // the memory mapping for the upper 64k expansion.
     assign ram_addr_a15_o   = cpu_be_o ? cpu_addr_i[15] : cpu_addr_o[15];
     assign ram_addr_a16_o   = cpu_be_o ? 1'b0 : ram_ctl_addr[16];
 

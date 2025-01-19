@@ -128,7 +128,7 @@ module cpu (
                 cpu_data_strobe_o <= 1'b1;
                 cpu_wr_en_o <= cpu_we_i;
             end
-            CPU_PHI_END: begin              // CPU mimimum clock pulse width met.
+            CPU_PHI_END: begin              // CPU minimum clock pulse width met.
                 cpu_clock_o <= '0;
                 cpu_wr_en_o <= '0;
             end

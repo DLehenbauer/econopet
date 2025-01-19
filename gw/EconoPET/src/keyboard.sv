@@ -55,7 +55,7 @@ module keyboard(
     wire [PIA_RS_WIDTH-1:0] pia_rs = rs_i[PIA_RS_WIDTH-1:0];
     wire [IO_REG_ADDR_WIDTH-1:0] col_addr = wb_addr_i[IO_REG_ADDR_WIDTH-1:0];
     wire writing_port_a =  cpu_we_i && pia1_cs_i && pia_rs == PIA_PORTA;     // CPU is selecting next keyboard col
-    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia_rs == PIA_PORTB;     // CPU is reading state of currenly selected col
+    wire reading_port_b = !cpu_we_i && pia1_cs_i && pia_rs == PIA_PORTB;     // CPU is reading state of currently selected col
 
     logic [PIA1_PORTA_KEY_D_OUT:PIA1_PORTA_KEY_A_OUT] selected_col = '0;
     logic [DATA_WIDTH-1:0]                            current_col  = 8'hff;

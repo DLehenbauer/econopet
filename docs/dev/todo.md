@@ -1,10 +1,14 @@
 # TODOs
 
 * Before ordering:
-  * Config DIPs
-  * 40/80 Column Switching
   * 96K RAM (?)
   * Try removing current limiting resistor before crystal.
+* Before release
+  * Config
+    * Business/Graphics Keyboard
+    * 9"/12" (test with 15kHz VGA)
+  * Menu
+    * 40/80 Column Switching
 * Firmware
   * USB keyboard bug
   * Menu:
