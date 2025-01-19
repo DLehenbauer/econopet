@@ -17,6 +17,8 @@
 import common_pkg::*;
 
 module memory_control (
+    input  logic                      reset_i,
+
     input  logic                      sys_clock_i,
     input  logic                      cpu_be_i,
     input  logic                      cpu_wr_strobe_i,
@@ -27,10 +29,13 @@ module memory_control (
     output logic bank_a15_o,
     output logic bank_ro_o
 );
-    logic [DATA_WIDTH-1:0] mem_ctl = 8'b1xxx_xxxx;
+    // RAM expansion is disabled at power on.
+    logic [DATA_WIDTH-1:0] mem_ctl = 8'b0xxx_xxxx;
 
     always_ff @(posedge sys_clock_i) begin
-        if (cpu_wr_strobe_i && cpu_addr_i == 16'hFFF0) begin
+        if (reset_i) begin
+            mem_ctl <= 8'b0xxx_xxxx;
+        end else if (cpu_wr_strobe_i && cpu_addr_i == 16'hFFF0) begin
             mem_ctl <= cpu_data_i;
         end
     end
@@ -52,12 +57,14 @@ module memory_control (
         endcase
     end
 
+    wire mem_enabled = mem_ctl[MEM_CTL_ENABLE];
+
     always_comb begin
         bank_en_o  = '0;
         bank_a15_o = 'x;  // Unused when bank_en is '0
         bank_ro_o  = '0;
 
-        if (mem_ctl[MEM_CTL_ENABLE]) begin
+        if (mem_enabled) begin
             unique casez (cpu_addr_i)
                 CPU_ADDR_WIDTH'('b10??_????_????_????): begin   // $8000-$BFFF: Lower bank (0/1)
                     bank_en_o  = !(screen_peek && mem_ctl[MEM_CTL_SCREEN_PEEK]);
@@ -76,6 +83,7 @@ module memory_control (
 endmodule
 
 module address_decoding (
+    input  logic                      reset_i,
     input  logic                      sys_clock_i,
 
     input  logic                      cpu_be_i,
@@ -102,6 +110,7 @@ module address_decoding (
     logic bank_ro;
 
     memory_control memory_control (
+        .reset_i(reset_i),
         .sys_clock_i(sys_clock_i),
         .cpu_be_i(cpu_be_i),
         .cpu_wr_strobe_i(cpu_wr_strobe_i),

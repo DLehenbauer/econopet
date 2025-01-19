@@ -260,6 +260,7 @@ module main (
     logic decoded_a16;
 
     address_decoding address_decoding (
+        .reset_i(cpu_reset_i),
         .sys_clock_i(sys_clock_i),
         
         .cpu_be_i(cpu_be_o),

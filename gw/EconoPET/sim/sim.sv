@@ -19,6 +19,7 @@
 `define TEST_KEYBOARD
 `define TEST_REGISTER_FILE
 `define TEST_TIMING
+`define TEST_ADDRESS_DECODING
 `define TEST_SPI
 `define TEST_SPI1
 `define TEST_RAM
@@ -46,6 +47,9 @@ module sim;
 `endif
 `ifdef TEST_TIMING
     timing_tb timing_tb ();
+`endif
+`ifdef TEST_ADDRESS_DECODING
+    address_decoding_tb address_decoding_tb ();
 `endif
 `ifdef TEST_SPI
     spi_tb spi_tb ();
@@ -88,6 +92,9 @@ module sim;
 `endif
 `ifdef TEST_TIMING
         timing_tb.run;
+`endif
+`ifdef TEST_ADDRESS_DECODING
+        address_decoding_tb.run;
 `endif
 `ifdef TEST_SPI
         spi_tb.run;
