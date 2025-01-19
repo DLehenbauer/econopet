@@ -16,6 +16,65 @@
 
 import common_pkg::*;
 
+module memory_control (
+    input  logic                      sys_clock_i,
+    input  logic                      cpu_be_i,
+    input  logic                      cpu_wr_strobe_i,
+    input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
+    input  logic [    DATA_WIDTH-1:0] cpu_data_i,
+
+    output logic bank_en_o,
+    output logic bank_a15_o,
+    output logic bank_ro_o
+);
+    logic [DATA_WIDTH-1:0] mem_ctl = 8'b1xxx_xxxx;
+
+    always_ff @(posedge sys_clock_i) begin
+        if (cpu_wr_strobe_i && cpu_addr_i == 16'hFFF0) begin
+            mem_ctl <= cpu_data_i;
+        end
+    end
+
+    logic io_peek;
+    logic screen_peek;
+
+    always_comb begin
+        io_peek     = '0;
+        screen_peek = '0;
+        unique casez (cpu_addr_i)
+            CPU_ADDR_WIDTH'('b1000_????_????_????): begin   // $8000-$8FFF: Screen peek-through
+                screen_peek = mem_ctl[MEM_CTL_SCREEN_PEEK];
+            end
+            CPU_ADDR_WIDTH'('b1110_1???_????_????): begin   // $E800-$EFFF: IO peek-through
+                io_peek = mem_ctl[MEM_CTL_IO_PEEK];
+            end
+            default: ;                                      // No peek-through
+        endcase
+    end
+
+    always_comb begin
+        bank_en_o  = '0;
+        bank_a15_o = 'x;  // Unused when bank_en is '0
+        bank_ro_o  = '0;
+
+        if (mem_ctl[MEM_CTL_ENABLE]) begin
+            unique casez (cpu_addr_i)
+                CPU_ADDR_WIDTH'('b1000_????_????_????): begin   // $8000-$BFFF: Lower bank (0/1)
+                    bank_en_o  = !(screen_peek && mem_ctl[MEM_CTL_SCREEN_PEEK]);
+                    bank_a15_o = mem_ctl[MEM_CTL_SELECT_LO];
+                    bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_LO];
+                end
+                CPU_ADDR_WIDTH'('b1110_1???_????_????): begin   // $C000-$FFFF: Upper bank (2/3)
+                    bank_en_o  = !(io_peek && mem_ctl[MEM_CTL_IO_PEEK]);
+                    bank_a15_o = mem_ctl[MEM_CTL_SELECT_HI];
+                    bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_HI];
+                end
+                default: ;                                      // No bank
+            endcase
+        end
+    end
+endmodule
+
 module address_decoding (
     input  logic                      sys_clock_i,
 
@@ -35,9 +94,25 @@ module address_decoding (
     output logic                      is_vram_o,
     output logic                      is_rom_o,
 
-    output logic                     decoded_a15_o,
-    output logic                     decoded_a16_o
+    output logic                      decoded_a15_o,
+    output logic                      decoded_a16_o
 );
+    logic bank_en;
+    logic bank_a15;
+    logic bank_ro;
+
+    memory_control memory_control (
+        .sys_clock_i(sys_clock_i),
+        .cpu_be_i(cpu_be_i),
+        .cpu_wr_strobe_i(cpu_wr_strobe_i),
+        .cpu_addr_i(cpu_addr_i),
+        .cpu_data_i(cpu_data_i),
+
+        .bank_en_o(bank_en),
+        .bank_a15_o(bank_a15),
+        .bank_ro_o(bank_ro)
+    );
+
     localparam RAM_EN_BIT       = 0,
                SID_EN_BIT       = 1,
                MAGIC_EN_BIT     = 2,
@@ -79,18 +154,24 @@ module address_decoding (
         if (!cpu_be_i) begin
             select = NONE;
         end else begin
-            priority casez (cpu_addr_i)
-                // PET memory map
-                CPU_ADDR_WIDTH'('b0???_????_????_????): select = RAM;    // RAM   : 0000-7FFF
-                CPU_ADDR_WIDTH'('b1000_1111_????_????): select = SID;    // SID   : 8F00-8FFF
-                CPU_ADDR_WIDTH'('b1000_????_????_????): select = VRAM;   // VRAM  : 8000-8FFF (overlaps with SID)
-                CPU_ADDR_WIDTH'('b1110_1000_0000_????): select = MAGIC;  // MAGIC : E800-E80F
-                CPU_ADDR_WIDTH'('b1110_1000_0001_????): select = PIA1;   // PIA1  : E810-E81F
-                CPU_ADDR_WIDTH'('b1110_1000_001?_????): select = PIA2;   // PIA2  : E820-E83F
-                CPU_ADDR_WIDTH'('b1110_1000_01??_????): select = VIA;    // VIA   : E840-E87F
-                CPU_ADDR_WIDTH'('b1110_1000_1???_????): select = CRTC;   // CRTC  : E880-E8FF
-                default:                                select = ROM;    // ROM   : 9000-E800, E900-FFFF
-            endcase
+            if (bank_en) begin
+                select = bank_ro
+                    ? ROM
+                    : RAM;
+            end else begin
+                priority casez (cpu_addr_i)
+                    // PET memory map
+                    CPU_ADDR_WIDTH'('b0???_????_????_????): select = RAM;    // RAM   : 0000-7FFF
+                    CPU_ADDR_WIDTH'('b1000_1111_????_????): select = SID;    // SID   : 8F00-8FFF
+                    CPU_ADDR_WIDTH'('b1000_????_????_????): select = VRAM;   // VRAM  : 8000-8FFF (overlaps with SID)
+                    CPU_ADDR_WIDTH'('b1110_1000_0000_????): select = MAGIC;  // MAGIC : E800-E80F
+                    CPU_ADDR_WIDTH'('b1110_1000_0001_????): select = PIA1;   // PIA1  : E810-E81F
+                    CPU_ADDR_WIDTH'('b1110_1000_001?_????): select = PIA2;   // PIA2  : E820-E83F
+                    CPU_ADDR_WIDTH'('b1110_1000_01??_????): select = VIA;    // VIA   : E840-E87F
+                    CPU_ADDR_WIDTH'('b1110_1000_1???_????): select = CRTC;   // CRTC  : E880-E8FF
+                    default:                                select = ROM;    // ROM   : 9000-E800, E900-FFFF
+                endcase
+            end
         end
     end
 
@@ -106,6 +187,6 @@ module address_decoding (
     assign via_en_o         = select[VIA_EN_BIT];
     assign crtc_en_o        = select[CRTC_EN_BIT];
 
-    assign decoded_a15_o    = cpu_addr_i[15];
-    assign decoded_a16_o    = 1'b0;
+    assign decoded_a15_o    = bank_en ? bank_a15 : cpu_addr_i[15];
+    assign decoded_a16_o    = bank_en;
 endmodule
