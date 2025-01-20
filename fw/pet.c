@@ -67,6 +67,8 @@ const uint8_t* const p_video_font_000 = rom_chars_8800;
 const uint8_t* const p_video_font_400 = rom_chars_8800 + 0x400;
 
 void pet_init_edit_rom(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
+    set_video(is80Columns);
+    
     if (isBusinessKeyboard) {
         spi_write(/* dest: */ 0xe000, /* pSrc: */ rom_edit_4_80_b_60Hz, sizeof(rom_edit_4_80_b_60Hz));
     } else {
