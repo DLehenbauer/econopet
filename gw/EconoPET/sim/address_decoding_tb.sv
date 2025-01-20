@@ -132,7 +132,7 @@ module address_decoding_tb();
 
     task set_mem_ctl(
         enabled,        // Enable expansion memory (1 = enabled, 0 = disabled)
-        io_peek,        // I/O peek-through at $E800-$EFFF (1 = enabled, 0 = disabled)
+        io_peek,        // I/O peek-through at $E810-$EFFF (1 = enabled, 0 = disabled)
         screen_peek,    // Screen peek-through at $8000-$8FFF (1 = enabled, 0 = disabled)
         select_32,      // Selects 16KB page at $C000-$FFFF (1 = block3, 0 = block2)
         select_10,      // Selects 16KB page at $8000-$BFFF (1 = block1, 0 = block0)
@@ -151,23 +151,6 @@ module address_decoding_tb();
 
     // Note that this excludes the SID, which maps into VRAM space.
     task check_io();
-        check_range(
-            /* name                   : */ "  MAGIC",
-            /* start_addr             : */ 'he800,
-            /* end_addr               : */ 'he80f,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 1,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0,
-            /* expected_a16_15        : */ 2'b01
-        );
-
         check_range(
             /* name                   : */ "  PIA1",
             /* start_addr             : */ 'he810,
@@ -331,7 +314,24 @@ module address_decoding_tb();
             /* expected_a16_15        : */ 2'b01
         );
 
-        $display("[%t]   IO: $E800-$EFFF", $time);
+        check_range(
+            /* name                   : */ "MAGIC",
+            /* start_addr             : */ 'he800,
+            /* end_addr               : */ 'he80f,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 1,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        $display("[%t]   IO: $E810-$EFFF", $time);
         check_io();
 
         check_range(
@@ -354,7 +354,7 @@ module address_decoding_tb();
         $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/2)", $time);
         set_mem_ctl(
             /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
-            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E810-$E8FF: (1 = enabled, 0 = disabled)
             /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
             /* select_32    : */ 0,     // $C000-$FFFF: (1 = block3, 0 = block2)
             /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)
@@ -399,7 +399,7 @@ module address_decoding_tb();
         $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 0/3)", $time);
         set_mem_ctl(
             /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
-            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E810-$E8FF: (1 = enabled, 0 = disabled)
             /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
             /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
             /* select_10    : */ 0,     // $8000-$BFFF: (1 = block1, 0 = block0)
@@ -444,7 +444,7 @@ module address_decoding_tb();
         $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/3)", $time);
         set_mem_ctl(
             /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
-            /* io_peek      : */ 1,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 1,     // $E810-$E8FF: (1 = enabled, 0 = disabled)
             /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
             /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
             /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)
@@ -472,7 +472,7 @@ module address_decoding_tb();
         check_range(
             /* name                   : */ "Block 3 (Protected, IO Peek-Through)",
             /* start_addr             : */ 'hc000,
-            /* end_addr               : */ 'he7ff,
+            /* end_addr               : */ 'he80f,
             /* expected_ram_en        : */ 1,
             /* expected_magic_en      : */ 0,
             /* expected_pia1_en       : */ 0,
@@ -508,7 +508,7 @@ module address_decoding_tb();
         $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/3)", $time);
         set_mem_ctl(
             /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
-            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E810-$E8FF: (1 = enabled, 0 = disabled)
             /* screen_peek  : */ 1,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
             /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
             /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)

@@ -47,11 +47,12 @@ module memory_control (
         io_peek     = '0;
         screen_peek = '0;
         
-        unique casez (cpu_addr_i)
+        priority casez (cpu_addr_i)
             CPU_ADDR_WIDTH'('b1000_????_????_????): begin   // $8000-$8FFF: Screen peek-through
                 screen_peek = mem_ctl[MEM_CTL_SCREEN_PEEK];
             end
-            CPU_ADDR_WIDTH'('b1110_1???_????_????): begin   // $E800-$EFFF: IO peek-through
+            CPU_ADDR_WIDTH'('b1110_1000_0000_????): ;       // $E800-$E80F: Exclude from IO peek-through
+            CPU_ADDR_WIDTH'('b1110_1???_????_????): begin   // $E810-$EFFF: IO peek-through
                 io_peek = mem_ctl[MEM_CTL_IO_PEEK];
             end
             default: ;                                      // No peek-through
