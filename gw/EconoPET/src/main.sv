@@ -256,6 +256,7 @@ module main (
     logic io_en;
     logic crtc_en;
     logic is_vram;
+    logic is_readonly;
     logic decoded_a15;
     logic decoded_a16;
 
@@ -279,7 +280,7 @@ module main (
 
         // Not yet used
         .magic_en_o(),
-        .is_rom_o(),
+        .is_readonly_o(is_readonly),
 
         .decoded_a15_o(decoded_a15),
         .decoded_a16_o(decoded_a16)
@@ -474,7 +475,7 @@ module main (
     assign via_cs_o  =  via_en && cpu_be_o;
 
     assign ram_oe_o         = (cpu_rd_en && ram_en) || ram_ctl_oe;
-    assign ram_we_o         = (cpu_wr_en && ram_en) || ram_ctl_we;
+    assign ram_we_o         = (cpu_wr_en && ram_en && !is_readonly) || ram_ctl_we;
 
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];

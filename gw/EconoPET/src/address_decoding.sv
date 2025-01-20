@@ -100,7 +100,7 @@ module address_decoding (
     output logic                      crtc_en_o,
     output logic                      io_en_o,
     output logic                      is_vram_o,
-    output logic                      is_rom_o,
+    output logic                      is_readonly_o,
 
     output logic                      decoded_a15_o,
     output logic                      decoded_a16_o
@@ -130,7 +130,7 @@ module address_decoding (
                VIA_EN_BIT       = 5,
                CRTC_EN_BIT      = 6,
                IO_EN_BIT        = 7,
-               IS_ROM_BIT       = 8,
+               IS_READONLY_BIT  = 8,
                IS_VRAM_BIT      = 9;
 
     localparam NUM_BITS         = 10;
@@ -143,7 +143,7 @@ module address_decoding (
                VIA_EN_MASK       = NUM_BITS'(1'b1) << VIA_EN_BIT,
                CRTC_EN_MASK      = NUM_BITS'(1'b1) << CRTC_EN_BIT,
                IO_EN_MASK        = NUM_BITS'(1'b1) << IO_EN_BIT,
-               IS_ROM_MASK       = NUM_BITS'(1'b1) << IS_ROM_BIT,
+               IS_READONLY_MASK  = NUM_BITS'(1'b1) << IS_READONLY_BIT,
                IS_VRAM_MASK      = NUM_BITS'(1'b1) << IS_VRAM_BIT;
 
     localparam NONE  = NUM_BITS'('0),
@@ -151,7 +151,7 @@ module address_decoding (
                VRAM  = RAM_EN_MASK  | IS_VRAM_MASK,
                SID   = SID_EN_MASK,
                MAGIC = MAGIC_EN_MASK,
-               ROM   = RAM_EN_MASK  | IS_ROM_MASK,
+               ROM   = RAM_EN_MASK  | IS_READONLY_MASK,
                PIA1  = PIA1_EN_MASK | IO_EN_MASK,
                PIA2  = PIA2_EN_MASK | IO_EN_MASK,
                VIA   = VIA_EN_MASK  | IO_EN_MASK,
@@ -185,7 +185,7 @@ module address_decoding (
     end
 
     assign ram_en_o         = select[RAM_EN_BIT];
-    assign is_rom_o         = select[IS_ROM_BIT];
+    assign is_readonly_o    = select[IS_READONLY_BIT] || bank_ro;
     assign is_vram_o        = select[IS_VRAM_BIT];
 
     assign sid_en_o         = select[SID_EN_BIT];

@@ -48,7 +48,7 @@ module address_decoding_tb();
         .sid_en_o(sid_en),
         .io_en_o(io_en),
         .is_vram_o(is_vram),
-        .is_rom_o(is_readonly)
+        .is_readonly_o(is_readonly)
     );
 
     task check(
