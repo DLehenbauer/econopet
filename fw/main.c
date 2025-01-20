@@ -49,9 +49,11 @@ void measure_freqs(uint fpga_div) {
     printf("    clk_fpga = %lu kHz\n", f_clk_sys / fpga_div);
 }
 
+#ifdef FPGA_PROG
 static const uint8_t __in_flash(".fpga_bitstream") bitstream[] = {
     #include "./fpga/bitstream.h"
 };
+#endif
 
 void fpga_init() {
     gpio_init(FPGA_CRESET_GP);
@@ -107,6 +109,8 @@ void fpga_init() {
         return;
     }
 
+    #ifdef FPGA_PROG
+
     // Create a clean CRESET_N pulse to initiate FPGA configuration.
     gpio_init(FPGA_CRESET_GP);
     gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
@@ -152,6 +156,8 @@ void fpga_init() {
     spi_write_blocking(FPGA_SPI_INSTANCE, buffer, /* len: */ 1);
 
     printf("FPGA: DONE\n");
+
+    #endif
 }
 
 int main() {
