@@ -40,12 +40,13 @@ module memory_control (
         end
     end
 
-    logic io_peek;
-    logic screen_peek;
+    logic io_peek;      // Asserted when IO peek-through enabled and address is $8000-$8FFF.
+    logic screen_peek;  // Asserted when screen peek-through enabled and address is $E800-$EFFF.
 
     always_comb begin
         io_peek     = '0;
         screen_peek = '0;
+        
         unique casez (cpu_addr_i)
             CPU_ADDR_WIDTH'('b1000_????_????_????): begin   // $8000-$8FFF: Screen peek-through
                 screen_peek = mem_ctl[MEM_CTL_SCREEN_PEEK];
@@ -149,7 +150,7 @@ module address_decoding (
     localparam NONE  = NUM_BITS'('0),
                RAM   = RAM_EN_MASK,
                VRAM  = RAM_EN_MASK  | IS_VRAM_MASK,
-               SID   = SID_EN_MASK,
+               SID   = SID_EN_MASK,                 // No IO_EN: SID implemented on FPGA
                MAGIC = MAGIC_EN_MASK,
                ROM   = RAM_EN_MASK  | IS_READONLY_MASK,
                PIA1  = PIA1_EN_MASK | IO_EN_MASK,

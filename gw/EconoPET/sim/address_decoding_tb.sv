@@ -18,6 +18,15 @@
 import common_pkg::*;
 
 module address_decoding_tb();
+    logic sys_clock;
+    clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(sys_clock));
+    initial clock_gen.start;
+
+    logic reset = 1'b0;
+    logic cpu_be = 1'b1;
+    logic cpu_wr_strobe = 1'b0;
+    logic [DATA_WIDTH-1:0] cpu_data;
+
     // Intentionally 1 bit larger than the CPU address width to avoid overflow/infinite loop.
     logic [CPU_ADDR_WIDTH:0] addr = 17'hxxxx;
 
@@ -32,11 +41,16 @@ module address_decoding_tb();
     logic is_vram;
     logic is_readonly;
 
+    logic decoded_a15;
+    logic decoded_a16;
+
     address_decoding address_decoding(
-        .sys_clock_i(),
-        .cpu_be_i(),
-        .cpu_wr_strobe_i(),
-        .cpu_data_i(),
+        .reset_i(reset),
+        .sys_clock_i(sys_clock),
+        
+        .cpu_be_i(cpu_be),
+        .cpu_wr_strobe_i(cpu_wr_strobe),
+        .cpu_data_i(cpu_data),
 
         .cpu_addr_i(addr[CPU_ADDR_WIDTH-1:0]),
         .ram_en_o(ram_en),
@@ -48,7 +62,10 @@ module address_decoding_tb();
         .sid_en_o(sid_en),
         .io_en_o(io_en),
         .is_vram_o(is_vram),
-        .is_readonly_o(is_readonly)
+        .is_readonly_o(is_readonly),
+
+        .decoded_a15_o(decoded_a15),
+        .decoded_a16_o(decoded_a16)
     );
 
     task check(
@@ -61,7 +78,8 @@ module address_decoding_tb();
         input expected_sid_en,
         input expected_io_en,
         input expected_is_vram,
-        input expected_is_readonly
+        input expected_is_readonly,
+        input [1:0] expected_a16_15
     );
         `assert_equal(ram_en, expected_ram_en);
         `assert_equal(magic_en, expected_magic_en);
@@ -73,6 +91,8 @@ module address_decoding_tb();
         `assert_equal(io_en, expected_io_en);
         `assert_equal(is_vram, expected_is_vram);
         `assert_equal(is_readonly, expected_is_readonly);
+        `assert_equal(decoded_a15, expected_a16_15[0]);
+        `assert_equal(decoded_a16, expected_a16_15[1]);
     endtask
 
     task check_range(
@@ -88,9 +108,10 @@ module address_decoding_tb();
         input expected_sid_en,
         input expected_io_en,
         input expected_is_vram,
-        input expected_is_readonly
+        input expected_is_readonly,
+        input [1:0] expected_a16_15
     );
-        $display("%s: $%x-$%x", name, start_addr, end_addr);
+        $display("[%t]   %s: $%x-$%x", $time, name, start_addr, end_addr);
 
         for (addr = start_addr; addr <= end_addr; addr = addr + 1) begin
             #1 check(
@@ -103,9 +124,171 @@ module address_decoding_tb();
                 expected_sid_en,
                 expected_io_en,
                 expected_is_vram,
-                expected_is_readonly
+                expected_is_readonly,
+                expected_a16_15
             );
         end
+    endtask
+
+    task set_mem_ctl(
+        enabled,        // Enable expansion memory (1 = enabled, 0 = disabled)
+        io_peek,        // I/O peek-through at $E800-$EFFF (1 = enabled, 0 = disabled)
+        screen_peek,    // Screen peek-through at $8000-$8FFF (1 = enabled, 0 = disabled)
+        select_32,      // Selects 16KB page at $C000-$FFFF (1 = block3, 0 = block2)
+        select_10,      // Selects 16KB page at $8000-$BFFF (1 = block1, 0 = block0)
+        protect_32,     // Write protects $C000-$FFFF excluding peek-through (1 = read only, 0 = read/write)
+        protect_10      // Write protects $8000-$BFFF excluding peek-through (1 = read only, 0 = read/write)
+    );
+        addr = 17'h0fff0;
+        cpu_data = { enabled, io_peek, screen_peek, 'x, select_32, select_10, protect_32, protect_10 };
+        
+        @(negedge sys_clock);
+        cpu_wr_strobe = 1'b1;
+        
+        @(negedge sys_clock);
+        cpu_wr_strobe = 1'b0;
+    endtask
+
+    // Note that this excludes the SID, which maps into VRAM space.
+    task check_io();
+        check_range(
+            /* name                   : */ "  MAGIC",
+            /* start_addr             : */ 'he800,
+            /* end_addr               : */ 'he80f,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 1,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        check_range(
+            /* name                   : */ "  PIA1",
+            /* start_addr             : */ 'he810,
+            /* end_addr               : */ 'he81f,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 1,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 1,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        check_range(
+            /* name                   : */ "  PIA2",
+            /* start_addr             : */ 'he820,
+            /* end_addr               : */ 'he83f,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 1,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 1,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        check_range(
+            /* name                   : */ "  VIA",
+            /* start_addr             : */ 'he840,
+            /* end_addr               : */ 'he87f,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 1,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 1,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        check_range(
+            /* name                   : */ "  CRTC",
+            /* start_addr             : */ 'he880,
+            /* end_addr               : */ 'he8ff,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 1,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        // Currently, this unmapped range is treated as ROM.
+        check_range(
+            /* name                   : */ "  (unmapped)",
+            /* start_addr             : */ 'he900,
+            /* end_addr               : */ 'hefff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b01
+        );
+    endtask
+
+    task check_screen();
+        check_range(
+            /* name                   : */ "  VRAM",
+            /* start_addr             : */ 'h8000,
+            /* end_addr               : */ 'h8eff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 1,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        check_range(
+            /* name                   : */ "  SID",
+            /* start_addr             : */ 'h8f00,
+            /* end_addr               : */ 'h8fff,
+            /* expected_ram_en        : */ 0,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 1,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b01
+        );
     endtask
 
     task run;
@@ -124,42 +307,12 @@ module address_decoding_tb();
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
             /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b00
         );
 
-        check_range(
-            /* name                   : */ "Display RAM",
-            /* start_addr             : */ 'h8000,
-            /* end_addr               : */ 'h8eff,
-            /* expected_ram_en        : */ 1,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 1,
-            /* expected_is_readonly   : */ 0
-        );
-
-        check_range(
-            /* name                   : */ "SID",
-            /* start_addr             : */ 'h8f00,
-            /* end_addr               : */ 'h8fff,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 1,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-
+        $display("[%t]   Screen: $8000-$8FFF", $time);
+        check_screen();
 
         check_range(
             /* name                   : */ "ROM",
@@ -174,105 +327,12 @@ module address_decoding_tb();
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
             /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 1
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b01
         );
 
-        check_range(
-            /* name                   : */ "MAGIC",
-            /* start_addr             : */ 'he800,
-            /* end_addr               : */ 'he80f,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 1,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-        check_range(
-            /* name                   : */ "PIA1",
-            /* start_addr             : */ 'he810,
-            /* end_addr               : */ 'he81f,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 1,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 1,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-        check_range(
-            /* name                   : */ "PIA2",
-            /* start_addr             : */ 'he820,
-            /* end_addr               : */ 'he83f,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 1,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 1,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-        check_range(
-            /* name                   : */ "VIA",
-            /* start_addr             : */ 'he840,
-            /* end_addr               : */ 'he87f,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 1,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 1,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-        check_range(
-            /* name                   : */ "CRTC",
-            /* start_addr             : */ 'he880,
-            /* end_addr               : */ 'he8ff,
-            /* expected_ram_en        : */ 0,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 1,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 0
-        );
-
-        // Currently, this unmapped range is treated as ROM.
-        check_range(
-            /* name                   : */ "(unmapped)",
-            /* start_addr             : */ 'he900,
-            /* end_addr               : */ 'hefff,
-            /* expected_ram_en        : */ 1,
-            /* expected_magic_en      : */ 0,
-            /* expected_pia1_en       : */ 0,
-            /* expected_pia2_en       : */ 0,
-            /* expected_via_en        : */ 0,
-            /* expected_crtc_en       : */ 0,
-            /* expected_sid_en        : */ 0,
-            /* expected_io_en         : */ 0,
-            /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 1
-        );
+        $display("[%t]   IO: $E800-$EFFF", $time);
+        check_io();
 
         check_range(
             /* name                   : */ "ROM",
@@ -287,7 +347,209 @@ module address_decoding_tb();
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
             /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 1
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b01
+        );
+
+        $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/2)", $time);
+        set_mem_ctl(
+            /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
+            /* select_32    : */ 0,     // $C000-$FFFF: (1 = block3, 0 = block2)
+            /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)
+            /* protect_32   : */ 1,     // $C000-$FFFF: (1 = read only, 0 = read/write)
+            /* protect_10   : */ 0      // $8000-$BFFF: (1 = read only, 0 = read/write)
+        );
+
+        check_range(
+            /* name                   : */ "Block 1",
+            /* start_addr             : */ 'h8000,
+            /* end_addr               : */ 'hbfff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        check_range(
+            /* name                   : */ "Block 2 (Protected)",
+            /* start_addr             : */ 'hc000,
+            /* end_addr               : */ 'hffff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b10
+        );
+
+        $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 0/3)", $time);
+        set_mem_ctl(
+            /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
+            /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
+            /* select_10    : */ 0,     // $8000-$BFFF: (1 = block1, 0 = block0)
+            /* protect_32   : */ 0,     // $C000-$FFFF: (1 = read only, 0 = read/write)
+            /* protect_10   : */ 1      // $8000-$BFFF: (1 = read only, 0 = read/write)
+        );
+
+        check_range(
+            /* name                   : */ "Block 0 (Protected)",
+            /* start_addr             : */ 'h8000,
+            /* end_addr               : */ 'hbfff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b10
+        );
+
+        check_range(
+            /* name                   : */ "Block 3",
+            /* start_addr             : */ 'hc000,
+            /* end_addr               : */ 'hffff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/3)", $time);
+        set_mem_ctl(
+            /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 1,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* screen_peek  : */ 0,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
+            /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
+            /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)
+            /* protect_32   : */ 1,     // $C000-$FFFF: (1 = read only, 0 = read/write)
+            /* protect_10   : */ 0      // $8000-$BFFF: (1 = read only, 0 = read/write)
+        );
+
+        check_range(
+            /* name                   : */ "Block 1",
+            /* start_addr             : */ 'h8000,
+            /* end_addr               : */ 'hbfff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        check_range(
+            /* name                   : */ "Block 3 (Protected, IO Peek-Through)",
+            /* start_addr             : */ 'hc000,
+            /* end_addr               : */ 'he7ff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        check_io();
+
+        check_range(
+            /* name                   : */ "Block 3 (Protected, IO Peek-Through)",
+            /* start_addr             : */ 'hf000,
+            /* end_addr               : */ 'hffff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        $display("[%t] 64K Expansion: $8000-$FFFF (Blocks 1/3)", $time);
+        set_mem_ctl(
+            /* enabled      : */ 1,     // (1 = enabled, 0 = disabled)
+            /* io_peek      : */ 0,     // $E800-$E8FF: (1 = enabled, 0 = disabled)
+            /* screen_peek  : */ 1,     // $8000-$8FFF: (1 = enabled, 0 = disabled)
+            /* select_32    : */ 1,     // $C000-$FFFF: (1 = block3, 0 = block2)
+            /* select_10    : */ 1,     // $8000-$BFFF: (1 = block1, 0 = block0)
+            /* protect_32   : */ 0,     // $C000-$FFFF: (1 = read only, 0 = read/write)
+            /* protect_10   : */ 1      // $8000-$BFFF: (1 = read only, 0 = read/write)
+        );
+
+        check_screen();
+
+        check_range(
+            /* name                   : */ "Block 1 (Protected, Screen Peek-Through)",
+            /* start_addr             : */ 'h9000,
+            /* end_addr               : */ 'hbfff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 1,
+            /* expected_a16_15        : */ 2'b11
+        );
+
+        check_range(
+            /* name                   : */ "Block 3",
+            /* start_addr             : */ 'hc000,
+            /* end_addr               : */ 'hffff,
+            /* expected_ram_en        : */ 1,
+            /* expected_magic_en      : */ 0,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b11
         );
 
         #1 $display("[%t] END %m", $time);
