@@ -62,17 +62,17 @@ module memory_control (
     always_comb begin
         bank_en_o  = '0;
         bank_a15_o = 'x;  // Unused when bank_en is '0
-        bank_ro_o  = '0;
+        bank_ro_o  = 'x;
 
         if (mem_enabled) begin
             unique casez (cpu_addr_i)
                 CPU_ADDR_WIDTH'('b10??_????_????_????): begin   // $8000-$BFFF: Lower bank (0/1)
-                    bank_en_o  = !(screen_peek && mem_ctl[MEM_CTL_SCREEN_PEEK]);
+                    bank_en_o  = !screen_peek;
                     bank_a15_o = mem_ctl[MEM_CTL_SELECT_LO];
                     bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_LO];
                 end
                 CPU_ADDR_WIDTH'('b11??_????_????_????): begin   // $C000-$FFFF: Upper bank (2/3)
-                    bank_en_o  = !(io_peek && mem_ctl[MEM_CTL_IO_PEEK]);
+                    bank_en_o  = !io_peek;
                     bank_a15_o = mem_ctl[MEM_CTL_SELECT_HI];
                     bank_ro_o  = mem_ctl[MEM_CTL_WRITE_PROTECT_HI];
                 end
@@ -185,7 +185,7 @@ module address_decoding (
     end
 
     assign ram_en_o         = select[RAM_EN_BIT];
-    assign is_readonly_o    = select[IS_READONLY_BIT] || bank_ro;
+    assign is_readonly_o    = select[IS_READONLY_BIT];
     assign is_vram_o        = select[IS_VRAM_BIT];
 
     assign sid_en_o         = select[SID_EN_BIT];
