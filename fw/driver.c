@@ -16,6 +16,8 @@
 #include "hw.h"
 #include "usb/keyboard.h"
 #include "video/video.h"
+#include "util.h"
+#include "global.h"
 
 //                           WS__AAAA
 #define SPI_CMD_READ_AT    0b01000000
@@ -128,6 +130,20 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
 
         while (byteLength--) {
             spi_write_next(*p++);
+        }
+    }
+}
+
+// Fills a range of memory with a byte value.
+void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
+    memset(temp_buffer, byte, MIN(sizeof(temp_buffer), byteLength));
+
+    if (byteLength--) {
+        spi_write_at(addr, temp_buffer[0]);
+
+        while (byteLength) {
+            spi_write(addr, temp_buffer, MIN(sizeof(temp_buffer), byteLength));
+            byteLength -= sizeof(temp_buffer);
         }
     }
 }

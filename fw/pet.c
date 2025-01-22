@@ -117,6 +117,10 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     pet_init_edit_rom(is80Columns, isBusinessKeyboard, is50Hz);
     spi_write(/* dest: */ 0xf000, /* pSrc: */ rom_kernal_f000, sizeof(rom_kernal_f000));
 
+    for (uint32_t addr = 0xe800, uint8_t byte = 0xe8; addr < 0xf000; addr += 0x1000, byte += 1) {
+        spi_fill(addr, byte, 0x1000);
+    }
+
     pet_reset();
 }
 

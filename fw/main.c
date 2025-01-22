@@ -12,6 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+// During development, you can disable the FPGA configuration by commenting out
+// the following line.  Because the bitstream is large, this reduces the amount
+// of time required to update the RP2040's flash.  (Of course, you will need to
+// use an external JTAG programmer to configure the FPGA to boot.)
+// #define FPGA_PROG
+
 #include "pch.h"
 #include "driver.h"
 #include "hw.h"
@@ -122,13 +128,15 @@ void fpga_init() {
     // Efinix requires SPI mode 3 for configuration.
     spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
-    // We will use this buffer of 1,000 zero bits to generate extra clock cycles at the
-    // end of configuration.  Declaring it here lets us use it to to end a single byte below.
-    const uint8_t buffer[125] = { 0 };
+    // Later, we will use this buffer of 1,000 zero bits to generate extra clock cycles
+    // at the end of configuration.  We clear the 125 bytes now 
+    _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
+
+    memset(temp_buffer, 0, MIN(sizeof(temp_buffer), 125));
     
     // Changes in clock polarity do not seem to take effect until the next write.  Send
     // a single byte while CS_N is deasserted to transition SCK to high.
-    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, /* len: */ 1);
+    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, /* len: */ 1);
     sleep_ms(1);  // t_CRESET_N = 320 ns
 
     // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to select passive
@@ -142,7 +150,7 @@ void fpga_init() {
     spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
 
     // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
-    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, sizeof(buffer));
+    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, 125);
 
     // Deassert CS_N to signal end of configuration.
     sleep_ms(1);  // t_CRESET_N = 320 ns
@@ -153,7 +161,7 @@ void fpga_init() {
 
     // Changes in clock polarity do not seem to take effect until the next write.  Send
     // a single byte while CS_N is deasserted to transition SCK to low.
-    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, /* len: */ 1);
+    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, /* len: */ 1);
 
     printf("FPGA: DONE\n");
 
