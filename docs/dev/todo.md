@@ -1,12 +1,14 @@
 # TODOs
 
 * Before ordering:
-  * 96K RAM (?)
   * Try removing current limiting resistor before crystal.
 * Before release
   * Config
     * Business/Graphics Keyboard
     * 9"/12" (test with 15kHz VGA)
+  * Keyboard
+    * Fix USB keyboard bugs
+    * Read back from PET keyboard for menu
   * Menu
     * 40/80 Column Switching
 * Firmware
