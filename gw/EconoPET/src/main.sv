@@ -278,10 +278,7 @@ module main (
         .crtc_en_o(crtc_en),
         .is_vram_o(is_vram),
 
-        // Not yet used
-        .magic_en_o(),
         .is_readonly_o(is_readonly),
-
         .decoded_a15_o(decoded_a15),
         .decoded_a16_o(decoded_a16)
     );
