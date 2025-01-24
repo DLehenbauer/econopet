@@ -136,15 +136,15 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
 
 // Fills a range of memory with a byte value.
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
-    memset(temp_buffer, byte, MIN(sizeof(temp_buffer), byteLength));
+    size_t chunk_len = MIN(sizeof(temp_buffer), byteLength);
+    memset(temp_buffer, byte, chunk_len);
 
-    if (byteLength--) {
-        spi_write_at(addr, temp_buffer[0]);
-
-        while (byteLength) {
-            spi_write(addr, temp_buffer, MIN(sizeof(temp_buffer), byteLength));
-            byteLength -= sizeof(temp_buffer);
-        }
+    int32_t remaining = byteLength;
+    while (remaining > 0) {
+        spi_write(addr, temp_buffer, chunk_len);
+        addr += chunk_len;
+        remaining -= chunk_len;
+        chunk_len = MIN(chunk_len, remaining);
     }
 }
 

@@ -9,6 +9,7 @@ add_subdirectory("external/pico-vfs")
 
 add_executable(${PROJECT_NAME}
     driver.c
+    global.c
     main.c
     menu/menu.c
     pet.c
