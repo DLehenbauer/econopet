@@ -25,7 +25,7 @@
 #include "pet.h"
 #include "sd/sd.h"
 #include "term.h"
-#include "test/mem.h"
+#include "diag/mem.h"
 #include "usb/usb.h"
 #include "usb/keyboard.h"
 #include "video/video.h"

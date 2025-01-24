@@ -15,7 +15,7 @@ add_executable(${PROJECT_NAME}
     pet.c
     sd/sd.c
     term.c
-    test/mem.c
+    diag/mem.c
     usb/cdc_app.c
     usb/hid_app.c
     usb/keyboard.c
