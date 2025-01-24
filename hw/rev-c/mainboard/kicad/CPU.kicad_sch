@@ -4335,7 +4335,7 @@
 		)
 		(uuid "09e03911-b40d-42e7-ab15-5990494fffe8")
 	)
-	(text "A single 128KB SRAM chip is used for main RAM, expansion RAM, display RAM\nand ROM.  The ROM portion is initialized at POR by the MCU.\n\nA[15:0] are the address of the shared system bus, which is connected to the\nCPU, IO, FPGA and most RAM address pins.  The exceptions are\nRAM_A[16:15,11:10], which are driven exclusively by the FPGA.\n\nRAM_A[11:10] is used by the FPGA to mirror display RAM when the CPU\naccesses the range $8000-8FFF.\n\n40 column PET has 1k of screen RAM, mirrored 4 times.\n80 column PET has 2k of screen RAM, mirrored 2 times.\n\nRAM_A[16:15] is used by the FPGA to implement bank switching when the\nCPU accesses the ranges $8000-FFFF.  The FPGA monitors writes to the\ncontrol register at $FFF0 to determine which bank is currently selected."
+	(text "A single 128KB SRAM chip is used for the 32K main RAM, 64K expansion RAM,\n2K display RAM, 2K character ROM and 26K system ROM.  ROMs are initialized\nby the MCU on POR (via SPI -> bus bridge provided by the FPGA).\n\nA[15:0] are the address of the shared system bus, which is connected to the\nCPU, IO, FPGA and most RAM address pins.  The exceptions are\nRAM_A[16:15,11:10], which are driven exclusively by the FPGA.\n\nRAM_A[11:10] is used by the FPGA to mirror display RAM when the CPU\naccesses the range $8000-8FFF.\n\n40 column PET has 1k of screen RAM, mirrored 4 times.\n80 column PET has 2k of screen RAM, mirrored 2 times.\n\nRAM_A[16:15] is used by the FPGA to implement bank switching when the\nCPU accesses the ranges $8000-FFFF.  The FPGA monitors writes to the\ncontrol register at $FFF0 to determine which bank is currently selected."
 		(exclude_from_sim no)
 		(at 176.53 55.88 0)
 		(effects
@@ -4392,7 +4392,7 @@
 		)
 		(uuid "c62edb33-344e-4d0a-82ae-36cd575971aa")
 	)
-	(text "The bus is shared with the FPGA.  The FPGA pulls BE (Bus Enable)\nlow to put the CPU's Address, Data, and R~{W} buffers in to high-Z\nwhile the FPGA drives the bus.\n\nCPU and RAM operate at +3V3 to interface directly with the FPGA.\nLevel shifters are used for connections to the 5V I/O section.\nThis split avoids needing level shifters for A[5..16]."
+	(text "The bus is shared with the FPGA.  The FPGA deasserts BE (Bus Enable)\nto transition the CPU's Address, Data, and R~{W} buffers to high-Z\nwhile the FPGA drives the bus.\n\nCPU and RAM operate at +3V3 to interface directly with the FPGA.\nLevel shifters are used for connections to the 5V I/O section.\nThis split avoids needing level shifters for A[5..16]."
 		(exclude_from_sim no)
 		(at 46.99 39.37 0)
 		(effects

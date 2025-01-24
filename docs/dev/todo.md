@@ -8,14 +8,14 @@
     * 9"/12" (test with 15kHz VGA)
   * Keyboard
     * Fix USB keyboard bugs
-    * Read back from PET keyboard for menu
+    * USB keyboard control
+    * PET keyboard control (via readback)
   * Menu
     * 40/80 Column Switching
 * Firmware
-  * USB keyboard bug
+  * 8K Video RAM:
+    * Move character rom to shadowed I/O region at $E000-$E800?
   * Menu:
-    * PET keyboard control
-    * USB keyboard control
     * Enter/Exit without reset?
   * Commit patched PicoDVI (?)
 * HW Design

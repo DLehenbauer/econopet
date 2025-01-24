@@ -7609,7 +7609,7 @@
 		)
 		(uuid "fe971b77-994c-417a-ba70-7aea2fb9bdba")
 	)
-	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute the more common values of 4.7k/10k.\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470Ω resistors protect PIAs and VIA in case\n*_IN are accidentally configured as outputs."
+	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute 4.7k/10k because the selection of resistor\nnetwork arrays is limited from our mfgr (unless we pay\na loading fee.)\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470Ω resistors reduce stress on the PIAs and VIA in\ncase *_IN are accidentally configured as outputs."
 		(exclude_from_sim no)
 		(at 95.25 127 0)
 		(effects
