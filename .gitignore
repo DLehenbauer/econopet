@@ -56,13 +56,13 @@ site/node_modules
 # ROMs
 #
 
-fw/roms/*.h
+fw/src/roms/*.h
 
 #
 # FPGA Bitstream
 #
 
-fw/fpga/bitstream.h
+fw/src/fpga/bitstream.h
 
 #
 # CC65

@@ -21,24 +21,35 @@ project("firmware")
 set(FAMILY rp2040)
 set(BOARD pico_sdk)
 
-add_subdirectory("external/PicoDVI/software/libdvi")
-add_subdirectory("external/pico-vfs")
+# Calculate the root '/fw' directory relative to this file
+set(FW_DIR ${CMAKE_SOURCE_DIR}/../..)
 
+# Include external projects
+set(EXTERNAL_DIR ${FW_DIR}/external)
+add_subdirectory(
+    ${EXTERNAL_DIR}/PicoDVI/software/libdvi
+    ${CMAKE_BINARY_DIR}/libdvi)
+add_subdirectory(
+    ${EXTERNAL_DIR}/pico-vfs
+    ${CMAKE_BINARY_DIR}/pico-vfs)
+
+# Include source files
+set(SRC_DIR ${FW_DIR}/src)
 add_executable(${PROJECT_NAME}
-    driver.c
-    global.c
-    main.c
-    menu/menu.c
-    pet.c
-    sd/sd.c
-    term.c
-    diag/mem.c
-    usb/cdc_app.c
-    usb/hid_app.c
-    usb/keyboard.c
-    usb/msc_app.c
-    usb/usb.c
-    video/video.c
+    ${SRC_DIR}/driver.c
+    ${SRC_DIR}/global.c
+    ${SRC_DIR}/main.c
+    ${SRC_DIR}/menu/menu.c
+    ${SRC_DIR}/pet.c
+    ${SRC_DIR}/sd/sd.c
+    ${SRC_DIR}/term.c
+    ${SRC_DIR}/diag/mem.c
+    ${SRC_DIR}/usb/cdc_app.c
+    ${SRC_DIR}/usb/hid_app.c
+    ${SRC_DIR}/usb/keyboard.c
+    ${SRC_DIR}/usb/msc_app.c
+    ${SRC_DIR}/usb/usb.c
+    ${SRC_DIR}/video/video.c
 )
 
 # EconoPET 40/8096 Rev. A: xosc requires a little extra time to stabilize.
@@ -54,10 +65,9 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216
 # target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1)
 
 # Expose tusb_config.h to TinyUSB
-target_include_directories(${PROJECT_NAME} PUBLIC
-        ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(${PROJECT_NAME} PUBLIC ${SRC_DIR})
 
-target_precompile_headers(${PROJECT_NAME} PRIVATE pch.h)
+target_precompile_headers(${PROJECT_NAME} PRIVATE ${SRC_DIR}/pch.h)
 
 # Configure PicoDVI library for monochrome
 target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -94,7 +104,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_CORE1_STACK_SIZE=0x200)
 
 # Include external libraries
 include_directories(
-    "external/PicoDVI/software/include")
+    "${EXTERNAL_DIR}/PicoDVI/software/include")
 
 pico_enable_filesystem(${PROJECT_NAME})
 

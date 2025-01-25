@@ -26,6 +26,6 @@ add_subdirectory("./roms")
 
 ExternalProject_add(
     firmware
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw/targets/rp2040
     INSTALL_COMMAND ""  # No installation step
 )
