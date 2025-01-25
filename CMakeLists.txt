@@ -13,8 +13,7 @@
 set(CMAKE_VERBOSE_MAKEFILE ON)
 cmake_minimum_required(VERSION 3.13...3.27)
 
-# Include Raspberry Pi Pico SDK (must be before project)
-include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+include(ExternalProject)
 
 project(EconoPET C CXX ASM)
 set(CMAKE_C_STANDARD 11)
@@ -22,14 +21,11 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_compile_options(-Wall -Wextra -Wnull-dereference)
 
-set(PICO_SDK_REQUIRED_VERSION "2.0.0")
-if (PICO_SDK_VERSION_STRING VERSION_LESS PICO_SDK_REQUIRED_VERSION)
-    message(FATAL_ERROR "Raspberry Pi Pico SDK version ${PICO_SDK_REQUIRED_VERSION} (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
-endif()
-
-# Initialize Raspberry Pi Pico SDK
-pico_sdk_init()
-
 # Add projects
-add_subdirectory("./fw")
 add_subdirectory("./roms")
+
+ExternalProject_add(
+    firmware
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw
+    INSTALL_COMMAND ""  # No installation step
+)
