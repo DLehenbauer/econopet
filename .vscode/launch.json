@@ -8,7 +8,8 @@
         {
             "name": "Firmware",
             "cwd": "${workspaceRoot}",
-            "executable": "${command:cmake.launchTargetPath}",
+            //"executable": "${command:cmake.launchTargetPath}",
+            "executable": "${workspaceRoot}/build/firmware-prefix/src/firmware-build/firmware.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",

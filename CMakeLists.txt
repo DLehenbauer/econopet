@@ -27,5 +27,7 @@ add_subdirectory("./roms")
 ExternalProject_add(
     firmware
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw/targets/rp2040
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}   # Use same variant (Debug/Release) as this project
     INSTALL_COMMAND ""  # No installation step
+    BUILD_ALWAYS 1
 )
