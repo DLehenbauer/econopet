@@ -20,5 +20,6 @@
         "PICO",
         "RIGHTSHIFT"
     ],
-    "cortex-debug.variableUseNaturalFormat": false
+    "cortex-debug.variableUseNaturalFormat": false,
+    "cmake.generator": "Ninja"
 }

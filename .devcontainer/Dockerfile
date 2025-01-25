@@ -76,7 +76,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     gcc-arm-none-eabi \
     gdb-multiarch \
     libnewlib-arm-none-eabi \
-    libstdc++-arm-none-eabi-newlib
+    libstdc++-arm-none-eabi-newlib \
+    ninja-build
 
 # Get Raspberry Pi Pico SDK
 RUN git clone --depth 1 --branch $PICO_SDK_VERSION https://github.com/raspberrypi/pico-sdk.git && \
