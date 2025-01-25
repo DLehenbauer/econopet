@@ -159,7 +159,7 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     // (VICE 3.9 does the same.)
 
     // 8800-EFFF
-    for (uint32_t addr = 0x8800; addr < 0xE800; addr += 0x100) {
+    for (uint32_t addr = 0x8800; addr < 0xAFFF; addr += 0x100) {
         spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
     }
 
@@ -167,7 +167,7 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     spi_fill(0xE800, /* byte: */ 0xE8, /* byteLength: **/ 0x10);
 
     // E900-FFFF
-    for (uint32_t addr = 0xE900; addr < 0x10000; addr += 0x100) {
+    for (uint32_t addr = 0xE900; addr < 0xF000; addr += 0x100) {
         spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
     }
 
