@@ -16,7 +16,6 @@
 #include "hw.h"
 #include "usb/keyboard.h"
 #include "video/video.h"
-#include "util.h"
 #include "global.h"
 
 //                           WS__AAAA

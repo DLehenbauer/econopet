@@ -117,14 +117,59 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     pet_init_edit_rom(is80Columns, isBusinessKeyboard, is50Hz);
     spi_write(/* dest: */ 0xf000, /* pSrc: */ rom_kernal_f000, sizeof(rom_kernal_f000));
 
-    spi_fill(0xe800, /* byte: */ 0xe8, /* byteLength: **/ 0x10);
-    spi_fill(0xe900, /* byte: */ 0xe9, /* byteLength: **/ 0x100);
-    spi_fill(0xea00, /* byte: */ 0xea, /* byteLength: **/ 0x100);
-    spi_fill(0xeb00, /* byte: */ 0xeb, /* byteLength: **/ 0x100);
-    spi_fill(0xec00, /* byte: */ 0xec, /* byteLength: **/ 0x100);
-    spi_fill(0xed00, /* byte: */ 0xed, /* byteLength: **/ 0x100);
-    spi_fill(0xee00, /* byte: */ 0xee, /* byteLength: **/ 0x100);
-    spi_fill(0xef00, /* byte: */ 0xef, /* byteLength: **/ 0x100);
+    // Commodore's '8032.mem.prg', which is included with the 64K RAM expansion, tests
+    // "I/O peek through" by reading the address $E800 and asserting the result is $E8:
+    //
+    //      .C:f974  AD 00 E8    LDA $E800
+    //      .C:f977  C9 E8       CMP #$E8
+    //      .C:f979  F0 07       BEQ $F982
+    //
+    // This is surprising as $E800 is unmapped.  After discussion with the Commodore PET/CBM
+    // Enthusiasts FB group, our hypothesis is that a combination of capacitance, slow low-Z
+    // transition, and/or hysteresis of the 74LS244 buffers holds the last data value read
+    // on the bus long enough that the 6502 can reliably read it back if there are no other
+    // drivers.
+    //
+    // In the case of 'LDA $E800', the last byte read would be the high byte of the address
+    // in the LDA instruction.  The same seems to hold true for other unmapped regions.  To
+    // simulate this quirk, we initialized RAM backing these unmapped regions with the high
+    // byte of the address.
+    //
+    // Note that this is likely an imperfect emulation of the PET as it returns the high byte
+    // of the address being read as opposed to holding the last byte transferred on the bus.
+    // This can be detected using indexed addressing modes:
+    //
+    //      ; Set up zeropage pointer to the base address ($9FFF)
+    //      LDA #$FF
+    //      STA tmp1
+    //      LDA #$9F
+    //      STA tmp1+1
+    //      
+    //      ; Initialize the Y register
+    //      LDY #$0         ; Start indexing at offset 0
+    //
+    //      ; Read unmapped addresses $9FFF and $A000 using the same base address of $9FFF.
+    //      ; In both cases, the last bus transfer should be the CPU fetching 'tmp1 + 1' ($9F).
+    //
+    //      LDA (tmp1),Y    ; Read $9FFF -> expect A=$9F (value fetched from 'tmp1 + 1')
+    //      INY             ; Increment Y to read the next byte
+    //      LDA (tmp1),Y    ; Read $A000 -> expect A=$9F (value fetched from 'tmp1 + 1')
+    //
+    // Our simulation will return $9F and A0 instead of the expect $9F for both reads.
+    // (VICE 3.9 does the same.)
+
+    // 8800-EFFF
+    for (uint32_t addr = 0x8800; addr < 0xE800; addr += 0x100) {
+        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
+    }
+
+    // E800-E80F
+    spi_fill(0xE800, /* byte: */ 0xE8, /* byteLength: **/ 0x10);
+
+    // E900-FFFF
+    for (uint32_t addr = 0xE900; addr < 0x10000; addr += 0x100) {
+        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
+    }
 
     pet_reset();
 }
