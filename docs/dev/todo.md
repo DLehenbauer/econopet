@@ -1,6 +1,7 @@
 # TODOs
 
 * Before ordering:
+  * Figure out NDAC/ATN report on 8296 burn-in
   * Try removing current limiting resistor before crystal.
   * Verify FPGA GPIO pin assignments in Efinity
 * Before release
