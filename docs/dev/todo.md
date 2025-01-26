@@ -2,12 +2,12 @@
 
 * Before ordering:
   * Try removing current limiting resistor before crystal.
+  * Verify FPGA GPIO pin assignments in Efinity
 * Before release
   * Config
     * Business/Graphics Keyboard
     * 9"/12" (test with 15kHz VGA)
   * Keyboard
-    * Fix USB keyboard bugs
     * USB keyboard control
     * PET keyboard control (via readback)
   * Menu
