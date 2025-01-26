@@ -72,6 +72,7 @@ WORKDIR $PICO_PATH
 # in order to build the 'pioasm' and 'elf2uf2' tools.
 RUN apt-get update && apt-get -y install --no-install-recommends \
     build-essential \
+    check \
     cmake \
     gcc-arm-none-eabi \
     gdb-multiarch \
