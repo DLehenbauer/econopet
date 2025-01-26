@@ -3,12 +3,6 @@ cmake_minimum_required(VERSION 3.13)
 # Include Raspberry Pi Pico SDK (must be before project)
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
-project(EconoPET C CXX ASM)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-
-add_compile_options(-Wall -Wextra -Wnull-dereference)
-
 set(PICO_SDK_REQUIRED_VERSION "2.0.0")
 if (PICO_SDK_VERSION_STRING VERSION_LESS PICO_SDK_REQUIRED_VERSION)
     message(FATAL_ERROR "Raspberry Pi Pico SDK version ${PICO_SDK_REQUIRED_VERSION} (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
@@ -20,6 +14,7 @@ pico_sdk_init()
 project("firmware")
 set(FAMILY rp2040)
 set(BOARD pico_sdk)
+add_compile_options(-Wall -Wextra -Wnull-dereference)
 
 # Calculate the root '/fw' directory relative to this file
 set(FW_DIR ${CMAKE_SOURCE_DIR}/../..)
@@ -47,6 +42,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/usb/cdc_app.c
     ${SRC_DIR}/usb/hid_app.c
     ${SRC_DIR}/usb/keyboard.c
+    ${SRC_DIR}/usb/keystate.c
     ${SRC_DIR}/usb/msc_app.c
     ${SRC_DIR}/usb/usb.c
     ${SRC_DIR}/video/video.c

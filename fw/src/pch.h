@@ -15,11 +15,14 @@
 #pragma once
 
 #include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // SDK
+#if defined(PICO_RP2040)
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
@@ -46,3 +49,4 @@
 // TinyUSB
 #include "bsp/board.h"
 #include "tusb.h"
+#endif
