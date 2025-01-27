@@ -37,7 +37,7 @@ bool reverse = false;
 void term_put_char(uint8_t ch) {
     bool reversed = (ch & 0x80) != 0;
     if (reversed != reverse) {
-        printf(reversed ? reverse_on : reverse_off);
+        fputs(reversed ? reverse_on : reverse_off, stdout);
         reverse = reversed;
     }
     putchar(term_chars_lower[ch & 0x7F]);
@@ -46,9 +46,9 @@ void term_put_char(uint8_t ch) {
 void term_display(const uint8_t* const pSrc, uint8_t cols, uint8_t rows) {
     const uint8_t* p = pSrc;
 
-    printf(home);
-    printf(reverse_off);
-    printf(cursor_off);
+    fputs(home, stdout);
+    fputs(reverse_off, stdout);
+    fputs(cursor_off, stdout);
     reverse = false;
 
     for (int r = 0; r < rows; r++) {

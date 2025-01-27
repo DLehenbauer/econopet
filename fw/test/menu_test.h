@@ -12,26 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include <check.h>
-#include "keystate_test.h"
-#include "menu_test.h"
+#include "../src/term.h"
 
-int run_suite() {
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
-
-    s = keystate_suite();
-    sr = srunner_create(s);
-
-    srunner_run_all(sr, CK_NORMAL);
-    number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
-    return (number_failed == 0) ? 0 : 1;
-}
-
-int main(void) {
-    menu();
-
-    return run_suite();
-}
+void menu();

@@ -55,4 +55,3 @@ Suite *keystate_suite(void) {
 
     return s;
 }
-

@@ -23,30 +23,33 @@
 
 // SDK
 #if defined(PICO_RP2040)
-#include "hardware/clocks.h"
-#include "hardware/dma.h"
-#include "hardware/gpio.h"
-#include "hardware/irq.h"
-#include "hardware/pwm.h"
-#include "hardware/spi.h"
-#include "hardware/structs/bus_ctrl.h"
-#include "hardware/structs/ssi.h"
-#include "hardware/sync.h"
-#include "hardware/uart.h"
-#include "hardware/vreg.h"
-#include "pico/binary_info.h"
-#include "pico/flash.h"
-#include "pico/multicore.h"
-#include "pico/sem.h"
-#include "pico/stdlib.h"
+    #include "hardware/clocks.h"
+    #include "hardware/dma.h"
+    #include "hardware/gpio.h"
+    #include "hardware/irq.h"
+    #include "hardware/pwm.h"
+    #include "hardware/spi.h"
+    #include "hardware/structs/bus_ctrl.h"
+    #include "hardware/structs/ssi.h"
+    #include "hardware/sync.h"
+    #include "hardware/uart.h"
+    #include "hardware/vreg.h"
+    #include "pico/binary_info.h"
+    #include "pico/flash.h"
+    #include "pico/multicore.h"
+    #include "pico/sem.h"
+    #include "pico/stdlib.h"
 
-// PicoDVI
-#include "common_dvi_pin_configs.h"
-#include "dvi_serialiser.h"
-#include "dvi.h"
-#include "tmds_encode.h"
+    // PicoDVI
+    #include "common_dvi_pin_configs.h"
+    #include "dvi_serialiser.h"
+    #include "dvi.h"
+    #include "tmds_encode.h"
 
-// TinyUSB
-#include "bsp/board.h"
-#include "tusb.h"
+    // TinyUSB
+    #include "bsp/board.h"
+    #include "tusb.h"
+#else
+    // Stub __in_flash for Linux or other host environments.
+    #define __in_flash(x)
 #endif
