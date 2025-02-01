@@ -217,7 +217,21 @@ Edit        | edit-4-40-n-50Hz.901498-01.bin  |   2048 | 3370e359
 Kernel      | kernal-4.901465-22.bin          |   4096 | cc5298a1
 Characters  | characters-2.901447-10.bin      |   2048 | d8408674
 
-## All
+## Appendix A: 6540 ROMs (28-pin)
+
+Some static PET units use 28-pin 6540 ROMs instead of the 24-pin 23xx ROMs standardized
+on by Commodore in later models.
+
+Mainboard | ROMs  | RAM
+----------|-------|------
+320008    | 6540  | 6550
+320081    | 2316B | 6550
+320132    | 6540  | 2114
+320137    | 2316B | 2114
+
+The content of the 6540 ROMs are identical to the their 23xx counterparts.
+
+## Appendix B: ROM Table
 
 Model       | Type                    | Function                                       | Part#      | Size | Address   | IC        | Version | Revision | Copyright | CRC-32     | Code
 ------------|-------------------------|------------------------------------------------|------------|------|-----------|-----------|---------|----------|-----------|------------|-------

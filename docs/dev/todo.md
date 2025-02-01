@@ -2,6 +2,7 @@
 
 * Before ordering:
   * Try removing current limiting resistor before crystal.
+  * Ensure modified GPIO assignments compile in Efinity.
 * Before release
   * Config
     * Business/Graphics Keyboard
