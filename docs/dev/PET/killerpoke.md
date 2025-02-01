@@ -14,7 +14,7 @@ However, on later PET models, driving PB5 in contention sufficiently loaded the 
 
 In this our open hardware design, the VERT signal is buffered by the level shifter and easily wins against the VIA.  Our primary concern is damage to the VIA from prolonged contention.
 
-The W65C22N datasheet notes that the 'N' variant has built-in current limiting resistors, but does not indicate their size or if they are intended to protect against transient shorts.
+The W65C22N datasheet notes that the 'N' variant has built-in current limiting resistors, but does not indicate their size or if they are only intended to protect against transient shorts.
 
 I asked about this in a Facebook group, and received this reply from Bill Mensch:
 
