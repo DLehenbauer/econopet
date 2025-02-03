@@ -1776,7 +1776,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A105KA5NQNC_C52923.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A105KA5NQN.do"
 			(at 97.79 82.55 0)
 			(effects
 				(font

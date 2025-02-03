@@ -5048,7 +5048,7 @@
 	)
 	(wire
 		(pts
-			(xy 90.17 36.83) (xy 90.17 39.37)
+			(xy 90.17 36.83) (xy 90.17 40.64)
 		)
 		(stroke
 			(width 0)
@@ -5358,7 +5358,7 @@
 	)
 	(polyline
 		(pts
-			(xy 50.8 25.4) (xy 50.8 48.26)
+			(xy 53.34 25.4) (xy 53.34 48.26)
 		)
 		(stroke
 			(width 0)
@@ -5438,7 +5438,7 @@
 	)
 	(polyline
 		(pts
-			(xy 88.9 48.26) (xy 88.9 25.4)
+			(xy 86.36 48.26) (xy 86.36 25.4)
 		)
 		(stroke
 			(width 0)
@@ -5898,7 +5898,7 @@
 	)
 	(polyline
 		(pts
-			(xy 88.9 25.4) (xy 50.8 25.4)
+			(xy 86.36 25.4) (xy 53.34 25.4)
 		)
 		(stroke
 			(width 0)
@@ -6728,7 +6728,7 @@
 	)
 	(polyline
 		(pts
-			(xy 50.8 48.26) (xy 88.9 48.26)
+			(xy 53.34 48.26) (xy 86.36 48.26)
 		)
 		(stroke
 			(width 0)
@@ -7168,7 +7168,7 @@
 	)
 	(wire
 		(pts
-			(xy 90.17 41.91) (xy 90.17 45.72)
+			(xy 90.17 43.18) (xy 90.17 45.72)
 		)
 		(stroke
 			(width 0)
@@ -7455,9 +7455,9 @@
 		)
 		(uuid "49488fba-6b65-496b-938d-786827503480")
 	)
-	(text "Optional PS filtering caps can be\npopulated to replace the original\n23000u cap."
+	(text "Optional PS filtering caps can\nbe populated to replace the\noriginal 23000u cap."
 		(exclude_from_sim no)
-		(at 52.07 33.02 0)
+		(at 54.61 34.29 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -9136,7 +9136,7 @@
 	)
 	(symbol
 		(lib_id "Connector:Conn_01x02_Pin")
-		(at 95.25 41.91 180)
+		(at 95.25 43.18 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -9145,7 +9145,7 @@
 		(fields_autoplaced yes)
 		(uuid "2a20e5c4-a75f-42f4-b0b0-7254558cfdfe")
 		(property "Reference" "J11"
-			(at 96.52 39.3699 0)
+			(at 96.52 40.6399 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9154,7 +9154,7 @@
 			)
 		)
 		(property "Value" "9V POWER"
-			(at 96.52 41.9099 0)
+			(at 96.52 43.1799 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9163,7 +9163,7 @@
 			)
 		)
 		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
-			(at 95.25 41.91 0)
+			(at 95.25 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9172,7 +9172,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 95.25 41.91 0)
+			(at 95.25 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9181,7 +9181,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x02, script generated"
-			(at 95.25 41.91 0)
+			(at 95.25 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9190,7 +9190,7 @@
 			)
 		)
 		(property "MOUSER" "649-1012937891002BLF"
-			(at 95.25 41.91 0)
+			(at 95.25 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13200,7 +13200,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A105KA5NQNC_C52923.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A105KA5NQN.do"
 			(at 170.18 134.62 0)
 			(effects
 				(font
@@ -14036,7 +14036,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05A105KA5NQNC_C52923.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A105KA5NQN.do"
 			(at 161.29 46.99 0)
 			(effects
 				(font
