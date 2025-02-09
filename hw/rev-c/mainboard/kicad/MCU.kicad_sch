@@ -7862,7 +7862,7 @@
 		(dnp no)
 		(uuid "97059369-3699-48d0-8a2f-db7fd549f04e")
 		(property "Reference" "R42"
-			(at 77.47 93.98 90)
+			(at 81.788 93.218 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7870,8 +7870,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "100"
-			(at 82.042 95.25 90)
+		(property "Value" "1k"
+			(at 81.28 95.25 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7888,7 +7888,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF1000TCE_C25076.pdf"
+		(property "Datasheet" ""
 			(at 80.01 95.25 0)
 			(effects
 				(font
@@ -7906,7 +7906,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25076"
+		(property "LCSC" "C11702"
 			(at 80.01 95.25 0)
 			(effects
 				(font
