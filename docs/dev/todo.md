@@ -28,3 +28,7 @@
   * Back:
     * Label remaining ports (IEEE, USER, KEYBOARD, etc.)
     * Label remaining pins (C[7:0], R[9:0], etc)
+* Future
+  * Relayout
+    * Ideally SMD pad to THT should be >= 3.05mm
+    
