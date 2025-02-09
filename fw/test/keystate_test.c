@@ -1,4 +1,18 @@
-#include <check.h>
+/**
+ * PET Clone - Open hardware implementation of the Commodore PET
+ * by Daniel Lehenbauer and contributors.
+ * 
+ * https://github.com/DLehenbauer/commodore-pet-clone
+ *
+ * To the extent possible under law, I, Daniel Lehenbauer, have waived all
+ * copyright and related or neighboring rights to this project. This work is
+ * published from the United States.
+ *
+ * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
+ */
+
+#include "keystate_test.h"
 #include "../src/usb/keystate.h"
 
 START_TEST(test_keystate) {
@@ -40,18 +54,4 @@ Suite *keystate_suite(void) {
     suite_add_tcase(s, tc_core);
 
     return s;
-}
-
-int main(void) {
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
-
-    s = keystate_suite();
-    sr = srunner_create(s);
-
-    srunner_run_all(sr, CK_NORMAL);
-    number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
-    return (number_failed == 0) ? 0 : 1;
 }

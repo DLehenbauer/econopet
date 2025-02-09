@@ -12,7 +12,10 @@ set(TEST_DIR ${FW_DIR}/test)
 
 add_executable(${PROJECT_NAME}
     ${TEST_DIR}/keystate_test.c
+    ${TEST_DIR}/menu_test.c
+    ${TEST_DIR}/main.c
     ${SRC_DIR}/usb/keystate.c
+    ${SRC_DIR}/term.c
 )
 
 target_link_libraries(${PROJECT_NAME} ${CHECK_LIBRARIES} subunit m)
