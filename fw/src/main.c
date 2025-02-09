@@ -12,14 +12,17 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-// During development, you can disable the FPGA configuration by commenting out
-// the following line.  Because the bitstream is large, this reduces the amount
-// of time required to update the RP2040's flash.  (Of course, you will need to
-// use an external JTAG programmer to configure the FPGA to boot.)
-// #define FPGA_PROG
+// Run 'fpga/bitstream.sh' to generate 'fpga/bitstream.h', or use a JTAG programmer to 
+// manually configure the FPGA after power on for a faster development loop.
+#if __has_include("fpga/bitstream.h")
+    #define FPGA_PROG
+#else
+    #warning "'fpga/bitstream.h' not found.  Use JTAG programmer to configure FPGA."
+#endif
 
 #include "pch.h"
 #include "driver.h"
+#include "global.h"
 #include "hw.h"
 #include "menu/menu.h"
 #include "pet.h"
@@ -132,7 +135,8 @@ void fpga_init() {
     // at the end of configuration.  We clear the 125 bytes now 
     _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
 
-    memset(temp_buffer, 0, MIN(sizeof(temp_buffer), 125));
+    // _Static_assert above ensures that sizeof(temp_buffer) >= 125 bytes.
+    memset(temp_buffer, 0, 125);
     
     // Changes in clock polarity do not seem to take effect until the next write.  Send
     // a single byte while CS_N is deasserted to transition SCK to high.
@@ -150,6 +154,7 @@ void fpga_init() {
     spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
 
     // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
+    // _Static_assert above ensures that sizeof(temp_buffer) >= 125 bytes.
     spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, 125);
 
     // Deassert CS_N to signal end of configuration.

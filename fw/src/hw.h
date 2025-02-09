@@ -24,23 +24,32 @@
 #define SPI1_SDO_GP 11
 #define SPI1_SDI_GP 12
 
-// When the MCU asserts CS (signalling the beginning of a new command), the FPGA asserts
+// When the MCU asserts CS (signaling the beginning of a new command), the FPGA asserts
 // STALL until the full command has been received and processed.
 #define SPI_STALL_GP 10
 
-// SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO for SPI.
+// SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO.
 // (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
 #define FPGA_SPI_MHZ 24
 #define SD_SPI_MHZ 24
 
-// SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP
+// SPI0 is used to configure the FPGA on POR and then used for communication with
+// the FPGA.  Efinix requires SPI mode 3 for configuration.  After POR, SPI mode 0
+// is used for communication.
+//
+// SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP.
+// The PrimeCell SSP deasserts/reasserts CSN between bytes, which resets the SPI
+// state machine on the FPGA (the state machine uses CSN for framing the command).
+// Therefore, CSN is driven manually by software as a GPIO.
 #define FPGA_SPI_INSTANCE spi0
 #define FPGA_SPI_CSN_GP SPI0_CSN_GP
 #define FPGA_SPI_SCK_GP SPI0_SCK_GP
 #define FPGA_SPI_SDO_GP SPI0_SDO_GP
 #define FPGA_SPI_SDI_GP SPI0_SDI_GP
 
-// SD card reader shares SPI1 bus
+// SPI1 is used to communicate with the SD card.  The SPI1 bus is also connected to
+// the FPGA and could be used as a second communication channel in the future.  There
+// are separate CSN signals for the SD card and FPGA.
 #define SD_SPI_INSTANCE spi1
 #define SD_CLK_GP SPI1_SCK_GP
 #define SD_CMD_GP SPI1_SDO_GP
@@ -55,5 +64,5 @@
 // PWM output used to generate the PLL input for FPGA.
 #define FPGA_CLK_GP 15
 
-// Menu button (requires enabling pull-up)
+// Menu button (active low / requires enabling pull-up)
 #define MENU_BTN_GP 27
