@@ -6,3 +6,4 @@
 * PET
   * [Memory Map](https://www.commodore.ca/manuals/pdfs/commodore_pet_memory_map.pdf)
   * [8032 ROM Map](https://www.zimmers.net/anonftp/pub/cbm/maps/PET8032rom-map.txt)
+  * [PETSCII Editor](https://lvllvl.c64online.com/)
