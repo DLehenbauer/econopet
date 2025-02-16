@@ -13113,7 +13113,7 @@
 		(uuid "6a46bb5b-b664-4949-80a1-dc1ec1810d7c")
 	)
 	(label "~{IRQ}"
-		(at 154.94 157.48 180)
+		(at 154.94 154.94 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -14048,7 +14048,7 @@
 		(uuid "ec6daee1-d898-45e5-9dc9-b270149584ad")
 	)
 	(label "~{SO}"
-		(at 154.94 154.94 180)
+		(at 154.94 157.48 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -14607,13 +14607,13 @@
 	)
 	(hierarchical_label "~{IRQ}"
 		(shape bidirectional)
-		(at 467.36 95.25 0)
+		(at 454.66 92.71 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "96ad6d7e-5313-4ba0-b95b-a0fdb7882718")
 	)
@@ -14799,13 +14799,13 @@
 	)
 	(hierarchical_label "~{SO}"
 		(shape output)
-		(at 454.66 92.71 180)
+		(at 467.36 95.25 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right)
+			(justify left)
 		)
 		(uuid "ebf5d43f-077f-4bb8-9d27-783ff3ac0fa9")
 	)
