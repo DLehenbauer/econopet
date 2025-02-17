@@ -19,6 +19,7 @@
   * [Trace Width Calculator](https://www.digikey.com/en/resources/conversion-calculators/conversion-calculator-pcb-trace-width)
   * [Trace Width Calculator](http://circuitcalculator.com/wordpress/?p=25/)
   * [Trace Impedance Calculator](https://www.eeweb.com/tools/edge-coupled-microstrip-impedance/)
+  * [Parallel Resistor Calculator](https://www.qsl.net/in3otd/parallr.html)
 * [JLCPCB Capabilities](https://jlcpcb.com/capabilities/Capabilities)
 * [JLCPCB Parts Search](https://yaqwsx.github.io/jlcparts/#/)
 * [JLCPCB DFM Analysis](https://jlcdfm.com/)

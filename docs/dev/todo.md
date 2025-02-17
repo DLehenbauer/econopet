@@ -30,5 +30,11 @@
     * Label remaining pins (C[7:0], R[9:0], etc)
 * Future
   * Relayout
-    * Ideally SMD pad to THT should be >= 3.05mm
+    * These parts should be offset: CPU, RAM, 25-pin header
+    * Route ground with signals
+    * Check http://jlcdfm.com recommendations
+      * Ideal SMD pad to THT is >= 3.05mm
+      * Anular rings >0.15mm
+
+
     

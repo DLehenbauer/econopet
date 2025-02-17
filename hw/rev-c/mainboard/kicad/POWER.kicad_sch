@@ -4503,6 +4503,12 @@
 		(uuid "0b893c50-bf03-42a0-a4da-9f78beec019d")
 	)
 	(junction
+		(at 215.9 100.33)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "0f43d364-79f4-464a-bd28-b8fee495a16c")
+	)
+	(junction
 		(at 90.17 36.83)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4665,6 +4671,12 @@
 		(uuid "64a702b9-a119-4462-8827-12af00fedfe2")
 	)
 	(junction
+		(at 215.9 107.95)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "683b3bc6-dcc9-4cc5-8f0a-f5187f8b73a0")
+	)
+	(junction
 		(at 247.65 149.86)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4693,6 +4705,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7131ee3d-de36-4b6f-a391-6695d97d81c2")
+	)
+	(junction
+		(at 215.9 96.52)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "71500282-f90b-4ba6-9b7c-41ba4d8330a0")
 	)
 	(junction
 		(at 201.93 129.54)
@@ -4855,12 +4873,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "e450a32d-3e3a-4b49-95a6-23bf67781efc")
-	)
-	(junction
-		(at 214.63 96.52)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "e81dd466-28b7-4be9-bb5b-d08f0e5b89b5")
 	)
 	(junction
 		(at 137.16 87.63)
@@ -5028,7 +5040,7 @@
 	)
 	(wire
 		(pts
-			(xy 198.12 96.52) (xy 214.63 96.52)
+			(xy 198.12 96.52) (xy 215.9 96.52)
 		)
 		(stroke
 			(width 0)
@@ -5115,6 +5127,16 @@
 			(type default)
 		)
 		(uuid "0fc2d902-71ce-4d64-83e1-ac1d60a77f30")
+	)
+	(wire
+		(pts
+			(xy 212.09 101.6) (xy 212.09 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "104939e1-d862-4f92-a0f9-66d92f97884a")
 	)
 	(wire
 		(pts
@@ -5356,6 +5378,16 @@
 		)
 		(uuid "24c027db-6925-47d0-9a32-23dea535de6a")
 	)
+	(wire
+		(pts
+			(xy 215.9 107.95) (xy 215.9 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "276d2959-5547-4ff3-bf70-8f0ac4f674ce")
+	)
 	(polyline
 		(pts
 			(xy 53.34 25.4) (xy 53.34 48.26)
@@ -5588,6 +5620,16 @@
 	)
 	(wire
 		(pts
+			(xy 212.09 106.68) (xy 212.09 107.95)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "38fc6319-442d-43b6-a2ae-ca0fdb32ea77")
+	)
+	(wire
+		(pts
 			(xy 147.32 48.26) (xy 147.32 46.99)
 		)
 		(stroke
@@ -5625,16 +5667,6 @@
 			(type default)
 		)
 		(uuid "3cc12e9f-bf85-48fd-ac73-d9e637ec256a")
-	)
-	(wire
-		(pts
-			(xy 214.63 96.52) (xy 226.06 96.52)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "3cf74703-e720-4215-b485-ea70ba3d98e7")
 	)
 	(wire
 		(pts
@@ -6198,6 +6230,16 @@
 	)
 	(wire
 		(pts
+			(xy 215.9 96.52) (xy 226.06 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "73494f2a-7651-42b0-a41c-a25ba707a0a6")
+	)
+	(wire
+		(pts
 			(xy 208.28 139.7) (xy 219.71 139.7)
 		)
 		(stroke
@@ -6338,6 +6380,16 @@
 	)
 	(wire
 		(pts
+			(xy 212.09 100.33) (xy 215.9 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "87d9f595-a39c-4fb2-8d51-2966aadfe074")
+	)
+	(wire
+		(pts
 			(xy 255.27 137.16) (xy 255.27 139.7)
 		)
 		(stroke
@@ -6458,16 +6510,6 @@
 	)
 	(wire
 		(pts
-			(xy 198.12 111.76) (xy 198.12 110.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "96720def-4c34-46ae-aaed-3f90e28213f3")
-	)
-	(wire
-		(pts
 			(xy 59.69 45.72) (xy 59.69 44.45)
 		)
 		(stroke
@@ -6475,6 +6517,16 @@
 			(type default)
 		)
 		(uuid "976b0a7a-eb64-4084-b982-9c09deb21f5e")
+	)
+	(wire
+		(pts
+			(xy 215.9 100.33) (xy 219.71 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "989ae785-c783-41c7-b39e-0d7f4e35b0f3")
 	)
 	(wire
 		(pts
@@ -6528,7 +6580,7 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 111.76) (xy 198.12 111.76)
+			(xy 215.9 111.76) (xy 198.12 111.76)
 		)
 		(stroke
 			(width 0)
@@ -6668,13 +6720,13 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 102.87) (xy 214.63 105.41)
+			(xy 219.71 106.68) (xy 219.71 107.95)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "af6411db-7548-4cac-8bce-db7506939269")
+		(uuid "ad23a2df-304c-46d5-9ed4-993d0774faa3")
 	)
 	(wire
 		(pts
@@ -6825,6 +6877,16 @@
 			(type default)
 		)
 		(uuid "bd6569f1-e2bc-4833-b01e-f1a3c3ca91c7")
+	)
+	(wire
+		(pts
+			(xy 198.12 111.76) (xy 198.12 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "be54928e-cba3-4486-be92-8bdffab8f376")
 	)
 	(wire
 		(pts
@@ -6988,6 +7050,16 @@
 	)
 	(wire
 		(pts
+			(xy 212.09 107.95) (xy 215.9 107.95)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cb45d75a-6e7e-4dd1-89c1-8af3201ff4b7")
+	)
+	(wire
+		(pts
 			(xy 187.96 80.01) (xy 189.23 80.01)
 		)
 		(stroke
@@ -7048,6 +7120,16 @@
 	)
 	(wire
 		(pts
+			(xy 215.9 107.95) (xy 219.71 107.95)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d6b3058c-b37d-43ea-a7f7-054de6f27018")
+	)
+	(wire
+		(pts
 			(xy 143.51 57.15) (xy 161.29 57.15)
 		)
 		(stroke
@@ -7078,6 +7160,16 @@
 	)
 	(wire
 		(pts
+			(xy 215.9 96.52) (xy 215.9 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d9ef29db-9387-48c4-a2c3-b123ed145671")
+	)
+	(wire
+		(pts
 			(xy 114.3 36.83) (xy 114.3 80.01)
 		)
 		(stroke
@@ -7095,6 +7187,16 @@
 			(type default)
 		)
 		(uuid "dc4a2ce8-3895-40a1-8831-d8f1b5528768")
+	)
+	(wire
+		(pts
+			(xy 219.71 100.33) (xy 219.71 101.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ddd07850-90c8-4ccf-b1e3-228d059d7ecd")
 	)
 	(wire
 		(pts
@@ -7135,16 +7237,6 @@
 			(type default)
 		)
 		(uuid "e25e48b9-6145-4c8a-b3f2-e0b2f5e901e3")
-	)
-	(wire
-		(pts
-			(xy 214.63 110.49) (xy 214.63 111.76)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e3ab9f92-8304-47d0-a66f-1544470429d0")
 	)
 	(wire
 		(pts
@@ -7365,16 +7457,6 @@
 			(type default)
 		)
 		(uuid "fb7a7f2f-df56-410a-a922-fac68247422e")
-	)
-	(wire
-		(pts
-			(xy 214.63 96.52) (xy 214.63 97.79)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "fc10fcf9-2772-48fb-a21e-97b07c272745")
 	)
 	(wire
 		(pts
@@ -7767,7 +7849,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1810231112_Hubei-KENTO-Elec-KT-0603R_C2286.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8550723991833485312"
 			(at 255.27 38.1 0)
 			(effects
 				(font
@@ -7908,7 +7990,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
 			(at 80.01 63.5 0)
 			(effects
 				(font
@@ -7984,7 +8066,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2303141100_MDD-Microdiode-Electronics--SS54_C22452.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2407101107_MDD-Microdiode-Semiconductor-SS54_C22452.pdf"
 			(at 67.31 63.5 90)
 			(effects
 				(font
@@ -8060,7 +8142,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2303141100_MDD-Microdiode-Electronics--SS54_C22452.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2407101107_MDD-Microdiode-Semiconductor-SS54_C22452.pdf"
 			(at 67.31 71.12 90)
 			(effects
 				(font
@@ -8136,7 +8218,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2303141100_MDD-Microdiode-Electronics--SS54_C22452.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2407101107_MDD-Microdiode-Semiconductor-SS54_C22452.pdf"
 			(at 55.88 67.31 90)
 			(effects
 				(font
@@ -8214,7 +8296,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
 			(at 80.01 71.12 0)
 			(effects
 				(font
@@ -8292,7 +8374,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
 			(at 55.88 81.28 0)
 			(effects
 				(font
@@ -8434,7 +8516,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311830_UNI-ROYAL-Uniroyal-Elec-0805W8F680JT5E_C17802.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311830_UNI-ROYAL-Uniroyal-Elec-0805W8F680JT5E_C17802.pdf"
 			(at 27.94 177.8 0)
 			(effects
 				(font
@@ -8513,7 +8595,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2109180930_Sunlord-GZ1608D601TF_C1002.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2310301640_Sunlord-GZ1608D601TF_C1002.pdf"
 			(at 182.88 129.54 0)
 			(effects
 				(font
@@ -8851,7 +8933,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UTC-Unisonic-Tech-LM317AG-TN3-R_C75510.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UTC-Unisonic-Tech-LM317AG-TN3-R_C75510.pdf"
 			(at 143.51 129.54 0)
 			(effects
 				(font
@@ -8931,7 +9013,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UTC-Unisonic-Tech-LM317AG-TN3-R_C75510.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UTC-Unisonic-Tech-LM317AG-TN3-R_C75510.pdf"
 			(at 143.51 36.83 0)
 			(effects
 				(font
@@ -9013,7 +9095,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF2200TCE_C25091.pdf"
 			(at 198.12 107.95 0)
 			(effects
 				(font
@@ -9092,7 +9174,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010130_UNI-ROYAL-Uniroyal-Elec-0603WAF1004T5E_C22935.pdf"
 			(at 134.62 177.8 0)
 			(effects
 				(font
@@ -9110,7 +9192,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C22935"
+		(property "LCSC" "C22936"
 			(at 134.62 177.8 0)
 			(effects
 				(font
@@ -9248,7 +9330,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Advanced-Monolithic-Systems-AMS1117-3-3_C6186.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8550724073479806976"
 			(at 130.81 172.72 0)
 			(effects
 				(font
@@ -9539,7 +9621,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAYNNN.do"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
 			(at 146.05 83.82 0)
 			(effects
 				(font
@@ -9761,7 +9843,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAYNNN.do"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
 			(at 114.3 173.99 0)
 			(effects
 				(font
@@ -9822,7 +9904,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "220n"
+		(property "Value" "220n 16V"
 			(at 200.66 101.5935 0)
 			(effects
 				(font
@@ -9840,7 +9922,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B224KO5NNN.do"
 			(at 198.12 100.33 0)
 			(effects
 				(font
@@ -10385,7 +10467,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 193.2432 135.763 0)
 			(effects
 				(font
@@ -10403,7 +10485,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 195.58 134.62 0)
 			(effects
 				(font
@@ -10421,7 +10503,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 195.58 134.62 0)
 			(effects
 				(font
@@ -10559,7 +10641,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 133.35 134.62 0)
 			(effects
 				(font
@@ -10830,7 +10912,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B102K500NT_C1523.pdf"
 			(at 231.14 101.6 0)
 			(effects
 				(font
@@ -10907,7 +10989,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 191.77 80.01 0)
 			(effects
 				(font
@@ -11052,7 +11134,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 208.28 134.62 0)
 			(effects
 				(font
@@ -11130,7 +11212,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAYNNN.do"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
 			(at 128.27 83.82 0)
 			(effects
 				(font
@@ -11352,7 +11434,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010130_UNI-ROYAL-Uniroyal-Elec-0603WAF1004T5E_C22935.pdf"
 			(at 139.7 177.8 0)
 			(effects
 				(font
@@ -11370,7 +11452,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C22935"
+		(property "LCSC" "C22936"
 			(at 139.7 177.8 0)
 			(effects
 				(font
@@ -11528,16 +11610,15 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 214.63 100.33 0)
+		(at 212.09 104.14 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "69676cdc-2d54-45b4-b402-dec9b4cfb321")
 		(property "Reference" "R14"
-			(at 217.17 99.0599 0)
+			(at 213.36 102.87 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11545,8 +11626,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2k2"
-			(at 217.17 101.5999 0)
+		(property "Value" "10k"
+			(at 213.36 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11555,7 +11636,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 214.63 100.33 0)
+			(at 212.09 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11563,8 +11644,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 214.63 100.33 0)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
+			(at 212.09 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11573,7 +11654,7 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
-			(at 214.63 100.33 0)
+			(at 212.09 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11581,8 +11662,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C4211"
-			(at 214.63 100.33 0)
+		(property "LCSC" "C25744"
+			(at 212.09 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11706,7 +11787,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1809301215_MDD-Microdiode-Electronics--SM4007PL_C64898.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2407101127_MDD-Microdiode-Semiconductor-SM4007PL_C64898.pdf"
 			(at 143.51 119.38 0)
 			(effects
 				(font
@@ -11803,7 +11884,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 219.71 134.62 0)
 			(effects
 				(font
@@ -11947,7 +12028,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF1501TCE_C25867.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF1501TCE_C25867.pdf"
 			(at 247.65 38.1 0)
 			(effects
 				(font
@@ -12025,7 +12106,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAYNNN.do"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
 			(at 137.16 83.82 0)
 			(effects
 				(font
@@ -12104,7 +12185,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "http://www.ti.com/lit/ds/symlink/tps5430.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_1811081920_Texas-Instruments-TPS5430DDAR_C9864.pdf"
 			(at 175.26 85.09 0)
 			(effects
 				(font
@@ -12114,6 +12195,15 @@
 			)
 		)
 		(property "Description" "3A, Step Down Swift Converter, Adjustable Output Voltage, 5.5-36V Input Voltage, PowerSO-8"
+			(at 175.26 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C9864"
 			(at 175.26 85.09 0)
 			(effects
 				(font
@@ -12455,7 +12545,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 129.54 46.99 0)
 			(effects
 				(font
@@ -12824,7 +12914,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF5101TCE_C25905.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF5101TCE_C25905.pdf"
 			(at 147.32 50.8 0)
 			(effects
 				(font
@@ -13122,7 +13212,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
 			(at 231.14 96.52 0)
 			(effects
 				(font
@@ -13474,7 +13564,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2407101107_MDD-Microdiode-Semiconductor-SS54_C22452.pdf"
 			(at 198.12 83.82 90)
 			(effects
 				(font
@@ -13535,7 +13625,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 252.9332 147.193 0)
 			(effects
 				(font
@@ -13553,7 +13643,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 255.27 146.05 0)
 			(effects
 				(font
@@ -13571,7 +13661,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 255.27 146.05 0)
 			(effects
 				(font
@@ -13632,7 +13722,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B151K500NT_C1527.pdf"
 			(at 186.69 104.14 0)
 			(effects
 				(font
@@ -13676,16 +13766,15 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 214.63 107.95 0)
+		(at 219.71 104.14 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "db46364b-ab2b-43bf-9525-ce3f9a0661f4")
 		(property "Reference" "R15"
-			(at 217.17 106.6799 0)
+			(at 220.98 102.87 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13693,8 +13782,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1k"
-			(at 217.17 109.2199 0)
+		(property "Value" "4k7"
+			(at 220.98 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13703,7 +13792,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 214.63 107.95 0)
+			(at 219.71 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13711,8 +13800,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 214.63 107.95 0)
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF4701TCE_C25900.pdf"
+			(at 219.71 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13721,7 +13810,7 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
-			(at 214.63 107.95 0)
+			(at 219.71 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13729,8 +13818,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C11702"
-			(at 214.63 107.95 0)
+		(property "LCSC" "C25900"
+			(at 219.71 104.14 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13789,7 +13878,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF1501TCE_C25867.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF1501TCE_C25867.pdf"
 			(at 139.7 50.8 0)
 			(effects
 				(font
@@ -13867,7 +13956,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF3000TCE_C25102.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF3000TCE_C25102.pdf"
 			(at 152.4 40.64 0)
 			(effects
 				(font
@@ -14479,7 +14568,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF1200TCE_C25079.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF1200TCE_C25079.pdf"
 			(at 153.67 134.62 0)
 			(effects
 				(font

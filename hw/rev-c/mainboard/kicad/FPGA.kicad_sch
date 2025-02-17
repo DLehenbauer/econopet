@@ -12419,6 +12419,17 @@
 		)
 		(uuid "065d0ec4-9a8e-46c1-b5cc-051990b6ad02")
 	)
+	(text "1% tolerance\nspecified"
+		(exclude_from_sim no)
+		(at 115.062 146.05 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "1b0d0a65-8941-47b2-b78c-d8d98ee366cd")
+	)
 	(text "BD2"
 		(exclude_from_sim no)
 		(at 140.97 54.61 0)
@@ -14463,18 +14474,6 @@
 	)
 	(hierarchical_label "DIAG"
 		(shape input)
-		(at 210.82 142.24 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "7a62e4c1-b5d1-4497-bfcb-b05dcb8c8d10")
-	)
-	(hierarchical_label "VIA_CB2"
-		(shape input)
 		(at 148.59 147.32 180)
 		(fields_autoplaced yes)
 		(effects
@@ -14482,6 +14481,18 @@
 				(size 1.27 1.27)
 			)
 			(justify right)
+		)
+		(uuid "7a62e4c1-b5d1-4497-bfcb-b05dcb8c8d10")
+	)
+	(hierarchical_label "VIA_CB2"
+		(shape input)
+		(at 210.82 142.24 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
 		)
 		(uuid "7be86e20-23cd-472e-bd18-adb9d1179029")
 	)
@@ -14893,7 +14904,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 100.33 255.27 0)
 			(effects
 				(font
@@ -15037,7 +15048,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 49.53 255.27 0)
 			(effects
 				(font
@@ -15117,7 +15128,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2207041900_Jiangsu-Changjing-Electronics-Technology-Co---Ltd--MMBT3904_C20526.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8552894390268936192"
 			(at 240.03 243.84 0)
 			(effects
 				(font
@@ -15181,7 +15192,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 279.4 152.4 0)
 			(effects
 				(font
@@ -15227,7 +15238,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 279.4 165.1 0)
 			(effects
 				(font
@@ -15854,7 +15865,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
 			(at 228.6 236.22 0)
 			(effects
 				(font
@@ -16086,7 +16097,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 180.34 137.16 0)
 			(effects
 				(font
@@ -16132,7 +16143,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 180.34 149.86 0)
 			(effects
 				(font
@@ -16904,7 +16915,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 87.63 255.27 0)
 			(effects
 				(font
@@ -16982,7 +16993,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B103KB5NNNC_C15195.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 133.35 237.49 0)
 			(effects
 				(font
@@ -17107,7 +17118,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 438.15 97.79 0)
 			(effects
 				(font
@@ -17125,7 +17136,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 440.69 96.52 0)
 			(effects
 				(font
@@ -17143,7 +17154,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 440.69 96.52 0)
 			(effects
 				(font
@@ -17333,7 +17344,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 82.55 237.49 0)
 			(effects
 				(font
@@ -17590,7 +17601,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 278.13 138.43 0)
 			(effects
 				(font
@@ -17636,7 +17647,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 278.13 143.51 0)
 			(effects
 				(font
@@ -18331,7 +18342,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 22.86 60.96 0)
 			(effects
 				(font
@@ -18391,7 +18402,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 180.34 104.14 0)
 			(effects
 				(font
@@ -18437,7 +18448,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 181.61 107.95 0)
 			(effects
 				(font
@@ -19080,7 +19091,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1002TCE_C25744.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
 			(at 63.5 35.56 0)
 			(effects
 				(font
@@ -19140,7 +19151,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 273.05 185.42 0)
 			(effects
 				(font
@@ -19186,7 +19197,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 273.05 195.58 0)
 			(effects
 				(font
@@ -19736,7 +19747,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1810231112_Hubei-KENTO-Elec-KT-0603R_C2286.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8550723991833485312"
 			(at 293.37 245.11 0)
 			(effects
 				(font
@@ -19932,7 +19943,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B103KB5NNNC_C15195.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 107.95 237.49 0)
 			(effects
 				(font
@@ -19992,7 +20003,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 232.2068 51.943 0)
 			(effects
 				(font
@@ -20010,7 +20021,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 229.87 50.8 0)
 			(effects
 				(font
@@ -20028,7 +20039,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 229.87 50.8 0)
 			(effects
 				(font
@@ -20217,7 +20228,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
 			(at 300.99 245.11 0)
 			(effects
 				(font
@@ -20295,7 +20306,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 74.93 255.27 0)
 			(effects
 				(font
@@ -20355,7 +20366,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 180.34 118.11 0)
 			(effects
 				(font
@@ -20401,7 +20412,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 180.34 124.46 0)
 			(effects
 				(font
@@ -20887,7 +20898,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1811101510_Everlight-Elec-19-217-GHC-YR1S2-3T_C72043.pdf"
+		(property "Datasheet" "https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2207051802_Everlight-Elec-19-217-GHC-YR1S2-6T_C2986059.pdf"
 			(at 236.22 236.22 0)
 			(effects
 				(font
@@ -20905,7 +20916,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C72043"
+		(property "LCSC" "C2986059"
 			(at 236.22 236.22 0)
 			(effects
 				(font
@@ -20947,7 +20958,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 43.18 36.83 0)
 			(effects
 				(font
@@ -20965,7 +20976,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 55.88 35.56 0)
 			(effects
 				(font
@@ -21061,7 +21072,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 95.25 237.49 0)
 			(effects
 				(font
@@ -21121,7 +21132,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 479.8568 95.123 0)
 			(effects
 				(font
@@ -21139,7 +21150,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 477.52 93.98 0)
 			(effects
 				(font
@@ -21157,7 +21168,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 477.52 93.98 0)
 			(effects
 				(font
@@ -21264,7 +21275,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 285.75 100.33 0)
 			(effects
 				(font
@@ -21310,7 +21321,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 287.02 110.49 0)
 			(effects
 				(font
@@ -21861,7 +21872,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 138.43 255.27 0)
 			(effects
 				(font
@@ -21921,7 +21932,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 338.8868 15.113 0)
 			(effects
 				(font
@@ -21939,7 +21950,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 336.55 13.97 0)
 			(effects
 				(font
@@ -21957,7 +21968,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 336.55 13.97 0)
 			(effects
 				(font
@@ -22064,7 +22075,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 403.6568 15.113 0)
 			(effects
 				(font
@@ -22082,7 +22093,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 401.32 13.97 0)
 			(effects
 				(font
@@ -22100,7 +22111,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 401.32 13.97 0)
 			(effects
 				(font
@@ -22160,7 +22171,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B103KB5NNNC_C15195.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 120.65 237.49 0)
 			(effects
 				(font
@@ -22485,7 +22496,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 316.23 81.915 0)
 			(effects
 				(font
@@ -22503,7 +22514,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 317.5 86.36 0)
 			(effects
 				(font
@@ -22646,7 +22657,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 275.59 78.74 0)
 			(effects
 				(font
@@ -22692,7 +22703,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 276.86 88.9 0)
 			(effects
 				(font
@@ -23285,7 +23296,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 125.73 255.27 0)
 			(effects
 				(font
@@ -23346,7 +23357,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 93.98 58.4199 0)
 			(effects
 				(font
@@ -23393,7 +23404,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 82.55 57.15 0)
 			(effects
 				(font
@@ -24009,7 +24020,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 44.45 237.49 0)
 			(effects
 				(font
@@ -24217,7 +24228,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 113.03 255.27 0)
 			(effects
 				(font
@@ -24277,7 +24288,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 180.34 90.17 0)
 			(effects
 				(font
@@ -24323,7 +24334,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 180.34 93.98 0)
 			(effects
 				(font
@@ -25053,7 +25064,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 78.74 140.97 0)
 			(effects
 				(font
@@ -25099,7 +25110,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 78.74 167.64 0)
 			(effects
 				(font
@@ -25585,7 +25596,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 62.23 255.27 0)
 			(effects
 				(font
@@ -25645,7 +25656,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 179.07 168.91 0)
 			(effects
 				(font
@@ -25691,7 +25702,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 177.8 181.61 0)
 			(effects
 				(font
@@ -26175,7 +26186,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1003TCE_C25741.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1003TCE_C25741.pdf"
 			(at 15.24 60.96 0)
 			(effects
 				(font
@@ -26251,7 +26262,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1003TCE_C25741.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1003TCE_C25741.pdf"
 			(at 231.14 243.84 0)
 			(effects
 				(font
@@ -26329,7 +26340,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B103KB5NNNC_C15195.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 163.83 255.27 0)
 			(effects
 				(font
@@ -26453,7 +26464,7 @@
 				)
 			)
 		)
-		(property "Value" "T8Q144C3"
+		(property "Value" "T20Q144C3"
 			(at 278.13 121.92 0)
 			(effects
 				(font
@@ -26499,7 +26510,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3278393"
+		(property "LCSC" "C3278392"
 			(at 278.13 129.54 0)
 			(effects
 				(font
@@ -27050,7 +27061,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B103KB5NNNC_C15195.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B103KB5NNN.do"
 			(at 151.13 255.27 0)
 			(effects
 				(font
@@ -27128,7 +27139,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 57.15 237.49 0)
 			(effects
 				(font
@@ -27339,7 +27350,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "12k 1%"
+		(property "Value" "12k"
 			(at 131.0386 147.193 0)
 			(effects
 				(font
@@ -27357,7 +27368,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1202TCE_C25752.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1202TCE_C25752.pdf"
 			(at 129.54 146.05 0)
 			(effects
 				(font
@@ -27630,7 +27641,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 69.85 237.49 0)
 			(effects
 				(font
