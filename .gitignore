@@ -19,6 +19,9 @@ hw/**/*.lck
 # KiCad footprint cache
 hw/**/fp-info-cache
 
+# Fabrication Toolkit backup files
+hw/**/mainboard/kicad/production/backups
+
 #
 # Efinity
 #
