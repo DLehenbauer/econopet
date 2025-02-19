@@ -7753,7 +7753,7 @@
 				)
 			)
 		)
-		(property "Value" "9V POWER"
+		(property "Value" "9V POWER JACK"
 			(at 31.9278 33.6296 0)
 			(effects
 				(font
@@ -7770,7 +7770,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.gravitech.us/poja2x51.html"
+		(property "Datasheet" "https://www.mouser.com/datasheet/2/222/KLDX_0202-334781.pdf"
 			(at 31.75 40.386 0)
 			(effects
 				(font
@@ -7788,7 +7788,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "992-CON-SOCJ-2155"
+		(property "MOUSER" "806-KLDX-0202-B"
 			(at 30.48 39.37 0)
 			(effects
 				(font
