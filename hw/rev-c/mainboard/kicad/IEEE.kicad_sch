@@ -8707,7 +8707,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1810010228_Texas-Instruments-SN74LS245DWR_C129580.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_1810010228_Texas-Instruments-SN74LS245DWR_C129580.pdf"
 			(at 128.27 50.8 0)
 			(effects
 				(font
@@ -8840,7 +8840,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1810010228_Texas-Instruments-SN74LS245DWR_C129580.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_1810010228_Texas-Instruments-SN74LS245DWR_C129580.pdf"
 			(at 128.27 162.56 0)
 			(effects
 				(font
@@ -8973,7 +8973,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2004251708_XINLUDA-XL74LS07_C513513.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2404261406_XINLUDA-XL74LS07_C513513.pdf"
 			(at 69.85 182.88 0)
 			(effects
 				(font
@@ -9097,7 +9097,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 34.29 138.43 0)
 			(effects
 				(font
@@ -9175,7 +9175,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 44.45 138.43 0)
 			(effects
 				(font
@@ -9253,7 +9253,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 55.88 138.43 0)
 			(effects
 				(font
@@ -9331,7 +9331,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 66.04 138.43 0)
 			(effects
 				(font
@@ -9409,7 +9409,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 76.2 138.43 0)
 			(effects
 				(font
@@ -9621,7 +9621,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2004251708_XINLUDA-XL74LS07_C513513.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2404261406_XINLUDA-XL74LS07_C513513.pdf"
 			(at 69.85 101.6 0)
 			(effects
 				(font
@@ -9746,7 +9746,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2004251708_XINLUDA-XL74LS07_C513513.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2404261406_XINLUDA-XL74LS07_C513513.pdf"
 			(at 69.85 55.88 0)
 			(effects
 				(font
@@ -9870,7 +9870,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
 			(at 109.22 160.02 0)
 			(effects
 				(font
@@ -10081,7 +10081,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0471T5E_C25510.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8557935083618123776"
 			(at 109.22 53.34 0)
 			(effects
 				(font
@@ -10159,7 +10159,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 158.75 140.97 0)
 			(effects
 				(font
@@ -10177,7 +10177,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 170.18 139.7 0)
 			(effects
 				(font
@@ -10255,7 +10255,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 208.28 140.97 0)
 			(effects
 				(font
@@ -10273,7 +10273,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 219.71 139.7 0)
 			(effects
 				(font
@@ -10740,7 +10740,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4k7"
+		(property "Value" "4k7x4"
 			(at 208.28 80.01 0)
 			(effects
 				(font
@@ -10758,7 +10758,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
 			(at 219.71 78.74 0)
 			(effects
 				(font
@@ -10921,7 +10921,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0471T5E_C25510.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8557935083618123776"
 			(at 109.22 43.18 0)
 			(effects
 				(font
@@ -10999,7 +10999,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 175.26 140.97 0)
 			(effects
 				(font
@@ -11017,7 +11017,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 186.69 139.7 0)
 			(effects
 				(font
@@ -11114,7 +11114,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0471T5E_C25510.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8557935083618123776"
 			(at 109.22 154.94 0)
 			(effects
 				(font
@@ -11192,7 +11192,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7"
+		(property "Value" "4u7 10V"
 			(at 230.9368 46.863 0)
 			(effects
 				(font
@@ -11210,7 +11210,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B472K500NT_C1538.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
 			(at 228.6 45.72 0)
 			(effects
 				(font
@@ -11228,7 +11228,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1538"
+		(property "LCSC" "C23733"
 			(at 228.6 45.72 0)
 			(effects
 				(font
@@ -11335,7 +11335,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4k7"
+		(property "Value" "4k7x4"
 			(at 175.26 80.01 0)
 			(effects
 				(font
@@ -11353,7 +11353,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
 			(at 186.69 78.74 0)
 			(effects
 				(font
@@ -11431,7 +11431,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4k7"
+		(property "Value" "4k7x4"
 			(at 158.75 80.01 0)
 			(effects
 				(font
@@ -11449,7 +11449,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
 			(at 170.18 78.74 0)
 			(effects
 				(font
@@ -11677,7 +11677,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
 			(at 109.22 162.56 0)
 			(effects
 				(font
@@ -12131,7 +12131,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "10kx4"
 			(at 191.77 140.97 0)
 			(effects
 				(font
@@ -12149,7 +12149,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0103T5E_C29718.pdf"
 			(at 203.2 139.7 0)
 			(effects
 				(font
@@ -12227,7 +12227,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4k7"
+		(property "Value" "4k7x4"
 			(at 191.77 80.01 0)
 			(effects
 				(font
@@ -12245,7 +12245,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_UNI-ROYAL-Uniroyal-Elec-4D03WGJ0472T5E_C1980.pdf"
 			(at 203.2 78.74 0)
 			(effects
 				(font

@@ -6935,7 +6935,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 97.79 118.11 0)
 			(effects
 				(font
@@ -7013,7 +7013,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 100.33 22.86 0)
 			(effects
 				(font
@@ -7091,7 +7091,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_Samsung-Electro-Mechanics-CL05B104KB54PNC_C307331.pdf"
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
 			(at 198.12 91.44 0)
 			(effects
 				(font
@@ -7170,7 +7170,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
 			(at 227.33 143.51 0)
 			(effects
 				(font
