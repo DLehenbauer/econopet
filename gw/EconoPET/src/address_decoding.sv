@@ -156,25 +156,29 @@ module address_decoding (
 
     logic [NUM_BITS-1:0] select = NUM_BITS'('hxxx);
 
-    always_comb begin
+    initial begin
+        select = NONE;
+    end
+
+    always_ff @(posedge sys_clock_i) begin
         if (!cpu_be_i) begin
-            select = NONE;
+            select <= NONE;
         end else begin
             if (bank_en) begin
-                select = bank_ro
+                select <= bank_ro
                     ? ROM
                     : RAM;
             end else begin
                 priority casez (cpu_addr_i)
                     // PET memory map
-                    CPU_ADDR_WIDTH'('b0???_????_????_????): select = RAM;    // RAM  : 0000-7FFF
-                    CPU_ADDR_WIDTH'('b1000_1111_????_????): select = SID;    // SID  : 8F00-8FFF
-                    CPU_ADDR_WIDTH'('b1000_????_????_????): select = VRAM;   // VRAM : 8000-8FFF (overlaps with SID)
-                    CPU_ADDR_WIDTH'('b1110_1000_0001_????): select = PIA1;   // PIA1 : E810-E81F
-                    CPU_ADDR_WIDTH'('b1110_1000_001?_????): select = PIA2;   // PIA2 : E820-E83F
-                    CPU_ADDR_WIDTH'('b1110_1000_01??_????): select = VIA;    // VIA  : E840-E87F
-                    CPU_ADDR_WIDTH'('b1110_1000_1???_????): select = CRTC;   // CRTC : E880-E8FF
-                    default:                                select = ROM;    // ROM  : 9000-E80F, E900-FFFF
+                    CPU_ADDR_WIDTH'('b0???_????_????_????): select <= RAM;    // RAM  : 0000-7FFF
+                    CPU_ADDR_WIDTH'('b1000_1111_????_????): select <= SID;    // SID  : 8F00-8FFF
+                    CPU_ADDR_WIDTH'('b1000_????_????_????): select <= VRAM;   // VRAM : 8000-8FFF (overlaps with SID)
+                    CPU_ADDR_WIDTH'('b1110_1000_0001_????): select <= PIA1;   // PIA1 : E810-E81F
+                    CPU_ADDR_WIDTH'('b1110_1000_001?_????): select <= PIA2;   // PIA2 : E820-E83F
+                    CPU_ADDR_WIDTH'('b1110_1000_01??_????): select <= VIA;    // VIA  : E840-E87F
+                    CPU_ADDR_WIDTH'('b1110_1000_1???_????): select <= CRTC;   // CRTC : E880-E8FF
+                    default:                                select <= ROM;    // ROM  : 9000-E80F, E900-FFFF
                 endcase
             end
         end

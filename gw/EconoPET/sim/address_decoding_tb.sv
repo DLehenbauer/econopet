@@ -24,11 +24,12 @@ module address_decoding_tb();
 
     logic reset = 1'b0;
     logic cpu_be = 1'b1;
-    logic cpu_wr_strobe = 1'b0;
-    logic [DATA_WIDTH-1:0] cpu_data;
 
-    // Intentionally 1 bit larger than the CPU address width to avoid overflow/infinite loop.
-    logic [CPU_ADDR_WIDTH:0] addr = 17'hxxxx;
+    logic [CPU_ADDR_WIDTH:0] cpu_addr;  // 'cpu_addr' is intentionally 1-bit larger than CPU_ADDR_WIDTH
+                                        // to avoid overflow when looping through the full address range.
+    
+    logic [DATA_WIDTH-1:0] cpu_data;    // Used to mock  CPU writes to the memory control register.
+    logic cpu_wr_strobe = 1'b0;
 
     logic ram_en;
     logic pia1_en;
@@ -51,7 +52,7 @@ module address_decoding_tb();
         .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_data_i(cpu_data),
 
-        .cpu_addr_i(addr[CPU_ADDR_WIDTH-1:0]),
+        .cpu_addr_i(cpu_addr[CPU_ADDR_WIDTH-1:0]),
         .ram_en_o(ram_en),
         .pia1_en_o(pia1_en),
         .pia2_en_o(pia2_en),
@@ -108,7 +109,11 @@ module address_decoding_tb();
     );
         $display("[%t]   %s: $%x-$%x", $time, name, start_addr, end_addr);
 
-        for (addr = start_addr; addr <= end_addr; addr = addr + 1) begin
+        for (cpu_addr = start_addr; cpu_addr <= end_addr; cpu_addr = cpu_addr + 1) begin
+            // Clock edge captures new input address.
+            @(posedge sys_clock);
+
+            // Signals are valid after edge.
             #1 check(
                 expected_ram_en,
                 expected_pia1_en,
@@ -133,7 +138,7 @@ module address_decoding_tb();
         protect_32,     // Write protects $C000-$FFFF excluding peek-through (1 = read only, 0 = read/write)
         protect_10      // Write protects $8000-$BFFF excluding peek-through (1 = read only, 0 = read/write)
     );
-        addr = 17'h0fff0;
+        cpu_addr = 17'h0fff0;
         cpu_data = { enabled, io_peek, screen_peek, 'x, select_32, select_10, protect_32, protect_10 };
         
         @(negedge sys_clock);

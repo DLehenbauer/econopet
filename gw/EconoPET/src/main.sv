@@ -485,14 +485,14 @@ module main (
         ? cpu_addr_i[10] & ram_addr_a10_mask
         : cpu_addr_o[10];
 
-    assign ram_addr_a11_o   = cpu_be_o
+    assign ram_addr_a11_o = cpu_be_o
         ? cpu_addr_i[11] & ram_addr_a11_mask
         : cpu_addr_o[11];
 
     // When the CPU is driving the bus, the control register at $FFF0 control
     // the memory mapping for the upper 64k expansion.
-    assign ram_addr_a15_o   = cpu_be_o ? decoded_a15 : cpu_addr_o[15];
-    assign ram_addr_a16_o   = cpu_be_o ? decoded_a16 : ram_ctl_addr[16];
+    assign ram_addr_a15_o = cpu_be_o ? decoded_a15 : cpu_addr_o[15];
+    assign ram_addr_a16_o = cpu_be_o ? decoded_a16 : ram_ctl_addr[16];
 
     // synthesis off
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin
