@@ -34,7 +34,8 @@
             "postRestartCommands": [
                 "break main",
                 "continue"
-            ]
+            ],
+            "preLaunchTask": "CMake: Build Firmware"
         },
         {
             "name": "PicoDVI Example",
