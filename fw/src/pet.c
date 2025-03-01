@@ -170,9 +170,14 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     // Our simulation will return $9F and A0 instead of the expect $9F for both reads.
     // (VICE 3.9 does the same.)
 
-    // 8800-EFFF
-    for (uint32_t addr = 0x8800; addr < 0xAFFF; addr += 0x100) {
-        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
+    // Skip 8800-8FFF because we currently use it for the character ROM.
+    // for (uint32_t addr = 0x8000; addr < 0x8FFF; addr += 0x100) {
+    //     spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: */ 0x100);
+    // }
+
+    // 9000-EFFF
+    for (uint32_t addr = 0x9000; addr < 0xAFFF; addr += 0x100) {
+        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: */ 0x100);
     }
 
     // E800-E80F
@@ -180,7 +185,7 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
 
     // E900-FFFF
     for (uint32_t addr = 0xE900; addr < 0xF000; addr += 0x100) {
-        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: **/ 0x100);
+        spi_fill(addr, /* byte: */ addr >> 8, /* byteLength: */ 0x100);
     }
 
     pet_reset();
