@@ -67,18 +67,30 @@ const uint8_t* const p_video_font_000 = rom_chars_8800;
 const uint8_t* const p_video_font_400 = rom_chars_8800 + 0x400;
 
 void pet_init_edit_rom(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
-    set_video(is80Columns);
-    
+    printf("Requested ROM: %s-%s-%sHz\n",
+        is80Columns ? "80" : "40",
+        isBusinessKeyboard ? "b" : "n",
+        is50Hz ? "50" : "60"
+    );
+   
     if (isBusinessKeyboard) {
         spi_write(/* dest: */ 0xe000, /* pSrc: */ rom_edit_4_80_b_60Hz, sizeof(rom_edit_4_80_b_60Hz));
+        set_video(true);
+        printf("Actual ROM: 80-b-60Hz\n");
     } else {
         if (is80Columns) {
             spi_write(/* dest: */ 0xe000, /* pSrc: */ rom_edit_4_80_n_60Hz, sizeof(rom_edit_4_80_n_60Hz));
+            set_video(true);
+            printf("Actual ROM: 80-n-60Hz\n");
         } else {
             if (is50Hz) {
                 spi_write(/* dest: */ 0xe000, /* pSrc: */ rom_edit_4_40_n_50Hz, sizeof(rom_edit_4_40_n_50Hz));
+                set_video(false);
+                printf("Actual ROM: 40-n-50Hz\n");
             } else {
                 spi_write(/* dest: */ 0xe000, /* pSrc: */ rom_edit_4_40_n_60Hz, sizeof(rom_edit_4_40_n_60Hz));
+                set_video(false);
+                printf("Actual ROM: 40-n-60Hz\n");
             }
         }
     }
@@ -132,7 +144,7 @@ void pet_init_roms(bool is80Columns, bool isBusinessKeyboard, bool is50Hz) {
     //
     // In the case of 'LDA $E800', the last byte read would be the high byte of the address
     // in the LDA instruction.  The same seems to hold true for other unmapped regions.  To
-    // simulate this quirk, we initialized RAM backing these unmapped regions with the high
+    // simulate this quirk, we initialize the RAM backing these unmapped regions with the high
     // byte of the address.
     //
     // Note that this is likely an imperfect emulation of the PET as it returns the high byte

@@ -91,6 +91,8 @@ void fpga_init() {
     // See: https://github.com/raspberrypi/pico-examples/blob/master/clocks/hello_48MHz/hello_48MHz.c
     stdio_init_all();
     printf("\e[2J");
+    printf("PICO_FLASH_SIZE_BYTES: 0x%08x\n", PICO_FLASH_SIZE_BYTES);
+    printf("PICO_XOSC_STARTUP_DELAY_MULTIPLIER: %d\n", PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
     printf("Clocks initialized:\n");
     measure_freqs(fpga_div);
 
