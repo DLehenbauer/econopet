@@ -172,6 +172,13 @@ void fpga_init() {
 
     printf("FPGA: DONE\n");
 
+    #else
+
+    // FPGA_PROG is not defined and no FPGA programmer is attached.
+    // Did you forget to generate 'bitstream.h'?
+    printf("ERROR: No FPGA programmer attached.\n");
+    assert(false);
+
     #endif
 }
 
