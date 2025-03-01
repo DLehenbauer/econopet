@@ -15,6 +15,8 @@
   * Menu:
     * Enter/Exit without reset?
   * Commit patched PicoDVI (?)
+* Compat:
+  * Echo last byte on bus when reading unmapped regions.
 * HW
   * Parts
     * SMT Tactile Buttons (C318884)
