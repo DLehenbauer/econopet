@@ -196,7 +196,7 @@ module video (
     logic dotgen_video;
     logic dotgen_en = '0;
 
-    // Scanlines exceeding the 8 pixel high character ROM should be blanked.
+    // Scan lines exceeding the 8 pixel high character ROM should be blanked.
     // (See 'NO_ROW' signal on sheets 8 and 10 of Universal Dynamic PET.)
     wire no_row = ra[3] || ra[4];
 

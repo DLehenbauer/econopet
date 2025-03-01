@@ -25,8 +25,6 @@ module video_dotgen(
     input  logic       display_en_i,
     output logic       video_o
 );
-    // TODO: The 'pixel_ctr' counter is only used to select the 'reverse' bit.
-    //       This can be avoided if we use a 2 MHz CLK in 80 col mode.
     logic [7:0] sr_out;
     logic       display_en;
 

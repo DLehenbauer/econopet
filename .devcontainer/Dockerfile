@@ -5,8 +5,8 @@ FROM --platform=linux/amd64 mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 ARG PICO_SDK_VERSION="2.0.0"
 ARG VERIBLE_VERSION="v0.0-3836-g86ee9bab"
-ARG EFINITY_VERSION="2024.1.163"
-ARG EFINITY_PATH="2024.1"
+ARG EFINITY_MAJOR_MINOR="2024.2"
+ARG EFINITY_PATCH="294"
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -20,11 +20,11 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 
 # Install Efinity -- Requires a free license from Efinix.
 # See: https://www.efinixinc.com/support/efinity.php
-ARG EFINITY_ARCHIVE="efinity-${EFINITY_VERSION}-ubuntu-x64.tar.bz2"
+ARG EFINITY_ARCHIVE="efinity-${EFINITY_MAJOR_MINOR}.${EFINITY_PATCH}-ubuntu-x64.tar.bz2"
 RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp && \
     tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
     rm -rf /tmp/${EFINITY_ARCHIVE} && \
-    chmod +x /opt/efinity/${EFINITY_PATH}/bin/setup.sh
+    chmod +x /opt/efinity/${EFINITY_MAJOR_MINOR}/bin/setup.sh
 
 # Install Icarus Verilog
 RUN apt-get update && apt-get -y install --no-install-recommends \
