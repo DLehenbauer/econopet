@@ -40,7 +40,7 @@ module cpu (
     // Timing for W65C02S
     // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
     //
-    // Minumum Phi2 pulse width is high 62ms and low 63ms (tPWH, tPWL)
+    // Minimum Phi2 pulse width is high 62ms and low 63ms (tPWH, tPWL)
     //
     // Rising Phi2 edge triggers bus transfer:
     //  - BE must be asserted 45ns before rising Phi2 edge (tBVD + tDSR)
@@ -77,7 +77,7 @@ module cpu (
                CPU_tDHx      = 10,  // CPU Data Hold Time (tDHR, tDHW)
                CPU_tMDS      = 40,  // CPU Write Data Delay Time (tMDS)
                RAM_tAA       = 10,  // RAM Address Access Time (tAA)
-               IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
+               IOTX_t        = 11;  // IO Transceiver Worst-Case Delay (tPZL)
 
     localparam bit [$bits(cycle_count)-1:0] CPU_SUSPENDED    = 0,
                                             CPU_BE_START     = 1,

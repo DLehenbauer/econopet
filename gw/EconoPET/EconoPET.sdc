@@ -30,7 +30,7 @@ proc ns_from_mhz { mhz } {
 
 set clock_mhz 64
 set clock_period [ns_from_mhz $clock_mhz]
-create_clock -period $clock_period -target sys_clock_i
+create_clock -period $clock_period sys_clock_i
 
 # SPI Constraints
 

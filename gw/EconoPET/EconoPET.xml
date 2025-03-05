@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1737332314" sw_version="2024.1.163" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1741185942" sw_version="2024.2.294" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
         <efx:timing_model name="C3"/>
     </efx:device_info>
-    <efx:design_info def_veri_version="sv_09" def_vhdl_version="vhdl_2008">
+    <efx:design_info def_veri_version="sv_09" def_vhdl_version="vhdl_2008" unified_flow="false">
         <efx:top_module name="top"/>
         <efx:design_file name="src/top.sv" version="default" library="default"/>
         <efx:design_file name="src/spi.sv" version="default" library="default"/>
@@ -46,6 +46,7 @@
         <efx:sdc_file name="EconoPET.sdc"/>
         <efx:inter_file name=""/>
     </efx:constraint_info>
+    <efx:isf_info/>
     <efx:sim_info>
         <efx:sim_file name="sim/sim.sv"/>
         <efx:sim_file name="sim/spi_driver.sv"/>
@@ -111,6 +112,11 @@
         <efx:param name="use-logic-for-small-mem" value="64" value_type="e_integer"/>
         <efx:param name="use-logic-for-small-rom" value="64" value_type="e_integer"/>
         <efx:param name="bram-push-tco-outreg" value="0" value_type="e_option"/>
+        <efx:param name="hdl-loop-limit" value="20000" value_type="e_integer"/>
+        <efx:param name="peri-syn-instantiation" value="0" value_type="e_option"/>
+        <efx:param name="peri-syn-inference" value="0" value_type="e_option"/>
+        <efx:param name="ram-decomp-mode" value="0" value_type="e_option"/>
+        <efx:param name="max_threads" value="-1" value_type="e_integer"/>
     </efx:synthesis>
     <efx:place_and_route tool_name="efx_pnr">
         <efx:param name="work_dir" value="work_pnr" value_type="e_string"/>
@@ -121,6 +127,7 @@
         <efx:param name="placer_effort_level" value="2" value_type="e_option"/>
         <efx:param name="max_threads" value="-1" value_type="e_integer"/>
         <efx:param name="print_critical_path" value="10" value_type="e_integer"/>
+        <efx:param name="classic_flow" value="off" value_type="e_noarg"/>
     </efx:place_and_route>
     <efx:bitstream_generation tool_name="efx_pgm">
         <efx:param name="mode" value="active" value_type="e_option"/>
