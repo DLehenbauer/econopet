@@ -315,3 +315,9 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7) [6540-026]         
 * Genealogy [1](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [2](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
 * [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt)
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
+
+## Tools
+
+* [Ghidra](https://github.com/NationalSecurityAgency/ghidra)
+  * `winget install Microsoft.OpenJDK.21`
+* [WFDis](https://www.white-flame.com/wfdis/)
