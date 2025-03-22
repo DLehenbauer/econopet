@@ -94,8 +94,8 @@ module address_decoding_tb();
 
     task check_range(
         input string name,
-        input [16:0] start_addr,
-        input [16:0] end_addr,
+        input integer start_addr,
+        input integer end_addr,
         input expected_ram_en,
         input expected_pia1_en,
         input expected_pia2_en,
@@ -107,9 +107,12 @@ module address_decoding_tb();
         input expected_is_readonly,
         input [1:0] expected_a16_15
     );
-        $display("[%t]   %s: $%x-$%x", $time, name, start_addr, end_addr);
+        integer delta;
 
-        for (cpu_addr = start_addr; cpu_addr <= end_addr; cpu_addr = cpu_addr + 1) begin
+        delta = 1'b1;
+        $display("[%t]   %12s: $%04x-$%04x", $time, name, CPU_ADDR_WIDTH'(start_addr), CPU_ADDR_WIDTH'(end_addr));
+
+        for (cpu_addr = start_addr; cpu_addr <= end_addr; cpu_addr = cpu_addr + delta) begin
             // Clock edge captures new input address.
             @(posedge sys_clock);
 
@@ -126,6 +129,24 @@ module address_decoding_tb();
                 expected_is_readonly,
                 expected_a16_15
             );
+
+`ifndef PARANOID
+            // If not running exhaustive tests, accelerate simulation by randomly skipping addresses.
+            // The logic below ensures that we always test the first and last two addresses in the range.
+            if (cpu_addr > start_addr) begin
+                delta = $urandom_range(1, (end_addr - start_addr) / 2);
+
+                // If the delta is too large, adjust it to ensure we don't skip the last two addresses.
+                if (cpu_addr + delta > end_addr - 1) begin
+                    delta = end_addr - cpu_addr - 1;
+
+                    // Once we've reached the last couple addresses, ensure forward progress.
+                    if (delta < 1) begin
+                        delta = 1;
+                    end
+                end
+            end
+`endif
         end
     endtask
 
@@ -168,7 +189,7 @@ module address_decoding_tb();
         );
 
         check_range(
-            /* name                   : */ "  PIA1",
+            /* name                   : */ "PIA1",
             /* start_addr             : */ 'he810,
             /* end_addr               : */ 'he81f,
             /* expected_ram_en        : */ 0,
@@ -184,7 +205,7 @@ module address_decoding_tb();
         );
 
         check_range(
-            /* name                   : */ "  PIA2",
+            /* name                   : */ "PIA2",
             /* start_addr             : */ 'he820,
             /* end_addr               : */ 'he83f,
             /* expected_ram_en        : */ 0,
@@ -200,7 +221,7 @@ module address_decoding_tb();
         );
 
         check_range(
-            /* name                   : */ "  VIA",
+            /* name                   : */ "VIA",
             /* start_addr             : */ 'he840,
             /* end_addr               : */ 'he87f,
             /* expected_ram_en        : */ 0,
@@ -216,7 +237,7 @@ module address_decoding_tb();
         );
 
         check_range(
-            /* name                   : */ "  CRTC",
+            /* name                   : */ "CRTC",
             /* start_addr             : */ 'he880,
             /* end_addr               : */ 'he8ff,
             /* expected_ram_en        : */ 0,
@@ -233,7 +254,7 @@ module address_decoding_tb();
 
         // Unmapped ranges in IO space are treated as ROM.
         check_range(
-            /* name                   : */ "  (unmapped)",
+            /* name                   : */ "(unmapped)",
             /* start_addr             : */ 'he900,
             /* end_addr               : */ 'hefff,
             /* expected_ram_en        : */ 1,
@@ -251,7 +272,7 @@ module address_decoding_tb();
 
     task check_screen();
         check_range(
-            /* name                   : */ "  VRAM",
+            /* name                   : */ "VRAM",
             /* start_addr             : */ 'h8000,
             /* end_addr               : */ 'h8eff,
             /* expected_ram_en        : */ 1,
@@ -267,7 +288,7 @@ module address_decoding_tb();
         );
 
         check_range(
-            /* name                   : */ "  SID",
+            /* name                   : */ "SID",
             /* start_addr             : */ 'h8f00,
             /* end_addr               : */ 'h8fff,
             /* expected_ram_en        : */ 0,

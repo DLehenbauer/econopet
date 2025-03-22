@@ -12,6 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+// Uncomment the below `define to enable slow/exhaustive/redundant testing.
+// `define PARANOID
+
 `define TEST_WB_MUX
 `define TEST_VIDEO
 `define TEST_VIDEO_CRTC

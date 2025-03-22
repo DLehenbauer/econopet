@@ -10,6 +10,7 @@
   * Menu
     * 40/80 Column Switching
 * Firmware
+  * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
   * 8K Video RAM:
     * Move character rom to shadowed I/O region at $E000-$E800?
   * Menu:
