@@ -10,12 +10,14 @@
   * Menu
     * 40/80 Column Switching
 * Firmware
-  * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
   * 8K Video RAM:
     * Move character rom to shadowed I/O region at $E000-$E800?
   * Menu:
     * Enter/Exit without reset?
   * Commit patched PicoDVI (?)
+* Gateware:
+  * Reinitialize SID state on reset.
+  * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
 * Compat:
   * Echo last byte on bus when reading unmapped regions.
 * HW
@@ -30,5 +32,5 @@
     * These parts should be offset: CPU, RAM, 25-pin header
     * Route ground with signals
     * Check http://jlcdfm.com recommendations
-      * Ideal SMD pad to THT is >= 3.05mm (Really?  This seems very large.)
+      * Ideal SMD pad to THT is >= 3.05mm (Really? This seems very large.)
       * Annular rings >0.15mm
