@@ -15,6 +15,7 @@
 // Uncomment the below `define to enable slow/exhaustive/redundant testing.
 // `define PARANOID
 
+`define TEST_MEMORY_MAP
 `define TEST_WB_MUX
 `define TEST_VIDEO
 `define TEST_VIDEO_CRTC
@@ -30,6 +31,9 @@
 `define TEST_TOP
 
 module sim;
+`ifdef TEST_MEMORY_MAP
+    memory_map_tb memory_map_tb ();
+`endif
 `ifdef TEST_WB_MUX
     wb_mux_tb wb_mux_tb ();
 `endif
@@ -75,6 +79,9 @@ module sim;
         $dumpfile("work_sim/out.vcd");
         $dumpvars(0, sim);
 
+`ifdef TEST_MEMORY_MAP
+        memory_map_tb.run;
+`endif
 `ifdef TEST_WB_MUX
         wb_mux_tb.run;
 `endif

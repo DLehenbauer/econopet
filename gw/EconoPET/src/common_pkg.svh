@@ -237,24 +237,40 @@ package common_pkg;
     // Registers
     //
 
-    localparam REG_IO_KBD  = 1'b0;
-    localparam REG_IO_PIA1 = 3'b1_00;
-    localparam REG_IO_PIA2 = 3'b1_01;
+    localparam REG_IO_KBD  = 2'b00;
+    localparam REG_IO_VIA  = 2'b01;
+    localparam REG_IO_PIA1 = 4'b1000;
+    localparam REG_IO_PIA2 = 4'b1001;
 
-    localparam int unsigned REG_IO_KEY_MATRIX_START = {27'b0, REG_IO_KBD, 4'h0},
-                            REG_IO_KEY_MATRIX_END   = REG_IO_KEY_MATRIX_START + KBD_COL_COUNT - 1,
-                            REG_IO_PIA1_PORTA       = {27'b0, REG_IO_PIA1, PIA_PORTA},
-                            REG_IO_PIA1_CRA         = {27'b0, REG_IO_PIA1, PIA_CRA},
-                            REG_IO_PIA1_PORTB       = {27'b0, REG_IO_PIA1, PIA_PORTB},
-                            REG_IO_PIA1_CRB         = {27'b0, REG_IO_PIA1, PIA_CRB},
-                            REG_IO_PIA2_PORTA       = {27'b0, REG_IO_PIA2, PIA_PORTA},
-                            REG_IO_PIA2_CRA         = {27'b0, REG_IO_PIA2, PIA_CRA},
-                            REG_IO_PIA2_PORTB       = {27'b0, REG_IO_PIA2, PIA_PORTB},
-                            REG_IO_PIA2_CRB         = {27'b0, REG_IO_PIA2, PIA_CRB},
-                            REG_IO_VIA_PORTB        = REG_IO_PIA2_CRB + 1'b1,
-                            IO_REG_COUNT            = REG_IO_VIA_PORTB + 1'b1;
+    localparam bit [5:0] REG_IO_KEY_MATRIX_START = {REG_IO_KBD, 4'h0},
+                         REG_IO_KEY_MATRIX_END   = REG_IO_KEY_MATRIX_START + 6'(KBD_COL_COUNT - 1'b1),
+                         REG_IO_VIA_PORTB        = {REG_IO_VIA, VIA_PORTB},
+                         REG_IO_VIA_PORTA        = {REG_IO_VIA, VIA_PORTA},
+                         REG_IO_VIA_DDRB         = {REG_IO_VIA, VIA_DDRB},
+                         REG_IO_VIA_DDRA         = {REG_IO_VIA, VIA_DDRA},
+                         REG_IO_VIA_T1CL         = {REG_IO_VIA, VIA_T1CL},
+                         REG_IO_VIA_T1CH         = {REG_IO_VIA, VIA_T1CH},
+                         REG_IO_VIA_T1LL         = {REG_IO_VIA, VIA_T1LL},
+                         REG_IO_VIA_T1LH         = {REG_IO_VIA, VIA_T1LH},
+                         REG_IO_VIA_T2CL         = {REG_IO_VIA, VIA_T2CL},
+                         REG_IO_VIA_T2CH         = {REG_IO_VIA, VIA_T2CH},
+                         REG_IO_VIA_SR           = {REG_IO_VIA, VIA_SR},
+                         REG_IO_VIA_ACR          = {REG_IO_VIA, VIA_ACR},
+                         REG_IO_VIA_PCR          = {REG_IO_VIA, VIA_PCR},
+                         REG_IO_VIA_IFR          = {REG_IO_VIA, VIA_IFR},
+                         REG_IO_VIA_IER          = {REG_IO_VIA, VIA_IER},
+                         REG_IO_VIA_ORA          = {REG_IO_VIA, VIA_ORA},
+                         REG_IO_PIA1_PORTA       = {REG_IO_PIA1, PIA_PORTA},
+                         REG_IO_PIA1_CRA         = {REG_IO_PIA1, PIA_CRA},
+                         REG_IO_PIA1_PORTB       = {REG_IO_PIA1, PIA_PORTB},
+                         REG_IO_PIA1_CRB         = {REG_IO_PIA1, PIA_CRB},
+                         REG_IO_PIA2_PORTA       = {REG_IO_PIA2, PIA_PORTA},
+                         REG_IO_PIA2_CRA         = {REG_IO_PIA2, PIA_CRA},
+                         REG_IO_PIA2_PORTB       = {REG_IO_PIA2, PIA_PORTB},
+                         REG_IO_PIA2_CRB         = {REG_IO_PIA2, PIA_CRB},
+                         IO_REG_COUNT            = REG_IO_PIA2_CRB + 1'b1;
 
-    localparam int unsigned IO_REG_ADDR_WIDTH       = bit_width(IO_REG_COUNT - 1'b1);
+    localparam int unsigned IO_REG_ADDR_WIDTH = bit_width(int'(IO_REG_COUNT) - 1'b1);
 
     //
     // Register file

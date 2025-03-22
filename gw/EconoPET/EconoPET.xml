@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1741185942" sw_version="2024.2.294" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1742659739" sw_version="2024.2.294" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -79,6 +79,7 @@
         <efx:sim_file name="external/65xx/6502_mux.v"/>
         <efx:sim_file name="external/65xx/6502_reg.v"/>
         <efx:sim_file name="sim/address_decoding_tb.sv"/>
+        <efx:sim_file name="sim/memory_map_tb.sv"/>
     </efx:sim_info>
     <efx:misc_info/>
     <efx:ip_info/>
