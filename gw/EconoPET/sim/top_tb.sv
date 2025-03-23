@@ -68,9 +68,9 @@ module top_tb;
             value = { 4'b1011, col[3:0] };
             
             $display("[%t]   Keyboard[%0d] <- %02x (WB)", $time, col, value);
-            mock_system.spi_write_at(common_pkg::wb_io_kbd_addr(col), value);
+            mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
 
-            mock_system.spi_read_at(common_pkg::wb_io_kbd_addr(col), dout);
+            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
             $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
             `assert_equal(dout, value);
 

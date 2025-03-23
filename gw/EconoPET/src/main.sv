@@ -371,8 +371,8 @@ module main (
     logic [DATA_WIDTH-1:0] kbd_wb_din;
     logic                  kbd_wb_stall;
     logic                  kbd_wb_ack;
-    logic [DATA_WIDTH-1:0] kbd_dout;
-    logic                  kbd_doe;
+
+    logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd;
 
     keyboard keyboard (
         .wb_clock_i(sys_clock_i),
@@ -385,15 +385,31 @@ module main (
         .wb_stall_o(kbd_wb_stall),
         .wb_ack_o(kbd_wb_ack),
         .wb_sel_i(kbd_wb_sel),
+        .usb_kbd_o(usb_kbd)
+    );
+
+    logic [DATA_WIDTH-1:0] io_dout;
+    logic                  io_doe;
+
+    //
+    // I/O
+    //
+
+    io io (
+        .wb_clock_i(sys_clock_i),
+
         .cpu_be_i(cpu_be_o),
         .cpu_data_i(cpu_data_i),
-        .cpu_data_o(kbd_dout),
-        .cpu_data_oe(kbd_doe),
+        .cpu_data_o(io_dout),
+        .cpu_data_oe(io_doe),
         .cpu_we_i(cpu_we_i),
+
         .pia1_cs_i(pia1_en),
         .pia2_cs_i(pia2_en),
         .via_cs_i(via_en),
-        .rs_i(cpu_addr_i[VIA_RS_WIDTH-1:0])
+        .rs_i(cpu_addr_i[VIA_RS_WIDTH-1:0]),
+
+        .usb_kbd_i(usb_kbd)
     );
 
     //
@@ -451,9 +467,9 @@ module main (
     //
 
     always_comb begin
-        if (kbd_doe) begin
-            cpu_data_o = kbd_dout;
-            cpu_data_oe = !cpu_we_i;
+        if (io_doe) begin
+            cpu_data_o = io_dout;
+            cpu_data_oe = !cpu_we_i;        // TODO: Is 'io_doe' asserted when CPU is writing?
         end else if (ram_ctl_doe) begin
             cpu_data_o = ram_ctl_dout;
             cpu_data_oe = 1;
@@ -466,8 +482,8 @@ module main (
     wire cpu_rd_en = cpu_be_o && !cpu_we_i;
     wire cpu_wr_en = cpu_be_o &&  cpu_we_i && cpu_clock_o;
 
-    assign io_oe_o   = io_en   && cpu_be_o && !kbd_doe;
-    assign pia1_cs_o = pia1_en && cpu_be_o && !kbd_doe;
+    assign io_oe_o   = io_en   && cpu_be_o && !io_doe;
+    assign pia1_cs_o = pia1_en && cpu_be_o && !io_doe;
     assign pia2_cs_o = pia2_en && cpu_be_o;
     assign via_cs_o  =  via_en && cpu_be_o;
 
