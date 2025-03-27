@@ -18,7 +18,7 @@ import common_pkg::*;
 
 module bram #(
     parameter DATA_DEPTH = 512,
-    parameter ADDR_WIDTH = common_pkg::bit_width(DATA_DEPTH-1)
+    parameter ADDR_WIDTH = $clog2(DATA_DEPTH)
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)

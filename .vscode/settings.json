@@ -4,21 +4,28 @@
     "verilog.linting.linter": "verilator",
     "verilog.linting.verilator.arguments": "--language 1800-2009 -y gw/EconoPET -y gw/EconoPET/src -y gw/EconoPET/external/65xx -y gw/EconoPET/external/icesid/icesid",
     "cSpell.words": [
-        "CapsLock",
         "CRTC",
         "datasheet",
         "deassert",
         "deasserted",
         "deasserting",
         "deasserts",
+        "demultiplexer",
+        "demux",
         "Efinix",
-        "endcase",
         "GPIO",
         "leds",
-        "LEFTSHIFT",
         "Lehenbauer",
-        "PICO",
-        "RIGHTSHIFT"
+        "VROM"
+    ],
+    "cSpell.dictionaryDefinitions": [
+        {
+            "name": "verilog",
+            "path": "./.vscode/verilog-keywords.txt"
+        }
+    ],
+    "cSpell.dictionaries": [
+        "verilog"
     ],
     "cortex-debug.variableUseNaturalFormat": false,
     "cmake.generator": "Ninja"

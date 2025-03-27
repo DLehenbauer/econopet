@@ -19,7 +19,7 @@ import common_pkg::*;
 
 module bram_tb #(
     parameter DATA_DEPTH = 512,
-    parameter BRAM_ADDR_WIDTH = common_pkg::bit_width(DATA_DEPTH-1)
+    parameter BRAM_ADDR_WIDTH = $clog2(DATA_DEPTH)
 );
     logic                     clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));

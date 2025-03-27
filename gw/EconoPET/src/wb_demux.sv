@@ -17,7 +17,7 @@
 import common_pkg::*;
 
 /**
- * Wishbone Demultiplexer (Many Controllers -> One Bus)
+ * Wishbone demultiplexer (many controllers -> one bus)
  *
  * @param COUNT Number of Wishbone controllers
  */

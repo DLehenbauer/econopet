@@ -1,0 +1,8 @@
+casez
+endcase
+endmodule
+localparam
+ifdef
+posedge
+negedge
+onehot0

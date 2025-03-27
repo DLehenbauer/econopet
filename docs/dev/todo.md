@@ -17,9 +17,11 @@
   * Commit patched PicoDVI (?)
 * Gateware:
   * Reinitialize SID state on reset.
+  * Consider CPU addr_strobe and CPU data_strobe signals?
   * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
+  * Remove unused *.sv files (cpu, arbiter, bram, vsync, ??)
 * Compat:
-  * Echo last byte on bus when reading unmapped regions.
+  * Echo last byte on bus when reading unmapped regions. ("ghost byte")
 * HW
   * Parts
     * SMT Tactile Buttons (C318884)

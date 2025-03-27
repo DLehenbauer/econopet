@@ -17,7 +17,7 @@
 import common_pkg::*;
 
 /**
- * Wishbone Multiplexer (One Bus -> Many Peripherals)
+ * Wishbone multiplexer (one bus -> many peripherals)
  *
  * @param COUNT Number of Wishbone controllers
  */
@@ -44,7 +44,7 @@ module wb_mux #(
 
     // Convert the one-hot select signal to binary index
     always_comb begin
-        sel_index = ($bits(sel_index-1))'(0);
+        sel_index = '0;
         
         for (int i = 0; i < COUNT; i++) begin
             if (wbp_sel_i[i]) begin

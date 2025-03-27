@@ -37,13 +37,8 @@ package common_pkg;
         return int'($ceil(time_ns / mhz_to_ns(SYS_CLOCK_MHZ)));
     endfunction
 
-    // Calculates the required bit width to store the given value.
-    function int bit_width(input int value);
-        return $clog2(value + 1'b1);
-    endfunction
-
-    localparam int unsigned DATA_WIDTH      = 8;                                // 6502 and Wishbone data buses are 1 byte wide.
-    localparam int unsigned BIT_INDEX_WIDTH = bit_width(DATA_WIDTH - 1'b1);     // Bits required to index into a byte (0-7).
+    localparam int unsigned DATA_WIDTH      = 8;                    // 6502 and Wishbone data buses are 1 byte wide.
+    localparam int unsigned BIT_INDEX_WIDTH = $clog2(DATA_WIDTH);   // Bits required to index into a byte (0-7).
 
     //
     // PET
@@ -52,7 +47,7 @@ package common_pkg;
     // The PET keyboard matrix is 8 rows x 10 columns.
     localparam int unsigned KBD_ROW_COUNT = 8;      // 0-7 (A-F,H-J)
     localparam int unsigned KBD_COL_COUNT = 10;     // 0-9 (1-10)
-    localparam int unsigned KBD_COL_WIDTH = bit_width(int'(KBD_COL_COUNT) - 1'b1);
+    localparam int unsigned KBD_COL_WIDTH = $clog2(KBD_COL_COUNT);
     
     // PIA: Peripheral Interface Adapter
     // https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf
@@ -182,7 +177,7 @@ package common_pkg;
                CRTC_REG_COUNT             = CRTC_R17_LIGHT_PEN_LOW + 1'b1;
 
     // Bit width of the CRTC's internal address register.
-    localparam int unsigned CRTC_ADDR_REG_WIDTH = bit_width(CRTC_REG_COUNT - 1'b1);
+    localparam int unsigned CRTC_ADDR_REG_WIDTH = $clog2(CRTC_REG_COUNT);
 
     // SID: Sound Interface Device
     // https://archive.org/details/mos-6581-sid-data-sheet/page/n3/mode/2up
@@ -219,7 +214,7 @@ package common_pkg;
                SID_R28_ENV3                     = 28,
                SID_REG_COUNT                    = SID_R28_ENV3 + 1'b1;
     
-    localparam int unsigned SID_ADDR_REG_WIDTH = bit_width(SID_REG_COUNT - 1'b1);
+    localparam int unsigned SID_ADDR_REG_WIDTH = $clog2(SID_REG_COUNT);
 
     // 64K RAM Expansion
 
@@ -268,7 +263,7 @@ package common_pkg;
                          REG_IO_PIA2_CRB         = {REG_IO_PIA2, PIA_CRB},
                          IO_REG_COUNT            = REG_IO_PIA2_CRB + 1'b1;
 
-    localparam int unsigned IO_REG_ADDR_WIDTH = bit_width(int'(IO_REG_COUNT) - 1'b1);
+    localparam int unsigned IO_REG_ADDR_WIDTH = $clog2(IO_REG_COUNT);
 
     //
     // Register file
@@ -301,7 +296,7 @@ package common_pkg;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
-    localparam int unsigned REG_ADDR_WIDTH  = bit_width(REG_COUNT - 1'b1);
+    localparam int unsigned REG_ADDR_WIDTH  = $clog2(REG_COUNT);
 
     // TODO: Consider arranging our address space such that the MCU can read VRAM,
     //       keyboard status, and the status register in a single SPI transaction.

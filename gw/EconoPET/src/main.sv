@@ -108,7 +108,7 @@ module main (
             {WB_RAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
             {WB_REG_BASE, {(WB_ADDR_WIDTH - $bits(WB_REG_BASE)){1'b?}}}: reg_wb_sel = 1'b1;
             {WB_KBD_BASE, {(WB_ADDR_WIDTH - $bits(WB_KBD_BASE)){1'b?}}}: kbd_wb_sel = 1'b1;
-            default: begin end
+            default: /* do nothing */ ;
         endcase
     end
 
@@ -416,6 +416,7 @@ module main (
     // Wishbone
     //
 
+    // Many controllers -> one bus
     wb_demux #(
         .COUNT(2)
     ) wb_demux (
@@ -446,6 +447,7 @@ module main (
         .wbc_grant_valid_i(grant_valid)
     );
 
+    // One bus -> many peripherals
     wb_mux #(
         .COUNT(3)
     ) wb_mux (
@@ -463,7 +465,7 @@ module main (
     );
 
     //
-    // Bus
+    // System Bus
     //
 
     always_comb begin
@@ -505,7 +507,7 @@ module main (
         ? cpu_addr_i[11] & ram_addr_a11_mask
         : cpu_addr_o[11];
 
-    // When the CPU is driving the bus, the control register at $FFF0 control
+    // When the CPU is driving the bus, the control register at $FFF0 controls
     // the memory mapping for the upper 64k expansion.
     assign ram_addr_a15_o = cpu_be_o ? decoded_a15 : cpu_addr_o[15];
     assign ram_addr_a16_o = cpu_be_o ? decoded_a16 : ram_ctl_addr[16];
