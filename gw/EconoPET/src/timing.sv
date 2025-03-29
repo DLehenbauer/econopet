@@ -32,8 +32,8 @@ module timing (
         cpu_clock_o     = 1'b0;
         cpu_be_o        = 1'b0;
         cpu_wr_strobe_o = 1'b0;
-        clk8_en_o       = '0;
-        clk16_en_o      = '0;
+        clk8_en_o       = 1'b0;
+        clk16_en_o      = 1'b0;
     end
 
     localparam COUNTER_WIDTH = 6;
@@ -72,9 +72,9 @@ module timing (
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
     assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
-    function int ns_to_cycles(input int time_ns);
+    function bit [COUNTER_WIDTH-1:0] ns_to_cycles(input int time_ns);
         // The '+1' is a conservative allowance for trace delay, etc.
-        return int'($ceil(time_ns / common_pkg::mhz_to_ns(SYS_CLOCK_MHZ))) + 1;
+        return COUNTER_WIDTH'(common_pkg::ns_to_cycles(time_ns)) + 1;
     endfunction
 
     localparam CPU_tBVD      = 30,  // CPU BE to Valid Data (tBVD)
@@ -83,15 +83,15 @@ module timing (
                CPU_tDHx      = 10,  // CPU Data Hold Time (tDHR, tDHW)
                CPU_tMDS      = 40,  // CPU Write Data Delay Time (tMDS)
                RAM_tAA       = 10,  // RAM Address Access Time (tAA)
-               IOTX_t        = 11;  // IO Transciever Worst-Case Delay (tPZL)
+               IOTX_t        = 11;  // IO Transceiver Worst-Case Delay (tPZL)
 
     localparam bit [COUNTER_WIDTH-1:0] CPU_OFFSET = CPU_1 * 8;
 
     localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START     = CPU_OFFSET,
-                                       CPU_PHI_START    = COUNTER_WIDTH'(int'(CPU_BE_START) + ns_to_cycles(CPU_tBVD + IOTX_t)),
+                                       CPU_PHI_START    = CPU_BE_START + ns_to_cycles(CPU_tBVD + IOTX_t),
                                        CPU_WR_STROBE    = CPU_PHI_END - 2,
-                                       CPU_PHI_END      = COUNTER_WIDTH'(int'(CPU_PHI_START) + ns_to_cycles(CPU_tPWH)),
-                                       CPU_BE_END       = COUNTER_WIDTH'(int'(CPU_PHI_END) + ns_to_cycles(CPU_tDHx));
+                                       CPU_PHI_END      = CPU_PHI_START + ns_to_cycles(CPU_tPWH),
+                                       CPU_BE_END       = CPU_PHI_END + ns_to_cycles(CPU_tDHx);
 
     always_ff @(posedge sys_clock_i) begin
         cpu_wr_strobe_o <= '0;
@@ -112,8 +112,7 @@ module timing (
             CPU_BE_END: begin
                 cpu_be_o <= 1'b0;
             end
-            default: begin
-            end
+            default: /* do nothing */;
         endcase
     end
 endmodule
