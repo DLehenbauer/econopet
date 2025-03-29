@@ -62,7 +62,7 @@ module spi1_controller (
     logic spi_start_pulse;
     logic spi_reset_pulse;
 
-    sync2_edge_detect sync_cs_n (  // Cross from CS_N to 'wb_clock_i' domain
+    sync2_edge_detect sync_cs_n (   // Cross from CS_N to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
         .data_i (spi_cs_ni),
         .data_o (),                 // Unused: Only need edge detection
@@ -75,9 +75,9 @@ module spi1_controller (
     sync2_edge_detect sync_valid (  // Cross from SCK to 'wb_clock_i' domain
         .clock_i(wb_clock_i),
         .data_i (spi_strobe),
-        .data_o (),                  // Unused: Only need positive edge detection
+        .data_o (),                 // Unused: Only need positive edge detection
         .pe_o   (spi_strobe_pulse),
-        .ne_o   ()                   // Unused: Only need positive edge detection
+        .ne_o   ()                  // Unused: Only need positive edge detection
     );
 
     // State encoding for our FSM:
@@ -101,7 +101,7 @@ module spi1_controller (
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
             spi_state <= READ_CMD;
         end else if (spi_strobe_pulse) begin
-            case (spi_state)
+            unique case (spi_state)
                 READ_CMD: begin
                     wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
 
@@ -139,6 +139,8 @@ module spi1_controller (
                     // Remain in the valid state until negative CS_N edge resets the FSM.
                     spi_state <= VALID;
                 end
+
+                default: $fatal(1, "Invalid state in SPI1 controller: %b", spi_state);
             endcase
         end
     end
@@ -176,7 +178,7 @@ module spi1_controller (
             wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o'
             wb_strobe_o <= '0;
         end else begin
-            case (wb_state)
+            unique case (wb_state)
                 READY: begin
                     wb_strobe_o <= 0;
 
@@ -201,6 +203,7 @@ module spi1_controller (
                         wb_state    <= READY;
                     end
                 end
+                default: $fatal(1, "Invalid state in SPI1 controller: %b", wb_state);
             endcase
         end
     end

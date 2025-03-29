@@ -1,8 +1,10 @@
 casez
 endcase
+endfunction
 endmodule
-localparam
+endtask
 ifdef
-posedge
+localparam
 negedge
 onehot0
+posedge

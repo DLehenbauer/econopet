@@ -24,21 +24,23 @@ module timing_tb;
 
     stopwatch stopwatch();
 
+    logic clk16_en;
+    logic clk8_en;
     logic cpu_be;
+    logic cpu_addr_strobe;
     logic cpu_clock;
-    logic cpu_wr_strobe;
+    logic cpu_data_strobe;
     logic load_sr1;
     logic load_sr2;
-    logic clk8_en;
-    logic clk16_en;
     logic [0:0] grant;
     logic grant_valid;
 
     timing timing (
         .sys_clock_i(clock),
         .cpu_be_o(cpu_be),
+        .cpu_addr_strobe_o(cpu_addr_strobe),
         .cpu_clock_o(cpu_clock),
-        .cpu_wr_strobe_o(cpu_wr_strobe),
+        .cpu_data_strobe_o(cpu_data_strobe),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .clk8_en_o(clk8_en),
@@ -80,15 +82,20 @@ module timing_tb;
         @(posedge cpu_be);
         $display("[%t] cpu_be at %0.2f mHz", $time, stopwatch.freq_mhz());
 
+        @(posedge cpu_addr_strobe);
+        stopwatch.start();
+        @(posedge cpu_addr_strobe);
+        $display("[%t] cpu_addr_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+
         @(posedge cpu_clock);
         stopwatch.start();
         @(posedge cpu_clock);
         $display("[%t] cpu_clock at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge cpu_wr_strobe);
+        @(posedge cpu_data_strobe);
         stopwatch.start();
-        @(posedge cpu_wr_strobe);
-        $display("[%t] cpu_wr_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge cpu_data_strobe);
+        $display("[%t] cpu_data_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         #1 $display("[%t] END %m", $time);
     endtask

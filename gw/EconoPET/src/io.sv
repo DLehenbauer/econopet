@@ -21,7 +21,8 @@ import common_pkg::*;
 module io(
     input  logic                     wb_clock_i,
 
-    input  logic                     cpu_be_i,
+    input  logic                     cpu_addr_strobe_i,
+    input  logic                     cpu_data_strobe_i,
     input  logic [   DATA_WIDTH-1:0] cpu_data_i,
     output logic [   DATA_WIDTH-1:0] cpu_data_o,
     output logic                     cpu_data_oe,   // Asserted when intercepting CPU read
@@ -46,32 +47,31 @@ module io(
     always_ff @(posedge wb_clock_i) begin
         cpu_data_oe <= '0;
 
-        if (cpu_be_i) begin
-            if (cpu_we_i) begin
-                // Cache CPU writes to all I/O registers.
-                unique case (1'b1)
-                    pia1_cs_i: register[{ REG_IO_PIA1, pia_rs }] <= cpu_data_i;
-                    pia2_cs_i: register[{ REG_IO_PIA2, pia_rs }] <= cpu_data_i;
-                    via_cs_i:  register[{ REG_IO_VIA,  via_rs }] <= cpu_data_i;
-                    default: /* do nothing */ ;
-                endcase
-            end else begin
-                // Intercept CPU reads from select I/O registers.
-                unique case (1'b1)
-                    pia1_cs_i: begin
-                        unique case (pia_rs)
-                            // Inject USB keyboard input by intercepting reads from PIA1_PORTB when
-                            // a USB keyboard key is pressed.
-                            PIA_PORTB: begin
-                                cpu_data_o  <= selected_row_data;             // Load USB keyboard column into 'cpu_data_o' register.
-                                cpu_data_oe <= selected_row_data != 8'hff;    // But only assert 'cpu_data_oe' if a key is pressed.
-                            end
-                            default: /* do nothing */;
-                        endcase
-                    end
-                    default: /* do nothing */ ;
-                endcase
-            end
+        if (cpu_data_strobe_i && cpu_we_i) begin
+            // CPU is writing to bus.  If the address is in the range of select I/O registers,
+            // capture the data in the register array.
+            unique case (1'b1)
+                pia1_cs_i: register[{ REG_IO_PIA1, pia_rs }] <= cpu_data_i;
+                pia2_cs_i: register[{ REG_IO_PIA2, pia_rs }] <= cpu_data_i;
+                via_cs_i:  register[{ REG_IO_VIA,  via_rs }] <= cpu_data_i;
+                default: /* do nothing */ ;
+            endcase
+        end else if (cpu_addr_strobe_i && !cpu_we_i) begin
+            // CPU is preparing to read from the bus.  Intercept reads to select I/O registers.
+            unique case (1'b1)
+                pia1_cs_i: begin
+                    unique case (pia_rs)
+                        // Inject USB keyboard input by intercepting reads from PIA1_PORTB when
+                        // a USB keyboard key is pressed.
+                        PIA_PORTB: begin
+                            cpu_data_o  <= selected_row_data;             // Load USB keyboard column into 'cpu_data_o' register.
+                            cpu_data_oe <= selected_row_data != 8'hff;    // But only assert 'cpu_data_oe' if a key is pressed.
+                        end
+                        default: /* do nothing */;
+                    endcase
+                end
+                default: /* do nothing */ ;
+            endcase
         end else begin
             // To relax timing, we pipeline reads from the 'register' array.
             selected_row_data   <= usb_kbd_i[selected_col];
