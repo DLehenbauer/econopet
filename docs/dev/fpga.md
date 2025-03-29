@@ -24,4 +24,4 @@ Supported access modes:
 
 ## T20
 
-Pin-compatible with T8.  There are 204 BRAMs for ~102KB of RAM.
+Pin-compatible with T8.  There are 204 BRAMs for ~102KB of RAM (+90KB).
