@@ -34,9 +34,11 @@ module video_tb;
 
     timing timing (
         .sys_clock_i(sys_clock),
-        .cpu_wr_strobe_o(clk1n_en),
-        .clk8_en_o(clk8_en),
         .clk16_en_o(clk16_en),
+        .clk8_en_o(clk8_en),
+        .cpu_be_o(),
+        .cpu_clock_o(),
+        .cpu_data_strobe_o(clk1n_en),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .grant_o(grant),

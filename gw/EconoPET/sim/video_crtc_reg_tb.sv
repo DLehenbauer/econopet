@@ -44,15 +44,21 @@ module video_crtc_reg_tb;
         .wb_stall_i(wb_stall)
     );
 
-    logic clk1n_en;
-    logic clk8_en;
     logic clk16_en;
+    logic clk8_en;
+    logic clk1n_en;
 
     timing timing (
         .sys_clock_i(clock),
-        .cpu_wr_strobe_o(clk1n_en),
+        .clk16_en_o(clk16_en),
         .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en)
+        .cpu_be_o(),
+        .cpu_clock_o(),
+        .cpu_data_strobe_o(clk1n_en),
+        .load_sr1_o(),
+        .load_sr2_o(),
+        .grant_o(),
+        .grant_valid_o()
     );
 
     logic        cs;

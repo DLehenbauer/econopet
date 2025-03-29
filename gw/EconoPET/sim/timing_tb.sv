@@ -24,25 +24,25 @@ module timing_tb;
 
     stopwatch stopwatch();
 
+    logic clk16_en;
+    logic clk8_en;
     logic cpu_be;
     logic cpu_clock;
-    logic cpu_wr_strobe;
+    logic cpu_data_strobe;
     logic load_sr1;
     logic load_sr2;
-    logic clk8_en;
-    logic clk16_en;
     logic [0:0] grant;
     logic grant_valid;
 
     timing timing (
         .sys_clock_i(clock),
+        .clk16_en_o(clk16_en),
+        .clk8_en_o(clk8_en),
         .cpu_be_o(cpu_be),
         .cpu_clock_o(cpu_clock),
-        .cpu_wr_strobe_o(cpu_wr_strobe),
+        .cpu_data_strobe_o(cpu_data_strobe),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
-        .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en),
         .grant_o(grant),
         .grant_valid_o(grant_valid)
     );
@@ -65,16 +65,6 @@ module timing_tb;
         @(posedge clk8_en);
         $display("[%t] clk8_en at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge load_sr2);
-        stopwatch.start();
-        @(posedge load_sr2);
-        $display("[%t] load_sr2 at %0.2f mHz", $time, stopwatch.freq_mhz());
-
-        @(posedge load_sr1);
-        stopwatch.start();
-        @(posedge load_sr1);
-        $display("[%t] load_sr1 at %0.2f mHz", $time, stopwatch.freq_mhz());
-
         @(posedge cpu_be);
         stopwatch.start();
         @(posedge cpu_be);
@@ -85,10 +75,20 @@ module timing_tb;
         @(posedge cpu_clock);
         $display("[%t] cpu_clock at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        @(posedge cpu_wr_strobe);
+        @(posedge cpu_data_strobe);
         stopwatch.start();
-        @(posedge cpu_wr_strobe);
-        $display("[%t] cpu_wr_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+        @(posedge cpu_data_strobe);
+        $display("[%t] cpu_data_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge load_sr1);
+        stopwatch.start();
+        @(posedge load_sr1);
+        $display("[%t] load_sr1 at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge load_sr2);
+        stopwatch.start();
+        @(posedge load_sr2);
+        $display("[%t] load_sr2 at %0.2f mHz", $time, stopwatch.freq_mhz());
 
         #1 $display("[%t] END %m", $time);
     endtask

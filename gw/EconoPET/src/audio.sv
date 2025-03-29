@@ -45,7 +45,7 @@ module audio (
     input  logic                          sys_clock_i,
     input  logic                          clk1_en_i,
     input  logic                          sid_en_i,
-    input  logic                          cpu_wr_en_i,
+    input  logic                          cpu_wr_strobe_i,
     input  logic [SID_ADDR_REG_WIDTH-1:0] addr_i,
     input  logic [                   7:0] data_i,       // writing to SID
     output logic [                   7:0] data_o,       // reading from SID
@@ -54,7 +54,7 @@ module audio (
     input  logic via_cb2_i,
     output logic audio_o
 );
-    wire sid_wr_en = cpu_wr_en_i && sid_en_i;
+    wire sid_wr_en = cpu_wr_strobe_i && sid_en_i;
 
     // See http://www.cbmhardware.de/show.php?r=14&id=71/PETSID
     logic signed [15:0] sid_out;

@@ -151,9 +151,9 @@ module main (
     assign cpu_we_o    = 0;
     assign cpu_we_oe   = 0;
 
-    logic cpu_wr_strobe;    // TODO: Rename? This is a 1-cycle pulse at end of write cycle (but ignores cpu_we_i)
-    logic clk8_en;
     logic clk16_en;
+    logic clk8_en;
+    logic cpu_data_strobe;
     logic load_sr1;
     logic load_sr2;
     logic [0:0] grant;
@@ -161,11 +161,11 @@ module main (
 
     timing timing (
         .sys_clock_i(sys_clock_i),
+        .clk16_en_o(clk16_en),
+        .clk8_en_o(clk8_en),
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
-        .cpu_wr_strobe_o(cpu_wr_strobe),
-        .clk8_en_o(clk8_en),
-        .clk16_en_o(clk16_en),
+        .cpu_data_strobe_o(cpu_data_strobe),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .grant_o(grant),
@@ -265,7 +265,7 @@ module main (
         .sys_clock_i(sys_clock_i),
         
         .cpu_be_i(cpu_be_o),
-        .cpu_wr_strobe_i(cpu_we_i && cpu_wr_strobe),
+        .cpu_wr_strobe_i(cpu_we_i && cpu_data_strobe),
         .cpu_addr_i(cpu_addr_i),
         .cpu_data_i(cpu_data_i),
 
@@ -326,7 +326,7 @@ module main (
         .config_crt_i(config_crt_i),        // Controls polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
 
         .cpu_reset_i(cpu_reset_i),
-        .crtc_clk_en_i(cpu_wr_strobe),      // 1 MHz clock enable for 'sys_clock_i'
+        .crtc_clk_en_i(cpu_data_strobe),      // 1 MHz clock enable for 'sys_clock_i'
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'cpu_addr_i' is in CRTC range
         .crtc_rs_i(cpu_addr_i[0]),          // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(cpu_we_i),               // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
@@ -352,7 +352,7 @@ module main (
         .reset_i(cpu_reset_i),
         .sys_clock_i(sys_clock_i),
         .clk1_en_i(load_sr1),
-        .cpu_wr_en_i(cpu_wr_strobe && cpu_we_i),
+        .cpu_wr_strobe_i(cpu_data_strobe && cpu_we_i),
         .sid_en_i(sid_en),
         .addr_i(cpu_addr_i[4:0]),
         .data_i(cpu_data_i),
