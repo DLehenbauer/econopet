@@ -33,13 +33,13 @@ module keyboard_tb;
 
     logic [ VIA_RS_WIDTH-1:0] rs;
 
-    logic                      cpu_be     = '0;
+    logic                      cpu_be        = '0;
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
     logic [    DATA_WIDTH-1:0] cpu_din;
     logic [    DATA_WIDTH-1:0] cpu_dout;
     logic                      cpu_doe;
-    logic                      cpu_we     = '0;
-    logic                      cpu_strobe = '0;
+    logic                      cpu_we        = '0;
+    logic                      cpu_wr_strobe = '0;
 
     wire pia1_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he81;
     wire pia2_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he82;
@@ -64,6 +64,7 @@ module keyboard_tb;
     io io (
         .wb_clock_i(clock),
         .cpu_be_i(cpu_be),
+        .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_data_i(cpu_din),
         .cpu_data_o(cpu_dout),
         .cpu_data_oe(cpu_doe),
@@ -95,17 +96,17 @@ module keyboard_tb;
     );
         @(negedge clock);
 
-        cpu_be     = 1'b1;
-        cpu_addr   = addr;
-        cpu_din    = data;
-        cpu_we     = 1'b1;
-        cpu_strobe = 1'b1;
+        cpu_be        = 1'b1;
+        cpu_addr      = addr;
+        cpu_din       = data;
+        cpu_we        = 1'b1;
+        cpu_wr_strobe = 1'b1;
         
         @(negedge clock);
         
-        cpu_we     = 1'b0;
-        cpu_strobe = 1'b0;
-        cpu_be     = 1'b0;
+        cpu_we        = 1'b0;
+        cpu_wr_strobe = 1'b0;
+        cpu_be        = 1'b0;
 
         repeat (16) @(posedge clock);
     endtask
@@ -116,16 +117,15 @@ module keyboard_tb;
     );
         @(negedge clock);
 
-        cpu_be     = 1'b1;
-        cpu_addr   = addr;
-        cpu_we     = 1'b0;
-        cpu_strobe = 1'b1;
+        cpu_be        = 1'b1;
+        cpu_addr      = addr;
+        cpu_we        = 1'b0;
+        cpu_wr_strobe = 1'b0;
 
         @(negedge clock);
 
-        data = cpu_dout;
-        cpu_strobe = 1'b0;
-        cpu_be     = 1'b0;
+        data          = cpu_dout;
+        cpu_be        = 1'b0;
 
         repeat (16) @(posedge clock);
     endtask

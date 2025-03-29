@@ -172,6 +172,8 @@ module main (
         .grant_valid_o(grant_valid)
     );
 
+    wire cpu_wr_strobe = cpu_data_strobe && cpu_we_i;
+
     //
     // Wishbone <-> RAM Bridge
     //
@@ -265,7 +267,7 @@ module main (
         .sys_clock_i(sys_clock_i),
         
         .cpu_be_i(cpu_be_o),
-        .cpu_wr_strobe_i(cpu_we_i && cpu_data_strobe),
+        .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_addr_i(cpu_addr_i),
         .cpu_data_i(cpu_data_i),
 
@@ -352,7 +354,7 @@ module main (
         .reset_i(cpu_reset_i),
         .sys_clock_i(sys_clock_i),
         .clk1_en_i(load_sr1),
-        .cpu_wr_strobe_i(cpu_data_strobe && cpu_we_i),
+        .cpu_wr_strobe_i(cpu_wr_strobe),
         .sid_en_i(sid_en),
         .addr_i(cpu_addr_i[4:0]),
         .data_i(cpu_data_i),
@@ -399,6 +401,7 @@ module main (
         .wb_clock_i(sys_clock_i),
 
         .cpu_be_i(cpu_be_o),
+        .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(io_dout),
         .cpu_data_oe(io_doe),
