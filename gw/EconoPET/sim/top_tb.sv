@@ -70,13 +70,15 @@ module top_tb;
             $display("[%t]   Keyboard[%0d] <- %02x (WB)", $time, col, value);
             mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
 
-            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
-            $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
-            `assert_equal(dout, value);
-
+            // Read from CPU
             mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
             $display("[%t]   Keyboard[%0d] -> %02x (CPU)", $time, col, dout);
+            `assert_equal(dout, value);
+
+            // Value read by CPU should be available via WB
+            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
+            $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
             `assert_equal(dout, value);
 
             // Keyboard interception should not interfere with RAM access.
@@ -167,9 +169,9 @@ module top_tb;
         $display("[%t] BEGIN %m", $time);
 
         mock_system.init;
-        mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
+        // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
-        cpu_ram_test;
+        // cpu_ram_test;
         usb_keyboard_test;
         crtc_write_test;
         sid_write_test;

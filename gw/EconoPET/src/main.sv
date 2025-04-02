@@ -374,7 +374,8 @@ module main (
     logic                  kbd_wb_stall;
     logic                  kbd_wb_ack;
 
-    logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd;
+    logic [DATA_WIDTH-1:0] io_dout;
+    logic                  io_doe;
 
     keyboard keyboard (
         .wb_clock_i(sys_clock_i),
@@ -387,32 +388,16 @@ module main (
         .wb_stall_o(kbd_wb_stall),
         .wb_ack_o(kbd_wb_ack),
         .wb_sel_i(kbd_wb_sel),
-        .usb_kbd_o(usb_kbd)
-    );
-
-    logic [DATA_WIDTH-1:0] io_dout;
-    logic                  io_doe;
-
-    //
-    // I/O
-    //
-
-    io io (
-        .wb_clock_i(sys_clock_i),
-
+        
         .cpu_be_i(cpu_be_o),
-        .cpu_wr_strobe_i(cpu_wr_strobe),
+        .cpu_data_strobe_i(timing.cpu_data_strobe_o), // 'timing.cpu_data_strobe_o' works around bug in iverilog v12.0
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(io_dout),
         .cpu_data_oe(io_doe),
         .cpu_we_i(cpu_we_i),
 
         .pia1_cs_i(pia1_en),
-        .pia2_cs_i(pia2_en),
-        .via_cs_i(via_en),
-        .rs_i(cpu_addr_i[VIA_RS_WIDTH-1:0]),
-
-        .usb_kbd_i(usb_kbd)
+        .pia1_rs_i(cpu_addr_i[PIA_RS_WIDTH-1:0])
     );
 
     //

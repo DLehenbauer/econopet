@@ -33,13 +33,13 @@ module keyboard_tb;
 
     logic [ VIA_RS_WIDTH-1:0] rs;
 
-    logic                      cpu_be        = '0;
+    logic                      cpu_be           = '0;
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
-    logic [    DATA_WIDTH-1:0] cpu_din;
-    logic [    DATA_WIDTH-1:0] cpu_dout;
+    logic [    DATA_WIDTH-1:0] bus_dout;    // Data written by bus (written by CPU, etc.)
+    logic [    DATA_WIDTH-1:0] bus_din;     // Data read by bus (read by CPU, etc.)
     logic                      cpu_doe;
-    logic                      cpu_we        = '0;
-    logic                      cpu_wr_strobe = '0;
+    logic                      cpu_we           = '0;
+    logic                      cpu_data_strobe  = '0;
 
     wire pia1_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he81;
     wire pia2_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he82;
@@ -58,22 +58,15 @@ module keyboard_tb;
         .wb_stall_o(stall),
         .wb_ack_o(ack),
         .wb_sel_i(1'b1),
-        .usb_kbd_o(usb_kbd)
-    );
 
-    io io (
-        .wb_clock_i(clock),
         .cpu_be_i(cpu_be),
-        .cpu_wr_strobe_i(cpu_wr_strobe),
-        .cpu_data_i(cpu_din),
-        .cpu_data_o(cpu_dout),
+        .cpu_data_strobe_i(cpu_data_strobe),
+        .cpu_data_i(bus_dout),      // Data written by bus (written by CPU, etc.)
+        .cpu_data_o(bus_din),       // Data read by bus (read by CPU, etc.)
         .cpu_data_oe(cpu_doe),
         .cpu_we_i(cpu_we),
         .pia1_cs_i(pia1_cs),
-        .pia2_cs_i(pia2_cs),
-        .via_cs_i(via_cs),
-        .rs_i(cpu_addr[VIA_RS_WIDTH-1:0]),
-        .usb_kbd_i(usb_kbd)
+        .pia1_rs_i(cpu_addr[PIA_RS_WIDTH-1:0])
     );
 
     wb_driver wb (
@@ -96,17 +89,17 @@ module keyboard_tb;
     );
         @(negedge clock);
 
-        cpu_be        = 1'b1;
-        cpu_addr      = addr;
-        cpu_din       = data;
-        cpu_we        = 1'b1;
-        cpu_wr_strobe = 1'b1;
+        cpu_be          = 1'b1;
+        cpu_addr        = addr;
+        bus_dout        = data;     // Data written by bus (written by CPU, etc.)
+        cpu_we          = 1'b1;
+        cpu_data_strobe = 1'b1;
         
         @(negedge clock);
         
-        cpu_we        = 1'b0;
-        cpu_wr_strobe = 1'b0;
-        cpu_be        = 1'b0;
+        cpu_we          = 1'b0;
+        cpu_data_strobe = 1'b0;
+        cpu_be          = 1'b0;
 
         repeat (16) @(posedge clock);
     endtask
@@ -117,15 +110,24 @@ module keyboard_tb;
     );
         @(negedge clock);
 
-        cpu_be        = 1'b1;
-        cpu_addr      = addr;
-        cpu_we        = 1'b0;
-        cpu_wr_strobe = 1'b0;
+        cpu_be          = 1'b1;
+        cpu_addr        = addr;
+        cpu_we          = 1'b0;
+
+        // We need a positive edge on the system clock for keyboard to detect that the next
+        // CPU read should be intercepted.
+        @(negedge clock);
+
+        // The pet keyboard matrix should be updated with the intercepted usb key press (if any)
+        // on the later data strobe.  If not intercepted, we assume no key press from PIA1 (0xFF).
+        cpu_data_strobe = 1'b1;
+        bus_dout        = cpu_doe ? bus_din : 8'hff;    // Data written by bus (in this case FPGA or PIA1)
 
         @(negedge clock);
 
-        data          = cpu_dout;
-        cpu_be        = 1'b0;
+        data            = bus_din;
+        cpu_data_strobe = 1'b0;
+        cpu_be          = 1'b0;
 
         repeat (16) @(posedge clock);
     endtask

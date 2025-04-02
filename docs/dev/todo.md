@@ -16,10 +16,13 @@
     * Enter/Exit without reset?
   * Commit patched PicoDVI (?)
 * Gateware:
-  * Reinitialize SID state on reset.
-  * Consider CPU addr_strobe and CPU data_strobe signals?
+  * Handle reset for:
+    * SID
+    * Keyboard
+  * Consider CPU addr_strobe signal?
   * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
-  * Remove unused *.sv files (cpu, arbiter, bram, vsync, ??)
+  * Remove unused *.sv files (cpu, arbiter, bram, vsync, io, ??)
+  * Generalize IO shadowing and interception for keyboard and (future) IEEE, etc.
 * Compat:
   * Echo last byte on bus when reading unmapped regions. ("ghost byte")
 * HW
