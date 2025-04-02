@@ -390,7 +390,7 @@ module main (
         .wb_sel_i(kbd_wb_sel),
         
         .cpu_be_i(cpu_be_o),
-        .cpu_data_strobe_i(timing.cpu_data_strobe_o), // 'timing.cpu_data_strobe_o' works around bug in iverilog v12.0
+        .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_data_i(cpu_data_i),
         .cpu_data_o(io_dout),
         .cpu_data_oe(io_doe),

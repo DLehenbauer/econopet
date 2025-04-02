@@ -121,6 +121,17 @@ void spi_write_next(uint8_t data) {
     cmd_end();
 }
 
+uint8_t spi_read_write_next(const uint8_t data) {
+    const uint8_t tx [] = { SPI_CMD_WRITE_NEXT, data };
+    uint8_t rx[sizeof(tx)];
+
+    cmd_start();
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
+    cmd_end();
+
+    return rx[sizeof(tx) - 1];
+}
+
 void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
     const uint8_t* p = pSrc;
     
@@ -130,6 +141,20 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
         while (byteLength--) {
             spi_write_next(*p++);
         }
+    }
+}
+
+void spi_write_read(uint32_t addr, const uint8_t* const pWriteSrc, uint8_t* pReadDest, size_t byteLength) {
+    const uint8_t* p = pWriteSrc;
+    
+    if (byteLength--) {
+        spi_write_at(addr, *p++);
+
+        while (byteLength--) {
+            *pReadDest++ = spi_read_write_next(*p++);
+        }
+
+        *pReadDest++ = spi_read_next();
     }
 }
 
@@ -170,7 +195,7 @@ void get_model(bool* crtc, bool* business) {
 }
 
 void sync_state() {
-    spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
+    spi_write_read(ADDR_KBD, key_matrix, pet_key_matrix, KEY_COL_COUNT);
     uint8_t status = spi_read_at(REG_STATUS);
     video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
 }

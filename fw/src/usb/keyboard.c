@@ -28,6 +28,19 @@ uint8_t key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
+uint8_t pet_key_matrix[KEY_COL_COUNT] = {
+    /* 0 */ 0xff,
+    /* 1 */ 0xff,
+    /* 2 */ 0xff,
+    /* 3 */ 0xff,
+    /* 4 */ 0xff,
+    /* 5 */ 0xff,
+    /* 6 */ 0xff,
+    /* 7 */ 0xff,
+    /* 8 */ 0xff,
+    /* 9 */ 0xff,
+};
+
 typedef struct __attribute__((packed)) {
     // First byte contains row/col packed as nibbles
     unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)

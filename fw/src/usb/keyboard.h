@@ -21,6 +21,7 @@
 // A key is pressed when the corresponding bit is 0.
 #define KEY_COL_COUNT 10
 extern uint8_t key_matrix[KEY_COL_COUNT];
+extern uint8_t pet_key_matrix[KEY_COL_COUNT];
 
 //void process_kbd_report(hid_keyboard_report_t const *report);
 void dispatch_key_events();
