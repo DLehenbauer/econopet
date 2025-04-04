@@ -302,18 +302,18 @@ static const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
 static uint8_t zp_backup[0x100] = { 0 };
 static uint8_t rom_backup[0x100] = { 0 };
 
-bool menu_task() {
+void menu_task() {
     ButtonAction action = get_button_action();
 
-    // If no button action, return to normal PET loop.
+    // If no button action, return to main PET loop.
     if (action == None) {
-        return false;
+        return;
     }
 
-    // If short press, return 'true' which will cause a reset.
+    // If short press, reset and then return to main PET loop.
     if (action == ShortPress) {
         pet_reset();
-        return true;
+        return;
     }
 
     printf("-- Enter Menu --\n");
@@ -324,6 +324,8 @@ bool menu_task() {
     // Save a copy of kernel ROM.
     spi_read(/* addr: */ 0x0000, sizeof(zp_backup), zp_backup);
     spi_read(/* addr: */ 0xff00, sizeof(rom_backup), rom_backup);
+
+    // Write menu ROM to $FF00 and enter via NMI.
     spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_menu_ff00, sizeof(rom_menu_ff00));    
     pet_nmi();
 
@@ -334,13 +336,11 @@ bool menu_task() {
         load_prg(prgFile);
     }
 
-    // Resume CPU
+    // Restore kernel ROM and zero page and use NMI to return to BASIC.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
     spi_write(/* addr: */ 0x0000, /* pSrc: */ zp_backup, sizeof(zp_backup));
     spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_backup, sizeof(rom_backup));
     pet_nmi();
 
     printf("-- Exit Menu --\n");
-
-    return true;
 }

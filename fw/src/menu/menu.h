@@ -28,4 +28,4 @@ typedef enum {
 } ButtonAction;
 
 void menu_init();
-bool menu_task();
+void menu_task();
