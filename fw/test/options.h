@@ -20,7 +20,8 @@ typedef enum {
     OptionKind_Choice,
     OptionKind_Boolean,
     OptionKind_Spacer,
-    OptionKind_End
+    OptionKind_Action,
+    OptionKind_End,
 } OptionKind;
 
 typedef struct {
@@ -30,13 +31,14 @@ typedef struct {
 } OptionSelect;
 
 typedef struct {
+    const char* const label;
+} OptionAction;
+
+typedef struct {
     OptionKind kind;
     union {
         OptionSelect select;
-        struct {
-            const char* name;
-            bool enabled;
-        } boolean;
+        OptionAction action;
         const char END;
     };
 } Option;
@@ -45,22 +47,6 @@ typedef struct {
     const char* name;
     Option* options;
 } Group;
-
-typedef enum {
-    Option_BasicVersion = 0,
-    Option_VSync = 1
-} OptionIndex;
-
-typedef enum {
-    Version_2 = 0,
-    Version_3 = 1,
-    Version_4 = 2
-} BasicVersion;
-
-typedef enum {
-    HZ_50 = 0,
-    HZ_60 = 1
-} VSync;
 
 typedef struct {
     Option* pOption;
@@ -71,6 +57,36 @@ typedef struct {
 } Layout;
 
 Layout layouts[32] = { 0 };
+
+// Index of groups.
+typedef enum {
+    Group_Basic = 0,
+    Group_Video = 1,
+    Group_Button = 2
+} GroupIndex;
+
+// Index of option within group.
+typedef enum {
+    Option_Basic_Version = 0,
+    Option_Video_Columns = 0,
+    Option_Video_VSync = 2,
+    Option_Button_Reset = 0
+} OptionIndex;
+
+typedef enum {
+    Option_Basic_Version_2 = 0,
+    Option_Basic_Version_3 = 1,
+    Option_Basic_Version_4 = 2,
+    Option_Video_Columns_40 = 0,
+    Option_Video_Columns_80 = 1,
+    Option_Video_VSync_50Hz = 0,
+    Option_Video_VSync_60Hz = 1
+} OptionValueIndices;
+
+typedef enum {
+    HZ_50 = 0,
+    HZ_60 = 1
+} VSync;
 
 Group groups[] = {
     {
@@ -108,6 +124,17 @@ Group groups[] = {
                 }
             },
             { .kind = OptionKind_End, .END = 0 }
+        },
+    },
+    {
+        .name = "Action",
+        .options = (Option[]) {
+            {
+                .kind = OptionKind_Action,
+                .action = {
+                    .label = "Reset"
+                }
+            },
         },
     },
 };

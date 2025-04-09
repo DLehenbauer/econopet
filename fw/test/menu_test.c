@@ -217,6 +217,15 @@ int draw_choice(uint8_t x, uint8_t y, uint8_t w, Option* pOption, uint8_t* pOpti
     return y;
 }
 
+int draw_button(uint8_t x, uint8_t y, uint8_t w, Option* pOption, uint8_t* pOptionIndex) {
+    uint8_t *pOut = get_screen_addr(x, y);
+    pOut = _draw_text(pOut, "[ ");
+    pOut = _draw_text(pOut, pOption->action.label);
+    pOut = _draw_text(pOut, " ]");
+    recordOptionLayout(x, y, w, pOption, 0, pOptionIndex);
+    return y;
+}
+
 int draw_option(uint8_t x, uint8_t y, uint8_t w, Option* option, uint8_t* pOptionIndex) {
     switch (option->kind) {
         case OptionKind_Choice: return draw_choice(x, y, w, option, pOptionIndex);
@@ -264,6 +273,26 @@ void undraw_cursor() {
     }
 }
 
+void onSelect(Option* pOption) {
+    // Choosing 80 column video forces Basic 4.0
+    if (pOption == &groups[Group_Video].options[Option_Video_Columns] &&
+        pOption->select.selected != Option_Video_Columns_40) {
+        groups[Group_Basic].options[Option_Basic_Version].select.selected = Option_Basic_Version_4;
+    }
+
+    // Choosing 50 Hz video forces Basic 4.0
+    if (pOption == &groups[Group_Video].options[Option_Video_VSync] &&
+        pOption->select.selected != Option_Video_VSync_60Hz) {
+        groups[Group_Basic].options[Option_Basic_Version].select.selected = Option_Basic_Version_4;
+    }
+
+    if (pOption == &groups[Group_Basic].options[Option_Basic_Version_2] ||
+        pOption == &groups[Group_Basic].options[Option_Basic_Version_3]) {
+        groups[Group_Video].options[Option_Video_Columns].select.selected = Option_Video_Columns_40;
+        groups[Group_Video].options[Option_Video_VSync].select.selected   = Option_Video_VSync_60Hz;
+    }
+}
+
 void select() {
     Layout* layout = &layouts[cursor];
     Option* pOption = layout->pOption;
@@ -271,6 +300,7 @@ void select() {
     switch (pOption->kind) {
         case OptionKind_Choice:
             pOption->select.selected = layout->value;
+            onSelect(pOption);
             break;
     }
 }
@@ -282,7 +312,8 @@ void display_config_menu() {
     // Draw Basic group frame:
     y = draw_group(0,   y, 30, &groups[0], &optionIndex);
     y = draw_group(0, ++y, 30, &groups[1], &optionIndex);
-
+    y = draw_button(0, ++y, 9, &groups[Group_Button].options[Option_Button_Reset], &optionIndex);
+ 
     draw_cursor();
 }
 
