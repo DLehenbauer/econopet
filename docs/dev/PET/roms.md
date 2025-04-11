@@ -318,6 +318,7 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7) [6540-026]         
 
 ## Tools
 
+* [cbmsymbols](https://github.com/ethandicks/cbmsymbols/)
 * [Ghidra](https://github.com/NationalSecurityAgency/ghidra)
   * `winget install Microsoft.OpenJDK.21`
 * [WFDis](https://www.white-flame.com/wfdis/)
