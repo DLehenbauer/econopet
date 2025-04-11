@@ -12,7 +12,7 @@
             "program": "${workspaceRoot}/build/fw/test/firmware-test",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceRoot}/build/fw/test",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
