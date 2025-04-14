@@ -34,8 +34,8 @@
 #define SD_SPI_MHZ 24
 
 // SPI0 is used to configure the FPGA on POR and then used for communication with
-// the FPGA.  Efinix requires SPI mode 3 for configuration.  After POR, SPI mode 0
-// is used for communication.
+// the FPGA.  Efinix requires SPI mode 3 for configuration.  After configuration,
+// SPI mode 0 is used for communication.
 //
 // SCK, SDO, and SDI are standard SPI bus signals driven by the PrimeCell SSP.
 // The PrimeCell SSP deasserts/reasserts CSN between bytes, which resets the SPI
@@ -57,8 +57,8 @@
 #define SD_CSN_GP 9
 #define SD_DETECT 8
 
-// Pulsing CRESET initiates FPGA configuration.  After the CRESET signal is de-asserted,
-// the MCU uploads the FPGA binary via SPI0.
+// Pulsing CRESET initiates FPGA configuration.  After the CRESET signal is deasserted,
+// the MCU uploads the FPGA binary via SPI0 (Mode 3).
 #define FPGA_CRESET_GP 26
 
 // PWM output used to generate the PLL input for FPGA.
