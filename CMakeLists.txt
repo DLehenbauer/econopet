@@ -33,6 +33,7 @@ ExternalProject_add(
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
         -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
+        -DBUILD_TESTING=OFF  # Disable libyaml tests
     INSTALL_COMMAND ""  # No installation step
     BUILD_ALWAYS 1      # (Ninja will quickly early exit if unchanged.)
 )

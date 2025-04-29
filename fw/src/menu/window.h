@@ -1,0 +1,39 @@
+/**
+ * PET Clone - Open hardware implementation of the Commodore PET
+ * by Daniel Lehenbauer and contributors.
+ *
+ * https://github.com/DLehenbauer/commodore-pet-clone
+ *
+ * To the extent possible under law, I, Daniel Lehenbauer, have waived all
+ * copyright and related or neighboring rights to this project. This work is
+ * published from the United States.
+ *
+ * @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
+ */
+
+#pragma once
+
+#include "../pch.h"
+ 
+typedef struct window_s {
+    // Pointers to start/end of character buffer.
+    uint8_t* const start;
+    uint8_t* const end;
+
+    // Width of window buffer.
+    const unsigned int width;
+
+    // Height of window buffer.
+    const unsigned int height;
+
+    // Current cursor position.
+    unsigned int cursor_x;
+    unsigned int cursor_y;
+} window_t;
+
+window_t window_create(uint8_t* pBuffer, unsigned int width, unsigned int height);
+uint8_t* window_xy(window_t* window, unsigned int x, unsigned int y);
+uint8_t* window_hline(window_t* window, uint8_t* start, unsigned int length, uint8_t c);
+uint8_t* window_puts(window_t* window, uint8_t* start, const char* str);
+uint8_t* window_reverse(window_t* window, uint8_t* start, unsigned int length);

@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- * 
+ *
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -12,8 +12,13 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#pragma once
+#include "../src/menu/menu_config.h"
 
-#include <check.h>
+#define COLS 40
+#define ROWS 25
+#define BUFFER_SIZE (COLS * ROWS)
+static uint8_t buffer[BUFFER_SIZE] = {0};
 
-Suite* keystate_suite(void);
+void config_test() {
+    menu_config_show(buffer, COLS, ROWS);
+}

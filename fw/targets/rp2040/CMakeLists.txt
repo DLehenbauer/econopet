@@ -27,6 +27,9 @@ add_subdirectory(
 add_subdirectory(
     ${EXTERNAL_DIR}/pico-vfs
     ${CMAKE_BINARY_DIR}/pico-vfs)
+add_subdirectory(
+    ${EXTERNAL_DIR}/libyaml
+    ${CMAKE_BINARY_DIR}/libyaml)
 
 # Include source files
 set(SRC_DIR ${FW_DIR}/src)
@@ -38,6 +41,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/pet.c
     ${SRC_DIR}/sd/sd.c
     ${SRC_DIR}/term.c
+    ${SRC_DIR}/config/config.c
     ${SRC_DIR}/diag/mem.c
     ${SRC_DIR}/usb/cdc_app.c
     ${SRC_DIR}/usb/hid_app.c
@@ -84,6 +88,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     tinyusb_host
     tinyusb_board
 
+    # libyaml
+    yaml
+
     # pico-vfs
     blockdevice_flash
     blockdevice_heap
@@ -98,8 +105,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 # core 1. Probably even 256 bytes would be fine.
 target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_CORE1_STACK_SIZE=0x200)
 
-# Include external libraries
+# Add include directories for external libraries
 include_directories(
+    "${EXTERNAL_DIR}/libyaml/include"
     "${EXTERNAL_DIR}/PicoDVI/software/include")
 
 pico_enable_filesystem(${PROJECT_NAME})

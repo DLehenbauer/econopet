@@ -23,4 +23,3 @@ extern bool video_is_80_col;
 extern bool video_graphics;
 
 void video_init();
-

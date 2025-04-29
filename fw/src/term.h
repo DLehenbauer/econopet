@@ -16,4 +16,18 @@
 
 #include "pch.h"
 
-void term_display(const uint8_t* const pSrc, uint8_t cols, uint8_t rows);
+// Define constants for special keys
+#define KEY_UP    1000
+#define KEY_DOWN  1001
+#define KEY_RIGHT 1002
+#define KEY_LEFT  1003
+#define KEY_HOME  1004
+#define KEY_END   1005
+#define KEY_PGUP  1006
+#define KEY_PGDN  1007
+
+void term_begin();
+void term_display(const uint8_t* char_buffer, const unsigned int cols, const unsigned int rows);
+void term_end();
+
+int term_getch();

@@ -14,24 +14,27 @@
 
 #include <check.h>
 #include "keystate_test.h"
+#include "config_test.h"
 #include "menu_test.h"
+#include "window_test.h"
 
 int run_suite() {
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
+    SRunner* sr = srunner_create(keystate_suite());
+    srunner_add_suite(sr, window_suite());
 
-    s = keystate_suite();
-    sr = srunner_create(s);
+    // To aide debugging, run tests in the current process.
+    // srunner_set_fork_status(sr, CK_NOFORK);
 
     srunner_run_all(sr, CK_NORMAL);
-    number_failed = srunner_ntests_failed(sr);
+    int number_failed = srunner_ntests_failed(sr);
     srunner_free(sr);
+
     return (number_failed == 0) ? 0 : 1;
 }
 
 int main(void) {
-    menu();
+    config_test();
+    // menu();
 
     return run_suite();
 }

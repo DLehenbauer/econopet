@@ -14,6 +14,6 @@
 
 #pragma once
 
-#include <check.h>
-
-Suite* keystate_suite(void);
+#include "../pch.h"
+ 
+void menu_config_show();

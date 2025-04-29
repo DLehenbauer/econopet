@@ -157,7 +157,7 @@ Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
   $E000 | D8       | 2316B-035 | 901474-02 | 75ff4af7
 
-### PET 4000 (CRTC)
+### PET 4000 (CRTC, 60 Hz)
 
 Same ICs as NoCRTC except UD7.
 
@@ -171,6 +171,14 @@ Address | Location | IC#       | Part#     | CRC-32
   $A000 | UD11     | -         | -         | -
   $9000 | UD12     | -         | -         | -
   N/A   | F10      | 2316B-004 | 901447-10 | d8408674
+
+### PET 4000 (CRTC, 50Hz)
+
+Identical except for UD7.
+
+Address | Location | IC#       | Part#     | CRC-32
+--------|----------|-----------|-----------|----------
+  $E000 | UD7      | 2316B     | 901498-01 | 3370e359
 
 ### PET 8000 (CRTC, 60Hz)
 
@@ -186,27 +194,15 @@ Identical except for UD7.
 
 Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
-  $B000 | UD7      | 2316B-059 | 901474-04 | c1ffca3a
+  $E000 | UD7      | 2316B-059 | 901474-04 | c1ffca3a
 
 ## ROM 4.1
 
 ROM 4.1 is identical to ROM 4.0 except for D5/UD10.
-As with ROM 4.0, D8/UD7 must match keyboard type.
-
-### PET 2001 & 4000 (NoCRTC)
 
 Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
   $B000 | D5       |  2332-120 | 901465-23 | ae3deac0
-
-### PET 8000 (CRTC, 60Hz)
-
-ROM 4.1 is identical to ROM 4.0 except for D8.
-As with ROM 4.0, D8 must match keyboard type.
-
-Address | Location | IC#       | Part#     | CRC-32
---------|----------|-----------|-----------|----------
-  $B000 | UD10     |  2332-120 | 901465-23 | ae3deac0
 
 ### PET 40xx (VICE)
 

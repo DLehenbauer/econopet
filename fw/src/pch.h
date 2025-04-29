@@ -14,12 +14,24 @@
 
 #pragma once
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+// Standard includes
+#include <assert.h>
 #include <errno.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
+#include <unistd.h>
+
+// libyaml
+#include <yaml.h>
 
 // SDK
 #if defined(PICO_RP2040)
