@@ -19,6 +19,7 @@
 #include "../hw.h"
 #include "../pet.h"
 #include "../sd/sd.h"
+#include "../term.h"
 #include "../video/video.h"
 #include "menu.h"
 
@@ -65,6 +66,25 @@ static ButtonAction get_button_action() {
     }
 
     return action;
+}
+
+int term_input_char() {
+    spi_write(0x8000, video_char_buffer, VIDEO_CHAR_BUFFER_BYTE_SIZE);
+
+    if (uart_is_readable(uart_default)) {
+        return uart_getc(uart_default);
+    }
+
+    switch (get_button_action()) {
+        case ShortPress:
+            return KEY_DOWN;
+        case LongPress:
+            return '\n';
+        default:
+            break;
+    }
+
+    return EOF;
 }
 
 // Lower-case (POKE 59468,14)
@@ -322,12 +342,7 @@ void menu_task() {
     spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_menu_ff00, sizeof(rom_menu_ff00));    
     pet_nmi();
 
-    screen_clear();
-
-    char* prgFile = directory();
-    if (prgFile != NULL) {
-        load_prg(prgFile);
-    }
+    menu_config_show(video_char_buffer, screen_width, screen_height);
 
     // Restore kernel ROM and zero page and use NMI to return to BASIC.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);

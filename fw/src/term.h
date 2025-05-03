@@ -26,8 +26,9 @@
 #define KEY_PGUP  1006
 #define KEY_PGDN  1007
 
+extern int term_input_char();
+
 void term_begin();
 void term_display(const uint8_t* char_buffer, const unsigned int cols, const unsigned int rows);
 void term_end();
-
 int term_getch();

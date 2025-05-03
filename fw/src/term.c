@@ -15,7 +15,7 @@
 #include "term.h"
 
 // This table maps from PET character ROM offsets to the closest VT-100 supported equivalents.
-static const char* __in_flash(".term") term_chars_lower[] = {
+static const char* const term_chars_lower[] = {
     //            0        1     2    3    4    5    6    7    8    9    A    B     C    D    E    F
     /* 00 */         "@", "a",  "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",  "l",         "m",         "n", "o",
     /* 10 */         "p", "q",  "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "\\",         "]",         "^", "<",
@@ -27,37 +27,24 @@ static const char* __in_flash(".term") term_chars_lower[] = {
     /* 70 */ "\e(0l\e(B", "_",  "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",  "_", "\e(0j\e(B",         "_", "_"
 };
 
-
-static const char* __in_flash(".term") home = "\e[H";
-static const char* __in_flash(".term") reverse_off = "\e[m";
-static const char* __in_flash(".term") reverse_on = "\e[7m";
-static const char* __in_flash(".term") cursor_off = "\e[?25l";
-static const char* __in_flash(".term") cursor_on = "\e[?25h";
-static const char* __in_flash(".term") enter_alternate = "\e[?1049h";
-static const char* __in_flash(".term") exit_alternate = "\e[?1049l";
-static const char* __in_flash(".term") clear_screen = "\e[2J\e[H";
-
-static struct termios oldt;
+static const char* const home = "\e[H";
+static const char* const reverse_off = "\e[m";
+static const char* const reverse_on = "\e[7m";
+static const char* const cursor_off = "\e[?25l";
+static const char* const cursor_on = "\e[?25h";
+static const char* const enter_alternate = "\e[?1049h";
+static const char* const exit_alternate = "\e[?1049l";
+static const char* const clear_screen = "\e[2J\e[H";
+static const char* const echo_off = "\e[12l";
+static const char* const echo_on = "\e[12h";
 
 void term_begin() {
     fputs(enter_alternate, stdout);
+    fputs(echo_off, stdout);
     fputs(cursor_off, stdout);
     fputs(reverse_off, stdout);
     fputs(clear_screen, stdout);
     fflush(stdout);
-
-    struct termios newt;
-    char ch;
-
-    // Get the current terminal settings
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-
-    // Disable canonical mode and echo
-    newt.c_lflag &= ~(ICANON | ECHO);
-
-    // Set the new terminal settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 }
 
 void term_display(const uint8_t* char_buffer, const unsigned int cols, const unsigned int rows) {
@@ -81,11 +68,9 @@ void term_display(const uint8_t* char_buffer, const unsigned int cols, const uns
 }
 
 void term_end() {
-    // Restore the old terminal settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-
     fputs(reverse_off, stdout);
     fputs(cursor_on, stdout);
+    fputs(echo_on, stdout);
     fputs(exit_alternate, stdout);
     fflush(stdout);
 }
@@ -96,39 +81,48 @@ typedef struct {
     int key;
 } escape_sequence_t;
 
-// Static table of escape sequences
+// Map escape sequences to key constants. (ESC [ has already been match.)
 static const escape_sequence_t escape_sequences[] = {
-    { "[A", KEY_UP },    // Up arrow
-    { "[B", KEY_DOWN },  // Down arrow
-    { "[C", KEY_RIGHT }, // Right arrow
-    { "[D", KEY_LEFT },  // Left arrow
-    { "[H", KEY_HOME },  // Home
-    { "[F", KEY_END },   // End
-    { "[5~", KEY_PGUP }, // Page Up
-    { "[6~", KEY_PGDN }, // Page Down
-    { NULL, 0 }              // Sentinel to mark the end of the table
+    { "A",  KEY_UP },
+    { "B",  KEY_DOWN },
+    { "C",  KEY_RIGHT },
+    { "D",  KEY_LEFT },
+    { "F",  KEY_END },
+    { "H",  KEY_HOME },
+    { "5~", KEY_PGUP },
+    { "6~", KEY_PGDN },
+    { NULL, EOF }
 };
 
+static bool is_sequence_terminator(int ch) {
+    return (64 <= ch && ch <= 126)
+        || (0 <= ch && ch <= 31);
+}
+
 int term_getch() {
+    int ch = term_input_char();
+    if (ch != '\e') {
+        return ch;
+    }
+
+    ch = getchar();
+    if (ch != '[') {
+        return ch;
+    }
+
     char buffer[10];
-    int bytes_read;
+    size_t bytes_read = 0;
 
-    bytes_read = read(STDIN_FILENO, buffer, 1);
-    if (bytes_read <= 0) {
-        return -1;
-    }
+    do {
+        ch = getchar();
+        buffer[bytes_read++] = ch;
+    } while (bytes_read < sizeof(buffer) && !is_sequence_terminator(ch));
 
-    if (buffer[0] == '\x1B') {
-        bytes_read += read(STDIN_FILENO, buffer + 1, sizeof(buffer) - 1);
-
-        for (int i = 0; i < ARRAY_SIZE(escape_sequences); i++) {
-            if (strncmp(buffer + 1, escape_sequences[i].sequence, bytes_read - 1) == 0) {
-                return escape_sequences[i].key;
-            }
+    for (const escape_sequence_t* entry = &escape_sequences[0]; entry->sequence != NULL; entry++) {
+        if (strncmp(buffer, entry->sequence, bytes_read) == 0) {
+            return entry->key;
         }
-
-        return -1;
     }
 
-    return buffer[0];
+    return EOF;
 }
