@@ -14,4 +14,4 @@
 
 #include "pch.h"
 
-uint8_t temp_buffer[125] = { 0 };
+uint8_t temp_buffer[2048] = { 0 };

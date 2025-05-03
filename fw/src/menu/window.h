@@ -38,3 +38,5 @@ uint8_t* window_xy(window_t* window, unsigned int x, unsigned int y);
 uint8_t* window_hline(window_t* window, uint8_t* start, unsigned int length, uint8_t c);
 uint8_t* window_puts(window_t* window, uint8_t* start, const char* str);
 uint8_t* window_reverse(window_t* window, uint8_t* start, unsigned int length);
+
+#define CH_SPACE 0x20

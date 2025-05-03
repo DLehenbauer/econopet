@@ -136,8 +136,6 @@ void fpga_init() {
     // Later, we will use this buffer of 1,000 zero bits to generate extra clock cycles
     // at the end of configuration.  We clear the 125 bytes now 
     _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
-
-    // _Static_assert above ensures that sizeof(temp_buffer) >= 125 bytes.
     memset(temp_buffer, 0, 125);
     
     // Changes in clock polarity do not seem to take effect until the next write.  Send
@@ -156,7 +154,7 @@ void fpga_init() {
     spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
 
     // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
-    // _Static_assert above ensures that sizeof(temp_buffer) >= 125 bytes.
+    _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
     spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, 125);
 
     // Deassert CS_N to signal end of configuration.

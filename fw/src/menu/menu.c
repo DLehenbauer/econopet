@@ -334,10 +334,6 @@ void menu_task() {
     // Suspend CPU
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
 
-    // Save a copy of kernel ROM.
-    spi_read(/* addr: */ 0x0000, sizeof(zp_backup), zp_backup);
-    spi_read(/* addr: */ 0xff00, sizeof(rom_backup), rom_backup);
-
     // Write menu ROM to $FF00 and enter via NMI.
     spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_menu_ff00, sizeof(rom_menu_ff00));    
     pet_nmi();
@@ -346,9 +342,7 @@ void menu_task() {
 
     // Restore kernel ROM and zero page and use NMI to return to BASIC.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-    spi_write(/* addr: */ 0x0000, /* pSrc: */ zp_backup, sizeof(zp_backup));
-    spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_backup, sizeof(rom_backup));
-    pet_nmi();
+    pet_reset();
 
     printf("-- Exit Menu --\n");
 }

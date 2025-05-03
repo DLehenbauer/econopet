@@ -15,6 +15,7 @@
 #pragma once
 
 #include "pch.h"
+#include "menu/window.h"
 
 // Define constants for special keys
 #define KEY_UP    1000
@@ -29,6 +30,6 @@
 extern int term_input_char();
 
 void term_begin();
-void term_display(const uint8_t* char_buffer, const unsigned int cols, const unsigned int rows);
+void term_display(const window_t* const window);
 void term_end();
 int term_getch();

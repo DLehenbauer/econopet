@@ -16,6 +16,7 @@
 
 #include "../config/config.h"
 #include "../term.h"
+#include "../global.h"
 #include "window.h"
 
 typedef struct context2_s {
@@ -27,12 +28,38 @@ void on_enter_config_callback(void* user_data) {
     ctx->skip_count--;
 }
 
-void on_action_load_callback(void* user_data, const char* file, uint32_t address) {
+void on_action_load_callback(void* user_data, const char* filename, uint32_t address) {
     context2_t* const ctx = (context2_t*) user_data;
-    if (ctx->skip_count == 0) {
-        // Load the file at the specified address
-        // This is a placeholder for the actual loading logic
-        printf("Loading file: %s at address: %5lx\n", file, address);
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    snprintf(temp_buffer, sizeof(temp_buffer), "/roms/%s", filename);
+    printf("0x%05X: %s\n", address, temp_buffer);
+
+    FILE *file = fopen(temp_buffer, "rb"); // Open file in binary read mode
+    if (!file) {
+        perror("Failed to open file");
+        goto cleanup;
+    }
+
+    // Read remaining bytes to the destination address.
+    size_t bytes_read;
+
+    while ((bytes_read = fread(temp_buffer, 1, sizeof(temp_buffer), file)) > 0) {
+        spi_write(address, temp_buffer, bytes_read);
+        address += bytes_read;
+
+        // Check for read errors (other than EOF)
+        if (bytes_read < sizeof(temp_buffer) && ferror(file)) {
+            perror("Error reading file");
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    if (file) {
+        fclose(file);
     }
 }
 
@@ -52,7 +79,7 @@ void load_config(int selected_config) {
         .on_action_load = on_action_load_callback,
     };
     
-    parse_config_file("data/config.yaml", &sink);
+    parse_config_file("/config.yaml", &sink);
 }
 
 typedef struct context_s {
@@ -80,18 +107,22 @@ void menu_config_show(uint8_t* const buffer, const unsigned int cols, const unsi
         .on_action_load = NULL,
     };
 
-    parse_config_file("data/config.yaml", &sink);
+    term_begin(&window);
+
+    parse_config_file("/config.yaml", &sink);
 
     unsigned int selected_config = 0;
     window_reverse(&window, window_xy(&window, 0, selected_config), 40);
 
-    term_begin();
-
-
     while (true) {
-        term_display(buffer, cols, rows);
+        term_display(&window);
 
-        switch (term_getch()) {
+        int ch = EOF;
+        do {
+            ch = term_getch();
+        } while (ch == EOF);
+
+        switch (ch) {
             case KEY_UP: {
                 if (selected_config > 0) {
                     window_reverse(&window, window_xy(&window, 0, selected_config), 40);
@@ -108,6 +139,7 @@ void menu_config_show(uint8_t* const buffer, const unsigned int cols, const unsi
                 }
                 break;
             }
+            case '\r':
             case '\n': {
                 return load_config(selected_config);
             }

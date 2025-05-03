@@ -38,19 +38,25 @@ static const char* const clear_screen = "\e[2J\e[H";
 static const char* const echo_off = "\e[12l";
 static const char* const echo_on = "\e[12h";
 
-void term_begin() {
+void term_begin(const window_t* const window) {
     fputs(enter_alternate, stdout);
     fputs(echo_off, stdout);
     fputs(cursor_off, stdout);
     fputs(reverse_off, stdout);
     fputs(clear_screen, stdout);
     fflush(stdout);
+
+    window_fill(window, CH_SPACE);
 }
 
-void term_display(const uint8_t* char_buffer, const unsigned int cols, const unsigned int rows) {
+void term_display(const window_t* const window) {
     bool reverse = false;
 
     fputs(home, stdout);
+
+    const unsigned int cols = window->width;
+    const unsigned int rows = window->height;
+    uint8_t* char_buffer = window->start;
 
     for (unsigned int r = 0; r < rows; r++) {
         for (unsigned int c = 0; c < cols; c++) {
@@ -63,7 +69,7 @@ void term_display(const uint8_t* char_buffer, const unsigned int cols, const uns
 
             fputs(term_chars_lower[ch & 0x7F], stdout);
         }
-        putchar('\n');
+        fputs("\r\n", stdout);
     }
 }
 
