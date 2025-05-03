@@ -32,7 +32,7 @@ void on_action_load_callback(void* user_data, const char* file, uint32_t address
     if (ctx->skip_count == 0) {
         // Load the file at the specified address
         // This is a placeholder for the actual loading logic
-        printf("Loading file: %s at address: %u\n", file, address);
+        printf("Loading file: %s at address: %lu\n", file, address);
     }
 }
 

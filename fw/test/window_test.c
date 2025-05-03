@@ -138,6 +138,7 @@ Suite *window_suite(void) {
 
     TCase* test_cases = tcase_create("window");
     tcase_add_test(test_cases, test_window_create);
+    tcase_add_test(test_cases, test_window_fill);
     tcase_add_test(test_cases, test_window_xy);
     tcase_add_test_raise_signal(test_cases, test_window_xy_x_invalid, SIGABRT);
     tcase_add_test_raise_signal(test_cases, test_window_xy_y_invalid, SIGABRT);

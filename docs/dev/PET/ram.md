@@ -62,4 +62,3 @@ On CRTC models:
   * [Overview](https://www.vintagecomputer.net/commodore/8096/CBMPET64KExpansion.pdf)
   * [PET index - 8x96](http://6502.org/users/andre/petindex/8x96.html)
   * [Schematics (Reverse Engineered)](https://www.zimmers.net/anonftp/pub/cbm/schematics/computers/pet/8096/pet_64k.pdf)
-

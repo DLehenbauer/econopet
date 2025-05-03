@@ -287,6 +287,8 @@ static bool parse_config_list(parser_state_t* state) {
 }
 
 void parse_config_file(const char* filename, const config_sink_t* const sink) {
+    FILE* file = NULL;
+
     parser_state_t state = {
         .parser = { 0 },
         .event = { 0 },
@@ -299,7 +301,7 @@ void parse_config_file(const char* filename, const config_sink_t* const sink) {
         goto cleanup;
     }
 
-    FILE* file = fopen(filename, "r");
+    file = fopen(filename, "r");
     if (!file) {
         print_error("Failed to open file '%s'", filename);
         goto cleanup;
