@@ -1,0 +1,80 @@
+configs:
+  - name: "Basic 2.0"
+    columns: 40
+    romset:
+      - file: "901439-08.bin"
+        address: 0x8800
+      - file: "901439-01.bin"
+        address: 0xC000
+      - file: "901439-02.bin"
+        address: 0xD000
+      - file: "901439-03.bin"
+        address: 0xE000
+      - file: "901439-04.bin"
+        address: 0xF000
+      - file: "901439-05.bin"
+        address: 0xC800
+      - file: "901439-06.bin"
+        address: 0xD800
+      - file: "901439-07.bin"
+        address: 0xF800
+  - name: "Basic 4.0 (40 Col 50 Hz)"
+    columns: 40
+    actions:
+      - file: "901447-10.bin"
+        address: 0x8800
+      - file: "901465-19.bin"
+        address: 0xB000
+      - file: "901465-20.bin"
+        address: 0xC000
+      - file: "901465-21.bin"
+        address: 0xD000
+      - file: "901499-01.bin"
+        address: 0xE000
+      - file: "901465-22.bin"
+        address: 0xF000
+  - name: "Basic 4.0 (40 Col 60 Hz)"
+    columns: 40
+    actions:
+      - file: "901447-10.bin"
+        address: 0x8800
+      - file: "901465-19.bin"
+        address: 0xB000
+      - file: "901465-20.bin"
+        address: 0xC000
+      - file: "901465-21.bin"
+        address: 0xD000
+      - file: "901499-01.bin"
+        address: 0xE000
+      - file: "901465-22.bin"
+        address: 0xF000
+  - name: "Basic 4.0 (80 Col 60 Hz)"
+    columns: 80
+    actions:
+      - file: "901447-10.bin"
+        address: 0x8800
+      - file: "901465-19.bin"
+        address: 0xB000
+      - file: "901465-20.bin"
+        address: 0xC000
+      - file: "901465-21.bin"
+        address: 0xD000
+      - file: "901474-03.bin"
+        address: 0xE000
+      - file: "901465-22.bin"
+        address: 0xF000
+  - name: "Basic 4.0 (80 Col 50 Hz)"
+    columns: 80
+    actions:
+      - file: "901447-10.bin"
+        address: 0x8800
+      - file: "901465-19.bin"
+        address: 0xB000
+      - file: "901465-20.bin"
+        address: 0xC000
+      - file: "901465-21.bin"
+        address: 0xD000
+      - file: "901474-04.bin"
+        address: 0xE000
+      - file: "901465-22.bin"
+        address: 0xF000
