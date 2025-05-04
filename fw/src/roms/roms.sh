@@ -1,12 +1,15 @@
 #!/bin/bash
-for r in ../../../build/roms/bin/roms/*
-do
-    f="$(basename -- $r .bin).h"
-    cat $r | xxd -i > $f
-done
+ROM_ROOT="../../../rom"
 
-# Create a modified edit ROM for 80 cols / Graphics keyboard
-cp edit-4-80-b-60Hz.901474-03.h edit-4-80-n-60Hz.901474-03-hack.h
-patch edit-4-80-n-60Hz.901474-03-hack.h edit-4-80-n-60Hz.901474-03-hack.diff
+pushd $ROM_ROOT
 
-cat ../../../rom/rom.bin | xxd -i > menu.h
+# Ensure build directory is empty
+[ -d "build" ] && rm -rf "build"
+mkdir -p "build"
+
+cd ./build
+cmake ..
+cmake --build .
+popd
+
+cat $ROM_ROOT/build/bin/menu.rom | xxd -i > menu_rom.h
