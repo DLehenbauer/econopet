@@ -59,7 +59,8 @@ site/node_modules
 # ROMs
 #
 
-fw/src/roms/*.h
+fw/src/roms/901447_10.h
+fw/src/roms/menu_rom.h
 
 #
 # FPGA Bitstream
