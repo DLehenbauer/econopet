@@ -5,9 +5,14 @@ set(FW_DIR ${CMAKE_SOURCE_DIR}/fw)
 
 # Include external projects
 set(EXTERNAL_DIR ${FW_DIR}/external)
+
+# Temporarily disable BUILD_TESTING for libyaml
+set(BUILD_TESTING OFF CACHE BOOL "Disable testing for libyaml" FORCE)
 add_subdirectory(
     ${EXTERNAL_DIR}/libyaml
     ${CMAKE_BINARY_DIR}/libyaml)
+# Restore BUILD_TESTING to its original value
+set(BUILD_TESTING ON CACHE BOOL "Enable testing for the rest of the project" FORCE)
 
 FIND_PATH(CHECK_INCLUDE_DIR check.h)
 FIND_LIBRARY(CHECK_LIBRARIES NAMES check)
@@ -23,6 +28,7 @@ add_executable(${PROJECT_NAME}
     #${TEST_DIR}/menu_test.c
     ${TEST_DIR}/main.c
     ${SRC_DIR}/config/config.c
+    ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/window.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/term.c
