@@ -33,10 +33,6 @@
 #include "usb/keyboard.h"
 #include "video/video.h"
 
-static bool isBusinessKeyboard = false;
-static bool hasCRTC = true;
-static bool is50Hz = true;
-
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
     uint32_t f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
@@ -199,10 +195,7 @@ int main() {
     video_init();
     usb_init();
 
-    get_model(&hasCRTC, &isBusinessKeyboard);
-    printf("Model: %s / %s\n", hasCRTC ? "CRTC" : "No CRTC", isBusinessKeyboard ? "Business Keyboard" : "Graphics Keyboard");
-
-    pet_init_roms(video_is_80_col, isBusinessKeyboard, is50Hz);
+    menu_enter();
 
     while (true) {
         // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file

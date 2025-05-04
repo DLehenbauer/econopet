@@ -199,8 +199,16 @@ foreach(pair IN LISTS binplace_ops)
     list(GET split_pair 1 destination_file)
 
     if (EXISTS ${downloaded_file})
-        file(COPY ${downloaded_file} DESTINATION ${destination_file})
-        message(STATUS "Copied ${downloaded_file} to ${destination_file}")
+        # Ensure the destination directory exists
+        get_filename_component(destination_dir ${destination_file} DIRECTORY)
+        file(MAKE_DIRECTORY ${destination_dir})
+
+        # Copy the file to the destination directory
+        file(COPY ${downloaded_file} DESTINATION ${destination_dir})
+
+        # Rename the copied file to the desired name
+        get_filename_component(source_filename ${downloaded_file} NAME)
+        file(RENAME ${destination_dir}/${source_filename} ${destination_file})
     else()
         message(FATAL_ERROR "File not found: ${downloaded_file}")
     endif()

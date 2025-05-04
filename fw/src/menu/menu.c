@@ -18,6 +18,7 @@
 #include "../driver.h"
 #include "../hw.h"
 #include "../pet.h"
+#include "../roms/roms.h"
 #include "../sd/sd.h"
 #include "../term.h"
 #include "../video/video.h"
@@ -305,13 +306,21 @@ void menu_init() {
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
-//
-// Menu Rom ($F000)
-//
+void menu_enter() {
+    printf("-- Enter Menu --\n");
 
-static const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
-    #include "../roms/menu.h"
-};
+    // Ensure CPU is suspended while initializing ROMs.
+    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
+    spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));  // Ensure character ROM is loaded
+    spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
+    pet_reset();
+    
+    menu_config_show(video_char_buffer, screen_width, screen_height);
+
+    pet_reset();
+
+    printf("-- Exit Menu --\n");
+}
 
 void menu_task() {
     ButtonAction action = get_button_action();
@@ -327,20 +336,5 @@ void menu_task() {
         return;
     }
 
-    printf("-- Enter Menu --\n");
-
-    // Suspend CPU
-    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-
-    // Write menu ROM to $FF00 and enter via NMI.
-    spi_write(/* dest: */ 0xff00, /* pSrc: */ rom_menu_ff00, sizeof(rom_menu_ff00));    
-    pet_nmi();
-
-    menu_config_show(video_char_buffer, screen_width, screen_height);
-
-    // Restore kernel ROM and zero page and use NMI to return to BASIC.
-    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-    pet_reset();
-
-    printf("-- Exit Menu --\n");
+    menu_enter();
 }

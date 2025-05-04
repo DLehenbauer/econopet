@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/window.c
     ${SRC_DIR}/pet.c
+    ${SRC_DIR}/roms/roms.c
     ${SRC_DIR}/sd/sd.c
     ${SRC_DIR}/term.c
     ${SRC_DIR}/config/config.c

@@ -23,6 +23,7 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 
 # Add projects
 add_subdirectory("./sdcard")
+add_subdirectory("./rom")
 add_subdirectory("./fw/test")
 
 ExternalProject_add(
@@ -36,4 +37,5 @@ ExternalProject_add(
         -DBUILD_TESTING=OFF  # Disable libyaml tests
     INSTALL_COMMAND ""  # No installation step
     BUILD_ALWAYS 1      # (Ninja will quickly early exit if unchanged.)
+    # DEPENDS PET_ROM
 )

@@ -14,6 +14,7 @@
 
 #include "video.h"
 #include "pet.h"
+#include "roms/roms.h"
 
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)

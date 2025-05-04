@@ -14,7 +14,7 @@ find_program(CA65_EXECUTABLE ca65 REQUIRED)
 find_program(LD65_EXECUTABLE ld65 REQUIRED)
 
 # Add a custom target to assemble the source files
-add_custom_target(assemble ALL
+add_custom_target("PET_ROM_Assemble" ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OBJ_DIR}
     COMMAND ${CA65_EXECUTABLE} -t pet -g -o ${OBJ_DIR}/main.o ${SRC_DIR}/main.s
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -22,12 +22,12 @@ add_custom_target(assemble ALL
 )
 
 # Add a custom target to link the object files
-add_custom_target(link ALL
+add_custom_target("PET_ROM" ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory ${BIN_DIR}
     COMMAND ${LD65_EXECUTABLE} -C ${SRC_DIR}/pet.cfg -o ${BIN_DIR}/${ROM_NAME} ${OBJ_DIR}/main.o
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Linking object files with LD65"
-    DEPENDS assemble
+    DEPENDS "PET_ROM_Assemble"
 )
 
 # Add a clean target to remove generated files

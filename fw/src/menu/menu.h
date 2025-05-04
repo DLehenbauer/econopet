@@ -28,4 +28,5 @@ typedef enum {
 } ButtonAction;
 
 void menu_init();
+void menu_enter();
 void menu_task();
