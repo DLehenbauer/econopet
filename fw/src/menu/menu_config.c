@@ -15,6 +15,7 @@
 #include "menu_config.h"
 
 #include "../config/config.h"
+#include "../driver.h"
 #include "../term.h"
 #include "../global.h"
 #include "window.h"

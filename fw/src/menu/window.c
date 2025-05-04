@@ -43,17 +43,17 @@ window_t window_create(uint8_t* start, unsigned int width, unsigned int height) 
     };
 }
 
-static inline void check_start(window_t* window, uint8_t* start) {
+static inline void check_start(const window_t* const window, uint8_t* start) {
     assert(window->start <= start && start < window->end);
 }
 
-static inline void check_length(window_t* window, uint8_t* start, unsigned int length) {
+static inline void check_length(const window_t* const window, uint8_t* start, unsigned int length) {
     start += length;
     
     assert(window->start <= start && start <= window->end);
 }
 
-uint8_t* window_xy(window_t* window, unsigned int x, unsigned int y) {
+uint8_t* window_xy(const window_t* const window, unsigned int x, unsigned int y) {
     const unsigned int width = window->width;
     const unsigned int height = window->height;
 
@@ -63,11 +63,11 @@ uint8_t* window_xy(window_t* window, unsigned int x, unsigned int y) {
     return &window->start[y * width + x];
 }
 
-void window_fill(window_t* window, uint8_t c) {
+void window_fill(const window_t* const window, uint8_t c) {
     memset(window->start, c, window->width * window->height);
 }
 
-uint8_t* window_hline(window_t* window, uint8_t* start, unsigned int length, uint8_t c) {
+uint8_t* window_hline(const window_t* const window, uint8_t* start, unsigned int length, uint8_t c) {
     check_start(window, start);
     check_length(window, start, length);
 
@@ -76,7 +76,7 @@ uint8_t* window_hline(window_t* window, uint8_t* start, unsigned int length, uin
     return start + length;
 }
 
-uint8_t* window_hline3(window_t* window, uint8_t* start, uint8_t length, uint8_t left, uint8_t middle, uint8_t right) {
+uint8_t* window_hline3(const window_t* const window, uint8_t* start, uint8_t length, uint8_t left, uint8_t middle, uint8_t right) {
     check_start(window, start);
     check_length(window, start, length);
 
@@ -92,7 +92,7 @@ uint8_t* window_hline3(window_t* window, uint8_t* start, uint8_t length, uint8_t
     return start;
 }
 
-uint8_t* window_fill_rect(window_t* window, uint8_t* start, uint8_t width, uint8_t height, uint8_t c) {
+uint8_t* window_fill_rect(const window_t* const window, uint8_t* start, uint8_t width, uint8_t height, uint8_t c) {
     while (height--) {
         window_hline(window, start, width, c);
         start += window->width;
@@ -105,7 +105,7 @@ uint8_t* window_fill_rect(window_t* window, uint8_t* start, uint8_t width, uint8
 // if it exceeds the the given length or the bounds of the window.
 //
 // The function returns the pointer to the next position in the window buffer after the string.
-uint8_t* window_puts_n(window_t* window, uint8_t* start, const char* str, unsigned int length) {
+uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char* str, unsigned int length) {
     uint8_t* pCh = (uint8_t*) str;
 
     while (*pCh != 0 && length > 0 && start < window->end) {
@@ -120,11 +120,11 @@ uint8_t* window_puts_n(window_t* window, uint8_t* start, const char* str, unsign
 // if it exceeds the window size.
 //
 // The function returns the pointer to the next position in the window buffer after the string.
-uint8_t* window_puts(window_t* window, uint8_t* start, const char* str) {
+uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str) {
     return window_puts_n(window, start, str, /* length: */ UINT_MAX);
 }
 
-uint8_t* window_reverse(window_t* window, uint8_t* start, unsigned int length) {
+uint8_t* window_reverse(const window_t* const window, uint8_t* start, unsigned int length) {
     check_start(window, start);
     check_length(window, start, length);
 

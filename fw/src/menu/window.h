@@ -26,17 +26,13 @@ typedef struct window_s {
 
     // Height of window buffer.
     const unsigned int height;
-
-    // Current cursor position.
-    unsigned int cursor_x;
-    unsigned int cursor_y;
 } window_t;
 
 window_t window_create(uint8_t* pBuffer, unsigned int width, unsigned int height);
-void window_fill(window_t* window, uint8_t c);
-uint8_t* window_xy(window_t* window, unsigned int x, unsigned int y);
-uint8_t* window_hline(window_t* window, uint8_t* start, unsigned int length, uint8_t c);
-uint8_t* window_puts(window_t* window, uint8_t* start, const char* str);
-uint8_t* window_reverse(window_t* window, uint8_t* start, unsigned int length);
+void window_fill(const window_t* const window, uint8_t c);
+uint8_t* window_xy(const window_t* const window, unsigned int x, unsigned int y);
+uint8_t* window_hline(const window_t* const window, uint8_t* start, unsigned int length, uint8_t c);
+uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str);
+uint8_t* window_reverse(const window_t* const window, uint8_t* start, unsigned int length);
 
 #define CH_SPACE 0x20

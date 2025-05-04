@@ -22,6 +22,7 @@
 #include "../term.h"
 #include "../video/video.h"
 #include "menu.h"
+#include "menu_config.h"
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.
@@ -311,9 +312,6 @@ void menu_init() {
 static const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
     #include "../roms/menu.h"
 };
-
-static uint8_t zp_backup[0x100] = { 0 };
-static uint8_t rom_backup[0x100] = { 0 };
 
 void menu_task() {
     ButtonAction action = get_button_action();
