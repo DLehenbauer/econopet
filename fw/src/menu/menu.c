@@ -311,9 +311,11 @@ void menu_enter() {
 
     // Ensure CPU is suspended while initializing ROMs.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-    spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));  // Ensure character ROM is loaded
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
     pet_reset();
+
+    set_video(/* cols80: */ false);
+    spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));
     
     menu_config_show(video_char_buffer, screen_width, screen_height);
 
