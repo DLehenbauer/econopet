@@ -15,15 +15,17 @@
 #include <dirent.h>
 #include "filesystem/vfs.h"
 
-#include "../driver.h"
-#include "../hw.h"
-#include "../pet.h"
-#include "../roms/roms.h"
-#include "../sd/sd.h"
-#include "../term.h"
-#include "../video/video.h"
+#include "global.h"
+#include "driver.h"
+#include "hw.h"
+#include "pet.h"
+#include "roms/roms.h"
+#include "sd/sd.h"
+#include "term.h"
+#include "video/video.h"
 #include "menu.h"
 #include "menu_config.h"
+#include "window.h"
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.
@@ -259,7 +261,7 @@ char* directory() {
 #define CHUNK_SIZE 2048
 
 void load_prg(const char *filename) {
-    FILE *file = fopen(filename, "rb"); // Open file in binary read mode
+    FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         perror("Failed to open file");
         return;
@@ -306,6 +308,36 @@ void menu_init() {
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
+void action_load(const char* filename, uint32_t address) {
+    snprintf((char*)(void*) temp_buffer, sizeof(temp_buffer), "/roms/%s", filename);
+    printf("0x%05lx: %s\n", address, temp_buffer);
+
+    FILE *file = sd_open((char*)(void*) temp_buffer, "rb"); // Open file in binary read mode
+    if (!file) {
+        perror("Failed to open file");
+        goto cleanup;
+    }
+
+    // Read remaining bytes to the destination address.
+    size_t bytes_read;
+
+    while ((bytes_read = fread(temp_buffer, 1, sizeof(temp_buffer), file)) > 0) {
+        spi_write(address, temp_buffer, bytes_read);
+        address += bytes_read;
+
+        // Check for read errors (other than EOF)
+        if (bytes_read < sizeof(temp_buffer) && ferror(file)) {
+            perror("Error reading file");
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    if (file) {
+        fclose(file);
+    }
+}
+
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
@@ -317,7 +349,12 @@ void menu_enter() {
     set_video(/* cols80: */ false);
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));
     
-    menu_config_show(video_char_buffer, screen_width, screen_height);
+    const window_t window = window_create(video_char_buffer, screen_width, screen_height);
+    const setup_sink_t setup_sink = {
+        .on_action_load = action_load,
+    };
+
+    menu_config_show(&window, &setup_sink);
 
     pet_reset();
 

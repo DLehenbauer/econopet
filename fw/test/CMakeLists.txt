@@ -22,18 +22,18 @@ set(SRC_DIR ${FW_DIR}/src)
 set(TEST_DIR ${FW_DIR}/test)
 
 add_executable(${PROJECT_NAME}
-    ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/config_test.c
-    ${TEST_DIR}/window_test.c
-    #${TEST_DIR}/menu_test.c
+    ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/main.c
+    #${TEST_DIR}/menu_test.c
+    ${TEST_DIR}/window_test.c
+    ${TEST_DIR}/sd.c
     ${SRC_DIR}/config/config.c
     ${SRC_DIR}/global.c
-    ${SRC_DIR}/menu/window.c
     ${SRC_DIR}/menu/menu_config.c
+    ${SRC_DIR}/menu/window.c
     ${SRC_DIR}/term.c
     ${SRC_DIR}/usb/keystate.c
-    #${SRC_DIR}/term.c
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -44,11 +44,5 @@ target_link_libraries(${PROJECT_NAME}
 
 # Include directories
 include_directories(
-    "${EXTERNAL_DIR}/libyaml/include")
-
-add_custom_command(
-    TARGET ${PROJECT_NAME} PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${TEST_DIR}/data
-            ${CMAKE_CURRENT_BINARY_DIR}/data
-)
+    "${EXTERNAL_DIR}/libyaml/include"
+    "${SRC_DIR}")

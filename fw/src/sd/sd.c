@@ -27,3 +27,12 @@ bool sd_init() {
 
     return true;
 }
+
+FILE* sd_open(const char* path, const char* mode) {
+    if (path[0] != '/') {
+        assert(false);
+        return NULL;
+    }
+
+    return fopen(path, mode);
+}

@@ -15,6 +15,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "../src/menu/window.h"
 #include "../src/menu/menu_config.h"
 
 #define COLS 40
@@ -40,8 +41,19 @@ int term_input_char() {
     return getchar();
 }
 
+void on_action_load(const char* filename, uint32_t address) {
+    // This is a placeholder for the actual callback implementation
+    printf("Action load: %s @ %05lx\n", filename, address);
+}
+
 void config_test() {
+    const window_t window = window_create(buffer, COLS, ROWS);
+    
+    const setup_sink_t setup_sink = {
+        .on_action_load = on_action_load,
+    };
+
     enable_raw_mode();
-    menu_config_show(buffer, COLS, ROWS);
+    menu_config_show(&window, &setup_sink);
     disable_raw_mode();
 }

@@ -12,9 +12,17 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#pragma once
+#include "sd/sd.h"
 
-#include "../pch.h"
+// All pico-vfs paths are absolute, starting with '/'.
+static const char* map_path(const char* const path) {
+    static char mapped_path[2048];
+    snprintf(mapped_path, sizeof(mapped_path), "../../../build/sdcard/sdcard_root/%s", path);
+    return mapped_path;
+}
 
-bool sd_init();
-FILE* sd_open(const char* path, const char* mode);
+// Wrapper for fopen
+FILE* sd_open(const char* path, const char* mode) {
+    assert(path[0] == '/');
+    return fopen(map_path(path), mode);
+}
