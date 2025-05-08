@@ -12,13 +12,17 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include <limits.h>
+#include "video/video.h"
 #include "sd/sd.h"
+
+uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 
 // All pico-vfs paths are absolute, starting with '/'.
 static const char* map_path(const char* const path) {
-    static char mapped_path[2048];
-    snprintf(mapped_path, sizeof(mapped_path), "../../../build/sdcard/sdcard_root/%s", path);
-    return mapped_path;
+    static char relative_path[PATH_MAX];
+    snprintf(relative_path, sizeof(relative_path), "../../../build/sdcard/sdcard_root%s", path);
+    return relative_path;
 }
 
 // Wrapper for fopen

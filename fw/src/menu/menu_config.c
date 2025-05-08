@@ -82,6 +82,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         .on_enter_config = NULL,
         .on_exit_config = on_config_callback,
         .on_action_load = NULL,
+        .window = window,
     };
 
     term_begin(window);

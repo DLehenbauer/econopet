@@ -160,7 +160,9 @@ void spi_write_read(uint32_t addr, const uint8_t* const pWriteSrc, uint8_t* pRea
 
 // Fills a range of memory with a byte value.
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
-    size_t chunk_len = MIN(sizeof(temp_buffer), byteLength);
+    uint8_t* temp_buffer = acquire_temp_buffer();
+    
+    size_t chunk_len = MIN(TEMP_BUFFER_SIZE, byteLength);
     memset(temp_buffer, byte, chunk_len);
 
     int32_t remaining = byteLength;
@@ -170,6 +172,8 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
         remaining -= chunk_len;
         chunk_len = MIN(chunk_len, remaining);
     }
+
+    release_temp_buffer(temp_buffer);
 }
 
 void set_cpu(bool ready, bool reset, bool nmi) {

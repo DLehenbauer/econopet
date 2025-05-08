@@ -35,6 +35,7 @@ add_subdirectory(
 set(SRC_DIR ${FW_DIR}/src)
 add_executable(${PROJECT_NAME}
     ${SRC_DIR}/driver.c
+    ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/main.c
     ${SRC_DIR}/menu/menu.c

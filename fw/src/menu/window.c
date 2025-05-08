@@ -63,6 +63,33 @@ uint8_t* window_xy(const window_t* const window, unsigned int x, unsigned int y)
     return &window->start[y * width + x];
 }
 
+unsigned int window_char_position(const window_t* const window, uint8_t* start) {
+    check_start(window, start);
+
+    const size_t delta = ((void*) start - (void*) window->start);
+    assert(delta < UINT_MAX);
+
+    return (unsigned int) delta;
+}
+
+int window_chars_remaining(const window_t* const window, uint8_t* start) {
+    check_start(window, start);
+
+    const int delta = (int)(((void*) window->end) - ((void*) start));
+    assert(INT_MIN < delta && delta < INT_MAX);
+
+    return delta;
+}
+
+int window_current_row(const window_t* const window, uint8_t* start) {
+    check_start(window, start);
+
+    const int row = (int) window_char_position(window, start) / window->width;
+    assert(INT_MIN < row && row < INT_MAX);
+
+    return row;
+}
+
 void window_fill(const window_t* const window, uint8_t c) {
     memset(window->start, c, window->width * window->height);
 }
@@ -105,12 +132,16 @@ uint8_t* window_fill_rect(const window_t* const window, uint8_t* start, uint8_t 
 // if it exceeds the the given length or the bounds of the window.
 //
 // The function returns the pointer to the next position in the window buffer after the string.
-uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char* str, unsigned int length) {
+uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char* const str, unsigned int length) {
     uint8_t* pCh = (uint8_t*) str;
 
     while (*pCh != 0 && length > 0 && start < window->end) {
         *start++ = ascii_to_vrom[*(pCh++)];
         length--;
+    }
+
+    if (*pCh != 0) {
+        fprintf(stderr, "Warning: string '%s' truncated to %u characters\n", str, length);
     }
 
     return start;
@@ -121,7 +152,44 @@ uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char*
 //
 // The function returns the pointer to the next position in the window buffer after the string.
 uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str) {
-    return window_puts_n(window, start, str, /* length: */ UINT_MAX);
+    return window_puts_n(window, start, str, /* length: */ window_chars_remaining(window, window->start));
+}
+
+
+uint8_t* window_vprint(const window_t* const window, uint8_t* start, const char* const format, va_list args) {
+    static char buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
+    
+    const unsigned int remaining = window_chars_remaining(window, start);
+    assert(remaining <= sizeof(buffer));
+
+    size_t written = vsnprintf(buffer, remaining, format, args);
+    window_puts(window, start, buffer);
+
+    return start + written;
+}
+
+uint8_t* window_print(const window_t* const window, uint8_t* start, const char* const format, ...) {
+    va_list args;
+    va_start(args, format);
+    start = window_vprint(window, start, format, args);
+    va_end(args);
+
+    return start;
+}
+
+uint8_t* window_vprintln(const window_t* const window, uint8_t* start, const char* const format, va_list args) {
+    start = window_vprint(window, start, format, args);
+    start = window_xy(window, 0, window_current_row(window, start) + 1);
+    return start;
+}
+
+uint8_t* window_println(const window_t* const window, uint8_t* start, const char* const format, ...) {
+    va_list args;
+    va_start(args, format);
+    start = window_vprintln(window, start, format, args);
+    va_end(args);
+
+    return start;
 }
 
 uint8_t* window_reverse(const window_t* const window, uint8_t* start, unsigned int length) {

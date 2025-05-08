@@ -13,23 +13,10 @@
  */
 
 #include "config.h"
+#include "fatal.h"
+#include "global.h"
 #include "sd/sd.h"
-
-void print_error(const char* format, ...) {
-    char buffer[512];
-    
-    va_list args;
-    va_start(args, format);
-    int written = vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-
-    if (errno != 0 && written < (int) sizeof(buffer)) {
-        snprintf(buffer + written, sizeof(buffer) - written, ": %s", strerror(errno));
-        errno = 0;
-    }
-
-    fprintf(stderr, "Error: %s\n", buffer);
-}
+#include "video/video.h"
 
 typedef struct parser_state_s {
     yaml_parser_t parser;
@@ -38,63 +25,73 @@ typedef struct parser_state_s {
     const config_sink_t* const sink;
 } parser_state_t;
 
-typedef bool (*parse_callback_t)(parser_state_t* state);
+typedef void (*parse_callback_t)(parser_state_t* state);
 
-void print_parse_error(parser_state_t* state, const char* format, ...) {
-    char buffer[512];
-    va_list args;
+static void fatal_parse_error(parser_state_t* state, const char* format, ...) {
+    const window_t* const window = state->sink->window;
 
-    // Start building the error message
-    int written = 0;
-
-    // Prepend the file name, line, and column information
-    written = snprintf(buffer, sizeof(buffer),
-        "'%s' at line %zu, column %zu: ",
-        state->filename,
-        state->parser.problem_mark.line + 1,
-        state->parser.problem_mark.column + 1);
-
-    // Append the custom error message
-    if (written < (int) sizeof(buffer)) {
-        va_start(args, format);
-        vsnprintf(buffer + written, sizeof(buffer) - written, format, args);
-        va_end(args);
+    window_fill(window, CH_SPACE);
+    uint8_t* pOut = window_println(window, window->start, "Error parsing YAML file:");
+    pOut = window_println(window, pOut, "'%s'", state->filename);
+    pOut = window_println(window, pOut, "");
+    
+    if (state->parser.problem != NULL) {
+        pOut = window_println(window, pOut,
+            "Line %zu, Column %zu: ",
+            state->parser.problem_mark.line + 1,
+            state->parser.problem_mark.column + 1);
+        pOut = window_println(window, pOut,
+            state->parser.problem);
+    } else {
+        pOut = window_println(window, pOut,
+            "Line %zu, Column %zu: ",
+            state->event.start_mark.line + 1,
+            state->event.start_mark.column + 1);
     }
 
-    // Print the complete error message
-    fprintf(stderr, "%s\n", buffer);
+    va_list args;
+    va_start(args, format);
+    pOut = window_vprintln(window, pOut, format, args);
+    va_end(args);
+
+    term_display(window);
+    abort();
 }
 
-static bool parse_next(parser_state_t* state) {
+static void parse_next(parser_state_t* state) {
     yaml_event_delete(&state->event);
     if (!yaml_parser_parse(&state->parser, &state->event)) {
-        print_parse_error(state, "Malformed YAML");
-        return false;
+        fatal_parse_error(state, "(YAML is malformed)");
     }
-
-    return true;
 }
 
-static bool assert_yaml_type(parser_state_t* state, yaml_event_type_t expected_type) {
-    bool result = state->event.type == expected_type;
-
-    if (!result) {
-        print_parse_error(state, "Expected event type %d, but got %d", expected_type, state->event.type);
-        goto cleanup;
+static char* type_to_string(yaml_event_type_t type) {
+    switch (type) {
+        case YAML_NO_EVENT: return "(none)";
+        case YAML_STREAM_START_EVENT: return "stream start";
+        case YAML_STREAM_END_EVENT: return "stream end";
+        case YAML_DOCUMENT_START_EVENT: return "document start";
+        case YAML_DOCUMENT_END_EVENT: return "document end";
+        case YAML_MAPPING_START_EVENT: return "mapping start";
+        case YAML_MAPPING_END_EVENT: return "mapping end";
+        case YAML_SEQUENCE_START_EVENT: return "sequence start";
+        case YAML_SEQUENCE_END_EVENT: return "sequence end";
+        case YAML_SCALAR_EVENT: return "scalar";
+        default: return "(unknown)";
     }
-
-cleanup:
-    return result;
 }
 
-static bool parse_expect_type(parser_state_t* state, yaml_event_type_t expected_type) {
-    bool result;
-    
-    if (!(result = parse_next(state))) { goto cleanup; }
-    if (!assert_yaml_type(state, expected_type)) { goto cleanup; }
+static void assert_yaml_type(parser_state_t* state, yaml_event_type_t expected_type) {
+    if (state->event.type != expected_type) {
+        fatal_parse_error(state, "Expected %d, but got %d",
+            type_to_string(expected_type),
+            type_to_string(state->event.type));
+    }
+}
 
-cleanup:
-    return result;
+static void parse_expect_type(parser_state_t* state, yaml_event_type_t expected_type) {
+    parse_next(state);
+    assert_yaml_type(state, expected_type);
 }
 
 static const char* get_current_string(parser_state_t* state) {
@@ -103,45 +100,34 @@ static const char* get_current_string(parser_state_t* state) {
 }
 
 // Helper function to parse a scalar value
-static bool parse_string(parser_state_t* state, char* buffer, size_t buffer_size) {
-    bool result;
-
-    if (!(result = parse_expect_type(state, YAML_SCALAR_EVENT))) { goto cleanup;}
-
+static void parse_string(parser_state_t* state, char* buffer, size_t buffer_size) {
+    parse_expect_type(state, YAML_SCALAR_EVENT);
     strncpy(buffer, get_current_string(state), buffer_size - 1);
     buffer[buffer_size - 1] = '\0';
-
-cleanup:
-    return result;
 }
 
-static bool parse_as_string(parser_state_t* state, void* context, size_t context_size) {
+static void parse_as_string(parser_state_t* state, void* context, size_t context_size) {
     return parse_string(state, (char*) context, context_size);
 }
 
-static bool parse_uint32(parser_state_t* state, uint32_t* value) {
-    bool result;
+static void parse_uint32(parser_state_t* state, uint32_t* value) {
     char buffer[32] = { 0 };
 
-    if (!(result = parse_string(state, buffer, sizeof(buffer)))) { goto cleanup; }
+    parse_string(state, buffer, sizeof(buffer));
 
     char* endptr = NULL;
     *value = strtoul(buffer, &endptr, 0);
-    if (!(result = *endptr == '\0')) {
-        print_parse_error(state, "Expected unsigned integer, but got '%s'\n", buffer);
-        goto cleanup;
+    if (*endptr != '\0') {
+        fatal_parse_error(state, "'%s' is not an unsigned integer\n", buffer);
     }
-
-cleanup:
-    return result;
 }
 
-static bool parse_as_uint32(parser_state_t* state, void* context, size_t context_size) {
+static void parse_as_uint32(parser_state_t* state, void* context, size_t context_size) {
     assert(context_size == sizeof(uint32_t));
     return parse_uint32(state, (uint32_t*) context);
 }
 
-typedef bool (*map_dispatch_fn_t)(parser_state_t* state, void* context, size_t context_size);
+typedef void (*map_dispatch_fn_t)(parser_state_t* state, void* context, size_t context_size);
 
 typedef struct map_dipatch_entry_s {
     const char* key;
@@ -150,12 +136,11 @@ typedef struct map_dipatch_entry_s {
     size_t context_size;
 } map_dispatch_entry_t;
 
-static bool parse_mapping_continued(parser_state_t* state, const map_dispatch_entry_t dispatch[]) {
-    bool result;
-
+static void parse_mapping_continued(parser_state_t* state, const map_dispatch_entry_t dispatch[]) {
     while (true) {
-        if (!(result = parse_next(state))) { goto cleanup; }
-        else if (state->event.type == YAML_MAPPING_END_EVENT) { goto cleanup; }
+        parse_next(state);
+
+        if (state->event.type == YAML_MAPPING_END_EVENT) { return; }
         else if (state->event.type == YAML_SCALAR_EVENT) {
             const char* const key = (const char*) state->event.data.scalar.value;
 
@@ -163,10 +148,9 @@ static bool parse_mapping_continued(parser_state_t* state, const map_dispatch_en
             const map_dispatch_entry_t* pEntry = &dispatch[0];
             while (true) {
                 if (pEntry->key == NULL) {
-                    print_parse_error(state, "Unknown key '%s'", key);
-                    goto cleanup;
+                    fatal_parse_error(state, "Unknown key '%s'", key);
                 } else if (strcmp(key, pEntry->key) == 0) {
-                    if (!(result = pEntry->fn(state, pEntry->context, pEntry->context_size))) { goto cleanup; }
+                    pEntry->fn(state, pEntry->context, pEntry->context_size);
                     break;
                 } else {
                     pEntry++;
@@ -174,137 +158,91 @@ static bool parse_mapping_continued(parser_state_t* state, const map_dispatch_en
             }
         }
     }
-
-cleanup:
-    return result;
 }
 
 
-static bool parse_mapping(parser_state_t* state, const map_dispatch_entry_t dispatch[]) {
+static void parse_mapping(parser_state_t* state, const map_dispatch_entry_t dispatch[]) {
     assert_yaml_type(state, YAML_MAPPING_START_EVENT);
-    return parse_mapping_continued(state, dispatch);
+    parse_mapping_continued(state, dispatch);
 }
 
-static bool parse_sequence(parser_state_t* state, parse_callback_t on_item_fn) {
-    bool result;
-
+static void parse_sequence(parser_state_t* state, parse_callback_t on_item_fn) {
     assert_yaml_type(state, YAML_SEQUENCE_START_EVENT);
 
     while (true) {
-        if (!(result = parse_next(state))) { goto cleanup; }
-        if (state->event.type == YAML_SEQUENCE_END_EVENT) { goto cleanup; }
-
-        if (state->event.type == YAML_MAPPING_START_EVENT) {
-            result = on_item_fn(state);
-            if (!result) {
-                goto cleanup;
-            }
-        }
+        parse_next(state);
+        
+        if (state->event.type == YAML_SEQUENCE_END_EVENT) { return; }
+        else if (state->event.type == YAML_MAPPING_START_EVENT) { on_item_fn(state); }
     }
-
-cleanup:
-    return true;
 }
 
-static bool parse_action_load_file_entry(parser_state_t* state) {
-    bool result;
-
+static void parse_action_load_file_entry(parser_state_t* state) {
     char file[261] = { 0 };     // Windows OS max path length is 260 characters
     uint32_t address = 0;
     
-    if (!(result = parse_mapping(state, (const map_dispatch_entry_t[]) {
+    parse_mapping(state, (const map_dispatch_entry_t[]) {
         { "file", parse_as_string, &file, sizeof(file) },
         { "address", parse_as_uint32, &address, sizeof(address) },
         { NULL, NULL, NULL, 0 }
-    }))) { goto cleanup; }
+    });
 
     if (state->sink->on_action_load) {
         state->sink->on_action_load(state->sink->user_data, file, address);
     }
-
-cleanup:
-    return result;
 }
 
-static bool parse_action_load_files(parser_state_t* state, void* context, size_t context_size) {
+static void parse_action_load_files(parser_state_t* state, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
 
-    bool result;
-    
-    if (!(result = parse_expect_type(state, YAML_SEQUENCE_START_EVENT))) { goto cleanup; }
-    if (!(result = parse_sequence(state, parse_action_load_file_entry))) { goto cleanup; }
-
-cleanup:
-    return result;
+    parse_expect_type(state, YAML_SEQUENCE_START_EVENT);
+    parse_sequence(state, parse_action_load_file_entry);
 }
 
-static bool parse_action_load(parser_state_t* state, void* context, size_t context_size) {
+static void parse_action_load(parser_state_t* state, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
     
-    bool result;
-
-    if (!(result = parse_mapping_continued(state, (const map_dispatch_entry_t[]) {
+    parse_mapping_continued(state, (const map_dispatch_entry_t[]) {
         { "files", parse_action_load_files, NULL, 0 },
         { NULL, NULL, NULL, 0 }
-    }))) { goto cleanup; }
-
-cleanup:
-    return result;
+    });
 }
 
-static bool parse_action(parser_state_t* state, void* context, size_t context_size) {
+static void parse_action(parser_state_t* state, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
     
-    bool result;
-
-    if (!(result = parse_next(state))) { goto cleanup; }
+    parse_next(state);
     const char* action = get_current_string(state);
 
     if (strcmp(action, "load") == 0) {
-        if (!(result = parse_action_load(state, NULL, 0))) { goto cleanup; }
+        parse_action_load(state, NULL, 0);
     } else {
-        print_parse_error(state, "Unknown action '%s'", action);
-        result = false;
-        goto cleanup;
+        fatal_parse_error(state, "Unknown action '%s'", action);
     }
-
-cleanup:
-    return result;
 }
 
-static bool parse_action_list_entry(parser_state_t* state) {
-    bool result;
+static void parse_action_list_entry(parser_state_t* state) {
     char action[32] = { 0 };
 
     assert_yaml_type(state, YAML_MAPPING_START_EVENT);
-    if (!(result = parse_string(state, action, sizeof(action)))) { goto cleanup; }
+    parse_string(state, action, sizeof(action));
     if (strcmp(action, "action") == 0) {
-        if (!(result = parse_action(state, NULL, 0))) { goto cleanup; }
+        parse_action(state, NULL, 0);
     } else {
-        print_parse_error(state, "Unknown action '%s'", action);
-        result = false;
-        goto cleanup;
+        fatal_parse_error(state, "Unknown action '%s'", action);
     }
-
-cleanup:
-    return result;
 }
 
 // Helper function to parse a list of actions
-static bool parse_action_list(parser_state_t* state, void* context, size_t context_size) {
+static void parse_action_list(parser_state_t* state, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
 
-    bool result;
-    
-    if (!(result = parse_expect_type(state, YAML_SEQUENCE_START_EVENT))) { goto cleanup; }
-    if (!(result = parse_sequence(state, parse_action_list_entry))) { goto cleanup; }
-    
-cleanup:
-    return result;
+    parse_expect_type(state, YAML_SEQUENCE_START_EVENT);
+    parse_sequence(state, parse_action_list_entry);
 }
 
 typedef struct parse_config_context_s {
@@ -312,40 +250,31 @@ typedef struct parse_config_context_s {
 } parse_config_context_t;
 
 // Helper function to parse an individual config
-static bool parse_config(parser_state_t* state) {
+static void parse_config(parser_state_t* state) {
     if (state->sink->on_enter_config) {
         state->sink->on_enter_config(state->sink->user_data);
     }
 
-    bool result;
     char name[41] = { 0 };
 
-    if (!(result = parse_mapping(state, (const map_dispatch_entry_t[]) {
+    parse_mapping(state, (const map_dispatch_entry_t[]) {
         { "name", parse_as_string, &name, sizeof(name) },
         { "setup", parse_action_list, NULL, 0 },
         { NULL, NULL, NULL, 0 }
-    }))) { goto cleanup; }
+    });
 
     if (state->sink->on_exit_config) {
         state->sink->on_exit_config(state->sink->user_data, name);
     }
-
-cleanup:
-    return result;
 }
 
 // Helper function to parse a list of configs
-static bool parse_config_list(parser_state_t* state, void* context, size_t context_size) {
+static void parse_config_list(parser_state_t* state, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
 
-    bool result;
-    
-    if (!(result = parse_expect_type(state, YAML_SEQUENCE_START_EVENT))) { goto cleanup; }
-    if (!(result = parse_sequence(state, parse_config))) { goto cleanup; }
-    
-cleanup:
-    return result;
+    parse_expect_type(state, YAML_SEQUENCE_START_EVENT);
+    parse_sequence(state, parse_config);
 }
 
 void parse_config_file(const char* filename, const config_sink_t* const sink) {
@@ -359,28 +288,25 @@ void parse_config_file(const char* filename, const config_sink_t* const sink) {
     };
 
     if (!yaml_parser_initialize(&state.parser)) {
-        print_error("Failed to initialize YAML parser");
-        goto cleanup;
+        fatal("Failed to initialize YAML parser");
     }
 
     file = sd_open(filename, "r");
     if (!file) {
-        print_error("Failed to open file '%s'", filename);
-        goto cleanup;
+        fatal("Failed to open '%s'", filename);
     }
 
     yaml_parser_set_input_file(&state.parser, file);
 
-    if (!parse_expect_type(&state, YAML_STREAM_START_EVENT)) { goto cleanup; }
-    if (!parse_expect_type(&state, YAML_DOCUMENT_START_EVENT)) { goto cleanup; }
-    if (!parse_expect_type(&state, YAML_MAPPING_START_EVENT)) { goto cleanup; }
+    parse_expect_type(&state, YAML_STREAM_START_EVENT);
+    parse_expect_type(&state, YAML_DOCUMENT_START_EVENT);
+    parse_expect_type(&state, YAML_MAPPING_START_EVENT);
     
     parse_mapping(&state, (const map_dispatch_entry_t[]) {
         { "configs", parse_config_list, NULL, 0 },
         { NULL, NULL, NULL, 0 }
     });
 
-cleanup:
     yaml_event_delete(&state.event);
     yaml_parser_delete(&state.parser);
 

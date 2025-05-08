@@ -12,6 +12,22 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "pch.h"
+#include "global.h"
 
-uint8_t temp_buffer[2048] = { 0 };
+static uint8_t __buffer[TEMP_BUFFER_SIZE] = { 0 };
+static uint8_t* temp_buffer = __buffer;
+
+uint8_t* acquire_temp_buffer() {
+    assert(temp_buffer != NULL);
+
+    uint8_t* ptr = temp_buffer;
+    temp_buffer = NULL;
+    return ptr;
+}
+
+void release_temp_buffer(const uint8_t* const buffer) {
+    assert(temp_buffer == NULL);
+    assert(buffer == __buffer);
+
+    temp_buffer = __buffer;
+}

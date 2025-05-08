@@ -26,9 +26,10 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/main.c
     #${TEST_DIR}/menu_test.c
+    ${TEST_DIR}/mock.c
     ${TEST_DIR}/window_test.c
-    ${TEST_DIR}/sd.c
     ${SRC_DIR}/config/config.c
+    ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/window.c

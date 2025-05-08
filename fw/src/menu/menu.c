@@ -309,7 +309,9 @@ void menu_init() {
 }
 
 void action_load(const char* filename, uint32_t address) {
-    snprintf((char*)(void*) temp_buffer, sizeof(temp_buffer), "/roms/%s", filename);
+    uint8_t* temp_buffer = acquire_temp_buffer();
+
+    snprintf((char*)(void*) temp_buffer, TEMP_BUFFER_SIZE, "/roms/%s", filename);
     printf("0x%05lx: %s\n", address, temp_buffer);
 
     FILE *file = sd_open((char*)(void*) temp_buffer, "rb"); // Open file in binary read mode
@@ -321,18 +323,22 @@ void action_load(const char* filename, uint32_t address) {
     // Read remaining bytes to the destination address.
     size_t bytes_read;
 
-    while ((bytes_read = fread(temp_buffer, 1, sizeof(temp_buffer), file)) > 0) {
+    while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
         spi_write(address, temp_buffer, bytes_read);
         address += bytes_read;
 
         // Check for read errors (other than EOF)
-        if (bytes_read < sizeof(temp_buffer) && ferror(file)) {
+        if (bytes_read < TEMP_BUFFER_SIZE && ferror(file)) {
             perror("Error reading file");
             goto cleanup;
         }
     }
 
 cleanup:
+    if (temp_buffer) {
+        release_temp_buffer(temp_buffer);
+    }
+
     if (file) {
         fclose(file);
     }

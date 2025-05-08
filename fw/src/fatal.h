@@ -16,7 +16,4 @@
 
 #include "pch.h"
 
-#define TEMP_BUFFER_SIZE 2048
-
-uint8_t* acquire_temp_buffer();
-void release_temp_buffer(const uint8_t* const buffer);
+void fatal(const char* const format, ...) __THROW __attribute__ ((__noreturn__));
