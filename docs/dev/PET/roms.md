@@ -1,10 +1,26 @@
 # ROMs
 
+## Naming
+
+Generation | Name      | Level
+-----------|-----------|---------------
+Original   | Basic 1.0 | Level 2 Basic
+Upgrade    | Basic 2.0 | Level 3 Basic
+4.0        | Basic 4.0 | Level 4 Basic
+
 ## ROM 1.0
 
 Early production PET 2001 units used MOS 6540 ROMs (28-pin).  Later revisions used 2316 ROMs (24-pin).
 
 The 28-pin and 24-pin ROMs have different IC and part numbers, but their contents are identical.
+
+Highlights:
+
+* Arrays limited to 256 items
+* IEEE-488 input not working
+* Tape data files had potential problems
+* No machine language monitor
+* Screen output polls for vertical refresh to avoid "sparkle".
 
 Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32
 --------|----------|----------|------------|-----------|-------------|----------
@@ -45,6 +61,7 @@ Highlights:
 
 * Corrects an intermittent bug in the edit software.
 * Improves the garbage collection routines.
+* Maybe removed 256 element restriction?
 
 Identical to ROM 1.0 except H1 ($C000).
 
@@ -54,6 +71,8 @@ Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32
 
 ### PET 2001-8N (VICE)
 
+The VICE roms are a binary concatenation of the ROMs indicated in the filenames:
+
 ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|----------
 Basic       | basic-1.901439-09-05-02-06.bin  |   8192 | aff78300
@@ -61,17 +80,19 @@ Edit        | edit-1-n.901439-03.bin          |   2048 | 9e1c5cea
 Kernel      | kernal-1.901439-04-07.bin       |   4096 | f0186492
 Characters  | characters-1.901447-08.bin      |   2048 | 54f32f45
 
-The VICE roms are a binary concatenation of the corresponding ROMs.
-
 ## ROM 3.0
 
 Highlights:
 
-* Support for commodore disk system.
-* Fixes bug limiting the dimensions of arrays.
+* Changed the banner ("***" -> "###")
+* Fixed support for commodore disk system.
+* Fixed bug limiting the dimensions of arrays. (or was that 2.0?)
+* Adds machine language monitor
 * Improved garbage collection.
+* Re-arranged the zero-page and ROM entry points
 * Adds ROM set for business keyboards
 * New character ROM (swaps upper/lower case)
+* Screen output polls for vertical refresh to avoid "sparkle".
 
 ### PET 2001 / 30xx
 
@@ -97,8 +118,9 @@ Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
   $E000 | D8       |2316B-024  | 901474-01 | 05db957e
 
-
 ### PET 30xx (VICE)
+
+The VICE roms are a binary concatenation of the ROMs indicated in the filenames:
 
 ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|----------
@@ -106,10 +128,6 @@ Basic       | basic-2.901465-01-02.bin        |   8192 | cf35e68b
 Edit        | edit-2-n.901447-24.bin          |   2048 | e459ab32
 Kernel      | kernal-2.901465-03.bin          |   4096 | f02238e2
 Characters  | characters-2.901447-10.bin      |   2048 | d8408674
-
-The VICE roms are a binary concatenation of the corresponding ROMs.
-
-### PET 3032B (VICE)
 
 Business keyboard is identical to 30XX except for Edit rom.
 
@@ -194,6 +212,8 @@ Address | Location | IC#       | Part#     | CRC-32
   $B000 | D5       |  2332-120 | 901465-23 | ae3deac0
 
 ### PET 40xx (VICE)
+
+The VICE roms are a binary concatenation of the ROMs indicated in the filenames:
 
 ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|----------
@@ -301,6 +321,7 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
 * [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt)
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
 * [Keyscan Maps](https://github.com/sjgray/cbm-edit-rom/blob/master/keyboard-tables1.asm)
+* [Jim Butterfield](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n9/mode/2up)
 
 ## Tools
 
