@@ -77,13 +77,15 @@ static char* type_to_string(yaml_event_type_t type) {
         case YAML_SEQUENCE_START_EVENT: return "sequence start";
         case YAML_SEQUENCE_END_EVENT: return "sequence end";
         case YAML_SCALAR_EVENT: return "scalar";
+        case YAML_ALIAS_EVENT: return "alias";
+
         default: return "(unknown)";
     }
 }
 
 static void assert_yaml_type(parser_state_t* state, yaml_event_type_t expected_type) {
     if (state->event.type != expected_type) {
-        fatal_parse_error(state, "Expected %d, but got %d",
+        fatal_parse_error(state, "Expected %s, but got %s",
             type_to_string(expected_type),
             type_to_string(state->event.type));
     }
@@ -173,7 +175,7 @@ static void parse_sequence(parser_state_t* state, parse_callback_t on_item_fn) {
         parse_next(state);
         
         if (state->event.type == YAML_SEQUENCE_END_EVENT) { return; }
-        else if (state->event.type == YAML_MAPPING_START_EVENT) { on_item_fn(state); }
+        else { on_item_fn(state); }
     }
 }
 

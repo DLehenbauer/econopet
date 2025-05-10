@@ -30,3 +30,7 @@ FILE* sd_open(const char* path, const char* mode) {
     assert(path[0] == '/');
     return fopen(map_path(path), mode);
 }
+
+void term_present() {
+    fflush(stdout);
+}
