@@ -17,6 +17,26 @@ Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32
   $F800 |    H7    | 6540-018 |  901439-07 | 2316B-07  |  901447-07  | c4f47ad1
   N/A   |    A2    | 6540-010 |  901439-08 | 2316B-08  |  901447-08  | 54f32f45
 
+### Keyboard
+
+Graphics/QWERTY keyscan map at $e75c:
+
+```text
+> m e75c e7ab
+-              10
+>C:e75c  3d 2e ff 03  3c 20 5b 12   =...< [.
+>C:e764  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
+>C:e76c  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
+>C:e774  33 31 0d 3b  4d 42 43 5a   31.;MBCZ
+>C:e77c  2a 35 ff 3a  4b 48 46 53   *5.:KHFS
+>C:e784  36 34 ff 4c  4a 47 44 41   64.LJGDA
+>C:e78c  2f 38 ff 50  49 59 52 57   /8.PIYRW
+>C:e794  39 37 5e 4f  55 54 45 51   97^OUTEQ
+-              09
+>C:e79c  14 11 ff 29  5c 27 24 22   ...)\'$"
+>C:e7a4  1d 13 5f 28  26 25 23 21   .._(&%#!
+```
+
 [Disassembly](https://www.zimmers.net/anonftp/pub/cbm/src/pet/rom-1.html)
 
 ## ROM 2.0
@@ -280,6 +300,7 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
 * Genealogy [1](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [2](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
 * [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt)
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
+* [Keyscan Maps](https://github.com/sjgray/cbm-edit-rom/blob/master/keyboard-tables1.asm)
 
 ## Tools
 
