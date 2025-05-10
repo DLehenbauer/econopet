@@ -71,6 +71,8 @@ void term_display(const window_t* const window) {
         }
         fputs("\r\n", stdout);
     }
+
+    term_present();
 }
 
 void term_end() {

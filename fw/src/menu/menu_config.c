@@ -86,6 +86,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     };
 
     term_begin(window);
+    term_display(window);
 
     parse_config_file("/config.yaml", &sink);
 

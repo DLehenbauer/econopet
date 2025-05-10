@@ -72,9 +72,12 @@ static ButtonAction get_button_action() {
     return action;
 }
 
-int term_input_char() {
+void term_present() {
     spi_write(0x8000, video_char_buffer, VIDEO_CHAR_BUFFER_BYTE_SIZE);
+    fflush(stdout);
+}
 
+int term_input_char() {
     if (uart_is_readable(uart_default)) {
         return uart_getc(uart_default);
     }
@@ -309,18 +312,14 @@ void menu_init() {
 }
 
 void action_load(const char* filename, uint32_t address) {
-    uint8_t* temp_buffer = acquire_temp_buffer();
-
-    snprintf((char*)(void*) temp_buffer, TEMP_BUFFER_SIZE, "/roms/%s", filename);
-    printf("0x%05lx: %s\n", address, temp_buffer);
-
-    FILE *file = sd_open((char*)(void*) temp_buffer, "rb"); // Open file in binary read mode
+    printf("0x%05lx: %s\n", address, filename);
+    FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
-        perror("Failed to open file");
-        goto cleanup;
+        fatal("Failed to open file '%s'", filename);
     }
 
     // Read remaining bytes to the destination address.
+    uint8_t* temp_buffer = acquire_temp_buffer();
     size_t bytes_read;
 
     while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
@@ -329,19 +328,12 @@ void action_load(const char* filename, uint32_t address) {
 
         // Check for read errors (other than EOF)
         if (bytes_read < TEMP_BUFFER_SIZE && ferror(file)) {
-            perror("Error reading file");
-            goto cleanup;
+            fatal("Failed to read file '%s'", filename);
         }
     }
 
-cleanup:
-    if (temp_buffer) {
-        release_temp_buffer(temp_buffer);
-    }
-
-    if (file) {
-        fclose(file);
-    }
+    release_temp_buffer(temp_buffer);
+    fclose(file);
 }
 
 void menu_enter() {

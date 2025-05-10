@@ -28,6 +28,7 @@
 #define KEY_PGDN  1007
 
 extern int term_input_char();
+extern void term_present();
 
 void term_begin();
 void term_display(const window_t* const window);
