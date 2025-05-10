@@ -16,6 +16,7 @@
 #include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
+#include "term.h"
 #include "video/video.h"
 
 typedef struct parser_state_s {

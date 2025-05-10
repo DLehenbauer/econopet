@@ -43,7 +43,7 @@ int term_input_char() {
 
 void on_action_load(const char* filename, uint32_t address) {
     // This is a placeholder for the actual callback implementation
-    printf("Action load: %s @ %05lx\n", filename, address);
+    printf("Action load: %s @ %05x\n", filename, address);
 }
 
 void config_test() {
