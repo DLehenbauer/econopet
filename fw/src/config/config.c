@@ -23,28 +23,33 @@ typedef struct parser_s {
     yaml_parser_t parser;
     yaml_event_t event;
     const char* filename;
-    const config_sink_t* const sink;
+    FILE* file;
+    const config_sink_t* sink;
+    struct parser_s* previous;
+    int depth;
 } parser_t;
 
 typedef void (*parse_callback_t)(parser_t* parser);
 
 static void fatal_parse_error(parser_t* parser, const char* format, ...) {
-    const window_t* const window = parser->sink->window;
+    const window_t window = window_create(video_char_buffer, 40, 25);
+    term_begin(&window);
+    window_fill(&window, CH_SPACE);
 
-    window_fill(window, CH_SPACE);
-    uint8_t* pOut = window_println(window, window->start, "Error parsing YAML file:");
-    pOut = window_println(window, pOut, "'%s'", parser->filename);
-    pOut = window_println(window, pOut, "");
+    uint8_t* pOut = window_println(&window, window.start, "E: error parsing file:");
+    window_reverse(&window, window.start, 2);
+    pOut = window_println(&window, pOut, "'%s'", parser->filename);
+    pOut = window_println(&window, pOut, "");
     
     if (parser->parser.problem != NULL) {
-        pOut = window_println(window, pOut,
+        pOut = window_println(&window, pOut,
             "Line %zu, Column %zu: ",
             parser->parser.problem_mark.line + 1,
             parser->parser.problem_mark.column + 1);
-        pOut = window_println(window, pOut,
+        pOut = window_println(&window, pOut,
             parser->parser.problem);
     } else {
-        pOut = window_println(window, pOut,
+        pOut = window_println(&window, pOut,
             "Line %zu, Column %zu: ",
             parser->event.start_mark.line + 1,
             parser->event.start_mark.column + 1);
@@ -52,17 +57,59 @@ static void fatal_parse_error(parser_t* parser, const char* format, ...) {
 
     va_list args;
     va_start(args, format);
-    pOut = window_vprintln(window, pOut, format, args);
+    pOut = window_vprintln(&window, pOut, format, args);
     va_end(args);
 
-    term_display(window);
+    term_display(&window);
     abort();
 }
 
+static yaml_char_t* get_current_anchor(parser_t* parser) {
+    switch (parser->event.type) {
+        case YAML_MAPPING_START_EVENT: return parser->event.data.mapping_start.anchor;
+        case YAML_SEQUENCE_START_EVENT: return parser->event.data.sequence_start.anchor;
+        case YAML_SCALAR_EVENT: return parser->event.data.scalar.anchor;
+        default: return NULL;
+    }
+}
+
+static void push_parser(parser_t* parser);
+static void pop_parser(parser_t* parser);
+
 static void parse_next(parser_t* parser) {
     yaml_event_delete(&parser->event);
+
     if (!yaml_parser_parse(&parser->parser, &parser->event)) {
         fatal_parse_error(parser, "(YAML is malformed)");
+    }
+
+    switch (parser->event.type) {
+        case YAML_STREAM_START_EVENT: { parser->depth++; break; }
+        case YAML_STREAM_END_EVENT: { parser->depth--; break; }
+
+        case YAML_DOCUMENT_START_EVENT: { parser->depth++; break; }
+        case YAML_DOCUMENT_END_EVENT: { parser->depth--; break; }
+
+        case YAML_MAPPING_START_EVENT: { parser->depth++; break; }
+        case YAML_MAPPING_END_EVENT: { parser->depth--; break; }
+
+        case YAML_SEQUENCE_START_EVENT: { parser->depth++; break; }
+        case YAML_SEQUENCE_END_EVENT: { parser->depth--; break; }
+
+        case YAML_ALIAS_EVENT: {
+            push_parser(parser);
+            break;
+        }
+
+        default: break;
+    }
+
+    if (parser->depth < 0) {
+        if (parser->previous != NULL) {
+            pop_parser(parser);
+        } else {
+            fatal_parse_error(parser, "yaml contents unbalanced");
+        }
     }
 }
 
@@ -95,6 +142,74 @@ static void assert_yaml_type(parser_t* parser, yaml_event_type_t expected_type) 
 static void parse_expect_type(parser_t* parser, yaml_event_type_t expected_type) {
     parse_next(parser);
     assert_yaml_type(parser, expected_type);
+}
+
+static void init_parser(parser_t* parser, const char* filename, const config_sink_t* const sink) {
+    parser->filename = filename;
+    parser->sink = sink;
+    parser->previous = NULL;
+    parser->depth = 0;
+
+    vet(yaml_parser_initialize(&parser->parser), "yaml_parser_initialize failed");
+
+    parser->file = sd_open(filename, "r");
+    vet(parser->file != NULL, "file '%s' not found", filename);
+
+    yaml_parser_set_input_file(&parser->parser, parser->file);
+
+    parse_expect_type(parser, YAML_STREAM_START_EVENT);
+    parse_expect_type(parser, YAML_DOCUMENT_START_EVENT);
+}
+
+static void deinit_parser(parser_t* parser) {
+    vet(parser->previous == NULL, "deinit_parser with non-empty stack");
+    vet(parser->depth == 0, "deinit_parser depth=%d", parser->depth);
+    yaml_event_delete(&parser->event);
+    yaml_parser_delete(&parser->parser);
+    fclose((FILE*) parser->file);
+}
+
+static void push_parser(parser_t* parser) {
+    parser_t* saved_parser = vetted_malloc(sizeof(parser_t));
+    memcpy(/* dest: */ saved_parser, /* src: */ parser, sizeof(parser_t));
+    init_parser(parser, saved_parser->filename, saved_parser->sink);
+    parser->previous = saved_parser;
+}
+
+static void pop_parser(parser_t* parser) {
+    parser_t* previous_parser = parser->previous;
+    vet(previous_parser != NULL, "pop_parser with empty stack");
+    parser->previous = NULL;
+
+    deinit_parser(parser);
+    memcpy(/* dest: */ parser, /* src: */ previous_parser, sizeof(parser_t));
+    free(previous_parser);
+}
+
+static void parse_skip(parser_t* parser, void* context, size_t context_size) {
+    int start_depth = parser->depth;
+
+    parse_next(parser);
+
+    switch (parser->event.type) {
+        case YAML_MAPPING_START_EVENT:
+        case YAML_SEQUENCE_START_EVENT: {
+            assert (parser->depth > start_depth);
+            
+            while (parser->depth > start_depth) {
+                parse_next(parser);
+            }
+            break;
+        }
+
+        case YAML_ALIAS_EVENT:
+        case YAML_SCALAR_EVENT:
+            break;
+
+        default:
+            fatal_parse_error(parser, "cannot skip %s",
+                type_to_string(parser->event.type));
+    }
 }
 
 static const char* get_current_string(parser_t* state) {
@@ -162,7 +277,6 @@ static void parse_mapping_continued(parser_t* parser, const map_dispatch_entry_t
         }
     }
 }
-
 
 static void parse_mapping(parser_t* parser, const map_dispatch_entry_t dispatch[]) {
     assert_yaml_type(parser, YAML_MAPPING_START_EVENT);
@@ -281,39 +395,20 @@ static void parse_config_list(parser_t* parser, void* context, size_t context_si
 }
 
 void parse_config_file(const char* filename, const config_sink_t* const sink) {
-    FILE* file = NULL;
+    parser_t parser;
 
-    parser_t parser = {
-        .parser = { 0 },
-        .event = { 0 },
-        .filename = filename,
-        .sink = sink,
-    };
+    init_parser(&parser, filename, sink);
 
-    if (!yaml_parser_initialize(&parser.parser)) {
-        fatal("Failed to initialize YAML parser");
-    }
-
-    file = sd_open(filename, "r");
-    if (!file) {
-        fatal("Failed to open '%s'", filename);
-    }
-
-    yaml_parser_set_input_file(&parser.parser, file);
-
-    parse_expect_type(&parser, YAML_STREAM_START_EVENT);
-    parse_expect_type(&parser, YAML_DOCUMENT_START_EVENT);
     parse_expect_type(&parser, YAML_MAPPING_START_EVENT);
     
     parse_mapping(&parser, (const map_dispatch_entry_t[]) {
         { "configs", parse_config_list, NULL, 0 },
+        { "data", parse_skip, NULL, 0 },
         { NULL, NULL, NULL, 0 }
     });
 
-    yaml_event_delete(&parser.event);
-    yaml_parser_delete(&parser.parser);
+    parse_expect_type(&parser, YAML_DOCUMENT_END_EVENT);
+    parse_expect_type(&parser, YAML_STREAM_END_EVENT);
 
-    if (file) {
-        fclose(file);
-    }
+    deinit_parser(&parser);
 }

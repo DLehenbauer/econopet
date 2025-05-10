@@ -18,14 +18,13 @@
 #include "term.h"
 #include "video/video.h"
 
-void fatal(const char* const format, ...) {
+static void vfatal(const char* const format, va_list args) {
     const window_t window = window_create(video_char_buffer, 40, 25);
     term_begin(&window);
 
-    va_list args;
-    va_start(args, format);
-    uint8_t* pOut = window_vprintln(&window, pOut, format, args);
-    va_end(args);
+    uint8_t* pOut = window_puts(&window, window.start, "E: ");
+    window_reverse(&window, window.start, 2);
+    pOut = window_vprintln(&window, pOut, format, args);
 
     if (errno != 0) {
         pOut = window_println(&window, pOut, "");
@@ -34,4 +33,26 @@ void fatal(const char* const format, ...) {
 
     term_display(&window);
     abort();
+}
+
+void fatal(const char* const format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfatal(format, args);
+    va_end(args);
+}
+
+void vet(bool condition, const char* const format, ...) {
+    if (!condition) {
+        va_list args;
+        va_start(args, format);
+        vfatal(format, args);
+        va_end(args);
+    }
+}
+
+void* vetted_malloc(size_t __size) {
+    void* p = malloc(__size);
+    vet(p != NULL, "malloc failed");
+    return p;
 }

@@ -24,7 +24,6 @@ typedef void (*action_load_callback_t)(void* user_data, const char* file, uint32
 
 // Struct for sinking parsed data
 typedef struct config_sink_s {
-    const window_t* const window;
     const enter_config_callback_t on_enter_config;
     const exit_config_callback_t on_exit_config;
     const action_load_callback_t on_action_load;
