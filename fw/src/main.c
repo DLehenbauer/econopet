@@ -60,6 +60,15 @@ static const uint8_t __in_flash(".fpga_bitstream") bitstream[] = {
 };
 #endif
 
+void fpga_write_zeros(size_t count) {
+    assert(count <= TEMP_BUFFER_SIZE);
+    
+    uint8_t* temp_buffer = acquire_temp_buffer();
+    memset(temp_buffer, 0, count);
+    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, count);
+    release_temp_buffer(&temp_buffer);
+}
+
 void fpga_init() {
     gpio_init(FPGA_CRESET_GP);
 
@@ -129,14 +138,9 @@ void fpga_init() {
     // Efinix requires SPI mode 3 for configuration.
     spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
-    // Later, we will use this buffer of 1,000 zero bits to generate extra clock cycles
-    // at the end of configuration.  We clear the 125 bytes now 
-    _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
-    memset(temp_buffer, 0, 125);
-    
     // Changes in clock polarity do not seem to take effect until the next write.  Send
     // a single byte while CS_N is deasserted to transition SCK to high.
-    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, /* len: */ 1);
+    fpga_write_zeros(/* count: */ 1);
     sleep_ms(1);  // t_CRESET_N = 320 ns
 
     // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to select passive
@@ -149,9 +153,12 @@ void fpga_init() {
     printf("FPGA: Sending %d bytes\n", sizeof(bitstream));
     spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
 
+    // To ensure successful configuration, the microprocessor must continue to supply the
+    // configuration clock to the Trion FPGA for at least 100 cycles after sending the last
+    // configuration data.
+    //
     // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
-    _Static_assert(sizeof(temp_buffer) >= 125, "'temp_buffer' must be at least 125 bytes.");
-    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, 125);
+    fpga_write_zeros(/* count: */ 125);
 
     // Deassert CS_N to signal end of configuration.
     sleep_ms(1);  // t_CRESET_N = 320 ns
@@ -162,7 +169,7 @@ void fpga_init() {
 
     // Changes in clock polarity do not seem to take effect until the next write.  Send
     // a single byte while CS_N is deasserted to transition SCK to low.
-    spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, /* len: */ 1);
+    fpga_write_zeros(/* count: */ 1);
 
     printf("FPGA: DONE\n");
 

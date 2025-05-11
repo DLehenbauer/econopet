@@ -30,6 +30,8 @@
 
 // SPI speeds faster than 24 MHz require overclocking 'peri_clk' or using PIO.
 // (See: https://github.com/Bodmer/TFT_eSPI/discussions/2432)
+//
+// Efinix T8 / T20 maximum configuration clock for X1 passive is 25 MHz.
 #define FPGA_SPI_MHZ 24
 #define SD_SPI_MHZ 24
 

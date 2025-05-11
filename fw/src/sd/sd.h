@@ -17,4 +17,8 @@
 #include "../pch.h"
 
 bool sd_init();
+
 FILE* sd_open(const char* path, const char* mode);
+
+typedef void (*sd_read_callback_t)(uint8_t* buffer, size_t bytes_read, void* context);
+void sd_read(const char* path, FILE* file, sd_read_callback_t callback, void* context);

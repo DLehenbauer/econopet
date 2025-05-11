@@ -334,8 +334,20 @@ void action_load(void* const context, const char* filename, uint32_t address) {
         }
     }
 
-    release_temp_buffer(temp_buffer);
+    release_temp_buffer(&temp_buffer);
     fclose(file);
+}
+
+void write_scanmap(uint32_t address, const binary_t* scanmap) {
+    for (size_t n = 0, col = 1; n < scanmap->size; col++) {
+        printf("%02d ", col);
+        for (size_t j = 0; j < 8; j++) {
+            printf("%02x ", scanmap->data[n++]);
+        }
+        printf("\n");
+    }
+
+    spi_write(address, scanmap->data, scanmap->size);
 }
 
 void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
@@ -347,11 +359,11 @@ void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap
 
     if (keyboard_type == keyboard_type_graphics && scanmap_n->size) {
         printf("0x%4lx: keyboard scanmap (graphics)\n", address);
-        spi_write(address, scanmap_n->data, scanmap_n->size);
+        write_scanmap(address, scanmap_n);
     } else if (scanmap_b->size) {
         assert(keyboard_type == keyboard_type_business);
         printf("0x%4lx: keyboard scanmap (business)\n", address);
-        spi_write(address, scanmap_b->data, scanmap_b->size);
+        write_scanmap(address, scanmap_b);
     }
 }
 

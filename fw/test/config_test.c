@@ -42,21 +42,25 @@ int term_input_char() {
 }
 
 void on_action_load(void* context, const char* filename, uint32_t address) {
+    (void) context;
+
     // This is a placeholder for the actual callback implementation
     printf("Action load: %s @ %04x\n", filename, address);
 }
 
 void print_scanmap(const binary_t* scanmap) {
-    for (size_t i = 0; i < scanmap->size; i) {
+    for (size_t n = 0, col = 1; n < scanmap->size; col++) {
+        printf("%02zu ", col);
         for (size_t j = 0; j < 8; j++) {
-            printf("%02x ", scanmap->data[i++]);
+            printf("%02x ", scanmap->data[n++]);
         }
         printf("\n");
     }
 }
 
 void on_action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
-    // This is a placeholder for the actual callback implementation
+    (void) context;
+
     printf("Action set-scanmap: %04x\n", address);
     printf("\nScanmap N:\n");
     print_scanmap(scanmap_n);

@@ -173,7 +173,7 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
         chunk_len = MIN(chunk_len, remaining);
     }
 
-    release_temp_buffer(temp_buffer);
+    release_temp_buffer(&temp_buffer);
 }
 
 void set_cpu(bool ready, bool reset, bool nmi) {

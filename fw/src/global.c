@@ -25,9 +25,10 @@ uint8_t* acquire_temp_buffer() {
     return ptr;
 }
 
-void release_temp_buffer(const uint8_t* const buffer) {
+void release_temp_buffer(uint8_t** const buffer) {
     assert(temp_buffer == NULL);
-    assert(buffer == __buffer);
+    assert(*buffer == __buffer);
 
     temp_buffer = __buffer;
+    *buffer = NULL;
 }
