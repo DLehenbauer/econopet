@@ -1,3 +1,8 @@
+data:
+  scanmaps:
+    - &qwerty-n "3d2eff033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f555445511411ff295c2724221d135f2826252321"
+    - &qwerty-b "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
+
 configs:
   - name: "Basic 2.0"
     setup:
@@ -6,19 +11,23 @@ configs:
           - file: "/roms/901439-08.bin"
             address: 0x8800
           - file: "/roms/901439-01.bin"
-            address: 0xC000
+            address: 0xc000
           - file: "/roms/901439-02.bin"
-            address: 0xD000
+            address: 0xd000
           - file: "/roms/901439-03.bin"
-            address: 0xE000
+            address: 0xe000
           - file: "/roms/901439-04.bin"
-            address: 0xF000
+            address: 0xf000
           - file: "/roms/901439-05.bin"
-            address: 0xC800
+            address: 0xc800
           - file: "/roms/901439-06.bin"
-            address: 0xD800
+            address: 0xd800
           - file: "/roms/901439-07.bin"
-            address: 0xF800
+            address: 0xf800
+      - action: "set-scanmap"
+        address: 0xe75c
+        graphics: *qwerty-n
+        business: *qwerty-b
   - name: "Basic 4.0 (40 Col 50 Hz)"
     setup:
       - action: "load"
@@ -26,15 +35,15 @@ configs:
           - file: "/roms/901447-10.bin"
             address: 0x8800
           - file: "/roms/901465-19.bin"
-            address: 0xB000
+            address: 0xb000
           - file: "/roms/901465-20.bin"
-            address: 0xC000
+            address: 0xc000
           - file: "/roms/901465-21.bin"
-            address: 0xD000
+            address: 0xd000
           - file: "/roms/901499-01.bin"
-            address: 0xE000
+            address: 0xe000
           - file: "/roms/901465-22.bin"
-            address: 0xF000
+            address: 0xf000
   - name: "Basic 4.0 (40 Col 60 Hz)"
     setup:
       - action: "load"
@@ -42,15 +51,15 @@ configs:
           - file: "/roms/901447-10.bin"
             address: 0x8800
           - file: "/roms/901465-19.bin"
-            address: 0xB000
+            address: 0xb000
           - file: "/roms/901465-20.bin"
-            address: 0xC000
+            address: 0xc000
           - file: "/roms/901465-21.bin"
-            address: 0xD000
+            address: 0xd000
           - file: "/roms/901499-01.bin"
-            address: 0xE000
+            address: 0xe000
           - file: "/roms/901465-22.bin"
-            address: 0xF000
+            address: 0xf000
   - name: "Basic 4.0 (80 Col 60 Hz)"
     setup:
       - action: "load"
@@ -58,15 +67,15 @@ configs:
           - file: "/roms/901447-10.bin"
             address: 0x8800
           - file: "/roms/901465-19.bin"
-            address: 0xB000
+            address: 0xb000
           - file: "/roms/901465-20.bin"
-            address: 0xC000
+            address: 0xc000
           - file: "/roms/901465-21.bin"
-            address: 0xD000
+            address: 0xd000
           - file: "/roms/901474-03.bin"
-            address: 0xE000
+            address: 0xe000
           - file: "/roms/901465-22.bin"
-            address: 0xF000
+            address: 0xf000
   - name: "Basic 4.0 (80 Col 50 Hz)"
     setup:
       - action: "load"
@@ -74,12 +83,12 @@ configs:
           - file: "/roms/901447-10.bin"
             address: 0x8800
           - file: "/roms/901465-19.bin"
-            address: 0xB000
+            address: 0xb000
           - file: "/roms/901465-20.bin"
-            address: 0xC000
+            address: 0xc000
           - file: "/roms/901465-21.bin"
-            address: 0xD000
+            address: 0xd000
           - file: "/roms/901474-04.bin"
-            address: 0xE000
+            address: 0xe000
           - file: "/roms/901465-22.bin"
-            address: 0xF000
+            address: 0xf000

@@ -14,7 +14,7 @@
 
 #include <dirent.h>
 #include "filesystem/vfs.h"
-
+#include "fatal.h"
 #include "global.h"
 #include "driver.h"
 #include "hw.h"
@@ -311,8 +311,10 @@ void menu_init() {
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
-void action_load(const char* filename, uint32_t address) {
-    printf("0x%05lx: %s\n", address, filename);
+void action_load(void* const context, const char* filename, uint32_t address) {
+    (void) context;
+
+    printf("0x%04lx: %s\n", address, filename);
     FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         fatal("Failed to open file '%s'", filename);
@@ -336,6 +338,23 @@ void action_load(const char* filename, uint32_t address) {
     fclose(file);
 }
 
+void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
+    (void) context;
+
+    bool crtc;
+    keyboard_type_t keyboard_type;
+    get_model(&crtc, &keyboard_type);
+
+    if (keyboard_type == keyboard_type_graphics && scanmap_n->size) {
+        printf("0x%4lx: keyboard scanmap (graphics)\n", address);
+        spi_write(address, scanmap_n->data, scanmap_n->size);
+    } else if (scanmap_b->size) {
+        assert(keyboard_type == keyboard_type_business);
+        printf("0x%4lx: keyboard scanmap (business)\n", address);
+        spi_write(address, scanmap_b->data, scanmap_b->size);
+    }
+}
+
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
@@ -350,6 +369,7 @@ void menu_enter() {
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
     const setup_sink_t setup_sink = {
         .on_action_load = action_load,
+        .on_action_set_scanmap = action_set_scanmap,
     };
 
     menu_config_show(&window, &setup_sink);

@@ -2,11 +2,13 @@
 
 ## Naming
 
-Generation | Name      | Level
------------|-----------|---------------
-Original   | Basic 1.0 | Level 2 Basic
-Upgrade    | Basic 2.0 | Level 3 Basic
-4.0        | Basic 4.0 | Level 4 Basic
+Generation | Level           | Official Name  | Common Name |
+-----------|-----------------|----------------|-------------|
+Original   | Basic Level I   | ROM 1.0        |  BASIC 1.0  |
+Original   | Basic Level II  | ROM 2.0        |  BASIC 1.0r |
+Upgrade    | Basic Level III | ROM 3.0        |  BASIC 2.0  |
+4.0        | Basic Level IV  | ROM 4.0 - 4.1  |  BASIC 4.0  |
+
 
 ## ROM 1.0
 
@@ -317,7 +319,8 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
   * [Editor from 4032 4.0 CRTC 60Hz Graphics](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-60hz-901499-01.dis.txt)
   * [SJGray's Disassemblies](https://github.com/sjgray/cbm-edit-rom/tree/master/disassemblies)
 * [Memory Map](https://www.commodore.ca/manuals/pdfs/commodore_pet_memory_map.pdf)
-* Genealogy [1](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [2](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
+* Genealogy
+  * The Official Commodore ROM Genealogy [1](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/30/mode/2up) [2](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [3](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
 * [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt)
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
 * [Keyscan Maps](https://github.com/sjgray/cbm-edit-rom/blob/master/keyboard-tables1.asm)

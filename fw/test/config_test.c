@@ -41,9 +41,27 @@ int term_input_char() {
     return getchar();
 }
 
-void on_action_load(const char* filename, uint32_t address) {
+void on_action_load(void* context, const char* filename, uint32_t address) {
     // This is a placeholder for the actual callback implementation
-    printf("Action load: %s @ %05x\n", filename, address);
+    printf("Action load: %s @ %04x\n", filename, address);
+}
+
+void print_scanmap(const binary_t* scanmap) {
+    for (size_t i = 0; i < scanmap->size; i) {
+        for (size_t j = 0; j < 8; j++) {
+            printf("%02x ", scanmap->data[i++]);
+        }
+        printf("\n");
+    }
+}
+
+void on_action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
+    // This is a placeholder for the actual callback implementation
+    printf("Action set-scanmap: %04x\n", address);
+    printf("\nScanmap N:\n");
+    print_scanmap(scanmap_n);
+    printf("\nScanmap B:\n");
+    print_scanmap(scanmap_b);
 }
 
 void config_test() {
@@ -51,6 +69,7 @@ void config_test() {
     
     const setup_sink_t setup_sink = {
         .on_action_load = on_action_load,
+        .on_action_set_scanmap = on_action_set_scanmap,
     };
 
     enable_raw_mode();

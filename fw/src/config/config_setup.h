@@ -1,7 +1,7 @@
 /**
  * PET Clone - Open hardware implementation of the Commodore PET
  * by Daniel Lehenbauer and contributors.
- *
+ * 
  * https://github.com/DLehenbauer/commodore-pet-clone
  *
  * To the extent possible under law, I, Daniel Lehenbauer, have waived all
@@ -12,21 +12,22 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#pragma once
+ #pragma once
 
-#include "pch.h"
-#include "config/config_setup.h"
-#include "menu/window.h"
+ #include "../pch.h"
+ 
+ typedef struct binary_s {
+    uint8_t* data;
+    size_t size;
+    size_t capacity;
+    size_t expected;
+} binary_t;
 
-typedef void (*on_enter_config_fn_t)(void* context);
-typedef void (*on_exit_config_fn_t)(void* context, const char* name);
+typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);
+typedef void (*on_set_scanmap_fn_t)(void* user_data, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b);
 
-// Struct for sinking parsed data
-typedef struct config_sink_s {
+typedef struct setup_sink_s {
     void* const context;
-    const on_enter_config_fn_t on_enter_config;
-    const on_exit_config_fn_t on_exit_config;
-    const setup_sink_t* const setup;
-} config_sink_t;
-
-void parse_config_file(const char* filename, const config_sink_t* const sink);
+    const on_load_fn_t on_action_load;
+    const on_set_scanmap_fn_t on_action_set_scanmap;
+} setup_sink_t;

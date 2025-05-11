@@ -190,12 +190,14 @@ void set_video(bool col80) {
     spi_write_at(REG_VIDEO, state);
 }
 
-void get_model(bool* crtc, bool* business) {
+void get_model(bool* crtc, keyboard_type_t* business) {
     uint8_t status = spi_read_at(REG_STATUS);
 
     // DIP switch is active low
-    *crtc = (status & REG_STATUS_CRT) == 0;             // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
-    *business = (status & REG_STATUS_KEYBOARD) == 0;    // Keyboard type (0 = Business, 1 = Graphics)
+    *crtc = (status & REG_STATUS_CRT) == 0;     // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    *business = (status & REG_STATUS_KEYBOARD)  // Keyboard type (0 = Business, 1 = Graphics)
+        ? keyboard_type_graphics
+        : keyboard_type_business;
 }
 
 void sync_state() {
@@ -203,3 +205,4 @@ void sync_state() {
     uint8_t status = spi_read_at(REG_STATUS);
     video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
 }
+

@@ -21,23 +21,36 @@
 #include "window.h"
 
 typedef struct setup_context_s {
-    const setup_sink_t* const setup_sink;
+    const setup_sink_t* const original_setup;
     unsigned int skip_count;
 } setup_context_t;
 
-void on_enter_config_callback(void* user_data) {
-    setup_context_t* const ctx = (setup_context_t*) user_data;
+void on_enter_config_callback(void* context) {
+    setup_context_t* const ctx = (setup_context_t*) context;
     ctx->skip_count--;
 }
 
-void on_action_load_callback(void* user_data, const char* filename, uint32_t address) {
-    setup_context_t* const ctx = (setup_context_t*) user_data;
+void on_action_load_callback(void* context, const char* filename, uint32_t address) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
     if (ctx->skip_count != 0xffffffff) {
         return;
     }
 
-    if (ctx->setup_sink->on_action_load != NULL) {
-        ctx->setup_sink->on_action_load(filename, address);
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_action_load != NULL) {
+        setup->on_action_load(setup->context, filename, address);
+    }
+}
+
+void on_action_set_scanmap_callback(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_action_set_scanmap != NULL) {
+        setup->on_action_set_scanmap(setup->context, address, scanmap_n, scanmap_b);
     }
 }
 
@@ -47,15 +60,21 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     printf("Loading config: %d\n", selected_config);
 
     setup_context_t ctx = {
-        .setup_sink = setup_sink,
+        .original_setup = setup_sink,
         .skip_count = selected_config,
     };
 
+    setup_sink_t intermediate_setup_sink = {
+        .context = &ctx,
+        .on_action_load = on_action_load_callback,
+        .on_action_set_scanmap = on_action_set_scanmap_callback,
+    };
+
     config_sink_t sink = {
-        .user_data = &ctx,
+        .context = &ctx,
+        .setup = &intermediate_setup_sink,
         .on_enter_config = on_enter_config_callback,
         .on_exit_config = NULL,
-        .on_action_load = on_action_load_callback,
     };
     
     parse_config_file("/config.yaml", &sink);
@@ -66,8 +85,8 @@ typedef struct context_s {
     unsigned int config_count;
 } context_t;
 
-void on_config_callback(void* user_data, const char* name) {
-    context_t* const ctx = (context_t*) user_data;
+void on_config_callback(void* context, const char* name) {
+    context_t* const ctx = (context_t*) context;
     window_puts(ctx->window, window_xy(ctx->window, 0, ctx->config_count++), name);
 }
 
@@ -78,10 +97,10 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     };
 
     config_sink_t sink = {
-        .user_data = &context,
+        .context = &context,
+        .setup = NULL,
         .on_enter_config = NULL,
         .on_exit_config = on_config_callback,
-        .on_action_load = NULL
     };
 
     term_begin(window);

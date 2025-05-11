@@ -16,11 +16,6 @@
 
 #include "../pch.h"
 #include "menu/window.h"
-
-typedef void (*setup_sink_on_action_load_fn)(const char* file, uint32_t address);
-
-typedef struct setup_sink_s {
-    const setup_sink_on_action_load_fn on_action_load;
-} setup_sink_t;
+#include "config/config_setup.h"
 
 void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink);
