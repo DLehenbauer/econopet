@@ -182,6 +182,11 @@ module keyboard_tb;
             wb.write(col, value);
             $display("[%t]     col %0d <- %2h (WB)", $time, col, value);
 
+            // Read back returns FF until the CPU reads the column.
+            wb.read(col, data_rd);
+            $display("[%t]     col %0d -> %2h (WB)", $time, col, data_rd);
+            `assert_equal(data_rd, 8'hFF);
+
             cpu_select_col(col);
             cpu_read_current_col(data);
             $display("[%t]     col %0d -> %2h (CPU)", $time, col, data);

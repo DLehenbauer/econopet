@@ -9,7 +9,6 @@ Original   | Basic Level II  | ROM 2.0        |  BASIC 1.0r |
 Upgrade    | Basic Level III | ROM 3.0        |  BASIC 2.0  |
 4.0        | Basic Level IV  | ROM 4.0 - 4.1  |  BASIC 4.0  |
 
-
 ## ROM 1.0
 
 Early production PET 2001 units used MOS 6540 ROMs (28-pin).  Later revisions used 2316 ROMs (24-pin).

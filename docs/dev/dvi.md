@@ -168,7 +168,7 @@ int __not_in_flash("main") main() {
 ```
 
 # 80 Column w/16 colors
-Hacking the 'colour_terminal' example produces 80 colums with CGA colors, but has some downsides:
+Hacking the 'colour_terminal' example produces 80 columns with CGA colors, but has some downsides:
 
 1. Font data needs to be swizzled to be scanline oriented.
 2. There is blue/yellow garbage at 720x480 (no overscan).
