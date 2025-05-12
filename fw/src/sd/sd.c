@@ -25,6 +25,11 @@
 #include "filesystem/vfs.h"
 
 bool sd_init() {
+    // Deassert SD CS
+    gpio_init(SD_CSN_GP);
+    gpio_set_dir(SD_CSN_GP, GPIO_OUT);
+    gpio_put(SD_CSN_GP, 1);
+
     blockdevice_t* sd = blockdevice_sd_create(
         SD_SPI_INSTANCE,
         /* tx: */ SD_CMD_GP,
@@ -57,15 +62,22 @@ FILE* sd_open(const char* path, const char* mode) {
     return file;
 }
 
-void sd_read(const char* filename, FILE* file, sd_read_callback_t callback, void* context) {
+size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size) {
+    size_t bytes_read = fread(dest, 1, size, file);
+
+    if (ferror(file)) {
+        fatal("error reading '%s'", filename);
+    }
+
+    return bytes_read;
+}
+
+void sd_read_file(const char* filename, sd_read_callback_t callback, void* context) {
+    FILE* file = sd_open(filename, "rb");
     uint8_t* buffer = acquire_temp_buffer();
 
     while (true) {
-        size_t bytes_read = fread(buffer, 1, TEMP_BUFFER_SIZE, file);
-
-        if (ferror(file)) {
-            fatal("error reading '%s'", filename);
-        }
+        size_t bytes_read = sd_read(filename, file, buffer, TEMP_BUFFER_SIZE);
 
         if (bytes_read == 0) {
             break;

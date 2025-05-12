@@ -12,14 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-// Run 'fpga/bitstream.sh' to generate 'fpga/bitstream.h', or use a JTAG programmer to 
-// manually configure the FPGA after power on for a faster development loop.
-#if __has_include("fpga/bitstream.h")
-    #define FPGA_PROG
-#else
-    #warning "'fpga/bitstream.h' not found.  Use JTAG programmer to configure FPGA."
-#endif
-
 #include "pch.h"
 #include "driver.h"
 #include "global.h"
@@ -54,12 +46,6 @@ void measure_freqs(uint fpga_div) {
     printf("    clk_fpga = %lu kHz\n", f_clk_sys / fpga_div);
 }
 
-#ifdef FPGA_PROG
-static const uint8_t __in_flash(".fpga_bitstream") bitstream[] = {
-    #include "./fpga/bitstream.h"
-};
-#endif
-
 void fpga_write_zeros(size_t count) {
     assert(count <= TEMP_BUFFER_SIZE);
     
@@ -67,6 +53,11 @@ void fpga_write_zeros(size_t count) {
     memset(temp_buffer, 0, count);
     spi_write_blocking(FPGA_SPI_INSTANCE, temp_buffer, count);
     release_temp_buffer(&temp_buffer);
+}
+
+void fpga_read_bitstream_callback(uint8_t* buffer, size_t bytes_read, void* context) {
+    (void)context;
+    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
 }
 
 void fpga_init() {
@@ -125,10 +116,7 @@ void fpga_init() {
         return;
     }
 
-    #ifdef FPGA_PROG
-
     // Create a clean CRESET_N pulse to initiate FPGA configuration.
-    gpio_init(FPGA_CRESET_GP);
     gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
     gpio_put(FPGA_CRESET_GP, 1);
     sleep_ms(1);  // t_CRESET_N = 320 ns
@@ -149,9 +137,11 @@ void fpga_init() {
 
     sleep_ms(1);  // t_CRESET_N = 320 ns
     gpio_put(FPGA_CRESET_GP, 1);
+    sleep_ms(1);  // t_CRESET_N = 320 ns
 
-    printf("FPGA: Sending %d bytes\n", sizeof(bitstream));
-    spi_write_blocking(FPGA_SPI_INSTANCE, bitstream, sizeof(bitstream));
+    // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must enable 'Generate SPI Raw
+    // Binary Configuration File' under ~File ~Edit Project ~Bitstream Generation.
+    sd_read_file("/fpga/EconoPET.hex.bin", fpga_read_bitstream_callback, NULL);
 
     // To ensure successful configuration, the microprocessor must continue to supply the
     // configuration clock to the Trion FPGA for at least 100 cycles after sending the last
@@ -172,15 +162,6 @@ void fpga_init() {
     fpga_write_zeros(/* count: */ 1);
 
     printf("FPGA: DONE\n");
-
-    #else
-
-    // FPGA_PROG is not defined and no FPGA programmer is attached.
-    // Did you forget to generate 'bitstream.h'?
-    printf("ERROR: No FPGA programmer attached.\n");
-    assert(false);
-
-    #endif
 }
 
 int main() {
@@ -191,14 +172,8 @@ int main() {
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
     menu_init();    // Begin charging debouncing capacitor.
-    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.
-
-    // Deassert SD CS
-    gpio_init(SD_CSN_GP);
-    gpio_set_dir(SD_CSN_GP, GPIO_OUT);
-    gpio_put(SD_CSN_GP, 1);
-    
     sd_init();
+    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.    
     video_init();
     usb_init();
 

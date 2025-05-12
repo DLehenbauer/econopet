@@ -20,5 +20,7 @@ bool sd_init();
 
 FILE* sd_open(const char* path, const char* mode);
 
+size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size);
+
 typedef void (*sd_read_callback_t)(uint8_t* buffer, size_t bytes_read, void* context);
-void sd_read(const char* path, FILE* file, sd_read_callback_t callback, void* context);
+void sd_read_file(const char* path, sd_read_callback_t callback, void* context);
