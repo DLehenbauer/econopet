@@ -176,7 +176,6 @@ int main() {
     fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.    
     video_init();
     usb_init();
-
     menu_enter();
 
     while (true) {

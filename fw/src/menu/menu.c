@@ -26,6 +26,7 @@
 #include "menu.h"
 #include "menu_config.h"
 #include "window.h"
+#include "usb/keyboard.h"
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.
@@ -78,6 +79,8 @@ void term_present() {
 }
 
 int term_input_char() {
+    int keycode = keyboard_getch();
+
     if (uart_is_readable(uart_default)) {
         return uart_getc(uart_default);
     }

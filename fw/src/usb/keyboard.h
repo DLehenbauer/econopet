@@ -20,8 +20,12 @@
 // The 'key_matrix' array is indexed by column and contains the row byte for that column.
 // A key is pressed when the corresponding bit is 0.
 #define KEY_COL_COUNT 10
+#define KEY_ROW_COUNT 8
 extern uint8_t key_matrix[KEY_COL_COUNT];
 extern uint8_t pet_key_matrix[KEY_COL_COUNT];
+
+uint8_t key_rc_to_i(uint8_t col, uint8_t row);
+int keyboard_getch();
 
 //void process_kbd_report(hid_keyboard_report_t const *report);
 void dispatch_key_events();

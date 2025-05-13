@@ -201,8 +201,9 @@ void get_model(bool* crtc, keyboard_type_t* business) {
 }
 
 void sync_state() {
-    spi_write_read(ADDR_KBD, key_matrix, pet_key_matrix, KEY_COL_COUNT);
+    spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
+    spi_read(ADDR_KBD, KEY_COL_COUNT, pet_key_matrix);
+
     uint8_t status = spi_read_at(REG_STATUS);
     video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
 }
-
