@@ -13,13 +13,15 @@
  */
 
 #include <check.h>
+#include "keyscan_test.h"
 #include "keystate_test.h"
 #include "config_test.h"
 #include "menu_test.h"
 #include "window_test.h"
 
 int run_suite() {
-    SRunner* sr = srunner_create(keystate_suite());
+    SRunner* sr = srunner_create(keyscan_suite());
+    srunner_add_suite(sr, keystate_suite());
     srunner_add_suite(sr, window_suite());
 
     // To aide debugging, run tests in the current process.
