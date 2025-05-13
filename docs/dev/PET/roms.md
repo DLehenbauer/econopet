@@ -2,12 +2,13 @@
 
 ## Naming
 
-Generation | Level           | Official Name  | Common Name |
------------|-----------------|----------------|-------------|
-Original   | Basic Level I   | ROM 1.0        |  BASIC 1.0  |
-Original   | Basic Level II  | ROM 2.0        |  BASIC 1.0r |
-Upgrade    | Basic Level III | ROM 3.0        |  BASIC 2.0  |
-4.0        | Basic Level IV  | ROM 4.0 - 4.1  |  BASIC 4.0  |
+Generation | Level           | Commodore Name |    Community Name      |
+-----------|-----------------|----------------|------------------------|
+Original   | Basic Level I   | ROM 1.0        |  BASIC 1.0 (unpatched) |
+Original   | Basic Level II  | ROM 2.0        |  BASIC 1.0 (patched)   |
+Upgrade    | Basic Level III | ROM 3.0        |  BASIC 2.0             |
+4.0        | Basic Level IV  | ROM 4.0        |  BASIC 4.0 (unpatched) |
+4.0        | Basic Level IV  | ROM 4.1        |  BASIC 4.0 (patched)   |
 
 ## ROM 1.0
 
@@ -62,7 +63,6 @@ Highlights:
 
 * Corrects an intermittent bug in the edit software.
 * Improves the garbage collection routines.
-* Maybe removed 256 element restriction?
 
 Identical to ROM 1.0 except H1 ($C000).
 
@@ -85,20 +85,20 @@ Characters  | characters-1.901447-08.bin      |   2048 | 54f32f45
 
 Highlights:
 
-* Changed the banner ("***" -> "###")
+* Changed the banner ("***" -> "###").
 * Fixed support for commodore disk system.
-* Fixed bug limiting the dimensions of arrays. (or was that 2.0?)
-* Adds machine language monitor
-* Improved garbage collection.
+* Fixed bug limiting the dimensions of arrays.
+* Adds machine language monitor.
+* Further improved garbage collection.
 * Re-arranged the zero-page and ROM entry points
-* Adds ROM set for business keyboards
-* New character ROM (swaps upper/lower case)
+* Adds ROM set for business keyboards.
+* New character ROM (swaps upper/lower case).
 * Screen output polls for vertical refresh to avoid "sparkle".
 
 ### PET 2001 / 30xx
 
 The 24-pin BASIC and Kernal ROMs are 4KB.  The contents of H1-H3 are identical to the concatenation of H1/H5, H2/H6, H3/H7.
-The 28-pin ROM upgrade set did not include a new character ROM.  Therefore, upper/lowercase continues to be swapped (like in BASIC 1-2).
+The 28-pin ROM upgrade set did not include a new character ROM.  Therefore, upper/lowercase continue to be swapped (like in BASIC 1-2).
 
 Address | Location | 6540 IC# | 6540 Part# | CRC-32    | 2316B IC# | 2316B Part# | CRC-32
 --------|----------|----------|------------|-----------|-----------|-------------|----------
@@ -318,9 +318,12 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
   * [Editor from 4032 4.0 CRTC 60Hz Graphics](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-60hz-901499-01.dis.txt)
   * [SJGray's Disassemblies](https://github.com/sjgray/cbm-edit-rom/tree/master/disassemblies)
 * [Memory Map](https://www.commodore.ca/manuals/pdfs/commodore_pet_memory_map.pdf)
+* [PET-Interfaces.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-Interfaces.txt) by William Levak
 * Genealogy
   * The Official Commodore ROM Genealogy [1](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/30/mode/2up) [2](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [3](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
-* [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt)
+* [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt) by William Levak
+* [README](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/README) by Olaf Seibert
+* [README.also](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/README.also) by William Levak
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
 * [Keyscan Maps](https://github.com/sjgray/cbm-edit-rom/blob/master/keyboard-tables1.asm)
 * [Jim Butterfield](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n9/mode/2up)
