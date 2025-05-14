@@ -20,16 +20,21 @@
 #include "window_test.h"
 
 int run_suite() {
-    SRunner* sr = srunner_create(keyscan_suite());
-    srunner_add_suite(sr, keystate_suite());
-    srunner_add_suite(sr, window_suite());
+    int number_failed = 0;
 
-    // To aide debugging, run tests in the current process.
-    // srunner_set_fork_status(sr, CK_NOFORK);
+    // These tests are run in the same process for convenient debugging.
+    SRunner* sr1 = srunner_create(keyscan_suite());
+    srunner_add_suite(sr1, keystate_suite());
+    srunner_set_fork_status(sr1, CK_NOFORK);
+    srunner_run_all(sr1, CK_VERBOSE);
+    number_failed += srunner_ntests_failed(sr1);
+    srunner_free(sr1);
 
-    srunner_run_all(sr, CK_NORMAL);
-    int number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
+    // These tests are run in a separate process as they intentionally assert.
+    SRunner* sr2 = srunner_create(window_suite());
+    srunner_run_all(sr2, CK_VERBOSE);
+    number_failed += srunner_ntests_failed(sr2);
+    srunner_free(sr2);
 
     return (number_failed == 0) ? 0 : 1;
 }

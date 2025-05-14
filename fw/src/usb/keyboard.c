@@ -14,6 +14,7 @@
 
 #include "keyboard.h"
 #include "keystate.h"
+#include "keyscan.h"
 
 uint8_t key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -325,30 +326,6 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     prev_report = *report;
 }
 
-uint8_t key_rc_to_i(uint8_t row, uint8_t col) {
-    assert(row < KEY_ROW_COUNT);
-    assert(col < KEY_COL_COUNT);
-    return (row << 4) | col;
-}
-
-static uint8_t get_pet_keycode() {
-    uint8_t keycode = 0;
-
-    for (uint8_t col = 0; col < KEY_COL_COUNT; col++) {
-        uint8_t current_row = pet_key_matrix[col];
-        if (current_row != 0xff) {
-            for (uint8_t row = 0, row_mask = 1; row < KEY_ROW_COUNT; row++, row <<= 1) {
-                if ((pet_key_matrix[col] & row_mask) == 0) {
-                    keycode = key_rc_to_i(row, col);
-                    break;
-                }
-            }
-        }
-    }
-
-    return keycode;
-}
-
 int keyboard_getch() {
     tuh_task();
     cdc_app_task();     // TODO: USB serial console unused.  Remove?
@@ -356,13 +333,5 @@ int keyboard_getch() {
     dispatch_key_events();
     sync_state();
 
-    uint8_t keycode = get_pet_keycode();
-
-    switch (keycode) {
-        case 0x00: // No key pressed
-            return EOF;
-        default:
-            printf("PET: Key pressed: %02x=(%d,%d)\n", keycode, keycode >> 4, keycode & 0x0f);
-            return EOF;
-    }
+    return keyscan_getch(pet_key_matrix);
 }

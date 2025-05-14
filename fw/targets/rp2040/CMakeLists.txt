@@ -50,6 +50,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/usb/cdc_app.c
     ${SRC_DIR}/usb/hid_app.c
     ${SRC_DIR}/usb/keyboard.c
+    ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
     ${SRC_DIR}/usb/msc_app.c
     ${SRC_DIR}/usb/usb.c
