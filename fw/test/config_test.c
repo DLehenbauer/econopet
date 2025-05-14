@@ -68,12 +68,27 @@ void on_action_set_scanmap(void* context, uint32_t address, const binary_t* scan
     print_scanmap(scanmap_b);
 }
 
+void on_action_patch(void* context, uint32_t address, const binary_t* binary) {
+    (void) context;
+
+    printf("Action patch: %04x\n", address);
+    printf("Binary size: %zu\n", binary->size);
+}
+
+void on_action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
+    (void) context;
+
+    printf("Action copy: %04x -> %04x, length: %u\n", source, destination, length);
+}
+
 void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
     
     const setup_sink_t setup_sink = {
         .on_action_load = on_action_load,
         .on_action_set_scanmap = on_action_set_scanmap,
+        .on_action_copy = on_action_copy,
+        .on_action_patch = on_action_patch,
     };
 
     enable_raw_mode();

@@ -25,9 +25,13 @@
 
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);
 typedef void (*on_set_scanmap_fn_t)(void* user_data, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b);
+typedef void (*on_patch_fn_t)(void* user_data, uint32_t address, const binary_t* binary);
+typedef void (*on_copy_fn_t)(void* user_data, uint32_t source, uint32_t destination, uint32_t length);
 
 typedef struct setup_sink_s {
     void* const context;
     const on_load_fn_t on_action_load;
     const on_set_scanmap_fn_t on_action_set_scanmap;
+    const on_patch_fn_t on_action_patch;
+    const on_copy_fn_t on_action_copy;
 } setup_sink_t;

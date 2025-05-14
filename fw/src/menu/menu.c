@@ -370,6 +370,39 @@ void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap
     }
 }
 
+void action_patch(void* context, uint32_t address, const binary_t* binary) {
+    (void) context;
+
+    printf("0x%4lx: patching %lu bytes bytes\n", address, binary->size);
+    spi_write(address, binary->data, binary->size);
+}
+
+void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
+    (void)context;
+
+    printf("0x%04lx: copying %lu bytes from 0x%04lx\n", source, length, destination);
+    uint8_t* temp_buffer = acquire_temp_buffer();
+
+    if (destination > source) {
+        while (length > 0) {
+            size_t chunk_size = MIN(length, TEMP_BUFFER_SIZE);
+            spi_read(source + length - chunk_size, chunk_size, temp_buffer);
+            spi_write(destination + length - chunk_size, temp_buffer, chunk_size);
+            length -= chunk_size;
+        }
+    } else {
+        uint32_t offset = 0;
+        while (offset < length) {
+            size_t chunk_size = MIN(length - offset, TEMP_BUFFER_SIZE);
+            spi_read(source + offset, chunk_size, temp_buffer);
+            spi_write(destination + offset, temp_buffer, chunk_size);
+            offset += chunk_size;
+        }
+    }
+
+    release_temp_buffer(&temp_buffer);
+}
+
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
@@ -385,6 +418,8 @@ void menu_enter() {
     const setup_sink_t setup_sink = {
         .on_action_load = action_load,
         .on_action_set_scanmap = action_set_scanmap,
+        .on_action_patch = action_patch,
+        .on_action_copy = action_copy,
     };
 
     menu_config_show(&window, &setup_sink);

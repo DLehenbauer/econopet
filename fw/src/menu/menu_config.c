@@ -25,12 +25,12 @@ typedef struct setup_context_s {
     unsigned int skip_count;
 } setup_context_t;
 
-void on_enter_config_callback(void* context) {
+static void on_enter_config_callback(void* context) {
     setup_context_t* const ctx = (setup_context_t*) context;
     ctx->skip_count--;
 }
 
-void on_action_load_callback(void* context, const char* filename, uint32_t address) {
+static void on_action_load_callback(void* context, const char* filename, uint32_t address) {
     const setup_context_t* const ctx = (setup_context_t*) context;
     if (ctx->skip_count != 0xffffffff) {
         return;
@@ -42,7 +42,7 @@ void on_action_load_callback(void* context, const char* filename, uint32_t addre
     }
 }
 
-void on_action_set_scanmap_callback(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
+static void on_action_set_scanmap_callback(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
     const setup_context_t* const ctx = (setup_context_t*) context;
     if (ctx->skip_count != 0xffffffff) {
         return;
@@ -51,6 +51,30 @@ void on_action_set_scanmap_callback(void* context, uint32_t address, const binar
     const setup_sink_t* const setup = ctx->original_setup;
     if (setup->on_action_set_scanmap != NULL) {
         setup->on_action_set_scanmap(setup->context, address, scanmap_n, scanmap_b);
+    }
+}
+
+static void on_action_patch_callback(void* context, uint32_t address, const binary_t* binary) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_action_patch != NULL) {
+        setup->on_action_patch(setup->context, address, binary);
+    }
+}
+
+static void on_action_copy_callback(void* context, uint32_t source, uint32_t destination, uint32_t length) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_action_copy != NULL) {
+        setup->on_action_copy(setup->context, source, destination, length);
     }
 }
 
@@ -68,6 +92,8 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .context = &ctx,
         .on_action_load = on_action_load_callback,
         .on_action_set_scanmap = on_action_set_scanmap_callback,
+        .on_action_patch = on_action_patch_callback,
+        .on_action_copy = on_action_copy_callback,
     };
 
     config_sink_t sink = {

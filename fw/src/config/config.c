@@ -89,6 +89,18 @@ static void on_action_set_scanmap(const parser_t* const parser, uint32_t address
     }
 }
 
+static void on_action_patch(const parser_t* const parser, uint32_t address, const binary_t* binary) {
+    if (parser->sink->setup && parser->sink->setup->on_action_patch) {
+        parser->sink->setup->on_action_patch(parser->sink->setup->context, address, binary);
+    }
+}
+
+static void on_action_copy(const parser_t* const parser, uint32_t source, uint32_t destination, uint32_t length) {
+    if (parser->sink->setup && parser->sink->setup->on_action_copy) {
+        parser->sink->setup->on_action_copy(parser->sink->setup->context, source, destination, length);
+    }
+}
+
 static yaml_char_t* get_current_anchor(parser_t* parser) {
     switch (parser->event.type) {
         case YAML_MAPPING_START_EVENT: return parser->event.data.mapping_start.anchor;
@@ -307,27 +319,30 @@ static void parse_as_uint32(parser_t* parser, void* context, size_t context_size
     return parse_uint32(parser, (uint32_t*) context);
 }
 
-static void parse_as_binary(parser_t* parser, void* context, size_t context_size) {
+static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
     parse_expect_type(parser, YAML_SCALAR_EVENT);
     assert(context_size == sizeof(binary_t));
 
-    binary_t* buffer = (binary_t*) context;
+    binary_t* binary = (binary_t*) context;
+    if (binary->size != 0) {
+        fatal_parse_error(parser, "duplicate binary/hex entry");
+    }
 
     const char* str = get_current_string(parser);
 
     size_t len = strlen(str);
-    if (buffer->size != 0 && len != buffer->size * 2) {
-        fatal_parse_error(parser, "expected %zu chars, got %zu", buffer->size, len);
+    if (binary->expected != 0 && len != binary->expected * 2) {
+        fatal_parse_error(parser, "expected %zu chars, got %zu", binary->expected, len);
     } else if (len % 2 != 0) {
         fatal_parse_error(parser, "hex string must have even length");
     }
 
-    buffer->size = len / 2;
-    if (buffer->size > buffer->capacity) {
+    binary->size = len / 2;
+    if (binary->size > binary->capacity) {
         fatal_parse_error(parser, "hex string exceeds expected size");
     }
 
-    for (size_t write_index = 0, read_index = 0; write_index < buffer->size; write_index++) {
+    for (size_t write_index = 0, read_index = 0; write_index < binary->size; write_index++) {
         char hex_byte[3] = { str[read_index++], str[read_index++], '\0' };
         char* endptr = NULL;
         long value = strtol(hex_byte, &endptr, 16);
@@ -336,7 +351,7 @@ static void parse_as_binary(parser_t* parser, void* context, size_t context_size
             fatal_parse_error(parser, "Invalid hex '%s'", hex_byte);
         }
 
-        buffer->data[write_index] = (uint8_t) value;
+        binary->data[write_index] = (uint8_t) value;
     }
 }
 
@@ -444,13 +459,56 @@ static void parse_action_set_scanmap(parser_t* parser, void* context, size_t con
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "address", parse_as_uint32, &address, sizeof(uint32_t) },
-        { "graphics", parse_as_binary, &scanmap_n, sizeof(scanmap_n) },
-        { "business", parse_as_binary, &scanmap_b, sizeof(scanmap_b) },
+        { "graphics", parse_as_hex, &scanmap_n, sizeof(scanmap_n) },
+        { "business", parse_as_hex, &scanmap_b, sizeof(scanmap_b) },
         { NULL, NULL, NULL, 0 }
     });
 
     on_action_set_scanmap(parser, address, &scanmap_n, &scanmap_b);
 }
+
+static void parse_action_patch(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    uint32_t address = 0;
+
+    uint8_t* binary_data = acquire_temp_buffer();
+    binary_t binary = {
+        .data = binary_data,
+        .size = 0,
+        .expected = 0,
+        .capacity = TEMP_BUFFER_SIZE
+    };
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "address", parse_as_uint32, &address, sizeof(uint32_t) },
+        { "hex", parse_as_hex, &binary, sizeof(binary) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    on_action_patch(parser, address, &binary);
+    release_temp_buffer(&binary_data);
+}
+
+static void parse_action_copy(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    uint32_t source = 0;
+    uint32_t destination = 0;
+    uint32_t length = 0;
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "source", parse_as_uint32, &source, sizeof(uint32_t) },
+        { "destination", parse_as_uint32, &destination, sizeof(uint32_t) },
+        { "length", parse_as_uint32, &length, sizeof(uint32_t) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    on_action_copy(parser, source, destination, length);
+}
+
 
 static void parse_action(parser_t* parser, void* context, size_t context_size) {
     (void)context;
@@ -463,6 +521,10 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_load(parser, NULL, 0);
     } else if (strcmp(action, "set-scanmap") == 0) {
         parse_action_set_scanmap(parser, NULL, 0);
+    } else if (strcmp(action, "patch") == 0) {
+        parse_action_patch(parser, NULL, 0);
+    } else if (strcmp(action, "copy") == 0) {
+        parse_action_copy(parser, NULL, 0);
     } else {
         fatal_parse_error(parser, "Unknown action '%s'", action);
     }

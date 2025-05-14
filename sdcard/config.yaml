@@ -28,6 +28,10 @@ configs:
         address: 0xe75c
         graphics: *qwerty-n
         business: *qwerty-b
+      - action: "copy"
+        source: 0xe7b4
+        destination: 0xe7ad
+        length: 0x06
   - name: "Basic 4.0 (40 Col 50 Hz)"
     setup:
       - action: "load"

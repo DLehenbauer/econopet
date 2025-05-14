@@ -55,6 +55,20 @@ Graphics/QWERTY keyscan map at $e75c:
 >C:e7a4  1d 13 5f 28  26 25 23 21   .._(&%#!
 ```
 
+### Vertical Refresh
+
+To prevent sparkle, polls via VIA PB5 (pin 15) to wait for vertical refresh before writing to VRAM.
+
+```txt
+.C:e7ad  AD 40 E8    LDA $E840
+.C:e7b0  29 20       AND #$20
+.C:e7b2  D0 F9       BNE $E7AD
+```
+
+### Disk
+
+There is a patch for H4 [here](https://hub.inktada.com/channel/rom1diskmagic) that fixes the issue with disk drives.
+
 [Disassembly](https://www.zimmers.net/anonftp/pub/cbm/src/pet/rom-1.html)
 
 ## ROM 2.0
@@ -327,6 +341,9 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
 * [Hash Codes](http://mhv.bplaced.net/cbmroms/cbmroms.php)
 * [Keyscan Maps](https://github.com/sjgray/cbm-edit-rom/blob/master/keyboard-tables1.asm)
 * [Jim Butterfield](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n9/mode/2up)
+* Basic 1/2 IEEE Bug:
+  * [Fachat's Notes](https://www.softwolves.com/arkiv/cbm-hackers/24/24293.html)
+  * [Rom1 Disk Magic](https://hub.inktada.com/channel/rom1diskmagic)
 
 ## Tools
 

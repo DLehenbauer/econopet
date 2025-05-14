@@ -19,9 +19,11 @@
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 
 // All pico-vfs paths are absolute, starting with '/'.
+// /workspaces/econopet/build/sdcard/sdcard_root/config.yaml
+// /workspaces/econopet/sdcard/config.yaml
 static const char* map_path(const char* const path) {
     static char relative_path[PATH_MAX];
-    snprintf(relative_path, sizeof(relative_path), "../../../build/sdcard/sdcard_root%s", path);
+    snprintf(relative_path, sizeof(relative_path), "../../../sdcard%s", path);
     return relative_path;
 }
 
