@@ -75,6 +75,7 @@ There is a patch for H4 [here](https://hub.inktada.com/channel/rom1diskmagic) th
 
 Highlights:
 
+* Fixed bug limiting the dimensions of arrays.
 * Corrects an intermittent bug in the edit software.
 * Improves the garbage collection routines.
 
@@ -101,7 +102,6 @@ Highlights:
 
 * Changed the banner ("***" -> "###").
 * Fixed support for commodore disk system.
-* Fixed bug limiting the dimensions of arrays.
 * Adds machine language monitor.
 * Further improved garbage collection.
 * Re-arranged the zero-page and ROM entry points
@@ -154,7 +154,7 @@ Edit        | edit-2-b.901474-01.bin          |   2048 | 05db957e
 
 Highlights:
 
-* Added the disk commands
+* Added the disk commands and status variables
 * Greatly improved the garbage collection
 * Adds ROM set for 80 column displays
 

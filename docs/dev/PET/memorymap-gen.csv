@@ -1,0 +1,1893 @@
+1.0,2.0,4.0,LABEL,DESCRIPTION
+----,----,----,CR0,"6545 Video interface chip - CRT controller"
+----,----,----,CR1,"Sets top margin of screen (8-bit registers ""cr2""-""crf"" follow)"
+0000,----,----,L00,x
+0000,----,----,buf,
+0002,----,----,L02,x
+C75F,----,----,NULL,x
+FE80,----,----,BCI1,x
+FE9E,----,----,BCI2,x
+----,----,----,PABBO,Patches
+----,----,----,PCTH0,+
+----,----,----,PCTH1,+
+026A,----,----,L026A,x
+C6CF,----,----,CKEOL,x
+C9D8,----,----,LC9D8,"(local symbol)"
+CA5A,----,----,LCA5A,"(local symbol)"
+CA64,----,----,LCA64,"(local symbol)"
+CE3B,----,----,LCE3B,"(local symbol)"
+CE69,----,----,LCE69,"(local symbol)"
+D657,----,----,LD657,"(local symbol)"
+E1AA,----,----,LE1AA,"(local symbol)"
+E1C9,----,----,LE1C9,"(local symbol)"
+E1CE,----,----,LE1CE,"(local symbol)"
+E1D8,----,----,LE1D8,"(local symbol)"
+E1F0,----,----,LE1F0,"(local symbol)"
+E241,----,----,LE241,"(local symbol)"
+E273,----,----,LE273,"(local symbol)"
+E275,----,----,LE275,"(local symbol)"
+E6AC,----,----,LE6AC,"(local symbol)"
+E6AD,----,----,LE6AD,"(local symbol)"
+E73F,----,----,LE73F,"(local symbol)"
+E7F3,----,----,LE7F3,"(local symbol)"
+F253,----,----,LF253,"(local symbol)"
+F2EA,----,----,LF2EA,"(local symbol)"
+F304,----,----,LF304,"(local symbol)"
+F3CC,----,----,LF3CC,"(local symbol)"
+F53B,----,----,LF53B,"(local symbol)"
+F5E3,----,----,LF5E3,"(local symbol)"
+F5E7,----,----,LF5E7,"(local symbol)"
+F71C,----,----,LF71C,"(local symbol)"
+F720,----,----,LF720,"(local symbol)"
+F724,----,----,LF724,"(local symbol)"
+F735,----,----,LF735,"(local symbol)"
+F9CA,----,----,LF9CA,"(local symbol)"
+FD48,----,----,LFD48,"(local symbol)"
+FD4E,----,----,LFD4E,"(local symbol)"
+FD65,----,----,LFD65,"(local symbol)"
+FD6D,----,----,LFD6D,"(local symbol)"
+FD9B,----,----,LFD9B,"(local symbol)"
+FDB3,----,----,LFDB3,"(local symbol)"
+FDC2,----,----,BSYI1,x
+FE0D,----,----,LFE0D,"(local symbol)"
+FE18,----,----,LFE18,"(local symbol)"
+FE2A,----,----,LFE2A,"(local symbol)"
+FE2D,----,----,LFE2D,"(local symbol)"
+FE44,----,----,LFE44,"(local symbol)"
+FE51,----,----,LFE51,"(local symbol)"
+FEAE,----,----,LFEAE,"(local symbol)"
+FEB3,----,----,LFEB3,"(local symbol)"
+FEB8,----,----,LFEB8,"(local symbol)"
+FEC3,----,----,LFEC3,"(local symbol)"
+FEC5,----,----,LFEC5,"(local symbol)"
+FECA,----,----,LFECA,"(local symbol)"
+FECF,----,----,LFECF,"(local symbol)"
+FED9,----,----,LFED9,"(local symbol)"
+FEE1,----,----,LFEE1,"(local symbol)"
+FEE6,----,----,LFEE6,"(local symbol)"
+FEEB,----,----,LFEEB,"(local symbol)"
+FEF0,----,----,LFEF0,"(local symbol)"
+FEFF,----,----,LFEFF,"(local symbol)"
+FF1B,----,----,LFF1B,"(local symbol)"
+FF24,----,----,LFF24,"(local symbol)"
+FF45,----,----,LFF45,"(local symbol)"
+FF9E,----,----,LFF9E,"(local symbol)"
+----,----,----,DIRCAT,"DIRECTORY vector"
+----,----,----,PATCHG,+
+----,----,----,PATCHH,+
+----,----,----,PATCHI,+
+----,----,----,PTHRTI,+
+----,----,----,patch2,"[typo in original?]"
+0004,----,----,NULCNT,x
+C462,----,----,LINLIN,x
+C465,----,----,INLINN,x
+C4C7,----,----,RESPUL,x
+C76D,----,----,FCERR1,x
+C9EE,----,----,PRTNUL,x
+C9F4,----,----,CLRPOS,x
+CA6A,----,----,OUTDO1,x
+CA70,----,----,TRYOUT,x
+D292,----,----,ERRGO1,x
+E150,----,----,INIT20,x
+E19B,----,----,PATCH1,x
+E19F,----,----,PATCH2,x
+E1AB,----,----,PATCH3,x
+E1BC,----,----,PATCH4,x
+E1CC,----,----,PATCH6,x
+E1D9,----,----,PATCH7,x
+0064,000D,----,CNTWFL,x
+----,000F,----,LINWID,"Screen line width (set in INIT but never used)"
+----,0010,----,NCMWFL,x
+C48C,C494,----,INCRTS,x
+----,C721,----,SNERRX,x
+D408,D404,----,FNDVAR,x
+D420,D41E,----,TVAR,x
+D429,D427,----,SVARS,x
+D435,D433,----,SVAR,x
+D43D,D43B,----,SVARGO,x
+D442,D440,----,ARYVAR,x
+D48A,D48A,----,ARYSTR,x
+D497,D497,----,DVARS,x
+D4A1,D4A1,----,DVAR,x
+D4B6,D4B6,----,DVAR2,x
+D4C0,D4C0,----,DVAR3,x
+D4DB,D4DB,----,GRBRTS,x
+D4E0,D4E0,----,GRBPAS,x
+D5AE,D5B0,----,FRETRT,x
+----,D745,----,STORD1,"Microsoft WAIT6502 Easter Egg routine"
+----,D758,----,MRCHKR,"Microsoft WAIT6502 Easter Egg outer loop"
+----,D75A,----,MRCHR,"Microsoft WAIT6502 Easter Egg inner loop"
+----,D766,----,PKINC,+
+----,E082,----,LE082,"Encoded WAIT6502 Easter Egg string (""!TFOSORCIM"")"
+E7AD,E6EB,----,DSPP1,x
+F180,F185,----,UNLSN1,x
+----,FD54,----,LFD54,"(local symbol)"
+FFCF,FFCF,----,KBASIN,"Kernal: Input character from current input device vector"
+FFD2,FFD2,----,KBSOUT,"Kernal: Output a byte to channel"
+FFEA,FFEA,----,KUDTIM,"Kernal: Increment realtime clock"
+0000,0000,0000,USRPOK,"$4C constant = JMP"
+0001,0001,0001,ADDPRC,"USR vector - Lo/Hi (MS additional precision const)"
+----,0002,0002,BUFPAG,x
+0003,0003,0003,STRSIZ,"# locations per descriptor"
+005A,0003,0003,CHARAC,"Starting delimiter / Search character"
+005A,0003,0003,INTEGR,"1 byte integer from ""qint"""
+005B,0004,0004,ENDCHR,"Ending delimiter"
+005C,0005,0005,COUNT,"General counter (Input buffer pointer; # of subscripts)"
+005D,0006,0006,DIMFLG,"Flag to remember dimensioned variables"
+005E,0007,0007,VALTYP,"Flag for variable type: 00=numeric; ff=string"
+005F,0008,0008,INTFLG,"Flag for # type: 80=integer; 00=floating point"
+0060,0009,0009,DORES,"Flag whether can crunch reserved words"
+0060,0009,0009,GARBFL,"Garbage collection flag ($80=already happened)"
+0061,000A,000A,SUBFLG,"Flag which allows subscripts in syntax (FNX flag)"
+0062,000B,000B,INPFLG,"Flags input or read (00=INPUT; 40=GET; 98=READ)"
+0063,000C,000C,DOMASK,"Mask used by relation operations (Comparison Evaluation Flag)"
+0063,000C,000C,TANSGN,"Flag sign of tangent"
+----,----,000D,DSDESC,"ds$ length"
+----,000E,0010,CHANL,"Active I/O Channel #"
+0003,000E,0010,CHANNL,"Active I/O Channel #"
+0008,0011,0011,POKER,"Holds address for POKE command (Integer value for SYS & GOTO)"
+0008,0011,0011,LINNUM,"Line # storage Lo/Hi"
+0012,0012,0012,FORSIZ,"# of bytes used on stack for-next"
+0065,0013,0013,TEMPPT,"index to next available descriptor"
+0066,0014,0014,LASTPT,"Pointer to last $ temp (Pointers for descriptor search)"
+0068,0016,0016,TEMPST,"Storage for numtp temp descriptors"
+0017,0017,0017,NUMLEV,"# of GOSUB levels allowed (const)"
+0071,001F,001F,INDEX,"Indirect index #1 - Lo/Hi"
+0071,001F,001F,INDEX1,"Indirect index #1 - Lo/Hi"
+0073,0021,0021,INDEX2,"Indirect index #2 - Lo/Hi"
+0075,0023,0023,RESHO,"Res - register (Product area for multiplication - 5 bytes)"
+0076,0024,0024,RESMOH,x
+0077,0025,0025,RESMO,x
+0077,0025,0025,ADDEND,"Temp used by ""umult"""
+0078,0026,0026,RESLO,x
+007A,0028,0028,TXTTAB,"Pointer to start of BASIC text - Lo/Hi"
+007C,002A,002A,VARTAB,"Pointer to start of variables - Lo/Hi"
+007E,002C,002C,ARYTAB,"Pointer to start of array table - Lo/Hi"
+0080,002E,002E,STREND,"Pointer to end of variables - Lo/Hi"
+0082,0030,0030,FRETOP,"Pointer to start of actual strings - Lo/Hi"
+0084,0032,0032,FRESPC,"Pointer to top of free string space - Lo/Hi"
+0086,0034,0034,MEMSIZ,"Highest RAM address available for BASIC - Lo/Hi"
+0088,0036,0036,CURLIN,"Current line # being executed - Lo/Hi"
+008A,0038,0038,OLDLIN,"Last line # executed (for CONT command) - Lo/Hi"
+008C,003A,003A,OLDTXT,"Old txtptr (for CONT) & temp storage - Lo/Hi"
+008E,003C,003C,DATLIN,"Current data line # (in case of errors) - Lo/Hi"
+0090,003E,003E,DATPTR,"Data statement pointer - Lo/Hi"
+0092,0040,0040,INPPTR,"Source pf input address - Lo/Hi"
+0094,0042,0042,VARNAM,"Current variable name - 2 byte"
+0096,0044,0044,FDECPT,"Pointer into powers of 10 for ""fout"""
+0096,0044,0044,VARPNT,"Pointer into variable in memory - Lo/Hi"
+0098,0046,0046,ANDMSK,"AND mask for WAIT instruction"
+0098,0046,0046,FORPNT,"Pointer into current FOR-NEXT variable reference - Lo/Hi"
+0098,0046,0046,LSTPNT,"Pointer to list $ - Lo/Hi"
+0099,0047,0047,EORMSK,"EOR mask for WAIT instruction"
+009A,0048,0048,OPPTR,"Pointer to current operator in table - Lo/Hi"
+0008,0048,0048,VARTXT,"Pointer into list of variables - Lo/Hi"
+009C,004A,004A,OPMASK,"Mask created by current operator (Comparison symbol accumulator)"
+009D,004B,004B,DEFPNT,"Pointer used in function definition"
+009D,004B,004B,GRBPNT,"Pointer used in garbage collection"
+009D,004B,004B,TEMPF3,"A third FAC temporary - 4 bytes (misc work area - 6 bytes)"
+009F,004D,004D,DSCPNT,"Pointer to a string description"
+00A2,0050,0050,FOUR6,"Variable constant used by garbage collection"
+00A3,0051,0051,JMPER,"4c = JMP: subroutine for dispatch of functions"
+00A4,0052,0052,SIZE,"address for dispatch of functions - Lo/Hi"
+00A5,0053,0053,OLDOV,"The old overflow"
+00A6,0054,0054,TEMPF1,"A FAC temp - 4 bytes (misc numeric work area - 10 bytes)"
+00A7,0055,0055,ARYPNT,"A pointer used in array building"
+00A7,0055,0055,HIGHDS,"Destination of highest element in blt."
+00A9,0057,0057,HIGHTR,"Souce of highest element to move"
+00AB,0059,0059,TEMPF2,"A FAC temp - 4 bytes"
+00AC,005A,005A,LOWDS,"Location of last byte transferred into"
+00AC,005A,005A,DECCNT,"# of places before decimal point"
+00AD,005B,005B,TENEXP,"Base 10 exponent for ""fin"" & ""fout"""
+00AE,005C,005C,LOWTR,"Last thing to move in blt."
+00AE,005C,005C,DPTFLG,"Flag if a decimal point has been input"
+00AE,005C,005C,GRBTOP,"Pointer used in garbage collection"
+00AF,005D,005D,EPSGN,"Sign of base 10 exponent"
+00AF,005D,005D,EXPSGN,"Sign of base 10 exponent"
+00B0,005E,005E,FAC,"Main floating-point accumulator (Mantissa - 5 bytes)"
+00B0,005E,005E,DSCTMP,"This is where temp descs are built"
+00B0,005E,005E,FACEXP,"The exponent byte"
+00B1,005F,005F,FACHO,"Most significant byte of mantissa"
+00B2,0060,0060,FACMOH,"One more"
+00B3,0061,0061,FACMO,"Middle order of mantissa"
+00B3,0061,0061,INDICE,"Indice is set up here buy ""qint"""
+00B4,0062,0062,FACLO,"Least significant byte of mantissa"
+00B5,0063,0063,FACSGN,"Sign of FAC. = 0 or -1 when unpacked"
+00B6,0064,0064,DEGREE,"A constant used by polynomials (Series evaluation constant pointer)"
+00B6,0064,0064,SGNFLG,"Sign of FAC is preserved here by ""fin"""
+00B7,0065,0065,BITS,"Counter for # of bit shifts to normalize FAC (FAC overflow)"
+00B8,0066,0066,ARGEXP,"Argument register exponent (Accum. #2 - 6 bytes)"
+00B9,0067,0067,ARGHO,x
+00BA,0068,0068,ARGMOH,x
+00BB,0069,0069,ARGMO,x
+00BC,006A,006A,ARGLO,x
+00BD,006B,006B,ARGSGN,"The sign - same as FAC"
+00BE,006C,006C,ARISGN,"A sign reflecting the result (Sign comparison - Acc. #1 vs #2)"
+00BE,006C,006C,STRNG1,"Pointer to a $ or descriptor"
+00BF,006D,006D,FACOV,"Overflow byte of the FAC (Accum. #1 lo-order - rounding)"
+00C0,006E,006E,BUFPTR,"Pointer to buffer used by ""crunch"" - Lo/Hi"
+00C0,006E,006E,CURTOL,"Absolute linear index is formed here (Cassette buff len/Series pointer)"
+00C0,006E,006E,FBUFPT,"Pointer to ""fbuffer"" used in ""fout"""
+00C0,006E,006E,POLYPT,"Pointer to polnomial coefficients"
+00C0,006E,006E,STRNG2,"Pointer to $ or desc."
+00C2,0070,0070,CHRGET,"Subroutine - gets next character from BASIC text (23 bytes)"
+00C8,0076,0076,CHRGOT,"Subroutine - regets current character from B. text"
+00C9,0077,0077,TXTPTR,"Pointer to current BASIC source text - Lo/Hi"
+00CF,007D,007D,QNUM,"Check and evaluate numeric char (inside CHRGET)"
+00D9,0087,0087,CHRRTS,"End of chrget"
+00DA,0088,0088,RNDX,"Next Random number - 6 bytes"
+01FE,008B,008B,ZZ7,x
+0200,008D,008D,TIME,x
+0200,008D,008D,CTIMR,"Jiffy (1/60th sec.) clock for TI and TI$ - 3 bytes"
+0219,0090,0090,CINV,"IRQ interrupt vector - Lo/Hi"
+021B,0092,0092,CBINV,"BRK interrupt vector - Lo/Hi"
+----,0094,0094,NMINV,"NMI interrupt vector - Lo/Hi"
+020C,0096,0096,CSTAT,"Variable ST - I/O Status byte"
+020C,0096,0096,SATUS,"Variable ST - I/O Status byte"
+0203,0097,0097,LSTX,"Which key down; 255=none"
+0204,0098,0098,SFST,"Shift key: 1 if depressed"
+0205,0099,0099,CRFAC,"Correction factor for clock - 2B"
+0209,009B,009B,STKEY,"Copy of keyboard PIA @ e812: STOP and RVS flags"
+020A,009C,009C,SVXT,"Timing constant for tape"
+020B,009D,009D,VERCK,"Load=0, Verify=1"
+020D,009E,009E,NDX,"Number of characters in keyboard buffer"
+020E,009F,009F,RVS,"Screen reverse flag"
+021D,00A0,00A0,C3P0,"IEEE output; 255=character pending"
+021E,00A1,00A1,INDX,"(End-of-line-for-input pointer)"
+021F,00A2,00A2,SNSW,x
+0220,00A3,00A3,LSXP,"Cursor row"
+0221,00A4,00A4,LSTP,"Cursor column"
+0222,00A5,00A5,BSOUR,"(IEEE output buffer)"
+0223,00A6,00A6,SFDX,"Key image"
+0224,00A7,00A7,BLNSW,"(0=flash cursor)"
+0225,00A8,00A8,BLNCT,"Blink counter for cursor flash"
+0226,00A9,00A9,GDBLN,"Character under cursor"
+0227,00AA,00AA,BLNON,"Cursor in blink phase"
+0228,00AB,00AB,SYNO,"EOT received from tape"
+0260,00AC,00AC,CRSW,"(Input from screen/from keyboard)"
+0261,00AD,00AD,XSAV,"X save"
+0262,00AE,00AE,LDTND,"How many open files"
+0263,00AF,00AF,DFLTN,"Default input device, normally 0"
+0264,00B0,00B0,DFLTO,"Default output device, normally 3"
+0265,00B1,00B1,PRTY,"Tape character parity"
+0266,00B2,00B2,DPSW,"(Byte received flag)"
+0267,00B3,00B3,WSW,"(Logical Address temporary save)"
+00E9,00B4,00B4,T1,"(Tape buffer character; Monitor command)"
+----,00B4,00B4,SAVX,"Place to save X"
+0268,00B5,00B5,T2,"Temporary 2"
+----,00B5,00B5,TMPC,x
+0268,00B5,00B5,RCNT,"(Temporary counter - File name pointer)"
+0269,00B6,00B6,T3,"Temporary 3"
+----,00B6,00B6,TMPC2,x
+026C,00B7,00B7,PCNTR,"Serial bit count"
+----,00B8,00B8,PTCH,x
+026F,00B9,00B9,FIRT,"(Cycle counter)"
+0270,00BA,00BA,CNTDN,"Tape writer countdown"
+0271,00BB,00BB,BUFPT,"Tape buffer pointers, #1 and #2 - Lo/Hi"
+0273,00BD,00BD,SHCNL,"(Write leader count; read pass1/2)"
+0274,00BE,00BE,RER,"(Read error flag - Write new byte)"
+0275,00BF,00BF,REZ,"(Read bit seq error - Write start bit)"
+0276,00C0,00C0,PTR1,"Error log pointers - pass 1"
+00C0,00C0,00C0,BUFSZ,x
+0277,00C1,00C1,PTR2,"Error log pointers - pass 2"
+0278,00C2,00C2,RDFLG,0=Scan/1-15=Count/$40=Load/$80=End
+0279,00C3,00C3,SHCNH,"Write leader length; read checksum"
+00E0,00C4,00C4,PNT,"Pointer to screen line address - Lo"
+00E1,00C5,00C5,POINT,"Pointer to screen line address - Hi"
+00E2,00C6,00C6,PNTR,"Column of cursor on screen line"
+0005,00C6,00C6,TRMPOS,"Column of cursor on screen line"
+00E3,00C7,00C7,SAL,"Start address Lo - pointer: tape, scroll"
+00C7,00C7,00C7,LASNUM,"Number of last function that takes one arg (const)"
+00E4,00C8,00C8,SAH,"Start address Hi - pointer: tape, scroll"
+00E5,00C9,00C9,EAL,"End address Lo  End of current program"
+00E6,00CA,00CA,EAH,"End address Hi  End of current program"
+00E7,00CB,00CB,CMP0,"(Tape timing constants - 2 bytes)"
+00E8,00CC,00CC,TEMP,x
+00EA,00CD,00CD,QTSW,"(0=direct cursor, else programmed)"
+00EB,00CE,00CE,SNSW1,"(Tape read timer 1 enabled)"
+00EC,00CF,00CF,DIFF,"(EOT received from tape)"
+00ED,00D0,00D0,PRP,"(Read character error)"
+00EE,00D1,00D1,FNLEN,"File name length"
+00EF,00D2,00D2,LA,"Current file logical address"
+00F0,00D3,00D3,SA,"Current file secondary addrs"
+00F1,00D4,00D4,FA,"First address - current file device number"
+00F2,00D5,00D5,LNMX,"Right-hand window or line margin"
+00F3,00D6,00D6,TBUF,"Pointer: Start of tape buffer - Lo/Hi"
+00F5,00D8,00D8,TBLX,"Active cursor line"
+00F6,00D9,00D9,data,"Last key/checksum/misc."
+00F9,00DA,00DA,FNADR,"File name address pointer - Lo/Hi"
+00FB,00DC,00DC,INSRT,"Number of INSERTs outstanding"
+00FC,00DD,00DD,OCHAR,"Write shift word/read character in"
+----,00DE,00DE,WRAP,x
+00FD,00DE,00DE,FSBLK,x
+00FE,00DF,00DF,MYCH,"Serial word buffer"
+0229,00E0,00E0,LDTB1,"Top/bottom of window - 2 bytes - 80 column."
+0207,00F9,00F9,CAS1,"Cassette #1 status"
+0208,00FA,00FA,CAS2,"Cassette #2 status"
+----,00FB,00FB,TMP0,"Indirect 1 - Lo/Hi"
+00F7,00FB,00FB,STAL,"Start tape address - Lo"
+00F8,00FC,00FC,STAH,"Start tape address - Hi"
+----,----,00FD,FNADR2,"(DOS pointer, misc. - 2 bytes)"
+----,00FD,00FD,TMP2,"Indirect 2 - Lo/Hi"
+00FF,00FF,00FF,LOFBUF,"+ index = start of ""fout"" $ for ""strd"" & ti$"
+0100,0100,0100,BAD,"Processor stack (STR$ work area, Monitor work area)"
+0100,0100,0100,FBUFFR,"""fout"" buffer holds ASCII $ for output"
+01FF,01FB,01FB,STKEND,"Stack end for BASIC"
+0009,01FF,01FF,ZZ1,x
+0009,01FF,01FF,ZZ4,x
+0009,01FF,01FF,ZZ5,x
+----,0200,0200,PCH,"PC - Hi"
+000A,0200,0200,BUF,"Input buffer - 81 bytes"
+----,0201,0201,PCL,"PC - Lo"
+000B,0201,0201,ZZ2,x
+----,0202,0202,ZZ3,x
+----,0202,0202,FLGS,"Flags - 6502 ST register"
+----,0203,0203,ACC,Acc
+----,0204,0204,XR,"X reg."
+----,0205,0205,YR,"Y reg."
+----,0206,0206,SP,SP
+----,0207,0207,INVH,"User IRQ - Hi"
+----,0208,0208,INVL,"User IRQ - Lo"
+----,0207,0209,ZZZ1,x
+----,0207,0209,SAVNAM,x
+0242,0251,0251,LAT,"File logical adress table - 10 bytes"
+024C,025B,025B,FAT,"File first address table - 10 bytes"
+0256,0265,0265,SAT,"File secondary address table - 10 bytes"
+020F,026F,026F,KEYD,"Keyboard input buffer - 10 bytes"
+027A,027A,027A,TAPE1,"Tape#1 input buffer - 192 bytes"
+----,----,033A,pos,
+----,----,033A,FNLEN2,"DOS character pointer"
+033A,033A,033A,TAPE2,"Tape#2 input buffer - 192 bytes"
+----,----,033B,DRIVE1,"DOS drive 1 flag"
+----,----,033C,DRIVE2,"DOS drive 2 flag"
+----,----,033D,LRECL,"(DOS length/write flag)"
+----,----,033D,DIDCHK,x
+----,----,033E,parchk,"DOS parameter check - syntax flags"
+----,----,033F,DISKID,"DOS disk ID - 2 bytes"
+----,----,0341,count,"DOS command string count"
+----,----,0342,TBUF2,"DOS file name buffer - 10 bytes"
+----,----,0353,TBUFF,"DOS commend string buffer - 46? bytes"
+----,03FA,03FA,USRCMD,"Monitor extension vector - Lo/Hi"
+----,----,03FC,BOB,"IEEE timeout defeat"
+0400,0400,0400,RAMLOC,"Available RAM for BASIC text - through $7fff"
+8000,8000,8000,OFFSET,"Screen RAM - through $83ff 40-col. / $87ff 80 col."
+----,FF10,8BB8,ZZ8,x
+C000,C000,B000,ROMLOC,"First ROM location"
+C000,C000,B000,STMDSP,"Start of instruction dispatch table"
+C046,C046,B066,FUNDSP,"Start of function dispatch table"
+C04C,C04C,B06C,USRLOC,"USR instruction's jump address within function"
+C074,C074,B094,OPTAB,"Start of math operators dispatch table"
+C089,C089,B0A9,NEGTAB,"Unitary negate dispatch .by 7d"
+C08C,C08C,B0AC,NOTTAB,"Not operator dispatch - .by 5a"
+C08F,C08F,B0AF,PTDORL,"Comparison dispatch - .by 64"
+C092,C092,B0B2,RESLST,"Start of reserved word list (Shift flags end of keyword)"
+C190,C192,B20D,ERRTAB,"Start of BASIC error message storage"
+C28D,C28B,B306,ERR,"Message - error"
+C294,C292,B30D,INTXT,"Message - in"
+C299,C297,B312,REDDY,"Message - ready."
+C2A4,C2A2,B31B,BRKTXT,"Message - break"
+C2AC,C2AA,B322,FNDFOR,"Peeks at the stack for an active ""for"" loop"
+C2B1,C2AF,B327,FFLOOP,"(Top of ""for"" peek loop)"
+C2C6,C2C4,B33C,CMPFOR,"(Compare stack to for/next variable pointer)"
+C2D2,C2D0,B348,ADDFRS,"(No match, check further)"
+C2D9,C2D7,B34F,FFRTS,"(End of ""for"" keep)"
+C2DA,C2D8,B350,BLTU,"Opens up a space in BASIC for a new line"
+C2E1,C2DF,B357,BLTUC,"(Entry from d502-2.0)"
+C2FE,C2FC,B374,BLT1,+
+C30A,C308,B380,BLTLP,+
+C30E,C30C,B384,MOREN1,+
+C315,C313,B38B,DECBLT,+
+C31D,C31B,B393,GETSTK,"Test if stack too deep - abort if is"
+C32A,C328,B3A0,REASON,"Checks for available memory space"
+C334,C332,B3AA,TRYMOR,+
+C338,C336,B3AE,REASAV,+
+C343,C341,B3B9,REASTO,+
+C356,C354,B3CC,REARTS,"(End of mem check)"
+C357,C355,B3CD,OMERR,"Preset for ""Out of memory"" and..."
+C359,C357,B3CF,ERROR,"Error handler - message index in X and..."
+C366,C364,B3DA,ERRCRD,"(Do ""crlf"" and...)"
+C36C,C36A,B3E0,GETERR,"(Read error message from table and...)"
+C379,C377,B3ED,TYPERR,"Restore data pointer & Print ""error"" and..."
+C380,C37E,B3F4,ERRFIN,"(Print string - address in A & Y and...)"
+C38B,C389,B3FF,READY,"Warm start of BASIC - NMI vector in 2.0 and 4.0"
+C394,C392,B406,MAIN,"Main BASIC loop - analyzes input lines"
+C3AC,C3AB,B41F,MAIN1,"Lines that start with a no. handled here"
+C3E7,C3E6,B45A,QDECT1,+
+C3EF,C3EE,B462,MLOOP,+
+C3FD,C3FC,B470,NODEL,"(Adjust pointers for cold start)"
+C418,C417,B48B,NODELC,+
+C428,C431,B4A5,STOLOP,"(Top of minor loop)"
+C430,C439,B4AD,FINI,"Cleans up BASIC system - CLR"
+C433,C442,B4B6,LNKPRG,"Relinks BASIC instructions in text area"
+C43C,C44B,B4BF,CHEAD,+
+C447,C453,B4C7,CZLOOP,"(Count til find zero)"
+----,C46E,B4E1,LNKRTS,"(End of link)"
+C468,C46F,B4E2,INLIN,"Receive line into input buffer - max. len 79+RETURN"
+C46A,C471,B4E4,INLINC,"(get a character from the keyboard)"
+C476,C47E,B4F8,FININ1,+
+C48D,C495,B4FB,CRUNCH,"Looks up keywords in an input line"
+C493,C49B,B501,KLOOP,+
+C49E,C4A7,B50D,CMPSPC,"(a SPACE?)"
+C4B4,C4BD,B523,KLOOP1,"(a ""0""?)"
+C4BC,C4C5,B52B,MUSTCR,+
+C4C6,C4CF,B53D,RESER,+
+C4C8,C4D1,B544,RESCON,+
+C4DA,C4E0,B552,GETBPT,+
+C4DC,C4E2,B554,STUFFH,+
+C4EF,C4F5,B567,COLIS,+
+C4F1,C4F7,B569,NODATT,+
+C4F8,C4FE,B570,STR1,+
+C500,C507,B579,STRNG,+
+C507,C50E,B580,NTHIS,+
+C50B,C512,B584,NTHIS1,+
+----,----,B58D,NTHIS2,+
+C51A,C522,B599,CRDONE,+
+C522,C52C,B5A3,FNDLIN,"Search for address if line whose# is in ""linnum"""
+C526,C530,B5A7,FNDLNC,"(Entry from b84b)"
+C53D,C547,B5BE,FNDLO1,+
+C546,C550,B5C7,AFFRTS,+
+C54F,C559,B5D0,FLINRT,"(line # not found)"
+C550,C55A,B5D1,FLNRTS,"(line # found)"
+C551,C55B,B5D2,SCRATH,"NEW instruction - clears all pointers"
+C553,C55D,B5D4,SCRTCH,"(Entry from d445)"
+C567,C572,B5E9,RUNC,"(adjust pointers for cold stat of BASIC)"
+C770,C577,B5EE,CLEAR,"CLR instruction - (clears variable pointers)"
+C56A,C579,B5F0,CLEARC,"(Entry from b80d)"
+C581,C590,B60B,FLOAD,"(Restore data pointer)"
+C584,C593,B60E,STKINI,"(Entry from b3ed)"
+C599,C5A6,B621,STKRTS,+
+C59A,C5A7,B622,STXTPT,"""txtptr""=""txttab""-1"
+C5A8,C5B5,B630,LIST,"LIST instruction"
+C5B0,C5BD,B638,GOLST,"(Convert char. $ to # in 11-12)"
+C5C7,C5D4,B64F,LSTEND,+
+C5D5,C5E2,B65D,LIST4,
+C5F2,C5FF,B67A,TSTDUN,(done?)
+C5F4,C601,B67C,TYPLIN,"(Print the integer in A,X)"
+C5FB,C608,B683,PRIT4,+
+C5FF,C60C,B687,PLOOP,"(Print character in A)"
+C60C,C619,B694,PLOOP1,+
+C61E,C62D,B6A8,GRODY,"(Jump to ""ready"")"
+C621,C630,B6AB,QPLOP,+
+C633,C642,B6C5,RESRCH,+
+C636,C645,B6C8,RESCR1,+
+----,----,B6CE,RESCR2,+
+C63E,C64D,B6D4,PRIT3,+
+----,----,B6D5,PRIT3B,+
+C649,C658,B6DE,FOR,"FOR instruction"
+C65A,C669,B6EF,NOTOL,+
+C692,C6A1,B727,LDFONE,"(Continue to build FOR vectors)"
+C6A6,C6B5,B73B,ONEON,"(Extract a FAC sign)"
+C6B5,C6C4,B74A,NEWSTT,"Read & execute next statement"
+C6C4,C6D4,B759,DIRCON,+
+----,C6E4,B769,DIRCN1,+
+C6E9,C6F7,B77C,GONE,"Dispatches next byte ""chrget"" returns"
+C6F2,C700,B785,GONE3,"Dispatches A if <>0 else loop to ""newstt"""
+C6F5,C702,B787,GONE2,"(Entry from b8e7)"
+----,----,B795,GONE4,+
+C6F9,C717,B7A2,GLET,"(Jump to perform LET)"
+C6C8,C71A,B7A5,MORSTS,"(A "":""?)"
+C6CC,C71E,B7A9,SNERR1,"(Jump to print ""syntax error"")"
+----,FECF,B7AC,GO,"Handle GO token - find a TO"
+C70D,C730,B7B7,RESTOR,"RESTORE statement"
+C717,C73A,B7C1,RESFIN,"(Entry from bce2)"
+C71B,C73E,B7C5,ISCRTS,"(End of RESTORE)"
+C71C,C73F,B7C6,STOP,"STOP instruction if carry set - else..."
+C71C,C73F,B7C6,BSTOP,"O.S. Substitute: ""stop"" is also a label at $f343"
+C71E,C741,B7C8,END,"END instruction"
+C71F,C742,B7C9,STOPC,(<>00?)
+C72B,C751,B7D8,STPEND,"(Entry from bbf2)"
+C733,C759,B7E0,DIRIS,+
+C735,C75B,B7E2,ENDCON,"(Entry from b766)"
+C742,C768,B7EB,GORDY,"Jump to ""ready"""
+C745,C76B,B7EE,CONT,"CONT instruction"
+C75E,C784,B807,CONTRT,"(End of CONT)"
+C775,C785,B808,RUN,"RUN instruction"
+C780,C790,B813,GOSUB,"GOSUB instruction"
+C794,C7A4,B827,RUNC2,"(Entry from b810)"
+C79D,C7AD,B830,GOTO,"GOTO instruction"
+C7B4,C7C4,B847,LUK4IT,+
+C7B8,C7C8,B84B,LUKALL,+
+C7C9,C7D9,B85C,GORTS,"(End of GOTO)"
+C7CA,C7DA,B85D,RETURN,"RETURN instruction"
+C7DB,C7EB,B86E,USERR,"Print ""undefined instruction error"""
+C7E0,C7F0,B873,SNERR2,"Jump to ""syntax error"""
+C7E3,C7F3,B876,RETU1,+
+C7F0,C800,B883,DATA,"(DATA instruction)"
+C7F3,C803,B886,ADDON,"(Add Y to scan pointer)"
+C7FD,C80D,B890,REMRTS,"(End of DATA)"
+C7FE,C80E,B891,DATAN,"Scan for next "":"""
+C801,C811,B894,REMN,"Scan for next end-of-line - ""txtptr"" offset in Y"
+C809,C819,B89C,EXCHQT,+
+C811,C821,B8A4,REMER,+
+C820,C830,B8B3,IF,"IF instruction"
+C82F,C83F,B8C2,OKGOTO,"(Allow GOTO after IF)"
+C833,C843,B8C6,REM,"REM instruction"
+C838,C848,B8CB,DOCOND,+
+C840,C850,B8D3,DOCO,"(Jump to do instruction)"
+C843,C853,B8D6,ONGOTO,"ON instruction"
+C84B,C85B,B8DE,SNERR3,"(Must include GOTO or GOSUB - else ""syntax error"")"
+C84F,C85F,B8E2,ONGLOP,+
+C857,C867,B8EA,ONGLP1,"(Get next char. & convert $ to #)"
+C862,C872,B8F5,ONGRTS,"(End of ON)"
+C863,C873,B8F6,LINGET,"Get integer from BASIC & put in ""linnum"""
+C869,C879,B8FC,MORLIN,"(Entry from b92d)"
+C897,C8A7,B92A,NXTLGC,"(Get next char. from input buffer)"
+C89D,C8AD,B930,LET,"LET instruction"
+C8BA,C8CA,B94D,QINTGR,"(Entry from bc8a)"
+C8CE,C8DE,B961,COPFLT,"(""fac"" to FOR pointer)"
+C8D1,C8E1,B964,COPSTR,+
+C8D2,C8E2,B965,INPCOM,"(Entry from bc7f)"
+C8E8,C8F5,B978,TIMELP,+
+C902,C90F,B992,NOML6,+
+C912,C91F,B9A2,TIMEST,+
+C91C,C928,B9AB,TIMNUM,+
+----,C92F,B9B2,FCERR2,"Jump to ""illegal quantity error"""
+C926,C932,B9B5,GOTNUM,+
+C92B,C937,B9BA,GETSPT,"Copy strings if needed"
+----,----,B9D2,DSKX1,+
+----,----,B9D4,DSKX2,+
+C93C,C948,B9E1,QVARIA,+
+C94A,C956,B9EF,DNTCPY,"(Don't copy)"
+C951,C95D,B9F6,COPY,"(Do copy)"
+C967,C973,BA13,COPYC,"(Entry from b9f3)"
+----,----,BA2E,COPY00,+
+----,----,BA44,COPY01,+
+----,----,BA46,COPY02,+
+----,----,BA4E,STRADJ,"Point to string for a copy"
+----,----,BA6C,ADJ,+
+----,----,BA74,LBA74,x
+----,----,BA83,ADJ00,+
+----,----,BA85,ADJ01,+
+C97F,C98B,BA88,PRINTN,"PRINT# instruction"
+C985,C991,BA8E,CMD,"CMD instruction"
+C98F,C99B,BA98,SAVEIT,+
+C999,C9A5,BAA2,STRDON,+
+C99C,C9A8,BAA5,NEWCHR,"(Get current character from buffer)"
+C99F,C9AB,BAA8,PRINT,"PRINT instruction"
+C9A1,C9AD,BAAA,PRINTC,"(Entry from bb15)"
+C9C8,C9D5,BAD2,FININL,"(Entry from b4f8)"
+C9D2,C9E2,BADF,CRDO,"Print RETURN character"
+C9E2,C9EC,BAED,CRFIN,"(Entry from bb34)"
+C9F8,C9EE,BAEF,PRTRTS,+
+C9F9,C9EF,BAF0,COMPRT,"(Process "","" char to correct column)"
+C9FC,C9F2,BAF3,MORCO1,+
+CA06,C9FC,BAFD,TABER,"TAB & SPC handler"
+CA1A,CA0C,BB0D,ASPAC,+
+----,CA0D,BB0E,XSPAC,+
+CA1E,CA0E,BB0F,XSPAC2,+
+CA21,CA11,BB12,NOTABR,+
+CA1B,CA17,BB18,XSPAC1,"(Jump to print CURSOR-RIGHT)"
+CA27,CA1C,BB1D,STROUT,"Output string address in Y and A - end with 00"
+CA2A,CA1F,BB20,STRPRT,"Print string pointed to by ""index"""
+CA31,CA26,BB27,STRPR2,"(Entry from bb32)"
+----,CA39,BB3A,OUTSPC,"Output a SPACE"
+CA44,CA40,BB41,CRTSKP,"Output a CURSOR-RIGHT"
+CA47,CA43,BB44,OUTQST,"Output a ""?"""
+CA49,CA45,BB46,OUTDO,"Output character in A"
+CA74,CA4C,BB49,OUTRTS,"(Force ST register bits)"
+CA77,CA4F,BB4C,TRMNOK,"Handles bad input data"
+CA7B,CA59,BB56,GETDTL,+
+CA7F,CA5D,BB5A,STCURL,"(Store current line #)"
+CA83,CA61,BB5E,SNERR4,"Jump to ""syntax error"""
+CA86,CA64,BB61,TRMNO1,+
+CA8F,CA6D,BB6A,DOAGIN,"(Print ""redo from start"" and...)"
+CA9F,CA7D,BB7A,GET,"GET instruction"
+CAB6,CA94,BB91,GETTTY,+
+CAC6,CAA7,BBA4,INPUTN,"INPUT# instruction"
+CAD6,CAB7,BBB4,IODONE,"Restore input to keyboard"
+CAD8,CAB9,BBB6,IORELE,+
+CAE0,CAC1,BBBE,INPUT,"INPUT instruction"
+CAF1,CAD2,BBCD,NOTQTI,+
+CAF8,CADA,BBD5,GETAGN,"(To prompt & receives INPUT)"
+CB0C,CAED,BBE8,BUFFUL,+
+CB17,CAFA,BBF5,QINLIN,"Prompts for & recieves INPUT"
+CB21,CB04,BBFF,GINLIN,+
+CB24,CB07,BC02,READ,"READ instruction"
+CB29,CB0E,BC09,INPCON,+
+CB2A,CB10,BC0B,INPCO1,"(Entry from bb9c - with A=40 for GET)"
+CB30,CB16,BC11,INLOOP,"(Entry from bcb1)"
+CB5B,CB42,BC3D,QDATA,+
+CB64,CB4B,BC46,GETNTH,"(To prompt & input)"
+CB67,CB4E,BC49,DATBK,+
+CB6B,CB52,BC4D,DATBK1,"(Entry from bcd7)"
+CB7C,CB66,BC61,SETQUT,+
+CB88,CB72,BC6D,RESETC,+
+CB89,CB73,BC6E,NOWGET,+
+CB94,CB7E,BC79,NOWGE1,+
+CBA0,CB8A,BC85,NUMINS,+
+CBA8,CB92,BC8D,STRDN2,"(Entry from bc82)"
+CBB4,CB9E,BC99,TRMOK,+
+CBCF,CBB9,BCB4,DATLOP,+
+CBE8,CBD2,BCCD,NOWLIN,+
+CBF5,CBDF,BCDA,VAREND,+
+CC00,CBEA,BCE5,VARY0,"Print ""extra ignored"" if @ kbd. & find a seperator"
+CC11,CBFB,BCF6,INPRTS,"End of READ"
+CC12,CBFC,BCF7,EXIGNT,"Message ""extra ignored"""
+CC23,CC0D,BD07,TRYAGN,"Message ""?redo from start"""
+CC36,CC20,BD19,NEXT,"NEXT instruction"
+CC3C,CC26,BD1F,GETFOR,"(Entry from bd81)"
+CC3F,CC29,BD22,STXFOR,+
+CC4A,CC34,BD2D,ERRGO5,"(To ""next without for error"")"
+CC4C,CC36,BD2F,HAVFOR,+
+CC8F,CC76,BD6F,NEWSGO,+
+CC92,CC79,BD72,LOOPDN,"Check data format - (check type mismatch)"
+CCA4,CC8B,BD84,FRMNUM,"Jump to ""frmevl"""
+CCA7,CC8E,BD87,CHKNUM,"Check that current type is numeric"
+CCA9,CC90,BD89,CHKSTR,"Check that current type is string - cks. ""valtyp"""
+CCAA,CC91,BD8A,CHKVAL,+
+CCB0,CC97,BD90,CHKOK,+
+CCB1,CC98,BD91,DOCSTR,+
+CCB3,CC9A,BD93,CHKERR,"Print ""type mismatch error"""
+CCB5,CC9C,BD95,ERRGO4,+
+CCB8,CC9F,BD98,FRMEVL,"Formula evaluator - evaluates all formulas"
+CCBE,CCA5,BD9E,FRMEV1,+
+CCC3,CCAA,BDA3,LPOPER,"(Entry from be27)"
+CCD2,CCB9,BDB2,TSTOP,+
+CCD5,CCBC,BDB5,LOPREL,+
+CCF1,CCD8,BDD1,ENDREL,+
+CD0A,CCF1,BDEA,QPREC,+
+CD13,CCFA,BDF3,DOPREC,+
+CD14,CCFB,BDF4,NEGPRC,+
+CD21,CD08,BE01,FINREL,+
+CD2B,CD12,BE0B,FINRE2,+
+CD33,CD1A,BE13,QPREC1,+
+CD3A,CD21,BE1A,DOPRE1,+
+CD4A,CD31,BE2A,SNERR5,+
+CD4D,CD34,BE2D,PUSHF1,+
+CD52,CD39,BE32,PUSHF,+
+CD5D,CD44,BE41,FORPSH,+
+CD72,CD59,BE56,QOP,+
+CD75,CD5C,BE59,QOPGO,+
+CD77,CD5E,BE5B,QCHNUM,+
+CD7E,CD65,BE62,UNPSTK,+
+CD80,CD67,BE64,PULSTK,"Restore ""arg"" from stack (pushed evaluation)"
+CD9A,CD81,BE7E,QOPRTS,+
+CD9C,CD83,BE80,UNPRTS,+
+CD9D,CD84,BE81,EVAL,"Evaluates numeric formulas"
+CDA1,CD88,BE85,EVAL0,+
+CDA6,CD8D,BE8A,EVAL1,+
+CDA9,CD90,BE8D,EVAL2,+
+CDBC,CDA3,BEA0,PIVAL,"Binary value of pi"
+CDC1,CDA8,BEA5,QDOT,+
+CDD1,CDB8,BEB5,STRTXT,"Immediate strings handler"
+CDDA,CDC1,BEBE,STRTX2,+
+CDE0,CDC7,BEC4,EVAL3,+
+CDE8,CDCF,BECC,NOTOP,"Eval - not"
+CDF7,CDDE,BEDB,EVAL4,+
+CE05,CDEC,BEE9,PARCHK,"Evaluate functions within parentheses (frmeul)"
+CE0B,CDF2,BEEF,CHKCLS,"Check for right  parenthesis - )"
+CE0E,CDF5,BEF2,CHKOPN,"Check for left parenthesis - ("
+CE11,CDF8,BEF5,CHKCOM,"Check for a comma - ,"
+CE13,CDFA,BEF7,SYNCHR,"Compare ""txtptr"" against A, if <> then..."
+CE1C,CE03,BF00,SNERR,"Print ""syntax error"" & exit"
+CE21,CE08,BF05,DOMIN,"Set up function for future evaluation"
+CE23,CE0A,BF07,GONPRC,+
+----,----,BF0C,CKSUMB,"Checksum byte for the $b000 rom"
+----,----,BF0D,LBF0D,x
+CE28,CE0F,BF8C,ISVAR,"Set up a variable name search"
+CE2A,CE11,BF8E,ZZ6,+
+CE2B,CE12,BF8F,ISVRET,+
+----,----,BFC1,ISVDS,"ds$ test and handler"
+CE53,CE42,BFD3,STRRTS,+
+CE54,CE43,BFD4,GOOO,+
+CE65,CE54,BFE5,GOOOOO,+
+----,----,BFFC,CHKDS,"Check for DS variable"
+CE76,CE69,C003,GETTIM,"Assign time to TI"
+CE82,CE75,C00F,QSTATV,+
+----,----,C01C,QDSAV,+
+CE90,CE82,C040,GOMOVF,+
+CE97,CE89,C047,ISFUN,"Dispatch and eval if it's a function (Set up function references)"
+CEC1,CEB3,C071,OKNORM,"+ [iknorm is typo?]"
+CEC6,CEB8,C076,FINGO,"Place function dispatch address in ""jumper"" & go"
+CED6,CEC8,C086,OROP,"OR instruction"
+CED9,CECB,C089,ANDOP,"AND instruction"
+CF06,CEF8,C0B6,DOREL,"""<"" instruction"
+CF1E,CF10,C0CE,STRCMP,+
+CF46,CF38,C0F6,STASGN,+
+CF4B,CF3D,C0FB,NXTCMP,+
+CF51,CF43,C101,QCOMP,+
+CF56,CF48,C106,GETCMP,+
+CF62,CF54,C112,DOCMP,+
+CF6B,CF5D,C11B,GOFLOT,+
+CF6E,CF60,C11E,DIM3,"Re-entry for multi-dim array"
+CF71,CF63,C121,DIM,"DIM instruction"
+CF7B,CF6D,C12B,PTRGET,"Searches for a BASIC variable"
+CF80,CF72,C130,PTRGT1,+
+CF82,CF74,C132,PTRGT2,+
+CF8C,CF7E,C13C,INTERR,"Jump to ""Syntax error"""
+CF8F,CF81,C13F,PTRGT3,+
+CF9F,CF91,C14F,ISSEC,+
+CFA0,CF92,C150,EATEM,+
+CFAA,CF9C,C15A,NOSEC,+
+CFB4,CFA6,C164,NOTSTR,+
+CFC4,CFB6,C174,TURNON,+
+CFCB,CFBD,C17B,STRNAM,+
+CFE1,CFD3,C18F,STXFND,"(Find a BASIC variable)"
+CFE3,CFD5,C191,LOPFND,+
+CFED,CFDF,C19B,LOPFN,+
+CFFA,CFEC,C1AB,NXTPTR,"Move search to next table entry"
+CFFB,CFED,C1AC,NOTIT,+
+D005,CFF7,C1B6,ISLETC,"(Test A, set flags)"
+D00E,D000,C1BF,ISLRTS,+
+D00F,D001,C1C0,NOTFNS,"Did not find variable - create a new one"
+D015,D007,C1C6,LDZR,+
+D01C,D00C,C1CB,NOTEVL,"(Test for TI)"
+D02C,D01C,C1DB,GOBADV,"(Jump to ""syntax error"")"
+D02F,D01F,C1DE,QSTAVR,"Test for ST"
+----,----,C1E6,QDSVAR,"Test for DS"
+D037,D027,C1F2,VAROK,"Good usable variable"
+D04D,D03D,C208,NOTEVE,+
+D44A,D448,C21C,ARYVA2,+
+D44E,D44C,C220,ARYVA3,+
+D459,D457,C228,ARYVGO,"Search the arrays"
+D488,D488,C259,ARYGET,"Move thru the array tables"
+D492,D492,C263,GOGO,+
+----,----,C281,GOGO1,+
+D4D0,D4D0,C290,DVARTS,+
+D05D,D04D,C29D,ARYDON,+
+D079,D069,C2B9,FINPTR,"Logs basic variable location [Bump address by 2]"
+D083,D073,C2C3,FINNOW,+
+D088,D078,C2C8,FMAPTR,"Array pointer subroutine(Set up array pointer)"
+D094,D084,C2D4,JSRGM,+
+D099,D089,C2D9,N32768,"Floating point binary value -32768 (top of screen)"
+D09D,D08D,C2DD,INTIDX,"Evaluate formula - results is positive integer"
+D0A3,D093,C2E3,POSINT,"Convert floating binary to positive integer"
+D0A7,D09A,C2EA,AYINT,"Convert floating binary to integer"
+D0B4,D0A7,C2F7,NONONO,"Branch to ""illegal quantity error"""
+D0B6,D0A9,C2F9,QINTGO,"Jmp ""qint"""
+D0B9,D0AC,C2FC,ISARY,"Locates and/or creates arrays (to C4A7 4.0)"
+D0C3,D0B6,C306,INDLOP,+
+D104,D0F7,C347,LOPFDA,+
+D110,D103,C353,LOPFDV,+
+D11F,D112,C362,NMARY1,+
+D12D,D120,C370,BSERR,"Print ""bad subscript error"""
+D130,D123,C373,FCERR,"Print ""illegal quantity error"""
+D132,D125,C375,ERRGO3,"(Jump to error message)"
+D135,D128,C378,GOTARY,x
+D149,D13C,C38C,NOTFDD,"+ (nptfdp is typo)"
+D15D,D150,C39F,NOTFLT,+
+D166,D159,C3A8,STOMLT,+
+D16F,D162,C3B1,LOPPTA,+
+D17F,D172,C3C1,NOTDIM,+
+D1A2,D195,C3E4,GREASE,"(Check available memory space)"
+D1B1,D1A4,C3F3,ZERITA,+
+D1B6,D1A9,C3F8,DECCUR,+
+D1D3,D1C6,C415,GETDEF,+
+D1DB,D1CE,C41D,INLPNM,+
+D1F1,D1E4,C433,BSERR7,"Jump to ""bad subscript error"""
+D1F4,D1E7,C436,OMERR1,"Jump to ""out of memory error"""
+D1F7,D1EA,C439,INLPN2,+
+D1F8,D1EB,C43A,INLPN1,+
+D209,D1FC,C44B,ADDIND,+
+D218,D20D,C45C,NOTFL1,+
+D21E,D213,C462,STOML1,+
+D232,D227,C476,DIMRTS,+
+D233,D228,C477,UMULT,"Integer arithmetic routines for multi-dim arrays"
+D23C,D231,C480,UMULTD,+
+D246,D23B,C48A,UMULTC,+
+D25F,D254,C4A3,UMLCNT,+
+D263,D258,C4A7,UMLRTS,+
+D264,D259,C4A8,FRE,"FRE instruction"
+D26B,D260,C4AF,NOFREF,"(Do garbage collection)"
+D278,D26D,C4BC,GIVAYF,"Converts integer to floating binary"
+D285,D27A,C4C9,POS,"POS instruction"
+D287,D27C,C4CB,SNGFLT,"Converts Y to floating binary"
+D28B,D280,C4CF,ERRDIR,"Is instruction type indirect only?"
+----,D288,C4D7,ERRGUF,"Print ""illegal direct"""
+D295,D28D,C4DC,DEF,"DEF instruction; also evaluates FN"
+D2C3,D2BB,C50A,GETFNM,"(check FN syntax)"
+D2D6,D2CE,C51D,FNDOER,"Evaluates FN"
+D2FC,D2F2,C541,DEFSTF,+
+D333,D329,C578,DEFFIN,+
+D349,D33F,C58E,STRD,"STR$ instruction"
+D353,D349,C598,TIMSTR,"Make a string out of info at $01ff"
+D359,D34F,C59E,STRINI,"Make a string at address in ""facmo pointer"""
+D361,D357,C5A6,STRSPA,+
+D36B,D361,C5B0,STRLIT,"Scans at sets up string elements"
+D371,D367,C5B6,STRLT2,+
+D37B,D371,C5C0,STRGET,+
+D388,D37E,C5CD,STRFIN,+
+D38C,D382,C5D1,STRFI1,+
+D38D,D383,C5D2,STRFI2,+
+D399,D38F,C5DE,STRST2,+
+----,D399,C5E8,STRCP,+
+D3AA,D3A4,C5F3,PUTNEW,"Check string temps - place data in temps"
+D3B2,D3AC,C5FB,ERRGO2,"-1=Print ""formula to complex error"""
+D3B5,D3AF,C5FE,PUTNW1,+
+D3D2,D3CE,C61D,GETSPA,"Builds string vectors"
+D3D4,D3D0,C61F,TRYAG2,+
+D3DF,D3DB,C62D,TRYAG3,+
+----,----,C63A,TRYAG4,+
+D3E9,D3E5,C644,STRFRE,+
+----,----,C65A,GETRTS,+
+D3F4,D3F0,C65B,GARBAG,+
+D404,D400,C66A,GARBA2,"Does 'garbage collection' - packs strings"
+----,----,C67E,GLOOP,+
+----,----,C68A,COL00,+
+----,----,C693,COL00B,+
+----,----,C69E,COL00A,+
+----,----,C6A9,COL01,+
+----,----,C6B2,COL02,+
+----,----,C6CE,GLOP1,+
+----,----,C6D8,COL02B,+
+----,----,C6F0,COL02A,+
+----,----,C700,GRBEND,"Jmp ""endgrb"""
+----,----,C703,COL03,+
+----,----,C716,ENDGRB,"Moves ""frespc"" to ""fretop"""
+----,----,C71F,SKIP2,+
+----,----,C724,SKIP2A,+
+----,----,C726,MOVPNT,+
+----,----,C730,MOV00,+
+----,----,C735,MOVTOP,+
+----,----,C73F,MOV01,+
+----,----,C744,SETINX,+
+----,----,C746,SET00,+
+D515,D517,C74F,CAT,"Concatenate two strings: ""fac"" and ""txtptr"""
+D535,D537,C76F,SIZEOK,+
+D552,D554,C78C,MOVINS,"(Store string)"
+D560,D562,C79A,MOVSTR,+
+D564,D566,C79E,MOVDO,+
+D568,D56A,C7A2,MOVLP,+
+D571,D573,C7AB,MVDONE,+
+D57A,D57C,C7B4,MVSTRT,+
+D57B,D57D,C7B5,FRESTR,"(Discard unwanted string)"
+D57E,D580,C7B8,FREFAC,+
+D582,D584,C7BC,FRETMP,"Frees up temporary string pointers"
+----,----,C7DE,RES00,+
+----,----,C7F6,FRE01,+
+D5AD,D5AF,C7FC,FREPLA,+
+----,----,C7FE,FRE02,+
+D5B3,D5B5,C811,FRETMS,"(Clean descriptor stack)"
+D5C3,D5C5,C821,FRERTS,+
+D5C4,D5C6,C822,CHRD,"CHR$ instruction"
+D5D8,D5DA,C836,LEFTD,"LEFT$ instruction"
+D5DE,D5E0,C83C,RLEFT,+
+D5E4,D5E6,C842,RLEFT1,+
+D5E5,D5E7,C843,RLEFT2,+
+D5E6,D5E8,C844,RLEFT3,+
+D5FD,D5FF,C85B,PULMOR,+
+D604,D606,C862,RIGHTD,"RIGHT$ instruction"
+D60F,D611,C86D,MIDD,"MID$ instruction"
+D620,D622,C87E,MID2,+
+D637,D63B,C897,PREAM,"Used by right - (pull string data)"
+D654,D656,C8B2,LEN,"LEN instruction"
+D65A,D65C,C8B8,LEN1,"(Switch string to numeric)"
+D663,D665,C8C1,ASC,"ASC instruction"
+D670,D672,C8CE,GOFUC,"Jump to ""illegal quantity error"""
+D673,D675,C8D1,GTBYTC,"Does a ""chrget"" and ""getbyt"""
+D676,D678,C8D4,GETBYT,"Egaulate the formula and..."
+D679,D67B,C8D7,CONINT,"(Get a single byte value and return it in X)"
+D685,D687,C8E3,VAL,"VAL instruction"
+D6A5,D6A7,C903,VAL2,+
+D6BB,D6BD,C918,ST2TXT,+
+D6C3,D6C5,C920,VALRTS,+
+D6C4,D6C6,C921,GETNUM,"Evaluate formula and return integer value (0-65535) (Get two parameters for POKE or WAIT)"
+D6CA,D6CC,C927,COMBYT,+
+D6D0,D6D2,C92D,GETADR,"Convert ""fac"" to integer - place in ""poker"""
+D6E6,D6E8,C943,PEEK,"PEEK instruction"
+D6F3,D6FB,C94E,GETCON,+
+D6F6,D6FE,C951,DOSGFL,+
+D6F9,D707,C95A,POKE,"POKE instruction"
+D702,D710,C963,FNWAIT,"WAIT instruction"
+D711,D71F,C972,STORDO,+
+D715,D723,C976,WAITER,+
+D71D,D72B,C97E,ZERRTS,+
+D71E,D72C,C97F,FADDH,"Add 1/2 to fpb value in fac"
+D725,D733,C986,FSUB,"Move memory to ""arg"" and..."
+D728,D736,C989,FSUBT,"""-"" instruction: fac=fac-arg"
+D737,D76E,C998,FADD5,+
+D73C,D773,C99D,FADD,"Move  memory to ""arg"" and..."
+D73F,D776,C9A0,FADDT,"""+"" instruction: fac=fac+arg"
+D74C,D783,C9AD,FADDC,+
+D768,D79F,C9C9,FADDA,+
+D76C,D7A3,C9CD,FADD1,+
+D778,D7AF,C9D9,FADD4,+
+D784,D7BB,C9E5,SUBIT,+
+D7A7,D7DE,CA08,FADFLT,+
+D7AC,D7E3,CA0D,NORMAL,"Normalize ""fac"" - results of addition & subtraction"
+D7B0,D7E7,CA11,NORM3,+
+D7CC,D803,CA2D,ZEROFC,"""fac""=0"
+D7CE,D805,CA2F,ZEROF1,+
+D7D0,D807,CA31,ZEROML,"Make sign positive"
+D7D3,D80A,CA34,FADD2,+
+D7F2,D829,CA53,NORM2,+
+D7FE,D835,CA5F,NORM1,+
+D80B,D842,CA6C,SQUEEZ,+
+D80D,D844,CA6E,RNDSHF,+
+D81B,D852,CA7C,RNDRTS,+
+D81C,D853,CA7D,NEGFAC,"Complement ""fac"" entirely"
+D822,D859,CA83,NEGFCH,"Complement just the number in ""fac"""
+D844,D87B,CAA5,INCFAC,"Increment ""fac"""
+D852,D889,CAB3,INCFRT,+
+D853,D88A,CAB4,OVERR,"Print ""overflow error"""
+D858,D88F,CAB9,MULSHF,"Shifer routines - (multiply a byte)"
+D85A,D891,CABB,SHFTR2,+
+D86E,D8A5,CACF,SHIFTR,+
+D87B,D8B2,CADC,SHFTR3,+
+D881,D8B8,CAE2,SHFTR4,+
+D885,D8BC,CAE6,ROLSHF,+
+D88F,D8C6,CAF0,SHFTRT,+
+D891,D8C8,CAF2,FONE,"Floating-point-binary constant: 1"
+D896,D8CD,CAF7,LOGCN2,"Floating-point-binary constant: 2.34518945e-38"
+D8AB,D8E2,CB0C,SQR05,"Floating binary value: 1/sqr(2)"
+D8B0,D8E7,CB11,SQR20,"Floating binary value: sqr(2)"
+D8B5,D8EC,CB16,NEGHLF,"Floating binary value: 1/2"
+D8BA,D8F1,CB1B,LOG2,"Floating binary value: ln(2)"
+D8BF,D8F6,CB20,LOG,"LOG instruction"
+D8C6,D8FD,CB27,LOGERR,"Jump to illegal quantity error"""
+D8C9,D900,CB2A,LOG1,+
+----,----,CB5A,MULLN2,+
+D8FD,D934,CB5E,FMULT,"Multiply: ""fac""=""fac""*""arg"""
+D900,D937,CB61,FMULTT,"""*"" instruction: ""arg"" and ""fac"" loaded"
+D92B,D965,CB8F,MLTPLY,+
+D930,D96A,CB94,MLTPL1,+
+D933,D96D,CB97,MLTPL2,+
+D94F,D989,CBB3,MLTPL3,+
+D95D,D997,CBC1,MULTRT,+
+D95E,D998,CBC2,CONUPK,"Unpack memory into ""arg"""
+D989,D9C3,CBED,MULDIV,"Check and adjust exps or FPB mult and div (Test & adjust ""fac"" & ""arg"")"
+D98B,D9C5,CBEF,MLDEXP,+
+D996,D9D0,CBFA,TRYOFF,+
+D9A6,D9E0,CC0A,MLDVEX,"(Handle overflow and underflow)"
+D9AC,D9E6,CC10,ZEREMV,+
+D9B1,D9EB,CC15,GOOVER,"Jump to ""overflow error"""
+D9B4,D9EE,CC18,MUL10,"Multiply: ""fac""=""fac""*10"
+D9BF,D9F9,CC23,FINML6,+
+D9CA,DA04,CC2E,MUL10R,+
+D9CB,DA05,CC2F,TENC,"Floating point binary value of 10"
+D9D0,DA0A,CC34,DIV10,"Divide: ""fac""=""fac""/10"
+D9D9,DA13,CC3D,FDIVF,"(Perform divide-by)"
+D9E1,DA1B,CC45,FDIV,"Unpack memory and divide - (do divide-into)"
+D9E4,DA1E,CC48,FDIVT,"""/"" instruction: ""fac""=""arg""/""fac"""
+D9FB,DA35,CC5F,DIVIDE,+
+DA11,DA4B,CC75,SAVQUO,+
+DA1E,DA58,CC82,QSHFT,+
+DA21,DA5B,CC85,SHFARG,+
+DA2F,DA69,CC93,DIVSUB,+
+DA4C,DA86,CCB0,LD100,+
+DA50,DA8A,CCB4,DIVNRM,+
+DA5C,DA96,CCC0,DV0ERR,"Print ""division by zero error"""
+DA61,DA9B,CCC5,MOVFR,"Move ""res"" to ""fac"""
+DA74,DAAE,CCD8,MOVFM,"Move memory to ""fac"""
+DA99,DAD3,CCFD,MOV2F,"(Pack ""fac"" into memory)"
+DA9C,DAD6,CD00,MOV1F,+
+DAA2,DADC,CD06,MOVVF,+
+DAA6,DAE0,CD0A,MOVMF,"(Round off ""fac"" and) move ""fac"" to memory"
+DACE,DB08,CD32,MOVFA,"Move ""arg"" to ""fac"""
+DAD0,DB0A,CD34,MOVFA1,+
+DAD4,DB0E,CD38,MOVFAL,+
+DADE,DB18,CD42,MOVAF,"Move ""fac"" to ""arg"" with round-off"
+DAE1,DB1B,CD45,MOVEF,"(Move ""fac"" to ""arg"" without roundoff)"
+DAE3,DB1D,CD47,MOVAFL,+
+DAEC,DB26,CD50,MOVRTS,+
+DAED,DB27,CD51,ROUND,"Round-off ""fac"""
+DAF5,DB2F,CD59,INCRND,+
+DAFD,DB37,CD61,SIGN,"Extract sign from ""fac"" - place in A"
+DB01,DB3B,CD65,FCSIGN,+
+DB03,DB3D,CD67,FCOMPS,+
+DB0A,DB44,CD6E,SIGNRT,+
+DB0B,DB45,CD6F,SGN,"SGN instruction"
+DB0E,DB48,CD72,FLOAT,"Float the signed integer in ""fac"""
+DB16,DB50,CD7A,FLOATS,"Float the signed number in ""fac"""
+DB1B,DB55,CD7F,FLOATC,+
+DB21,DB5B,CD85,FLOATB,+
+DB2A,DB64,CD8E,ABS,"ABS instruction"
+DB2D,DB67,CD91,FCOMP,"Compare ""arg"" and ""fac"": A=1 if ""arg""<""fac"" (Compare ""fac"" to memory)"
+DB2F,DB69,CD93,FCOMPN,+
+DB64,DB9E,CDC8,FCOMPC,+
+DB6A,DBA4,CDCE,FCOMPD,+
+DB6D,DBA7,CDD1,QINT,"Floating to fixed conversion: ""fac""=int(""fac"")"
+DB81,DBBB,CDE5,QISHFT,+
+DB8C,DBC6,CDF0,QINTRT,+
+DB8D,DBC7,CDF1,QINT1,+
+DB9E,DBD8,CE02,INT,"INT instruction"
+DBBB,DBF5,CE1F,CLRFAC,"Fill all positions of ""fac"" with contents of A"
+DBC4,DBFE,CE28,INTRTS,+
+DBC5,DBFF,CE29,FIN,"Convert input string to floating-pt. value in ""fac"""
+DBC9,DC03,CE2D,FINZLP,+
+DBD8,DC12,CE3C,QPLUS,+
+DBDC,DC16,CE40,FINC,+
+DBDF,DC19,CE43,FINDGQ,+
+DBE1,DC1B,CE45,FIN1,+
+DC00,DC3A,CE64,FINEC1,+
+DC02,DC3C,CE66,FINEC,+
+DC05,DC3F,CE69,FNEDG1,+
+DC07,DC41,CE6B,FINEC2,+
+DC13,DC4D,CE77,FINDP,+
+DC19,DC53,CE7D,FINE,+
+DC1B,DC55,CE7F,FINE1,+
+DC24,DC5E,CE88,FINDIV,+
+DC2D,DC67,CE91,FINMUL,+
+DC34,DC6E,CE98,FINQNG,+
+DC39,DC73,CE9D,NEGXQS,+
+DC3C,DC76,CEA0,FINDIG,+
+DC43,DC7D,CEA7,FINDG1,+
+DC50,DC8A,CEB4,FINLOG,"(Get new ASCII digit)"
+DC63,DC9D,CEC7,FINEDG,+
+DC72,DCAC,CED6,MLEX10,+
+DC70,DCBA,CEE4,MLEXMI,+
+DC85,DCBF,CEE9,N0999,"Floating binary constant: 99999999.90625"
+DC8A,DCC4,CEEE,N9999,"Floating binary constant: 99999999.5"
+DC8F,DCC9,CEF3,NMIL,"Floating binary constant: 1**+9"
+----,----,CEF8,CHSUMC,"Checksum byte $c000 ROM"
+DC94,DCCE,CF78,INPRT,"Print current line number - (Print ""in"" then #)"
+DC9F,DCD9,CF83,LINPRT,"Print current line number (Print ""in"", then #)"
+DCAC,DCE6,CF90,STROU2,"Jump to ""strout"""
+DCAF,DCE9,CF93,FOUT,"Convert ""fac"" to string ending in 0, address in A & Y"
+DCB1,DCEB,CF95,FOUTC,+
+DCB9,DCF3,CF9D,FOUT1,+
+DCD2,DD0C,CFB6,FOUT37,"(""fac""=""fac""*1**+9)"
+DCDB,DD15,CFBF,FOUT7,+
+DCDD,DD17,CFC1,FOUT4,+
+DCE8,DD22,CFCC,FOUT3,"(Multiply/Divide by 10)"
+DCF3,DD2D,CFD7,FOUT38,+
+DCFA,DD34,CFDE,FOUT9,+
+DD01,DD3B,CFE5,FOUT5,+
+DD04,DD3E,CFE8,BIGGES,"(Convert ""fac"" to positive integer)"
+DD19,DD53,CFFD,FOUTPI,+
+DD1A,DD54,CFFE,FOUT6,+
+DD25,DD5F,D009,FOUT39,+
+DD36,DD70,D01A,FOUT16,+
+DD38,DD72,D01C,FOUT8,+
+DD3A,DD74,D01E,FOUTIM,"Clock entry into ""fout"""
+DD3C,DD76,D020,FOUT2,+
+DD60,DD9A,D044,FOUT41,+
+DD62,DD9C,D046,FOUT40,+
+DD69,DDA3,D04D,FOUTYP,+
+DD84,DDBE,D068,STXBUF,+
+DD96,DDD0,D07A,FOULDY,+
+DD98,DDD2,D07C,FOUT11,+
+DDA5,DDDF,D089,FOUT12,+
+DDB5,DDEF,D099,FOUT14,+
+DDC1,DDFB,D0A5,FOUT15,+
+DDD6,DE10,D0BA,FOUT19,+
+DDD9,DE13,D0BD,FOUT17,+
+DDDE,DE18,D0C2,FOUT20,+
+DDE3,DE1D,D0C7,FHALF,"Floating binary value: 1/2"
+D01A,DE1F,D0C9,ZERO,+
+DDE8,DE22,D0CC,FOUTBL,"Tables of powers of -10**: (2.86868289E+36)"
+DE0C,DE46,D0F0,FDCEND,"End of powers table"
+DE24,DE5E,D108,SQR,"SQR instruction"
+DE24,DE5E,D108,TIMEND,"End of time conversion tables"
+DE2E,DE68,D112,FPWRT,"[up-arrow] instruction: ""arg""**""fac"""
+DE37,DE71,D11B,FPWRT1,+
+DE51,DE8B,D135,FPWR1,+
+DE67,DEA1,D14B,NEGOP,""">"" instruction - Negate the number in ""fac"""
+DE71,DEAB,D155,NEGRTS,+
+DE72,DEAC,D156,LOGEB2,"Floating binary value: log(E) in base 2"
+DE77,DEB1,D15B,EXPCON,"LOG and exponent - floating binary tables"
+DEA0,DEDA,D184,EXP,"EXP instruction (of ""fac"")"
+DEB0,DEEA,D194,STOLD,+
+DEBB,DEF5,D19F,GOMLDV,+
+DEBE,DEF8,D1A2,EXP1,+
+DECE,DF08,D1B2,SWAPLP,+
+DEF3,DF2D,D1D7,POLYX,"Polynomial evaluator (function series evaluation)"
+DF09,DF43,D1ED,POLY,+
+DF0D,DF47,D1F1,POLY1,+
+DF1C,DF56,D200,POLY3,"(Multiply ""fac"" * ""bufptr"")"
+DF20,DF5A,D204,POLY2,+
+DF2D,DF67,D211,POLY4,+
+DF3D,DF77,D221,RMULC,"(RND constants)"
+DF41,DF7B,D225,RADDC,+
+DF45,DF7F,D229,RND,"RND instruction"
+DF63,DF9D,D247,QSETNR,"(Calculate new random number: ""fac""=rnd(""fac"")"
+DF78,DFB2,D25C,RND1,"(Scramble ""fac"" mantissa)"
+DF88,DFC2,D26C,STRNEX,+
+DF9B,DFD5,D27F,GMOVMF,+
+DF9E,DFD8,D282,COS,"COS instruction"
+DFA5,DFDF,D289,SIN,"SIN instruction"
+DFD7,E011,D2BB,SIN1,"(Gosub "">"" routine)"
+DFDA,E014,D2BE,SIN2,+
+DFE7,E021,D2CB,SIN3,+
+DFEE,E028,D2D2,TAN,"TAN instruction"
+E016,E050,D2FA,COSC,x
+E01A,E054,D2FE,PI2,"Floating binary value of pi/2"
+E01F,E059,D303,TWOPI,"Floating binary value 2*pi"
+E024,E05E,D308,FR4,"Floating binary value 1/4"
+E029,E063,D30D,SINCON,"SIN tables - Floating binary values:-4.88193226e-38"
+E048,E08C,D32C,ATN,"ATN instruction - uses ""fac"""
+E050,E094,D334,ATN1,+
+E05E,E0A2,D342,ATN2,+
+E071,E0B5,D355,ATN3,+
+E077,E0BB,D35B,ATN4,+
+E078,E0BC,D35C,ATNCON,"(Constants: 5.79991803e-36)"
+E0B5,E0F9,D399,INITAT,"Basic system initialization code - copy of ""chrget"""
+E0BB,E0FF,D39F,CHDGOT,+
+E0CC,E110,D3B0,CHDRTS,+
+E0D2,E116,D3B6,INIT,"BASIC cold start - initialization and memory test"
+E0E7,E131,D3C9,MOVCHG,"(Copy ""chrget"" to zero page)"
+E116,E15D,D400,LOOPMM,+
+E122,E165,D408,LOOPM1,+
+E131,E174,D417,USEDEC,+
+E135,E178,D41B,USEDEF,+
+E174,E1B7,D44B,WORDS,"Message - 'bytes free'"
+E17F,E1C4,D458,FREMES,"Message - ""### commodore basic ###'"
+E1E1,E1DE,D472,LASTWR,"Last byte of BASIC interpreter+1"
+----,FD11,D472,CALLE,"Call entry to Machine-Lanuage monitor"
+----,FD17,D478,BRKE,"Break entry to Machine-language monitor"
+----,FD2D,D491,B3,"PC-1 for Break"
+----,FD48,D4AC,B5,"Print entry data"
+----,FD56,D4BA,STRT,"User command input"
+----,FD65,D4C9,ST1,"Input command line"
+----,FD70,D4D4,S0,"Lookup command"
+----,FD72,D4D6,S1,+
+----,FD82,D4E6,S2,"Loop for all commands"
+----,FD88,D4EC,PUTP,"Move ""tmp0"" to ""pch"",""pc1"""
+----,FD93,D4F7,DM,"Display memory routine: ""ar""=# bytes, ""tmp0""=address"
+----,FD97,D4FB,DM1,"Write N bytes"
+----,FDA7,D50B,BYTE,"Read & store byte unless space, or ""tmpc""=0"
+----,FDB9,D51D,BY3,"Increment ""tmp0"" address"
+----,FDBF,D523,SETR,"Set to access registers"
+----,FDCA,D52E,SPAC2,"Print 2 spaces"
+----,FDCD,D531,SPACE,"Print 1 space"
+----,FDD0,D534,CRLF,"Print return + line-feed"
+----,FDD5,D539,INCTMP,"Increment where ""tmp0"" points, by one"
+----,FDDF,D543,SETWR,+
+----,FDE0,D544,CMDS,"Table of Monitor commands"
+----,FDE8,D54C,ADRH,"Table of Monitor commands' addresses-1: Hi bytes"
+----,FDF0,D554,ADRL,"Table of Monitor commands' addresses-1: Lo bytes"
+----,FDF8,D55C,REGK,"Register header display"
+----,FE15,D579,ALTRIT,"(Begin new memory display line with prompt)"
+----,FE22,D586,zz3,
+----,FE23,D587,DSPLYR,"R - Display registers command"
+----,FE25,D589,D2,"(Read & print ""regk' loop)"
+----,FE57,D5BB,zz4,
+----,FE58,D5BC,DSPLYM,"M - display memory command"
+----,FE6E,D5D2,DSP1,"Test for stop key and ..."
+----,FE91,D5F5,BEQS1,"Jump to ""strt"""
+----,FE94,D5F8,ERRS1,"Jump to ""erropr"""
+----,FE96,D5FA,zz2,
+----,FE97,D5FB,ALTR,"Alter registers"
+----,FEA2,D606,AL2,SYS8
+----,FEB4,D618,AL3,"Set to alter registers"
+----,FEB8,D61C,zz1,
+----,FEB9,D61D,ALTM,"Alter memory - read address & data"
+----,FEC3,D627,A4,+
+----,FEC5,D629,A5,+
+----,FECD,D631,A9,+
+----,FECE,D632,zz5,
+----,----,D633,go,"G - go command"
+----,FEE2,D646,G1,"Original or new value to SP"
+----,FF06,D66A,zz6,x
+----,FF07,D66B,EXIT,"X - exit command"
+----,FF0E,D672,ERRL,"Jump to ""erropr"""
+----,----,D674,zz8,
+----,FF10,D674,zz7,
+----,FF11,D675,LD,"L - Load command - default is from cassette #1"
+----,FF22,D688,L1,+
+----,FF2F,D695,L2,"File name must be next"
+----,FF31,D697,L3,"Read file name"
+----,FF43,D6A9,L4,"File name too long"
+----,FF47,D6AD,L5,"Is this a load?"
+----,FF4B,D6B1,L6,"Not a load"
+----,FF57,D6BD,L7,"Load error"
+----,FF5C,D6C2,L8,"Is this a default load?"
+----,FF65,D6CB,L9,"Bad syntax"
+----,FF6C,D6D2,L10,"Device 0"
+----,FF70,D6D6,L11,"Device 3"
+----,FF7D,D6E3,L12,"Bad syntax"
+----,FF8A,D6F0,L13,"Missing end address"
+----,FF9A,D700,L20,"Skip space loop"
+----,FFA3,D709,L14,"Missing [return] at end"
+----,E76A,D717,WROA,"Monitor routines: Write address from ""tmp0"" stores"
+----,E76C,D719,WROA1,+
+----,E775,D722,WROB,"Write a byte - unpack A into 2 characters in X & A"
+----,E784,D731,WRTWO,"Write two characters from X & A"
+----,E78D,D73A,ASCII,"(Convert low nybble to ascii)"
+----,E794,D741,ASC1,+
+----,E797,D744,T2T2,"Swap ""tmp0"" with ""tmp2"""
+----,E799,D746,T2T21,+
+----,E7A7,D754,RDOA,"Read hex addr: return Hi in ""tmp0"", Lo in ""tmp0+1"""
+----,E7AE,D75B,RDOA2,+
+----,E7B5,D762,RDEXIT,"Exit read"
+----,E7B6,D763,RDOB,"Read hex byte and return in A"
+----,E7BE,D76B,RDOB1,Space?
+----,E7CB,D778,RDOB2,"Convert first character to hex"
+----,E7D8,D785,RDOB3,"Convert second character to hex"
+----,E7E0,D78D,HEXIT,"Input one hex digit to A"
+----,E7EA,D797,HEX09,"Exit with hex value in A"
+----,E7EB,D798,RDOC,"Read character"
+----,E7F7,D7A4,ERROPR,"Operator error restart"
+----,----,D7AC,SYNERR,"To ""syntax error"""
+----,----,D7AF,record,"RECORD instruction"
+----,----,D7DB,NUMADR,+
+----,----,D7E1,REXNEX,+
+----,----,D7FE,DONER,+
+----,----,D801,QTYER1,+
+----,----,D804,CHK1,"Disk parameter checks"
+----,----,D808,CHKER1,+
+----,----,D80B,CHK2,+
+----,----,D818,CHK3,+
+----,----,D81D,CHK4,+
+----,----,D824,CHK5,+
+----,----,D82E,CHK6,+
+----,----,D838,TABLD,"Dummy disk control messages"
+----,----,D873,CATLOG,"CATALOG & DIRECTORY instructions"
+----,----,D87D,CATALG,+
+----,----,D889,CATBLD,+
+----,----,D8A5,WG220,+
+----,----,D8D2,SKIPB,+
+----,----,D8D8,WG250,+
+----,----,D8FE,WG255,+
+----,----,D905,WG240,+
+----,----,D911,WG235,+
+----,----,D912,WG230,+
+----,----,D91A,SUBA,Output
+----,----,D923,SUBB,+
+----,----,D92E,SUBBR,+
+----,----,D92F,ENTRY0,"Find spare secondary address"
+----,----,D931,ENTRY1,+
+----,----,D935,ENTRY2,+
+----,----,D93F,RFOUND,+
+----,----,D942,dopen,"DOPEN instruction"
+----,----,D94F,DOPEN2,+
+----,----,D95B,RECLCK,+
+----,----,D95D,LEAV,+
+----,----,D970,LEAV1,+
+----,----,D977,append,"APPEND instruction"
+----,----,D984,DAPPEN,+
+----,----,D991,ERRCHL,"Get disk status"
+----,----,D995,GETDS,+
+----,----,D9AB,ECHKS,+
+----,----,D9B3,EREAD,+
+----,----,D9BF,LOOP1,+
+----,----,D9CB,ERREND,+
+----,----,D9D2,format,"HEADER instruction"
+----,----,D9DE,FERRO,+
+----,----,D9E1,DFORMA,+
+----,----,D9EA,FBUILD,+
+----,----,D9F5,FCONT,+
+----,----,D9F8,FERRS,+
+----,----,DA04,FERRP,+
+----,----,DA07,dclose,"DCLOSE instruction"
+----,----,DA11,DCLSE,+
+----,----,DA1B,DCLALL,+
+----,----,DA1F,DCLLP,+
+----,----,DA30,DCLBYE,+
+----,----,DA31,BOBREC,"Set up disk record"
+----,----,DA3D,DRECG,+
+----,----,DA43,DREBLD,+
+----,----,DA65,colect,"COLLECT instruction"
+----,----,DA6B,DCOLLE,+
+----,----,DA7A,DCOLL0,+
+----,----,DA7E,backup,"BACKUP instruction"
+----,----,DA87,BERRO,+
+----,----,DA8A,BBACK,+
+----,----,DA91,DBACKU,+
+----,----,DA98,TRANS,+
+----,----,DA9B,TRANS1,+
+----,----,DAA7,copy,"COPY instruction"
+----,----,DAB7,COPY2,+
+----,----,DABD,COPCON,+
+----,----,DAC0,COPY3,+
+----,----,DAC7,concat,"CONCAT instruction"
+----,----,DAD4,RSFN,"Insert command string values"
+----,----,DAE1,RDFN,+
+----,----,DAEA,RDMOV,+
+----,----,DAF8,RDRT0,+
+----,----,DAF9,RDRT1,+
+----,----,DAFD,RID,+
+----,----,DB0D,dsave,"DSAVE instruction"
+----,----,DB1A,DSAVE2,+
+----,----,DB23,SAVLD0,+
+----,----,DB32,SAVLD1,+
+----,----,DB3A,dload,"DLOAD instruction"
+----,----,DB44,DLOERR,+
+----,----,DB47,DLOAD2,+
+----,----,DB55,rename,"RENAME instruction"
+----,----,DB5F,DREN,+
+----,----,DB66,scrtch,"SCRATCH instruction"
+----,----,DB6C,DSCRAT,+
+----,----,DB78,NUMSCR,+
+----,----,DB87,NUMLP,+
+----,----,DB93,NUMPRT,+
+----,----,DB98,NUMBYE,+
+----,----,DB99,DDIREC,"Check Direct command"
+----,----,DB9D,DXCR0,+
+----,----,DB9E,RUSURE,"Ask ""are you sure?"" - wait for reply"
+----,----,DBA3,RUSUR1,+
+----,----,DBAB,RUSUR2,+
+----,----,DBCB,ANSNO,+
+----,----,DBD5,ANSYES,+
+----,----,DBD6,ANSBYE,+
+----,----,DBD7,BADDIS,"Print ""bad disk"""
+----,----,DBE1,OLDCLR,"Clear DS$ and ST"
+----,----,DBF1,OLDCL1,+
+----,----,DBFA,SENDP,"Assemble disk command string"
+----,----,DBFC,SENDP1,+
+----,----,DC02,SENDP2,+
+----,----,DC0D,RXFN1,+
+----,----,DC14,RXFN2,+
+----,----,DC1B,RXREC,+
+----,----,DC24,RXID,+
+----,----,DC2B,RXWRT,+
+----,----,DC34,RXD1,+
+----,----,DC3D,RXD2,+
+----,----,DC44,RXDD,+
+----,----,DC46,RPLCE,+
+----,----,DC4C,TRANR,+
+----,----,DC57,RWRT,+
+----,----,DC60,RWRT1,+
+----,----,DC67,RWRTS,+
+----,----,DC68,DOSPAR,"Parse BASIC DOS command"
+----,----,DC89,PARSEL,+
+----,----,DC9F,PARNXT,+
+----,----,DCB2,NEXT7,+
+----,----,DCBA,SNER1,+
+----,----,DCBD,LOGADR,+
+----,----,DCD8,RECLEN,+
+----,----,DCEA,RECOO,+
+----,----,DCF8,RECON,+
+----,----,DD03,DONE1,+
+----,----,DD06,NAME11,+
+----,----,DD09,ON1,+
+----,----,DD0F,UNIT1,+
+----,----,DD15,DRV1,+
+----,----,DD34,QTYER2,+
+----,----,DD37,IDENT,+
+----,----,DD41,IDCON,+
+----,----,DD45,NEXT3,+
+----,----,DD4B,NEXT4,+
+----,----,DD60,NAME1,+
+----,----,DD77,LOOP6,+
+----,----,DD85,NAMCON,+
+----,----,DD96,DELIM1,+
+----,----,DD9E,NXXX,+
+----,----,DDA8,NEXT6,+
+----,----,DDAF,NEXT6A,+
+----,----,DDB3,SNER8,+
+----,----,DDB6,PARSE2,+
+----,----,DDCD,SNER2,+
+----,----,DDD0,DRV2,+
+----,----,DDEC,ON2,+
+----,----,DDF2,UNIT2,+
+----,----,DDF8,NAME2,+
+----,----,DE0F,DELIM2,+
+----,----,DE20,SNER3,+
+----,----,DE23,DONE,+
+----,----,DE27,QTYERR,+
+----,----,DE2C,ON,"Get Device number"
+----,----,DE33,UNIT,x
+----,----,DE49,NEWNAM,"Get file name"
+----,----,DE6C,LENCHK,+
+----,----,DE74,ERRLEN,+
+----,----,DE79,NXXT5,+
+----,----,DE81,NEXT5,+
+----,----,DE82,NXX5,+
+----,----,DE87,GETVAL,"Get small variable parameter"
+----,----,DE8A,GTVL2,+
+----,----,DE8F,cont,+
+----,----,DE9A,NUMERC,+
+----,----,DE9D,CKSUMD,"Checksum $d000 ROM"
+E1C2,----,DE9E,PATCH5,
+----,----,DEA4,SIGNON,"Message ""*** commodore basic 4.0 ***""+[2 returns]"
+E1E1,E1DE,E000,CINT,"(Register/screen initialization)"
+E1ED,E1E7,E009,PX1,"Clear locations $60-$f8"
+E236,E229,E04B,CLSR,"Initialize line pointers for [clr]"
+E254,E22D,E04F,LPS1,"$f4 - $f8 = $83"
+----,E23B,E05D,LPS2,+
+E257,E23C,E05E,LPS3,+
+E245,E248,E06A,LPS4,"-2=Clear screen"
+E269,E257,E079,NXTD,"Start new screen linel adj. pointers for preset line"
+E5DB,E25D,E07F,STUPT,+
+E5FA,E27A,E09C,STUPZ,"Cursor column #"
+E604,E284,E0A6,STUPR,+
+E27D,E285,E0A7,LP2,"(Input from keyboard - Get character from keyboard buffer & move rest of buffer down)"
+E282,E28A,E0AC,LP1,"Keyboard buffer"
+E294,E29A,E0BC,LOOP4,"Print single character"
+E297,E29D,E0BF,LOOP3,"Wait for kbd. input; echo to screen, exit on [return]"
+E2B0,E2B1,E0D3,LP21,"Get character from buffer"
+E2BD,E2BD,E0DF,LP23,"RUN or LOAD"
+E2C8,E2C8,E0EA,LP22,+
+E2D1,E2D0,E0F2,CLP5,+
+E2DA,E2D9,E0FB,CLP6,+
+E2FA,E2F4,E116,LOOP5,"(Input from screen)"
+E303,E2FC,E11E,LOP5,"Cursor column #"
+E309,E302,E124,LOP51,"Strip bits 6 & 7"
+E313,E30C,E12E,LOP54,+
+E319,E312,E134,LOP52,+
+E31D,E316,E138,LOP53,"If necessary, toggle ('quote' mode flag)"
+E327,E31F,E141,CLP2,+
+E335,E32B,E153,CLP2A,"Print character in acc"
+E338,E32E,E156,CLP21,+
+E33A,E330,E158,CLP1,"Last key = cr"
+E348,E33E,E166,CLP7,+
+E349,E33F,E167,QTSWC,'quote'
+E355,E34B,E173,QTSWL,+
+E356,E34C,E174,NXT33,+
+E358,E34E,E176,NXT3,"Screen [rvs] flag"
+E35D,E352,E17A,NC3,+
+E35F,E354,E17C,NVS,"# of keyboard [inserts] outstanding"
+E365,E35A,E182,NVS1,"Write acc to screen"
+E368,E35D,E185,JSTS,"Cursor column #"
+E383,E377,E19F,JSTS1,"Last line"
+E38A,E37E,E1A6,LOOP2,+
+E392,E386,E1AE,LOP2,+
+E397,E38B,E1B3,JSTSX,+
+E3A3,E395,E1BD,JSXB,+
+E3A4,E396,E1BE,JTS2,+
+E3AA,E39C,E1C4,SCRL,"Scroll screen"
+E3B1,E3A3,E1CD,JSTS2,"Line wrap table"
+E3C4,E3B4,E1DE,BKLN,"Set up new screen line - Max columns per screen line"
+E3D0,E3C0,E1EA,BKLN1,+
+E3DB,E3C9,E1F3,NTCN2,+
+E3EA,E3D8,E202,PRT,"Output character in A"
+E406,E3F3,E21D,NJT1,+
+E412,E3FF,E229,NTCN,"Number of keyboard inserts outstanding"
+E419,E406,E230,CNC3X,+
+E428,E415,E23F,BK1,+
+E433,E420,E24A,BK2,+
+E439,E426,E250,NTCN1,"(If=0, not in quote mode)"
+E43D,E42A,E254,CNC3,+
+E440,E42D,E257,NC3W,[reverse]?
+E447,E433,E25D,NC1,[home]?
+E44E,E43A,E264,NC2,[cursor-right]?
+E45F,E44B,E275,JPL4,+
+E461,E44D,E277,NCZ2,+
+E464,E450,E27A,NCX2,[cursor-down]?
+E476,E462,E28C,JPL3,+
+E479,E465,E28F,PRT1,+
+E481,E46D,E297,PRT2,"Increment cursor line number"
+E48F,E47A,E2A4,NXTX,+
+E497,E482,E2AC,NXTX1,+
+E4A5,E490,E2BA,UP5,"(If=0, not in quote mode)"
+E4B9,E4A4,E2CE,INS3,"(End of line?)"
+E4C0,E4AB,E2D5,INS1,"Screen line length"
+E4C2,E4AD,E2D7,INS2,+
+E4D5,E4C0,E2EA,UP9,"# of keyboard [inserts] outstanding"
+E4D9,E4C4,E2EE,UP6,+
+E4DE,E4C9,E2F3,UP2,[cursor-down]?
+E4EE,E4D9,E303,UP1,+
+E4FE,E4E8,E312,UP3,+
+E50E,E4F8,E322,NXT2,[reverse]?
+E517,E500,E32A,NXT6,[cursor-right]?
+E526,E50F,E339,NXT61,x
+E52D,E516,E340,JLP2,+
+E530,E519,E343,NXLN,"Check for & perform scrolling"
+E536,E51E,E348,NXLN2,+
+E53E,E526,E350,NXLN1,+
+E548,E52F,E359,NXT1,"Clear screen flags to 0"
+E559,E53F,E369,SCROL,"Scroll to screen"
+E56D,E552,E37B,SCRL1,+
+E574,E559,E382,MLP1,+
+E58D,E572,E39B,MLP2,+
+E599,E57E,E3A7,SCRL4,+
+E59D,E582,E3AB,SCRL5,+
+E5A9,E58C,E3B5,SCRL3,+
+E5CA,E5AA,E3D2,MLP4,+
+E5CD,E5AD,E3D5,MLP41,"Wait for TI interrupt"
+E5D8,E5B7,E3DF,MLP42,+
+E605,E5BA,E3E2,NEWLN,"Start new screen line"
+E617,E5CC,E3F3,NEWLX,+
+E619,E5CE,E3F5,NEWL1,+
+E627,E5DA,E401,NEWLA,+
+E63B,E5ED,E414,NELL,+
+E648,E5FA,E421,BLKLN,+
+E65D,E60D,E434,BLKL,+
+E66B,E61B,E442,PULS,"Main Interrupt entry -IRQ & BRK"
+E67B,E62B,E452,PULS1,"Indirect jump through IRQ vector"
+E685,E62E,E455,KEY,"60hz hardware interrupt: clock, cursor, keyboard"
+E6A6,E649,E470,KEY5,+
+E6B0,E64D,E474,KEY4,+
+E6D4,E66E,E495,KEY3,+
+E6DB,E674,E49B,KL24,+
+E6DE,E677,E49E,KL2,+
+E6EA,E682,E4A9,KL23,+
+E6F4,E68B,E4B2,KL25,+
+E6F7,E68E,E4B5,KL22,"Keyboard scan"
+E701,E698,E4BF,KL1,+
+E74B,E6A7,E4CE,CKIS1,+
+E758,E6B4,E4DB,SPCK,"Key image"
+E75B,E6B6,E4DD,CKUT,+
+E709,E6B7,E4DE,CKIT,+
+E714,E6C2,E4E9,CKIT1,+
+E72C,E6D6,E4FD,KN1,+
+E739,E6E2,E509,KEYF,+
+E73C,----,E50B,PREND0,+
+E67E,E6E4,E600,PREND,"(Exit from interrupt)"
+E7AC,E6EA,E606,DSPP,+
+E75C,E6F8,E60B,CHAR,"Keyboard encoding table; 10 rows of 8 values"
+E7BC,E748,E65B,LDTB2,"Screen table; 25 lines (80 col. $e755)"
+E7D5,E761,E674,RUNTB,"Message: 'dL'""*'+[return]+""run""+[return]"
+----,----,E67D,CKSUME,"Checksum $e000 ROM"
+E810,E810,E810,PIAL,"Keyboard PIA: I/O port A & data direction register"
+E811,E811,E811,PIAL1,"Control Register A"
+E812,E812,E812,PIAK,"I/O port B & DDR=$ff unless hitting certain keys"
+E813,E813,E813,PIAS,"Control register B - Cassette 1 motor $35=on, $3d=off"
+E820,E820,E820,IEEI,"IEEE PIA: I/O port A & data data direction register"
+E821,E821,E821,IEEIS,"Control register A - set output line CA2 $34=low, $3c=high"
+E822,E822,E822,IEEO,"I/O port B & data direction registers; Output data - set to $ff before read port A"
+E823,E823,E823,IEEOS,"Control register B - set output line CB2 $34=low, $3c=high"
+E840,E840,E840,PIA,"VIA: I/O port B: $cf=Cass @2 motor on, $df=Cass #2 motor off, etc."
+E841,E841,E841,SYNC,"I/O port A with handshaking"
+E842,E842,E842,P2DB,"Data direction register for I/O port B"
+E843,E843,E843,P2DA,"Data direction register for I/O port A"
+E844,E844,E844,TIL,"Lo byte: Read timer 1 & counter, write to timer 1 latch & ..."
+9044,E844,E844,CHTIM,+
+E845,E845,E845,TIH,"Hi byte: initiate count"
+E846,E846,E846,TILL,"Lo byte: read timer 1 latch"
+E847,E847,E847,TILH,"Hi byte"
+E848,E848,E848,T2L,"Read timer 2 counter log byte & reset interrupt, etc."
+E849,E849,E849,T2H,"Read timer 2 counter hy byte; write to timer 2 hi byte resets interrupt"
+E84A,E84A,E84A,SR,"Serial I/O shift register; Sets timbre and octave of CB2 sound: $0f $33 & $55 are popular settings"
+E84B,E84B,E84B,ACR,"Auxilliary control register: $10 enables CB2 sound; $00 allows normal I/O after CB2 sound"
+E84C,E84C,E84C,PCR,"Peripheral control register: $0c sets graphic mode; $0e sets text mode"
+E84D,E84D,E84D,IFR,"Interrupt flag register"
+E84E,E84E,E84E,IER,"Interrrupt enable register"
+E84F,E84F,E84F,SYNC1,"I/O port A without handshaking"
+----,----,F000,MSG1,"F000-F0D1 file messages"
+F000,F000,F000,MS1,"File message: ""too many files"""
+F00E,F00E,F00E,MS2,"File message: ""file open"""
+F017,F017,F017,MS3,"File message: ""file not open"""
+F024,F024,F024,MS4,"File message: ""file not found"""
+F032,F032,F032,MS5,"File message: [return] + ""searching """
+F039,F039,F039,MS20,"File message: ""ing """
+F03D,F03D,F03D,MS6,"File message: ""for """
+F041,F041,F041,MS7,"File message: [return] + ""press  play """
+F04D,F04D,F04D,MS8,"File message: ""& record """
+F056,F056,F056,MS9,"File message: ""on tape #"""
+F05F,F05F,F05F,MS10,"File message: [return] + ..."
+F060,F060,F060,MS22,"File message: ""load"""
+F064,F064,F064,MS11,"File message: [return] + ""writing """
+F06D,F06D,F06D,MS21,"File message: [return] + ..."
+F06E,F06E,F06E,MS12,"File message: ""verify"""
+F074,F074,F074,MS13,"File message: ""device no present"""
+F086,F086,F086,MS15,"File message: ""not input file"""
+F094,F094,F094,MS16,"File message: ""not output file"""
+F0A3,F0A3,F0A3,MS17,"File message: [return] + ""found """
+F0AA,F0AA,F0AA,MS18,"File message: [return] + ""ok"" + [shift return]"
+F0AE,F0AE,F0AE,MS19,"File message: [return] + ""ready."" + [shift return]"
+----,----,F0B6,MSG30,"File message: [return] + ""are you sure ?"""
+----,----,F0C5,MSG31,"File message: [return] ""? bad disk "" + [return]"
+F0B6,F0B6,F0D2,TALK,"SYS15 - Sent 'Talk' (to IEEE) with attention"
+F0BA,F0BA,F0D5,LISTN,"(Send 'Listen' (to IEEE) with attention - uses A)"
+F0BC,F0BC,F0D7,LIST1,"(Send IEEE command character)"
+F0E1,F0DF,F0FA,LIST2,x
+F0E7,F0E4,F0FF,list4,"Wait for DAV n=lo"
+F0F1,F0EE,F109,ISOUR,"(Sent byte to IEEE) - Test channel"
+F107,F103,F11E,ISR1,"Wait for NRFD to become low"
+F111,F10D,F128,ISR0,+
+F116,F112,F12D,ISR2,"IEEE status"
+F121,F11D,F138,ISR3,"Set IEEE out control DAV to hi"
+F12C,F128,F143,SECND,"SYS27 - Sent secondary address with listen - uses A"
+F132,F12D,F148,SCATN,"IEEE channel test: release ATN"
+----,----,F151,ERRS3,"Option: timeout or wait for IEEE response"
+----,----,F15B,ERRS4,+
+F13B,F136,F165,ERRP0,"Status=""listener timeout"""
+F13D,F138,F167,ERR01,+
+F142,F13D,F16C,ERRP7,"Print ""device not present"""
+F146,F141,F170,ERRP1,"Timeout on read, clear control lines"
+F14B,F146,F175,ER001,+
+E7DE,F156,F185,MSG,"Print system message)-(Send canned file message)"
+F15B,F164,F193,TKSA,"SYS26 - Secondary address with talk - uses A"
+F161,F169,F198,TKATN,"SYS29 - Release ATN after talk - uses A"
+F167,F16F,F19E,CIOUT,"SYS19 - Handshake character out - uses A); (Send character to IEEE-jb)"
+F171,F177,F1A6,CI2,+
+F176,F17C,F1AB,CI4,+
+F17A,F17F,F1AE,UNTLK,"SYS18 - untalk: drop IEEE device - no reg. used"
+F17E,F183,F1B9,UNLSN,"SYS17 - Send unlisten: no registers used"
+F187,F18C,F1C0,ACPTR,"SYS20 - Handshake in byte (Input) from IEEE - uses A"
+F194,F199,F1CD,ACP00,"Set timer 1 to max"
+F199,F19E,F1D2,ACP01,"Bit 6=tl int"
+F1B5,F1BA,F1EE,ACP03,"Get IEEE input, invert & save on stack"
+F1C0,F1C5,F1F9,ACP05,+
+F1CC,F1D1,F205,GETIN,"SYS10 - Get a buffered character - uses A"
+F1DF,F1E1,F215,BASIN,"SYS8 - Input a byte from channel - uses A"
+F1F1,F1F0,F224,BN10,"If input device in A=screen, find line length"
+F200,F1FD,F231,BN20,"If tape, set up to input characters, else IEEE"
+F223,F20F,F243,JTG35,+
+F205,F215,F249,JTGET,"Tape control"
+F218,F225,F259,JTG10,"Get byte from tape buffer"
+F227,F228,F25C,BN30,"Get ST"
+F22C,F22E,F262,BN32,+
+F22D,F22F,F263,BN35,"Jump to get IEEE input"
+F230,F232,F266,BSOUT,"SYS9 - Output a byte to channel - uses A"
+F241,F23D,F271,BO10,"(If not IEEE)"
+F247,F243,F277,BO20,"(Send to cassette)"
+F248,F244,F278,BO21,"Charager to tape buffer storage"
+F273,F264,F298,JTP10,"Get tape buffer character"
+F277,F268,F29C,RSTOR,"Put in character in second tape buffer address"
+F2A4,F26E,F2A2,CLALL,"SYS11 - abort, not close, all file - no regs. used"
+F27D,F272,F2A6,CLRCH,+
+F27D,F272,F2A6,CLRCHN,"SYS7 - Restore default I/O devices"
+F28B,F27B,F2AF,JX750,+
+F299,F284,F2B8,JX770,"Initialize I/O to default values"
+F2AB,F28D,F2C1,JLTLK,"Fine & set up file data"
+F2AE,F28F,F2C3,JX600,+
+F2B8,F299,F2CD,JZ100,"Move file table entries to device, command"
+F2C7,F2A8,F2DC,JZ101,+
+F2C8,F2A9,F2DD,CLOSE,"CLOSE (logical file) instruction"
+F2CD,F2AE,F2E2,CLOS5,"SYS4 - Close (logical) file # in A"
+F2CD,F2AE,F2E2,FCLOSE,+
+F2D2,F2B3,F2E7,CLOS10,"Move files from table"
+F307,F2E1,F315,JX120,+
+F30A,F2E4,F318,JX150,"Recover list # & reduce open files by 1"
+F329,F300,F334,JX170,+
+F32A,F301,F335,STOP1,"SYS22 - Test [stop] key - uses no registers - A=0 if stop wanted"
+F338,F30E,F342,STOP2,+
+F339,F30F,F343,stop,"Stop if [stop] key depr.- ""stop"" also a lbl. at $b7c6"
+F33F,F315,F349,SPMSG,"Send message if in direct mode"
+----,F31D,F351,TXTST,"Test if in direct mode"
+----,F321,F355,TXTRT,+
+----,F322,F356,LD15,"Program LOAD subroutines"
+F366,F326,F35A,LD20,"If device#=0 or 3, print ""syntax error"""
+F37B,F352,F38C,LD30,+
+F37E,F355,F38F,LD40,"Strip bit 1 from ST"
+F39A,F378,F3B3,LD50,+
+F39C,F37A,F3B5,LD60,+
+----,F380,F3BB,LD64,"Test ST for end of file"
+----,----,F3C1,LD90,+
+----,F387,F3C6,LD65,"Tape end address=start address"
+F3A5,F395,F3D4,ld100,+
+F3AE,F39E,F3DD,LD112,+
+F3B7,F3A7,F3E6,LD120,"Jump to ""file not found"""
+F3BA,F3AA,F3E9,LD150,+
+F3BF,F3AF,F3EE,LD170,+
+F346,F3C2,F401,LOAD,"LOAD instruction"
+F34B,F3C6,F405,LD10,"0=LOAD; 1=VERIFY"
+F34E,F3C9,F408,LOADNP,"Transfer BASIC start/end to Tape start/end address"
+F350,F3CE,F40D,LD11,"Wait for key switch change"
+----,F3E6,F425,LD209,"Print ""load error"""
+F3E5,F3EF,F42E,LD210,"COLD START of BASIC - Reset to start & print ""ready."""
+F3F9,F404,F443,LD205,+
+F3FF,F40A,F449,LD300,"Print ""searching"""
+F411,F41D,F45C,LD105,"Print ""   file name"""
+F417,F423,F462,LD110,+
+F421,F42D,F46C,LD115,+
+F422,F42E,F46D,LD400,"Print ""loading"" or ""verifying"""
+F42B,F436,F475,LD410,"""Verify"""
+F433,F43E,F47D,PARS1,"Initialize default values for I/O device"
+F45B,F45F,F49E,PR060,+
+F45C,F460,F49F,PR070,"Get expression from input buffer; put in X"
+F462,F466,F4A5,OPENI,"Open IEEE channel for output"
+F475,F475,F4B4,OPENIB,+
+F47D,F47C,F4BB,OP37,"Abort IEEE & print ""device not present"""
+F482,F481,F4C0,OP35,+
+F488,F487,F4C6,OP40,+
+F492,F491,F4D0,OP45,+
+F495,F494,F4D3,FAF,"Find specific tape header block"
+F4A3,F4A1,F4E0,FAF20,+
+F4B9,F4B5,F4F4,FAF30,+
+F4BA,F4B6,F4F5,FAF40,+
+F4BB,F4B7,F4F6,VER,"VERIFY instruction"
+F4CF,F4C9,F508,VER10,"Print ""ok"""
+F4D4,F4CE,F50D,PARS2,"Get Open/Close parameters"
+F4F6,F4EF,F52E,PR100,+
+----,F4F7,F536,PR111,+
+F504,F4FD,F53C,PR200,"READ file name - get string"
+F515,F50E,F54D,PR140,"Check for end"
+F51C,F515,F554,PR147,+
+F51D,F516,F555,PR150,"Check for comma "","""
+F522,F519,F558,PR130,+
+----,F51E,F55D,PR135,"To ""syntax error"""
+F52A,F521,F560,OPEN,"OPEN instruction: from input parameters"
+----,----,F563,OP94,"SYS3 - Open logical file - uses no registers (no symb for 1.0 or 2.0)"
+F52F,F526,F565,FOPEN,"-2=Open file with preset parameters"
+F534,F528,F567,OP98,+
+F53D,F52F,F56E,OP100,+
+F566,F559,F598,OP150,+
+F579,F56E,F5AD,OP160,"Print ""file not found"" & then clear I/O"
+F57B,F570,F5AF,ERMSG,"Send error message"
+F58B,F583,F5C2,OP170,"Search tape for header block"
+F592,F58A,F5C9,OP200,"Wait for cassette record/play switch"
+F59A,F592,F5D1,OP171,+
+F5AA,F5A3,F5E2,OP172,+
+F5AD,F5A5,F5E4,OP175,+
+F5AE,F5A6,F5E5,FAH,"Find any tape header block"
+F5B2,F5A9,F5E8,FAH30,"Read data record from tape"
+F5C5,F5BC,F5FB,FAH50,+
+F5D1,F5C9,F608,FAH55,+
+F5DB,F5D3,F612,FAH45,+
+F5DD,F5D5,F614,FAH40,"Recover load/verify indicator"
+F5ED,F5DA,F619,TAPEH,"Write tape header"
+----,F5EF,F62E,BLNK2,"Fill cassette buffer with spaces"
+F61E,F613,F652,TH20,+
+F632,F625,F664,TH30,+
+F64D,F63C,F67B,LDAD2,"Get start & end address from tape header for LOAD"
+F654,F643,F682,LDAD3,"Tape buffer to pointer"
+F667,F656,F695,ZZZ,x
+F67C,F66B,F6AA,ZZ10,+
+F67D,F66C,F6AB,LDAD1,"Set tape buffer start & end pointers"
+F695,F684,F6C3,SYS,"SYS instruction"
+----,F68D,F6CC,SV60,"Set tape write start & end"
+F69E,F69E,F6DD,SAVE,"SAVE instruction"
+----,F6A1,F6E0,SV3,"Transfer BASIC start/end to tape"
+----,F6A4,F6E3,SV5,"Test for proper output device"
+F6B5,F6A8,F6E7,SV10,"Abort IEEE, print ""device not present"""
+F6BA,F6AD,F6EC,SV20,"Screen the current device?"
+F6CE,F6D8,F717,SV30,"Is current address = end address?"
+F6E3,F6ED,F72C,SV50,"Send UNLISTEN to IEEE"
+F6E6,F6F0,F72F,CLSE1,"Close IEEE channel"
+F6F6,F703,F742,SV100,+
+F708,F716,F755,SV105,"Write tape header"
+F736,F729,F768,UDTIM,"Update jiffy clock (Hardware interrupt: cursor, tape & keyboard)"
+F743,F731,F770,UD10,+
+F74E,F73B,F77A,UD20,+
+F75B,F745,F784,UD30,+
+F75D,F747,F786,UD40,+
+F76C,F755,F794,UD45,+
+F774,F75C,F79B,UD50,"Zero the correction clock"
+F77C,F762,F7A1,UD60,"Wait till keyboard input row changes"
+F787,F76C,F7AB,UD65,+
+F788,F76D,F7AC,UD70,+
+F78B,F770,F7AF,CHKIN,"SYS5 - open channel for input - uses X"
+F79B,F77F,F7BE,JX300,"Abort IEEE & print ""file not open"""
+F79D,F781,F7C0,JX305,+
+F7A0,F784,F7C3,JX310,+
+F7B5,F79B,F7DA,JX320,"Set input device to keyboard"
+F7BB,F7A0,F7DF,JX330,"Set output from logical file number; Restore A,X,Y from stack & RTS"
+F7BC,F7A1,F7E3,JX3301,+
+F7C9,F7AE,F7F0,JX340,+
+F7D0,F7B1,F7F3,JX350,"Check ST variable"
+F7DC,F7BC,F7FE,CKOUT,+
+F7DC,F7BC,F7FE,CHKOUT,"SYS6 - open channel for output - uses X; Set output device from logical file number"
+F7F8,F7D6,F818,CK10,"To screen?"
+F806,F7E6,F828,JX360,"Set CMD device"
+F80C,F7EB,F82D,JX370,"Remember IEEE device #"
+----,----,F831,JX3701,"Test IEEE channel"
+F81A,F7F8,F83D,JX380,+
+F821,F7FB,F840,JX390,"Check ST variable"
+F82D,F806,F84B,JTP20,"Increment tape buffer pointer"
+F83B,F812,F857,CSTE1,"Print ""press play"" - Wait till cassette PLAY key hit"
+F842,F819,F85E,CS30,+
+F851,F828,F86D,CS40,+
+F85E,F835,F87A,CS10,"Test cassette switch (Sense tape switch)"
+F868,F83E,F883,CS20,"Bit 1 = cassette #1 read control"
+F870,F846,F88B,CS25,+
+F871,F847,F88C,CSTE2,"Ask for RECORD + PLAY, wait for PLAY"
+F87F,F855,F89A,RBLK,"Initiate tape read to buffer  (Read tape to buffer)"
+F88A,F85E,F8A3,TRD,"(Read tape)"
+F8B4,F87F,F8C4,TRD2,"Toggle cassette #1 read control"
+----,F882,F8C7,TRD3,+
+F8B9,F886,F8CB,WBLK,"Initiate tape write  (Write tape from buffer)"
+F8BC,F889,F8CE,TWRT,Checksum
+F8C4,F890,F8D5,TWRT2,"-2=write tape, leader length in A"
+F8D2,F89B,F8E0,TAPE,"Common tape I/O"
+F8EB,F8B6,F8FB,TP20,+
+F8F6,F8C0,F905,TP30,"Interblock delay loop"
+----,F8C2,F907,TP32,+
+----,F8C4,F909,TP35,+
+F8FA,F8CE,F913,TP40,"Test, IRQ not modified"
+F912,F8E5,F92A,TP50,+
+F913,F8E6,F92B,TWAIT,"Test is (Wait for) I/O complete or [stop] key down"
+F91E,F8F0,F935,tstop,"Test stop key"
+F92B,F8FD,F942,STOP3,"BRK to immediate mode"
+F92E,F900,F945,STT1,"Tape bit timing adjust"
+F943,F915,F95A,STT2,+
+F94A,F91C,F961,STT3,+
+F95F,F931,F976,read,"Interrupt routine for tape read - read tape bits"
+F96D,F93F,F984,RD1,+
+F97F,F951,F996,RADS,+
+F981,F953,F998,RD3,+
+F995,F966,F9AB,JRADJ,+
+F998,F969,F9AE,RJDJ,+
+F9B8,F988,F9CD,JRAD2,+
+F9BC,F98B,F9D0,SRER,+
+F9C5,F993,F9D8,RADX2,+
+F9CB,F997,F9DC,RADL,"Right start bit/read bit sequence error"
+F9CE,F999,F9DE,RAD5,+
+F9E5,F9AC,F9F1,RDBK,+
+F9FA,F9BF,FA04,RADP,+
+FA04,F9C8,FA0D,RADBK,"Interrupt restore"
+FA07,F9CB,FA10,RAD3,+
+FA12,F9D5,FA1A,ROUT2,+
+FA14,F9D7,FA1C,ROUT1,+
+FA29,F9EA,FA2F,RAD3G,+
+FA2E,F9EE,FA33,RAD4,+
+FA4A,FA07,FA4C,RAD2,"EOT bit recieved"
+FA53,FA0F,FA54,RAD2Y,+
+FA5B,FA16,FA5B,RAD2X,"Timing constant"
+FA6C,FA26,FA6B,RADQ,+
+FA70,FA2A,FA6F,RADQ1,+
+FA84,FA3B,FA80,RADQ2,+
+FA94,FA4A,FA8F,RADK,+
+FA9B,FA50,FA95,RADR1,+
+FAA0,FA54,FA99,RDBK2,+
+FAA3,FA57,FA9C,RADJ,"Read tape characters: initialize tape flags"
+FAB5,FA67,FAAC,RD15,+
+FACC,FA7D,FAC2,RD12,+
+FAD1,FA81,FAC6,RD10,+
+FAD4,FA84,FAC9,RD20,+
+FAEB,FA9A,FADF,RD22,+
+FAF2,FAA0,FAE5,RD200,+
+FB06,FAB1,FAF6,RD40,+
+FB0D,FAB7,FAFC,RD60,+
+FB1B,FAC5,FB0A,RD70,+
+FB3A,FAE2,FB27,RD80,+
+FB45,FAEC,FB31,RD56,+
+FB5A,FAFF,FB44,RD58,+
+FB87,FB27,FB6C,RD52,+
+FB8B,FB2B,FB70,RD55,"Read character error"
+FB92,FB32,FB77,RD59,+
+FB9D,FB3C,FB81,RD90,+
+FBA5,FB44,FB89,RD160,End
+FBA7,FB46,FB8B,RD161,+
+FBB1,FB4F,FB94,RD167,"Right leader count"
+FBBF,FB5B,FBA0,RD175,+
+FBD9,FB73,FBB8,RD180,"Interrupt return"
+FBDC,FB76,FBBB,RD300,"Reset tape read address (Reset tape I/O pointer)"
+FBE5,FB7F,FBC4,UDST,"Flag error into ST variable"
+FBEC,FB84,FBC9,NEWCH,"New character - reset counters for new byte"
+FC00,FB93,FBD8,WRITE,"Write a bit to tape"
+FC07,FB9A,FBDF,WRTW,+
+FC09,FB9C,FBE1,WRT1,+
+FC0B,FB9E,FBE3,WRTX,+
+FC1C,FBAF,FBF4,WRTL3,"Tape write"
+FC21,FBB4,FBF9,WRTN,"Tape write interrupt"
+FC39,FBCA,FC0F,WRTN1,x
+FC48,FBD7,FC1C,WRTN2,+
+FC65,FBF0,FC35,WRT3,"Interrupt return"
+FC68,FBF3,FC38,WRT2,"Cycle counter=0"
+FC74,FBFD,FC42,WRTS,+
+FC81,FC09,FC4E,WRTS1,+
+FC8C,FC13,FC58,WRT61,+
+FC90,FC17,FC5C,WRT6,+
+FC9F,FC26,FC6B,WRT7,+
+FCB1,FC38,FC7D,WRT4,"Tape character parity"
+FCB8,FC3E,FC83,WRTBK,+
+FCBB,FC41,FC86,WRNC,+
+FCC2,FC48,FC8D,WREND,+
+FCCF,FC54,FC99,WRTZ,"IRQ entry for print"
+FCFB,FC7B,FCC0,TNIF,"Terminate tape - restore interrupt vector"
+FD16,FC96,FCDB,STKY,"Right blocks completed"
+FD1B,FC9B,FCE0,BSIV,"IRQ fixer"
+FFED,FCA6,FCEB,TNOF,"Turn off both tape motors"
+FD7C,FCB4,FCF9,VPRTY,"Checksum calculation"
+FD8A,FCC0,FD05,VP10,+
+FD90,FCC6,FD0B,WRT62,"Advance load/save pointer"
+FD9A,FCD0,FD15,WRT64,+
+FD38,FCD1,FD16,START,"RESET: power-on; BASIC 1.0 diagnostics begin at $fd48"
+----,FCFE,FD49,NMI,"NMI vectors through here"
+FD28,FD01,FD4C,BSIT,"Table of interrupt vectors"
+----,----,FD5C,CKSUMF,"Checksum for $f000 ROM"
+----,----,FF93,CONCAT,"Jump Table from here on: CONCAT vector"
+----,----,FF96,DOPEN,"DOPEN vector"
+----,----,FF99,DCLOSE,"DCLOSE vector"
+----,----,FF9C,RECORD,"RECORD vector"
+----,----,FF9F,FORMAT,"HEADER vector"
+----,----,FFA2,COLECT,"COLLECT vector"
+----,----,FFA5,BACKUP,"BACKUP vector"
+----,----,FFA8,DCOPY,"DCOPY vector"
+----,----,FFAB,APPEND,"APPEND vector"
+----,----,FFAE,DSAVE,"DSAVE vector"
+----,----,FFB1,DLOAD,"DLOAD vector"
+----,----,FFB4,DCAT,"CATALOG vector"
+----,----,FFB7,RENAME,"RENAME vector"
+----,----,FFBA,SCRATC,"SCRATCH vector"
+----,----,FFBD,READDS,"DS & DS$ vector (Get disk status)"
+FFC0,FFC0,FFC0,COPEN,"OPEN vector"
+FFC3,FFC3,FFC3,CCLOS,"CLOSE vector"
+FFC6,FFC6,FFC6,COIN,"Set input device vector"
+FFC9,FFC9,FFC9,COOUT,"Set output device vector"
+FFCC,FFCC,FFCC,CCCHN,Same
+FFCC,FFCC,FFCC,CLSCHN,"Restore normal (default) i/o devices vector"
+C479,C481,FFCF,INCHR,Same
+FFCF,FFCF,FFCF,CINCH,"Input character from current input device vector"
+FFD2,FFD2,FFD2,OUTCH,"Output a character vector"
+FFD5,FFD5,FFD5,CLOAD,"LOAD vector"
+FFD8,FFD8,FFD8,CSAVE,"SAVE vector"
+FFDB,FFDB,FFDB,CVERF,"VERIFY vector"
+FFDE,FFDE,FFDE,CSYS,"SYS vector"
+FFE1,FFE1,FFE1,ISCNTC,"Test stop key vector"
+FFE4,FFE4,FFE4,CGETL,"GET a character from current input device"
+FFE7,FFE7,FFE7,CCALL,"Abort all i/o channels vector"
