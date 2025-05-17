@@ -2,7 +2,7 @@
 0000,0000,0000,usrpok,"$4c constant = JMP"
 0001,0001,0001,addprc,"USR vector - Lo/Hi"
 005a,0003,0003,strsiz,"# of locations per $ descriptor"
-,,,integer,"1 byte integer from ""qint"""
+,,,integr,"1 byte integer from ""qint"""
 ,,,charac,"Starting delimiter"
 ,,,,"(Search character, usually $00)"
 ,,,,"(May have another use in Fat Forty only)"
@@ -16,7 +16,7 @@
 ,,,addpr8,
 0060,0009,0009,dores,""" whether can crunch reserved words"
 ,,,,"(Flag: DATA scan; LIST quote; memory)"
-0051,000a,000a,clmwid,"Size of print window"
+0061,000a,000a,clmwid,"Size of print window"
 ,,,subflg,"Flag which allows subscripts in syntax"
 ,,,,"(FNX flag)"
 0062,000b,000b,inpflg,"Flags input or read"
@@ -79,7 +79,7 @@
 00a3,0051,0051,jmper,"4c = JMP; subroutine for dispatch of functions - Lo/Hi"
 00a4,0052,0052,size,"address for dispatch of functions - Lo/Hi"
 00a5,0053,0053,oldov,"The old overflow"
-00a6,0054,0054,tempfl,"A FAC temp - 4 bytes"
+00a6,0054,0054,tempf1,"A FAC temp - 4 bytes"
 ,,,,"(Misc numeric work area - thru 5d)"
 00a7,0055,0055,arypnt,"A pointer used in array building"
 ,,,highds,"Destination of highest element in blt."
@@ -112,10 +112,10 @@
 ,,,,"(Accum. #2 - thru 6b)"
 00b9,0067,0067,argho,
 00ba,0068,0068,argmoh,
-00bb,0069,0069,argmlo,
+00bb,0069,0069,argmo,
 00bc,006a,006a,arglo,
 00bd,006b,006b,argsgn,"The sign - same as FAC"
-00be,006c,006c,strngl,"Pointer to a $ or descriptor"
+00be,006c,006c,strng1,"Pointer to a $ or descriptor"
 ,,,arisgn,"A sign reflecting the result"
 ,,,,"(Sign comparison, Acc. #1 vs. #2)"
 00bf,006d,006d,facov,"Overflow byte of the FAC"
@@ -128,7 +128,7 @@
 ,,,,"(Cassette buff len/Series pointer)"
 00c2,0070,0070,chrget,"Subroutine - gets next character from BASIC text"
 ,,,,"(thru 87)"
-00c8,0076,0076,chrgrot,"Subroutine - regets current character from B. text"
+00c8,0076,0076,chrgot,"Subroutine - regets current character from B. text"
 00c9,0077,0077,txtptr,"Pointer to current BASIC source text - Lo/Hi"
 00da,0087,0087,chrrts,"End of chrget"
 00d8,0088,0088,rndx,"Next Random number - thru 8c"
@@ -194,7 +194,7 @@ none,0094,0094,nminv,"NMI "" "" """
 ?,00cb,00cb,cmp0,"(Tape timing constants - 2 bytes)"
 ?,00cc,00cc,temp,
 00ea,00cd,00cd,qtsw,"(0=direct cursor, else programmed)"
-?,00ce,00ce,snswl,"(Tape read timer 1 enabled)"
+?,00ce,00ce,snsw1,"(Tape read timer 1 enabled)"
 000b,00cf,00cf,diff,"(EOT received from tape)"
 ?,00d0,00d0,prp,"(Read character error)"
 ,,,xid,
@@ -216,7 +216,7 @@ none,0094,0094,nminv,"NMI "" "" """
 00fe*,00df,00df,mych,"Serial word buffer"
 0229,00e0,00e0,,"[*E76E 80 COL] 40 column screen line wrap table - thru f8"
 ,,,,"(Lo of start address of $19 lines)"
--,-,00e0,ldtbl,"Top, bottom of window - 2 bytes - 80 column."
+-,-,00e0,ldtb1,"Top, bottom of window - 2 bytes - 80 column."
 ,,,xrec,
 ,,00e1,xwrt,
 -,-,00e2,,"Left window margin - "" """
@@ -263,14 +263,14 @@ none,0094,0094,nminv,"NMI "" "" """
 ?,0209,0209,savnam,
 ,,,zzz1,
 0242,0251,0251,lat,"File logical address table - thru 025a"
-024c,025b,025b,file,"File first address table - thru 0264"
+024c,025b,025b,fat,"File first address table - thru 0264"
 0256,0265,0265,sat,"File secondary address table - thru 026e"
 020f,026f,026f,keyd,"Keyboard input buffer - thru 0278"
 027a,027a,027a,tape1,"Tape#1 input buffer - thru 0339"
 033a,033a,033a,tape2,""" #2 "" "" "" 03f9"
 -,-,,fnlen2,"DOS character pointer"
 ,,,pos,
--,-,033b,drivel,"DOS drive 1 flag"
+-,-,033b,drive1,"DOS drive 1 flag"
 -,-,033c,drive2,"DOS drive 2 flag"
 -,-,033d,lrecl,"(DOS length/write flag)"
 ,,,didchk,
@@ -297,7 +297,7 @@ none,0094,0094,nminv,"NMI "" "" """
 -,-,a000,,"4K system ROM - Superpet only"
 c000,c000,b000,romloc,"First ROM location"
 ,,,stmdsp,"Start of instruction dispatch table"
-c046,c046,b066,fundsdp,""" "" function "" """
+c046,c046,b066,fundsp,""" "" function "" """
 c04c,c04c,b06c,usrloc,"USR instruction's jump address within function table"
 c074,c074,b094,optab,"Start of math operators dispatch table"
 c089,c089,b0a9,negtab,"Unitary negate dispatch - .by 7d"
@@ -318,10 +318,10 @@ c2d2,c2d0,b348,addfrs,"(No match, check further)"
 c2d9,c2d7,b34f,ffrts,"(End of ""for"" peek)"
 c2da,c2d8,b350,bltu,"Opens up a space in BASIC for a new line"
 c2e1,c2df,b357,bltuc,"(Entry from d502-2.0)"
-c2fe,c2fc,b374,bltl,+
+c2fe,c2fc,b374,blt1,+
 c30a,c308,b380,bltlp,+
-c30e,c30c,b384,morenl,+
-c315,c313,b38b,declbt,+
+c30e,c30c,b384,moren1,+
+c315,c313,b38b,decblt,+
 c31d,c31b,b393,getstk,"Test if stack too deep - abort if is"
 c32a,c328,b3a0,reason,"Checks for available memory space"
 c334,c332,b3aa,trymor,+
@@ -336,8 +336,8 @@ c379,c377,b3ed,typerr,"Restore data pointer & Print ""error"" and..."
 c380,c37e,b3f4,errfin,"(Print string - address in A & Y and...)"
 c38b,c389,b3ff,ready,"Warm start of BASIC - NMI vector in 2.0 & 4.0"
 c394,c392,b406,main,"Main BASIC loop - analyzes input lines"
-c3ac,c3ab,b41f,mainl,"Lines that start with a no. handled here"
-c3e7,c3e6,b45a,qdectl,+
+c3ac,c3ab,b41f,main1,"Lines that start with a no. handled here"
+c3e7,c3e6,b45a,qdect1,+
 c3fd,c3ee,b462,mloop,+
 c418,c3fc,b470,nodel,"(Adjust pointers for cold start)"
 c418,c417,b48b,nodelc,+
@@ -353,15 +353,15 @@ c476,c47e,b4f8,fininl,+
 c48d,c495,b4fb,crunch,"Looks up keywords in an input line"
 c493,c49b,b501,kloop,+
 c49e,c4a7,b50d,cmpspc,"(a SPACE?)"
-c4b4,c4bd,b523,kloopl,+
-c4bc,c4c5,b52b,muster,"(a ""0""?)"
+c4b4,c4bd,b523,kloop1,"(a ""0""?)"
+c4bc,c4c5,b52b,mustcr,+
 c4c6,c4cf,b53d,reser,+
 c4c8,c4d1,b544,rescon,+
 c4da,c4e0,b552,getbpt,+
 c4dc,c4e2,b554,stuffh,+
 c4ef,c4f5,b567,colis,+
 c4f1,c4f7,b569,nodatt,+
-c4f8,c4fe,b570,strl,+
+c4f8,c4fe,b570,str1,+
 c500,c507,b579,strng,+
 c507,c50e,b580,nthis,+
 c50b,c512,b584,nthis1,+
@@ -369,7 +369,7 @@ c50b,c512,b584,nthis1,+
 c51a,c522,b599,crdone,+
 c522,c52c,b5a3,fndlin,"Search for address of line whose # is in ""linnum"""
 c526,c530,b5a7,fndlnc,"(Entry from b84b)"
-c53d,c547,b5be,fndlol,+
+c53d,c547,b5be,fndlo1,+
 c546,c550,b5c7,affrts,+
 c54f,c559,b5d0,flinrt,"(line # not found)"
 c550,c55a,b5d1,flnrts,"("" # "" found)"
@@ -382,7 +382,7 @@ c581,c590,b60b,fload,"(Restore data pointer)"
 c584,c593,b60e,stkini,"(Entry from b3ed)"
 c588,c597,b612,(pop),"(Undo all gosubs & goto's - use before panic exit)"
 c597,c5a6,b621,stkrts,+
-c59a,c5b5,b622,stxtpts,"""textptr""=""txttab""-1"
+c59a,c5b5,b622,stxtpt,"""textptr""=""txttab""-1"
 c5a8,c5bd,b630,list,"LIST instruction"
 c5b0,c5bd,b638,golst,"(Convert char. $ to # in 11-12)"
 c5b7,c5d4,b64f,lstend,+
@@ -404,14 +404,14 @@ c692,c6a1,b727,ldfone,"(Continue to build FOR vectors)"
 c6a6,c6b5,b73b,oneon,"(Extract FAC sign)"
 c6b5,c6c4,b74a,newstt,"Read & execute next statement"
 -,c6d4,b759,dircon,+
--,c6e4,b769,dircnl,+
+-,c6e4,b769,dircn1,+
 c6e9,c6f7,b77c,gone,"Dispatches next byte ""chrget"" returns"
 c6f2,c700,b785,gone2,"Dispatches A if <>0 else loop to ""newstt"""
 c6f5,c702,b787,gone3,"(Entry from b8e7)"
 -,-*,b795,gone4,+
 -,c717,b7a2,glet,"(Jump to perform LET)"
 -,c71a,b7a5,morsts,"(A "":""? )"
-c6cc,c71e,b7a9,snerrl,"(Jump to print ""syntax error"")"
+c6cc,c71e,b7a9,snerr1,"(Jump to print ""syntax error"")"
 -,-*,b7ac,go,"Handle GO token - find a TO"
 c70d,c730,b7b7,restor,"RESTORE statement"
 c717,c73a,b7c1,resfin,"(Entry from bce2)"
@@ -436,7 +436,7 @@ c7c9,c7d9,b85c,gorts,"(End of GOTO)"
 c7ca,c7da,b85d,return,"RETURN instruction"
 c7db,c7e0,b86e,userr,"Print ""undefined instruction error"""
 c7e0,c7e8,b873,snerr2,"Jump to ""syntax error"""
-c7e3,c7f3,b876,retul,+
+c7e3,c7f3,b876,retu1,+
 c7f0,c800,b883,data,"(DATA instruction)"
 c7f3,c803,b886,addon,"(Add Y to scan pointer)"
 c7fd,c80d,b890,remrts,"(End of DATA)"
@@ -452,7 +452,7 @@ c840,c850,b8d3,doco,"(Jump to do instruction)"
 c843,c853,b8d6,ongoto,"ON instruction"
 c84b,c85b,b8de,snerr3,"(Must include GOTO or GOSUB - else ""syntax error"")"
 c84f,c85f,b8e2,onglop,+
-c857,c867,b8ea,onglpl,"(Get next char. & convert $ to #)"
+c857,c867,b8ea,onglp1,"(Get next char. & convert $ to #)"
 c862,c872,b8f5,ongrts,"(End of ON)"
 c863,c873,b8f6,linget,"Get integer from BASIC & put in ""linnum"""
 c869,c879,b8fc,morlin,"(Entry from b92d)"
@@ -487,8 +487,7 @@ c967,c973,ba13,copyc,"(Entry from b9f3)"
 -,-,ba85,adj01,+
 c97f,c98b,ba88,printn,"PRINT# instruction"
 c985,c991,ba8e,cmd,"CMD instruction"
-c98f,c99b,ba98,saveitn,+
-c990,c99b,ba9a,savet,+
+c98f,c99b,ba98,saveit,+
 c999,c9a5,baa2,strdon,+
 c99c,c9a8,baa5,newchr,"(Get current character from buffer)"
 c99f,c9ab,baa8,print,"PRINT instruction"
@@ -496,9 +495,9 @@ c9a1,c9ad,baaa,printc,"(Entry from bb15)"
 c9c8,c9d5,bad2,fininl,"(Entry from b4f8)"
 c9d8,c9e2,badf,crdo,"Print RETURN character"
 -,c9ec,baed,crfin,"(Entry from bb34)"
-c9f8,c9ee,baef,ptrrts,+
+c9f8,c9ee,baef,prtrts,+
 c9f9,c9ef,baf0,comprt,"(Process "","" to correct column)"
-c9fc,c9f2,baf3,morcol,+
+c9fc,c9f2,baf3,morco1,+
 ca06,c9fc,bafd,taber,"TAB & SPC handler"
 -,ca0c,bb0d,aspac,+
 -,ca0d,bb0e,xspac,+
@@ -517,7 +516,7 @@ ca77,ca4f,bb4c,trmnok,"Handles bad input data"
 -,ca59,bb56,getdtl,+
 ca7f,ca5d,bb5a,stcurl,"(Store current line #)"
 ca83,ca61,bb5e,snerr4,"Jump to ""syntax error"""
-ca86,ca64,bb61,trmnol,+
+ca86,ca64,bb61,trmno1,+
 ca8f,ca6d,bb6a,doagin,"(Print ""redo from start"" and...)"
 ca9f,ca7d,bb7a,get,"GET instruction"
 cab6,ca94,bb91,gettty,+
@@ -533,16 +532,16 @@ cb17,cafa,bbf5,qinlin,"Prompts for & receives INPUT"
 cb21,cb04,bbff,ginlin,+
 cb24,cb07,bc02,read,"READ instruction"
 -,cb0e,bc09,inpcon,+
-cb2a,cb10,bc0b,inpcol,"(Entry from bb9c - with A=40 for GET)"
+cb2a,cb10,bc0b,inpco1,"(Entry from bb9c - with A=40 for GET)"
 cb30,cb16,bc11,inloop,"(Entry from bcb1)"
 cb5b,cb42,bc3d,qdata,+
 cb64,cb4b,bc46,getnth,"(To prompt & input)"
 cb67,cb4e,bc49,datbk,+
-cb6b,cb52,bc4d,datbkl,"(Entry from bcd7)"
+cb6b,cb52,bc4d,datbk1,"(Entry from bcd7)"
 cb7c,cb66,bc61,setqut,+
 cb88,cb72,bc6d,resetc,+
 cb89,cb73,bc6e,nowget,+
-cb94,cb76,bc79,nowgel,+
+cb94,cb76,bc79,nowge1,+
 cba0,cb8a,bc85,numins,+
 cba8,cb92,bc8d,strdn2,"(Entry from bc82)"
 cbb4,cb9e,bc99,trmok,+
@@ -577,13 +576,13 @@ ccf1,ccd8,bdda,endrel,+
 cc0a,ccf1,bdea,qprec,+
 cdl3,ccfa,bdf3,doprec,+
 cd14,ccfb,bdf4,negprc,+
-cd21,cd08,be01,finre1,+
+cd21,cd08,be01,finrel,+
 cd2b,cd12,be0b,finre2,+
-cd33,cd1a,be13,qprecl,+
-cd3a,cd21,bela,doprel,+
+cd33,cd1a,be13,qprec1,+
+cd3a,cd21,be1a,dopre1,+
 cd4a,cd31,be2a,snerr5,+
-cd4d,cd34,be2d,pushfl,+
-cd52,cd39,be32,pushf1,+
+cd4d,cd34,be2d,pushf1,+
+cd52,cd39,be32,pushf,+
 cd5d,cd44,be41,forpsh,+
 cd72,cd59,be56,qop,+
 cd75,cd5c,be59,qopgo,+
@@ -678,7 +677,7 @@ d44e,d44c,c220,aryva3,+
 d459,d457,c228,aryvgo,"Search the arrays"
 d488,d488,c259,aryget,"Move thru the array tables"
 d492,d492,c263,gogo,+
--,-,c281,gogol,+
+-,-,c281,gogo1,+
 d4d0,d4d0,c290,dvarts,+
 -,-,c29d,arydon,+
 d079,d069,c2b9,finptr,"Logs basic variable location [Bump address by 2]"
@@ -695,9 +694,9 @@ d0b9,d0ac,c2fc(-C4A7),isary,"Locates and/or creates arrays"
 d0c3,d0b6,c306,indlop,+
 d104,d0f7,c347,lopfda,+
 d110,d103,c353,lopfdv,+
-d11d,d112,c362,nmaryl,+
-d12d,d120,c370,bserrl,"Print ""bad subscript error"""
-d130,d123,c373,fcerrl,"Print ""illegal quantity error"""
+d11d,d112,c362,nmary1,+
+d12d,d120,c370,bserr,"Print ""bad subscript error"""
+d130,d123,c373,fcerr,"Print ""illegal quantity error"""
 d132,d125,c375,errgo3,"(Jump to error message)"
 d149,d13c,c38c,nptfdp,+
 d150,d158,c39f,notflt,+
@@ -708,14 +707,14 @@ dla2,d195,c3e4,grease,"(Check available memory space)"
 d1b1,dla4,c3f3,zerita,+
 d1b6,dla9,c3f8,deccur,+
 d1d3,d1c6,c415,getdef,+
-d1db,dlce,c4ld,inlpnm,+
-d1fl,dle4,c433,bserr7,"Jump to ""bad subscript error"""
-d1f4,dle7,c436,omerrl,"Jump to ""out of memory error"""
-d1f7,dlea,c439,inlpn2,+
-d1f7,dleb,c43a,inlpnl,+
-d209,dlfc,c44b,addind,+
-d218,d20d,c45c,notfll,+
-d21e,d213,c462,stomll,+
+d1db,d1ce,c4ld,inlpnm,+
+d1fl,d1e4,c433,bserr7,"Jump to ""bad subscript error"""
+d1f4,d1e7,c436,omerr1,"Jump to ""out of memory error"""
+d1f7,d1ea,c439,inlpn2,+
+d1f7,d1eb,c43a,inlpn1,+
+d209,d1fc,c44b,addind,+
+d218,d20d,c45c,notfl1,+
+d21e,d213,c462,stoml1,+
 d232,d227,c476,dimrts,+
 d233,d228,c477,umult,"Integer arithmetic routines for multi-dim arrays"
 d23c,d231,c480,umultd,+
@@ -761,9 +760,9 @@ d404,d400,c66a,garba2,"Does 'garbage collection' - packs strings"
 -,-,c68a,col00,+
 -,-,c693,col00b,+
 -,-,c69e,col00a,+
--,-,c6a9,col0l,+
+-,-,c6a9,col01,+
 -,-,c6b2,col02,+
--,-,c6ce,glopl,+
+-,-,c6ce,glop1,+
 -,-,c6d8,col02b,+
 -,-,c6f0,col02a,+
 -,-,c700,grbend,"Jmp ""endgrb"""
@@ -806,10 +805,10 @@ d60f,d611,c86d,midd,"MID$ instruction"
 d620,d622,c87e,mid2,+
 d637,d63b,c897,pream,"Used by right - (pull string data)"
 d654,d656,c8b2,len,"LEN instruction"
-d65a,d65c,c8b8,lenl,"(Switch string to numeric)"
+d65a,d65c,c8b8,len1,"(Switch string to numeric)"
 d663,d665,c8c1,asc,"ASC instruction"
 d670,d672,c8ce,gofuc,"Jump to ""illegal quantity error"""
-d673,d675,c8d1,gtbyte,"Does a ""chrget"" and ""getbyt"""
+d673,d675,c8d1,gtbytc,"Does a ""chrget"" and ""getbyt"""
 d676,d678,c8d4,getbyt,"Evaluate the formula and..."
 d679,d67b,c8d7,conint,"(Get a single byte value and return it in X)"
 d685,d687,c8e3,val,"VAL instruction"
@@ -822,7 +821,7 @@ d6ca,d6cc,c927,combyt,+
 d6d0,d6d2,c92d,getadr,"Convert ""fac"" to integer - place in ""poker"""
 d6e6,d6e8,c943,peek,"PEEK instruction"
 d6f3,d6fb,c94e,getcon,+
--,d6fe,c951,dosgf1,+
+-,d6fe,c951,dosgfl,+
 d6f9,d707,c95a,poke,"POKE instruction"
 d702,d710,c963,fuwait,"WAIT instruction"
 d711,d71f,c972,stordo,+
@@ -844,10 +843,10 @@ d7ac,d7e3,ca0d,normal,"Normalize ""fac"" - results of addition & subtraction"
 d7b0,d7e7,call,norm3,+
 d7cc,d803,ca2d,zerofc,"""fac""=0"
 d7ce,d805,ca2f,zerof1,+
-d7d0,d807,ca31,zerom1,"Make sign positive"
+d7d0,d807,ca31,zeroml,"Make sign positive"
 d7d3,d80a,ca34,fadd2,+
 d7f2,d829,ca53,norm2,+
-d7fe,d835,ca5f,norml,+
+d7fe,d835,ca5f,norm1,+
 d80b,d842,ca6c,squeez,+
 d80d,d844,ca6e,rndshf,+
 d81b,d852,ca7c,rndrts,+
@@ -889,8 +888,8 @@ d9a6,d9e0,cc0a,mldvex,"(Handle overflow and underflow)"
 d9ac,d9e6,cc10,zeremv,+
 d9b1,d9eb,cc15,goover,"Jump to ""overflow error"""
 d9b4,d9ee,cc18,mul10,"Multiply: ""fac""=""fac""*10"
-d9bf,d9f9,cc23,finm16,+
-d9ca,da04,cc2e,mull0r,+
+d9bf,d9f9,cc23,finml6,+
+d9ca,da04,cc2e,mul10r,+
 d9cb,da05,cc2f,tenc,"Floating point binary value of 10"
 d9d0,da0a,cc34,div10,"Divide: ""fac""=""fac""/10"
 d9d9,da13,cc3d,fdivf,"(Perform divide-by)"
@@ -915,7 +914,7 @@ dad0,db0a,cd34,movfa1,+
 dad4,db0e,cd38,movfal,+
 dade,db18,cd42,movaf,"Move ""fac"" to ""arg"" with round-off"
 dae1,db1b,cd45,movef,"("" "" "" "" without "" "")"
-dae3,db1d,cd47,movaf1,+
+dae3,db1d,cd47,movafl,+
 daec,db26,cd50,movrts,+
 daed,db27,cd51,round,"Round-off ""fac"""
 daf5,db2f,cd59,incrnd,+
@@ -937,29 +936,29 @@ db6a,dba4,cdce,fcompd,+
 db6d,dba7,cdd1,qint,"Floating to fixed conversion: ""fac""=int(""fac"")"
 db81,dbbb,cde5,qishft,+
 db8c,dbc6,cdf0,qintrt,+
-db8d,dbc7,cdf1,qintl,+
+db8d,dbc7,cdf1,qint1,+
 db9e,dbd8,ce02,int,"INT instruction"
-dbbb,dbf5,celf,clrfac,"Fill all positions of ""fac"" with contents of A"
+dbbb,dbf5,ce1f,clrfac,"Fill all positions of ""fac"" with contents of A"
 dbc4,dbfe,ce28,intrts,+
 dbc5,dbff,ce29,fin,"Convert input string to floating-pt. value in ""fac"""
 dbc9,dc03,ce2d,finzlp,+
 dbd8,dc12,ce3c,qplus,+
 dbdc,dc16,ce40,finc,+
-dbdf,dc19,ce43,findqq,+
-dbel,dc1b,ce45,finl,+
-dc00,dc3a,ce64,finecl,+
+dbdf,dc19,ce43,findgq,+
+dbel,dc1b,ce45,fin1,+
+dc00,dc3a,ce64,finec1,+
 dc02,dc3c,ce66,finec,+
-dc05,dc3f,ce69,finedg1,+
+dc05,dc3f,ce69,fnedg1,+
 dc07,dc41,ce6b,finec2,+
 dc13,dc4d,ce77,findp,+
 dc19,dc53,ce7d,fine,+
-dc1b,dc55,ce7f,finel,+
+dc1b,dc55,ce7f,fine1,+
 dc24,dc5e,ce88,findiv,+
 dc2d,dc67,ce91,finmul,+
 dc34,dc6e,ce98,finqng,+
 dc39,dc73,ce9d,negxqs,+
 dc3c,dc76,cea0,findig,+
-dc43,dc7d,cea7,findgl,+
+dc43,dc7d,cea7,findg1,+
 dc50,dc8a,ceb4,finlog,"(Get new ASCII digit)"
 dc63,dc9d,cec7,finedg,+
 dc72,dcac,ced6,mlex10,+
@@ -1008,8 +1007,8 @@ de0d,de46,d0f0,fdcend,"End of powers table"
 de24,de5e,d108,timend,""" "" time conversion tables"
 ,,,sqr,"SQR instruction"
 de2e,de68,d112,fpwrt,"[up-arrow] instruction: ""arg""**""fac"""
-de37,de71,d11b,fpwrtl,+
-de51,de8b,d135,fpwrl,+
+de37,de71,d11b,fpwrt1,+
+de51,de8b,d135,fpwr1,+
 de67,deal,d14b,negop,""">"" instruction - Negate the number in ""fac"""
 de71,deab,d155,negrts,+
 de72,deac,d156,logeb2,"Floating binary value: log(E) in base 2"
@@ -1017,7 +1016,7 @@ de77,debl,d15b,expcon,"LOG and exponent - floating binary tables"
 dea0,deda,d184,exp,"EXP instruction (of ""fac"")"
 deb0,deea,d194,stold,+
 debb,def5,d19f,gomldv,+
-debe,def8,dla2,expl,+
+debe,def8,d1a2,exp1,+
 dece,df08,d1b2,swaplp,+
 def3,df2d,d1d7,polyx,"Polynomial evaluator (function series evaluation)"
 def9,df43,dled,poly,+
@@ -1029,7 +1028,7 @@ df3d,df77,d221,rmulc,"(RND constants)"
 df41,df7b,d225,raddc,+
 df45,df7f,d229,rnd,"RND instruction"
 df63,df9d,d247,qsetnr,"(Calculate new random number: ""fac""=rnd(""fac""))"
-df78,dfb2,d25c,rndl,"(Scramble ""fac"" mantissa)"
+df78,dfb2,d25c,rnd1,"(Scramble ""fac"" mantissa)"
 df88,dfc2,d26c,strnex,+
 df9b,dfd5,d26f,gmovmf,+
 df9e,dfd8,d282,cos,"COS instruction"
@@ -1055,7 +1054,7 @@ e0c2,e110,d3b0,chdrts,+
 e0dd,e116,d3b6,init,"BASIC cold start - initialization and memory test"
 e0e7,e131,d3c9,movchg,"(Copy ""chrget"" to zero page)"
 e116,e15d,d400,loopmm,+
-e122,e165,d408,loopml,+
+e122,e165,d408,loopm1,+
 e131,e174,d417,usedec,+
 e135,e178,d41b,isedef,+
 e174,e1b7,d44b,words,"Message - 'bytes free'"
@@ -1066,13 +1065,13 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 0439,fd2d,d491,b3,"PC-1 for Break"
 0447,fd48,d4ac,b5,"Print entry data"
 0457,fd56,d4ba,strt,"User command input"
-0477,fd65,d4c9,stl,"Input command line"
+0477,fd65,d4c9,st1,"Input command line"
 0482,fd70,d4d4,s0,"Lookup command"
 0484,fd72,d4d6,s1,+
 0498,fd82,d4e6,s2,"Loop for all commands"
 0482,fd88,d4ec,putp,"Move ""tmp0"" to ""pch"",""pcl"""
 04bb,fd93,d4f7,dm,"Display memory routine: ""ar""=# bytes, ""tmp0""=address"
-048f,fd97,d4fb,dml,"Write N bytes"
+048f,fd97,d4fb,dm1,"Write N bytes"
 04cf,fda7,d50b,byte,"Read & store byte unless space, or ""tmpc""=0"
 04el,fdb9,d51d,by3,"Increment ""tmp0"" address"
 04e7,fdbf,d523,setr,"Set to access registers"
@@ -1086,13 +1085,13 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 0512,fdf0,d554,adrl,""" "" "" "" : Lo """
 051a,fdf8,d55c,regk,"Register header display"
 -,fe15,d579,altrit,"(Begin new memory display line with prompt)"
-052d,fe23,d587,displyr,"R - display registers command"
+052d,fe23,d587,dsplyr,"R - display registers command"
 053c,fe25,d589,d2,"(Read & print ""regk"" loop)"
-055f,fe58,d5bc,displym,"M - display memory command"
-0587,fe6e,d5d2,dspl,"Test for stop key and ..."
-05ac,fe91,d5f5,begsl,"Jump to ""strt"""
-05af,fe94,d5f8,errsl,""" "" ""errorpr"""
-05b2,fe97,d5fb,altrl,"Alter registers"
+055f,fe58,d5bc,dsplym,"M - display memory command"
+0587,fe6e,d5d2,dsp1,"Test for stop key and ..."
+05ac,fe91,d5f5,beqs1,"Jump to ""strt"""
+05af,fe94,d5f8,errs1,""" "" ""errorpr"""
+05b2,fe97,d5fb,altr,"Alter registers"
 05bd,fea2,d606,al2,SYS8
 -,feb4,d618,al3,"Set to alter registers"
 05c2,feb9,d61d,altm,"Alter memory - read address & data"
@@ -1100,31 +1099,31 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 05ce,fec5,d629,a5,+
 05d6,fecd,d631,a9,+
 05d8,fecf,d631,go,"G - go command"
-05eb,fee2,d646,gl,"Original or new value to SP"
+05eb,fee2,d646,g1,"Original or new value to SP"
 05fe,ff07,d66b,exit,"X - exit command"
 069c,ff0e,d672,errl,"Jump to ""errorpr"""
 069f,ff11,d675,ld,"L - Load command - default is from cassette #1"
--,ff22,d688,11,+
--,ff2f,d695,12,"File name must be next"
-06ce,ff31,d697,13,"Read file name"
-0714,ff43,d6a9,14,"File name too long"
-071f,ff47,d6ad,15,"Is this a load?"
--,ff4b,d6b1,16,"Not a load"
--,ff57,d6bd,17,"Load error"
--,ff5c,d6c2,18,"Is this a default load?"
--,ff65,d6cb,19,"Bad syntax"
--,ff6c,d6d2,110,"Device 0"
--,ff70,d6d6,111,+
--,ff7d,d6e3,112,"Bad syntax"
--,ff8a,d6f0,113,"Missing end address"
--,ff9a,d700,120,"Skip space loop"
--,ff9f,d709,114,"Missing [return] at end"
+-,ff22,d688,l1,+
+-,ff2f,d695,l2,"File name must be next"
+06ce,ff31,d697,l3,"Read file name"
+0714,ff43,d6a9,l4,"File name too long"
+071f,ff47,d6ad,l5,"Is this a load?"
+-,ff4b,d6b1,l6,"Not a load"
+-,ff57,d6bd,l7,"Load error"
+-,ff5c,d6c2,l8,"Is this a default load?"
+-,ff65,d6cb,l9,"Bad syntax"
+-,ff6c,d6d2,l10,"Device 0"
+-,ff70,d6d6,l11,+
+-,ff7d,d6e3,l12,"Bad syntax"
+-,ff8a,d6f0,l13,"Missing end address"
+-,ff9a,d700,l20,"Skip space loop"
+-,ff9f,d709,l14,"Missing [return] at end"
 0604,e76a,d717,wroa,"Monitor routines: Write address from ""tmp0"" stores"
-060a,e76c,d719,wroal,+
+060a,e76c,d719,wroa1,+
 0613,e775,d722,wrob,"Write a byte - unpack A into 2 characters in X & A"
 0622,e784,d731,wrtwo,"Write 2 characters from X & A"
 062b,e78d,d73a,ascii,"(Convert low nybble to ascii)"
-0634,e794,d741,ascl,+
+0634,e794,d741,asc1,+
 063f,e797,d744,t2t2,"Swap ""tmp0"" with ""tmp2"""
 0641,e799,d746,t2t21,+
 064f,e7a7,d754,rdoa,"Read hex addr: return Hi in ""tmp0"", Lo in ""tmp0+1"""
@@ -1143,9 +1142,9 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,d7db,numadr,+
 -,-,d7el,rexnex,+
 -,-,d7fe,doner,+
--,-,d801,qtyerl,+
--,-,d804,chkl,"Disk parameter checks"
--,-,d808,chkerl,+
+-,-,d801,qtyer1,+
+-,-,d804,chk1,"Disk parameter checks"
+-,-,d808,chker1,+
 -,-,d80b,chk2,+
 -,-,d818,chk3,+
 -,-,d81d,chk4,+
@@ -1173,7 +1172,7 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,d94f,dopen2,+
 -,-,d95b,reclck,+
 -,-,d95d,leav,+
--,-,d970,leavl,+
+-,-,d970,leav1,+
 -,-,d977,append,"APPEND instruction"
 -,-,d984,dappen,+
 -,-,d991,errchl,"Get disk status"
@@ -1225,7 +1224,7 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,db44,dloerr,+
 -,-,db47,dload2,+
 -,-,db55,rename,+
--,-,db5f,drenl,+
+-,-,db5f,dren1,+
 -,-,db66,scrtch,"SCRATCH instruction"
 -,-,db6c,dscrat,+
 -,-,db78,numscr,+
@@ -1244,7 +1243,7 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,dbel,oldclr,"Clear DS$ and ST"
 -,-,dbfl,oldcl1,+
 -,-,dbfa,sendp,"Assemble disk command string"
--,-,dbfc,sendpl,+
+-,-,dbfc,sendp1,+
 -,-,dc02,sendp2,+
 -,-,dc0d,rxfn1,+
 -,-,dc14,rxfn2,+
@@ -1257,28 +1256,28 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,dc46,rplce,+
 -,-,dc4c,tranr,+
 -,-,dc57,rwrt,+
--,-,dc60,rwrtl,+
+-,-,dc60,rwrt1,+
 -,-,dc67,rwrts,+
 -,-,dc68,dospar,"Parse BASIC DOS command"
 -,-,dc89,parsel,+
 -,-,dc9f,parnxt,+
 -,-,dcb2,next7,+
--,-,dcba,snerl,+
+-,-,dcba,sner1,+
 -,-,dcbd,logadr,+
 -,-,dcd8,reclem,+
 -,-,dcea,recoo,+
 -,-,dcf8,recon,+
--,-,dd03,donel,+
--,-,dd06,namell,+
--,-,dd09,onl,+
--,-,dd0f,unitl,+
--,-,dd15,drvl,+
+-,-,dd03,done1,+
+-,-,dd06,name11,+
+-,-,dd09,on1,+
+-,-,dd0f,unit1,+
+-,-,dd15,drv1,+
 -,-,dd34,qtyer2,+
 -,-,dd37,ident,+
 -,-,dd41,idcon,+
 -,-,dd45,next3,+
 -,-,dd4b,next4,+
--,-,dd60,namel,+
+-,-,dd60,name1,+
 -,-,dd77,loop6,+
 -,-,dd85,namcon,+
 -,-,dd96,delim1,+
@@ -1310,7 +1309,7 @@ e40f,fd11,d472,calle,"Call entry to Machine-language monitor"
 -,-,de9d,cksumd,"Checksum $d000 ROM"
 -,-,dea4,patch2,"Message ""*** commodore basic 4.0 ***""+[2 returns]"
 e1e1,e1de,e000,cint,"(Register/screen initialization)"
-e1ed,e1e7,e009,pxl,"Clear locations $60-$f8"
+e1ed,e1e7,e009,px1,"Clear locations $60-$f8"
 e250,e229,e04b,clsr,"Initialize line pointers for [clr]"
 ?,e22d,e04f,lps1,"$f4 - $f8 = $83"
 ?,e23b,e05d,lps2,+
@@ -1322,7 +1321,7 @@ e5fa,e27a,e09c,stupz,"Cursor column #"
 e604,e284,e0a6,stupr,+
 e27d,e285,e0a7,lp2,"(Input from keyboard - Get character from keyboard"
 ,,,,"buffer & move rest of buffer down)"
-e282,e28a,e0ac,lpl,"Keyboard buffer"
+e282,e28a,e0ac,lp1,"Keyboard buffer"
 e294,e29a,e0bc,loop4,"Print single character"
 e297,e29d,e0bf,loop3,"Wait for kbd. input; echo to screen, exit on [return]"
 e2b0,e2b1,e0df,lp21,"Get character from buffer"
@@ -1330,55 +1329,55 @@ e2bd,e2bd,e0df,lp23,"RUN or LOAD"
 e2c8,e2c8,e0ea,lp22,+
 e2d1,e2d0,e0f2,clp5,+
 e2da,e2d9,e0fb,clp6,+
-e2fa,e2f4,ell6,loop5,"(Input from screen)"
-e303,e2fc,elle,lop5,"Cursor column #"
-e309,e302,el24,lop51,"Strip bits 6 & 7"
-e313,e30c,el2e,lop54,+
-e319,e312,el34,lop52,+
-e31d,e31b,el38,lop53,"If necessary, toggle ('quote' mode flag)"
-e327,e31f,el41,clp2,+
-e335,e32b,el53,clp2a,"Print character in acc"
-e338,e32e,el56,clp21,+
-e33a,e330,el58,clp1,"Last key = cr"
-e348,e33e,el66,clp7,+
-e349,e33f,el67,qtswc,'quote'
-e355,e34b,el73,qtswl,+
-e356,e34c,el74,nxt33,+
-e358,e34e,el76,nxt3,"Screen [rvs] flag"
-e35d,e352,el7a,nc3,+
-e35f,e354,el7c,nvs,"# of keyboard [inserts] outstanding"
-e365,e35a,el82,nvsl,"Write acc to screen"
-e368,e35d,el85,jsts,"Cursor column #"
-e383,e377,el9f,jstsl,"Last line"
-e38a,e37e,elae,loop2,+
-e392,e386,elae,lop3,+
-e397,e38b,elb3,jstsx,+
-e3a3,e395,elbd,jsxb,+
-e3a4,e396,elbe,jts2,+
-e3aa,e39c,elc4,scrl,"Scroll screen"
-e3b1,e3a3,elcd,jsts2,"Line wrap table"
-e3c4,e3b4,elde,bkln,"Set up new screen line - Max columns per screen line"
-e3d0,e3c0,elea,bkln1,+
-e3db,e3c9,elfl,ntcn2,+
+e2fa,e2f4,e116,loop5,"(Input from screen)"
+e303,e2fc,e11e,lop5,"Cursor column #"
+e309,e302,e124,lop51,"Strip bits 6 & 7"
+e313,e30c,e12e,lop54,+
+e319,e312,e134,lop52,+
+e31d,e31b,e138,lop53,"If necessary, toggle ('quote' mode flag)"
+e327,e31f,e141,clp2,+
+e335,e32b,e153,clp2a,"Print character in acc"
+e338,e32e,e156,clp21,+
+e33a,e330,e158,clp1,"Last key = cr"
+e348,e33e,e166,clp7,+
+e349,e33f,e167,qtswc,'quote'
+e355,e34b,e173,qtswl,+
+e356,e34c,e174,nxt33,+
+e358,e34e,e176,nxt3,"Screen [rvs] flag"
+e35d,e352,e17a,nc3,+
+e35f,e354,e17c,nvs,"# of keyboard [inserts] outstanding"
+e365,e35a,e182,nvs1,"Write acc to screen"
+e368,e35d,e185,jsts,"Cursor column #"
+e383,e377,e19f,jsts1,"Last line"
+e38a,e37e,e1ae,loop2,+
+e392,e386,e1ae,lop2,+
+e397,e38b,e1b3,jstsx,+
+e3a3,e395,e1bd,jsxb,+
+e3a4,e396,e1be,jts2,+
+e3aa,e39c,e1c4,scrl,"Scroll screen"
+e3b1,e3a3,e1cd,jsts2,"Line wrap table"
+e3c4,e3b4,e1de,bkln,"Set up new screen line - Max columns per screen line"
+e3d0,e3c0,e1ea,bkln1,+
+e3db,e3c9,e1f1,ntcn2,+
 e3ea,e3d8,e202,prt,"Output character in A"
-e406,e3f3,e21d,njtl,+
+e406,e3f3,e21d,njt1,+
 e412,e3ff,e229,ntcn,"Number of keyboard inserts outstanding"
 e419,e405,e230,cnc3x,+
-e428,e415,e23f,bkl,+
+e428,e415,e23f,bk1,+
 e433,e420,e24a,bk2,+
-e430,e426,e250,ntcnl,"(If=0, not in quote mode)"
+e430,e426,e250,ntcn1,"(If=0, not in quote mode)"
 e43d,e42a,e254,cnc3,+
 e440,e42d,e257,nc3w,[reverse]?
-e447,e433,e25d,ncl,[home]?
+e447,e433,e25d,nc1,[home]?
 e44e,e43a,e264,nc2,[cursor-right]?
 e453,e43f,e275,jpl4,+
 e461,e44d,e277,ncz2,+
 e454,e460,e27a,ncx2,[cursor-down]?
-e476,e462,e28c,jp13,+
+e476,e462,e28c,jpl3,+
 e479,e465,e28f,prt1,+
 e481,e46d,e297,prt2,"Increment cursor line number"
 e487,e47a,e2a4,nxtx,+
-e497,e482,e2ac,nxtxl,+
+e497,e482,e2ac,nxtx1,+
 e4a5,e490,e2ba,up5,"(If=0, not in quote mode)"
 e4b9,e4a4,e2ce,ins3,"(End of line?)"
 e4c0,e4ab,e2d7,ins1,"Screen line length"
@@ -1407,28 +1406,28 @@ e5cd,e5ad,e3d5,mlp41,"Wait for TI interrupt"
 e5d8,e5b7,e3df,mlp42,+
 e5db,e5ba,e3e2,newln,"Start new screen line"
 e617,e5cc,e3f3,newlx,+
-e619,e5ce,e3f5,newll,+
+e619,e5ce,e3f5,newl1,+
 e627,e5da,e401,newla,+
 e63b,e5ed,e414,nell,+
 e648,e5fa,e421,blkln,+
 e65d,e60d,e434,blkl,+
 e66b,e61b,e442,puls,"Main Interrupt-entry -IRQ & BRK"
-e67b,e62b,e452,pulsl,"Indirect jump through IRQ vector"
+e67b,e62b,e452,puls1,"Indirect jump through IRQ vector"
 ?,e649,e470,key5,"60hz hardware interrupt: clock, cursor, keyboard"
 e6b0,e64d,e474,key4,+
 e6d4,e66e,e495,key3,+
-e6d8,e674,e49b,k124,+
-e6de,e677,e49e,k12,+
-e6ea,e682,e4a9,k123,+
-e6f4,e68b,e4b2,k125,+
-e6f7,e68e,e4b5,k122,+
-e701,e698,e4bf,k11,"Keyboard scan"
-?,e6a7,e4ce,ckisl,+
+e6d8,e674,e49b,kl24,+
+e6de,e677,e49e,kl2,+
+e6ea,e682,e4a9,kl23,+
+e6f4,e68b,e4b2,kl25,+
+e6f7,e68e,e4b5,kl22,+
+e701,e698,e4bf,kl1,"Keyboard scan"
+?,e6a7,e4ce,ckis1,+
 ?,e6b4,e4db,spck,"Key image"
 e708,e6b6,e4dd,ckut,+
 e709,e6b7,e4de,ckit,+
-e714,e6c2,e4e9,ckitl,+
-e72c,e6d6,e4fd,knl,+
+e714,e6c2,e4e9,ckit1,+
+e72c,e6d6,e4fd,kn1,+
 e739,e6e2,e509,keyf,+
 e67e,e6e4,e600,prend,"(Exit from Interrupt)"
 ?,e6f3,e60b,dspp,+
@@ -1438,7 +1437,7 @@ e7d5,e761,e674,runtb,"Message: 'dl'*+[return]+run""+[return]"
 ,,,,"Characters entered when [shift-run] is hit"
 -,-,e67d,cksume,"Checksum $e000 ROM"
 e810,e810,e810,pial,"Keyboard PIA: I/O port A & data direction register"
-e811,e811,e811,piall,"Control Register A"
+e811,e811,e811,pial1,"Control Register A"
 e812,e812,e812,piak,"I/O port B & data direction register"
 ,,,,"=$ff, unless hitting certain keys:"
 ,,,,"[rvs]=$fe, [""=$fd, [space]=$fb & ""<""=$f7"
@@ -1464,7 +1463,7 @@ e845,e845,e845,chtim,+
 e846,e846,e846,tih,"Hi byte: initiate count"
 e847,e847,e847,till,"Lo byte: read timer 1 latch"
 ,,,tilh,"Hi """
-e848,e848,e848,t21,"Read timer 2 counter lo byte, & reset interrupt"
+e848,e848,e848,t2l,"Read timer 2 counter lo byte, & reset interrupt"
 ,,,,"Write to timer 2 lo byte"
 ,,,,"Microsecond clock"
 ,,,,"Sets tone in CB2 sound: 0=low, $ff=high"
@@ -1482,11 +1481,11 @@ e84c,e84c,e84c,pcr,"Peripheral control register:"
 ,,,,"$0e "" text """
 e84d,e84d,e84d,ifr,"Interrupt flag register"
 e84e,e84e,e84e,ier,""" enable """
-e84f,e84f,e84f,syncl,"I/O port A without handshaking"
+e84f,e84f,e84f,sync1,"I/O port A without handshaking"
 -,-,e880,cr0,"6545 Video interface chip - CRT controller"
 ,,,,"Bits 0-6: Set left margin of screen"
 ,,,,"Bit 7: Hi=interlaced scan mode"
--,-,e881,crl,"Sets top margin of screen"
+-,-,e881,cr1,"Sets top margin of screen"
 ,,,,"(8 bit registers ""cr2""-""crf"" follow)"
 -,-,eff0-3,,"6551 ACIA - Superpet only"
 -,-,eff4-5,,"6850 ACIA - "" """
@@ -1524,10 +1523,10 @@ f0ae,f0ae,f0ae,ms19,""" "" : ""ready. "" + [shift return]"
 -,-,f0c5,msg31,""" "" : [return] + ""? bad disk "" + [return]"
 f0b6,f0b6,f0d2,talk,"SYS15 - Send 'Talk' (to IEEE) with attention"
 f0ba,f0ba,f0d5,listn,"( - - "" 'Listen' "" "" "" "" - uses A)"
-f0bc,f0bc,f0d7,listl,"(Send IEEE command character)"
+f0bc,f0bc,f0d7,list1,"(Send IEEE command character)"
 f0e7,f0e4,f0ff,list4,"Wait for DAV n=lo"
 f0f1,f0ee,f109,isour,"(Send byte to IEEE)- Test channel"
-f107,f103,f11e,isrl,"Wait for NPRD in to become low"
+f107,f103,f11e,isr1,"Wait for NPRD in to become low"
 f111,f11d,f128,isr0,+
 f116,f112,f12d,isr2,"IEEE status"
 f121,f11d,f138,isr3,"Set IEEE out control DAV to hi"
@@ -1540,12 +1539,12 @@ f13d,f138,f167,err01,+
 f142,f13d,f16c,errp7,"Print ""device not present"""
 ,,,,"Status=""file not found"" or ""end of tape"""
 f146,f141,f170,errl,"Timeout on read, clear control lines"
-f14b,f146,f175,err001,+
+f14b,f146,f175,er001,+
 e7de,f156,f185,msg,"(Print system message)-(Send canned file message)"
 f15b,f164,f193,tksa,"SYS26 - Secondary address with talk - uses A"
 ,,,,"(Send byte, clear control lines)"
 f161,f169,f198,tkatn,"SYS29 - Release ATN after talk - uses A"
-f167,f16f,f19e,clout,"SYS19 - Handshake character out - uses A"
+f167,f16f,f19e,ciout,"SYS19 - Handshake character out - uses A"
 ,,,,"(Send normal, deferred, IEEE character)"
 ,,,,"(Send character to IEEE-jb)"
 f171,f177,fla6,ci2,+
@@ -1572,7 +1571,7 @@ f230,f232,f266,bsout,"SYS9 Output a byte to channel - uses A"
 f241,f23d,f271,bo10,"(If not IEEE)"
 f247,f243,f277,bo20,"(Send to cassette)"
 f248,f244,f278,bo21,"Character to tape buffer storage"
-f273,f264,f298,jtplo,"Get tape buffer character"
+f273,f264,f298,jtp10,"Get tape buffer character"
 f277,f268,f29c,rstor,"Put in character in second tape buffer address"
 f2a4,f26e,f2a2,clall,"SYS1l abort, not close, all files - no regs. used"
 f27d,f272,f2a6,clrchn,"SYS7 - Restore default I/O devices"
@@ -1581,8 +1580,8 @@ f28b,f27b,f2af,jx750,+
 1299,f284,f2b8,jx770,"Initialize I/O to default values"
 f2ab,f28d,f2c1,jltlk,"Find & set up file data"
 f2ae,f28f,f2c3,jx600,+
-f2b8,f299,f2cd,jzl00,"Move file table entries to device, command"
-f2c7,f299,f2dc,jzl01,+
+f2b8,f299,f2cd,jz100,"Move file table entries to device, command"
+f2c7,f299,f2dc,jz101,+
 f2c8,f2a9,f2dd,close,"CLOSE (logical file) instruction"
 f2cd,f2ae,f2e2,clos5,"SYS4 - Close (logical) file # in A"
 ,,,fclose,+
@@ -1605,7 +1604,7 @@ f39c,f37a,f3b5,ld60,+
 ,f380,f3bb,ld64,"Test ST for end of file"
 ,-,f3c1,ld90,+
 ,f387,f3c6,ld65,"Tape end address=start address"
-f3a5,f395,f3d4,1d100,+
+f3a5,f395,f3d4,ld100,+
 f3ae,f39e,f3dd,ld112,+
 f3b7,f3a7,f3e6,ld120,"Jump to ""file not found"""
 f3ba,f3aa,f3e9,ld150,+
@@ -1623,7 +1622,7 @@ f417,f423,f462,ld110,+
 f421,f42d,f46c,ld115,+
 f422,f42e,f46d,ld400,"Print ""loading"" or ""verifying"""
 f42b,f436,f475,ld410,"""Verify"""
-f433,f43e,f47d,parsl,"Initialize default values for I/O device"
+f433,f43e,f47d,pars1,"Initialize default values for I/O device"
 f43b,f447,f486,-,"Get LOAD/SAVE type parameters"
 f45b,f45f,f496,pro60,+
 f45c,f460,f49e,pr070,"Get expression from input buffer; put in X"
@@ -1638,16 +1637,16 @@ f4a3,f4a1,f4e0,faf20,+
 f4b9,f4b5,f4f4,faf30,+
 f4ba,f4b6,f4f5,faf40,+
 f4bb,f4b7,f4f6,ver,"VERIFY instruction"
-f4cf,f4c9,f508,verl0,"Print ""ok"""
+f4cf,f4c9,f508,ver10,"Print ""ok"""
 f4d4,f4ce,f50d,pars2,"Get Open/Close parameters"
-f4f6,f4ef,f52e,prl00,+
-f4fe,f4f7,f536,frlll,+
+f4f6,f4ef,f52e,pr100,+
+f4fe,f4f7,f536,fr111,+
 f504,f4fd,f53c,p200,"Read file name - get string"
-f515,f50e,f54d,prl40,"Check for end"
-f51c,f515,f554,prl47,+
-f51d,f516,f555,prl50,"Check for comma "","""
-f522,f519,f558,prl30,+
-f527,f51e,f55d,prl35,"To ""syntax error"""
+f515,f50e,f54d,pr140,"Check for end"
+f51c,f515,f554,pr147,+
+f51d,f516,f555,pr150,"Check for comma "","""
+f522,f519,f558,pr130,+
+f527,f51e,f55d,pr135,"To ""syntax error"""
 f52a,f521,f560,open,"OPEN instruction: from input parameters"
 f52d,f524,f563,op94,"SYS3 - Open logical file - uses no registers"
 -,f526,f565,fopen,"-2=Open file with preset parameters"
@@ -1675,7 +1674,7 @@ f64d,f63c,f67b,ldad2,"Get start & end address from tape header for LOAD"
 f654,f643,f682,ldad3,"Tape buffer to pointer"
 f667,f656,f695,-,"Set tape buffer start address"
 f67c,f66b,f6aa,zz10,+
-f67d,f66c,f6ab,ldadl,"Set tape buffer start & end pointers"
+f67d,f66c,f6ab,ldad1,"Set tape buffer start & end pointers"
 -,f684,f6c3,sys,"SYS instruction"
 f695,f68d,f6cc,sv60,"Set tape write start & end"
 f69e,f69c,f6dd,save,"SAVE instruction"
@@ -1690,7 +1689,7 @@ f6f6,f703,f742,sv100,+
 f708,f716,f755,sv105,"Write tape header"
 f729,f729,f768,udtim,"Update jiffy clock"
 ,,,,"(Hardware interrupt: cursor, tape & keyboard)"
-f743,f731,f770,udl0,+
+f743,f731,f770,ud10,+
 f74e,f73b,f77a,ud20,+
 f75b,f745,f784,ud30,+
 f75d,f747,f786,ud40,+
@@ -1713,14 +1712,14 @@ f7d0,f7b1,f7f3,jx350,"Check ST variable"
 f7dc,f7bc,f7fe,chkout,"SYS6 - open channel for output - uses X"
 ,,,,"Set output device from logical file number"
 ,,,ckout,+
-f7f8,f7d6,f818,clk10,"To screen?"
+f7f8,f7d6,f818,ck10,"To screen?"
 f806,f7e6,f828,jx360,"Set CMD device"
 f80c,f7eb,f82d,jx370,"Remember IEEE device #"
 f80d,f7ec,f831,jx3701,"Test IEEE channel"
 f81e,f7f8,f83d,jx380,+
 f821,f7fb,f840,jx390,"Check ST variable"
 f82d,f806,f84b,jtp20,"Increment tape buffer pointer"
-f83b,f812,f857,cstel,"Print ""press play"" - Wait till cassette PLAY key hit"
+f83b,f812,f857,cste1,"Print ""press play"" - Wait till cassette PLAY key hit"
 f842,f819,f85e,cs30,+
 f851,f828,f86d,cs40,+
 f85e,f835,f87a,cs10,"Test cassette switch (Sense tape switch)"
@@ -1749,7 +1748,7 @@ f92e,f900,f945,stt1,"Tape bit timing adjust"
 f943,f915,f95a,stt2,+
 f94a,f91c,f961,stt3,+
 f95f,f931,f976,read,"Interrupt routine for tape read - read tape bits"
-f96d,f93f,f934,rdl,+
+f96d,f93f,f984,rd1,+
 f97f,f951,f996,rads,+
 f981,f953,f998,rd3,+
 f995,f966,f9ab,jradj,+
@@ -1757,7 +1756,7 @@ f998,f969,f9ae,rjdj,+
 f9b8,f988,f9cd,jrad2,+
 f9bc,f98b,f9d0,srer,+
 f9c5,f993,f9d8,radx2,+
-f9cb,f997,f9dc,rad1,"Right start bit/read bit sequence error"
+f9cb,f997,f9dc,radl,"Right start bit/read bit sequence error"
 f9ce,f999,f9de,rad5,+
 f9e5,f9ac,f9fl,rdbk,+
 f9fa,f9bf,fa04,radp,+
@@ -1771,10 +1770,10 @@ fa4a,fa07,fa4c,rad2,"EOT bit received"
 f253,fa0f,fa54,rad2y,+
 fa5b,fal6,fa5b,rad2x,"Timing constant"
 fa6c,fa26,fa6b,radq,+
-fa70,fa2a,fa6f,radql,+
+fa70,fa2a,fa6f,radq1,+
 fa84,fa3b,fa80,radq2,+
 fa94,fa4a,fa8f,radk,+
-fa9b,fa50,fa95,radrl,+
+fa9b,fa50,fa95,radr1,+
 faa0,fa54,fa99,rdbk2,+
 faa3,fa57,fa9c,radj,"Read tape characters: initialize tape flags"
 fab5,fa67,faac,rd15,
@@ -1803,7 +1802,7 @@ fbe5,fb7f,fbc4,udst,"Flag error into ST variable"
 fbc0,fb84,fbc9,newch,"New character - reset counters for new byte"
 fc00,fb93,fbd8,write,"Write a bit to tape"
 fc07,fb9a,fbdf,wrtw,+
-fc09,fb9c,fbel,wrtl,+
+fc09,fb9c,fbe1,wrt1,+
 fc0b,fb9e,fbe3,wrtx,+
 fc1c,fbaf,fbf4,wrtl3,"Tape write"
 fc21,fbba,fbf9,wrtn,"Tape write interrupt"
@@ -1817,7 +1816,7 @@ fc90,fc17,fc5c,wrt6,+
 fc9f,fc26,fc6b,wrt7,+
 fcbl,fc38,fc7d,wrt4,"Tape character parity"
 fcb8,fc3e,fc83,wrtbk,+
-fcbb,fc41,fc86,wrtnl,"Write tape leader"
+fcbb,fc41,fc86,wrtn1,"Write tape leader"
 ,,fc86,wrnc,+
 fccf,fc54,fc99,wrtz,"IRQ entry for print"
 fcfb,fc7b,fcc0,tnif,"Terminate tape - restore interrupt vector"
@@ -1825,7 +1824,7 @@ fd16,fc95,fcdb,stky,"Right blocks completed"
 fdlb,fc9b,fce0,bsiv,"IRQ fixer"
 ?,fca6,fceb,tnof,"Turn off both tape motors"
 fd7c,fcb4,fcf9,vprty,"Checksum calculation"
-fd8a,fcbe,fd05,vpl0,+
+fd8a,fcbe,fd05,vp10,+
 fd90,fcc6,fd0b,wrt62,"Advance load/save pointer"
 fcd0,fcc5,fd15,wrt64,+
 fd38,fcd1,fd16,start,"RESET: Power-on"
@@ -1846,7 +1845,7 @@ fd38,fcd1,fd16,start,"RESET: Power-on"
 -,-,ffbl,dload,"DLOAD   """
 -,-,ffb4,dircat,"DIRECTORY """
 ,,,dcat,"CATALOG   """
--,-,ffb7,renamc,"RENAME    """
+-,-,ffb7,rename,"RENAME    """
 -,-,ffba,scratc,"SCRATCH   """
 -,-,ffbd,readds,"DS & D$ ""(Get disk status)"
 ffc0,ffc0,ffc0,copen,"OPEN """
