@@ -77,8 +77,7 @@ sub check_missing_labels {
         my $label = $missing_label_ref->{label};
         my $d1 = $missing_label_ref->{data};
 
-        print "Label '$label' exists in $file1 but not in $file2\n";
-        print "  $file1:$d1->{line_number} Label '$label' ($d1->{addr1}, $d1->{addr2}, $d1->{addr4}, $d1->{description})\n";
+        print "  $file1:$d1->{line_number} Extra label '$label' ($d1->{addr1}, $d1->{addr2}, $d1->{addr4}, $d1->{description})\n";
 
         # Find labels in data2 with matching addresses
         my @matching_labels;
@@ -92,10 +91,9 @@ sub check_missing_labels {
         }
 
         if (@matching_labels) {
-            print "  Labels in $file2 with matching addresses:\n";
             foreach my $match_label (@matching_labels) {
                 my $d2 = ${$data2}{$match_label};
-                print "    $file2:$d2->{line_number} Label '$match_label' ($d2->{addr1}, $d2->{addr2}, $d2->{addr4}, $d2->{description})\n";
+                print "    $file2:$d2->{line_number} matches? '$match_label' ($d2->{addr1}, $d2->{addr2}, $d2->{addr4}, $d2->{description})\n";
             }
         }
 
@@ -109,7 +107,30 @@ sub are_addresses_equal {
     my ($addr1, $addr2) = @_;
     $addr1 = "" if ($addr1 eq "-" || $addr1 eq "----");
     $addr2 = "" if ($addr2 eq "-" || $addr2 eq "----");
-    return ($addr1 eq $addr2);
+    return ($addr1 eq "") || ($addr1 eq $addr2);
+}
+
+# Validate address fields in the data
+sub validate_addresses {
+    my ($file, $data) = @_;
+    my $error_count = 0;
+
+    foreach my $label (keys %{$data}) {
+        my $d = $data->{$label};
+        foreach my $addr_field (qw(addr1 addr2 addr4)) {
+            my $addr = $d->{$addr_field};
+
+            # Skip empty strings
+            next if $addr eq "";
+
+            # Check for valid hexadecimal, "-", or "?"
+            unless ($addr =~ /^[0-9a-fA-F]+$/ || $addr eq "-" || $addr eq "----" || $addr eq "?") {
+                print "ERROR: $file:$d->{line_number} Label '$label' $addr_field '$addr' is not a valid hexadecimal value, '-', or '?'\n";
+                $error_count++;
+            }
+        }
+    }
+    return $error_count;
 }
 
 # Load the two CSV files
@@ -119,33 +140,62 @@ my $file2 = "memorymap-gen.csv";
 my %data1 = load_csv($file1);
 my %data2 = load_csv($file2);
 
-# Compare the data
-print "Comparing $file1 and $file2...\n";
+# Validate addresses in both data sets
+my $total_error_count = 0;
+$total_error_count += validate_addresses($file1, \%data1);
+$total_error_count += validate_addresses($file2, \%data2);
+
+if ($total_error_count > 0) {
+    print "Total errors found in address fields: $total_error_count\n";
+    exit 1;
+}
 
 my $diff_count = 0;
 
 # Check for labels present in data1 but not in data2
-$diff_count = check_missing_labels(\%data1, \%data2, $file1, $file2, $diff_count);
+print "\nLabels in $file1 but not in $file2:\n";
+$diff_count += check_missing_labels(\%data1, \%data2, $file1, $file2, $diff_count);
 
 # Check for labels present in data2 but not in data1
-$diff_count = check_missing_labels(\%data2, \%data1, $file2, $file1, $diff_count);
+print "\nLabels in $file2 but not in $file1:\n";
+$diff_count += check_missing_labels(\%data2, \%data1, $file2, $file1, $diff_count);
+
+# Compare the data
+print "\nLabels in both $file1 and $file2 with discrepencies:\n";
+
+# Collect common labels and their data
+my @common_labels;
+foreach my $label (keys %data1) {
+    if (exists $data2{$label}) {
+        push @common_labels, { label => $label, d1 => $data1{$label}, d2 => $data2{$label} };
+    }
+}
+
+# Sort common labels by line number in file1
+@common_labels = sort { $a->{d1}->{line_number} <=> $b->{d1}->{line_number} } @common_labels;
 
 # Check for differences in common labels
-my @labels1 = keys %data1;
-foreach my $label (@labels1) {
-    next unless exists $data2{$label}; # Skip labels only in one file
-
-    my $d1 = $data1{$label};
-    my $d2 = $data2{$label};
+my $max_file_info_length = 25;
+foreach my $common_label_ref (@common_labels) {
+    my $label = $common_label_ref->{label};
+    my $d1 = $common_label_ref->{d1};
+    my $d2 = $common_label_ref->{d2};
 
     if (!are_addresses_equal($d1->{addr1}, $d2->{addr1}) ||
         !are_addresses_equal($d1->{addr2}, $d2->{addr2}) ||
         !are_addresses_equal($d1->{addr4}, $d2->{addr4}) ||
         ($d1->{description} ne $d2->{description})
     ) {
-        print "Difference found for label '$label':\n";
-        print "  $file1:$d1->{line_number} addr1=$d1->{addr1}, addr2=$d1->{addr2}, addr4=$d1->{addr4}, description=\"$d1->{description}\"\n";
-        print "  $file2:$d2->{line_number} addr1=$d2->{addr1}, addr2=$d2->{addr2}, addr4=$d2->{addr4}, description=\"$d2->{description}\"\n";
+        # Format the output with padding for alignment
+        my $file1_info = sprintf "%s:%s", $file1, $d1->{line_number};
+        my $file2_info = sprintf "%s:%s", $file2, $d2->{line_number};
+
+        print "  Difference found for label '$label':\n";
+        printf "    %-${max_file_info_length}s addr1=%-4s, addr2=%-4s, addr4=%-4s, description=\"%s\"\n",
+            $file1_info, $d1->{addr1}, $d1->{addr2}, $d1->{addr4}, $d1->{description};
+        printf "    %-${max_file_info_length}s addr1=%-4s, addr2=%-4s, addr4=%-4s, description=\"%s\"\n",
+            $file2_info, $d2->{addr1}, $d2->{addr2}, $d2->{addr4}, $d2->{description};
+
         $diff_count++;
     }
 }
