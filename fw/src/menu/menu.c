@@ -80,6 +80,9 @@ void term_present() {
 
 int term_input_char() {
     int keycode = keyboard_getch();
+    if (keycode != EOF) {
+        return keycode;
+    }
 
     if (uart_is_readable(uart_default)) {
         return uart_getc(uart_default);

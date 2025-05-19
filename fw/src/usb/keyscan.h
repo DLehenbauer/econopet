@@ -33,14 +33,14 @@ typedef uint8_t key_event_t;
 #define PET_KEY_DOWN_N      (PET_KEY_EVENT(true, 6, 1))
 #define PET_KEY_RIGHT_N     (PET_KEY_EVENT(true, 7, 0))
 #define PET_KEY_RETURN_N    (PET_KEY_EVENT(true, 5, 6))
+#define PET_KEY_LSHIFT_N    (PET_KEY_EVENT(true, 0, 8))
 #define PET_KEY_RSHIFT_N    (PET_KEY_EVENT(true, 5, 8))
 
-#define PET_KEY_DOWN_B      (PET_KEY_EVENT(true, 5, 4))
+#define PET_KEY_DOWN_B      (PET_KEY_EVENT(true, 4, 5))
 #define PET_KEY_RIGHT_B     (PET_KEY_EVENT(true, 5, 0))
 #define PET_KEY_RETURN_B    (PET_KEY_EVENT(true, 4, 3))
+#define PET_KEY_LSHIFT_B    (PET_KEY_EVENT(true, 6, 6))
 #define PET_KEY_RSHIFT_B    (PET_KEY_EVENT(true, 0, 6))
-
-#define PET_KEY_LSHIFT_N_B  (PET_KEY_EVENT(true, 0, 8))
 
 // Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
 extern const key_event_t key_event_none;

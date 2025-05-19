@@ -71,7 +71,8 @@ key_event_t next_key_event(const uint8_t* matrix) {
 
 int keyscan_is_shifted(uint8_t matrix[KEY_COL_COUNT]) {
     static const key_event_t shift_keys[] = {
-        PET_KEY_LSHIFT_N_B,
+        PET_KEY_LSHIFT_N,
+        PET_KEY_LSHIFT_B,
         PET_KEY_RSHIFT_N,
         PET_KEY_RSHIFT_B,
     };
