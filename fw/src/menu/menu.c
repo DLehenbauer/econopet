@@ -376,7 +376,7 @@ void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
-    printf("0x%4lx: patching %lu bytes bytes\n", address, binary->size);
+    printf("0x%4lx: patching %zu bytes bytes\n", address, binary->size);
     spi_write(address, binary->data, binary->size);
 }
 

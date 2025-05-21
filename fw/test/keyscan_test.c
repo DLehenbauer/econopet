@@ -110,7 +110,8 @@ START_TEST(test_keyscan_getch) {
     }
 
     static const key_event_t shift_keys[] = {
-        PET_KEY_LSHIFT_N_B,
+        PET_KEY_LSHIFT_N,
+        PET_KEY_LSHIFT_B,
         PET_KEY_RSHIFT_N,
         PET_KEY_RSHIFT_B,
     };

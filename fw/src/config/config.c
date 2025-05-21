@@ -509,7 +509,6 @@ static void parse_action_copy(parser_t* parser, void* context, size_t context_si
     on_action_copy(parser, source, destination, length);
 }
 
-
 static void parse_action(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
