@@ -133,6 +133,38 @@ Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
   $E000 | D8       |2316B-024  | 901474-01 | 05db957e
 
+### Keyboard
+
+Business/QWERTY keyscan map at $e6fb:
+
+```text
+> m e6fb e74a
+-        16 04
+>C:e6fb  50 e7 3a 03  39 36 33 df   P.:.963.
+-              15
+>C:e703  b1 2f ff 13  4d 20 58 12   ./..M X.
+-              0f
+>C:e70b  b2 ff ff b0  2c 4e 56 5a   ....,NVZ
+               19
+>C:e713  b3 00 ff ae  2e 42 43 00   .....BC.
+>C:e71b  b4 db 4f 11  55 54 45 51   ..O.UTEQ
+                               09
+>C:e723  14 50 49 dc  59 52 57 89   .PI.YRW.
+>C:e72b  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
+>C:e733  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
+-           06
+>C:e73b  b9 ff de b7  b0 37 34 31   .....741
+-        05 0e
+>C:e743  ff ff 1d b8  2d 38 35 32   ....-852
+```
+
+Note that the first two table entries are an instruction. Presumably these keys are unpressable? (CTRL-V, CTRL-D)
+
+```text
+> d e6fb
+.C:e6fb  50 E7       BVC $E6E4
+```
+
 ### PET 30xx (VICE)
 
 The VICE roms are a binary concatenation of the ROMs indicated in the filenames:
