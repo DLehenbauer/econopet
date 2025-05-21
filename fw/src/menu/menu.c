@@ -344,35 +344,6 @@ void action_load(void* const context, const char* filename, uint32_t address) {
     fclose(file);
 }
 
-void write_scanmap(uint32_t address, const binary_t* scanmap) {
-    for (size_t n = 0, col = 1; n < scanmap->size; col++) {
-        printf("%02d ", col);
-        for (size_t j = 0; j < 8; j++) {
-            printf("%02x ", scanmap->data[n++]);
-        }
-        printf("\n");
-    }
-
-    spi_write(address, scanmap->data, scanmap->size);
-}
-
-void action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
-    (void) context;
-
-    bool crtc;
-    keyboard_type_t keyboard_type;
-    get_model(&crtc, &keyboard_type);
-
-    if (keyboard_type == keyboard_type_graphics && scanmap_n->size) {
-        printf("0x%4lx: keyboard scanmap (graphics)\n", address);
-        write_scanmap(address, scanmap_n);
-    } else if (scanmap_b->size) {
-        assert(keyboard_type == keyboard_type_business);
-        printf("0x%4lx: keyboard scanmap (business)\n", address);
-        write_scanmap(address, scanmap_b);
-    }
-}
-
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
@@ -420,7 +391,6 @@ void menu_enter() {
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
     const setup_sink_t setup_sink = {
         .on_action_load = action_load,
-        .on_action_set_scanmap = action_set_scanmap,
         .on_action_patch = action_patch,
         .on_action_copy = action_copy,
     };

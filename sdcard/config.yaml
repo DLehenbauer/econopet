@@ -1,10 +1,3 @@
-data:    
-  scanmaps:
-    - &qwerty-n "3d2eff033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f555445511411ff295c2724221d135f2826252321"
-    - &qwerty-b "50e73a03393633dfb12fff134d205812b2ffffb02c4e565ab300ffae2e424300b4db4f1155544551145049dc59525789b6c04c0d4a474441b53b4bdd4846539bb9ffdeb7b0373431ffff1db82d383532"
-  patches:
-    - &rom-1-keyscan-fix "bd5be7d007a9018d0402d010c9fff00cc93cd0052c11e830038e230268caf00888d0d9ee10e8d0caad2302cd0302f0228d0302aac5fff01abd5be74e040290020980ae0d029d0f02e8e00ad002a2008e0d024c7ee6"
-
 configs:
   - name: "Basic 2.0"
     setup:
@@ -26,17 +19,10 @@ configs:
             address: 0xd800
           - file: "/roms/901439-07.bin"
             address: 0xf800
-      - action: "set-scanmap"
-        address: 0xe75c
-        graphics: *qwerty-n
-        business: *qwerty-b
       - action: "copy"
         source: 0xe7b4
         destination: 0xe7ad
         length: 0x06
-      - action: "patch"
-        address: 0xe705
-        hex: *rom-1-keyscan-fix
   - name: "Basic 4.0 (40 Col 50 Hz)"
     setup:
       - action: "load"

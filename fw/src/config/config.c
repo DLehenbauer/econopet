@@ -83,12 +83,6 @@ static void on_action_load(const parser_t* const parser, const char* file, uint3
     }
 }
 
-static void on_action_set_scanmap(const parser_t* const parser, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
-    if (parser->sink->setup && parser->sink->setup->on_action_set_scanmap) {
-        parser->sink->setup->on_action_set_scanmap(parser->sink->setup->context, address, scanmap_n, scanmap_b);
-    }
-}
-
 static void on_action_patch(const parser_t* const parser, uint32_t address, const binary_t* binary) {
     if (parser->sink->setup && parser->sink->setup->on_action_patch) {
         parser->sink->setup->on_action_patch(parser->sink->setup->context, address, binary);
@@ -109,7 +103,6 @@ static yaml_char_t* get_current_anchor(parser_t* parser) {
         default: return NULL;
     }
 }
-
 
 static char* type_to_string(yaml_event_type_t type) {
     switch (type) {
@@ -437,36 +430,6 @@ static void parse_action_load(parser_t* parser, void* context, size_t context_si
     });
 }
 
-static void parse_action_set_scanmap(parser_t* parser, void* context, size_t context_size) {
-    (void)context;
-    (void)context_size;
-
-    uint32_t address = 0;
-
-    uint8_t scanmap_n_data[80] = { 0 };
-    binary_t scanmap_n = {
-        .data = scanmap_n_data,
-        .expected = sizeof(scanmap_n_data),
-        .capacity = sizeof(scanmap_n_data)
-    };
-
-    uint8_t scanmap_b_data[80] = { 0 };
-    binary_t scanmap_b = {
-        .data = scanmap_b_data,
-        .expected = sizeof(scanmap_n_data),
-        .capacity = sizeof(scanmap_b_data)
-    };
-
-    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
-        { "address", parse_as_uint32, &address, sizeof(uint32_t) },
-        { "graphics", parse_as_hex, &scanmap_n, sizeof(scanmap_n) },
-        { "business", parse_as_hex, &scanmap_b, sizeof(scanmap_b) },
-        { NULL, NULL, NULL, 0 }
-    });
-
-    on_action_set_scanmap(parser, address, &scanmap_n, &scanmap_b);
-}
-
 static void parse_action_patch(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -518,8 +481,6 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
 
     if (strcmp(action, "load") == 0) {
         parse_action_load(parser, NULL, 0);
-    } else if (strcmp(action, "set-scanmap") == 0) {
-        parse_action_set_scanmap(parser, NULL, 0);
     } else if (strcmp(action, "patch") == 0) {
         parse_action_patch(parser, NULL, 0);
     } else if (strcmp(action, "copy") == 0) {

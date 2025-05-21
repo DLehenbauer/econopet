@@ -48,26 +48,6 @@ void on_action_load(void* context, const char* filename, uint32_t address) {
     printf("Action load: %s @ %04x\n", filename, address);
 }
 
-void print_scanmap(const binary_t* scanmap) {
-    for (size_t n = 0, col = 1; n < scanmap->size; col++) {
-        printf("%02zu ", col);
-        for (size_t j = 0; j < 8; j++) {
-            printf("%02x ", scanmap->data[n++]);
-        }
-        printf("\n");
-    }
-}
-
-void on_action_set_scanmap(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
-    (void) context;
-
-    printf("Action set-scanmap: %04x\n", address);
-    printf("\nScanmap N:\n");
-    print_scanmap(scanmap_n);
-    printf("\nScanmap B:\n");
-    print_scanmap(scanmap_b);
-}
-
 void on_action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
@@ -86,7 +66,6 @@ void config_test() {
     
     const setup_sink_t setup_sink = {
         .on_action_load = on_action_load,
-        .on_action_set_scanmap = on_action_set_scanmap,
         .on_action_copy = on_action_copy,
         .on_action_patch = on_action_patch,
     };

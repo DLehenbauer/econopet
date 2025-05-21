@@ -42,18 +42,6 @@ static void on_action_load_callback(void* context, const char* filename, uint32_
     }
 }
 
-static void on_action_set_scanmap_callback(void* context, uint32_t address, const binary_t* scanmap_n, const binary_t* scanmap_b) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_action_set_scanmap != NULL) {
-        setup->on_action_set_scanmap(setup->context, address, scanmap_n, scanmap_b);
-    }
-}
-
 static void on_action_patch_callback(void* context, uint32_t address, const binary_t* binary) {
     const setup_context_t* const ctx = (setup_context_t*) context;
     if (ctx->skip_count != 0xffffffff) {
@@ -91,7 +79,6 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     setup_sink_t intermediate_setup_sink = {
         .context = &ctx,
         .on_action_load = on_action_load_callback,
-        .on_action_set_scanmap = on_action_set_scanmap_callback,
         .on_action_patch = on_action_patch_callback,
         .on_action_copy = on_action_copy_callback,
     };
