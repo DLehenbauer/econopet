@@ -1735,7 +1735,7 @@ f8b4,f87f,f8c4,trd2,"Toggle cassette #1 read control"
 f8b9,f886,f8cb,wblk,"Initiate tape write  (Write tape from buffer)"
 f8bc,f88c,f8ce,twrt,Checksum
 f8c1,f88e,f8d3,,+
-f8c4,f890,f8d5,twrt2,-2=Write tape, leader length in A
+f8c4,f890,f8d5,twrt2,"-2=Write tape, leader length in A"
 f8cf,f89b,f8e0,tape,"Common tape I/O"
 f8eb,f8b6,f8fb,tp20,+
 -,f8c0,f905,tp30,"Interblock delay loop"
