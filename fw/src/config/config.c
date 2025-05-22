@@ -95,6 +95,10 @@ static void on_action_copy(const parser_t* const parser, uint32_t source, uint32
     }
 }
 
+static model_flags_t get_model_flags(const parser_t* const parser) {
+    return parser->sink->setup ? parser->sink->setup->model_flags : model_flag_none;
+}
+
 static yaml_char_t* get_current_anchor(parser_t* parser) {
     switch (parser->event.type) {
         case YAML_MAPPING_START_EVENT: return parser->event.data.mapping_start.anchor;
@@ -490,6 +494,43 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
     }
 }
 
+static void parse_action_list(parser_t* parser, void* context, size_t context_size);
+
+static void parse_then_else(parser_t* parser, void* context, size_t context_size) {
+    assert(context_size == sizeof(bool));
+    bool condition = *((bool*)context);
+
+    if (condition) {
+        parse_action_list(parser, NULL, 0);
+    } else {
+        //assert_yaml_type(parser, YAML_SEQUENCE_START_EVENT);
+        parse_skip(parser, NULL, 0);
+    }
+}
+
+static void parse_if(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+    
+    parse_next(parser);
+    const char* condition = get_current_string(parser);
+    bool then_value = false;
+
+    if (strcmp(condition, "graphics") == 0) {
+        then_value = (get_model_flags(parser) & model_flag_business) == 0;
+    } else {
+        fatal_parse_error(parser, "Unknown if-cond '%s'", condition);
+    }
+
+    bool else_value = !then_value;
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "then", parse_then_else, &then_value, sizeof(then_value) },
+        { "else", parse_then_else, &else_value, sizeof(else_value) },
+        { NULL, NULL, NULL, 0 }
+    });
+}
+
 static void parse_action_list_entry(parser_t* parser) {
     assert_yaml_type(parser, YAML_MAPPING_START_EVENT);
 
@@ -498,6 +539,8 @@ static void parse_action_list_entry(parser_t* parser) {
 
     if (strcmp(action, "action") == 0) {
         parse_action(parser, NULL, 0);
+    } else if (strcmp(action, "if") == 0) {
+        parse_if(parser, NULL, 0);
     } else {
         fatal_parse_error(parser, "Unknown action '%s'", action);
     }

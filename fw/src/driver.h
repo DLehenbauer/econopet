@@ -15,11 +15,7 @@
 #pragma once
 
 #include "pch.h"
-
-typedef enum {
-    keyboard_type_graphics,
-    keyboard_type_business,
-} keyboard_type_t;
+#include "model.h"
 
 void driver_init();
 
@@ -36,4 +32,4 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 void set_cpu(bool ready, bool reset, bool nmi);
 void set_video(bool col80);
 void sync_state();
-void get_model(bool* crtc, keyboard_type_t* keyboard_type);
+model_flags_t get_model();

@@ -15,8 +15,9 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "../src/menu/window.h"
-#include "../src/menu/menu_config.h"
+#include "model.h"
+#include "menu/window.h"
+#include "menu/menu_config.h"
 
 #define COLS 40
 #define ROWS 25
@@ -51,8 +52,7 @@ void on_action_load(void* context, const char* filename, uint32_t address) {
 void on_action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
-    printf("Action patch: %04x\n", address);
-    printf("Binary size: %zu\n", binary->size);
+    printf("Action patch: %04x, length: %zu\n", address, binary->size);
 }
 
 void on_action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
@@ -65,9 +65,11 @@ void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
     
     const setup_sink_t setup_sink = {
+        .context = NULL,
         .on_action_load = on_action_load,
         .on_action_copy = on_action_copy,
         .on_action_patch = on_action_patch,
+        .model_flags = model_flag_crtc | model_flag_business,
     };
 
     enable_raw_mode();

@@ -390,9 +390,11 @@ void menu_enter() {
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
     const setup_sink_t setup_sink = {
+        .context = NULL,
         .on_action_load = action_load,
         .on_action_patch = action_patch,
         .on_action_copy = action_copy,
+        .model_flags = get_model(),
     };
 
     menu_config_show(&window, &setup_sink);

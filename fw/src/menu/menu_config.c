@@ -81,6 +81,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .on_action_load = on_action_load_callback,
         .on_action_patch = on_action_patch_callback,
         .on_action_copy = on_action_copy_callback,
+        .model_flags = setup_sink->model_flags
     };
 
     config_sink_t sink = {

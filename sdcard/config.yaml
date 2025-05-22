@@ -19,6 +19,20 @@ configs:
             address: 0xd800
           - file: "/roms/901439-07.bin"
             address: 0xf800
+      - if: "graphics"
+          # Use ROM '901439-03' (loaded above)
+        else:
+          # Commodore never produced an edit ROM for the business keyboard for the original ROM set.
+          # This patch replaces the original keyscan routine with one adapter from '901474-01'.
+          - action: "patch"
+            address: 0x0e702
+            hex: "b01148bd5be7d007a9018d0402d0038e230268caf00888d0e6ee10e8d0d7ad2302cd0302f0318d0302aa302bbd5be708297f2830184e04029013c92c900dc93cb009e90fc920b00569202c0980ae0d029d0f02e820ece74c7ee650e73a03393633dfb12fff134d205812b2ffffb02c4e565ab300ffae2e424300b4db4f1155544551145049dc59525789b6c04c0d4a474441b53b4bdd4846539bb9ffdeb7b0373431ffff1db82d383532"
+          - action: "patch"
+            address: 0x0e7ec
+            hex: "e00ad00af0060a6905a00060a2008e0d02d0f800"
+      # Orginal PET roms polled VIA ($E840) to delay screen updates until vertical blanking
+      # to avoid "sparkle" artifacts. On later CRTC models this is unnecessary and causes
+      # delays due to short vsync pulses. This copy elides the delay loop.
       - action: "copy"
         source: 0xe7b4
         destination: 0xe7ad
