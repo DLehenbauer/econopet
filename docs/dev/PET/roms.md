@@ -226,9 +226,25 @@ Address | Location | IC#       | Part#     | CRC-32
   $9000 | UD12     | -         | -         | -
   N/A   | F10      | 2316B-004 | 901447-10 | d8408674
 
+#### Graphics Scanmap (901498-01, 901499-01)
+
+```text
+> m e73f e78e
+>C:e73f  3d 2e 10 03  3c 20 5b 12   =...< [.
+>C:e747  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
+>C:e74f  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
+>C:e757  33 31 0d 3b  4d 42 43 5a   31.;MBCZ
+>C:e75f  2a 35 ff 3a  4b 48 46 53   *5.:KHFS
+>C:e767  36 34 ff 4c  4a 47 44 41   64.LJGDA
+>C:e76f  2f 38 ff 50  49 59 52 57   /8.PIYRW
+>C:e777  39 37 5e 4f  55 54 45 51   97^OUTEQ
+>C:e77f  14 11 09 29  5c 27 24 22   ...)\'$"
+>C:e787  1d 13 5f 28  26 25 23 21   .._(&%#!
+```
+
 ### PET 4000 (CRTC, 50Hz)
 
-Identical except for UD7.
+Identical except for UD7.  Scanmap at $e73f.
 
 Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
@@ -242,9 +258,25 @@ Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
   $E000 | UD7      | 2316B-041 | 901474-03 | 5674dd5e
 
+#### Business Scanmap (901474-03, 901474-04)
+
+```text
+> m e6d1 e720
+>C:e6d1  16 04 3a 03  39 36 33 df   ..:.963.
+>C:e6d9  b1 2f 15 13  4d 20 58 12   ./..M X.
+>C:e6e1  b2 10 0f b0  2c 4e 56 5a   ....,NVZ
+>C:e6e9  b3 00 19 ae  2e 42 43 00   .....BC.
+>C:e6f1  b4 db 4f 11  55 54 45 51   ..O.UTEQ
+>C:e6f9  14 50 49 dc  59 52 57 09   .PI.YRW.
+>C:e701  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
+>C:e709  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
+>C:e711  b9 06 de b7  b0 37 34 31   .....741
+>C:e719  05 0e 1d b8  2d 38 35 32   ....-852
+```
+
 ### PET 8000 (CRTC, 50Hz)
 
-Identical except for UD7.
+Identical except for UD7.  Scanmap at $e6d1.
 
 Address | Location | IC#       | Part#     | CRC-32
 --------|----------|-----------|-----------|----------
@@ -375,6 +407,7 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
 * [Jim Butterfield](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n9/mode/2up)
 * Basic 1/2 IEEE Bug:
   * [Fachat's Notes](https://www.softwolves.com/arkiv/cbm-hackers/24/24293.html)
+  * [PET 2001 IEEE patch from VICE](https://lc64.blogspot.com/2018/02/pet2001-basic1-ieee-patch-from-vice.html)
   * [Rom1 Disk Magic](https://hub.inktada.com/channel/rom1diskmagic)
 
 ## Tools

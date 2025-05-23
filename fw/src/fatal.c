@@ -32,6 +32,9 @@ static void vfatal(const char* const format, va_list args) {
     }
 
     term_display(&window);
+    
+    video_graphics = true;  // Use lower case for bit-banged DVI display
+
     abort();
 }
 
