@@ -196,15 +196,16 @@ notes:
         ; Busy wait after selecting new column to give PIA1 an opportunity
         ; to detect new input.
 
-    outer_loop:
-        LDX #$37            ; Load X
+        LDX #$17            ; Load X
     inner_loop:
         DEX                 ; 2 cycles
         BNE inner_loop      ; 3 cycles if taken, 2 cycles if not
-        BNE outer_loop      ; 3 cycles if taken, 2 cycles if not
 
         ; Read pressed keys in current column
+debounce:
         LDA PIA1_PORTB
+        CMP PIA1_PORTB  ; Compare with previous value
+        BNE debounce    ; If not equal, wait for stable state
 
         ; Continue scanning with next column
         JMP keyscan_loop
