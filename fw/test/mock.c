@@ -17,6 +17,8 @@
 #include "sd/sd.h"
 
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
+bool video_graphics = false;
+bool video_is_80_col = false;
 
 // All pico-vfs paths are absolute, starting with '/'.
 // /workspaces/econopet/build/sdcard/sdcard_root/config.yaml
