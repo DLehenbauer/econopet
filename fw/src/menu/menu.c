@@ -377,6 +377,22 @@ void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t 
     release_temp_buffer(&temp_buffer);
 }
 
+void action_set_options(void* context, options_t* options) {
+    (void) context;
+
+    model_t model = get_model();
+
+    if (options->columns == 80) {
+        model.flags |= model_flag_80_cols;
+    } else {
+        model.flags &= ~model_flag_80_cols;
+    }
+
+    set_model(model);
+
+    printf("Set options: %lu columns\n", options->columns);
+}
+
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
@@ -389,16 +405,21 @@ void menu_enter() {
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
+
+    model_t model = get_model();
+
     const setup_sink_t setup_sink = {
         .context = NULL,
         .on_action_load = action_load,
         .on_action_patch = action_patch,
         .on_action_copy = action_copy,
-        .model_flags = get_model(),
+        .on_action_set_options = action_set_options,
+        .model = &model,
     };
 
     menu_config_show(&window, &setup_sink);
 
+    set_model(model);
     pet_reset();
 
     printf("-- Exit Menu --\n");

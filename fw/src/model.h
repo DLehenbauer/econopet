@@ -15,7 +15,12 @@
 #pragma once
 
 typedef enum {
-    model_flag_none     = 0,
-    model_flag_crtc     = 1 << 0,   // Flag set if the model has a CRTC (12"/20kHz display)
-    model_flag_business = 1 << 1,   // Flag set if the model has a business keyboard
+    model_flag_none         = 0,
+    model_flag_crtc         = 1 << 0,   // Set if the model has a CRTC (12"/20kHz display)
+    model_flag_business     = 1 << 1,   // Set if the model has a business keyboard
+    model_flag_80_cols      = 1 << 2,   // Set if the model display two characters per CCK (80 columns)
 } model_flags_t;
+
+typedef struct model_s {
+    model_flags_t flags;
+} model_t;

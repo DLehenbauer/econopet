@@ -32,4 +32,6 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 void set_cpu(bool ready, bool reset, bool nmi);
 void set_video(bool col80);
 void sync_state();
-model_flags_t get_model();
+
+model_t get_model();
+void set_model(model_t model);

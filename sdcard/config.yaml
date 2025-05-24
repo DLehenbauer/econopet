@@ -107,6 +107,8 @@ configs:
             address: 0xe000
           - file: "/roms/901465-22.bin"
             address: 0xf000
+      - action: "set"
+        columns: 80
   - name: "Basic 4.0 (80 Col 50 Hz)"
     setup:
       - action: "load"
@@ -123,3 +125,5 @@ configs:
             address: 0xe000
           - file: "/roms/901465-22.bin"
             address: 0xf000
+      - action: "set"
+        columns: 80

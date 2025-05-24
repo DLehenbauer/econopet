@@ -66,6 +66,18 @@ static void on_action_copy_callback(void* context, uint32_t source, uint32_t des
     }
 }
 
+static void on_action_set_callback(void* context, options_t* options) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_action_set_options != NULL) {
+        setup->on_action_set_options(setup->context, options);
+    }
+}
+
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
     // This is a placeholder for the actual loading logic
@@ -81,7 +93,8 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .on_action_load = on_action_load_callback,
         .on_action_patch = on_action_patch_callback,
         .on_action_copy = on_action_copy_callback,
-        .model_flags = setup_sink->model_flags
+        .on_action_set_options = on_action_set_callback,
+        .model = setup_sink->model,
     };
 
     config_sink_t sink = {

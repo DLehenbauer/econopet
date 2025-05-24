@@ -190,24 +190,42 @@ void set_video(bool col80) {
     spi_write_at(REG_VIDEO, state);
 }
 
-model_flags_t get_model() {
+model_t get_model() {
     uint8_t status = spi_read_at(REG_STATUS);
 
-    model_flags_t model = model_flag_none;
+    model_flags_t flags = model_flag_none;
 
     // Map DIP switch position to model flags. (Note that DIP switch is active low.)
 
     // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     if ((status & REG_STATUS_CRT) == 0) {
-        model |= model_flag_crtc;
+        flags |= model_flag_crtc;
     }
 
     // Keyboard type (0 = Business, 1 = Graphics)
     if ((status & REG_STATUS_KEYBOARD) == 0) {
-        model |= model_flag_business;
+        flags |= model_flag_business;
     }
 
+    if (video_is_80_col) {
+        flags |= model_flag_80_cols;
+    }
+
+    model_t model = {
+        .flags = flags
+    };
+
     return model;
+}
+
+void set_model(model_t model) {
+    uint8_t state = 0;
+    
+    video_is_80_col = (model.flags & model_flag_80_cols) != 0;
+    printf("Setting model: %s\n", video_is_80_col ? "80 columns" : "40 columns");
+    
+    if (video_is_80_col) { state |= REG_VIDEO_80_COL_MODE; }
+    spi_write_at(REG_VIDEO, state);
 }
 
 void sync_state() {

@@ -61,15 +61,27 @@ void on_action_copy(void* context, uint32_t source, uint32_t destination, uint32
     printf("Action copy: %04x -> %04x, length: %u\n", source, destination, length);
 }
 
+void on_action_set_options(void* context, options_t* options) {
+    (void) context;
+
+    // This is a placeholder for the actual callback implementation
+    printf("Action set options: columns = %u\n", options->columns);
+}
+
 void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
+
+    model_t model = {
+        .flags = model_flag_crtc | model_flag_business, // Example model flags
+    };
     
     const setup_sink_t setup_sink = {
         .context = NULL,
         .on_action_load = on_action_load,
         .on_action_copy = on_action_copy,
         .on_action_patch = on_action_patch,
-        .model_flags = model_flag_crtc | model_flag_business,
+        .on_action_set_options = on_action_set_options,
+        .model = &model,
     };
 
     enable_raw_mode();

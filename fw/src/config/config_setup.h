@@ -24,9 +24,14 @@
     size_t expected;
 } binary_t;
 
+typedef struct options_s {
+    uint32_t columns;   // Number of columns (default: 40)
+} options_t;
+
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);
 typedef void (*on_patch_fn_t)(void* user_data, uint32_t address, const binary_t* binary);
 typedef void (*on_copy_fn_t)(void* user_data, uint32_t source, uint32_t destination, uint32_t length);
+typedef void (*on_set_options_fn_t)(void* user_data, options_t* options);
 
 typedef struct setup_sink_s {
     // 'context' is used by 'load_config' to filter callbacks to only the selected config.
@@ -36,7 +41,8 @@ typedef struct setup_sink_s {
     const on_load_fn_t on_action_load;
     const on_patch_fn_t on_action_patch;
     const on_copy_fn_t on_action_copy;
+    const on_set_options_fn_t on_action_set_options;
 
     // 'model_flags' is used to evaluate 'if' conditions in the YAML config file.
-    model_flags_t model_flags;
+    model_t* model;
 } setup_sink_t;

@@ -95,8 +95,13 @@ static void on_action_copy(const parser_t* const parser, uint32_t source, uint32
     }
 }
 
+static model_t* get_model(const parser_t* const parser) {
+    return parser->sink->setup ? parser->sink->setup->model : NULL;
+}
+
 static model_flags_t get_model_flags(const parser_t* const parser) {
-    return parser->sink->setup ? parser->sink->setup->model_flags : model_flag_none;
+    const model_t* model = get_model(parser);
+    return model ? model->flags : model_flag_none;
 }
 
 static yaml_char_t* get_current_anchor(parser_t* parser) {
@@ -476,6 +481,28 @@ static void parse_action_copy(parser_t* parser, void* context, size_t context_si
     on_action_copy(parser, source, destination, length);
 }
 
+static void parse_action_set(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    options_t options = {
+        .columns = 40,  // Default value
+    };
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    if (options.columns != 40 && options.columns != 80) {
+        fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
+    }
+
+    if (parser->sink->setup && parser->sink->setup->on_action_set_options) {
+        parser->sink->setup->on_action_set_options(parser->sink->setup->context, &options);
+    }
+}
+
 static void parse_action(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -489,6 +516,8 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_patch(parser, NULL, 0);
     } else if (strcmp(action, "copy") == 0) {
         parse_action_copy(parser, NULL, 0);
+    } else if (strcmp(action, "set") == 0) {
+        parse_action_set(parser, NULL, 0);
     } else {
         fatal_parse_error(parser, "Unknown action '%s'", action);
     }
