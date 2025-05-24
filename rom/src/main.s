@@ -186,9 +186,9 @@ notes:
         LDA #$0F
         STA PIA1_PORTA
         LDA #$3C
-        STA $E811
+        STA PIA1_PACTL
         LDA #$3D
-        STA $E813
+        STA PIA1_PBCTL
 
     keyscan_loop:
         INC PIA1_PORTA           ; Select next keyboard column
@@ -204,7 +204,7 @@ notes:
         BNE outer_loop      ; 3 cycles if taken, 2 cycles if not
 
         ; Read pressed keys in current column
-        LDA $E812
+        LDA PIA1_PORTB
 
         ; Continue scanning with next column
         JMP keyscan_loop
