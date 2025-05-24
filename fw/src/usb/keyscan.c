@@ -69,27 +69,24 @@ key_event_t next_key_event(const uint8_t* matrix) {
     return event;
 }
 
-int keyscan_is_shifted(uint8_t matrix[KEY_COL_COUNT]) {
-    static const key_event_t shift_keys[] = {
-        PET_KEY_LSHIFT_N,
-        PET_KEY_LSHIFT_B,
-        PET_KEY_RSHIFT_N,
-        PET_KEY_RSHIFT_B,
-    };
-
-    for (size_t i = 0; i < ARRAY_SIZE(shift_keys); i++) {
-        const unsigned int row = PET_KEY_ROW(shift_keys[i]);
-        const unsigned int col = PET_KEY_COL(shift_keys[i]);
-        
-        if ((matrix[col] & (1 << row)) == 0) {
-            return true;
-        }
-    }
-
-    return false;
+bool is_key_down(const uint8_t matrix[KEY_COL_COUNT], key_event_t event) {
+    assert(event != key_event_none);
+ 
+    const unsigned int row = PET_KEY_ROW(event);
+    const unsigned int col = PET_KEY_COL(event);
+    const uint8_t mask = 1 << row;
+    
+    return (matrix[col] & mask) == 0;
 }
 
-int keyscan_getch(uint8_t matrix[KEY_COL_COUNT]) {
+int keyscan_is_shifted(const uint8_t matrix[KEY_COL_COUNT]) {
+    return is_key_down(matrix, PET_KEY_LSHIFT_N) ||
+           is_key_down(matrix, PET_KEY_LSHIFT_B) ||
+           is_key_down(matrix, PET_KEY_RSHIFT_N) ||
+           is_key_down(matrix, PET_KEY_RSHIFT_B);
+}
+
+int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
     static const key_event_t gfx_keys[] = {
         PET_KEY_DOWN_N,
         PET_KEY_RIGHT_N,

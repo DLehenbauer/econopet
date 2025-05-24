@@ -46,4 +46,4 @@ typedef uint8_t key_event_t;
 extern const key_event_t key_event_none;
 
 key_event_t next_key_event(const uint8_t* matrix);
-int keyscan_getch(uint8_t matrix[10]);
+int keyscan_getch(const uint8_t matrix[10]);
