@@ -72,6 +72,16 @@ static void on_action_set_callback(void* context, options_t* options) {
         return;
     }
 
+    model_t model = get_model();
+    
+    if (options->columns == 80) {
+        model.flags |= model_flag_80_cols;    
+    } else {
+        model.flags &= ~model_flag_80_cols;
+    }
+
+    set_model(model);
+
     const setup_sink_t* const setup = ctx->original_setup;
     if (setup->on_action_set_options != NULL) {
         setup->on_action_set_options(setup->context, options);

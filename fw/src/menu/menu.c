@@ -419,7 +419,6 @@ void menu_enter() {
 
     menu_config_show(&window, &setup_sink);
 
-    set_model(model);
     pet_reset();
 
     printf("-- Exit Menu --\n");
