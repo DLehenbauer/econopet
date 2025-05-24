@@ -1,7 +1,10 @@
 .segment "CODE"
 
 notes:
-        .byte $76, $9E, $D2, $EE
+        .byte $75, $9D, $D2, $EC
+
+uhoh:
+        .byte $EC, $EC, $A7, $A7
 
 
 .proc delay
