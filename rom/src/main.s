@@ -181,34 +181,35 @@ notes:
         .byte $00
 .endproc
 
-.proc keyscan
-        ; Initialize PIA1 for reading keyboard input
-        LDA #$0F
-        STA PIA1_PORTA
+.proc keyscan    
+    start:
+        ; Original keyscan resets these on each interrupt.  Probably unnecessary.
         LDA #$3C
         STA PIA1_PACTL
         LDA #$3D
         STA PIA1_PBCTL
+        LDY #$09            ; Start on keyboard row 9
 
     keyscan_loop:
-        INC PIA1_PORTA           ; Select next keyboard column
+        STY PIA1_PORTA      ; Select row
 
-        ; Busy wait after selecting new column to give PIA1 an opportunity
-        ; to detect new input.
+        ; Busy wait to give PIA1 an opportunity to detect new input.  The delay below is
+        ; approximately the same number of cycles that the original keyscan routine used
+        ; to check bits in the currently selected row.
 
-        LDX #$17            ; Load X
+        LDX #$16            ; Load X
     inner_loop:
         DEX                 ; 2 cycles
         BNE inner_loop      ; 3 cycles if taken, 2 cycles if not
 
-        ; Read pressed keys in current column
 debounce:
-        LDA PIA1_PORTB
-        CMP PIA1_PORTB  ; Compare with previous value
-        BNE debounce    ; If not equal, wait for stable state
+        LDA PIA1_PORTB      ; Read pressed keys in current row
+        CMP PIA1_PORTB      ; Compare with previous value
+        BNE debounce        ; If not equal, wait for stable state
 
-        ; Continue scanning with next column
-        JMP keyscan_loop
+        DEY                 ; Move to next row (descending)
+        BMI start           ; If Y < 0, wrap around to row 9.
+        BPL keyscan_loop    ; Continue scanning
 .endproc
 
 .proc reset_handler
