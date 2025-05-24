@@ -44,8 +44,6 @@ Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32   
 Graphics/QWERTY keyboard scanmap at $e75c:
 
 ```text
-> m e75c e7ab
--              10
 >C:e75c  3d 2e ff 03  3c 20 5b 12   =...< [.
 >C:e764  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
 >C:e76c  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
@@ -54,7 +52,6 @@ Graphics/QWERTY keyboard scanmap at $e75c:
 >C:e784  36 34 ff 4c  4a 47 44 41   64.LJGDA
 >C:e78c  2f 38 ff 50  49 59 52 57   /8.PIYRW
 >C:e794  39 37 5e 4f  55 54 45 51   97^OUTEQ
--              09
 >C:e79c  14 11 ff 29  5c 27 24 22   ...)\'$"
 >C:e7a4  1d 13 5f 28  26 25 23 21   .._(&%#!
 ```
@@ -142,30 +139,21 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 Business/QWERTY keyboard scanmap at $e6fb:
 
 ```text
-> m e6fb e74a
--        16 04
 >C:e6fb  50 e7 3a 03  39 36 33 df   P.:.963.
--              15
 >C:e703  b1 2f ff 13  4d 20 58 12   ./..M X.
--              0f
 >C:e70b  b2 ff ff b0  2c 4e 56 5a   ....,NVZ
-               19
 >C:e713  b3 00 ff ae  2e 42 43 00   .....BC.
 >C:e71b  b4 db 4f 11  55 54 45 51   ..O.UTEQ
-                               09
 >C:e723  14 50 49 dc  59 52 57 89   .PI.YRW.
 >C:e72b  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
 >C:e733  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
--           06
 >C:e73b  b9 ff de b7  b0 37 34 31   .....741
--        05 0e
 >C:e743  ff ff 1d b8  2d 38 35 32   ....-852
 ```
 
 Note that the first two table entries are an instruction. Presumably these keys are unpressable? (CTRL-V, CTRL-D)
 
 ```text
-> d e6fb
 .C:e6fb  50 E7       BVC $E6E4
 ```
 
@@ -233,7 +221,6 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 #### Graphics Scanmap (901498-01, 901499-01)
 
 ```text
-> m e73f e78e
 >C:e73f  3d 2e 10 03  3c 20 5b 12   =...< [.
 >C:e747  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
 >C:e74f  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
@@ -244,6 +231,70 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 >C:e777  39 37 5e 4f  55 54 45 51   97^OUTEQ
 >C:e77f  14 11 09 29  5c 27 24 22   ...)\'$"
 >C:e787  1d 13 5f 28  26 25 23 21   .._(&%#!
+```
+
+### PET 4000B (CRTC, 60Hz, Business)
+
+Business keyboard is identical to 40XX except for Edit rom.
+
+ROM         | File                            | Length | CRC-32  
+------------|---------------------------------|--------|---------
+Edit        | edit-4-40-b-60Hz.ts.bin         |   2048 | 7a0e59ad
+
+```patch
+- .C:e55c  EA          NOP
+- .C:e55d  EA          NOP
+- .C:e55e  EA          NOP
+- .C:e55f  EA          NOP
+- .C:e560  EA          NOP
+- .C:e561  EA          NOP
+- .C:e562  EA          NOP
++ .C:e55c  AA          TAX
++ .C:e55d  08          PHP
++ .C:e55e  29 7F       AND #$7F
++ .C:e560  28          PLP
++ .C:e561  30 17       BMI $E57A
+.C:e563  46 98       LSR $98
+.C:e565  90 13       BCC $E57A
+- .C:e567  EA          NOP
+- .C:e568  EA          NOP
+- .C:e569  EA          NOP
+- .C:e56a  EA          NOP
+- .C:e56b  EA          NOP
+- .C:e56c  EA          NOP
+- .C:e56d  EA          NOP
+- .C:e56e  EA          NOP
+- .C:e56f  EA          NOP
+- .C:e570  EA          NOP
+- .C:e571  EA          NOP
+- .C:e572  EA          NOP
+- .C:e573  EA          NOP
+- .C:e574  EA          NOP
+- .C:e575  EA          NOP
+- .C:e576  EA          NOP
+- .C:e577  EA          NOP
++ .C:e567  C9 2C       CMP #$2C
++ .C:e569  90 0D       BCC $E578
++ .C:e56b  C9 3C       CMP #$3C
++ .C:e56d  B0 09       BCS $E578
++ .C:e56f  E9 0F       SBC #$0F
++ .C:e571  C9 20       CMP #$20
++ .C:e573  B0 05       BCS $E57A
++ .C:e575  69 20       ADC #$20
++ .C:e577  2C 09 80    BIT $8009
+```
+
+```text
+>C:e73f  16 04 3a 03  39 36 33 df   ..:.963.
+>C:e747  b1 2f 15 13  4d 20 58 12   ./..M X.
+>C:e74f  b2 10 0f b0  2c 4e 56 5a   ....,NVZ
+>C:e757  b3 00 19 ae  2e 42 43 00   .....BC.
+>C:e75f  b4 db 4f 11  55 54 45 51   ..O.UTEQ
+>C:e767  14 50 49 dc  59 52 57 09   .PI.YRW.
+>C:e76f  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
+>C:e777  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
+>C:e77f  b9 06 de b7  b0 37 34 31   .....741
+>C:e787  05 0e 1d b8  2d 38 35 32   ....-852
 ```
 
 ### PET 4000 (CRTC, 50Hz)
@@ -282,6 +333,70 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 + e7e4  29         db 29h
 ```
 
+### PET 4000B (CRTC, 50Hz, Business)
+
+Business keyboard is identical to 40XX except for Edit rom.
+
+ROM         | File                            | Length | CRC-32  
+------------|---------------------------------|--------|---------
+Edit        | edit-4-40-b-50Hz.ts.bin         |   2048 | 16fb070c
+
+```patch
+- .C:e55c  EA          NOP
+- .C:e55d  EA          NOP
+- .C:e55e  EA          NOP
+- .C:e55f  EA          NOP
+- .C:e560  EA          NOP
+- .C:e561  EA          NOP
+- .C:e562  EA          NOP
++ .C:e55c  AA          TAX
++ .C:e55d  08          PHP
++ .C:e55e  29 7F       AND #$7F
++ .C:e560  28          PLP
++ .C:e561  30 17       BMI $E57A
+.C:e563  46 98       LSR $98
+.C:e565  90 13       BCC $E57A
+- .C:e567  EA          NOP
+- .C:e568  EA          NOP
+- .C:e569  EA          NOP
+- .C:e56a  EA          NOP
+- .C:e56b  EA          NOP
+- .C:e56c  EA          NOP
+- .C:e56d  EA          NOP
+- .C:e56e  EA          NOP
+- .C:e56f  EA          NOP
+- .C:e570  EA          NOP
+- .C:e571  EA          NOP
+- .C:e572  EA          NOP
+- .C:e573  EA          NOP
+- .C:e574  EA          NOP
+- .C:e575  EA          NOP
+- .C:e576  EA          NOP
+- .C:e577  EA          NOP
++ .C:e567  C9 2C       CMP #$2C
++ .C:e569  90 0D       BCC $E578
++ .C:e56b  C9 3C       CMP #$3C
++ .C:e56d  B0 09       BCS $E578
++ .C:e56f  E9 0F       SBC #$0F
++ .C:e571  C9 20       CMP #$20
++ .C:e573  B0 05       BCS $E57A
++ .C:e575  69 20       ADC #$20
++ .C:e577  2C 09 80    BIT $8009
+```
+
+```text
+>C:e73f  16 04 3a 03  39 36 33 df   ..:.963.
+>C:e747  b1 2f 15 13  4d 20 58 12   ./..M X.
+>C:e74f  b2 10 0f b0  2c 4e 56 5a   ....,NVZ
+>C:e757  b3 00 19 ae  2e 42 43 00   .....BC.
+>C:e75f  b4 db 4f 11  55 54 45 51   ..O.UTEQ
+>C:e767  14 50 49 dc  59 52 57 09   .PI.YRW.
+>C:e76f  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
+>C:e777  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
+>C:e77f  b9 06 de b7  b0 37 34 31   .....741
+>C:e787  05 0e 1d b8  2d 38 35 32   ....-852
+```
+
 ### PET 8000 (CRTC, 60Hz)
 
 Identical except for UD7.
@@ -293,7 +408,6 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 #### Business Scanmap (901474-03, 901474-04)
 
 ```text
-> m e6d1 e720
 >C:e6d1  16 04 3a 03  39 36 33 df   ..:.963.
 >C:e6d9  b1 2f 15 13  4d 20 58 12   ./..M X.
 >C:e6e1  b2 10 0f b0  2c 4e 56 5a   ....,NVZ

@@ -3,24 +3,24 @@ configs:
     setup:
       - action: "load"
         files:
-          - file: "/roms/901439-08.bin"
-            address: 0x8800
-          - file: "/roms/901439-01.bin"
-            address: 0xc000
-          - file: "/roms/901439-02.bin"
-            address: 0xd000
-          - file: "/roms/901439-03.bin"
-            address: 0xe000
-          # https://hub.inktada.com/channel/rom1diskmagic
-          - file: "/roms/rom1diskrom_v15.bin"
-          # - file: "/roms/901439-04.bin"
-            address: 0xf000
-          - file: "/roms/901439-05.bin"
-            address: 0xc800
-          - file: "/roms/901439-06.bin"
-            address: 0xd800
-          - file: "/roms/901439-07.bin"
-            address: 0xf800
+          - address: 0x8800
+            file: "/roms/901439-08.bin"
+          - address: 0xc000
+            file: "/roms/901439-01.bin"
+          - address: 0xd000
+            file: "/roms/901439-02.bin"
+          - address: 0xe000
+            file: "/roms/901439-03.bin"
+          - address: 0xf000
+            # https://hub.inktada.com/channel/rom1diskmagic
+            file: "/roms/rom1diskrom_v15.bin"
+            # file: "/roms/901439-04.bin"            
+          - address: 0xc800
+            file: "/roms/901439-05.bin"
+          - address: 0xd800
+            file: "/roms/901439-06.bin"
+          - address: 0xf800
+            file: "/roms/901439-07.bin"
       - if: "graphics"
           # Use ROM '901439-03' (loaded above)
         else:
@@ -43,34 +43,54 @@ configs:
     setup:
       - action: "load"
         files:
-          - file: "/roms/901447-10.bin"
-            address: 0x8800
-          - file: "/roms/901465-19.bin"
-            address: 0xb000
-          - file: "/roms/901465-20.bin"
-            address: 0xc000
-          - file: "/roms/901465-21.bin"
-            address: 0xd000
-          - file: "/roms/901499-01.bin"
-            address: 0xe000
-          - file: "/roms/901465-22.bin"
-            address: 0xf000
+          - address: 0x8800
+            file: "/roms/901447-10.bin"
+          - address: 0xb000
+            file: "/roms/901465-19.bin"
+          - address: 0xc000
+            file: "/roms/901465-20.bin"
+          - address: 0xd000
+            file: "/roms/901465-21.bin"
+          - address: 0xe000
+            file: "/roms/901498-01.bin"
+          - address: 0xf000
+            file: "/roms/901465-22.bin"
+      - if: "graphics"
+          # Use ROM '901499-01' (loaded above)
+        else:
+          # Commodore never produced an edit ROM for the business keyboard.
+          - action: "patch"
+            address: 0xe55c
+            hex: "aa08297f28301746989013c92c900dc93cb009e90fc920b00569202c"
+          - action: "patch"
+            address: 0xe73f
+            hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "Basic 4.0 (40 Col 60 Hz)"
     setup:
       - action: "load"
         files:
-          - file: "/roms/901447-10.bin"
-            address: 0x8800
-          - file: "/roms/901465-19.bin"
-            address: 0xb000
-          - file: "/roms/901465-20.bin"
-            address: 0xc000
-          - file: "/roms/901465-21.bin"
-            address: 0xd000
-          - file: "/roms/901499-01.bin"
-            address: 0xe000
-          - file: "/roms/901465-22.bin"
-            address: 0xf000
+          - address: 0x8800
+            file: "/roms/901447-10.bin"
+          - address: 0xb000
+            file: "/roms/901465-19.bin"
+          - address: 0xc000
+            file: "/roms/901465-20.bin"
+          - address: 0xd000
+            file: "/roms/901465-21.bin"
+          - address: 0xe000
+            file: "/roms/901499-01.bin"
+          - address: 0xf000
+            file: "/roms/901465-22.bin"
+      - if: "graphics"
+          # Use ROM '901499-01' (loaded above)
+        else:
+          # Commodore never produced an edit ROM for the business keyboard.
+          - action: "patch"
+            address: 0xe55c
+            hex: "aa08297f28301746989013c92c900dc93cb009e90fc920b00569202c"
+          - action: "patch"
+            address: 0xe73f
+            hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "Basic 4.0 (80 Col 60 Hz)"
     setup:
       - action: "load"
