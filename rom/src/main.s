@@ -1,5 +1,49 @@
 .segment "CODE"
 
+notes:
+        .byte $76, $9E, $D2, $EE
+
+
+.proc delay
+        LDA #$30
+    loop:
+        SEC         ; Set carry flag
+        SBC #$01    ; Subtract 1 from A
+        BNE loop    ; Loop until A = 0
+        RTS
+.endproc
+
+; On entry, $00-$01 points to the notes table. Y = number of notes.
+.proc beep
+        LDY #$03        ; Last note
+
+        LDA #$10        ; VIA ACR
+        STA $E84B
+
+        LDA #$55
+        STA $E84A
+        DEY
+
+next_note:
+        LDA notes,Y     ; Load note from address at $00/$01 + Y offset
+        STA $E848
+        LDX #$00
+loop:
+        JSR delay
+        DEX
+        BNE loop
+
+        DEY
+        BPL next_note
+
+        ; VIA SR/ACR: No sound
+        LDX #$00
+        STX $E84A   ; VIA SR
+        STX $E84B   ; VIA ACR
+
+        RTS
+.endproc
+
 .proc init_io
         ; Disable all interrupts
         LDA #$7F
@@ -46,7 +90,7 @@
         STX $E84A   ; VIA SR
         STX $E84B   ; VIA ACR
 
-; Init CRTC
+        ; Init CRTC
         LDA #$0E                    ; VIA CA2: Graphics mode ($0C = Upper, $0E = Lower)
         STA $E84C
 
@@ -96,6 +140,7 @@
 
 .proc reset_handler
         JSR init_io
+        JSR beep
         JMP keyscan
 .endproc
 
