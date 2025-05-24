@@ -211,7 +211,7 @@ model_flags_t get_model() {
 }
 
 void sync_state() {
-    spi_write(ADDR_KBD, key_matrix, KEY_COL_COUNT);
+    spi_write(ADDR_KBD, usb_key_matrix, KEY_COL_COUNT);
     spi_read(ADDR_KBD, KEY_COL_COUNT, pet_key_matrix);
 
     uint8_t status = spi_read_at(REG_STATUS);

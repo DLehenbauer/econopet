@@ -16,7 +16,7 @@
 #include "keystate.h"
 #include "keyscan.h"
 
-uint8_t key_matrix[KEY_COL_COUNT] = {
+uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
     /* 1 */ 0xff,
     /* 2 */ 0xff,
@@ -168,8 +168,8 @@ static bool shift_lock_enabled = false;
 void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
     uint8_t rowMask = 1 << row;
 
-    if (key_matrix[col] & rowMask) {
-        key_matrix[col] &= ~rowMask;
+    if (usb_key_matrix[col] & rowMask) {
+        usb_key_matrix[col] &= ~rowMask;
         printf("USB: Key down: %d=(%d,%d)\n", keycode, row, col);
     }
 }
@@ -183,8 +183,8 @@ void modifier_down(uint8_t modifierMask) {
 void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
     uint8_t rowMask = 1 << row;
 
-    if (key_matrix[col] & ~rowMask) {
-        key_matrix[col] |= rowMask;
+    if (usb_key_matrix[col] & ~rowMask) {
+        usb_key_matrix[col] |= rowMask;
         printf("USB: Key up: %d=(%d,%d)\n", keycode, row, col);
     }
 }
@@ -333,5 +333,11 @@ int keyboard_getch() {
     dispatch_key_events();
     sync_state();
 
-    return keyscan_getch(pet_key_matrix);
+    bool use_pet_keys = true;
+    
+    for (uint8_t i = 0; i < KEY_COL_COUNT; i++) {
+        use_pet_keys &= (usb_key_matrix[i] == 0xff);
+    }
+
+    return keyscan_getch(use_pet_keys ? pet_key_matrix : usb_key_matrix);
 }
