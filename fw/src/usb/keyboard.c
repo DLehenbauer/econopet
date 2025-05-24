@@ -333,5 +333,11 @@ int keyboard_getch() {
     dispatch_key_events();
     sync_state();
 
-    return keyscan_getch(pet_key_matrix);
+    bool use_pet_keys = true;
+    
+    for (uint8_t i = 0; i < KEY_COL_COUNT; i++) {
+        use_pet_keys &= (usb_key_matrix[i] == 0xff);
+    }
+
+    return keyscan_getch(use_pet_keys ? pet_key_matrix : usb_key_matrix);
 }
