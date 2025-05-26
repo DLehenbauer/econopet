@@ -13,6 +13,7 @@
  */
 
 #include <limits.h>
+#include "model.h"
 #include "video/video.h"
 #include "sd/sd.h"
 
@@ -37,4 +38,16 @@ FILE* sd_open(const char* path, const char* mode) {
 
 void term_present() {
     fflush(stdout);
+}
+
+static model_t _model = {
+    .flags = 0,
+};
+
+model_t get_model() { 
+    return _model;
+}
+
+void set_model(model_t model) {
+    _model = model;
 }
