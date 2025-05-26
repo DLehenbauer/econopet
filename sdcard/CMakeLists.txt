@@ -158,3 +158,6 @@ endforeach()
 
 # Copy config.yaml to the sdcard_root directory
 file(COPY ${CMAKE_CURRENT_LIST_DIR}/config.yaml DESTINATION ${sdcard_root_dir})
+
+# Copy ukm to the sdcard_root directory
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/ukm DESTINATION ${sdcard_root_dir})
