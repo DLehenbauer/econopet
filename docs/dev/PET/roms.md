@@ -233,6 +233,22 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 >C:e787  1d 13 5f 28  26 25 23 21   .._(&%#!
 ```
 
+#### CRTC Tables (901499-01)
+
+Text Mode
+```
+>C:e7b1  31 28 29 0f  20 03 19 1d   1(). ...
+>C:e7b9  00 09 00 00  10 00 00 00   ........
+>C:e7c1  00 00                      ..
+```
+
+Graphics Mode
+```
+>C:e7c3  31 28 29 0f  28 05 19 21   1().(..!
+>C:e7cb  00 07 00 00  10 00 00 00   ........
+>C:e7d3  00 00                      ..
+```
+
 ### PET 4000B (CRTC, 60Hz, Business)
 
 Business keyboard is identical to 40XX except for Edit rom.
@@ -331,6 +347,22 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 ```patch
 - e7e4  bb         db BBh
 + e7e4  29         db 29h
+```
+
+#### CRTC Tables (901498-01)
+
+Text Mode
+```
+>C:e7b1  31 28 29 0f  27 00 19 20   1().'.. 
+>C:e7b9  00 09 00 00  10 00 00 00   ........
+>C:e7c1  00 00
+```
+
+Graphics Mode
+```
+>C:e7c3  31 28 29 0f  31 00 19 25   1().1..%
+>C:e7cb  00 07 00 00  10 00 00 00   ........
+>C:e7d3  00 00                      ..
 ```
 
 ### PET 4000B (CRTC, 50Hz, Business)

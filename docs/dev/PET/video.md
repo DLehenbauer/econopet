@@ -95,3 +95,4 @@ VSync  | 60.062 Hz | 95.195% (800us negative pulse)| Video connector (J7)
 
 * [VGA Timing Calculator](https://www.epanorama.net/faq/vga2rgb/calc.html)
 * [Pixel Clock Calculator](https://www.monitortests.com/pixelclock.php)
+* [Hunter](https://gitlab.com/rabenauge/hunter/)
