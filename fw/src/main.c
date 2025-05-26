@@ -55,8 +55,10 @@ void fpga_write_zeros(size_t count) {
     release_temp_buffer(&temp_buffer);
 }
 
-void fpga_read_bitstream_callback(uint8_t* buffer, size_t bytes_read, void* context) {
+void fpga_read_bitstream_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
+    (void)offset;
     (void)context;
+
     spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
 }
 
@@ -173,7 +175,7 @@ int main() {
 
     menu_init();    // Begin charging debouncing capacitor.
     sd_init();
-    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.    
+    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.
     video_init();
     usb_init();
     menu_enter();

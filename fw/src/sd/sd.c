@@ -74,7 +74,12 @@ size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size) {
 
 void sd_read_file(const char* filename, sd_read_callback_t callback, void* context) {
     FILE* file = sd_open(filename, "rb");
+    if (!file) {
+        fatal("failed to open file '%s'", filename);
+    }
+
     uint8_t* buffer = acquire_temp_buffer();
+    size_t offset = 0;
 
     while (true) {
         size_t bytes_read = sd_read(filename, file, buffer, TEMP_BUFFER_SIZE);
@@ -83,7 +88,8 @@ void sd_read_file(const char* filename, sd_read_callback_t callback, void* conte
             break;
         }
 
-        callback(buffer, bytes_read, context);
+        callback(offset, buffer, bytes_read, context);
+        offset += bytes_read;
     }
 
     release_temp_buffer(&buffer);

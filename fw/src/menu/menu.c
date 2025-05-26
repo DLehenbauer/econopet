@@ -398,15 +398,15 @@ void action_set_options(void* context, options_t* options) {
     printf("Set options: %lu columns\n", options->columns);
 }
 
-void action_set_keymap_callback(uint8_t* buffer, size_t bytes_read, void* context) {
-    (void)context;
-    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
+void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
+    memcpy(context + offset, buffer, bytes_read);
 }
 
 void action_set_keymap(void* context, const char* filename) {
-    (void) context;
+    action_context_t* ctx = (action_context_t*) context;
 
-    sd_read_file(filename, action_set_keymap_callback, NULL);
+    sd_read_file(filename, read_keymap_callback, ctx->config);
+    printf("USB keymap: %s\n", filename);
 }
 
 void menu_enter() {
