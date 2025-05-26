@@ -68,6 +68,13 @@ void on_action_set_options(void* context, options_t* options) {
     printf("Action set options: columns = %u\n", options->columns);
 }
 
+void on_action_set_keymap(void* context, const char* filename) {
+    (void) context;
+
+    // This is a placeholder for the actual callback implementation
+    printf("Action set keymap: %s\n", filename);
+}
+
 void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
 
@@ -77,10 +84,11 @@ void config_test() {
     
     const setup_sink_t setup_sink = {
         .context = NULL,
-        .on_action_load = on_action_load,
-        .on_action_copy = on_action_copy,
-        .on_action_patch = on_action_patch,
-        .on_action_set_options = on_action_set_options,
+        .on_load = on_action_load,
+        .on_copy = on_action_copy,
+        .on_patch = on_action_patch,
+        .on_set_options = on_action_set_options,
+        .on_set_keymap = on_action_set_keymap,
         .model = &model,
     };
 

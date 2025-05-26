@@ -317,6 +317,10 @@ void menu_init() {
     gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
+typedef struct action_context_s {
+    configuration_t* config;
+} action_context_t;
+
 void action_load(void* const context, const char* filename, uint32_t address) {
     (void) context;
 
@@ -380,6 +384,7 @@ void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t 
 void action_set_options(void* context, options_t* options) {
     (void) context;
 
+    // TODO: Use context to set directly in config.
     model_t model = get_model();
 
     if (options->columns == 80) {
@@ -391,6 +396,17 @@ void action_set_options(void* context, options_t* options) {
     set_model(model);
 
     printf("Set options: %lu columns\n", options->columns);
+}
+
+void action_set_keymap_callback(uint8_t* buffer, size_t bytes_read, void* context) {
+    (void)context;
+    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
+}
+
+void action_set_keymap(void* context, usb_keymap_kind_t kind, const char* filename) {
+    (void) context;
+
+    sd_read_file(filename, action_set_keymap_callback, NULL);
 }
 
 void menu_enter() {
@@ -408,13 +424,22 @@ void menu_enter() {
 
     model_t model = get_model();
 
+    configuration_t config = {
+        .usb_keymap = { 0 },
+    };
+
+    action_context_t action_context = {
+        .config = &config,
+    };
+
     const setup_sink_t setup_sink = {
-        .context = NULL,
-        .on_action_load = action_load,
-        .on_action_patch = action_patch,
-        .on_action_copy = action_copy,
-        .on_action_set_options = action_set_options,
-        .model = &model,
+        .context = &action_context,
+        .on_load = action_load,
+        .on_patch = action_patch,
+        .on_copy = action_copy,
+        .on_set_options = action_set_options,
+        .on_set_keymap = action_set_keymap,
+        .model = &model
     };
 
     menu_config_show(&window, &setup_sink);

@@ -78,20 +78,20 @@ void vet_parser(parser_t* parser, bool condition, const char* const format, ...)
 }
 
 static void on_action_load(const parser_t* const parser, const char* file, uint32_t address) {
-    if (parser->sink->setup && parser->sink->setup->on_action_load) {
-        parser->sink->setup->on_action_load(parser->sink->setup->context, file, address);
+    if (parser->sink->setup && parser->sink->setup->on_load) {
+        parser->sink->setup->on_load(parser->sink->setup->context, file, address);
     }
 }
 
 static void on_action_patch(const parser_t* const parser, uint32_t address, const binary_t* binary) {
-    if (parser->sink->setup && parser->sink->setup->on_action_patch) {
-        parser->sink->setup->on_action_patch(parser->sink->setup->context, address, binary);
+    if (parser->sink->setup && parser->sink->setup->on_patch) {
+        parser->sink->setup->on_patch(parser->sink->setup->context, address, binary);
     }
 }
 
 static void on_action_copy(const parser_t* const parser, uint32_t source, uint32_t destination, uint32_t length) {
-    if (parser->sink->setup && parser->sink->setup->on_action_copy) {
-        parser->sink->setup->on_action_copy(parser->sink->setup->context, source, destination, length);
+    if (parser->sink->setup && parser->sink->setup->on_copy) {
+        parser->sink->setup->on_copy(parser->sink->setup->context, source, destination, length);
     }
 }
 
@@ -481,6 +481,22 @@ static void parse_action_copy(parser_t* parser, void* context, size_t context_si
     on_action_copy(parser, source, destination, length);
 }
 
+static void parse_action_set_usb_keymap(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    char filename[261] = { 0 };  // Windows OS max path length is 260 characters
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "file", parse_as_string, &filename, sizeof(filename) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    if (parser->sink->setup && parser->sink->setup->on_set_keymap) {
+        parser->sink->setup->on_set_keymap(parser->sink->setup->context, filename);
+    }
+}
+
 static void parse_action_set(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -498,8 +514,8 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
     }
 
-    if (parser->sink->setup && parser->sink->setup->on_action_set_options) {
-        parser->sink->setup->on_action_set_options(parser->sink->setup->context, &options);
+    if (parser->sink->setup && parser->sink->setup->on_set_options) {
+        parser->sink->setup->on_set_options(parser->sink->setup->context, &options);
     }
 }
 
@@ -516,6 +532,8 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_patch(parser, NULL, 0);
     } else if (strcmp(action, "copy") == 0) {
         parse_action_copy(parser, NULL, 0);
+    } else if (strcmp(action, "set-usb-keymap") == 0) {
+        parse_action_set_usb_keymap(parser, NULL, 0);
     } else if (strcmp(action, "set") == 0) {
         parse_action_set(parser, NULL, 0);
     } else {

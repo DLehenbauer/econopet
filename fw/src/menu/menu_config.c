@@ -37,8 +37,8 @@ static void on_action_load_callback(void* context, const char* filename, uint32_
     }
 
     const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_action_load != NULL) {
-        setup->on_action_load(setup->context, filename, address);
+    if (setup->on_load != NULL) {
+        setup->on_load(setup->context, filename, address);
     }
 }
 
@@ -49,8 +49,8 @@ static void on_action_patch_callback(void* context, uint32_t address, const bina
     }
 
     const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_action_patch != NULL) {
-        setup->on_action_patch(setup->context, address, binary);
+    if (setup->on_patch != NULL) {
+        setup->on_patch(setup->context, address, binary);
     }
 }
 
@@ -61,8 +61,8 @@ static void on_action_copy_callback(void* context, uint32_t source, uint32_t des
     }
 
     const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_action_copy != NULL) {
-        setup->on_action_copy(setup->context, source, destination, length);
+    if (setup->on_copy != NULL) {
+        setup->on_copy(setup->context, source, destination, length);
     }
 }
 
@@ -72,19 +72,21 @@ static void on_action_set_callback(void* context, options_t* options) {
         return;
     }
 
-    model_t model = get_model();
-    
-    if (options->columns == 80) {
-        model.flags |= model_flag_80_cols;    
-    } else {
-        model.flags &= ~model_flag_80_cols;
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_set_options != NULL) {
+        setup->on_set_options(setup->context, options);
+    }
+}
+
+static void on_action_set_keymap_callback(void* context, const char* filename) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
     }
 
-    set_model(model);
-
     const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_action_set_options != NULL) {
-        setup->on_action_set_options(setup->context, options);
+    if (setup->on_set_keymap != NULL) {
+        setup->on_set_keymap(setup->context, filename);
     }
 }
 
@@ -100,11 +102,12 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
 
     setup_sink_t intermediate_setup_sink = {
         .context = &ctx,
-        .on_action_load = on_action_load_callback,
-        .on_action_patch = on_action_patch_callback,
-        .on_action_copy = on_action_copy_callback,
-        .on_action_set_options = on_action_set_callback,
-        .model = setup_sink->model,
+        .on_load = on_action_load_callback,
+        .on_patch = on_action_patch_callback,
+        .on_copy = on_action_copy_callback,
+        .on_set_options = on_action_set_callback,
+        .on_set_keymap = on_action_set_keymap_callback,
+        .model = setup_sink->model
     };
 
     config_sink_t sink = {
