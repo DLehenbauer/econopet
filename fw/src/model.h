@@ -42,5 +42,7 @@ typedef struct __attribute__((packed)) usb_keymap_entry_s {
 } usb_keymap_entry_t;
 
 typedef struct configuration_s {
-    usb_keymap_entry_t usb_keymap[512][2];
+    const usb_keymap_entry_t usb_keymap[512][2];
 } configuration_t;
+
+extern configuration_t configuration;

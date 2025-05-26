@@ -403,7 +403,7 @@ void action_set_keymap_callback(uint8_t* buffer, size_t bytes_read, void* contex
     spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
 }
 
-void action_set_keymap(void* context, usb_keymap_kind_t kind, const char* filename) {
+void action_set_keymap(void* context, const char* filename) {
     (void) context;
 
     sd_read_file(filename, action_set_keymap_callback, NULL);
@@ -424,12 +424,8 @@ void menu_enter() {
 
     model_t model = get_model();
 
-    configuration_t config = {
-        .usb_keymap = { 0 },
-    };
-
     action_context_t action_context = {
-        .config = &config,
+        .config = &configuration,
     };
 
     const setup_sink_t setup_sink = {

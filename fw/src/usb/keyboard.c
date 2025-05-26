@@ -15,6 +15,7 @@
 #include "keyboard.h"
 #include "keystate.h"
 #include "keyscan.h"
+#include "model.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -42,28 +43,7 @@ uint8_t pet_key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
-typedef struct __attribute__((packed)) {
-    // First byte contains row/col packed as nibbles
-    unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
-    unsigned int col: 4;        // Column : 0-9
-
-    // Second byte contains flags
-    unsigned int reserved: 6;
-    unsigned int unshift: 1;    // 0 = Normal, 1 = Implicitly remove shift
-    unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
-} KeyInfo;
-
-// Graphic US positional keymap
-static const uint8_t __in_flash(".keymap_grus_pos") keymap_grus_pos[] = {
-    #include "../keymaps/grus_pos.h"
-};
-
-// Graphic US symbolic keymap
-static const uint8_t __in_flash(".keymap_grus_sym") keymap_grus_sym[] = {
-    #include "../keymaps/grus_sym.h"
-};
-
-static const KeyInfo* s_keymap = (KeyInfo*)((void*) keymap_grus_sym);
+static const usb_keymap_entry_t* s_keymap = configuration.usb_keymap;
 
 typedef struct {
     uint8_t dev_addr;       // USB device address of keyboard
@@ -116,7 +96,7 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
         return;
     }
 
-    KeyInfo keyInfo = s_keymap[
+    usb_keymap_entry_t keyInfo = s_keymap[
         (keystate & KEYSTATE_SHIFTED_FLAG)
             ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
@@ -136,7 +116,7 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
 static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
     
-    KeyInfo keyInfo = s_keymap[
+    usb_keymap_entry_t keyInfo = s_keymap[
         is_shifted
             ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
@@ -176,7 +156,7 @@ void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
 
 void modifier_down(uint8_t modifierMask) {
     uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
-    KeyInfo keyInfo = s_keymap[keycode];
+    usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_down(keycode, keyInfo.row, keyInfo.col);
 }
 
@@ -191,7 +171,7 @@ void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
 
 void modifier_up(uint8_t modifierMask) {
     uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
-    KeyInfo keyInfo = s_keymap[keycode];
+    usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_up(keycode, keyInfo.row, keyInfo.col);
 }
 
