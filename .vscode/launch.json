@@ -52,7 +52,9 @@
             //
             // Picoprobe documentation uses 5000 Hz:
             // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            "serverArgs": ["-c", "adapter speed 31249"],
+            //
+            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
+            "serverArgs": ["-c", "adapter speed 20833"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToEntryPoint": "main",
             // Work around for stopping at main on restart
@@ -83,7 +85,9 @@
             //
             // Picoprobe documentation uses 5000 Hz:
             // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            "serverArgs": ["-c", "adapter speed 31249"],
+            //
+            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
+            "serverArgs": ["-c", "adapter speed 20833"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToEntryPoint": "main",
             // Work around for stopping at main on restart
@@ -114,7 +118,9 @@
             //
             // Picoprobe documentation uses 5000 Hz:
             // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            "serverArgs": ["-c", "adapter speed 31249"],
+            //
+            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
+            "serverArgs": ["-c", "adapter speed 20833"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToEntryPoint": "main",
             // Work around for stopping at main on restart
@@ -144,7 +150,9 @@
             //
             // Picoprobe documentation uses 5000 Hz:
             // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            "serverArgs": ["-c", "adapter speed 31249"],
+            //
+            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
+            "serverArgs": ["-c", "adapter speed 20833"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToEntryPoint": "main",
             // Work around for stopping at main on restart
