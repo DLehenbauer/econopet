@@ -402,11 +402,16 @@ void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, voi
     memcpy(context + offset, buffer, bytes_read);
 }
 
+void read_keymap(const char* filename, configuration_t* config) {
+    // Read the keymap file and store it in the configuration.
+    void* keymap = (void*) config->usb_keymap[0];
+    sd_read_file(filename, read_keymap_callback, keymap);
+    printf("USB keymap: '%s'\n", filename);
+}
+
 void action_set_keymap(void* context, const char* filename) {
     action_context_t* ctx = (action_context_t*) context;
-
-    sd_read_file(filename, read_keymap_callback, ctx->config);
-    printf("USB keymap: %s\n", filename);
+    read_keymap(filename, ctx->config);
 }
 
 void menu_enter() {
@@ -417,12 +422,17 @@ void menu_enter() {
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
     pet_reset();
 
-    set_video(/* cols80: */ false);
+    // We need to load a USB keymap to allow the user to navigate the menu with USB.
+    // Menu is keymap agnostic (only uses cursor/enter keys), so any keymap will do.
+    read_keymap("/ukm/us-grus.bin", &configuration);
+
+    model_t model = get_model();
+    model.flags &= ~model_flag_80_cols;     // Ensure 40 columns for menu
+    set_model(model);
+
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
-
-    model_t model = get_model();
 
     action_context_t action_context = {
         .config = &configuration,

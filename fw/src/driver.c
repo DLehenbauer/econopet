@@ -184,12 +184,6 @@ void set_cpu(bool ready, bool reset, bool nmi) {
     spi_write_at(REG_CPU, state);
 }
 
-void set_video(bool col80) {
-    uint8_t state = 0;
-    if (col80) { state |= REG_VIDEO_80_COL_MODE; }
-    spi_write_at(REG_VIDEO, state);
-}
-
 model_t get_model() {
     uint8_t status = spi_read_at(REG_STATUS);
 

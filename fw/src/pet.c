@@ -13,6 +13,8 @@
  */
 
 #include "driver.h"
+#include "usb/keyboard.h"
+#include "video/video.h"
 #include "pet.h"
 
 void pet_reset() {
@@ -27,6 +29,10 @@ void pet_reset() {
     // (We set 'ready' to false to prevent the CPU from executing instructions.)
     set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
     sleep_us(4);
+
+    memset(video_char_buffer, 0x20, VIDEO_CHAR_BUFFER_BYTE_SIZE);   // Clear video character buffer
+    memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix)); // Clear keyboard matrix
+    memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix)); // Clear USB keyboard matrix
     
     // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
     set_cpu(/* ready: */ false, /* reset: */ true, /* nmi: */ false);
