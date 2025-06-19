@@ -14,7 +14,7 @@ configs:
           - address: 0xf000
             # https://hub.inktada.com/channel/rom1diskmagic
             file: "/roms/rom1diskrom_v15.bin"
-            # file: "/roms/901439-04.bin"            
+            # file: "/roms/901439-04.bin"
           - address: 0xc800
             file: "/roms/901439-05.bin"
           - address: 0xd800
@@ -95,7 +95,7 @@ configs:
         then:
           # Use ROM '901499-01' (loaded above)
           - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"          
+            file: "/ukm/us-grus.bin"
         else:
           # Commodore never produced an edit ROM for the business keyboard.
           - action: "patch"
@@ -122,6 +122,23 @@ configs:
             address: 0xe000
           - file: "/roms/901465-22.bin"
             address: 0xf000
+      - if: "graphics"
+        then:
+          # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
+          # This patch replaces the original keyscan routine with one adapted from the 40 column
+          # edit rom '901499-01'.
+          - action: "patch"
+            address: 0x0e545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0x0e6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+          - action: "set-usb-keymap"
+            file: "/ukm/us-grus.bin"
+        else:
+          # Use ROM '901474-03' (loaded above)
+          - action: "set-usb-keymap"
+            file: "/ukm/us-buuk.bin"
       - action: "set"
         columns: 80
   - name: "Basic 4.0 (80 Col 50 Hz)"
@@ -140,5 +157,22 @@ configs:
             address: 0xe000
           - file: "/roms/901465-22.bin"
             address: 0xf000
+      - if: "graphics"
+        then:
+          # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
+          # This patch replaces the original keyscan routine with one adapted from the 40 column
+          # edit rom '901499-01'.
+          - action: "patch"
+            address: 0x0e545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0x0e6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+          - action: "set-usb-keymap"
+            file: "/ukm/us-grus.bin"
+        else:
+          # Use ROM '901474-03' (loaded above)
+          - action: "set-usb-keymap"
+            file: "/ukm/us-buuk.bin"
       - action: "set"
         columns: 80
