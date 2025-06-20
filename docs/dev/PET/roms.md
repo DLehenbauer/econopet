@@ -182,7 +182,7 @@ Highlights:
 * Greatly improved the garbage collection
 * Adds ROM set for 80 column displays
 
-### PET 2001 & 4000 (Graphics Keyboard, NoCRTC)
+### PET 2001 & 40XX (Graphics Keyboard, NoCRTC)
 
 Address | Location | IC#       | Part#     | CRC-32   | Checksum
 --------|----------|-----------|-----------|----------|---------
@@ -195,7 +195,7 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
   $F000 | D9       |  2332-075 | 901465-22 | cc5298a1 |    F0
   N/A   | F10      | 2316B-004 | 901447-10 | d8408674 | ?
 
-### PET 2001 & 4000 (Business Keyboard, NoCRTC)
+### PET 2001 & 40XX (Business Keyboard, NoCRTC)
 
 Business keyboard is identical except for D8.
 
@@ -203,7 +203,7 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 --------|----------|-----------|-----------|----------|---------
   $E000 | D8       | 2316B-035 | 901474-02 | 75ff4af7 |    E0
 
-### PET 4000 (CRTC, 60 Hz)
+### PET 40XX (CRTC, 60 Hz)
 
 Same ICs as NoCRTC except UD7.
 
@@ -249,13 +249,15 @@ Graphics Mode
 >C:e7d3  00 00                      ..
 ```
 
-### PET 4000B (CRTC, 60Hz, Business)
+### PET 40XXB (CRTC, 60Hz, Business)
 
 Business keyboard is identical to 40XX except for Edit rom.
 
 ROM         | File                            | Length | CRC-32  
 ------------|---------------------------------|--------|---------
 Edit        | edit-4-40-b-60Hz.ts.bin         |   2048 | 7a0e59ad
+
+Below are the edit rom changes required for the business keyboard:
 
 ```patch
 - .C:e55c  EA          NOP
@@ -313,13 +315,15 @@ Edit        | edit-4-40-b-60Hz.ts.bin         |   2048 | 7a0e59ad
 >C:e787  05 0e 1d b8  2d 38 35 32   ....-852
 ```
 
-### PET 4000 (CRTC, 50Hz)
+### PET 40XX (CRTC, 50Hz)
 
 Identical except for UD7.  Scanmap at $e73f.
 
 Address | Location | IC#       | Part#     | CRC-32   | Checksum
 --------|----------|-----------|-----------|----------|---------
   $E000 | UD7      | 2316B     | 901498-01 | 3370e359 | ?
+
+Below are the edit rom changes for 50 Hz.
 
 ```patch
 - e455  20 ea ff   JSR UDTIM
@@ -365,13 +369,15 @@ Graphics Mode
 >C:e7d3  00 00                      ..
 ```
 
-### PET 4000B (CRTC, 50Hz, Business)
+### PET 40XXB (CRTC, 50Hz, Business)
 
 Business keyboard is identical to 40XX except for Edit rom.
 
 ROM         | File                            | Length | CRC-32  
 ------------|---------------------------------|--------|---------
 Edit        | edit-4-40-b-50Hz.ts.bin         |   2048 | 16fb070c
+
+Below are the edit rom changes required for the business keyboard:
 
 ```patch
 - .C:e55c  EA          NOP
@@ -429,7 +435,7 @@ Edit        | edit-4-40-b-50Hz.ts.bin         |   2048 | 16fb070c
 >C:e787  05 0e 1d b8  2d 38 35 32   ....-852
 ```
 
-### PET 8000 (CRTC, 60Hz)
+### PET 80XX (CRTC, 60Hz)
 
 Identical except for UD7.
 
@@ -452,7 +458,65 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 >C:e719  05 0e 1d b8  2d 38 35 32   ....-852
 ```
 
-### PET 8000 (CRTC, 50Hz)
+Below are the edit rom changes required for the graphics keyboard:
+
+```patch
+- .C:e545  AA          TAX
+- .C:e546  08          PHP
+- .C:e547  29 7F       AND #$7F
+- .C:e549  28          PLP
+- .C:e54a  30 17       BMI $E563
++ .C:e545  EA          NOP
++ .C:e546  EA          NOP
++ .C:e547  EA          NOP
++ .C:e548  EA          NOP
++ .C:e549  EA          NOP
++ .C:e54A  EA          NOP
++ .C:e54B  EA          NOP
+.C:e54c  46 98       LSR $98
+.C:e54e  90 13       BCC $E563
+- .C:e550  C9 2C       CMP #$2C
+- .C:e552  90 0D       BCC $E561
+- .C:e554  C9 3C       CMP #$3C
+- .C:e556  B0 09       BCS $E561
+- .C:e558  E9 0F       SBC #$0F
+- .C:e55a  C9 20       CMP #$20
+- .C:e55c  B0 05       BCS $E563
+- .C:e55e  69 20       ADC #$20
+- .C:e560  2C 09 80    BIT $8009
++ .C:e550  EA          NOP
++ .C:e551  EA          NOP
++ .C:e552  EA          NOP
++ .C:e553  EA          NOP
++ .C:e554  EA          NOP
++ .C:e555  EA          NOP
++ .C:e556  EA          NOP
++ .C:e557  EA          NOP
++ .C:e558  EA          NOP
++ .C:e559  EA          NOP
++ .C:e55a  EA          NOP
++ .C:e55b  EA          NOP
++ .C:e55c  EA          NOP
++ .C:e55d  EA          NOP
++ .C:e55e  EA          NOP
++ .C:e55f  EA          NOP
++ .C:e560  EA          NOP
+```
+
+```
+>C:e6d1  3d 2e 10 03  3c 20 5b 12   =...< [.
+>C:e6d9  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
+>C:e6e1  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
+>C:e6e9  33 31 0d 3b  4d 42 43 5a   31.;MBCZ
+>C:e6f1  2a 35 ff 3a  4b 48 46 53   *5.:KHFS
+>C:e6f9  36 34 ff 4c  4a 47 44 41   64.LJGDA
+>C:e701  2f 38 ff 50  49 59 52 57   /8.PIYRW
+>C:e709  39 37 5e 4f  55 54 45 51   97^OUTEQ
+>C:e711  14 11 09 29  5c 27 24 22   ...)\'$"
+>C:e719  1d 13 5f 28  26 25 23 21   .._(&%#!
+```
+
+### PET 80XX (CRTC, 50Hz)
 
 Identical except for UD7.  Scanmap at $e6d1.
 
