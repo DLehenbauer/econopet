@@ -21,25 +21,19 @@ Register | Value | Description
  R0      |   63  | H_TOTAL = 8 MHz pixel clock / 8 pixel char / (64 chars - 1) = 15.625 KHz
  R1      |   40  | H_DISPLAYED = 40 columns
  R2      |   48  | H_SYNC_POS
- R3[3:0] |    1  | H_SYNC_WIDTH = 1
- R3[7:4] |    5  | V_SYNC_WIDTH = 5
- R4      |   32  | V_TOTAL = 15.625 KHz / ((33 rows - 1) * 8 lines per row) = 61.04 Hz
- R5      |    5  | V_LINE_ADJUST = 15.625 KHz / (33 rows * 8 lines per row + 5 lines) = 60.10 Hz
+ R3[3:0] |   15  | H_SYNC_WIDTH = 15
+ R3[7:4] |    0  | V_SYNC_WIDTH = 16
+ R4      |   31  | V_TOTAL = 15.625 KHz / ((33 rows - 1) * 8 lines per row) = 61.04 Hz
+ R5      |    4  | V_LINE_ADJUST = 15.625 KHz / (33 rows * 8 lines per row + 5 lines) = 60.10 Hz
  R6      |   25  | V_DISPLAYED = 25 rows
  R7      |   28  | V_SYNC_POS
  R9      |    7  | SCAN_LINE = 8 pixel character height (-1)
- R12[4]  |    0  | TA12 inverts video: 0 = 9" monitor, 1 = 12" monitor
 
 From [SJGray's cbm-edit-rom](https://github.com/sjgray/cbm-edit-rom/blob/master/crtc-reg-normal.asm):
 
-```asm
-;---------------------- 40/80x25, 60 Hz, 15.748 kHz (NTSC) for External Monitor (inverted video)
-!IF REFRESH=3 {
-;                             0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17
-CRT_CONFIG_TEXT:     !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
-; Decimal                    63  40  50 1/2  30   6  25  28   0   7   0   0  16   0   0   0   0   0
-CRT_CONFIG_GRAPHICS: !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$00,$00,$00,$00,$00
-}
+```
+$3F,$28,$30,$8E,$20,$00,$19,$1C,$00,$07,$00,$00,$00,$00,$00,$00,$00,$00
+ 63  40  48 142  32   0  25  28  
 ```
 
 ## CRTC

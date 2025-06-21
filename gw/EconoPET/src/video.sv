@@ -55,7 +55,7 @@ module video (
     // DotGen
     input  logic load_sr1_i,                      // 1 MHz clock user to load SR of dot generator
     input  logic load_sr2_i,                      // 2 MHz clock used to load SR of dot generator
-    input  logic config_crt_i,                    // Adjusts polarity of video signals (0 = 12"/CRTC, 1 = 9"/non-CRTC)
+    input  logic config_crt_i,                    // Select VDU (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic col_80_mode_i,                   // (0 = 40 col, 1 = 80 col)
     input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
     output logic h_sync_o,                        // Horizontal sync
@@ -96,6 +96,7 @@ module video (
         .data_i(crtc_data_i),         // Transfer data written from CPU to CRTC when CS asserted and /RW is low
         .data_o(crtc_data_o),         // Transfer data read by CPU from CRTC when CS asserted and /RW is high
         .data_oe(crtc_data_oe),       // Asserted when CPU is reading from CRTC
+        .config_crt_i(config_crt_i),  // Select VDU (0 = 12"/CRTC, 1 = 9"/non-CRTC)
         .h_sync_o(crtc_h_sync),       // Horizontal sync (active high)
         .v_sync_o(crtc_v_sync),       // Vertical sync (active high)
         .de_o(de),                    // Display enable
