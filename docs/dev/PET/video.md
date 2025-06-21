@@ -2,22 +2,17 @@
 
 ## Non-CRTC
 
-PETs without a CRTC chip used 9" are equipped with 9" monitors, which require:
-
-* HSync frequency is 15.632 KHz (~NTSC)
-* H/VSync are active high
-* Video is active low
-
-### Timing (Non-CRTC)
-
 Measurements from a 2001-32N (1979):
 
-Signal | Frequency  | Source
--------|------------|----------
-Crystal| 16.007 MHz | I1 pin 1
-CPU    | 1.0009 MHz | 6502 pin 37
-HSync  | 15.63 KHz  | Video pin 5 (consistent with 16.007 MHz / 1024 = 15.632 KHz)
-VSync  | 60.12 Hz   | Video pin 3 (consistent with 15.632 KHz / 260 lines = ~60.122 Hz)
+Signal | Frequency  | Period   | Width  | Polarity    | Source
+-------|------------|----------|--------|-------------|-----------
+Crystal| 16.007 MHz |        - |      - |         -   | I1 pin 1
+CPU    | 1.0009 MHz |        - |      - |         -   | 6502 pin 37
+HSync  | 15.63 KHz  |    64us  |   24us | Active High | Video pin 5 (consistent with 16.007 MHz / 1024 = 15.632 KHz)
+VSync  | 60.12 Hz   | 16.64ms  | 1.28ms | Active Low  | Video pin 3 (consistent with 15.632 KHz / 260 lines = ~60.122 Hz)
+Video  |          - |        - |      - | Active Low  | -
+
+### CRTC for 9" monitor
 
 Closest CRTC settings:
 
@@ -49,12 +44,6 @@ CRT_CONFIG_GRAPHICS: !byte $3f,$28,$32,$12,$1e,$06,$19,$1C,$00,$07,$00,$00,$10,$
 
 ## CRTC
 
-PETs with a CRTC chip are equipped with 12" monitors, which require:
-
-* HSync frequency is 20 KHz
-* H/VSync are active low
-* Video is active high
-
 ### Address decoding
 
 Address decoding selects asserts the CRTC's CS line (Chip Select) for $E880-E8FF.
@@ -62,15 +51,21 @@ The CRTC has a single RS (Register Select) input that is tied to A0.
 
 ### Timing (CRTC)
 
-Measurements from 8032 power on:
+Measurements from 8032 (60 Hz) at power on:
 
-Signal | Frequency | Duty                          | Source
--------|-----------|-------------------------------|---------------------
-HSync  | 20 KHz    | 70-70.126%                    | Video connector (J7)
-VSync  | 60.062 Hz | 95.195% (800us negative pulse)| Video connector (J7)
+Signal | Frequency  | Period   | Width  | Polarity    | Source
+-------|------------|----------|--------|-------------|-----------
+HSync  |     20 KHz |    50us  |   15us | Active Low  | Video pin 5
+VSync  | 60.062 Hz  | 16.65ms  |  800us | Active Low  | Video pin 3
+Video  |          - |        - |      - | Active High | -
 
 ## Reference
 
+* non-CRTC
+  * [Restoring the Early PET Computer 9" VDU](https://www.worldphaco.com/uploads/RESTORING%20THE%20%20PET%20COMPUTER%209.pdf)
+  * [attiny2313_petvid](https://github.com/skibo/attiny2313_petvid)
+  * [PET/CBM 4 State Machine](https://forum.vcfed.org/index.php?attachments/cbm4state-jpg.1251230/)
+  * [PetVideoSim](https://github.com/skibo/PetVideoSim) ([VCDs](https://github.com/skibo/PetVideoSim/releases))
 * CRTC
   * [Operation](http://www.6502.org/users/andre/hwinfo/crtc/crtc.html)
   * [Internals](http://www.6502.org/users/andre/hwinfo/crtc/internals/index.html)
