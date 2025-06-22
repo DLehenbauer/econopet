@@ -1,35 +1,26 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Include Raspberry Pi Pico SDK (must be before project)
-include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
-
-set(PICO_SDK_REQUIRED_VERSION "2.0.0")
-if (PICO_SDK_VERSION_STRING VERSION_LESS PICO_SDK_REQUIRED_VERSION)
-    message(FATAL_ERROR "Raspberry Pi Pico SDK version ${PICO_SDK_REQUIRED_VERSION} (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
-endif()
-
-# Initialize Raspberry Pi Pico SDK
-pico_sdk_init()
-
 project("firmware")
-set(FAMILY rp2040)
-set(BOARD pico_sdk)
 add_compile_options(-Wall -Wextra -Wnull-dereference)
-
-# Calculate the root '/fw' directory relative to this file
-set(FW_DIR ${CMAKE_SOURCE_DIR}/../..)
 
 # Include external projects
 set(EXTERNAL_DIR ${FW_DIR}/external)
+
 add_subdirectory(
     ${EXTERNAL_DIR}/PicoDVI/software/libdvi
     ${CMAKE_BINARY_DIR}/libdvi)
+
 add_subdirectory(
     ${EXTERNAL_DIR}/pico-vfs
     ${CMAKE_BINARY_DIR}/pico-vfs)
+
+# Temporarily disable BUILD_TESTING for libyaml
+set(BUILD_TESTING OFF CACHE BOOL "Disable testing for libyaml" FORCE)
 add_subdirectory(
     ${EXTERNAL_DIR}/libyaml
     ${CMAKE_BINARY_DIR}/libyaml)
+# Restore BUILD_TESTING to its original value
+set(BUILD_TESTING ON CACHE BOOL "Enable testing for the rest of the project" FORCE)
 
 # Include source files
 set(SRC_DIR ${FW_DIR}/src)
@@ -104,7 +95,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     blockdevice_sd
     filesystem_fat
     filesystem_littlefs
-    filesystem_vfs  
+    filesystem_vfs
 )
 
 # We have a lot in SRAM4 (particularly TMDS LUT) but don't need much stack on

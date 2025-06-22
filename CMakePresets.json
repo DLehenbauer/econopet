@@ -1,0 +1,80 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 1
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_C_STANDARD": "11",
+                "CMAKE_CXX_STANDARD": "17",
+                "PICO_SDK_PATH": "$env{PICO_SDK_PATH}"
+            }
+        },
+        {
+            "name": "rp2040_base",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "PICO_PLATFORM": "rp2040",
+                "CMAKE_TOOLCHAIN_FILE": "$env{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake"
+            }
+        },
+        {
+            "name": "rp2040_debug",
+            "inherits": "rp2040_base",
+            "displayName": "Bootloader (Debug)",
+            "description": "Build for RP2040 using the Pico SDK",
+            "binaryDir": "${sourceDir}/build/rp2040_debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "rp2040_release",
+            "inherits": "rp2040_base",
+            "displayName": "Bootloader (Release)",
+            "description": "Build for RP2040 using the Pico SDK",
+            "binaryDir": "${sourceDir}/build/rp2040_release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "test_base",
+            "hidden": true,
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build/test",
+            "cacheVariables": {
+                "PICO_PLATFORM": "host",
+                "PICO_NO_HARDWARE": "1",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_FLAGS_DEBUG": "-ggdb -fno-omit-frame-pointer -fno-inline",
+                "CMAKE_CXX_FLAGS_DEBUG": "-ggdb -fno-omit-frame-pointer -fno-inline",
+                "CMAKE_EXE_LINKER_FLAGS_DEBUG": "-O0"
+            }
+        },
+        {
+            "name": "test",
+            "inherits": "test_base",
+            "displayName": "Test",
+            "description": "Unit tests for Linux host"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "rp2040_release",
+            "configurePreset": "rp2040_release"
+        },
+        {
+            "name": "test",
+            "configurePreset": "test"
+        }
+    ]
+}

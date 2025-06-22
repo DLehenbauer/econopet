@@ -1,26 +1,56 @@
 # Default to latest Ubuntu LTS.
 # (See https://hub.docker.com/r/microsoft/devcontainers-base)
 ARG VARIANT="ubuntu"
-FROM --platform=linux/amd64 mcr.microsoft.com/devcontainers/base:${VARIANT}
+ARG PLATFORM="linux/amd64"
+FROM --platform=${PLATFORM} mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 # From https://github.com/raspberrypi/pico-sdk/releases
-ARG PICO_SDK_VERSION="2.0.0"
+ARG PICO_SDK_VERSION="2.1.1"
 
 # From https://github.com/raspberrypi/openocd/branches
 ARG OPENOCD_VERSION="sdk-2.0.0"
 
 # From https://github.com/chipsalliance/verible/releases
-ARG VERIBLE_VERSION="v0.0-3958-g7aae5c08"
+ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
 
 # From https://github.com/steveicarus/iverilog/releases
 ARG IVERILOG_VERSION="v12_0"
 
 # Efinity software requires a free license from Efinix. Please do the right thing.
 # From https://www.efinixinc.com/support/efinity.php
-ARG EFINITY_MAJOR_MINOR="2024.2"
-ARG EFINITY_PATCH="294"
+ARG EFINITY_MAJOR_MINOR="2025.1"
+ARG EFINITY_PATCH="110"
 
-#
+# Cache large downloads:
+
+# Download Efinity software -- Requires a free license from Efinix. Please do the right thing.
+# (See: https://www.efinixinc.com/support/efinity.php)
+ARG EFINITY_ARCHIVE="efinity-${EFINITY_MAJOR_MINOR}.${EFINITY_PATCH}-linux-x64.tar.bz2"
+RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp
+
+# Clone Raspberry Pi Pico SDK
+# (See https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
+ENV PICO_SDK_PATH="/opt/pico-sdk"
+RUN cd /opt && \
+    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/pico-sdk.git && \
+    cd ${PICO_SDK_PATH} && \
+    git submodule update --init --recursive --depth 1 --single-branch
+
+# Clone 'picotool': Pico SDK recommends installing this tool separately.
+RUN cd /tmp && \
+    git clone --depth 1 --single-branch https://github.com/raspberrypi/picotool.git
+
+# Clone fork of OpenOCD for debugging RP2040
+RUN cd /tmp && \
+    git clone --branch "${OPENOCD_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/openocd.git
+
+# Clone Icarus Verilog (built from source)
+RUN cd /tmp && \
+    git clone --branch ${IVERILOG_VERSION} --depth 1 --single-branch https://github.com/steveicarus/iverilog.git
+
+ARG VERIBLE_ARCHIVE="verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz"
+RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/${VERIBLE_ARCHIVE} -P /tmp
+
 # Install apt package dependencies.
 #
 # For VS Code "xaver.clang-format" extension:
@@ -69,7 +99,7 @@ ARG EFINITY_PATCH="294"
 #   universal-ctags
 #   verilator
 #
-# For UART communication with Pico
+# For UART communication with RP2040:
 #
 #   minicom
 #
@@ -119,38 +149,6 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Cache large downloads:
-
-# Download Efinity software -- Requires a free license from Efinix. Please do the right thing.
-# (See: https://www.efinixinc.com/support/efinity.php)
-ARG EFINITY_ARCHIVE="efinity-${EFINITY_MAJOR_MINOR}.${EFINITY_PATCH}-ubuntu-x64.tar.bz2"
-RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp
-
-# Clone Raspberry Pi Pico SDK
-# (See https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
-ARG PICO_PATH="/opt/pico"
-ENV PICO_SDK_PATH="${PICO_PATH}/pico-sdk"
-RUN mkdir -p ${PICO_PATH} && \
-    cd ${PICO_PATH} && \
-    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/pico-sdk.git && \
-    cd ${PICO_SDK_PATH} && \
-    git submodule update --init --recursive --depth 1 --single-branch
-
-# Clone Raspberry Pi Pico SDK examples
-RUN cd ${PICO_PATH} && \
-    git clone --branch "sdk-${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/pico-examples.git
-
-# Clone fork of OpenOCD for debugging RP2040
-RUN cd ${PICO_PATH} && \
-    git clone --branch "${OPENOCD_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/openocd.git
-
-# Clone Icarus Verilog (built from source)
-RUN cd /tmp && \
-    git clone --branch ${IVERILOG_VERSION} --depth 1 --single-branch https://github.com/steveicarus/iverilog.git
-
-ARG VERIBLE_ARCHIVE="verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz"
-RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/${VERIBLE_ARCHIVE} -P /tmp
-
 # Fix warnings from Cortex-Debug extension
 # (See https://forums.raspberrypi.com/viewtopic.php?t=333146)
 RUN cd /usr/bin && \
@@ -163,8 +161,7 @@ RUN cd /usr/bin && \
 
 # Install Icarus Verilog (built from source)
 # (Do this early as it takes a while).
-RUN cd /tmp && \
-    cd iverilog && \
+RUN cd /tmp/iverilog && \
     sh autoconf.sh && \
     sh configure && \
     make -j$(nproc) && \
@@ -172,13 +169,25 @@ RUN cd /tmp && \
     cd /tmp && \
     rm -rf iverilog
 
+# Install 'picotool'
+RUN cd /tmp/picotool && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && \
+    rm -rf picotool
+
 # Install OpenOCD (built from source for RP2040)
 # (See: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
-RUN cd "${PICO_PATH}/openocd" && \
+RUN cd /tmp/openocd && \
     ./bootstrap && \
     ./configure && \
     make -j$(nproc) && \
-    sudo make install
+    sudo make install && \
+    cd /tmp && \
+    rm -rf openocd
 
 # Install Efinity -- Requires a free license from Efinix. Please do the right thing.
 # (See: https://www.efinixinc.com/support/efinity.php)

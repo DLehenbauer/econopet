@@ -1,8 +1,5 @@
 project("firmware-test")
 
-# Calculate the root '/fw' directory relative to this file
-set(FW_DIR ${CMAKE_SOURCE_DIR}/fw)
-
 # Include external projects
 set(EXTERNAL_DIR ${FW_DIR}/external)
 

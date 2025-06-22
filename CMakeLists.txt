@@ -24,18 +24,4 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 # Add projects
 add_subdirectory("./sdcard")
 add_subdirectory("./rom")
-add_subdirectory("./fw/test")
-
-ExternalProject_add(
-    firmware
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw/targets/rp2040
-    # Pass common build arguments to the child project
-    CMAKE_ARGS
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
-        -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
-        -DBUILD_TESTING=OFF  # Disable libyaml tests
-    INSTALL_COMMAND ""  # No installation step
-    BUILD_ALWAYS 1      # (Ninja will quickly early exit if unchanged.)
-    # DEPENDS PET_ROM
-)
+add_subdirectory("./fw")
