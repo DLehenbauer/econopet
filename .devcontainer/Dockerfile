@@ -194,6 +194,7 @@ RUN cd /tmp/openocd && \
 RUN tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
     rm -rf /tmp/${EFINITY_ARCHIVE} && \
     chmod +x /opt/efinity/${EFINITY_MAJOR_MINOR}/bin/setup.sh
+ENV EFINITY_PATH="/opt/efinity/${EFINITY_MAJOR_MINOR}"
 
 # Install Verible (download from chipsalliance)
 RUN mkdir -p /opt/verible && \

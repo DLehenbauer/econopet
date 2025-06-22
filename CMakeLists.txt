@@ -24,4 +24,5 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 # Add projects
 add_subdirectory("./sdcard")
 add_subdirectory("./rom")
+add_subdirectory("./gw")
 add_subdirectory("./fw")
