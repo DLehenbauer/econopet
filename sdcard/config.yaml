@@ -12,9 +12,9 @@ configs:
           - address: 0xe000
             file: "/roms/901439-03.bin"
           - address: 0xf000
+            # Instead of "/roms/901439-04.bin", we use a patched ROM for disk drive support:
             # https://hub.inktada.com/channel/rom1diskmagic
             file: "/roms/rom1diskrom_v15.bin"
-            # file: "/roms/901439-04.bin"
           - address: 0xc800
             file: "/roms/901439-05.bin"
           - address: 0xd800
@@ -30,11 +30,12 @@ configs:
           # Commodore never produced an edit ROM for the business keyboard for the original ROM set.
           # This patch replaces the original keyscan routine with one adapted from '901474-01'.
           - action: "patch"
-            address: 0x0e702
-            hex: "b01148bd5be7d007a9018d0402d0038e230268caf00888d0e6ee10e8d0d7ad2302cd0302f0318d0302aa302bbd5be708297f2830184e04029013c92c900dc93cb009e90fc920b00569202c0980ae0d029d0f02e820ece74c7ee650e73a03393633dfb12fff134d205812b2ffffb02c4e565ab300ffae2e424300b4db4f1155544551145049dc59525789b6c04c0d4a474441b53b4bdd4846539bb9ffdeb7b0373431ffff1db82d383532"
-          - action: "patch"
             address: 0x0e7ec
             hex: "e00ad00af0060a6905a00060a2008e0d02d0f800"
+          # Business keyboard scanmap from '901474-01'
+          - action: "patch"
+            address: 0x0e702
+            hex: "b01148bd5be7d007a9018d0402d0038e230268caf00888d0e6ee10e8d0d7ad2302cd0302f0318d0302aa302bbd5be708297f2830184e04029013c92c900dc93cb009e90fc920b00569202c0980ae0d029d0f02e820ece74c7ee650e73a03393633dfb12fff134d205812b2ffffb02c4e565ab300ffae2e424300b4db4f1155544551145049dc59525789b6c04c0d4a474441b53b4bdd4846539bb9ffdeb7b0373431ffff1db82d383532"
           - action: "set-usb-keymap"
             file: "/ukm/us-buuk.bin"
       # Original PET roms polled VIA ($E840) to delay screen updates until vertical blanking
@@ -66,10 +67,13 @@ configs:
           - action: "set-usb-keymap"
             file: "/ukm/us-grus.bin"
         else:
-          # Commodore never produced an edit ROM for the business keyboard.
+          # Commodore never produced an edit ROM for the business keyboard for 40 column models.
+          # This patch replaces the original keyscan routine with one adapted from the 80 column
+          # edit rom '901474-03'.
           - action: "patch"
             address: 0xe55c
             hex: "aa08297f28301746989013c92c900dc93cb009e90fc920b00569202c"
+          # Business keyboard scanmap from '901474-03'
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
@@ -97,10 +101,13 @@ configs:
           - action: "set-usb-keymap"
             file: "/ukm/us-grus.bin"
         else:
-          # Commodore never produced an edit ROM for the business keyboard.
+          # Commodore never produced an edit ROM for the business keyboard for 40 column models.
+          # This patch replaces the original keyscan routine with one adapted from the 80 column
+          # edit rom '901474-03'.
           - action: "patch"
             address: 0xe55c
             hex: "aa08297f28301746989013c92c900dc93cb009e90fc920b00569202c"
+          # Business keyboard scanmap from '901474-03'
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
@@ -130,6 +137,7 @@ configs:
           - action: "patch"
             address: 0x0e545
             hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          # Graphics keyboard scanmap from '901499-01'
           - action: "patch"
             address: 0x0e6d1
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
@@ -165,6 +173,7 @@ configs:
           - action: "patch"
             address: 0x0e545
             hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          # Graphics keyboard scanmap from '901499-01'
           - action: "patch"
             address: 0x0e6d1
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
