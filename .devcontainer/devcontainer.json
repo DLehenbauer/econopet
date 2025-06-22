@@ -23,12 +23,14 @@
         }
     },
 
+    // You may need to run `sudo modprobe cdc_acm` on Ubuntu to have access to the ttyACM0 device.
     "runArgs": [
-        "--privileged",             // Required to access Picoprobe SWD from dev container
-        "--device=/dev/ttyACM0"     // Expose Picoprobe URT to dev container
+        "--privileged",             // Required to access Debugprobe from dev container
+        "--device=/dev/ttyACM0"     // Expose Debugprobe URT to dev container
     ],
     
-    // TODO: Figure out how to connect to Picoprobe as a non-root user.
-    //       Maybe https://github.com/robotdad/piconotes?tab=readme-ov-file#setup-udev-rules-in-wsl?
-    "remoteUser": "root"
+    // TODO: Investigate if it is reasonable to run the dev container as a non-root user.
+    // (See: https://www.robmiles.com/journal/2024/1/18/effortless-debugging-with-your-pico-probe-no-more-sudo)
+    "remoteUser": "root",
+    "postCreateCommand": "sudo chown -R root:root . && git submodule update --init --recursive --depth 1 --single-branch"
 }
