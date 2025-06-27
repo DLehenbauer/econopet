@@ -39,6 +39,8 @@ module video_crtc(
     output logic [DATA_WIDTH-1:0] data_o,   // Transfer data read by CPU from CRTC when CS asserted and /RW is high
     output logic                  data_oe,  // Asserted when CPU is reading from CRTC
 
+    input  logic config_crt_i,              // Select VDU (0 = 12"/CRTC, 1 = 9"/non-CRTC)
+
     output logic h_sync_o,                  // Horizontal sync
     output logic v_sync_o,                  // Vertical sync
     output logic de_o,                      // Display enable
@@ -73,6 +75,8 @@ module video_crtc(
         .cs_i(cs_i),
         .we_i(we_i),
         .rs_i(rs_i),
+
+        .config_crt_i(config_crt_i),
         
         .r0_h_total_o(h_total),
         .r1_h_displayed_o(h_displayed),
