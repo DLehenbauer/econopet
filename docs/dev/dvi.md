@@ -1,5 +1,21 @@
 # PicoDVI
 
+```patch
+diff --git a/software/libdvi/dvi.c b/software/libdvi/dvi.c
+index a00bb93..f2f3901 100644
+--- a/software/libdvi/dvi.c
++++ b/software/libdvi/dvi.c
+@@ -43,7 +43,7 @@ void dvi_init(struct dvi_inst *inst, uint spinlock_tmds_queue, uint spinlock_col
+        for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
+                void *tmdsbuf;
+ #if DVI_MONOCHROME_TMDS
+-               tmdsbuf = malloc(inst->timing->h_active_pixels / DVI_SYMBOLS_PER_WORD * sizeof(uint32_t));
++               tmdsbuf = malloc(inst->timing->h_active_pixels * sizeof(uint32_t));
+ #else
+                tmdsbuf = malloc(3 * inst->timing->h_active_pixels / DVI_SYMBOLS_PER_WORD * sizeof(uint32_t));
+ #endif
+ ```
+
 EconoPET uses the same DVI pinout as 'micromod_cfg' (See https://www.sparkfun.com/products/17718)
 
 ```cpp
