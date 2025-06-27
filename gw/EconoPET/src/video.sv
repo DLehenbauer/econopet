@@ -240,8 +240,36 @@ module video (
     // The 9" and 12" CRTs have different polarity requirements for video and h_sync signals.
     // We adjust the outputs based on the 'config_crt' input (0 = 12", 1 = 9").
     //
-    //                                                 9" CRT    12" CRT
-    assign video_o  = dotgen_video ^ config_crt_i; // Active-L   Active-H
-    assign h_sync_o = !crtc_h_sync ^ config_crt_i; // Active-H   Active-L
-    assign v_sync_o = !crtc_v_sync;                // Active-L   Active-L
+    //          9" CRT    12" CRT
+    //  HSync: Active-H   Active-L
+    //  VSync: Active-L   Active-L
+    //  Video: Active-L   Active-H
+
+    // Adjust signal delay to match measurements from a 8032 60Hz.
+    // H-Sync asserted 300ns before the end of the visible video line.
+    delay #(
+        .DELAY_CYCLES(7),
+        .INITIAL_VALUE(1'b1)
+    ) h_delay (
+        .clock_i(wb_clock_i),
+        .reset_i(cpu_reset_i),
+        .data_i(!crtc_h_sync ^ config_crt_i),   // Adjust polarity based on CRT type
+        .data_o(h_sync_o)
+    );
+
+    // Adjust signal delay to match measurements from a 8032 60Hz.
+    // V-Sync asserted 2.10866ms after the end of the last visible line.
+    delay #(
+        .DELAY_CYCLES(4),
+        .INITIAL_VALUE(1'b0)
+    ) v_delay (
+        .clock_i(wb_clock_i),
+        .reset_i(cpu_reset_i),
+        .data_i(!crtc_v_sync),                  // Vertical sync is always active low
+        .data_o(v_sync_o)
+    );
+
+    always_ff @(posedge wb_clock_i) begin
+        video_o <= dotgen_video ^ config_crt_i; // Adjust polarity based on CRT type
+    end
 endmodule
