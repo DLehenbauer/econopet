@@ -121,6 +121,8 @@
         <efx:param name="max_threads" value="-1" value_type="e_integer"/>
         <efx:param name="enable-mark-debug" value="1" value_type="e_option"/>
         <efx:param name="max-bit-blast-mem-size" value="10240" value_type="e_integer"/>
+        <efx:param name="enable-mark-debug" value="1" value_type="e_option"/>
+        <efx:param name="max-bit-blast-mem-size" value="10240" value_type="e_integer"/>
     </efx:synthesis>
     <efx:place_and_route tool_name="efx_pnr">
         <efx:param name="work_dir" value="work_pnr" value_type="e_string"/>

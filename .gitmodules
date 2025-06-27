@@ -13,9 +13,6 @@
 [submodule "fw/external/pico-vfs"]
 	path = fw/external/pico-vfs
 	url = https://github.com/dlehenbauer/pico-vfs.git
-[submodule "fw/external/sc"]
-	path = fw/external/sc
-	url = https://github.com/tezc/sc.git
 [submodule "gw/EconoPET/external/icesid"]
 	path = gw/EconoPET/external/icesid
 	url = https://github.com/DLehenbauer/icesid

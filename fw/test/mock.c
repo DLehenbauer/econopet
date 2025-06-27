@@ -26,7 +26,7 @@ bool video_is_80_col = false;
 // /workspaces/econopet/sdcard/config.yaml
 static const char* map_path(const char* const path) {
     static char relative_path[PATH_MAX];
-    snprintf(relative_path, sizeof(relative_path), "../../../sdcard%s", path);
+    snprintf(relative_path, sizeof(relative_path), "../../../../sdcard%s", path);
     return relative_path;
 }
 
