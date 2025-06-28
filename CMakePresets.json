@@ -29,7 +29,7 @@
         {
             "name": "rp2040_debug",
             "inherits": "rp2040_base",
-            "displayName": "Bootloader (Debug)",
+            "displayName": "RP2040 (Debug)",
             "description": "Build for RP2040 using the Pico SDK",
             "binaryDir": "${sourceDir}/build/rp2040_debug",
             "cacheVariables": {
@@ -39,7 +39,7 @@
         {
             "name": "rp2040_release",
             "inherits": "rp2040_base",
-            "displayName": "Bootloader (Release)",
+            "displayName": "RP2040 (Release)",
             "description": "Build for RP2040 using the Pico SDK",
             "binaryDir": "${sourceDir}/build/rp2040_release",
             "cacheVariables": {
