@@ -1,1 +1,0 @@
-cmake --build ./build --target fw/test/all && ./build/fw/test/firmware-test
