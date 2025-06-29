@@ -64,7 +64,9 @@ Video  |          - |        - |      - | Active High | -
   * [Operation](http://www.6502.org/users/andre/hwinfo/crtc/crtc.html)
   * [Internals](http://www.6502.org/users/andre/hwinfo/crtc/internals/index.html)
   * [Wikipedia](https://en.wikipedia.org/wiki/Motorola_6845)
-  * [Register Values](https://github.com/sjgray/cbm-edit-rom/blob/master/docs/CRTC%20Registers.txt)
+  * Register Values
+    * [Spreadsheet](https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Finchocks.co.uk%2Fcommodore%2FPET%2FPET_CRTC.xls)
+    * [SJGray](https://github.com/sjgray/cbm-edit-rom/blob/master/docs/CRTC%20Registers.txt)
   * [Reverse Engineering](https://stardot.org.uk/forums/viewtopic.php?t=22008)
   * Datasheet
     * [Motorolla MC6845](https://archive.org/details/bitsavers_motorolada_1431515/page/n9/mode/2up)
