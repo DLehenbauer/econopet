@@ -5,6 +5,7 @@ ARG PLATFORM="linux/amd64"
 FROM --platform=${PLATFORM} mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 # From https://github.com/raspberrypi/pico-sdk/releases
+#  and https://github.com/raspberrypi/picotool/releases
 ARG PICO_SDK_VERSION="2.1.1"
 
 # From https://github.com/raspberrypi/openocd/branches
@@ -38,7 +39,7 @@ RUN cd /opt && \
 
 # Clone 'picotool': Pico SDK recommends installing this tool separately.
 RUN cd /tmp && \
-    git clone --depth 1 --single-branch https://github.com/raspberrypi/picotool.git
+    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/picotool.git
 
 # Clone fork of OpenOCD for debugging RP2040
 RUN cd /tmp && \
