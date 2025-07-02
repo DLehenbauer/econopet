@@ -13,13 +13,23 @@ Input | Output
 
 The code which polls for VIDEO ON is shown below:
 
+Original ROM:
+
 ```text
 .C:e7ad  AD 40 E8    DSPP1  LDA $E840   ; Poll VIA for vertical refresh to avoid "sparkle"
 .C:e7b0  29 20              AND #$20    ;   PORTB[5] is VIDEO ON (in)
 .C:e7b2  D0 F9              BNE DSPP1   ;   0 = Video Off, 1 = Video On
 ```
 
-This approach avoided visual artifacts but slowed down screen updates. Users discovered that reconfiguring PB5 as an output tricked the system into thinking it was always in a vertical blank interval, bypassing the delay.  The BASIC command to do this was:
+Upgrade ROM (Graphics Keyboard Only):
+
+```text
+.C:e6eb  AD 40 E8    DSPP1  LDA $E840   ; Poll VIA for vertical refresh to avoid "sparkle"
+.C:e6ee  29 20              AND #$20    ;   PORTB[5] is VIDEO ON (in)
+.C:e6f0  D0 F9              BNE DSPP1   ;   0 = Video Off, 1 = Video On
+```
+
+Delaying output until the vertical refresh avoided visual artifacts but slowed down screen updates. Users discovered that reconfiguring PB5 as an output tricked the system into thinking it was always in a vertical blank interval, bypassing the delay.  The BASIC command to do this was:
 
 ```basic
 POKE 59458,62

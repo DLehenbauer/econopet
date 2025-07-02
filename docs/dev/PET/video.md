@@ -29,12 +29,7 @@ Register | Value | Description
  R7      |   28  | V_SYNC_POS
  R9      |    7  | SCAN_LINE = 8 pixel character height (-1)
 
-From [SJGray's cbm-edit-rom](https://github.com/sjgray/cbm-edit-rom/blob/master/crtc-reg-normal.asm):
-
-```
-$3F,$28,$30,$8E,$20,$00,$19,$1C,$00,$07,$00,$00,$00,$00,$00,$00,$00,$00
- 63  40  48 142  32   0  25  28  
-```
+Note that the maximum V_SYNC_WIDTH of 16 is a little short (ideally, this would be 20).
 
 ## CRTC
 
