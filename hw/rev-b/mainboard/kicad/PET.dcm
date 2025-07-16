@@ -1,0 +1,112 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP +16V_Unreg
+D Power symbol creates a global label with name "+16V_Unreg"
+K power-flag
+$ENDCMP
+#
+$CMP +9V_Unreg
+D Power symbol creates a global label with name "+9V_Unreg"
+K power-flag
+$ENDCMP
+#
+$CMP -9V_Unreg
+D Power symbol creates a global label with name "-9V_Unreg"
+K power-flag
+$ENDCMP
+#
+$CMP AS6C1008
+D 512K x 8 Low Power CMOS RAM, DIP-32
+K RAM SRAM CMOS MEMORY
+F https://www.alliancememory.com/wp-content/uploads/pdf/AS6C4008.pdf
+$ENDCMP
+#
+$CMP Conn_01x06_Card_Edge
+D Generic connector, double row, 02x06, top/bottom pin numbering scheme (row 1: 1...pins_per_row, row2: pins_per_row+1 ... num_pins), script generated (kicad-library-utils/schlib/autogen/connector/)
+K connector
+F ~
+$ENDCMP
+#
+$CMP Conn_02x12_Card_Edge
+D Generic connector, double row, 02x12, top/bottom pin numbering scheme (row 1: 1...pins_per_row, row2: pins_per_row+1 ... num_pins), script generated (kicad-library-utils/schlib/autogen/connector/)
+K connector
+F ~
+$ENDCMP
+#
+$CMP SN74LS07
+F https://www.ti.com/lit/gpn/SN74LS07
+$ENDCMP
+#
+$CMP SN74LVC8T245
+D 8-Bit Dual-Supply Bus Transceiver With Configurable Voltage Translation and 3-State Outputs, TSSOP-24
+K Noninverting Bidirectional
+F https://www.ti.com/lit/ds/symlink/sn74lvc8t245.pdf
+$ENDCMP
+#
+$CMP TPS54331DR
+D  4.5V to 28V Input, 3A, Synchronous Step-Down Converter with Eco-mode(tm)
+K Step-Down DC-DC Switching Regulator
+F http://www.ti.com/lit/ds/symlink/tps54336a.pdf
+$ENDCMP
+#
+$CMP VCCA
+D Power symbol creates a global label with name "VCCA"
+K power-flag
+$ENDCMP
+#
+$CMP VCCIO_1A
+D Power symbol creates a global label with name "VCCIO_1A"
+K power-flag
+$ENDCMP
+#
+$CMP VCCIO_1B
+D Power symbol creates a global label with name "VCCIO_1B"
+K power-flag
+$ENDCMP
+#
+$CMP VCCIO_2A
+D Power symbol creates a global label with name "VCCIO_2A"
+K power-flag
+$ENDCMP
+#
+$CMP VCCIO_2B
+D Power symbol creates a global label with name "VCCIO_2B"
+K power-flag
+$ENDCMP
+#
+$CMP VCORE
+D Power symbol creates a global label with name "VCORE"
+K power-flag
+$ENDCMP
+#
+$CMP W65C02SxP
+D W65C02S 8-bit CMOS General Purpose Microprocessor, DIP-40
+K 6502 CPU uP
+F http://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf
+$ENDCMP
+#
+$CMP W65C21NxP
+D W65C21N CMOS Peripheral Interface Adapter (PIA), 20-pin I/O, NMOS-Compatible, DIP-40
+K 6502 6521 PIA I/O
+F http://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf
+$ENDCMP
+#
+$CMP W65C22NxP
+D W65C22N CMOS Versatile Interface Adapter (VIA), 20-pin I/O, 2 Timer/Counters, NMOS-Compatible, DIP-40
+K 6502 6522 VIA I/O
+F http://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf
+$ENDCMP
+#
+$CMP XL1509-5.0E1
+D 5.0V, 2A DC-DC Converter, Maximum VIN 40V, SOP-8
+K buck converter regulator step-down voltage simple switcher fixed
+F https://datasheet.lcsc.com/lcsc/1809050422_XLSEMI-XL1509-5.0E1_C61063.pdf
+$ENDCMP
+#
+$CMP XL1509-ADJE1
+D ADJ, 2A DC-DC Converter, Maximum VIN 40V, SOP-8
+K buck converter regulator step-down voltage simple switcher adjustable
+F https://datasheet.lcsc.com/lcsc/1809042013_XLSEMI-XL1509-ADJE1_C74192.pdf
+$ENDCMP
+#
+#End Doc Library
