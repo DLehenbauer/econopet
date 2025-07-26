@@ -131,6 +131,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     gcc \
     gcc-arm-none-eabi \
     gdb-multiarch \
+    git-lfs \
     gperf \
     gtkwave \
     libftdi-dev \

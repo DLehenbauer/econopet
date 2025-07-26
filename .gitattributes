@@ -4,3 +4,6 @@
 
 # Keymap files are binary
 fw/keymaps/*.bin binary
+
+# Git LFS
+*.pdf filter=lfs diff=lfs merge=lfs -text

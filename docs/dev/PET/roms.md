@@ -128,7 +128,7 @@ Address | Location | 6540 IC# | 6540 Part# | CRC-32    | 2316B IC# | 2316B Part#
 
 ### PET 30xxB (Business Keyboard)
 
-Business keyboard is identical except for D8.
+Business keyboard is identical except for editor ROM (D8).
 
 Address | Location | IC#       | Part#     | CRC-32   | Checksum
 --------|----------|-----------|-----------|----------|---------

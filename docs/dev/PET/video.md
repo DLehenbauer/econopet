@@ -22,14 +22,15 @@ Register | Value | Description
  R1      |   40  | H_DISPLAYED = 40 columns
  R2      |   48  | H_SYNC_POS
  R3[3:0] |   15  | H_SYNC_WIDTH = 15
- R3[7:4] |    0  | V_SYNC_WIDTH = 16
+ R3[7:4] |    0  | V_SYNC_WIDTH = 16 -- (Ideally = 20 -- See note below)
  R4      |   31  | V_TOTAL = 15.625 KHz / ((33 rows - 1) * 8 lines per row) = 61.04 Hz
  R5      |    4  | V_LINE_ADJUST = 15.625 KHz / (33 rows * 8 lines per row + 5 lines) = 60.10 Hz
  R6      |   25  | V_DISPLAYED = 25 rows
  R7      |   28  | V_SYNC_POS
  R9      |    7  | SCAN_LINE = 8 pixel character height (-1)
 
-Note that the maximum V_SYNC_WIDTH of 16 is a little short (ideally, this would be 20).
+Note that the maximum V_SYNC_WIDTH of 16 is a little short.  Ideally, V_SYNC_WIDTH would be 20, but
+this is outside the range supported by the CRTC.
 
 ## CRTC
 
