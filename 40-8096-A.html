@@ -3,21 +3,252 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EconoPET 40/8096 Rev. A</title>
-    <!--  
-    <link rel="shortcut icon" href="favicon.ico">
-    <link rel="stylesheet" href="your.css">
-    -->
+    <title>EconoPET 40/8096 Rev. A - Commodore CBM/PET Mainboard Replacement</title>
+    <meta name="description" content="EconoPET 40/8096 Rev. A mainboard replacement for Commodore CBM/PET series computers">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        line-height: 1.47059;
+        color: #1d1d1f;
+        background: #f5f5f7;
+        min-height: 100vh;
+        font-weight: 400;
+        letter-spacing: 0.011em;
+      }
+
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      .card {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 4rem 3rem;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        margin-bottom: 2rem;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+      }
+
+      h1 {
+        color: #1d1d1f;
+        font-size: 3rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        text-align: center;
+        letter-spacing: -0.003em;
+        line-height: 1.08349;
+      }
+
+      .subtitle {
+        color: #86868b;
+        font-size: 1.375rem;
+        text-align: center;
+        margin-bottom: 3rem;
+        font-weight: 400;
+        line-height: 1.381966;
+        letter-spacing: 0.007em;
+      }
+
+      .description {
+        font-size: 1.1875rem;
+        margin-bottom: 3rem;
+        text-align: center;
+        color: #1d1d1f;
+        font-weight: 400;
+        line-height: 1.42105;
+        letter-spacing: 0.007em;
+        max-width: 640px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .pcb-image {
+        text-align: center;
+        margin: 3rem 0;
+      }
+
+      .pcb-image img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
+
+      .pcb-image img:hover {
+        transform: scale(1.01);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      }
+
+      .links {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 3rem;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem 2rem;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        text-align: center;
+        gap: 0.5rem;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+      }
+
+      .btn-secondary {
+        background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        color: white;
+        box-shadow: 0 4px 15px rgba(149, 165, 166, 0.3);
+      }
+
+      .btn-secondary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(149, 165, 166, 0.4);
+      }
+
+      .icon {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+      }
+
+      .feature {
+        text-align: center;
+        padding: 1rem;
+      }
+
+      .feature h3 {
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+      }
+
+      .feature p {
+        color: #7f8c8d;
+        font-size: 0.95rem;
+      }
+
+      .footer {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        margin-top: 2rem;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 15px;
+        }
+
+        .card {
+          padding: 1.5rem;
+        }
+
+        h1 {
+          font-size: 2rem;
+        }
+
+        .subtitle {
+          font-size: 1rem;
+        }
+
+        .description {
+          font-size: 1rem;
+        }
+
+        .btn {
+          padding: 0.875rem 1.5rem;
+          font-size: 1rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        h1 {
+          font-size: 1.75rem;
+        }
+
+        .card {
+          padding: 1rem;
+        }
+      }
+    </style>
   </head>
   <body>
-    <main>
-      Coming soon.
-    </main>
-    <!--
-    <script src="your.js"></script>
-    <noscript>
-      JavaScript is not enabled.
-    </noscript>
-    -->
+    <div class="container">
+      <div class="card">
+        <h1>EconoPET 40/8096 Rev. A</h1>
+        <p class="subtitle">Open hardware CBM/PET mainboard replacement</p>
+        
+        <p class="description">
+          The EconoPET can be used to repair or upgrade a Commodore PET/CBM 2001 / 30xx / 40xx or 80xx series machine.
+          The EconoPET can also be used independently with an HDMI display and USB keyboard.
+        </p>
+
+        <div class="pcb-image">
+          <a href="assets/EconoPET-40-8096-A-PCB-Full.jpg" target="_blank">
+            <img src="assets/EconoPET-40-8096-A-PCB.jpg" alt="EconoPET 40/8096 Rev. A PCB Board" />
+          </a>
+        </div>
+
+        <div class="links">
+          <a href="assets/EconoPET-40-8096-A-250726.pdf" class="btn btn-primary" target="_blank">
+            <svg class="icon" viewBox="0 0 24 24">
+              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+            </svg>
+            Download Manual (PDF)
+          </a>
+          
+          <a href="assets/EconoPET-40-8096-A-250726.img" class="btn btn-primary" download>
+            <svg class="icon" viewBox="0 0 24 24">
+              <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
+            </svg>
+            Download MicroSD Image
+          </a>
+          
+          <a href="https://github.com/DLehenbauer/econopet" class="btn btn-secondary" target="_blank">
+            <svg class="icon" viewBox="0 0 24 24">
+              <path d="M12,2A10,10 0 0,0 2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10 0 0,0 12,2Z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>License: CC0 1.0 Universal (Public Domain Dedication)</p>
+      </div>
+    </div>
   </body>
 </html>
