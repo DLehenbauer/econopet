@@ -75,6 +75,14 @@ void on_action_set_keymap(void* context, const char* filename) {
     printf("Action set keymap: %s\n", filename);
 }
 
+void on_action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
+    (void) context;
+
+    // This is a placeholder for the actual callback implementation
+    printf("Action fix checksum: start=0x%04x, end=0x%04x, fix=0x%04x, checksum=0x%02x\n", 
+           start_addr, end_addr, fix_addr, checksum);
+}
+
 void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
 
@@ -89,6 +97,7 @@ void config_test() {
         .on_patch = on_action_patch,
         .on_set_options = on_action_set_options,
         .on_set_keymap = on_action_set_keymap,
+        .on_fix_checksum = on_action_fix_checksum,
         .model = &model,
     };
 

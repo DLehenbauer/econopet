@@ -90,6 +90,18 @@ static void on_action_set_keymap_callback(void* context, const char* filename) {
     }
 }
 
+static void on_action_fix_checksum_callback(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
+    const setup_context_t* const ctx = (setup_context_t*) context;
+    if (ctx->skip_count != 0xffffffff) {
+        return;
+    }
+
+    const setup_sink_t* const setup = ctx->original_setup;
+    if (setup->on_fix_checksum != NULL) {
+        setup->on_fix_checksum(setup->context, start_addr, end_addr, fix_addr, checksum);
+    }
+}
+
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
     // This is a placeholder for the actual loading logic
@@ -107,6 +119,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .on_copy = on_action_copy_callback,
         .on_set_options = on_action_set_callback,
         .on_set_keymap = on_action_set_keymap_callback,
+        .on_fix_checksum = on_action_fix_checksum_callback,
         .model = setup_sink->model
     };
 

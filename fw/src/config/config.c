@@ -95,6 +95,12 @@ static void on_action_copy(const parser_t* const parser, uint32_t source, uint32
     }
 }
 
+static void on_action_fix_checksum(const parser_t* const parser, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
+    if (parser->sink->setup && parser->sink->setup->on_fix_checksum) {
+        parser->sink->setup->on_fix_checksum(parser->sink->setup->context, start_addr, end_addr, fix_addr, checksum);
+    }
+}
+
 static model_t* get_model(const parser_t* const parser) {
     return parser->sink->setup ? parser->sink->setup->model : NULL;
 }
@@ -519,6 +525,26 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     }
 }
 
+static void parse_action_fix_checksum(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    uint32_t start_addr = 0;
+    uint32_t end_addr = 0;
+    uint32_t fix_addr = 0;
+    uint32_t checksum = 0;
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "start-addr", parse_as_uint32, &start_addr, sizeof(uint32_t) },
+        { "end-addr", parse_as_uint32, &end_addr, sizeof(uint32_t) },
+        { "fix-addr", parse_as_uint32, &fix_addr, sizeof(uint32_t) },
+        { "checksum", parse_as_uint32, &checksum, sizeof(uint32_t) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    on_action_fix_checksum(parser, start_addr, end_addr, fix_addr, checksum);
+}
+
 static void parse_action(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -536,6 +562,8 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_set_usb_keymap(parser, NULL, 0);
     } else if (strcmp(action, "set") == 0) {
         parse_action_set(parser, NULL, 0);
+    } else if (strcmp(action, "fix-checksum") == 0) {
+        parse_action_fix_checksum(parser, NULL, 0);
     } else {
         fatal_parse_error(parser, "Unknown action '%s'", action);
     }

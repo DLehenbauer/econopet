@@ -414,6 +414,32 @@ void action_set_keymap(void* context, const char* filename) {
     read_keymap(filename, ctx->config);
 }
 
+void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t expected) {
+    (void) context;
+
+    printf("0x%04lx: setting checksum for 0x%04lx-0x%04lx to 0x%02lx\n", 
+           fix_addr, start_addr, end_addr, expected);
+
+    // Calculate the actual checksum by reading the memory range
+    uint8_t actual_sum = 0;
+    uint8_t* temp_buffer = acquire_temp_buffer();
+    
+    for (uint32_t addr = start_addr; addr <= end_addr; addr += TEMP_BUFFER_SIZE) {
+        size_t chunk_size = MIN(end_addr - addr + 1, TEMP_BUFFER_SIZE);
+        spi_read(addr, chunk_size, temp_buffer);
+        
+        for (size_t i = 0; i < chunk_size; i++) {
+            actual_sum += temp_buffer[i];
+        }
+    }
+    
+    release_temp_buffer(&temp_buffer);
+
+    uint8_t adjust_byte = spi_read_at(fix_addr);
+    adjust_byte += (((uint8_t) expected) - actual_sum);
+    spi_write_at(fix_addr, adjust_byte);
+}
+
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
@@ -445,6 +471,7 @@ void menu_enter() {
         .on_copy = action_copy,
         .on_set_options = action_set_options,
         .on_set_keymap = action_set_keymap,
+        .on_fix_checksum = action_fix_checksum,
         .model = &model
     };
 

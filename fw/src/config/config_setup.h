@@ -33,6 +33,7 @@ typedef void (*on_patch_fn_t)(void* user_data, uint32_t address, const binary_t*
 typedef void (*on_copy_fn_t)(void* user_data, uint32_t source, uint32_t destination, uint32_t length);
 typedef void (*on_set_options_fn_t)(void* user_data, options_t* options);
 typedef void (*on_set_keymap_fn_t)(void* user_data, const char* filename);
+typedef void (*on_fix_checksum_fn_t)(void* user_data, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum);
 
 typedef struct setup_sink_s {
     // 'context' is used by 'load_config' to filter callbacks to only the selected config.
@@ -44,6 +45,7 @@ typedef struct setup_sink_s {
     const on_copy_fn_t on_copy;
     const on_set_options_fn_t on_set_options;
     const on_set_keymap_fn_t on_set_keymap;
+    const on_fix_checksum_fn_t on_fix_checksum;
 
     // 'model_flags' is used to evaluate 'if' conditions in the YAML config file.
     model_t* model;
