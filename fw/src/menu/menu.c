@@ -27,6 +27,7 @@
 #include "menu_config.h"
 #include "window.h"
 #include "usb/keyboard.h"
+#include "roms/checksum.h"
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.
@@ -324,7 +325,7 @@ typedef struct action_context_s {
 void action_load(void* const context, const char* filename, uint32_t address) {
     (void) context;
 
-    printf("0x%04lx: %s\n", address, filename);
+    printf("0x%04lx", address, filename);
     FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         fatal("Failed to open file '%s'", filename);
@@ -333,8 +334,10 @@ void action_load(void* const context, const char* filename, uint32_t address) {
     // Read remaining bytes to the destination address.
     uint8_t* temp_buffer = acquire_temp_buffer();
     size_t bytes_read;
+    uint8_t checksum = 0;
 
     while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
+        checksum_add(temp_buffer, bytes_read, &checksum);
         spi_write(address, temp_buffer, bytes_read);
         address += bytes_read;
 
@@ -343,6 +346,8 @@ void action_load(void* const context, const char* filename, uint32_t address) {
             fatal("Failed to read file '%s'", filename);
         }
     }
+
+    printf("-%0x04: %s ($0x%02x)\n", address, filename, checksum);
 
     release_temp_buffer(&temp_buffer);
     fclose(file);
@@ -414,30 +419,42 @@ void action_set_keymap(void* context, const char* filename) {
     read_keymap(filename, ctx->config);
 }
 
+static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
+    uint8_t checksum = 0;
+    uint8_t* temp_buffer = acquire_temp_buffer();
+    
+    uint32_t addr = start_addr;
+    uint32_t remaining_bytes = end_addr - start_addr;
+
+    while (remaining_bytes > 0) {
+        size_t chunk_size = MIN(remaining_bytes, TEMP_BUFFER_SIZE);
+        spi_read(addr, chunk_size, temp_buffer);
+        checksum_add(temp_buffer, chunk_size, &checksum);
+        
+        addr += chunk_size;
+        remaining_bytes -= chunk_size;
+    }
+
+    release_temp_buffer(&temp_buffer);
+    return checksum;
+}
+
 void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t expected) {
     (void) context;
 
-    printf("0x%04lx: setting checksum for 0x%04lx-0x%04lx to 0x%02lx\n", 
-           fix_addr, start_addr, end_addr, expected);
+    uint8_t actual_sum = checksum_ram(start_addr, end_addr + 1);
 
-    // Calculate the actual checksum by reading the memory range
-    uint8_t actual_sum = 0;
-    uint8_t* temp_buffer = acquire_temp_buffer();
-    
-    for (uint32_t addr = start_addr; addr <= end_addr; addr += TEMP_BUFFER_SIZE) {
-        size_t chunk_size = MIN(end_addr - addr + 1, TEMP_BUFFER_SIZE);
-        spi_read(addr, chunk_size, temp_buffer);
-        
-        for (size_t i = 0; i < chunk_size; i++) {
-            actual_sum += temp_buffer[i];
-        }
+    if (actual_sum != expected) {
+        uint8_t current_byte = spi_read_at(fix_addr);
+        uint8_t adjusted_byte = checksum_fix(current_byte, actual_sum, expected);
+
+        printf("0x%04lx: fixing checksum for 0x%04lx-0x%04lx ($0x%02lx -> $0x%02lx)\n", 
+            fix_addr, start_addr, end_addr, actual_sum, expected);
+
+        spi_write_at(fix_addr, adjusted_byte);
+
+        assert(checksum_ram(start_addr, end_addr + 1) == expected);
     }
-    
-    release_temp_buffer(&temp_buffer);
-
-    uint8_t adjust_byte = spi_read_at(fix_addr);
-    adjust_byte += (((uint8_t) expected) - actual_sum);
-    spi_write_at(fix_addr, adjust_byte);
 }
 
 void menu_enter() {
