@@ -104,8 +104,24 @@ static void on_action_fix_checksum_callback(void* context, uint32_t start_addr, 
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
-    // This is a placeholder for the actual loading logic
     printf("Loading config: %d\n", selected_config);
+
+    // In later PET/CBM models, reading from an unmapped address holds the previous byte
+    // transferred on the data bus.  This has the effect of making it appear that unmapped
+    // regions are filled with the the high byte of the corresponding memory address:
+    //
+    //      .m 90f0 9108
+    //      .:  90f0  90 90 90 90 90 90 90 90
+    //      .:  90f8  90 90 90 90 90 90 90 90
+    //      .:  9100  91 91 91 91 91 91 91 91
+    //      .:  9108  91 91 91 91 91 91 91 91
+    //
+    // In the EconoPET, all "unmapped" memory regions fall through to RAM (or soft-ROM),
+    // so we approximate this effect by prefilling $9000-$FFFF with the high byte of the
+    // address.  The loaded config will overwrite the populate ROM regions.
+    for (uint16_t a = 0x90; a <= 0xff; a++) {
+        spi_fill(a << 8, a, 0x100);
+    }
 
     setup_context_t ctx = {
         .original_setup = setup_sink,

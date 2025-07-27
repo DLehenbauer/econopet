@@ -31,8 +31,8 @@ void pet_reset() {
     sleep_us(4);
 
     memset(video_char_buffer, 0x20, VIDEO_CHAR_BUFFER_BYTE_SIZE);   // Clear video character buffer
-    memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix)); // Clear keyboard matrix
-    memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix)); // Clear USB keyboard matrix
+    memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));           // Clear keyboard matrix
+    memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));           // Clear USB keyboard matrix
     
     // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
     set_cpu(/* ready: */ false, /* reset: */ true, /* nmi: */ false);
