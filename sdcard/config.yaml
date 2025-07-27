@@ -6,7 +6,7 @@ configs:
           - address: 0x8800
             file: "/roms/901447-10.bin"
           - address: 0xb000
-            file: "/roms/901465-19.bin"
+            file: "/roms/901465-23.bin"
           - address: 0xc000
             file: "/roms/901465-20.bin"
           - address: 0xd000
@@ -40,7 +40,7 @@ configs:
           - address: 0x8800
             file: "/roms/901447-10.bin"
           - address: 0xb000
-            file: "/roms/901465-19.bin"
+            file: "/roms/901465-23.bin"
           - address: 0xc000
             file: "/roms/901465-20.bin"
           - address: 0xd000
@@ -73,7 +73,7 @@ configs:
         files:
           - file: "/roms/901447-10.bin"
             address: 0x8800
-          - file: "/roms/901465-19.bin"
+          - file: "/roms/901465-23.bin"
             address: 0xb000
           - file: "/roms/901465-20.bin"
             address: 0xc000
@@ -97,7 +97,7 @@ configs:
           - action: "patch"
             address: 0x0e6d1
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
-          # Because we patched the editor ROM, we should adjust the checksum byte.
+          # Because we patched the editor ROM, we should fix the checksum.
           - action: "fix-checksum"
             checksum: 0xe0
             start-addr: 0xe000
@@ -115,7 +115,7 @@ configs:
         files:
           - file: "/roms/901447-10.bin"
             address: 0x8800
-          - file: "/roms/901465-19.bin"
+          - file: "/roms/901465-23.bin"
             address: 0xb000
           - file: "/roms/901465-20.bin"
             address: 0xc000
