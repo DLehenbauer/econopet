@@ -325,7 +325,7 @@ typedef struct action_context_s {
 void action_load(void* const context, const char* filename, uint32_t address) {
     (void) context;
 
-    printf("0x%04lx", address, filename);
+    printf("0x%04lx", address);
     FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         fatal("Failed to open file '%s'", filename);
@@ -347,7 +347,7 @@ void action_load(void* const context, const char* filename, uint32_t address) {
         }
     }
 
-    printf("-%0x04: %s ($0x%02x)\n", address, filename, checksum);
+    printf("-%04lx: %s ($%02x)\n", address - 1, filename, checksum);
 
     release_temp_buffer(&temp_buffer);
     fclose(file);
@@ -448,7 +448,7 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
         uint8_t current_byte = spi_read_at(fix_addr);
         uint8_t adjusted_byte = checksum_fix(current_byte, actual_sum, expected);
 
-        printf("0x%04lx: fixing checksum for 0x%04lx-0x%04lx ($0x%02lx -> $0x%02lx)\n", 
+        printf("0x%04lx: fixing checksum for $%04lx-%04lx ($%02x -> $%02lx)\n", 
             fix_addr, start_addr, end_addr, actual_sum, expected);
 
         spi_write_at(fix_addr, adjusted_byte);

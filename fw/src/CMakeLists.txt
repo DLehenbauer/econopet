@@ -39,6 +39,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/model.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c
+    ${FW_SRC_DIR}/roms/checksum.c
     ${FW_SRC_DIR}/sd/sd.c
     ${FW_SRC_DIR}/term.c
     ${FW_SRC_DIR}/config/config.c
