@@ -139,6 +139,11 @@ module ram (
                 end
                 else cycle_count <= cycle_count + 1'b1;
             end
+            default: begin
+                // synthesis off
+                $fatal(1, "Illegal 'state' value: %0d", state);
+                // synthesis on
+            end
         endcase
     end
 endmodule
