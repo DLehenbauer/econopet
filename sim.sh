@@ -40,10 +40,8 @@ if [ -n "$VIEW_WAVE" ]; then
 fi
 
 if [ -n "$UPDATE_F_FILE" ]; then
-    # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file, but ignore
-    # the resulting Python exception which occurs due to lack of SystemVerilog support.
-    # (See https://www.efinixinc.com/support/forum.php?cid=6&pid=932)
-    "$(dirname "$0")/efx.sh" --flow rtlsim 2> /dev/null
+    # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file.
+    "$(dirname "$0")/gw/efx.sh" --flow rtlsim
     echo
 fi
 
