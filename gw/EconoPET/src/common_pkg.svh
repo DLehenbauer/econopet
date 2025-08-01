@@ -300,16 +300,27 @@ package common_pkg;
 
     // TODO: Consider arranging our address space such that the MCU can read VRAM,
     //       keyboard status, and the status register in a single SPI transaction.
-    localparam WB_RAM_BASE  = 3'b000;
+
+    // Note: WB_RAM_BASE reserves an extra bit for the RAM address.  This double
+    //       maps the RAM address space as follows:
+    //
+    //         $00000-$1ffff -> $00000-$1ffff
+    //         $20000-$3ffff -> $00000-$1ffff
+    //
+    //       This allows SPI / wishbone reads and writes to "wrap-around".  This
+    //       is particularily useful for 'read_next' at 0x1ffff, which otherwise
+    //       would stall indefinately because attempting to read $20000 would
+    //       deselect the wishbone RAM peripheral.
+    localparam WB_RAM_BASE  = 2'b00;
     localparam WB_REG_BASE  = 4'b0100;
     localparam WB_CRTC_BASE = 4'b0101;
     localparam WB_KBD_BASE  = 5'b01100;
-    localparam WB_VRAM_BASE = { WB_RAM_BASE, 6'b010000 };   // SRAM: $8000-87FF
-    localparam WB_VROM_BASE = { WB_RAM_BASE, 6'b010001 };   // SRAM: $8800-8FFF
+    localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
+    localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0010001 };   // SRAM: $8800-8FFF
 
     // TODO: Move some of these address helpers to ../sim?
     function logic[WB_ADDR_WIDTH-1:0] wb_ram_addr(input logic[RAM_ADDR_WIDTH-1:0] address);
-        return { WB_RAM_BASE, address };
+        return { WB_RAM_BASE, 1'b0, address };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_reg_addr(input logic[REG_ADDR_WIDTH-1:0] register);

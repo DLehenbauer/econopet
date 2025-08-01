@@ -38,6 +38,27 @@ module top_tb;
         `assert_equal(dout, data_i);
     endtask
 
+    task static spi_ram_test;
+        integer i;
+        bit   [WB_ADDR_WIDTH-2:0] addr;        // Constrain to RAM address space $0000-$7FFF
+        logic [   DATA_WIDTH-1:0] dout;
+        bit   [   DATA_WIDTH-1:0] value;
+
+        $display("[%t] Begin SPI/RAM Test", $time);
+
+        mock_system.spi_read_at(common_pkg::wb_ram_addr(17'h1ffff), dout);
+
+        for (i = 0; i < 10; i = i + 1) begin
+            addr = $random();
+            value = $random();
+            mock_system.spi_write_at(common_pkg::wb_ram_addr(addr), value);
+            mock_system.spi_read_at(common_pkg::wb_ram_addr(addr), dout);
+            `assert_equal(dout, value);
+        end
+
+        $display("[%t] End SPI/RAM Test", $time);
+    endtask
+
     task static cpu_ram_test;
         integer i;
         bit   [CPU_ADDR_WIDTH-2:0] addr;        // Constrain to RAM address space $0000-$7FFF
@@ -171,7 +192,8 @@ module top_tb;
         mock_system.init;
         // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
-        // cpu_ram_test;
+        spi_ram_test;
+        cpu_ram_test;
         usb_keyboard_test;
         crtc_write_test;
         sid_write_test;
