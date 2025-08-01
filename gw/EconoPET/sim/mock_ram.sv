@@ -24,7 +24,7 @@ module mock_ram (
     input  logic                      ram_we_n_i,
     input  logic                      ram_oe_n_i
 );
-    logic [DATA_WIDTH - 1:0] mem[(2 ** RAM_ADDR_WIDTH) - 1];
+    logic [DATA_WIDTH - 1:0] mem[(2 ** RAM_ADDR_WIDTH)];
 
     task automatic load_rom(
         input bit [RAM_ADDR_WIDTH-1:0] address,

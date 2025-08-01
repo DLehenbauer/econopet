@@ -78,15 +78,46 @@ module ram_tb;
         .wb_stall_i(stall)
     );
 
-    logic [DATA_WIDTH-1:0] data_rd;
+    task test_rd(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+        logic [DATA_WIDTH-1:0] data_rd;
+
+        wb.read(common_pkg::wb_ram_addr(addr), data_rd);
+        `assert_equal(data_rd, data);
+    endtask
+
+    task test_wr(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+        logic [DATA_WIDTH-1:0] data_rd;
+
+        wb.write(common_pkg::wb_ram_addr(addr), data);
+    endtask
+
+
+    task test_rw(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+        test_wr(addr, data);
+        test_rd(addr, data);
+    endtask
 
     task run;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
-        wb.write(common_pkg::wb_ram_addr(17'h00000), 8'h55);
-        wb.read(common_pkg::wb_ram_addr(17'h00000), data_rd);
-        `assert_equal(data_rd, 8'h55);
+        test_wr(17'h00000, 8'h55);
+        test_wr(17'h1fffe, 8'h33);
+        test_wr(17'h1ffff, 8'hcc);
+
+        test_rd(17'h00000, 8'h55);
+        test_rd(17'h1fffe, 8'h33);
+        test_rd(17'h1ffff, 8'hcc);
+
+        // If PARANOID is defined, exhaustively test all RAM addresses:
+`ifdef PARANOID
+        for (int i = 0; i < 2**RAM_ADDR_WIDTH; i++) begin
+            test_rw(i, i[7:0]);
+        end
+        for (int i = 0; i < 2**RAM_ADDR_WIDTH; i++) begin
+            test_rd(i, i[7:0]);
+        end
+`endif
 
         #1 $display("[%t] END %m", $time);
     endtask
