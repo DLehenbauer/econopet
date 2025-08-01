@@ -38,18 +38,49 @@ const uint screen_height = 25;
 
 #define CH_SPACE 0x20
 
+static bool read_button_debounced() {
+    static uint64_t last_change_time = 0;
+    static bool raw_state = true;       // Last raw button state (initial: pressed for capacitor charging)
+    static bool debounced_state = true; // Debounced button state
+    
+    const uint64_t DEBOUNCE_TIME_US = 50000;  // 50ms debounce time
+
+    bool current_raw = !gpio_get(MENU_BTN_GP);  // Active low button
+    uint64_t current_time = time_us_64();
+
+    // Check if raw button state has changed
+    if (current_raw != raw_state) {
+        raw_state = current_raw;
+        last_change_time = current_time;
+        return debounced_state;  // Return current debounced state during transition
+    }
+
+    // Check if we're still in debounce period
+    if ((current_time - last_change_time) < DEBOUNCE_TIME_US) {
+        return debounced_state;  // Still debouncing, return current state
+    }
+
+    // Button state is stable, update debounced state
+    debounced_state = current_raw;
+    return debounced_state;
+}
+
 static ButtonAction get_button_action() {
-    // Initial state is pressed/handled to give debouncing capacitor time to charge.
-    static bool is_pressed = true;
+    // Track button press/release events and timing for short/long press detection
+    static bool is_pressed = true;     // Initial state matches debounced initial state
     static bool was_handled = true;
     static uint64_t press_start;
+    
+    const uint64_t LONG_PRESS_TIME_US = 500000; // 500ms for long press
 
     bool was_pressed = is_pressed;
-    is_pressed = !gpio_get(MENU_BTN_GP);
+    is_pressed = read_button_debounced();
+    
+    uint64_t current_time = time_us_64();
     ButtonAction action = None;
 
     if (!is_pressed) {
-        // Button is not current pressed.
+        // Button is not currently pressed.
         if (was_pressed && !was_handled) {
             // Button has just been released and did not previously exceed the
             // long-press threshold.
@@ -60,11 +91,11 @@ static ButtonAction get_button_action() {
     } else {
         // The button is currently pressed.
         if (!was_pressed) {
-            // Button has just been pressed.  Record the start time of the press.
-            press_start = time_us_64();
+            // Button has just been pressed (after debounce).  Record the start time.
+            press_start = current_time;
             was_handled = false;
-        } else if (!was_handled && (time_us_64() - press_start > 500000)) {
-            // Button has been held for more that 500ms.  Consider this a long press.
+        } else if (!was_handled && (current_time - press_start > LONG_PRESS_TIME_US)) {
+            // Button has been held for more than 500ms.  Consider this a long press.
             was_handled = true;
             action = LongPress;
             printf("MENU button: long press\n");
