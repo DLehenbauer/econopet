@@ -15,6 +15,7 @@
 #include "menu_config.h"
 
 #include "config/config.h"
+#include "diag/mem.h"
 #include "driver.h"
 #include "term.h"
 #include "global.h"
@@ -209,6 +210,12 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
             case '\n': {
                 return load_config(setup_sink, selected_config);
             }
+            case 'T':
+            case 't': {
+                set_cpu(/*ready: */ false, /* reset:*/ false, /* nmi: */ false);
+                test_ram();
+            }
+
             default:
                 break;
         }

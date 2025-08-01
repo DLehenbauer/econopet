@@ -32,6 +32,8 @@ static void next_rc(unsigned int* row, unsigned int* col) {
     *col = c;
 }
 
+// This function scans the given PET keyboard matrix and returns the next PET key event
+// or key_event_none if no key is pressed.
 key_event_t next_key_event(const uint8_t* matrix) {
     static uint8_t previous[KEY_COL_COUNT] = {
         0xff, 0xff, 0xff, 0xff, 0xff,
@@ -87,33 +89,50 @@ int keyscan_is_shifted(const uint8_t matrix[KEY_COL_COUNT]) {
 }
 
 int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
-    static const key_event_t gfx_keys[] = {
+    static const key_event_t pet_keys[] = {
+        // Graphics Keyboard
         PET_KEY_DOWN_N,
         PET_KEY_RIGHT_N,
         PET_KEY_RETURN_N,
-    };
-    
-    static const key_event_t business_keys[] = {
+        PET_KEY_T_N,
+
+        // Business Keyboard
         PET_KEY_DOWN_B,
         PET_KEY_RIGHT_B,
         PET_KEY_RETURN_B,
+        PET_KEY_T_B,
     };
     
     static const int term_keys_unshifted[] = {
-        KEY_DOWN,
-        KEY_RIGHT,
-        '\n',
+        // Graphics Keyboard
+        /*   PET_KEY_DOWN_N: */ KEY_DOWN, 
+        /*  PET_KEY_RIGHT_N: */ KEY_RIGHT, 
+        /* PET_KEY_RETURN_N: */ '\n',
+        /*      PET_KEY_T_N: */ 't',
+
+        // Business Keyboard
+        /*   PET_KEY_DOWN_B: */ KEY_DOWN,
+        /*  PET_KEY_RIGHT_B: */ KEY_RIGHT,
+        /* PET_KEY_RETURN_B: */ '\n',
+        /*      PET_KEY_T_B: */ 't',
     };
     
     static const int term_keys_shifted[] = {
-        KEY_UP,
-        KEY_LEFT,
-        '\n',
+        // Graphics Keyboard
+        /*   PET_KEY_DOWN_N: */ KEY_UP,
+        /*  PET_KEY_RIGHT_N: */ KEY_LEFT,
+        /* PET_KEY_RETURN_N: */ '\n',
+        /*      PET_KEY_T_N: */ 'T',
+
+        // Business Keyboard
+        /*   PET_KEY_DOWN_B: */ KEY_UP,
+        /*  PET_KEY_RIGHT_B: */ KEY_LEFT,
+        /* PET_KEY_RETURN_B: */ '\n',
+        /*      PET_KEY_T_B: */ 'T',
     };
     
-    static_assert((ARRAY_SIZE(gfx_keys) == ARRAY_SIZE(business_keys))
-        && (ARRAY_SIZE(gfx_keys) == ARRAY_SIZE(term_keys_unshifted))
-        && (ARRAY_SIZE(gfx_keys) == ARRAY_SIZE(term_keys_shifted)),
+    static_assert((ARRAY_SIZE(pet_keys) == ARRAY_SIZE(term_keys_unshifted))
+        && (ARRAY_SIZE(pet_keys) == ARRAY_SIZE(term_keys_shifted)),
         "Key event arrays must be the same size");
     
     while (true) {
@@ -122,11 +141,11 @@ int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
             return EOF;
         }
 
-        for (size_t i = 0; i < ARRAY_SIZE(gfx_keys); i++) {
-            if (event == gfx_keys[i]) {
-                return keyscan_is_shifted(matrix) ? term_keys_shifted[i] : term_keys_unshifted[i];
-            } else if (event == business_keys[i]) {
-                return keyscan_is_shifted(matrix) ? term_keys_shifted[i] : term_keys_unshifted[i];
+        for (size_t i = 0; i < ARRAY_SIZE(pet_keys); i++) {
+            if (event == pet_keys[i]) {
+                return keyscan_is_shifted(matrix)
+                    ? term_keys_shifted[i]
+                    : term_keys_unshifted[i];
             }
         }
     }
