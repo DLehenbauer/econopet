@@ -107,6 +107,9 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
     printf("Loading config: %d\n", selected_config);
 
+    // Suspend the CPU while we're loading the config.
+    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
     // transferred on the data bus.  This has the effect of making it appear that unmapped
     // regions are filled with the the high byte of the corresponding memory address:

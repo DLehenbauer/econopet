@@ -20,4 +20,4 @@ extern const uint8_t rom_chars_8800[0x800];
 extern const uint8_t* const p_video_font_000;
 extern const uint8_t* const p_video_font_400;
 
-extern const uint8_t rom_menu_ff00[0x100];
+void start_menu_rom();

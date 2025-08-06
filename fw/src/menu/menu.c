@@ -491,26 +491,15 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
 void menu_enter() {
     printf("-- Enter Menu --\n");
 
-    // Ensure CPU is suspended while initializing ROMs.
-    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
-    spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
-    pet_reset();
-
-    // We need to load a USB keymap to allow the user to navigate the menu with USB.
-    // Menu is keymap agnostic (only uses cursor/enter keys), so any keymap will do.
-    read_keymap("/ukm/us-grus.bin", &configuration);
-
-    model_t model = get_model();
-    model.flags &= ~model_flag_80_cols;     // Ensure 40 columns for menu
-    set_model(model);
-
-    spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));
+    start_menu_rom();
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
 
     action_context_t action_context = {
         .config = &configuration,
     };
+
+    model_t model = get_model();
 
     const setup_sink_t setup_sink = {
         .context = &action_context,
