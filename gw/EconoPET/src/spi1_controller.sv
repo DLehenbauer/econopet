@@ -105,13 +105,13 @@ module spi1_controller (
                 READ_CMD: begin
                     wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
 
-                    if (spi_data_rx[6]) begin
+                    if (spi_data_rx[6:5] == 2'b10) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
                         wb_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
                         spi_state <= READ_ADDR_HI_ARG;
                     end else begin
-                        // Otherwise increment the previous address.
-                        wb_addr_o <= wb_addr_o + 1'b1;
+                        // Otherwise increment/decrement the previous address.
+                        wb_addr_o <= wb_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[6]}}, spi_data_rx[5]};
                         spi_state <= spi_data_rx[7]
                             ? READ_DATA_ARG
                             : VALID;

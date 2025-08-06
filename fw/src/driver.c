@@ -18,11 +18,15 @@
 #include "video/video.h"
 #include "global.h"
 
-//                           WS__AAAA
+//                           WMd_AAAA
 #define SPI_CMD_READ_AT    0b01000000
-#define SPI_CMD_READ_NEXT  0b00000000
+#define SPI_CMD_READ_NEXT  0b00100000
+#define SPI_CMD_READ_PREV  0b01100000
+#define SPI_CMD_READ_SAME  0b00000000
 #define SPI_CMD_WRITE_AT   0b11000000
-#define SPI_CMD_WRITE_NEXT 0b10000000
+#define SPI_CMD_WRITE_NEXT 0b10100000
+#define SPI_CMD_WRITE_PREV 0b11100000
+#define SPI_CMD_WRITE_SAME 0b10000000
 
 #define ADDR_KBD (0b011 << 17)
 
@@ -94,6 +98,28 @@ uint8_t spi_read_next() {
     return rx[0];
 }
 
+uint8_t spi_read_prev() {
+    const uint8_t tx[1] = { SPI_CMD_READ_PREV };
+    uint8_t rx[sizeof(tx)];
+
+    cmd_start();
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
+    cmd_end();
+    
+    return rx[0];
+}
+
+uint8_t spi_read_same() {
+    const uint8_t tx[1] = { SPI_CMD_READ_SAME };
+    uint8_t rx[sizeof(tx)];
+
+    cmd_start();
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
+    cmd_end();
+    
+    return rx[0];
+}
+
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
     spi_read_seek(addr);
 
@@ -115,6 +141,22 @@ void spi_write_at(uint32_t addr, uint8_t data) {
 
 void spi_write_next(uint8_t data) {
     const uint8_t tx [] = { SPI_CMD_WRITE_NEXT, data };
+
+    cmd_start();
+    spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));
+    cmd_end();
+}
+
+void spi_write_prev(uint8_t data) {
+    const uint8_t tx [] = { SPI_CMD_WRITE_PREV, data };
+
+    cmd_start();
+    spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));
+    cmd_end();
+}
+
+void spi_write_same(uint8_t data) {
+    const uint8_t tx [] = { SPI_CMD_WRITE_SAME, data };
 
     cmd_start();
     spi_write_blocking(FPGA_SPI_INSTANCE, tx, sizeof(tx));

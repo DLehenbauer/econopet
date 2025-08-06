@@ -32,7 +32,7 @@ module mock_ram (
     );
         int file, status;
 
-        file = $fopen({ "../../build/roms/bin/roms/", filename }, "rb");
+        file = $fopen({ "../../build/rp2040_release/sdcard/download/", filename }, "rb");
         if (file == 0) begin
             $fatal(1, "Error opening file '%s'.  Did you forget to build '/roms'?", filename);
         end

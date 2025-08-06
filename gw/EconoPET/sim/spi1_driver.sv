@@ -43,8 +43,13 @@ module spi1_driver(
         spi_driver.reset();
     endtask
 
-    function [7:0] cmd(input bit we, input bit set_addr, input logic [WB_ADDR_WIDTH-1:0] addr = 20'hx_xxxx);
-        return { we, set_addr, 2'bxx, addr[WB_ADDR_WIDTH-1:16] };
+    localparam bit [1:0] ADDR_MODE_SAME = 2'b00,
+                         ADDR_MODE_INC  = 2'b01,
+                         ADDR_MODE_SEEK = 2'b10,
+                         ADDR_MODE_DEC  = 2'b11;
+
+    function [7:0] cmd(input bit we, input bit [1:0] addr_mode, input logic [WB_ADDR_WIDTH-1:0] addr = 20'bx);
+        return { we, addr_mode, 1'bx, addr[WB_ADDR_WIDTH-1:16] };
     endfunction
 
     function [7:0] addr_hi(input logic [WB_ADDR_WIDTH-1:0] addr);
@@ -84,7 +89,7 @@ module spi1_driver(
 
         $display("[%t]    spi1.write_at(%x, %x)", $time, addr_i, data_i);
 
-        c  = cmd(/* we: */ 1'b1, /* set_addr: */ 1'b1, addr_i);
+        c  = cmd(/* we: */ 1'b1, ADDR_MODE_SEEK, addr_i);
         ah = addr_hi(addr_i);
         al = addr_lo(addr_i);
 
@@ -98,7 +103,7 @@ module spi1_driver(
 
         $display("[%t]    spi1.read_at(%x)", $time, addr_i);
 
-        c  = cmd(/* we: */ '0, /* set_addr: */ 1'b1, addr_i);
+        c  = cmd(/* we: */ '0, ADDR_MODE_SEEK, addr_i);
         ah = addr_hi(addr_i);
         al = addr_lo(addr_i);
 
@@ -110,8 +115,58 @@ module spi1_driver(
 
         $display("[%t]    spi1.read_next()", $time);
 
-        c = cmd(/* we: */ '0, /* set_addr: */ '0, 6'bxxxxxx);
+        c = cmd(/* we: */ '0, ADDR_MODE_INC, 20'bx);
 
         send('{c});
+    endtask
+
+    task read_prev();
+        logic [7:0] c;
+
+        $display("[%t]    spi1.read_prev()", $time);
+
+        c = cmd(/* we: */ '0, ADDR_MODE_DEC, 20'bx);
+
+        send('{c});
+    endtask
+
+    task read_same();
+        logic [7:0] c;
+
+        $display("[%t]    spi1.read_same()", $time);
+
+        c = cmd(/* we: */ '0, ADDR_MODE_SAME, 20'bx);
+
+        send('{c});
+    endtask
+
+    task write_next(input [DATA_WIDTH-1:0] data_i);
+        logic [7:0] c;
+
+        $display("[%t]    spi1.write_next(%x)", $time, data_i);
+
+        c = cmd(/* we: */ 1'b1, ADDR_MODE_INC, 20'bx);
+
+        send('{c, data_i});
+    endtask
+
+    task write_prev(input [DATA_WIDTH-1:0] data_i);
+        logic [7:0] c;
+
+        $display("[%t]    spi1.write_prev(%x)", $time, data_i);
+
+        c = cmd(/* we: */ 1'b1, ADDR_MODE_DEC, 20'bx);
+
+        send('{c, data_i});
+    endtask
+
+    task write_same(input [DATA_WIDTH-1:0] data_i);
+        logic [7:0] c;
+
+        $display("[%t]    spi1.write_same(%x)", $time, data_i);
+
+        c = cmd(/* we: */ 1'b1, ADDR_MODE_SAME, 20'bx);
+
+        send('{c, data_i});
     endtask
 endmodule

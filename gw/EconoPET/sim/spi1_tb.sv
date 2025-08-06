@@ -85,6 +85,27 @@ module spi1_tb;
         spi1_driver.write_at(addr_i, data_i);
     endtask
 
+    task write_next(
+        input logic [DATA_WIDTH-1:0] data_i
+    );
+        set_expected(/* addr: */ expected_addr + 1'b1, /* we: */ 1'b1, /* data: */ data_i);
+        spi1_driver.write_next(data_i);
+    endtask
+
+    task write_prev(
+        input logic [DATA_WIDTH-1:0] data_i
+    );
+        set_expected(/* addr: */ expected_addr - 1'b1, /* we: */ 1'b1, /* data: */ data_i);
+        spi1_driver.write_prev(data_i);
+    endtask
+
+    task write_same(
+        input logic [DATA_WIDTH-1:0] data_i
+    );
+        set_expected(/* addr: */ expected_addr, /* we: */ 1'b1, /* data: */ data_i);
+        spi1_driver.write_same(data_i);
+    endtask
+
     task read_at(
         input logic [WB_ADDR_WIDTH-1:0] addr_i
     );
@@ -95,6 +116,16 @@ module spi1_tb;
     task read_next();
         set_expected(/* addr: */ expected_addr + 1'b1, /* we: */ '0);
         spi1_driver.read_next();
+    endtask
+
+    task read_prev();
+        set_expected(/* addr: */ expected_addr - 1'b1, /* we: */ '0);
+        spi1_driver.read_prev();
+    endtask
+
+    task read_same();
+        set_expected(/* addr: */ expected_addr, /* we: */ '0);
+        spi1_driver.read_same();
     endtask
 
     always @(posedge spi_cs_n) begin
@@ -147,14 +178,51 @@ module spi1_tb;
     end
 
     task run;
+        $display("[%t] BEGIN %m", $time);
         spi1_driver.reset();
 
-        write_at(20'h00000, 8'h00);
-        read_next(8'h01);
-        read_next(8'h01);
-        read_next(8'h01);
-        read_next(8'h01);
-        read_next(8'h01);
-        write_at(20'hFFFFF, 8'h00);
+        $display("[%t] Test 1: Basic write_at/read_at", $time);
+        write_at(20'h00000, 8'hAA);
+        read_at(20'h00000);
+        write_at(20'hfffff, 8'h55);
+        read_at(20'hfffff);
+
+        $display("[%t] Test 2: Sequential _next operations", $time);
+        write_at(20'hffffe, 8'hfe);
+        write_next(8'hff);
+        write_next(8'h00);
+        write_next(8'h01);
+        read_at(20'hffffe);
+        read_next();
+        read_next();
+        read_next();
+
+        $display("[%t] Test 3: Reverse _prev operations", $time);
+        write_at(20'h00001, 8'h01);
+        write_prev(8'h00);
+        write_prev(8'hff);
+        write_prev(8'hfe);
+        read_at(20'h00001);
+        read_prev();
+        read_prev();
+        read_prev();
+
+        $display("[%t] Test 4: Same address _same operations", $time);
+        write_at(20'h12345, 8'h10);
+        read_same();
+        write_same(8'h20);
+        read_same();
+        write_same(8'h30);
+        read_same();
+
+        $display("[%t] Test 5: Mixed operations", $time);
+        write_at(20'h04000, 8'h40);
+        read_next();
+        write_prev(8'h50);
+        read_same();
+        write_next(8'h60);
+        read_at(20'h04001);
+
+        #1 $display("[%t] END %m", $time);
     endtask
 endmodule
