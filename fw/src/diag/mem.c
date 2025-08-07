@@ -12,10 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "../driver.h"
+#include "driver.h"
+#include "fatal.h"
 #include "mem.h"
-
-//#define CONTINUE_ON_ERROR
 
 const int32_t addr_min = 0x00000;
 const int32_t addr_max = 0x1FFFF;
@@ -38,92 +37,67 @@ bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
     return true;
 }
 
-void fix_byte(uint32_t addr, uint8_t expected) {
-    int i = 0;
-
-    for (; i < 8; i++) {
-        spi_write_at(addr, expected);
-        if (check_byte(addr, spi_read_at(addr), expected)) {
-            return;
-        }
-    }
-
-    printf("$%05lx: Correction failed after %d attempts.\n", addr, i);
-    panic("");
-}
-
-uint8_t check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit, uint8_t expected_bit) {
-    uint8_t actual_bit = (actual_byte >> bit) & 1;
+void check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit_index, uint8_t expected_bit) {
+    uint8_t actual_bit = (actual_byte >> bit_index) & 1;
     
-    if (actual_bit != expected_bit) {
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wformat"
-        #pragma GCC diagnostic ignored "-Wformat-extra-args"
-        printf("$%05lx[%d]: Expected %d, but got %d (actual byte read %08b)\n", addr, bit, expected_bit, actual_bit, actual_byte);
-        #pragma GCC diagnostic pop
-
-        sleep_ms(1);
-        uint8_t byte2 = spi_read_at(addr);
-
-        if (byte2 != actual_byte) {
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wformat"
-            #pragma GCC diagnostic ignored "-Wformat-extra-args"
-            printf("Inconsistent read result (attempt 1: %08b, attempt 2: %08b)\n", actual_byte, byte2);
-            #pragma GCC diagnostic pop
-        }
-
-        #ifdef CONTINUE_ON_ERROR
-            // Correct the error before continuing:
-            actual_byte = actual_byte ^ (1 << bit);
-            fix_byte(addr, actual_byte);
-        #else
-            panic("");
-        #endif
-    }
-
-    return actual_byte;
+    // #pragma GCC diagnostic push
+    // #pragma GCC diagnostic ignored "-Wformat"
+    // #pragma GCC diagnostic ignored "-Wformat-extra-args"
+    vet(actual_bit == expected_bit, "$%05lx[%d]: Expected %d, but got %d (byte read: %08b)", addr, bit_index, expected_bit, actual_bit, actual_byte);
+    // #pragma GCC diagnostic pop
 }
 
-uint8_t toggle_bit(uint32_t addr, uint8_t bit, uint8_t expected_bit) {
+uint8_t toggle_bit(uint32_t addr, uint8_t byte, uint8_t bit_index, uint8_t expected_bit) {
     assert(addr_min <= addr && addr <= addr_max);
-    assert(bit <= 7);
+    assert(bit_index <= 7);
 
-    uint8_t byte = check_bit(addr, spi_read_at(addr), bit, expected_bit);
-    byte = byte ^ (1 << bit);
-    spi_write_at(addr, byte);
-    return byte;
+    check_bit(addr, byte, bit_index, expected_bit);
+    return byte ^ (1 << bit_index);
 }
 
-typedef void march_element_fn(int32_t addr, int8_t bit);
+typedef uint8_t last_read_fn();
+typedef void last_write_fn(uint8_t byte);
+typedef void march_element_fn(int32_t addr, int8_t bit, last_read_fn* pLastReadFn);
 
 void test_each_bit_ascending(march_element_fn* pFn) {
+    spi_read_seek(addr_min);    
     for (int32_t addr = addr_min; addr <= addr_max; addr++) {
-        for (int8_t bit = 0; bit < 8; bit++) {
-            pFn(addr, bit);
+        for (int8_t bit = 0; bit < 7; bit++) {
+            pFn(addr, bit, spi_read_same);
         }
+        pFn(addr, 7, addr != addr_max ? spi_read_next : spi_read_same);
     }
 }
 
 void test_each_bit_descending(march_element_fn* pFn) {
+    spi_read_seek(addr_max);
     for (int32_t addr = addr_max; addr >= addr_min; addr--) {
-        for (int8_t bit = 7; bit >= 0; bit--) {
-            pFn(addr, bit);
+        for (int8_t bit = 7; bit >= 1; bit--) {
+            pFn(addr, bit, spi_read_same);
         }
+        pFn(addr, 0, addr != addr_min ? spi_read_prev : spi_read_same);
     }
 }
 
-void r0w1r1(int32_t addr, int8_t bit) {
-    toggle_bit(addr, bit, /* expected: */ 0);
-    check_bit(addr, spi_read_at(addr), bit, /* expected: */ 1);
+void r0w1r1(int32_t addr, int8_t bit, last_read_fn* pLastReadFn) {
+    uint8_t byte = spi_read_same();
+    byte = toggle_bit(addr, byte, bit, /* expected: */ 0);
+    spi_write_same(byte);
+    spi_read_same();
+    byte = pLastReadFn();
+    check_bit(addr, byte, bit, /* expected: */ 1);
 }
 
-void r0w1(int32_t addr, int8_t bit) {
-    toggle_bit(addr, bit, /* expected: */ 0);
+void r0w1(int32_t addr, int8_t bit, last_read_fn* pLastReadFn) {
+    uint8_t byte = toggle_bit(addr, spi_read_same(), bit, /* expected: */ 0);
+    spi_write_same(byte);
+    pLastReadFn(byte);
 }
 
-void r1w0(int32_t addr, int8_t bit) {
-    toggle_bit(addr, bit, /* expected: */ 1);
+void r1w0(int32_t addr, int8_t bit, last_read_fn* pLastReadFn) {
+    uint8_t byte = toggle_bit(addr, spi_read_same(), bit, /* expected: */ 1);
+    spi_write_same(byte);
+    pLastReadFn(byte);
 }
 
 // Uses Extended March C- algorithm
@@ -133,10 +107,7 @@ void test_ram() {
         printf("\nRAM Test (Extended March C-): $%05lx-$%05lx -- Iteration #%ld:\n", addr_min, addr_max, iteration);
 
         printf("⇕(w0): ");
-        spi_write_at(addr_min, 0);
-        for (int32_t addr = addr_min + 1; addr <= addr_max; addr++) {
-            spi_write_next(0);
-        }
+        spi_fill(addr_min, 0, addr_max - addr_min + 1);
         puts("OK");
 
         printf("⇑(r0,w1,r1): ");

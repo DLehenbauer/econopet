@@ -15,10 +15,13 @@
 #include "fatal.h"
 #include "global.h"
 #include "menu/window.h"
+#include "roms/roms.h"
 #include "term.h"
 #include "video/video.h"
 
 static void vfatal(const char* const format, va_list args) {
+    start_menu_rom();
+
     const window_t window = window_create(video_char_buffer, 40, 25);
     term_begin(&window);
 
