@@ -30,13 +30,13 @@ Highlights:
 
 Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32   | Checksum
 --------|----------|----------|------------|-----------|-------------|----------|---------
-  $C000 |    H1    | 6540-011 |  901439-01 | 2316B-01  |  901447-01  | a055e33a | ?
-  $D000 |    H2    | 6540-013 |  901439-02 | 2316B-03  |  901447-03  | d349f2d4 | ?
-  $E000 |    H3    | 6540-015 |  901439-03 | 2316B-05  |  901447-05  | 9e1c5cea | ?
-  $F000 |    H4    | 6540-016 |  901439-04 | 2316B-06  |  901447-06  | 661a814a | ?
-  $C800 |    H5    | 6540-012 |  901439-05 | 2316B-02  |  901447-02  | 69fd8a8f | ?
-  $D800 |    H6    | 6540-014 |  901439-06 | 2316B-04  |  901447-04  | 850544eb | ?
-  $F800 |    H7    | 6540-018 |  901439-07 | 2316B-07  |  901447-07  | c4f47ad1 | ?
+  $C000 |    H1    | 6540-011 |  901439-01 | 2316B-01  |  901447-01  | a055e33a | AD?
+  $D000 |    H2    | 6540-013 |  901439-02 | 2316B-03  |  901447-03  | d349f2d4 | 15?
+  $E000 |    H3    | 6540-015 |  901439-03 | 2316B-05  |  901447-05  | 9e1c5cea | 60?
+  $F000 |    H4    | 6540-016 |  901439-04 | 2316B-06  |  901447-06  | 661a814a | F5?
+  $C800 |    H5    | 6540-012 |  901439-05 | 2316B-02  |  901447-02  | 69fd8a8f | 09?
+  $D800 |    H6    | 6540-014 |  901439-06 | 2316B-04  |  901447-04  | 850544eb | 0E?
+  $F800 |    H7    | 6540-018 |  901439-07 | 2316B-07  |  901447-07  | c4f47ad1 | 4A?
   N/A   |    A2    | 6540-010 |  901439-08 | 2316B-08  |  901447-08  | 54f32f45 | ?
 
 ### Keyboard (901447-05)
@@ -84,7 +84,7 @@ Identical to ROM 1.0 except H1 ($C000).
 
 Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32   | Checksum
 --------|----------|----------|------------|-----------|-------------|----------|---------
-  $C000 | H1       | 6540-019 |  901439-09 | 2316B-09  |  901447-09  | 03cf16d0 | ?
+  $C000 | H1       | 6540-019 |  901439-09 | 2316B-09  |  901447-09  | 03cf16d0 | 19?
 
 ### PET 2001-8N (VICE)
 
@@ -188,7 +188,7 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 --------|----------|-----------|-----------|----------|---------
   $9000 | D3       | -         | -         | -        | -
   $A000 | D4       | -         | -         | -        | -
-  $B000 | D5       |  2332     | 901465-19 | 3a5f5721 | ?
+  $B000 | D5       |  2332     | 901465-19 | 3a5f5721 |    B1?
   $C000 | D6       |  2332-059 | 901465-20 | 0fc17b9c |    C0
   $D000 | D7       |  2332-096 | 901465-21 | 36d91855 |    D0
   $E000 | D8       | 2316B-034 | 901447-29 | e5714d4c |    E0
@@ -675,6 +675,7 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
 * [PET-Interfaces.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-Interfaces.txt) by William Levak
 * Genealogy
   * The Official Commodore ROM Genealogy [1](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/30/mode/2up) [2](http://penguincentral.com/retrocomputing/PET/petroms.pdf) [3](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/Commodore%20ROM%20Genealogy.pdf)
+* [DIAG.TXT](https://zimmers.net/anonftp/pub/cbm/firmware/misc/petdiag/petdiag.zip)
 * [PET-Parts.txt](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/PET-parts.txt) by William Levak
 * [README](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/README) by Olaf Seibert
 * [README.also](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/README.also) by William Levak
