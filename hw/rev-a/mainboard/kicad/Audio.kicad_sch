@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors rated for 62.5mW or more")
+		(comment 2 "Unspecified capacitors rated for 25V or more")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -2721,7 +2724,7 @@
 		)
 		(uuid "307b2906-6c82-46c7-983f-f59e82bd523b")
 	)
-	(text "The AUDIO source is ΔΣ encoded 1-bit\noutput from the FPGA (3.3V at 64 MHz).\n\nThe 1u capacitor and 12k resistor\nadjusts this to line-level audio, which\nis +/- 0.5V AC for consumer electronics.\n\n(Note that the amplifiers and powered\nspeakers typically provide a 10k resistor\nto ground to form a voltage divider.)"
+	(text "The AUDIO source is ΔΣ encoded 1-bit\noutput from the FPGA (3V3 at 64 MHz).\n\nThe 1u capacitor and 12k resistor\nadjusts this to line-level audio, which\nis +/- 0.5V AC for consumer electronics.\n\n(Note that amplifiers and powered speakers\ntypically provide a 10k resistor to ground\nto form a voltage divider.)"
 		(exclude_from_sim no)
 		(at 34.544 78.994 0)
 		(effects

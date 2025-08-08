@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors rated for 62.5mW or more")
+		(comment 2 "Unspecified capacitors rated for 25V or more")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Connector:Conn_01x06_Pin"
@@ -4549,7 +4552,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "CASS B"
+		(property "Value" "CASS_B_EDGE"
 			(at 247.142 144.7546 0)
 			(effects
 				(font
@@ -4630,7 +4633,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "CASS A"
+		(property "Value" "CASS_A_EDGE"
 			(at 247.142 102.8446 0)
 			(effects
 				(font

@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors rated for 62.5mW or more")
+		(comment 2 "Unspecified capacitors rated for 25V or more")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -5070,9 +5073,9 @@
 		)
 		(uuid "fed6a1e7-e233-4dff-87e0-8992a65c8dd0")
 	)
-	(text "\"Killer Poke\" puts PB5 in contention with BVERT.\n\nW65C22N drives 1 CMOS load (~3ma).\nBVERT is driven at ~24ma by level shifter.\nI_{MAX} is ~20ma per pin CMOS, ~16ma TTL?\nCMOS rule of thumb is 220-1K Ω.\n470Ω passes ~10ma, which is further reduced\nby built-in series resistors in the W65C22N."
+	(text "470R protects VIA from \"Killer Poke\", which\nputs PB5 in contention with BVERT.\n\nW65C22N drives 1 CMOS load (~3ma).\nBVERT is driven at ~24ma by level shifter.\n(BVERT easily wins againts VIA.)\n"
 		(exclude_from_sim no)
-		(at 217.678 155.702 0)
+		(at 219.71 153.67 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5107,9 +5110,9 @@
 		)
 		(uuid "90283901-e984-455f-aff2-fd5e564473ae")
 	)
-	(text "Signals with a 'B' prefix have been level shifted from 3V3 to 5V\n\nNote that ~{IRQ} is wire-or'ed and pulled to 3V3 (not 5V)"
+	(text "Note that ~{IRQ} is\nwire-or'ed and pulled\nto 3V3 (not 5V)"
 		(exclude_from_sim no)
-		(at 146.05 46.99 0)
+		(at 15.24 118.11 0)
 		(effects
 			(font
 				(size 1.27 1.27)

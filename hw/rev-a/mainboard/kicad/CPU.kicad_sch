@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors rated for 62.5mW or more")
+		(comment 2 "Unspecified capacitors rated for 25V or more")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -2201,7 +2204,7 @@
 		(uuid "036256f3-8d96-4ea4-9439-dea0d4045cf2")
 	)
 	(bus_entry
-		(at 110.49 119.38)
+		(at 111.76 119.38)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2219,7 +2222,7 @@
 		(uuid "0ece2b87-02c1-4250-9204-efdee0b5a9d0")
 	)
 	(bus_entry
-		(at 110.49 124.46)
+		(at 111.76 124.46)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2255,7 +2258,7 @@
 		(uuid "21491966-3c4c-414a-8ddc-0c7176ddff87")
 	)
 	(bus_entry
-		(at 110.49 132.08)
+		(at 111.76 132.08)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2300,7 +2303,7 @@
 		(uuid "334446cd-af18-48a8-bb73-a88f4d220620")
 	)
 	(bus_entry
-		(at 110.49 137.16)
+		(at 111.76 137.16)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2309,7 +2312,7 @@
 		(uuid "34d6d782-5641-4526-b346-05de03ea8c0e")
 	)
 	(bus_entry
-		(at 110.49 127)
+		(at 111.76 127)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2444,7 +2447,7 @@
 		(uuid "7de04273-7eda-4419-ad6c-938bfee9f2d2")
 	)
 	(bus_entry
-		(at 110.49 121.92)
+		(at 111.76 121.92)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2489,7 +2492,7 @@
 		(uuid "a54a2d51-4b66-4d14-b33d-1444b55de06d")
 	)
 	(bus_entry
-		(at 110.49 129.54)
+		(at 111.76 129.54)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2561,7 +2564,7 @@
 		(uuid "e085e529-431d-4fe9-aed9-287036ceabd6")
 	)
 	(bus_entry
-		(at 110.49 134.62)
+		(at 111.76 134.62)
 		(size 2.54 2.54)
 		(stroke
 			(width 0)
@@ -2641,6 +2644,16 @@
 			(type default)
 		)
 		(uuid "000fe7cf-094f-4f01-af53-a4611ca8637e")
+	)
+	(wire
+		(pts
+			(xy 107.95 132.08) (xy 111.76 132.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "034e10a1-57b6-4412-9981-70a0e03eeca6")
 	)
 	(wire
 		(pts
@@ -2822,26 +2835,6 @@
 		)
 		(uuid "22c944ff-207c-44a1-8525-43c7d37c8937")
 	)
-	(wire
-		(pts
-			(xy 107.95 129.54) (xy 110.49 129.54)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "25e5e3b2-c628-460f-8b34-28a2c7950e5f")
-	)
-	(wire
-		(pts
-			(xy 107.95 127) (xy 110.49 127)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "272d2299-18dd-4a3e-a196-6d15ba4f51c4")
-	)
 	(bus
 		(pts
 			(xy 114.3 109.22) (xy 114.3 111.76)
@@ -2992,6 +2985,16 @@
 		)
 		(uuid "3f6533ba-c4f9-46fc-b56b-e4570f6ba8d8")
 	)
+	(wire
+		(pts
+			(xy 107.95 124.46) (xy 111.76 124.46)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3fce758c-56f7-462d-a1ee-9666a13e2f33")
+	)
 	(bus
 		(pts
 			(xy 114.3 101.6) (xy 114.3 104.14)
@@ -3001,6 +3004,16 @@
 			(type default)
 		)
 		(uuid "40fa11de-0076-4b71-a33b-6abe07dfba23")
+	)
+	(wire
+		(pts
+			(xy 107.95 129.54) (xy 111.76 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4286713e-9681-4a75-8808-ed11ce93254f")
 	)
 	(wire
 		(pts
@@ -3194,16 +3207,6 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 121.92) (xy 110.49 121.92)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "58e43a80-a74c-4a45-a990-a8fe7ecac27a")
-	)
-	(wire
-		(pts
 			(xy 187.96 67.31) (xy 187.96 68.58)
 		)
 		(stroke
@@ -3304,7 +3307,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 129.54) (xy 113.03 132.08)
+			(xy 114.3 129.54) (xy 114.3 132.08)
 		)
 		(stroke
 			(width 0)
@@ -3321,16 +3324,6 @@
 			(type default)
 		)
 		(uuid "6916c60f-6e14-4b1e-adfd-c6bd538dad53")
-	)
-	(wire
-		(pts
-			(xy 107.95 132.08) (xy 110.49 132.08)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "69e05192-f084-4bb3-aff6-f350c539f1a8")
 	)
 	(wire
 		(pts
@@ -3352,6 +3345,16 @@
 		)
 		(uuid "6a6a09af-2839-47c6-adb8-ea0915f4ad96")
 	)
+	(wire
+		(pts
+			(xy 107.95 134.62) (xy 111.76 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6b55bb39-b188-4f5b-9adf-61024ac62b29")
+	)
 	(bus
 		(pts
 			(xy 114.3 78.74) (xy 114.3 46.99)
@@ -3364,7 +3367,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 146.05) (xy 113.03 139.7)
+			(xy 114.3 146.05) (xy 114.3 139.7)
 		)
 		(stroke
 			(width 0)
@@ -3394,7 +3397,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 124.46) (xy 113.03 127)
+			(xy 114.3 124.46) (xy 114.3 127)
 		)
 		(stroke
 			(width 0)
@@ -3421,6 +3424,16 @@
 			(type default)
 		)
 		(uuid "7503f499-a70b-4c50-a97c-dd49f11cb67d")
+	)
+	(wire
+		(pts
+			(xy 107.95 137.16) (xy 111.76 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "75fbaba9-c905-4884-acd6-3938b4a5f188")
 	)
 	(wire
 		(pts
@@ -3484,7 +3497,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 132.08) (xy 113.03 134.62)
+			(xy 114.3 132.08) (xy 114.3 134.62)
 		)
 		(stroke
 			(width 0)
@@ -3584,7 +3597,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 127) (xy 113.03 129.54)
+			(xy 114.3 127) (xy 114.3 129.54)
 		)
 		(stroke
 			(width 0)
@@ -3614,7 +3627,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 121.92) (xy 113.03 124.46)
+			(xy 114.3 121.92) (xy 114.3 124.46)
 		)
 		(stroke
 			(width 0)
@@ -3754,6 +3767,16 @@
 	)
 	(wire
 		(pts
+			(xy 107.95 127) (xy 111.76 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9de2fec6-3a4a-448b-a4ad-f221ef6a43a9")
+	)
+	(wire
+		(pts
 			(xy 53.34 96.52) (xy 71.12 96.52)
 		)
 		(stroke
@@ -3862,6 +3885,16 @@
 		)
 		(uuid "b0017ca8-8b10-48a7-99f1-c40108e33a43")
 	)
+	(wire
+		(pts
+			(xy 107.95 121.92) (xy 111.76 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b2f37300-a7b1-4ccc-94fb-731718968ae9")
+	)
 	(bus
 		(pts
 			(xy 137.16 119.38) (xy 137.16 118.11)
@@ -3871,16 +3904,6 @@
 			(type default)
 		)
 		(uuid "b50e9732-b892-4758-8532-13b4dd3da38b")
-	)
-	(wire
-		(pts
-			(xy 107.95 124.46) (xy 110.49 124.46)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b6346b0a-bb01-4e48-89f7-5054374e0d0d")
 	)
 	(wire
 		(pts
@@ -3934,7 +3957,7 @@
 	)
 	(bus
 		(pts
-			(xy 215.9 146.05) (xy 113.03 146.05)
+			(xy 215.9 146.05) (xy 114.3 146.05)
 		)
 		(stroke
 			(width 0)
@@ -3984,23 +4007,13 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 134.62) (xy 113.03 137.16)
+			(xy 114.3 134.62) (xy 114.3 137.16)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "c710bc05-ac98-4660-b348-95d2103fc030")
-	)
-	(wire
-		(pts
-			(xy 107.95 134.62) (xy 110.49 134.62)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c71e1710-20a1-4e33-88ae-549fb47faa61")
 	)
 	(wire
 		(pts
@@ -4084,16 +4097,6 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 137.16) (xy 110.49 137.16)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d432cbe6-4998-44d8-87df-626563ccc34f")
-	)
-	(wire
-		(pts
 			(xy 60.96 114.3) (xy 77.47 114.3)
 		)
 		(stroke
@@ -4114,7 +4117,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 119.38) (xy 110.49 119.38)
+			(xy 107.95 119.38) (xy 111.76 119.38)
 		)
 		(stroke
 			(width 0)
@@ -4144,7 +4147,7 @@
 	)
 	(bus
 		(pts
-			(xy 113.03 137.16) (xy 113.03 139.7)
+			(xy 114.3 137.16) (xy 114.3 139.7)
 		)
 		(stroke
 			(width 0)
@@ -4357,9 +4360,9 @@
 		)
 		(uuid "2e5fe58f-072c-4536-98a0-db5671c5cf2d")
 	)
-	(text "~{RES}, ~{IRQ}, and ~{NMI} are open-drain and wire ORed.\n\nRDY is bidirectional and wire ORed.\n\n~{SO} is pulled high by the FPGA."
+	(text "~{RES}, ~{IRQ}, ~{NMI}, and RDY are\nopen-drain and wire ORed.\n\n~{SO} is pulled high by the FPGA."
 		(exclude_from_sim no)
-		(at 39.37 165.1 0)
+		(at 50.8 152.4 0)
 		(effects
 			(font
 				(size 1.27 1.27)

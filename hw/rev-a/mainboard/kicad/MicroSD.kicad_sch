@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors rated for 62.5mW or more")
+		(comment 2 "Unspecified capacitors rated for 25V or more")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Connector:Micro_SD_Card_Det1"
@@ -1676,7 +1679,7 @@
 		)
 		(uuid "3a2325a1-81f3-44cf-90c0-1bb64c5e3908")
 	)
-	(text "DAT[0]   : (POCI) is open-drain output that requires pullup.\nDAT[2:1] : Unused inputs in SPI mode.  Pullups recommended\n           to avoid current draw due to metastablitiy.\nDAT[3]   : (~{CS}) has built-in 22-50k pullup to ensure card\n           is deselected by default.\nCMD      : (PICO) input in SPI mode.\nCLK      : (SCK) always an input.  Never gets pullup.\n\nCM1624 uses:\n25k pullup for DAT[0:3] and CMD\n40 Ohm termination for DAT[0:3], CMD, and CLK\n\n10k pullups common (e.g., ExpressIf documentation)."
+	(text "DAT[0]   : (POCI) is open-drain output that requires pullup.\nDAT[2:1] : Unused inputs in SPI mode.  Pullups recommended\n           to avoid current draw due to metastablitiy.\nDAT[3]   : (~{CS}) has built-in 22-50k pullup to ensure card\n           is deselected by default.\nCMD      : (PICO) input in SPI mode.\nCLK      : (SCK) always an input.  Never gets pullup.\n\nFor reference, CM1624 uses:\n25k pullup for DAT[0:3] and CMD\n40 Ohm termination for DAT[0:3], CMD, and CLK\n\n10k pullups common (e.g., ExpressIf documentation)."
 		(exclude_from_sim no)
 		(at 153.67 149.86 0)
 		(effects
