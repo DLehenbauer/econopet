@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -855,32 +858,32 @@
 		)
 	)
 	(junction
-		(at 123.19 93.98)
+		(at 132.08 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "32bdb894-6e92-4f9e-82b3-ba0e457a85a1")
 	)
 	(junction
-		(at 113.03 93.98)
+		(at 121.92 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "96c05414-540f-472f-8a8f-ea46384b6f5b")
 	)
 	(junction
-		(at 142.24 74.93)
+		(at 151.13 74.93)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c6417c72-97df-4c82-864a-b5577c15cb46")
 	)
 	(junction
-		(at 142.24 114.3)
+		(at 151.13 114.3)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "e63779cd-b5ae-4b0a-b40f-00bc93bb2dec")
 	)
 	(wire
 		(pts
-			(xy 113.03 113.03) (xy 113.03 114.3)
+			(xy 121.92 113.03) (xy 121.92 114.3)
 		)
 		(stroke
 			(width 0)
@@ -890,7 +893,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 114.3) (xy 142.24 115.57)
+			(xy 151.13 114.3) (xy 151.13 115.57)
 		)
 		(stroke
 			(width 0)
@@ -900,7 +903,7 @@
 	)
 	(wire
 		(pts
-			(xy 130.81 101.6) (xy 132.08 101.6)
+			(xy 139.7 101.6) (xy 140.97 101.6)
 		)
 		(stroke
 			(width 0)
@@ -910,7 +913,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 93.98) (xy 113.03 96.52)
+			(xy 121.92 93.98) (xy 121.92 96.52)
 		)
 		(stroke
 			(width 0)
@@ -920,7 +923,7 @@
 	)
 	(wire
 		(pts
-			(xy 123.19 91.44) (xy 123.19 93.98)
+			(xy 132.08 91.44) (xy 132.08 93.98)
 		)
 		(stroke
 			(width 0)
@@ -930,7 +933,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 74.93) (xy 142.24 88.9)
+			(xy 151.13 74.93) (xy 151.13 88.9)
 		)
 		(stroke
 			(width 0)
@@ -940,7 +943,7 @@
 	)
 	(wire
 		(pts
-			(xy 146.05 76.2) (xy 146.05 74.93)
+			(xy 154.94 76.2) (xy 154.94 74.93)
 		)
 		(stroke
 			(width 0)
@@ -950,7 +953,7 @@
 	)
 	(wire
 		(pts
-			(xy 130.81 106.68) (xy 132.08 106.68)
+			(xy 139.7 106.68) (xy 140.97 106.68)
 		)
 		(stroke
 			(width 0)
@@ -960,7 +963,7 @@
 	)
 	(wire
 		(pts
-			(xy 130.81 99.06) (xy 132.08 99.06)
+			(xy 139.7 99.06) (xy 140.97 99.06)
 		)
 		(stroke
 			(width 0)
@@ -970,7 +973,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 114.3) (xy 142.24 114.3)
+			(xy 121.92 114.3) (xy 151.13 114.3)
 		)
 		(stroke
 			(width 0)
@@ -980,7 +983,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 73.66) (xy 142.24 74.93)
+			(xy 151.13 73.66) (xy 151.13 74.93)
 		)
 		(stroke
 			(width 0)
@@ -990,7 +993,7 @@
 	)
 	(wire
 		(pts
-			(xy 130.81 104.14) (xy 132.08 104.14)
+			(xy 139.7 104.14) (xy 140.97 104.14)
 		)
 		(stroke
 			(width 0)
@@ -1000,7 +1003,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 101.6) (xy 113.03 102.87)
+			(xy 121.92 101.6) (xy 121.92 102.87)
 		)
 		(stroke
 			(width 0)
@@ -1010,7 +1013,7 @@
 	)
 	(wire
 		(pts
-			(xy 113.03 93.98) (xy 123.19 93.98)
+			(xy 121.92 93.98) (xy 132.08 93.98)
 		)
 		(stroke
 			(width 0)
@@ -1020,7 +1023,7 @@
 	)
 	(wire
 		(pts
-			(xy 130.81 96.52) (xy 132.08 96.52)
+			(xy 139.7 96.52) (xy 140.97 96.52)
 		)
 		(stroke
 			(width 0)
@@ -1030,7 +1033,7 @@
 	)
 	(wire
 		(pts
-			(xy 123.19 86.36) (xy 123.19 85.09)
+			(xy 132.08 86.36) (xy 132.08 85.09)
 		)
 		(stroke
 			(width 0)
@@ -1040,7 +1043,7 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 93.98) (xy 113.03 93.98)
+			(xy 118.11 93.98) (xy 121.92 93.98)
 		)
 		(stroke
 			(width 0)
@@ -1050,7 +1053,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 74.93) (xy 146.05 74.93)
+			(xy 151.13 74.93) (xy 154.94 74.93)
 		)
 		(stroke
 			(width 0)
@@ -1060,7 +1063,7 @@
 	)
 	(wire
 		(pts
-			(xy 123.19 93.98) (xy 132.08 93.98)
+			(xy 132.08 93.98) (xy 140.97 93.98)
 		)
 		(stroke
 			(width 0)
@@ -1068,20 +1071,33 @@
 		)
 		(uuid "f19c3fed-8a67-4e63-9870-abda4c450af2")
 	)
-	(text "Flash"
+	(text "16MiB Quad SPI flash memory for MCU.\n\nHolding BOOTSEL at power on puts the\nMCU into programming mode, allowing\nnew firmware to be uploaded via USB\nfor initial programming and recovery.\n\n(Typically, firmware updates happen\nvia microSD instead.)"
 		(exclude_from_sim no)
-		(at 90.17 71.12 0)
+		(at 105.41 66.04 0)
 		(effects
 			(font
-				(size 4 4)
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "2c223be9-1edb-4d32-bf50-4afb0540eef2")
+	)
+	(text "Flash"
+		(exclude_from_sim no)
+		(at 105.41 54.61 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
 			)
 			(justify left bottom)
 		)
-		(uuid "dc9b99a1-f279-4024-b46a-99074fccd026")
+		(uuid "8125b097-b30c-48d6-9ed9-e5b7e3d8e52d")
 	)
 	(hierarchical_label "SD3"
 		(shape bidirectional)
-		(at 130.81 106.68 180)
+		(at 139.7 106.68 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1093,7 +1109,7 @@
 	)
 	(hierarchical_label "SCK"
 		(shape input)
-		(at 130.81 96.52 180)
+		(at 139.7 96.52 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1105,7 +1121,7 @@
 	)
 	(hierarchical_label "SD1"
 		(shape bidirectional)
-		(at 130.81 101.6 180)
+		(at 139.7 101.6 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1117,7 +1133,7 @@
 	)
 	(hierarchical_label "SD0"
 		(shape bidirectional)
-		(at 130.81 99.06 180)
+		(at 139.7 99.06 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1129,7 +1145,7 @@
 	)
 	(hierarchical_label "SD2"
 		(shape bidirectional)
-		(at 130.81 104.14 180)
+		(at 139.7 104.14 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1141,7 +1157,7 @@
 	)
 	(hierarchical_label "~{CS}"
 		(shape input)
-		(at 109.22 93.98 180)
+		(at 118.11 93.98 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -1153,7 +1169,7 @@
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
-		(at 113.03 107.95 90)
+		(at 121.92 107.95 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1161,7 +1177,7 @@
 		(dnp no)
 		(uuid "2e1ce5dc-103c-44fb-a2ce-b391647ce97d")
 		(property "Reference" "SW6"
-			(at 114.2492 106.7816 90)
+			(at 123.1392 106.7816 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1170,7 +1186,7 @@
 			)
 		)
 		(property "Value" "BOOTSEL"
-			(at 114.2492 109.093 90)
+			(at 123.1392 109.093 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1179,7 +1195,7 @@
 			)
 		)
 		(property "Footprint" "EconoPET:SW_PUSH_1P1T_6x3.5mm_H4.3_APEM_MJTP1243"
-			(at 107.95 107.95 0)
+			(at 116.84 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1188,7 +1204,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 107.95 107.95 0)
+			(at 116.84 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1197,7 +1213,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 113.03 107.95 0)
+			(at 121.92 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1206,7 +1222,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 113.03 107.95 90)
+			(at 121.92 107.95 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1215,7 +1231,7 @@
 			)
 		)
 		(property "Amazon" "https://smile.amazon.com/dp/B008DS188Y"
-			(at 113.03 107.95 90)
+			(at 121.92 107.95 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1224,7 +1240,7 @@
 			)
 		)
 		(property "Alt-LCSC" "C457531"
-			(at 113.03 107.95 0)
+			(at 121.92 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1233,7 +1249,7 @@
 			)
 		)
 		(property "MOUSER" "611-PTS636SK43LFS"
-			(at 113.03 107.95 0)
+			(at 121.92 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1258,7 +1274,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 142.24 115.57 0)
+		(at 151.13 115.57 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1267,7 +1283,7 @@
 		(fields_autoplaced yes)
 		(uuid "657fb4e7-042e-40b5-862b-956a136e8dff")
 		(property "Reference" "#PWR0177"
-			(at 142.24 121.92 0)
+			(at 151.13 121.92 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1276,7 +1292,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 142.24 120.65 0)
+			(at 151.13 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1284,7 +1300,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 142.24 115.57 0)
+			(at 151.13 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1293,7 +1309,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 115.57 0)
+			(at 151.13 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1302,7 +1318,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 142.24 115.57 0)
+			(at 151.13 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1324,7 +1340,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 123.19 88.9 0)
+		(at 132.08 88.9 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1332,7 +1348,7 @@
 		(dnp no)
 		(uuid "715235fe-7199-4036-aa32-f022017e5449")
 		(property "Reference" "R66"
-			(at 121.285 90.805 90)
+			(at 130.175 90.805 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1341,7 +1357,7 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 123.19 90.805 90)
+			(at 132.08 90.805 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1350,7 +1366,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 123.19 88.9 0)
+			(at 132.08 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1359,7 +1375,7 @@
 			)
 		)
 		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
-			(at 123.19 88.9 0)
+			(at 132.08 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1368,7 +1384,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 123.19 88.9 0)
+			(at 132.08 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1377,7 +1393,7 @@
 			)
 		)
 		(property "LCSC" "C25744"
-			(at 123.19 88.9 0)
+			(at 132.08 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1402,7 +1418,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 123.19 85.09 0)
+		(at 132.08 85.09 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1411,7 +1427,7 @@
 		(fields_autoplaced yes)
 		(uuid "8209f55c-f35b-4524-91d7-8bf4ef7a2b8a")
 		(property "Reference" "#PWR0175"
-			(at 123.19 88.9 0)
+			(at 132.08 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1420,7 +1436,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 123.19 80.01 0)
+			(at 132.08 80.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1428,7 +1444,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 123.19 85.09 0)
+			(at 132.08 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1437,7 +1453,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 123.19 85.09 0)
+			(at 132.08 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1446,7 +1462,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 123.19 85.09 0)
+			(at 132.08 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1468,7 +1484,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 113.03 99.06 180)
+		(at 121.92 99.06 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1476,7 +1492,7 @@
 		(dnp no)
 		(uuid "8d9523ed-5f4f-4c4b-9964-1475ead90e11")
 		(property "Reference" "R65"
-			(at 111.125 97.155 90)
+			(at 120.015 97.155 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1485,7 +1501,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 113.03 97.79 90)
+			(at 121.92 97.79 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1494,7 +1510,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 113.03 99.06 0)
+			(at 121.92 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1503,7 +1519,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
-			(at 113.03 99.06 0)
+			(at 121.92 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1512,7 +1528,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 113.03 99.06 0)
+			(at 121.92 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1521,7 +1537,7 @@
 			)
 		)
 		(property "LCSC" "C11702"
-			(at 113.03 99.06 0)
+			(at 121.92 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1546,7 +1562,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 146.05 78.74 0)
+		(at 154.94 78.74 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1554,7 +1570,7 @@
 		(dnp no)
 		(uuid "917bca46-fcaf-4280-a6d5-dcbf4d2fedb7")
 		(property "Reference" "C1"
-			(at 148.3868 77.5716 0)
+			(at 157.2768 77.5716 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1563,7 +1579,7 @@
 			)
 		)
 		(property "Value" "100n"
-			(at 148.3868 79.883 0)
+			(at 157.2768 79.883 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1572,7 +1588,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 146.05 78.74 0)
+			(at 154.94 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1581,7 +1597,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
-			(at 146.05 78.74 0)
+			(at 154.94 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1590,7 +1606,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 146.05 78.74 0)
+			(at 154.94 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1599,7 +1615,7 @@
 			)
 		)
 		(property "LCSC" "C307331"
-			(at 146.05 78.74 0)
+			(at 154.94 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1624,7 +1640,7 @@
 	)
 	(symbol
 		(lib_id "Memory_Flash:W25Q128JVS")
-		(at 142.24 101.6 0)
+		(at 151.13 101.6 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1632,7 +1648,7 @@
 		(dnp no)
 		(uuid "946cbf38-e765-47d9-a77d-709a42611048")
 		(property "Reference" "U22"
-			(at 134.62 90.424 0)
+			(at 143.51 90.424 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1641,7 +1657,7 @@
 			)
 		)
 		(property "Value" "W25Q128JVS"
-			(at 143.256 113.03 0)
+			(at 152.146 113.03 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1650,7 +1666,7 @@
 			)
 		)
 		(property "Footprint" "EconoPET:SOIC-8_5.23x5.23mm_P1.27mm"
-			(at 142.24 101.6 0)
+			(at 151.13 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1659,7 +1675,7 @@
 			)
 		)
 		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8560111703904829441"
-			(at 142.24 101.6 0)
+			(at 151.13 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1668,7 +1684,7 @@
 			)
 		)
 		(property "Description" "128Mb Serial Flash Memory, Standard/Dual/Quad SPI, SOIC-8"
-			(at 142.24 101.6 0)
+			(at 151.13 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1677,7 +1693,7 @@
 			)
 		)
 		(property "LCSC" "C97521"
-			(at 142.24 101.6 0)
+			(at 151.13 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1720,7 +1736,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 146.05 81.28 0)
+		(at 154.94 81.28 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1729,7 +1745,7 @@
 		(fields_autoplaced yes)
 		(uuid "db19e21b-4d9e-43b0-8c3a-a3f0fbd2ef99")
 		(property "Reference" "#PWR0178"
-			(at 146.05 87.63 0)
+			(at 154.94 87.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1738,7 +1754,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 146.05 86.36 0)
+			(at 154.94 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1746,7 +1762,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 146.05 81.28 0)
+			(at 154.94 81.28 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1755,7 +1771,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 146.05 81.28 0)
+			(at 154.94 81.28 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1764,7 +1780,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 146.05 81.28 0)
+			(at 154.94 81.28 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1786,7 +1802,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 142.24 73.66 0)
+		(at 151.13 73.66 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1795,7 +1811,7 @@
 		(fields_autoplaced yes)
 		(uuid "f4d03a2a-b9f4-4e1e-b1c2-655180289d5e")
 		(property "Reference" "#PWR0176"
-			(at 142.24 77.47 0)
+			(at 151.13 77.47 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1804,7 +1820,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 142.24 68.58 0)
+			(at 151.13 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1812,7 +1828,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 142.24 73.66 0)
+			(at 151.13 73.66 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1821,7 +1837,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 73.66 0)
+			(at 151.13 73.66 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1830,7 +1846,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 142.24 73.66 0)
+			(at 151.13 73.66 0)
 			(effects
 				(font
 					(size 1.27 1.27)

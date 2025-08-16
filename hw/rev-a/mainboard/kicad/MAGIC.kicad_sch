@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -3162,7 +3165,7 @@
 		)
 		(uuid "ff2b1c61-b5ee-48fe-ac1a-b9538b4ff8cc")
 	)
-	(text "PIAs and VIA operate at 5V logic levels for compatible I/O.\n\nCPU and RAM operate at the same 3.3V logic levels as the FPGA\nand MCU to reduce the amount of level shifting required.\n\nD[0..7] are the only bidirectional lines that need to be shifted.\nThe direction of D[0..7] is controlled by R~{W}."
+	(text "PIAs and VIA operate at 5V logic levels for compatible I/O.\n\nCPU and RAM operate at the same 3V3 logic levels as the FPGA\nand MCU to reduce the amount of level shifting required.\n\nD[0..7] are the only bidirectional lines that need to be shifted.\nThe direction of D[0..7] is controlled by R~{W}."
 		(exclude_from_sim no)
 		(at 127 153.67 0)
 		(effects
@@ -3199,9 +3202,9 @@
 		)
 		(uuid "617c9cf4-ea39-41b3-90fb-c811c136475d")
 	)
-	(text "MCU responsibilities:\n- Configure FPGA at POR\n- Initialize SRAM with ROM images\n- Read back video RAM and output to HDMI (bit-banged DVI)\n- Report USB keyboard input to FPGA\n\nFPGA responsibilities:\n- Timing / address decoding\n- CRTC emulation / native PET video generation\n- Expose read/write access to SRAM for MCU (via SPI)\n- Intercept PIA1 to inject USB keyboard\n\nSRAM is shared between the 6502 and the FPGA by\nusing an effective bus speed of 8 MHz taking turns\nin round-robin fashion.\n\nFrom the CPU and I/O chip's perspective, PHI2 is \"stretched\"\nwith a 1/8th duty cycle.  From the FPGA's perspective, there\nis an 8 MHz clock and 8 clock enable signals, which are used\nas follows:\n\n0: Read/write to SRAM to service SPI request from MCU\n1: Read even character from VRAM\n2: Read even character bitmat from \"ROM\"\n3: Read odd character from VRAM\n4: Read odd character from \"ROM\"\n5: (future use)\n6: Setup for next CPU cycle\n7: Pulse PHI2"
+	(text "MCU responsibilities:\n- Generate FPGA_CLK\n- Configure FPGA at POR\n- Initialize SRAM with ROM images\n- Read back video RAM and output to HDMI (bit-banged DVI)\n- Report USB keyboard matrix to FPGA\n\nFPGA responsibilities:\n- Timing / address decoding\n- Native PET video generation / CRTC\n- Expose sysem bus to MCU (via SPI)\n- Intercept PIA1 to inject USB keyboard\n\nSRAM is shared between the 6502 and the FPGA by using an\neffective bus speed of 8 MHz taking turns in round-robin\nfashion.\n\nFrom the CPU and I/O chip's perspective, PHI2 is \"stretched\"\nwith a 1/8th duty cycle.  From the FPGA's perspective, there\nis an 8 MHz clock and 8 clock enable signals, which are used\nas follows:\n\n0: Read/write to SRAM to service SPI request from MCU\n1: Read even character from VRAM\n2: Read even character bitmat from \"ROM\"\n3: Read odd character from VRAM\n4: Read odd character from \"ROM\"\n5: Read/write to SRAM to service SPI request from MCU\n6: Setup for next CPU cycle\n7: Pulse PHI2\n\n(Note: Above subject to change with firmware updates.)"
 		(exclude_from_sim no)
-		(at 26.67 191.77 0)
+		(at 26.67 198.12 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -3210,9 +3213,9 @@
 		)
 		(uuid "b3fcf16b-286f-4649-8f4d-3901570dbf10")
 	)
-	(text "~{IO_OE} high @ 2V\nNo level shift required"
+	(text "~{IO_OE} does not require level-shifting\n(high @ 2V)"
 		(exclude_from_sim no)
-		(at 176.53 86.36 0)
+		(at 163.83 85.09 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -3221,7 +3224,7 @@
 		)
 		(uuid "bd66370e-0b12-446b-870b-ae5623128808")
 	)
-	(text "Shift 5V -> 3.3V:\n\nVOUT = VIN * (R2 / (R1 + R2)\nVIN = 5.1V\nR1 = 5.6k - 1%\nR2 = 10k + 1%\nVOUT = 3.29V"
+	(text "Shift 5V -> 3V3:\n\nVOUT = VIN * (R2 / (R1 + R2)\nVIN = 5.1V\nR1 = 5.6k - 1%\nR2 = 10k + 1%\nVOUT = 3.29V"
 		(exclude_from_sim no)
 		(at 120.65 116.84 0)
 		(effects

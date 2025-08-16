@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "74xx:74LS145"
@@ -3550,6 +3553,19 @@
 			(justify left bottom)
 		)
 		(uuid "ce0f1e5e-9890-4b80-a537-1f976b701c59")
+	)
+	(text "KEYBOARD"
+		(exclude_from_sim no)
+		(at 83.82 115.57 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "ef5f8f96-b2b6-4111-81d0-bf5c0705c099")
 	)
 	(label "KEY_COL6"
 		(at 186.69 63.5 0)

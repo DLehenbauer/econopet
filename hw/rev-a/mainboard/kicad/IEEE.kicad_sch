@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "74xx:74LS245"
@@ -3363,7 +3366,7 @@
 		(uuid "4f64108f-3d5d-4825-b46b-fc21e8bb8133")
 	)
 	(junction
-		(at 228.6 41.91)
+		(at 231.14 48.26)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "53b0df29-285b-4647-a2a2-ad6e32e0fed0")
@@ -3471,7 +3474,7 @@
 		(uuid "991c479b-27d4-43ad-967c-fee2890fe7a7")
 	)
 	(junction
-		(at 212.09 49.53)
+		(at 214.63 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a42d370a-7281-4009-a39f-9a58cc456f1e")
@@ -3537,7 +3540,7 @@
 		(uuid "c48a6a93-a237-4a53-96a7-40756e533389")
 	)
 	(junction
-		(at 219.71 49.53)
+		(at 222.25 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c82e62e6-bbf1-4468-99aa-ad6e9066fc1a")
@@ -4331,7 +4334,7 @@
 	)
 	(wire
 		(pts
-			(xy 228.6 41.91) (xy 228.6 43.18)
+			(xy 231.14 48.26) (xy 231.14 49.53)
 		)
 		(stroke
 			(width 0)
@@ -5291,7 +5294,7 @@
 	)
 	(wire
 		(pts
-			(xy 204.47 44.45) (xy 205.74 44.45)
+			(xy 207.01 50.8) (xy 208.28 50.8)
 		)
 		(stroke
 			(width 0)
@@ -5641,7 +5644,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 49.53) (xy 219.71 49.53)
+			(xy 214.63 55.88) (xy 222.25 55.88)
 		)
 		(stroke
 			(width 0)
@@ -5681,7 +5684,7 @@
 	)
 	(wire
 		(pts
-			(xy 204.47 49.53) (xy 204.47 44.45)
+			(xy 207.01 55.88) (xy 207.01 50.8)
 		)
 		(stroke
 			(width 0)
@@ -5691,7 +5694,7 @@
 	)
 	(wire
 		(pts
-			(xy 228.6 48.26) (xy 228.6 49.53)
+			(xy 231.14 54.61) (xy 231.14 55.88)
 		)
 		(stroke
 			(width 0)
@@ -5991,7 +5994,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 44.45) (xy 219.71 44.45)
+			(xy 220.98 50.8) (xy 222.25 50.8)
 		)
 		(stroke
 			(width 0)
@@ -6981,7 +6984,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 41.91) (xy 228.6 41.91)
+			(xy 220.98 48.26) (xy 231.14 48.26)
 		)
 		(stroke
 			(width 0)
@@ -7111,7 +7114,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 49.53) (xy 204.47 49.53)
+			(xy 214.63 55.88) (xy 207.01 55.88)
 		)
 		(stroke
 			(width 0)
@@ -7551,7 +7554,7 @@
 	)
 	(wire
 		(pts
-			(xy 219.71 44.45) (xy 219.71 49.53)
+			(xy 222.25 50.8) (xy 222.25 55.88)
 		)
 		(stroke
 			(width 0)
@@ -7591,7 +7594,7 @@
 	)
 	(wire
 		(pts
-			(xy 219.71 49.53) (xy 228.6 49.53)
+			(xy 222.25 55.88) (xy 231.14 55.88)
 		)
 		(stroke
 			(width 0)
@@ -7609,7 +7612,7 @@
 		)
 		(uuid "fe971b77-994c-417a-ba70-7aea2fb9bdba")
 	)
-	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute 4.7k/10k because the selection of resistor\nnetwork arrays is limited from our mfgr (unless we pay\na loading fee.)\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470Ω resistors reduce stress on the PIAs and VIA in\ncase *_IN are accidentally configured as outputs."
+	(text "This is an approximation of the MC3446 transciever\nusing commonly available parts.\n\nThe MC3446 internally used a 2.4k/5k voltage divider.\nWe substitute 4.7k/10k because the selection of resistor\nnetwork arrays is limited from our mfgr (unless we pay\na loading fee.)\n\n'07 drivers can sink 40ma, which is close to IEEE\nstandard of 48ma.\n\n'245 recievers provide:\n• TTL → CMOS level conversion\n• Hysterises\n• Hi-Z inputs to avoid loading driver\n\n470Ω resistors protect the PIAs and VIA in case\n*_IN are accidentally configured as outputs."
 		(exclude_from_sim no)
 		(at 95.25 127 0)
 		(effects
@@ -7620,8 +7623,21 @@
 		)
 		(uuid "76078780-1af5-4a49-ba78-635b61698d99")
 	)
+	(text "IEEE-488"
+		(exclude_from_sim no)
+		(at 95.25 88.9 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "7bbdc0da-fb26-4308-ad39-98beca839f1e")
+	)
 	(label "DIO7"
-		(at 218.44 29.21 0)
+		(at 220.98 35.56 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7654,7 +7670,7 @@
 		(uuid "09684b6c-5d15-4020-b96b-0b388e8ee3ea")
 	)
 	(label "ATN"
-		(at 205.74 41.91 180)
+		(at 208.28 48.26 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7665,7 +7681,7 @@
 		(uuid "0d0a1a72-a52a-4f6a-8552-2d3d565da222")
 	)
 	(label "DIO6"
-		(at 218.44 26.67 0)
+		(at 220.98 33.02 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7731,7 +7747,7 @@
 		(uuid "218a2487-4406-4830-b6ad-8a4182eda4f4")
 	)
 	(label "IFC"
-		(at 205.74 39.37 180)
+		(at 208.28 45.72 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7753,7 +7769,7 @@
 		(uuid "22591446-6d82-47ac-b525-9e9deb496c8c")
 	)
 	(label "DIO1"
-		(at 205.74 24.13 180)
+		(at 208.28 30.48 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7797,7 +7813,7 @@
 		(uuid "2fe436e0-75bf-42a2-b14a-09df5c2be702")
 	)
 	(label "SRQ"
-		(at 218.44 39.37 0)
+		(at 220.98 45.72 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7863,7 +7879,7 @@
 		(uuid "4be25af8-39f2-4002-9837-911821c1b9cc")
 	)
 	(label "DIO4"
-		(at 205.74 31.75 180)
+		(at 208.28 38.1 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7940,7 +7956,7 @@
 		(uuid "62ed984b-c070-4de1-bd86-30aeb09fb9cd")
 	)
 	(label "EOI"
-		(at 205.74 34.29 180)
+		(at 208.28 40.64 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7984,7 +8000,7 @@
 		(uuid "6a3aff19-5e5c-466c-80b5-82ab994aaee1")
 	)
 	(label "DIO3"
-		(at 205.74 29.21 180)
+		(at 208.28 35.56 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8094,7 +8110,7 @@
 		(uuid "88b7d164-35a2-420d-9da6-a56db04f962b")
 	)
 	(label "DAV"
-		(at 218.44 34.29 0)
+		(at 220.98 40.64 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8226,7 +8242,7 @@
 		(uuid "b45301a2-b6d7-44bd-8834-616acde30aef")
 	)
 	(label "DIO5"
-		(at 218.44 24.13 0)
+		(at 220.98 30.48 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8259,7 +8275,7 @@
 		(uuid "bfcdffb4-9a75-4453-a5cf-48d0c88fa2a7")
 	)
 	(label "NDAC"
-		(at 218.44 36.83 0)
+		(at 220.98 43.18 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8314,7 +8330,7 @@
 		(uuid "cdea6ba1-cc65-46ec-9776-a403fa76c4fe")
 	)
 	(label "DIO8"
-		(at 218.44 31.75 0)
+		(at 220.98 38.1 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8369,7 +8385,7 @@
 		(uuid "d54fce64-01e8-4f5c-8f34-4e64d47e3402")
 	)
 	(label "NRFD"
-		(at 205.74 36.83 180)
+		(at 208.28 43.18 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8380,7 +8396,7 @@
 		(uuid "d83f235d-44da-4d8d-aa16-1ac06e5bbd9f")
 	)
 	(label "DIO2"
-		(at 205.74 26.67 180)
+		(at 208.28 33.02 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -9468,7 +9484,7 @@
 				)
 			)
 		)
-		(property "Value" "IEEE"
+		(property "Value" "IEEE_EDGE"
 			(at 240.03 103.4796 0)
 			(effects
 				(font
@@ -10598,7 +10614,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_02x09_Odd_Even")
-		(at 210.82 34.29 0)
+		(at 213.36 40.64 0)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
@@ -10608,7 +10624,7 @@
 		(fields_autoplaced yes)
 		(uuid "52090067-486f-45bf-85aa-f30d55abde57")
 		(property "Reference" "J20"
-			(at 212.09 17.78 0)
+			(at 214.63 24.13 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10616,7 +10632,7 @@
 			)
 		)
 		(property "Value" "IEEE_HEADER"
-			(at 212.09 20.32 0)
+			(at 214.63 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10624,7 +10640,7 @@
 			)
 		)
 		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_2x09_P2.54mm_Vertical"
-			(at 210.82 34.29 0)
+			(at 213.36 40.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10633,7 +10649,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 210.82 34.29 0)
+			(at 213.36 40.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10642,7 +10658,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 210.82 34.29 0)
+			(at 213.36 40.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10651,7 +10667,7 @@
 			)
 		)
 		(property "MOUSER" "649-1012938195002BLF"
-			(at 210.82 34.29 0)
+			(at 213.36 40.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11176,7 +11192,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 228.6 45.72 0)
+		(at 231.14 52.07 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -11184,7 +11200,7 @@
 		(dnp no)
 		(uuid "90b30db4-ad6c-4340-9790-9b6a17e4fc1a")
 		(property "Reference" "C75"
-			(at 230.9368 44.5516 0)
+			(at 233.4768 50.9016 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11193,7 +11209,7 @@
 			)
 		)
 		(property "Value" "4u7 10V"
-			(at 230.9368 46.863 0)
+			(at 233.4768 53.213 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11202,7 +11218,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 228.6 45.72 0)
+			(at 231.14 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11211,7 +11227,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
-			(at 228.6 45.72 0)
+			(at 231.14 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11220,7 +11236,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 228.6 45.72 0)
+			(at 231.14 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11229,7 +11245,7 @@
 			)
 		)
 		(property "LCSC" "C23733"
-			(at 228.6 45.72 0)
+			(at 231.14 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11511,7 +11527,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 212.09 49.53 0)
+		(at 214.63 55.88 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -11520,7 +11536,7 @@
 		(fields_autoplaced yes)
 		(uuid "9d6eff7d-868e-4cd1-8529-5b3874af6e6a")
 		(property "Reference" "#PWR0113"
-			(at 212.09 55.88 0)
+			(at 214.63 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11529,7 +11545,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 212.09 54.61 0)
+			(at 214.63 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11537,7 +11553,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 212.09 49.53 0)
+			(at 214.63 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11546,7 +11562,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 212.09 49.53 0)
+			(at 214.63 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11555,7 +11571,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 212.09 49.53 0)
+			(at 214.63 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12049,7 +12065,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 228.6 41.91 0)
+		(at 231.14 48.26 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -12058,7 +12074,7 @@
 		(fields_autoplaced yes)
 		(uuid "ba45b3ec-8ae7-4ff1-9ac8-fb2044002926")
 		(property "Reference" "#PWR0114"
-			(at 228.6 45.72 0)
+			(at 231.14 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12067,7 +12083,7 @@
 			)
 		)
 		(property "Value" "+5V"
-			(at 228.6 36.83 0)
+			(at 231.14 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12075,7 +12091,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 228.6 41.91 0)
+			(at 231.14 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12084,7 +12100,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 228.6 41.91 0)
+			(at 231.14 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12093,7 +12109,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 228.6 41.91 0)
+			(at 231.14 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)

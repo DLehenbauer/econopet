@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Connector:Conn_01x02_Pin"
@@ -2824,7 +2827,7 @@
 		(uuid "7aeea3a2-0725-4078-8da3-bf0e5797fe1a")
 	)
 	(junction
-		(at 82.55 24.13)
+		(at 86.36 24.13)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7e14d044-201d-46db-8a9d-bf729100ad27")
@@ -2896,7 +2899,7 @@
 		(uuid "941f3a84-91c4-4fdc-b336-e72b7c5a12fa")
 	)
 	(junction
-		(at 128.27 142.24)
+		(at 128.27 139.7)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "96816730-305d-4900-983f-94bb85ccad7f")
@@ -2992,7 +2995,7 @@
 		(uuid "fc7dc9b4-c3ec-438b-9b0e-9742beb5c9f2")
 	)
 	(junction
-		(at 73.66 31.75)
+		(at 77.47 31.75)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "fc9c4005-89c6-4c5b-8d5d-a624cccc8a48")
@@ -3207,7 +3210,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 19.05) (xy 107.95 20.32)
+			(xy 102.87 19.05) (xy 102.87 20.32)
 		)
 		(stroke
 			(width 0)
@@ -3237,7 +3240,7 @@
 	)
 	(wire
 		(pts
-			(xy 160.02 46.99) (xy 194.31 46.99)
+			(xy 160.02 46.99) (xy 213.36 46.99)
 		)
 		(stroke
 			(width 0)
@@ -3297,7 +3300,7 @@
 	)
 	(wire
 		(pts
-			(xy 199.39 44.45) (xy 232.41 44.45)
+			(xy 218.44 44.45) (xy 232.41 44.45)
 		)
 		(stroke
 			(width 0)
@@ -3437,7 +3440,7 @@
 	)
 	(wire
 		(pts
-			(xy 73.66 24.13) (xy 82.55 24.13)
+			(xy 77.47 24.13) (xy 86.36 24.13)
 		)
 		(stroke
 			(width 0)
@@ -3607,7 +3610,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 24.13) (xy 101.6 24.13)
+			(xy 86.36 24.13) (xy 95.25 24.13)
 		)
 		(stroke
 			(width 0)
@@ -3667,7 +3670,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 24.13) (xy 82.55 25.4)
+			(xy 86.36 24.13) (xy 86.36 25.4)
 		)
 		(stroke
 			(width 0)
@@ -3767,7 +3770,7 @@
 	)
 	(wire
 		(pts
-			(xy 128.27 138.43) (xy 128.27 142.24)
+			(xy 128.27 138.43) (xy 128.27 139.7)
 		)
 		(stroke
 			(width 0)
@@ -3807,7 +3810,7 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 19.05) (xy 127 19.05)
+			(xy 119.38 19.05) (xy 129.54 19.05)
 		)
 		(stroke
 			(width 0)
@@ -3837,7 +3840,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 19.05) (xy 115.57 19.05)
+			(xy 102.87 19.05) (xy 115.57 19.05)
 		)
 		(stroke
 			(width 0)
@@ -3907,7 +3910,7 @@
 	)
 	(wire
 		(pts
-			(xy 101.6 24.13) (xy 101.6 35.56)
+			(xy 95.25 24.13) (xy 95.25 35.56)
 		)
 		(stroke
 			(width 0)
@@ -3927,7 +3930,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 187.96) (xy 129.54 187.96)
+			(xy 119.38 187.96) (xy 121.92 187.96)
 		)
 		(stroke
 			(width 0)
@@ -3957,7 +3960,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 31.75) (xy 73.66 31.75)
+			(xy 86.36 31.75) (xy 77.47 31.75)
 		)
 		(stroke
 			(width 0)
@@ -3987,7 +3990,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 25.4) (xy 107.95 26.67)
+			(xy 102.87 25.4) (xy 102.87 26.67)
 		)
 		(stroke
 			(width 0)
@@ -4047,7 +4050,7 @@
 	)
 	(wire
 		(pts
-			(xy 73.66 24.13) (xy 73.66 25.4)
+			(xy 77.47 24.13) (xy 77.47 25.4)
 		)
 		(stroke
 			(width 0)
@@ -4077,7 +4080,7 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 187.96) (xy 121.92 187.96)
+			(xy 101.6 187.96) (xy 114.3 187.96)
 		)
 		(stroke
 			(width 0)
@@ -4197,7 +4200,7 @@
 	)
 	(wire
 		(pts
-			(xy 128.27 142.24) (xy 128.27 143.51)
+			(xy 128.27 139.7) (xy 128.27 140.97)
 		)
 		(stroke
 			(width 0)
@@ -4287,7 +4290,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 30.48) (xy 82.55 31.75)
+			(xy 86.36 30.48) (xy 86.36 31.75)
 		)
 		(stroke
 			(width 0)
@@ -4407,7 +4410,7 @@
 	)
 	(wire
 		(pts
-			(xy 137.16 187.96) (xy 140.97 187.96)
+			(xy 129.54 187.96) (xy 133.35 187.96)
 		)
 		(stroke
 			(width 0)
@@ -4497,7 +4500,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 19.05) (xy 127 20.32)
+			(xy 129.54 19.05) (xy 129.54 20.32)
 		)
 		(stroke
 			(width 0)
@@ -4567,7 +4570,7 @@
 	)
 	(wire
 		(pts
-			(xy 115.57 138.43) (xy 115.57 142.24)
+			(xy 115.57 138.43) (xy 115.57 139.7)
 		)
 		(stroke
 			(width 0)
@@ -4587,7 +4590,7 @@
 	)
 	(wire
 		(pts
-			(xy 199.39 46.99) (xy 232.41 46.99)
+			(xy 218.44 46.99) (xy 232.41 46.99)
 		)
 		(stroke
 			(width 0)
@@ -4677,7 +4680,7 @@
 	)
 	(wire
 		(pts
-			(xy 160.02 44.45) (xy 194.31 44.45)
+			(xy 160.02 44.45) (xy 213.36 44.45)
 		)
 		(stroke
 			(width 0)
@@ -4717,7 +4720,7 @@
 	)
 	(wire
 		(pts
-			(xy 101.6 35.56) (xy 107.95 35.56)
+			(xy 95.25 35.56) (xy 107.95 35.56)
 		)
 		(stroke
 			(width 0)
@@ -4757,7 +4760,7 @@
 	)
 	(wire
 		(pts
-			(xy 115.57 142.24) (xy 128.27 142.24)
+			(xy 115.57 139.7) (xy 128.27 139.7)
 		)
 		(stroke
 			(width 0)
@@ -4807,7 +4810,7 @@
 	)
 	(wire
 		(pts
-			(xy 140.97 187.96) (xy 140.97 189.23)
+			(xy 133.35 187.96) (xy 133.35 189.23)
 		)
 		(stroke
 			(width 0)
@@ -4927,7 +4930,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 25.4) (xy 127 26.67)
+			(xy 129.54 25.4) (xy 129.54 26.67)
 		)
 		(stroke
 			(width 0)
@@ -5017,7 +5020,7 @@
 	)
 	(wire
 		(pts
-			(xy 73.66 30.48) (xy 73.66 31.75)
+			(xy 77.47 30.48) (xy 77.47 31.75)
 		)
 		(stroke
 			(width 0)
@@ -5086,9 +5089,20 @@
 		)
 		(uuid "1bdff47b-90aa-4ae2-90d4-3006d3881ba1")
 	)
-	(text "Oscillator Specs:\n\nC_{L}=20pF\nC_{0}=7pF\nDL=1-200μW (100uW typical)\nESR=80Ω\n\nLoad capacitor calculation:\n\nC = 2*C_{L} - 2*C_{stray}\nC_{L} = 20pf, C_{stray} = 2-5pF\nC = 30-36pF"
+	(text "The MCU configures the FPGA using SPI0.\nAfterward, the MCU can communicate\nasynchronously with the system bus over\nSPI0 using the FPGA as a bridge.\n\nSPI0 is used to initialize SRAM with the\nPET ROM contents on boot.  Afterwards,\nCore0 of the MCU uses SPI0 to read back\nvideo RAM at $8000 while Core1 bit-bangs\nDVI video to the HDMI connector.\n\nCore0 also processes USB keyboard input\nand passes the current USB keyboard matrix\nto the FPGA, which injects it into the\nsystem bus when the CPU reads $E812.\n\nOther serial buses (SPI1, IC20, I2C1) are\nfor future use.\n\n(Note: Above subject to change with firmware\nupdates.)"
 		(exclude_from_sim no)
-		(at 16.002 99.314 0)
+		(at 16.51 43.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "24cd26cf-f4a1-4f56-98ae-0eb9686e2c22")
+	)
+	(text "Oscillator Specs:\n\nC_{L}=20pF\nC_{0}=7pF\nDL=1-200μW (100uW typical)\nESR=80Ω\n\nLoad capacitor calculation:\n\nC = 2*C_{L} - 2*C_{stray}\nC_{L} = 20pf, C_{stray} = 2-5pF\nC = 30-36pF\n\nThis setup seems to require\nPICO_XOSC_STARTUP_DELAY_MULTIPLIER\nworkaround.  Harmless, but possibly\ncould be improved by reducing /\nremoving 1k series resistor."
+		(exclude_from_sim no)
+		(at 15.24 113.03 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5097,9 +5111,9 @@
 		)
 		(uuid "33b8f586-7f31-4322-a766-79b248b0ab22")
 	)
-	(text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when updating\nthe FPGA.  Aside from being a convenience, this avoids\ncontention on SPI0_~{CS}, which the T8Q144 requires to\nbe driven low (even when using JTAG).\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
+	(text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when externally\nprogramming the FPGA during development.  Aside from\nbeing a convenience, this avoids contention on SPI0_~{CS},\nwhich the T8Q144 requires to be driven low (even when\nusing JTAG).\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
 		(exclude_from_sim no)
-		(at 44.45 152.4 0)
+		(at 46.99 154.94 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5108,9 +5122,55 @@
 		)
 		(uuid "5e212df6-fe8c-49fb-9ba7-f277a9a19cab")
 	)
+	(text "MCU"
+		(exclude_from_sim no)
+		(at 16.51 20.32 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "6a267738-5142-4399-b2f9-62b71fb07021")
+	)
+	(text "DANGER: Closing the DVI_SCL/DVI_SDA jumpers pulls\nthe corresponding RP2040 GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
+		(exclude_from_sim no)
+		(at 212.09 163.83 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "6a8c87fe-bcfb-4ee0-9d98-ee83e957c3db")
+	)
+	(text "MCU status LED visible when looking into\nthe PET expansion slot.  (Other LEDs are\nonly visible when the PET case is open.)"
+		(exclude_from_sim no)
+		(at 101.6 182.88 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "98c0b1b1-bfa6-48ba-965d-21b9bdd9fb9d")
+	)
+	(text "MENU/RESET button input for MCU.\nOn short press, MCU triggers a CPU reset.\nOn long press, MCU (re)enters boot menu."
+		(exclude_from_sim no)
+		(at 80.01 170.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c8eb350a-8166-4ace-9af0-b3fc5cef20a5")
+	)
 	(text "DVDD Decoupling"
 		(exclude_from_sim no)
-		(at 82.55 22.86 0)
+		(at 77.47 22.86 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5121,7 +5181,7 @@
 	)
 	(text "10k resistor on ~{CRESET} enables programmer\nto override MCU during development."
 		(exclude_from_sim no)
-		(at 27.94 193.04 0)
+		(at 27.94 194.31 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5208,7 +5268,7 @@
 		(uuid "5f7d7c79-c133-421b-8cf1-20faae0175a7")
 	)
 	(label "GP25"
-		(at 109.22 187.96 0)
+		(at 101.6 187.96 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5395,7 +5455,7 @@
 		(uuid "e789988c-b2b2-4152-bb3c-13f026bc4913")
 	)
 	(label "DVDD"
-		(at 101.6 35.56 0)
+		(at 95.25 35.56 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5898,7 +5958,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 128.27 143.51 0)
+		(at 128.27 140.97 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5907,7 +5967,7 @@
 		(fields_autoplaced yes)
 		(uuid "119004e5-811e-40d5-956b-052455219dca")
 		(property "Reference" "#PWR0156"
-			(at 128.27 149.86 0)
+			(at 128.27 147.32 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5916,7 +5976,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 128.27 148.59 0)
+			(at 128.27 146.05 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5924,7 +5984,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 128.27 143.51 0)
+			(at 128.27 140.97 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5933,7 +5993,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 128.27 143.51 0)
+			(at 128.27 140.97 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5942,7 +6002,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 128.27 143.51 0)
+			(at 128.27 140.97 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6107,16 +6167,15 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 107.95 26.67 0)
+		(at 102.87 26.67 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "2202dd7e-13d0-45a8-b303-560fd8d46dac")
 		(property "Reference" "#PWR0154"
-			(at 107.95 33.02 0)
+			(at 102.87 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6125,7 +6184,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 107.95 31.75 0)
+			(at 102.87 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6133,7 +6192,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 107.95 26.67 0)
+			(at 102.87 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6142,7 +6201,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 107.95 26.67 0)
+			(at 102.87 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6151,7 +6210,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 107.95 26.67 0)
+			(at 102.87 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6560,7 +6619,7 @@
 	)
 	(symbol
 		(lib_id "Device:LED")
-		(at 133.35 187.96 180)
+		(at 125.73 187.96 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6568,7 +6627,7 @@
 		(dnp no)
 		(uuid "30bb9ec8-94d7-43bf-993c-fcef4026282e")
 		(property "Reference" "D11"
-			(at 133.35 191.135 0)
+			(at 125.73 191.135 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6576,7 +6635,7 @@
 			)
 		)
 		(property "Value" "LED_GRN"
-			(at 133.35 193.4464 0)
+			(at 125.73 193.4464 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6584,7 +6643,7 @@
 			)
 		)
 		(property "Footprint" "LED_SMD:LED_0603_1608Metric"
-			(at 133.35 187.96 0)
+			(at 125.73 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6593,7 +6652,7 @@
 			)
 		)
 		(property "Datasheet" "https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2207051802_Everlight-Elec-19-217-GHC-YR1S2-6T_C2986059.pdf"
-			(at 133.35 187.96 0)
+			(at 125.73 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6602,7 +6661,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 133.35 187.96 0)
+			(at 125.73 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6611,7 +6670,7 @@
 			)
 		)
 		(property "LCSC" "C2986059"
-			(at 133.35 187.96 0)
+			(at 125.73 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6944,7 +7003,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 73.66 31.75 0)
+		(at 77.47 31.75 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6953,7 +7012,7 @@
 		(fields_autoplaced yes)
 		(uuid "5a9e092c-134c-4161-9daf-21c0381fda56")
 		(property "Reference" "#PWR0153"
-			(at 73.66 38.1 0)
+			(at 77.47 38.1 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6962,7 +7021,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 73.66 36.83 0)
+			(at 77.47 36.83 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6970,7 +7029,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 73.66 31.75 0)
+			(at 77.47 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6979,7 +7038,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 73.66 31.75 0)
+			(at 77.47 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6988,7 +7047,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 73.66 31.75 0)
+			(at 77.47 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7092,7 +7151,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 124.46 187.96 90)
+		(at 116.84 187.96 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -7100,7 +7159,7 @@
 		(dnp no)
 		(uuid "6d107083-f9cf-4964-a9c6-eee4e03c9725")
 		(property "Reference" "R43"
-			(at 121.92 189.23 90)
+			(at 114.3 189.23 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7109,7 +7168,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 125.73 187.96 90)
+			(at 118.11 187.96 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7118,7 +7177,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 124.46 187.96 0)
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7127,7 +7186,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
-			(at 124.46 187.96 0)
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7136,7 +7195,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 124.46 187.96 0)
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7145,7 +7204,7 @@
 			)
 		)
 		(property "LCSC" "C11702"
-			(at 124.46 187.96 0)
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7170,7 +7229,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 127 22.86 0)
+		(at 129.54 22.86 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -7178,7 +7237,7 @@
 		(dnp no)
 		(uuid "70ab000c-4727-4539-a200-929e0fed6fad")
 		(property "Reference" "C92"
-			(at 129.3368 21.6916 0)
+			(at 131.8768 21.6916 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7187,7 +7246,7 @@
 			)
 		)
 		(property "Value" "2u2 6.3V"
-			(at 129.3368 24.003 0)
+			(at 131.8768 24.003 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7196,7 +7255,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 127 22.86 0)
+			(at 129.54 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7205,7 +7264,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A225MQ5NSN.do"
-			(at 127 22.86 0)
+			(at 129.54 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7214,7 +7273,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 127 22.86 0)
+			(at 129.54 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7223,7 +7282,7 @@
 			)
 		)
 		(property "LCSC" "C12530"
-			(at 127 22.86 0)
+			(at 129.54 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7314,16 +7373,15 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 127 26.67 0)
+		(at 129.54 26.67 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "759d5095-3a9e-482c-9e3b-ae4fdd75288b")
 		(property "Reference" "#PWR0155"
-			(at 127 33.02 0)
+			(at 129.54 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7332,7 +7390,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 127 31.75 0)
+			(at 129.54 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7340,7 +7398,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 127 26.67 0)
+			(at 129.54 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7349,7 +7407,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 127 26.67 0)
+			(at 129.54 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7358,7 +7416,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 127 26.67 0)
+			(at 129.54 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7698,7 +7756,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 82.55 27.94 0)
+		(at 86.36 27.94 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -7706,7 +7764,7 @@
 		(dnp no)
 		(uuid "8df3f4bd-d6fb-4c14-a61f-11563ca1c8a7")
 		(property "Reference" "C90"
-			(at 84.8868 26.7716 0)
+			(at 88.6968 26.7716 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7715,7 +7773,7 @@
 			)
 		)
 		(property "Value" "100n"
-			(at 84.8868 29.083 0)
+			(at 88.6968 29.083 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7724,7 +7782,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 82.55 27.94 0)
+			(at 86.36 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7733,7 +7791,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
-			(at 82.55 27.94 0)
+			(at 86.36 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7742,7 +7800,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 82.55 27.94 0)
+			(at 86.36 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7751,7 +7809,7 @@
 			)
 		)
 		(property "LCSC" "C307331"
-			(at 82.55 27.94 0)
+			(at 86.36 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7776,7 +7834,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 196.85 46.99 90)
+		(at 215.9 46.99 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -7784,7 +7842,7 @@
 		(dnp no)
 		(uuid "8ed2cc1e-3c9a-4130-9073-63af108b863f")
 		(property "Reference" "R47"
-			(at 194.31 45.72 90)
+			(at 213.36 45.72 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7793,7 +7851,7 @@
 			)
 		)
 		(property "Value" "27"
-			(at 198.12 46.99 90)
+			(at 217.17 46.99 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7802,7 +7860,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 196.85 46.99 0)
+			(at 215.9 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7811,7 +7869,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311845_UNI-ROYAL-Uniroyal-Elec-0603WAF270JT5E_C25190.pdf"
-			(at 196.85 46.99 0)
+			(at 215.9 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7820,7 +7878,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 196.85 46.99 0)
+			(at 215.9 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7829,7 +7887,7 @@
 			)
 		)
 		(property "LCSC" "C25190"
-			(at 196.85 46.99 0)
+			(at 215.9 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8075,7 +8133,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 107.95 22.86 0)
+		(at 102.87 22.86 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8083,7 +8141,7 @@
 		(dnp no)
 		(uuid "afed17d7-300e-47a3-86f7-577ae28a8e78")
 		(property "Reference" "C91"
-			(at 110.2868 21.6916 0)
+			(at 105.2068 21.6916 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8092,7 +8150,7 @@
 			)
 		)
 		(property "Value" "2u2 6.3V"
-			(at 110.2868 24.003 0)
+			(at 105.2068 24.003 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8101,7 +8159,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 107.95 22.86 0)
+			(at 102.87 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8110,7 +8168,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A225MQ5NSN.do"
-			(at 107.95 22.86 0)
+			(at 102.87 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8119,7 +8177,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 107.95 22.86 0)
+			(at 102.87 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8128,7 +8186,7 @@
 			)
 		)
 		(property "LCSC" "C12530"
-			(at 107.95 22.86 0)
+			(at 102.87 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8153,7 +8211,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 196.85 44.45 90)
+		(at 215.9 44.45 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8161,7 +8219,7 @@
 		(dnp no)
 		(uuid "bf7d7041-b0ba-4135-a8d7-06423886b97b")
 		(property "Reference" "R46"
-			(at 194.31 43.18 90)
+			(at 213.36 43.18 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8170,7 +8228,7 @@
 			)
 		)
 		(property "Value" "27"
-			(at 198.12 44.45 90)
+			(at 217.17 44.45 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8179,7 +8237,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 196.85 44.45 0)
+			(at 215.9 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8188,7 +8246,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311845_UNI-ROYAL-Uniroyal-Elec-0603WAF270JT5E_C25190.pdf"
-			(at 196.85 44.45 0)
+			(at 215.9 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8197,7 +8255,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 196.85 44.45 0)
+			(at 215.9 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8206,7 +8264,7 @@
 			)
 		)
 		(property "LCSC" "C25190"
-			(at 196.85 44.45 0)
+			(at 215.9 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8375,7 +8433,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 140.97 189.23 0)
+		(at 133.35 189.23 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8383,7 +8441,7 @@
 		(dnp no)
 		(uuid "ccb5a6cb-f860-4440-ad8b-e8fbbe890584")
 		(property "Reference" "#PWR0157"
-			(at 140.97 195.58 0)
+			(at 133.35 195.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8392,7 +8450,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 140.97 193.548 0)
+			(at 133.35 193.548 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8400,7 +8458,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 140.97 189.23 0)
+			(at 133.35 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8409,7 +8467,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 140.97 189.23 0)
+			(at 133.35 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8418,7 +8476,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 140.97 189.23 0)
+			(at 133.35 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9246,7 +9304,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 73.66 27.94 0)
+		(at 77.47 27.94 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -9254,7 +9312,7 @@
 		(dnp no)
 		(uuid "f1df0e70-445d-4a83-abca-4c19a15d817e")
 		(property "Reference" "C3"
-			(at 75.9968 26.7716 0)
+			(at 79.8068 26.7716 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9263,7 +9321,7 @@
 			)
 		)
 		(property "Value" "100n"
-			(at 75.9968 29.083 0)
+			(at 79.8068 29.083 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9272,7 +9330,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 73.66 27.94 0)
+			(at 77.47 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9281,7 +9339,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05B104KB54PN.do"
-			(at 73.66 27.94 0)
+			(at 77.47 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9290,7 +9348,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 73.66 27.94 0)
+			(at 77.47 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9299,7 +9357,7 @@
 			)
 		)
 		(property "LCSC" "C307331"
-			(at 73.66 27.94 0)
+			(at 77.47 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)

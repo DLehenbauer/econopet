@@ -8,6 +8,11 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(company "https://is.gd/6hpvh6")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
+		(comment 4 "License: CC0 1.0 Universal (Public Domain Dedication)")
 	)
 	(lib_symbols)
 	(junction
@@ -15,12 +20,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "044de712-d3da-40ed-9c9f-d91ef285c74c")
-	)
-	(junction
-		(at 209.55 100.33)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "07145bfa-f409-47a8-9ba4-be3e65ce5350")
 	)
 	(junction
 		(at 109.22 134.62)
@@ -35,16 +34,16 @@
 		(uuid "285b373c-316e-4275-a8c8-3ee6d6d57416")
 	)
 	(junction
-		(at 212.09 102.87)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "2b2150c6-b731-453d-95a1-c6b1b230c342")
-	)
-	(junction
 		(at 163.83 129.54)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "34922a5d-1e3b-4201-91a9-0e7b32aeac9a")
+	)
+	(junction
+		(at 205.74 105.41)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "40e5bc02-b58a-43f9-b4a4-85ab18bf82a2")
 	)
 	(junction
 		(at 152.4 96.52)
@@ -59,10 +58,10 @@
 		(uuid "63683a23-989e-4c85-8ec2-cff1fc171481")
 	)
 	(junction
-		(at 214.63 105.41)
+		(at 200.66 100.33)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "978a2360-d91e-40b7-8277-90f8ab68cbbf")
+		(uuid "6c696662-a61f-439a-a2be-a3b47ec410b7")
 	)
 	(junction
 		(at 147.32 90.17)
@@ -89,6 +88,12 @@
 		(uuid "b6f7cbbf-5a8c-437e-8e52-a3627997e450")
 	)
 	(junction
+		(at 203.2 102.87)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "eb81b1ec-ba5a-4e7e-9c9e-317bc8860515")
+	)
+	(junction
 		(at 149.86 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -96,7 +101,7 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 180.34) (xy 60.96 180.34)
+			(xy 152.4 176.53) (xy 60.96 176.53)
 		)
 		(stroke
 			(width 0)
@@ -106,7 +111,7 @@
 	)
 	(wire
 		(pts
-			(xy 149.86 177.8) (xy 63.5 177.8)
+			(xy 149.86 173.99) (xy 63.5 173.99)
 		)
 		(stroke
 			(width 0)
@@ -206,6 +211,16 @@
 	)
 	(wire
 		(pts
+			(xy 203.2 102.87) (xy 212.09 102.87)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0ba96aa6-d6e5-4a70-915b-5ed207592681")
+	)
+	(wire
+		(pts
 			(xy 142.24 41.91) (xy 168.91 41.91)
 		)
 		(stroke
@@ -226,7 +241,7 @@
 	)
 	(wire
 		(pts
-			(xy 194.31 100.33) (xy 209.55 100.33)
+			(xy 194.31 100.33) (xy 200.66 100.33)
 		)
 		(stroke
 			(width 0)
@@ -246,7 +261,7 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 90.17) (xy 147.32 175.26)
+			(xy 147.32 90.17) (xy 147.32 171.45)
 		)
 		(stroke
 			(width 0)
@@ -276,7 +291,7 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 105.41) (xy 214.63 166.37)
+			(xy 205.74 105.41) (xy 205.74 166.37)
 		)
 		(stroke
 			(width 0)
@@ -356,7 +371,7 @@
 	)
 	(wire
 		(pts
-			(xy 194.31 105.41) (xy 214.63 105.41)
+			(xy 194.31 105.41) (xy 205.74 105.41)
 		)
 		(stroke
 			(width 0)
@@ -516,7 +531,7 @@
 	)
 	(wire
 		(pts
-			(xy 66.04 175.26) (xy 66.04 134.62)
+			(xy 66.04 171.45) (xy 66.04 134.62)
 		)
 		(stroke
 			(width 0)
@@ -576,16 +591,6 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 100.33) (xy 220.98 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "65b328dd-59a6-4a5d-94d5-0ec10641c649")
-	)
-	(wire
-		(pts
 			(xy 163.83 105.41) (xy 163.83 129.54)
 		)
 		(stroke
@@ -606,13 +611,23 @@
 	)
 	(wire
 		(pts
-			(xy 194.31 102.87) (xy 212.09 102.87)
+			(xy 194.31 102.87) (xy 203.2 102.87)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "69f36eb8-b5c9-448a-ba62-abde9a723457")
+	)
+	(wire
+		(pts
+			(xy 200.66 100.33) (xy 212.09 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6ae5e725-018f-49a3-89f8-91a853894ff2")
 	)
 	(bus
 		(pts
@@ -656,7 +671,7 @@
 	)
 	(wire
 		(pts
-			(xy 63.5 177.8) (xy 63.5 132.08)
+			(xy 63.5 173.99) (xy 63.5 132.08)
 		)
 		(stroke
 			(width 0)
@@ -673,16 +688,6 @@
 			(type default)
 		)
 		(uuid "8022c62a-af58-49c0-a9df-26eebce0f3ed")
-	)
-	(wire
-		(pts
-			(xy 212.09 102.87) (xy 220.98 102.87)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8333e272-0a4c-4faf-873c-8fc0bc5d2ab5")
 	)
 	(wire
 		(pts
@@ -716,7 +721,7 @@
 	)
 	(wire
 		(pts
-			(xy 60.96 180.34) (xy 60.96 129.54)
+			(xy 60.96 176.53) (xy 60.96 129.54)
 		)
 		(stroke
 			(width 0)
@@ -756,7 +761,7 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 175.26) (xy 66.04 175.26)
+			(xy 147.32 171.45) (xy 66.04 171.45)
 		)
 		(stroke
 			(width 0)
@@ -773,16 +778,6 @@
 			(type default)
 		)
 		(uuid "9f4abbc0-6ac3-48f0-b823-2c1c19349540")
-	)
-	(wire
-		(pts
-			(xy 214.63 105.41) (xy 220.98 105.41)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a088fc23-1acf-4d19-b04f-457cd92120e4")
 	)
 	(wire
 		(pts
@@ -813,6 +808,16 @@
 			(type default)
 		)
 		(uuid "a5ef31b7-003a-4e91-9578-7ffb4cba9788")
+	)
+	(wire
+		(pts
+			(xy 205.74 105.41) (xy 212.09 105.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a67f95b6-3821-4969-aa12-c9cd8e7182db")
 	)
 	(wire
 		(pts
@@ -866,7 +871,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 161.29) (xy 114.3 161.29)
+			(xy 200.66 161.29) (xy 114.3 161.29)
 		)
 		(stroke
 			(width 0)
@@ -946,7 +951,7 @@
 	)
 	(wire
 		(pts
-			(xy 209.55 100.33) (xy 209.55 161.29)
+			(xy 200.66 100.33) (xy 200.66 161.29)
 		)
 		(stroke
 			(width 0)
@@ -966,7 +971,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 102.87) (xy 212.09 163.83)
+			(xy 203.2 102.87) (xy 203.2 163.83)
 		)
 		(stroke
 			(width 0)
@@ -1016,7 +1021,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 163.83) (xy 111.76 163.83)
+			(xy 203.2 163.83) (xy 111.76 163.83)
 		)
 		(stroke
 			(width 0)
@@ -1136,7 +1141,7 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 96.52) (xy 152.4 180.34)
+			(xy 152.4 96.52) (xy 152.4 176.53)
 		)
 		(stroke
 			(width 0)
@@ -1176,7 +1181,7 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 166.37) (xy 109.22 166.37)
+			(xy 205.74 166.37) (xy 109.22 166.37)
 		)
 		(stroke
 			(width 0)
@@ -1236,7 +1241,7 @@
 	)
 	(wire
 		(pts
-			(xy 149.86 93.98) (xy 149.86 177.8)
+			(xy 149.86 93.98) (xy 149.86 173.99)
 		)
 		(stroke
 			(width 0)
@@ -1263,6 +1268,33 @@
 			(type default)
 		)
 		(uuid "fd29cce5-2d5d-4676-956a-df49a3c13d23")
+	)
+	(text "\"If you don't use a current limiting resistor the\n LED will light up orange!  Because of the fire!\n Because sometimes Daddy makes mistakes.\"\n\n                                - Milo, Age 4.5\n"
+		(exclude_from_sim no)
+		(at 76.2 190.5 0)
+		(effects
+			(font
+				(size 1.5875 1.5875)
+				(thickness 0.3175)
+				(bold yes)
+				(italic yes)
+			)
+			(justify left)
+		)
+		(uuid "6390a6cc-0e3d-40ce-862b-b05e81279e59")
+	)
+	(text "System Block Diagram"
+		(exclude_from_sim no)
+		(at 40.64 20.32 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "d7ab9822-788f-4a76-b4be-97d7a9c7c4b0")
 	)
 	(sheet
 		(at 40.64 29.21)
@@ -2771,7 +2803,7 @@
 		)
 	)
 	(sheet
-		(at 220.98 29.21)
+		(at 212.09 73.66)
 		(size 20.32 11.43)
 		(fields_autoplaced yes)
 		(stroke
@@ -2783,7 +2815,7 @@
 		)
 		(uuid "00000000-0000-0000-0000-000061ed99de")
 		(property "Sheetname" "POWER"
-			(at 220.98 28.4984 0)
+			(at 212.09 72.9484 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2792,7 +2824,7 @@
 			)
 		)
 		(property "Sheetfile" "POWER.kicad_sch"
-			(at 220.98 41.2246 0)
+			(at 212.09 85.6746 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2809,7 +2841,7 @@
 		)
 	)
 	(sheet
-		(at 220.98 97.79)
+		(at 212.09 97.79)
 		(size 20.32 11.43)
 		(fields_autoplaced yes)
 		(stroke
@@ -2821,7 +2853,7 @@
 		)
 		(uuid "1dc0595f-3832-49f8-98ab-9c5f13feffce")
 		(property "Sheetname" "VIDEO"
-			(at 220.98 97.0784 0)
+			(at 212.09 97.0784 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2830,7 +2862,7 @@
 			)
 		)
 		(property "Sheetfile" "VIDEO.kicad_sch"
-			(at 220.98 109.8046 0)
+			(at 212.09 109.8046 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2839,7 +2871,7 @@
 			)
 		)
 		(pin "BVERT" input
-			(at 220.98 105.41 180)
+			(at 212.09 105.41 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2849,7 +2881,7 @@
 			(uuid "6e875037-9b1b-4fda-8284-502ef1756570")
 		)
 		(pin "BVIDEO" input
-			(at 220.98 100.33 180)
+			(at 212.09 100.33 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2859,7 +2891,7 @@
 			(uuid "44422120-f3d8-4f0b-a0ea-78cb8cef15c2")
 		)
 		(pin "BHORIZ" input
-			(at 220.98 102.87 180)
+			(at 212.09 102.87 180)
 			(effects
 				(font
 					(size 1.27 1.27)

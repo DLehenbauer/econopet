@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Connector_Generic:Conn_02x06_Top_Bottom"
@@ -12418,6 +12421,18 @@
 			(justify right bottom)
 		)
 		(uuid "065d0ec4-9a8e-46c1-b5cc-051990b6ad02")
+	)
+	(text "TODO: Cleanup"
+		(exclude_from_sim no)
+		(at 144.78 24.13 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+			)
+		)
+		(uuid "0c9536f3-239c-44e2-84fa-752187540c86")
 	)
 	(text "1% tolerance\nspecified"
 		(exclude_from_sim no)

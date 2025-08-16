@@ -8,6 +8,9 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
+		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
+		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
 	)
 	(lib_symbols
 		(symbol "Device:C_Small"
@@ -2710,6 +2713,19 @@
 		)
 		(uuid "ff3053a2-0f18-4ba1-ad55-60c9076c3729")
 	)
+	(text "Audio"
+		(exclude_from_sim no)
+		(at 34.29 57.15 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "2cfc100e-f715-4201-a43b-792c94e445a3")
+	)
 	(text "Twin-T notch filter compensates\nfor 2 KHz resonant frequency of\nour chosen speaker."
 		(exclude_from_sim no)
 		(at 120.904 86.106 0)
@@ -2721,9 +2737,9 @@
 		)
 		(uuid "307b2906-6c82-46c7-983f-f59e82bd523b")
 	)
-	(text "The AUDIO source is ΔΣ encoded 1-bit\noutput from the FPGA (3.3V at 64 MHz).\n\nThe 1u capacitor and 12k resistor\nadjusts this to line-level audio, which\nis +/- 0.5V AC for consumer electronics.\n\n(Note that the amplifiers and powered\nspeakers typically provide a 10k resistor\nto ground to form a voltage divider.)"
+	(text "PET CB2 and DIAG are inputs to FPGA.\nFPGA implements AND gate and outputs\nAUDIO source.  This saves an IC and\nallows for experimental enhancements,\nlike SID emulation at $8F00.\n\nThe AUDIO source is ΔΣ encoded 1-bit\noutput from the FPGA (3V3 at 64 MHz).\n\nThe 1u capacitor and 12k resistor\nadjusts this to line-level audio, which\nis +/- 0.5V AC for consumer electronics.\n\n(Note that amplifiers and powered speakers\ntypically provide a 10k resistor to ground\nto form a voltage divider.)"
 		(exclude_from_sim no)
-		(at 34.544 78.994 0)
+		(at 34.29 74.93 0)
 		(effects
 			(font
 				(size 1.27 1.27)
