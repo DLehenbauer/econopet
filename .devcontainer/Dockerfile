@@ -113,10 +113,15 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 #
 #   binutils-multiarch
 #
+# Tools for website:
+#
+#   advancecomp
+#
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
 RUN apt-get update && apt-get -y install --no-install-recommends \
+    advancecomp \
     autoconf \
     automake \
     binutils-multiarch \

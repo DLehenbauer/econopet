@@ -5,13 +5,14 @@
   "main": "index.js",
   "scripts": {
     "deploy": "gh-pages -d dist",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "http-server ./dist -p 8080"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "CC0",
   "homepage": "https://dlehenbauer.github.io/econopet",
   "devDependencies": {
-    "gh-pages": "^6.0.0"
+    "gh-pages": "^6.0.0",
+    "http-server": "^14.1.1"
   }
 }
