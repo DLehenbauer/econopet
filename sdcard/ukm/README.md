@@ -1,6 +1,6 @@
 # USB Keymaps
 
-Keymaps are binary tables that map USB HID key codes to the commodore PET keyboard matrix.
+Keymaps are binary tables that map USB HID key codes to the Commodore PET keyboard matrix.
 
 References:
 * https://usb.org/sites/default/files/hut1_22.pdf

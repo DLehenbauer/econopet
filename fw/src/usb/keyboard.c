@@ -102,12 +102,6 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
 
     const uint8_t row = keyInfo.row;
-
-    if (row > 7) {
-        printf("USB: Key up %d=(undefined)\n", keycode);
-        return;
-    }
-
     const uint8_t col = keyInfo.col;
 
     enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ false);
@@ -122,12 +116,6 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
             
     const uint8_t row = keyInfo.row;
-
-    if (row > 7) {
-        printf("USB: Key down %d=(undefined)\n", keycode);
-        return;
-    }
-
     const uint8_t col = keyInfo.col;
 
     if (keyInfo.shift) { 
@@ -144,8 +132,26 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
 }
 
 static bool shift_lock_enabled = false;
+static bool num_lock_enabled = false;
+static bool scroll_lock_enabled = false;
 
+static const char* const usb_modifier_names[] = {
+    "CONTROL_LEFT",
+    "SHIFT_LEFT",
+    "ALT_LEFT",
+    "GUI_LEFT",
+    "CONTROL_RIGHT",
+    "SHIFT_RIGHT",
+    "ALT_RIGHT",
+    "GUI_RIGHT",
+};
+    
 void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
+    if (row > 7) {
+        printf("USB: Key down: %d=(undefined)\n", keycode);
+        return;
+    }
+
     uint8_t rowMask = 1 << row;
 
     if (usb_key_matrix[col] & rowMask) {
@@ -154,13 +160,19 @@ void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
     }
 }
 
-void modifier_down(uint8_t modifierMask) {
-    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
+void modifier_down(uint8_t modifier_offset) {
+    printf("USB: Modifier down: %s\n", usb_modifier_names[modifier_offset]);
+    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
     usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_down(keycode, keyInfo.row, keyInfo.col);
 }
 
 void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
+    if (row > 7) {
+        printf("USB: Key up: %d=(undefined)\n", keycode);
+        return;
+    }
+
     uint8_t rowMask = 1 << row;
 
     if (usb_key_matrix[col] & ~rowMask) {
@@ -169,8 +181,9 @@ void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
     }
 }
 
-void modifier_up(uint8_t modifierMask) {
-    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifierMask;
+void modifier_up(uint8_t modifier_offset) {
+    printf("USB: Modifier up: %s\n", usb_modifier_names[modifier_offset]);
+    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
     usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_up(keycode, keyInfo.row, keyInfo.col);
 }
@@ -195,20 +208,18 @@ static uint8_t get_modifiers(KeyEvent keyEvent) {
     return modifiers;
 }
 
+// Generic lock toggle function for shift lock, numlock, scrolllock
+static void toggle_lock(const KeyEvent* const keyEvent, bool* lock_flag, const char* lock_name) {
+    if (keyEvent->pressed) {
+        *lock_flag = !(*lock_flag);
+        printf("USB: %s %s\n", lock_name, *lock_flag ? "enabled" : "disabled");
+        sync_leds(keyEvent->dev_addr);
+    }
+}
+
 void dispatch_key_events() {
     static uint8_t active_modifiers = 0;
 
-    static const char* const modifiers[] = {
-        "CONTROL_LEFT",
-        "SHIFT_LEFT",
-        "ALT_LEFT",
-        "GUI_LEFT",
-        "CONTROL_RIGHT",
-        "SHIFT_RIGHT",
-        "ALT_RIGHT",
-        "GUI_RIGHT",
-    };
-    
     KeyEvent keyEvent;
 
     if (!peek_key_event(&keyEvent)) {
@@ -229,11 +240,9 @@ void dispatch_key_events() {
 
                 if (new_mod) {
                     if (!old_mod) {
-                        printf("USB: Modifier down: %s\n", modifiers[i]);
                         modifier_down(i);
                     }
                 } else if (old_mod) {
-                    printf("USB: Modifier up: %s\n", modifiers[i]);
                     modifier_up(i);
                 }
 
@@ -245,22 +254,22 @@ void dispatch_key_events() {
 
     do {
         switch (keyEvent.key) {
-            case HID_KEY_CAPS_LOCK: {
-                if (keyEvent.pressed) {
-                    shift_lock_enabled = !shift_lock_enabled;                   
-                    printf("USB: Shift lock %s\n", shift_lock_enabled ? "enabled" : "disabled");
-                    sync_leds(keyEvent.dev_addr);
-                }
+            case HID_KEY_CAPS_LOCK:
+                toggle_lock(&keyEvent, &shift_lock_enabled, "Caps Lock");
                 break;
-            }
-            default: {
+            case HID_KEY_NUM_LOCK:
+                toggle_lock(&keyEvent, &num_lock_enabled, "Num Lock");
+                break;
+            case HID_KEY_SCROLL_LOCK:
+                toggle_lock(&keyEvent, &scroll_lock_enabled, "Scroll Lock");
+                break;
+            default:
                 if (keyEvent.pressed) {
                     key_down(keyEvent.key, keyEvent.row, keyEvent.col);
                 } else {
                     key_up(keyEvent.key, keyEvent.row, keyEvent.col);
                 }
                 break;
-            }
         }
 
         dequeue_key_event();
@@ -289,6 +298,8 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
 
     const uint8_t modifiers = report->modifier;
 
+    // For each previously pressed key, check if the key still exists in the
+    // new report.  If not, the key has been released.
     for (uint8_t i = 0; i < sizeof(prev_report.keycode); i++) {
         const uint8_t keycode = prev_report.keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
@@ -296,6 +307,8 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
         }
     }
 
+    // For each key in the new report, check if the key exists in the new report.
+    // If not, the key has been pressed.
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
