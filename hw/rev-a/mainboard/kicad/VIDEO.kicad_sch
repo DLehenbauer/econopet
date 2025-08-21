@@ -8,9 +8,11 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
-		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
-		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(company "https://is.gd/6hpvh6")
+		(comment 1 "Unspecified resistors are 1% / 62.5mW")
+		(comment 2 "Unspecified capacitors are 25V")
 		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
+		(comment 4 "License: CC0 1.0 Universal (Public Domain Dedication)")
 	)
 	(lib_symbols
 		(symbol "EconoPET:CBM_PET_VIDEO_Conn_Keyed"
@@ -538,6 +540,17 @@
 			(type default)
 		)
 		(uuid "fc620863-4415-4db7-a4b3-4306b45a609b")
+	)
+	(text "Not too much to see here.  :-)\n\nIf you're looking for the modern DVI\nvideo output over an HDMI connector,\nlook under Magic / MCU / DVI."
+		(exclude_from_sim no)
+		(at 123.19 115.57 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "a5182e9d-bccd-4b6f-a417-721a6ccd3a8d")
 	)
 	(text "VIDEO HEADER"
 		(exclude_from_sim no)

@@ -8,9 +8,11 @@
 		(title "EconoPET 40/8096")
 		(date "2023-10-01")
 		(rev "A")
-		(comment 1 "Unspecified resistors are 1% and rated for 62.5mW or higher")
-		(comment 2 "Unspecified capacitors are rated for 25V or higher")
+		(company "https://is.gd/6hpvh6")
+		(comment 1 "Unspecified resistors are 1% / 62.5mW")
+		(comment 2 "Unspecified capacitors are 25V")
 		(comment 3 "Signals with B-prefix are level-shifted from 3V3 to 5V")
+		(comment 4 "License: CC0 1.0 Universal (Public Domain Dedication)")
 	)
 	(lib_symbols
 		(symbol "Connector:HDMI_A"
@@ -1898,7 +1900,7 @@
 		)
 		(uuid "3b49edf3-df0b-435b-8fe2-88e1ea44cfed")
 	)
-	(text "CEC, SCL, and SDA are for possible future use and\ndisconnected by solder jumpers by default.\n\nDANGER: Closing the DVI_SCL/DVI_SDA jumpers pulls\nthe corresponding RP2040 GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
+	(text "CEC, SCL, and SDA are for experimentation and\ndisconnected by solder jumpers by default.\n\nDANGER: Closing the DVI_SCL/DVI_SDA jumpers pulls\nthe corresponding RP2040 GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
 		(exclude_from_sim no)
 		(at 80.01 134.62 0)
 		(effects
@@ -1909,9 +1911,9 @@
 		)
 		(uuid "562d2cde-6ebc-46df-8ca7-9609ce469af9")
 	)
-	(text "Technically, not true HDMI.  This is the DVI\nTMDS protocol over an HDMI connector."
+	(text "Uses legacy DVI TMDS protocol over an HDMI connector.\nSee: https://github.com/Wren6991/PicoDVI"
 		(exclude_from_sim no)
-		(at 83.82 52.07 0)
+		(at 83.82 50.8 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1935,7 +1937,7 @@
 	)
 	(text "DVI VIDEO"
 		(exclude_from_sim no)
-		(at 83.82 48.26 0)
+		(at 83.82 45.72 0)
 		(effects
 			(font
 				(size 1.5 1.5)
