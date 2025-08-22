@@ -27,5 +27,6 @@ extern uint8_t pet_key_matrix[KEY_COL_COUNT];
 uint8_t key_rc_to_i(uint8_t col, uint8_t row);
 int keyboard_getch();
 
-//void process_kbd_report(hid_keyboard_report_t const *report);
+void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report);
 void dispatch_key_events();
+void sync_leds(uint8_t dev_addr);

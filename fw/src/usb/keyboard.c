@@ -109,19 +109,19 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
 
 static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
-    
+
     usb_keymap_entry_t keyInfo = s_keymap[
         is_shifted
             ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
             : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
-            
+
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
 
     if (keyInfo.shift) { 
         modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
     }
-    
+
     if (keyInfo.unshift) {
         modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
     }
@@ -132,8 +132,8 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
 }
 
 static bool shift_lock_enabled = false;
-static bool num_lock_enabled = false;
-static bool scroll_lock_enabled = false;
+static bool num_lock_enabled = true;
+static bool scroll_lock_enabled = true;
 
 static const char* const usb_modifier_names[] = {
     "CONTROL_LEFT",
@@ -188,12 +188,22 @@ void modifier_up(uint8_t modifier_offset) {
     key_up(keycode, keyInfo.row, keyInfo.col);
 }
 
-static void sync_leds(uint8_t dev_addr) {
+void sync_leds(uint8_t dev_addr) {
     static uint8_t led_report = 0;
 
-    led_report = shift_lock_enabled
-        ? KEYBOARD_LED_CAPSLOCK
-        : 0;
+    led_report = 0;
+    if (shift_lock_enabled) {
+        led_report |= KEYBOARD_LED_CAPSLOCK;
+    }
+    if (num_lock_enabled) {
+        led_report |= KEYBOARD_LED_NUMLOCK;
+    }
+    if (scroll_lock_enabled) {
+        led_report |= KEYBOARD_LED_SCROLLLOCK;
+        s_keymap = configuration.usb_keymap[usb_keymap_kind_sym];
+    } else {
+        s_keymap = configuration.usb_keymap[usb_keymap_kind_pos];
+    }
 
     tuh_hid_set_report(dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
 }
@@ -208,7 +218,7 @@ static uint8_t get_modifiers(KeyEvent keyEvent) {
     return modifiers;
 }
 
-// Generic lock toggle function for shift lock, numlock, scrolllock
+// Generic lock toggle function for shift lock, num lock, and scroll lock
 static void toggle_lock(const KeyEvent* const keyEvent, bool* lock_flag, const char* lock_name) {
     if (keyEvent->pressed) {
         *lock_flag = !(*lock_flag);

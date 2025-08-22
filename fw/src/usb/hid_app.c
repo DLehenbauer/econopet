@@ -24,6 +24,7 @@
  */
 
 #include "../pch.h"
+#include "keyboard.h"
 
 //--------------------------------------------------------------------+
 // MACRO TYPEDEF CONSTANT ENUM DECLARATION
@@ -42,7 +43,6 @@ static struct
   tuh_hid_report_info_t report_info[MAX_REPORT];
 }hid_info[CFG_TUH_HID];
 
-extern void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *report);
 static void process_mouse_report(hid_mouse_report_t const * report);
 static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len);
 
@@ -69,6 +69,11 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
   printf("HID Interface Protocol = %s\r\n", protocol_str[itf_protocol]);
+
+  // Synchronize keyboard LEDs on mount
+  if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
+    sync_leds(dev_addr);
+  }
 
   // By default host stack will use activate boot protocol on supported interface.
   // Therefore for this simple example, we only need to parse generic report descriptor (with built-in parser)
