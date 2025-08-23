@@ -23,4 +23,4 @@ FILE* sd_open(const char* path, const char* mode);
 size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size);
 
 typedef void (*sd_read_callback_t)(size_t offset, uint8_t* buffer, size_t bytes_read, void* context);
-void sd_read_file(const char* path, sd_read_callback_t callback, void* context);
+void sd_read_file(const char* path, sd_read_callback_t callback, void* context, size_t max_bytes);
