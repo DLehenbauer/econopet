@@ -18,8 +18,7 @@
 // Character ROM offsets
 #define CH_SPACE 0x20 // ' ' (space)
 
-// Lower-case (POKE 59468,14)
-// This table maps from ASCII to the character ROM offsets.
+// This table maps from ASCII to lower-case character ROM offsets.
 static const uint8_t ascii_to_vrom[] = {
     /*              0               1               2               3               4               5               6               7               8               9               A               B               C               D               E               F  */
     /* 0 | NUL */ 0x00, /* SOH */ 0x01, /* STX */ 0x02, /* ETX */ 0x03, /* EOT */ 0x04, /* ENQ */ 0x05, /* ACK */ 0x06, /* BEL */ 0x07, /*  BS */ 0x08, /*  HT */ 0x09, /*  LF */ 0x0A, /*  VT */ 0x0B, /*  FF */ 0x0C, /*  CR */ 0x0D, /*  SO */ 0x0E, /*  SI */ 0x0F,
@@ -154,7 +153,6 @@ uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char*
 uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str) {
     return window_puts_n(window, start, str, /* length: */ window_chars_remaining(window, window->start));
 }
-
 
 uint8_t* window_vprint(const window_t* const window, uint8_t* start, const char* const format, va_list args) {
     static char buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];

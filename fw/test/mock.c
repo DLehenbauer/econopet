@@ -16,6 +16,7 @@
 #include "model.h"
 #include "video/video.h"
 #include "sd/sd.h"
+#include "mock.h"
 
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 bool video_graphics = false;
@@ -39,3 +40,19 @@ FILE* sd_open(const char* path, const char* mode) {
 void term_present() {
     fflush(stdout);
 }
+
+void set_cpu(bool ready, bool reset, bool nmi) {
+    (void)ready;
+    (void)reset;
+    (void)nmi;
+}
+
+void start_menu_rom() { }
+
+void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
+    (void)addr;
+    (void)byte;
+    (void)byteLength;
+}
+
+void test_ram() { }

@@ -60,6 +60,5 @@
     #include "bsp/board.h"
     #include "tusb.h"
 #else
-    // Stub __in_flash for Linux or other host environments.
-    #define __in_flash(x)
+    #include "../test/mock.h"
 #endif
