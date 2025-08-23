@@ -1,5 +1,5 @@
 #include "driver.h"
-#include "model.h"
+#include "system_state.h"
 #include "pet.h"
 #include "roms.h"
 #include "usb/keyboard.h"
@@ -19,13 +19,13 @@ void start_menu_rom() {
     // Suspended CPU while initializing ROMs.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
 
-    model_t model = get_model();
-    model.flags &= ~model_flag_80_cols;     // Ensure 40 columns for menu
-    set_model(model);
+    // Ensure we are in 40 column mode on startup.
+    system_state.pet_display_columns = pet_display_columns_40;
+    write_pet_model(&system_state);
 
     // We need to load a USB keymap to allow the user to navigate the menu with USB.
     // Menu is keymap agnostic (only uses cursor/enter keys), so any keymap will do.
-    read_keymap("/ukm/us-grus.bin", &configuration);
+    read_keymap("/ukm/us-grus.bin", &system_state);
 
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));  // Load character ROM

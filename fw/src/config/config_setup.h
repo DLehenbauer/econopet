@@ -15,7 +15,7 @@
  #pragma once
 
  #include "pch.h"
- #include "model.h"
+ #include "system_state.h"
  
  typedef struct binary_s {
     uint8_t* data;
@@ -47,6 +47,5 @@ typedef struct setup_sink_s {
     const on_set_keymap_fn_t on_set_keymap;
     const on_fix_checksum_fn_t on_fix_checksum;
 
-    // 'model_flags' is used to evaluate 'if' conditions in the YAML config file.
-    model_t* model;
+    const system_state_t* const system_state;
 } setup_sink_t;

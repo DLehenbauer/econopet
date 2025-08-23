@@ -15,7 +15,7 @@
 #pragma once
 
 #include "pch.h"
-#include "model.h"
+#include "system_state.h"
 
 void driver_init();
 
@@ -34,8 +34,7 @@ void spi_write_same(uint8_t data);
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 
 void set_cpu(bool ready, bool reset, bool nmi);
-void set_video(bool col80);
 void sync_state();
 
-model_t get_model();
-void set_model(model_t model);
+void read_pet_model(system_state_t* const system_state);
+void write_pet_model(const system_state_t* const system_state);

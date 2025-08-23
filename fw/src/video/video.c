@@ -15,6 +15,7 @@
 #include "video.h"
 #include "pet.h"
 #include "roms/roms.h"
+#include "system_state.h"
 
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
@@ -26,7 +27,6 @@ struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
 bool video_graphics = false;
-bool video_is_80_col = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // CRTC registers
@@ -70,7 +70,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		cx_start = (FRAME_WIDTH - (CHAR_PIXEL_WIDTH * chars_displayed_x)) >> 4;	// Left margin in characters
 
 		// If in 40 column mode, divide the chars_displayed_x by 2.  We do not, however adjust, cx_start
-		if (!video_is_80_col) {
+		if (system_state.pet_display_columns == pet_display_columns_40) {
 			chars_displayed_x >>= 1;
 		}
 	} else {
@@ -86,7 +86,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
 		const uint ra = y % r9_max_scan_line;
 
-		if (video_is_80_col) {
+		if (system_state.pet_display_columns == pet_display_columns_80) {
 			while (remaining--) {
 				uint c = video_char_buffer[src++];
 				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];

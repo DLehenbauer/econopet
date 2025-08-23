@@ -101,15 +101,6 @@ static void on_action_fix_checksum(const parser_t* const parser, uint32_t start_
     }
 }
 
-static model_t* get_model(const parser_t* const parser) {
-    return parser->sink->setup ? parser->sink->setup->model : NULL;
-}
-
-static model_flags_t get_model_flags(const parser_t* const parser) {
-    const model_t* model = get_model(parser);
-    return model ? model->flags : model_flag_none;
-}
-
 static yaml_char_t* get_current_anchor(parser_t* parser) {
     switch (parser->event.type) {
         case YAML_MAPPING_START_EVENT: return parser->event.data.mapping_start.anchor;
@@ -583,6 +574,16 @@ static void parse_then_else(parser_t* parser, void* context, size_t context_size
     }
 }
 
+static pet_keyboard_model_t get_pet_keyboard_model(const parser_t* const parser) {
+    const setup_sink_t* const setup_sink = parser->sink->setup;
+
+    // 'setup_sink' is only defined when applying a configuration.  When not applying a
+    // configuration, the returned value is unimportant.
+    return setup_sink == NULL
+        ? pet_keyboard_model_graphics
+        : setup_sink->system_state->pet_keyboard_model;
+}
+
 static void parse_if(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -592,7 +593,7 @@ static void parse_if(parser_t* parser, void* context, size_t context_size) {
     bool then_value = false;
 
     if (strcmp(condition, "graphics") == 0) {
-        then_value = (get_model_flags(parser) & model_flag_business) == 0;
+        then_value = get_pet_keyboard_model(parser) == pet_keyboard_model_graphics;
     } else {
         fatal_parse_error(parser, "Unknown if-cond '%s'", condition);
     }

@@ -13,7 +13,7 @@
  */
 
 #include <limits.h>
-#include "model.h"
+#include "system_state.h"
 #include "video/video.h"
 #include "sd/sd.h"
 #include "mock.h"

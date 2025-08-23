@@ -350,7 +350,7 @@ void menu_init() {
 }
 
 typedef struct action_context_s {
-    configuration_t* config;
+    system_state_t* system_state;
 } action_context_t;
 
 void action_load(void* const context, const char* filename, uint32_t address) {
@@ -418,18 +418,19 @@ void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t 
 }
 
 void action_set_options(void* context, options_t* options) {
-    (void) context;
+    action_context_t* ctx = (action_context_t*) context;
 
-    // TODO: Use context to set directly in config.
-    model_t model = get_model();
-
-    if (options->columns == 80) {
-        model.flags |= model_flag_80_cols;
-    } else {
-        model.flags &= ~model_flag_80_cols;
+    switch (options->columns) {
+        case 40:
+            ctx->system_state->pet_display_columns = pet_display_columns_40;
+            break;
+        default:
+            vet(options->columns == 80, "Invalid 'columns:' in config (got %d)", options->columns);
+            ctx->system_state->pet_display_columns = pet_display_columns_80;
+            break;
     }
 
-    set_model(model);
+    write_pet_model(ctx->system_state);
 
     printf("Set options: %lu columns\n", options->columns);
 }
@@ -438,16 +439,16 @@ void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, voi
     memcpy(context + offset, buffer, bytes_read);
 }
 
-void read_keymap(const char* filename, configuration_t* config) {
+void read_keymap(const char* filename, system_state_t* config) {
     // Read the keymap file and store it in the configuration.
-    void* keymap = (void*) config->usb_keymap[0];
-    sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap[0]));
+    void* keymap = (void*) config->usb_keymap_data[0];
+    sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap_data[0]));
     printf("USB keymap: '%s'\n", filename);
 }
 
 void action_set_keymap(void* context, const char* filename) {
     action_context_t* ctx = (action_context_t*) context;
-    read_keymap(filename, ctx->config);
+    read_keymap(filename, ctx->system_state);
 }
 
 static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
@@ -496,10 +497,8 @@ void menu_enter() {
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
 
     action_context_t action_context = {
-        .config = &configuration,
+        .system_state = &system_state,
     };
-
-    model_t model = get_model();
 
     const setup_sink_t setup_sink = {
         .context = &action_context,
@@ -509,7 +508,7 @@ void menu_enter() {
         .on_set_options = action_set_options,
         .on_set_keymap = action_set_keymap,
         .on_fix_checksum = action_fix_checksum,
-        .model = &model
+        .system_state = &system_state,
     };
 
     menu_config_show(&window, &setup_sink);

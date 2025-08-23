@@ -122,7 +122,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     //
     // In the EconoPET, all "unmapped" memory regions fall through to RAM (or soft-ROM),
     // so we approximate this effect by prefilling $9000-$FFFF with the high byte of the
-    // address.  The loaded config will overwrite the populate ROM regions.
+    // address.  The loaded config will overwrite the populated ROM regions.
     for (uint16_t a = 0x90; a <= 0xff; a++) {
         spi_fill(a << 8, a, 0x100);
     }
@@ -140,7 +140,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .on_set_options = on_action_set_callback,
         .on_set_keymap = on_action_set_keymap_callback,
         .on_fix_checksum = on_action_fix_checksum_callback,
-        .model = setup_sink->model
+        .system_state = setup_sink->system_state
     };
 
     config_sink_t sink = {

@@ -12,6 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "model.h"
+#include "system_state.h"
 
-configuration_t configuration = { 0 };
+system_state_t system_state = { 0 };

@@ -19,22 +19,22 @@ set(SRC_DIR ${FW_DIR}/src)
 set(TEST_DIR ${FW_DIR}/test)
 
 add_executable(${PROJECT_NAME}
-    ${TEST_DIR}/config_test.c
-    ${TEST_DIR}/keyscan_test.c
-    ${TEST_DIR}/keystate_test.c
-    ${TEST_DIR}/main.c
     #${TEST_DIR}/menu_test.c
-    ${TEST_DIR}/mock.c
-    ${TEST_DIR}/window_test.c
     ${SRC_DIR}/config/config.c
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/window.c
-    ${SRC_DIR}/model.c
+    ${SRC_DIR}/system_state.c
     ${SRC_DIR}/term.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
+    ${TEST_DIR}/config_test.c
+    ${TEST_DIR}/keyscan_test.c
+    ${TEST_DIR}/keystate_test.c
+    ${TEST_DIR}/main.c
+    ${TEST_DIR}/mock.c
+    ${TEST_DIR}/window_test.c
 )
 
 target_link_libraries(${PROJECT_NAME}

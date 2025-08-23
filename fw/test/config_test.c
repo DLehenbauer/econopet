@@ -15,7 +15,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "model.h"
+#include "system_state.h"
 #include "menu/window.h"
 #include "menu/menu_config.h"
 
@@ -86,10 +86,11 @@ void on_action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_add
 void config_test() {
     const window_t window = window_create(buffer, COLS, ROWS);
 
-    model_t model = {
-        .flags = model_flag_crtc | model_flag_business, // Example model flags
+    system_state_t system_state = {
+        .pet_keyboard_model = pet_keyboard_model_business,
+        .pet_video_type = pet_video_type_crtc,
     };
-    
+
     const setup_sink_t setup_sink = {
         .context = NULL,
         .on_load = on_action_load,
@@ -98,7 +99,7 @@ void config_test() {
         .on_set_options = on_action_set_options,
         .on_set_keymap = on_action_set_keymap,
         .on_fix_checksum = on_action_fix_checksum,
-        .model = &model,
+        .system_state = &system_state,
     };
 
     enable_raw_mode();

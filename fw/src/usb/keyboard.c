@@ -12,10 +12,11 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "driver.h"
 #include "keyboard.h"
-#include "keystate.h"
 #include "keyscan.h"
-#include "model.h"
+#include "keystate.h"
+#include "system_state.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -43,7 +44,7 @@ uint8_t pet_key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
-static const usb_keymap_entry_t* s_keymap = configuration.usb_keymap[usb_keymap_kind_sym];
+static usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
 
 typedef struct {
     uint8_t dev_addr;       // USB device address of keyboard
@@ -200,9 +201,9 @@ void sync_leds(uint8_t dev_addr) {
     }
     if (scroll_lock_enabled) {
         led_report |= KEYBOARD_LED_SCROLLLOCK;
-        s_keymap = configuration.usb_keymap[usb_keymap_kind_sym];
+        s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
     } else {
-        s_keymap = configuration.usb_keymap[usb_keymap_kind_pos];
+        s_keymap = system_state.usb_keymap_data[usb_keymap_kind_positional];
     }
 
     tuh_hid_set_report(dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));

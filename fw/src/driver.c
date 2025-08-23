@@ -49,7 +49,7 @@
 // Video Control Register
 #define REG_VIDEO_80_COL_MODE (1 << 0)
 
-void cmd_start() {
+static void cmd_start() {
     while (gpio_get(SPI_STALL_GP));
 
     // The PrimeCell SSP deasserts CS after each byte is transmitted.  This conflicts with the
@@ -60,7 +60,7 @@ void cmd_start() {
     gpio_put(FPGA_SPI_CSN_GP, 0);
 }
 
-void cmd_end() {
+static void cmd_end() {
     while (gpio_get(SPI_STALL_GP));
 
     // The PrimeCell SSP deasserts CS after each byte is transmitted.  This conflicts with the
@@ -226,41 +226,29 @@ void set_cpu(bool ready, bool reset, bool nmi) {
     spi_write_at(REG_CPU, state);
 }
 
-model_t get_model() {
+void read_pet_model(system_state_t* const system_state) {
     uint8_t status = spi_read_at(REG_STATUS);
-
-    model_flags_t flags = model_flag_none;
 
     // Map DIP switch position to model flags. (Note that DIP switch is active low.)
 
-    // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
-    if ((status & REG_STATUS_CRT) == 0) {
-        flags |= model_flag_crtc;
-    }
+    // PET video type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    system_state->pet_video_type = (status & REG_STATUS_CRT) == 0
+        ? pet_video_type_crtc
+        : pet_video_type_fixed;
 
-    // Keyboard type (0 = Business, 1 = Graphics)
-    if ((status & REG_STATUS_KEYBOARD) == 0) {
-        flags |= model_flag_business;
-    }
-
-    if (video_is_80_col) {
-        flags |= model_flag_80_cols;
-    }
-
-    model_t model = {
-        .flags = flags
-    };
-
-    return model;
+    // PET keyboard type (0 = Business, 1 = Graphics)
+    system_state->pet_keyboard_model = (status & REG_STATUS_KEYBOARD) == 0
+        ? pet_keyboard_model_business
+        : pet_keyboard_model_graphics;
 }
 
-void set_model(model_t model) {
+void write_pet_model(const system_state_t* const system_state) {
     uint8_t state = 0;
-    
-    video_is_80_col = (model.flags & model_flag_80_cols) != 0;
-    printf("Setting model: %s\n", video_is_80_col ? "80 columns" : "40 columns");
-    
-    if (video_is_80_col) { state |= REG_VIDEO_80_COL_MODE; }
+
+    if (system_state->pet_display_columns == pet_display_columns_80) {
+        state |= REG_VIDEO_80_COL_MODE;
+    }
+
     spi_write_at(REG_VIDEO, state);
 }
 
