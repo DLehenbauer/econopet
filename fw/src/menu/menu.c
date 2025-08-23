@@ -442,7 +442,7 @@ void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, voi
 void read_keymap(const char* filename, system_state_t* config) {
     // Read the keymap file and store it in the configuration.
     void* keymap = (void*) config->usb_keymap_data[0];
-    sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap_data[0]));
+    sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap_data));
     printf("USB keymap: '%s'\n", filename);
 }
 

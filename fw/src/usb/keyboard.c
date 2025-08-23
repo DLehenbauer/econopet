@@ -44,7 +44,7 @@ uint8_t pet_key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
-static usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
+static const usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
 
 typedef struct {
     uint8_t dev_addr;       // USB device address of keyboard

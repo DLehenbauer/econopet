@@ -52,7 +52,7 @@ typedef struct system_state_s {
     // The first indexer is graphics vs. business.
     // The second indexer is symbolic vs. positional.
     // The third indexer maps USB HID codes to usb_keymap_entry_t.
-    usb_keymap_entry_t usb_keymap_data[2][2][512];
+    usb_keymap_entry_t usb_keymap_data[2][512];
 
     // Reflects the state of the current keyboard model (graphics or business)
     // as determined by the config DIP switch on the board.
