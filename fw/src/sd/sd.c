@@ -83,7 +83,10 @@ void sd_read_file(const char* filename, sd_read_callback_t callback, void* conte
     size_t remaining = max_bytes;
 
     while (remaining > 0) {
-        size_t to_read = remaining < TEMP_BUFFER_SIZE ? remaining : TEMP_BUFFER_SIZE;
+        size_t to_read = remaining < TEMP_BUFFER_SIZE
+            ? remaining
+            : TEMP_BUFFER_SIZE;
+
         size_t bytes_read = sd_read(filename, file, buffer, to_read);
 
         if (bytes_read == 0) {
@@ -91,6 +94,7 @@ void sd_read_file(const char* filename, sd_read_callback_t callback, void* conte
         }
 
         callback(offset, buffer, bytes_read, context);
+        
         offset += bytes_read;
         remaining -= bytes_read;
     }
