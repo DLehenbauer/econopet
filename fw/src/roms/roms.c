@@ -19,13 +19,16 @@ void start_menu_rom() {
     // Suspended CPU while initializing ROMs.
     set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
 
+    // Query the PET model (according to the onboard DIP switches).
+    read_pet_model(&system_state);
+
     // Ensure we are in 40 column mode on startup.
     system_state.pet_display_columns = pet_display_columns_40;
     write_pet_model(&system_state);
 
     // We need to load a USB keymap to allow the user to navigate the menu with USB.
     // Menu is keymap agnostic (only uses cursor/enter keys), so any keymap will do.
-    read_keymap("/ukm/us-grus.bin", &system_state);
+    read_keymap("/ukm/us.bin", &system_state);
 
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
     spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));  // Load character ROM

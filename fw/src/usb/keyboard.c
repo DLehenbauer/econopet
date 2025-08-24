@@ -13,10 +13,10 @@
  */
 
 #include "driver.h"
-#include "keyboard.h"
+#include "fatal.h"
 #include "keyscan.h"
 #include "keystate.h"
-#include "system_state.h"
+#include "keyboard.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,
@@ -44,10 +44,28 @@ uint8_t pet_key_matrix[KEY_COL_COUNT] = {
     /* 9 */ 0xff,
 };
 
-static const usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
+// If true, use symbolic keyboard mapping: USB key events are mapped to PET keys
+// based on the symbol printed on the USB keyboard.
+//
+// If false, use physical keyboard mapping: USB key events are mapped to PET keys
+// based on the physical position of the key. This mode is useful for software or games
+// that expect the original PET keyboard layout, where the key's position is more
+// important than its label.
+static bool use_symbolic_keymap = true;
+
+// If true, the USB keyboard model is swapped (graphics <-> business) with
+// respect to the PET keyboard.
+static bool swap_keyboard_model = false;
+
+// State of the USB keyboard caps lock.
+static bool caps_lock_enabled = false;
+
+// The currently active USB keyboard model (graphics or business).
+static pet_keyboard_model_t active_keyboard_model = pet_keyboard_model_graphics;
+static usb_keymap_kind_t active_keymap_kind = usb_keymap_kind_symbolic;
+static const usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[pet_keyboard_model_graphics][usb_keymap_kind_symbolic];
 
 typedef struct {
-    uint8_t dev_addr;       // USB device address of keyboard
     uint8_t key;            // USB HID keycode
     uint8_t row;            // PET keyboard row
     uint8_t col;            // PET keyboard column
@@ -63,11 +81,21 @@ static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
 
-static void enqueue_key_event(uint8_t dev_addr, uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
+// Note that the theoretical maximum number of keyboards is actually 127.
+#define MAX_KEYBOARDS 8
+
+typedef struct {
+    uint8_t dev_addr;
+    uint8_t instance;
+    bool attached;
+} keyboard_info_t;
+
+static keyboard_info_t attached_keyboards[MAX_KEYBOARDS] = { 0 };
+
+static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
     uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
     if (new_write_index != key_buffer_next_read_index) {
         KeyEvent keyEvent = {
-            .dev_addr = dev_addr,
             .key = keycode,
             .row = row,
             .col = col,
@@ -89,7 +117,7 @@ static void dequeue_key_event() {
     key_buffer_next_read_index = (key_buffer_next_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
-static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
     KeyStateFlags keystate = keystate_reset(keycode);
 
     if (!(keystate & KEYSTATE_PRESSED_FLAG)) {
@@ -105,10 +133,10 @@ static void enqueue_key_up(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers)
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
 
-    enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ false);
+    enqueue_key_event(keycode, row, col, modifiers, /* pressed: */ false);
 }
 
-static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
 
     usb_keymap_entry_t keyInfo = s_keymap[
@@ -127,27 +155,12 @@ static void enqueue_key_down(uint8_t dev_addr, uint8_t keycode, uint8_t modifier
         modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
     }
 
-    enqueue_key_event(dev_addr, keycode, row, col, modifiers, /* pressed: */ true);
+    enqueue_key_event(keycode, row, col, modifiers, /* pressed: */ true);
 
     keystate_set(keycode, KEYSTATE_PRESSED_FLAG | (is_shifted ? KEYSTATE_SHIFTED_FLAG : 0));
 }
 
-static bool shift_lock_enabled = false;
-static bool num_lock_enabled = true;
-static bool scroll_lock_enabled = true;
-
-static const char* const usb_modifier_names[] = {
-    "CONTROL_LEFT",
-    "SHIFT_LEFT",
-    "ALT_LEFT",
-    "GUI_LEFT",
-    "CONTROL_RIGHT",
-    "SHIFT_RIGHT",
-    "ALT_RIGHT",
-    "GUI_RIGHT",
-};
-    
-void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
+static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
     if (row > 7) {
         printf("USB: Key down: %d=(undefined)\n", keycode);
         return;
@@ -161,14 +174,7 @@ void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
     }
 }
 
-void modifier_down(uint8_t modifier_offset) {
-    printf("USB: Modifier down: %s\n", usb_modifier_names[modifier_offset]);
-    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
-    usb_keymap_entry_t keyInfo = s_keymap[keycode];
-    key_down(keycode, keyInfo.row, keyInfo.col);
-}
-
-void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
+static void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
     if (row > 7) {
         printf("USB: Key up: %d=(undefined)\n", keycode);
         return;
@@ -182,37 +188,123 @@ void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
     }
 }
 
-void modifier_up(uint8_t modifier_offset) {
+static const char* const usb_modifier_names[] = {
+    "CONTROL_LEFT",
+    "SHIFT_LEFT",
+    "ALT_LEFT",
+    "GUI_LEFT",
+    "CONTROL_RIGHT",
+    "SHIFT_RIGHT",
+    "ALT_RIGHT",
+    "GUI_RIGHT",
+};
+    
+static void modifier_down(uint8_t modifier_offset) {
+    printf("USB: Modifier down: %s\n", usb_modifier_names[modifier_offset]);
+    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
+    usb_keymap_entry_t keyInfo = s_keymap[keycode];
+    key_down(keycode, keyInfo.row, keyInfo.col);
+}
+
+static void modifier_up(uint8_t modifier_offset) {
     printf("USB: Modifier up: %s\n", usb_modifier_names[modifier_offset]);
     uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
     usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_up(keycode, keyInfo.row, keyInfo.col);
 }
 
-void sync_leds(uint8_t dev_addr) {
+static void sync_leds(uint8_t dev_addr) {
     static uint8_t led_report = 0;
 
     led_report = 0;
-    if (shift_lock_enabled) {
+
+    if (caps_lock_enabled) {
         led_report |= KEYBOARD_LED_CAPSLOCK;
     }
-    if (num_lock_enabled) {
+    if (active_keyboard_model == pet_keyboard_model_graphics) {
         led_report |= KEYBOARD_LED_NUMLOCK;
     }
-    if (scroll_lock_enabled) {
+    if (active_keymap_kind == usb_keymap_kind_symbolic) {
         led_report |= KEYBOARD_LED_SCROLLLOCK;
-        s_keymap = system_state.usb_keymap_data[usb_keymap_kind_symbolic];
-    } else {
-        s_keymap = system_state.usb_keymap_data[usb_keymap_kind_positional];
     }
 
     tuh_hid_set_report(dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
 }
 
+void usb_keyboard_added(uint8_t dev_addr, uint8_t instance) {
+    for (int i = 0; i < MAX_KEYBOARDS; i++) {
+        if (!attached_keyboards[i].attached) {
+            // Add new keyboard to our list of attached keyboards.
+            attached_keyboards[i].dev_addr = dev_addr;
+            attached_keyboards[i].instance = instance;
+            attached_keyboards[i].attached = true;
+
+            // Initialize LEDs for the newly attached keyboard.
+            sync_leds(dev_addr);
+
+            return;
+        }
+    }
+
+    fatal("Max supported USB keyboards is %d.", MAX_KEYBOARDS);
+}
+
+void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
+    for (int i = 0; i < MAX_KEYBOARDS; i++) {
+        if (attached_keyboards[i].attached
+            && attached_keyboards[i].dev_addr == dev_addr
+            && attached_keyboards[i].instance == instance
+        ) {
+            // Remove keyboard from our list of attached keyboards.
+            attached_keyboards[i].attached = false;
+            return;
+        }
+    }
+
+    fatal("USB (addr=%d, instance=%d) not found on removal.", dev_addr, instance);
+}
+
+static void usb_keyboard_sync(system_state_t* system_state) {
+    // Get the PET keyboard model (graphics or business) as determined by the config
+    // DIP switch on the board.
+    const pet_keyboard_model_t pet_model = system_state->pet_keyboard_model;
+
+    // Determine the active USB keyboard model (graphics or business), taking into
+    // account the 'usb_swap_keyboard_model' setting.
+    active_keyboard_model = swap_keyboard_model
+        ? pet_model == pet_keyboard_model_graphics      // Swap models
+            ? pet_keyboard_model_business
+            : pet_keyboard_model_graphics
+        : pet_model;                                    // No swap
+
+    // Get the USB keymap kind (symbolic or positional).
+    active_keymap_kind = use_symbolic_keymap
+        ? usb_keymap_kind_symbolic
+        : usb_keymap_kind_positional;
+
+    // Update the current s_keymap pointer to point to the currently active model/kind.
+    s_keymap = system_state->usb_keymap_data[active_keyboard_model][active_keymap_kind];
+
+    // Synchronize the keyboard LEDs to match the currently active state.
+    for (int i = 0; i < MAX_KEYBOARDS; i++) {
+        if (attached_keyboards[i].attached) {
+            sync_leds(attached_keyboards[i].dev_addr);
+        }
+    }
+}
+
+void usb_keyboard_reset(system_state_t* system_state) {
+    swap_keyboard_model = false;
+    use_symbolic_keymap = false;
+    caps_lock_enabled = false;
+
+    usb_keyboard_sync(system_state);
+}
+
 static uint8_t get_modifiers(KeyEvent keyEvent) {
     uint8_t modifiers = keyEvent.modifiers;
 
-    if (shift_lock_enabled) {
+    if (caps_lock_enabled) {
         modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
     }
 
@@ -224,7 +316,7 @@ static void toggle_lock(const KeyEvent* const keyEvent, bool* lock_flag, const c
     if (keyEvent->pressed) {
         *lock_flag = !(*lock_flag);
         printf("USB: %s %s\n", lock_name, *lock_flag ? "enabled" : "disabled");
-        sync_leds(keyEvent->dev_addr);
+        usb_keyboard_sync(&system_state);
     }
 }
 
@@ -266,13 +358,13 @@ void dispatch_key_events() {
     do {
         switch (keyEvent.key) {
             case HID_KEY_CAPS_LOCK:
-                toggle_lock(&keyEvent, &shift_lock_enabled, "Caps Lock");
+                toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
                 break;
             case HID_KEY_NUM_LOCK:
-                toggle_lock(&keyEvent, &num_lock_enabled, "Num Lock");
+                toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
                 break;
             case HID_KEY_SCROLL_LOCK:
-                toggle_lock(&keyEvent, &scroll_lock_enabled, "Scroll Lock");
+                toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
                 break;
             default:
                 if (keyEvent.pressed) {
@@ -301,6 +393,8 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
 }
 
 void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
+    (void) dev_addr;
+
     static hid_keyboard_report_t prev_report = {
         .modifier = 0,
         .reserved = 0,
@@ -314,7 +408,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     for (uint8_t i = 0; i < sizeof(prev_report.keycode); i++) {
         const uint8_t keycode = prev_report.keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
-            enqueue_key_up(dev_addr, keycode, modifiers);
+            enqueue_key_up(keycode, modifiers);
         }
     }
 
@@ -323,7 +417,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
-            enqueue_key_down(dev_addr, keycode, modifiers);
+            enqueue_key_down(keycode, modifiers);
         }
     }
 
@@ -337,11 +431,14 @@ int keyboard_getch() {
     dispatch_key_events();
     sync_state();
 
-    bool use_pet_keys = true;
+    // If the USB keyboard matrix has pressed keys it takes precedence.  Otherwise, we fall
+    // back to the PET keyboard matrix.  This is the same logic used by the FPGA when determining
+    // when to intercept the reads from $E812.
+    bool use_usb_keys = false;
     
     for (uint8_t i = 0; i < KEY_COL_COUNT; i++) {
-        use_pet_keys &= (usb_key_matrix[i] == 0xff);
+        use_usb_keys |= (usb_key_matrix[i] != 0xff);
     }
 
-    return keyscan_getch(use_pet_keys ? pet_key_matrix : usb_key_matrix);
+    return keyscan_getch(use_usb_keys ? usb_key_matrix : pet_key_matrix);
 }

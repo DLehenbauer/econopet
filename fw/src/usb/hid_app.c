@@ -72,7 +72,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
   // Synchronize keyboard LEDs on mount
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
-    sync_leds(dev_addr);
+    usb_keyboard_added(dev_addr, instance);
   }
 
   // By default host stack will use activate boot protocol on supported interface.
@@ -95,6 +95,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
   printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
+  usb_keyboard_removed(dev_addr, instance);
 }
 
 // Invoked when received report from device via interrupt endpoint

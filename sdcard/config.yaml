@@ -1,6 +1,8 @@
 configs:
   - name: "CBM 40xx (40 Col 50 Hz)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0x8800
@@ -16,13 +18,7 @@ configs:
           - address: 0xf000
             file: "/roms/901465-22.bin"
       - if: "graphics"
-        then:
-          # Use ROM '901499-01' (loaded above)
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
         else:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
           # This patch replaces the original keyscan routine with one adapted from the 80 column
           # edit rom '901474-03'.
@@ -35,6 +31,8 @@ configs:
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "PET 40xx (40 Col 60 Hz)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0x8800
@@ -50,13 +48,7 @@ configs:
           - address: 0xf000
             file: "/roms/901465-22.bin"
       - if: "graphics"
-        then:
-          # Use ROM '901499-01' (loaded above)
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
         else:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
           # This patch replaces the original keyscan routine with one adapted from the 80 column
           # edit rom '901474-03'.
@@ -69,6 +61,8 @@ configs:
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "CBM 80xx (80 Col 50 Hz)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - file: "/roms/901447-10.bin"
@@ -85,8 +79,6 @@ configs:
             address: 0xf000
       - if: "graphics"
         then:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
           # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
           # This patch replaces the original keyscan routine with one adapted from the 40 column
           # edit rom '901499-01'.
@@ -103,14 +95,12 @@ configs:
             start-addr: 0xe000
             end-addr: 0xe7ff
             fix-addr: 0xe7ff
-        else:
-          # Use ROM '901474-03' (loaded above)
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
       - action: "set"
         columns: 80
   - name: "PET 80xx (80 Col 60 Hz)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - file: "/roms/901447-10.bin"
@@ -127,8 +117,6 @@ configs:
             address: 0xf000
       - if: "graphics"
         then:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
           # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
           # This patch replaces the original keyscan routine with one adapted from the 40 column
           # edit rom '901499-01'.
@@ -139,14 +127,12 @@ configs:
           - action: "patch"
             address: 0x0e6d1
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
-        else:
-          # Use ROM '901474-03' (loaded above)
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
       - action: "set"
         columns: 80
   - name: "PET 2001 (Upgraded ROMs)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0x8800
@@ -159,8 +145,6 @@ configs:
             file: "/roms/901465-03.bin"
       - if: "graphics"
         then:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
           # Load editor ROM for graphics keyboard.
           - action: "load"
             files:
@@ -178,8 +162,6 @@ configs:
             destination: 0xe6eb
             length: 0x06            
         else:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
           # For the business keyboard, we use the editor ROM for the 30xxB, which is almost
           # identical except that:
           #
@@ -200,6 +182,8 @@ configs:
             hex: "0c"
   - name: "PET 2001 (Original ROMs)"
     setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0x8800
@@ -221,13 +205,7 @@ configs:
           - address: 0xf800
             file: "/roms/901439-07.bin"
       - if: "graphics"
-        then:
-          # Use ROM '901439-03' (loaded above)
-          - action: "set-usb-keymap"
-            file: "/ukm/us-grus.bin"
         else:
-          - action: "set-usb-keymap"
-            file: "/ukm/us-buuk.bin"
           # Commodore never produced an edit ROM for the business keyboard for the original ROM set.
           # This patch replaces the original keyscan routine with one adapted from '901474-01'.
           - action: "patch"

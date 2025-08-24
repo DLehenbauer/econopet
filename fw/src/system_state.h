@@ -29,11 +29,6 @@ typedef enum pet_display_columns_e {
     pet_display_columns_80 = 80,
 } pet_display_columns_t;
 
-typedef enum usb_keymap_kind_e {
-    usb_keymap_kind_symbolic   = 0,
-    usb_keymap_kind_positional = 1,
-} usb_keymap_kind_t;
-
 typedef struct __attribute__((packed)) usb_keymap_entry_s {
     // First byte contains PET keyboard matrix row/col packed as nibbles
     unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
@@ -45,14 +40,16 @@ typedef struct __attribute__((packed)) usb_keymap_entry_s {
     unsigned int shift: 1;      // 0 = Normal, 1 = Implicitly add shift
 } usb_keymap_entry_t;
 
-typedef struct system_state_s {
-    // The currently active usb_keymap_kind.
-    usb_keymap_kind_t usb_keymap_kind;
+typedef enum usb_keymap_kind_e {
+    usb_keymap_kind_symbolic   = 0,
+    usb_keymap_kind_positional = 1,
+} usb_keymap_kind_t;
 
-    // The first indexer is graphics vs. business.
-    // The second indexer is symbolic vs. positional.
+typedef struct system_state_s {
+    // First indexer:  (0 = graphics, 1 = business)
+    // Second indexer: (0 = symbolic, 1 = positional)
     // The third indexer maps USB HID codes to usb_keymap_entry_t.
-    usb_keymap_entry_t usb_keymap_data[2][512];
+    usb_keymap_entry_t usb_keymap_data[2][2][512];
 
     // Reflects the state of the current keyboard model (graphics or business)
     // as determined by the config DIP switch on the board.
