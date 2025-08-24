@@ -294,8 +294,8 @@ static void usb_keyboard_sync(system_state_t* system_state) {
 }
 
 void usb_keyboard_reset(system_state_t* system_state) {
+    use_symbolic_keymap = true;
     swap_keyboard_model = false;
-    use_symbolic_keymap = false;
     caps_lock_enabled = false;
 
     usb_keyboard_sync(system_state);
