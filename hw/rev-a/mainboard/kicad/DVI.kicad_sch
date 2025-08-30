@@ -1911,9 +1911,9 @@
 		)
 		(uuid "562d2cde-6ebc-46df-8ca7-9609ce469af9")
 	)
-	(text "Uses legacy DVI TMDS protocol over an HDMI connector.\nSee: https://github.com/Wren6991/PicoDVI"
+	(text "DVI TMDS protocol over an HDMI-compatible\nconnector (not HDMI certified).\n\nSee: https://github.com/Wren6991/PicoDVI"
 		(exclude_from_sim no)
-		(at 83.82 50.8 0)
+		(at 83.82 49.53 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1937,7 +1937,7 @@
 	)
 	(text "DVI VIDEO"
 		(exclude_from_sim no)
-		(at 83.82 45.72 0)
+		(at 83.82 43.18 0)
 		(effects
 			(font
 				(size 1.5 1.5)

@@ -3167,9 +3167,9 @@
 		)
 		(uuid "ff2b1c61-b5ee-48fe-ac1a-b9538b4ff8cc")
 	)
-	(text "PIAs and VIA operate at 5V logic levels for compatible I/O.\n\nCPU and RAM operate at the same 3V3 logic levels as the FPGA\nand MCU to reduce the amount of level shifting required.\n\nD[0..7] are the only bidirectional lines that need to be shifted.\nThe direction of D[0..7] is controlled by R~{W}."
+	(text "PIAs and VIA operate at 5V logic\nlevels for compatible I/O.\n\nTo reduce the amount of level shifting\nrequired, CPU and RAM operate at 3V3\nlogic levels to share the system bus\nwith the FPGA.\n\nD[0..7] are the only bidirectional\nlines that need to be shifted.\n\nThe direction of D[0..7] is controlled\nby R~{W}."
 		(exclude_from_sim no)
-		(at 127 153.67 0)
+		(at 147.32 45.72 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -3180,7 +3180,7 @@
 	)
 	(text "Level Shifting"
 		(exclude_from_sim no)
-		(at 175.26 17.78 0)
+		(at 147.32 17.78 0)
 		(effects
 			(font
 				(size 1.5 1.5)
@@ -3215,9 +3215,9 @@
 		)
 		(uuid "b3fcf16b-286f-4649-8f4d-3901570dbf10")
 	)
-	(text "~{IO_OE} does not require level-shifting\n(high @ 2V)"
+	(text "~{IO_OE} is asserted whenenver address\ndecoding asserts ~{PIA1_CS}, ~{PIA2_CS},\nor ~{VIA_CS}.\n\n~{IO_OE} does not require level-shifting\n(high @ 2V)"
 		(exclude_from_sim no)
-		(at 163.83 85.09 0)
+		(at 162.56 91.44 0)
 		(effects
 			(font
 				(size 1.27 1.27)
