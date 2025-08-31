@@ -12,9 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`ifndef COMMON_PKG_SVH
-`define COMMON_PKG_SVH
-
 package common_pkg;
     //
     // Timing
@@ -346,5 +343,3 @@ package common_pkg;
         return { WB_VROM_BASE, address[VROM_ADDR_WIDTH-2:0] };
     endfunction
 endpackage
-
-`endif

@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./src/common_pkg.svh"
-
 import common_pkg::*;
 
 // Thin wrapper around Kenneth C. Dyke's 6502 core.

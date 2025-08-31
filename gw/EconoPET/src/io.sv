@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./src/common_pkg.svh"
-
 import common_pkg::*;
 
 // This module tracks and intercepts select reads/writes to I/O registers.

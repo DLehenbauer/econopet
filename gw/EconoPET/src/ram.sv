@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./src/common_pkg.svh"
-
 import common_pkg::*;
 
 // Wishbone peripheral that allows the MCU to access RAM (via SPI bridge).

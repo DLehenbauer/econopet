@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1754486790" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1756656443" sw_version="2025.1.110" last_run_state="pass" last_run_flow="syn" config_result_in_sync="sync" design_ood="sync" place_ood="change" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -7,6 +7,7 @@
     </efx:device_info>
     <efx:design_info def_veri_version="sv_09" def_vhdl_version="vhdl_2008" unified_flow="false">
         <efx:top_module name="top"/>
+        <efx:design_file name="src/common_pkg.sv" version="default" library="default"/>
         <efx:design_file name="src/top.sv" version="default" library="default"/>
         <efx:design_file name="src/spi.sv" version="default" library="default"/>
         <efx:design_file name="src/spi1_controller.sv" version="default" library="default"/>

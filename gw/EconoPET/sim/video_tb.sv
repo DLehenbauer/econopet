@@ -13,7 +13,6 @@
  */
 
 `include "./sim/assert.svh"
-`include "./src/common_pkg.svh"
 
 import common_pkg::*;
 

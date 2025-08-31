@@ -12,8 +12,6 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./src/common_pkg.svh"
-
 import common_pkg::*;
 
 module clock_gen #(
