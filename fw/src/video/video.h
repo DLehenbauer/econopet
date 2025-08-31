@@ -22,4 +22,7 @@ extern uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 extern bool video_is_80_col;
 extern bool video_graphics;
 
+#define CRTC_REG_COUNT 14
+extern uint8_t pet_crtc_registers[CRTC_REG_COUNT];
+
 void video_init();

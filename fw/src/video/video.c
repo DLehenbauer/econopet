@@ -28,6 +28,7 @@ struct semaphore dvi_start_sem;
 
 bool video_graphics = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
+uint8_t pet_crtc_registers[CRTC_REG_COUNT] = { 0 };
 
 // CRTC registers
 static const uint8_t r1_h_displayed   = 40;	// Horizontal displayed characters

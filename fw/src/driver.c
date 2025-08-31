@@ -28,7 +28,8 @@
 #define SPI_CMD_WRITE_PREV 0b11100000
 #define SPI_CMD_WRITE_SAME 0b10000000
 
-#define ADDR_KBD (0b011 << 17)
+#define ADDR_KBD  (0b011 << 17)
+#define ADDR_CRTC (0b0101 << 16)
 
 // Register File
 #define ADDR_REG    (0b010 << 17)
@@ -255,6 +256,7 @@ void write_pet_model(const system_state_t* const system_state) {
 void sync_state() {
     spi_write(ADDR_KBD, usb_key_matrix, KEY_COL_COUNT);
     spi_read(ADDR_KBD, KEY_COL_COUNT, pet_key_matrix);
+    spi_read(ADDR_CRTC, CRTC_REG_COUNT, pet_crtc_registers);
 
     uint8_t status = spi_read_at(REG_STATUS);
     video_graphics = (status & REG_STATUS_GRAPHICS) != 0;

@@ -23,7 +23,7 @@ module video (
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                      // Bus clock
     output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
+    input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data received from RAM (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
     output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
     output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
     output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
@@ -33,7 +33,7 @@ module video (
     // Wishbone B4 peripheral to read current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
     input  logic wb_we_i,                         // Direction of transaction (0 = read , 1 = write)
     input  logic wb_cycle_i,                      // Bus cycle is active
     input  logic wb_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
