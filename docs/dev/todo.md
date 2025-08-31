@@ -1,7 +1,7 @@
 # TODOs
 
 * Before release
-  * 9"/12" (test with 15kHz VGA and/or RGB2HDMI)
+  * Hang on reset?
 * Firmware
   * 8K Video RAM:
     * Move character rom to shadowed I/O region at $E000-$E800?
@@ -11,7 +11,6 @@
   * Commit patched PicoDVI (?)
 * Gateware:
   * Handle reset for:
-    * SID
     * Keyboard
   * Consider CPU addr_strobe signal?
   * Use writes to VIA/CA2 to cache Gfx state instead of physical pin?
@@ -20,7 +19,7 @@
 * Compat:
   * Echo last byte on bus when reading unmapped regions. ("ghost byte")
 * HW
-  * Straigthen bumped traces below User Port header (front)
+  * Straighten bumped traces below User Port header (front)
   * Parts
     * SMT Tactile Buttons (C318884)
     * SMT Dip for config (C2961921)
