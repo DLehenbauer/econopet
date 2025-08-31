@@ -17,6 +17,7 @@
         "GPIO",
         "leds",
         "Lehenbauer",
+        "synthesizable",
         "Trion",
         "VROM"
     ],

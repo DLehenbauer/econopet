@@ -140,7 +140,11 @@ module spi1_controller (
                     spi_state <= VALID;
                 end
 
-                default: $fatal(1, "Invalid state in SPI1 controller: %b", spi_state);
+                default: begin
+                    // synthesis off
+                    $fatal(1, "Invalid state in SPI1 controller: %b", spi_state);
+                    // synthesis on
+                end
             endcase
         end
     end
@@ -203,7 +207,11 @@ module spi1_controller (
                         wb_state    <= READY;
                     end
                 end
-                default: $fatal(1, "Invalid state in SPI1 controller: %b", wb_state);
+                default: begin
+                    // synthesis off
+                    $fatal(1, "Invalid state in SPI1 controller: %b", wb_state);
+                    // synthesis on
+                end
             endcase
         end
     end
