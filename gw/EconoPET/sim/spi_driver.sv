@@ -93,6 +93,8 @@ module spi_driver(
     sync2_edge_detect sync_valid (
         .clock_i(clock_i),
         .data_i(spi_strobe),
-        .pe_o(spi_ack_o)
+        .data_o(),
+        .pe_o(spi_ack_o),
+        .ne_o()
     );
 endmodule

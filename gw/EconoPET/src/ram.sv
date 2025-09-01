@@ -129,7 +129,7 @@ module ram (
                 state <= READY;
             end
             WRITING: begin
-                if (cycle_count == write_hold_count) begin
+                if (cycle_count == $bits(cycle_count)'(write_hold_count)) begin
                     wbp_ack_o <= 1;
                     wbp_stall_o <= 0;
                     ram_we_o  <= 0;

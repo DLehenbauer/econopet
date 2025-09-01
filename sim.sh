@@ -19,6 +19,10 @@ while [[ $# -gt 0 ]]; do
         UPDATE_F_FILE=1
         shift
         ;;
+    -l|--lint)
+        LINT=1
+        shift
+        ;;    
     -m|--map)
         EFX_MAP=1
         shift
@@ -54,12 +58,23 @@ if [ -n "$UPDATE_F_FILE" ]; then
     grep -v -E '^\s*src/.*_pkg\.sv' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.tmp.f"
     mv "$PROJ_DIR/work_sim/$PROJ_NAME.tmp.f" "$PROJ_DIR/work_sim/$PROJ_NAME.f"
 
+    # Produce a second '.f' file for Verilator that removes all references to source
+    # files under '/opt/efinity/' and 'sim/'.  (Line may start with an optional '-v')
+    grep -v -E '^(-v )?((/opt/efinity/)|(sim/)|(external/65xx))' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
+
     echo
 fi
+
+# verilator --lint-only -Wall --language 1800-2009 -y gw/EconoPET -y gw/EconoPET/src -I gw/EconoPET/src -y gw/EconoPET/external/65xx -y gw/EconoPET/external/icesid/icesid -f"gw/EconoPET/work_sim/pkgs.f" -f"gw/EconoPET/work_sim/$PROJ_NAME.f"
 
 # 'efx_run' produces relative paths to simulation files. Therefore, we must execute
 # iverilog from the root of the project directory.
 pushd "$PROJ_DIR" || exit 1
+
+if [ -n "$LINT" ]; then
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -f "$PROJ_DIR/work_sim/pkgs.f" -f "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f" --top-module top
+    exit_on_failure
+fi
 
 iverilog -g2009 -s "sim" -o"$PROJ_DIR/work_sim/$PROJ_NAME.vvp" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx
 exit_on_failure

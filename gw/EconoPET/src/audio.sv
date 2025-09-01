@@ -67,11 +67,13 @@ module audio (
         .iAddr (addr_i),       // sid address
         .iDataW(data_i),       // writing to SID
         .oDataR(data_o),       // reading from SID
-        .oOut  (sid_out),      // sid output
-
-        // Unused
+        .oOut  (sid_out)       // sid output
+`ifndef VERILATOR
+        ,
+        // IceSID excludes ioPotX/Y for verilator
         .ioPotX(),
         .ioPotY()
+`endif
     );
 
     wire signed [15:0] cb2_out = via_cb2_i && diag_i ? 16'h800 : -16'h800;
