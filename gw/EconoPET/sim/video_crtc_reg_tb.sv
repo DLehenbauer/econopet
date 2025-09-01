@@ -80,13 +80,13 @@ module video_crtc_reg_tb;
 
     video_crtc_reg video_crtc_reg (
         .wb_clock_i(clock),
-        .wb_addr_i(wb_addr),
-        .wb_data_o(wb_crtc_dout),
-        .wb_we_i(wb_we),
-        .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_strobe),
-        .wb_stall_o(wb_stall),
-        .wb_ack_o(wb_ack),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_o(wb_crtc_dout),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(wb_stall),
+        .wbp_ack_o(wb_ack),
 
         .clk_en_i(clk1n_en),
         .cs_i(cs),

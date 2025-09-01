@@ -21,24 +21,24 @@ module video (
 
     // Wishbone B4 controller to fetch character and pixel data from VRAM and VROM.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic wb_clock_i,                      // Bus clock
-    output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data received from RAM (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
-    output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
-    output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
-    output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
-    input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
-    input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
+    input  logic wb_clock_i,                       // Bus clock
+    output logic [WB_ADDR_WIDTH-1:0] wbc_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    input  logic [   DATA_WIDTH-1:0] wbc_data_i,   // Data received from RAM (captured on 'wb_clock_i' when 'wbc_ack_i' asserted)
+    output logic wbc_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
+    output logic wbc_cycle_o,                      // Requests a bus cycle from the arbiter
+    output logic wbc_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wbc_we_o' are valid).
+    input  logic wbc_stall_i,                      // Signals that peripheral is not ready to accept request
+    input  logic wbc_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
     // Wishbone B4 peripheral to read current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
-    input  logic wb_we_i,                         // Direction of transaction (0 = read , 1 = write)
-    input  logic wb_cycle_i,                      // Bus cycle is active
-    input  logic wb_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
-    output logic wb_stall_o,                      // Peripheral is not ready to accept the request
-    output logic wb_ack_o,                        // Indicates success termination of cycle (data_o is valid)
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wbc_ack_i' asserted)
+    input  logic wbp_we_i,                         // Direction of transaction (0 = read , 1 = write)
+    input  logic wbp_cycle_i,                      // Bus cycle is active
+    input  logic wbp_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
+    output logic wbp_stall_o,                      // Peripheral is not ready to accept the request
+    output logic wbp_ack_o,                        // Indicates success termination of cycle (data_o is valid)
 
     // CRTC interface to CPU bus
     input  logic cpu_reset_i,
@@ -61,9 +61,9 @@ module video (
     output logic video_o                          // Video output
 );
     initial begin
-        wb_we_o     = '0;
-        wb_cycle_o  = '0;
-        wb_strobe_o = '0;
+        wbc_we_o     = '0;
+        wbc_cycle_o  = '0;
+        wbc_strobe_o = '0;
     end
 
     //
@@ -78,13 +78,13 @@ module video (
 
     video_crtc video_crtc (
         .wb_clock_i(wb_clock_i),
-        .wb_addr_i(wb_addr_i),
-        .wb_data_o(wb_data_o),
-        .wb_we_i(wb_we_i),
-        .wb_cycle_i(wb_cycle_i),
-        .wb_strobe_i(wb_strobe_i),
-        .wb_stall_o(wb_stall_o),
-        .wb_ack_o(wb_ack_o),
+        .wbp_addr_i(wbp_addr_i),
+        .wbp_data_o(wbp_data_o),
+        .wbp_we_i(wbp_we_i),
+        .wbp_cycle_i(wbp_cycle_i),
+        .wbp_strobe_i(wbp_strobe_i),
+        .wbp_stall_o(wbp_stall_o),
+        .wbp_ack_o(wbp_ack_o),
 
         .reset_i(cpu_reset_i),
         .clk_en_i(crtc_clk_en_i),     // 1 MHz clock enable for 'sys_clock_i'
@@ -136,39 +136,39 @@ module video (
                WB_WAIT = 2;
 
     always_comb begin
-        wb_addr_o = addrs[fetch_stage];
+        wbc_addr_o = addrs[fetch_stage];
     end
 
     logic [1:0] fetch_stage = EVEN_RAM;
-    logic [1:0] wb_state    = WB_IDLE;
+    logic [1:0] wbc_state    = WB_IDLE;
 
     always_ff @(posedge wb_clock_i) begin
-        case (wb_state)
+        case (wbc_state)
             WB_IDLE: begin
-                wb_strobe_o <= 0;
-                wb_cycle_o  <= 0;
+                wbc_strobe_o <= 0;
+                wbc_cycle_o  <= 0;
 
                 if (crtc_clk_en_i) begin
-                    wb_cycle_o  <= 1;
-                    wb_strobe_o <= 1;
-                    wb_state    <= WB_REQ;
+                    wbc_cycle_o  <= 1;
+                    wbc_strobe_o <= 1;
+                    wbc_state    <= WB_REQ;
                 end
             end
 
             WB_REQ: begin
-                if (!wb_stall_i) begin
-                    wb_strobe_o <= 0;
+                if (!wbc_stall_i) begin
+                    wbc_strobe_o <= 0;
                 end
 
-                if (wb_ack_i) begin
-                    data[fetch_stage] <= wb_data_i;
+                if (wbc_ack_i) begin
+                    data[fetch_stage] <= wbc_data_i;
                     fetch_stage       <= fetch_stage + 1'b1;
-                    wb_strobe_o       <= 1;
+                    wbc_strobe_o       <= 1;
                     
                     if (fetch_stage == ODD_ROM) begin
-                        wb_cycle_o  <= 0;
-                        wb_strobe_o <= 0;
-                        wb_state    <= WB_IDLE;
+                        wbc_cycle_o  <= 0;
+                        wbc_strobe_o <= 0;
+                        wbc_state    <= WB_IDLE;
                     end
                 end
             end

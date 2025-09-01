@@ -48,13 +48,13 @@ module spi1_tb;
 
     spi1_controller spi1 (
         .wb_clock_i(clock),
-        .wb_addr_o(addr),
-        .wb_data_i(rd_data),
-        .wb_data_o(wr_data),
-        .wb_we_o(we),
-        .wb_cycle_o(cycle),
-        .wb_stall_i(stall),
-        .wb_ack_i(ack),
+        .wbc_addr_o(addr),
+        .wbc_data_i(rd_data),
+        .wbc_data_o(wr_data),
+        .wbc_we_o(we),
+        .wbc_cycle_o(cycle),
+        .wbc_stall_i(stall),
+        .wbc_ack_i(ack),
 
         .spi_sck_i(spi_sck),
         .spi_cs_ni(spi_cs_n),

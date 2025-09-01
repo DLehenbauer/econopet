@@ -18,13 +18,13 @@ module video_crtc_reg (
     // Wishbone B4 peripheral to read current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                    // FPGA System clock
-    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i, // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wb_data_o, // Data received from MCU to write (valid when 'cycle_o' asserted)
-    input  logic wb_we_i,                       // Direction of transaction (0 = read , 1 = write)
-    input  logic wb_cycle_i,                    // Bus cycle is active
-    input  logic wb_strobe_i,                   // New transaction requested (address, data, and control signals are valid)
-    output logic wb_stall_o,                    // Peripheral is not ready to accept the request
-    output logic wb_ack_o,                      // Indicates success termination of cycle (data_o is valid)
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i, // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wbp_data_o, // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic wbp_we_i,                       // Direction of transaction (0 = read , 1 = write)
+    input  logic wbp_cycle_i,                    // Bus cycle is active
+    input  logic wbp_strobe_i,                   // New transaction requested (address, data, and control signals are valid)
+    output logic wbp_stall_o,                    // Peripheral is not ready to accept the request
+    output logic wbp_ack_o,                      // Indicates success termination of cycle (data_o is valid)
     
     input  logic clk_en_i,                      // Gates 'sys_clock_i' to advance CRTC state
     input  logic [DATA_WIDTH-1:0] data_i,       // Transfer data written from CPU to CRTC when CS asserted and /RW is low
@@ -66,29 +66,27 @@ module video_crtc_reg (
         r[CRTC_R13_START_ADDR_LO]    = 8'h00;
     end
 
-    // TODO: Need CRTC addr base
-
     logic wb_select;
     wb_decode #(WB_CRTC_BASE) wb_decode (
-        .wb_addr_i(wb_addr_i),
+        .wb_addr_i(wbp_addr_i),
         .selected_o(wb_select)
     );
 
     // Wishbone peripheral always completes in a single cycle.
-    assign wb_stall_o = 1'b0;
-    wire [CRTC_ADDR_REG_WIDTH-1:0] crtc_addr = wb_addr_i[CRTC_ADDR_REG_WIDTH-1:0];
+    assign wbp_stall_o = 1'b0;
+    wire [CRTC_ADDR_REG_WIDTH-1:0] crtc_addr = wbp_addr_i[CRTC_ADDR_REG_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
-        wb_ack_o <= '0;
-        if (wb_select && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= r[crtc_addr];
+        wbp_ack_o <= '0;
+        if (wb_select && wbp_cycle_i && wbp_strobe_i) begin
+            wbp_data_o <= r[crtc_addr];
             
             // TODO: Support writes?
-            // if (wb_we_i) begin
+            // if (wbp_we_i) begin
             //     r[crtc_addr] <= data_i;
             // end
             
-            wb_ack_o <= 1'b1;
+            wbp_ack_o <= 1'b1;
         end else if (clk_en_i && cs_i && we_i) begin
             if (rs_i == '0) ar <= data_i[4:0];  // RS = 0: Write to address register (select R0..17)
             else r[ar] <= data_i;               // RS = 1: Write to currently addressed register (set R0..17)

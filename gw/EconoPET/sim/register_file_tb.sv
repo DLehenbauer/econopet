@@ -46,15 +46,15 @@ module register_file_tb;
 
     register_file register_file (
         .wb_clock_i(clock),
-        .wb_addr_i(common_pkg::wb_reg_addr(addr)),
-        .wb_data_i(pico),
-        .wb_data_o(poci),
-        .wb_we_i(we),
-        .wb_cycle_i(cycle),
-        .wb_strobe_i(strobe),
-        .wb_ack_o(ack),
-        .wb_stall_o(stall),
-        .wb_sel_i(1'b1),
+        .wbp_addr_i(common_pkg::wb_reg_addr(addr)),
+        .wbp_data_i(pico),
+        .wbp_data_o(poci),
+        .wbp_we_i(we),
+        .wbp_cycle_i(cycle),
+        .wbp_strobe_i(strobe),
+        .wbp_ack_o(ack),
+        .wbp_stall_o(stall),
+        .wbp_sel_i(1'b1),
 
         // Status register
         .video_graphic_i(video_graphic),

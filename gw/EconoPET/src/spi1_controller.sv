@@ -18,14 +18,14 @@ module spi1_controller (
     // Wishbone B4 pipelined controller
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,                      // Bus clock
-    output logic [WB_ADDR_WIDTH-1:0] wb_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wb_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wb_ack_i' asserted)
-    output logic wb_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
-    output logic wb_cycle_o,                      // Requests a bus cycle from the arbiter
-    output logic wb_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wb_we_o' are valid).
-    input  logic wb_stall_i,                      // Signals that peripheral is not ready to accept request
-    input  logic wb_ack_i,                        // Signals termination of cycle ('data_i' valid)
+    output logic [WB_ADDR_WIDTH-1:0] wbc_addr_o,   // Address of pending read/write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wbc_data_o,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic [   DATA_WIDTH-1:0] wbc_data_i,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wbc_ack_i' asserted)
+    output logic wbc_we_o,                         // Direction of bus transfer (0 = reading, 1 = writing)
+    output logic wbc_cycle_o,                      // Requests a bus cycle from the arbiter
+    output logic wbc_strobe_o,                     // Signals next request ('addr_o', 'data_o', and 'wbc_we_o' are valid).
+    input  logic wbc_stall_i,                      // Signals that peripheral is not ready to accept request
+    input  logic wbc_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
     // SPI
     input  logic spi_cs_ni,  // (CS)  Chip Select (active low)
@@ -101,15 +101,15 @@ module spi1_controller (
         end else if (spi_strobe_pulse) begin
             unique case (spi_state)
                 READ_CMD: begin
-                    wb_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
+                    wbc_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
 
                     if (spi_data_rx[6:5] == 2'b10) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
-                        wb_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
+                        wbc_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
                         spi_state <= READ_ADDR_HI_ARG;
                     end else begin
                         // Otherwise increment/decrement the previous address.
-                        wb_addr_o <= wb_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[6]}}, spi_data_rx[5]};
+                        wbc_addr_o <= wbc_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[6]}}, spi_data_rx[5]};
                         spi_state <= spi_data_rx[7]
                             ? READ_DATA_ARG
                             : VALID;
@@ -117,19 +117,19 @@ module spi1_controller (
                 end
 
                 READ_ADDR_HI_ARG: begin
-                    wb_addr_o[15:8] <= spi_data_rx;
+                    wbc_addr_o[15:8] <= spi_data_rx;
                     spi_state       <= READ_ADDR_LO_ARG;
                 end
 
                 READ_ADDR_LO_ARG: begin
-                    wb_addr_o[7:0] <= spi_data_rx;
-                    spi_state      <= wb_we_o
+                    wbc_addr_o[7:0] <= spi_data_rx;
+                    spi_state      <= wbc_we_o
                         ? READ_DATA_ARG
                         : VALID;
                 end
 
                 READ_DATA_ARG: begin
-                    wb_data_o <= spi_data_rx;
+                    wbc_data_o <= spi_data_rx;
                     spi_state <= VALID;
                 end
 
@@ -150,7 +150,7 @@ module spi1_controller (
     // Wishbone controller state machine ('wb_clock_i' domain)
 
     initial begin
-        wb_strobe_o = '0;
+        wbc_strobe_o = '0;
     end
 
     // MCU/FPGA handshake works as follows:
@@ -170,44 +170,44 @@ module spi1_controller (
                          RECEIVING_CMD  = 2'b01,  // 'spi_cs_ni' asserted
                          PROCESSING_CMD = 2'b11;  // Received 'spi_data_o' is valid
 
-    logic [1:0] wb_state = READY;
-    assign spi_stall_o = wb_state[0];
-    assign wb_cycle_o  = wb_state[1];
+    logic [1:0] wbc_state = READY;
+    assign spi_stall_o = wbc_state[0];
+    assign wbc_cycle_o  = wbc_state[1];
 
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
-            wb_state <= READY;  // Deassert 'wb_cycle_o' and 'spi_stall_o'
-            wb_strobe_o <= '0;
+            wbc_state <= READY;  // Deassert 'wbc_cycle_o' and 'spi_stall_o'
+            wbc_strobe_o <= '0;
         end else begin
-            unique case (wb_state)
+            unique case (wbc_state)
                 READY: begin
-                    wb_strobe_o <= 0;
+                    wbc_strobe_o <= 0;
 
                     if (spi_start_pulse) begin
-                        wb_state <= RECEIVING_CMD;
+                        wbc_state <= RECEIVING_CMD;
                     end
                 end
                 RECEIVING_CMD: begin
                     if (spi_valid) begin
-                        wb_strobe_o <= 1'b1;
-                        wb_state <= PROCESSING_CMD;
+                        wbc_strobe_o <= 1'b1;
+                        wbc_state <= PROCESSING_CMD;
                     end
                 end
                 PROCESSING_CMD: begin
-                    // Continue asserting wb_strobe_o while the bus is stalled.
-                    if (!wb_stall_i) wb_strobe_o <= '0;
+                    // Continue asserting wbc_strobe_o while the bus is stalled.
+                    if (!wbc_stall_i) wbc_strobe_o <= '0;
 
-                    // The '!wb_strobe_o' prevents the SPI1 controller for accepting ACKs
+                    // The '!wbc_strobe_o' prevents the SPI1 controller for accepting ACKs
                     // before it's request has been accepted.
-                    if (!wb_strobe_o && wb_ack_i) begin
-                        spi_data_tx <= wb_data_i;
-                        wb_state    <= READY;
+                    if (!wbc_strobe_o && wbc_ack_i) begin
+                        spi_data_tx <= wbc_data_i;
+                        wbc_state    <= READY;
                     end
                 end
                 default: begin
                     // synthesis off
-                    $fatal(1, "Invalid state in SPI1 controller: %b", wb_state);
+                    $fatal(1, "Invalid state in SPI1 controller: %b", wbc_state);
                     // synthesis on
                 end
             endcase

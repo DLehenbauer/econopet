@@ -94,22 +94,22 @@ module video_tb;
 
         // Wishbone controller
         .wb_clock_i(sys_clock),
-        .wb_addr_o(wbc_addr),
-        .wb_data_i(wbc_din),
-        .wb_we_o(wbc_we),
-        .wb_cycle_o(wbc_cycle),
-        .wb_strobe_o(wbc_strobe),
-        .wb_stall_i(wbc_stall),
-        .wb_ack_i(wbc_ack),
+        .wbc_addr_o(wbc_addr),
+        .wbc_data_i(wbc_din),
+        .wbc_we_o(wbc_we),
+        .wbc_cycle_o(wbc_cycle),
+        .wbc_strobe_o(wbc_strobe),
+        .wbc_stall_i(wbc_stall),
+        .wbc_ack_i(wbc_ack),
 
         // Wishbone peripheral
-        .wb_addr_i(wbp_addr),
-        .wb_data_o(wbp_dout),
-        .wb_we_i(wbp_we),
-        .wb_cycle_i(wbp_cycle),
-        .wb_strobe_i(wbp_strobe),
-        .wb_stall_o(wbp_stall),
-        .wb_ack_o(wbp_ack),
+        .wbp_addr_i(wbp_addr),
+        .wbp_data_o(wbp_dout),
+        .wbp_we_i(wbp_we),
+        .wbp_cycle_i(wbp_cycle),
+        .wbp_strobe_i(wbp_strobe),
+        .wbp_stall_o(wbp_stall),
+        .wbp_ack_o(wbp_ack),
 
         // CRTC
         .cpu_reset_i(crtc_res),

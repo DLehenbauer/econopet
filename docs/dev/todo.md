@@ -3,6 +3,9 @@
 * Before release
   * Hang on reset?
 * Firmware
+  * Try [pio_spi](https://github.com/raspberrypi/pico-examples/tree/master/pio/spi):
+    * Handles CS automatically
+    * Potentially can exceed 24 MHz
   * 8K Video RAM:
     * Move character rom to shadowed I/O region at $E000-$E800?
     * (Will require gw support for "ghost byte" readback for compat.)
@@ -18,7 +21,7 @@
   * Generalize IO shadowing and interception for keyboard and (future) IEEE, etc.
 * Compat:
   * Echo last byte on bus when reading unmapped regions. ("ghost byte")
-* HW
+* Hardware
   * Straighten bumped traces below User Port header (front)
   * Parts
     * SMT Tactile Buttons (C318884)

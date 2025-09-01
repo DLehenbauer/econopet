@@ -18,13 +18,13 @@ module video_crtc(
     // Wishbone B4 peripheral to read current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,
-    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
-    output logic [   DATA_WIDTH-1:0] wb_data_o,
-    input  logic wb_we_i,
-    input  logic wb_cycle_i,
-    input  logic wb_strobe_i,
-    output logic wb_stall_o,
-    output logic wb_ack_o,
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,
+    input  logic wbp_we_i,
+    input  logic wbp_cycle_i,
+    input  logic wbp_strobe_i,
+    output logic wbp_stall_o,
+    output logic wbp_ack_o,
     
     input  logic reset_i,
     input  logic clk_en_i,                  // Gates 'wb_clock_i' to advance CRTC state
@@ -60,13 +60,13 @@ module video_crtc(
 
     video_crtc_reg video_crtc_reg (
         .wb_clock_i(wb_clock_i),
-        .wb_addr_i(wb_addr_i),
-        .wb_data_o(wb_data_o),
-        .wb_we_i(wb_we_i),
-        .wb_cycle_i(wb_cycle_i),
-        .wb_strobe_i(wb_strobe_i),
-        .wb_stall_o(wb_stall_o),
-        .wb_ack_o(wb_ack_o),
+        .wbp_addr_i(wbp_addr_i),
+        .wbp_data_o(wbp_data_o),
+        .wbp_we_i(wbp_we_i),
+        .wbp_cycle_i(wbp_cycle_i),
+        .wbp_strobe_i(wbp_strobe_i),
+        .wbp_stall_o(wbp_stall_o),
+        .wbp_ack_o(wbp_ack_o),
 
         .clk_en_i(clk_en_i),
         .data_i(data_i),

@@ -57,7 +57,6 @@ module audio (
     // See http://www.cbmhardware.de/show.php?r=14&id=71/PETSID
     logic signed [15:0] sid_out;
 
-    // TODO: 'iRst' doesn't seem to stop audio from playing?
     sid #(
         .POT_SUPPORT(0)
     ) sid (
@@ -68,7 +67,11 @@ module audio (
         .iAddr (addr_i),       // sid address
         .iDataW(data_i),       // writing to SID
         .oDataR(data_o),       // reading from SID
-        .oOut  (sid_out)       // sid output
+        .oOut  (sid_out),      // sid output
+
+        // Unused
+        .ioPotX(),
+        .ioPotY()
     );
 
     wire signed [15:0] cb2_out = via_cb2_i && diag_i ? 16'h800 : -16'h800;

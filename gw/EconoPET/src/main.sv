@@ -129,14 +129,14 @@ module main (
 
     spi1_controller spi1 (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_o(spi1_addr),
-        .wb_data_i(spi1_din),
-        .wb_data_o(spi1_dout),
-        .wb_we_o(spi1_we),
-        .wb_cycle_o(spi1_cycle),
-        .wb_strobe_o(spi1_strobe),
-        .wb_stall_i(spi1_stall),
-        .wb_ack_i(spi1_ack),
+        .wbc_addr_o(spi1_addr),
+        .wbc_data_i(spi1_din),
+        .wbc_data_o(spi1_dout),
+        .wbc_we_o(spi1_we),
+        .wbc_cycle_o(spi1_cycle),
+        .wbc_strobe_o(spi1_strobe),
+        .wbc_stall_i(spi1_stall),
+        .wbc_ack_i(spi1_ack),
 
         .spi_cs_ni(spi0_cs_ni),     // SPI CS_N
         .spi_sck_i(spi0_sck_i),     // SPI SCK
@@ -191,15 +191,15 @@ module main (
 
     ram ram (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(wb_addr),
-        .wb_data_i(wb_dout),
-        .wb_data_o(ram_wb_din),
-        .wb_we_i(wb_we),
-        .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_strobe),
-        .wb_stall_o(ram_wb_stall),
-        .wb_ack_o(ram_wb_ack),
-        .wb_sel_i(ram_wb_sel),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(ram_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(ram_wb_stall),
+        .wbp_ack_o(ram_wb_ack),
+        .wbp_sel_i(ram_wb_sel),
 
         .ram_oe_o(ram_ctl_oe),
         .ram_we_o(ram_ctl_we),
@@ -221,15 +221,15 @@ module main (
 
     register_file register_file (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(wb_addr),
-        .wb_data_i(wb_dout),
-        .wb_data_o(reg_wb_din),
-        .wb_we_i(wb_we),
-        .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_strobe),
-        .wb_ack_o(reg_wb_ack),
-        .wb_stall_o(reg_wb_stall),
-        .wb_sel_i(reg_wb_sel),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(reg_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_ack_o(reg_wb_ack),
+        .wbp_stall_o(reg_wb_stall),
+        .wbp_sel_i(reg_wb_sel),
 
         // Status register
         .video_graphic_i(graphic_i),
@@ -292,7 +292,6 @@ module main (
 
     logic [WB_ADDR_WIDTH-1:0] video_addr;    // Captured address for read
     logic [   DATA_WIDTH-1:0] video_din;     // Peripheral -> Video (WE=0)
-    logic [   DATA_WIDTH-1:0] video_dout;    // Video -> Peripheral (WE=1)
     logic                     video_we;
     logic                     video_cycle;
     logic                     video_strobe;
@@ -310,22 +309,22 @@ module main (
     video video (
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
-        .wb_addr_o(video_addr),
-        .wb_data_i(video_din),
-        .wb_we_o(video_we),
-        .wb_cycle_o(video_cycle),
-        .wb_strobe_o(video_strobe),
-        .wb_stall_i(video_stall),
-        .wb_ack_i(video_ack),
+        .wbc_addr_o(video_addr),
+        .wbc_data_i(video_din),
+        .wbc_we_o(video_we),
+        .wbc_cycle_o(video_cycle),
+        .wbc_strobe_o(video_strobe),
+        .wbc_stall_i(video_stall),
+        .wbc_ack_i(video_ack),
 
         // Wishbone peripheral for reading back CRTC registers
-        .wb_addr_i(wb_addr),
-        .wb_data_o(crtc_wb_din),
-        .wb_we_i(wb_we),
-        .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_strobe),
-        .wb_stall_o(crtc_wb_stall),
-        .wb_ack_o(crtc_wb_ack),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_o(crtc_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(crtc_wb_stall),
+        .wbp_ack_o(crtc_wb_ack),
 
         // Video timing
         .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode
@@ -385,15 +384,15 @@ module main (
 
     keyboard keyboard (
         .wb_clock_i(sys_clock_i),
-        .wb_addr_i(wb_addr),
-        .wb_data_i(wb_dout),
-        .wb_data_o(kbd_wb_din),
-        .wb_we_i(wb_we),
-        .wb_cycle_i(wb_cycle),
-        .wb_strobe_i(wb_strobe),
-        .wb_stall_o(kbd_wb_stall),
-        .wb_ack_o(kbd_wb_ack),
-        .wb_sel_i(kbd_wb_sel),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(kbd_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(kbd_wb_stall),
+        .wbp_ack_o(kbd_wb_ack),
+        .wbp_sel_i(kbd_wb_sel),
         
         .cpu_be_i(cpu_be_o),
         .cpu_data_strobe_i(cpu_data_strobe),
@@ -421,7 +420,7 @@ module main (
         .wbc_strobe_i({ spi1_strobe, video_strobe }),
         .wbc_addr_i({ spi1_addr, video_addr }),
         .wbc_din_o({ spi1_din, video_din }),
-        .wbc_dout_i({ spi1_dout, video_dout }),
+        .wbc_dout_i({ spi1_dout, 8'hxx }), // Video has no data out
         .wbc_we_i({ spi1_we, video_we }),
         .wbc_stall_o({ spi1_stall, video_stall }),
         .wbc_ack_o({ spi1_ack, video_ack }),

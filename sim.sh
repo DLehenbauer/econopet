@@ -68,7 +68,7 @@ vvp -l"$PROJ_DIR/outflow/$PROJ_NAME.rtl.simlog" "$PROJ_DIR/work_sim/$PROJ_NAME.v
 exit_on_failure
 
 if [ -n "$EFX_MAP" ]; then
-    "$SCRIPT_DIR/efx_map.sh"
+    "$SCRIPT_DIR/gw/efx.sh" --flow map
     exit_on_failure
 fi
 

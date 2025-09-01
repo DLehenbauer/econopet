@@ -18,15 +18,15 @@ module register_file(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                     wb_clock_i,
-    input  logic [WB_ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [   DATA_WIDTH-1:0] wb_data_i,
-    output logic [   DATA_WIDTH-1:0] wb_data_o,
-    input  logic                     wb_we_i,
-    input  logic                     wb_cycle_i,
-    input  logic                     wb_strobe_i,
-    output logic                     wb_stall_o,
-    output logic                     wb_ack_o,
-    input  logic                     wb_sel_i,              // Asserted when selected by 'wb_addr_i'
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i,
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,
+    input  logic                     wbp_we_i,
+    input  logic                     wbp_cycle_i,
+    input  logic                     wbp_strobe_i,
+    output logic                     wbp_stall_o,
+    output logic                     wbp_ack_o,
+    input  logic                     wbp_sel_i,              // Asserted when selected by 'wbp_addr_i'
 
     // Status register
     input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
@@ -45,7 +45,7 @@ module register_file(
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
     initial begin
-        wb_ack_o   = '0;
+        wbp_ack_o   = '0;
 
         register[REG_STATUS][REG_STATUS_GRAPHICS_BIT] = 1'b0;
         register[REG_STATUS][REG_STATUS_CRT_BIT]      = 1'b0;
@@ -63,19 +63,19 @@ module register_file(
     end
 
     // This peripheral always completes WB operations in a single cycle.
-    assign wb_stall_o = 1'b0;
+    assign wbp_stall_o = 1'b0;
 
-    wire [REG_ADDR_WIDTH-1:0] reg_addr = wb_addr_i[REG_ADDR_WIDTH-1:0];
+    wire [REG_ADDR_WIDTH-1:0] reg_addr = wbp_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
-        if (wb_sel_i && wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= register[reg_addr];
-            if (wb_we_i) begin
-                register[reg_addr] <= wb_data_i;
+        if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
+            wbp_data_o <= register[reg_addr];
+            if (wbp_we_i) begin
+                register[reg_addr] <= wbp_data_i;
             end
-            wb_ack_o <= 1'b1;
+            wbp_ack_o <= 1'b1;
         end else begin
-            wb_ack_o <= '0;
+            wbp_ack_o <= '0;
 
             // Refresh status registers while not in a wishbone cycle.  This happens at
             // 64 MHz, which is guaranteed to restore overwritten status bits before
