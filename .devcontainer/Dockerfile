@@ -54,6 +54,12 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 
 # Install apt package dependencies.
 #
+# Efinity 2025.1 dependencies:
+#
+#   libgl1
+#   libegl1
+#   libxkbcommon0
+#
 # For VS Code "xaver.clang-format" extension:
 # 
 #   clang-format
@@ -139,11 +145,14 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     git-lfs \
     gperf \
     gtkwave \
+    libegl1 \
     libftdi-dev \
+    libgl1 \
     libnewlib-arm-none-eabi \
     libstdc++-arm-none-eabi-newlib \
     libtool \
     libusb-1.0-0-dev \
+    libxkbcommon0 \
     make \
     minicom \
     ninja-build \

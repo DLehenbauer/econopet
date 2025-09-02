@@ -20,7 +20,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wnull-dereference)
 
 # Add projects
-add_subdirectory("./sdcard")
-#add_subdirectory("./rom")
-#add_subdirectory("./gw")
+add_subdirectory("./rom")
 add_subdirectory("./fw")
+add_subdirectory("./gw")
+add_subdirectory("./sdcard")

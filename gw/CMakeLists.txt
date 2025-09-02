@@ -7,9 +7,9 @@ set(FPGA_WORK_DIR ${CMAKE_CURRENT_BINARY_DIR}/work)
 
 # Define the FPGA bitstream build target
 add_custom_target(fpga_bitstream
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/efx.sh --output_dir ${FPGA_OUTPUT_DIR} --work_dir ${FPGA_WORK_DIR}
+    COMMENT "Compiling FPGA bitstream using Efinity tools"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building FPGA bitstream using Efinity tools"
+    COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}"
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"
     VERBATIM
 )

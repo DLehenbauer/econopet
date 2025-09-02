@@ -63,12 +63,6 @@ fw/src/roms/901447_10.h
 fw/src/roms/menu_rom.h
 
 #
-# FPGA Bitstream
-#
-
-fw/src/fpga/bitstream.h
-
-#
 # CC65
 # 
 

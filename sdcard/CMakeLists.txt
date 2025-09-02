@@ -14,7 +14,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 cmake_minimum_required(VERSION 3.13.1)
 include(FetchContent)
 
-project(roms)
+project(sdcard)
 
 set(CMAKE_TLS_VERIFY true)
 set(sdcard_download_dir ${CMAKE_CURRENT_BINARY_DIR}/download)
