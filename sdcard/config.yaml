@@ -6,17 +6,17 @@ configs:
       - action: "load"
         files:
           - address: 0x8800
-            file: "/roms/901447-10.bin"
+            file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
-            file: "/roms/901465-23.bin"
+            file: "/roms/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/901465-20.bin"
+            file: "/roms/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/901465-21.bin"
+            file: "/roms/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/901498-01.bin"
+            file: "/roms/edit-4-40-n-50Hz.901498-01.bin"
           - address: 0xf000
-            file: "/roms/901465-22.bin"
+            file: "/roms/kernal-4.901465-22.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -36,17 +36,17 @@ configs:
       - action: "load"
         files:
           - address: 0x8800
-            file: "/roms/901447-10.bin"
+            file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
-            file: "/roms/901465-23.bin"
+            file: "/roms/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/901465-20.bin"
+            file: "/roms/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/901465-21.bin"
+            file: "/roms/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/901499-01.bin"
+            file: "/roms/edit-4-40-n-60Hz.901499-01.bin"
           - address: 0xf000
-            file: "/roms/901465-22.bin"
+            file: "/roms/kernal-4.901465-22.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -65,17 +65,17 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/901447-10.bin"
+          - file: "/roms/characters-2.901447-10.bin"
             address: 0x8800
-          - file: "/roms/901465-23.bin"
+          - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
-          - file: "/roms/901465-20.bin"
+          - file: "/roms/basic-4-c000.901465-20.bin"
             address: 0xc000
-          - file: "/roms/901465-21.bin"
+          - file: "/roms/basic-4-d000.901465-21.bin"
             address: 0xd000
-          - file: "/roms/901474-04.bin"
+          - file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
             address: 0xe000
-          - file: "/roms/901465-22.bin"
+          - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
       - if: "graphics"
         then:
@@ -103,17 +103,17 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/901447-10.bin"
+          - file: "/roms/characters-2.901447-10.bin"
             address: 0x8800
-          - file: "/roms/901465-23.bin"
+          - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
-          - file: "/roms/901465-20.bin"
+          - file: "/roms/basic-4-c000.901465-20.bin"
             address: 0xc000
-          - file: "/roms/901465-21.bin"
+          - file: "/roms/basic-4-d000.901465-21.bin"
             address: 0xd000
-          - file: "/roms/901474-03.bin"
+          - file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
             address: 0xe000
-          - file: "/roms/901465-22.bin"
+          - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
       - if: "graphics"
         then:
@@ -136,20 +136,20 @@ configs:
       - action: "load"
         files:
           - address: 0x8800
-            file: "/roms/901447-10.bin"
+            file: "/roms/characters-2.901447-10.bin"
           - address: 0xc000
-            file: "/roms/901465-01.bin"
+            file: "/roms/basic-2-c000.901465-01.bin"
           - address: 0xd000
-            file: "/roms/901465-02.bin"
+            file: "/roms/basic-2-d000.901465-02.bin"
           - address: 0xf000
-            file: "/roms/901465-03.bin"
+            file: "/roms/kernal-2.901465-03.bin"
       - if: "graphics"
         then:
           # Load editor ROM for graphics keyboard.
           - action: "load"
             files:
             - address: 0xe000
-              file: "/roms/901447-24.bin"
+              file: "/roms/edit-2-n.901447-24.bin"
           # Upgrade ROMs for the graphics keyboard continued to delay screen updates until
           # the beam was outside the visible region to avoid "sparkle" artifacts.
           #
@@ -175,7 +175,7 @@ configs:
           - action: "load"
             files:
             - address: 0xe000
-              file: "/roms/901474-01.bin"
+              file: "/roms/edit-2-b.901474-01.bin"
           # The 30xxB editor ROM initializes to lower case.  Patch it to upper case.
           - action: "patch"
             address: 0x0e221
@@ -187,23 +187,23 @@ configs:
       - action: "load"
         files:
           - address: 0x8800
-            file: "/roms/901439-08.bin"
+            file: "/roms/characters-1.901447-08.bin"
           - address: 0xc000
-            file: "/roms/901439-01.bin"
+            file: "/roms/rom-1-c000.901439-01.bin"
           - address: 0xd000
-            file: "/roms/901439-02.bin"
+            file: "/roms/rom-1-d000.901439-02.bin"
           - address: 0xe000
-            file: "/roms/901439-03.bin"
+            file: "/roms/rom-1-e000.901439-03.bin"
           - address: 0xf000
             # Instead of "/roms/901439-04.bin", we use a patched ROM for disk drive support:
             # https://hub.inktada.com/channel/rom1diskmagic
             file: "/roms/rom1diskrom_v15.bin"
           - address: 0xc800
-            file: "/roms/901439-05.bin"
+            file: "/roms/rom-1-c800.901439-05.bin"
           - address: 0xd800
-            file: "/roms/901439-06.bin"
+            file: "/roms/rom-1-d800.901439-06.bin"
           - address: 0xf800
-            file: "/roms/901439-07.bin"
+            file: "/roms/rom-1-f800.901439-07.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for the original ROM set.

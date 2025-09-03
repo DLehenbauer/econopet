@@ -225,7 +225,8 @@ ENV PATH="/opt/verible/bin:${PATH}"
 
 # Download required ROMs (with MD5 verification)
 # Note: Build context is the .devcontainer folder, so copy relative to it.
+ENV ECONOPET_ROMS_DIR="/opt/econopet/roms"
 COPY download-roms.sh /tmp/download-roms.sh
 RUN chmod +x /tmp/download-roms.sh && \
-    /tmp/download-roms.sh /opt/roms && \
+    /tmp/download-roms.sh ${ECONOPET_ROMS_DIR} && \
     rm -f /tmp/download-roms.sh
