@@ -54,6 +54,10 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 
 # Install apt package dependencies.
 #
+# Upgrade:
+#
+#   ca-certificates
+#
 # Efinity 2025.1 dependencies:
 #
 #   libgl1
@@ -133,6 +137,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     binutils-multiarch \
     bison \
     build-essential \
+    ca-certificates \
     cc65 \
     check \
     clang-format \
@@ -217,3 +222,10 @@ RUN mkdir -p /opt/verible && \
     tar -x -f /tmp/${VERIBLE_ARCHIVE} -C /opt/verible --strip-components 1 && \
     rm -rf /tmp/${VERIBLE_ARCHIVE}
 ENV PATH="/opt/verible/bin:${PATH}"
+
+# Download required ROMs (with MD5 verification)
+# Note: Build context is the .devcontainer folder, so copy relative to it.
+COPY download-roms.sh /tmp/download-roms.sh
+RUN chmod +x /tmp/download-roms.sh && \
+    /tmp/download-roms.sh /opt/roms && \
+    rm -f /tmp/download-roms.sh
