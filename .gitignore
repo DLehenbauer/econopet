@@ -20,7 +20,7 @@ hw/**/*.lck
 hw/**/fp-info-cache
 
 # Fabrication Toolkit backup files
-hw/**/mainboard/kicad/production/backups
+hw/**/production/backups
 
 #
 # Efinity
