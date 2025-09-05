@@ -69,8 +69,25 @@
     ],
     "buildPresets": [
         {
-            "name": "rp2040_release",
-            "configurePreset": "rp2040_release"
+            "name": "fw",
+            "displayName": "Firmware",
+            "description": "Build only the RP2040 firmware target",
+            "configurePreset": "rp2040_release",
+            "targets": ["firmware.elf"]
+        },
+        {
+            "name": "gw",
+            "displayName": "Gateware",
+            "description": "Build only the FPGA bitstream target",
+            "configurePreset": "rp2040_release",
+            "targets": ["fpga_bitstream"]
+        },
+        {
+            "name": "sdcard",
+            "displayName": "SD Card",
+            "description": "Build all targets including sdcard content",
+            "configurePreset": "rp2040_release",
+            "targets": ["all"]
         },
         {
             "name": "test",

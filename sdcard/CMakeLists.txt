@@ -43,3 +43,38 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/config.yaml" DESTINATION "${sdcard_root_dir
 
 # Copy ukm to the sdcard_root directory
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
+
+# Copy firmware UF2 produced by fw/firmware.elf into the SD card root at build time
+# Ensure we depend on the actual firmware.elf target so the UF2 exists before copy
+set(FW_TARGET firmware.elf)
+
+add_custom_command(
+    OUTPUT "${sdcard_root_dir}/firmware.uf2"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}"
+    COMMAND ${CMAKE_COMMAND} -E copy
+            "$<TARGET_FILE_DIR:${FW_TARGET}>/${FW_TARGET}.uf2"
+            "${sdcard_root_dir}/firmware.uf2"
+    DEPENDS ${FW_TARGET}
+    COMMENT "Copying ${FW_TARGET}.uf2 to SD card root"
+    VERBATIM
+)
+
+# Copy FPGA bitstream produced by gw target into sdcard_root/fpga
+set(GW_BITSTREAM "${CMAKE_BINARY_DIR}/gw/outflow/EconoPET.hex.bin")
+
+add_custom_command(
+    OUTPUT "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}/fpga"
+    COMMAND ${CMAKE_COMMAND} -E copy
+            "${GW_BITSTREAM}"
+            "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+    DEPENDS fpga_bitstream "${GW_BITSTREAM}"
+    COMMENT "Copying EconoPET.hex.bin to SD card fpga directory"
+    VERBATIM
+)
+
+# Define 'sdcard' target that performs the copy; included in default 'all' build
+add_custom_target(sdcard ALL
+    DEPENDS "${sdcard_root_dir}/firmware.uf2"
+            "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+)
