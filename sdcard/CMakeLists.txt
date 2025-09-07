@@ -23,16 +23,12 @@ set(sdcard_rom_dir ${sdcard_root_dir}/roms)
 if(NOT DEFINED ENV{ECONOPET_ROMS_DIR} OR "$ENV{ECONOPET_ROMS_DIR}" STREQUAL "")
     message(FATAL_ERROR "ECONOPET_ROMS_DIR environment variable is not set. Set it to the directory containing ROM files.")
 endif()
+
 set(roms_source_dir "$ENV{ECONOPET_ROMS_DIR}")
-
 message(STATUS "Using ROMs from: ${roms_source_dir}")
-
-# Ensure source directory exists
 if(NOT IS_DIRECTORY "${roms_source_dir}")
     message(FATAL_ERROR "ROM source directory not found: ${roms_source_dir}. Check the ECONOPET_ROMS_DIR environment variable is set to a valid directory.")
 endif()
-
-# Create destination directories
 
 # Copy static files from the source 'sdcard' directory to the build output
 # during configuration.
@@ -69,8 +65,23 @@ add_custom_command(
     VERBATIM
 )
 
-# Define 'sdcard' target that performs the copy; included in default 'all' build
-add_custom_target(sdcard ALL
+# Create a zip archive of the SD card contents
+string(TIMESTAMP ECONOPET_DATE "%y%m%d")
+set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${ECONOPET_DATE}.0.zip")
+set(sdcard_zip_path "${CMAKE_CURRENT_BINARY_DIR}/${sdcard_zip_name}")
+
+add_custom_command(
+    OUTPUT "${sdcard_zip_path}"
+    # Zip only the contents of ${sdcard_root_dir}
+    COMMAND ${CMAKE_COMMAND} -E tar cf "${sdcard_zip_path}" --format=zip .
+    WORKING_DIRECTORY "${sdcard_root_dir}"
     DEPENDS "${sdcard_root_dir}/firmware.uf2"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+    COMMENT "Zipping SD card contents to ${sdcard_zip_path}"
+    VERBATIM
+)
+
+# Define 'sdcard' target that performs the copy; included in default 'all' build
+add_custom_target(sdcard ALL
+    DEPENDS "${sdcard_zip_path}"
 )
