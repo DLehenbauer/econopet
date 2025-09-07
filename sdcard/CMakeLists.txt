@@ -33,21 +33,18 @@ if(NOT IS_DIRECTORY "${roms_source_dir}")
 endif()
 
 # Create destination directories
+
+# Copy static files from the source 'sdcard' directory to the build output
+# during configuration.
 file(MAKE_DIRECTORY "${sdcard_rom_dir}")
-
-# Copy all ROM files verbatim (no renaming, no checksum verification)
-file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
-
-# Copy config.yaml to the sdcard_root directory
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/config.yaml" DESTINATION "${sdcard_root_dir}")
-
-# Copy ukm to the sdcard_root directory
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/bootloader.uf2" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
+file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
 
 # Copy firmware UF2 produced by fw/firmware.elf into the SD card root at build time
 # Ensure we depend on the actual firmware.elf target so the UF2 exists before copy
 set(FW_TARGET firmware.elf)
-
 add_custom_command(
     OUTPUT "${sdcard_root_dir}/firmware.uf2"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}"
@@ -61,7 +58,6 @@ add_custom_command(
 
 # Copy FPGA bitstream produced by gw target into sdcard_root/fpga
 set(GW_BITSTREAM "${CMAKE_BINARY_DIR}/gw/outflow/EconoPET.hex.bin")
-
 add_custom_command(
     OUTPUT "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}/fpga"

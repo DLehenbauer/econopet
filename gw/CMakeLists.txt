@@ -43,7 +43,8 @@ message(VERBOSE "FPGA source files: ${FPGA_SRC_FILES}")
 # Define the output bitstream file
 set(FPGA_BITSTREAM_FILE "${FPGA_OUTPUT_DIR}/EconoPET.hex.bin")
 
-# Produce the bitstream file only when sources are newer
+# Produce the bitstream file only when sources are newer.  This takes a minute or two to run,
+# so we declare 'USES_TERMINAL' to give some feedback that the build is progressing.
 add_custom_command(
     COMMENT "Compiling FPGA bitstream using Efinity tools (be patient)"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -51,6 +52,7 @@ add_custom_command(
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"
     DEPENDS ${FPGA_SRC_FILES}
+    USES_TERMINAL
     VERBATIM
 )
 
