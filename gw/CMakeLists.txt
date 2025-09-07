@@ -48,7 +48,9 @@ set(FPGA_BITSTREAM_FILE "${FPGA_OUTPUT_DIR}/EconoPET.hex.bin")
 add_custom_command(
     COMMENT "Compiling FPGA bitstream using Efinity tools (be patient)"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND /bin/bash -lc "git update-index -q --refresh && git diff --quiet -- EconoPET/EconoPET.xml && git diff --quiet --cached -- EconoPET/EconoPET.xml || (echo '*** ERROR: EconoPET.xml has local edits. Aborting build. ***' >&2; exit 1)"
     COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}"
+    COMMAND /bin/bash -lc "git restore --source=HEAD --worktree -- EconoPET/EconoPET.xml || true"
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"
     DEPENDS ${FPGA_SRC_FILES}
