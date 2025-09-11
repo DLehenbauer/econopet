@@ -215,8 +215,8 @@ configs:
           - action: "patch"
             address: 0x0e702
             hex: "b01148bd5be7d007a9018d0402d0038e230268caf00888d0e6ee10e8d0d7ad2302cd0302f0318d0302aa302bbd5be708297f2830184e04029013c92c900dc93cb009e90fc920b00569202c0980ae0d029d0f02e820ece74c7ee650e73a03393633dfb12fff134d205812b2ffffb02c4e565ab300ffae2e424300b4db4f1155544551145049dc59525789b6c04c0d4a474441b53b4bdd4846539bb9ffdeb7b0373431ffff1db82d383532"
-      # Original ROMs polled VIA ($E840) to delay screen updates until outside the beam
-      # was outside the visible region to avoid "sparkle" artifacts.
+      # Original ROMs polled VIA ($E840) to delay screen updates until the beam was
+      # outside the visible region to avoid "sparkle" artifacts.
       #
       # On later CRTC models, the polling is unnecessary and results in extremely slow
       # text output due to VIA/PB5 being connected to VERT instead of VIDEO_ON/SYNC.
