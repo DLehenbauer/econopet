@@ -4340,9 +4340,9 @@
 		)
 		(uuid "09e03911-b40d-42e7-ab15-5990494fffe8")
 	)
-	(text "A single 128KB SRAM chip is used for the 32K main RAM, 64K expansion RAM,\n2K display RAM, 2K character ROM and 26K system ROM.  ROMs are initialized\nby the MCU on POR (via SPI -> bus bridge provided by the FPGA).\n\nA[15:0] are the address of the shared system bus, which is connected to the\nCPU, IO, FPGA and most RAM address pins.  The exceptions are\nRAM_A[16:15,11:10], which are driven exclusively by the FPGA.\n\nRAM_A[11:10] is used by the FPGA to mirror display RAM when the CPU\naccesses the range $8000-8FFF.\n\n40 column PET has 1k of screen RAM, mirrored 4 times.\n80 column PET has 2k of screen RAM, mirrored 2 times.\n\nRAM_A[16:15] is used by the FPGA to implement bank switching when the\nCPU accesses the ranges $8000-FFFF.  The FPGA monitors writes to the\ncontrol register at $FFF0 to determine which bank is currently selected."
+	(text "A single 128 KB SRAM chip provides all memory regions: 32 KB main RAM,\n64 KB expansion RAM (banked), 2 KB display RAM, 2 KB character ROM,\nand 26 KB system ROM.\n\nROM contents are initialized by the MCU at power-on reset (POR) through\nan SPI-to-bus bridge implemented in the FPGA.\n\nAddress lines A[15:0] form the shared system bus, connecting the CPU,\nI/O, FPGA, and most SRAM address pins.  The exceptions are\nRAM_A[16:15, 11:10], which are routed through the FPGA instead of\nconnected directly to the bus.\n\nRAM_A[11:10] is used by the FPGA to mirror display RAM when the CPU\naccesses the range $8000-8FFF.\n\n40 column PET has 1k of screen RAM, mirrored 4 times.\n80 column PET has 2k of screen RAM, mirrored 2 times.\n\nThe FPGA uses RAM_A[16:15] to implement bank switching for CPU\naccesses in the range $8000-FFFF.  Writes to the control register at\n$FFF0 are monitored by the FPGA to determine the active bank.\n"
 		(exclude_from_sim no)
-		(at 176.53 55.88 0)
+		(at 171.45 58.42 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -4397,9 +4397,9 @@
 		)
 		(uuid "c62edb33-344e-4d0a-82ae-36cd575971aa")
 	)
-	(text "CPU and RAM operate at 3V3 so that the system bus\nand CPU control signals can be directly shared\nwith the FPGA.\n\nLevel shifters are used for connections to the 5V\nI/O section.  This design avoids needing level\nshifters for A[5..16].\n\nThe FPGA deasserts BE (Bus Enable) to transition the\nCPU's Address, Data, and R~{W} buffers to high-Z\nwhen the FPGA drives the bus.\n\n"
+	(text "The CPU and RAM operate at 3V3, allowing the system\nbus and control signals to interface directly with\nthe FPGA.\n\nTherefore, level shifters are only required where\nthe CPU / FPGA interface with the 5 V I/O section.\nThis avoids needing level shifters for A[5..16].\n\nWhen the FPGA drives the bus, it deasserts BE\n(Bus Enable) to place the CPU's Address, Data, and\nR/~W buffers in a high-impedance state."
 		(exclude_from_sim no)
-		(at 60.96 41.91 0)
+		(at 58.42 39.37 0)
 		(effects
 			(font
 				(size 1.27 1.27)

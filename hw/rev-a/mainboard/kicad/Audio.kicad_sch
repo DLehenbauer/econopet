@@ -2717,7 +2717,7 @@
 	)
 	(text "Audio"
 		(exclude_from_sim no)
-		(at 34.29 57.15 0)
+		(at 46.99 57.15 0)
 		(effects
 			(font
 				(size 1.5 1.5)
@@ -2739,9 +2739,9 @@
 		)
 		(uuid "307b2906-6c82-46c7-983f-f59e82bd523b")
 	)
-	(text "PET CB2 and DIAG are inputs to FPGA.\nFPGA implements AND gate and outputs\nAUDIO source.  This saves an IC and\nallows for experimental enhancements,\nlike SID emulation at $8F00.\n\nThe AUDIO source is ΔΣ encoded 1-bit\noutput from the FPGA (3V3 at 64 MHz).\n\nThe 1u capacitor and 12k resistor\nadjusts this to line-level audio, which\nis +/- 0.5V AC for consumer electronics.\n\n(Note that amplifiers and powered speakers\ntypically provide a 10k resistor to ground\nto form a voltage divider.)"
+	(text "PET CB2 and DIAG are inputs to the FPGA. The FPGA\nimplements an AND gate and outputs the resulting\nAUDIO signal.  This eliminates one external gate\nand allows for FPGA-based audio enhancements.\n\nThe AUDIO output is a 1-bit ΔΣ-encoded\n(delta-sigma) signal from the FPGA (3V3, 64 MHz).\nA 1 µF capacitor and 12 kΩ resistor filter and\nscale this to line-level audio (~±0.5 V AC).\n\nNote that amplifiers and powered speakers typically\ninclude a 10 kΩ resistor to ground, forming a\nvoltage divider with the 12 kΩ resistor.\n"
 		(exclude_from_sim no)
-		(at 34.29 74.93 0)
+		(at 46.99 72.39 0)
 		(effects
 			(font
 				(size 1.27 1.27)
