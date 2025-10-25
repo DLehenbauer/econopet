@@ -31,7 +31,10 @@
   * Silk
     * Recommended Assembly order: IDC header accidentally included in 2x header parts
     * Reorder so that we do large headers first and in an order that ensures scraps will have sufficient parts.
-  * Layout
+      * Header #1 (length 25): 25 = 25 used, 0 waste
+      * Header #2 (length 25): 11 + 10 + 3 = 24 used, 1 waste
+      * Header #3 (length 20): 9 + 8 = 17 used, 3 waste
+  * Layout / Routing
     * These parts should be offset: CPU, RAM, 25-pin header
     * Route ground with signals
     * Check http://jlcdfm.com recommendations
