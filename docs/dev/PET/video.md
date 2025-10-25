@@ -1,8 +1,10 @@
 # Video
 
-## Non-CRTC
+## Non-CRTC (9" monitor)
 
-Measurements from a 2001-32N (1979):
+Thomas Skibo documented the Non-CRTC (9") video timings [here](https://github.com/skibo/attiny2313_petvid).
+
+Some additional measurements from a 2001-32N (1979):
 
 Signal | Frequency  | Period   | Width  | Polarity    | Source
 -------|------------|----------|--------|-------------|-----------
@@ -36,7 +38,7 @@ this is outside the range supported by the CRTC.
 
 ### Address decoding
 
-Address decoding selects asserts the CRTC's CS line (Chip Select) for $E880-E8FF.
+Address decoding asserts the CRTC's CS line (Chip Select) for $E880-E8FF.
 The CRTC has a single RS (Register Select) input that is tied to A0.
 
 ### Timing (CRTC)
