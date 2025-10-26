@@ -23,4 +23,8 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 add_subdirectory("./rom")
 add_subdirectory("./fw")
 add_subdirectory("./gw")
+
+# SDCard requires binaries built for RP2040
+if(PICO_PLATFORM STREQUAL "rp2040")
 add_subdirectory("./sdcard")
+endif()
