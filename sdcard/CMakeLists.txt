@@ -38,29 +38,39 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/bootloader.uf2" DESTINATION "${sdcard_root_
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
 file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
 
-# Copy firmware UF2 produced by fw/firmware.elf into the SD card root at build time
-# Ensure we depend on the actual firmware.elf target so the UF2 exists before copy
-set(FW_TARGET firmware.elf)
+# Get firmware and FPGA paths from CMake variables (set by super-project)
+# These should be passed in as -DFIRMWARE_UF2=... and -DFPGA_BITSTREAM=...
+if(NOT DEFINED FIRMWARE_UF2)
+    message(FATAL_ERROR "FIRMWARE_UF2 must be defined (path to firmware.elf.uf2)")
+endif()
+
+if(NOT DEFINED FPGA_BITSTREAM)
+    message(FATAL_ERROR "FPGA_BITSTREAM must be defined (path to EconoPET.hex.bin)")
+endif()
+
+message(STATUS "Firmware UF2: ${FIRMWARE_UF2}")
+message(STATUS "FPGA Bitstream: ${FPGA_BITSTREAM}")
+
+# Copy firmware UF2 into the SD card root at build time
 add_custom_command(
     OUTPUT "${sdcard_root_dir}/firmware.uf2"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}"
-    COMMAND ${CMAKE_COMMAND} -E copy
-            "$<TARGET_FILE_DIR:${FW_TARGET}>/${FW_TARGET}.uf2"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${FIRMWARE_UF2}"
             "${sdcard_root_dir}/firmware.uf2"
-    DEPENDS ${FW_TARGET}
-    COMMENT "Copying ${FW_TARGET}.uf2 to SD card root"
+    DEPENDS "${FIRMWARE_UF2}"
+    COMMENT "Copying firmware.uf2 to SD card root"
     VERBATIM
 )
 
-# Copy FPGA bitstream produced by gw target into sdcard_root/fpga
-set(GW_BITSTREAM "${CMAKE_BINARY_DIR}/gw/outflow/EconoPET.hex.bin")
+# Copy FPGA bitstream into sdcard_root/fpga
 add_custom_command(
     OUTPUT "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}/fpga"
-    COMMAND ${CMAKE_COMMAND} -E copy
-            "${GW_BITSTREAM}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${FPGA_BITSTREAM}"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
-    DEPENDS fpga_bitstream "${GW_BITSTREAM}"
+    DEPENDS "${FPGA_BITSTREAM}"
     COMMENT "Copying EconoPET.hex.bin to SD card fpga directory"
     VERBATIM
 )

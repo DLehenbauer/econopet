@@ -9,13 +9,11 @@ cd "$SCRIPT_DIR"
 # Ensure we restore the original directory on exit
 trap 'cd "$ORIG_PWD"' EXIT
 
+# Clean build directory
 rm -rf ./build
 
-# Build sdcard
-cmake --preset rp2040_release --log-level VERBOSE
-cmake --build --preset sdcard
+# Configure CMake super-project
+cmake -S . -B build -G Ninja
 
-# Build firmware unit tests for Linux host
-cmake --preset test --log-level VERBOSE
-cmake --build --preset test
-#pushd build/test/fw/test && ./firmware-test; popd
+# Building all subprojects
+cmake --build build

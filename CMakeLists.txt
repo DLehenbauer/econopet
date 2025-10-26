@@ -10,21 +10,141 @@
 # @copyright CC0 http://creativecommons.org/publicdomain/zero/1.0/
 # @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
 cmake_minimum_required(VERSION 3.13...3.27)
 
-project(EconoPET C CXX ASM)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+# Root super-project that orchestrates building all subprojects
+project(EconoPET_SuperProject NONE)
 
-add_compile_options(-Wall -Wextra -Wnull-dereference)
+# Include ExternalProject module for building subprojects
+include(ExternalProject)
 
-# Add projects
-add_subdirectory("./rom")
-add_subdirectory("./fw")
-add_subdirectory("./gw")
+# Determine if we should build all subprojects or specific ones
+option(BUILD_ROM "Build the 6502 ROM subproject" ON)
+option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
+option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
+option(BUILD_TESTS "Build the firmware unit tests" ON)
+option(BUILD_SDCARD "Build the SD card package" ON)
 
-# SDCard requires binaries built for RP2040
-if(PICO_PLATFORM STREQUAL "rp2040")
-add_subdirectory("./sdcard")
+# Common build directory
+set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
+
+# ============================================================================
+# ROM Subproject (6502 Assembly using CC65)
+# ============================================================================
+if(BUILD_ROM)
+    ExternalProject_Add(rom_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/rom
+        BINARY_DIR ${SUPER_BUILD_DIR}/rom
+        CMAKE_ARGS
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=Release
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS FALSE
+    )
+    set(ROM_BINARY ${SUPER_BUILD_DIR}/rom/bin/menu.rom)
 endif()
+
+# ============================================================================
+# FPGA Subproject (Verilog using Efinity)
+# ============================================================================
+if(BUILD_FPGA)
+    ExternalProject_Add(fpga_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/gw
+        BINARY_DIR ${SUPER_BUILD_DIR}/gw
+        CMAKE_ARGS
+            -G Ninja
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target fpga_bitstream
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS FALSE
+    )
+    set(FPGA_BITSTREAM ${SUPER_BUILD_DIR}/gw/outflow/EconoPET.hex.bin)
+endif()
+
+# ============================================================================
+# Firmware Subproject (RP2040 using Pico SDK)
+# ============================================================================
+if(BUILD_FIRMWARE)
+    # Firmware requires special configuration with Pico SDK
+    set(FW_CMAKE_ARGS
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DPICO_PLATFORM=rp2040
+        -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
+        -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+    )
+    
+    ExternalProject_Add(firmware_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw
+        BINARY_DIR ${SUPER_BUILD_DIR}/fw
+        CMAKE_ARGS ${FW_CMAKE_ARGS}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target firmware.elf
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS FALSE
+    )
+    set(FIRMWARE_ELF ${SUPER_BUILD_DIR}/fw/src/firmware.elf)
+    set(FIRMWARE_UF2 ${SUPER_BUILD_DIR}/fw/src/firmware.elf.uf2)
+endif()
+
+# ============================================================================
+# Firmware Tests Subproject (Linux host tests)
+# ============================================================================
+if(BUILD_TESTS)
+    set(TEST_CMAKE_ARGS
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=Debug
+        -DPICO_PLATFORM=host
+        -DPICO_NO_HARDWARE=1
+        -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
+        "-DCMAKE_C_FLAGS_DEBUG=-ggdb -fno-omit-frame-pointer -fno-inline"
+        "-DCMAKE_CXX_FLAGS_DEBUG=-ggdb -fno-omit-frame-pointer -fno-inline"
+    )
+    
+    ExternalProject_Add(test_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/fw
+        BINARY_DIR ${SUPER_BUILD_DIR}/test
+        CMAKE_ARGS ${TEST_CMAKE_ARGS}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS FALSE
+    )
+endif()
+
+# ============================================================================
+# SD Card Package (depends on ROM, FPGA, and Firmware)
+# ============================================================================
+if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
+    ExternalProject_Add(sdcard_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/sdcard
+        BINARY_DIR ${SUPER_BUILD_DIR}/sdcard
+        DEPENDS firmware_project fpga_project
+        CMAKE_ARGS
+            -G Ninja
+            -DPICO_PLATFORM=rp2040
+            -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
+            -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+            -DFIRMWARE_UF2=${FIRMWARE_UF2}
+            -DFPGA_BITSTREAM=${FPGA_BITSTREAM}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
+endif()
+
+# ============================================================================
+# Convenience targets
+# ============================================================================
+
+# Target to build everything
+add_custom_target(all_projects
+    DEPENDS 
+        $<$<BOOL:${BUILD_ROM}>:rom_project>
+        $<$<BOOL:${BUILD_FPGA}>:fpga_project>
+        $<$<BOOL:${BUILD_FIRMWARE}>:firmware_project>
+        $<$<BOOL:${BUILD_TESTS}>:test_project>
+        $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
+    COMMENT "Building all enabled subprojects"
+)
+
+# Make all_projects the default target
+add_custom_target(default_target ALL DEPENDS all_projects)
