@@ -18,14 +18,19 @@ ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
 ARG IVERILOG_VERSION="v12_0"
 
 # Efinity software requires a free license from Efinix. Please do the right thing.
-# From https://www.efinixinc.com/support/efinity.php
+# From https://www.efinixinc.com/support/
 ARG EFINITY_MAJOR_MINOR="2025.1"
 ARG EFINITY_PATCH="110"
 
 # Cache large downloads:
 
 # Download Efinity software -- Requires a free license from Efinix. Please do the right thing.
-# (See: https://www.efinixinc.com/support/efinity.php)
+#
+#   1. Create an account on the Efinix website.
+#   2. Log in to your account.
+#   3. Navigate to the Efinity page to request your free license.
+#      (See: https://www.efinixinc.com/support/)
+#
 ARG EFINITY_ARCHIVE="efinity-${EFINITY_MAJOR_MINOR}.${EFINITY_PATCH}-linux-x64.tar.bz2"
 RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp
 
@@ -58,7 +63,7 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 #
 #   ca-certificates
 #
-# Efinity 2025.1 dependencies:
+# Efinity dependencies (as of 2025.1):
 #
 #   libgl1
 #   libegl1
@@ -211,7 +216,7 @@ RUN cd /tmp/openocd && \
     rm -rf openocd
 
 # Install Efinity -- Requires a free license from Efinix. Please do the right thing.
-# (See: https://www.efinixinc.com/support/efinity.php)
+# (See: https://www.efinixinc.com/support/)
 RUN tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
     rm -rf /tmp/${EFINITY_ARCHIVE} && \
     chmod +x /opt/efinity/${EFINITY_MAJOR_MINOR}/bin/setup.sh
