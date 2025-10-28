@@ -13,6 +13,7 @@
  */
 
 #include <limits.h>
+#include <stdlib.h>
 #include "system_state.h"
 #include "video/video.h"
 #include "sd/sd.h"
@@ -23,12 +24,19 @@ bool video_graphics = false;
 bool video_is_80_col = false;
 
 // All pico-vfs paths are absolute, starting with '/'.
-// /workspaces/econopet/build/sdcard/sdcard_root/config.yaml
-// /workspaces/econopet/sdcard/config.yaml
+// Map to the sdcard directory using ECONOPET_TEST_SDCARD_ROOT environment variable
 static const char* map_path(const char* const path) {
-    static char relative_path[PATH_MAX];
-    snprintf(relative_path, sizeof(relative_path), "../../../../sdcard%s", path);
-    return relative_path;
+    static char absolute_path[PATH_MAX];
+    
+    const char* sdcard_root = getenv("ECONOPET_TEST_SDCARD_ROOT");
+    if (!sdcard_root) {
+        fprintf(stderr, "FATAL: ECONOPET_TEST_SDCARD_ROOT environment variable not set.\n");
+        fprintf(stderr, "Please set it to the sdcard directory path.\n");
+        exit(1);
+    }
+    
+    snprintf(absolute_path, sizeof(absolute_path), "%s%s", sdcard_root, path);
+    return absolute_path;
 }
 
 // Wrapper for fopen

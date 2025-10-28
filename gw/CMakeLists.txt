@@ -60,3 +60,6 @@ add_custom_command(
 
 # Make the bitstream target part of the default build and depend on the output file
 add_custom_target(fpga_bitstream ALL DEPENDS ${FPGA_BITSTREAM_FILE})
+
+# Add simulation tests subdirectory
+add_subdirectory(${FPGA_PROJECT_DIR}/sim ${CMAKE_CURRENT_BINARY_DIR}/sim)

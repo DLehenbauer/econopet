@@ -40,7 +40,7 @@ int run_suite() {
 }
 
 int main(void) {
-    config_test();
+    // config_test();
     // menu();
 
     return run_suite();

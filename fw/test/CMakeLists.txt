@@ -47,3 +47,17 @@ target_link_libraries(${PROJECT_NAME}
 include_directories(
     "${EXTERNAL_DIR}/libyaml/include"
     "${SRC_DIR}")
+
+# Enable testing
+enable_testing()
+
+# Add the test executable as a CTest test
+add_test(
+    NAME firmware_tests
+    COMMAND ${PROJECT_NAME}
+)
+
+# Set environment variable to point to sdcard directory
+set_tests_properties(firmware_tests PROPERTIES
+    ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../../sdcard"
+)
