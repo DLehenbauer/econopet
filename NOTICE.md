@@ -987,3 +987,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## ROM 1 Disk Magic
+
+**source:** <https://hub.inktada.com/channel/rom1diskmagic>
+
+No license information available. Freely distributed from the source URL above.
