@@ -8,17 +8,20 @@ usage() {
   exit 2
 }
 
-BASE_URL="http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/"
-
 # Require destination directory argument
-if [[ ${#@} -lt 1 ]]; then
+if [[ $# -lt 1 ]]; then
   usage
 fi
-OUT_DIR="$1"
+
+readonly OUT_DIR="$1"
 mkdir -p "${OUT_DIR}"
 
-# filename MD5 (from sdcard/CMakeLists.txt)
-ROM_LIST="$(cat <<'EOF'
+# Create temporary directory that will auto-cleanup on exit
+readonly TMP_DIR=$(mktemp -d)
+trap "rm -rf '${TMP_DIR}'" EXIT
+
+# List of Zimmers.net ROM files and their expected MD5 checksums
+readonly ROM_LIST="$(cat <<'EOF'
 rom-1-c000.901439-01.bin B45778BDC95D67CCB475008718F4466B
 rom-1-d000.901439-02.bin E13B5675386BEB93E8397DF891113F5B
 rom-1-e000.901439-03.bin EF9BD0E62DFC47EB463FEF20D0344826
@@ -52,43 +55,87 @@ calc_md5() {
   md5sum "$1" | awk '{print toupper($1)}'
 }
 
-download_and_verify() {
-  local name="$1"
+# Verify MD5 checksum of a file, optionally downloading if missing or invalid
+# Args: filepath, expected_md5, download_url (optional), download_path (optional)
+# Returns: 0 if verified, 1 if downloaded, 2 download_url not provided and verification failed
+ensure_file() {
+  local filepath="$1"
   local want_md5="$2"
-  local url="${BASE_URL}${name}"
-  local dest="${OUT_DIR}/${name}"
-
-  if [[ -f "${dest}" ]]; then
+  local download_url="${3:-}"
+  local download_path="${4:-${filepath}}"
+  local filename="$(basename "${filepath}")"
+  
+  # Check if file exists and verify it
+  if [[ -f "${filepath}" ]]; then
     local have_md5
-    have_md5="$(calc_md5 "${dest}")"
+    have_md5="$(calc_md5 "${filepath}")"
+    
     if [[ "${have_md5}" == "${want_md5^^}" ]]; then
-      echo "[CACHED] ${name} (MD5: ${want_md5^^})"
+      echo "[OK] ${filename} (MD5: ${want_md5^^})"
       return 0
     else
-      echo "[WARN] Checksum mismatch for cached ${name}; re-downloading"
-      rm -f "${dest}"
+      echo "[WARN] Checksum mismatch for cached ${filename}; re-downloading"
+      rm -f "${filepath}"
     fi
   fi
-
-  echo "[GET] ${url}"
-  wget -q -O "${dest}" "${url}"
-
-  local have_md5
-  have_md5="$(calc_md5 "${dest}")"
-  if [[ "${have_md5}" != "${want_md5^^}" ]]; then
-    echo "[ERR] MD5 mismatch for ${name}"
-    echo "  expected: ${want_md5^^}"
-    echo "  actual:   ${have_md5}"
-    rm -f "${dest}"
-    exit 1
+  
+  # Download if URL provided
+  if [[ -n "${download_url}" ]]; then
+    echo "[GET] ${download_url}"
+    if ! wget -q -O "${download_path}" "${download_url}"; then
+      echo "[ERR] Failed to download from ${download_url}"
+      rm -f "${download_path}"
+      exit 1
+    fi
+    return 1
+  else
+    echo "[ERR] MD5 mismatch for ${filename}" >&2
+    echo "  expected: ${want_md5^^}" >&2
+    echo "  actual:   ${have_md5}" >&2
+    rm -f "${filepath}"
+    return 2
   fi
-  echo "[OK] ${name} (MD5: ${want_md5^^})"
 }
 
-# Iterate list
-while read -r fname md5; do
-  [[ -z "${fname:-}" ]] && continue
-  download_and_verify "${fname}" "${md5}"
-done <<< "${ROM_LIST}"
+download_roms() {
+  local base_url="http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/"
 
-echo "All ROMs downloaded and verified in ${OUT_DIR}"
+  # Download and verify ROMs from list
+  while read -r fname md5; do
+    [[ -z "${fname:-}" ]] && continue
+    
+    local url="${base_url}${fname}"
+    local dest="${OUT_DIR}/${fname}"
+    
+    # Try to download if needed (returns 1 if downloaded)
+    if ! ensure_file "${dest}" "${md5}" "${url}"; then
+      # Verify the downloaded file
+      if ! ensure_file "${dest}" "${md5}"; then
+        exit 1
+      fi
+    fi
+  done <<< "${ROM_LIST}"
+}
+
+download_rom1diskmagic() {
+  local url="https://www.insanerocketry.com/personal/rom1diskmagic.zip"
+  local rom_file="rom1diskrom_v15.bin"
+  local md5="B13D678C248748A1440151B5F78FB385"
+  local dest="${OUT_DIR}/${rom_file}"
+  local zip_path="${TMP_DIR}/$(basename "${url}")"
+
+  # Check if file exists and is valid, otherwise download zip
+  if ! ensure_file "${dest}" "${md5}" "${url}" "${zip_path}"; then
+    # Extract the ROM file from the downloaded zip
+    unzip -q "${zip_path}" -d "${TMP_DIR}"
+    mv "${TMP_DIR}/rom1diskmagic/rom1diskrom/${rom_file}" "${dest}"
+    
+    # Verify the extracted file
+    if ! ensure_file "${dest}" "${md5}"; then
+      exit 1
+    fi
+  fi
+}
+
+download_roms
+download_rom1diskmagic
