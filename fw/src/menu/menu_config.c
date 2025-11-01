@@ -21,88 +21,6 @@
 #include "global.h"
 #include "window.h"
 
-typedef struct setup_context_s {
-    const setup_sink_t* const original_setup;
-    unsigned int skip_count;
-} setup_context_t;
-
-static void on_enter_config_callback(void* context) {
-    setup_context_t* const ctx = (setup_context_t*) context;
-    ctx->skip_count--;
-}
-
-static void on_action_load_callback(void* context, const char* filename, uint32_t address) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_load != NULL) {
-        setup->on_load(setup->context, filename, address);
-    }
-}
-
-static void on_action_patch_callback(void* context, uint32_t address, const binary_t* binary) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_patch != NULL) {
-        setup->on_patch(setup->context, address, binary);
-    }
-}
-
-static void on_action_copy_callback(void* context, uint32_t source, uint32_t destination, uint32_t length) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_copy != NULL) {
-        setup->on_copy(setup->context, source, destination, length);
-    }
-}
-
-static void on_action_set_callback(void* context, options_t* options) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_set_options != NULL) {
-        setup->on_set_options(setup->context, options);
-    }
-}
-
-static void on_action_set_keymap_callback(void* context, const char* filename) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_set_keymap != NULL) {
-        setup->on_set_keymap(setup->context, filename);
-    }
-}
-
-static void on_action_fix_checksum_callback(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
-    const setup_context_t* const ctx = (setup_context_t*) context;
-    if (ctx->skip_count != 0xffffffff) {
-        return;
-    }
-
-    const setup_sink_t* const setup = ctx->original_setup;
-    if (setup->on_fix_checksum != NULL) {
-        setup->on_fix_checksum(setup->context, start_addr, end_addr, fix_addr, checksum);
-    }
-}
-
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
     printf("Loading config: %d\n", selected_config);
@@ -127,30 +45,14 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         spi_fill(a << 8, a, 0x100);
     }
 
-    setup_context_t ctx = {
-        .original_setup = setup_sink,
-        .skip_count = selected_config,
-    };
-
-    setup_sink_t intermediate_setup_sink = {
-        .context = &ctx,
-        .on_load = on_action_load_callback,
-        .on_patch = on_action_patch_callback,
-        .on_copy = on_action_copy_callback,
-        .on_set_options = on_action_set_callback,
-        .on_set_keymap = on_action_set_keymap_callback,
-        .on_fix_checksum = on_action_fix_checksum_callback,
-        .system_state = setup_sink->system_state
-    };
-
     config_sink_t sink = {
-        .context = &ctx,
-        .setup = &intermediate_setup_sink,
-        .on_enter_config = on_enter_config_callback,
+        .context = NULL,
+        .setup = setup_sink,
+        .on_enter_config = NULL,
         .on_exit_config = NULL,
     };
     
-    parse_config_file("/config.yaml", &sink);
+    parse_config_file("/config.yaml", &sink, selected_config);
 }
 
 typedef struct context_s {
@@ -179,7 +81,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     term_begin(window);
     term_display(window);
 
-    parse_config_file("/config.yaml", &sink);
+    parse_config_file("/config.yaml", &sink, -1);
 
     unsigned int selected_config = 0;
     window_reverse(window, window_xy(window, 0, selected_config), 40);

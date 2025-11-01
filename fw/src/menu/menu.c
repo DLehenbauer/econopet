@@ -268,14 +268,14 @@ char* directory() {
     screen_clear();
     file_slots_read("/", 0);
     
-    for (uint y = 0; y < MAX_FILE_SLOTS; y++) {
+    for (int y = 0; y < MAX_FILE_SLOTS; y++) {
         if (file_slots[y].d_name[0] == '\0') {
             break;
         }
         screen_print(0, y, file_slots[y].d_name, false);
     }
 
-    uint selected = 0;
+    int selected = 0;
     screen_reverse(0, selected, screen_width);
 
     while (true) {

@@ -29,4 +29,4 @@ typedef struct config_sink_s {
     const setup_sink_t* const setup;
 } config_sink_t;
 
-void parse_config_file(const char* filename, const config_sink_t* const sink);
+void parse_config_file(const char* filename, const config_sink_t* const sink, int target_index);

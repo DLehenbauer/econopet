@@ -17,3 +17,7 @@ cmake -S . -B build -G Ninja
 
 # Building all subprojects
 cmake --build build
+
+# Run unit tests
+echo "Running unit tests..."
+ctest --test-dir build --output-on-failure --verbose

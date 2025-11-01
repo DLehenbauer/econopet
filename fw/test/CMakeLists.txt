@@ -29,6 +29,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/term.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
+    ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/config_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c

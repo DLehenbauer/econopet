@@ -27,6 +27,11 @@ typedef struct parser_s {
     const config_sink_t* sink;
     struct parser_s* previous;
     int depth;
+    
+    // Config selection state: -1 for enumerate all, >= 0 to execute specific config
+    int target_index;
+    int current_index;
+    bool executing;
 } parser_t;
 
 typedef void (*parse_callback_t)(parser_t* parser);
@@ -78,25 +83,25 @@ void vet_parser(parser_t* parser, bool condition, const char* const format, ...)
 }
 
 static void on_action_load(const parser_t* const parser, const char* file, uint32_t address) {
-    if (parser->sink->setup && parser->sink->setup->on_load) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_load) {
         parser->sink->setup->on_load(parser->sink->setup->context, file, address);
     }
 }
 
 static void on_action_patch(const parser_t* const parser, uint32_t address, const binary_t* binary) {
-    if (parser->sink->setup && parser->sink->setup->on_patch) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_patch) {
         parser->sink->setup->on_patch(parser->sink->setup->context, address, binary);
     }
 }
 
 static void on_action_copy(const parser_t* const parser, uint32_t source, uint32_t destination, uint32_t length) {
-    if (parser->sink->setup && parser->sink->setup->on_copy) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_copy) {
         parser->sink->setup->on_copy(parser->sink->setup->context, source, destination, length);
     }
 }
 
 static void on_action_fix_checksum(const parser_t* const parser, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
-    if (parser->sink->setup && parser->sink->setup->on_fix_checksum) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_fix_checksum) {
         parser->sink->setup->on_fix_checksum(parser->sink->setup->context, start_addr, end_addr, fix_addr, checksum);
     }
 }
@@ -212,12 +217,15 @@ static void parse_expect_type(parser_t* parser, yaml_event_type_t expected_type)
     assert_yaml_type(parser, expected_type);
 }
 
-static void init_parser(parser_t* parser, const char* filename, const config_sink_t* const sink) {
+static void init_parser(parser_t* parser, const char* filename, const config_sink_t* const sink, int target_index) {
     memset(parser, 0, sizeof(parser_t));
 
     parser->filename = filename;
     parser->sink = sink;
     parser->depth = 0;
+    parser->target_index = target_index;
+    parser->current_index = 0;
+    parser->executing = false;
 
     vet_parser(parser, yaml_parser_initialize(&parser->parser), "yaml_parser_initialize failed");
 
@@ -241,7 +249,7 @@ static void deinit_parser(parser_t* parser) {
 static void push_parser(parser_t* parser) {
     parser_t* saved_parser = vetted_malloc(sizeof(parser_t));
     memcpy(/* dest: */ saved_parser, /* src: */ parser, sizeof(parser_t));
-    init_parser(parser, saved_parser->filename, saved_parser->sink);
+    init_parser(parser, saved_parser->filename, saved_parser->sink, saved_parser->target_index);
     parser->previous = saved_parser;
 }
 
@@ -489,7 +497,7 @@ static void parse_action_set_usb_keymap(parser_t* parser, void* context, size_t 
         { NULL, NULL, NULL, 0 }
     });
 
-    if (parser->sink->setup && parser->sink->setup->on_set_keymap) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_keymap) {
         parser->sink->setup->on_set_keymap(parser->sink->setup->context, filename);
     }
 }
@@ -511,7 +519,7 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
     }
 
-    if (parser->sink->setup && parser->sink->setup->on_set_options) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_options) {
         parser->sink->setup->on_set_options(parser->sink->setup->context, &options);
     }
 }
@@ -637,6 +645,11 @@ typedef struct parse_config_context_s {
 
 // Helper function to parse an individual config
 static void parse_config(parser_t* parser) {
+    // Update executing state based on current config index
+    if (parser->target_index >= 0) {
+        parser->executing = (parser->current_index == parser->target_index);
+    }
+    
     if (parser->sink->on_enter_config) {
         parser->sink->on_enter_config(parser->sink->context);
     }
@@ -652,6 +665,10 @@ static void parse_config(parser_t* parser) {
     if (parser->sink->on_exit_config) {
         parser->sink->on_exit_config(parser->sink->context, name);
     }
+    
+    // Increment config index and clear executing flag after processing this config
+    parser->current_index++;
+    parser->executing = false;
 }
 
 // Helper function to parse a list of configs
@@ -663,10 +680,10 @@ static void parse_config_list(parser_t* parser, void* context, size_t context_si
     parse_sequence(parser, parse_config);
 }
 
-void parse_config_file(const char* filename, const config_sink_t* const sink) {
+void parse_config_file(const char* filename, const config_sink_t* const sink, int target_index) {
     parser_t parser;
 
-    init_parser(&parser, filename, sink);
+    init_parser(&parser, filename, sink, target_index);
 
     parse_expect_type(&parser, YAML_MAPPING_START_EVENT);
     
