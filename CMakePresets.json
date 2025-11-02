@@ -2,96 +2,83 @@
     "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 22,
-        "patch": 1
+        "minor": 13,
+        "patch": 0
     },
     "configurePresets": [
         {
-            "name": "base",
-            "hidden": true,
+            "name": "default",
+            "displayName": "Default Configuration",
+            "description": "Configure the EconoPET super-project",
             "generator": "Ninja",
-            "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "CMAKE_C_STANDARD": "11",
-                "CMAKE_CXX_STANDARD": "17",
-                "PICO_SDK_PATH": "$env{PICO_SDK_PATH}"
-            }
-        },
-        {
-            "name": "rp2040_base",
-            "hidden": true,
-            "inherits": "base",
-            "cacheVariables": {
-                "PICO_PLATFORM": "rp2040",
-                "CMAKE_TOOLCHAIN_FILE": "$env{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake"
-            }
-        },
-        {
-            "name": "rp2040_debug",
-            "inherits": "rp2040_base",
-            "displayName": "RP2040 (Debug)",
-            "description": "Build for RP2040 using the Pico SDK",
-            "binaryDir": "${sourceDir}/build/rp2040_debug",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "rp2040_release",
-            "inherits": "rp2040_base",
-            "displayName": "RP2040 (Release)",
-            "description": "Build for RP2040 using the Pico SDK",
-            "binaryDir": "${sourceDir}/build/rp2040_release",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-            }
-        },
-        {
-            "name": "test_base",
-            "hidden": true,
-            "inherits": "base",
-            "binaryDir": "${sourceDir}/build/test",
-            "cacheVariables": {
-                "PICO_PLATFORM": "host",
-                "PICO_NO_HARDWARE": "1",
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_C_FLAGS_DEBUG": "-ggdb -fno-omit-frame-pointer -fno-inline",
-                "CMAKE_CXX_FLAGS_DEBUG": "-ggdb -fno-omit-frame-pointer -fno-inline",
-                "CMAKE_EXE_LINKER_FLAGS_DEBUG": "-O0"
-            }
-        },
-        {
-            "name": "test",
-            "inherits": "test_base",
-            "displayName": "Test",
-            "description": "Unit tests for Linux host"
+            "binaryDir": "${sourceDir}/build"
         }
     ],
     "buildPresets": [
         {
+            "name": "all",
+            "displayName": "Build All",
+            "description": "Build all subprojects (ROM, firmware, gateware, tests, SD card)",
+            "configurePreset": "default",
+            "targets": ["all_projects"]
+        },
+        {
             "name": "fw",
             "displayName": "Firmware",
-            "description": "Build only the RP2040 firmware target",
-            "configurePreset": "rp2040_release",
-            "targets": ["firmware.elf"]
+            "description": "Build only the RP2040 firmware",
+            "configurePreset": "default",
+            "targets": ["firmware_project"]
+        },
+        {
+            "name": "fw_test",
+            "displayName": "Firmware Tests",
+            "description": "Build only the firmware unit tests",
+            "configurePreset": "default",
+            "targets": ["test_project"]
         },
         {
             "name": "gw",
             "displayName": "Gateware",
-            "description": "Build only the FPGA bitstream target",
-            "configurePreset": "rp2040_release",
-            "targets": ["fpga_bitstream"]
+            "description": "Build only the FPGA gateware",
+            "configurePreset": "default",
+            "targets": ["fpga_project"]
         },
         {
             "name": "sdcard",
-            "displayName": "SD Card",
-            "description": "Build all targets including sdcard content",
-            "configurePreset": "rp2040_release",
-            "targets": ["all"]
+            "displayName": "SD Card Package",
+            "description": "Build SD card package with all dependencies (firmware, gateware)",
+            "configurePreset": "default",
+            "targets": ["sdcard_project"]
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "all",
+            "displayName": "All Tests",
+            "description": "Run all available tests",
+            "configurePreset": "default"
         },
         {
-            "name": "test",
-            "configurePreset": "test"
+            "name": "fw",
+            "displayName": "Firmware Tests",
+            "description": "Run only firmware unit tests",
+            "configurePreset": "default",
+            "filter": {
+                "include": {
+                    "label": "fw"
+                }
+            }
+        },
+        {
+            "name": "gw",
+            "displayName": "Gateware Tests",
+            "description": "Run only gateware simulation tests",
+            "configurePreset": "default",
+            "filter": {
+                "include": {
+                    "label": "gw"
+                }
+            }
         }
     ]
 }
