@@ -25,6 +25,7 @@ add_custom_command(
         -f ${WORK_SIM_DIR}/EconoPET.f
         -f ${WORK_SIM_DIR}/timescale.f
         -I external/65xx
+    -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
     WORKING_DIRECTORY ${PROJ_DIR}
     COMMENT "Compiling Verilog testbenches with iverilog"
     VERBATIM

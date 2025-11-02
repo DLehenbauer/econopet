@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.13)
 
 project(EconoPET_FPGA NONE)
 
+# ECONOPET_ROMS_DIR should be passed from parent CMakeLists.txt
+if(NOT DEFINED ECONOPET_ROMS_DIR)
+    if(NOT DEFINED ENV{ECONOPET_ROMS_DIR} OR "$ENV{ECONOPET_ROMS_DIR}" STREQUAL "")
+        message(FATAL_ERROR "ECONOPET_ROMS_DIR must be set (either as CMake variable or environment variable).")
+    endif()
+    set(ECONOPET_ROMS_DIR "$ENV{ECONOPET_ROMS_DIR}")
+endif()
+message(STATUS "Gateware using ECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}")
+
 set(FPGA_PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/EconoPET)
 set(FPGA_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/outflow)
 set(FPGA_WORK_DIR ${CMAKE_CURRENT_BINARY_DIR}/work)

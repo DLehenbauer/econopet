@@ -30,9 +30,12 @@ module mock_ram (
     );
         int file, status;
 
-        file = $fopen({ "../../build/rp2040_release/sdcard/download/", filename }, "rb");
+    `ifndef ECONOPET_ROMS_DIR
+        $fatal(1, "ECONOPET_ROMS_DIR not defined. Specify the ROM directory with -DECONOPET_ROMS_DIR=\"/path/to/roms\" on the Verilog compiler command line.");
+    `endif
+        file = $fopen({ `ECONOPET_ROMS_DIR, "/", filename }, "rb");
         if (file == 0) begin
-            $fatal(1, "Error opening file '%s'.  Did you forget to build '/roms'?", filename);
+            $fatal(1, "Unable to open ROM '%s' in '%s'. Verify ECONOPET_ROMS_DIR is set and points to the ROM directory.", filename, `ECONOPET_ROMS_DIR);
         end
 
         status = $fread(mem, file, 32'(address));

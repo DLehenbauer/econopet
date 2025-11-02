@@ -11,7 +11,13 @@
             "displayName": "Default Configuration",
             "description": "Configure the EconoPET super-project",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build"
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "ECONOPET_ROMS_DIR": {
+                    "type": "PATH",
+                    "value": ""
+                }
+            }
         }
     ],
     "buildPresets": [

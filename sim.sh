@@ -76,7 +76,7 @@ if [ -n "$LINT" ]; then
     exit_on_failure
 fi
 
-iverilog -g2009 -s "sim" -o"$PROJ_DIR/work_sim/$PROJ_NAME.vvp" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx
+iverilog -g2009 -s "sim" -o"$PROJ_DIR/work_sim/$PROJ_NAME.vvp" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
 vvp -l"$PROJ_DIR/outflow/$PROJ_NAME.rtl.simlog" "$PROJ_DIR/work_sim/$PROJ_NAME.vvp"

@@ -21,6 +21,17 @@ include(ExternalProject)
 # Enable testing at the super-project level
 enable_testing()
 
+# Resolve ECONOPET_ROMS_DIR (documented in CMakePresets.json; may be empty initially)
+# Priority: 1) Cache variable from preset or -D flag, 2) Environment variable, 3) Fatal error
+if(NOT DEFINED ECONOPET_ROMS_DIR OR "${ECONOPET_ROMS_DIR}" STREQUAL "")
+    if(DEFINED ENV{ECONOPET_ROMS_DIR} AND NOT "$ENV{ECONOPET_ROMS_DIR}" STREQUAL "")
+        set(ECONOPET_ROMS_DIR "$ENV{ECONOPET_ROMS_DIR}" CACHE PATH "Path to ROM files")
+    else()
+        message(FATAL_ERROR "ECONOPET_ROMS_DIR must be set (via preset cache variable or environment variable).")
+    endif()
+endif()
+message(STATUS "ECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}")
+
 # Determine if we should build all subprojects or specific ones
 option(BUILD_ROM "Build the 6502 ROM subproject" ON)
 option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
