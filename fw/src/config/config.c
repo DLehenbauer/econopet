@@ -322,11 +322,13 @@ static void parse_uint32(parser_t* parser, uint32_t* value) {
 }
 
 static void parse_as_uint32(parser_t* parser, void* context, size_t context_size) {
+    (void)context_size;
     assert(context_size == sizeof(uint32_t));
     return parse_uint32(parser, (uint32_t*) context);
 }
 
 static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
+    (void)context_size;
     parse_expect_type(parser, YAML_SCALAR_EVENT);
     assert(context_size == sizeof(binary_t));
 
@@ -571,6 +573,7 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
 static void parse_action_list(parser_t* parser, void* context, size_t context_size);
 
 static void parse_then_else(parser_t* parser, void* context, size_t context_size) {
+    (void)context_size;
     assert(context_size == sizeof(bool));
     bool condition = *((bool*)context);
 

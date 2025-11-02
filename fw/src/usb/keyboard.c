@@ -17,6 +17,7 @@
 #include "keyscan.h"
 #include "keystate.h"
 #include "keyboard.h"
+#include "usb.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 0 */ 0xff,

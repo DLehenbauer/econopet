@@ -2,6 +2,7 @@
 #include "system_state.h"
 #include "pet.h"
 #include "roms.h"
+#include "menu/menu.h"
 #include "usb/keyboard.h"
 
 const uint8_t __in_flash(".rom_chars_8800") rom_chars_8800[] = {

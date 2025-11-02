@@ -30,3 +30,4 @@ typedef enum {
 void menu_init();
 void menu_enter();
 void menu_task();
+void read_keymap(const char* filename, system_state_t* config);
