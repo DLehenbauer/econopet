@@ -18,7 +18,7 @@ cmake --build --preset gw          # Build gateware only
 cmake --build --preset sdcard      # Build SD card package
 
 # Test
-ctest --preset default             # Run all tests
+ctest --preset all                 # Run all tests
 ctest --preset fw                  # Run firmware tests only
 ctest --preset gw                  # Run gateware tests only
 ```
