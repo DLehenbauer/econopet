@@ -1,19 +1,30 @@
-# Git Notes
+# Git Reference
 
-## Remove Broken Submodule
+## Submodules
+
+### Update Submodules
+
+When you pull a commit that has changed the committed submodule version, you need to update the submodules to match:
 
 ```sh
-# Remove entry from ~/.gitmodules
-code .submodules
+# Update all submodules to the versions specified in the current commit
+#
+# --init: Initialize any submodules that haven't been initialized yet
+#         (e.g., new submodules added to the project)
+#
+# --recursive: Update nested submodules as well
 
-# Remove target directory
-rm -rf fw/external/libyaml
-
-# Remove submodule repository
-rm -rf .git/modules/fw/external/libyaml
+git submodule update --init --recursive
 ```
 
-## Add Submodule
+If you want to pull and update submodules in one command:
+
+```sh
+# Pull changes and update submodules automatically
+git pull --recurse-submodules
+```
+
+### Add Submodule
 
 ```sh
 # Add the submodule without specifying a branch
@@ -33,4 +44,17 @@ popd
 # Record the submodule state in the main repository
 git add fw/external/libyaml
 git commit -m "Added libyaml submodule at tag v0.2.5"
+```
+
+### Remove Submodule
+
+```sh
+# Remove entry from ~/.gitmodules
+code .submodules
+
+# Remove target directory
+rm -rf fw/external/libyaml
+
+# Remove submodule repository
+rm -rf .git/modules/fw/external/libyaml
 ```
