@@ -14,6 +14,9 @@ ARG OPENOCD_VERSION="sdk-2.0.0"
 # From https://github.com/chipsalliance/verible/releases
 ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
 
+# From https://github.com/verilator/verilator/releases
+ARG VERILATOR_VERSION="v5.030"
+
 # From https://github.com/steveicarus/iverilog/releases
 ARG IVERILOG_VERSION="v12_0"
 
@@ -49,6 +52,10 @@ RUN cd /tmp && \
 # Clone fork of OpenOCD for debugging RP2040
 RUN cd /tmp && \
     git clone --branch "${OPENOCD_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/openocd.git
+
+# Clone Verilator (built from source)
+RUN cd /tmp && \
+    git clone --branch ${VERILATOR_VERSION} --depth 1 --single-branch https://github.com/verilator/verilator.git
 
 # Clone Icarus Verilog (built from source)
 RUN cd /tmp && \
@@ -155,7 +162,9 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     git-lfs \
     gperf \
     gtkwave \
+    help2man \
     libegl1 \
+    libfl-dev \
     libftdi-dev \
     libgl1 \
     libnewlib-arm-none-eabi \
@@ -168,8 +177,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     ninja-build \
     pkg-config \
     texinfo \
-    universal-ctags \
-    verilator
+    universal-ctags
 
 # Clean apt cache and temporary files
 RUN apt-get clean && \
@@ -184,6 +192,16 @@ RUN cd /usr/bin && \
 #
 # Build and install the tools
 #
+
+# Install Verilator (built from source)
+# (Do this early as it takes a while).
+RUN cd /tmp/verilator && \
+    autoconf && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && \
+    rm -rf verilator
 
 # Install Icarus Verilog (built from source)
 # (Do this early as it takes a while).
