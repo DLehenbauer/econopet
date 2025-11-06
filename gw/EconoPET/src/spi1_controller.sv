@@ -42,8 +42,8 @@ module spi1_controller (
     logic spi_strobe;  // Asserted on rising SCK edge when incoming 'spi_data_rx' is valid.
                        // Outgoing 'spi_data_tx' is captured on the following negative SCK edge.
 
-    logic [   DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
-    logic [   DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
+    logic [DATA_WIDTH-1:0] spi_data_rx;  // Byte received from SPI (see also 'spi_strobe').
+    logic [DATA_WIDTH-1:0] spi_data_tx;  // Next byte to transmit to SPI (see also 'spi_strobe').
 
     spi spi (
         .spi_cs_ni(spi_cs_ni),
@@ -84,7 +84,7 @@ module spi1_controller (
     //  A = address (processing a random access command, awaiting address bytes)
     //  V = valid   (a command has been received, request cycle from bus arbiter)
     //
-    //                               VAD
+    //                                         VAD
     localparam bit [2:0] READ_CMD         = 3'b000,
                          READ_DATA_ARG    = 3'b001,
                          READ_ADDR_HI_ARG = 3'b010,
@@ -106,7 +106,7 @@ module spi1_controller (
                     if (spi_data_rx[6:5] == 2'b10) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
                         wbc_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
-                        spi_state <= READ_ADDR_HI_ARG;
+                        spi_state  <= READ_ADDR_HI_ARG;
                     end else begin
                         // Otherwise increment/decrement the previous address.
                         wbc_addr_o <= wbc_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[6]}}, spi_data_rx[5]};
@@ -118,19 +118,19 @@ module spi1_controller (
 
                 READ_ADDR_HI_ARG: begin
                     wbc_addr_o[15:8] <= spi_data_rx;
-                    spi_state       <= READ_ADDR_LO_ARG;
+                    spi_state        <= READ_ADDR_LO_ARG;
                 end
 
                 READ_ADDR_LO_ARG: begin
                     wbc_addr_o[7:0] <= spi_data_rx;
-                    spi_state      <= wbc_we_o
+                    spi_state <= wbc_we_o
                         ? READ_DATA_ARG
                         : VALID;
                 end
 
                 READ_DATA_ARG: begin
                     wbc_data_o <= spi_data_rx;
-                    spi_state <= VALID;
+                    spi_state  <= VALID;
                 end
 
                 VALID: begin
@@ -172,7 +172,7 @@ module spi1_controller (
 
     logic [1:0] wbc_state = READY;
     assign spi_stall_o = wbc_state[0];
-    assign wbc_cycle_o  = wbc_state[1];
+    assign wbc_cycle_o = wbc_state[1];
 
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
@@ -195,14 +195,17 @@ module spi1_controller (
                     end
                 end
                 PROCESSING_CMD: begin
-                    // Continue asserting wbc_strobe_o while the bus is stalled.
+                    // Keep 'wbc_strobe_o' asserted until the slave accepts the request (!wbc_stall_i).
+                    // While 'wbc_stall_i' is high (slave not ready) we continue to present the request.
                     if (!wbc_stall_i) wbc_strobe_o <= '0;
 
-                    // The '!wbc_strobe_o' prevents the SPI1 controller for accepting ACKs
-                    // before it's request has been accepted.
+                    // We only capture an ACK after the request was accepted in a prior cycle.
+                    // Non-blocking assignments mean '!wbc_strobe_o' tests the previous-cycle value.
+                    // This prevents treating an ACK that coincides with the cycle where the request
+                    // is first accepted (stall_i deasserts) as valid immediately.
                     if (!wbc_strobe_o && wbc_ack_i) begin
                         spi_data_tx <= wbc_data_i;
-                        wbc_state    <= READY;
+                        wbc_state   <= READY;
                     end
                 end
                 default: begin
