@@ -7,15 +7,6 @@ Project-specific guidelines for the EconoPET project emphasizing small, incremen
 - Stop immediately on first failure; fix before proceeding with additional changes
 - Avoid batching unrelated edits before validating earlier changes
 
-## Firmware (/fw) development workflow
-When making changes to firmware code:
-
-1. Build tests first (fastest): `cmake --build --preset fw_test`
-2. Run firmware tests: `ctest --preset fw`
-3. Build full firmware image: `cmake --build --preset fw`
-
-Rationale: `fw_test` builds much faster than the full `fw` target and catches some compile and unit test issues early. Only proceed to step 3 after steps 1-2 pass successfully.
-
 ## Gateware (/gw) development workflow
 When making changes to gateware code:
 
@@ -23,20 +14,6 @@ When making changes to gateware code:
 2. Only if tests pass, build gateware: `cmake --build --preset gw`
 
 Rationale: The `gw` build target is very slow and not needed for simulation since tests use the Icarus Verilog interpreter. Never start the gateware build when simulation tests are failing.
-
-## Cross-domain changes (fw + gw)
-When changes span both firmware and gateware:
-- Validate gateware simulation tests first (`ctest --preset gw`)
-- Then run firmware test cycle (`cmake --build --preset fw_test` → `ctest --preset fw`)
-- Only after both pass, proceed with full builds if needed
-
-## Final verification
-Once you believe a task is complete:
-
-1. Build everything: `cmake --build --preset all`
-2. Run all tests: `ctest --preset all`
-
-Do not mark a task as complete until both commands succeed. This final verification ensures changes work correctly across the entire project.
 
 ## Command reference
 Consult `CMakePresets.json` and `README.md` for complete information about available CMake build and test presets.
@@ -55,14 +32,10 @@ Rationale: Avoids maintaining forks and prevents upstream divergence.
 
 ## Typical workflow examples
 Firmware-only change:
-1. `cmake --build --preset fw_test`
-2. `ctest --preset fw`
-3. `cmake --build --preset fw` (once tests pass)
-4. `cmake --build --preset all` (final verification)
-5. `ctest --preset all` (final verification)
+1. `cmake --build --preset fw`
+2. `cmake --build --preset fw_test`
+3. `ctest --preset fw`
 
 Gateware-only change:
 1. `ctest --preset gw`
 2. `cmake --build --preset gw` (once simulation passes)
-3. `cmake --build --preset all` (final verification)
-4. `ctest --preset all` (final verification)
