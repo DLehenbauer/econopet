@@ -12491,7 +12491,7 @@
 		)
 		(uuid "710139d0-f1ed-472d-aaea-4426fa410597")
 	)
-	(text "During configuration, all GPIO pins excluding LVDS as\nGPIO are configured in weak pull-up mode.\n\nThe LVDS as GPIO pins are tri-stated without a pull-up\nor pull-down resistor.\n\nPull ~{CRESET} low to reset FPGA until MCU is ready.\nNote that MCU drives ~{CRESET} through 10k resistor\nso it can be overridden by programmer when connected.\n\nPull CSI high to enable FPGA configuration\nPull TEST_N high to deactivate test mode\nPull CBUS[2:0] high for SPI x1\nLeave CBSEL[1:0] floating (not using multi-image)\n\nMCU config:\nMCU drives SS_N low to select passive SPI\nMCU transitions CRESET_N low -> high to begin (320 ns)\nMCU sends bitsteam via CCK and CDI0\nFPGA asserts CDONE on success, NSTATUS on error\n\nPROG drives ~{SPI_EN} low during SPI Passive or JTAG\nprogramming.  We use this to reset the MCU."
+	(text "During configuration, GPIO pins (excluding LVDS) are\nconfigured in weak pull-up mode.  LVDS are tri-stated\nwithout a pull-up or pull-down resistor.\n\nPull ~{CRESET} low to reset FPGA until MCU is ready.\nNote that MCU drives ~{CRESET} through 10k resistor\nso it can be overridden by programmer when connected.\n\nPull CSI high to enable FPGA configuration\nPull TEST_N high to deactivate test mode\nPull CBUS[2:0] high for SPI x1\nLeave CBSEL[1:0] floating (not using multi-image)\n\nMCU config:\nMCU drives SS_N low to select passive SPI\nMCU transitions CRESET_N low -> high to begin (320 ns)\nMCU sends bitsteam via CCK and CDI0\nFPGA asserts CDONE on success, NSTATUS on error\n\nPROG drives ~{SPI_EN} low during SPI Passive or JTAG\nprogramming.  We use this to hold the MCU in reset\nto prevent contention."
 		(exclude_from_sim no)
 		(at 17.78 125.73 0)
 		(effects
