@@ -34,7 +34,7 @@
             "name": "Firmware",
             "cwd": "${workspaceRoot}",
             //"executable": "${command:cmake.launchTargetPath}",
-            "executable": "${workspaceRoot}/build/rp2040_debug/fw/src/firmware.elf",
+            "executable": "${workspaceRoot}/build/fw/src/firmware.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",

@@ -1,6 +1,7 @@
 [submodule "fw/external/PicoDVI"]
 	path = fw/external/PicoDVI
-	url = https://github.com/Wren6991/PicoDVI.git
+	url = https://github.com/DLehenbauer/PicoDVI.git
+	branch = oob_fix
 [submodule "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico"]
 	path = fw/external/no-OS-FatFS-SD-SPI-RPi-Pico
 	url = https://github.com/carlk3/no-OS-FatFS-SD-SPI-RPi-Pico.git
