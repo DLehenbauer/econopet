@@ -110,7 +110,7 @@ package common_pkg;
                                          VIA_PORTB_NRFD_IN         = 6,    // IEEE-488: (0 = Device not ready for data, 1 = Device ready for data)
                                          VIA_PORTB_DAV_IN          = 7;    // IEEE-488: (0 = DIO1-8 is valid, 1 = DIO1-8 is not valid)
 
-    // CRTC: CRT Controller
+    // CRTC (6545) registers
     // http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf
 
     localparam CRTC_R0_H_TOTAL            = 0,   // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
@@ -150,7 +150,10 @@ package common_pkg;
                                                  //       [6] Not used
                                                  //       [7] Not used
 
-               CRTC_R9_MAX_SCAN_LINE      = 9,   // [4:0] Number of scan lines per character row, including spacing.
+               CRTC_R9_MAX_SCAN_LINE      = 9,   // [4:0] Number of scan lines per character row, minus one, including spacing.
+                                                 //
+                                                 //       Graphics Mode: 7 → 8 scan lines/row (full character)
+                                                 //           Text Mode: 8 → 9 scan lines/row (full character + 1 blank line)
 
                CRTC_R10_CURSOR_START_LINE = 10,  // [6:0] Cursor blink mode and starting scan line [Not implemented]
                                                  //
