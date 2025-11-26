@@ -130,6 +130,9 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 	static uint8_t y_start = 0;
 	static uint8_t y_visible = 0;
 
+    // TODO: Copy into SRAM and precalculate flip/stretch? (PERF)
+    static const uint8_t* p_char_rom = rom_chars_8800;
+
     y -= y_start;
 
     if (y >= y_visible) {
@@ -149,13 +152,12 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		if (system_state.pet_display_columns == pet_display_columns_40) {
 			chars_displayed_x >>= 1;
 		}
-	} else {
-		// TODO: Copy into SRAM and precalculate flip/stretch? (PERF)
-		// Select graphics/text character ROM
-		const uint8_t* const p_char_rom = video_graphics
+
+        // Select graphics/text character ROM
+		p_char_rom = video_graphics
 			? p_video_font_400
 			: p_video_font_000;
-
+	} else {
 		uint src = y / r9_max_scan_line * chars_displayed_x;	// Next offset to read from 'video_char_buffer'
 		uint dest = cx_start;									// Next byte offset to write in 'scanline'
 		uint remaining = chars_displayed_x;						// Remaining number of characters to display in row
