@@ -2,8 +2,10 @@
 
 #include <stdint.h>
 
-// Stub __in_flash for Linux
-#define __in_flash(x)
+// Stub Pico SDK types and macros for non-Pico builds
+#define __in_flash(x) x
+#define __not_in_flash_func(x) x
+typedef unsigned int uint;
 
 // Mock HID keyboard report structure
 // (See /opt/pico-sdk/lib/tinyusb/src/class/hid/hid.h)

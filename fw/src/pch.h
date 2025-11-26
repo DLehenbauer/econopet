@@ -31,8 +31,8 @@
 // libyaml
 #include <yaml.h>
 
-// SDK
 #if defined(PICO_RP2040)
+    // Pico SDK
     #include "hardware/clocks.h"
     #include "hardware/dma.h"
     #include "hardware/gpio.h"
@@ -49,6 +49,7 @@
     #include "pico/multicore.h"
     #include "pico/sem.h"
     #include "pico/stdlib.h"
+    #include "pico/types.h"
 
     // PicoDVI
     #include "common_dvi_pin_configs.h"

@@ -122,6 +122,19 @@ static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
     return x | (x << 1);
 }
 
+static inline uint8_t __not_in_flash_func(get_char_scanline)(
+    const uint src,
+    const uint8_t* const p_char_rom,
+    const uint ra
+) {
+	uint c = video_char_buffer[src];
+	uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
+	if (c & 0x80) {
+		p8 ^= 0xff;
+	}
+	return (uint8_t)flip_x(p8);
+}
+
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
@@ -166,29 +179,14 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
 		if (system_state.pet_display_columns == pet_display_columns_80) {
 			while (remaining--) {
-				uint c = video_char_buffer[src++];
-				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
-				
-				if (c & 0x80) {
-					p8 ^= 0xff;
-				}
-				
-				p8 = flip_x(p8);
-
+				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra);
 				scanline[dest++] = p8;
 			}
 		} else {
 			while (remaining--) {
-				uint c = video_char_buffer[src++];
-				uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
+				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra);
 
-				if (c & 0x80) {
-					p8 ^= 0xff;
-				}
-
-				p8 = flip_x(p8);
-				uint16_t p16 = stretch_x(p8);
-
+				uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
 				scanline[dest++] = p16;
 				scanline[dest++] = p16 >> 8;
 			}
