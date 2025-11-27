@@ -54,7 +54,7 @@ if(BUILD_ROM)
             -DCMAKE_BUILD_TYPE=Release
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
-        BUILD_ALWAYS FALSE
+        BUILD_ALWAYS TRUE
     )
     set(ROM_BINARY ${SUPER_BUILD_DIR}/rom/bin/menu.rom)
 endif()
@@ -70,7 +70,7 @@ if(BUILD_FPGA)
             -G Ninja
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target fpga_bitstream
         INSTALL_COMMAND ""
-        BUILD_ALWAYS FALSE
+        BUILD_ALWAYS TRUE
     )
     set(FPGA_BITSTREAM ${SUPER_BUILD_DIR}/gw/outflow/EconoPET.hex.bin)
 endif()
@@ -94,7 +94,7 @@ if(BUILD_FIRMWARE)
         CMAKE_ARGS ${FW_CMAKE_ARGS}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target firmware.elf
         INSTALL_COMMAND ""
-        BUILD_ALWAYS FALSE
+        BUILD_ALWAYS TRUE
     )
     set(FIRMWARE_ELF ${SUPER_BUILD_DIR}/fw/src/firmware.elf)
     set(FIRMWARE_UF2 ${SUPER_BUILD_DIR}/fw/src/firmware.elf.uf2)
@@ -120,7 +120,7 @@ if(BUILD_TESTS)
         CMAKE_ARGS ${TEST_CMAKE_ARGS}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
-        BUILD_ALWAYS FALSE
+        BUILD_ALWAYS TRUE
     )
 endif()
 
