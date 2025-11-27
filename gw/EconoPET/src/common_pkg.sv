@@ -113,66 +113,72 @@ package common_pkg;
     // CRTC (6545) registers
     // http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf
 
-    localparam CRTC_R0_H_TOTAL            = 0,   // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
-                                                 //       The frequency of HSYNC is thus determined by this register.
+    localparam CRTC_R0_H_TOTAL            = 0,  // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
+                                                //       The frequency of HSYNC is thus determined by this register.
                 
-               CRTC_R1_H_DISPLAYED        = 1,   // [7:0] Number of displayed characters per horizontal line.
+               CRTC_R1_H_DISPLAYED        = 1,  // [7:0] Number of displayed characters per horizontal line.
                 
-               CRTC_R2_H_SYNC_POS         = 2,   // [7:0] Position of the HSYNC on the horizontal line, in terms of the character location number on the line.
-                                                 //       The position of the HSYNC determines the left-to-right location of the displayed text on the video screen.
-                                                 //       In this way, the side margins are adjusted.
+               CRTC_R2_H_SYNC_POS         = 2,  // [7:0] Position of the HSYNC on the horizontal line, in terms of the character location number on the line.
+                                                //       The position of the HSYNC determines the left-to-right location of the displayed text on the video screen.
+                                                //       In this way, the side margins are adjusted.
 
-               CRTC_R3_SYNC_WIDTH         = 3,   // [3:0] Width of HSYNC in character clock times (0 = HSYNC off)
-                                                 // [7:4] Width of VSYNC in scan lines (0 = 16 scanlines)
+               CRTC_R3_SYNC_WIDTH         = 3,  // [3:0] Width of HSYNC in character clock times (0 = HSYNC off)
+                                                // [7:4] Width of VSYNC in scan lines (0 = 16 scanlines)
 
-               CRTC_R4_V_TOTAL            = 4,   // [6:0] Total number of character rows in a frame, minus one. This register, along with R5,
-                                                 //       determines the overall frame rate, which should be close to the line frequency to
-                                                 //       ensure flicker-free appearance. If the frame time is adjusted to be longer than the
-                                                 //       period of the line frequency, then /RES may be used to provide absolute synchronism.
+               CRTC_R4_V_TOTAL            = 4,  // [6:0] Total number of character rows in a frame, minus one. This register, along with R5,
+                                                //       determines the overall frame rate, which should be close to the line frequency to
+                                                //       ensure flicker-free appearance. If the frame time is adjusted to be longer than the
+                                                //       period of the line frequency, then /RES may be used to provide absolute synchronism.
 
-               CRTC_R5_V_ADJUST           = 5,   // [4:0] Number of additional scan lines needed to complete an entire frame scan and is intended
-                                                 //       as a fine adjustment for the video frame time.
+               CRTC_R5_V_ADJUST           = 5,  // [4:0] Number of additional scan lines needed to complete an entire frame scan and is intended
+                                                //       as a fine adjustment for the video frame time.
 
-               CRTC_R6_V_DISPLAYED        = 6,   // [6:0] Number of displayed character rows in each frame. In this way, the vertical size of the
-                                                 //       displayed text is determined.
+               CRTC_R6_V_DISPLAYED        = 6,  // [6:0] Number of displayed character rows in each frame. In this way, the vertical size of the
+                                                //       displayed text is determined.
             
-               CRTC_R7_V_SYNC_POS         = 7,   // [6:0] Selects the character row time at which the VSYNC pulse is desired to occur and, thus,
-                                                 //       is used to position the displayed text in the vertical direction.
+               CRTC_R7_V_SYNC_POS         = 7,  // [6:0] Selects the character row time at which the VSYNC pulse is desired to occur and, thus,
+                                                //       is used to position the displayed text in the vertical direction.
 
-               CRTC_R8_MODE_CONTROL       = 8,   // [7:0] Selects operating mode [Not implemented]
-                                                 //
-                                                 //       [0] Must be 0
-                                                 //       [1] Not used
-                                                 //       [2] RAD: Refresh RAM addressing Mode (0 = straight binary, 1 = row/col)
-                                                 //       [3] Must be 0
-                                                 //       [4] DES: Display Enable Skew (0 = no delay, 1 = delay Display Enable one char at a time)
-                                                 //       [5] CSK: Cursor Skew (0 = no delay, 1 = delay Cursor one char at a time)
-                                                 //       [6] Not used
-                                                 //       [7] Not used
+               CRTC_R8_MODE_CONTROL       = 8,  // [7:0] Selects operating mode [Not implemented]
+                                                //
+                                                //       [0] Must be 0
+                                                //       [1] Not used
+                                                //       [2] RAD: Refresh RAM addressing Mode (0 = straight binary, 1 = row/col)
+                                                //       [3] Must be 0
+                                                //       [4] DES: Display Enable Skew (0 = no delay, 1 = delay Display Enable one char at a time)
+                                                //       [5] CSK: Cursor Skew (0 = no delay, 1 = delay Cursor one char at a time)
+                                                //       [6] Not used
+                                                //       [7] Not used
 
-               CRTC_R9_MAX_SCAN_LINE      = 9,   // [4:0] Number of scan lines per character row, minus one, including spacing.
-                                                 //
-                                                 //       Graphics Mode: 7 → 8 scan lines/row (full character)
-                                                 //           Text Mode: 8 → 9 scan lines/row (full character + 1 blank line)
+               CRTC_R9_MAX_SCAN_LINE      = 9,  // [4:0] Number of scan lines per character row, minus one, including spacing.
+                                                //
+                                                //       Graphics Mode: 7 → 8 scan lines/row (full character)
+                                                //           Text Mode: 8 → 9 scan lines/row (full character + 1 blank line)
 
-               CRTC_R10_CURSOR_START_LINE = 10,  // [6:0] Cursor blink mode and starting scan line [Not implemented]
-                                                 //
-                                                 //       [6:5] Cursor blink mode with respect to field rate.
-                                                 //             (00 = on, 01 = off, 10 = 1/16 rate, 11 = 1/32 rate)
-                                                 //
-                                                 //       [4:0] Starting scan line
+               CRTC_R10_CURSOR_START_LINE = 10, // [6:0] Cursor blink mode and starting scan line [Not implemented]
+                                                //
+                                                //       [6:5] Cursor blink mode with respect to field rate.
+                                                //             (00 = on, 01 = off, 10 = 1/16 rate, 11 = 1/32 rate)
+                                                //
+                                                //       [4:0] Starting scan line
 
-               CRTC_R11_CURSOR_END_LINE   = 11,  // [4:0] Ending scan line of cursor [Not implemented]
+               CRTC_R11_CURSOR_END_LINE   = 11, // [4:0] Ending scan line of cursor [Not implemented]
 
-               CRTC_R12_START_ADDR_HI     = 12,  // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
+               CRTC_R12_START_ADDR_HI     = 12, // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
+                                                //
+                                                //       Note that on the PET, bits MA[13:12] do not address video RAM and instead are
+                                                //       used for special functions:
+                                                //
+                                                //         [5] TA13 selects an alternative character rom (0 = normal, 1 = international)
+                                                //         [4] TA12 inverts the video signal (0 = inverted, 1 = normal)
 
-               CRTC_R13_START_ADDR_LO     = 13,  // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
+               CRTC_R13_START_ADDR_LO     = 13, // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
                
-               CRTC_R14_CURSOR_POS_HIGH   = 14,  // [5:0] 14-bit memory address (MA) of current cursor position [Not implemented]
-               CRTC_R15_CURSOR_POS_LOW    = 15,  // [7:0]
+               CRTC_R14_CURSOR_POS_HIGH   = 14, // [5:0] 14-bit memory address (MA) of current cursor position [Not implemented]
+               CRTC_R15_CURSOR_POS_LOW    = 15, // [7:0]
                
-               CRTC_R16_LIGHT_PEN_HIGH    = 16,  // [5:0] 14-bit video display address at which lightpen strobe occured [Not implemented]
-               CRTC_R17_LIGHT_PEN_LOW     = 17,  // [7:0]
+               CRTC_R16_LIGHT_PEN_HIGH    = 16, // [5:0] 14-bit video display address at which lightpen strobe occured [Not implemented]
+               CRTC_R17_LIGHT_PEN_LOW     = 17, // [7:0]
 
                CRTC_REG_COUNT             = CRTC_R17_LIGHT_PEN_LOW + 1'b1;
 
