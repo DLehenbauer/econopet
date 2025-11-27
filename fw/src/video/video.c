@@ -21,7 +21,8 @@
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
 #define DVI_TIMING dvi_timing_720x480p_60hz
 
-#define CHAR_PIXEL_WIDTH 8
+#define FONT_WIDTH 8
+#define FONT_HEIGHT 8
 
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
@@ -127,12 +128,17 @@ static inline uint8_t __not_in_flash_func(get_char_scanline)(
     const uint8_t* const p_char_rom,
     const uint ra
 ) {
-	uint c = video_char_buffer[src];
-	uint8_t p8 = p_char_rom[(c & 0x7f) * r9_max_scan_line + ra];
+	const uint c = video_char_buffer[src];
+	
+    uint8_t p8 = ra < FONT_HEIGHT
+        ? p_char_rom[(c & 0x7f) * FONT_HEIGHT + ra]
+        : 0;
+
 	if (c & 0x80) {
 		p8 ^= 0xff;
 	}
-	return (uint8_t)flip_x(p8);
+	
+    return flip_x(p8);
 }
 
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
@@ -159,7 +165,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		y_start   = (FRAME_HEIGHT - y_visible) >> 1;	// Top margin in scan lines
 
 		chars_displayed_x = (r1_h_displayed << 1);		// Horizontal displayed characters (2x for 80-column mode)
-		cx_start = (FRAME_WIDTH - (CHAR_PIXEL_WIDTH * chars_displayed_x)) >> 4;	// Left margin in characters
+		cx_start = (FRAME_WIDTH - (FONT_WIDTH * chars_displayed_x)) >> 4;	// Left margin in characters
 
 		// If in 40 column mode, divide the chars_displayed_x by 2.  We do not, however adjust, cx_start
 		if (system_state.pet_display_columns == pet_display_columns_40) {
