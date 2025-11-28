@@ -40,7 +40,6 @@
         "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico",
         "fw/external/pico-vfs",
         "fw/external/PicoDVI",
-        "fw/external/sc",
         "gw/EconoPET/external/65xx",
         "gw/EconoPET/external/icesid",
         "gw/EconoPET/external/verilog-6502"
