@@ -11,14 +11,14 @@ See the [project page](https://dlehenbauer.github.io/econopet) for user manual a
 cmake --preset default
 
 # Build
-cmake --build --preset all --clean-first # Build everything
-cmake --build build/fw                   # Build firmware only
-cmake --build --preset fw_test           # Build firmware tests only
-cmake --build --preset gw                # Build gateware only
-cmake --build --preset sdcard            # Build SD card package
+cmake --build --preset all          # Build everything
+cmake --build --preset fw           # Build firmware only
+cmake --build --preset fw_test      # Build firmware tests only
+cmake --build --preset gw           # Build gateware only
+cmake --build --preset sdcard       # Build SD card package
 
 # Test
-ctest --preset all                 # Run all tests
-ctest --preset fw                  # Run firmware tests only
-ctest --preset gw                  # Run gateware tests only
+ctest --preset all                  # Run all tests
+ctest --preset fw                   # Run firmware tests only
+ctest --preset gw                   # Run gateware tests only
 ```
