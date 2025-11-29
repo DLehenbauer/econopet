@@ -114,8 +114,8 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
 };
 
 static inline uint16_t __not_in_flash_func(flip_x)(uint8_t x) {
-	// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
-	return ((x * 0x0802LU & 0x22110LU) | (x * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
+    // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
+    return ((x * 0x0802LU & 0x22110LU) | (x * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
 }
 
 static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
@@ -171,8 +171,8 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     y -= y_start;
 
     if (y >= y_visible) {
-		// Blank scan line.  Because scan lines are recycled, this also clears the unused overscan
-		// area on the left/right of the visible region.
+        // Blank scan line.  Because scan lines are recycled, this also clears the unused overscan
+        // area on the left/right of the visible region.
         memset(scanline, 0, sizeof(scanline));
 
 		// Use blank scan lines to reload/recompute CRTC-dependent values.
@@ -243,19 +243,20 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 }
 
 static void __not_in_flash_func(core1_scanline_callback)() {
-	static uint y = 1;
-	prepare_scanline(y);
-	y = (y + 1) % FRAME_HEIGHT;
+    static uint y = 1;
+    prepare_scanline(y);
+    y = (y + 1) % FRAME_HEIGHT;
 }
 
 static void core1_main() {
-	dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
-	sem_acquire_blocking(&dvi_start_sem);
-	dvi_start(&dvi0);
+    dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
+    sem_acquire_blocking(&dvi_start_sem);
+    dvi_start(&dvi0);
 
-	while (1) 
-		__wfi();
-	__builtin_unreachable();
+    while (1) {
+        __wfi();
+    }
+    __builtin_unreachable();
 }
 
 void video_init() {
@@ -265,15 +266,15 @@ void video_init() {
         panic("FAIL: Incorrect clk_sys frequency. Expected %d +/-1 kHz, but got %d kHz.", DVI_TIMING.bit_clk_khz, f_clk_sys);
     }
 
-	dvi0.timing = &DVI_TIMING;
-	dvi0.ser_cfg = micromod_cfg;
-	dvi0.scanline_callback = core1_scanline_callback;
-	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
+    dvi0.timing = &DVI_TIMING;
+    dvi0.ser_cfg = micromod_cfg;
+    dvi0.scanline_callback = core1_scanline_callback;
+    dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
 
-	prepare_scanline(0);
+    prepare_scanline(0);
 
-	sem_init(&dvi_start_sem, /* initial_permits: */ 0, /* max_permits: */ 1);
-	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
-	multicore_launch_core1(core1_main);
-	sem_release(&dvi_start_sem);
+    sem_init(&dvi_start_sem, /* initial_permits: */ 0, /* max_permits: */ 1);
+    hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
+    multicore_launch_core1(core1_main);
+    sem_release(&dvi_start_sem);
 }
