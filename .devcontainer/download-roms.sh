@@ -137,5 +137,20 @@ download_rom1diskmagic() {
   fi
 }
 
+download_colourpet_rom() {
+  local url="https://github.com/sjgray/cbm-edit-rom/raw/refs/heads/master/binaries/ColourPET/VICE/colourpet-c1-80-b-60-esc-wedge-reboot-backarrow-VICE%20(2017-03-03).bin"
+  local rom_file="colourpet-c1-80-b-60.bin"
+  local md5="34FC9984EA9710D513A79ECEC9A7BDB1"
+  local dest="${OUT_DIR}/${rom_file}"
+
+  ensure_file "${dest}" "${md5}" "${url}" || {
+    # Verify the downloaded file
+    if ! ensure_file "${dest}" "${md5}"; then
+      exit 1
+    fi
+  }
+}
+
 download_roms
 download_rom1diskmagic
+download_colourpet_rom

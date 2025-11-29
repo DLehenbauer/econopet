@@ -471,7 +471,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
     parse_config_file("/config.yaml", &config_sink, -1);
     
     int num_configs = test_ctx.config_exit_count;
-    ck_assert_int_eq(num_configs, 6);  // Should have exactly 6 configs
+    ck_assert_int_eq(num_configs, 7);  // Should have exactly 7 configs
     
     // Now load each config by index to verify they're all valid
     for (int i = 0; i < num_configs; i++) {

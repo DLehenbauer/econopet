@@ -226,3 +226,24 @@ configs:
         source: 0xe7b4
         destination: 0xe7ad
         length: 0x06
+  - name: "ColourPET (40 Col 60 Hz)"
+    setup:
+      - action: "set-usb-keymap"
+        file: "/ukm/us.bin"
+      - action: "load"
+        files:
+          - file: "/roms/characters-2.901447-10.bin"
+            address: 0x8800
+          - file: "/roms/basic-4-b000.901465-23.bin"
+            address: 0xb000
+          - file: "/roms/basic-4-c000.901465-20.bin"
+            address: 0xc000
+          - file: "/roms/basic-4-d000.901465-21.bin"
+            address: 0xd000
+          - file: "/roms/colourpet-c1-80-b-60.bin"
+            address: 0xe000
+          - file: "/roms/kernal-4.901465-22.bin"
+            address: 0xf000
+      - action: "set"
+        columns: 40
+ 
