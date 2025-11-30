@@ -143,7 +143,7 @@ static inline uint8_t __not_in_flash_func(get_char_scanline)(
     return p8;
 }
 
-static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
+static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static uint h_displayed   = 40;	        // Horizontal displayed characters
