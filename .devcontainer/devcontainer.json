@@ -1,35 +1,31 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/debian
 {
-	"name": "EconoPET",
-    
-	"build": {
+    "name": "EconoPET",
+    "build": {
         "dockerfile": "Dockerfile"
     },
-
     "customizations": {
-        "vscode": {           
+        "vscode": {
             // Add the IDs of extensions you want installed when the container is created.
             "extensions": [
-				"DavidAnson.vscode-markdownlint",
-				"marus25.cortex-debug",
-				"mcu-debug.peripheral-viewer",  // Required by 'marus25.cortex-debug'
-				"ms-vscode.cpptools-extension-pack",
-				"mshr-h.veriloghdl",
-				"mutantdino.resourcemonitor",
-				"saoudrizwan.claude-dev",
-				"streetsidesoftware.code-spell-checker",
-				"xaver.clang-format"
-			]
+                "chris-hock.pioasm""DavidAnson.vscode-markdownlint",
+                "marus25.cortex-debug",
+                "mcu-debug.peripheral-viewer", // Required by 'marus25.cortex-debug'
+                "ms-vscode.cpptools-extension-pack",
+                "mshr-h.veriloghdl",
+                "mutantdino.resourcemonitor",
+                "saoudrizwan.claude-dev",
+                "streetsidesoftware.code-spell-checker",
+                "xaver.clang-format",
+            ]
         }
     },
-
     // You may need to run `sudo modprobe cdc_acm` on Ubuntu to have access to the ttyACM0 device.
     "runArgs": [
-        "--privileged",             // Required to access Debugprobe from dev container
-        "--device=/dev/ttyACM0"     // Expose Debugprobe URT to dev container
+        "--privileged", // Required to access Debugprobe from dev container
+        "--device=/dev/ttyACM0" // Expose Debugprobe URT to dev container
     ],
-    
     // TODO: Investigate if it is reasonable to run the dev container as a non-root user.
     // (See: https://www.robmiles.com/journal/2024/1/18/effortless-debugging-with-your-pico-probe-no-more-sudo)
     "remoteUser": "root",
