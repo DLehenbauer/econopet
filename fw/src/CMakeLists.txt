@@ -75,7 +75,8 @@ target_precompile_headers(${FW_EXECUTABLE_NAME} PRIVATE ${FW_SRC_DIR}/pch.h)
 target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE
     DVI_VERTICAL_REPEAT=2
     DVI_N_TMDS_BUFFERS=3
-    DVI_MONOCHROME_TMDS=1)
+    DVI_MONOCHROME_TMDS=1
+    DVI_1BPP_BIT_REVERSE=1)
 
 # pull in common dependencies
 target_link_libraries(${FW_EXECUTABLE_NAME} PUBLIC

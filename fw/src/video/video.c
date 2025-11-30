@@ -113,11 +113,6 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
     // Remaining registers unimplemented -> 0
 };
 
-static inline uint16_t __not_in_flash_func(flip_x)(uint8_t x) {
-    // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
-    return ((x * 0x0802LU & 0x22110LU) | (x * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
-}
-
 static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
     x = (x | (x << 4)) & 0x0F0F;
     x = (x | (x << 2)) & 0x3333;
@@ -145,7 +140,7 @@ static inline uint8_t __not_in_flash_func(get_char_scanline)(
 		p8 ^= 0xff;                                     // Invert character bitmap
 	}
 	
-    return flip_x(p8);                                  // ROM data is LSB on left, so flip horizontally
+    return p8;
 }
 
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / 8] = { 0 };
@@ -230,8 +225,8 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
 
 				uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
-				*p_dest++ = p16;
 				*p_dest++ = p16 >> 8;
+				*p_dest++ = p16;
 			}
 		}
 	}
