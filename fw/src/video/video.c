@@ -236,7 +236,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
             dvi_validate_tmds_buffer(tmdsbuf);
             queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
-
 		} else {
 			while (remaining--) {
                 src &= display_mask;
@@ -256,7 +255,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 }
 
 static void __not_in_flash_func(core1_scanline_callback)() {
-    static uint y = 1;
+    static uint y = 0;
     prepare_scanline(y);
     y = (y + 1) % FRAME_HEIGHT;
 }
@@ -290,10 +289,12 @@ void video_init() {
     
     // Precalculate TMDS-encoded blank scanline (all zeros).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
-    static uint8_t __attribute__((aligned(4))) blank_scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
-    tmds_encode_1bpp((const uint32_t*) blank_scanline, blank_tmdsbuf, FRAME_WIDTH);
+    memset(scanline, 0, sizeof(scanline));
+    tmds_encode_1bpp((const uint32_t*) scanline, blank_tmdsbuf, FRAME_WIDTH);
+    dvi_validate_tmds_buffer(blank_tmdsbuf);
 
-    prepare_scanline(0);
+    // Prepare initial scanline before starting DVI on core 1.
+    dvi0.scanline_callback();
 
     sem_init(&dvi_start_sem, /* initial_permits: */ 0, /* max_permits: */ 1);
     hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
