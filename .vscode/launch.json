@@ -67,7 +67,7 @@
         {
             "name": "PicoDVI Example",
             "cwd": "${workspaceRoot}",
-            "executable": "${workspaceRoot}/fw/external/PicoDVI/software/build/apps/hello_dvi/hello_dvi.elf",
+            "executable": "${workspaceRoot}/fw/external/PicoDVI/software/build/apps/colour_terminal/colour_terminal.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
