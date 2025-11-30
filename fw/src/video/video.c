@@ -17,6 +17,11 @@
 #include "roms/roms.h"
 #include "system_state.h"
 
+// Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal
+// demo, instead of using interrupt-driven scanline callbacks. This may be useful for
+// debugging or profiling.
+#define VIDEO_CORE1_LOOP
+
 #define FRAME_WIDTH 720
 #define FRAME_HEIGHT (480 / DVI_VERTICAL_REPEAT)
 #define DVI_TIMING dvi_timing_720x480p_60hz
@@ -429,13 +434,33 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     }
 }
 
+#ifdef VIDEO_CORE1_LOOP
+
+// Tight loop mode: core1 iterates through all scanlines per frame in a loop,
+// similar to the PicoDVI colour_terminal demo. No interrupt-driven callbacks.
+static void __not_in_flash_func(core1_main)() {
+    dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
+    sem_acquire_blocking(&dvi_start_sem);
+    dvi_start(&dvi0);
+
+    while (true) {
+        for (uint y = 0; y < FRAME_HEIGHT; ++y) {
+            prepare_scanline(y);
+        }
+    }
+    __builtin_unreachable();
+}
+
+#else
+
+// Interrupt mode: scanlines are prepared via interrupt-driven callback.
 static void __not_in_flash_func(core1_scanline_callback)() {
     static uint y = 0;
     prepare_scanline(y);
     y = (y + 1) % FRAME_HEIGHT;
 }
 
-static void core1_main() {
+static void __not_in_flash_func(core1_main)() {
     dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
     sem_acquire_blocking(&dvi_start_sem);
     dvi_start(&dvi0);
@@ -446,6 +471,8 @@ static void core1_main() {
     __builtin_unreachable();
 }
 
+#endif // VIDEO_CORE1_LOOP
+
 void video_init() {
     const uint32_t f_clk_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
     const int32_t delta = f_clk_sys - DVI_TIMING.bit_clk_khz;
@@ -455,7 +482,9 @@ void video_init() {
 
     dvi0.timing = &DVI_TIMING;
     dvi0.ser_cfg = micromod_cfg;
+#ifndef VIDEO_CORE1_LOOP
     dvi0.scanline_callback = core1_scanline_callback;
+#endif
     dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
 
     // Dequeue one TMDS buffer from the free queue to use as our precalculated blank scanline.
@@ -475,8 +504,10 @@ void video_init() {
     );
     dvi_validate_tmds_buffer(blank_tmdsbuf);
 
+#ifndef VIDEO_CORE1_LOOP
     // Prepare initial scanline before starting DVI on core 1.
     dvi0.scanline_callback();
+#endif
 
     sem_init(&dvi_start_sem, /* initial_permits: */ 0, /* max_permits: */ 1);
     hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
