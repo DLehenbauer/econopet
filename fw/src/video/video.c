@@ -213,10 +213,11 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
         is_80_col = (system_state.pet_display_columns == pet_display_columns_80);
         if (is_80_col) {
-            h_displayed <<= 1;          // Double horizontal displayed characters for 80-column mode
-            display_mask = 0x7ff;       // 80 columns machine has 2Kb video RAM
+            h_displayed <<= 1;              // Double horizontal displayed characters for 80-column mode
+            display_start <<= 1;            // Double start address for 80-column mode
+            display_mask = 0x7ff;           // 80 columns machine has 2Kb video RAM
         } else {
-            display_mask = 0x3ff;       // 40 columns machine has 1Kb video RAM
+            display_mask = 0x3ff;           // 40 columns machine has 1Kb video RAM
         }
 
         // Select graphics/text character ROM
