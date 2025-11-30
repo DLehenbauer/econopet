@@ -120,30 +120,127 @@ static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
     return x | (x << 1);
 }
 
-static inline uint8_t __not_in_flash_func(get_char_scanline)(
-    const uint src,                                     // Current source offset in video_char_buffer
-    const uint8_t* const p_char_rom,                    // Start of character set bitmap data
-    const uint ra,                                      // Row address within character (0 to FONT_HEIGHT-1)
-    const uint8_t invert_mask                           // Display invert mask
+static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
+
+// ---------------------------------------------------------------------------
+// TMDS encoding wrappers
+//
+// These inline functions wrap tmds_encode_1bpp with an API that matches the
+// eventual target functions: tmds_encode_font_2bpp and tmds_encode_font_2bpp_wide.
+//
+// The color-related parameters (colourbuf, plane) are currently unused/ignored.
+// When migrating to the real tmds_encode_font_2bpp functions, replace these
+// wrapper calls with direct calls to the assembly implementations.
+// ---------------------------------------------------------------------------
+
+/**
+ * Encode characters to TMDS for 80-column mode (8px wide characters).
+ *
+ * This wrapper renders character glyphs to a pixel buffer and calls
+ * tmds_encode_1bpp. It matches the signature of tmds_encode_font_2bpp
+ * from PicoDVI's colour_terminal app.
+ *
+ * @param charbuf       Character buffer (video RAM)
+ * @param colourbuf     Color buffer (unused - pass NULL)
+ * @param tmdsbuf       Output TMDS buffer
+ * @param n_chars       Number of characters to encode
+ * @param font_base     Font bitmap base (8 bytes per character)
+ * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
+ * @param plane         Color plane 0-2 (unused - pass 0)
+ * @param invert        0x00 normal, 0xFF to invert video
+ */
+static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
+    const uint8_t *charbuf,
+    const uint8_t *colourbuf,
+    uint32_t *tmdsbuf,
+    uint n_chars,
+    const uint8_t *font_base,
+    uint scanline_idx,
+    uint plane,
+    uint32_t invert
 ) {
-    if (ra >= FONT_HEIGHT) {
-        return invert_mask;                             // Outside character height: blank line
+    (void)colourbuf;  // Unused for now
+    (void)plane;      // Unused for now
+
+    const uint8_t invert_mask = (uint8_t)invert;
+    uint8_t *p_dest = scanline;
+
+    for (uint i = 0; i < n_chars; i++) {
+        uint8_t p8;
+
+        if (scanline_idx >= FONT_HEIGHT) {
+            // Outside character height: blank line (respects invert)
+            p8 = invert_mask;
+        } else {
+            const uint8_t c = charbuf[i];
+            p8 = font_base[(c & 0x7f) * FONT_HEIGHT + scanline_idx];
+            p8 ^= invert_mask;
+            if (c & 0x80) {
+                p8 ^= 0xff;  // Invert if bit 7 set in character code
+            }
+        }
+
+        *p_dest++ = p8;
     }
 
-	const uint c = video_char_buffer[src];              // Read character from video RAM
-    uint8_t p8 = p_char_rom[                            // Fetch character bitmap row
-        (c & 0x7f) * FONT_HEIGHT + ra];
-
-    p8 ^= invert_mask;                                  // Apply display invert mask
-
-	if (c & 0x80) {                                     // If bit 7 of character is set
-		p8 ^= 0xff;                                     // Invert character bitmap
-	}
-	
-    return p8;
+    tmds_encode_1bpp((const uint32_t *)scanline, tmdsbuf, n_chars * FONT_WIDTH);
 }
 
-static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
+/**
+ * Encode characters to TMDS for 40-column mode (16px wide characters, 2x stretch).
+ *
+ * This wrapper renders character glyphs with 2x horizontal stretch to a pixel
+ * buffer and calls tmds_encode_1bpp. It matches the signature of
+ * tmds_encode_font_2bpp_wide from PicoDVI's colour_terminal app.
+ *
+ * @param charbuf       Character buffer (video RAM)
+ * @param colourbuf     Color buffer (unused - pass NULL)
+ * @param tmdsbuf       Output TMDS buffer
+ * @param n_chars       Number of characters to encode
+ * @param font_base     Font bitmap base (8 bytes per character)
+ * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
+ * @param plane         Color plane 0-2 (unused - pass 0)
+ * @param invert        0x00 normal, 0xFF to invert video
+ */
+static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
+    const uint8_t *charbuf,
+    const uint8_t *colourbuf,
+    uint32_t *tmdsbuf,
+    uint n_chars,
+    const uint8_t *font_base,
+    uint scanline_idx,
+    uint plane,
+    uint32_t invert
+) {
+    (void)colourbuf;  // Unused for now
+    (void)plane;      // Unused for now
+
+    const uint8_t invert_mask = (uint8_t)invert;
+    uint8_t *p_dest = scanline;
+
+    for (uint i = 0; i < n_chars; i++) {
+        uint8_t p8;
+
+        if (scanline_idx >= FONT_HEIGHT) {
+            // Outside character height: blank line (respects invert)
+            p8 = invert_mask;
+        } else {
+            const uint8_t c = charbuf[i];
+            p8 = font_base[(c & 0x7f) * FONT_HEIGHT + scanline_idx];
+            p8 ^= invert_mask;
+            if (c & 0x80) {
+                p8 ^= 0xff;  // Invert if bit 7 set in character code
+            }
+        }
+
+        // Stretch each pixel horizontally by 2x
+        uint16_t p16 = stretch_x(p8);
+        *p_dest++ = p16 >> 8;
+        *p_dest++ = (uint8_t)p16;
+    }
+
+    tmds_encode_1bpp((const uint32_t *)scanline, tmdsbuf, n_chars * FONT_WIDTH * 2);
+}
 
 // Precalculated TMDS-encoded blank scanline. This buffer is dequeued from
 // dvi0.q_tmds_free during video_init() and kept permanently. For blank scanlines
@@ -220,6 +317,8 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             display_mask = 0x3ff;           // 40 columns machine has 1Kb video RAM
         }
 
+        display_start &= display_mask;
+
         // Select graphics/text character ROM
 		p_char_rom = video_graphics
 			? p_video_font_400
@@ -231,27 +330,13 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
     } else {
-        uint src = display_start + y / lines_per_row * h_displayed;     // Next offset to read from `video_char_buffer`
-        uint8_t* p_dest = scanline;                                     // Write content starting at scanline[0]
-        uint remaining = h_displayed;                                   // Remaining number of characters to display in `scanline`
+        // Calculate start offset in video_char_buffer for this row.
+        // Note: display_start may have bits above display_mask (ma[13:12] are special),
+        // so we mask only when computing the actual buffer index.
+        const uint row_offset = display_start + y / lines_per_row * h_displayed;
+        const uint row_start = row_offset & display_mask;
 
         const uint ra = y % lines_per_row;
-
-        if (is_80_col) {
-            while (remaining--) {
-                src &= display_mask;
-                uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
-                *p_dest++ = p8;
-            }
-        } else {
-            while (remaining--) {
-                src &= display_mask;
-                uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
-                uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
-                *p_dest++ = p16 >> 8;
-                *p_dest++ = p16;
-            }
-        }
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
@@ -259,8 +344,66 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         // Copy left margin from precalculated blank TMDS buffer
         memcpy(tmdsbuf, blank_tmdsbuf, left_margin_words * sizeof(uint32_t));
 
-        // Encode only the visible content portion
-        tmds_encode_1bpp((const uint32_t*) scanline, &tmdsbuf[left_margin_words], content_pixels);
+        // Check if the row wraps around the video buffer boundary.
+        // The buffer size is (display_mask + 1), so we wrap if row_start + h_displayed > display_mask + 1.
+        const uint buffer_size = display_mask + 1;
+        const uint first_chars = MIN(buffer_size - row_start, h_displayed);
+
+        // First part: from row_start (may be all characters if no wrap)
+        if (is_80_col) {
+            tmds_encode_font_2bpp_inline(
+                &video_char_buffer[row_start],
+                NULL,                           // colourbuf (unused)
+                &tmdsbuf[left_margin_words],
+                first_chars,
+                p_char_rom,
+                ra,
+                0,                              // plane (unused)
+                invert_mask
+            );
+        } else {
+            tmds_encode_font_2bpp_wide_inline(
+                &video_char_buffer[row_start],
+                NULL,                           // colourbuf (unused)
+                &tmdsbuf[left_margin_words],
+                first_chars,
+                p_char_rom,
+                ra,
+                0,                              // plane (unused)
+                invert_mask
+            );
+        }
+
+        // Second part: wrap-around from start of buffer (if needed)
+        if (first_chars < h_displayed) {
+            const uint second_chars = h_displayed - first_chars;
+            uint first_words = first_chars * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
+
+            if (is_80_col) {
+                tmds_encode_font_2bpp_inline(
+                    &video_char_buffer[0],
+                    NULL,
+                    &tmdsbuf[left_margin_words + first_words],
+                    second_chars,
+                    p_char_rom,
+                    ra,
+                    0,
+                    invert_mask
+                );
+            } else {
+                first_words *= 2;   // 40-column mode: each character is 16 pixels wide
+                tmds_encode_font_2bpp_wide_inline(
+                    &video_char_buffer[0],
+                    NULL,
+                    &tmdsbuf[left_margin_words + first_words],
+                    second_chars,
+                    p_char_rom,
+                    ra,
+                    0,
+                    invert_mask
+                );
+            }
+        }
 
         // Copy right margin from precalculated blank TMDS buffer
         memcpy(&tmdsbuf[right_margin_start], &blank_tmdsbuf[right_margin_start], right_margin_words * sizeof(uint32_t));
