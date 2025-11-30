@@ -162,6 +162,11 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 	static uint y_start = 0;
 	static uint y_visible = 0;
     static bool is_80_col = false;
+    static uint left_margin_words = 0;
+    static uint content_pixels = 0;
+    static uint content_words = 0;
+    static uint right_margin_start = 0;
+    static uint right_margin_words = 0;
 
     // TODO: Copy character into SRAM and precalculate flip/stretch? (PERF)
     static const uint8_t* p_char_rom = rom_chars_8800;
@@ -199,6 +204,13 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         // characters.
 		x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
 
+        // Precompute TMDS word offsets for margins and content for the frame
+        left_margin_words = x_start * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
+        content_pixels = h_displayed * FONT_WIDTH * 2;          // Always * 2 because h_displayed not yet adjusted for 80-columns
+        content_words = content_pixels / DVI_SYMBOLS_PER_WORD;  // Always word aligned: division by DVI_SYMBOLS_PER_WORD cancels * 2 above.
+        right_margin_start = left_margin_words + content_words;
+        right_margin_words = (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD) - right_margin_start;
+
         is_80_col = (system_state.pet_display_columns == pet_display_columns_80);
         if (is_80_col) {
             h_displayed <<= 1;          // Double horizontal displayed characters for 80-column mode
@@ -217,41 +229,44 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         memcpy(tmdsbuf, blank_tmdsbuf, (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD) * sizeof(uint32_t));
         dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
-} else {
-		uint src = display_start + y / lines_per_row * h_displayed;     // Next offset to read from `video_char_buffer`
-		uint8_t* p_dest = &scanline[x_start];					        // Next byte to write in `scanline`
-		uint remaining = h_displayed;						            // Remaining number of characters to display in `scanline`
+    } else {
+        uint src = display_start + y / lines_per_row * h_displayed;     // Next offset to read from `video_char_buffer`
+        uint8_t* p_dest = scanline;                                     // Write content starting at scanline[0]
+        uint remaining = h_displayed;                                   // Remaining number of characters to display in `scanline`
 
-		const uint ra = y % lines_per_row;
+        const uint ra = y % lines_per_row;
 
-		if (is_80_col) {
-			while (remaining--) {
+        if (is_80_col) {
+            while (remaining--) {
                 src &= display_mask;
-				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
-				*p_dest++ = p8;
-			}
-
-            uint32_t *tmdsbuf;
-            queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
-            tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
-            dvi_validate_tmds_buffer(tmdsbuf);
-            queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
-		} else {
-			while (remaining--) {
+                uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
+                *p_dest++ = p8;
+            }
+        } else {
+            while (remaining--) {
                 src &= display_mask;
-				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
-				uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
-				*p_dest++ = p16 >> 8;
-				*p_dest++ = p16;
-			}
+                uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
+                uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
+                *p_dest++ = p16 >> 8;
+                *p_dest++ = p16;
+            }
+        }
 
-            uint32_t *tmdsbuf;
-            queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
-            tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
-            dvi_validate_tmds_buffer(tmdsbuf);
-            queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
-		}
-	}
+        uint32_t *tmdsbuf;
+        queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
+
+        // Copy left margin from precalculated blank TMDS buffer
+        memcpy(tmdsbuf, blank_tmdsbuf, left_margin_words * sizeof(uint32_t));
+
+        // Encode only the visible content portion
+        tmds_encode_1bpp((const uint32_t*) scanline, &tmdsbuf[left_margin_words], content_pixels);
+
+        // Copy right margin from precalculated blank TMDS buffer
+        memcpy(&tmdsbuf[right_margin_start], &blank_tmdsbuf[right_margin_start], right_margin_words * sizeof(uint32_t));
+
+        dvi_validate_tmds_buffer(tmdsbuf);
+        queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
+    }
 }
 
 static void __not_in_flash_func(core1_scanline_callback)() {
