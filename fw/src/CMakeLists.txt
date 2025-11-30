@@ -52,6 +52,8 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/usb/msc_app.c
     ${FW_SRC_DIR}/usb/usb.c
     ${FW_SRC_DIR}/video/video.c
+    ${FW_SRC_DIR}/video/tmds_encode_font_2bpp.c
+    ${FW_SRC_DIR}/video/tmds_encode_font_2bpp.S
 )
 
 # EconoPET 40/8096 Rev. A: xosc requires a little extra time to stabilize.
@@ -74,7 +76,7 @@ target_precompile_headers(${FW_EXECUTABLE_NAME} PRIVATE ${FW_SRC_DIR}/pch.h)
 # Configure PicoDVI library
 target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE
     DVI_VERTICAL_REPEAT=2
-    DVI_N_TMDS_BUFFERS=3
+    DVI_N_TMDS_BUFFERS=4
     DVI_1BPP_BIT_REVERSE=1)
 
 # pull in common dependencies

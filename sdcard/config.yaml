@@ -226,7 +226,7 @@ configs:
         source: 0xe7b4
         destination: 0xe7ad
         length: 0x06
-  - name: "ColourPET (40 Col 60 Hz)"
+  - name: "ColourPET (80 Col 60 Hz)"
     setup:
       - action: "set-usb-keymap"
         file: "/ukm/us.bin"
@@ -244,6 +244,17 @@ configs:
             address: 0xe000
           - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
+      - if: "graphics"
+        then:
+          # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
+          # This patch replaces the original keyscan routine with one adapted from the 40 column
+          # edit rom '901499-01'.
+          - action: "patch"
+            address: 0x0e545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          # Graphics keyboard scanmap from '901499-01'
+          - action: "patch"
+            address: 0x0e6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
-        columns: 40
- 
+        columns: 80

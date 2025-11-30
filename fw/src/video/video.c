@@ -16,6 +16,7 @@
 #include "pet.h"
 #include "roms/roms.h"
 #include "system_state.h"
+#include "tmds_encode_font_2bpp.h"
 
 // Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal
 // demo, instead of using interrupt-driven scanline callbacks. This may be useful for
@@ -37,6 +38,37 @@ struct semaphore dvi_start_sem;
 
 bool video_graphics = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
+
+// ---------------------------------------------------------------------------
+// CGA Palette (16 colors in RGB222 format)
+// RGB222 format: bits 5:4 = R, bits 3:2 = G, bits 1:0 = B
+// ---------------------------------------------------------------------------
+
+static const uint8_t cga_palette[16] = {
+    0x00, // 0: Black
+    0x02, // 1: Blue
+    0x08, // 2: Green
+    0x0A, // 3: Cyan
+    0x20, // 4: Red
+    0x22, // 5: Magenta
+    0x24, // 6: Brown
+    0x2A, // 7: Light Gray
+    0x15, // 8: Dark Gray
+    0x17, // 9: Light Blue
+    0x1D, // 10: Light Green
+    0x1F, // 11: Light Cyan
+    0x35, // 12: Light Red
+    0x37, // 13: Light Magenta
+    0x3D, // 14: Yellow
+    0x3F, // 15: White
+};
+
+// Colour buffer: one byte per character position
+// High nibble (bits 7:4) = background palette index (0-15)
+// Low nibble (bits 3:0) = foreground palette index (0-15)
+// Initialized to bright green (10) on black (0) = 0x0A
+#define MAX_CHARS_PER_LINE (FRAME_WIDTH / FONT_WIDTH)
+static uint8_t colourbuf[MAX_CHARS_PER_LINE];
 
 // ---------------------------------------------------------------------------
 // CRTC (6545) registers
@@ -121,134 +153,88 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
     // Remaining registers unimplemented -> 0
 };
 
-static inline uint16_t __not_in_flash_func(stretch_x)(uint16_t x) {
-    x = (x | (x << 4)) & 0x0F0F;
-    x = (x | (x << 2)) & 0x3333;
-    x = (x | (x << 1)) & 0x5555;
-    return x | (x << 1);
-}
-
-static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
-
 // ---------------------------------------------------------------------------
 // TMDS encoding wrappers
 //
-// These inline functions wrap tmds_encode_1bpp with an API that matches the
-// eventual target functions: tmds_encode_font_2bpp and tmds_encode_font_2bpp_wide.
-//
-// The color-related parameters (colourbuf, plane) are currently unused/ignored.
-// When migrating to the real tmds_encode_font_2bpp functions, replace these
-// wrapper calls with direct calls to the assembly implementations.
+// These inline functions call the optimized assembly encoders from 
+// tmds_encode_font_2bpp.S for each of the 3 RGB planes.
 // ---------------------------------------------------------------------------
 
 /**
  * Encode characters to TMDS for 80-column mode (8px wide characters).
  *
- * This wrapper renders character glyphs to a pixel buffer and calls
- * tmds_encode_1bpp. It matches the signature of tmds_encode_font_2bpp
- * from PicoDVI's colour_terminal app.
+ * Calls the assembly tmds_encode_font_2bpp for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
- * @param colourbuf     Color buffer (unused - pass NULL)
+ * @param p_colourbuf   Color buffer (one byte per character)
  * @param tmdsbuf       Output TMDS buffer
  * @param n_chars       Number of characters to encode
  * @param font_base     Font bitmap base (8 bytes per character)
  * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
- * @param plane         Color plane 0-2 (unused - pass 0)
  * @param invert        0x00 normal, 0xFF to invert video
  */
 static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
     const uint8_t *charbuf,
-    const uint8_t *colourbuf,
+    const uint8_t *p_colourbuf,
     uint32_t *tmdsbuf,
     uint n_chars,
     const uint8_t *font_base,
     uint scanline_idx,
     uint32_t invert
 ) {
-    (void)colourbuf;  // Unused for now
+    const uint n_pix = n_chars * FONT_WIDTH;
 
-    const uint8_t invert_mask = (uint8_t)invert;
-    uint8_t *p_dest = scanline;
-
-    for (uint i = 0; i < n_chars; i++) {
-        uint8_t p8;
-
-        if (scanline_idx >= FONT_HEIGHT) {
-            // Outside character height: blank line (respects invert)
-            p8 = invert_mask;
-        } else {
-            const uint8_t c = charbuf[i];
-            p8 = font_base[(c & 0x7f) * FONT_HEIGHT + scanline_idx];
-            p8 ^= invert_mask;
-            if (c & 0x80) {
-                p8 ^= 0xff;  // Invert if bit 7 set in character code
-            }
-        }
-
-        *p_dest++ = p8;
-    }
-
-    // Encode 3 RGB planes separately
-    for (uint p = 0; p < N_TMDS_LANES; p++) {
-        tmds_encode_1bpp((const uint32_t *)scanline, &tmdsbuf[p * WORDS_PER_LANE], n_chars * FONT_WIDTH);
+    // Encode all 3 RGB planes
+    for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
+        tmds_encode_font_2bpp(
+            charbuf,
+            p_colourbuf,
+            &tmdsbuf[plane * WORDS_PER_LANE],
+            n_pix,
+            font_base,
+            scanline_idx,
+            plane,
+            invert
+        );
     }
 }
 
 /**
  * Encode characters to TMDS for 40-column mode (16px wide characters, 2x stretch).
  *
- * This wrapper renders character glyphs with 2x horizontal stretch to a pixel
- * buffer and calls tmds_encode_1bpp. It matches the signature of
- * tmds_encode_font_2bpp_wide from PicoDVI's colour_terminal app.
+ * Calls the assembly tmds_encode_font_2bpp_wide for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
- * @param colourbuf     Color buffer (unused - pass NULL)
+ * @param p_colourbuf   Color buffer (one byte per character)
  * @param tmdsbuf       Output TMDS buffer
  * @param n_chars       Number of characters to encode
  * @param font_base     Font bitmap base (8 bytes per character)
  * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
- * @param plane         Color plane 0-2 (unused - pass 0)
  * @param invert        0x00 normal, 0xFF to invert video
  */
 static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
     const uint8_t *charbuf,
-    const uint8_t *colourbuf,
+    const uint8_t *p_colourbuf,
     uint32_t *tmdsbuf,
     uint n_chars,
     const uint8_t *font_base,
     uint scanline_idx,
     uint32_t invert
 ) {
-    (void)colourbuf;  // Unused for now
+    const uint n_pix = n_chars * FONT_WIDTH * 2;  // 2x stretch
 
-    const uint8_t invert_mask = (uint8_t)invert;
-    uint8_t *p_dest = scanline;
-
-    for (uint i = 0; i < n_chars; i++) {
-        uint8_t p8;
-
-        if (scanline_idx >= FONT_HEIGHT) {
-            // Outside character height: blank line (respects invert)
-            p8 = invert_mask;
-        } else {
-            const uint8_t c = charbuf[i];
-            p8 = font_base[(c & 0x7f) * FONT_HEIGHT + scanline_idx];
-            p8 ^= invert_mask;
-            if (c & 0x80) {
-                p8 ^= 0xff;  // Invert if bit 7 set in character code
-            }
-        }
-
-        // Stretch each pixel horizontally by 2x
-        uint16_t p16 = stretch_x(p8);
-        *p_dest++ = p16 >> 8;
-        *p_dest++ = (uint8_t)p16;
-    }
-
-    // Encode 3 RGB planes separately
-    for (uint p = 0; p < N_TMDS_LANES; p++) {
-        tmds_encode_1bpp((const uint32_t *)scanline, &tmdsbuf[p * WORDS_PER_LANE], n_chars * FONT_WIDTH * 2);
+    // Encode all 3 RGB planes
+    for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
+        tmds_encode_font_2bpp_wide(
+            charbuf,
+            p_colourbuf,
+            &tmdsbuf[plane * WORDS_PER_LANE],
+            n_pix,
+            font_base,
+            scanline_idx,
+            plane,
+            invert
+        );
     }
 }
 
@@ -301,11 +287,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     y -= y_start;
 
     if (y >= y_visible) {
-        // Blank scan line.  Because scan lines are recycled, this also clears the unused overscan
-        // area on the left/right of the visible region.
-        memset(scanline, 0, sizeof(scanline));
-
-		// Use blank scan lines to reload/recompute CRTC-dependent values.
+        // Blank scan line - use blank scan lines to reload/recompute CRTC-dependent values.
         h_displayed   = pet_crtc_registers[CRTC_R1_H_DISPLAYED];	                // R1[7:0]: Horizontal displayed characters
         v_displayed   = pet_crtc_registers[CRTC_R6_V_DISPLAYED] & 0x7F;	            // R6[6:0]: Vertical displayed character rows
         lines_per_row = (pet_crtc_registers[CRTC_R9_MAX_SCAN_LINE] & 0x1F) + 1;     // R9[4:0]: Scan lines per character row (plus one)
@@ -381,7 +363,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         if (is_80_col) {
             tmds_encode_font_2bpp_inline(
                 &video_char_buffer[row_start],
-                NULL,                           // colourbuf (unused)
+                colourbuf,
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -391,7 +373,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         } else {
             tmds_encode_font_2bpp_wide_inline(
                 &video_char_buffer[row_start],
-                NULL,                           // colourbuf (unused)
+                colourbuf,
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -408,7 +390,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             if (is_80_col) {
                 tmds_encode_font_2bpp_inline(
                     &video_char_buffer[0],
-                    NULL,
+                    &colourbuf[first_chars],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -419,7 +401,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 first_words *= 2;   // 40-column mode: each character is 16 pixels wide
                 tmds_encode_font_2bpp_wide_inline(
                     &video_char_buffer[0],
-                    NULL,
+                    &colourbuf[first_chars],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -491,15 +473,25 @@ void video_init() {
     // This buffer is kept permanently and never returned to the queue.
     queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
     
-    // Precalculate TMDS-encoded blank scanline (all zeros).
+    // Initialize the TMDS lookup table for 2bpp palettised font encoding
+    init_palettised_1bpp_tables();
+
+    // Initialize the palette (using CGA palette for both fg and bg colors)
+    set_palette(cga_palette, cga_palette);
+
+    // Initialize colour buffer to bright green (10) on black (0)
+    // Colour byte format: (bg << 4) | fg = (0 << 4) | 10 = 0x0A
+    memset(colourbuf, 0x0A, sizeof(colourbuf));
+
+    // Precalculate TMDS-encoded blank scanline (all zeros / background color).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
     tmds_encode_font_2bpp_inline(
-        NULL,                       // charbuf (unused)
-        NULL,                       // colourbuf (unused)
+        video_char_buffer,          // charbuf (content doesn't matter for blank lines)
+        colourbuf,                  // colourbuf
         blank_tmdsbuf,
         FRAME_WIDTH / FONT_WIDTH,   // n_chars
-        NULL,                       // font_base
-        FONT_HEIGHT,                // ra >= font height = blank line
+        p_video_font_000,           // font_base
+        FONT_HEIGHT,                // ra >= font height = blank line (shows background only)
         0x00                        // no invert
     );
     dvi_validate_tmds_buffer(blank_tmdsbuf);
