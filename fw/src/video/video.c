@@ -145,6 +145,11 @@ static inline uint8_t __not_in_flash_func(get_char_scanline)(
 
 static uint8_t __attribute__((aligned(4))) scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
 
+// Precalculated TMDS-encoded blank scanline. This buffer is dequeued from
+// dvi0.q_tmds_free during video_init() and kept permanently. For blank scanlines
+// (y >= y_visible), we memcpy from this buffer instead of re-encoding each time.
+static uint32_t* blank_tmdsbuf;
+
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static uint h_displayed   = 40;	        // Horizontal displayed characters
     static uint v_displayed   = 25;	        // Vertical displayed characters
@@ -206,7 +211,13 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 		p_char_rom = video_graphics
 			? p_video_font_400
 			: p_video_font_000;
-	} else {
+
+        uint32_t *tmdsbuf;
+        queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
+        memcpy(tmdsbuf, blank_tmdsbuf, (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD) * sizeof(uint32_t));
+        dvi_validate_tmds_buffer(tmdsbuf);
+        queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
+} else {
 		uint src = display_start + y / lines_per_row * h_displayed;     // Next offset to read from `video_char_buffer`
 		uint8_t* p_dest = &scanline[x_start];					        // Next byte to write in `scanline`
 		uint remaining = h_displayed;						            // Remaining number of characters to display in `scanline`
@@ -219,22 +230,29 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
 				*p_dest++ = p8;
 			}
+
+            uint32_t *tmdsbuf;
+            queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
+            tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
+            dvi_validate_tmds_buffer(tmdsbuf);
+            queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
+
 		} else {
 			while (remaining--) {
                 src &= display_mask;
 				uint8_t p8 = get_char_scanline(src++, p_char_rom, ra, invert_mask);
-
 				uint16_t p16 = stretch_x(p8);   // Stretch character horizontally for 40-column mode
 				*p_dest++ = p16 >> 8;
 				*p_dest++ = p16;
 			}
+
+            uint32_t *tmdsbuf;
+            queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
+            tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
+            dvi_validate_tmds_buffer(tmdsbuf);
+            queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
 		}
 	}
-
-	uint32_t *tmdsbuf;
-	queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
-	tmds_encode_1bpp((const uint32_t*) scanline, tmdsbuf, FRAME_WIDTH);
-	queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
 }
 
 static void __not_in_flash_func(core1_scanline_callback)() {
@@ -265,6 +283,15 @@ void video_init() {
     dvi0.ser_cfg = micromod_cfg;
     dvi0.scanline_callback = core1_scanline_callback;
     dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
+
+    // Dequeue one TMDS buffer from the free queue to use as our precalculated blank scanline.
+    // This buffer is kept permanently and never returned to the queue.
+    queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
+    
+    // Precalculate TMDS-encoded blank scanline (all zeros).
+    // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
+    static uint8_t __attribute__((aligned(4))) blank_scanline[FRAME_WIDTH / FONT_WIDTH] = { 0 };
+    tmds_encode_1bpp((const uint32_t*) blank_scanline, blank_tmdsbuf, FRAME_WIDTH);
 
     prepare_scanline(0);
 
