@@ -24,6 +24,9 @@
 #define FONT_WIDTH 8
 #define FONT_HEIGHT 8
 
+// Number of 32-bit words per TMDS lane
+#define WORDS_PER_LANE (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD)
+
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
@@ -156,11 +159,9 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
     uint n_chars,
     const uint8_t *font_base,
     uint scanline_idx,
-    uint plane,
     uint32_t invert
 ) {
     (void)colourbuf;  // Unused for now
-    (void)plane;      // Unused for now
 
     const uint8_t invert_mask = (uint8_t)invert;
     uint8_t *p_dest = scanline;
@@ -183,7 +184,10 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
         *p_dest++ = p8;
     }
 
-    tmds_encode_1bpp((const uint32_t *)scanline, tmdsbuf, n_chars * FONT_WIDTH);
+    // Encode 3 RGB planes separately
+    for (uint p = 0; p < N_TMDS_LANES; p++) {
+        tmds_encode_1bpp((const uint32_t *)scanline, &tmdsbuf[p * WORDS_PER_LANE], n_chars * FONT_WIDTH);
+    }
 }
 
 /**
@@ -209,11 +213,9 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
     uint n_chars,
     const uint8_t *font_base,
     uint scanline_idx,
-    uint plane,
     uint32_t invert
 ) {
     (void)colourbuf;  // Unused for now
-    (void)plane;      // Unused for now
 
     const uint8_t invert_mask = (uint8_t)invert;
     uint8_t *p_dest = scanline;
@@ -239,13 +241,34 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
         *p_dest++ = (uint8_t)p16;
     }
 
-    tmds_encode_1bpp((const uint32_t *)scanline, tmdsbuf, n_chars * FONT_WIDTH * 2);
+    // Encode 3 RGB planes separately
+    for (uint p = 0; p < N_TMDS_LANES; p++) {
+        tmds_encode_1bpp((const uint32_t *)scanline, &tmdsbuf[p * WORDS_PER_LANE], n_chars * FONT_WIDTH * 2);
+    }
 }
 
 // Precalculated TMDS-encoded blank scanline. This buffer is dequeued from
 // dvi0.q_tmds_free during video_init() and kept permanently. For blank scanlines
 // (y >= y_visible), we memcpy from this buffer instead of re-encoding each time.
 static uint32_t* blank_tmdsbuf;
+
+// Copy left and right blank margins for all TMDS lanes into target buffer.
+// left_margin_words/right_margin_words are counts of 32-bit words per lane.
+static inline void copy_blank_margins(uint32_t *tmdsbuf, uint left_margin_words, uint right_margin_words) {
+    const uint right_margin_start = WORDS_PER_LANE - right_margin_words;
+    const size_t left_bytes = left_margin_words * sizeof(uint32_t);
+    const size_t right_bytes = right_margin_words * sizeof(uint32_t);
+    uint32_t* dst_lane = tmdsbuf;
+    uint32_t* src_lane = blank_tmdsbuf;
+
+    uint remaining = N_TMDS_LANES;
+    while (remaining--) {
+        memcpy(dst_lane, src_lane, left_bytes);
+        memcpy(dst_lane + right_margin_start, src_lane + right_margin_start, right_bytes);
+        dst_lane += WORDS_PER_LANE;
+        src_lane += WORDS_PER_LANE;
+    }
+}
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static uint h_displayed   = 40;	        // Horizontal displayed characters
@@ -306,7 +329,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         content_pixels = h_displayed * FONT_WIDTH * 2;          // Always * 2 because h_displayed not yet adjusted for 80-columns
         content_words = content_pixels / DVI_SYMBOLS_PER_WORD;  // Always word aligned: division by DVI_SYMBOLS_PER_WORD cancels * 2 above.
         right_margin_start = left_margin_words + content_words;
-        right_margin_words = (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD) - right_margin_start;
+        right_margin_words = WORDS_PER_LANE - right_margin_start;
 
         is_80_col = (system_state.pet_display_columns == pet_display_columns_80);
         if (is_80_col) {
@@ -326,7 +349,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
-        memcpy(tmdsbuf, blank_tmdsbuf, (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD) * sizeof(uint32_t));
+        memcpy(tmdsbuf, blank_tmdsbuf, N_TMDS_LANES * WORDS_PER_LANE * sizeof(uint32_t));
         dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
     } else {
@@ -341,8 +364,8 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
 
-        // Copy left margin from precalculated blank TMDS buffer
-        memcpy(tmdsbuf, blank_tmdsbuf, left_margin_words * sizeof(uint32_t));
+        // Copy left/right blank margins for all lanes
+        copy_blank_margins(tmdsbuf, left_margin_words, right_margin_words);
 
         // Check if the row wraps around the video buffer boundary.
         // The buffer size is (display_mask + 1), so we wrap if row_start + h_displayed > display_mask + 1.
@@ -358,7 +381,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 first_chars,
                 p_char_rom,
                 ra,
-                0,                              // plane (unused)
                 invert_mask
             );
         } else {
@@ -369,7 +391,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 first_chars,
                 p_char_rom,
                 ra,
-                0,                              // plane (unused)
                 invert_mask
             );
         }
@@ -387,7 +408,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                     second_chars,
                     p_char_rom,
                     ra,
-                    0,
                     invert_mask
                 );
             } else {
@@ -399,14 +419,10 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                     second_chars,
                     p_char_rom,
                     ra,
-                    0,
                     invert_mask
                 );
             }
         }
-
-        // Copy right margin from precalculated blank TMDS buffer
-        memcpy(&tmdsbuf[right_margin_start], &blank_tmdsbuf[right_margin_start], right_margin_words * sizeof(uint32_t));
 
         dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
@@ -448,8 +464,15 @@ void video_init() {
     
     // Precalculate TMDS-encoded blank scanline (all zeros).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
-    memset(scanline, 0, sizeof(scanline));
-    tmds_encode_1bpp((const uint32_t*) scanline, blank_tmdsbuf, FRAME_WIDTH);
+    tmds_encode_font_2bpp_inline(
+        NULL,                       // charbuf (unused)
+        NULL,                       // colourbuf (unused)
+        blank_tmdsbuf,
+        FRAME_WIDTH / FONT_WIDTH,   // n_chars
+        NULL,                       // font_base
+        FONT_HEIGHT,                // ra >= font height = blank line
+        0x00                        // no invert
+    );
     dvi_validate_tmds_buffer(blank_tmdsbuf);
 
     // Prepare initial scanline before starting DVI on core 1.
