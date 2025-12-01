@@ -5,7 +5,7 @@
 #include "menu/menu.h"
 #include "usb/keyboard.h"
 
-const uint8_t __in_flash(".rom_chars_8800") rom_chars_8800[] = {
+const uint8_t __in_flash(".rom_chars_e800") rom_chars_e800[] = {
     #include "901447_10.h"
 };
 
@@ -13,8 +13,8 @@ const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
     #include "menu_rom.h"
 };
 
-const uint8_t* const p_video_font_000 = rom_chars_8800;
-const uint8_t* const p_video_font_400 = rom_chars_8800 + 0x400;
+const uint8_t* const p_video_font_000 = rom_chars_e800;
+const uint8_t* const p_video_font_400 = rom_chars_e800 + 0x400;
 
 void start_menu_rom() {
     // Suspended CPU while initializing ROMs.
@@ -32,6 +32,6 @@ void start_menu_rom() {
     read_keymap("/ukm/us.bin", &system_state);
 
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
-    spi_write(/* dest: */ 0x8800, /* pSrc: */ rom_chars_8800, sizeof(rom_chars_8800));  // Load character ROM
+    spi_write(/* dest: */ 0xE800, /* pSrc: */ rom_chars_e800, sizeof(rom_chars_e800));  // Load character ROM
     pet_reset();
 }

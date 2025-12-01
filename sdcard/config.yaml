@@ -5,7 +5,7 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0x8800
+          - address: 0xe800
             file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
             file: "/roms/basic-4-b000.901465-23.bin"
@@ -35,7 +35,7 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0x8800
+          - address: 0xe800
             file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
             file: "/roms/basic-4-b000.901465-23.bin"
@@ -66,7 +66,7 @@ configs:
       - action: "load"
         files:
           - file: "/roms/characters-2.901447-10.bin"
-            address: 0x8800
+            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"
@@ -104,7 +104,7 @@ configs:
       - action: "load"
         files:
           - file: "/roms/characters-2.901447-10.bin"
-            address: 0x8800
+            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"
@@ -135,7 +135,7 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0x8800
+          - address: 0xe800
             file: "/roms/characters-2.901447-10.bin"
           - address: 0xc000
             file: "/roms/basic-2-c000.901465-01.bin"
@@ -186,7 +186,7 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0x8800
+          - address: 0xe800
             file: "/roms/characters-1.901447-08.bin"
           - address: 0xc000
             file: "/roms/rom-1-c000.901439-01.bin"
@@ -233,7 +233,7 @@ configs:
       - action: "load"
         files:
           - file: "/roms/characters-2.901447-10.bin"
-            address: 0x8800
+            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"

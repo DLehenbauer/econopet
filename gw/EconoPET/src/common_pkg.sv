@@ -322,7 +322,7 @@ package common_pkg;
     localparam WB_CRTC_BASE = 4'b0101;
     localparam WB_KBD_BASE  = 5'b01100;
     localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
-    localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0010001 };   // SRAM: $8800-8FFF
+    localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0011101 };   // SRAM: $E800-EFFF
 
     // TODO: Move some of these address helpers to ../sim?
     function logic[WB_ADDR_WIDTH-1:0] wb_ram_addr(input logic[RAM_ADDR_WIDTH-1:0] address);
@@ -346,7 +346,7 @@ package common_pkg;
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input logic[VROM_ADDR_WIDTH-1:0] address);
-        // TODO: We currently only have 2KB of VROM mapped at $8800-$8FFF.
+        // TODO: We currently only have 2KB of VROM mapped at $E800-$EFFF.
         //       Therefore, we ignore the CHR_OPTION passed as the msb of the address.
         //       (See 'CHR_OPTION' signal on sheets 8 and 10 of Universal Dynamic PET.)
         return { WB_VROM_BASE, address[VROM_ADDR_WIDTH-2:0] };

@@ -16,7 +16,7 @@
 
 #include "../pch.h"
 
-extern const uint8_t rom_chars_8800[0x800];
+extern const uint8_t rom_chars_e800[0x800];
 extern const uint8_t* const p_video_font_000;
 extern const uint8_t* const p_video_font_400;
 

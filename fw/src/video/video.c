@@ -280,7 +280,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static uint right_margin_words = 0;
 
     // TODO: Copy character into SRAM and precalculate flip/stretch? (PERF)
-    static const uint8_t* p_char_rom = rom_chars_8800;
+    static const uint8_t* p_char_rom = rom_chars_e800;
 
     // For convenience, remap local `y` so that `y == 0` is the first visible scan line.
     // Because `y` is unsigned, the top blank area wraps around to a large integer.
