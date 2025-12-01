@@ -21,9 +21,7 @@
             "type": "cmake",
             "label": "CMake: Build Firmware",
             "command": "build",
-            "targets": [
-                "firmware"
-            ],
+            "preset": "fw",
             "group": "build",
             "problemMatcher": [],
             "detail": "CMake template build task",

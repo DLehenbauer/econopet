@@ -62,7 +62,7 @@
                 "break main",
                 "continue"
             ],
-            "preLaunchTask": "CMake: build"
+            "preLaunchTask": "CMake: Build Firmware"
         },
         {
             "name": "PicoDVI Example",
