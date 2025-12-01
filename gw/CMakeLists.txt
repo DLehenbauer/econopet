@@ -49,6 +49,17 @@ endforeach()
 
 message(VERBOSE "FPGA source files: ${FPGA_SRC_FILES}")
 
+# Option to enforce clean EconoPET.xml (check for local edits before build, restore after build)
+option(ECONOPET_GW_ENFORCE_CLEAN_XML "Check for local edits to EconoPET.xml and restore after build" OFF)
+
+if(ECONOPET_GW_ENFORCE_CLEAN_XML)
+    set(XML_CHECK_COMMAND COMMAND /bin/bash -lc "git update-index -q --refresh && git diff --quiet -- EconoPET/EconoPET.xml && git diff --quiet --cached -- EconoPET/EconoPET.xml || (echo '*** ERROR: EconoPET.xml has local edits. Aborting build. ***' >&2; exit 1)")
+    set(XML_RESTORE_COMMAND COMMAND /bin/bash -lc "git restore --source=HEAD --worktree -- EconoPET/EconoPET.xml || true")
+else()
+    set(XML_CHECK_COMMAND "")
+    set(XML_RESTORE_COMMAND "")
+endif()
+
 # Define the output bitstream file
 set(FPGA_BITSTREAM_FILE "${FPGA_OUTPUT_DIR}/EconoPET.hex.bin")
 
@@ -57,9 +68,9 @@ set(FPGA_BITSTREAM_FILE "${FPGA_OUTPUT_DIR}/EconoPET.hex.bin")
 add_custom_command(
     COMMENT "Compiling FPGA bitstream using Efinity tools (be patient)"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMAND /bin/bash -lc "git update-index -q --refresh && git diff --quiet -- EconoPET/EconoPET.xml && git diff --quiet --cached -- EconoPET/EconoPET.xml || (echo '*** ERROR: EconoPET.xml has local edits. Aborting build. ***' >&2; exit 1)"
+    ${XML_CHECK_COMMAND}
     COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}"
-    COMMAND /bin/bash -lc "git restore --source=HEAD --worktree -- EconoPET/EconoPET.xml || true"
+    ${XML_RESTORE_COMMAND}
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"
     DEPENDS ${FPGA_SRC_FILES}
