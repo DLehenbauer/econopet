@@ -143,6 +143,7 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
 RUN apt-get update && apt-get -y install --no-install-recommends \
+    acme \
     advancecomp \
     autoconf \
     automake \
