@@ -32,6 +32,6 @@ void start_menu_rom() {
     read_keymap("/ukm/us.bin", &system_state);
 
     spi_write(/* dest: */ 0xFF00, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
-    spi_write(/* dest: */ 0xE800, /* pSrc: */ rom_chars_e800, sizeof(rom_chars_e800));  // Load character ROM
+    spi_write(/* dest: */ 0x68000, /* pSrc: */ rom_chars_e800, sizeof(rom_chars_e800));  // Load character ROM
     pet_reset();
 }

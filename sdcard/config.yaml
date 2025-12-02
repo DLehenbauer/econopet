@@ -5,8 +5,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0xe800
-            file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
             file: "/roms/basic-4-b000.901465-23.bin"
           - address: 0xc000
@@ -17,6 +15,8 @@ configs:
             file: "/roms/edit-4-40-n-50Hz.901498-01.bin"
           - address: 0xf000
             file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters-2.901447-10.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -35,8 +35,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0xe800
-            file: "/roms/characters-2.901447-10.bin"
           - address: 0xb000
             file: "/roms/basic-4-b000.901465-23.bin"
           - address: 0xc000
@@ -47,6 +45,8 @@ configs:
             file: "/roms/edit-4-40-n-60Hz.901499-01.bin"
           - address: 0xf000
             file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters-2.901447-10.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -65,8 +65,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/characters-2.901447-10.bin"
-            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"
@@ -77,6 +75,8 @@ configs:
             address: 0xe000
           - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
+          - file: "/roms/characters-2.901447-10.bin"
+            address: 0x68000
       - if: "graphics"
         then:
           # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
@@ -103,8 +103,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/characters-2.901447-10.bin"
-            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"
@@ -115,6 +113,8 @@ configs:
             address: 0xe000
           - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
+          - file: "/roms/characters-2.901447-10.bin"
+            address: 0x68000
       - if: "graphics"
         then:
           # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
@@ -135,14 +135,14 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0xe800
-            file: "/roms/characters-2.901447-10.bin"
           - address: 0xc000
             file: "/roms/basic-2-c000.901465-01.bin"
           - address: 0xd000
             file: "/roms/basic-2-d000.901465-02.bin"
           - address: 0xf000
             file: "/roms/kernal-2.901465-03.bin"
+          - address: 0x68000
+            file: "/roms/characters-2.901447-10.bin"
       - if: "graphics"
         then:
           # Load editor ROM for graphics keyboard.
@@ -186,8 +186,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - address: 0xe800
-            file: "/roms/characters-1.901447-08.bin"
           - address: 0xc000
             file: "/roms/rom-1-c000.901439-01.bin"
           - address: 0xd000
@@ -204,6 +202,8 @@ configs:
             file: "/roms/rom-1-d800.901439-06.bin"
           - address: 0xf800
             file: "/roms/rom-1-f800.901439-07.bin"
+          - address: 0x68000
+            file: "/roms/characters-1.901447-08.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for the original ROM set.
@@ -232,8 +232,6 @@ configs:
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/characters-2.901447-10.bin"
-            address: 0xe800
           - file: "/roms/basic-4-b000.901465-23.bin"
             address: 0xb000
           - file: "/roms/basic-4-c000.901465-20.bin"
@@ -244,6 +242,8 @@ configs:
             address: 0xe000
           - file: "/roms/kernal-4.901465-22.bin"
             address: 0xf000
+          - file: "/roms/characters-2.901447-10.bin"
+            address: 0x68000
       - if: "graphics"
         then:
           # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.

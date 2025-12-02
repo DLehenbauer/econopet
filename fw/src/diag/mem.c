@@ -16,8 +16,18 @@
 #include "fatal.h"
 #include "mem.h"
 
-const int32_t addr_min = 0x00000;
-const int32_t addr_max = 0x1FFFF;
+// SRAM address range (128KB)
+#define SRAM_ADDR_MIN 0x00000
+#define SRAM_ADDR_MAX 0x1FFFF
+
+// BRAM address range (4KB character ROM)
+// WB_BRAM_BASE = 5'b01101, followed by 15 zeros = 0x68000
+#define BRAM_ADDR_MIN 0x68000
+#define BRAM_ADDR_MAX 0x68FFF
+
+// Current test range (set by test functions)
+static int32_t addr_min;
+static int32_t addr_max;
 
 bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
     if (actual != expected) {
@@ -102,35 +112,46 @@ void r1w0(int32_t addr, int8_t bit, last_read_fn* pLastReadFn) {
 
 // Uses Extended March C- algorithm
 // See: https://booksite.elsevier.com/9780123705976/errata/13~Chapter%2008%20MBIST.pdf
+static void march_c_minus(const char* name, uint32_t iteration) {
+    printf("  %s: $%05lx-$%05lx\n", name, addr_min, addr_max);
+
+    printf("    ⇕(w0): ");
+    spi_fill(addr_min, 0, addr_max - addr_min + 1);
+    puts("OK");
+
+    printf("    ⇑(r0,w1,r1): ");
+    test_each_bit_ascending(r0w1r1);
+    puts("OK");
+
+    printf("    ⇑(r1,w0): ");
+    test_each_bit_ascending(r1w0);
+    puts("OK");
+
+    printf("    ⇓(r0,w1): ");
+    test_each_bit_descending(r0w1);
+    puts("OK");
+    
+    printf("    ⇓(r1,w0): ");
+    test_each_bit_descending(r1w0);
+    puts("OK");
+
+    printf("    ⇕(r0): ");
+    spi_read_seek(addr_min);
+    for (int32_t addr = addr_min; addr <= addr_max; addr++) {
+        check_byte(addr, spi_read_next(), 0);
+    }
+    puts("OK");
+}
+
 void test_ram() {
     for (uint32_t iteration = 1;; iteration++) {
-        printf("\nRAM Test (Extended March C-): $%05lx-$%05lx -- Iteration #%ld:\n", addr_min, addr_max, iteration);
+        printf("\nExtended March C- Test: Iteration #%ld:\n", iteration);
+        addr_min = SRAM_ADDR_MIN;
+        addr_max = SRAM_ADDR_MAX;
+        march_c_minus("RAM", iteration);
 
-        printf("⇕(w0): ");
-        spi_fill(addr_min, 0, addr_max - addr_min + 1);
-        puts("OK");
-
-        printf("⇑(r0,w1,r1): ");
-        test_each_bit_ascending(r0w1r1);
-        puts("OK");
-
-        printf("⇑(r1,w0): ");
-        test_each_bit_ascending(r1w0);
-        puts("OK");
-
-        printf("⇓(r0,w1): ");
-        test_each_bit_descending(r0w1);
-        puts("OK");
-        
-        printf("⇓(r1,w0): ");
-        test_each_bit_descending(r1w0);
-        puts("OK");
-
-        printf("⇕(r0): ");
-        spi_read_seek(addr_min);
-        for (int32_t addr = addr_min; addr <= addr_max; addr++) {
-            check_byte(addr, spi_read_next(), 0);
-        }
-        puts("OK");
+        addr_min = BRAM_ADDR_MIN;
+        addr_max = BRAM_ADDR_MAX;
+        march_c_minus("BRAM", iteration);
     }
 }

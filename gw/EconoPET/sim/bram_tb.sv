@@ -17,8 +17,8 @@
 import common_pkg::*;
 
 module bram_tb #(
-    parameter DATA_DEPTH = 512,
-    parameter BRAM_ADDR_WIDTH = $clog2(DATA_DEPTH)
+    parameter BRAM_DATA_DEPTH = 512,
+    parameter BRAM_ADDR_WIDTH = $clog2(BRAM_DATA_DEPTH)
 );
     logic                     clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
@@ -33,16 +33,20 @@ module bram_tb #(
     logic                     ack;
     logic                     stall;
 
-    bram mem (
+    bram #(
+        .DATA_DEPTH(BRAM_DATA_DEPTH),
+        .ADDR_WIDTH(BRAM_ADDR_WIDTH)
+    ) mem (
         .wb_clock_i(clock),
-        .wb_addr_i(addr[BRAM_ADDR_WIDTH-1:0]),
-        .wb_data_i(pico),
-        .wb_data_o(poci),
-        .wb_we_i(we),
-        .wb_cycle_i(cycle),
-        .wb_strobe_i(strobe),
-        .wb_ack_o(ack),
-        .wb_stall_o(stall)
+        .wbp_addr_i(addr),
+        .wbp_data_i(pico),
+        .wbp_data_o(poci),
+        .wbp_we_i(we),
+        .wbp_cycle_i(cycle),
+        .wbp_strobe_i(strobe),
+        .wbp_ack_o(ack),
+        .wbp_stall_o(stall),
+        .wbp_sel_i(1'b1)    // Always selected for testbench
     );
 
     wb_driver wb (

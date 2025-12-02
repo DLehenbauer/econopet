@@ -15,28 +15,28 @@
 import common_pkg::*;
 
 module bram #(
-    parameter DATA_DEPTH = 512,
+    parameter DATA_DEPTH = 4096,
     parameter ADDR_WIDTH = $clog2(DATA_DEPTH)
 ) (
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                  wb_clock_i,
-    input  logic [ADDR_WIDTH-1:0] wb_addr_i,
-    input  logic [DATA_WIDTH-1:0] wb_data_i,
-    output logic [DATA_WIDTH-1:0] wb_data_o,
-    input  logic                  wb_we_i,
-    input  logic                  wb_cycle_i,
-    input  logic                  wb_strobe_i,
-    output logic                  wb_stall_o,
-    output logic                  wb_ack_o
+    input  logic                     wb_clock_i,
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i,
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,
+    input  logic                     wbp_we_i,
+    input  logic                     wbp_cycle_i,
+    input  logic                     wbp_strobe_i,
+    output logic                     wbp_stall_o,
+    output logic                     wbp_ack_o,
+    input  logic                     wbp_sel_i       // Asserted when selected by 'wbp_addr_i'
 );
     (* syn_ramstyle = "block_ram" *) reg [DATA_WIDTH-1:0] mem[DATA_DEPTH-1:0];
 
     initial begin
         integer i;
 
-        wb_ack_o   = '0;
-        wb_stall_o = '0;
+        wbp_ack_o = '0;
 
         // Per T8 datasheet: block RAM content is random and undefined if not initialized.
         for (i = 0; i < DATA_DEPTH; i = i + 1) begin
@@ -44,15 +44,21 @@ module bram #(
         end
     end
 
+    // This peripheral always completes WB operations in a single cycle.
+    assign wbp_stall_o = 1'b0;
+
+    // Extract the relevant address bits from the full Wishbone address
+    wire [ADDR_WIDTH-1:0] mem_addr = wbp_addr_i[ADDR_WIDTH-1:0];
+
     always_ff @(posedge wb_clock_i) begin
-        if (wb_cycle_i && wb_strobe_i) begin
-            wb_data_o <= mem[wb_addr_i];
-            if (wb_we_i) begin
-                mem[wb_addr_i] <= wb_data_i;
+        if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
+            wbp_data_o <= mem[mem_addr];
+            if (wbp_we_i) begin
+                mem[mem_addr] <= wbp_data_i;
             end
-            wb_ack_o <= 1'b1;
+            wbp_ack_o <= 1'b1;
         end else begin
-            wb_ack_o <= '0;
+            wbp_ack_o <= '0;
         end
     end
 endmodule

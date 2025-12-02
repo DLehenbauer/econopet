@@ -97,18 +97,21 @@ module main (
     logic reg_wb_sel;
     logic kbd_wb_sel;
     logic crtc_wb_sel;
+    logic bram_wb_sel;
 
     always_comb begin
         ram_wb_sel = 1'b0;
         reg_wb_sel = 1'b0;
         kbd_wb_sel = 1'b0;
         crtc_wb_sel = 1'b0;
+        bram_wb_sel = 1'b0;
 
         unique casez (wb_addr)
             {WB_RAM_BASE,  {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
             {WB_REG_BASE,  {(WB_ADDR_WIDTH - $bits(WB_REG_BASE)){1'b?}}}: reg_wb_sel = 1'b1;
             {WB_KBD_BASE,  {(WB_ADDR_WIDTH - $bits(WB_KBD_BASE)){1'b?}}}: kbd_wb_sel = 1'b1;
             {WB_CRTC_BASE, {(WB_ADDR_WIDTH - $bits(WB_CRTC_BASE)){1'b?}}}: crtc_wb_sel = 1'b1;
+            {WB_BRAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_BRAM_BASE)){1'b?}}}: bram_wb_sel = 1'b1;
             default: /* do nothing */ ;
         endcase
     end
@@ -372,6 +375,30 @@ module main (
     );
 
     //
+    // BRAM (Character ROM)
+    //
+
+    logic [DATA_WIDTH-1:0] bram_wb_din;
+    logic                  bram_wb_stall;
+    logic                  bram_wb_ack;
+
+    bram #(
+        .DATA_DEPTH(4096),      // 4KB for character ROM (2 character sets x 2KB each)
+        .ADDR_WIDTH(BRAM_ADDR_WIDTH)
+    ) bram (
+        .wb_clock_i(sys_clock_i),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(bram_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(bram_wb_stall),
+        .wbp_ack_o(bram_wb_ack),
+        .wbp_sel_i(bram_wb_sel)
+    );
+
+    //
     // USB Keyboard
     //
 
@@ -442,9 +469,9 @@ module main (
 
     // One bus -> many peripherals
     wb_mux #(
-        .COUNT(4)
+        .COUNT(5)
     ) wb_mux (
-        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel }),
+        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel }),
 
         // Wishbone Bus
         .wb_din_o(wb_din),
@@ -452,9 +479,9 @@ module main (
         .wb_ack_o(wb_ack),
 
         // Wishbone peripherals to mux
-        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din }),
-        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall }),
-        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack })
+        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din, bram_wb_din }),
+        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall, bram_wb_stall }),
+        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack, bram_wb_ack })
     );
 
     //

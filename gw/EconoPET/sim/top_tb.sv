@@ -153,6 +153,62 @@ module top_tb;
         $display("[%t] End SID Write Test", $time);
     endtask
 
+    task static bram_test;
+        integer i;
+        bit   [BRAM_ADDR_WIDTH-1:0] addr;
+        logic [     DATA_WIDTH-1:0] dout;
+        bit   [     DATA_WIDTH-1:0] value;
+
+        // Calculate last valid BRAM address
+        localparam bit [BRAM_ADDR_WIDTH-1:0] BRAM_LAST_ADDR = (1 << BRAM_ADDR_WIDTH) - 1;
+
+        // Boundary test addresses: 0, 1, 2, n-2, n-1, n
+        localparam int NUM_BOUNDARY_TESTS = 6;
+        bit [BRAM_ADDR_WIDTH-1:0] test_addrs[NUM_BOUNDARY_TESTS];
+        bit [DATA_WIDTH-1:0] test_values[NUM_BOUNDARY_TESTS];
+
+        $display("[%t] Begin BRAM Test", $time);
+
+        test_addrs[0] = BRAM_ADDR_WIDTH'(0);
+        test_addrs[1] = BRAM_ADDR_WIDTH'(1);
+        test_addrs[2] = BRAM_ADDR_WIDTH'(2);
+        test_addrs[3] = BRAM_LAST_ADDR - 2;
+        test_addrs[4] = BRAM_LAST_ADDR - 1;
+        test_addrs[5] = BRAM_LAST_ADDR;
+
+        test_values[0] = $random();
+        test_values[1] = $random();
+        test_values[2] = $random();
+        test_values[3] = $random();
+        test_values[4] = $random();
+        test_values[5] = $random();
+
+        // Write addresses at/near boundaries
+        for (i = 0; i < NUM_BOUNDARY_TESTS; i = i + 1) begin
+            $display("[%t]   Writing BRAM[0x%03x] <- 0x%02x", $time, test_addrs[i], test_values[i]);
+            mock_system.spi_write_at(common_pkg::wb_bram_addr(test_addrs[i]), test_values[i]);
+        end
+
+        // Verify previous writes
+        for (i = 0; i < NUM_BOUNDARY_TESTS; i = i + 1) begin
+            mock_system.spi_read_at(common_pkg::wb_bram_addr(test_addrs[i]), dout);
+            $display("[%t]   Verifying BRAM[0x%03x] == 0x%02x", $time, test_addrs[i], test_values[i]);
+            `assert_equal(dout, test_values[i]);
+        end
+
+        // Test random addresses
+        for (i = 0; i < 10; i = i + 1) begin
+            addr = $random();
+            value = $random();
+            $display("[%t]   BRAM[0x%03x] <- 0x%02x", $time, addr, value);
+            mock_system.spi_write_at(common_pkg::wb_bram_addr(addr), value);
+            mock_system.spi_read_at(common_pkg::wb_bram_addr(addr), dout);
+            `assert_equal(dout, value);
+        end
+
+        $display("[%t] End BRAM Test", $time);
+    endtask
+
     task static register_file_test;
         logic [     DATA_WIDTH-1:0] dout;
 
@@ -196,6 +252,7 @@ module top_tb;
         crtc_write_test;
         sid_write_test;
         register_file_test;
+        bram_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;

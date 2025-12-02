@@ -321,8 +321,12 @@ package common_pkg;
     localparam WB_REG_BASE  = 4'b0100;
     localparam WB_CRTC_BASE = 4'b0101;
     localparam WB_KBD_BASE  = 5'b01100;
+    localparam WB_BRAM_BASE = 5'b01101;
     localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
     localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0011101 };   // SRAM: $E800-EFFF
+
+    // BRAM address width for character ROM (4KB = 2^12 bytes)
+    localparam int unsigned BRAM_ADDR_WIDTH = 12;
 
     // TODO: Move some of these address helpers to ../sim?
     function logic[WB_ADDR_WIDTH-1:0] wb_ram_addr(input logic[RAM_ADDR_WIDTH-1:0] address);
@@ -341,14 +345,18 @@ package common_pkg;
         return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_COL_WIDTH - $bits(WB_KBD_BASE))'('0), register };
     endfunction
 
+    function logic[WB_ADDR_WIDTH-1:0] wb_bram_addr(input logic[BRAM_ADDR_WIDTH-1:0] address);
+        return { WB_BRAM_BASE, (WB_ADDR_WIDTH - BRAM_ADDR_WIDTH - $bits(WB_BRAM_BASE))'('0), address };
+    endfunction
+
     function logic[WB_ADDR_WIDTH-1:0] wb_vram_addr(input logic[VRAM_ADDR_WIDTH-1:0] address);
         return { WB_VRAM_BASE, address };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input logic[VROM_ADDR_WIDTH-1:0] address);
-        // TODO: We currently only have 2KB of VROM mapped at $E800-$EFFF.
-        //       Therefore, we ignore the CHR_OPTION passed as the msb of the address.
-        //       (See 'CHR_OPTION' signal on sheets 8 and 10 of Universal Dynamic PET.)
-        return { WB_VROM_BASE, address[VROM_ADDR_WIDTH-2:0] };
+        // Character ROM is now stored in BRAM at $68000-$68FFF (4KB).
+        // The full 12-bit address is used, supporting both character sets.
+        // (See 'CHR_OPTION' signal on sheets 8 and 10 of Universal Dynamic PET.)
+        return wb_bram_addr(address);
     endfunction
 endpackage
