@@ -21,3 +21,6 @@
 [submodule "fw/external/libyaml"]
 	path = fw/external/libyaml
 	url = https://github.com/yaml/libyaml.git
+[submodule "rom/external/cbm-edit-rom"]
+	path = rom/external/cbm-edit-rom
+	url = https://github.com/DLehenbauer/cbm-edit-rom.git

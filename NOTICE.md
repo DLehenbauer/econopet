@@ -993,3 +993,9 @@ SOFTWARE.
 **source:** <https://hub.inktada.com/channel/rom1diskmagic>
 
 No license information available. Freely distributed from the source URL above.
+
+## cbm-edit-rom
+
+**source:** <https://github.com/sjgray/cbm-edit-rom.git>
+
+No license information available. Freely distributed from the source URL above.
