@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
 project(PET_ROM LANGUAGES NONE)
 
+# =============================================================================
+# Menu ROM (CC65)
+# =============================================================================
+
 # Define the output program name
 set(ROM_NAME menu.rom)
 
@@ -30,9 +34,49 @@ add_custom_target("PET_ROM" ALL
     DEPENDS "PET_ROM_Assemble"
 )
 
-# Add a clean target to remove generated files
+# =============================================================================
+# ColourPET Edit ROM (ACME)
+# =============================================================================
+
+# Find the ACME cross-assembler
+find_program(ACME_EXECUTABLE acme REQUIRED)
+message(STATUS "Found ACME: ${ACME_EXECUTABLE}")
+
+# Define paths for ColourPET edit ROM
+set(CBM_EDIT_ROM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/cbm-edit-rom)
+set(COLOURPET_SRC_OUTPUT ${CBM_EDIT_ROM_DIR}/binaries/colourpet-test.bin)
+set(COLOURPET_OUTPUT ${BIN_DIR}/colourpet-test.bin)
+
+# Collect all assembly source files as dependencies
+file(GLOB COLOURPET_ASM_SOURCES 
+    ${CBM_EDIT_ROM_DIR}/*.asm
+    ${CBM_EDIT_ROM_DIR}/config-custom/*.asm
+)
+
+# Custom command to build the ColourPET edit ROM and copy to build directory
+add_custom_command(
+    OUTPUT ${COLOURPET_OUTPUT}
+    COMMAND ${ACME_EXECUTABLE} config-custom/!colourpet40.asm
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${BIN_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy ${COLOURPET_SRC_OUTPUT} ${COLOURPET_OUTPUT}
+    WORKING_DIRECTORY ${CBM_EDIT_ROM_DIR}
+    DEPENDS ${COLOURPET_ASM_SOURCES}
+    COMMENT "Assembling ColourPET edit ROM with ACME"
+    VERBATIM
+)
+
+# Custom target for ColourPET edit ROM
+add_custom_target(ColourPET_EditROM ALL
+    DEPENDS ${COLOURPET_OUTPUT}
+)
+
+# =============================================================================
+# Clean target
+# =============================================================================
+
 add_custom_target(clean_all
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${OBJ_DIR}
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${BIN_DIR}
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${COLOURPET_OUTPUT}
     COMMENT "Cleaning build artifacts"
 )

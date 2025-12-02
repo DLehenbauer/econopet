@@ -55,6 +55,13 @@
             "description": "Build SD card package with all dependencies (firmware, gateware)",
             "configurePreset": "default",
             "targets": ["sdcard_project"]
+        },
+        {
+            "name": "rom",
+            "displayName": "ROMs",
+            "description": "Build only the ROM subproject (menu and edit ROM)",
+            "configurePreset": "default",
+            "targets": ["rom_project"]
         }
     ],
     "testPresets": [

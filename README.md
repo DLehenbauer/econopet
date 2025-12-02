@@ -15,6 +15,7 @@ cmake --build --preset all          # Build everything
 cmake --build --preset fw           # Build firmware only
 cmake --build --preset fw_test      # Build firmware tests only
 cmake --build --preset gw           # Build gateware only
+cmake --build --preset rom          # Build ROMs only (menu and edit ROM)
 cmake --build --preset sdcard       # Build SD card package
 
 # Test
