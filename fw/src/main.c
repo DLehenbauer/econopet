@@ -21,6 +21,7 @@
 #include "sd/sd.h"
 #include "term.h"
 #include "diag/mem.h"
+#include "system_state.h"
 #include "usb/usb.h"
 #include "usb/keyboard.h"
 #include "video/video.h"
@@ -183,7 +184,7 @@ int main() {
     while (true) {
         // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
         //       in a single SPI transaction?  Maybe even read/write simultaneously?
-        spi_read(/* src: */ 0x8000, /* byteLength: */ sizeof(video_char_buffer), /* pDest: */ (uint8_t*) video_char_buffer);
+        spi_read(/* src: */ 0x8000, /* byteLength: */ system_state.video_ram_bytes, /* pDest: */ (uint8_t*) video_char_buffer);
 
         tuh_task();
         cdc_app_task();     // TODO: USB serial console unused.  Remove?

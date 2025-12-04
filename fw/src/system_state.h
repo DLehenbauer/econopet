@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 typedef enum pet_keyboard_model_e {
     pet_keyboard_model_graphics = 0,
     pet_keyboard_model_business = 1,
@@ -62,6 +65,16 @@ typedef struct system_state_s {
     // Reflects the number of displayed columns (40 or 80).  This is configured by
     // the firmware and and sent to the FPGA via SPI.
     pet_display_columns_t pet_display_columns;
+
+    // Size of video RAM in KB (1, 2, or 4).  This is configured by the firmware
+    // and sent to the FPGA via SPI to set the video RAM address mask.
+    uint8_t video_ram_kb;
+
+    // Precomputed size of video RAM in bytes. Updated whenever video_ram_kb changes.
+    size_t video_ram_bytes;
 } system_state_t;
 
 extern system_state_t system_state;
+
+// Setter to keep derived fields in sync.
+void system_state_set_video_ram_kb(system_state_t* state, uint8_t video_ram_kb);

@@ -509,16 +509,22 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     (void)context_size;
 
     options_t options = {
-        .columns = 40,  // Default value
+        .columns = 40,       // Default value
+        .video_ram_kb = 1,   // Default value
     };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
+        { "video-ram-kb", parse_as_uint32, &options.video_ram_kb, sizeof(options.video_ram_kb) },
         { NULL, NULL, NULL, 0 }
     });
 
     if (options.columns != 40 && options.columns != 80) {
         fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
+    }
+
+    if (options.video_ram_kb < 1 || options.video_ram_kb > 4) {
+        fatal_parse_error(parser, "Invalid video RAM size: %u KB (must be 1-4)", options.video_ram_kb);
     }
 
     if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_options) {

@@ -56,10 +56,10 @@ module register_file(
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;    // Reset
         register[REG_CPU][REG_CPU_NMI_BIT]   = 1'b0;    // Not NMI
 
-        // Video state at power on: 40 column mode, graphics
-        register[REG_VIDEO][REG_VIDEO_COL_80_BIT] = 1'b0;
-
-        video_ram_mask_o[11:10] = 2'b00;
+        // Video state at power on: 40 column mode, 1KB video RAM
+        register[REG_VIDEO][REG_VIDEO_COL_80_BIT]        = 1'b0;
+        register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT]   = 1'b0;
+        register[REG_VIDEO][REG_VIDEO_RAM_MASK_LO_BIT]   = 1'b0;
     end
 
     // This peripheral always completes WB operations in a single cycle.
@@ -91,4 +91,5 @@ module register_file(
     assign cpu_nmi_o           = register[REG_CPU][REG_CPU_NMI_BIT];
     
     assign video_col_80_mode_o = register[REG_VIDEO][REG_VIDEO_COL_80_BIT];
+    assign video_ram_mask_o    = register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT:REG_VIDEO_RAM_MASK_LO_BIT];
 endmodule

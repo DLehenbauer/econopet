@@ -38,6 +38,33 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/bootloader.uf2" DESTINATION "${sdcard_root_
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
 file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
 
+# Copy any ROM .bin files produced by the 'rom' target into sdcard/roms
+# (exclude the special firmware-embedded 'menu.rom'). Print status for each.
+# The sdcard project builds under ${CMAKE_CURRENT_BINARY_DIR} which is
+# typically ${TOP}/build/sdcard. The ROM binaries live under ${TOP}/build/rom/bin.
+get_filename_component(build_root "${CMAKE_CURRENT_BINARY_DIR}" DIRECTORY)
+set(rom_bin_dir "${build_root}/rom/bin")
+file(GLOB rom_bin_files "${rom_bin_dir}/*.bin")
+message(STATUS "Scanning ROM bin directory: ${rom_bin_dir}")
+message(STATUS "Found ROM bins: ${rom_bin_files}")
+
+set(sdcard_rom_outputs)
+foreach(bin_file ${rom_bin_files})
+    get_filename_component(bin_name "${bin_file}" NAME)
+    add_custom_command(
+        OUTPUT "${sdcard_rom_dir}/${bin_name}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_rom_dir}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Including ROM: ${bin_name}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${bin_file}"
+                "${sdcard_rom_dir}/${bin_name}"
+        DEPENDS "${bin_file}"
+        COMMENT "Copying ${bin_name} to SD card roms"
+        VERBATIM
+    )
+    list(APPEND sdcard_rom_outputs "${sdcard_rom_dir}/${bin_name}")
+endforeach()
+
 # Get firmware and FPGA paths from CMake variables (set by super-project)
 # These should be passed in as -DFIRMWARE_UF2=... and -DFPGA_BITSTREAM=...
 if(NOT DEFINED FIRMWARE_UF2)
@@ -87,6 +114,7 @@ add_custom_command(
     WORKING_DIRECTORY "${sdcard_root_dir}"
     DEPENDS "${sdcard_root_dir}/firmware.uf2"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+            ${sdcard_rom_outputs}
     COMMENT "Zipping SD card contents to ${sdcard_zip_path}"
     VERBATIM
 )

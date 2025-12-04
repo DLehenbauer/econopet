@@ -41,6 +41,7 @@ uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // ---------------------------------------------------------------------------
 // CGA Palette (16 colors in RGB222 format)
+// 
 // RGB222 format: bits 5:4 = R, bits 3:2 = G, bits 1:0 = B
 // ---------------------------------------------------------------------------
 
@@ -68,7 +69,7 @@ static const uint8_t cga_palette[16] = {
 // Low nibble (bits 3:0) = foreground palette index (0-15)
 // Initialized to bright green (10) on black (0) = 0x0A
 #define MAX_CHARS_PER_LINE (FRAME_WIDTH / FONT_WIDTH)
-static uint8_t colourbuf[MAX_CHARS_PER_LINE];
+static uint8_t* colourbuf = &video_char_buffer[0x800];
 
 // ---------------------------------------------------------------------------
 // CRTC (6545) registers
@@ -363,7 +364,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         if (is_80_col) {
             tmds_encode_font_2bpp_inline(
                 &video_char_buffer[row_start],
-                colourbuf,
+                &colourbuf[row_start],
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -373,7 +374,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         } else {
             tmds_encode_font_2bpp_wide_inline(
                 &video_char_buffer[row_start],
-                colourbuf,
+                &colourbuf[row_start],
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -390,7 +391,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             if (is_80_col) {
                 tmds_encode_font_2bpp_inline(
                     &video_char_buffer[0],
-                    &colourbuf[first_chars],
+                    &colourbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -401,7 +402,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 first_words *= 2;   // 40-column mode: each character is 16 pixels wide
                 tmds_encode_font_2bpp_wide_inline(
                     &video_char_buffer[0],
-                    &colourbuf[first_chars],
+                    &colourbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -478,10 +479,6 @@ void video_init() {
 
     // Initialize the palette (using CGA palette for both fg and bg colors)
     set_palette(cga_palette, cga_palette);
-
-    // Initialize colour buffer to bright green (10) on black (0)
-    // Colour byte format: (bg << 4) | fg = (0 << 4) | 10 = 0x0A
-    memset(colourbuf, 0x0A, sizeof(colourbuf));
 
     // Precalculate TMDS-encoded blank scanline (all zeros / background color).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.

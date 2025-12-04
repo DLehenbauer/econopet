@@ -15,3 +15,8 @@
 #include "system_state.h"
 
 system_state_t system_state = { 0 };
+
+void system_state_set_video_ram_kb(system_state_t* state, uint8_t video_ram_kb) {
+	state->video_ram_kb = video_ram_kb;
+	state->video_ram_bytes = (size_t)video_ram_kb * 1024u;
+}

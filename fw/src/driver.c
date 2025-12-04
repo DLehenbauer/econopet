@@ -13,6 +13,7 @@
  */
 
 #include "driver.h"
+#include "fatal.h"
 #include "hw.h"
 #include "usb/keyboard.h"
 #include "video/video.h"
@@ -48,7 +49,10 @@
 #define REG_CPU_NMI   (1 << 2)
 
 // Video Control Register
-#define REG_VIDEO_80_COL_MODE (1 << 0)
+#define REG_VIDEO_80_COL_MODE   (1 << 0)
+#define REG_VIDEO_RAM_MASK_LO   (1 << 1)
+#define REG_VIDEO_RAM_MASK_HI   (1 << 2)
+#define REG_VIDEO_RAM_MASK_SHIFT 1       // Bit position where the 2-bit RAM mask starts
 
 /**
  * Begins an SPI command transaction with the FPGA.
@@ -596,27 +600,59 @@ void read_pet_model(system_state_t* const system_state) {
 }
 
 /**
+ * Converts video RAM size in KB to a 2-bit mask value for the FPGA.
+ * 
+ * The mask controls how many address bits are used for video RAM addressing:
+ * - 1KB: mask = 0b00 (10 address bits, addresses 0x000-0x3FF)
+ * - 2KB: mask = 0b01 (11 address bits, addresses 0x000-0x7FF)
+ * - 3KB: mask = 0b10 (11 address bits, addresses 0x000-0xBFF)
+ * - 4KB: mask = 0b11 (12 address bits, addresses 0x000-0xFFF)
+ * 
+ * @param video_ram_kb Video RAM size (1-4 KB)
+ * @return 2-bit mask value for REG_VIDEO
+ */
+static uint8_t video_ram_kb_to_mask(uint8_t video_ram_kb) {
+    assert(video_ram_kb >= 1 && video_ram_kb <= 4);
+    return video_ram_kb - 1;
+}
+
+/**
  * Writes the PET display configuration to the FPGA video control register.
  * 
  * This function configures the video subsystem in the FPGA based on the
- * current system state, specifically the display column mode.
+ * current system state, including display column mode and video RAM size.
  * 
- * VIDEO CONTROL REGISTER BITS:
+ * Video control register bits:
+ * 
  * - REG_VIDEO_80_COL_MODE (bit 0): Column mode
  *   0 = 40 column mode
  *   1 = 80 column mode
  * 
+ * - REG_VIDEO_RAM_MASK (bits 2:1): Video RAM size mask
+ *   00 = 1KB video RAM
+ *   01 = 2KB video RAM
+ *   11 = 4KB video RAM
+ * 
  * The PET originally came in 40-column and 80-column variants. This setting
  * configures the video output timing and character generation accordingly.
+ * The video RAM size determines how much screen memory is available.
  * 
  * @param system_state Pointer to system state containing display configuration
  */
 void write_pet_model(const system_state_t* const system_state) {
+    // Ensure derived fields are consistent.
+    vet(system_state->video_ram_bytes == (size_t)system_state->video_ram_kb * 1024u,
+        "system_state.video_ram_bytes (%zu) inconsistent with video_ram_kb (%u)",
+        system_state->video_ram_bytes, system_state->video_ram_kb);
     uint8_t state = 0;
 
     if (system_state->pet_display_columns == pet_display_columns_80) {
         state |= REG_VIDEO_80_COL_MODE;
     }
+
+    // Convert video RAM KB to mask and shift to correct bit position
+    uint8_t ram_mask = video_ram_kb_to_mask(system_state->video_ram_kb);
+    state |= (ram_mask << REG_VIDEO_RAM_MASK_SHIFT);
 
     spi_write_at(REG_VIDEO, state);
 }
@@ -628,7 +664,8 @@ void write_pet_model(const system_state_t* const system_state) {
  * the RP2040 (which handles USB keyboard input and video output) and the
  * FPGA (which generates native PET video and injects USB keyboard input).
  * 
- * OPERATIONS PERFORMED:
+ * Operations performed:
+ * 
  * 1. Write USB keyboard matrix to FPGA (ADDR_KBD)
  *    - RP2040 scans USB keyboard and updates usb_key_matrix[]
  *    - FPGA reads this to inject key presses when the CPU reads $E812.

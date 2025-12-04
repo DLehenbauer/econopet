@@ -25,6 +25,7 @@ void start_menu_rom() {
 
     // Ensure we are in 40 column mode on startup.
     system_state.pet_display_columns = pet_display_columns_40;
+    system_state_set_video_ram_kb(&system_state, 1);
     write_pet_model(&system_state);
 
     // We need to load a USB keymap to allow the user to navigate the menu with USB.

@@ -25,7 +25,8 @@
 } binary_t;
 
 typedef struct options_s {
-    uint32_t columns;   // Number of columns (default: 40)
+    uint32_t columns;       // Number of columns (default: 40)
+    uint32_t video_ram_kb;  // Video RAM size in KB: 1, 2, or 4 (default: 1)
 } options_t;
 
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);

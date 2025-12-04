@@ -515,7 +515,7 @@ module main (
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];
 
-    wire ram_addr_a10_mask = !is_vram | video_ram_mask[10] | video_col_80_mode;
+    wire ram_addr_a10_mask = !is_vram | video_ram_mask[10];
     wire ram_addr_a11_mask = !is_vram | video_ram_mask[11];
 
     // When the CPU is driving the bus, apply masks to RAM A10/A11 to wrap video memory.

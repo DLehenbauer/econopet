@@ -8,12 +8,18 @@
 //   { R_packed, G_packed, B_packed }
 // where each byte = (bg_2bit << 2) | fg_2bit
 // This format matches what the TMDS LUT expects for its upper index bits.
-__attribute__((section(".scratch_x.palette_table"), aligned(4)))
+//
+// Note: Moved from .scratch_x to main SRAM as an experiment to test
+// feasibility of larger LUT tables for RGB332/RGB333 support.
+__attribute__((aligned(4)))
 uint8_t palette_table[256 * 3];
 
 // TMDS lookup table: 4 backgrounds × 4 foregrounds × 16 pixel patterns × 2 words
 // Total: 256 entries × 8 bytes = 2KB
-__attribute__((section(".scratch_x.palettised_1bpp_tables"), aligned(4)))
+//
+// Note: Moved from .scratch_x to main SRAM as an experiment to test
+// feasibility of larger LUT tables for RGB332/RGB333 support.
+__attribute__((aligned(4)))
 uint32_t palettised_1bpp_tables[256 * 2];
 
 // ============================================================================

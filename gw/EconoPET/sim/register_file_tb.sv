@@ -119,9 +119,10 @@ module register_file_tb;
         `assert_equal(cpu_nmi, nmi);
     endtask
 
-    task test_video_reg(input logic col_80_mode);
-        test_reg(REG_VIDEO, {7'bxxxx_xxx, col_80_mode});
+    task test_video_reg(input logic col_80_mode, input logic [1:0] ram_mask);
+        test_reg(REG_VIDEO, {5'bxxxx_x, ram_mask, col_80_mode});
         `assert_equal(video_col_80_mode, col_80_mode);
+        `assert_equal(video_ram_mask, ram_mask);
     endtask
 
     task run;
@@ -133,6 +134,7 @@ module register_file_tb;
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset, 1'b1);
         `assert_equal(video_col_80_mode, 1'b0);
+        `assert_equal(video_ram_mask, 2'b00);
 
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b1, /* nmi: */ 1'b0);
@@ -141,8 +143,13 @@ module register_file_tb;
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b1);
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
 
-        test_video_reg(/* col_80_mode: */ 1'b1);
-        test_video_reg(/* col_80_mode: */ 1'b0);
+        // Test video register with all combinations of col_80_mode and ram_mask
+        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b00);
+        test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'b00);
+        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b01);
+        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b10);
+        test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'b11);
+        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b00);
 
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b0, /* keyboard: */ 1'b1);
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);

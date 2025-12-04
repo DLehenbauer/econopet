@@ -17,6 +17,8 @@ configs:
             file: "/roms/kernal-4.901465-22.bin"
           - address: 0x68000
             file: "/roms/characters-2.901447-10.bin"
+      - action: "set"
+        video-ram-kb: 1
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -47,6 +49,8 @@ configs:
             file: "/roms/kernal-4.901465-22.bin"
           - address: 0x68000
             file: "/roms/characters-2.901447-10.bin"
+      - action: "set"
+        video-ram-kb: 1
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -97,6 +101,7 @@ configs:
             fix-addr: 0xe7ff
       - action: "set"
         columns: 80
+        video-ram-kb: 2
   - name: "PET 80xx (80 Col 60 Hz)"
     setup:
       - action: "set-usb-keymap"
@@ -129,6 +134,7 @@ configs:
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
         columns: 80
+        video-ram-kb: 2
   - name: "PET 2001 (Upgraded ROMs)"
     setup:
       - action: "set-usb-keymap"
@@ -180,6 +186,8 @@ configs:
           - action: "patch"
             address: 0x0e221
             hex: "0c"
+      - action: "set"
+        video-ram-kb: 1
   - name: "PET 2001 (Original ROMs)"
     setup:
       - action: "set-usb-keymap"
@@ -226,35 +234,38 @@ configs:
         source: 0xe7b4
         destination: 0xe7ad
         length: 0x06
-  - name: "ColourPET (80 Col 60 Hz)"
+      - action: "set"
+        video-ram-kb: 1
+  - name: "ColourPET (40 Col 60 Hz)"
     setup:
       - action: "set-usb-keymap"
         file: "/ukm/us.bin"
       - action: "load"
         files:
-          - file: "/roms/basic-4-b000.901465-23.bin"
-            address: 0xb000
-          - file: "/roms/basic-4-c000.901465-20.bin"
-            address: 0xc000
-          - file: "/roms/basic-4-d000.901465-21.bin"
-            address: 0xd000
-          - file: "/roms/colourpet-c1-80-b-60.bin"
-            address: 0xe000
-          - file: "/roms/kernal-4.901465-22.bin"
-            address: 0xf000
-          - file: "/roms/characters-2.901447-10.bin"
-            address: 0x68000
-      - if: "graphics"
-        then:
-          # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
-          # This patch replaces the original keyscan routine with one adapted from the 40 column
-          # edit rom '901499-01'.
-          - action: "patch"
-            address: 0x0e545
-            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
-          # Graphics keyboard scanmap from '901499-01'
-          - action: "patch"
-            address: 0x0e6d1
-            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/colourpet-test.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters-2.901447-10.bin"
+      # - if: "graphics"
+      #   then:
+      #     # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
+      #     # This patch replaces the original keyscan routine with one adapted from the 40 column
+      #     # edit rom '901499-01'.
+      #     - action: "patch"
+      #       address: 0x0e545
+      #       hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+      #     # Graphics keyboard scanmap from '901499-01'
+      #     - action: "patch"
+      #       address: 0x0e6d1
+      #       hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
-        columns: 80
+        columns: 40
+        video-ram-kb: 3

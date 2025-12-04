@@ -288,10 +288,12 @@ package common_pkg;
     localparam int unsigned REG_CPU_NMI_BIT         = 2;
     
     // Register 2: Video Control
-    localparam int unsigned REG_VIDEO               = 2;
-    localparam int unsigned REG_VIDEO_COL_80_BIT    = 0;
+    localparam int unsigned REG_VIDEO                   = 2;
+    localparam int unsigned REG_VIDEO_COL_80_BIT        = 0;
+    localparam int unsigned REG_VIDEO_RAM_MASK_LO_BIT   = 1;    // video_ram_mask[10]
+    localparam int unsigned REG_VIDEO_RAM_MASK_HI_BIT   = 2;    // video_ram_mask[11]
 
-    localparam int unsigned REG_COUNT               = REG_VIDEO + 1'b1;
+    localparam int unsigned REG_COUNT                   = REG_VIDEO + 1'b1;
 
     //
     // Bus

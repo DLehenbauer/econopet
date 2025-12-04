@@ -15,6 +15,7 @@
 #include <dirent.h>
 #include "filesystem/vfs.h"
 #include "fatal.h"
+#include "system_state.h"
 #include "global.h"
 #include "driver.h"
 #include "hw.h"
@@ -430,9 +431,14 @@ void action_set_options(void* context, options_t* options) {
             break;
     }
 
+    // Validate and set video RAM size (must be 1-4 KB)
+    vet(options->video_ram_kb >= 1 && options->video_ram_kb <= 4,
+        "Invalid 'video-ram-kb:' in config (got %lu, expected 1-4)", options->video_ram_kb);
+    system_state_set_video_ram_kb(ctx->system_state, (uint8_t) options->video_ram_kb);
+
     write_pet_model(ctx->system_state);
 
-    printf("Set options: %lu columns\n", options->columns);
+    printf("Set options: %lu columns, %lu KB video RAM\n", options->columns, options->video_ram_kb);
 }
 
 void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
@@ -493,6 +499,7 @@ void menu_enter() {
     printf("-- Enter Menu --\n");
 
     start_menu_rom();
+    memset(video_char_buffer + 0x800, 0x0F, VIDEO_CHAR_BUFFER_BYTE_SIZE - 0x800);
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
 
