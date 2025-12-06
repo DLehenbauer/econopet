@@ -39,29 +39,24 @@ struct semaphore dvi_start_sem;
 bool video_graphics = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
-// ---------------------------------------------------------------------------
-// CGA Palette (16 colors in RGB332 format)
-// 
-// RGB332 format: bits 7:5 = R (3-bit), bits 4:2 = G (3-bit), bits 1:0 = B (2-bit)
-// ---------------------------------------------------------------------------
-
-static const uint8_t cga_palette[16] = {
-    0x00, // 0: Black        (R=0, G=0, B=0)
-    0x02, // 1: Blue         (R=0, G=0, B=2)
-    0x1C, // 2: Green        (R=0, G=7, B=0)
-    0x1E, // 3: Cyan         (R=0, G=7, B=2)
-    0xE0, // 4: Red          (R=7, G=0, B=0)
-    0xE2, // 5: Magenta      (R=7, G=0, B=2)
-    0x64, // 6: Brown        (R=3, G=1, B=0)
-    0xB6, // 7: Light Gray   (R=5, G=5, B=2)
-    0x49, // 8: Dark Gray    (R=2, G=2, B=1)
-    0x4F, // 9: Light Blue   (R=2, G=3, B=3)
-    0x5F, // 10: Light Green (R=2, G=7, B=3)
-    0x7F, // 11: Light Cyan  (R=3, G=7, B=3)
-    0xEF, // 12: Light Red   (R=7, G=3, B=3)
-    0xF3, // 13: Light Magenta (R=7, G=4, B=3)
-    0xFC, // 14: Yellow      (R=7, G=7, B=0)
-    0xFF, // 15: White       (R=7, G=7, B=3)
+// C128 Palette (16 colors, RRRGGGBB)
+static const uint8_t c128_palette[16] = {
+    0x00, // 0: Black
+    0x49, // 1: Medium Gray
+    0x01, // 2: Blue
+    0x03, // 3: Light Blue
+    0x10, // 4: Green
+    0x1C, // 5: Light Green
+    0x0D, // 6: Dark Cyan
+    0x1F, // 7: Light Cyan
+    0x40, // 8: Red
+    0xE0, // 9: Light Red
+    0x81, // 10: Dark Magenta
+    0xE3, // 11: Magenta
+    0x6C, // 12: Dark Yellow
+    0xDC, // 13: Yellow
+    0xB6, // 14: Light Gray
+    0xFF  // 15: White
 };
 
 // Colour buffer: one byte per character position
@@ -475,7 +470,7 @@ void video_init() {
     queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
     
     // Initialize the palette (using CGA palette for both fg and bg colors)
-    set_palette(cga_palette, cga_palette);
+    set_palette(c128_palette, c128_palette);
 
     // Precalculate TMDS-encoded blank scanline (all zeros / background color).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
