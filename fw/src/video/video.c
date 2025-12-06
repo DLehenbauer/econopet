@@ -16,7 +16,7 @@
 #include "pet.h"
 #include "roms/roms.h"
 #include "system_state.h"
-#include "tmds_encode_font_2bpp.h"
+#include "tmds_encode.h"
 
 // Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal
 // demo, instead of using interrupt-driven scanline callbacks. This may be useful for

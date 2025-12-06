@@ -52,8 +52,8 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/usb/msc_app.c
     ${FW_SRC_DIR}/usb/usb.c
     ${FW_SRC_DIR}/video/video.c
-    ${FW_SRC_DIR}/video/tmds_encode_font_2bpp.c
-    ${FW_SRC_DIR}/video/tmds_encode_font_2bpp.S
+    ${FW_SRC_DIR}/video/tmds_encode.c
+    ${FW_SRC_DIR}/video/tmds_encode.S
 )
 
 # EconoPET 40/8096 Rev. A: xosc requires a little extra time to stabilize.
