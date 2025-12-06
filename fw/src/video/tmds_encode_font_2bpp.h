@@ -5,15 +5,10 @@
 
 // Set separate 16-color palettes for foreground and background.
 // Must be called before encoding.
-// fg_palette: 16 bytes for foreground colors, each in RGB222 format (bits 5:4=R, 3:2=G, 1:0=B)
-// bg_palette: 16 bytes for background colors, each in RGB222 format (bits 5:4=R, 3:2=G, 1:0=B)
+// fg_palette: 16 bytes for foreground colors, each in RGB332 format (bits 7:5=R, 4:2=G, 1:0=B)
+// bg_palette: 16 bytes for background colors, each in RGB332 format (bits 7:5=R, 4:2=G, 1:0=B)
 // Note: fg_palette and bg_palette can point to the same array for a shared palette.
 void set_palette(const uint8_t *fg_palette, const uint8_t *bg_palette);
-
-// Initialize the TMDS lookup table for 2bpp palettised font encoding.
-// Must be called once at startup before using tmds_encode_font_2bpp functions.
-// This generates the palettised_1bpp_tables in scratch memory.
-void init_palettised_1bpp_tables(void);
 
 // Render characters using an 8px-wide font with 16-color palette.
 // This function encodes one color plane (R, G, or B) per call.
@@ -35,9 +30,7 @@ void init_palettised_1bpp_tables(void);
 //
 // scanline: the scanline within each character (0-7) to render.
 //
-// plane: color plane to encode (0=B, 1=G, 2=R for PicoDVI TMDS lane ordering)
-//
-// invert: 0x00 for normal, 0xFF to swap fg/bg
+// plane: color plane to encode (0=R, 1=G, 2=B)
 
 void tmds_encode_font_2bpp(const uint8_t *charbuf, const uint8_t *colourbuf,
     uint32_t *tmdsbuf, uint n_pix, const uint8_t *font_base, uint scanline, uint plane,

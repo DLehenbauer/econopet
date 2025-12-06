@@ -40,28 +40,28 @@ bool video_graphics = false;
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // ---------------------------------------------------------------------------
-// CGA Palette (16 colors in RGB222 format)
+// CGA Palette (16 colors in RGB332 format)
 // 
-// RGB222 format: bits 5:4 = R, bits 3:2 = G, bits 1:0 = B
+// RGB332 format: bits 7:5 = R (3-bit), bits 4:2 = G (3-bit), bits 1:0 = B (2-bit)
 // ---------------------------------------------------------------------------
 
 static const uint8_t cga_palette[16] = {
-    0x00, // 0: Black
-    0x02, // 1: Blue
-    0x08, // 2: Green
-    0x0A, // 3: Cyan
-    0x20, // 4: Red
-    0x22, // 5: Magenta
-    0x24, // 6: Brown
-    0x2A, // 7: Light Gray
-    0x15, // 8: Dark Gray
-    0x17, // 9: Light Blue
-    0x1D, // 10: Light Green
-    0x1F, // 11: Light Cyan
-    0x35, // 12: Light Red
-    0x37, // 13: Light Magenta
-    0x3D, // 14: Yellow
-    0x3F, // 15: White
+    0x00, // 0: Black        (R=0, G=0, B=0)
+    0x02, // 1: Blue         (R=0, G=0, B=2)
+    0x1C, // 2: Green        (R=0, G=7, B=0)
+    0x1E, // 3: Cyan         (R=0, G=7, B=2)
+    0xE0, // 4: Red          (R=7, G=0, B=0)
+    0xE2, // 5: Magenta      (R=7, G=0, B=2)
+    0x64, // 6: Brown        (R=3, G=1, B=0)
+    0xB6, // 7: Light Gray   (R=5, G=5, B=2)
+    0x49, // 8: Dark Gray    (R=2, G=2, B=1)
+    0x4F, // 9: Light Blue   (R=2, G=3, B=3)
+    0x5F, // 10: Light Green (R=2, G=7, B=3)
+    0x7F, // 11: Light Cyan  (R=3, G=7, B=3)
+    0xEF, // 12: Light Red   (R=7, G=3, B=3)
+    0xF3, // 13: Light Magenta (R=7, G=4, B=3)
+    0xFC, // 14: Yellow      (R=7, G=7, B=0)
+    0xFF, // 15: White       (R=7, G=7, B=3)
 };
 
 // Colour buffer: one byte per character position
@@ -474,9 +474,6 @@ void video_init() {
     // This buffer is kept permanently and never returned to the queue.
     queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
     
-    // Initialize the TMDS lookup table for 2bpp palettised font encoding
-    init_palettised_1bpp_tables();
-
     // Initialize the palette (using CGA palette for both fg and bg colors)
     set_palette(cga_palette, cga_palette);
 
