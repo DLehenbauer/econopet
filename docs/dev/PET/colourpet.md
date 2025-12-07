@@ -60,6 +60,80 @@ This document summarizes how the `cbm-edit-rom` project implements colour handli
   - `C64COLOURS`: approximations of C64 NTSC/PAL colours to RRRGGGBB.
   - Indexing uses PETSCII colour code positions defined in `COLOURS`.
 
+## Custom Palette (Analog Mode)
+- Files: `colourpet.asm`, `memzeropage.asm`
+
+In Analog mode (`COLOURMODE=1`), a third palette option allows user-defined colours stored in "hidden" colour RAM—the portion of colour memory beyond the visible 25×COLUMNS screen area.
+
+### Palette Selection
+| `ColourPNum` | Palette | Source |
+|--------------|---------|--------|
+| 0 | C128/RGBI | `C128COLOURS` table in ROM |
+| 1 | C64 | `C64COLOURS` table in ROM |
+| 2 | **Custom** | `ColourStor` in hidden colour RAM |
+
+- Select palette at runtime: `POKE 208, n` (where `n` = 0, 1, or 2)
+
+### Custom Palette Memory Location
+The custom palette is stored immediately after the visible screen area in colour RAM:
+
+```
+ColourStor = COLOUR_RAM + 25 * COLUMNS
+```
+
+| COLOURVER | COLOUR_RAM | ColourStor (40-col) | ColourStor (80-col) |
+|-----------|------------|---------------------|---------------------|
+| 0 (beta)  | `$8400`    | `$87E8` (34792)     | `$8BD0` (35792)     |
+| 1 (normal)| `$8800`    | `$8BE8` (35816)     | `$8FD0` (36816)     |
+
+### Custom Palette Format
+The custom palette occupies **16 consecutive bytes** starting at `ColourStor`, one byte per colour index (0–15). Each byte is in **RRRGGGBB** format (RGB332):
+
+| Bits | Component | Levels |
+|------|-----------|--------|
+| 7:5  | Red       | 8      |
+| 4:2  | Green     | 8      |
+| 1:0  | Blue      | 4      |
+
+### BASIC Examples
+```basic
+REM Select custom palette
+POKE 208, 2
+
+REM Set colour 0 (black) - already 0
+POKE 34792, 0
+
+REM Set colour 15 (white)
+POKE 34792 + 15, 255
+
+REM Set colour 5 to bright green (R=0, G=7, B=0)
+REM Binary: 00011100 = 28
+POKE 34792 + 5, 28
+
+REM Set colour 8 to bright red (R=7, G=0, B=0)
+REM Binary: 11100000 = 224
+POKE 34792 + 8, 224
+
+REM Set colour 2 to bright blue (R=0, G=0, B=3)
+REM Binary: 00000011 = 3
+POKE 34792 + 2, 3
+```
+
+Note: The address `34792` assumes 40-column mode with `COLOURVER=0`. Adjust for your configuration using the table above.
+
+### How It Works
+When `SetColourValue` is called with `ColourPNum=2`, it reads directly from hidden colour RAM instead of the ROM tables:
+
+```asm
+LDA ColourPNum        ; Current Palette
+CMP #2                ; Custom Palette?
+BNE SCV_Set           ; No, use default
+LDA ColourStor,X      ; Yes, read from hidden colour RAM
+JMP SCV_exit
+```
+
+This allows runtime palette modification without ROM changes.
+
 ## Rendering and Screen Operations
 - File: `editrom40.asm`
   - Colour-aware output:
