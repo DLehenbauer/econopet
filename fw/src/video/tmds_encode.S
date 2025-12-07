@@ -15,7 +15,7 @@
 //
 // - A character buffer (1 byte per character)
 //
-// - A colour buffer (1 byte per character): high nibble = background palette
+// - A color buffer (1 byte per character): high nibble = background palette
 //   index (0-15), low nibble = foreground palette index (0-15)
 //
 // - A 16-color palette, pre-expanded into palette_table by set_palette()
@@ -40,7 +40,7 @@
 
 // Register usage:
 // r0 contains character buffer pointer
-// r1 contains colour buffer pointer  
+// r1 contains color buffer pointer  
 // r2 contains output buffer pointer
 // r3 is scratch
 // r4-r7 are for scratch + pixels
@@ -59,7 +59,7 @@
 // wide: 0 for normal (8px chars), 1 for wide (16px chars with 2x horizontal stretch)
 //
 // Function signature:
-//   void name(const uint8_t *charbuf, const uint8_t *colourbuf,
+//   void name(const uint8_t *charbuf, const uint8_t *colorbuf,
 //             uint32_t *tmdsbuf, uint n_pix,
 //             const uint8_t *font_base, uint scanline, uint plane, uint32_t invert)
 // Stack args at [sp+36]=font_base, [sp+40]=scanline, [sp+44]=plane, [sp+48]=invert
@@ -167,7 +167,7 @@ bit_double_lut:
 // ============================================================================
 
 // Emit 4 doubled pixels from 2 font bits (wide mode helper)
-// r4 = font byte (preserved), r5 = LUT base + colour offset (preserved)
+// r4 = font byte (preserved), r5 = LUT base + color offset (preserved)
 // bit_shift = bit position of the 2-bit pair to extract (6, 4, 2, or 0)
 // Clobbers r3, r6, r7
 .macro emit_doubled_4pix bit_shift
@@ -184,9 +184,9 @@ bit_double_lut:
 
 // Process one character and emit TMDS pixels
 // charbuf_offs: offset from r0 to load character
-// colourbuf_offs: offset from r1 to load color byte
+// colorbuf_offs: offset from r1 to load color byte
 // wide: 0 for normal (8px output), 1 for wide (16px output with 2x stretch)
-.macro do_char charbuf_offs colourbuf_offs wide
+.macro do_char charbuf_offs colorbuf_offs wide
     // Get 8 font bits for this character (font is in PET layout: char_code * 8 + scanline)
     // PET quirk: bit 7 of char code inverts the scanline, bits [6:0] are font index
     // Note: r8 already contains font_base + clamped_scanline, r11 contains font mask
@@ -205,9 +205,9 @@ bit_double_lut:
     eors r4, r6                                 // r4 ^= invert (swap fg/bg if invert is 0xFF)
     uxtb r4, r4                                 // mask to 8 bits (clear upper 24 bits after XOR)
 
-    // Get colour byte and look up in palette_table
+    // Get color byte and look up in palette_table
     // palette_table index = color_byte * 3 + plane (r10 already has palette_table + plane)
-    ldrb r3, [r1, #\colourbuf_offs]             // r3 = color byte
+    ldrb r3, [r1, #\colorbuf_offs]              // r3 = color byte
     lsls r5, r3, #1                             // r5 = color * 2
     adds r5, r3                                 // r5 = color * 3
     add r5, r10                                 // r5 = &palette_table[color*3 + plane]

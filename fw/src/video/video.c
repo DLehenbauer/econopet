@@ -59,12 +59,12 @@ static const uint8_t c128_palette[16] = {
     0xFF  // 15: White
 };
 
-// Colour buffer: one byte per character position
+// Color buffer: one byte per character position
 // High nibble (bits 7:4) = background palette index (0-15)
 // Low nibble (bits 3:0) = foreground palette index (0-15)
 // Initialized to bright green (10) on black (0) = 0x0A
 #define MAX_CHARS_PER_LINE (FRAME_WIDTH / FONT_WIDTH)
-static uint8_t* colourbuf = &video_char_buffer[0x800];
+static uint8_t* colorbuf = &video_char_buffer[0x800];
 
 // ---------------------------------------------------------------------------
 // CRTC (6545) registers
@@ -162,7 +162,7 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
  * Calls the assembly tmds_encode_font_8px_palette_1lane for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
- * @param p_colourbuf   Color buffer (one byte per character)
+ * @param p_colorbuf    Color buffer (one byte per character)
  * @param tmdsbuf       Output TMDS buffer
  * @param n_chars       Number of characters to encode
  * @param font_base     Font bitmap base (8 bytes per character)
@@ -171,7 +171,7 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
  */
 static inline void __not_in_flash_func(tmds_encode_font_8px_palette)(
     const uint8_t *charbuf,
-    const uint8_t *p_colourbuf,
+    const uint8_t *p_colorbuf,
     uint32_t *tmdsbuf,
     uint n_chars,
     const uint8_t *font_base,
@@ -184,7 +184,7 @@ static inline void __not_in_flash_func(tmds_encode_font_8px_palette)(
     for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
         tmds_encode_font_8px_palette_1lane(
             charbuf,
-            p_colourbuf,
+            p_colorbuf,
             &tmdsbuf[plane * WORDS_PER_LANE],
             n_pix,
             font_base,
@@ -201,7 +201,7 @@ static inline void __not_in_flash_func(tmds_encode_font_8px_palette)(
  * Calls the assembly tmds_encode_font_16px_palette_1lane for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
- * @param p_colourbuf   Color buffer (one byte per character)
+ * @param p_colorbuf    Color buffer (one byte per character)
  * @param tmdsbuf       Output TMDS buffer
  * @param n_chars       Number of characters to encode
  * @param font_base     Font bitmap base (8 bytes per character)
@@ -210,7 +210,7 @@ static inline void __not_in_flash_func(tmds_encode_font_8px_palette)(
  */
 static inline void __not_in_flash_func(tmds_encode_font_16px_palette)(
     const uint8_t *charbuf,
-    const uint8_t *p_colourbuf,
+    const uint8_t *p_colorbuf,
     uint32_t *tmdsbuf,
     uint n_chars,
     const uint8_t *font_base,
@@ -223,7 +223,7 @@ static inline void __not_in_flash_func(tmds_encode_font_16px_palette)(
     for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
         tmds_encode_font_16px_palette_1lane(
             charbuf,
-            p_colourbuf,
+            p_colorbuf,
             &tmdsbuf[plane * WORDS_PER_LANE],
             n_pix,
             font_base,
@@ -359,7 +359,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         if (is_80_col) {
             tmds_encode_font_8px_palette(
                 &video_char_buffer[row_start],
-                &colourbuf[row_start],
+                &colorbuf[row_start],
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -369,7 +369,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         } else {
             tmds_encode_font_16px_palette(
                 &video_char_buffer[row_start],
-                &colourbuf[row_start],
+                &colorbuf[row_start],
                 &tmdsbuf[left_margin_words],
                 first_chars,
                 p_char_rom,
@@ -386,7 +386,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             if (is_80_col) {
                 tmds_encode_font_8px_palette(
                     &video_char_buffer[0],
-                    &colourbuf[0],
+                    &colorbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -397,7 +397,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 first_words *= 2;   // 40-column mode: each character is 16 pixels wide
                 tmds_encode_font_16px_palette(
                     &video_char_buffer[0],
-                    &colourbuf[0],
+                    &colorbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
@@ -476,7 +476,7 @@ void video_init() {
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
     tmds_encode_font_8px_palette(
         video_char_buffer,          // charbuf (content doesn't matter for blank lines)
-        colourbuf,                  // colourbuf
+        colorbuf,                   // colorbuf
         blank_tmdsbuf,
         FRAME_WIDTH / FONT_WIDTH,   // n_chars
         p_video_font_000,           // font_base
