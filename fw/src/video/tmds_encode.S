@@ -26,8 +26,8 @@
 // Each LUT entry is 4 TMDS symbols (2 words), giving an 8KB table.
 //
 // Two variants are provided:
-// - tmds_encode_font_2bpp: 8px wide characters
-// - tmds_encode_font_2bpp_wide: 16px wide characters (2x horizontal stretch)
+// - tmds_encode_font_8px_palette_1lane: 8px wide characters (single color plane)
+// - tmds_encode_font_16px_palette_1lane: 16px wide characters (single color plane, 2x horizontal stretch)
 
 // Offsets suitable for ldr/str (must be <= 0x7c):
 #define ACCUM0_OFFS     (SIO_INTERP0_ACCUM0_OFFSET     - SIO_INTERP0_ACCUM0_OFFSET)
@@ -160,7 +160,7 @@ bit_double_lut:
     .byte 0x0c  // 10 -> 1100
     .byte 0x0f  // 11 -> 1111
 
-.section .scratch_x.tmds_encode_font_2bpp, "ax"
+.section .scratch_x.tmds_encode_font_palette, "ax"
 
 // ============================================================================
 // Unified character processing macro
@@ -250,8 +250,8 @@ bit_double_lut:
 // ============================================================================
 
 // Generate both functions using the parameterized macro
-define_encode_func tmds_encode_font_2bpp 0
-define_encode_func tmds_encode_font_2bpp_wide 1
+define_encode_func tmds_encode_font_8px_palette_1lane 0
+define_encode_func tmds_encode_font_16px_palette_1lane 1
 
 // ============================================================================
 // TMDS Lookup Table (External)

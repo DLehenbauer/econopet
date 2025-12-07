@@ -29,9 +29,10 @@
 void set_palette(const uint8_t* fg_palette, const uint8_t* bg_palette);
 
 /**
- * Render characters using an 8px-wide font with 16-color palette.
+ * Render characters using an 8px-wide font with 16-color palette (single color plane).
  * 
- * This function encodes one color plane (R, G, or B) per call.
+ * This is the low-level encoder that processes one color plane (R, G, or B) per call.
+ * Most callers should use the higher-level wrapper that encodes all 3 planes.
  * 
  * @param charbuf Pointer to the row of characters (8 bits each) for the current scanline (byte-aligned)
  * @param colorbuf Pointer to color attribute bytes, one per character.
@@ -46,11 +47,14 @@ void set_palette(const uint8_t* fg_palette, const uint8_t* bg_palette);
  * @param plane Color plane to encode (0=R, 1=G, 2=B)
  * @param invert Invert mask for character rendering
  */
-void tmds_encode_font_2bpp(const uint8_t* charbuf, const uint8_t* colorbuf, uint32_t* tmdsbuf, uint n_pix,
-                           const uint8_t* font_base, uint scanline, uint plane, uint32_t invert);
+void tmds_encode_font_8px_palette_1lane(const uint8_t* charbuf, const uint8_t* colorbuf, uint32_t* tmdsbuf, uint n_pix,
+                                        const uint8_t* font_base, uint scanline, uint plane, uint32_t invert);
 
 /**
- * Render characters using an 8px-wide font stretched to 16px wide.
+ * Render characters using an 8px-wide font stretched to 16px wide (single color plane).
+ * 
+ * This is the low-level encoder that processes one color plane (R, G, or B) per call.
+ * Most callers should use the higher-level wrapper that encodes all 3 planes.
  * 
  * This wide variant stretches each pixel horizontally by doubling it. This reads half as many
  * characters from charbuf and colorbuf for the same n_pix output.
@@ -64,5 +68,5 @@ void tmds_encode_font_2bpp(const uint8_t* charbuf, const uint8_t* colorbuf, uint
  * @param plane Color plane to encode (0=R, 1=G, 2=B)
  * @param invert Invert mask for character rendering
  */
-void tmds_encode_font_2bpp_wide(const uint8_t* charbuf, const uint8_t* colorbuf, uint32_t* tmdsbuf, uint n_pix,
-                                const uint8_t* font_base, uint scanline, uint plane, uint32_t invert);
+void tmds_encode_font_16px_palette_1lane(const uint8_t* charbuf, const uint8_t* colorbuf, uint32_t* tmdsbuf, uint n_pix,
+                                         const uint8_t* font_base, uint scanline, uint plane, uint32_t invert);

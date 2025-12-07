@@ -153,13 +153,13 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
 // TMDS encoding wrappers
 //
 // These inline functions call the optimized assembly encoders from 
-// tmds_encode_font_2bpp.S for each of the 3 RGB planes.
+// tmds_encode.S for each of the 3 RGB planes.
 // ---------------------------------------------------------------------------
 
 /**
  * Encode characters to TMDS for 80-column mode (8px wide characters).
  *
- * Calls the assembly tmds_encode_font_2bpp for each RGB plane.
+ * Calls the assembly tmds_encode_font_8px_palette_1lane for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
  * @param p_colourbuf   Color buffer (one byte per character)
@@ -169,7 +169,7 @@ uint8_t pet_crtc_registers[CRTC_REG_COUNT] = {
  * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
  * @param invert        0x00 normal, 0xFF to invert video
  */
-static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
+static inline void __not_in_flash_func(tmds_encode_font_8px_palette)(
     const uint8_t *charbuf,
     const uint8_t *p_colourbuf,
     uint32_t *tmdsbuf,
@@ -182,7 +182,7 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
 
     // Encode all 3 RGB planes
     for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
-        tmds_encode_font_2bpp(
+        tmds_encode_font_8px_palette_1lane(
             charbuf,
             p_colourbuf,
             &tmdsbuf[plane * WORDS_PER_LANE],
@@ -198,7 +198,7 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
 /**
  * Encode characters to TMDS for 40-column mode (16px wide characters, 2x stretch).
  *
- * Calls the assembly tmds_encode_font_2bpp_wide for each RGB plane.
+ * Calls the assembly tmds_encode_font_16px_palette_1lane for each RGB plane.
  *
  * @param charbuf       Character buffer (video RAM)
  * @param p_colourbuf   Color buffer (one byte per character)
@@ -208,7 +208,7 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_inline)(
  * @param scanline_idx  Scanline index within character row (0-7, >7 = blank)
  * @param invert        0x00 normal, 0xFF to invert video
  */
-static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
+static inline void __not_in_flash_func(tmds_encode_font_16px_palette)(
     const uint8_t *charbuf,
     const uint8_t *p_colourbuf,
     uint32_t *tmdsbuf,
@@ -221,7 +221,7 @@ static inline void __not_in_flash_func(tmds_encode_font_2bpp_wide_inline)(
 
     // Encode all 3 RGB planes
     for (uint plane = 0; plane < N_TMDS_LANES; ++plane) {
-        tmds_encode_font_2bpp_wide(
+        tmds_encode_font_16px_palette_1lane(
             charbuf,
             p_colourbuf,
             &tmdsbuf[plane * WORDS_PER_LANE],
@@ -357,7 +357,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
         // First part: from row_start (may be all characters if no wrap)
         if (is_80_col) {
-            tmds_encode_font_2bpp_inline(
+            tmds_encode_font_8px_palette(
                 &video_char_buffer[row_start],
                 &colourbuf[row_start],
                 &tmdsbuf[left_margin_words],
@@ -367,7 +367,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 invert_mask
             );
         } else {
-            tmds_encode_font_2bpp_wide_inline(
+            tmds_encode_font_16px_palette(
                 &video_char_buffer[row_start],
                 &colourbuf[row_start],
                 &tmdsbuf[left_margin_words],
@@ -384,7 +384,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             uint first_words = first_chars * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
 
             if (is_80_col) {
-                tmds_encode_font_2bpp_inline(
+                tmds_encode_font_8px_palette(
                     &video_char_buffer[0],
                     &colourbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
@@ -395,7 +395,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 );
             } else {
                 first_words *= 2;   // 40-column mode: each character is 16 pixels wide
-                tmds_encode_font_2bpp_wide_inline(
+                tmds_encode_font_16px_palette(
                     &video_char_buffer[0],
                     &colourbuf[0],
                     &tmdsbuf[left_margin_words + first_words],
@@ -474,7 +474,7 @@ void video_init() {
 
     // Precalculate TMDS-encoded blank scanline (all zeros / background color).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
-    tmds_encode_font_2bpp_inline(
+    tmds_encode_font_8px_palette(
         video_char_buffer,          // charbuf (content doesn't matter for blank lines)
         colourbuf,                  // colourbuf
         blank_tmdsbuf,
