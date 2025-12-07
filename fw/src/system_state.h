@@ -66,15 +66,19 @@ typedef struct system_state_s {
     // the firmware and and sent to the FPGA via SPI.
     pet_display_columns_t pet_display_columns;
 
-    // Size of video RAM in KB (1, 2, or 4).  This is configured by the firmware
-    // and sent to the FPGA via SPI to set the video RAM address mask.
-    uint8_t video_ram_kb;
+    // Video RAM mask (0-3).  Controls which address bits are used for video RAM:
+    //  00 = 1KB at $8000 (40 column monochrome)
+    //  01 = 2KB at $8000 (80 column monochrome)
+    //  10 = 1KB at $8000 + 1KB at $8800 (40 column color)
+    //  11 = 4KB at $8000 (80 column color)
+    // This is configured by the firmware and sent to the FPGA via SPI.
+    uint8_t video_ram_mask;
 
-    // Precomputed size of video RAM in bytes. Updated whenever video_ram_kb changes.
+    // Precomputed size of video RAM in bytes. Updated whenever video_ram_mask changes.
     size_t video_ram_bytes;
 } system_state_t;
 
 extern system_state_t system_state;
 
 // Setter to keep derived fields in sync.
-void system_state_set_video_ram_kb(system_state_t* state, uint8_t video_ram_kb);
+void system_state_set_video_ram_mask(system_state_t* state, uint8_t video_ram_mask);

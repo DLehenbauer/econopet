@@ -600,23 +600,6 @@ void read_pet_model(system_state_t* const system_state) {
 }
 
 /**
- * Converts video RAM size in KB to a 2-bit mask value for the FPGA.
- * 
- * The mask controls how many address bits are used for video RAM addressing:
- * - 1KB: mask = 0b00 (10 address bits, addresses 0x000-0x3FF)
- * - 2KB: mask = 0b01 (11 address bits, addresses 0x000-0x7FF)
- * - 3KB: mask = 0b10 (11 address bits, addresses 0x000-0xBFF)
- * - 4KB: mask = 0b11 (12 address bits, addresses 0x000-0xFFF)
- * 
- * @param video_ram_kb Video RAM size (1-4 KB)
- * @return 2-bit mask value for REG_VIDEO
- */
-static uint8_t video_ram_kb_to_mask(uint8_t video_ram_kb) {
-    assert(video_ram_kb >= 1 && video_ram_kb <= 4);
-    return video_ram_kb - 1;
-}
-
-/**
  * Writes the PET display configuration to the FPGA video control register.
  * 
  * This function configures the video subsystem in the FPGA based on the
@@ -629,30 +612,25 @@ static uint8_t video_ram_kb_to_mask(uint8_t video_ram_kb) {
  *   1 = 80 column mode
  * 
  * - REG_VIDEO_RAM_MASK (bits 2:1): Video RAM size mask
- *   00 = 1KB video RAM
- *   01 = 2KB video RAM
- *   11 = 4KB video RAM
- * 
- * The PET originally came in 40-column and 80-column variants. This setting
- * configures the video output timing and character generation accordingly.
- * The video RAM size determines how much screen memory is available.
+ *   00 = 1KB at $8000 (40 column monochrome)
+ *   01 = 2KB at $8000 (80 column monochrome)
+ *   10 = 1KB at $8000 + 1KB at $8800 (40 column color)
+ *   11 = 4KB at $8000 (80 column color)
  * 
  * @param system_state Pointer to system state containing display configuration
  */
 void write_pet_model(const system_state_t* const system_state) {
     // Ensure derived fields are consistent.
-    vet(system_state->video_ram_bytes == (size_t)system_state->video_ram_kb * 1024u,
-        "system_state.video_ram_bytes (%zu) inconsistent with video_ram_kb (%u)",
-        system_state->video_ram_bytes, system_state->video_ram_kb);
+    vet(system_state->video_ram_bytes == (size_t)(system_state->video_ram_mask + 1) * 1024u,
+        "system_state.video_ram_bytes (%zu) inconsistent with video_ram_mask (%u)",
+        system_state->video_ram_bytes, system_state->video_ram_mask);
     uint8_t state = 0;
 
     if (system_state->pet_display_columns == pet_display_columns_80) {
         state |= REG_VIDEO_80_COL_MODE;
     }
 
-    // Convert video RAM KB to mask and shift to correct bit position
-    uint8_t ram_mask = video_ram_kb_to_mask(system_state->video_ram_kb);
-    state |= (ram_mask << REG_VIDEO_RAM_MASK_SHIFT);
+    state |= (system_state->video_ram_mask << REG_VIDEO_RAM_MASK_SHIFT);
 
     spi_write_at(REG_VIDEO, state);
 }

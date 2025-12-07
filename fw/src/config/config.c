@@ -488,34 +488,23 @@ static void parse_action_copy(parser_t* parser, void* context, size_t context_si
     on_action_copy(parser, source, destination, length);
 }
 
-static void parse_action_set_usb_keymap(parser_t* parser, void* context, size_t context_size) {
-    (void)context;
-    (void)context_size;
-
-    char filename[261] = { 0 };  // Windows OS max path length is 260 characters
-
-    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
-        { "file", parse_as_string, &filename, sizeof(filename) },
-        { NULL, NULL, NULL, 0 }
-    });
-
-    if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_keymap) {
-        parser->sink->setup->on_set_keymap(parser->sink->setup->context, filename);
-    }
-}
-
 static void parse_action_set(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
 
+    // Parse video-ram-kb from YAML (1-4), then convert to mask (0-3)
+    uint32_t video_ram_kb = 1;  // Default: 1KB
+
     options_t options = {
-        .columns = 40,       // Default value
-        .video_ram_kb = 1,   // Default value
+        .columns = 40,          // Default value
+        .video_ram_mask = 0,    // Default value (will be derived from video_ram_kb)
+        .usb_keymap = { 0 },    // Default: empty (use default keymap)
     };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
-        { "video-ram-kb", parse_as_uint32, &options.video_ram_kb, sizeof(options.video_ram_kb) },
+        { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
+        { "usb-keymap", parse_as_string, &options.usb_keymap, sizeof(options.usb_keymap) },
         { NULL, NULL, NULL, 0 }
     });
 
@@ -523,9 +512,12 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
     }
 
-    if (options.video_ram_kb < 1 || options.video_ram_kb > 4) {
-        fatal_parse_error(parser, "Invalid video RAM size: %u KB (must be 1-4)", options.video_ram_kb);
+    if (video_ram_kb < 1 || video_ram_kb > 4) {
+        fatal_parse_error(parser, "Invalid video RAM size: %u KB (must be 1-4)", video_ram_kb);
     }
+
+    // Convert KB (1-4) to mask (0-3)
+    options.video_ram_mask = video_ram_kb - 1;
 
     if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_options) {
         parser->sink->setup->on_set_options(parser->sink->setup->context, &options);
@@ -565,8 +557,6 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_patch(parser, NULL, 0);
     } else if (strcmp(action, "copy") == 0) {
         parse_action_copy(parser, NULL, 0);
-    } else if (strcmp(action, "set-usb-keymap") == 0) {
-        parse_action_set_usb_keymap(parser, NULL, 0);
     } else if (strcmp(action, "set") == 0) {
         parse_action_set(parser, NULL, 0);
     } else if (strcmp(action, "fix-checksum") == 0) {

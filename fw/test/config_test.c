@@ -65,14 +65,12 @@ void on_action_set_options(void* context, options_t* options) {
     (void) context;
 
     // This is a placeholder for the actual callback implementation
-    printf("Action set options: columns = %u\n", options->columns);
-}
-
-void on_action_set_keymap(void* context, const char* filename) {
-    (void) context;
-
-    // This is a placeholder for the actual callback implementation
-    printf("Action set keymap: %s\n", filename);
+    printf("Action set options: columns = %u, video_ram_mask = %u",
+           options->columns, options->video_ram_mask);
+    if (options->usb_keymap[0] != '\0') {
+        printf(", usb_keymap = %s", options->usb_keymap);
+    }
+    printf("\n");
 }
 
 void on_action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
@@ -97,7 +95,6 @@ void config_test() {
         .on_copy = on_action_copy,
         .on_patch = on_action_patch,
         .on_set_options = on_action_set_options,
-        .on_set_keymap = on_action_set_keymap,
         .on_fix_checksum = on_action_fix_checksum,
         .system_state = &system_state,
     };

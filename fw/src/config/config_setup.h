@@ -25,15 +25,15 @@
 } binary_t;
 
 typedef struct options_s {
-    uint32_t columns;       // Number of columns (default: 40)
-    uint32_t video_ram_kb;  // Video RAM size in KB: 1, 2, or 4 (default: 1)
+    uint32_t columns;        // Number of columns (default: 40)
+    uint32_t video_ram_mask; // Video RAM mask (0-3, default: 0 = 1KB)
+    char usb_keymap[261];    // USB keymap file path (empty = use default)
 } options_t;
 
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);
 typedef void (*on_patch_fn_t)(void* user_data, uint32_t address, const binary_t* binary);
 typedef void (*on_copy_fn_t)(void* user_data, uint32_t source, uint32_t destination, uint32_t length);
 typedef void (*on_set_options_fn_t)(void* user_data, options_t* options);
-typedef void (*on_set_keymap_fn_t)(void* user_data, const char* filename);
 typedef void (*on_fix_checksum_fn_t)(void* user_data, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum);
 
 typedef struct setup_sink_s {
@@ -45,7 +45,6 @@ typedef struct setup_sink_s {
     const on_patch_fn_t on_patch;
     const on_copy_fn_t on_copy;
     const on_set_options_fn_t on_set_options;
-    const on_set_keymap_fn_t on_set_keymap;
     const on_fix_checksum_fn_t on_fix_checksum;
 
     const system_state_t* const system_state;

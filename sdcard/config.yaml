@@ -1,8 +1,6 @@
 configs:
   - name: "CBM 40xx (40 Col 50 Hz)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0xb000
@@ -18,6 +16,7 @@ configs:
           - address: 0x68000
             file: "/roms/characters-2.901447-10.bin"
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
       - if: "graphics"
         else:
@@ -33,8 +32,6 @@ configs:
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "PET 40xx (40 Col 60 Hz)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0xb000
@@ -50,6 +47,7 @@ configs:
           - address: 0x68000
             file: "/roms/characters-2.901447-10.bin"
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
       - if: "graphics"
         else:
@@ -65,8 +63,6 @@ configs:
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
   - name: "CBM 80xx (80 Col 50 Hz)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - file: "/roms/basic-4-b000.901465-23.bin"
@@ -100,12 +96,11 @@ configs:
             end-addr: 0xe7ff
             fix-addr: 0xe7ff
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
   - name: "PET 80xx (80 Col 60 Hz)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - file: "/roms/basic-4-b000.901465-23.bin"
@@ -133,12 +128,11 @@ configs:
             address: 0x0e6d1
             hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
   - name: "PET 2001 (Upgraded ROMs)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0xc000
@@ -187,11 +181,10 @@ configs:
             address: 0x0e221
             hex: "0c"
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
   - name: "PET 2001 (Original ROMs)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0xc000
@@ -235,11 +228,10 @@ configs:
         destination: 0xe7ad
         length: 0x06
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
   - name: "ColourPET (40 Col 60 Hz)"
     setup:
-      - action: "set-usb-keymap"
-        file: "/ukm/us.bin"
       - action: "load"
         files:
           - address: 0xb000
@@ -267,5 +259,6 @@ configs:
       #       address: 0x0e6d1
       #       hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
+        usb-keymap: "/ukm/us.bin"
         columns: 40
         video-ram-kb: 3

@@ -29,7 +29,6 @@ typedef struct test_context_s {
     int patch_count;
     int copy_count;
     int set_options_count;
-    int set_keymap_count;
     int fix_checksum_count;
     
     char last_config_name[41];
@@ -41,7 +40,8 @@ typedef struct test_context_s {
     uint32_t last_copy_dest;
     uint32_t last_copy_length;
     uint32_t last_columns;
-    char last_keymap_file[PATH_MAX];
+    uint32_t last_video_ram_mask;
+    char last_usb_keymap[261];
     uint32_t last_checksum_start;
     uint32_t last_checksum_end;
     uint32_t last_checksum_fix;
@@ -93,13 +93,9 @@ static void test_on_set_options(void* context, options_t* options) {
     test_context_t* ctx = (test_context_t*)context;
     ctx->set_options_count++;
     ctx->last_columns = options->columns;
-}
-
-static void test_on_set_keymap(void* context, const char* filename) {
-    test_context_t* ctx = (test_context_t*)context;
-    ctx->set_keymap_count++;
-    strncpy(ctx->last_keymap_file, filename, sizeof(ctx->last_keymap_file) - 1);
-    ctx->last_keymap_file[sizeof(ctx->last_keymap_file) - 1] = '\0';
+    ctx->last_video_ram_mask = options->video_ram_mask;
+    strncpy(ctx->last_usb_keymap, options->usb_keymap, sizeof(ctx->last_usb_keymap) - 1);
+    ctx->last_usb_keymap[sizeof(ctx->last_usb_keymap) - 1] = '\0';
 }
 
 static void test_on_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
@@ -119,7 +115,6 @@ static const setup_sink_t setup_sink = {
     .on_patch = test_on_patch,
     .on_copy = test_on_copy,
     .on_set_options = test_on_set_options,
-    .on_set_keymap = test_on_set_keymap,
     .on_fix_checksum = test_on_fix_checksum,
     .system_state = &sys_state,
 };
@@ -245,24 +240,118 @@ START_TEST(test_parse_set_action) {
     
     ck_assert_int_eq(test_ctx.set_options_count, 1);
     ck_assert_int_eq(test_ctx.last_columns, 80);
+    // video-ram-kb defaults to 1, which maps to mask 0
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 0);
 }
 END_TEST
 
-// Test: Parse config with set-usb-keymap action
-START_TEST(test_parse_set_keymap_action) {
+// Test: Parse config with video-ram-kb setting (1KB = mask 0)
+START_TEST(test_parse_set_video_ram_1kb) {
     const char* yaml_content = 
         "configs:\n"
-        "  - name: Set Keymap Test\n"
+        "  - name: Video RAM 1KB Test\n"
         "    setup:\n"
-        "      - action: set-usb-keymap\n"
-        "        file: custom_keymap.bin\n";
+        "      - action: set\n"
+        "        video-ram-kb: 1\n";
     
     mock_register_file("/config.yaml", yaml_content);
     
     parse_config_file("/config.yaml", &config_sink, 0);
     
-    ck_assert_int_eq(test_ctx.set_keymap_count, 1);
-    ck_assert_str_eq(test_ctx.last_keymap_file, "custom_keymap.bin");
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 0);  // 1KB -> mask 0
+}
+END_TEST
+
+// Test: Parse config with video-ram-kb setting (2KB = mask 1)
+START_TEST(test_parse_set_video_ram_2kb) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Video RAM 2KB Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        video-ram-kb: 2\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 1);  // 2KB -> mask 1
+}
+END_TEST
+
+// Test: Parse config with video-ram-kb setting (3KB = mask 2, ColourPET mode)
+START_TEST(test_parse_set_video_ram_3kb) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Video RAM 3KB Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        video-ram-kb: 3\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 2);  // 3KB -> mask 2
+}
+END_TEST
+
+// Test: Parse config with video-ram-kb setting (4KB = mask 3)
+START_TEST(test_parse_set_video_ram_4kb) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Video RAM 4KB Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        video-ram-kb: 4\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 3);  // 4KB -> mask 3
+}
+END_TEST
+
+// Test: Parse config with combined columns and video-ram-kb settings
+START_TEST(test_parse_set_columns_and_video_ram) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Combined Options Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n"
+        "        video-ram-kb: 2\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_int_eq(test_ctx.last_columns, 80);
+    ck_assert_int_eq(test_ctx.last_video_ram_mask, 1);  // 2KB -> mask 1
+}
+END_TEST
+
+// Test: Parse config with usb-keymap in set action
+START_TEST(test_parse_set_keymap_action) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Set Keymap Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        usb-keymap: custom_keymap.bin\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert_str_eq(test_ctx.last_usb_keymap, "custom_keymap.bin");
 }
 END_TEST
 
@@ -506,6 +595,11 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_patch_action);
     tcase_add_test(tc_core, test_parse_copy_action);
     tcase_add_test(tc_core, test_parse_set_action);
+    tcase_add_test(tc_core, test_parse_set_video_ram_1kb);
+    tcase_add_test(tc_core, test_parse_set_video_ram_2kb);
+    tcase_add_test(tc_core, test_parse_set_video_ram_3kb);
+    tcase_add_test(tc_core, test_parse_set_video_ram_4kb);
+    tcase_add_test(tc_core, test_parse_set_columns_and_video_ram);
     tcase_add_test(tc_core, test_parse_set_keymap_action);
     tcase_add_test(tc_core, test_parse_fix_checksum_action);
     tcase_add_test(tc_core, test_parse_multiple_configs_select_second);

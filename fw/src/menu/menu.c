@@ -431,14 +431,19 @@ void action_set_options(void* context, options_t* options) {
             break;
     }
 
-    // Validate and set video RAM size (must be 1-4 KB)
-    vet(options->video_ram_kb >= 1 && options->video_ram_kb <= 4,
-        "Invalid 'video-ram-kb:' in config (got %lu, expected 1-4)", options->video_ram_kb);
-    system_state_set_video_ram_kb(ctx->system_state, (uint8_t) options->video_ram_kb);
+    // Validate and set video RAM mask (must be 0-3)
+    vet(options->video_ram_mask <= 3,
+        "Invalid video RAM mask in config (got %lu, expected 0-3)", options->video_ram_mask);
+    system_state_set_video_ram_mask(ctx->system_state, (uint8_t) options->video_ram_mask);
+
+    // Load USB keymap if specified
+    if (options->usb_keymap[0] != '\0') {
+        read_keymap(options->usb_keymap, ctx->system_state);
+    }
 
     write_pet_model(ctx->system_state);
 
-    printf("Set options: %lu columns, %lu KB video RAM\n", options->columns, options->video_ram_kb);
+    printf("Set options: %lu columns, video RAM mask %lu\n", options->columns, options->video_ram_mask);
 }
 
 void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
@@ -513,7 +518,6 @@ void menu_enter() {
         .on_patch = action_patch,
         .on_copy = action_copy,
         .on_set_options = action_set_options,
-        .on_set_keymap = action_set_keymap,
         .on_fix_checksum = action_fix_checksum,
         .system_state = &system_state,
     };
