@@ -112,7 +112,7 @@ void r1w0(int32_t addr, int8_t bit, last_read_fn* pLastReadFn) {
 
 // Uses Extended March C- algorithm
 // See: https://booksite.elsevier.com/9780123705976/errata/13~Chapter%2008%20MBIST.pdf
-static void march_c_minus(const char* name, uint32_t iteration) {
+static void march_c_minus(const char* name) {
     printf("  %s: $%05lx-$%05lx\n", name, addr_min, addr_max);
 
     printf("    ⇕(w0): ");
@@ -148,10 +148,10 @@ void test_ram() {
         printf("\nExtended March C- Test: Iteration #%ld:\n", iteration);
         addr_min = SRAM_ADDR_MIN;
         addr_max = SRAM_ADDR_MAX;
-        march_c_minus("RAM", iteration);
+        march_c_minus("RAM");
 
         addr_min = BRAM_ADDR_MIN;
         addr_max = BRAM_ADDR_MAX;
-        march_c_minus("BRAM", iteration);
+        march_c_minus("BRAM");
     }
 }
