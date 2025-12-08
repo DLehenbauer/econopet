@@ -94,7 +94,7 @@ ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|---------
 Basic       | basic-1.901439-09-05-02-06.bin  |   8192 | aff78300
 Edit        | edit-1-n.901439-03.bin          |   2048 | 9e1c5cea
-Kernel      | kernal-1.901439-04-07.bin       |   4096 | f0186492
+Kernal      | kernal-1.901439-04-07.bin       |   4096 | f0186492
 Characters  | characters-1.901447-08.bin      |   2048 | 54f32f45
 
 ## ROM 3.0
@@ -165,7 +165,7 @@ ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|---------
 Basic       | basic-2.901465-01-02.bin        |   8192 | cf35e68b
 Edit        | edit-2-n.901447-24.bin          |   2048 | e459ab32
-Kernel      | kernal-2.901465-03.bin          |   4096 | f02238e2
+Kernal      | kernal-2.901465-03.bin          |   4096 | f02238e2
 Characters  | characters-2.901447-10.bin      |   2048 | d8408674
 
 Business keyboard is identical to 30XX except for Edit rom.
@@ -574,8 +574,40 @@ ROM         | File                            | Length | CRC-32
 ------------|---------------------------------|--------|---------
 Basic       | basic-4.901465-23-20-21.bin     |  12288 | 2a940f0a
 Edit        | edit-4-40-n-50Hz.901498-01.bin  |   2048 | 3370e359
-Kernel      | kernal-4.901465-22.bin          |   4096 | cc5298a1
+Kernal      | kernal-4.901465-22.bin          |   4096 | cc5298a1
 Characters  | characters-2.901447-10.bin      |   2048 | d8408674
+
+The Basic ROM is a concatenation of:
+  901465-23 ($B***)
+  901465-20 ($C***)
+  901465-21 ($D***)
+
+## 8296
+
+ROM          | Address | Location | IC#       | Part#     | CRC-32   | Checksum
+-------------|-------- |----------|-----------|-----------|----------|---------
+Option       | $9000   | UE10     | -         | -         | -        | -
+Option       | $A000   | UE9      | -         | -         | -        | -
+Editor ASCII | -       | UE8      | -         | 901474-04 | -        | -
+Editor DIN   | -       | UE8      | -         | 324243-01 | -        | -
+Basic/Kernal | $B000   | UE7      | -         | 324746-01 | -        | -
+Char ASCII   | -       | UE5      | -         | 901447-10 | -        | -
+Char DIN     | -       | UE5      | -         | 324242-01 | -        | -
+
+The Basic/Kernal ROM is a concatenation of:
+  901465-23 ($B***)
+  901465-20 ($C***)
+  901465-21 ($D***)
+  901465-22 ($F***)
+
+## 8296D
+
+Same as 8296, except for the editor ROM (UE8).
+
+ROM          | Address | Location | IC#       | Part#      | CRC-32   | Checksum
+-------------|-------- |----------|-----------|------------|----------|---------
+Editor ASCII | -       | UE8      | -         | 324243-02B | -        | -
+Editor DIN   | -       | UE8      | -         | 324243-03  | -        | -
 
 ## Appendix A: 6540 ROMs (28-pin)
 
@@ -686,6 +718,9 @@ PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                    
   * [Fachat's Notes](https://www.softwolves.com/arkiv/cbm-hackers/24/24293.html)
   * [PET 2001 IEEE patch from VICE](https://lc64.blogspot.com/2018/02/pet2001-basic1-ieee-patch-from-vice.html)
   * [Rom1 Disk Magic](https://hub.inktada.com/channel/rom1diskmagic)
+* 8296
+  * [8296D Service Manual (DE)](https://ia903406.us.archive.org/31/items/manual_8296D_SM_COMMODORE_DE/8296D_SM_COMMODORE_DE_text.pdf)
+  * [André Fachat's Notes](https://zimmers.net/anonftp/pub/cbm/firmware/computers/pet/8296/edit-50hz-324243-02b.txt)
 
 ## Tools
 
