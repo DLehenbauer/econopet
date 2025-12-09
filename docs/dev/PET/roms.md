@@ -602,7 +602,7 @@ The Basic/Kernal ROM is a concatenation of:
 
 ## 8296D
 
-Same as 8296, except for the editor ROM (UE8).
+Same as 8296, except for the editor ROM (UE8)?
 
 ROM          | Address | Location | IC#       | Part#      | CRC-32   | Checksum
 -------------|-------- |----------|-----------|------------|----------|---------
@@ -660,7 +660,14 @@ CBM 80xx    | Editor                  | PET Edit 4 80 B CRTC 60Hz (UD7)         
 CBM 80xx    | Editor                  | PET Edit 4 80 CRTC 60Hz (UD7)                  | 901499-03  | 2KB  | E000-E7FF | 2316B     | 4       | -        | -         | -          | 6502  
 CBM 80xx CR | Basic                   | PET Basic 4 & Kernal 4 (UE7)                   | 324746-01  | 16KB | B000-FFFF | 23128-632 | 4       | -        | 1983      | 0x03a25bb4 | 6502  
 CBM 80xx CR | Editor                  | PET Edit 4 80 8296 DIN 50Hz (UE8)              | 324243-01  | 4KB  | E000-EFFF | 2532      | 4       | -        | 1982      | 0x4000e833 | 6502  
-CBM 8296    | Diagnostic              | DIAG 8296 v1.3                                 | 324806-01  | 4KB  | F000-FFFF | 2332      | 1.3     | -        | -         | 0xc670e91c | 6502  
+CBM 8296    | Character (8 Scanlines) | PET Character DIN (UC5)                        | 324242-01  | 4KB  | 4KB       | 2532      | -       | -        | -         | Check      | BINARY
+CBM 8296    | Basic                   | PET Basic 4 High & Kernal 4                    | 324878-02HI | 8KB | B000-FFFF | 2764      | 4.0     | -        | -         | Check      | 6502
+CBM 8296    | Basic                   | PET Basic 4 Low                                | 324878-01LO | 8KB | C000-DFFF | 2764      | 4.0     | -        | -         | Check      | 6502
+CBM 8296    | Editor                  | PET Edit 4 80 8296 Execudesk                   | execudesk  | 4KB  | E000-EFFF | 2532      | 4.0     | -        | -         | Check      | 6502
+CBM 8296    | Editor                  | PET Edit 4 80 8296 Execudesk                   | execudesk_86-02 | 4KB | E000-EFFF | 2532  | 4.0     | -        | -         | Check      | 6502
+CBM 8296 D  | Editor                  | PET Edit 4 80 8296D DIN (UE8)                  | 324243-03  | 4KB  | E000-EFFF | 2532      | -       | -        | 1982      | Check      | 6502
+CBM 8296 D  | Editor                  | PET Edit 4 80 8296D DIN (UE8)                  | 324243-04  | 4KB  | E000-EFFF | 2332      | 4.0     | -        | 1982      | Check      | 6502
+CBM 8296 D  | Editor                  | PET Edit 4 80 B 8296 ASCII (UE8)               | 324243-02B | 4KB  | E000-EFFF | 2532      | 4.0     | -        | -         | Check      | 6502
 PET 2001    | -                       | -                                              | 901447-16  | 2KB  | -         | 2316B     | -       | -        | -         | -          | -
 PET 2001    | Character (8 Scanlines) | PET Character (Basic 1/2) (A2)                 | 901439-08  | 2KB  | -         | 6540-010  | -       | -        | -         | 0x54f32f45 | BINARY
 PET 2001    | Character (8 Scanlines) | PET Character (Basic 1/2) (F10, A2)            | 901447-08  | 2KB  | -         | 2316B-08  | -       | -        | -         | 0x54f32f45 | BINARY

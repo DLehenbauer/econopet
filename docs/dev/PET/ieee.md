@@ -2,19 +2,19 @@
 
 ## Signals
 
- Name | Description
-------|------------
+Name   | Description
+-------|------------
 DIO1-8 | Data Input/Output 1-8, used for transmitting and receiving data or commands.
-EOI  | End Or Identify, indicates the last byte of a data transfer or is used in parallel polling.
-DAV  | Data Valid, signals when data is ready on the data bus for reading.
-NRFD | Not Ready For Data, indicates that a device is not ready to accept data.
-NDAC | Not Data Accepted, signals that a device has not yet accepted the data.
-IFC  | Interface Clear, used to initialize the bus and set all devices to a known state.
-SRQ  | Service Request, indicates that a device requires attention from the controller.
-ATN  | Attention, asserted only by the controller to gain attention and to denote address/control information on the data bus.
-SHIELD| Ground shield for reducing electrical noise.
-REN  | Remote Enable, allows the controller to set devices into remote or local mode.
-GND  | Signal Ground, provides a reference point for all signals on the bus.
+EOI    | End Or Identify, indicates the last byte of a data transfer or is used in parallel polling.
+DAV    | Data Valid, signals when data is ready on the data bus for reading.
+NRFD   | Not Ready For Data, indicates that a device is not ready to accept data.
+NDAC   | Not Data Accepted, signals that a device has not yet accepted the data.
+IFC    | Interface Clear, used to initialize the bus and set all devices to a known state.
+SRQ    | Service Request, indicates that a device requires attention from the controller.
+ATN    | Attention, asserted only by the controller to gain attention and to denote address/control information on the data bus.
+SHIELD | Ground shield for reducing electrical noise.
+REN    | Remote Enable, allows the controller to set devices into remote or local mode.
+GND    | Signal Ground, provides a reference point for all signals on the bus.
 
 ## Addresses
 
@@ -56,12 +56,12 @@ PIA Addressing
 
 Address | CRA (Bit 2) | CRB (Bit 2) | Read | Write
 --------|-------------|-------------|------|-------
-0 | 1 | x | PIBA | ORA
-0 | 0 | x | DDRA | DDRA
-1 | x | x | CRA | CRA
-2 | x | 1 | PIBB | ORB
-2 | x | 0 | DDRB | DDRB
-3 | x | x | CRB | CRB
+      0 |           1 |           x | PIBA | ORA
+      0 |           0 |           x | DDRA | DDRA
+      1 |           x |           x | CRA  | CRA
+      2 |           x |           1 | PIBB | ORB
+      2 |           x |           0 | DDRB | DDRB
+      3 |           x |           x | CRB  | CRB
 
 ```
 ; cint1 Initialize I/O
