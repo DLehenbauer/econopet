@@ -56,10 +56,16 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/video/tmds_encode.S
 )
 
-# EconoPET 40/8096 Rev. A: xosc requires a little extra time to stabilize.
-# On tested sample (45240-60), 8ms was intermittent and 16ms was reliable.
-# 64ms provides a large tolerance.
-target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
+# EconoPET 40/8096 Rev. A requires extended crystal oscillator startup time.
+#
+# The original PET power supply uses a large electrolytic capacitor (17,000-23,000µF)
+# to filter rectified AC. After extended off periods, insufficient capacitor charge
+# can cause voltage instability during boot, particularly during CRT sync events.
+#
+# Testing on sample 45240-60 showed multiplier values of 8 were intermittent and 16
+# reliable when recently powered, but cold starts may require more. Using the maximum
+# value (174) provides margin across all operating conditions.
+target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=174)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216)
