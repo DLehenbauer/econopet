@@ -32,7 +32,8 @@ void pet_reset() {
 
     usb_keyboard_reset(&system_state);
 
-    memset(video_char_buffer, 0x20, VIDEO_CHAR_BUFFER_BYTE_SIZE);   // Clear video character buffer
+    memset(video_char_buffer, 0x20, 0x800);                         // Clear video character buffer
+    memset(video_char_buffer + 0x800, 0x0f, 0x800);                 // Set color buffer to white on black
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));           // Clear keyboard matrix
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));           // Clear USB keyboard matrix
     
