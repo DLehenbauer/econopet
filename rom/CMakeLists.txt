@@ -26,9 +26,12 @@ add_custom_target("PET_ROM_Assemble" ALL
 )
 
 # Add a custom target to link the object files
+# Uses copy_if_different to avoid updating timestamp when content hasn't changed
 add_custom_target("PET_ROM" ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory ${BIN_DIR}
-    COMMAND ${LD65_EXECUTABLE} -C ${SRC_DIR}/pet.cfg -o ${BIN_DIR}/${ROM_NAME} ${OBJ_DIR}/main.o
+    COMMAND ${LD65_EXECUTABLE} -C ${SRC_DIR}/pet.cfg -o ${BIN_DIR}/${ROM_NAME}.tmp ${OBJ_DIR}/main.o
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BIN_DIR}/${ROM_NAME}.tmp ${BIN_DIR}/${ROM_NAME}
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${BIN_DIR}/${ROM_NAME}.tmp
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Linking object files with LD65"
     DEPENDS "PET_ROM_Assemble"

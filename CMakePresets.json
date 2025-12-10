@@ -15,7 +15,7 @@
             "cacheVariables": {
                 "ECONOPET_ROMS_DIR": {
                     "type": "PATH",
-                    "value": ""
+                    "value": "$env{ECONOPET_ROMS_DIR}"
                 }
             }
         }

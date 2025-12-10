@@ -16,6 +16,6 @@
 
 #include "pch.h"
 
-void fatal(const char* const format, ...);
+void __attribute__((noreturn)) fatal(const char* const format, ...);
 void vet(bool condition, const char* const format, ...);
 void* vetted_malloc(size_t __size);

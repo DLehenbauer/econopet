@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.13)
 project("firmware" C CXX ASM)
 add_compile_options(-Wall -Wextra -Wnull-dereference)
 
+# Include ROM header generation function
+include(${FW_DIR}/cmake/AddRomHeader.cmake)
+
 # Include external projects
 set(FW_EXTERNAL_DIR ${FW_DIR}/external)
 
@@ -121,6 +124,21 @@ include_directories(
     "${FW_EXTERNAL_DIR}/PicoDVI/software/include")
 
 pico_enable_filesystem(${FW_EXECUTABLE_NAME})
+
+# Generate ROM headers from binary files
+# These are generated in the build directory and only updated if content changes
+add_rom_header(${FW_EXECUTABLE_NAME}
+    ${ECONOPET_ROMS_DIR}/characters-2.901447-10.bin
+    ${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h
+)
+
+add_rom_header(${FW_EXECUTABLE_NAME}
+    ${ECONOPET_ROM_BIN_DIR}/menu.rom
+    ${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h
+)
+
+# Add build directory to include path for generated ROM headers
+target_include_directories(${FW_EXECUTABLE_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # create map/bin/hex/uf2 file etc.
 pico_add_extra_outputs(${FW_EXECUTABLE_NAME})

@@ -132,3 +132,18 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
 }
 
 void test_ram() { }
+
+// Mock Pico SDK functions for test builds
+
+// Wait for interrupt (no-op in tests)
+void __wfi() { }
+
+// Nop operation for tight loop contents
+void tight_loop_contents(void) { }
+
+// Mock watchdog enable function (used to reset the system in fatal errors)
+void watchdog_enable(unsigned int delay_ms, bool pause_on_debug) {
+    assert(delay_ms == 0);
+    assert(pause_on_debug == true);
+    abort();
+}

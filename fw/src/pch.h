@@ -44,6 +44,7 @@
     #include "hardware/sync.h"
     #include "hardware/uart.h"
     #include "hardware/vreg.h"
+    #include "hardware/watchdog.h"
     #include "pico/binary_info.h"
     #include "pico/flash.h"
     #include "pico/multicore.h"

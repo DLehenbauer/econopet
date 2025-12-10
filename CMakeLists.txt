@@ -86,6 +86,8 @@ if(BUILD_FIRMWARE)
         -DPICO_PLATFORM=rp2040
         -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
         -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+        -DECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}
+        -DECONOPET_ROM_BIN_DIR=${SUPER_BUILD_DIR}/rom/bin
     )
     
     ExternalProject_Add(firmware_project

@@ -2,6 +2,12 @@
 
 .segment "CODE"
 
+; Jump table for reset vector at $FF00 - each entry is 3 bytes (JMP instruction).
+; The firmware selects the boot tune by writing $FF00 + (entry * 3) to the reset vector.
+reset_vector_table:
+        JMP reset_happy         ; Entry 0: Normal boot ($FF00)
+        JMP reset_uhoh          ; Entry 1: Error boot ($FF03)
+
 ; PIA1 and PIA2 declarations haven't yet been picked up by Ubuntu 'cc65' package.
 ; https://github.com/cc65/cc65/commit/12f9a2f1f87b90d0ec880bc4e76be10996150b9f
 
@@ -212,9 +218,15 @@ debounce:
         BPL keyscan_loop    ; Continue scanning
 .endproc
 
-.proc reset_handler
+.proc reset_happy
         JSR init_io
         JSR play_happy_tune
+        JMP keyscan
+.endproc
+
+.proc reset_uhoh
+        JSR init_io
+        JSR play_uhoh_tune
         JMP keyscan
 .endproc
 
@@ -244,6 +256,6 @@ debounce:
 .segment "VECTORS"      ; $FFFA-$FFFF
 
 vectors:
-    .word nmi_handler   ; NMI vector (low byte at $FFFA, high byte at $FFFB)
-    .word reset_handler ; Reset vector (low byte at $FFFC, high byte at $FFFD)
-    .word irq_handler   ; IRQ/BRK vector (low byte at $FFFE, high byte at $FFFF)
+    .word nmi_handler         ; NMI vector (low byte at $FFFA, high byte at $FFFB)
+    .word reset_vector_table  ; Reset vector (low byte at $FFFC, high byte at $FFFD)
+    .word irq_handler         ; IRQ/BRK vector (low byte at $FFFE, high byte at $FFFF)
