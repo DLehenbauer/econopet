@@ -45,7 +45,7 @@ The W65C22N datasheet notes that the 'N' variant has built-in current limiting r
 
 I asked about this in a Facebook group, and received this reply from Bill Mensch:
 
-> The "N" version was created to be similar to the NMOS replacement version for IO voltage s for TTL compatibility and pull-up resistor characteristics. Shorting out the pins is never a good idea, that said this design is very forgiving.
+> The "N" version was created to be similar to the NMOS replacement version for IO voltages for TTL compatibility and pull-up resistor characteristics. Shorting out the pins is never a good idea, that said this design is very forgiving.
 
 Based on the above, I've added a 470 ohm series resistor to relieve the stress on the VIA and further attenuate any effect on the VERT signal.
 

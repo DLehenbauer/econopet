@@ -10,9 +10,9 @@
  BASIC 4.0      | ROM 4.0        | 4.0        | Basic Level IV
  BASIC 4.0R     | ROM 4.1        | 4.0        | Basic Level IV
 
-* [ROM Genealogy](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/31/mode/1up)
-* [ROM Genealogy](http://penguincentral.com/retrocomputing/PET/petroms.pdf) is official Commodore documentation preserved by Ethan Dicks.
-* Jim Butterfield [article](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n10/mode/1up)
+* [ROM Genealogy](http://penguincentral.com/retrocomputing/PET/petroms.pdf) is official Commodore documentation preserved by Ethan Dicks
+* [ROM Genealogy](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/31/mode/1up) is a subset of the above from Commodore Newsletter Vol 1, No 10 (1982)
+* Jim Butterfield's [What Software Do I Have?](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n10/mode/1up) article in Interface Magazine (July 1981)
 
 ## ROM 1.0
 
@@ -26,7 +26,7 @@ Highlights:
 * IEEE-488 input not working
 * Tape data files had potential problems
 * No machine language monitor
-* Screen output polls for vertical refresh to avoid "sparkle".
+* Screen output polls for vertical refresh to avoid "sparkle" (see [killerpoke.md](killerpoke.md))
 
 Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32   | Checksum
 --------|----------|----------|------------|-----------|-------------|----------|---------
@@ -101,14 +101,14 @@ Characters  | characters-1.901447-08.bin      |   2048 | 54f32f45
 
 Highlights:
 
-* Changed the banner ("***" -> "###").
-* Fixed support for commodore disk system.
-* Adds machine language monitor.
-* Further improved garbage collection.
+* Changed the banner ("***" -> "###")
+* Fixed support for commodore disk system
+* Adds machine language monitor
+* Further improved garbage collection
 * Re-arranged the zero-page and ROM entry points
-* Adds ROM set for business keyboards.
-* New character ROM (swaps upper/lower case).
-* Screen output polls for vertical refresh to avoid "sparkle".
+* Adds ROM set for business keyboards
+* New character ROM (swaps upper/lower case)
+* Screen output polls for vertical refresh to avoid "sparkle" (see [killerpoke.md](killerpoke.md))
 
 ### PET 2001 / 30xx
 
@@ -578,9 +578,10 @@ Kernal      | kernal-4.901465-22.bin          |   4096 | cc5298a1
 Characters  | characters-2.901447-10.bin      |   2048 | d8408674
 
 The Basic ROM is a concatenation of:
-  901465-23 ($B***)
-  901465-20 ($C***)
-  901465-21 ($D***)
+
+* 901465-23 ($B***)
+* 901465-20 ($C***)
+* 901465-21 ($D***)
 
 ## 8296
 
@@ -595,10 +596,11 @@ Char ASCII   | -       | UE5      | -         | 901447-10 | -        | -
 Char DIN     | -       | UE5      | -         | 324242-01 | -        | -
 
 The Basic/Kernal ROM is a concatenation of:
-  901465-23 ($B***)
-  901465-20 ($C***)
-  901465-21 ($D***)
-  901465-22 ($F***)
+
+* 901465-23 ($B***)
+* 901465-20 ($C***)
+* 901465-21 ($D***)
+* 901465-22 ($F***)
 
 ## 8296D
 
