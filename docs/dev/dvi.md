@@ -1,20 +1,6 @@
 # PicoDVI
 
-```patch
-diff --git a/software/libdvi/dvi.c b/software/libdvi/dvi.c
-index a00bb93..f2f3901 100644
---- a/software/libdvi/dvi.c
-+++ b/software/libdvi/dvi.c
-@@ -43,7 +43,7 @@ void dvi_init(struct dvi_inst *inst, uint spinlock_tmds_queue, uint spinlock_col
-        for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
-                void *tmdsbuf;
- #if DVI_MONOCHROME_TMDS
--               tmdsbuf = malloc(inst->timing->h_active_pixels / DVI_SYMBOLS_PER_WORD * sizeof(uint32_t));
-+               tmdsbuf = malloc(inst->timing->h_active_pixels * sizeof(uint32_t));
- #else
-                tmdsbuf = malloc(3 * inst->timing->h_active_pixels / DVI_SYMBOLS_PER_WORD * sizeof(uint32_t));
- #endif
- ```
+**Note:** Requires heap corruption fix [here](https://github.com/Wren6991/PicoDVI/pull/97).
 
 EconoPET uses the same DVI pinout as 'micromod_cfg' (See https://www.sparkfun.com/products/17718)
 
@@ -28,12 +14,13 @@ static const struct dvi_serialiser_cfg micromod_cfg = {
 };
 ```
 
-# PicoDVI library experiments
+## Historical Experiments
 
 * Must queue one scanline before starting core1 loop or get a red screen
 * Interrupt driven output avoids corruption of left edge.
 
-# 80 columns w/palette
+### 80 columns w/palette
+
 Hacking the 'mandel-full' example, even with vertical doubling, consumes nearly 100% of core to display a static scanline.
 
 ```c
@@ -183,7 +170,8 @@ int __not_in_flash("main") main() {
 }
 ```
 
-# 80 Column w/16 colors
+### 80 Column w/16 colors
+
 Hacking the 'colour_terminal' example produces 80 columns with CGA colors, but has some downsides:
 
 1. Font data needs to be swizzled to be scanline oriented.
