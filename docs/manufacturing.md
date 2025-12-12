@@ -39,13 +39,12 @@ The manufacturing files for JLCPCB are located in `hw/rev-a/production/`:
    - Select **SMT Assembly** service on the order page
    - Upload `bom.csv` for the Bill of Materials
    - Upload `positions.csv` for component placement data
-   - JLCPCB will calculate assembly costs based on component availability
-   - The FPGA should now be available through your global sourcing pre-order
+   - JLCPCB will calculate the total cost for the componants and assembly
 
 5. **Complete Your Order**
    - Review the order summary and component selections
    - Proceed to checkout and payment
-   - JLCPCB will manufacture the PCB and assemble components as available
+   - JLCPCB will manufacture the PCB, assembly components, and send to you in the mail
 
 ## Through-Hole Assembly
 
