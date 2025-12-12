@@ -2,6 +2,8 @@
 
 Open hardware mainboard replacement for Commodore PET/CBM 2001/30xx/40xx/80xx machines. The EconoPET can also run standalone with HDMI display and USB keyboard.
 
+![EconoPET running Space Invaders](site/dist/assets/EconoPET-Invaders.jpg)
+
 ## User Resources
 
 See the [project page](https://dlehenbauer.github.io/econopet) for user manual and firmware updates.
