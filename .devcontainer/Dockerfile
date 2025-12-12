@@ -247,6 +247,24 @@ RUN mkdir -p /opt/verible && \
     rm -rf /tmp/${VERIBLE_ARCHIVE}
 ENV PATH="/opt/verible/bin:${PATH}"
 
+# Install FNM (Fast Node Manager) for managing Node.js versions
+# (See: https://github.com/Schniz/fnm)
+ENV FNM_DIR="/opt/fnm"
+RUN mkdir -p ${FNM_DIR} && \
+    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir ${FNM_DIR} --skip-shell && \
+    chmod +x ${FNM_DIR}/fnm
+ENV PATH="${FNM_DIR}:$PATH"
+
+# Install the latest Node.js LTS version
+RUN eval "$(fnm env)" && \
+    fnm install --lts && \
+    fnm default lts-latest && \
+    node --version && \
+    npm --version
+
+# Setup FNM in shell profile for root user
+RUN echo 'eval "$(fnm env --use-on-cd)"' >> /root/.bashrc
+
 # Download required ROMs (with MD5 verification)
 # Note: Build context is the .devcontainer folder, so copy relative to it.
 ENV ECONOPET_ROMS_DIR="/opt/econopet/roms"
