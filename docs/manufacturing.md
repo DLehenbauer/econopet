@@ -4,11 +4,11 @@ I use [JLCPCB](https://jlcpcb.com/) to manufacture the PCB and assemble the surf
 
 ## Ordering from JLCPCB
 
-If you've never ordered a PCB before, it's pretty straightforward, but it might be worth getting in touch so we can walk through it together the first time.
+If you've never ordered a PCB before, it's pretty straightforward, but it might be worth getting in touch so we can walk through it together the first time.  You can find me on the [Commodore PET/CBM Enthusiast](https://www.facebook.com/groups/214556078753960) group on Facebook (highly recommended) or [open a GitHub issue](https://github.com/DLehenbauer/econopet/issues/new) on this repository with any questions.
 
 1. You upload your design files (Gerber files for the PCB layout and CSV files for component placement) to a manufacturer, in this case JLCPCB.
 2. The manufacturer fabricates the circuit board and automatically places and solders the surface-mount (SMT) components onto it
-3. They perform quality testing and mail the boards to you
+3. They perform quality testing and ship the boards to you
 
 **Minimum Order Quantity:** JLCPCB requires ordering a minimum of 5 PCBs. You can choose to have 2-5 of these boards assembled with SMT components. The unpopulated bare PCBs will be shipped along with the assembled boards.
 
@@ -39,27 +39,150 @@ The manufacturing files for JLCPCB are located in `hw/rev-a/production/`:
    - Select **SMT Assembly** service on the order page
    - Upload `bom.csv` for the Bill of Materials
    - Upload `positions.csv` for component placement data
-   - JLCPCB will calculate the total cost for the componants and assembly
+   - JLCPCB will calculate the total cost for the components and assembly
 
 5. **Complete Your Order**
    - Review the order summary and component selections
    - Proceed to checkout and payment
-   - JLCPCB will manufacture the PCB, assembly components, and send to you in the mail
+   - JLCPCB will manufacture the PCB, assemble the components, and ship the boards to you
 
 ## Through-Hole Assembly
 
 After receiving your boards from JLCPCB, you'll need to solder the through-hole components. You can source all through-hole components from [Mouser Electronics](https://www.mouser.com).
 
-### Assembly Order
+> **💡 Tip:** While Mouser part numbers are given for completeness, the following through-hole components are common parts available inexpensively in bulk from various sources (Amazon, AliExpress, eBay, etc.)
+>
+> - Break-away pin headers (2.54mm pitch, 1 and 2 rows)
+> - Jumper caps (2.54mm pitch)
+> - Tactile push buttons (6.0x3.5mm, 2 pin)
+> - Right-angled push buttons (6mm)
+> - PCB mounting pillars (nylon, 11mm height, adhesive base)
+> - DC power jacks (5.5mm, 2.1mm center pin)
+
+### BOM for Through-Hole Components
+
+Mfr Part Number|Mouser Part Number|Order Quantity|Description|Datasheet URL
+-|-|-|-|-
+W65C02S6TPG-14|955-W65C02S6TPG-14|1|W65C02S CPU (DIP-40). Do not substitute other 6502 variants.|[datasheet](https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
+W65C21N6TPG-14|955-W65C21N6TPG-14|2|W65C21N PIA (DIP-40). Do not substitute W65C21S (lacks current limiting resistors).|[datasheet](https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf)
+W65C22N6TPG-14|955-W65C22N6TPG-14|1|W65C22N VIA (DIP-40). Do not substitute W65C22S (lacks current limiting resistors).|[datasheet](https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf)
+AS6C1008-55PCN|913-AS6C1008-55PCN|1|128KB SRAM (DIP-32, 55ns)|[datasheet](https://www.mouser.com/datasheet/3/893/1/AS6C1008_Mar_2023V1.2.pdf)
+1-2199299-5|571-1-2199299-5|4|DIP-40 IC Socket (optional but recommended)|[datasheet](https://www.mouser.com/catalog/additional/Tyco%20Electronics_1-1773906-9_DIP_Socket_QRG_012017.pdf)
+DILB32P-223TLF|649-DILB32P223TLF|1|DIP-32 IC Socket (optional but recommended)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10052485.pdf)
+640384-9|571-6403849|1|PET power connector (optional if using stand-alone)|[datasheet](https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=640384&DocType=Customer+Drawing&DocLang=English&PartCntxt=640384-9&DocFormat=pdf)
+10129378-936003BLF|649-1012937893603BLF|1|36x1 Header: PET keyboard/video (optional if using stand-alone)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129378.pdf)
+AT-1220-TT-9-R|665-AT1220TT9R|1|Internal PCB mounted speaker (optional)|[datasheet](https://www.mouser.com/datasheet/3/360/1/specs_AT_1220_TT_9_R.pdf)
+SJ-43504-SMT-TR|490-SJ-43504-SMT-TR|1|3.5mm Audio Jack (required for sound)|[datasheet](https://www.mouser.com/datasheet/3/6118/1/sj_43504_smt_tr.pdf)
+DS04-254-1L-02BK|490-DS04-254-1L-02BK|1|DIP Switch (config display and keyboard)|[datasheet](https://www.mouser.com/datasheet/3/6118/1/ds04_254.pdf)
+MSA-G|737-MSA-G|1|Jumper cap (config Video or 5V)|[datasheet](https://www.mouser.com/datasheet/3/6015/1/msa_g_data_sheet.pdf)
+MJTP1117|642-MJTP1117|1|Right-angled Button (Menu)|[datasheet](https://www.mouser.com/catalog/specsheets/Apem_04-15-2025_MJTP%20Series-6MM.pdf)
+PTS636SK43 LFS|611-PTS636SK43LFS|4|Push Buttons: Flash & Run required, Reset & NMI optional|[datasheet](https://www.ckswitches.com/media/2779/pts636.pdf)
+10129381-950002BLF|649-1012938195002BLF|2|25x2 Header: bus, user, MCU, 5V, menu (optional breakouts)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129381.pdf)
+10129381-940002BLF|649-1012938194002BLF|1|20x2 Header: IEEE, KeyEx (optional breakouts)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129381.pdf)
+613012243121|710-613012243121|2|PMOD Connectors (6x2, right angle, optional)|[datasheet](https://www.we-online.com/components/products/datasheet/613012243121.pdf)
+61201621621|710-61201621621|1|SWD/JTAG (8x2 pin, shrouded, optional)|[datasheet](https://www.we-online.com/components/products/datasheet/61201621621.pdf)
+10129378-910002BLF|649-1012937891002BLF|2|10x1 Header: User config (required) and cassette, 6V, 9V (optional breakouts)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129378.pdf)
+SC1628|358-SC1628|1|32GB microSD card (known good, but feel free to try what you have on hand)|[datasheet](https://www.mouser.com/catalog/additional/Raspberry_Pi_rpi_sdcard_EU_DoC.pdf)
+RASPC722X|502-RASPC722X|1|DC Power Jack (optional: for standalone use)|[datasheet](https://www.mouser.com/datasheet/3/144/1/rapc722x_cd.pdf)
+LCBSBM-7-01A-RT|144-LCBSBM-7-01A-RT|2|PCB Mounting Pillar (get 4 if using standalone)[^part-unverified]|[datasheet](https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt)
+
+### Assembly
 
 The back of the PCB lists a recommended assembly order, generally sorted by component height (shortest first). This order is not critical. It's perfectly fine to skip optional components (such as header pins) and add them later if desired.
+
+> **⚠️ Warning: Silkscreen Error (rev 40/8096-A)**
+>
+> Steps 22-23 on the silkscreen incorrectly list "8x2 Header (2)", implying two 8x2 pin headers are needed. In reality, one of these is the shrouded JTAG/SWD connector (part #61201621621), not a standard pin header.
+>
+> **Do not cut an extra 8x2 header** from your 25x2 or 20x2 pin headers, as this will leave you short on parts.
+>
+> Additionally, since the shrouded JTAG/SWD connector is taller than standard headers, the assembly order should list it after the speaker (step 30.5) instead of 22-23 as is currently printed.
 
 ### Component Orientation
 
 Most through-hole components are either symmetrical or can only be inserted one way, so orientation is straightforward. However, there are a few components that require careful attention:
 
-- **ICs and IC Sockets:** These must be oriented correctly. Both the IC and its socket have a notch on one end that should face the top of the board, as indicated by the silk screen markings.
+- **ICs and IC Sockets:** These must be oriented correctly. Both the IC and its socket have a notch on one end that should face the top of the board, as indicated by the silkscreen markings.
 
-- **Optional Polarized Capacitors:** There are two optional polarized capacitors that are typically not populated. If you choose to install them, the stripe on the capacitor (indicating the negative lead) should face the negative lead as indicated on the silkscreen.
+- **DIP Switch:** The DIP switch should be oriented so the 'ON' position faces towards the FPGA to match the silkscreen markings.
+
+- **Optional Polarized Capacitors:** There are two optional polarized capacitors that are typically not populated. If you choose to install them, the stripe on the capacitor (indicating the negative lead) should align with the negative marking on the silkscreen.
 
 For all other components, refer to the silkscreen markings on the PCB for guidance if you're unsure about polarity or orientation.
+
+### Header Splitting & Keying
+
+Break-away pin headers are sold in long strips that must be divided into the required sizes. To split a header, use side cutters or a razor saw to cut between pins at the indicated positions. When cut, pin headers can sometimes break unevenly or at the wrong point, so it's a good idea to order some spares.
+
+#### 1x36 Header (PET Keyboard/Video)
+
+**Note:** Mouser part (649-1012937893603BLF) is a slightly taller header that matches the pin length used by Commodore in my CBM 8032. Likely, a standard height header can be substituted.
+
+```txt
+               cut                                       cut
+      Video     ↓                Keyboard                 ↓
+|------ 7 ------|------------------ 20 -------------------|-------- 9 --------|
+| O _ O O O O O | O _ O O O O O O O O O O O O O O O O O O | O O O O O O O O O |
+    ↑               ↑
+ remove          remove
+  (key)           (key)
+```
+
+#### 25x2 Headers (Bus/User/MCU/5V/Menu)
+
+**Note:** There are two 25x2 pin headers in the BOM. One is used uncut for the bus expansion breakout. The other is divided as shown below.
+
+```txt
+                     cut                     cut     cut
+           MCU        ↓          User         ↓  5V   ↓ Menu
+|--------- 10 --------|---------- 11 ---------|-- 3 --| 1 |
+| O O O O O O O O O O | O O O O O O O O O O O | O O O | O |
+| O O O O O O O O O O | O O O O O O O O O O O | O O O | O |
+```
+
+#### 20x2 Header (IEEE/KeyEx)
+
+```txt
+                 cut                 cut       
+       KeyEx      ↓       IEEE        ↓
+|------- 8 -------|-------- 9 --------|-- 3 --|
+| O O O O O O O O | O O O O O O O O O | O O O |
+| O O O O O O O O | O O O O O O O O O | O O O |
+```
+
+#### 10x1 Headers (User port cfg/Cassette/9V/6V)
+
+**Note:** There are two 10x1 pin headers in the BOM. Both need to be divided differently, as shown below.
+
+##### 10x1 Header #1 (User port config, cassette)
+
+```txt
+       cut           cut
+   Cfg  ↓     Cass    ↓
+|-- 3 --|----- 6 -----| 1 |
+| O O O | O O O O O O | O |
+```
+
+##### 10x1 Header #2 (9V, cassette, 6V)
+
+```txt
+     cut           cut
+  9V  ↓     Cass    ↓  6V
+|- 2 -|----- 6 -----|- 2 -|
+| O O | O O O O O O | O O |
+```
+
+#### PET Power Connector
+
+The PET power connector is a larger 3.93mm pitch connector with 9 pins. Two pins must be removed to key the connector correctly.
+
+```txt
+         Power
+|--------- 9 ---------|
+| O O _ _ O O O O O O |
+      ↑ ↑
+    remove
+    (key)
+```
+
+[^part-unverified]: This part is untested, but expected to work based on the product description.
