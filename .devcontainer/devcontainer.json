@@ -9,15 +9,17 @@
         "vscode": {
             // Add the IDs of extensions you want installed when the container is created.
             "extensions": [
-                "chris-hock.pioasm""DavidAnson.vscode-markdownlint",
+                "chris-hock.pioasm",
+                "DavidAnson.vscode-markdownlint",
                 "marus25.cortex-debug",
-                "mcu-debug.peripheral-viewer", // Required by 'marus25.cortex-debug'
+                "mcu-debug.peripheral-viewer",
                 "ms-vscode.cpptools-extension-pack",
                 "mshr-h.veriloghdl",
                 "mutantdino.resourcemonitor",
                 "saoudrizwan.claude-dev",
+                "shd101wyy.markdown-preview-enhanced",
                 "streetsidesoftware.code-spell-checker",
-                "xaver.clang-format",
+                "xaver.clang-format"
             ]
         }
     },
