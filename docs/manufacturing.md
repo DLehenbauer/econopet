@@ -4,6 +4,8 @@ I use [JLCPCB](https://jlcpcb.com/) to manufacture the PCB and assemble the surf
 
 ## Ordering from JLCPCB
 
+> **⚠️ Warning:** Rev A isn't perfect. Before ordering, please review the project's [known issues](https://github.com/DLehenbauer/econopet/issues?q=state%3Aopen%20label%3A40%2F8096-A) and understand that some fixes may require minor component rework after boards are received from JLCPCB.
+
 If you've never ordered a PCB before, it's pretty straightforward, but it might be worth getting in touch so we can walk through it together the first time.  You can find me on the [Commodore PET/CBM Enthusiast](https://www.facebook.com/groups/214556078753960) group on Facebook (highly recommended) or [open a GitHub issue](https://github.com/DLehenbauer/econopet/issues/new) on this repository with any questions.
 
 1. You upload your design files (Gerber files for the PCB layout and CSV files for component placement) to a manufacturer, in this case JLCPCB.
@@ -106,7 +108,9 @@ Most through-hole components are either symmetrical or can only be inserted one 
 
 - **DIP Switch:** The DIP switch should be oriented so the 'ON' position faces towards the FPGA to match the silkscreen markings.
 
-- **Optional Polarized Capacitors:** There are two optional polarized capacitors that are typically not populated. If you choose to install them, the stripe on the capacitor (indicating the negative lead) should align with the negative marking on the silkscreen.
+- **Polarized Capacitors:** There are two optional polarized capacitors. If you choose to install them, the stripe on the capacitor (indicating the negative lead) should align with the negative marking on the silkscreen.
+
+- **JTAG/SWD Connector:** The shrouded JTAG/SWD connector has a keyed design to ensure correct orientation. The notch should face downward toward the HDMI connector, corresponding with the marking on the silkscreen.
 
 For all other components, refer to the silkscreen markings on the PCB for guidance if you're unsure about polarity or orientation.
 
@@ -186,3 +190,42 @@ The PET power connector is a larger 3.93mm pitch connector with 9 pins. Two pins
 ```
 
 [^part-unverified]: This part is untested, but expected to work based on the product description.
+
+## Bootstrapping the Firmware
+
+Normally, firmware upgrades are performed via the microSD card. However, the initial installation of the firmware requires a bootloader to be flashed onto the EconoPET via USB.
+
+The full steps for bootstrapping the EconoPET firmware are:
+
+1. Initialize a microSD card with the firmware files
+1. Install the bootloader onto the EconoPET via USB (one time only)
+1. Power on the EconoPET to load the firmware from the microSD card
+
+Each of these steps is described in detail below.
+
+> **⚠️ Note:** To avoid a "bright spot" on the CRT, it is best to install the bootloader and perform the *initial* firmware installation outside the CBM/PET machine using a separate 9V DC power supply.
+
+### Initializing the microSD Card
+
+The EconoPET uses a microSD card to configure the system at power on and reset. To prepare a microSD card for the EconoPET, or upgrade the firmware in the future, you will need to perform the following steps:
+
+- Download and unzip the latest firmware from the EconoPET site: https://dlehenbauer.github.io/econopet/40-8096-A.html
+- Format the microSD card with the FAT32 or exFAT filesystem
+- Copy the unzipped contents of the firmware archive to the root of the microSD card
+
+If you have trouble formatting the microSD card, try the SD Memory Card Formatter tool from the SD Association: https://www.sdcard.org/downloads/
+
+> **⚠️ Note:** The microSD card reader uses a push-to-eject mechanism for card removal. Do not remove the card by pulling. Please be gentle with PCB mounted connectors.
+
+### Installing the EconoPET Bootloader
+
+1. With the board removed from your CBM/PET, connect a USB cable from the EconoPET's USB-C port to your computer.
+1. Enter flash mode:
+   - Press and hold the FLASH button on the EconoPET.
+   - While holding FLASH, connect 9V DC power to the EconoPET (use DC jack or 2-pin breakout).
+   - After a couple of seconds, you can release the FLASH button.
+1. The EconoPET will appear on your PC as a USB mass storage device named RPI-RP2.
+1. Copy the bootloader file: Drag and drop the bootloader.uf2 file into the RPI-RP2 drive. (bootloader.uf2 is contained in the same .zip used to initialize the microSD card.)
+1. After the file is copied, the EconoPET will automatically reboot and finish the firmware update from the microSD card. (Green LED will blink rapidly during this process.)
+1. When the flashing process is complete, you will hear a happy 4-note beep from the speaker.
+1. Disconnect power and the USB cable and proceed to install in the PET.

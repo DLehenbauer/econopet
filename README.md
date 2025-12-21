@@ -10,7 +10,7 @@ See the [project page](https://dlehenbauer.github.io/econopet) for user manual a
 
 ## Manufacturing
 
-For instructions on ordering an EconoPET board from JLCPCB, including manufacturing files, see [docs/manufacturing.md](docs/manufacturing.md).
+Rev. A has been released. For manufacturing and assembly instructions, see [docs/manufacturing.md](docs/manufacturing.md).
 
 ## Development
 
