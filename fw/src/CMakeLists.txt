@@ -61,13 +61,12 @@ add_executable(${FW_EXECUTABLE_NAME}
 
 # EconoPET 40/8096 Rev. A requires extended crystal oscillator startup time.
 #
-# The original PET power supply uses a large electrolytic capacitor (17,000-23,000µF)
-# to filter rectified AC. After extended off periods, insufficient capacitor charge
-# can cause voltage instability during boot, particularly during CRT sync events.
+# The YSX321SL crystal used in the EconoPET 40/8096 Rev. A requires a longer startup
+# time than the default used by the RP2040 SDK.
 #
 # Testing on sample 45240-60 showed multiplier values of 8 were intermittent and 16
-# reliable when recently powered, but cold starts may require more. Using the maximum
-# value (174) provides margin across all operating conditions.
+# reliable when recently powered, but variance between boards or cold starts may require
+# more. Using the maximum value (174) provides margin across all operating conditions.
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=174)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
