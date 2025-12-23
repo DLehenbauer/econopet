@@ -1,18 +1,16 @@
 {
   "name": "site",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.0.1",
+  "description": "Static gh-pages site for EconoPET",
   "main": "index.js",
   "scripts": {
-    "deploy": "gh-pages -d dist",
     "test": "http-server ./dist -p 8080"
   },
   "keywords": [],
-  "author": "",
+  "author": "Daniel Lehenbauer and contributors",
   "license": "CC0",
   "homepage": "https://dlehenbauer.github.io/econopet",
   "devDependencies": {
-    "gh-pages": "^6.0.0",
     "http-server": "^14.1.1"
   }
 }
