@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "../src/menu/window.h"
+#include "../src/display/window.h"
 #include "window_test.h"
 
 #define WIDTH 5

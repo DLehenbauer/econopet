@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "../pch.h"
+#include "pch.h"
  
 typedef struct window_s {
     // Pointers to start/end of character buffer.

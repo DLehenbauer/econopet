@@ -14,7 +14,7 @@
 
 #include "fatal.h"
 #include "global.h"
-#include "menu/window.h"
+#include "display/window.h"
 #include "roms/roms.h"
 #include "term.h"
 #include "video/video.h"

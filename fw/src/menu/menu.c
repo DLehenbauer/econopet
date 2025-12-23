@@ -26,7 +26,7 @@
 #include "video/video.h"
 #include "menu.h"
 #include "menu_config.h"
-#include "window.h"
+#include "display/window.h"
 #include "usb/keyboard.h"
 #include "roms/checksum.h"
 #include "display/char_encoding.h"

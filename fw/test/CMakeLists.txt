@@ -22,10 +22,10 @@ add_executable(${PROJECT_NAME}
     #${TEST_DIR}/menu_test.c
     ${SRC_DIR}/config/config.c
     ${SRC_DIR}/display/char_encoding.c
+    ${SRC_DIR}/display/window.c
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
-    ${SRC_DIR}/menu/window.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/term.c
     ${SRC_DIR}/usb/keyscan.c

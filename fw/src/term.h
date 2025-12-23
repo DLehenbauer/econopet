@@ -15,7 +15,7 @@
 #pragma once
 
 #include "pch.h"
-#include "menu/window.h"
+#include "display/window.h"
 
 // Define constants for special keys
 #define KEY_UP    1000

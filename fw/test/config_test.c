@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 #include "system_state.h"
-#include "menu/window.h"
+#include "display/window.h"
 #include "menu/menu_config.h"
 
 #define COLS 40

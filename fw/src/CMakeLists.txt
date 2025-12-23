@@ -39,7 +39,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/main.c
     ${FW_SRC_DIR}/menu/menu.c
     ${FW_SRC_DIR}/menu/menu_config.c
-    ${FW_SRC_DIR}/menu/window.c
+    ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c

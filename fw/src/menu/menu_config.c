@@ -19,7 +19,7 @@
 #include "driver.h"
 #include "term.h"
 #include "global.h"
-#include "window.h"
+#include "display/window.h"
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config

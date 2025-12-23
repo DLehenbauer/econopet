@@ -16,7 +16,7 @@
 
 #include "pch.h"
 #include "config/config_setup.h"
-#include "menu/window.h"
+#include "display/window.h"
 
 typedef void (*on_enter_config_fn_t)(void* context);
 typedef void (*on_exit_config_fn_t)(void* context, const char* name);
