@@ -383,8 +383,7 @@ module main (
     logic                  bram_wb_ack;
 
     bram #(
-        .DATA_DEPTH(4096),      // 4KB for character ROM (2 character sets x 2KB each)
-        .ADDR_WIDTH(BRAM_ADDR_WIDTH)
+        .DATA_DEPTH(4096)   // 4KB for character ROM (2 character sets x 2KB each)
     ) bram (
         .wb_clock_i(sys_clock_i),
         .wbp_addr_i(wb_addr),

@@ -15,7 +15,7 @@
 import common_pkg::*;
 
 module bram #(
-    parameter DATA_DEPTH = 4096,
+    parameter DATA_DEPTH,
     parameter ADDR_WIDTH = $clog2(DATA_DEPTH)
 ) (
     // Wishbone B4 peripheral
@@ -51,14 +51,14 @@ module bram #(
     wire [ADDR_WIDTH-1:0] mem_addr = wbp_addr_i[ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
+        wbp_ack_o <= '0;
+
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= mem[mem_addr];
             if (wbp_we_i) begin
                 mem[mem_addr] <= wbp_data_i;
             end
             wbp_ack_o <= 1'b1;
-        end else begin
-            wbp_ack_o <= '0;
         end
     end
 endmodule

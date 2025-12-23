@@ -17,8 +17,7 @@
 import common_pkg::*;
 
 module bram_tb #(
-    parameter BRAM_DATA_DEPTH = 512,
-    parameter BRAM_ADDR_WIDTH = $clog2(BRAM_DATA_DEPTH)
+    parameter BRAM_DATA_DEPTH = 512
 );
     logic                     clock;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(clock));
@@ -34,8 +33,7 @@ module bram_tb #(
     logic                     stall;
 
     bram #(
-        .DATA_DEPTH(BRAM_DATA_DEPTH),
-        .ADDR_WIDTH(BRAM_ADDR_WIDTH)
+        .DATA_DEPTH(BRAM_DATA_DEPTH)
     ) mem (
         .wb_clock_i(clock),
         .wbp_addr_i(addr),
