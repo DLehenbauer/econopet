@@ -1,3 +1,7 @@
+# Extensions
+
+This document outlines potential extensions for the EconoPET 40/8096.
+
 ## Memory Mapped Extensions
  
 Range         | Description
@@ -17,6 +21,8 @@ Range         | Description
 * 1 bit: ColourPET color data address (`$8400` or `$8800`)
 * 1 bit: SID at $8F00
 * 1 bit: Writable character bitmaps (at what address?)
+* 7 bits: Enable "ROMs" (1 bit each for `$9xxx`, `$Axxx`, etc.)
+  * Controls whether accesses to these areas go to SRAM or the expansion port
 * 7 bits: Write enable "ROMs" (1 bit each for `$9xxx`, `$Axxx`, etc.)
 
 ## Potential Control Register Locations
