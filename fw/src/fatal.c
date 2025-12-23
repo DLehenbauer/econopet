@@ -60,15 +60,6 @@ void fatal(const char* const format, ...) {
     va_end(args);
 }
 
-void vet(bool condition, const char* const format, ...) {
-    if (!condition) {
-        va_list args;
-        va_start(args, format);
-        vfatal(format, args);
-        va_end(args);
-    }
-}
-
 void* vetted_malloc(size_t __size) {
     // TODO: Use preallocated memory only in low memory situations.
     void* p = malloc(__size);
