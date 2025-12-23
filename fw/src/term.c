@@ -13,19 +13,7 @@
  */
 
 #include "term.h"
-
-// This table maps from PET character ROM offsets to the closest VT-100 supported equivalents.
-static const char* const term_chars_lower[] = {
-    //            0        1     2    3    4    5    6    7    8    9    A    B     C    D    E    F
-    /* 00 */         "@", "a",  "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",  "l",         "m",         "n", "o",
-    /* 10 */         "p", "q",  "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "\\",         "]",         "^", "<",
-    /* 20 */         " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+",  ",",         "-",         ".", "/",
-    /* 30 */         "0", "1",  "2", "3", "4", "5", "6", "7", "8", "9", ":", ";",  "<",         "=",         ">", "?",
-    /* 40 */ "\e(0q\e(B", "A",  "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",  "L",         "M",         "N", "O",
-    /* 50 */         "P", "Q",  "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "_",  "_", "\e(0x\e(B",         "_", "_",
-    /* 60 */         "_", "_",  "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",  "_", "\e(0m\e(B", "\e(0k\e(B", "_",
-    /* 70 */ "\e(0l\e(B", "_",  "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",  "_", "\e(0j\e(B",         "_", "_"
-};
+#include "display/char_encoding.h"
 
 static const char* const home = "\e[H";
 static const char* const reverse_off = "\e[m";
@@ -67,7 +55,7 @@ void term_display(const window_t* const window) {
                 fputs(reverse ? reverse_on : reverse_off, stdout);
             }
 
-            fputs(term_chars_lower[ch & 0x7F], stdout);
+            fputs(vrom_to_term(ch), stdout);
         }
         fputs("\r\n", stdout);
     }

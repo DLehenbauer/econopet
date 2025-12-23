@@ -21,6 +21,7 @@ set(TEST_DIR ${FW_DIR}/test)
 add_executable(${PROJECT_NAME}
     #${TEST_DIR}/menu_test.c
     ${SRC_DIR}/config/config.c
+    ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
@@ -29,6 +30,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/term.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
+    ${TEST_DIR}/char_encoding_test.c
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/config_test.c
     ${TEST_DIR}/keyscan_test.c

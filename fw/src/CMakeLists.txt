@@ -32,6 +32,7 @@ set(FW_SRC_DIR ${FW_DIR}/src)
 set(FW_EXECUTABLE_NAME "${PROJECT_NAME}.elf")
 
 add_executable(${FW_EXECUTABLE_NAME}
+    ${FW_SRC_DIR}/display/char_encoding.c
     ${FW_SRC_DIR}/driver.c
     ${FW_SRC_DIR}/fatal.c
     ${FW_SRC_DIR}/global.c
