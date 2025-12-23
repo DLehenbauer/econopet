@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "../pch.h"
+#include "../../pch.h"
 
 /**
  * Set separate 16-color palettes for foreground and background.

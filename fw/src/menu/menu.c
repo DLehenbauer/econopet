@@ -23,7 +23,7 @@
 #include "roms/roms.h"
 #include "sd/sd.h"
 #include "term.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 #include "menu.h"
 #include "menu_config.h"
 #include "display/window.h"

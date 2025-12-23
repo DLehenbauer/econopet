@@ -55,9 +55,9 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/usb/keystate.c
     ${FW_SRC_DIR}/usb/msc_app.c
     ${FW_SRC_DIR}/usb/usb.c
-    ${FW_SRC_DIR}/video/video.c
-    ${FW_SRC_DIR}/video/tmds_encode.c
-    ${FW_SRC_DIR}/video/tmds_encode.S
+    ${FW_SRC_DIR}/display/dvi/dvi.c
+    ${FW_SRC_DIR}/display/dvi/tmds_encode.c
+    ${FW_SRC_DIR}/display/dvi/tmds_encode.S
 )
 
 # EconoPET 40/8096 Rev. A requires extended crystal oscillator startup time.

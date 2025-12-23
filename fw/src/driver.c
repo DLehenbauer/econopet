@@ -16,7 +16,7 @@
 #include "fatal.h"
 #include "hw.h"
 #include "usb/keyboard.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 #include "global.h"
 
 //                           WMd_AAAA

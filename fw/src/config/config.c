@@ -17,7 +17,7 @@
 #include "global.h"
 #include "sd/sd.h"
 #include "term.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 
 typedef struct parser_s {
     yaml_parser_t parser;

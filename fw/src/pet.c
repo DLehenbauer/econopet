@@ -14,7 +14,7 @@
 
 #include "driver.h"
 #include "usb/keyboard.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 #include "pet.h"
 
 void pet_reset() {

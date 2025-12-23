@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "../pch.h"
+#include "../../pch.h"
 
 #define VIDEO_CHAR_BUFFER_BYTE_SIZE 0x1000  // 4KB video RAM
 

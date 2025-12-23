@@ -14,7 +14,7 @@
 
 #include "window.h"
 #include "char_encoding.h"
-#include "video/video.h"
+#include "dvi/dvi.h"
 
 // Character ROM offsets
 #define CH_SPACE 0x20 // ' ' (space)

@@ -12,10 +12,10 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include "video.h"
-#include "pet.h"
-#include "roms/roms.h"
-#include "system_state.h"
+#include "dvi.h"
+#include "../../pet.h"
+#include "../../roms/roms.h"
+#include "../../system_state.h"
 #include "tmds_encode.h"
 
 // Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal
@@ -258,16 +258,16 @@ static inline void copy_blank_margins(uint32_t *tmdsbuf, uint left_margin_words,
 }
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
-    static uint h_displayed   = 40;	        // Horizontal displayed characters
-    static uint v_displayed   = 25;	        // Vertical displayed characters
-    static uint lines_per_row = 8;	        // Vertical scan lines per character
+    static uint h_displayed   = 40;        // Horizontal displayed characters
+    static uint v_displayed   = 25;        // Vertical displayed characters
+    static uint lines_per_row = 8;        // Vertical scan lines per character
     static uint display_start = 0x1000;     // Start address in video_char_buffer (ma[13:12] are special)
     static uint display_mask  = 0x3ff;      // Mask for display address wrapping
     static uint8_t invert_mask = 0x00;      // ma[12] = invert video (1 = normal, 0 = inverted)
 
-	static uint x_start = 0;
-	static uint y_start = 0;
-	static uint y_visible = 0;
+static uint x_start = 0;
+static uint y_start = 0;
+static uint y_visible = 0;
     static bool is_80_col = false;
     static uint left_margin_words = 0;
     static uint content_pixels = 0;
@@ -284,8 +284,8 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
     if (y >= y_visible) {
         // Blank scan line - use blank scan lines to reload/recompute CRTC-dependent values.
-        h_displayed   = pet_crtc_registers[CRTC_R1_H_DISPLAYED];	                // R1[7:0]: Horizontal displayed characters
-        v_displayed   = pet_crtc_registers[CRTC_R6_V_DISPLAYED] & 0x7F;	            // R6[6:0]: Vertical displayed character rows
+        h_displayed   = pet_crtc_registers[CRTC_R1_H_DISPLAYED];                // R1[7:0]: Horizontal displayed characters
+        v_displayed   = pet_crtc_registers[CRTC_R6_V_DISPLAYED] & 0x7F;            // R6[6:0]: Vertical displayed character rows
         lines_per_row = (pet_crtc_registers[CRTC_R9_MAX_SCAN_LINE] & 0x1F) + 1;     // R9[4:0]: Scan lines per character row (plus one)
 
         display_start = ((pet_crtc_registers[CRTC_R12_START_ADDR_HI] & 0x3f) << 8)  // R12[5:0]: High 6 bits of display start address
@@ -299,13 +299,13 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             lines_per_row = MIN(lines_per_row, FRAME_HEIGHT / v_displayed);
         }
 
-		y_visible = v_displayed * lines_per_row;	    // Total visible scan lines
-		y_start   = (FRAME_HEIGHT - y_visible) / 2;	    // Top margin in scan lines
+y_visible = v_displayed * lines_per_row;    // Total visible scan lines
+y_start   = (FRAME_HEIGHT - y_visible) / 2;    // Top margin in scan lines
 
         // Compute left margin based on horizontal displayed characters. Note that `h_displayed`
         // has not yet been adjusted for 80-column mode, so is 1/2 the final value assuming 8 pixel
         // characters.
-		x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
+x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
 
         // Precompute TMDS word offsets for margins and content for the frame
         left_margin_words = x_start * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
@@ -326,9 +326,9 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         display_start &= display_mask;
 
         // Select graphics/text character ROM
-		p_char_rom = video_graphics
-			? p_video_font_400
-			: p_video_font_000;
+p_char_rom = video_graphics
+? p_video_font_400
+: p_video_font_000;
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);

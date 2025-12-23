@@ -24,7 +24,7 @@
 #include "system_state.h"
 #include "usb/usb.h"
 #include "usb/keyboard.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);

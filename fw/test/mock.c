@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "system_state.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 #include "sd/sd.h"
 #include "mock.h"
 

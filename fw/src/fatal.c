@@ -17,7 +17,7 @@
 #include "display/window.h"
 #include "roms/roms.h"
 #include "term.h"
-#include "video/video.h"
+#include "display/dvi/dvi.h"
 
 static void __attribute__((noreturn)) vfatal(const char* const format, va_list args) {
     start_menu_rom(MENU_ROM_BOOT_ERROR);
