@@ -36,12 +36,26 @@ Despite the name, [8032.mem.prg](https://www.zimmers.net/anonftp/pub/cbm/pet/uti
 .C:f977  C9 E8       CMP #$E8
 ```
 
+## 8296
+
+The 8296 includes the 8096-style expansion mapping, plus an extra 32KB of general RAM (for 128KB total).  This extra 32KB RAM is mapped as follows:
+
+* `$8000-$8FFF` 4KB of read/write video RAM
+* `$9000-$FFFF` sits under ROM decode and is normally "write-only".
+
+The region `$9000-$9FFF` is addressable by the CRTC, bringing the total amount of video RAM to 8KB, provided you don't need readback from the upper 4KB.
+
+Otherwise, the 28KB of RAM sits under ROM decode (`$9000-$FFFF`) can only
+be read by the CPU by reconfiguring the machine with jumpers so that user
+port pins can be used to unmap the ROM overlay in these regions.
+
 ## References
 
 * [CBM 64K RAM Expansion](https://mikenaberezny.com/hardware/pet-cbm/cbm-64k-ram-expansion/)
   * [Overview](https://www.vintagecomputer.net/commodore/8096/CBMPET64KExpansion.pdf)
   * [PET index - 8x96](http://6502.org/users/andre/petindex/8x96.html)
   * [Schematics (Reverse Engineered)](https://www.zimmers.net/anonftp/pub/cbm/schematics/computers/pet/8096/pet_64k.pdf)
+* [Commodore PET Programming Model](http://6502.org/users/andre/petindex/progmod.html)
 * Diagnostics
   * [8032.mem.prg](https://www.zimmers.net/anonftp/pub/cbm/pet/utilities/8032.mem.prg)
   * [cbmeqtest.d64](https://www.zimmers.net/anonftp/pub/cbm/pet/utilities/cbmeqtest.d64.gz)
