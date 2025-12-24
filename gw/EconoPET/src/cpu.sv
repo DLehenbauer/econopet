@@ -60,7 +60,7 @@ module cpu (
     //        (3) Since this is a static design, the maximum cycle time could
     //            be infinite
     //
-    // Summary interpretations:
+    // Summary:
     //
     // Minimum Phi2 pulse width is high 62ns and low 63ns (tPWH, tPWL)
     //
@@ -81,7 +81,7 @@ module cpu (
     //  - At maximum clock rate, RAM has 70ns between ADDR stabilizing and the
     //    beginning of the read setup time (tACC).
     //
-    // Timing for W65C21 (PIA)
+    // Timing for W65C21N (PIA)
     // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf)
     //
     // | Symbol | Parameter                       | Min | Max | Units |
@@ -101,8 +101,8 @@ module cpu (
     // | tHW    | Data Bus Hold Time              |   5 |   - | ns    |
     // | tCPW   | Peripheral Data Delay Time      |   - |  20 | ns    |
     //
-    // Summary interpretations:
-    //
+    // Summary:
+    // - Minimum Phi2 pulse width is high 35ns and low 35ns (tCYC, tC)
     // - ADDR, RWD, CS2B must be stable at least 8ns before rising Phi2 (tACR, tACW)
     //   and may be released 0ns after falling edge (tCAR, tCAW)
     // - Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR)
@@ -111,6 +111,36 @@ module cpu (
     //   held 5ns after falling edge (tHW)
     // - Peripheral-side data can appear within 20ns after rising Phi2 (tCPW)
     //
+    // Timing for W65C22N (VIA)
+    // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf)
+    //
+    // | Symbol | Parameter                                     | Min | Max | Units |
+    // |--------|-----------------------------------------------|-----|-----|-------|
+    // | tCYC   | Cycle Time                                    |  70 |   - | ns    |
+    // | tPWH   | Phase 2 Pulse Width High                      |  35 |   - | ns    |
+    // | tPWL   | Phase 2 Pulse Width Low                       |  35 |   - | ns    |
+    // | tR,F   | Phase 2 Transition                            |   - |   5 | ns    |
+    // | tACR   | CSx, RSx, RWB Setup - READ                    |  10 |   - | ns    |
+    // | tCAR   | CSx, RSx, RWB Hold (PHI2 rising edge) - READ  |  10 |   - | ns    |
+    // | tCDR   | Data Bus Delay                                |   - |  20 | ns    |
+    // | tHR    | Data Bus Hold Time                            |  10 |   - | ns    |
+    // | tPCR   | Peripheral Data Setup                         |  10 |   - | ns    |
+    // | tACW   | CSx, RSx, RWB Setup - WRITE                   |  10 |   - | ns    |
+    // | tCAW   | CSx, RSx, RWB Hold (PHI2 rising edge) - WRITE |  10 |   - | ns    |
+    // | tDCW   | Data Bus Setup                                |  10 |   - | ns    |
+    // | tHW    | Data Bus Hold                                 |  10 |   - | ns    |
+    // | tCPW   | Peripheral Data Delay                         |   - | 250 | ns    |
+    //
+    // Summary:
+    // - Minimum Phi2 pulse width is high 35ns and low 35ns (tPWH, tPWL)
+    // - ADDR/CSx/RSx/RWB stable at least 10ns before rising Phi2 (tACR, tACW)
+    //   and held 10ns after rising edge (tCAR, tCAW).
+    // - Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR)
+    //   and should be held ~10ns around the edge (tHR, tPCR ~10ns setup).
+    // - Peripheral write data must be set up 10ns before rising Phi2 (tDCW)
+    //   and held 10ns after rising edge (tHW).
+    // - Peripheral-side data can appear within ~250ns after rising Phi2 (tCPW).
+    // 
     // Timing for SN74LVC4245A
     // (See: https://www.ti.com/lit/ds/symlink/sn74lvc4245a.pdf)
     //
@@ -138,7 +168,7 @@ module cpu (
     // | tPLZ   | /OE  | B  |   1 |  7.7 | ns    |
     // | tPHZ   | /OE  | B  |   1 |  7.8 | ns    |
     //
-    // Summary interpretations:
+    // Summary:
     //
     // - Propagation: A→B up to 6.7ns (tPLH A→B); B→A up to 6.1ns (tPHL B→A). Budget 6.7ns worst‑case.
     // - Enable (/OE asserted): to B up to 10.3ns (tPZL /OE→B); to A up to 10.0ns (tPZH /OE→A).
