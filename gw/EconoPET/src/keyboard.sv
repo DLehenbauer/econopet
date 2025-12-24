@@ -14,31 +14,39 @@
 
 import common_pkg::*;
 
-// Wishbone peripheral that receives the state of the USB keyboard
-// from the MCU and exposes it as a 10x8 matrix.
+// Wishbone peripheral that:
+//
+//  1. Ingests USB keyboard matrix data from the MCU and injects it when the
+//     CPU reads PIA1 keyboard input.
+//
+//  2. Snoops the PET keyboard matrix during CPU scans via PIA1 reads so the
+//     observed matrix can later be fetched over Wishbone.
+//
+// Note that the snooped PET keyboard matrix is only updated when the CPU
+// is actively scanning the keyboard via PIA1 reads.
 module keyboard(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                     wb_clock_i,
-    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
-    input  logic [   DATA_WIDTH-1:0] wbp_data_i,
-    output logic [   DATA_WIDTH-1:0] wbp_data_o,
-    input  logic                     wbp_we_i,
-    input  logic                     wbp_cycle_i,
-    input  logic                     wbp_strobe_i,
-    output logic                     wbp_stall_o,
-    output logic                     wbp_ack_o,
-    input  logic                     wbp_sel_i,      // Asserted when selected by 'wb_addr_i'
+    input  logic                     wb_clock_i,        // Wishbone bus clock
+    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,        // Wishbone address (low bits pick keyboard column)
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i,        // Wishbone write data (USB keyboard column bitmap)
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,        // Wishbone read data (PET keyboard column bitmap)
+    input  logic                     wbp_we_i,          // Wishbone write enable (1 = write USB column)
+    input  logic                     wbp_cycle_i,       // Wishbone cycle in progress
+    input  logic                     wbp_strobe_i,      // Wishbone request strobe (addr/data valid)
+    output logic                     wbp_stall_o,       // Wishbone stall (not used, always 0)
+    output logic                     wbp_ack_o,         // Wishbone acknowledge for completed transfer
+    input  logic                     wbp_sel_i,         // Wishbone peripheral select decoded from address
 
-    input  logic                     cpu_be_i,
-    input  logic                     cpu_data_strobe_i,
-    input  logic [   DATA_WIDTH-1:0] cpu_data_i,
-    output logic [   DATA_WIDTH-1:0] cpu_data_o,
-    output logic                     cpu_data_oe,   // Asserted when intercepting CPU read
-    input  logic                     cpu_we_i,
+    input  logic                     cpu_be_i,          // CPU bus enable
+    input  logic                     cpu_data_strobe_i, // Strobe aligned with CPU data phase
+    input  logic                     cpu_we_i,          // CPU write enable
+    input  logic [   DATA_WIDTH-1:0] cpu_data_i,        // Incoming data from system bus
+    output logic [   DATA_WIDTH-1:0] cpu_data_o,        // Outgoing data to system bus when intercepting reads
+    output logic                     cpu_data_oe,       // Output enable when when intercepting reads
 
-    input  logic                     pia1_cs_i,     // PIA1 chip select (from address_decoding)
-    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i      // PIA1 register select (cpu_addr[1:0])
+    input  logic                     pia1_cs_i,         // PIA1 chip select (from address decoding)
+    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i          // PIA1 register select (cpu_addr[1:0])
 );
     // PET keyboard matrix is all 1's when no keys are pressed.
     logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd = '1;
@@ -67,14 +75,18 @@ module keyboard(
     logic [KBD_ROW_COUNT-1:0] selected_row_data = '1;
 
     always_ff @(posedge wb_clock_i) begin
+        // Cache the selected column so that PIA1_PORTB interception reads can
+        // avoid performing a usb_kbd array lookup.
         selected_row_data <= usb_kbd[selected_col];
 
         if (pia1_cs_i && cpu_data_strobe_i) begin
             if (cpu_we_i) begin
+                // CPU writes to PIA1_PORTA select the keyboard column to scan.
                 if (pia1_rs_i == PIA_PORTA) begin
                     selected_col <= cpu_data_i[PIA1_PORTA_KEY_D_OUT:PIA1_PORTA_KEY_A_OUT];
                 end
             end else begin
+                // Snoop CPU reads from PIA1_PORTB to capture PET keyboard state.
                 if (pia1_rs_i == PIA_PORTB) begin
                     pet_kbd[selected_col] <= cpu_data_i;
                 end
@@ -82,7 +94,7 @@ module keyboard(
         end
     end
 
-    always_ff @(posedge wb_clock_i) begin   
+    always_ff @(posedge wb_clock_i) begin
         cpu_data_oe <= 1'b0;
 
         if (cpu_be_i && !cpu_we_i) begin
