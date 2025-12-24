@@ -19,7 +19,7 @@
 
 ## SRAM
 
-* [AS6C1008](https://www.alliancememory.com/wp-content/uploads/pdf/AS6C1008_Mar_2023V1.2.pdf)
+* [AS6C1008](https://www.alliancememory.com/wp-content/uploads/AS6C1008_Mar_2023V1.2.pdf)
 * [IS61WV1288EEBLL](https://www.issi.com/WW/pdf/61-64WV1288EEBLL.pdf)
 
 ## MCU
