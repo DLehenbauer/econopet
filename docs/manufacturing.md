@@ -86,7 +86,9 @@ PTS636SK43 LFS|611-PTS636SK43LFS|4|Push Buttons: Flash & Run required, Reset & N
 10129378-910002BLF|649-1012937891002BLF|2|10x1 Header: User config (required) and cassette, 6V, 9V (optional breakouts)|[datasheet](https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129378.pdf)
 SC1628|358-SC1628|1|32GB microSD card (known good, but feel free to try what you have on hand)|[datasheet](https://www.mouser.com/catalog/additional/Raspberry_Pi_rpi_sdcard_EU_DoC.pdf)
 RASPC722X|502-RASPC722X|1|DC Power Jack (optional: for standalone use)|[datasheet](https://www.mouser.com/datasheet/3/144/1/rapc722x_cd.pdf)
-LCBSBM-7-01A-RT|144-LCBSBM-7-01A-RT|2|PCB Mounting Pillar (get 4 if using standalone)[^part-unverified]|[datasheet](https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt)
+LCBSBM-7-01A-RT|144-LCBSBM-7-01A-RT|2 or 4|PCB Mounting Pillar (get 4 if using standalone)|[datasheet](https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt)
+LCBSBM-7-01A-RT|144-LCBSBM-7-01A-RT|2 or 4|PCB Mounting Pillar (get 4 if using standalone)|[datasheet](https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt)
+EEU-FM1H121LB|667-EEU-FM1H121LB|1|120uF 50V low-ESR capacitor (C89)|[datasheet](https://industrial.panasonic.com/cdbs/www-data/pdf/RDF0000/ABA0000C1018.pdf)
 
 ### Assembly
 
@@ -108,7 +110,7 @@ Most through-hole components are either symmetrical or can only be inserted one 
 
 - **DIP Switch:** The DIP switch should be oriented so the 'ON' position faces towards the FPGA to match the silkscreen markings.
 
-- **Polarized Capacitors:** There are two optional polarized capacitors. If you choose to install them, the stripe on the capacitor (indicating the negative lead) should align with the negative marking on the silkscreen.
+- **Polarized Capacitors:** C89 is a polarized electrolytic capacitor. The longer lead is the positive (+) terminal, which should align with the '+' marking on the PCB silkscreen.  C89 has multiple holes for different capacitor sizes.  Ensure you use the correct holes for the capacitor you have.
 
 - **JTAG/SWD Connector:** The shrouded JTAG/SWD connector has a keyed design to ensure correct orientation. The notch should face downward toward the HDMI connector, corresponding with the marking on the silkscreen.
 
@@ -188,8 +190,6 @@ The PET power connector is a larger 3.93mm pitch connector with 9 pins. Two pins
     remove
     (key)
 ```
-
-[^part-unverified]: This part is untested, but expected to work based on the product description.
 
 ## Bootstrapping the Firmware
 
