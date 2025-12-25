@@ -5365,7 +5365,7 @@
 	)
 	(polyline
 		(pts
-			(xy 53.34 27.94) (xy 53.34 48.26)
+			(xy 53.34 30.48) (xy 53.34 48.26)
 		)
 		(stroke
 			(width 0)
@@ -5445,7 +5445,7 @@
 	)
 	(polyline
 		(pts
-			(xy 86.36 48.26) (xy 86.36 27.94)
+			(xy 86.36 48.26) (xy 86.36 30.48)
 		)
 		(stroke
 			(width 0)
@@ -5885,7 +5885,7 @@
 	)
 	(polyline
 		(pts
-			(xy 86.36 27.94) (xy 53.34 27.94)
+			(xy 86.36 30.48) (xy 53.34 30.48)
 		)
 		(stroke
 			(width 0)
@@ -7433,6 +7433,17 @@
 		)
 		(uuid "fff0d1e4-0e31-4a91-8576-24381d4266b2")
 	)
+	(text "*TLV1117LV33 substituted\nfor AMS1117-3.3 due to\nincorrect placement of\nR6/R8 for ESR compensation"
+		(exclude_from_sim no)
+		(at 127 190.5 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "0e6d981a-abf2-4d49-aec4-2108f0fd86a7")
+	)
 	(text "LM317A:\nΔV_{OUT}=~3V (at ≥ 10ma)\nUse 120R load resistor\n\nT8/T20Q144 Power Requirements\nAbsolute max VCORE: 1.42V\nTypical: 1.15V ~ 1.25V"
 		(exclude_from_sim no)
 		(at 145.796 157.988 0)
@@ -7492,7 +7503,7 @@
 		)
 		(uuid "49488fba-6b65-496b-938d-786827503480")
 	)
-	(text "Optional PS filtering caps.\nTypically not populated."
+	(text "Configurable PS filtering caps"
 		(exclude_from_sim no)
 		(at 54.61 34.29 0)
 		(effects
@@ -9176,7 +9187,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1"
+		(property "Value" "0"
 			(at 120.65 177.292 90)
 			(effects
 				(font
@@ -9194,7 +9205,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010130_UNI-ROYAL-Uniroyal-Elec-0603WAF1004T5E_C22935.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8578255895094087680"
 			(at 120.65 177.8 0)
 			(effects
 				(font
@@ -9212,7 +9223,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C22936"
+		(property "LCSC" "C21189"
 			(at 120.65 177.8 0)
 			(effects
 				(font
@@ -9333,7 +9344,7 @@
 				)
 			)
 		)
-		(property "Value" "AMS1117-3.3"
+		(property "Value" "TLV1117LV33"
 			(at 114.3 161.29 0)
 			(effects
 				(font
@@ -9350,7 +9361,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8550724073479806976"
+		(property "Datasheet" "https://www.ti.com/cn/lit/gpn/tlv1117lv"
 			(at 116.84 172.72 0)
 			(effects
 				(font
@@ -9368,7 +9379,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C6186"
+		(property "LCSC" "C15578"
 			(at 114.3 166.37 0)
 			(effects
 				(font
@@ -11436,7 +11447,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1"
+		(property "Value" "0"
 			(at 125.73 177.292 90)
 			(effects
 				(font
@@ -11454,7 +11465,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010130_UNI-ROYAL-Uniroyal-Elec-0603WAF1004T5E_C22935.pdf"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8578255895094087680"
 			(at 125.73 177.8 0)
 			(effects
 				(font
@@ -11472,7 +11483,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C22936"
+		(property "LCSC" "C21189"
 			(at 125.73 177.8 0)
 			(effects
 				(font
@@ -12893,7 +12904,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "a71bdd89-6b16-43f2-a51f-66dc152cf877")
 		(property "Reference" "C89"
 			(at 61.9252 40.7416 0)
@@ -12904,7 +12915,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "15000u"
+		(property "Value" "120uF"
 			(at 61.9252 43.053 0)
 			(effects
 				(font
@@ -12922,7 +12933,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.chemi-con.co.jp/products/relatedfiles/capacitor/catalog/LBVLL-e.PDF"
+		(property "Datasheet" "https://industrial.panasonic.com/cdbs/www-data/pdf/RDF0000/ABA0000C1018.pdf"
 			(at 59.69 41.91 0)
 			(effects
 				(font
@@ -12931,7 +12942,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "120uF 50V low-ESR capacitor"
 			(at 59.69 41.91 0)
 			(effects
 				(font
@@ -12940,7 +12951,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "661-BV250L153AM40S"
+		(property "MOUSER" "667-EEU-FM1H121LB"
 			(at 59.69 41.91 0)
 			(effects
 				(font
