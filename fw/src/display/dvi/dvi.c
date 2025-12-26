@@ -326,9 +326,9 @@ x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixel
         display_start &= display_mask;
 
         // Select graphics/text character ROM
-p_char_rom = video_graphics
-? p_video_font_400
-: p_video_font_000;
+        p_char_rom = video_graphics
+            ? p_video_font_400
+            : p_video_font_000;
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);

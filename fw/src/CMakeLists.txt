@@ -82,11 +82,15 @@ target_include_directories(${FW_EXECUTABLE_NAME} PUBLIC ${FW_SRC_DIR})
 
 target_precompile_headers(${FW_EXECUTABLE_NAME} PRIVATE ${FW_SRC_DIR}/pch.h)
 
-# Configure PicoDVI library
+# Configure PicoDVI library.  Setting DVI_VERTICAL_REPEAT=2 halves the vertical resolution to
+# 240p by displaying each scanline twice, which buys us more time to prepare each frame.
+#
+# We increase DVI_N_TMDS_BUFFERS from the default of 3 to 4.  One buffer is permanently reserved
+# for a precalculated blank scanline (see 'blank_tmdsbuf' in dvi.c), used for non-visible regions
+# and margins. This leaves 3 buffers in the free queue for active video scanlines.
 target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE
     DVI_VERTICAL_REPEAT=2
-    DVI_N_TMDS_BUFFERS=4
-    DVI_1BPP_BIT_REVERSE=1)
+    DVI_N_TMDS_BUFFERS=4)
 
 # pull in common dependencies
 target_link_libraries(${FW_EXECUTABLE_NAME} PUBLIC
