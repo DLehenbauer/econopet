@@ -60,14 +60,12 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/dvi/tmds_encode.S
 )
 
-# EconoPET 40/8096 Rev. A requires extended crystal oscillator startup time.
+# Extend crystal oscillator startup time to improve cold power-on reliability. The CBM/PET
+# powers mainboard and monitor from the same transformer, potentially causing transient
+# voltage dips when the CRT and DC filter cap are fully discharged.
 #
-# The YSX321SL crystal used in the EconoPET 40/8096 Rev. A requires a longer startup
-# time than the default used by the RP2040 SDK.
-#
-# Testing on sample 45240-60 showed multiplier values of 8 were intermittent and 16
-# reliable when recently powered, but variance between boards or cold starts may require
-# more. Using the maximum value (174) provides margin across all operating conditions.
+# We increase the oscillator startup delay to the maximum (174) to help 40/8096 Rev A.
+# boards tolerate this. (See https://github.com/DLehenbauer/econopet/issues/3)
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=174)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
@@ -75,7 +73,7 @@ target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16
 
 # Not required for RP2040B2 silicon and conflicts with use of GPIO15 (FPGA_CLK)
 # (See https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf#errata-e5)
-# target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1)
+#target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1)
 
 # Expose tusb_config.h to TinyUSB
 target_include_directories(${FW_EXECUTABLE_NAME} PUBLIC ${FW_SRC_DIR})
