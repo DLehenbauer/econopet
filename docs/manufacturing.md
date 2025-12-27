@@ -19,8 +19,8 @@ If you've never ordered a PCB before, it's pretty straightforward, but it might 
 The manufacturing files for JLCPCB are located in `hw/rev-a/production/`:
 
 - **[EconoPET_408096_A.zip](../hw/rev-a/production/EconoPET_408096_A.zip)** - Gerber files for PCB manufacturing
-- **[bom.csv](../hw/rev-a/production/bom.csv)** - Bill of Materials for SMT assembly
-- **[positions.csv](../hw/rev-a/production/positions.csv)** - Component positions for SMT assembly
+- **[jlcpcb-rev-a-bom.csv](../hw/rev-a/production/jlcpcb-rev-a-bom.csv)** - Bill of Materials for SMT assembly
+- **[jlcpcb-rev-a-cpl.csv](../hw/rev-a/production/jlcpcb-rev-a-cpl.csv)** - Component positions for SMT assembly
 
 ### Ordering Steps
 
@@ -33,14 +33,14 @@ The manufacturing files for JLCPCB are located in `hw/rev-a/production/`:
 
 3. **Quote & Order PCB**
    - Go to [JLCPCB Instant Quote](https://jlcpcb.com/instant-quote)
-   - Upload `EconoPET_408096_A.zip` (Gerber files)
+   - Upload **[EconoPET_408096_A.zip](../hw/rev-a/production/EconoPET_408096_A.zip)** (Gerber files)
    - Use all default PCB options (2 layers, 1.6mm thickness, HASL finish, etc.)
    - Add to cart and proceed
 
 4. **Add SMT Assembly**
    - Select **SMT Assembly** service on the order page
-   - Upload `bom.csv` for the Bill of Materials
-   - Upload `positions.csv` for component placement data
+   - Upload **[jlcpcb-rev-a-bom.csv](../hw/rev-a/production/jlcpcb-rev-a-bom.csv)** for the Bill of Materials
+   - Upload **[jlcpcb-rev-a-cpl.csv](../hw/rev-a/production/jlcpcb-rev-a-cpl.csv)** for component placement data
    - JLCPCB will calculate the total cost for the components and assembly
 
 5. **Complete Your Order**
