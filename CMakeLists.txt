@@ -83,6 +83,7 @@ if(BUILD_FIRMWARE)
     set(FW_CMAKE_ARGS
         -G Ninja
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         -DPICO_PLATFORM=rp2040
         -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
         -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
@@ -109,6 +110,7 @@ if(BUILD_TESTS)
     set(TEST_CMAKE_ARGS
         -G Ninja
         -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         -DPICO_PLATFORM=host
         -DPICO_NO_HARDWARE=1
         -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}

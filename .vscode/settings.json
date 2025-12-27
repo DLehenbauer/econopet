@@ -3,6 +3,13 @@
     "verilog.linting.iverilog.arguments": "-Y .sv -y gw/EconoPET/src",
     "verilog.linting.linter": "verilator",
     "verilog.linting.verilator.arguments": "--sv -Igw/EconoPET/src gw/EconoPET/src/common_pkg.sv",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/fw/compile_commands.json",
+    "cmake.configureEnvironment": {
+        "PICO_SDK_PATH": "/opt/pico-sdk"
+    },
+    "cmake.buildEnvironment": {
+        "PICO_SDK_PATH": "/opt/pico-sdk"
+    },
     "cSpell.words": [
         "backpressure",
         "CRTC",

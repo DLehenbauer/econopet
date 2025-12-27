@@ -67,7 +67,7 @@ add_executable(${FW_EXECUTABLE_NAME}
 #
 # We increase the oscillator startup delay to the maximum (174) to help 40/8096 Rev A.
 # boards tolerate this. (See https://github.com/DLehenbauer/econopet/issues/3)
-target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=174)
+target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=1)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216)
