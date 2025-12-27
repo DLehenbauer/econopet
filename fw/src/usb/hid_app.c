@@ -23,8 +23,10 @@
  *
  */
 
-#include "../pch.h"
+#include "pch.h"
+
 #include "keyboard.h"
+#include "diag/log/log.h"
 
 //--------------------------------------------------------------------+
 // MACRO TYPEDEF CONSTANT ENUM DECLARATION
@@ -62,13 +64,13 @@ void hid_app_task(void)
 // therefore report_desc = NULL, desc_len = 0
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
 {
-  printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
+  log_info("HID device address = %d, instance = %d is mounted", dev_addr, instance);
 
   // Interface protocol (hid_interface_protocol_enum_t)
   const char* protocol_str[] = { "None", "Keyboard", "Mouse" };
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
-  printf("HID Interface Protocol = %s\r\n", protocol_str[itf_protocol]);
+  log_debug("HID Interface Protocol = %s", protocol_str[itf_protocol]);
 
   // Synchronize keyboard LEDs on mount
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
@@ -80,21 +82,21 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
   if ( itf_protocol == HID_ITF_PROTOCOL_NONE )
   {
     hid_info[instance].report_count = tuh_hid_parse_report_descriptor(hid_info[instance].report_info, MAX_REPORT, desc_report, desc_len);
-    printf("HID has %u reports \r\n", hid_info[instance].report_count);
+    log_debug("HID has %u reports", hid_info[instance].report_count);
   }
 
   // request to receive report
   // tuh_hid_report_received_cb() will be invoked when report is available
   if ( !tuh_hid_receive_report(dev_addr, instance) )
   {
-    printf("Error: cannot request to receive report\r\n");
+    log_warn("Error: cannot request to receive report");
   }
 }
 
 // Invoked when device with hid interface is un-mounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
-  printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
+  log_info("HID device address = %d, instance = %d is unmounted", dev_addr, instance);
   usb_keyboard_removed(dev_addr, instance);
 }
 
@@ -124,7 +126,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   // continue to request to receive report
   if ( !tuh_hid_receive_report(dev_addr, instance) )
   {
-    printf("Error: cannot request to receive report\r\n");
+    log_warn("Error: cannot request to receive report");
   }
 }
 
@@ -273,7 +275,7 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
 
   if (!rpt_info)
   {
-    printf("Couldn't find report info !\r\n");
+    log_debug("Couldn't find report info !");
     return;
   }
 

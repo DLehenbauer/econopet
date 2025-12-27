@@ -12,24 +12,26 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include <dirent.h>
-#include "filesystem/vfs.h"
-#include "fatal.h"
-#include "system_state.h"
-#include "global.h"
+#include "menu.h"
+
+#include "diag/log/log.h"
+#include "display/char_encoding.h"
+#include "display/dvi/dvi.h"
+#include "display/window.h"
 #include "driver.h"
+#include "fatal.h"
+#include "filesystem/vfs.h"
+#include "global.h"
 #include "hw.h"
+#include "menu_config.h"
 #include "pet.h"
+#include "roms/checksum.h"
 #include "roms/roms.h"
 #include "sd/sd.h"
+#include "system_state.h"
 #include "term.h"
-#include "display/dvi/dvi.h"
-#include "menu.h"
-#include "menu_config.h"
-#include "display/window.h"
 #include "usb/keyboard.h"
-#include "roms/checksum.h"
-#include "display/char_encoding.h"
+#include <dirent.h>
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.
@@ -87,7 +89,7 @@ static ButtonAction get_button_action() {
             // Button has just been released and did not previously exceed the
             // long-press threshold.
             action = ShortPress;
-            printf("MENU button: short press\n");
+            log_debug("MENU button: short press");
         }
 
     } else {
@@ -100,7 +102,7 @@ static ButtonAction get_button_action() {
             // Button has been held for more than 500ms.  Consider this a long press.
             was_handled = true;
             action = LongPress;
-            printf("MENU button: long press\n");
+            log_debug("MENU button: long press");
         }
     }
 
@@ -344,7 +346,7 @@ typedef struct action_context_s {
 void action_load(void* const context, const char* filename, uint32_t address) {
     (void) context;
 
-    printf("0x%04lx", address);
+    log_debug("0x%04lx", address);
     FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         fatal("Failed to open file '%s'", filename);
@@ -366,7 +368,7 @@ void action_load(void* const context, const char* filename, uint32_t address) {
         }
     }
 
-    printf("-%04lx: %s ($%02x)\n", address - 1, filename, checksum);
+    log_debug("-%04lx: %s ($%02x)", address - 1, filename, checksum);
 
     release_temp_buffer(&temp_buffer);
     fclose(file);
@@ -375,14 +377,14 @@ void action_load(void* const context, const char* filename, uint32_t address) {
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
-    printf("0x%4lx: patching %zu bytes bytes\n", address, binary->size);
+    log_debug("0x%04lx: patching %zu bytes", address, binary->size);
     spi_write(address, binary->data, binary->size);
 }
 
 void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
     (void)context;
 
-    printf("0x%04lx: copying %lu bytes from 0x%04lx\n", source, length, destination);
+    log_debug("0x%04lx: copying %lu bytes from 0x%04lx", source, length, destination);
     uint8_t* temp_buffer = acquire_temp_buffer();
 
     if (destination > source) {
@@ -430,7 +432,7 @@ void action_set_options(void* context, options_t* options) {
 
     write_pet_model(ctx->system_state);
 
-    printf("Set options: %lu columns, video RAM mask %lu\n", options->columns, options->video_ram_mask);
+    log_debug("Set options: %lu columns, video RAM mask %lu", options->columns, options->video_ram_mask);
 }
 
 void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
@@ -441,7 +443,7 @@ void read_keymap(const char* filename, system_state_t* config) {
     // Read the keymap file and store it in the configuration.
     void* keymap = (void*) config->usb_keymap_data[0];
     sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap_data));
-    printf("USB keymap: '%s'\n", filename);
+    log_debug("USB keymap: '%s'", filename);
 }
 
 void action_set_keymap(void* context, const char* filename) {
@@ -478,7 +480,7 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
         uint8_t current_byte = spi_read_at(fix_addr);
         uint8_t adjusted_byte = checksum_fix(current_byte, actual_sum, expected);
 
-        printf("0x%04lx: fixing checksum for $%04lx-%04lx ($%02x -> $%02lx)\n", 
+        log_debug("0x%04lx: fixing checksum for $%04lx-%04lx ($%02x -> $%02lx)", 
             fix_addr, start_addr, end_addr, actual_sum, expected);
 
         spi_write_at(fix_addr, adjusted_byte);
@@ -488,7 +490,7 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
 }
 
 void menu_enter() {
-    printf("-- Enter Menu --\n");
+    log_info("-- Enter Menu --");
 
     start_menu_rom(MENU_ROM_BOOT_NORMAL);
     memset(video_char_buffer + 0x800, 0x0F, VIDEO_CHAR_BUFFER_BYTE_SIZE - 0x800);
@@ -513,7 +515,7 @@ void menu_enter() {
 
     pet_reset();
 
-    printf("-- Exit Menu --\n");
+    log_info("-- Exit Menu --");
 }
 
 void menu_task() {

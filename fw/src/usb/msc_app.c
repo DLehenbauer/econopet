@@ -23,7 +23,8 @@
  *
  */
 
-#include "../pch.h"
+#include "pch.h"
+#include "diag/log/log.h"
 
 //--------------------------------------------------------------------+
 // MACRO TYPEDEF CONSTANT ENUM DECLARATION
@@ -37,19 +38,19 @@ bool inquiry_complete_cb(uint8_t dev_addr, tuh_msc_complete_data_t const * cb_da
 
   if (csw->status != 0)
   {
-    printf("Inquiry failed\r\n");
+    log_warn("Inquiry failed");
     return false;
   }
 
   // Print out Vendor ID, Product ID and Rev
-  printf("%.8s %.16s rev %.4s\r\n", inquiry_resp.vendor_id, inquiry_resp.product_id, inquiry_resp.product_rev);
+  log_debug("%.8s %.16s rev %.4s", inquiry_resp.vendor_id, inquiry_resp.product_id, inquiry_resp.product_rev);
 
   // Get capacity of device
   uint32_t const block_count = tuh_msc_get_block_count(dev_addr, cbw->lun);
   uint32_t const block_size = tuh_msc_get_block_size(dev_addr, cbw->lun);
 
-  printf("Disk Size: %lu MB\r\n", block_count / ((1024*1024)/block_size));
-  printf("Block Count = %lu, Block Size: %lu\r\n", block_count, block_size);
+  log_debug("Disk Size: %lu MB", block_count / ((1024*1024)/block_size));
+  log_debug("Block Count = %lu, Block Size: %lu", block_count, block_size);
 
   return true;
 }
@@ -57,7 +58,7 @@ bool inquiry_complete_cb(uint8_t dev_addr, tuh_msc_complete_data_t const * cb_da
 //------------- IMPLEMENTATION -------------//
 void tuh_msc_mount_cb(uint8_t dev_addr)
 {
-  printf("A MassStorage device is mounted\r\n");
+  log_info("A MassStorage device is mounted");
 
   uint8_t const lun = 0;
   tuh_msc_inquiry(dev_addr, lun, &inquiry_resp, inquiry_complete_cb, 0);
@@ -66,6 +67,5 @@ void tuh_msc_mount_cb(uint8_t dev_addr)
 void tuh_msc_umount_cb(uint8_t dev_addr)
 {
   (void) dev_addr;
-  printf("A MassStorage device is unmounted\r\n");
+  log_info("A MassStorage device is unmounted");
 }
-

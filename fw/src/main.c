@@ -13,19 +13,19 @@
  */
 
 #include "pch.h"
+#include "diag/log/log.h"
+#include "diag/mem.h"
+#include "display/dvi/dvi.h"
 #include "driver.h"
 #include "global.h"
 #include "hw.h"
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
-#include "term.h"
-#include "diag/mem.h"
-#include "diag/log/log.h"
 #include "system_state.h"
-#include "usb/usb.h"
+#include "term.h"
 #include "usb/keyboard.h"
-#include "display/dvi/dvi.h"
+#include "usb/usb.h"
 
 static void log_reset_reason(void) {
     const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
@@ -67,15 +67,9 @@ void measure_freqs(uint fpga_div) {
     uint32_t f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
     uint32_t f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
 
-    printf("    pll_sys  = %lu kHz\n", f_pll_sys);
-    printf("    pll_usb  = %lu kHz\n", f_pll_usb);
-    printf("    rosc     = %lu kHz\n", f_rosc);
-    printf("    clk_sys  = %lu kHz\n", f_clk_sys);
-    printf("    clk_peri = %lu kHz\n", f_clk_peri);
-    printf("    clk_usb  = %lu kHz\n", f_clk_usb);
-    printf("    clk_adc  = %lu kHz\n", f_clk_adc);
-    printf("    clk_rtc  = %lu kHz\n", f_clk_rtc);
-    printf("    clk_fpga = %lu kHz\n", f_clk_sys / fpga_div);
+    log_debug("clk: pll_sys=%lu pll_usb=%lu rosc=%lu kHz", f_pll_sys, f_pll_usb, f_rosc);
+    log_debug("clk: sys=%lu peri=%lu usb=%lu kHz", f_clk_sys, f_clk_peri, f_clk_usb);
+    log_debug("clk: adc=%lu rtc=%lu fpga=%lu kHz", f_clk_adc, f_clk_rtc, f_clk_sys / fpga_div);
 }
 
 void fpga_write_zeros(size_t count) {
@@ -126,17 +120,15 @@ void fpga_init() {
     log_init();
     log_reset_reason();
     
-    printf("PICO_FLASH_SIZE_BYTES: 0x%08x\n", PICO_FLASH_SIZE_BYTES);
-    printf("PICO_XOSC_STARTUP_DELAY_MULTIPLIER: %d\n", PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
-    printf("Clocks initialized:\n");
+    log_debug("FLASH_SIZE=0x%08x XOSC_DELAY=%d", PICO_FLASH_SIZE_BYTES, PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
     measure_freqs(fpga_div);
 
     // Initialize FPGA_SPI at 24 MHz (default format is to SPI mode 0).
-    uint baudrate = spi_init(FPGA_SPI_INSTANCE, FPGA_SPI_MHZ * MHZ);
+    const int baudrate = spi_init(FPGA_SPI_INSTANCE, FPGA_SPI_MHZ * MHZ);
     gpio_set_function(FPGA_SPI_SCK_GP, GPIO_FUNC_SPI);
     gpio_set_function(FPGA_SPI_SDO_GP, GPIO_FUNC_SPI);
     gpio_set_function(FPGA_SPI_SDI_GP, GPIO_FUNC_SPI);
-    printf("    fpga_spi = %u Bd\n", baudrate);
+    log_debug("fpga_spi=%u Bd", baudrate);
 
     // Configure and deassert CS_N.  We configure CS_N as GPIO_OUT rather than GPIO_FUNC_SPI
     // so we can control via software.
@@ -151,7 +143,7 @@ void fpga_init() {
     // When no programmer is attached, the onboard 100k pull-down will hold the FPGA in reset.
     // If CRESET_N is is high, we know a JTAG programmer is attached and skip FPGA configuration.
     if (gpio_get(FPGA_CRESET_GP)) {
-        printf("FPGA config skipped: Programmer attached.\n");
+        log_warn("FPGA config skipped: Programmer attached");
         return;
     }
 
@@ -200,7 +192,7 @@ void fpga_init() {
     // a single byte while CS_N is deasserted to transition SCK to low.
     fpga_write_zeros(/* count: */ 1);
 
-    printf("FPGA: DONE\n");
+    log_info("FPGA configured");
 }
 
 int main() {

@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "../pch.h"
+#include "pch.h"
+#include "system_state.h"
 
 typedef enum {
     // Button is not pressed or currently being held.

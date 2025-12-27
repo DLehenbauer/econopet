@@ -13,6 +13,7 @@
  */
 
 #include "usb.h"
+#include "diag/log/log.h"
 
 void usb_init() {
     // Something in 'board_init()' interrupts the UART, losing characters pending in the FIFO.
@@ -25,13 +26,13 @@ void usb_init() {
     // init host stack on configured roothub port
     tuh_init(BOARD_TUH_RHPORT);
 
-    printf("USB initialized\n");
+    log_info("USB initialized");
 }
 
 void tuh_mount_cb(uint8_t dev_addr) {
-    printf("USB: Mounted device with address %d\n", dev_addr);
+    log_info("USB: Mounted device with address %d", dev_addr);
 }
 
 void tuh_umount_cb(uint8_t dev_addr) {
-    printf("USB: Unmounted device with address %d\n", dev_addr);
+    log_info("USB: Unmounted device with address %d", dev_addr);
 }

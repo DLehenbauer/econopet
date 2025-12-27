@@ -13,6 +13,8 @@
  */
 
 #include "sd.h"
+
+#include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
 #include "global.h"
@@ -42,7 +44,7 @@ bool sd_init() {
     filesystem_t* fat = filesystem_fat_create();
 
     if (fs_mount("/", fat, sd) == -1) {
-        printf("fs_mount error: %s", strerror(errno));
+        log_warn("fs_mount error: %s", strerror(errno));
         return false;
     }
 

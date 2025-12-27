@@ -15,15 +15,16 @@
 #include "menu_config.h"
 
 #include "config/config.h"
+#include "diag/log/log.h"
 #include "diag/mem.h"
-#include "driver.h"
-#include "term.h"
-#include "global.h"
 #include "display/window.h"
+#include "driver.h"
+#include "global.h"
+#include "term.h"
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
-    printf("Loading config: %d\n", selected_config);
+    log_info("Loading config: %d", selected_config);
 
     // Suspend the CPU while we're loading the config.
     set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);

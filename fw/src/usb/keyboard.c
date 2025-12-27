@@ -12,11 +12,13 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "keyboard.h"
+
+#include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
 #include "keyscan.h"
 #include "keystate.h"
-#include "keyboard.h"
 #include "usb.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
@@ -122,7 +124,7 @@ static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
     KeyStateFlags keystate = keystate_reset(keycode);
 
     if (!(keystate & KEYSTATE_PRESSED_FLAG)) {
-        printf("USB: Key up %d=(not found)\n", keycode);
+        log_debug("USB: Key up %d=(not found)", keycode);
         return;
     }
 
@@ -163,7 +165,7 @@ static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
 
 static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
     if (row > 7) {
-        printf("USB: Key down: %d=(undefined)\n", keycode);
+        log_debug("USB: Key down: %d=(undefined)", keycode);
         return;
     }
 
@@ -171,13 +173,13 @@ static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
 
     if (usb_key_matrix[col] & rowMask) {
         usb_key_matrix[col] &= ~rowMask;
-        printf("USB: Key down: %d=(%d,%d)\n", keycode, row, col);
+        log_debug("USB: Key down: %d=(%d,%d)", keycode, row, col);
     }
 }
 
 static void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
     if (row > 7) {
-        printf("USB: Key up: %d=(undefined)\n", keycode);
+        log_debug("USB: Key up: %d=(undefined)", keycode);
         return;
     }
 
@@ -185,7 +187,7 @@ static void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
 
     if (usb_key_matrix[col] & ~rowMask) {
         usb_key_matrix[col] |= rowMask;
-        printf("USB: Key up: %d=(%d,%d)\n", keycode, row, col);
+        log_debug("USB: Key up: %d=(%d,%d)", keycode, row, col);
     }
 }
 
@@ -201,14 +203,14 @@ static const char* const usb_modifier_names[] = {
 };
     
 static void modifier_down(uint8_t modifier_offset) {
-    printf("USB: Modifier down: %s\n", usb_modifier_names[modifier_offset]);
+    log_debug("USB: Modifier down: %s", usb_modifier_names[modifier_offset]);
     uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
     usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_down(keycode, keyInfo.row, keyInfo.col);
 }
 
 static void modifier_up(uint8_t modifier_offset) {
-    printf("USB: Modifier up: %s\n", usb_modifier_names[modifier_offset]);
+    log_debug("USB: Modifier up: %s", usb_modifier_names[modifier_offset]);
     uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
     usb_keymap_entry_t keyInfo = s_keymap[keycode];
     key_up(keycode, keyInfo.row, keyInfo.col);
@@ -316,7 +318,7 @@ static uint8_t get_modifiers(KeyEvent keyEvent) {
 static void toggle_lock(const KeyEvent* const keyEvent, bool* lock_flag, const char* lock_name) {
     if (keyEvent->pressed) {
         *lock_flag = !(*lock_flag);
-        printf("USB: %s %s\n", lock_name, *lock_flag ? "enabled" : "disabled");
+        log_debug("USB: %s %s", lock_name, *lock_flag ? "enabled" : "disabled");
         usb_keyboard_sync(&system_state);
     }
 }
