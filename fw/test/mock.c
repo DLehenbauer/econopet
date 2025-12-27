@@ -15,6 +15,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "system_state.h"
 #include "display/dvi/dvi.h"
 #include "sd/sd.h"
@@ -146,4 +147,11 @@ void watchdog_enable(unsigned int delay_ms, bool pause_on_debug) {
     assert(delay_ms == 0);
     assert(pause_on_debug == true);
     abort();
+}
+
+// Mock Pico SDK time function - returns microseconds since epoch
+uint64_t time_us_64(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ULL + (uint64_t)ts.tv_nsec / 1000ULL;
 }

@@ -18,6 +18,7 @@
 #include "config_test.h"
 #include "keyscan_test.h"
 #include "keystate_test.h"
+#include "log_test.h"
 #include "menu_test.h"
 #include "window_test.h"
 
@@ -29,6 +30,7 @@ int run_suite() {
     srunner_add_suite(sr1, config_parser_suite());
     srunner_add_suite(sr1, keyscan_suite());
     srunner_add_suite(sr1, keystate_suite());
+    srunner_add_suite(sr1, log_suite());
     srunner_set_fork_status(sr1, CK_NOFORK);
     srunner_run_all(sr1, CK_VERBOSE);
     number_failed += srunner_ntests_failed(sr1);

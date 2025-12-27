@@ -20,6 +20,7 @@ typedef struct hid_keyboard_report_s {
 void __wfi();
 void tight_loop_contents(void);
 void watchdog_enable(unsigned int delay_ms, bool pause_on_debug);
+uint64_t time_us_64(void);
 
 // In-memory file system for testing
 // Register a file with given path and content in memory

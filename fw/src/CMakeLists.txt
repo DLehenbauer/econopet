@@ -48,6 +48,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/term.c
     ${FW_SRC_DIR}/config/config.c
     ${FW_SRC_DIR}/diag/mem.c
+    ${FW_SRC_DIR}/diag/log/log.c
     ${FW_SRC_DIR}/usb/cdc_app.c
     ${FW_SRC_DIR}/usb/hid_app.c
     ${FW_SRC_DIR}/usb/keyboard.c

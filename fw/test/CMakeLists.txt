@@ -21,6 +21,7 @@ set(TEST_DIR ${FW_DIR}/test)
 add_executable(${PROJECT_NAME}
     #${TEST_DIR}/menu_test.c
     ${SRC_DIR}/config/config.c
+    ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/window.c
     ${SRC_DIR}/fatal.c
@@ -35,6 +36,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
+    ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/window_test.c

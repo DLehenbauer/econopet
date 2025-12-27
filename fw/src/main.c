@@ -21,10 +21,41 @@
 #include "sd/sd.h"
 #include "term.h"
 #include "diag/mem.h"
+#include "diag/log/log.h"
 #include "system_state.h"
 #include "usb/usb.h"
 #include "usb/keyboard.h"
 #include "display/dvi/dvi.h"
+
+static void log_reset_reason(void) {
+    const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
+    const uint32_t watchdog_reason = watchdog_hw->reason;
+    const uint32_t scratch0 = watchdog_hw->scratch[0];
+
+    log_debug("chip_reset=0x%08lx watchdog=0x%08lx", chip_reset, watchdog_reason);
+
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_POR_BITS) {
+        log_warn("Reset: power-on / brown-out");
+    }
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_RUN_BITS) {
+        log_warn("Reset: RUN pin");
+    }
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_PSM_RESTART_BITS) {
+        log_warn("Reset: debug PSM restart");
+    }
+
+    if (watchdog_reason & WATCHDOG_REASON_TIMER_BITS) {
+        log_warn("Reset: watchdog timer");
+    }
+    if (watchdog_reason & WATCHDOG_REASON_FORCE_BITS) {
+        log_warn("Reset: watchdog force");
+    }
+
+    if (scratch0 != 0) {
+        log_warn("Reset: scratch0=0x%08lx", scratch0);
+        watchdog_hw->scratch[0] = 0;
+    }
+}
 
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
@@ -90,6 +121,11 @@ void fpga_init() {
     // See: https://github.com/raspberrypi/pico-examples/blob/master/clocks/hello_48MHz/hello_48MHz.c
     stdio_init_all();
     printf("\e[2J");
+
+    // Log reset reason as early as possible
+    log_init();
+    log_reset_reason();
+    
     printf("PICO_FLASH_SIZE_BYTES: 0x%08x\n", PICO_FLASH_SIZE_BYTES);
     printf("PICO_XOSC_STARTUP_DELAY_MULTIPLIER: %d\n", PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
     printf("Clocks initialized:\n");
