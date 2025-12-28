@@ -12,10 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "dvi.h"
-#include "../../pet.h"
-#include "../../roms/roms.h"
-#include "../../system_state.h"
+
+#include "pet.h"
+#include "roms/roms.h"
+#include "system_state.h"
 #include "tmds_encode.h"
 
 // Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal

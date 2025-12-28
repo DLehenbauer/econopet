@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "pch.h"
+#include <stdint.h>
 
 typedef uint8_t key_event_t;
 

@@ -12,7 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "window.h"
+
 #include "char_encoding.h"
 #include "dvi/dvi.h"
 

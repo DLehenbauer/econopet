@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include "../pch.h"
-
 extern void cdc_app_task(void);
 extern void hid_app_task(void);
 

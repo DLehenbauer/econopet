@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "pch.h"
- 
+#include <stdarg.h>
+#include <stdint.h>
+
 typedef struct window_s {
     // Pointers to start/end of character buffer.
     uint8_t* const start;

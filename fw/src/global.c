@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "global.h"
 
 static uint8_t __buffer[TEMP_BUFFER_SIZE] = { 0 };

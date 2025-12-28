@@ -12,7 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "usb.h"
+
 #include "diag/log/log.h"
 
 void usb_init() {

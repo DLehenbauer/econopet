@@ -12,8 +12,8 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "console.h"
-#include <stdio.h>
 
 // Control characters
 #define CTRL_C      0x03

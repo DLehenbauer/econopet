@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "pch.h"
 #include "system_state.h"
 
 void menu_enter(void);

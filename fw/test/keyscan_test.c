@@ -12,10 +12,13 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "keyscan_test.h"
 #include "usb/keyscan.h"
-#include "usb/keyboard.h"
 #include "input.h"
+
+// PET keyboard matrix dimensions (from keyboard.h, redefined here to avoid TinyUSB dependencies)
+#define KEY_COL_COUNT 10
 
 START_TEST(test_keyscan_next_key_event) {
     uint8_t matrix[KEY_COL_COUNT] = {

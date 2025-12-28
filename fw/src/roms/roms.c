@@ -1,8 +1,10 @@
-#include "driver.h"
-#include "system_state.h"
-#include "pet.h"
+#include "pch.h"
 #include "roms.h"
+
+#include "driver.h"
 #include "menu/menu.h"
+#include "pet.h"
+#include "system_state.h"
 #include "usb/keyboard.h"
 
 const uint8_t __in_flash(".rom_chars_e800") rom_chars_e800[] = {

@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "checksum.h"
 
 void checksum_add(const uint8_t* buffer, size_t length, uint8_t* checksum) {

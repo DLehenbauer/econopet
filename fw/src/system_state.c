@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "system_state.h"
 
 system_state_t system_state = { 0 };

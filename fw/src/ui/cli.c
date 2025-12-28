@@ -12,16 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "cli.h"
+
 #include "console.h"
 #include "diag/log/log.h"
 #include "display/display.h"
 #include "reset.h"
 #include "system_state.h"
-#include <inttypes.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
 
 // CLI state
 static char line_buffer[CONSOLE_LINE_MAX];

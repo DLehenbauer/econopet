@@ -12,12 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "driver.h"
+
+#include "display/dvi/dvi.h"
 #include "fatal.h"
+#include "global.h"
 #include "hw.h"
 #include "usb/keyboard.h"
-#include "display/dvi/dvi.h"
-#include "global.h"
 
 //                           WMd_AAAA
 #define SPI_CMD_READ_AT    0b01000000

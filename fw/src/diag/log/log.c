@@ -12,8 +12,9 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#include <inttypes.h>
+#include "pch.h"
 #include "log.h"
+
 #include "system_state.h"
 
 // Ring buffer for a single log level

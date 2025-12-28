@@ -13,6 +13,7 @@
  */
 
 #include "pch.h"
+
 #include "diag/log/log.h"
 #include "diag/mem.h"
 #include "display/display.h"

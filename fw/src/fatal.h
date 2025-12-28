@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "pch.h"
+#include <stddef.h>
 
 void __attribute__((noreturn)) fatal(const char* const format, ...);
 void* vetted_malloc(size_t __size);

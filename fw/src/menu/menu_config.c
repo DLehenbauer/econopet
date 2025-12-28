@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "menu_config.h"
 
 #include "config/config.h"

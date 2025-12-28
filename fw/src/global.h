@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "pch.h"
+#include <stdint.h>
 
 #define TEMP_BUFFER_SIZE 2048
 

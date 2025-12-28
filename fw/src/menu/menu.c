@@ -12,11 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "menu.h"
 
+#include <dirent.h>
+
 #include "diag/log/log.h"
-#include "display/display.h"
 #include "display/char_encoding.h"
+#include "display/display.h"
 #include "display/dvi/dvi.h"
 #include "display/window.h"
 #include "driver.h"
@@ -32,7 +35,6 @@
 #include "sd/sd.h"
 #include "system_state.h"
 #include "usb/keyboard.h"
-#include <dirent.h>
 
 // When navigating the SD card's file system, this is the maximum number
 // of we will display to the user/cache in memory.

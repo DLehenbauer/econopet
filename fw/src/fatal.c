@@ -12,10 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
+#include "fatal.h"
+
 #include "display/display.h"
 #include "display/dvi/dvi.h"
 #include "display/window.h"
-#include "fatal.h"
 #include "global.h"
 #include "input.h"
 #include "reset.h"

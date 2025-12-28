@@ -14,7 +14,5 @@
 
 #pragma once
 
-#include "pch.h"
-
 void pet_reset();
 void pet_nmi();

@@ -14,7 +14,10 @@
 
 #pragma once
 
-#include "pch.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include "system_state.h"
 
 void driver_init();

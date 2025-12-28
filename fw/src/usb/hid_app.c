@@ -25,8 +25,8 @@
 
 #include "pch.h"
 
-#include "keyboard.h"
 #include "diag/log/log.h"
+#include "keyboard.h"
 
 //--------------------------------------------------------------------+
 // MACRO TYPEDEF CONSTANT ENUM DECLARATION

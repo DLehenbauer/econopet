@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "pch.h"
+#include <stdint.h>
 
 /**
  * Diagnostic Logging System

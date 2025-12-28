@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "keystate.h"
 
 #define NUM_KEYSTATE_FLAGS 2

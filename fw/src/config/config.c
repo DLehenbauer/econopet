@@ -12,12 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "config.h"
+
+#include "display/display.h"
+#include "display/dvi/dvi.h"
 #include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
-#include "display/display.h"
-#include "display/dvi/dvi.h"
 
 typedef struct parser_s {
     yaml_parser_t parser;

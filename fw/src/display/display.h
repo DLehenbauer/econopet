@@ -16,6 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include "display/window.h"
 
 // Initialize display subsystem

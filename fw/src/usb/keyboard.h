@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "../pch.h"
+#include <stdint.h>
+
 #include "system_state.h"
 
 // PET keyboard matrix is 8 rows by 10 columns where each row is represented by a bit in a byte.

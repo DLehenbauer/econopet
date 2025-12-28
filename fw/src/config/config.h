@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "pch.h"
 #include "config/config_setup.h"
 #include "display/window.h"
 

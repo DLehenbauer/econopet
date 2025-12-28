@@ -14,12 +14,13 @@
 
 #include "pch.h"
 #include "term_inject.h"
+
+#include "class/hid/hid.h"
+#include "diag/log/log.h"
 #include "input.h"
 #include "system_state.h"
+#include "tusb.h"
 #include "usb/keyboard.h"
-#include "diag/log/log.h"
-#include "class/hid/hid.h"
-#include "tusb.h"  // For KEYBOARD_MODIFIER_LEFTSHIFT
 
 // HID key entry: keycode + shift modifier state
 typedef struct {

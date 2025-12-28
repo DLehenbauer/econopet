@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include "../pch.h"
-
 bool sd_init();
 
 FILE* sd_open(const char* path, const char* mode);

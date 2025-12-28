@@ -13,9 +13,6 @@
  */
 
 #pragma once
-
-#include "../pch.h"
-
 typedef enum _KeyStateFlags {
     KEYSTATE_PRESSED_FLAG = (1 << 0),
     KEYSTATE_SHIFTED_FLAG = (1 << 1),

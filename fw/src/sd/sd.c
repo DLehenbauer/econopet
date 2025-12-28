@@ -12,19 +12,20 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "sd.h"
-
-#include "diag/log/log.h"
-#include "driver.h"
-#include "fatal.h"
-#include "global.h"
-#include "hw.h"
 
 #include "blockdevice/flash.h"
 #include "blockdevice/sd.h"
 #include "filesystem/fat.h"
 #include "filesystem/littlefs.h"
 #include "filesystem/vfs.h"
+
+#include "diag/log/log.h"
+#include "driver.h"
+#include "fatal.h"
+#include "global.h"
+#include "hw.h"
 
 bool sd_init() {
     // Deassert SD CS

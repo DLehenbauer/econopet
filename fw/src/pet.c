@@ -12,10 +12,12 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
+#include "pet.h"
+
+#include "display/dvi/dvi.h"
 #include "driver.h"
 #include "usb/keyboard.h"
-#include "display/dvi/dvi.h"
-#include "pet.h"
 
 void pet_reset() {
     // Per the W65C02S datasheet (sections 3.10 - 3.11):

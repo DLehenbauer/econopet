@@ -12,12 +12,14 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
- #pragma once
+#pragma once
 
- #include "pch.h"
- #include "system_state.h"
- 
- typedef struct binary_s {
+#include <stddef.h>
+#include <stdint.h>
+
+#include "system_state.h"
+
+typedef struct binary_s {
     uint8_t* data;
     size_t size;
     size_t capacity;

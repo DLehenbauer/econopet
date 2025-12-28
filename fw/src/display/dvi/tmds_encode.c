@@ -12,6 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "pch.h"
 #include "tmds_encode.h"
 
 // Palette table: Pre-computed intensity indices for TMDS lookup
