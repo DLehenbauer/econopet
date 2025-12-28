@@ -15,6 +15,7 @@
 #include "menu.h"
 
 #include "diag/log/log.h"
+#include "display/display.h"
 #include "display/char_encoding.h"
 #include "display/dvi/dvi.h"
 #include "display/window.h"
@@ -23,13 +24,13 @@
 #include "filesystem/vfs.h"
 #include "global.h"
 #include "hw.h"
+#include "input.h"
 #include "menu_config.h"
 #include "pet.h"
 #include "roms/checksum.h"
 #include "roms/roms.h"
 #include "sd/sd.h"
 #include "system_state.h"
-#include "term.h"
 #include "usb/keyboard.h"
 #include <dirent.h>
 
@@ -41,253 +42,6 @@ const uint screen_width  = 40;
 const uint screen_height = 25;
 
 #define CH_SPACE 0x20
-
-static bool read_button_debounced() {
-    static uint64_t last_change_time = 0;
-    static bool raw_state = true;       // Last raw button state (initial: pressed for capacitor charging)
-    static bool debounced_state = true; // Debounced button state
-    
-    const uint64_t DEBOUNCE_TIME_US = 50000;  // 50ms debounce time
-
-    bool current_raw = !gpio_get(MENU_BTN_GP);  // Active low button
-    uint64_t current_time = time_us_64();
-
-    // Check if raw button state has changed
-    if (current_raw != raw_state) {
-        raw_state = current_raw;
-        last_change_time = current_time;
-        return debounced_state;  // Return current debounced state during transition
-    }
-
-    // Check if we're still in debounce period
-    if ((current_time - last_change_time) < DEBOUNCE_TIME_US) {
-        return debounced_state;  // Still debouncing, return current state
-    }
-
-    // Button state is stable, update debounced state
-    debounced_state = current_raw;
-    return debounced_state;
-}
-
-static ButtonAction get_button_action() {
-    // Track button press/release events and timing for short/long press detection
-    static bool is_pressed = true;     // Initial state matches debounced initial state
-    static bool was_handled = true;
-    static uint64_t press_start;
-    
-    const uint64_t LONG_PRESS_TIME_US = 500000; // 500ms for long press
-
-    bool was_pressed = is_pressed;
-    is_pressed = read_button_debounced();
-    
-    uint64_t current_time = time_us_64();
-    ButtonAction action = None;
-
-    if (!is_pressed) {
-        // Button is not currently pressed.
-        if (was_pressed && !was_handled) {
-            // Button has just been released and did not previously exceed the
-            // long-press threshold.
-            action = ShortPress;
-            log_debug("MENU button: short press");
-        }
-
-    } else {
-        // The button is currently pressed.
-        if (!was_pressed) {
-            // Button has just been pressed (after debounce).  Record the start time.
-            press_start = current_time;
-            was_handled = false;
-        } else if (!was_handled && (current_time - press_start > LONG_PRESS_TIME_US)) {
-            // Button has been held for more than 500ms.  Consider this a long press.
-            was_handled = true;
-            action = LongPress;
-            log_debug("MENU button: long press");
-        }
-    }
-
-    return action;
-}
-
-void term_present() {
-    spi_write(0x8000, video_char_buffer, VIDEO_CHAR_BUFFER_BYTE_SIZE);
-    fflush(stdout);
-}
-
-int term_input_char() {
-    int keycode = keyboard_getch();
-    if (keycode != EOF) {
-        return keycode;
-    }
-
-    if (uart_is_readable(uart_default)) {
-        return uart_getc(uart_default);
-    }
-
-    switch (get_button_action()) {
-        case ShortPress:
-            return KEY_DOWN;
-        case LongPress:
-            return '\n';
-        default:
-            break;
-    }
-
-    return EOF;
-}
-
-uint screen_offset(uint x, uint y) {
-    assert(x < screen_width && y < screen_height);
-    uint offset = y;
-    offset *= screen_width;
-    offset += x;
-    return offset;
-}
-
-void screen_clear() {
-    memset(video_char_buffer, CH_SPACE, screen_width * screen_height);
-}
-
-void screen_print(uint x, uint y, const char* str, bool reverse) {
-    uint offset = screen_offset(x, y);
-    const uint8_t* pCh = (uint8_t*) str;
-    if (reverse) {
-        while (*pCh != 0) {
-            video_char_buffer[offset++] = (ascii_to_vrom(*(pCh++)) | 0x80);
-        }
-    } else {
-        while (*pCh != 0) {
-            video_char_buffer[offset++] = ascii_to_vrom(*(pCh++));
-        }
-    }
-}
-
-void screen_reverse(uint x, uint y, uint length) {
-    uint offset = screen_offset(x, y);
-    
-    assert((offset + length) <= (screen_width * screen_height));
-    
-    while (length--) {
-        video_char_buffer[offset++] ^= 0x80;
-    }
-}
-
-static struct dirent file_slots[MAX_FILE_SLOTS] = { 0 };
-static char full_path [PATH_MAX + 1] = { 0 };
-
-typedef enum {
-    STATUS_ERROR,
-    STATUS_SUCCESS_MORE_ENTRIES,
-    STATUS_SUCCESS_END_OF_DIR
-} DirStatus;
-
-DirStatus file_slots_read(char* path, uint position) {
-    struct dirent* entry = NULL;
-    uint y = 0;
-
-    DIR* dir = opendir(path);
-    if (dir == NULL) {
-        goto Cleanup;
-    }
-
-    // Skip entries until we arrive at the desired position or reach the end of the directory.
-    while (position--) {
-        entry = readdir(dir);
-        if (entry == NULL) {
-            goto Cleanup;
-        }
-    }
-
-    while (((entry = readdir(dir)) != NULL) && (y < MAX_FILE_SLOTS)) {
-        memcpy(&file_slots[y++], entry, sizeof(struct dirent));
-    }
-
-Cleanup:
-    if (y < MAX_FILE_SLOTS) {
-        file_slots[y].d_name[0] = '\0';
-    }
-
-    DirStatus status;
-
-    if (errno != 0) {
-        status = STATUS_ERROR;
-        perror("readdir");
-    } else if (entry == NULL) {
-        status = STATUS_SUCCESS_END_OF_DIR;
-    } else {
-        status = STATUS_SUCCESS_MORE_ENTRIES;
-    }
-
-    if (dir != NULL) {
-        closedir(dir);
-    }
-
-    return status;
-}
-
-int path_concat(char *dest, size_t dest_size, const char *path, const char *filename) {
-    if (!dest || !path || !filename) {
-        return -1; // Invalid arguments
-    }
-
-    // Check if dest_size is sufficient
-    size_t path_len = strlen(path);
-    size_t filename_len = strlen(filename);
-    size_t total_len = path_len + 1 + filename_len + 1; // 1 for '/', 1 for null terminator
-
-    if (total_len > dest_size) {
-        return -2; // Destination buffer too small
-    }
-
-    // Copy the path
-    strncpy(dest, path, dest_size);
-    dest[dest_size - 1] = '\0'; // Ensure null termination
-
-    // Append a separator if needed
-    if (path_len > 0 && path[path_len - 1] != '/') {
-        strncat(dest, "/", dest_size - strlen(dest) - 1);
-    }
-
-    // Append the filename
-    strncat(dest, filename, dest_size - strlen(dest) - 1);
-
-    return 0; // Success
-}
-
-char* directory() {
-    screen_clear();
-    file_slots_read("/", 0);
-    
-    for (int y = 0; y < MAX_FILE_SLOTS; y++) {
-        if (file_slots[y].d_name[0] == '\0') {
-            break;
-        }
-        screen_print(0, y, file_slots[y].d_name, false);
-    }
-
-    int selected = 0;
-    screen_reverse(0, selected, screen_width);
-
-    while (true) {
-        ButtonAction action = get_button_action();
-
-        switch (action) {
-            case None:
-                break;
-            case ShortPress:
-                screen_reverse(0, selected, screen_width);
-                selected++;
-                selected %= screen_height;
-                screen_reverse(0, selected, screen_width);
-                break;
-            case LongPress:
-                path_concat(full_path, sizeof(full_path), "/", file_slots[selected].d_name);
-                return full_path;
-        }
-    }
-
-    __builtin_unreachable();
-}
 
 #define CHUNK_SIZE 2048
 
@@ -329,14 +83,6 @@ void load_prg(const char *filename) {
     spi_write_at(0x2a, size & 0xFF);
     spi_write_at(0xca, size >> 8);
     spi_write_at(0x2b, size >> 8);
-}
-
-void menu_init() {
-    gpio_init(MENU_BTN_GP);
-
-    // Enable pull-up resistor as the button is active low
-    gpio_pull_up(MENU_BTN_GP);
-    gpio_set_dir(MENU_BTN_GP, GPIO_IN);
 }
 
 typedef struct action_context_s {
@@ -489,9 +235,11 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
     }
 }
 
-void menu_enter() {
+void menu_enter(void) {
     log_info("-- Enter Menu --");
 
+    system_state.video_source = video_source_firmware;
+    
     start_menu_rom(MENU_ROM_BOOT_NORMAL);
     memset(video_char_buffer + 0x800, 0x0F, VIDEO_CHAR_BUFFER_BYTE_SIZE - 0x800);
     
@@ -513,24 +261,24 @@ void menu_enter() {
 
     menu_config_show(&window, &setup_sink);
 
+    system_state.video_source = video_source_pet;
     pet_reset();
 
     log_info("-- Exit Menu --");
 }
 
-void menu_task() {
-    ButtonAction action = get_button_action();
+void menu_task(void) {
+    // Check for button events from the input queue
+    int key = input_getch();
 
-    // If no button action, return to main PET loop.
-    if (action == None) {
-        return;
+    switch (key) {
+        case KEY_BTN_SHORT:
+            pet_reset();
+            break;
+        case KEY_BTN_LONG:
+            menu_enter();
+            break;
+        default:
+            break;
     }
-
-    // If short press, reset and then return to main PET loop.
-    if (action == ShortPress) {
-        pet_reset();
-        return;
-    }
-
-    menu_enter();
 }

@@ -15,16 +15,17 @@
 #include "pch.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
+#include "display/display.h"
 #include "display/dvi/dvi.h"
 #include "driver.h"
 #include "global.h"
 #include "hw.h"
+#include "input.h"
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
 #include "system_state.h"
-#include "term.h"
-#include "usb/keyboard.h"
+#include "ui/cli.h"
 #include "usb/usb.h"
 
 static void log_reset_reason(void) {
@@ -202,26 +203,22 @@ int main() {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-    menu_init();    // Begin charging debouncing capacitor.
+    input_init();   // Initialize input subsystem (button)
     sd_init();
     fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.
-    video_init();
+    display_init(); // Initialize display subsystem (video)
     usb_init();
+    
+    // Start CLI on serial console (runs independently of PET display)
+    cli_init();
+    
+    // Show menu on PET display (terminal stays in CLI mode)
     menu_enter();
 
     while (true) {
-        // TODO: Reconfigure SPI/Wishbone address space so we can read video ram and register file
-        //       in a single SPI transaction?  Maybe even read/write simultaneously?
-        spi_read(/* src: */ 0x8000, /* byteLength: */ system_state.video_ram_bytes, /* pDest: */ (uint8_t*) video_char_buffer);
-
-        tuh_task();
-        cdc_app_task();     // TODO: USB serial console unused.  Remove?
-        hid_app_task();     // TODO: Remove empty HID task or merge with dispatch_key_events?
-        dispatch_key_events();
-
-        // Write USB keyboard state and read video graphics.
-        sync_state();
-        menu_task();
+        input_task();   // Poll inputs, dispatch based on mode
+        display_task(); // Sync video buffer, render to terminal if needed
+        menu_task();    // Check for button events to enter menu
     }
 
     __builtin_unreachable();

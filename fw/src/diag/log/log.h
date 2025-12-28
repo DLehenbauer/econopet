@@ -112,6 +112,13 @@ void log_event(log_level_t level, const char* format, ...) __attribute__((format
 uint64_t log_uptime_us(void);
 
 /**
+ * Get the boot time (when log_init was called) in absolute time_us_64 units.
+ * Used for converting log entry timestamps to relative times.
+ * @return Absolute boot time in microseconds
+ */
+uint64_t log_boot_time(void);
+
+/**
  * Iterator for reading log entries across all levels in chronological order.
  */
 typedef struct {

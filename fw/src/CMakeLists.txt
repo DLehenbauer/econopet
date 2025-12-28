@@ -36,20 +36,24 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/driver.c
     ${FW_SRC_DIR}/fatal.c
     ${FW_SRC_DIR}/global.c
+    ${FW_SRC_DIR}/input.c
     ${FW_SRC_DIR}/main.c
+    ${FW_SRC_DIR}/reset.c
     ${FW_SRC_DIR}/menu/menu.c
     ${FW_SRC_DIR}/menu/menu_config.c
+    ${FW_SRC_DIR}/display/display.c
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
+    ${FW_SRC_DIR}/term_inject.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c
     ${FW_SRC_DIR}/roms/checksum.c
     ${FW_SRC_DIR}/sd/sd.c
-    ${FW_SRC_DIR}/term.c
     ${FW_SRC_DIR}/config/config.c
     ${FW_SRC_DIR}/diag/mem.c
     ${FW_SRC_DIR}/diag/log/log.c
-    ${FW_SRC_DIR}/usb/cdc_app.c
+    ${FW_SRC_DIR}/ui/cli.c
+    ${FW_SRC_DIR}/ui/console.c
     ${FW_SRC_DIR}/usb/hid_app.c
     ${FW_SRC_DIR}/usb/keyboard.c
     ${FW_SRC_DIR}/usb/keyscan.c

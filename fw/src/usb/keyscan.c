@@ -14,7 +14,7 @@
 
 #include "keyboard.h"
 #include "keyscan.h"
-#include "term.h"
+#include "input.h"
 
 // Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
 const key_event_t key_event_none = PET_KEY_EVENT(false, 0x7, 0xF);

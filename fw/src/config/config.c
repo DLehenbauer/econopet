@@ -16,7 +16,7 @@
 #include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
-#include "term.h"
+#include "display/display.h"
 #include "display/dvi/dvi.h"
 
 typedef struct parser_s {
@@ -38,8 +38,7 @@ typedef void (*parse_callback_t)(parser_t* parser);
 
 static void vfatal_parse_error(parser_t* parser, const char* format, va_list args) {
     const window_t window = window_create(video_char_buffer, 40, 25);
-    term_begin(&window);
-    window_fill(&window, CH_SPACE);
+    display_window_begin(&window);
 
     uint8_t* pOut = window_println(&window, window.start, "E: error parsing file:");
     window_reverse(&window, window.start, 2);
@@ -62,7 +61,7 @@ static void vfatal_parse_error(parser_t* parser, const char* format, va_list arg
 
     pOut = window_vprintln(&window, pOut, format, args);
 
-    term_display(&window);
+    display_window_show(&window);
     abort();
 }
 

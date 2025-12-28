@@ -120,7 +120,7 @@ static void dequeue_key_event() {
     key_buffer_next_read_index = (key_buffer_next_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
-static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
+void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
     KeyStateFlags keystate = keystate_reset(keycode);
 
     if (!(keystate & KEYSTATE_PRESSED_FLAG)) {
@@ -139,7 +139,7 @@ static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
     enqueue_key_event(keycode, row, col, modifiers, /* pressed: */ false);
 }
 
-static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
+void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
 
     usb_keymap_entry_t keyInfo = s_keymap[
@@ -411,7 +411,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     for (uint8_t i = 0; i < sizeof(prev_report.keycode); i++) {
         const uint8_t keycode = prev_report.keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
-            enqueue_key_up(keycode, modifiers);
+            usb_keyboard_enqueue_key_up(keycode, modifiers);
         }
     }
 
@@ -420,7 +420,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
-            enqueue_key_down(keycode, modifiers);
+            usb_keyboard_enqueue_key_down(keycode, modifiers);
         }
     }
 
@@ -428,12 +428,6 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
 }
 
 int keyboard_getch() {
-    tuh_task();
-    cdc_app_task();     // TODO: USB serial console unused.  Remove?
-    hid_app_task();     // TODO: Remove empty HID task or merge with dispatch_key_events?
-    dispatch_key_events();
-    sync_state();
-
     // If the USB keyboard matrix has pressed keys it takes precedence.  Otherwise, we fall
     // back to the PET keyboard matrix.  This is the same logic used by the FPGA when determining
     // when to intercept the reads from $E812.
@@ -443,5 +437,7 @@ int keyboard_getch() {
         use_usb_keys |= (usb_key_matrix[i] != 0xff);
     }
 
-    return keyscan_getch(use_usb_keys ? usb_key_matrix : pet_key_matrix);
+    return keyscan_getch(use_usb_keys
+        ? usb_key_matrix
+        : pet_key_matrix);
 }

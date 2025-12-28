@@ -12,18 +12,20 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
+#include "display/display.h"
+#include "display/dvi/dvi.h"
+#include "display/window.h"
 #include "fatal.h"
 #include "global.h"
-#include "display/window.h"
+#include "input.h"
+#include "reset.h"
 #include "roms/roms.h"
-#include "term.h"
-#include "display/dvi/dvi.h"
 
 static void __attribute__((noreturn)) vfatal(const char* const format, va_list args) {
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(video_char_buffer, 40, 25);
-    term_begin(&window);
+    display_window_begin(&window);
 
     uint8_t* pOut = window_puts(&window, window.start, "E: ");
     window_reverse(&window, window.start, 2);
@@ -34,23 +36,17 @@ static void __attribute__((noreturn)) vfatal(const char* const format, va_list a
         pOut = window_print(&window, pOut, "(%d): %s", errno, strerror(errno));
     }
 
-    term_display(&window);
+    display_window_show(&window);
     
     video_graphics = true;  // Use lower case for bit-banged DVI display
 
     // Wait for a key press (keyboard or menu button)
-    while (term_input_char() == EOF) {
+    while (input_getch() == EOF) {
+        input_task();
         tight_loop_contents();
     }
 
-    // We use the watchdog to reset the cores and peripherals to get back to
-    // a known state before running the firmware.
-    watchdog_enable(/* delay_ms: */ 0, /* pause_on_debug: */ true);
-
-    // Wait for watchdog to reset the device
-    while (true) {
-        __wfi();
-    }
+    system_reset();
 }
 
 void fatal(const char* const format, ...) {

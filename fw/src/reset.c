@@ -12,25 +12,16 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-#pragma once
-
 #include "pch.h"
-#include "display/window.h"
+#include "reset.h"
 
-// Define constants for special keys
-#define KEY_UP    1000
-#define KEY_DOWN  1001
-#define KEY_RIGHT 1002
-#define KEY_LEFT  1003
-#define KEY_HOME  1004
-#define KEY_END   1005
-#define KEY_PGUP  1006
-#define KEY_PGDN  1007
+void system_reset(void) {
+    // We use the watchdog to reset the cores and peripherals to get back to
+    // a known state before running the firmware.
+    watchdog_enable(/* delay_ms: */ 0, /* pause_on_debug: */ true);
 
-extern int term_input_char();
-extern void term_present();
-
-void term_begin();
-void term_display(const window_t* const window);
-void term_end();
-int term_getch();
+    // Wait for watchdog to reset the device
+    while (true) {
+        __wfi();
+    }
+}

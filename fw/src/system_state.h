@@ -32,6 +32,23 @@ typedef enum pet_display_columns_e {
     pet_display_columns_80 = 80,
 } pet_display_columns_t;
 
+typedef enum video_source_e {
+    video_source_pet,       // HDMI shows what 6502 writes to $8000
+    video_source_firmware,  // HDMI shows firmware-controlled buffer
+} video_source_t;
+
+typedef enum term_mode_e {
+    term_mode_cli,          // Terminal shows CLI prompt, accepts commands
+    term_mode_log,          // Terminal shows log messages (legacy, for echo)
+    term_mode_video,        // Terminal mirrors video buffer
+} term_mode_t;
+
+typedef enum term_input_dest_e {
+    term_input_ignore,      // Discard terminal input
+    term_input_to_pet,      // Inject as PET keystrokes
+    term_input_to_firmware, // Route to firmware (menu, etc.)
+} term_input_dest_t;
+
 typedef struct __attribute__((packed)) usb_keymap_entry_s {
     // First byte contains PET keyboard matrix row/col packed as nibbles
     unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
@@ -76,6 +93,11 @@ typedef struct system_state_s {
 
     // Precomputed size of video RAM in bytes. Updated whenever video_ram_mask changes.
     size_t video_ram_bytes;
+
+    // I/O routing configuration
+    video_source_t video_source;        // Where HDMI gets its video data
+    term_mode_t term_mode;              // What terminal output shows
+    term_input_dest_t term_input_dest;  // Where terminal input goes
 } system_state_t;
 
 extern system_state_t system_state;

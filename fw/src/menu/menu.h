@@ -17,18 +17,6 @@
 #include "pch.h"
 #include "system_state.h"
 
-typedef enum {
-    // Button is not pressed or currently being held.
-    None        = 0,
-
-    // Button has been released. Time held is below long press threshold.
-    ShortPress  = 1,
-
-    // Button has been held longer than long-press threshold.
-    LongPress   = 2
-} ButtonAction;
-
-void menu_init();
-void menu_enter();
-void menu_task();
+void menu_enter(void);
+void menu_task(void);
 void read_keymap(const char* filename, system_state_t* config);

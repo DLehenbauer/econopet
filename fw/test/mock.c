@@ -114,8 +114,25 @@ FILE* sd_open(const char* path, const char* mode) {
     exit(1);
 }
 
-void term_present() {
+// Mock display functions
+void display_window_begin(const void* window) {
+    (void)window;
+}
+
+void display_window_show(const void* window) {
+    (void)window;
     fflush(stdout);
+}
+
+void display_task(void) { }
+
+// Mock input functions
+void input_init(void) { }
+
+void input_task(void) { }
+
+int input_getch(void) {
+    return EOF;
 }
 
 void set_cpu(bool ready, bool reset, bool nmi) {
@@ -146,6 +163,11 @@ void tight_loop_contents(void) { }
 void watchdog_enable(unsigned int delay_ms, bool pause_on_debug) {
     assert(delay_ms == 0);
     assert(pause_on_debug == true);
+    abort();
+}
+
+// Mock system_reset function (used by fatal to restart)
+void system_reset(void) {
     abort();
 }
 

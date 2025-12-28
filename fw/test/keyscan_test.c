@@ -15,7 +15,7 @@
 #include "keyscan_test.h"
 #include "usb/keyscan.h"
 #include "usb/keyboard.h"
-#include "term.h"
+#include "input.h"
 
 START_TEST(test_keyscan_next_key_event) {
     uint8_t matrix[KEY_COL_COUNT] = {

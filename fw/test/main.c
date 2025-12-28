@@ -15,11 +15,9 @@
 #include <check.h>
 #include "char_encoding_test.h"
 #include "config_parser_test.h"
-#include "config_test.h"
 #include "keyscan_test.h"
 #include "keystate_test.h"
 #include "log_test.h"
-#include "menu_test.h"
 #include "window_test.h"
 
 int run_suite() {
@@ -46,8 +44,5 @@ int run_suite() {
 }
 
 int main(void) {
-    // config_test();
-    // menu();
-
     return run_suite();
 }

@@ -14,6 +14,7 @@
 
 #include <inttypes.h>
 #include "log.h"
+#include "system_state.h"
 
 // Ring buffer for a single log level
 typedef struct {
@@ -37,13 +38,6 @@ static uint64_t log_boot_time_us = 0;
 
 // Timestamp of previous entry for tie-breaking when timestamps are equal
 static uint64_t log_last_timestamp_us = 0;
-
-// Level name prefixes for serial output
-static const char* const level_prefixes[LOG_LEVEL_COUNT] = {
-    "D",  // DEBUG
-    "I",  // INFO
-    "W"   // WARN
-};
 
 void log_init(void) {
     // Record boot time for relative timestamps
@@ -105,14 +99,6 @@ static void log_vevent(log_level_t level, const char* format, va_list args) {
     if (ring->count < ring->capacity) {
         ring->count++;
     }
-
-#if LOG_ECHO_SERIAL
-    // Echo to serial with level prefix and relative timestamp
-    uint64_t relative_us = entry->timestamp_us - log_boot_time_us;
-    uint32_t seconds = (uint32_t)(relative_us / 1000000);
-    uint32_t millis = (uint32_t)((relative_us % 1000000) / 1000);
-    printf("[%4" PRIu32 ".%03" PRIu32 "] %s: %s\n", seconds, millis, level_prefixes[level], entry->message);
-#endif
 }
 
 void log_event(log_level_t level, const char* format, ...) {
@@ -145,6 +131,10 @@ void log_warn(const char* format, ...) {
 
 uint64_t log_uptime_us(void) {
     return time_us_64() - log_boot_time_us;
+}
+
+uint64_t log_boot_time(void) {
+    return log_boot_time_us;
 }
 
 void log_iter_init(log_iterator_t* iter, log_level_t min_level) {

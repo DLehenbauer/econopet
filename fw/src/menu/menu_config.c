@@ -17,10 +17,11 @@
 #include "config/config.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
+#include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
 #include "global.h"
-#include "term.h"
+#include "input.h"
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
@@ -79,8 +80,8 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         .on_exit_config = on_config_callback,
     };
 
-    term_begin(window);
-    term_display(window);
+    // Fill window with spaces
+    window_fill(window, 0x20);
 
     parse_config_file("/config.yaml", &sink, -1);
 
@@ -88,32 +89,32 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     window_reverse(window, window_xy(window, 0, selected_config), 40);
 
     while (true) {
-        term_display(window);
+        // Sync display (writes buffer to PET RAM and terminal)
+        display_task();
 
         int ch = EOF;
         do {
-            ch = term_getch();
+            input_task();
+            ch = input_getch();
         } while (ch == EOF);
 
         switch (ch) {
             case KEY_UP: {
-                if (selected_config > 0) {
-                    window_reverse(window, window_xy(window, 0, selected_config), 40);
-                    selected_config--;
-                    window_reverse(window, window_xy(window, 0, selected_config), 40);
-                }
+                window_reverse(window, window_xy(window, 0, selected_config), 40);
+                selected_config = (selected_config + context.config_count - 1) % context.config_count;
+                window_reverse(window, window_xy(window, 0, selected_config), 40);
                 break;
             }
-            case KEY_DOWN: {
-                if (selected_config < context.config_count - 1) {
-                    window_reverse(window, window_xy(window, 0, selected_config), 40);
-                    selected_config++;
-                    window_reverse(window, window_xy(window, 0, selected_config), 40);
-                }
+            case KEY_DOWN: 
+            case KEY_BTN_SHORT: {
+                window_reverse(window, window_xy(window, 0, selected_config), 40);
+                selected_config = (selected_config + 1) % context.config_count;
+                window_reverse(window, window_xy(window, 0, selected_config), 40);
                 break;
             }
             case '\r':
-            case '\n': {
+            case '\n':
+            case KEY_BTN_LONG: {
                 return load_config(setup_sink, selected_config);
             }
             case 'T':
@@ -126,6 +127,4 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
                 break;
         }
     }
-    
-    term_end();
 }
