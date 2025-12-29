@@ -20,9 +20,14 @@
   * [Trace Width Calculator](http://circuitcalculator.com/wordpress/?p=25/)
   * [Trace Impedance Calculator](https://www.eeweb.com/tools/edge-coupled-microstrip-impedance/)
   * [Parallel Resistor Calculator](https://www.qsl.net/in3otd/parallr.html)
-* [JLCPCB Capabilities](https://jlcpcb.com/capabilities/Capabilities)
-* [JLCPCB Parts Search](https://yaqwsx.github.io/jlcparts/#/)
-* [JLCPCB DFM Analysis](https://jlcdfm.com/)
+* JLCPCB
+  * [Capabilities](https://jlcpcb.com/capabilities/Capabilities)
+  * [Parts Search](https://jlcpcb.com/parts/all-electronic-components) ([Alt](https://yaqwsx.github.io/jlcparts/#/))
+  * [DFM Analysis](https://jlcdfm.com/)
+
+## RP2040
+
+* [Debug Probe Firmware](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html#updating-the-firmware-on-the-debug-probe)
 
 ## FPGA & Verilog
 
