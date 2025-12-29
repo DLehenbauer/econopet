@@ -1,10 +1,22 @@
 cmake_minimum_required(VERSION 3.13)
 
-project("firmware" C CXX ASM)
+project("firmware"
+    VERSION 0.1.0
+    LANGUAGES C CXX ASM)
 add_compile_options(-Wall -Wextra -Wnull-dereference)
 
 # Include ROM header generation function
 include(${FW_DIR}/cmake/AddRomHeader.cmake)
+
+# Include git version information
+include(${FW_DIR}/cmake/GitVersion.cmake)
+
+# Generate version header in build directory
+configure_file(
+    ${FW_DIR}/cmake/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    @ONLY
+)
 
 # Include external projects
 set(FW_EXTERNAL_DIR ${FW_DIR}/external)
@@ -71,7 +83,7 @@ add_executable(${FW_EXECUTABLE_NAME}
 #
 # We increase the oscillator startup delay to the maximum (174) to help 40/8096 Rev A.
 # boards tolerate this. (See https://github.com/DLehenbauer/econopet/issues/3)
-target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=1)
+target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=8)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216)

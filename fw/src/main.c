@@ -29,36 +29,6 @@
 #include "ui/cli.h"
 #include "usb/usb.h"
 
-static void log_reset_reason(void) {
-    const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
-    const uint32_t watchdog_reason = watchdog_hw->reason;
-    const uint32_t scratch0 = watchdog_hw->scratch[0];
-
-    log_debug("chip_reset=0x%08lx watchdog=0x%08lx", chip_reset, watchdog_reason);
-
-    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_POR_BITS) {
-        log_warn("Reset: power-on / brown-out");
-    }
-    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_RUN_BITS) {
-        log_warn("Reset: RUN pin");
-    }
-    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_PSM_RESTART_BITS) {
-        log_warn("Reset: debug PSM restart");
-    }
-
-    if (watchdog_reason & WATCHDOG_REASON_TIMER_BITS) {
-        log_warn("Reset: watchdog timer");
-    }
-    if (watchdog_reason & WATCHDOG_REASON_FORCE_BITS) {
-        log_warn("Reset: watchdog force");
-    }
-
-    if (scratch0 != 0) {
-        log_warn("Reset: scratch0=0x%08lx", scratch0);
-        watchdog_hw->scratch[0] = 0;
-    }
-}
-
 void measure_freqs(uint fpga_div) {
     uint32_t f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
     uint32_t f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
@@ -118,10 +88,6 @@ void fpga_init() {
     stdio_init_all();
     printf("\e[2J");
 
-    // Log reset reason as early as possible
-    log_init();
-    log_reset_reason();
-    
     log_debug("FLASH_SIZE=0x%08x XOSC_DELAY=%d", PICO_FLASH_SIZE_BYTES, PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
     measure_freqs(fpga_div);
 
@@ -198,27 +164,39 @@ void fpga_init() {
 }
 
 int main() {
-    // Turn on LED at start of config to signal that the RP2040 has booted and FPGA
-    // configuration has started (sd_init will turn LED off.)
+    // Note: A prolonged period without a valid sync signal may cause the PET monitor to
+    // display a "bright spot" which can damage the CRT phosphor. Therefore, we initialize
+    // the FPGA as soon as possible to start generating a native video for the PET.
+    //
+    // We limit the work done before fpga_init() to tasks that are either very fast or
+    // prerequisites for FPGA configuration.
+
+    // Turn on LED to signal that the RP2040 has booted.  'sd_init()' will turn LED off.
+    // If the LED is "stuck on" at boot, this typically means the sd card is missing.
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
-    input_init();   // Initialize input subsystem (button)
-    sd_init();
-    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA.
-    display_init(); // Initialize display subsystem (video)
-    usb_init();
+    log_init();     // Initialize logging subsystem early for boot diagnostics
+    input_init();   // Begin charging debounce capacitor for menu button (if any)
+    sd_init();      // SD card is required to read the FPGA's bitstream file
+    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA
+
+    // We now are generating a valid video signal for the PET, so it's safe to proceed
+    // with the rest of the initialization.
+
+    display_init(); // Initialize firmware display subsystem
+    usb_init();     // Initialize USB subsystem
+    cli_init();     // Start CLI on UART serial
     
-    // Start CLI on serial console (runs independently of PET display)
-    cli_init();
-    
-    // Show menu on PET display (terminal stays in CLI mode)
+    // Enter boot menu
     menu_enter();
 
+    // PET is configured and running.  Enter main loop to synchronize displays, service
+    // input queues, and check for menu/reset button.
     while (true) {
-        input_task();   // Poll inputs, dispatch based on mode
         display_task(); // Sync video buffer, render to terminal if needed
+        input_task();   // Poll inputs, dispatch based on mode
         menu_task();    // Check for button events to enter menu
     }
 

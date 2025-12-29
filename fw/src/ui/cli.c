@@ -20,6 +20,7 @@
 #include "display/display.h"
 #include "reset.h"
 #include "system_state.h"
+#include "version.h"
 
 // CLI state
 static char line_buffer[CONSOLE_LINE_MAX];
@@ -182,7 +183,7 @@ void cli_init(void) {
     
     // Print welcome banner and initial prompt
     printf("\r\n");
-    printf("EconoPET Debug Console\r\n");
+    printf("EconoPET Firmware v%s (%s%s)\r\n", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
     printf("Type 'help' for available commands.\r\n");
     printf("\r\n");
     printf("econopet> ");

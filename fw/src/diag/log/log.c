@@ -16,6 +16,7 @@
 #include "log.h"
 
 #include "system_state.h"
+#include "version.h"
 
 // Ring buffer for a single log level
 typedef struct {
@@ -73,6 +74,34 @@ void log_init(void) {
                    "LOG_INFO_ENTRIES must be a power of 2");
     _Static_assert((LOG_WARN_ENTRIES & (LOG_WARN_ENTRIES - 1)) == 0,
                    "LOG_WARN_ENTRIES must be a power of 2");
+
+    // First log entry after init records reset reason
+    const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
+    const uint32_t watchdog_reason = watchdog_hw->reason;
+    const uint32_t scratch0 = watchdog_hw->scratch[0];
+    
+    log_warn("EconoPET v%s (%s%s)", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
+    log_debug("chip_reset=0x%08lx watchdog=0x%08lx", chip_reset, watchdog_reason);
+
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_POR_BITS) {
+        log_warn("Reset: power-on / brown-out");
+    }
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_RUN_BITS) {
+        log_warn("Reset: RUN pin");
+    }
+    if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_PSM_RESTART_BITS) {
+        log_warn("Reset: debug PSM restart");
+    }
+    if (watchdog_reason & WATCHDOG_REASON_TIMER_BITS) {
+        log_warn("Reset: watchdog timer");
+    }
+    if (watchdog_reason & WATCHDOG_REASON_FORCE_BITS) {
+        log_warn("Reset: watchdog force");
+    }
+    if (scratch0 != 0) {
+        log_warn("Reset: scratch0=0x%08lx", scratch0);
+        watchdog_hw->scratch[0] = 0;
+    }
 }
 
 static void log_vevent(log_level_t level, const char* format, va_list args) {

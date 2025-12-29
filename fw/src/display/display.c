@@ -16,8 +16,8 @@
 #include "display.h"
 
 #include "char_encoding.h"
-#include "dvi/dvi.h"
 #include "driver.h"
+#include "dvi/dvi.h"
 #include "system_state.h"
 
 // Terminal escape sequences
