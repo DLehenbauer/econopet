@@ -50,7 +50,7 @@ static int dequeue_key(void) {
     return keycode;
 }
 
-// Button debouncing and action detection
+// Read state of MENU button
 static bool read_button_debounced(void) {
     static uint64_t last_change_time = 0;
     static bool raw_state = true;       // Last raw button state (initial: pressed for capacitor charging)
@@ -61,16 +61,19 @@ static bool read_button_debounced(void) {
     bool current_raw = !gpio_get(MENU_BTN_GP);  // Active low button
     uint64_t current_time = time_us_64();
 
-    // Check if raw button state has changed
+    // Check if raw button state has changed, record the new state and time.
     if (current_raw != raw_state) {
         raw_state = current_raw;
         last_change_time = current_time;
-        return debounced_state;  // Return current debounced state during transition
+
+        // Return previous debounced state during transition
+        return debounced_state;
     }
 
     // Check if we're still in debounce period
     if ((current_time - last_change_time) < DEBOUNCE_TIME_US) {
-        return debounced_state;  // Still debouncing, return current state
+        // Still debouncing, return previous debounced state
+        return debounced_state;
     }
 
     // Button state is stable, update debounced state
