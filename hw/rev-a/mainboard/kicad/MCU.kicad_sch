@@ -8356,7 +8356,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "cca2b0b3-6877-46aa-9beb-8dafd2125ac0")
 		(property "Reference" "C6"
 			(at 69.6468 120.7516 0)
@@ -8367,7 +8367,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4u7 10V"
+		(property "Value" "DNP"
 			(at 69.6468 123.063 0)
 			(effects
 				(font
@@ -8385,7 +8385,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
+		(property "Datasheet" ""
 			(at 67.31 121.92 0)
 			(effects
 				(font
@@ -8403,7 +8403,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C23733"
+		(property "LCSC" ""
 			(at 67.31 121.92 0)
 			(effects
 				(font
@@ -8663,7 +8663,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "15k"
+		(property "Value" "4k7"
 			(at 78.105 107.95 90)
 			(effects
 				(font
@@ -8681,7 +8681,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010100_UNI-ROYAL-Uniroyal-Elec-0402WGF1502TCE_C25756.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010045_UNI-ROYAL-Uniroyal-Elec-0402WGF4701TCE_C25900.pdf"
 			(at 76.2 107.95 0)
 			(effects
 				(font
@@ -8699,7 +8699,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25756"
+		(property "LCSC" "C25900"
 			(at 76.2 107.95 0)
 			(effects
 				(font
