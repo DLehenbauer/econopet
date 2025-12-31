@@ -32,32 +32,15 @@
 static int32_t addr_min;
 static int32_t addr_max;
 
-bool check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
-    if (actual != expected) {
-        // GCC doesn't recognize the %b format until v12.  (However, the runtime supports it.)
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wformat"
-        #pragma GCC diagnostic ignored "-Wformat-extra-args"
-        log_debug("$%05lx: Expected %08b, but got %08b", addr, expected, actual);
-        #pragma GCC diagnostic pop
-
-        #ifdef CONTINUE_ON_ERROR
-            return false;
-        #else
-            panic("");
-        #endif
-    }
-    return true;
+void check_byte(uint32_t addr, uint8_t actual, uint8_t expected) {
+    vet(actual == expected, "$%05lx: Expected %08b, but got %08b", addr, expected, actual);
 }
 
 void check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit_index, uint8_t expected_bit) {
     uint8_t actual_bit = (actual_byte >> bit_index) & 1;
-    
-    // #pragma GCC diagnostic push
-    // #pragma GCC diagnostic ignored "-Wformat"
-    // #pragma GCC diagnostic ignored "-Wformat-extra-args"
-    vet(actual_bit == expected_bit, "$%05lx[%d]: Expected %d, but got %d (byte read: %08b)", addr, bit_index, expected_bit, actual_bit, actual_byte);
-    // #pragma GCC diagnostic pop
+
+    vet(actual_bit == expected_bit, "$%05lx[%d]: Expected %d, but got %d (byte read: %08b)", addr, bit_index,
+        expected_bit, actual_bit, actual_byte);
 }
 
 uint8_t toggle_bit(uint32_t addr, uint8_t byte, uint8_t bit_index, uint8_t expected_bit) {
