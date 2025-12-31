@@ -1210,7 +1210,7 @@
           "group_by": false,
           "label": "MOUSER",
           "name": "MOUSER",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,

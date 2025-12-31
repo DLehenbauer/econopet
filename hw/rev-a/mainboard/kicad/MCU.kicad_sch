@@ -5116,9 +5116,9 @@
 		)
 		(uuid "33b8f586-7f31-4322-a766-79b248b0ab22")
 	)
-	(text "~{SPI_ENA} is driven low during FPGA programming.\n\nWe use this to hold the MCU in reset when externally\nprogramming the FPGA during development.  Aside from\nbeing a convenience, this avoids contention on SPI0_~{CS},\nwhich the T8Q144 requires to be driven low (even when\nusing JTAG).\n\nFT2232H can source/sink ~8ma, so 1K should be ok.\n"
+	(text "The T20Q144 requires SPI0_~{CS} to be pulsed low, even\nwhen using JTAG.  To prevent contention on SPI0_~{CS},\nwe use ~{SPI_ENA} to reset the RP2040, which then\ndetects that ~{CRESET} is being actively driven hi and\nskips JTAG configuration.\n\n            POR       Idle        Programming\n~SPI0_~{CS}   float       hi          Pulse lo -> hi\n~{SPI_ENA}    float       float       Pulse lo -> float\n~{CRESET}     hi          hi          low\n\nThe 1K resistor is an unnecessary precaution, since the\nJTAG programmer never drives ~{SPI_ENA} high.\n"
 		(exclude_from_sim no)
-		(at 46.99 154.94 0)
+		(at 48.26 162.56 0)
 		(effects
 			(font
 				(size 1.27 1.27)
