@@ -75,13 +75,15 @@ void log_init(void) {
     _Static_assert((LOG_WARN_ENTRIES & (LOG_WARN_ENTRIES - 1)) == 0,
                    "LOG_WARN_ENTRIES must be a power of 2");
 
-    // First log entry after init records reset reason
+    log_warn("EconoPET v%s (%s%s)", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
+
+#if defined(PICO_RP2040)
+    // Record reset reason from hardware registers (only available on RP2040)
     const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
     const uint32_t watchdog_reason = watchdog_hw->reason;
     const uint32_t scratch0 = watchdog_hw->scratch[0];
-    
-    log_warn("EconoPET v%s (%s%s)", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
-    log_debug("chip_reset=0x%08lx watchdog=0x%08lx", chip_reset, watchdog_reason);
+
+    log_debug("chip_reset=0x%08" PRIx32 " watchdog=0x%08" PRIx32, chip_reset, watchdog_reason);
 
     if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_POR_BITS) {
         log_warn("Reset: power-on / brown-out");
@@ -99,9 +101,10 @@ void log_init(void) {
         log_warn("Reset: watchdog force");
     }
     if (scratch0 != 0) {
-        log_warn("Reset: scratch0=0x%08lx", scratch0);
+        log_warn("Reset: scratch0=0x%08" PRIx32, scratch0);
         watchdog_hw->scratch[0] = 0;
     }
+#endif
 }
 
 static void log_vevent(log_level_t level, const char* format, va_list args) {

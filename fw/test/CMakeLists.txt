@@ -1,4 +1,16 @@
-project("firmware-test")
+project("firmware-test"
+    VERSION 0.1.0
+    LANGUAGES C)
+
+# Include git version information
+include(${FW_DIR}/cmake/GitVersion.cmake)
+
+# Generate version header in build directory
+configure_file(
+    ${FW_DIR}/cmake/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    @ONLY
+)
 
 # Include external projects
 set(EXTERNAL_DIR ${FW_DIR}/external)
@@ -47,6 +59,7 @@ target_link_libraries(${PROJECT_NAME}
 
 # Include directories
 include_directories(
+    "${CMAKE_CURRENT_BINARY_DIR}"
     "${EXTERNAL_DIR}/libyaml/include"
     "${SRC_DIR}")
 

@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
 bool sd_init();
 
 FILE* sd_open(const char* path, const char* mode);
