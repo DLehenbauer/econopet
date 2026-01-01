@@ -12915,7 +12915,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "120uF"
+		(property "Value" "330uF"
 			(at 61.9252 43.053 0)
 			(effects
 				(font
@@ -12942,7 +12942,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "120uF 50V low-ESR capacitor"
+		(property "Description" "330uF 35V low-ESR capacitor"
 			(at 59.69 41.91 0)
 			(effects
 				(font
@@ -12951,7 +12951,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "667-EEU-FM1H121LB"
+		(property "MOUSER" "667-EEU-FM1V331"
 			(at 59.69 41.91 0)
 			(effects
 				(font
