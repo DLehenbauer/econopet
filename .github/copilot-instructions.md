@@ -45,6 +45,14 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 
 ## Code Conventions
 
+### Plain ASCII text (avoid “fancy” Unicode)
+- When generating prose (commit messages, PR text, docs, comments, user-facing strings), prefer plain ASCII characters.
+- Do not emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode that humans typically don’t type:
+	- Use `'` and `"` (not `’` `“` `”`)
+	- Use `-` (not `–` or `—`)
+	- Use `...` (not `…`)
+- Avoid other decorative Unicode in text (e.g., `•`, `→`, non-breaking spaces) unless the user explicitly asks for it or it is required by a technical format.
+
 ### File headers
 New source files should include the CC0 license header with author attribution (see fw/src/main.c for example).
 
