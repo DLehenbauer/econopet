@@ -52,6 +52,7 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 	- Use `-` (not `–` or `—`)
 	- Use `...` (not `…`)
 - Avoid other decorative Unicode in text (e.g., `•`, `→`, non-breaking spaces) unless the user explicitly asks for it or it is required by a technical format.
+- Avoid overuse of semi-colons, as these are rarely used in English.
 
 ### File headers
 New source files should include the CC0 license header with author attribution (see fw/src/main.c for example).
