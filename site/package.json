@@ -4,6 +4,8 @@
   "description": "Static gh-pages site for EconoPET",
   "main": "index.js",
   "scripts": {
+    "install": "pip install -r requirements.txt",
+    "build": "mkdocs build",
     "test": "http-server ./dist -p 8080"
   },
   "keywords": [],

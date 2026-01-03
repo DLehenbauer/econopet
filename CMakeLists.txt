@@ -150,6 +150,16 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
 endif()
 
 # ============================================================================
+# Site/Documentation target
+# ============================================================================
+add_custom_target(site
+    COMMAND npm install
+    COMMAND npm run build
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/site
+    COMMENT "Building static site with documentation"
+)
+
+# ============================================================================
 # Convenience targets
 # ============================================================================
 

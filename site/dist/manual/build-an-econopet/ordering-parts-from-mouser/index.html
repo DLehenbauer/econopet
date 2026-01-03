@@ -1,0 +1,786 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../ordering-pcbs-from-jlcpcb/">
+      
+      
+        <link rel="next" href="../assembling-the-board/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Ordering Parts - EconoPET Manual</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ordering-parts-from-mouser" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="EconoPET Manual" class="md-header__button md-logo" aria-label="EconoPET Manual" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            EconoPET Manual
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Ordering Parts
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="EconoPET Manual" class="md-nav__button md-logo" aria-label="EconoPET Manual" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    EconoPET Manual
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build an EconoPET
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Build an EconoPET
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build an EconoPET
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ordering-pcbs-from-jlcpcb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering PCBs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering Parts
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering Parts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-buy-from-mouser-vs-elsewhere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to buy from Mouser (vs elsewhere)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What to buy from Mouser (vs elsewhere)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bom-for-through-hole-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BOM for Through-Hole Components
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../assembling-the-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Assembly
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installing-the-firmware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Firmware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-buy-from-mouser-vs-elsewhere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to buy from Mouser (vs elsewhere)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What to buy from Mouser (vs elsewhere)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bom-for-through-hole-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BOM for Through-Hole Components
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ordering-parts-from-mouser">Ordering parts from Mouser</h1>
+<p>This section lists the through-hole parts needed to build an EconoPET mainboard.  These parts will be hand-soldered onto the PCB after receiving it from JLCPCB.</p>
+<h2 id="what-to-buy-from-mouser-vs-elsewhere">What to buy from Mouser (vs elsewhere)</h2>
+<p>All items below can be sourced from Mouser, but some are generic and often cheaper in bulk from other sources:</p>
+<ul>
+<li>Break-away pin headers (2.54mm pitch, 1x and 2x)</li>
+<li>Jumper caps (2.54mm pitch)</li>
+<li>Small tactile push buttons</li>
+<li>Right-angle push button (menu)</li>
+<li>PCB mounting pillars (nylon, adhesive)</li>
+<li>DC power jack (5.5mm OD / 2.1mm ID)</li>
+</ul>
+<p>If you do buy headers from Mouser, consider ordering a few spares. Cutting headers to length is easy to get wrong on the first try.</p>
+<h3 id="bom-for-through-hole-components">BOM for Through-Hole Components</h3>
+<table>
+<thead>
+<tr>
+<th>Mfr Part Number</th>
+<th>Mouser Part Number</th>
+<th>Order Quantity</th>
+<th>Description</th>
+<th>Datasheet URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>W65C02S6TPG-14</td>
+<td>955-W65C02S6TPG-14</td>
+<td>1</td>
+<td>W65C02S CPU (DIP-40). Do not substitute other 6502 variants.</td>
+<td><a href="https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>W65C21N6TPG-14</td>
+<td>955-W65C21N6TPG-14</td>
+<td>2</td>
+<td>W65C21N PIA (DIP-40). Do not substitute W65C21S (lacks current limiting resistors).</td>
+<td><a href="https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>W65C22N6TPG-14</td>
+<td>955-W65C22N6TPG-14</td>
+<td>1</td>
+<td>W65C22N VIA (DIP-40). Do not substitute W65C22S (lacks current limiting resistors).</td>
+<td><a href="https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>AS6C1008-55PCN</td>
+<td>913-AS6C1008-55PCN</td>
+<td>1</td>
+<td>128KB SRAM (DIP-32, 55ns)</td>
+<td><a href="https://www.mouser.com/datasheet/3/893/1/AS6C1008_Mar_2023V1.2.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>1-2199299-5</td>
+<td>571-1-2199299-5</td>
+<td>4</td>
+<td>DIP-40 IC Socket (optional but recommended)</td>
+<td><a href="https://www.mouser.com/catalog/additional/Tyco%20Electronics_1-1773906-9_DIP_Socket_QRG_012017.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>DILB32P-223TLF</td>
+<td>649-DILB32P223TLF</td>
+<td>1</td>
+<td>DIP-32 IC Socket (optional but recommended)</td>
+<td><a href="https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10052485.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>640384-9</td>
+<td>571-6403849</td>
+<td>1</td>
+<td>PET power connector (optional if using stand-alone)</td>
+<td><a href="https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&amp;DocNm=640384&amp;DocType=Customer+Drawing&amp;DocLang=English&amp;PartCntxt=640384-9&amp;DocFormat=pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>10129378-936003BLF</td>
+<td>649-1012937893603BLF</td>
+<td>1</td>
+<td>36x1 Header: PET keyboard/video (optional if using stand-alone)</td>
+<td><a href="https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129378.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>AT-1220-TT-9-R</td>
+<td>665-AT1220TT9R</td>
+<td>1</td>
+<td>Internal PCB mounted speaker (optional)</td>
+<td><a href="https://www.mouser.com/datasheet/3/360/1/specs_AT_1220_TT_9_R.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>SJ-43504-SMT-TR</td>
+<td>490-SJ-43504-SMT-TR</td>
+<td>1</td>
+<td>3.5mm Audio Jack (required for sound)</td>
+<td><a href="https://www.mouser.com/datasheet/3/6118/1/sj_43504_smt_tr.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>DS04-254-1L-02BK</td>
+<td>490-DS04-254-1L-02BK</td>
+<td>1</td>
+<td>DIP Switch (config display and keyboard)</td>
+<td><a href="https://www.mouser.com/datasheet/3/6118/1/ds04_254.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>MSA-G</td>
+<td>737-MSA-G</td>
+<td>1</td>
+<td>Jumper cap (config Video or 5V)</td>
+<td><a href="https://www.mouser.com/datasheet/3/6015/1/msa_g_data_sheet.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>MJTP1117</td>
+<td>642-MJTP1117</td>
+<td>1</td>
+<td>Right-angled Button (Menu)</td>
+<td><a href="https://www.mouser.com/catalog/specsheets/Apem_04-15-2025_MJTP%20Series-6MM.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>PTS636SK43 LFS</td>
+<td>611-PTS636SK43LFS</td>
+<td>4</td>
+<td>Push Buttons: Flash &amp; Run required, Reset &amp; NMI optional</td>
+<td><a href="https://www.ckswitches.com/media/2779/pts636.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>10129381-950002BLF</td>
+<td>649-1012938195002BLF</td>
+<td>2</td>
+<td>25x2 Header: bus, user, MCU, 5V, menu (optional breakouts)</td>
+<td><a href="https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129381.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>10129381-940002BLF</td>
+<td>649-1012938194002BLF</td>
+<td>1</td>
+<td>20x2 Header: IEEE, KeyEx (optional breakouts)</td>
+<td><a href="https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129381.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>613012243121</td>
+<td>710-613012243121</td>
+<td>2</td>
+<td>PMOD Connectors (6x2, right angle, optional)</td>
+<td><a href="https://www.we-online.com/components/products/datasheet/613012243121.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>61201621621</td>
+<td>710-61201621621</td>
+<td>1</td>
+<td>SWD/JTAG (8x2 pin, shrouded, optional)</td>
+<td><a href="https://www.we-online.com/components/products/datasheet/61201621621.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>10129378-910002BLF</td>
+<td>649-1012937891002BLF</td>
+<td>2</td>
+<td>10x1 Header: User config (required) and cassette, 6V, 9V (optional breakouts)</td>
+<td><a href="https://cdn.amphenol-cs.com/media/wysiwyg/files/drawing/10129378.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>SC1628</td>
+<td>358-SC1628</td>
+<td>1</td>
+<td>32GB microSD card (known good, but feel free to try what you have on hand)</td>
+<td><a href="https://www.mouser.com/catalog/additional/Raspberry_Pi_rpi_sdcard_EU_DoC.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>RASPC722X</td>
+<td>502-RASPC722X</td>
+<td>1</td>
+<td>DC Power Jack (optional: for standalone use)</td>
+<td><a href="https://www.mouser.com/datasheet/3/144/1/rapc722x_cd.pdf">datasheet</a></td>
+</tr>
+<tr>
+<td>LCBSBM-7-01A-RT</td>
+<td>144-LCBSBM-7-01A-RT</td>
+<td>2 or 4</td>
+<td>PCB Mounting Pillar (get 4 if using standalone)</td>
+<td><a href="https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt">datasheet</a></td>
+</tr>
+<tr>
+<td>LCBSBM-7-01A-RT</td>
+<td>144-LCBSBM-7-01A-RT</td>
+<td>2 or 4</td>
+<td>PCB Mounting Pillar (get 4 if using standalone)</td>
+<td><a href="https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt">datasheet</a></td>
+</tr>
+<tr>
+<td>EEU-FM1V331</td>
+<td>667-EEU-FM1V331</td>
+<td>1</td>
+<td>330uF 35V low-ESR capacitor (C89)</td>
+<td><a href="https://industrial.panasonic.com/cdbs/www-data/pdf/RDF0000/ABA0000C1018.pdf">datasheet</a></td>
+</tr>
+</tbody>
+</table>
+<p>Next: <a href="../assembling-the-board/">Assembling the board</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

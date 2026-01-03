@@ -138,6 +138,8 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 # Tools for website:
 #
 #   advancecomp
+#   python3
+#   python3-pip
 #
 
 # Use unattended mode for 'apt'
@@ -177,6 +179,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     minicom \
     ninja-build \
     pkg-config \
+    python3 \
+    python3-pip \
     texinfo \
     universal-ctags
 

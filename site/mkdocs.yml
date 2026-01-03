@@ -1,0 +1,21 @@
+site_name: EconoPET Manual
+docs_dir: ../docs/manual
+site_dir: dist/manual
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - macros
+
+extra:
+  repo_raw_url: https://github.com/DLehenbauer/econopet/raw/main
+
+nav:
+  - Build an EconoPET:
+    - build-an-econopet/index.md
+    - Ordering PCBs: build-an-econopet/ordering-pcbs-from-jlcpcb.md
+    - Ordering Parts: build-an-econopet/ordering-parts-from-mouser.md
+    - Assembly: build-an-econopet/assembling-the-board.md
+    - Firmware: build-an-econopet/installing-the-firmware.md

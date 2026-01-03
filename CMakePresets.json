@@ -62,6 +62,13 @@
             "description": "Build only the ROM subproject (menu and edit ROM)",
             "configurePreset": "default",
             "targets": ["rom_project"]
+        },
+        {
+            "name": "site",
+            "displayName": "Site",
+            "description": "Build the static site including manual documentation",
+            "configurePreset": "default",
+            "targets": ["site"]
         }
     ],
     "testPresets": [
