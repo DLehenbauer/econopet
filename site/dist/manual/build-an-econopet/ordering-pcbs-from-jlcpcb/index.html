@@ -383,10 +383,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ordering-steps" class="md-nav__link">
+  <a href="#ordering-the-pcb" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ordering steps
+        Ordering the PCB
       
     </span>
   </a>
@@ -570,10 +570,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ordering-steps" class="md-nav__link">
+  <a href="#ordering-the-pcb" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ordering steps
+        Ordering the PCB
       
     </span>
   </a>
@@ -598,20 +598,20 @@
 
 
 <h1 id="ordering-pcbs-from-jlcpcb">Ordering PCBs from JLCPCB</h1>
-<p>This page describes how to order PCBs from JLCPCB. JLCPCB will manufacture the PCBs and assemble the surface-mount components.</p>
-<p>JLCPCB will not assemble the through-hole parts in this project (IC sockets, headers, etc.). You will solder those parts yourself after the boards arrive.</p>
+<p>This page describes how to order PCBs from JLCPCB. JLCPCB is a major PCB manufacturer that also offers low-volume PCB assembly (PCBA), which makes it popular for prototyping and hobby builds.</p>
 <h2 id="how-the-process-works">How the process works</h2>
-<p>JLCPCB is a major PCB manufacturer that also offers low-volume PCB assembly (PCBA), which makes it popular for prototyping and hobby builds.</p>
-<p>To place an order, you will upload manufacturing files to their website:</p>
+<p>To place an order, you will upload a set of manufacturing files to JLCPCB's website:</p>
 <ul>
-<li><a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/EconoPET_408096_A.zip">Gerber files (Gerber ZIP)</a>: the PCB fabrication data (copper layers, solder mask, silkscreen, drill files, etc.)</li>
-<li><a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>Bill of Materials (BOM)</a>: the list of components to be assembled (for PCBA)</li>
+<li><a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/EconoPET_408096_A.zip">Gerber files (Gerber ZIP)</a>: Fabrication data for the PCB</li>
+<li><a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>Bill of Materials (BOM)</a>: the list of SMT components to be assembled (for PCBA)</li>
 <li><a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-cpl.csv" download>Component Placement List (CPL)</a>: the component location and orientation (for PCBA)</li>
 </ul>
-<p>JLCPCB will generate a quote based on your PCB options, how many boards you want assembled, and component cost. After you submit the order, JLCPCB engineers will run a fabrication/assembly review and may ask you to approve substitutions or clarify issues. Once accepted, they fabricate the PCBs, assemble the SMT parts, and ship the boards.</p>
+<p>JLCPCB will generate a quote based on your PCB options, how many boards you want assembled, and component cost.  After you submit the order, JLCPCB engineers will run a fabrication/assembly review and notify you if there are any issues with your order.</p>
+<p>Once your order is accepted, JLCPCB's factory will fabricate the PCB.  After the PCB is fabricated and checked by QA, the PCB will be sent to the assembly line where SMT components will be placed and soldered.  After a final inspection, the completed boards will be shipped to you.</p>
+<p>This project does not use JLCPCB's through-hole assembly service. You will order the through-hole parts separately from Mouser and solder them yourself when your PCBs arrive.</p>
 <h3 id="minimum-quantities">Minimum quantities</h3>
 <p>For PCB fabrication, there is a fixed amount of work to prepare and run a job (CAM checks, tooling/drill setup, panelization, and solder mask/silkscreen processing). Similarly, for PCB assembly (PCBA) there are one-time setup costs (assembly programming, feeder setup, and often a stencil).</p>
-<p>These setup costs amortize over larger orders, so manufacturers typically have minimum order quantities:</p>
+<p>To amortize these costs, PCB manufacturers typically have minimum order quantities:</p>
 <table>
 <thead>
 <tr>
@@ -630,20 +630,23 @@
 </tr>
 </tbody>
 </table>
-<p>While the price-per-board drops quickly with larger orders, please place a small initial test order to verify the project works for you before committing to a larger quantity.</p>
+<p>Please place a small initial test order to verify the project works for you before committing to a larger quantity.</p>
 <h3 id="sourcing-the-fpga">Sourcing the FPGA</h3>
-<p>Your PCB order cannot be completed until all parts are available in JLCPCB's inventory.  Most parts used in the EconoPET are commonly stocked by JLCPCB, but the FPGA (T20Q144C3) is not a standard JLCPCB part.</p>
-<p>You will need to pre-order the FPGA using JLCPCB's Global Sourcing service. In short: you will buy the part through JLCPCB (they source it from a distributor such as CoreStaff or Digi-Key), it ships to JLCPCB's warehouse, and they hold it for your account until you submit a PCBA order that uses it.</p>
+<p>The FPGA used by the EconoPET (T20Q144C3) is not a standard JLCPCB part.  You will need to pre-purchase the FPGA using JLCPCB's Global Sourcing service before you can finalize your PCB/PCBA order.</p>
+<p>When you use JLCPCB's global sourcing service, you buy the part through JLCPCB's website and JLCPCB sources it from a distributor such as CoreStaff or Digi-Key.  The distributor ships the component directly to JLCPCB's warehouse, where JLCPCB holds the part for you until you submit a PCBA order that uses it.</p>
 <h3 id="out-of-stock-parts">Out-of-stock parts</h3>
-<p>JLCPCB maintains an inventory of commonly used SMT parts. When you upload the BOM, they will check availability and warn you if any parts are out of stock. If this happens, you have a few options:</p>
+<p>When you upload the BOM, JLCPCB will check their inventory and warn you if any parts are out of stock. If this happens, you have a couple options:</p>
 <ol>
-<li>If available, buy "idle parts" (parts other JLCPCB customers pre-ordered but did not use and are reselling).</li>
-<li>Pre-order the part and wait for it to arrive at JLCPCB before finalizing your order.</li>
+<li>If available, buy "idle parts" (extra parts pre-ordered by other JLCPCB customers who no longer need them).</li>
+<li>Pre-order the part and wait for it to arrive at JLCPCB before finalizing your PCB/PCBA order.</li>
 </ol>
-<p>Since idle parts are already in the JLCPCB warehouse, they can be used immediately. This is generally the best option, when it is available.</p>
-<p>Pre-ordering parts is similar to Global Sourcing, but usually cheaper per unit because it may not involve a third-party distributor. The trade-off is that there may be a minimum order quantity and lead time. Depending on the MOQ and schedule, Global Sourcing may be worth considering.</p>
-<h2 id="ordering-steps">Ordering steps</h2>
-<p>Below are the general steps to place an order.  Please <a href="https://github.com/DLehenbauer/econopet/issues">open a GitHub issue</a> if you run into a problem or have questions about the process.</p>
+<p>Idle parts can be used immediately because they are already in JLCPCB's warehouse. This is generally the best option when it is available.</p>
+<p>Pre-ordering parts is similar to Global Sourcing, but does not involve a third-party distributor which typically reduces the per-unit cost.  The trade-off is that there may be a minimum order quantity and lead time. Depending on the MOQ and schedule, Global Sourcing may be worth considering.</p>
+<h2 id="ordering-the-pcb">Ordering the PCB</h2>
+<p>Below are the general steps to place an order.  Please help improve this document by <a href="https://github.com/DLehenbauer/econopet/issues">opening a GitHub issue</a> if you run into a problem or have questions about the process.</p>
+<blockquote>
+<p><strong>💡 Tip:</strong> To get a rough cost estimate, you can do a "dry run" by uploading the Gerber, BOM, and CPL files to JLCPCB and stopping before checkout. You can do this even if you have not pre-ordered the FPGA yet.  Don't forget to add the price of the through-hole parts from Mouser to your total cost estimate.</p>
+</blockquote>
 <ol>
 <li>
 <p>Create a JLCPCB account</p>
@@ -654,38 +657,111 @@
 <li>
 <p>Pre-order the FPGA (important)</p>
 <ul>
-<li>Use JLCPCB Global Sourcing to pre-order the FPGA: <a href="https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1">https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1</a></li>
+<li>Use <a href="https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1">JLCPCB Global Sourcing</a> to pre-order the FPGA</li>
 <li>Search for MFR Part #: T20Q144C3</li>
-<li>Order one unit per assembled board</li>
+<li>Pick a distributor and add the part to your cart<ul>
+<li>Order one unit per assembled board (so order at least 2, or you won't be able to place a minimum PCBA order for 2 boards)</li>
+<li>In the past, CoreStaff has had a nice price break if you order 5+ units</li>
+</ul>
+</li>
+<li>Complete the checkout process<ul>
+<li>Go to your cart and select the 'Global Sourcing Parts' tab</li>
+<li>Check the row containing the T20Q144C3 part and click 'Secure Checkout' to complete your order</li>
+</ul>
+</li>
 <li>Pre-ordered parts will be shipped to JLCPCB and held in their warehouse until you submit your assembly order</li>
 </ul>
 </li>
 <li>
-<p>Quote and order the bare PCB</p>
+<p>Quote for the PCB</p>
 <ul>
-<li>Go to JLCPCB Instant Quote: <a href="https://cart.jlcpcb.com/quote">https://cart.jlcpcb.com/quote</a></li>
-<li>Upload the Gerber ZIP: <a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/EconoPET_408096_A.zip">EconoPET_408096_A.zip</a></li>
-<li>Use the default PCB options (2 layers, 1.6mm thickness, HASL finish, green solder mask).</li>
+<li>Go to JLCPCB's <a href="https://cart.jlcpcb.com/quote">Instant Quote page</a></li>
+<li>Click 'Add Gerber File' and upload the Gerber ZIP: <a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/EconoPET_408096_A.zip">EconoPET_408096_A.zip</a></li>
+<li>Set the following PCB options:<ul>
+<li>PCB Qty: (choose how many PCBs you want fabricated)</li>
+</ul>
+</li>
+<li>Unless you know what you are doing, use the default values for other options (list below for reference):<ul>
+<li>Base Material: FR-4</li>
+<li>Layers: 2</li>
+<li>Dimensions: (detected from Gerber file)</li>
+<li>Product Type: Industrial/Consumer Electronics</li>
+<li>PCB Specifications:<ul>
+<li>Different Design: 1</li>
+<li>Delivery Format: Single PCB</li>
+<li>PCB Thickness: 1.6mm</li>
+<li>PCB Color: Green</li>
+<li>Silkscreen: White</li>
+<li>Material Type: FR4 TG135</li>
+<li>Surface Finish: HASL (with lead)</li>
+</ul>
+</li>
+<li>High-spec Options<ul>
+<li>Outer Copper Weight: 1oz</li>
+<li>Via Covering: Tented</li>
+<li>Via Plating Method: 0.3mm/(0.4/0.45mm)</li>
+<li>Board Outline Tolerance: +/-0.2mm(Regular)</li>
+<li>Confirm Production file: No</li>
+<li>Mark on PCB: Remove Mark</li>
+<li>Electrical Testing: Flying Probe Test</li>
+<li>Gold Fingers: No</li>
+<li>Castellated Holes: No</li>
+<li>Edge Plating: No</li>
+<li>Blind Slots: No</li>
+<li>UL Marking: No</li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 <li>
-<p>Add SMT assembly</p>
+<p>Add PCB Assembly</p>
 <ul>
-<li>Select the SMT Assembly service for your PCB order.</li>
-<li>Upload the BOM file: <a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>jlcpcb-rev-a-bom.csv</a>(right-click, "Save Link As...")</li>
+<li>Turn on the "PCB Assembly" toggle switch on the Instant Quote page.</li>
+<li>Set the following PCB Assembly options:<ul>
+<li>PCBA Qty: (choose how many boards you want assembled)</li>
+</ul>
+</li>
+<li>Unless you know what you are doing, use the default values for other options (list below for reference):<ul>
+<li>PCBA Type: Economic</li>
+<li>Assembly Side: Top Side</li>
+<li>Tooling holes: Added by JLCPCB</li>
+<li>Confirm Parts Placement: No</li>
+<li>Stencil Storage: No</li>
+<li>Fixture Storage: No</li>
+<li>Parts Selection: By Customer</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p>Upload BOM and CPL files</p>
+<ul>
+<li>Push "Next" to go to the PCB preview page.</li>
+<li>Push "Next" again to go to the BOM/CPL upload page.</li>
+<li>Upload the BOM file: <a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>jlcpcb-rev-a-bom.csv</a> (right-click, "Save Link As...")</li>
 <li>Upload the CPL file: <a href="https://github.com/DLehenbauer/econopet/raw/main/hw/rev-a/production/jlcpcb-rev-a-cpl.csv" download>jlcpcb-rev-a-cpl.csv</a> (right-click, "Save Link As...")</li>
-<li>JLCPCB will price parts and assembly and may prompt you to resolve part availability.</li>
-<li>If a part is out of stock, check if there are "Idle Parts" available. These are parts that other users have pre-ordered, did not use, and are selling to other JLCPCB users.<ul>
-<li>If no idle parts are available, you will need to pre-order a minimum quantity and wait before placing the order.</li>
-</ul>
-</li>
+<li>Click 'Process BOM &amp; CPL' to continue.</li>
 </ul>
 </li>
 <li>
-<p>Place the order</p>
+<p>Review BOM Data</p>
 <ul>
-<li>Complete checkout.</li>
-<li>JLCPCB will fabricate the PCB, assemble the SMT parts, test, and ship.</li>
+<li>JLCPCB will display the parts found in the BOM along with pricing and availablity.</li>
+<li>If a part is out of stock, click the table row (not the magnifying glass) to see options for idle parts or pre-ordering.</li>
+<li>Click 'Next' to continue to the Component Placement page.</li>
+</ul>
+</li>
+<li>
+<p>Sanity check that the Component Placement looks right, then press 'Next' to continue to the Quote &amp; Order tab.</p>
+</li>
+<li>
+<p>Place your order</p>
+<ul>
+<li>Select Reserch\Education\DIY\Entertainment / DYI - HS Code 902300</li>
+<li>Click 'Save To Cart' (your card will show two items: PCB fabrication and PCB assembly)</li>
+<li>Click 'Secure Checkout' to complete your order.</li>
 </ul>
 </li>
 </ol>
