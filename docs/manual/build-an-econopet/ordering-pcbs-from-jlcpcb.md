@@ -6,9 +6,9 @@ This page describes how to order PCBs from JLCPCB. JLCPCB is a major PCB manufac
 
 To place an order, you will upload a set of manufacturing files to JLCPCB's website:
 
-- [Gerber files (Gerber ZIP)]({{ repo_raw_url }}/hw/rev-a/production/EconoPET_408096_A.zip): Fabrication data for the PCB
-- <a href="{{ repo_raw_url }}/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>Bill of Materials (BOM)</a>: the list of SMT components to be assembled (for PCBA)
-- <a href="{{ repo_raw_url }}/hw/rev-a/production/jlcpcb-rev-a-cpl.csv" download>Component Placement List (CPL)</a>: the component location and orientation (for PCBA)
+- [Gerber files (Gerber ZIP)](/econopet/downloads/EconoPET_408096_A.zip): Fabrication data for the PCB
+- <a href="/econopet/downloads/jlcpcb-rev-a-bom.csv" download>Bill of Materials (BOM)</a>: the list of SMT components to be assembled (for PCBA)
+- <a href="/econopet/downloads/jlcpcb-rev-a-cpl.csv" download>Component Placement List (CPL)</a>: the component location and orientation (for PCBA)
 
 JLCPCB will generate a quote based on your PCB options, how many boards you want assembled, and component cost.  After you submit the order, JLCPCB engineers will run a fabrication/assembly review and notify you if there are any issues with your order.
 
@@ -71,7 +71,7 @@ Below are the general steps to place an order.  Please help improve this documen
 3. Quote for the PCB
 
     - Go to JLCPCB's [Instant Quote page](https://cart.jlcpcb.com/quote)
-    - Click 'Add Gerber File' and upload the Gerber ZIP: [EconoPET_408096_A.zip]({{ repo_raw_url }}/hw/rev-a/production/EconoPET_408096_A.zip)
+    - Click 'Add Gerber File' and upload the Gerber ZIP: [EconoPET_408096_A.zip](/econopet/downloads/EconoPET_408096_A.zip)
     - Set the following PCB options:
         - PCB Qty: (choose how many PCBs you want fabricated)
     - Unless you know what you are doing, use the default values for other options (list below for reference):
@@ -118,8 +118,8 @@ Below are the general steps to place an order.  Please help improve this documen
 5. Upload BOM and CPL files
     - Push "Next" to go to the PCB preview page.
     - Push "Next" again to go to the BOM/CPL upload page.
-    - Upload the BOM file: <a href="{{ repo_raw_url }}/hw/rev-a/production/jlcpcb-rev-a-bom.csv" download>jlcpcb-rev-a-bom.csv</a> (right-click, "Save Link As...")
-    - Upload the CPL file: <a href="{{ repo_raw_url }}/hw/rev-a/production/jlcpcb-rev-a-cpl.csv" download>jlcpcb-rev-a-cpl.csv</a> (right-click, "Save Link As...")
+    - Upload the BOM file: <a href="/econopet/downloads/jlcpcb-rev-a-bom.csv" download>jlcpcb-rev-a-bom.csv</a>
+    - Upload the CPL file: <a href="/econopet/downloads/jlcpcb-rev-a-cpl.csv" download>jlcpcb-rev-a-cpl.csv</a>
     - Click 'Process BOM & CPL' to continue.
 
 6. Review BOM Data

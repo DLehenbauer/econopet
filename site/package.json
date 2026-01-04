@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "install": "pip install -r requirements.txt",
-    "build": "mkdocs build",
+    "build": "mkdocs build && mkdir -p dist/downloads && cp ../hw/rev-a/production/EconoPET_408096_A.zip ../hw/rev-a/production/jlcpcb-rev-a-bom.csv ../hw/rev-a/production/jlcpcb-rev-a-cpl.csv dist/downloads",
     "test": "http-server ./dist -p 8080"
   },
   "keywords": [],
