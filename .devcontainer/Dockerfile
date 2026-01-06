@@ -25,6 +25,9 @@ ARG IVERILOG_VERSION="v12_0"
 ARG EFINITY_MAJOR_MINOR="2025.1"
 ARG EFINITY_PATCH="110"
 
+# From https://github.com/caddyserver/caddy/releases
+ARG CADDY_VERSION="2.7.6"
+
 # Cache large downloads:
 
 # Download Efinity software -- Requires a free license from Efinix. Please do the right thing.
@@ -259,7 +262,7 @@ RUN mkdir -p ${FNM_DIR} && \
     chmod +x ${FNM_DIR}/fnm
 ENV PATH="${FNM_DIR}:$PATH"
 
-# Install the latest Node.js LTS version
+# Use FNM to install the latest Node.js LTS version
 RUN eval "$(fnm env)" && \
     fnm install --lts && \
     fnm default lts-latest && \
@@ -268,6 +271,12 @@ RUN eval "$(fnm env)" && \
 
 # Setup FNM in shell profile for root user
 RUN echo 'eval "$(fnm env --use-on-cd)"' >> /root/.bashrc
+
+# Install Caddy (static file server to test gh-pages site)
+RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" -o /tmp/caddy.tar.gz && \
+    tar -xzf /tmp/caddy.tar.gz -C /tmp && \
+    install -m 0755 /tmp/caddy /usr/local/bin/caddy && \
+    rm -f /tmp/caddy.tar.gz
 
 # Download required ROMs (with MD5 verification)
 # Note: Build context is the .devcontainer folder, so copy relative to it.

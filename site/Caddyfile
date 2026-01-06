@@ -1,0 +1,16 @@
+:8080 {
+  root * dist
+  encode zstd gzip
+
+  handle_path /econopet/* {
+    try_files {path} {path}.html
+    file_server
+  }
+
+  handle_path /econopet {
+    redir / 308
+  }
+
+  try_files {path} {path}.html
+  file_server
+}
