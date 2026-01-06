@@ -52,6 +52,7 @@ build/
 # Site
 #
 
+site/dist
 site/node_modules
 
 #
