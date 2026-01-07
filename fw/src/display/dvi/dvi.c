@@ -260,16 +260,16 @@ static inline void copy_blank_margins(uint32_t *tmdsbuf, uint left_margin_words,
 }
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
-    static uint h_displayed   = 40;        // Horizontal displayed characters
-    static uint v_displayed   = 25;        // Vertical displayed characters
-    static uint lines_per_row = 8;        // Vertical scan lines per character
+    static uint h_displayed   = 40;         // Horizontal displayed characters
+    static uint v_displayed   = 25;         // Vertical displayed characters
+    static uint lines_per_row = 8;          // Vertical scan lines per character
     static uint display_start = 0x1000;     // Start address in video_char_buffer (ma[13:12] are special)
     static uint display_mask  = 0x3ff;      // Mask for display address wrapping
     static uint8_t invert_mask = 0x00;      // ma[12] = invert video (1 = normal, 0 = inverted)
 
-static uint x_start = 0;
-static uint y_start = 0;
-static uint y_visible = 0;
+    static uint x_start = 0;
+    static uint y_start = 0;
+    static uint y_visible = 0;
     static bool is_80_col = false;
     static uint left_margin_words = 0;
     static uint content_pixels = 0;
@@ -301,13 +301,13 @@ static uint y_visible = 0;
             lines_per_row = MIN(lines_per_row, FRAME_HEIGHT / v_displayed);
         }
 
-y_visible = v_displayed * lines_per_row;    // Total visible scan lines
-y_start   = (FRAME_HEIGHT - y_visible) / 2;    // Top margin in scan lines
+        y_visible = v_displayed * lines_per_row;    // Total visible scan lines
+        y_start   = (FRAME_HEIGHT - y_visible) / 2;    // Top margin in scan lines
 
         // Compute left margin based on horizontal displayed characters. Note that `h_displayed`
         // has not yet been adjusted for 80-column mode, so is 1/2 the final value assuming 8 pixel
         // characters.
-x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
+        x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
 
         // Precompute TMDS word offsets for margins and content for the frame
         left_margin_words = x_start * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
