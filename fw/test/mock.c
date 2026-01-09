@@ -28,7 +28,6 @@
 
 uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 bool video_graphics = false;
-bool video_is_80_col = false;
 
 // In-memory file system for testing
 typedef struct mem_file_s {
