@@ -669,7 +669,7 @@ void sync_state() {
     spi_read(ADDR_KBD, KEY_COL_COUNT, pet_key_matrix);
 
     // Read CRTC registers from FPGA
-    spi_read(ADDR_CRTC, CRTC_REG_COUNT, pet_crtc_registers);
+    spi_read(ADDR_CRTC, CRTC_REG_COUNT, system_state.pet_crtc_registers);
 
     // Read graphics mode flag from status register
     uint8_t status = spi_read_at(REG_STATUS);

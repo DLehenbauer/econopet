@@ -19,7 +19,4 @@
 
 #include "system_state.h"
 
-#define CRTC_REG_COUNT 14
-extern uint8_t pet_crtc_registers[CRTC_REG_COUNT];
-
 void video_init();

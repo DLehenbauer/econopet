@@ -66,6 +66,7 @@ Video  |          - |        - |      - | Active High | -
     * [Spreadsheet](https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Finchocks.co.uk%2Fcommodore%2FPET%2FPET_CRTC.xls)
     * [SJGray](https://github.com/sjgray/cbm-edit-rom/blob/master/docs/CRTC%20Registers.txt)
   * [Reverse Engineering](https://stardot.org.uk/forums/viewtopic.php?t=22008)
+  * [Part Info](https://www.amiga-stuff.com/hardware/crtc.html)
   * Datasheet
     * [Motorolla MC6845](https://archive.org/details/bitsavers_motorolada_1431515/page/n9/mode/2up)
     * [Motorolla AN-851](https://archive.org/details/bitsavers_motorolaapaMC6845CRTCSimplifiesVideoDisplayControl_9722748/mode/2up)
