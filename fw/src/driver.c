@@ -673,5 +673,5 @@ void sync_state() {
 
     // Read graphics mode flag from status register
     uint8_t status = spi_read_at(REG_STATUS);
-    video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
+    system_state.video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
 }

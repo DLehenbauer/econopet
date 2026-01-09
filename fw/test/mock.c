@@ -25,8 +25,6 @@
 #include "sd/sd.h"
 #include "mock.h"
 
-bool video_graphics = false;
-
 // In-memory file system for testing
 typedef struct mem_file_s {
     char path[PATH_MAX];

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -106,6 +107,9 @@ typedef struct system_state_s {
 
     // Video character buffer (shared between PET, DVI output, and terminal)
     uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];
+
+    // Video graphics mode flag (true = graphics/lowercase charset, false = text/uppercase)
+    bool video_graphics;
 } system_state_t;
 
 extern system_state_t system_state;

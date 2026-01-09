@@ -19,8 +19,6 @@
 
 #include "system_state.h"
 
-extern bool video_graphics;
-
 #define CRTC_REG_COUNT 14
 extern uint8_t pet_crtc_registers[CRTC_REG_COUNT];
 

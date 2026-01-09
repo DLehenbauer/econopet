@@ -41,7 +41,7 @@ static void __attribute__((noreturn)) vfatal(const char* const format, va_list a
 
     display_window_show(&window);
     
-    video_graphics = true;  // Use lower case for bit-banged DVI display
+    system_state.video_graphics = true;  // Use lower case for bit-banged DVI display
 
     // Wait for a key press (keyboard or menu button)
     while (input_getch() == EOF) {

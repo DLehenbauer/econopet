@@ -38,8 +38,6 @@
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
-bool video_graphics = false;
-
 // C128 Palette (16 colors, RRRGGGBB)
 static const uint8_t c128_palette[16] = {
     0x00, // 0: Black
@@ -329,7 +327,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         display_start &= display_mask;
 
         // Select graphics/text character ROM
-        p_char_rom = video_graphics
+        p_char_rom = system_state.video_graphics
             ? p_video_font_400
             : p_video_font_000;
 
