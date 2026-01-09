@@ -39,7 +39,6 @@ struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
 
 bool video_graphics = false;
-uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE] = { 0 };
 
 // C128 Palette (16 colors, RRRGGGBB)
 static const uint8_t c128_palette[16] = {
@@ -66,7 +65,6 @@ static const uint8_t c128_palette[16] = {
 // Low nibble (bits 3:0) = foreground palette index (0-15)
 // Initialized to bright green (10) on black (0) = 0x0A
 #define MAX_CHARS_PER_LINE (FRAME_WIDTH / FONT_WIDTH)
-static uint8_t* colorbuf = &video_char_buffer[0x800];
 
 // ---------------------------------------------------------------------------
 // CRTC (6545) registers
@@ -280,6 +278,9 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     // TODO: Copy character into SRAM and precalculate flip/stretch? (PERF)
     static const uint8_t* p_char_rom = rom_chars_e800;
 
+    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+    uint8_t* const colorbuf = video_char_buffer + 0x800;
+
     // For convenience, remap local `y` so that `y == 0` is the first visible scan line.
     // Because `y` is unsigned, the top blank area wraps around to a large integer.
     y -= y_start;
@@ -470,6 +471,9 @@ void video_init() {
     // Dequeue one TMDS buffer from the free queue to use as our precalculated blank scanline.
     // This buffer is kept permanently and never returned to the queue.
     queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
+
+    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+    uint8_t* const colorbuf = video_char_buffer + 0x800;
     
     // Initialize the palette (using CGA palette for both fg and bg colors)
     set_palette(c128_palette, c128_palette);
@@ -477,7 +481,7 @@ void video_init() {
     // Precalculate TMDS-encoded blank scanline (all zeros / background color).
     // This is used for blank scanlines (y >= y_visible) instead of re-encoding each time.
     tmds_encode_font_8px_palette(
-        video_char_buffer,          // charbuf (content doesn't matter for blank lines)
+        video_char_buffer,          // charbuf (content ignored for blank lines)
         colorbuf,                   // colorbuf
         blank_tmdsbuf,
         FRAME_WIDTH / FONT_WIDTH,   // n_chars

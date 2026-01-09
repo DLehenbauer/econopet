@@ -146,7 +146,7 @@ uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* s
 }
 
 uint8_t* window_vprint(const window_t* const window, uint8_t* start, const char* const format, va_list args) {
-    static char buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
+    static char buffer[PET_MAX_VIDEO_RAM_BYTES];
 
     const unsigned int remaining = window_chars_remaining(window, start);
     assert(remaining <= sizeof(buffer));

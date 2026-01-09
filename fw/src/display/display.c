@@ -64,7 +64,7 @@ static void display_term_render(void) {
 
     const unsigned int cols = screen_width;
     const unsigned int rows = screen_height;
-    uint8_t* char_buffer = video_char_buffer;
+    uint8_t* char_buffer = system_state.video_char_buffer;
 
     for (unsigned int r = 0; r < rows; r++) {
         for (unsigned int c = 0; c < cols; c++) {
@@ -88,13 +88,16 @@ void display_term_refresh(void) {
 }
 
 void display_task(void) {
+    // Local pointer to avoid repeated struct member access
+    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+
     // Sync video buffer based on video source
     if (system_state.video_source == video_source_pet) {
         // Read PET video RAM into buffer (6502 drives display)
         spi_read(0x8000, system_state.video_ram_bytes, video_char_buffer);
     } else {
         // Write buffer to PET video RAM (firmware drives display)
-        spi_write(0x8000, video_char_buffer, VIDEO_CHAR_BUFFER_BYTE_SIZE);
+        spi_write(0x8000, video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
     }
     
     // HDMI DVI core continuously reads video_char_buffer - no action needed

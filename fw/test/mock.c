@@ -22,11 +22,9 @@
 #include <time.h>
 
 #include "system_state.h"
-#include "display/dvi/dvi.h"
 #include "sd/sd.h"
 #include "mock.h"
 
-uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 bool video_graphics = false;
 
 // In-memory file system for testing

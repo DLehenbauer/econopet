@@ -16,10 +16,10 @@
 #include "config.h"
 
 #include "display/display.h"
-#include "display/dvi/dvi.h"
 #include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
+#include "system_state.h"
 
 typedef struct parser_s {
     yaml_parser_t parser;
@@ -39,7 +39,7 @@ typedef struct parser_s {
 typedef void (*parse_callback_t)(parser_t* parser);
 
 static void vfatal_parse_error(parser_t* parser, const char* format, va_list args) {
-    const window_t window = window_create(video_char_buffer, 40, 25);
+    const window_t window = window_create(system_state.video_char_buffer, 40, 25);
     display_window_begin(&window);
 
     uint8_t* pOut = window_println(&window, window.start, "E: error parsing file:");

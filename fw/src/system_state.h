@@ -17,6 +17,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// In the 8296, the CRTC can address 8KB of video RAM from $8000-$9FFF.  This is the
+// upper bound on the amount of display RAM we may need to synchronize between PET
+// video, DVI output, and the terminal.
+#define PET_MAX_VIDEO_RAM_BYTES 0x2000
+
 typedef enum pet_keyboard_model_e {
     pet_keyboard_model_graphics = 0,
     pet_keyboard_model_business = 1,
@@ -98,6 +103,9 @@ typedef struct system_state_s {
     video_source_t video_source;        // Where HDMI gets its video data
     term_mode_t term_mode;              // What terminal output shows
     term_input_dest_t term_input_dest;  // Where terminal input goes
+
+    // Video character buffer (shared between PET, DVI output, and terminal)
+    uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];
 } system_state_t;
 
 extern system_state_t system_state;

@@ -17,9 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define VIDEO_CHAR_BUFFER_BYTE_SIZE 0x1000  // 4KB video RAM
+#include "system_state.h"
 
-extern uint8_t video_char_buffer[VIDEO_CHAR_BUFFER_BYTE_SIZE];
 extern bool video_graphics;
 
 #define CRTC_REG_COUNT 14

@@ -243,7 +243,10 @@ void menu_enter(void) {
     system_state.video_source = video_source_firmware;
     
     start_menu_rom(MENU_ROM_BOOT_NORMAL);
-    memset(video_char_buffer + 0x800, 0x0F, VIDEO_CHAR_BUFFER_BYTE_SIZE - 0x800);
+
+    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+    uint8_t* const colorbuf = video_char_buffer + 0x800;
+    memset(colorbuf, 0x0F, PET_MAX_VIDEO_RAM_BYTES - (colorbuf - video_char_buffer));
     
     const window_t window = window_create(video_char_buffer, screen_width, screen_height);
 

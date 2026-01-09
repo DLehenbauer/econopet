@@ -22,11 +22,12 @@
 #include "input.h"
 #include "reset.h"
 #include "roms/roms.h"
+#include "system_state.h"
 
 static void __attribute__((noreturn)) vfatal(const char* const format, va_list args) {
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
-    const window_t window = window_create(video_char_buffer, 40, 25);
+    const window_t window = window_create(system_state.video_char_buffer, 40, 25);
     display_window_begin(&window);
 
     uint8_t* pOut = window_puts(&window, window.start, "E: ");
