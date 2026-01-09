@@ -75,9 +75,9 @@ void log_init(void) {
     _Static_assert((LOG_WARN_ENTRIES & (LOG_WARN_ENTRIES - 1)) == 0,
                    "LOG_WARN_ENTRIES must be a power of 2");
 
+#if defined(PICO_RP2040)
     log_warn("EconoPET v%s (%s%s)", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
 
-#if defined(PICO_RP2040)
     // Record reset reason from hardware registers (only available on RP2040)
     const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
     const uint32_t watchdog_reason = watchdog_hw->reason;
