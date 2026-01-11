@@ -43,6 +43,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/char_encoding_test.c
     ${TEST_DIR}/config_parser_test.c
+    ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c

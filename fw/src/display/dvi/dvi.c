@@ -15,6 +15,7 @@
 #include "pch.h"
 #include "dvi.h"
 
+#include "crtc.h"
 #include "pet.h"
 #include "roms/roms.h"
 #include "system_state.h"
@@ -173,22 +174,21 @@ static inline void copy_blank_margins(uint32_t *tmdsbuf, uint left_margin_words,
 }
 
 static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
-    static uint h_displayed   = 40;         // Horizontal displayed characters
-    static uint v_displayed   = 25;         // Vertical displayed characters
-    static uint lines_per_row = 8;          // Vertical scan lines per character
-    static uint display_start = 0x1000;     // Start address in video_char_buffer (ma[13:12] are special)
-    static uint display_mask  = 0x3ff;      // Mask for display address wrapping
-    static uint8_t invert_mask = 0x00;      // ma[12] = invert video (1 = normal, 0 = inverted)
-
-    static uint x_start = 0;
-    static uint y_start = 0;
-    static uint y_visible = 0;
-    static bool is_80_col = false;
-    static uint left_margin_words = 0;
-    static uint content_pixels = 0;
-    static uint content_words = 0;
-    static uint right_margin_start = 0;
-    static uint right_margin_words = 0;
+    // Display geometry, recalculated during blank scanlines
+    static dvi_display_geometry_t geo = {
+        .chars_per_row = 40,
+        .rows = 25,
+        .scanlines_per_row = 8,
+        .vram_start = 0x000,
+        .vram_mask = 0x3ff,
+        .invert_mask = 0x00,
+        .visible_scanlines = 200,
+        .top_margin = 20,
+        .double_width = true,
+        .left_margin_words = 0,
+        .content_words = 0,
+        .right_margin_words = 0,
+    };
 
     // TODO: Copy character into SRAM and precalculate flip/stretch? (PERF)
     static const uint8_t* p_char_rom = rom_chars_e800;
@@ -196,55 +196,21 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     uint8_t* const video_char_buffer = system_state.video_char_buffer;
     uint8_t* const colorbuf = video_char_buffer + 0x800;
 
-    // Local pointer to CRTC registers for performance (avoids repeated struct member access)
-    const uint8_t* const crtc = system_state.pet_crtc_registers;
-
     // For convenience, remap local `y` so that `y == 0` is the first visible scan line.
     // Because `y` is unsigned, the top blank area wraps around to a large integer.
-    y -= y_start;
+    y -= geo.top_margin;
 
-    if (y >= y_visible) {
+    if (y >= geo.visible_scanlines) {
         // Blank scan line - use blank scan lines to reload/recompute CRTC-dependent values.
-        h_displayed   = crtc[CRTC_R1_H_DISPLAYED];                      // R1[7:0]: Horizontal displayed characters
-        v_displayed   = crtc[CRTC_R6_V_DISPLAYED] & 0x7F;               // R6[6:0]: Vertical displayed character rows
-        lines_per_row = (crtc[CRTC_R9_MAX_SCAN_LINE] & 0x1F) + 1;       // R9[4:0]: Scan lines per character row (plus one)
-
-        display_start = ((crtc[CRTC_R12_START_ADDR_HI] & 0x3f) << 8)    // R12[5:0]: High 6 bits of display start address
-                        | crtc[CRTC_R13_START_ADDR_LO];                 // R13[7:0]: Low 8 bits of display start address
-
-        invert_mask = display_start & (1 << 12) ? 0x00 : 0xff;          // ma[12] = invert video (1 = normal, 0 = inverted)
-
-        // Clamp `lines_per_row` to fit `v_displayed` rows within `FRAME_HEIGHT`, ensuring at least
-        // one blank scanline per frame to reload CRTC values. Guards against division by zero.
-        if (v_displayed > 0) {
-            lines_per_row = MIN(lines_per_row, FRAME_HEIGHT / v_displayed);
-        }
-
-        y_visible = v_displayed * lines_per_row;    // Total visible scan lines
-        y_start   = (FRAME_HEIGHT - y_visible) / 2;    // Top margin in scan lines
-
-        // Compute left margin based on horizontal displayed characters. Note that `h_displayed`
-        // has not yet been adjusted for 80-column mode, so is 1/2 the final value assuming 8 pixel
-        // characters.
-        x_start = ((FRAME_WIDTH / 16) - h_displayed);   // Left margin in bytes (8 pixels)
-
-        // Precompute TMDS word offsets for margins and content for the frame
-        left_margin_words = x_start * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
-        content_pixels = h_displayed * FONT_WIDTH * 2;          // Always * 2 because h_displayed not yet adjusted for 80-columns
-        content_words = content_pixels / DVI_SYMBOLS_PER_WORD;  // Always word aligned: division by DVI_SYMBOLS_PER_WORD cancels * 2 above.
-        right_margin_start = left_margin_words + content_words;
-        right_margin_words = WORDS_PER_LANE - right_margin_start;
-
-        is_80_col = (system_state.pet_display_columns == pet_display_columns_80);
-        if (is_80_col) {
-            h_displayed <<= 1;              // Double horizontal displayed characters for 80-column mode
-            display_start <<= 1;            // Double start address for 80-column mode
-            display_mask = 0x7ff;           // 80 columns machine has 2Kb video RAM
-        } else {
-            display_mask = 0x3ff;           // 40 columns machine has 1Kb video RAM
-        }
-
-        display_start &= display_mask;
+        crtc_calculate_geometry(
+            system_state.pet_crtc_registers,
+            system_state.pet_display_columns,
+            FRAME_WIDTH,
+            FRAME_HEIGHT,
+            FONT_WIDTH,
+            DVI_SYMBOLS_PER_WORD,
+            &geo
+        );
 
         // Select graphics/text character ROM
         p_char_rom = system_state.video_graphics
@@ -258,72 +224,70 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
     } else {
         // Calculate start offset in video_char_buffer for this row.
-        // Note: display_start may have bits above display_mask (ma[13:12] are special),
-        // so we mask only when computing the actual buffer index.
-        const uint row_offset = display_start + y / lines_per_row * h_displayed;
-        const uint row_start = row_offset & display_mask;
+        const uint row_offset = geo.vram_start + y / geo.scanlines_per_row * geo.chars_per_row;
+        const uint row_start = row_offset & geo.vram_mask;
 
-        const uint ra = y % lines_per_row;
+        const uint ra = y % geo.scanlines_per_row;
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
 
         // Copy left/right blank margins for all lanes
-        copy_blank_margins(tmdsbuf, left_margin_words, right_margin_words);
+        copy_blank_margins(tmdsbuf, geo.left_margin_words, geo.right_margin_words);
 
         // Check if the row wraps around the video buffer boundary.
-        // The buffer size is (display_mask + 1), so we wrap if row_start + h_displayed > display_mask + 1.
-        const uint buffer_size = display_mask + 1;
-        const uint first_chars = MIN(buffer_size - row_start, h_displayed);
+        // The buffer size is (vram_mask + 1), so we wrap if row_start + chars_per_row > vram_mask + 1.
+        const uint buffer_size = geo.vram_mask + 1;
+        const uint first_chars = MIN(buffer_size - row_start, geo.chars_per_row);
 
         // First part: from row_start (may be all characters if no wrap)
-        if (is_80_col) {
-            tmds_encode_font_8px_palette(
-                &video_char_buffer[row_start],
-                &colorbuf[row_start],
-                &tmdsbuf[left_margin_words],
-                first_chars,
-                p_char_rom,
-                ra,
-                invert_mask
-            );
-        } else {
+        if (geo.double_width) {
             tmds_encode_font_16px_palette(
                 &video_char_buffer[row_start],
                 &colorbuf[row_start],
-                &tmdsbuf[left_margin_words],
+                &tmdsbuf[geo.left_margin_words],
                 first_chars,
                 p_char_rom,
                 ra,
-                invert_mask
+                geo.invert_mask
+            );
+        } else {
+            tmds_encode_font_8px_palette(
+                &video_char_buffer[row_start],
+                &colorbuf[row_start],
+                &tmdsbuf[geo.left_margin_words],
+                first_chars,
+                p_char_rom,
+                ra,
+                geo.invert_mask
             );
         }
 
         // Second part: wrap-around from start of buffer (if needed)
-        if (first_chars < h_displayed) {
-            const uint second_chars = h_displayed - first_chars;
+        if (first_chars < geo.chars_per_row) {
+            const uint second_chars = geo.chars_per_row - first_chars;
             uint first_words = first_chars * FONT_WIDTH / DVI_SYMBOLS_PER_WORD;
 
-            if (is_80_col) {
-                tmds_encode_font_8px_palette(
-                    &video_char_buffer[0],
-                    &colorbuf[0],
-                    &tmdsbuf[left_margin_words + first_words],
-                    second_chars,
-                    p_char_rom,
-                    ra,
-                    invert_mask
-                );
-            } else {
+            if (geo.double_width) {
                 first_words *= 2;   // 40-column mode: each character is 16 pixels wide
                 tmds_encode_font_16px_palette(
                     &video_char_buffer[0],
                     &colorbuf[0],
-                    &tmdsbuf[left_margin_words + first_words],
+                    &tmdsbuf[geo.left_margin_words + first_words],
                     second_chars,
                     p_char_rom,
                     ra,
-                    invert_mask
+                    geo.invert_mask
+                );
+            } else {
+                tmds_encode_font_8px_palette(
+                    &video_char_buffer[0],
+                    &colorbuf[0],
+                    &tmdsbuf[geo.left_margin_words + first_words],
+                    second_chars,
+                    p_char_rom,
+                    ra,
+                    geo.invert_mask
                 );
             }
         }
