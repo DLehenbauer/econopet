@@ -10,7 +10,9 @@ See the [project page](https://dlehenbauer.github.io/econopet) for user manual a
 
 ## Manufacturing
 
-Rev. A has been released. For manufacturing and assembly instructions, see [docs/manufacturing.md](docs/manufacturing.md).
+> **⚠️ Warning:** Rev A is not perfect. Before ordering, review the currently [known issues](https://github.com/DLehenbauer/econopet/issues?q=state%3Aopen%20label%3A40%2F8096-A) and understand that new issues may be discovered over time.
+
+Rev. A has been released. For manufacturing and assembly instructions, go [here](https://dlehenbauer.github.io/econopet/manual/build-an-econopet/).
 
 ## Development
 
