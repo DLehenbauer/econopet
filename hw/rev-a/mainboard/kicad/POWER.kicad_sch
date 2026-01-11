@@ -7455,9 +7455,9 @@
 		)
 		(uuid "36373244-3f47-47b9-8cf8-e846bf57bdef")
 	)
-	(text "18.3 VAC C.T. arrives on pins 1/5.\n\nRectified +9V DC leaves on pin 4, is externally\nconnected to a 23000u capacitor to reduce ripple,\nand returns on pin 2.\n\nPins 8/9 are not used by the replacement board.\nThe PET power supply delivers 17 VAC on pins 8/9,\nwhich was used by the original mainboard to\nproduce +16V DC for internal accessories.\n\nThe CRT gets power directly from the transformer.\n\nCapactiors must be derated by ~30% for AC:\n9V AC * 1.415 = ~13V DC"
+	(text "18.3 VAC C.T. arrives on pins 1/5. Rectified DC\nleaves on pin 4, is externally smoothed by a\n17-23mF capacitor and returns on pin 2.\n\nDespite being labeled 9V_UNREG in the CBM\nschematics, the actual voltage is closer to 12V.\n\nPins 8/9 are not used by the replacement board.\nThe PET power supply delivers 17 VAC on pins 8/9,\nwhich was used by the original mainboard to\nproduce +16V DC for internal accessories.\n\nThe CRT gets power directly from the transformer.\n\nCapactiors must be derated by ~30% for AC:\n12V AC * 1.415 = ~17V DC\n\nUse min 25V for caps connected to +9V_UNREG"
 		(exclude_from_sim no)
-		(at 21.59 121.92 0)
+		(at 29.21 132.08 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7625,9 +7625,9 @@
 		)
 		(uuid "ccfe9cea-dbba-432f-a260-d3dc1aa53e4f")
 	)
-	(text "6.1V @ ~700ma max\n(~350ma per cassette port)\n\nVoltage and limits derived from\nPET schematics and datasheets\n\nVoltage is non-critical as the\ndatasette speed is controlled by\na mechanical governor.\n\nHeatsink does not appear to be\nrequired."
+	(text "6.1V @ ~700ma max\n(~350ma per cassette port)\n\nVoltage and limits derived from\nPET schematics and datasheets\n\nVoltage is non-critical as the\ndatasette speed is controlled by\na mechanical governor.\n\nHeatsink does not appear to be\nrequired for a single Datasette.\n\n(Running two Datasettes at the\nsame time hasn't been tested.)\n"
 		(exclude_from_sim no)
-		(at 170.18 62.23 0)
+		(at 170.18 68.58 0)
 		(effects
 			(font
 				(size 1.27 1.27)
