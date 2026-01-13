@@ -87,7 +87,7 @@ static inline void crtc_calculate_geometry(
         h_displayed = max_h_displayed;
     }
 
-    uint v_displayed   = crtc[CRTC_R6_V_DISPLAYED] & 0x7F;              // R6[6:0]: Vertical displayed character rows
+    const uint v_displayed   = crtc[CRTC_R6_V_DISPLAYED] & 0x7F;        // R6[6:0]: Vertical displayed character rows
     uint lines_per_row = (crtc[CRTC_R9_MAX_SCAN_LINE] & 0x1F) + 1;      // R9[4:0]: Scan lines per character row (plus one)
 
     // Clamp lines_per_row to fit v_displayed rows within frame_height, ensuring at least
@@ -105,30 +105,27 @@ static inline void crtc_calculate_geometry(
     // ma[12] = invert video (1 = normal, 0 = inverted)
     out->invert_mask = display_start & (1 << 12) ? 0x00 : 0xff;
 
-    uint y_visible = v_displayed * lines_per_row;   // Total visible scan lines
-    uint y_start   = (frame_height - y_visible) / 2;   // Top margin in scan lines
+    const uint y_visible = v_displayed * lines_per_row;   // Total visible scan lines
+    const uint y_start   = (frame_height - y_visible) / 2;   // Top margin in scan lines
 
     // Compute left margin based on horizontal displayed characters. Note that h_displayed
     // has not yet been adjusted for 80-column mode, so is 1/2 the final value assuming 8 pixel
     // characters. h_displayed is already clamped to max_h_displayed, so this cannot underflow.
-    uint x_start = max_h_displayed - h_displayed;   // Left margin in 8-pixel units
+    const uint x_start = max_h_displayed - h_displayed;   // Left margin in 8-pixel units
 
     // Precompute TMDS word offsets for margins and content for the frame
-    uint left_margin_words = x_start * font_width / symbols_per_word;
-    uint content_pixels = h_displayed * font_width * 2;             // Always * 2 because h_displayed not yet adjusted for 80-columns
-    uint content_words = content_pixels / symbols_per_word;         // Always word aligned
-    uint right_margin_start = left_margin_words + content_words;
-    uint right_margin_words = words_per_lane - right_margin_start;
+    const uint left_margin_words = x_start * font_width / symbols_per_word;
+    const uint content_pixels = h_displayed * font_width * 2;           // Always * 2 because h_displayed not yet adjusted for 80-columns
+    const uint content_words = content_pixels / symbols_per_word;       // Always word aligned
+    const uint right_margin_start = left_margin_words + content_words;
+    const uint right_margin_words = words_per_lane - right_margin_start;
 
-    bool is_80_col = (columns == pet_display_columns_80);
-    uint display_mask;
+    const bool is_80_col = (columns == pet_display_columns_80);
+    const uint display_mask = is_80_col ? 0x7ff : 0x3ff;
 
     if (is_80_col) {
         h_displayed <<= 1;              // Double horizontal displayed characters for 80-column mode
         display_start <<= 1;            // Double start address for 80-column mode
-        display_mask = 0x7ff;           // 80 columns machine has 2Kb video RAM
-    } else {
-        display_mask = 0x3ff;           // 40 columns machine has 1Kb video RAM
     }
 
     display_start &= display_mask;
