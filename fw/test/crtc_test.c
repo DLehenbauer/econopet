@@ -287,6 +287,72 @@ START_TEST(test_zero_rows) {
 }
 END_TEST
 
+// Test: h_displayed larger than frame width causes clamping (not underflow)
+START_TEST(test_h_displayed_overflow) {
+    uint8_t crtc[CRTC_REG_COUNT];
+    init_crtc_40col(crtc);
+    crtc[CRTC_R1_H_DISPLAYED] = 113;  // 0x71 - larger than 720/16 = 45
+    
+    dvi_display_geometry_t geo;
+    crtc_calculate_geometry(crtc, pet_display_columns_40, FRAME_WIDTH, FRAME_HEIGHT,
+                            FONT_WIDTH, SYMBOLS_PER_WORD, &geo);
+    
+    // h_displayed should be clamped to max (45 for 40-col mode)
+    ck_assert_uint_eq(geo.chars_per_row, 45);
+    
+    // Left margin should be 0 (no space left)
+    ck_assert_uint_eq(geo.left_margin_words, 0);
+    
+    // Total margin + content should not exceed words per lane
+    ck_assert_uint_le(geo.left_margin_words + geo.content_words + geo.right_margin_words,
+                      WORDS_PER_LANE);
+}
+END_TEST
+
+// Test: Garbage CRTC register values that previously caused hard fault
+// These are actual values observed during initialization before CRTC is programmed
+START_TEST(test_garbage_crtc_values) {
+    uint8_t crtc[CRTC_REG_COUNT];
+    
+    // The 8032 burnin test initializes the CRTC with these garbage values
+    // when run on a 40-column PET.  My guess is that `8032 test.prg` hard
+    // codes the address of the ROM's CRTC initialization tables, which is
+    // different on 40 vs. 80 column edit ROMs.
+    crtc[CRTC_R0_H_TOTAL] = 0x4C;
+    crtc[CRTC_R1_H_DISPLAYED] = 0x71;       // 113 chars - way too large!
+    crtc[CRTC_R2_H_SYNC_POS] = 0xE0;
+    crtc[CRTC_R3_SYNC_WIDTH] = 0x3D;
+    crtc[CRTC_R4_V_TOTAL] = 0x2E;
+    crtc[CRTC_R5_V_ADJUST] = 0x10;
+    crtc[CRTC_R6_V_DISPLAYED] = 0x03;       // Only 3 rows
+    crtc[CRTC_R7_V_SYNC_POS] = 0x3C;
+    crtc[CRTC_R8_MODE_CONTROL] = 0x20;
+    crtc[CRTC_R9_MAX_SCAN_LINE] = 0x5B;     // Would be 28 scanlines per row after masking
+    crtc[CRTC_R10_CURSOR_START_LINE] = 0x12;
+    crtc[CRTC_R11_CURSOR_END_LINE] = 0x2D;
+    crtc[CRTC_R12_START_ADDR_HI] = 0x30;
+    crtc[CRTC_R13_START_ADDR_LO] = 0x00;
+    
+    dvi_display_geometry_t geo;
+    // This should NOT crash or cause undefined behavior
+    crtc_calculate_geometry(crtc, pet_display_columns_40, FRAME_WIDTH, FRAME_HEIGHT,
+                            FONT_WIDTH, SYMBOLS_PER_WORD, &geo);
+    
+    // Verify reasonable clamped values
+    ck_assert_uint_le(geo.chars_per_row, FRAME_WIDTH / 16);  // Clamped to max
+    ck_assert_uint_le(geo.visible_scanlines, FRAME_HEIGHT);
+    
+    // Verify margin calculations are sane (no underflow)
+    ck_assert_uint_le(geo.left_margin_words, WORDS_PER_LANE);
+    ck_assert_uint_le(geo.content_words, WORDS_PER_LANE);
+    ck_assert_uint_le(geo.right_margin_words, WORDS_PER_LANE);
+    
+    // Total should equal words per lane
+    ck_assert_uint_eq(geo.left_margin_words + geo.content_words + geo.right_margin_words,
+                      WORDS_PER_LANE);
+}
+END_TEST
+
 Suite *crtc_suite(void) {
     Suite *s;
     TCase *tc_40col;
@@ -330,6 +396,8 @@ Suite *crtc_suite(void) {
     tc_edge = tcase_create("edge_cases");
     tcase_add_test(tc_edge, test_scanlines_clamped);
     tcase_add_test(tc_edge, test_zero_rows);
+    tcase_add_test(tc_edge, test_h_displayed_overflow);
+    tcase_add_test(tc_edge, test_garbage_crtc_values);
     suite_add_tcase(s, tc_edge);
 
     return s;

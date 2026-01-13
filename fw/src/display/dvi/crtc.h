@@ -79,14 +79,16 @@ static inline void crtc_calculate_geometry(
 
     // Extract values from CRTC registers
     uint h_displayed   = crtc[CRTC_R1_H_DISPLAYED];                     // R1[7:0]: Horizontal displayed characters
+
+    // Clamp h_displayed to prevent unsigned underflow when computing margins.
+    // This guards against garbage CRTC register values during initialization.
+    const uint max_h_displayed = frame_width / 16;
+    if (h_displayed > max_h_displayed) {
+        h_displayed = max_h_displayed;
+    }
+
     uint v_displayed   = crtc[CRTC_R6_V_DISPLAYED] & 0x7F;              // R6[6:0]: Vertical displayed character rows
     uint lines_per_row = (crtc[CRTC_R9_MAX_SCAN_LINE] & 0x1F) + 1;      // R9[4:0]: Scan lines per character row (plus one)
-
-    uint display_start = ((crtc[CRTC_R12_START_ADDR_HI] & 0x3f) << 8)   // R12[5:0]: High 6 bits of display start address
-                         | crtc[CRTC_R13_START_ADDR_LO];                // R13[7:0]: Low 8 bits of display start address
-
-    // ma[12] = invert video (1 = normal, 0 = inverted)
-    out->invert_mask = display_start & (1 << 12) ? 0x00 : 0xff;
 
     // Clamp lines_per_row to fit v_displayed rows within frame_height, ensuring at least
     // one blank scanline per frame to reload CRTC values. Guards against division by zero.
@@ -97,13 +99,19 @@ static inline void crtc_calculate_geometry(
         }
     }
 
+    uint display_start = ((crtc[CRTC_R12_START_ADDR_HI] & 0x3f) << 8)   // R12[5:0]: High 6 bits of display start address
+                         | crtc[CRTC_R13_START_ADDR_LO];                // R13[7:0]: Low 8 bits of display start address
+
+    // ma[12] = invert video (1 = normal, 0 = inverted)
+    out->invert_mask = display_start & (1 << 12) ? 0x00 : 0xff;
+
     uint y_visible = v_displayed * lines_per_row;   // Total visible scan lines
     uint y_start   = (frame_height - y_visible) / 2;   // Top margin in scan lines
 
     // Compute left margin based on horizontal displayed characters. Note that h_displayed
     // has not yet been adjusted for 80-column mode, so is 1/2 the final value assuming 8 pixel
-    // characters.
-    uint x_start = ((frame_width / 16) - h_displayed);   // Left margin in 8-pixel units
+    // characters. h_displayed is already clamped to max_h_displayed, so this cannot underflow.
+    uint x_start = max_h_displayed - h_displayed;   // Left margin in 8-pixel units
 
     // Precompute TMDS word offsets for margins and content for the frame
     uint left_margin_words = x_start * font_width / symbols_per_word;
