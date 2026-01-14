@@ -15,11 +15,12 @@
 import common_pkg::*;
 
 module video_crtc_reg (
-    // Wishbone B4 peripheral to read current CRTC register values.
+    // Wishbone B4 peripheral to read/write current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic wb_clock_i,                    // FPGA System clock
+    input  logic wb_clock_i,                     // FPGA System clock
     input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i, // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wbp_data_o, // Data received from MCU to write (valid when 'cycle_o' asserted)
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i, // Data received from MCU to write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wbp_data_o, // Data to transmit to MCU (valid when 'ack_o' asserted)
     input  logic wbp_we_i,                       // Direction of transaction (0 = read , 1 = write)
     input  logic wbp_cycle_i,                    // Bus cycle is active
     input  logic wbp_strobe_i,                   // New transaction requested (address, data, and control signals are valid)
@@ -81,10 +82,9 @@ module video_crtc_reg (
         if (wb_select && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= r[crtc_addr];
             
-            // TODO: Support writes?
-            // if (wbp_we_i) begin
-            //     r[crtc_addr] <= data_i;
-            // end
+            if (wbp_we_i) begin
+                r[crtc_addr] <= wbp_data_i;
+            end
             
             wbp_ack_o <= 1'b1;
         end else if (clk_en_i && cs_i && we_i) begin

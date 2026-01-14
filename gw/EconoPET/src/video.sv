@@ -30,10 +30,11 @@ module video (
     input  logic wbc_stall_i,                      // Signals that peripheral is not ready to accept request
     input  logic wbc_ack_i,                        // Signals termination of cycle ('data_i' valid)
 
-    // Wishbone B4 peripheral to read current CRTC register values.
+    // Wishbone B4 peripheral to read/write current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,   // Address of pending read/write (valid when 'cycle_o' asserted)
-    output logic [   DATA_WIDTH-1:0] wbp_data_o,   // Data to transmit to MCU (captured on 'wb_clock_i' when 'wbc_ack_i' asserted)
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i,   // Data received from MCU to write (valid when 'cycle_o' asserted)
+    output logic [   DATA_WIDTH-1:0] wbp_data_o,   // Data to transmit to MCU (valid when 'ack_o' asserted)
     input  logic wbp_we_i,                         // Direction of transaction (0 = read , 1 = write)
     input  logic wbp_cycle_i,                      // Bus cycle is active
     input  logic wbp_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
@@ -79,6 +80,7 @@ module video (
     video_crtc video_crtc (
         .wb_clock_i(wb_clock_i),
         .wbp_addr_i(wbp_addr_i),
+        .wbp_data_i(wbp_data_i),
         .wbp_data_o(wbp_data_o),
         .wbp_we_i(wbp_we_i),
         .wbp_cycle_i(wbp_cycle_i),

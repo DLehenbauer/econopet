@@ -15,10 +15,11 @@
 import common_pkg::*;
 
 module video_crtc(
-    // Wishbone B4 peripheral to read current CRTC register values.
+    // Wishbone B4 peripheral to read/write current CRTC register values.
     // (See: https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic wb_clock_i,
     input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
+    input  logic [   DATA_WIDTH-1:0] wbp_data_i,
     output logic [   DATA_WIDTH-1:0] wbp_data_o,
     input  logic wbp_we_i,
     input  logic wbp_cycle_i,
@@ -61,6 +62,7 @@ module video_crtc(
     video_crtc_reg video_crtc_reg (
         .wb_clock_i(wb_clock_i),
         .wbp_addr_i(wbp_addr_i),
+        .wbp_data_i(wbp_data_i),
         .wbp_data_o(wbp_data_o),
         .wbp_we_i(wbp_we_i),
         .wbp_cycle_i(wbp_cycle_i),

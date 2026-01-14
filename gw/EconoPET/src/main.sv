@@ -320,8 +320,9 @@ module main (
         .wbc_stall_i(video_stall),
         .wbc_ack_i(video_ack),
 
-        // Wishbone peripheral for reading back CRTC registers
+        // Wishbone peripheral for reading/writing CRTC registers
         .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
         .wbp_data_o(crtc_wb_din),
         .wbp_we_i(wb_we),
         .wbp_cycle_i(wb_cycle),

@@ -31,11 +31,13 @@ module video_crtc_reg_tb;
     logic wb_stall;
     logic wb_ack;
 
+    logic [DATA_WIDTH-1:0] wb_data_out;
+
     wb_driver wb (
         .wb_clock_i(clock),
         .wb_addr_o(wb_addr),
         .wb_data_i(wb_crtc_dout),
-        .wb_data_o(),
+        .wb_data_o(wb_data_out),
         .wb_we_o(wb_we),
         .wb_cycle_o(wb_cycle),
         .wb_strobe_o(wb_strobe),
@@ -65,7 +67,6 @@ module video_crtc_reg_tb;
     logic        rs;
     logic [7:0]  crtc_data_i;
 
-
     logic [ 7:0] r0_h_total;
     logic [ 7:0] r1_h_displayed;
     logic [ 7:0] r2_h_sync_pos;
@@ -81,6 +82,7 @@ module video_crtc_reg_tb;
     video_crtc_reg video_crtc_reg (
         .wb_clock_i(clock),
         .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_data_out),
         .wbp_data_o(wb_crtc_dout),
         .wbp_we_i(wb_we),
         .wbp_cycle_i(wb_cycle),
@@ -93,6 +95,7 @@ module video_crtc_reg_tb;
         .we_i(we),
         .rs_i(rs),
         .data_i(crtc_data_i),
+        .config_crt_i(1'b0),
 
         .r0_h_total_o(r0_h_total),
         .r1_h_displayed_o(r1_h_displayed),
@@ -160,11 +163,53 @@ module video_crtc_reg_tb;
         $display("[%t] BEGIN %m", $time);
 
         wb.reset;
+        cs = '0;
+        we = '0;
+
+        // Test: Write and read back all CRTC registers via Wishbone
+        // Use value (r + 0xA0) for each register - distinct from 9" and 12" defaults
+        for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+            wb.write(common_pkg::wb_crtc_addr(r), 8'hA0 + r);
+        end
+
+        @(posedge clock);
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             wb.read(common_pkg::wb_crtc_addr(r), data);
-            $display("[%t]   R%0d = %d", $time, r, data);
+            `assert_equal(data, 8'hA0 + r);
         end
+
+        // Verify register outputs are correctly updated, accounting for truncation
+        // R0: 8-bit h_total -> 8-bit output (no truncation)
+        `assert_equal(r0_h_total, 8'hA0);
+
+        // R1: 8-bit h_displayed -> 8-bit output (no truncation)
+        `assert_equal(r1_h_displayed, 8'hA1);
+
+        // R2: 8-bit h_sync_pos -> 8-bit output (no truncation)
+        `assert_equal(r2_h_sync_pos, 8'hA2);
+
+        // R3: bits [3:0] -> 4-bit h_sync_width, bits [7:4] -> 5-bit v_sync_width
+        `assert_equal(r3_h_sync_width, 4'h3);
+        `assert_equal(r3_v_sync_width, 5'hA);
+
+        // R4: 7-bit v_total (bits [6:0])
+        `assert_equal(r4_v_total, 7'h24);
+
+        // R5: 5-bit v_adjust (bits [4:0])
+        `assert_equal(r5_v_adjust, 5'h05);
+
+        // R6: 7-bit v_displayed (bits [6:0])
+        `assert_equal(r6_v_displayed, 7'h26);
+
+        // R7: 7-bit v_sync_pos (bits [6:0])
+        `assert_equal(r7_v_sync_pos, 7'h27);
+
+        // R9: 5-bit max_scan_line (bits [4:0])
+        `assert_equal(r9_max_scan_line, 5'h09);
+
+        // R12-R13: 6-bit high (bits [5:0]) + 8-bit low = 14-bit start_addr
+        `assert_equal(r1213_start_addr, {6'h2C, 8'hAD});
 
         #1 $display("[%t] END %m", $time);
     endtask
