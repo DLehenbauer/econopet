@@ -26,6 +26,7 @@ module video_crtc(
     input  logic wbp_strobe_i,
     output logic wbp_stall_o,
     output logic wbp_ack_o,
+    input  logic wbp_sel_i,                 // Asserted when selected by 'wbp_addr_i'
     
     input  logic reset_i,
     input  logic clk_en_i,                  // Gates 'wb_clock_i' to advance CRTC state
@@ -69,6 +70,7 @@ module video_crtc(
         .wbp_strobe_i(wbp_strobe_i),
         .wbp_stall_o(wbp_stall_o),
         .wbp_ack_o(wbp_ack_o),
+        .wbp_sel_i(wbp_sel_i),
 
         .clk_en_i(clk_en_i),
         .data_i(data_i),

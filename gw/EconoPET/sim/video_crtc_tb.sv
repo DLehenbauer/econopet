@@ -62,6 +62,7 @@ module video_crtc_tb;
         .wbp_strobe_i(),
         .wbp_stall_o(),
         .wbp_ack_o(),
+        .wbp_sel_i(),
 
         .reset_i(res),
         .clk_en_i(clk1n_en),

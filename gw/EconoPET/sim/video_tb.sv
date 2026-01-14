@@ -110,6 +110,7 @@ module video_tb;
         .wbp_strobe_i(wbp_strobe),
         .wbp_stall_o(wbp_stall),
         .wbp_ack_o(wbp_ack),
+        .wbp_sel_i(1'b1),
 
         // CRTC
         .cpu_reset_i(crtc_res),

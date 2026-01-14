@@ -22,7 +22,6 @@
         <efx:design_file name="src/address_decoding.sv" version="default" library="default"/>
         <efx:design_file name="src/vsync.sv" version="default" library="default"/>
         <efx:design_file name="src/register_file.sv" version="default" library="default"/>
-        <efx:design_file name="src/wb_decode.sv" version="default" library="default"/>
         <efx:design_file name="src/keyboard.sv" version="default" library="default"/>
         <efx:design_file name="src/video.sv" version="default" library="default"/>
         <efx:design_file name="src/video_crtc.sv" version="default" library="default"/>

@@ -329,6 +329,7 @@ module main (
         .wbp_strobe_i(wb_strobe),
         .wbp_stall_o(crtc_wb_stall),
         .wbp_ack_o(crtc_wb_ack),
+        .wbp_sel_i(crtc_wb_sel),
 
         // Video timing
         .clk8_en_i(clk8_en),                // 8 MHz pixel clock for 40 column mode

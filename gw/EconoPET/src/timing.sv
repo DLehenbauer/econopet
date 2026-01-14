@@ -70,11 +70,6 @@ module timing (
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
     assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
-    function bit [COUNTER_WIDTH-1:0] ns_to_cycles(input int time_ns);
-        // The '+1' is a conservative allowance for trace delay, etc.
-        return COUNTER_WIDTH'(common_pkg::ns_to_cycles(time_ns)) + 1;
-    endfunction
-
     localparam CPU_tBVD = 30,  // CPU BE to Valid Data (tBVD)
                CPU_tPWH = 62,  // CPU Clock Pulse Width High (tPWH)
                CPU_tDSR = 15,  // CPU Data Setup Time (tDSR)
@@ -83,13 +78,23 @@ module timing (
                RAM_tAA  = 10,  // RAM Address Access Time (tAA)
                IOTX_t   = 11;  // IO Transceiver Worst-Case Delay (tPZL)
 
+    // Convert nanoseconds to cycles: ceil(time_ns / (1000 / 64MHz)) + 1
+    // At 64 MHz, 1 cycle = 15.625 ns, so cycles = ceil(time_ns / 15.625) + 1
+    // Precomputed values for Icarus Verilog compatibility:
+    //   CPU_tBVD + IOTX_t = 41 ns -> ceil(41/15.625) + 1 = 3 + 1 = 4 cycles
+    //   CPU_tPWH = 62 ns -> ceil(62/15.625) + 1 = 4 + 1 = 5 cycles
+    //   CPU_tDHx = 10 ns -> ceil(10/15.625) + 1 = 1 + 1 = 2 cycles
+    localparam bit [COUNTER_WIDTH-1:0] CYCLES_BVD_IOTX = 6'd4,
+                                       CYCLES_PWH      = 6'd5,
+                                       CYCLES_DHX      = 6'd2;
+
     localparam bit [COUNTER_WIDTH-1:0] CPU_OFFSET = CPU_1 * 8;
 
     localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START     = CPU_OFFSET,
-                                       CPU_PHI_START    = CPU_BE_START + ns_to_cycles(CPU_tBVD + IOTX_t),
-                                       CPU_DATA_STROBE  = CPU_PHI_END - 2,
-                                       CPU_PHI_END      = CPU_PHI_START + ns_to_cycles(CPU_tPWH),
-                                       CPU_BE_END       = CPU_PHI_END + ns_to_cycles(CPU_tDHx);
+                                       CPU_PHI_START    = CPU_BE_START + CYCLES_BVD_IOTX,
+                                       CPU_DATA_STROBE  = CPU_PHI_END - 6'd2,
+                                       CPU_PHI_END      = CPU_PHI_START + CYCLES_PWH,
+                                       CPU_BE_END       = CPU_PHI_END + CYCLES_DHX;
 
     always_ff @(posedge sys_clock_i) begin
         cpu_data_strobe_o <= '0;

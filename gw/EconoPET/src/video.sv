@@ -40,6 +40,7 @@ module video (
     input  logic wbp_strobe_i,                     // New transaction requested (address, data, and control signals are valid)
     output logic wbp_stall_o,                      // Peripheral is not ready to accept the request
     output logic wbp_ack_o,                        // Indicates success termination of cycle (data_o is valid)
+    input  logic wbp_sel_i,                        // Asserted when selected by 'wbp_addr_i'
 
     // CRTC interface to CPU bus
     input  logic cpu_reset_i,
@@ -87,6 +88,7 @@ module video (
         .wbp_strobe_i(wbp_strobe_i),
         .wbp_stall_o(wbp_stall_o),
         .wbp_ack_o(wbp_ack_o),
+        .wbp_sel_i(wbp_sel_i),
 
         .reset_i(cpu_reset_i),
         .clk_en_i(crtc_clk_en_i),     // 1 MHz clock enable for 'sys_clock_i'

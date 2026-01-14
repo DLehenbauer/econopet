@@ -26,6 +26,7 @@ module video_crtc_reg (
     input  logic wbp_strobe_i,                   // New transaction requested (address, data, and control signals are valid)
     output logic wbp_stall_o,                    // Peripheral is not ready to accept the request
     output logic wbp_ack_o,                      // Indicates success termination of cycle (data_o is valid)
+    input  logic wbp_sel_i,                      // Asserted when selected by 'wbp_addr_i'
     
     input  logic clk_en_i,                      // Gates 'sys_clock_i' to advance CRTC state
     input  logic [DATA_WIDTH-1:0] data_i,       // Transfer data written from CPU to CRTC when CS asserted and /RW is low
@@ -67,19 +68,13 @@ module video_crtc_reg (
         r[CRTC_R13_START_ADDR_LO]    = 8'h00;
     end
 
-    logic wb_select;
-    wb_decode #(WB_CRTC_BASE) wb_decode (
-        .wb_addr_i(wbp_addr_i),
-        .selected_o(wb_select)
-    );
-
     // Wishbone peripheral always completes in a single cycle.
     assign wbp_stall_o = 1'b0;
     wire [CRTC_ADDR_REG_WIDTH-1:0] crtc_addr = wbp_addr_i[CRTC_ADDR_REG_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
         wbp_ack_o <= '0;
-        if (wb_select && wbp_cycle_i && wbp_strobe_i) begin
+        if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= r[crtc_addr];
             
             if (wbp_we_i) begin
