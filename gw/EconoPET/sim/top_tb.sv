@@ -120,11 +120,25 @@ module top_tb;
 
         $display("[%t] Begin CRTC Write Test", $time);
 
+        // Test 1: Write CRTC registers via CPU, verify via SPI wishbone
+        $display("[%t]   Test 1: CPU writes, SPI reads", $time);
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             mock_system.cpu_write(16'hE880, r);
-            value = { 3'b101, r };
+            value = { 3'b101, r[4:0] };
             mock_system.cpu_write(16'hE881, value);
-            $display("[%t]   CRTC[%0d] -> %02x", $time, r, value);
+            $display("[%t]     CRTC[%0d] <- %02x (CPU)", $time, r, value);
+
+            mock_system.spi_read_at(common_pkg::wb_crtc_addr(r), dout);
+            `assert_equal(dout, value);
+        end
+
+        // Test 2: Write CRTC registers via SPI wishbone, verify via SPI readback
+        $display("[%t]   Test 2: SPI writes, SPI reads", $time);
+        for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+            // Use different value pattern to distinguish from Test 1
+            value = { 3'b110, r[4:0] };
+            mock_system.spi_write_at(common_pkg::wb_crtc_addr(r), value);
+            $display("[%t]     CRTC[%0d] <- %02x (SPI)", $time, r, value);
 
             mock_system.spi_read_at(common_pkg::wb_crtc_addr(r), dout);
             `assert_equal(dout, value);

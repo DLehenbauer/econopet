@@ -75,6 +75,11 @@ module mock_cpu (
         $display("[%t]   CPU Write %04x <- %02x", $time, addr, data);
 
         @(posedge cpu_clock_i);
+
+        // Return to read mode after write completes to avoid unintended
+        // repeated writes on subsequent bus cycles
+        @(posedge cpu_clock_ne);
+        set_we_next = 1'b0;
     endtask
 
     task read(

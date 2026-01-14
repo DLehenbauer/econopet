@@ -153,7 +153,7 @@ package common_pkg;
                CRTC_R9_MAX_SCAN_LINE      = 9,  // [4:0] Number of scan lines per character row, minus one, including spacing.
                                                 //
                                                 //       Graphics Mode: 7 → 8 scan lines/row (full character)
-                                                //           Text Mode: 8 → 9 scan lines/row (full character + 1 blank line)
+                                                //           Text Mode: 9 → 10 scan lines/row (full character + 2 blank lines)
 
                CRTC_R10_CURSOR_START_LINE = 10, // [6:0] Cursor blink mode and starting scan line [Not implemented]
                                                 //
