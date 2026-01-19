@@ -76,3 +76,19 @@ As a secondary precaution, implementors may choose to use a write-enable bit to 
     2. Write to `$E800` to select a bank other than `$E8` (which is read-only).
 
 This two-step process makes the chances of an accidental write to extension registers vanishingly small.
+
+## Candidates
+
+As a starting point, the following extensions have been implemented on the EconoPET and are potential candidates for standardization:
+
+* Toggle 40/80 columns
+* Partial ColourPET support:
+  * 40 or 80 columns
+  * Colour ram at $8800
+  * Colour data interpretted as 4-bit palette index
+  * Currently paletted hard coded to RGBI, but could be customizable.
+  * Could support separate custom palettes for FG vs. BG for 32-colors total.
+* (FPGA emulated) SID chip at overlaid at `$8Fxx`.
+* Video RAM mask ($00 = 1KB, $01 = 2KB, $11 = 4/8KB).
+
+(Next on my list is exposing the character ROM data for custom fonts.)
