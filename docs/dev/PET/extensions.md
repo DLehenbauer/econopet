@@ -1,39 +1,78 @@
-# Extensions
+# PET Extension Standard Proposal
 
-This document outlines potential extensions for the EconoPET 40/8096.
+This document outlines a proposal for a shared standard for memory-mapped extensions on the Commodore PET/CBM series.  The goal is to allow modern expansion devices and replacement mainboards to provide a common interface for software to detect and utilize additional hardware features.
 
-## Memory Mapped Extensions
- 
-Range         | Description
---------------|-------------
-`$8000-$9FFF` | 8KB video RAM
-`$8400-$87FF` | ColourPET (40 col - color data at `$8400`)
-`$8800-$8FFF` | ColourPET (80 col - color data at `$8800`)
-`$8F00-$8FFF` | SID cartridge (emulated by VICE)
-`$?-$?`       | Future: Writable character bitmaps (TBD)
-`$?-$?`       | Future: Some way to identify EconoPET revision (TBD)
+## Core Concept: Banked Registers
 
-## Desired Control Bits
+For maximum backwards compatibility with the original CBM/PET hardware, and to minimize the impact on the limited I/O space of the PET, this standard proposes that control registers occupy a single 16-byte window at `$E800-$E80F` with a banking mechanism.
 
-* 1 bit: toggle 40/80 column mode
-* 2 bits: Video RAM mask (00 = 1KB, 01 = 2KB, 10 = 4KB, 11 = 8KB)
-* 2 bit: ColourPET mode (00 = off, 01 = RGBI, 10 = Palette, 11 = Analog)
-* 1 bit: ColourPET color data address (`$8400` or `$8800`)
-* 1 bit: SID at $8F00
-* 1 bit: Writable character bitmaps (at what address?)
-* 7 bits: Enable "ROMs" (1 bit each for `$9xxx`, `$Axxx`, etc.)
-  * Controls whether accesses to these areas go to SRAM or the expansion port
-* 7 bits: Write enable "ROMs" (1 bit each for `$9xxx`, `$Axxx`, etc.)
+Address         | Function                 | Description
+----------------|--------------------------|----------------
+`$E800`         | **Bank Select Register** | Writing a value selects the active bank.
+`$E801`-`$E80F` | **Banked Window**        | The function of these 15 bytes depends on the selected bank.
 
-## Potential Control Register Locations
+Note that while control registers reside exclusively in the `$E800-$E80F` range, the effect of these registers may extend to other memory-mapped regions.  For example, a control register might toggle access to a SID chip overlaid at `$8Fxx` or expand the number of indexable registers of the CRTC.
 
-* 64KB RAM expansion control register at `$FFF0` has an unused/reserved bit (bit 4)
-* CRTC registers 18-31 are writable, but unused
-* There are 16 unmapped bytes at `$E800-$E80F` (accessible with I/O peek-through enabled)
+## Bank Allocation
 
-## Thoughts
+The proposed standard allocates the 256 possible banks as follows:
 
-* For maximum compatibility, use $FFF0 bit 4 to enable/disable all extensions
-* Consider reserving all or part of `$E800-$E80F` for ring-buffer communication with FPGA/MCU
-* Potential issues with changing currently selected CRTC register?
-* ColourPET RGBI mode seems redundant with palette mode. Is it worth keeping?
+* Standard extensions begin at bank $00 and grow upwards.
+* Non-standard / board specific extensions begin at bank $FF and grow downwards.
+
+## Standard Extensions
+
+Standard extensions are features implemented by multiple mainboards or expansion devices. (The first defined standard extension should provide a mechanism to identify the board type and hardware/firmware versions.)
+
+## Non-Standard / Board-Specific Extensions
+
+Non-standard extensions are specific to a particular mainboard or expansion device. These banks may be used for any purpose and are expected to overlap/conflict between different devices.
+
+Portable software wishing to use non-standard extensions should first perform board identification to determine which extensions are supported.
+
+## Backwards Compatibility
+
+A primary goal of this standard is to allow software to remain compatible with unmodified PET/CBM hardware while detecting and leveraging extensions when available.
+
+Implementations targeting strict backwards compatibility should additionally implement:
+
+1. "Bus holding" emulation for bank `$E8`.
+2. A write-enable bit at `$FFF0` (Bit 4).
+
+These behaviors are described in more detail below.
+
+### Bank $E8 is Reserved/Special
+
+In later PET/CBM models, reading from an unmapped address holds the previous byte transferred on the data bus. For example, `LDA $E800` (opcode `AD 00 E8`) will return `$E8` since the address `$E800` is unmapped and `$E8` was the last byte previously transferred.
+
+This has the effect of making it appear that unmapped regions are filled with the high byte of the corresponding memory address:
+
+```text
+.m e800 e80f
+.:  e800  E8 E8 E8 E8 E8 E8 E8 E8
+.:  e808  E8 E8 E8 E8 E8 E8 E8 E8
+```
+
+For example, Commodore's 64KB Memory Expansion test (`mem.8032.prg`) uses this technique to test that I/O peek-through works correctly by asserting a read to `$E800` returns `$E8`:
+
+```text
+.C:f974  AD 00 E8    LDA $E800
+.C:f977  C9 E8       CMP #$E8
+```
+
+While not strictly required by the standard, it is recommended that implementors preserve or emulate this behavior.
+
+### Write Enable Bit at $FFF0 (Bit 4)
+
+As a secondary precaution, implementors may choose to use a write-enable bit to prevent accidental writes to extension registers. `$FFF0` is the control register for the Commodore 64KB Memory Expansion.  Bit 4 of this register is reserved and historically unused.
+
+### Behavior
+
+* At Power-On Reset (POR),
+  * `$FFF0` Bit 4 should be initialized to `0`.
+  * `$E800` should be initialized to bank `$E8`
+* To access extension registers, software must:
+    1. Set `$FFF0` Bit 4 to `1` to enable writes to `$E800`.
+    2. Write to `$E800` to select a bank other than `$E8` (which is read-only).
+
+This two-step process makes the chances of an accidental write to extension registers vanishingly small.
