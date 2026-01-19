@@ -61,6 +61,9 @@ Video  |          - |        - |      - | Active High | -
 * CRTC
   * [Operation](http://www.6502.org/users/andre/hwinfo/crtc/crtc.html)
   * [Internals](http://www.6502.org/users/andre/hwinfo/crtc/internals/index.html)
+  * [CRTC - BeebWiki](https://beebwiki.mdfs.net/CRTC)
+  * [The Amstrad CPC CRTC 
+Compendium](https://www.cpcwiki.eu/imgs/4/4a/ACCC1.8-EN.pdf)
   * [Wikipedia](https://en.wikipedia.org/wiki/Motorola_6845)
   * Register Values
     * [Spreadsheet](https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Finchocks.co.uk%2Fcommodore%2FPET%2FPET_CRTC.xls)
