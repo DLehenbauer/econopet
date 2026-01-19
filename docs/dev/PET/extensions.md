@@ -22,13 +22,15 @@ The proposed standard allocates the 256 possible banks as follows:
 
 ## Standard Extensions
 
-Standard extensions are features implemented by multiple mainboards or expansion devices. (The first defined standard extension should provide a mechanism to identify the board type and hardware/firmware versions.)
+Standard extensions are features implemented by multiple mainboards or expansion devices. The first defined standard extension should provide a mechanism to identify the board type and hardware/firmware versions.
+
+> **Note:** Most extensions will be "non-standard" and specific to a particular mainboard or expansion device.  Only when multiple parties agree to implement a particular extension in a compatible manner should it be promoted to a "standard" extension.
 
 ## Non-Standard / Board-Specific Extensions
 
 Non-standard extensions are specific to a particular mainboard or expansion device. These banks may be used for any purpose and are expected to overlap/conflict between different devices.
 
-Portable software wishing to use non-standard extensions should first perform board identification to determine which extensions are supported.
+Portable software wishing to use non-standard extensions should first perform board identification to verify it is running on the expected hardware.
 
 ## Backwards Compatibility
 
@@ -60,7 +62,7 @@ For example, Commodore's 64KB Memory Expansion test (`mem.8032.prg`) uses this t
 .C:f977  C9 E8       CMP #$E8
 ```
 
-While not strictly required by the standard, it is recommended that implementors preserve or emulate this behavior.
+While not strictly required by the standard, it is recommended that implementors preserve or emulate this behavior for reads to bank `$E8`.
 
 ### Write Enable Bit at $FFF0 (Bit 4)
 
@@ -85,10 +87,10 @@ As a starting point, the following extensions have been implemented on the Econo
 * Partial ColourPET support:
   * 40 or 80 columns
   * Colour ram at $8800
-  * Colour data interpretted as 4-bit palette index
-  * Currently paletted hard coded to RGBI, but could be customizable.
-  * Could support separate custom palettes for FG vs. BG for 32-colors total.
-* (FPGA emulated) SID chip at overlaid at `$8Fxx`.
+  * Colour data interpretted as a pair of 4-bit indexes into a 16-color palette.
+  * Currently palette hard coded to RGBI, but could be customizable (R3G3B2).
+  * Could support separate custom palettes for FG vs. BG (for a combined 32 onscreen colors.)
+* (FPGA emulated) SID chip overlaid at `$8Fxx`.
 * Video RAM mask ($00 = 1KB, $01 = 2KB, $11 = 4/8KB).
 
 (Next on my list is exposing the character ROM data for custom fonts.)
