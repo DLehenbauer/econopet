@@ -110,7 +110,8 @@ package common_pkg;
                                          VIA_PORTB_NRFD_IN         = 6,    // IEEE-488: (0 = Device not ready for data, 1 = Device ready for data)
                                          VIA_PORTB_DAV_IN          = 7;    // IEEE-488: (0 = DIO1-8 is valid, 1 = DIO1-8 is not valid)
 
-    // CRTC (6545) registers
+    // CRTC (MOS6545) registers
+    // https://ia600203.us.archive.org/5/items/crtc6545/crtc6545.pdf
     // http://archive.6502.org/datasheets/rockwell_r6545-1_crtc.pdf
 
     localparam CRTC_R0_H_TOTAL            = 0,  // [7:0] Total displayed and non-displayed characters, minus one, per horizontal line.
@@ -165,25 +166,34 @@ package common_pkg;
                CRTC_R11_CURSOR_END_LINE   = 11, // [4:0] Ending scan line of cursor [Not implemented]
 
                CRTC_R12_START_ADDR_HI     = 12, // [5:0] High 6 bits of 14 bit display address (starting address of screen_addr_o[13:8]).
+               CRTC_R13_START_ADDR_LO     = 13, // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
                                                 //
                                                 //       Note that on the PET, bits MA[13:12] do not address video RAM and instead are
                                                 //       used for special functions:
                                                 //
                                                 //         [5] TA13 selects an alternative character rom (0 = normal, 1 = international)
                                                 //         [4] TA12 inverts the video signal (0 = inverted, 1 = normal)
+                                                //
+                                                //       [Motorola CRTC only] Allows readback of R12-13 [Not implemented]
 
-               CRTC_R13_START_ADDR_LO     = 13, // [7:0] Low 8 bits of 14 bit display address (starting address of screen_addr_o[7:0]).
                
                CRTC_R14_CURSOR_POS_HIGH   = 14, // [5:0] 14-bit memory address (MA) of current cursor position [Not implemented]
-               CRTC_R15_CURSOR_POS_LOW    = 15, // [7:0]
+               CRTC_R15_CURSOR_POS_LOW    = 15, // [7:0] (All variants can read R14-R15 - [Not implemented])
                
                CRTC_R16_LIGHT_PEN_HIGH    = 16, // [5:0] 14-bit video display address at which lightpen strobe occured [Not implemented]
-               CRTC_R17_LIGHT_PEN_LOW     = 17, // [7:0]
+               CRTC_R17_LIGHT_PEN_LOW     = 17, // [7:0] (All variants can read R16-R17 - [Not implemented])
 
-               CRTC_REG_COUNT             = CRTC_R17_LIGHT_PEN_LOW + 1'b1;
+               CRTC_R31_DUMMY_REG         = 31, // [Rockwell R6545 only] Used with UR (Update Ready) status bit [Not implemented]
+
+               CRTC_REG_COUNT             = CRTC_R31_DUMMY_REG + 1'b1;
 
     // Bit width of the CRTC's internal address register.
     localparam int unsigned CRTC_ADDR_REG_WIDTH = $clog2(CRTC_REG_COUNT);
+
+    // CRTC Status Register Bits (read from address $E880 when RS=0)
+    localparam CRTC_STATUS_UPDATE_READY_BIT = 7,  // [Rockwell R6545 only] Update Ready (0 = R31 read/written, 1 = update strobe occurred) [Not implemented]
+               CRTC_STATUS_LPEN_BIT         = 6,  // LPEN Register Full (0 = R16/R17 read, 1 = LPEN strobe occurred) [Not implemented]
+               CRTC_STATUS_VBLANK_BIT       = 5;  // Vertical Blanking  (0 = not in vblank, 1 = in vblank)
 
     // SID: Sound Interface Device
     // https://archive.org/details/mos-6581-sid-data-sheet/page/n3/mode/2up

@@ -145,6 +145,11 @@ module video_crtc_reg_tb;
         crtc_end();
     endtask
 
+    task cpu_write(input logic [7:0] register, input logic [7:0] data);
+        select(register);
+        write(data);
+    endtask
+
     task setup(
         input logic [7:0] values[]
     );
@@ -167,7 +172,8 @@ module video_crtc_reg_tb;
         cs = '0;
         we = '0;
 
-        // Test: Write and read back all CRTC registers via Wishbone
+        // Test 1: Write and read back all CRTC registers via Wishbone
+        $display("[%t]   Test 1: Wishbone write, Wishbone read", $time);
         // Use value (r + 0xA0) for each register - distinct from 9" and 12" defaults
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             wb.write(common_pkg::wb_crtc_addr(r), 8'hA0 + r);
@@ -180,37 +186,44 @@ module video_crtc_reg_tb;
             `assert_equal(data, 8'hA0 + r);
         end
 
-        // Verify register outputs are correctly updated, accounting for truncation
-        // R0: 8-bit h_total -> 8-bit output (no truncation)
-        `assert_equal(r0_h_total, 8'hA0);
+        // Verify register outputs are correctly updated, accounting for truncation        
+        `assert_equal(r0_h_total, 8'hA0);                   // R0[7:0]
+        `assert_equal(r1_h_displayed, 8'hA1);               // R1[7:0]
+        `assert_equal(r2_h_sync_pos, 8'hA2);                // R2[7:0]
+        `assert_equal(r3_h_sync_width, 4'h3);               // R3[3:0]
+        `assert_equal(r3_v_sync_width, 5'hA);               // R3[7:4]
+        `assert_equal(r4_v_total, 7'h24);                   // R4[6:0]
+        `assert_equal(r5_v_adjust, 5'h05);                  // R5[4:0]
+        `assert_equal(r6_v_displayed, 7'h26);               // R6[6:0]
+        `assert_equal(r7_v_sync_pos, 7'h27);                // R7[6:0]
+        `assert_equal(r9_max_scan_line, 5'h09);             // R9[4:0]
+        `assert_equal(r1213_start_addr, {6'h2C, 8'hAD});    // { R12[5:0], R13[7:0] }
 
-        // R1: 8-bit h_displayed -> 8-bit output (no truncation)
-        `assert_equal(r1_h_displayed, 8'hA1);
+        // Test 2: CPU write, Wishbone read
+        $display("[%t]   Test 2: CPU write, Wishbone read", $time);
+        for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+            cpu_write(r, 8'hB0 + r);
+        end
 
-        // R2: 8-bit h_sync_pos -> 8-bit output (no truncation)
-        `assert_equal(r2_h_sync_pos, 8'hA2);
+        @(posedge clock);
 
-        // R3: bits [3:0] -> 4-bit h_sync_width, bits [7:4] -> 5-bit v_sync_width
-        `assert_equal(r3_h_sync_width, 4'h3);
-        `assert_equal(r3_v_sync_width, 5'hA);
+        for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+            wb.read(common_pkg::wb_crtc_addr(r), data);
+            `assert_equal(data, 8'hB0 + r);
+        end
 
-        // R4: 7-bit v_total (bits [6:0])
-        `assert_equal(r4_v_total, 7'h24);
-
-        // R5: 5-bit v_adjust (bits [4:0])
-        `assert_equal(r5_v_adjust, 5'h05);
-
-        // R6: 7-bit v_displayed (bits [6:0])
-        `assert_equal(r6_v_displayed, 7'h26);
-
-        // R7: 7-bit v_sync_pos (bits [6:0])
-        `assert_equal(r7_v_sync_pos, 7'h27);
-
-        // R9: 5-bit max_scan_line (bits [4:0])
-        `assert_equal(r9_max_scan_line, 5'h09);
-
-        // R12-R13: 6-bit high (bits [5:0]) + 8-bit low = 14-bit start_addr
-        `assert_equal(r1213_start_addr, {6'h2C, 8'hAD});
+        // Verify register outputs are correctly updated with new values
+        `assert_equal(r0_h_total, 8'hB0);                   // R0[7:0]
+        `assert_equal(r1_h_displayed, 8'hB1);               // R1[7:0]
+        `assert_equal(r2_h_sync_pos, 8'hB2);                // R2[7:0]
+        `assert_equal(r3_h_sync_width, 4'h3);               // R3[3:0]
+        `assert_equal(r3_v_sync_width, 5'h0B);              // R3[7:4]
+        `assert_equal(r4_v_total, 7'h34);                   // R4[6:0]
+        `assert_equal(r5_v_adjust, 5'h15);                  // R5[4:0]
+        `assert_equal(r6_v_displayed, 7'h36);               // R6[6:0]
+        `assert_equal(r7_v_sync_pos, 7'h37);                // R7[6:0]
+        `assert_equal(r9_max_scan_line, 5'h19);             // R9[4:0]
+        `assert_equal(r1213_start_addr, {6'h3C, 8'hBD});    // { R12[5:0], R13[7:0] }
 
         #1 $display("[%t] END %m", $time);
     endtask

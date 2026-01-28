@@ -489,10 +489,13 @@ module main (
     // System Bus
     //
 
+    // io_doe and crtc_oe are mutually exclusive (address decoding ensures this)
+    wire io_or_crtc_oe = io_doe | crtc_oe;
+
     always_comb begin
-        if (io_doe) begin
-            cpu_data_o = io_dout;
-            cpu_data_oe = !cpu_we_i;        // TODO: Is 'io_doe' asserted when CPU is writing?
+        if (io_or_crtc_oe) begin
+            cpu_data_o = crtc_oe ? crtc_dout : io_dout;
+            cpu_data_oe = !cpu_we_i;
         end else if (ram_ctl_doe) begin
             cpu_data_o = ram_ctl_dout;
             cpu_data_oe = 1;
@@ -542,6 +545,7 @@ module main (
         assert(!io_oe_o  ||  cpu_be_o)     else $fatal(1, "IO must not be active unless CPU is driving bus");
         assert(!io_oe_o  || !ram_oe_o)     else $fatal(1, "IO and RAM_OE must not drive bus at same time");
         assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
+        assert(!(io_doe && crtc_oe))       else $fatal(1, "IO and CRTC must not drive bus at same time");
     end
     // synthesis on
 endmodule

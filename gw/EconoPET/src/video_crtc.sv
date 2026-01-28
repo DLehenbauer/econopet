@@ -276,4 +276,25 @@ module video_crtc(
     assign v_sync_o    = v_sync; 
     assign de_o        = h_display && v_display;
     assign ra_o        = line_counter;
+
+    //
+    // CPU Read Interface
+    //
+    // Status Register (directly accent at $E880, active when RS=0):
+    //   Bit 7:   Not used - Rockwell R6545 only
+    //   Bit 6:   LPEN Register Full (0 = R16/R17 read, 1 = LPEN strobe occurred)
+    //   Bit 5:   Vertical Blanking (0 = not in vblank, 1 = in vblank)
+    //   Bit 4-0: Not used
+    //
+    // Data Register ($E881, active when RS=1):
+    //   Returns 0 for all register reads (R12-R17 readable on real 6545).
+    //
+
+    wire v_blank = !v_display;
+
+    // Status register: bit 5 = vertical blanking, bit 6 = LPEN (always 0, no light pen)
+    wire [DATA_WIDTH-1:0] status_reg = { 1'b0, 1'b0, v_blank, 5'b00000 };
+
+    assign data_o  = rs_i ? 8'h00 : status_reg;
+    assign data_oe = cs_i && !we_i;
 endmodule

@@ -113,6 +113,18 @@ module video_crtc_tb;
         crtc_end();
     endtask
 
+    task read_status(output logic [7:0] data);
+        crtc_begin(/* rs: */ '0, /* we: */ '0);
+        data = crtc_data_o;
+        crtc_end();
+    endtask
+
+    task read_data(output logic [7:0] data);
+        crtc_begin(/* rs: */ '1, /* we: */ '0);
+        data = crtc_data_o;
+        crtc_end();
+    endtask
+
     // task assert(input logic [7:0] expected);
     //     crtc_begin(/* rs: */ '1, /* we: */ '0);
         
@@ -186,6 +198,44 @@ module video_crtc_tb;
         end
 
         reset();
+
+        // Test: Status register read
+        // Status register format:
+        //   Bit 7:   Not used - Rockwell R6545 only
+        //   Bit 6:   LPEN Register Full (always 0, no light pen)
+        //   Bit 5:   Vertical Blanking (1 = in vblank)
+        //   Bit 4-0: Not used
+        begin
+            logic [7:0] status;
+
+            $display("[%t]   Test: Status register", $time);
+
+            // Wait for vertical sync (indicates we're in vblank)
+            @(posedge v_sync);
+            read_status(status);
+            $display("[%t]     Status = %02x (vblank expected)", $time, status);
+            `assert_equal(status[5], 1'b1);  // In vblank
+
+            // Wait for next frame's active display
+            @(negedge v_sync);
+            @(posedge de);
+            read_status(status);
+            $display("[%t]     Status = %02x (active display expected)", $time, status);
+            `assert_equal(status[5], 1'b0);  // Not in vblank
+        end
+
+        // Test: Data register read (should return 0)
+        begin
+            logic [7:0] data;
+            integer r;
+
+            $display("[%t]   Test: Data register reads", $time);
+            for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+                select(r);
+                read_data(data);
+                `assert_equal(data, 8'h00);
+            end
+        end
 
         // Measure Horizontal Sync Frequency
         @(posedge h_sync);

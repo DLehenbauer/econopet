@@ -147,6 +147,49 @@ module top_tb;
         $display("[%t] End CRTC Write Test", $time);
     endtask
 
+    task static crtc_read_test;
+        integer r;
+        logic [DATA_WIDTH-1:0] dout;
+        logic [DATA_WIDTH-1:0] masked;
+
+        $display("[%t] Begin CRTC Read Test", $time);
+
+        // Test 1: CPU reads from CRTC status register ($E880, RS=0).
+        // Status register format:
+        //   Bit 7:   Not used
+        //   Bit 6:   LPEN Register Full (always 0, no light pen support)
+        //   Bit 5:   Vertical Blanking (1 = in vblank, tested in video_crtc_tb.sv)
+        //   Bit 4-0: Not used
+        $display("[%t]   Test 1: Status register read", $time);
+        mock_system.cpu_read(16'hE880, dout);
+        $display("[%t]   CRTC Status -> %02x (CPU)", $time, dout);
+        // VBlank (bit 5) is tested in `video_crtc_tb.sv`.  Here we just sanity
+        // check that the unused bits return zero.
+        masked = dout & 8'b1001_1111;
+        `assert_equal(masked, 8'h00);
+
+        // Test 2: CPU reads from CRTC data register ($E881, RS=1) should return 0.
+        // Real MOS6545 CRTC only supports reading R14-R17 (cursor/light pen).  Our
+        // implementation returns 0 for all registers.
+        $display("[%t]   Test 2: Data register reads", $time);
+        for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
+            mock_system.cpu_write(16'hE880, r);         // Select register r
+            mock_system.cpu_read(16'hE881, dout);       // Read from CRTC data register
+            $display("[%t]     CRTC[%0d] -> %02x (CPU)", $time, r, dout);
+            `assert_equal(dout, 8'h00);                 // Expect 0 for all reads
+        end
+
+        // Test 3: Verify CRTC read does not interfere with IO reads.
+        // After CRTC read, keyboard should still work correctly.
+        $display("[%t]   Test 3: CRTC/IO mutual exclusion", $time);
+        mock_system.spi_write_at(common_pkg::wb_kbd_addr(0), 8'hA5);
+        mock_system.cpu_write(16'hE810 + PIA_PORTA, 8'h00);  // Select column 0
+        mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+        `assert_equal(dout, 8'hA5);
+
+        $display("[%t] End CRTC Read Test", $time);
+    endtask
+
     task static sid_write_test;
         integer r;
         logic [     DATA_WIDTH-1:0] dout;
@@ -264,6 +307,7 @@ module top_tb;
         cpu_ram_test;
         usb_keyboard_test;
         crtc_write_test;
+        crtc_read_test;
         sid_write_test;
         register_file_test;
         bram_test;
