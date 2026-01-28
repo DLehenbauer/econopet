@@ -7,7 +7,7 @@ EconoPET is an open hardware mainboard replacement for Commodore PET/CBM compute
 | Component | Location | Language | Toolchain |
 |-----------|----------|----------|-----------|
 | **Firmware** | `/fw` | C (RP2040) | Pico SDK, ARM GCC |
-| **Gateware** | `/gw` | SystemVerilog | Efinity (Efinix FPGA) |
+| **Gateware** | `/gw` | SystemVerilog | Efinity (Efinix FPGA), Icarus Verilog |
 | **ROMs** | `/rom` | 6502 Assembly | CC65, ACME |
 
 ## Architecture
@@ -30,53 +30,19 @@ ctest --preset gw                   # Run gateware simulations (fast)
 cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 ```
 
-## Development Workflows
-
-### Firmware changes (`/fw/src`)
-1. `cmake --build --preset fw` - build firmware
-2. `cmake --build --preset fw_test` - build tests
-3. `ctest --preset fw` - run tests
-
-### Gateware changes (`/gw/EconoPET/src`)
-1. `ctest --preset gw` - run Verilog simulations (Icarus Verilog)
-2. Only if tests pass: `cmake --build --preset gw` - build bitstream
-
-**Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow and simulation catches most issues.
-
 ## Code Conventions
 
-### Plain ASCII text (avoid “fancy” Unicode)
+### Plain ASCII text (avoid "fancy" Unicode)
 - When generating prose (commit messages, PR text, docs, comments, user-facing strings), prefer plain ASCII characters.
-- Do not emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode that humans typically don’t type:
-	- Use `'` and `"` (not `’` `“` `”`)
-	- Use `-` (not `–` or `—`)
-	- Use `...` (not `…`)
-- Avoid other decorative Unicode in text (e.g., `•`, `→`, non-breaking spaces) unless the user explicitly asks for it or it is required by a technical format.
+- Do not emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode that humans typically don't type:
+  - Use `'` and `"` (not curly quotes)
+  - Use `-` (not en-dash or em-dash)
+  - Use `...` (not ellipsis character)
+- Avoid other decorative Unicode in text (e.g., bullet, arrow, non-breaking spaces) unless the user explicitly asks for it or it is required by a technical format.
 - Avoid overuse of semi-colons, as these are rarely used in English.
 
 ### File headers
 New source files should include the CC0 license header with author attribution (see fw/src/main.c for example).
-
-### Firmware C conventions (`/fw`)
-- Header files: never include `pch.h`; `#pragma once` must be the first non-comment line
-- Source files include order: `pch.h`, corresponding header, blank line, standard library `<...>` (alphabetized), blank line, external `"..."` (alphabetized), blank line, project `"..."` (alphabetized)
-- Include paths: don’t use relative paths like `../../pch.h` (the include path already contains `fw/src`); use simple includes like `#include "pch.h"` or `#include "subdir/header.h"`
-
-### Firmware patterns
-- Tests use [Check](https://libcheck.github.io/check/) framework - see [fw/test/main.c](fw/test/main.c)
-- Platform abstraction via `PICO_PLATFORM`: real hardware vs host testing
-- Precompiled header: `pch.h` included in all firmware `.c` source files (never from headers)
-
-### Gateware patterns
-- Testbenches named `*_tb.sv` in [gw/EconoPET/sim/](gw/EconoPET/sim/)
-- `top.sv` normalizes hardware signals, `main.sv` contains core logic
-- Active-high internal signals (top module inverts active-low pins)
-
-## External Dependencies
-
-Directories `/fw/external` and `/gw/EconoPET/external` are **git submodules**. Do not modify files in these paths without explicit confirmation. When changes seem to require modifying submodule code:
-1. Propose alternatives first (wrappers, adapters, compile flags)
-2. Request confirmation before proceeding
 
 ## Environment Variables
 
