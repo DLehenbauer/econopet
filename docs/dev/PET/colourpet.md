@@ -22,6 +22,28 @@ This document summarizes how the `cbm-edit-rom` project implements colour handli
   - `COLOURVER`: selects colour RAM base (`$8400` beta vs `$8800` normal/uPET).
 
 ## Memory Layout and Variables
+
+| Variable/Address | Location/Value | Description |
+|------------------|----------------|-------------|
+| `COLOUR_RAM`     | `$8400`        | Colour RAM base if `COLOURVER=0` (beta) |
+| `COLOUR_RAM`     | `$8800`        | Colour RAM base if `COLOURVER=1` (normal/uPET/VICE) |
+| `ColourFG`       | `$BB`          | Zero page: Current foreground colour |
+| `ColourBG`       | `$BC`          | Zero page: Current background colour |
+| `ColourV`        | `$D7`          | Zero page: Combined colour byte to write to RAM |
+| `ColourCount`    | `$D6`          | Zero page: Counter for colour codes |
+| `ColourPNum`     | `$D0`          | Zero page: Analog palette selection (0-2) |
+| `COLOURSTOR`     | `COLOUR_RAM` + (25 * Cols) | Start of hidden custom palette storage |
+| **Storage Area** | | *(Defined in memcpet.asm)* |
+| `COLOURSTOR`     | `COLOURSTOR` + 9 | Base of hidden variables (Offset +9) |
+| `COLOURV`        | `COLOURSTOR` + 1 | Combined FG and BG value |
+| `COLOURFG`       | `COLOURSTOR` + 2 | Foreground Colour |
+| `COLOURBG`       | `COLOURSTOR` + 3 | Background Colour |
+| `COLOURBORDER`   | `COLOURSTOR` + 4 | Border Colour |
+| `COLOURCOUNT`    | `COLOURSTOR` + 5 | Count to track colour change codes |
+| `COLOURREGBG`    | `COLOURSTOR` + 6 | Colour Background Register (dummy) |
+| `COLOURREGBORDER`| `COLOURSTOR` + 7 | Colour Border Register (dummy) |
+| `COLOURREGMODE`  | `COLOURSTOR` + 8 | Colour Mode Register (Future) |
+
 - File: `memzeropage.asm` (Zero Page and colour RAM base)
   - Colour RAM base (`COLOUR_RAM`):
     - `COLOURVER=0`: `$8400` (beta; colour tables shifted)

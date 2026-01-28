@@ -45,9 +45,7 @@ The 8296 includes the 8096-style expansion mapping, plus an extra 32KB of genera
 
 The region `$9000-$9FFF` is addressable by the CRTC, bringing the total amount of video RAM to 8KB, provided you don't need readback from the upper 4KB.
 
-Otherwise, the 28KB of RAM sits under ROM decode (`$9000-$FFFF`) can only
-be read by the CPU by reconfiguring the machine with jumpers so that user
-port pins can be used to unmap the ROM overlay in these regions.
+Otherwise, the 28KB of RAM that sits under ROM decode (`$9000-$FFFF`) can only be read by the CPU by reconfiguring the machine with jumpers so that user port pins can be used to unmap the ROM overlay in these regions.
 
 ## References
 
