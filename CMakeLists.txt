@@ -196,15 +196,18 @@ endif()
 
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
-    # Run the simulation script - it will fail on top_tb (missing ROMs) but that's expected
-    # We mark it as WILL_FAIL since 13 tests pass before it hits the ROM issue
-    add_test(
-        NAME verilog_simulation_tests
-        COMMAND ${CMAKE_SOURCE_DIR}/sim.sh
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties(verilog_simulation_tests PROPERTIES
-        LABELS "gw;sim"
-        TIMEOUT 300
-    )
+    # Discover testbenches and add each as a separate test
+    file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
+    foreach(TB_FILE ${TB_FILES})
+        get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
+        add_test(
+            NAME ${TB_NAME}
+            COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        )
+        set_tests_properties(${TB_NAME} PROPERTIES
+            LABELS "gw;sim"
+            TIMEOUT 300
+        )
+    endforeach()
 endif()

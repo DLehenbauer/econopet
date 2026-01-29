@@ -3,6 +3,7 @@
 SCRIPT_DIR="$(readlink -f $(dirname "$0"))"
 PROJ_NAME="EconoPET"
 PROJ_DIR="$SCRIPT_DIR/gw/$PROJ_NAME"
+BUILD_DIR="$SCRIPT_DIR/build"
 
 # Helper function to check the exit code, pop the directory, and exit on failure
 exit_on_failure() {
@@ -13,6 +14,31 @@ exit_on_failure() {
     fi
 }
 
+show_help() {
+    echo "Usage: $0 [OPTIONS] [TEST_NAME]"
+    echo
+    echo "Run gateware simulation tests."
+    echo
+    echo "Options:"
+    echo "  -u, --update    Update the .f file from Efinity project"
+    echo "  -l, --lint      Run Verilator lint check"
+    echo "  -m, --map       Run Efinity map flow after simulation"
+    echo "  -v, --view      View waveform in GTKWave (requires TEST_NAME)"
+    echo "  -a, --all       Run all tests via CTest"
+    echo "  -h, --help      Show this help message"
+    echo
+    echo "Arguments:"
+    echo "  TEST_NAME       Name of testbench to run (e.g., spi_tb, timing_tb)"
+    echo "                  If omitted and -a not specified, lists available tests"
+    echo
+    echo "Examples:"
+    echo "  $0 spi_tb       # Run spi_tb test"
+    echo "  $0 -a           # Run all tests"
+    echo "  $0 -v spi_tb    # View spi_tb waveform"
+    echo "  $0              # List available tests"
+}
+
+TEST_NAME=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     -u|--update)
@@ -31,15 +57,33 @@ while [[ $# -gt 0 ]]; do
         VIEW_WAVE=1
         shift
         ;;
-    *)
+    -a|--all)
+        RUN_ALL=1
+        shift
+        ;;
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    -*)
         echo "Unknown option: $1"
+        show_help
         exit 1
+        ;;
+    *)
+        TEST_NAME="$1"
+        shift
         ;;
   esac
 done
 
 if [ -n "$VIEW_WAVE" ]; then
-    gtkwave "$PROJ_DIR/work_sim/out.vcd" &
+    if [ -z "$TEST_NAME" ]; then
+        echo "Error: --view requires a test name"
+        echo "Usage: $0 -v TEST_NAME"
+        exit 1
+    fi
+    gtkwave "$PROJ_DIR/work_sim/${TEST_NAME}.vcd" &
     exit $?
 fi
 
@@ -65,7 +109,11 @@ if [ -n "$UPDATE_F_FILE" ]; then
     echo
 fi
 
-# verilator --lint-only -Wall --language 1800-2009 -y gw/EconoPET -y gw/EconoPET/src -I gw/EconoPET/src -y gw/EconoPET/external/65xx -y gw/EconoPET/external/icesid/icesid -f"gw/EconoPET/work_sim/pkgs.f" -f"gw/EconoPET/work_sim/$PROJ_NAME.f"
+# Run all tests via CTest
+if [ -n "$RUN_ALL" ]; then
+    cd "$BUILD_DIR" && ctest --preset gw --output-on-failure
+    exit $?
+fi
 
 # 'efx_run' produces relative paths to simulation files. Therefore, we must execute
 # iverilog from the root of the project directory.
@@ -76,10 +124,37 @@ if [ -n "$LINT" ]; then
     exit_on_failure
 fi
 
-iverilog -g2009 -s "sim" -o"$PROJ_DIR/work_sim/$PROJ_NAME.vvp" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+# If no test name provided, list available tests
+if [ -z "$TEST_NAME" ]; then
+    echo "Available testbenches:"
+    for f in "$PROJ_DIR/sim/"*_tb.sv; do
+        basename "$f" .sv
+    done
+    echo
+    echo "Run a specific test:  $0 TEST_NAME"
+    echo "Run all tests:        $0 -a"
+    popd
+    exit 0
+fi
+
+# Validate test name
+if [ ! -f "$PROJ_DIR/sim/${TEST_NAME}.sv" ]; then
+    echo "Error: Testbench '$TEST_NAME' not found"
+    echo "Available testbenches:"
+    for f in "$PROJ_DIR/sim/"*_tb.sv; do
+        basename "$f" .sv
+    done
+    popd
+    exit 1
+fi
+
+# Compile and run the specified test
+VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
+
+iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
-vvp -l"$PROJ_DIR/outflow/$PROJ_NAME.rtl.simlog" "$PROJ_DIR/work_sim/$PROJ_NAME.vvp"
+vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"
 exit_on_failure
 
 if [ -n "$EFX_MAP" ]; then

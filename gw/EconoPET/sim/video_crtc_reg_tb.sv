@@ -227,4 +227,11 @@ module video_crtc_reg_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/video_crtc_reg_tb.vcd");
+        $dumpvars(0, video_crtc_reg_tb);
+        run;
+        $finish;
+    end
 endmodule

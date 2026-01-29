@@ -93,4 +93,11 @@ module cpu_data_mux_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/cpu_data_mux_tb.vcd");
+        $dumpvars(0, cpu_data_mux_tb);
+        run;
+        $finish;
+    end
 endmodule

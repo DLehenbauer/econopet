@@ -206,4 +206,11 @@ module keyboard_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/keyboard_tb.vcd");
+        $dumpvars(0, keyboard_tb);
+        run;
+        $finish;
+    end
 endmodule

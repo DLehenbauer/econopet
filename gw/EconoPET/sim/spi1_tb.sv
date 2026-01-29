@@ -224,4 +224,11 @@ module spi1_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/spi1_tb.vcd");
+        $dumpvars(0, spi1_tb);
+        run;
+        $finish;
+    end
 endmodule

@@ -23,6 +23,17 @@ Instructions for developing SystemVerilog gateware for the Efinix FPGA.
 
 - Name testbenches with `*_tb.sv` suffix
 - Place testbenches in [gw/EconoPET/sim/](gw/EconoPET/sim/)
+- Each testbench is standalone and auto-discovered by CTest
+
+## Running Tests
+
+```sh
+ctest --preset gw -j$(nproc)    # Run all gw tests in parallel (fastest)
+ctest --preset gw               # Run all gw tests sequentially
+./sim.sh spi_tb                 # Run a single test
+./sim.sh -v spi_tb              # View waveform for a test
+./sim.sh                        # List available tests
+```
 
 ## Adding New Files
 
@@ -36,7 +47,7 @@ When adding new `*.sv` or `*.v` files, they must be registered in the project:
 
 ## Development Workflow
 
-1. `ctest --preset gw` - run Verilog simulations (Icarus Verilog)
+1. `ctest --preset gw -j$(nproc)` - run Verilog simulations in parallel
 2. Only if tests pass: `cmake --build --preset gw` - build bitstream
 
 **Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow (~2 min) and simulation catches most issues.
@@ -52,12 +63,17 @@ Complete these steps in order for all gateware changes:
    - `` `assert_exact_equal(actual, expected) `` - strict equality check
    - `` `assert_compare(actual, op, expected) `` - comparison with operator
 
-3. **Register new testbenches** - Add new testbenches to [sim.sv](gw/EconoPET/sim/sim.sv):
-   - Add a `` `define TEST_MYMODULE `` flag near the top
-   - Add a conditional instantiation block: `` `ifdef TEST_MYMODULE ... `endif ``
-   - Add a call to the testbench's `run` task in the `initial` block
+3. **Make testbench standalone** - Each testbench must include an initial block:
+   ```systemverilog
+   initial begin
+       $dumpfile({`__FILE__, ".vcd"});
+       $dumpvars(0, mymodule_tb);
+       run;
+       $finish;
+   end
+   ```
 
-4. **Run simulations** - Execute `ctest --preset gw` and verify all tests pass.
+4. **Run simulations** - Execute `ctest --preset gw -j$(nproc)` and verify all tests pass.
 
 5. **Build bitstream** (last step) - Only after all simulations pass, run `cmake --build --preset gw`. This step takes ~2 minutes.
 

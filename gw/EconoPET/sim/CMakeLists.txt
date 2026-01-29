@@ -10,53 +10,62 @@ find_program(VVP vvp REQUIRED)
 # Set paths
 set(PROJ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(WORK_SIM_DIR ${PROJ_DIR}/work_sim)
-set(VVP_FILE ${WORK_SIM_DIR}/EconoPET.vvp)
 
 # Enable testing
 enable_testing()
 
-# Custom target to compile the Verilog
-add_custom_command(
-    OUTPUT ${VVP_FILE}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${WORK_SIM_DIR}
-    COMMAND cd ${PROJ_DIR} && ${IVERILOG} -g2009 -s "sim" 
-        -o ${VVP_FILE}
-        -f ${WORK_SIM_DIR}/pkgs.f
-        -f ${WORK_SIM_DIR}/EconoPET.f
-        -f ${WORK_SIM_DIR}/timescale.f
-        -I external/65xx
-    -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
-    WORKING_DIRECTORY ${PROJ_DIR}
-    COMMENT "Compiling Verilog testbenches with iverilog"
-    VERBATIM
-)
+# Auto-discover all testbench files
+file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*_tb.sv")
 
-add_custom_target(verilog_compile DEPENDS ${VVP_FILE})
+message(STATUS "Found testbenches:")
+foreach(TB_FILE ${TB_FILES})
+    get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
+    message(STATUS "  - ${TB_NAME}")
+endforeach()
 
-# Add a test for each passing testbench
-# Note: The sim.sv file runs all tests, so we run it once and check output
-add_test(
-    NAME verilog_simulation_tests
-    COMMAND ${VVP} ${VVP_FILE}
-    WORKING_DIRECTORY ${PROJ_DIR}
-)
+# Create a test for each testbench
+foreach(TB_FILE ${TB_FILES})
+    get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
+    set(VVP_FILE ${WORK_SIM_DIR}/${TB_NAME}.vvp)
 
-set_tests_properties(verilog_simulation_tests PROPERTIES
-    LABELS "verilog;simulation;gateware"
-    TIMEOUT 300
-)
+    # Custom command to compile the testbench
+    add_custom_command(
+        OUTPUT ${VVP_FILE}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${WORK_SIM_DIR}
+        COMMAND cd ${PROJ_DIR} && ${IVERILOG} -g2009 -s "${TB_NAME}"
+            -o ${VVP_FILE}
+            -f ${WORK_SIM_DIR}/pkgs.f
+            -f ${WORK_SIM_DIR}/EconoPET.f
+            -f ${WORK_SIM_DIR}/timescale.f
+            -I external/65xx
+            -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+        WORKING_DIRECTORY ${PROJ_DIR}
+        COMMENT "Compiling ${TB_NAME} with iverilog"
+        VERBATIM
+    )
 
-# Add dependency on compilation
-add_test(
-    NAME verilog_compile_check
-    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verilog_compile
-)
+    # Create a target for compiling this testbench
+    add_custom_target(${TB_NAME}_compile DEPENDS ${VVP_FILE})
 
-set_tests_properties(verilog_compile_check PROPERTIES
-    LABELS "verilog;build"
-    FIXTURES_SETUP verilog_fixture
-)
+    # Add build test (compiles the testbench)
+    add_test(
+        NAME ${TB_NAME}_build
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${TB_NAME}_compile
+    )
+    set_tests_properties(${TB_NAME}_build PROPERTIES
+        LABELS "verilog;build"
+        FIXTURES_SETUP ${TB_NAME}_fixture
+    )
 
-set_tests_properties(verilog_simulation_tests PROPERTIES
-    FIXTURES_REQUIRED verilog_fixture
-)
+    # Add run test (executes the compiled testbench)
+    add_test(
+        NAME ${TB_NAME}
+        COMMAND ${VVP} ${VVP_FILE}
+        WORKING_DIRECTORY ${PROJ_DIR}
+    )
+    set_tests_properties(${TB_NAME} PROPERTIES
+        LABELS "verilog;simulation;gateware"
+        TIMEOUT 300
+        FIXTURES_REQUIRED ${TB_NAME}_fixture
+    )
+endforeach()

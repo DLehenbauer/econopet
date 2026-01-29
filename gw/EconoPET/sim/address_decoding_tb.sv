@@ -553,4 +553,11 @@ module address_decoding_tb();
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/address_decoding_tb.vcd");
+        $dumpvars(0, address_decoding_tb);
+        run;
+        $finish;
+    end
 endmodule

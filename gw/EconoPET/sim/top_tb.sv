@@ -341,4 +341,11 @@ module top_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/top_tb.vcd");
+        $dumpvars(0, top_tb);
+        run;
+        $finish;
+    end
 endmodule

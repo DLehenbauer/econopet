@@ -157,4 +157,11 @@ module register_file_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/register_file_tb.vcd");
+        $dumpvars(0, register_file_tb);
+        run;
+        $finish;
+    end
 endmodule

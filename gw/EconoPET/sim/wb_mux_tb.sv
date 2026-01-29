@@ -66,4 +66,11 @@ module wb_mux_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/wb_mux_tb.vcd");
+        $dumpvars(0, wb_mux_tb);
+        run;
+        $finish;
+    end
 endmodule

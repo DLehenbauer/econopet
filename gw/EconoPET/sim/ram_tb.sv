@@ -120,4 +120,11 @@ module ram_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/ram_tb.vcd");
+        $dumpvars(0, ram_tb);
+        run;
+        $finish;
+    end
 endmodule

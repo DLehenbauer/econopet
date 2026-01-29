@@ -57,4 +57,11 @@ module memory_map_tb();
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/memory_map_tb.vcd");
+        $dumpvars(0, memory_map_tb);
+        run;
+        $finish;
+    end
 endmodule

@@ -186,4 +186,11 @@ module spi_tb;
         #1 $display("[%t]   END: Transfer 2 bytes", $time);
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/spi_tb.vcd");
+        $dumpvars(0, spi_tb);
+        run;
+        $finish;
+    end
 endmodule

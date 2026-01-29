@@ -91,4 +91,11 @@ module timing_tb;
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/timing_tb.vcd");
+        $dumpvars(0, timing_tb);
+        run;
+        $finish;
+    end
 endmodule

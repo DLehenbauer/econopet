@@ -75,4 +75,11 @@ module bram_tb #(
 
         #1 $display("[%t] END %m", $time);
     endtask
+
+    initial begin
+        $dumpfile("work_sim/bram_tb.vcd");
+        $dumpvars(0, bram_tb);
+        run;
+        $finish;
+    end
 endmodule
