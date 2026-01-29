@@ -44,5 +44,9 @@
         "gw/EconoPET/external/65xx",
         "gw/EconoPET/external/icesid",
         "gw/EconoPET/external/verilog-6502"
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "ctest": true,
+        "./sim.sh": true
+    }
 }

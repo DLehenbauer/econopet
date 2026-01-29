@@ -489,21 +489,17 @@ module main (
     // System Bus
     //
 
-    // io_doe and crtc_oe are mutually exclusive (address decoding ensures this)
-    wire io_or_crtc_oe = io_doe | crtc_oe;
-
-    always_comb begin
-        if (io_or_crtc_oe) begin
-            cpu_data_o = crtc_oe ? crtc_dout : io_dout;
-            cpu_data_oe = !cpu_we_i;
-        end else if (ram_ctl_doe) begin
-            cpu_data_o = ram_ctl_dout;
-            cpu_data_oe = 1;
-        end else begin
-            cpu_data_o = 'x;
-            cpu_data_oe = 0;
-        end
-    end
+    // Mux FPGA-driven data sources onto CPU data bus.
+    // Note: External SRAM drives the bus directly via ram_oe_o and is not included here.
+    // Driver order: [2]=ram_ctl (WB-RAM bridge), [1]=crtc, [0]=keyboard
+    cpu_data_mux #(
+        .COUNT(3)
+    ) cpu_data_mux (
+        .data_i({ ram_ctl_dout, crtc_dout, io_dout }),
+        .oe_i({ ram_ctl_doe, crtc_oe, io_doe & !cpu_we_i }),
+        .data_o(cpu_data_o),
+        .oe_o(cpu_data_oe)
+    );
 
     wire cpu_rd_en = cpu_be_o && !cpu_we_i;
     wire cpu_wr_en = cpu_be_o &&  cpu_we_i && cpu_clock_o;
@@ -537,15 +533,24 @@ module main (
     assign ram_addr_a16_o = cpu_be_o ? decoded_a16 : ram_ctl_addr[16];
 
     // synthesis off
+    
+    // At most one source may drive the CPU data bus at a time:
+    //   io_oe_o       - External IO chips (PIA1, PIA2, VIA) via transceiver
+    //   ram_oe_o      - External SRAM (output enabled)
+    //   cpu_data_oe   - FPGA (keyboard intercept, CRTC, WB-RAM bridge)
+    wire [2:0] dbg_data_bus_drivers = {io_oe_o, ram_oe_o, cpu_data_oe};
+    wire [1:0] dbg_ram_oe_we = {ram_oe_o, ram_we_o};
+
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin
         assert(!cpu_be_o || !ram_wb_stall) else $fatal(1, "WB<->RAM bridge must be stalled when CPU is driving bus");
         assert(!cpu_be_o || !ram_ctl_oe)   else $fatal(1, "WB<->RAM bridge must not assert OE when CPU is driving bus");
         assert(!cpu_be_o || !ram_ctl_we)   else $fatal(1, "WB<->RAM bridge must not assert WE when CPU is driving bus");
         assert(!cpu_be_o || !ram_wb_ack)   else $fatal(1, "WB<->RAM bridge must not assert ACK when CPU is driving bus");
         assert(!io_oe_o  ||  cpu_be_o)     else $fatal(1, "IO must not be active unless CPU is driving bus");
-        assert(!io_oe_o  || !ram_oe_o)     else $fatal(1, "IO and RAM_OE must not drive bus at same time");
         assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
-        assert(!(io_doe && crtc_oe))       else $fatal(1, "IO and CRTC must not drive bus at same time");
+        
+        assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {io, ram, fpga}=%b", dbg_data_bus_drivers);
+        assert($onehot0(dbg_ram_oe_we)) else $fatal(1, "RAM must be reading or writing, not both: {ram_oe, ram_we}=%b", dbg_ram_oe_we);
     end
     // synthesis on
 endmodule

@@ -17,6 +17,7 @@
 
 `define TEST_MEMORY_MAP
 `define TEST_WB_MUX
+`define TEST_CPU_DATA_MUX
 `define TEST_VIDEO
 `define TEST_VIDEO_CRTC
 `define TEST_VIDEO_CRTC_REG
@@ -36,6 +37,9 @@ module sim;
 `endif
 `ifdef TEST_WB_MUX
     wb_mux_tb wb_mux_tb ();
+`endif
+`ifdef TEST_CPU_DATA_MUX
+    cpu_data_mux_tb cpu_data_mux_tb ();
 `endif
 `ifdef TEST_VIDEO
     video_tb video_tb ();
@@ -84,6 +88,9 @@ module sim;
 `endif
 `ifdef TEST_WB_MUX
         wb_mux_tb.run;
+`endif
+`ifdef TEST_CPU_DATA_MUX
+        cpu_data_mux_tb.run;
 `endif
 `ifdef TEST_VIDEO
         video_tb.run;
