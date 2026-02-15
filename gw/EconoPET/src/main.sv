@@ -261,6 +261,7 @@ module main (
     logic sid_en;
     logic io_en;
     logic crtc_en;
+    logic unmapped;
     logic is_vram;
     logic is_readonly;
     logic decoded_a15;
@@ -282,6 +283,7 @@ module main (
         .sid_en_o(sid_en),
         .io_en_o(io_en),
         .crtc_en_o(crtc_en),
+        .unmapped_o(unmapped),
         .is_vram_o(is_vram),
 
         .is_readonly_o(is_readonly),
@@ -489,12 +491,26 @@ module main (
     // System Bus
     //
 
+    logic [DATA_WIDTH-1:0] open_bus_dout;
+    logic                  open_bus_oe;
+
+    open_bus open_bus (
+        .sys_clock_i(sys_clock_i),
+        .cpu_data_strobe_i(cpu_data_strobe),
+        .cpu_data_i(cpu_data_i),
+        .unmapped_i(unmapped),
+        .cpu_be_i(cpu_be_o),
+        .cpu_we_i(cpu_we_i),
+        .data_o(open_bus_dout),
+        .data_oe(open_bus_oe)
+    );
+
     // Many controllers -> System data bus
     cpu_data_mux #(
-        .COUNT(3)
+        .COUNT(4)
     ) cpu_data_mux (
-        .data_i({ ram_ctl_dout, crtc_dout, io_dout }),
-        .oe_i({ ram_ctl_doe, crtc_oe, io_doe & !cpu_we_i }),
+        .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout }),
+        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe, io_doe & !cpu_we_i }),
         .data_o(cpu_data_o),
         .oe_o(cpu_data_oe)
     );

@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -47,8 +47,6 @@ module timing_tb;
     );
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         @(posedge clock);
         stopwatch.start();
         @(posedge clock);
@@ -89,13 +87,7 @@ module timing_tb;
         @(posedge load_sr2);
         $display("[%t] load_sr2 at %0.2f mHz", $time, stopwatch.freq_mhz());
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/timing_tb.vcd");
-        $dumpvars(0, timing_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

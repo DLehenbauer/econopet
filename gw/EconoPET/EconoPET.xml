@@ -43,6 +43,7 @@
         <efx:design_file name="src/io.sv" version="default" library="default"/>
         <efx:design_file name="src/delay.sv" version="default" library="default"/>
         <efx:design_file name="src/cpu_data_mux.sv" version="default" library="default"/>
+        <efx:design_file name="src/open_bus.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
     <efx:constraint_info>
@@ -84,6 +85,7 @@
         <efx:sim_file name="sim/address_decoding_tb.sv"/>
         <efx:sim_file name="sim/memory_map_tb.sv"/>
         <efx:sim_file name="sim/cpu_data_mux_tb.sv"/>
+        <efx:sim_file name="sim/open_bus_tb.sv"/>
     </efx:sim_info>
     <efx:misc_info/>
     <efx:ip_info/>

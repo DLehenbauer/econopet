@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -126,8 +126,6 @@ module register_file_tb;
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         wb.reset;
 
         // Check power-on state
@@ -155,13 +153,7 @@ module register_file_tb;
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);
         test_status(/* graphics: */ 1'b1, /* crt: */ 1'b0, /* keyboard: */ 1'b0);
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/register_file_tb.vcd");
-        $dumpvars(0, register_file_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

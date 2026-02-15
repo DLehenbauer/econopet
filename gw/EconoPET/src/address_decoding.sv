@@ -97,6 +97,7 @@ module address_decoding (
     output logic                      via_en_o,
     output logic                      crtc_en_o,
     output logic                      io_en_o,
+    output logic                      unmapped_o,
     output logic                      is_vram_o,
     output logic                      is_readonly_o,
 
@@ -128,9 +129,10 @@ module address_decoding (
                CRTC_EN_BIT      = 5,
                IO_EN_BIT        = 6,
                IS_READONLY_BIT  = 7,
-               IS_VRAM_BIT      = 8;
+               IS_VRAM_BIT      = 8,
+               UNMAPPED_BIT     = 9;
 
-    localparam NUM_BITS         = 9;
+    localparam NUM_BITS         = 10;
 
     localparam RAM_EN_MASK       = NUM_BITS'(1'b1) << RAM_EN_BIT,
                SID_EN_MASK       = NUM_BITS'(1'b1) << SID_EN_BIT,
@@ -140,17 +142,19 @@ module address_decoding (
                CRTC_EN_MASK      = NUM_BITS'(1'b1) << CRTC_EN_BIT,
                IO_EN_MASK        = NUM_BITS'(1'b1) << IO_EN_BIT,
                IS_READONLY_MASK  = NUM_BITS'(1'b1) << IS_READONLY_BIT,
-               IS_VRAM_MASK      = NUM_BITS'(1'b1) << IS_VRAM_BIT;
+               IS_VRAM_MASK      = NUM_BITS'(1'b1) << IS_VRAM_BIT,
+               UNMAPPED_MASK     = NUM_BITS'(1'b1) << UNMAPPED_BIT;
 
-    localparam NONE  = NUM_BITS'('0),
-               RAM   = RAM_EN_MASK,
-               VRAM  = RAM_EN_MASK  | IS_VRAM_MASK,
-               SID   = SID_EN_MASK,                 // No IO_EN: SID implemented on FPGA
-               ROM   = RAM_EN_MASK  | IS_READONLY_MASK,
-               PIA1  = PIA1_EN_MASK | IO_EN_MASK,
-               PIA2  = PIA2_EN_MASK | IO_EN_MASK,
-               VIA   = VIA_EN_MASK  | IO_EN_MASK,
-               CRTC  = CRTC_EN_MASK;                // No IO_EN: CRTC implemented on FPGA
+    localparam NONE     = NUM_BITS'('0),
+               RAM      = RAM_EN_MASK,
+               VRAM     = RAM_EN_MASK  | IS_VRAM_MASK,
+               SID      = SID_EN_MASK,                 // No IO_EN: SID implemented on FPGA
+               ROM      = RAM_EN_MASK  | IS_READONLY_MASK,
+               UNMAPPED = UNMAPPED_MASK,               // Open bus: no device responds
+               PIA1     = PIA1_EN_MASK | IO_EN_MASK,
+               PIA2     = PIA2_EN_MASK | IO_EN_MASK,
+               VIA      = VIA_EN_MASK  | IO_EN_MASK,
+               CRTC     = CRTC_EN_MASK;                // No IO_EN: CRTC implemented on FPGA
 
     logic [NUM_BITS-1:0] select = NUM_BITS'('hxxx);
 
@@ -174,11 +178,12 @@ module address_decoding (
                     // verilator lint_off CASEOVERLAP
                     CPU_ADDR_WIDTH'('b1000_????_????_????): select <= VRAM;   // VRAM : 8000-8FFF (intentionally overlaps with SID)
                     // verilator lint_on CASEOVERLAP
-                    CPU_ADDR_WIDTH'('b1110_1000_0001_????): select <= PIA1;   // PIA1 : E810-E81F
-                    CPU_ADDR_WIDTH'('b1110_1000_001?_????): select <= PIA2;   // PIA2 : E820-E83F
-                    CPU_ADDR_WIDTH'('b1110_1000_01??_????): select <= VIA;    // VIA  : E840-E87F
-                    CPU_ADDR_WIDTH'('b1110_1000_1???_????): select <= CRTC;   // CRTC : E880-E8FF
-                    default:                                select <= ROM;    // ROM  : 9000-E80F, E900-FFFF
+                    CPU_ADDR_WIDTH'('b1110_1000_0000_????): select <= UNMAPPED; // Open bus: E800-E80F
+                    CPU_ADDR_WIDTH'('b1110_1000_0001_????): select <= PIA1;     // PIA1 : E810-E81F
+                    CPU_ADDR_WIDTH'('b1110_1000_001?_????): select <= PIA2;     // PIA2 : E820-E83F
+                    CPU_ADDR_WIDTH'('b1110_1000_01??_????): select <= VIA;      // VIA  : E840-E87F
+                    CPU_ADDR_WIDTH'('b1110_1000_1???_????): select <= CRTC;     // CRTC : E880-E8FF
+                    default:                                select <= ROM;      // ROM  : 9000-E7FF, E900-FFFF
                 endcase
             end
         end
@@ -194,6 +199,7 @@ module address_decoding (
     assign pia2_en_o        = select[PIA2_EN_BIT];
     assign via_en_o         = select[VIA_EN_BIT];
     assign crtc_en_o        = select[CRTC_EN_BIT];
+    assign unmapped_o       = select[UNMAPPED_BIT];
 
     assign decoded_a15_o    = bank_en ? bank_a15 : cpu_addr_i[15];
     assign decoded_a16_o    = bank_en;

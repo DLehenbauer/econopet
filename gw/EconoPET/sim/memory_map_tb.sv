@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -26,8 +26,6 @@ module memory_map_tb();
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         // expected_addr = common_pkg::wb_io_addr(REG_IO_VIA_PORTB);
         // check_next("REG_IO_VIA_PORTB", common_pkg::wb_io_addr(REG_IO_VIA_PORTB));
         // check_next("REG_IO_VIA_PORTA", common_pkg::wb_io_addr(REG_IO_VIA_PORTA));
@@ -55,13 +53,7 @@ module memory_map_tb();
         // check_next("REG_IO_PIA2_CRB", common_pkg::wb_io_addr(REG_IO_PIA2_CRB));
         // check_next("IO_REG_COUNT", common_pkg::wb_io_addr(IO_REG_COUNT));
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/memory_map_tb.vcd");
-        $dumpvars(0, memory_map_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

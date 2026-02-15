@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -177,7 +177,6 @@ module spi1_tb;
     end
 
     task run;
-        $display("[%t] BEGIN %m", $time);
         spi1_driver.reset();
 
         $display("[%t] Test 1: Basic write_at/read_at", $time);
@@ -222,13 +221,7 @@ module spi1_tb;
         write_next(8'h60);
         read_at(20'h04001);
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/spi1_tb.vcd");
-        $dumpvars(0, spi1_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

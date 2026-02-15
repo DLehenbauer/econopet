@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -82,8 +82,6 @@ module wbc_mux_tb;
     );
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         // Initialize
         wbc_cycle  = '0;
         wbc_strobe = '0;
@@ -176,14 +174,7 @@ module wbc_mux_tb;
         `assert_equal(wb_strobe, 1'b1);     // Strobe passes through
         `assert_equal(wbc_stall[1], 1'b0);  // Selected controller not stalled (wb_stall=0)
         $display("[%t]   PASS: Grant valid allows strobe through", $time);
-
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/wbc_mux_tb.vcd");
-        $dumpvars(0, wbc_mux_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

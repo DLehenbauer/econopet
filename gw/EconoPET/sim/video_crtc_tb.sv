@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -157,8 +157,6 @@ module video_crtc_tb;
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         reset();
 
         if (1) begin
@@ -251,13 +249,7 @@ module video_crtc_tb;
         @(posedge v_sync);
         $display("[%t] VSYNC at %0.2f Hz", $time, stopwatch.freq_hz());
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/video_crtc_tb.vcd");
-        $dumpvars(0, video_crtc_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

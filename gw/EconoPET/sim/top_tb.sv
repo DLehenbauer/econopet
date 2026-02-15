@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -298,7 +298,6 @@ module top_tb;
         logic [DATA_WIDTH-1:0] cpu_dout;
         int count;
 
-        $display("[%t] BEGIN %m", $time);
 
         mock_system.init;
         // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
@@ -339,13 +338,7 @@ module top_tb;
             mock_system.spi_read(cpu_dout);
         end
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/top_tb.vcd");
-        $dumpvars(0, top_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

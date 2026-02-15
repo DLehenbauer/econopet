@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -97,8 +97,6 @@ module ram_tb;
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         wb.reset;
         test_wr(17'h00000, 8'h55);
         test_wr(17'h1fffe, 8'h33);
@@ -118,13 +116,7 @@ module ram_tb;
         end
 `endif
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/ram_tb.vcd");
-        $dumpvars(0, ram_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

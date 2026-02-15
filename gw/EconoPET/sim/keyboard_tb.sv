@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -162,8 +162,6 @@ module keyboard_tb;
         logic [DATA_WIDTH-1:0] value;
         logic [DATA_WIDTH-1:0] data;
 
-        $display("[%t] BEGIN %m", $time);
-
         wb.reset;
 
         $display("[%t]   Keyboard cols must be initialized to 8'hFF at power on.", $time);
@@ -204,13 +202,7 @@ module keyboard_tb;
             wb.write(col, 8'hff);
         end
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/keyboard_tb.vcd");
-        $dumpvars(0, keyboard_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

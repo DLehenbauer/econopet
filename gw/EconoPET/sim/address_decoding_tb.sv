@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 import common_pkg::*;
 
 module address_decoding_tb();
@@ -36,6 +36,7 @@ module address_decoding_tb();
     logic crtc_en;
     logic sid_en;
     logic io_en;
+    logic unmapped;
     logic is_vram;
     logic is_readonly;
 
@@ -58,6 +59,7 @@ module address_decoding_tb();
         .crtc_en_o(crtc_en),
         .sid_en_o(sid_en),
         .io_en_o(io_en),
+        .unmapped_o(unmapped),
         .is_vram_o(is_vram),
         .is_readonly_o(is_readonly),
 
@@ -73,6 +75,7 @@ module address_decoding_tb();
         input expected_crtc_en,
         input expected_sid_en,
         input expected_io_en,
+        input expected_unmapped,
         input expected_is_vram,
         input expected_is_readonly,
         input [1:0] expected_a16_15
@@ -84,6 +87,7 @@ module address_decoding_tb();
         `assert_equal(crtc_en, expected_crtc_en);
         `assert_equal(sid_en, expected_sid_en);
         `assert_equal(io_en, expected_io_en);
+        `assert_equal(unmapped, expected_unmapped);
         `assert_equal(is_vram, expected_is_vram);
         `assert_equal(is_readonly, expected_is_readonly);
         `assert_equal(decoded_a15, expected_a16_15[0]);
@@ -101,6 +105,7 @@ module address_decoding_tb();
         input expected_crtc_en,
         input expected_sid_en,
         input expected_io_en,
+        input expected_unmapped,
         input expected_is_vram,
         input expected_is_readonly,
         input [1:0] expected_a16_15
@@ -123,6 +128,7 @@ module address_decoding_tb();
                 expected_crtc_en,
                 expected_sid_en,
                 expected_io_en,
+                expected_unmapped,
                 expected_is_vram,
                 expected_is_readonly,
                 expected_a16_15
@@ -169,20 +175,21 @@ module address_decoding_tb();
 
     // Note that this excludes the SID, which maps into VRAM space.
     task check_io();
-        // Unmapped ranges in IO space are treated as ROM.
+        // $E800-$E80F is truly unmapped (open bus).
         check_range(
             /* name                   : */ "(unmapped)",
             /* start_addr             : */ 'he800,
             /* end_addr               : */ 'he80f,
-            /* expected_ram_en        : */ 1,
+            /* expected_ram_en        : */ 0,
             /* expected_pia1_en       : */ 0,
             /* expected_pia2_en       : */ 0,
             /* expected_via_en        : */ 0,
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 1,
             /* expected_is_vram       : */ 0,
-            /* expected_is_readonly   : */ 1,
+            /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
         );
 
@@ -197,6 +204,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 1,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
@@ -213,6 +221,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 1,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
@@ -229,6 +238,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 1,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
@@ -245,14 +255,15 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 1,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
         );
 
-        // Unmapped ranges in IO space are treated as ROM.
+        // $E900-$EFFF falls through to ROM.
         check_range(
-            /* name                   : */ "(unmapped)",
+            /* name                   : */ "(ROM)",
             /* start_addr             : */ 'he900,
             /* end_addr               : */ 'hefff,
             /* expected_ram_en        : */ 1,
@@ -262,6 +273,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b01
@@ -280,6 +292,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 1,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
@@ -296,6 +309,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 1,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b01
@@ -303,8 +317,6 @@ module address_decoding_tb();
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         check_range(
             /* name                   : */ "RAM",
             /* start_addr             : */ 'h0000,
@@ -316,6 +328,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b00
@@ -335,6 +348,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b01
@@ -354,6 +368,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b01
@@ -381,6 +396,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b11
@@ -397,6 +413,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b10
@@ -424,6 +441,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b10
@@ -440,6 +458,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b11
@@ -467,6 +486,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b11
@@ -483,6 +503,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b11
@@ -501,6 +522,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b11
@@ -530,6 +552,7 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 1,
             /* expected_a16_15        : */ 2'b11
@@ -546,18 +569,13 @@ module address_decoding_tb();
             /* expected_crtc_en       : */ 0,
             /* expected_sid_en        : */ 0,
             /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
             /* expected_is_vram       : */ 0,
             /* expected_is_readonly   : */ 0,
             /* expected_a16_15        : */ 2'b11
         );
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/address_decoding_tb.vcd");
-        $dumpvars(0, address_decoding_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

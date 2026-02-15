@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -34,8 +34,6 @@ module cpu_data_mux_tb;
     );
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         // Initialize: all sources disabled
         data_i[0] = 8'hAA;
         data_i[1] = 8'hBB;
@@ -91,13 +89,7 @@ module cpu_data_mux_tb;
         // so we skip that test here. The assertion is verified by the fact that
         // main.sv's existing mutual-exclusion guarantees prevent this condition.
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/cpu_data_mux_tb.vcd");
-        $dumpvars(0, cpu_data_mux_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

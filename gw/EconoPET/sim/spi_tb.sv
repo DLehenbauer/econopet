@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 module spi_tb;
     logic       sck;
@@ -124,8 +124,6 @@ module spi_tb;
     endtask
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         // Check power on state prior to setting cs_n
         $display("[%t]   Vet power on state", $time);
         #1;
@@ -184,13 +182,7 @@ module spi_tb;
         #1 cs = '0;
 
         #1 $display("[%t]   END: Transfer 2 bytes", $time);
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/spi_tb.vcd");
-        $dumpvars(0, spi_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

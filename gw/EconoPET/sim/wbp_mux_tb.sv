@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -45,8 +45,6 @@ module wbp_mux_tb;
     );
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         // Initialize peripheral responses with distinct values
         wbp_din[0]   = 8'hAA;
         wbp_din[1]   = 8'hBB;
@@ -96,14 +94,7 @@ module wbp_mux_tb;
         #1;
         `assert_equal(wb_din, 8'hAA);
         $display("[%t]   PASS: Selection switch works", $time);
-
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/wbp_mux_tb.vcd");
-        $dumpvars(0, wbp_mux_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

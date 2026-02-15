@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -166,8 +166,6 @@ module video_crtc_reg_tb;
         integer r;
         logic [7:0] data;
 
-        $display("[%t] BEGIN %m", $time);
-
         wb.reset;
         cs = '0;
         we = '0;
@@ -225,13 +223,7 @@ module video_crtc_reg_tb;
         `assert_equal(r9_max_scan_line, 5'h19);             // R9[4:0]
         `assert_equal(r1213_start_addr, {6'h3C, 8'hBD});    // { R12[5:0], R13[7:0] }
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/video_crtc_reg_tb.vcd");
-        $dumpvars(0, video_crtc_reg_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule

@@ -12,7 +12,7 @@
  * @author Daniel Lehenbauer <DLehenbauer@users.noreply.github.com> and contributors
  */
 
-`include "./sim/assert.svh"
+`include "./sim/tb.svh"
 
 import common_pkg::*;
 
@@ -66,20 +66,12 @@ module bram_tb #(
     end
 
     task run;
-        $display("[%t] BEGIN %m", $time);
-
         wb.reset;
         wb.write(10'h00, 8'h55);
         wb.read(10'h00, data_rd);
         `assert_equal(data_rd, 8'h55);
 
-        #1 $display("[%t] END %m", $time);
     endtask
 
-    initial begin
-        $dumpfile("work_sim/bram_tb.vcd");
-        $dumpvars(0, bram_tb);
-        run;
-        $finish;
-    end
+    `TB_INIT
 endmodule
