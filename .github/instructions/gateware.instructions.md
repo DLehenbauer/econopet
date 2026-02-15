@@ -18,6 +18,42 @@ Instructions for developing SystemVerilog gateware for the Efinix FPGA.
 
 - Use active-high signals internally
 - The `top` module inverts active-low hardware pins at the boundary
+- Use "controller" and "peripheral" instead of deprecated "master" and "slave" terminology for all buses (Wishbone, SPI, I2C, etc.):
+
+| Use | Instead of |
+|-----|------------|
+| Controller | Master |
+| Peripheral | Slave |
+
+### Naming Suffixes
+
+| Suffix | Meaning | Example |
+|--------|---------|---------|
+| `_i` | Input port | `clock_i`, `data_i` |
+| `_o` | Output port | `data_o`, `valid_o` |
+| `_n` | Active-low  | `reset_n` |
+| `_ni` | Active-low input | `cs_ni` |
+| `_no` | Active-low output | `irq_no` |
+| `_en` | Enable signal | `clk8_en`, `write_en` |
+| `_oe` | Output enable | `data_oe` |
+
+### Wishbone Bus Prefixes
+
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `wb_` | Shared Wishbone bus signals | `wb_addr`, `wb_cycle` |
+| `wbc_` | Wishbone controller signals | `wbc_addr_i`, `wbc_cycle_i` |
+| `wbp_` | Wishbone peripheral signals | `wbp_din_o`, `wbp_ack_o` |
+
+### SPI Signal Names
+
+For SPI signals specifically, follow the [OSHWA resolution](https://oshwa.org/resources/a-resolution-to-redefine-spi-signal-names/):
+
+| Use | Instead of |
+|-----|------------|
+| `SDO` / `SDI` | `MOSI` / `MISO` |
+| `PICO` / `POCI` | (for bidirectional devices) |
+| `CS` | `SS` |
 
 ## Testbenches
 

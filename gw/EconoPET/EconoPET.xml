@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1769622550" sw_version="2025.1.110" last_run_state="pass" last_run_flow="syn" config_result_in_sync="sync" design_ood="change" place_ood="change" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1769694534" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="change" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -29,8 +29,8 @@
         <efx:design_file name="src/video_dotgen.sv" version="default" library="default"/>
         <efx:design_file name="src/audio.sv" version="default" library="default"/>
         <efx:design_file name="src/arbiter.sv" version="default" library="default"/>
-        <efx:design_file name="src/wb_mux.sv" version="default" library="default"/>
-        <efx:design_file name="src/wb_demux.sv" version="default" library="default"/>
+        <efx:design_file name="src/wbc_mux.sv" version="default" library="default"/>
+        <efx:design_file name="src/wbp_mux.sv" version="default" library="default"/>
         <efx:design_file name="external/icesid/icesid/mult.v" version="default" library="default"/>
         <efx:design_file name="external/icesid/icesid/env.v" version="default" library="default"/>
         <efx:design_file name="external/icesid/icesid/pot.v" version="default" library="default"/>
@@ -67,7 +67,8 @@
         <efx:sim_file name="sim/video_tb.sv"/>
         <efx:sim_file name="sim/video_crtc_tb.sv"/>
         <efx:sim_file name="sim/video_crtc_reg_tb.sv"/>
-        <efx:sim_file name="sim/wb_mux_tb.sv"/>
+        <efx:sim_file name="sim/wbp_mux_tb.sv"/>
+        <efx:sim_file name="sim/wbc_mux_tb.sv"/>
         <efx:sim_file name="sim/wb_driver.sv"/>
         <efx:sim_file name="sim/mock_ram.sv"/>
         <efx:sim_file name="sim/mock_cpu.sv"/>

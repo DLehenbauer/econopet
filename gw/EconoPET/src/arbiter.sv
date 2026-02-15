@@ -84,12 +84,12 @@ module arbiter (
         end
     end
 
-    wb_demux #(
+    wbc_mux #(
         .COUNT(2)
-    ) wb_demux (
+    ) wbc_mux (
         .wb_clock_i(wb_clock_i),
 
-        // Wishbone controllers to demux
+        // Wishbone controllers to mux
         .wbc_cycle_i({ spi1_cycle_i, video_cycle_i }),
         .wbc_strobe_i({ spi1_strobe_i, video_strobe_i }),
         .wbc_addr_i({ spi1_addr_i, video_addr_i }),

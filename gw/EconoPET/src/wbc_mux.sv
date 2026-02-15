@@ -15,11 +15,13 @@
 import common_pkg::*;
 
 /**
- * Wishbone demultiplexer (many controllers -> one bus)
+ * Wishbone controller multiplexer.
+ *
+ * Multiplexes requests from multiple Wishbone controllers onto a shared bus.
  *
  * @param COUNT Number of Wishbone controllers
  */
-module wb_demux #(
+module wbc_mux #(
     parameter COUNT = 2  // Number of Wishbone controllers
 ) (
     input logic wb_clock_i,  // Clock

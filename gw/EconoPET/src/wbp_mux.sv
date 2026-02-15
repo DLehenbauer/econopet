@@ -15,11 +15,13 @@
 import common_pkg::*;
 
 /**
- * Wishbone multiplexer (one bus -> many peripherals)
+ * Wishbone peripheral multiplexer.
  *
- * @param COUNT Number of Wishbone controllers
+ * Multiplexes responses from multiple Wishbone peripherals back to the controller.
+ *
+ * @param COUNT Number of Wishbone peripherals
  */
-module wb_mux #(
+module wbp_mux #(
     parameter COUNT = 2   // Number of Wishbone peripherals
 ) (
     // Wishbone Bus

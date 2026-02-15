@@ -438,12 +438,12 @@ module main (
     //
 
     // Many controllers -> one bus
-    wb_demux #(
+    wbc_mux #(
         .COUNT(2)
-    ) wb_demux (
+    ) wbc_mux (
         .wb_clock_i(sys_clock_i),
 
-        // Wishbone controllers to demux
+        // Wishbone controllers to mux
         .wbc_cycle_i({ spi1_cycle, video_cycle }),
         .wbc_strobe_i({ spi1_strobe, video_strobe }),
         .wbc_addr_i({ spi1_addr, video_addr }),
@@ -469,9 +469,9 @@ module main (
     );
 
     // One bus -> many peripherals
-    wb_mux #(
+    wbp_mux #(
         .COUNT(5)
-    ) wb_mux (
+    ) wbp_mux (
         .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel }),
 
         // Wishbone Bus
@@ -489,9 +489,7 @@ module main (
     // System Bus
     //
 
-    // Mux FPGA-driven data sources onto CPU data bus.
-    // Note: External SRAM drives the bus directly via ram_oe_o and is not included here.
-    // Driver order: [2]=ram_ctl (WB-RAM bridge), [1]=crtc, [0]=keyboard
+    // Many controllers -> System data bus
     cpu_data_mux #(
         .COUNT(3)
     ) cpu_data_mux (
