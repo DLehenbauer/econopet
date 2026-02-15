@@ -48,5 +48,8 @@
     "chat.tools.terminal.autoApprove": {
         "ctest": true,
         "./sim.sh": true
-    }
+    },
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        { "file": ".github/instructions/commit-message.instructions.md" },
+    ]
 }
