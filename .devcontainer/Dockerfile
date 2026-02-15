@@ -25,6 +25,11 @@ ARG IVERILOG_VERSION="v12_0"
 ARG EFINITY_MAJOR_MINOR="2025.1"
 ARG EFINITY_PATCH="110"
 
+# From https://apt.kitware.com/
+# Pin to 3.x: CMake 4.x removed compat with cmake_minimum_required(VERSION < 3.5)
+# which breaks external dependencies (e.g., libyaml). Update when deps are fixed.
+ARG CMAKE_VERSION="3.*"
+
 # From https://github.com/caddyserver/caddy/releases
 ARG CADDY_VERSION="2.7.6"
 
@@ -147,6 +152,20 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
+
+# Install Kitware APT repository so CMake is newer than Ubuntu default.
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    ca-certificates \
+    gpg \
+    wget && \
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | \
+    gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
+    . /etc/os-release && \
+    echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ ${UBUNTU_CODENAME} main" \
+    | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
+    apt-get update && \
+    apt-get -y install --no-install-recommends kitware-archive-keyring
+
 RUN apt-get update && apt-get -y install --no-install-recommends \
     acme \
     advancecomp \
@@ -159,7 +178,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     cc65 \
     check \
     clang-format \
-    cmake \
+    cmake=${CMAKE_VERSION} \
+    cmake-data=${CMAKE_VERSION} \
     flex \
     g++ \
     gcc \
@@ -186,6 +206,9 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     python3-pip \
     texinfo \
     universal-ctags
+
+# Fail build if CMake is not installed correctly.
+RUN cmake --version
 
 # Clean apt cache and temporary files
 RUN apt-get clean && \
