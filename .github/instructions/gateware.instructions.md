@@ -64,8 +64,8 @@ For SPI signals specifically, follow the [OSHWA resolution](https://oshwa.org/re
 ## Running Tests
 
 ```sh
-ctest --preset gw -j$(nproc)    # Run all gw tests in parallel (fastest)
-ctest --preset gw               # Run all gw tests sequentially
+ctest --preset gw               # Run all gw tests in parallel (fastest)
+ctest --preset gw -j 1          # Run all gw tests sequentially
 ./sim.sh spi_tb                 # Run a single test
 ./sim.sh -v spi_tb              # View waveform for a test
 ./sim.sh                        # List available tests

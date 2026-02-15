@@ -98,6 +98,9 @@
                 "include": {
                     "label": "gw"
                 }
+            },
+            "execution": {
+                "jobs": 0
             }
         }
     ]
