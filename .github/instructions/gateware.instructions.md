@@ -1,6 +1,6 @@
 ---
 description: 'SystemVerilog coding conventions and patterns for FPGA gateware development'
-applyTo: 'gw/**/*.sv, gw/**/*.v'
+applyTo: 'gw/**/*.sv, gw/**/*.v, gw/**/*.svh'
 ---
 
 # Gateware Development Guidelines
@@ -99,15 +99,20 @@ Complete these steps in order for all gateware changes:
    - `` `assert_exact_equal(actual, expected) `` - strict equality check
    - `` `assert_compare(actual, op, expected) `` - comparison with operator
 
-3. **Make testbench standalone** - Each testbench must include an initial block:
-   ```systemverilog
-   initial begin
-       $dumpfile({`__FILE__, ".vcd"});
-       $dumpvars(0, mymodule_tb);
-       run;
-       $finish;
-   end
-   ```
+3. **Make testbench standalone** - Each testbench should use `TB_INIT` macro for self-contained execution. Example structure:
+```systemverilog
+`include "./sim/tb.svh"       // Defines TB_INIT macro
+
+import common_pkg::*;         // Import shared types and parameters
+
+module <<testbench_name>>();  // Module name ends in `_tb`
+    task run;
+      // Test logic goes here
+    endtask
+
+    `TB_INIT                  // Initializes testbench and runs `run` task
+endmodule
+```
 
 4. **Run simulations** - Execute `ctest --preset gw -j$(nproc)` and verify all tests pass.
 
