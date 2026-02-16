@@ -114,17 +114,9 @@ module <<testbench_name>>();  // Module name ends in `_tb`
 endmodule
 ```
 
-4. **Run simulations** - Execute `ctest --preset gw -j$(nproc)` and verify all tests pass.
+4. **Run simulations** - Execute `ctest --preset gw` and verify all tests pass.
 
 5. **Build bitstream** (last step) - Only after all simulations pass, run `cmake --build --preset gw`. This step takes ~2 minutes.
-
-### When a testbench may be skipped
-
-A new or updated testbench is not practical for:
-- Pin assignment changes in `top.sv`
-- Timing-only adjustments that require real hardware
-- Pure formatting or comment changes
-- Changes already covered by existing testbenches
 
 ## External Dependencies
 
