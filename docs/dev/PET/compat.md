@@ -90,39 +90,35 @@ PIA1   | `$E890-$E89F` | Early         | `x0`, `x4`, `x8`, `xC`
 PIA2   | `$E8A0-$E8AF` | Early         | `x0`, `x4`, `x8`, `xC`
 VIA    | `$E8C0-$E8CF` | Early         | `x0`
 
-## Bus Holding Behavior in Later PET/CBM Models
+## Open Bus Behavior
 
-In later PET/CBM models, reading from an unmapped address holds the previous byte transferred on the data bus. For example, `LDA $E800` (AD 00 E8) will return `$E8` since `$E800` is unmapped and `$E8` was the last byte previously transferred.
+In later PET/CBM models, reading from an unmapped address returns the last byte transferred on the data bus.  The resulting value depends on the bus activity during execution of the read instruction (fetching opcodes, operands, dereferencing pointers, etc.) and varies by addressing mode.
 
-This has the effect of making it appear that unmapped regions are filled with the high byte of the corresponding memory address:
+The following table summarizes the open bus value returned for each addressing mode when the target address is unmapped.  In all non-page-crossing cases, the last bus transfer before the read is the high byte of the target address.  When a page crossing occurs, the 6502 executes a speculative read from an uncorrected address (correct low byte, un-incremented high byte), and the open bus returns whatever was at that address instead.
 
-```text
-.m e800 e80f
-.:  e800  E8 E8 E8 E8 E8 E8 E8 E8
-.:  e808  E8 E8 E8 E8 E8 E8 E8 E8
-```
+Mode         | Assembler          | Page Cross? | Open Bus Value
+-------------|--------------------|:-----------:|-----------------------------
+Absolute     | `LDA/X/Y oper`     | -           | `BAH` (high byte of operand)
+Absolute,X   | `LDA/Y oper,X`     | No          | `BAH` (high byte of operand)
+Absolute,X   | `LDA/Y oper,X`     | Yes         | Byte at `BAH:(BAL+X)&$FF`
+Absolute,Y   | `LDA/X oper,Y`     | No          | `BAH` (high byte of operand)
+Absolute,Y   | `LDA/X oper,Y`     | Yes         | Byte at `BAH:(BAL+Y)&$FF`
+(Indirect,X) | `LDA (oper,X)`     | -           | `BAH` (high byte of operand)
+(Indirect),Y | `LDA (oper),Y`     | No          | `BAH` (high byte of operand)
+(Indirect),Y | `LDA (oper),Y`     | Yes         | Byte at `IAH:(IAL+Y)&$FF`
 
-### Example
+Where `BAH:BAL` is the base address from the instruction operand and `IAH:IAL` is the pointer read from zero page.
 
-The CBM 64KB Memory Expansion test (`mem.8032.prg`) uses this technique to test that IO peek-through works correctly by expecting to see $E8 at $E800:
+For example, `LDA $E800` returns `$E8` because the last byte fetched from the instruction stream is the high address byte `$E8`.  However, `LDA $E7FF,Y` with `Y=1` also targets `$E800` but the page-crossing speculative read fetches from `$E700` (Editor ROM), so the open bus returns the ROM byte (not `$E8`).
+
+### Open Bus Example
+
+The CBM 64KB Memory Expansion test (`mem.8032.prg`) uses the open bus behavior to verify that IO peek-through works correctly by expecting to see `$E8` at `$E800`:
 
 ```text
 .C:f974  AD 00 E8    LDA $E800
 .C:f977  C9 E8       CMP #$E8
 ```
-
-The VICE 3.9 emulator approximates the bus holding behavior by returning the high byte of any address read.  This is imperfect and can be detected by using indirect addressing:
-
-```text
-A9 00       LDA #$00
-85 FB       STA $FB
-A9 E8       LDA #$E8
-85 FC       STA $FC
-A0 00       LDY #$00
-B1 FB       LDA ($FB),Y
-```
-
-A real PET would return `$FB` (the last byte transferred before the read cycle), but VICE 3.9 returns `$E8`.
 
 ## 50/60 Hz Detection
 
