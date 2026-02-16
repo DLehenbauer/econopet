@@ -1,11 +1,11 @@
 ---
-description: 'Guidelines for creating high-quality custom instruction files for GitHub Copilot'
+description: 'Guidelines for creating high-quality instruction files for GitHub Copilot'
 applyTo: '**/*.instructions.md'
 ---
 
-# Custom Instructions File Guidelines
+# Instructions File Guidelines
 
-Instructions for creating effective and maintainable custom instruction files that guide GitHub Copilot in generating domain-specific code and following project conventions.
+Instructions for creating effective and maintainable instruction files that guide GitHub Copilot in generating domain-specific code and following project conventions.
 
 ## Project Context
 
@@ -140,9 +140,9 @@ code example here
 
 ### Code Comparison
 
-```markdown
+````markdown
 ### Good Example - Using TypeScript interfaces
-\`\`\`typescript
+```typescript
 interface User {
   id: string;
   name: string;
@@ -152,15 +152,15 @@ interface User {
 function getUser(id: string): User {
   // Implementation
 }
-\`\`\`
+```
 
 ### Bad Example - Using any type
-\`\`\`typescript
+```typescript
 function getUser(id: any): any {
   // Loses type safety
 }
-\`\`\`
 ```
+````
 
 ### Conditional Guidance
 
@@ -193,7 +193,7 @@ Before finalizing instruction files:
 
 Here's a minimal example structure for a new instruction file:
 
-```markdown
+````markdown
 ---
 description: 'Brief description of purpose'
 applyTo: '**/*.ext'
@@ -228,9 +228,9 @@ Brief introduction and context.
 ### Pattern 1
 Description and example
 
-\`\`\`language
+```language
 code example
-\`\`\`
+```
 
 ### Pattern 2
 Description and example
@@ -240,7 +240,7 @@ Description and example
 - Build command: `command to verify`
 - Linting: `command to lint`
 - Testing: `command to test`
-```
+````
 
 ## Maintenance
 
