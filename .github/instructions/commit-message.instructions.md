@@ -21,11 +21,11 @@ Use the Conventional Commits standard (https://www.conventionalcommits.org/).
 |------|-------------|
 | feat | A new feature or capability |
 | fix | A bug fix |
+| refactor | Code change that neither fixes a bug nor adds a feature |
+| test | Adding or updating tests or testbenches |
+| build | Changes to build system, CI, or dependencies |
 | docs | Documentation only changes |
 | style | Formatting, whitespace - no code change |
-| refactor | Code change that neither fixes a bug nor adds a feature |
-| test | Adding or updating tests |
-| build | Changes to build system, CI, or dependencies |
 | chore | Maintenance tasks that don't fit other types |
 
 ## Scopes
@@ -34,8 +34,8 @@ Use a short scope that identifies the component:
 
 | Scope | When to use |
 |-------|-------------|
-| fw | Firmware changes (fw/) |
 | gw | Gateware changes (gw/) |
+| fw | Firmware changes (fw/) |
 | rom | ROM changes (rom/) |
 | dev | VS Code settings, Dev container or Dockerfile changes (.devcontainer/) |
 
