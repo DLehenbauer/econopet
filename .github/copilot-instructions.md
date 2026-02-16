@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-EconoPET is an open hardware mainboard replacement for Commodore PET/CBM computers. The system has three main components that work together:
+EconoPET is an open hardware mainboard replacement for Commodore PET/CBM computers with three main components:
 
 | Component | Location | Language | Toolchain |
 |-----------|----------|----------|-----------|
@@ -12,7 +12,9 @@ EconoPET is an open hardware mainboard replacement for Commodore PET/CBM compute
 
 ## Architecture
 
-**Communication flow:** The RP2040 MCU (firmware) controls the FPGA (gateware) via SPI. The MCU uploads the FPGA bitstream on power-on, then uses SPI commands to read/write to the PET's address space and control system state. The FPGA manages the 6502 CPU bus, RAM, video timing, and I/O.
+- The RP2040 MCU (firmware) controls the FPGA (gateware) via SPI
+- On power-on, the MCU uploads the FPGA bitstream, then uses SPI commands to read/write the PET's address space and control system state
+- The FPGA manages the 6502 CPU bus, RAM, video timing, and I/O
 
 Key interfaces:
 - [fw/src/driver.h](fw/src/driver.h) - MCU-to-FPGA SPI protocol (firmware side)
@@ -32,19 +34,24 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 
 ## Code Conventions
 
-### Plain ASCII text (avoid "fancy" Unicode)
-- When generating prose (commit messages, PR text, docs, comments, user-facing strings), prefer plain ASCII characters.
-- Do not emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode that humans typically don't type:
+### Plain ASCII Text
+
+- Use plain ASCII in all generated prose (commit messages, PR text, docs, comments, user-facing strings)
+- Never emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode:
   - Use `'` and `"` (not curly quotes)
   - Use `-` (not en-dash or em-dash)
   - Use `...` (not ellipsis character)
-- Avoid other decorative Unicode in text (e.g., bullet, arrow, non-breaking spaces) unless the user explicitly asks for it or it is required by a technical format.
-- Avoid overuse of semi-colons, as these are rarely used in English.
+- Never use decorative Unicode (bullet, arrow, non-breaking spaces) unless explicitly requested or required by a technical format
+- Avoid overuse of semi-colons, as these are rarely used in English
+- Do not use hyphens or double hyphens to set off clauses - like this - or -- like this --. Use parentheses instead (like this).
 
-### File headers
-New source files should include the SPDX license header (see fw/src/main.c for example).
+### File Headers
+
+Include the SPDX license header in all new source files (see `fw/src/main.c` for example).
 
 ## Environment Variables
 
-- `ECONOPET_ROMS_DIR` points to PET ROM files (BASIC, KERNAL, etc.)
-- `PICO_SDK_PATH` points to the Raspberry Pi Pico SDK (typically `/opt/pico-sdk`). You may read files from this path to understand Pico SDK APIs, even though it is outside the VS Code workspace.
+| Variable | Purpose |
+|----------|---------|
+| `ECONOPET_ROMS_DIR` | Path to PET ROM files (BASIC, KERNAL, etc.) |
+| `PICO_SDK_PATH` | Path to Raspberry Pi Pico SDK (typically `/opt/pico-sdk`). Read files here to understand Pico SDK APIs, even though it is outside the workspace. |
