@@ -111,6 +111,10 @@ Where `BAH:BAL` is the base address from the instruction operand and `IAH:IAL` i
 
 For example, `LDA $E800` returns `$E8` because the last byte fetched from the instruction stream is the high address byte `$E8`.  However, `LDA $E7FF,Y` with `Y=1` also targets `$E800` but the page-crossing speculative read fetches from `$E700` (Editor ROM), so the open bus returns the ROM byte (not `$E8`).
 
+### 65C02 Difference
+
+The page-crossing behavior described above applies to the NMOS 6502.  The 65C02 (CMOS) suppresses the speculative read, so the invalid address is never placed on the bus.  On the 65C02, page-crossing reads of unmapped addresses return the operand high byte (`BAH`) regardless of whether a page crossing occurs, because `BAH` is still the last byte fetched from the instruction stream before the penalty cycle.
+
 ### Open Bus Example
 
 The CBM 64KB Memory Expansion test (`mem.8032.prg`) uses the open bus behavior to verify that IO peek-through works correctly by expecting to see `$E8` at `$E800`:

@@ -69,6 +69,7 @@ fw/src/roms/menu_rom.h
 rom/program.pet*
 rom/rom.bin
 rom/obj
+prgs/**/*.o
 
 #
 # Core dump

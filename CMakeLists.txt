@@ -29,6 +29,7 @@ option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
 option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
 option(BUILD_TESTS "Build the firmware unit tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
+option(BUILD_PRGS "Build the test programs" ON)
 
 # Common build directory
 set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
@@ -141,6 +142,21 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
 endif()
 
 # ============================================================================
+# Test Programs (CC65)
+# ============================================================================
+if(BUILD_PRGS)
+    ExternalProject_Add(prgs_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/prgs
+        BINARY_DIR ${SUPER_BUILD_DIR}/prgs
+        CMAKE_ARGS
+            -G Ninja
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
+endif()
+
+# ============================================================================
 # Site/Documentation target
 # ============================================================================
 add_custom_target(site
@@ -162,6 +178,7 @@ add_custom_target(all_projects
         $<$<BOOL:${BUILD_FIRMWARE}>:firmware_project>
         $<$<BOOL:${BUILD_TESTS}>:test_project>
         $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
+        $<$<BOOL:${BUILD_PRGS}>:prgs_project>
     COMMENT "Building all enabled subprojects"
 )
 

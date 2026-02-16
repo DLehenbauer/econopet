@@ -64,6 +64,13 @@
             "targets": ["rom_project"]
         },
         {
+            "name": "prgs",
+            "displayName": "Test Programs",
+            "description": "Build all test programs (prgs/)",
+            "configurePreset": "default",
+            "targets": ["prgs_project"]
+        },
+        {
             "name": "site",
             "displayName": "Site",
             "description": "Build the static site including manual documentation",
