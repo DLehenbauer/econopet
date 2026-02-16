@@ -42,7 +42,7 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 - Avoid overuse of semi-colons, as these are rarely used in English.
 
 ### File headers
-New source files should include the CC0 license header with author attribution (see fw/src/main.c for example).
+New source files should include the SPDX license header (see fw/src/main.c for example).
 
 ## Environment Variables
 
