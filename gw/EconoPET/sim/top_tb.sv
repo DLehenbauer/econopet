@@ -294,6 +294,38 @@ module top_tb;
         $display("[%t] End RegisterFile Test", $time);
     endtask
 
+    task static open_bus_test;
+        logic [DATA_WIDTH-1:0] dout;
+
+        $display("[%t] Begin Open Bus Test", $time);
+
+        // Seed the bus by writing a known value to mapped RAM.
+        mock_system.cpu_write(16'h0400, 8'hA5);
+
+        // Reading an unmapped address ($E800-$E80F) should return the last
+        // byte that was on the CPU data bus.
+        mock_system.cpu_read(16'hE800, dout);
+        $display("[%t]   Open bus after $A5 write -> %02x", $time, dout);
+        `assert_equal(dout, 8'hA5);
+
+        // A different value should track.
+        mock_system.cpu_write(16'h0401, 8'h42);
+        mock_system.cpu_read(16'hE801, dout);
+        $display("[%t]   Open bus after $42 write -> %02x", $time, dout);
+        `assert_equal(dout, 8'h42);
+
+        // Reading from a mapped address should return normally, not open bus.
+        mock_system.cpu_read(16'h0400, dout);
+        `assert_equal(dout, 8'hA5);
+
+        // After reading mapped RAM ($A5), open bus should now reflect that.
+        mock_system.cpu_read(16'hE80F, dout);
+        $display("[%t]   Open bus after RAM read  -> %02x", $time, dout);
+        `assert_equal(dout, 8'hA5);
+
+        $display("[%t] End Open Bus Test", $time);
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] cpu_dout;
         int count;
@@ -310,6 +342,7 @@ module top_tb;
         sid_write_test;
         register_file_test;
         bram_test;
+        open_bus_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;
