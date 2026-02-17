@@ -19,8 +19,25 @@ package common_pkg;
         return 1000.0 / freq_mhz;
     endfunction
 
+    localparam real NS_PER_CYCLE = mhz_to_ns(SYS_CLOCK_MHZ);
+
     function int ns_to_cycles(input int time_ns);
-        return int'($ceil(time_ns / mhz_to_ns(SYS_CLOCK_MHZ)));
+        return int'($ceil(time_ns / NS_PER_CYCLE));
+    endfunction
+
+    // PCB trace propagation delay budget.
+    localparam real PCB_DIELECTRIC_CONSTANT  = 4.5;     // See: https://jlcpcb.com/capabilities/pcb-capabilities
+
+    // Signal velocity = c / sqrt(Dk), where c = 299.79 mm/ns.
+    localparam real SPEED_OF_LIGHT_MM_PER_NS = 299.79;
+    localparam real TRACE_VELOCITY_MM_PER_NS = SPEED_OF_LIGHT_MM_PER_NS / $sqrt(PCB_DIELECTRIC_CONSTANT);
+    localparam real MAX_TRACE_LENGTH_MM      = 250.0;
+    localparam int  MAX_TRACE_DELAY_NS       = int'($ceil(MAX_TRACE_LENGTH_MM / TRACE_VELOCITY_MM_PER_NS));
+
+    // Adds the trace delay budget to the given time to ensure timing constraints are met
+    // after accounting for trace delays on the PCB.
+    function int ns_to_cycles_with_trace_delay(input int time_ns);
+        return int'($ceil((time_ns + MAX_TRACE_DELAY_NS) / NS_PER_CYCLE));
     endfunction
 
     localparam int unsigned DATA_WIDTH      = 8;                    // 6502 and Wishbone data buses are 1 byte wide.
