@@ -36,14 +36,9 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 
 ### Plain ASCII Text
 
-- Use plain ASCII in all generated prose (commit messages, PR text, docs, comments, user-facing strings)
-- Never emit smart/curly quotes, long dashes, ellipsis, or other typographic Unicode:
-  - Use `'` and `"` (not curly quotes)
-  - Use `-` (not en-dash or em-dash)
-  - Use `...` (not ellipsis character)
-- Never use decorative Unicode (bullet, arrow, non-breaking spaces) unless explicitly requested or required by a technical format
-- Avoid overuse of semi-colons, as these are rarely used in English
-- Do not use hyphens or double hyphens to set off clauses - like this - or -- like this --. Use parentheses instead (like this).
+- Use ASCII in generated prose: straight quotes (`'`, `"`), hyphens (`-`), and `...` (no smart quotes, em/en dashes, or Unicode decoratives)
+- Avoid semi-colons.
+- Use parentheses (not dashes) to set off clauses
 
 ### File Headers
 
