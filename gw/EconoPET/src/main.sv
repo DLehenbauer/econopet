@@ -17,6 +17,7 @@ module main (
     output logic cpu_irq_o,
     input  logic cpu_nmi_i,
     output logic cpu_nmi_o,
+    input  logic cpu_sync_i,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,

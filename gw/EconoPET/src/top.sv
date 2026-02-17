@@ -46,6 +46,8 @@ module top #(
     output logic cpu_nmi_n_o,
     output logic cpu_nmi_n_oe,
 
+    input  logic cpu_sync_i,        // Asserted 70ns after falling PHI2 if next cycle fetches an opcode.
+
     // RAM
     output logic ram_addr_a10_o,
     output logic ram_addr_a11_o,
@@ -191,6 +193,7 @@ module top #(
         .cpu_irq_o(cpu_irq_o),
         .cpu_nmi_i(cpu_nmi_i),
         .cpu_nmi_o(cpu_nmi_o),
+        .cpu_sync_i(cpu_sync_i),
 
         .cpu_addr_i(cpu_addr_i),
         .cpu_addr_o(cpu_addr_o),
