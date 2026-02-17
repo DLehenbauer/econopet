@@ -83,7 +83,7 @@ When adding new `*.sv` or `*.v` files, they must be registered in the project:
 
 ## Development Workflow
 
-1. `ctest --preset gw -j$(nproc)` - run Verilog simulations in parallel
+1. `ctest --preset gw` - run Verilog simulations
 2. Only if tests pass: `cmake --build --preset gw` - build bitstream
 
 **Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow (~2 min) and simulation catches most issues.
