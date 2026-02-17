@@ -139,3 +139,47 @@ The timing values below bound propagation and enable/disable delays used when bu
 - Enable (/OE asserted): to B up to 10.3ns (tPZL /OE to B); to A up to 10.0ns (tPZH /OE to A).
 - Disable (/OE deasserted): to B high-Z up to 7.8ns (tPHZ /OE to B); to A high-Z up to 7.0ns (tPLZ /OE to A). Budget 7.8ns worst-case.
 - Turn-around: deassert /OE, wait >=7.8ns to reach high-Z, switch DIR, then re-assert /OE to avoid contention.
+
+## AS6C1008-55PCN (SRAM)
+
+([Datasheet](https://www.alliancememory.com/wp-content/uploads/AS6C1008_Mar_2023V1.2.pdf))
+
+### Read Cycle
+
+| Symbol | Parameter                                | Min | Max | Units |
+|--------|------------------------------------------|-----|-----|-------|
+| tRC    | Read Cycle Time                          |  55 |   - | ns    |
+| tAA    | Address Access Time                      |   - |  55 | ns    |
+| tACE   | Chip Enable Access Time                  |   - |  55 | ns    |
+| tOE    | Output Enable Access Time                |   - |  30 | ns    |
+| tCLZ   | Chip Enable to Output in Low-Z           |   - |  10 | ns    |
+| tOLZ   | Output Enable to Output in Low-Z         |   - |   5 | ns    |
+| tCHZ   | Chip Disable to Output in High-Z         |   - |  20 | ns    |
+| tOHZ   | Output Disable to Output in High-Z       |   - |  20 | ns    |
+| tOH    | Output Hold from Address Change          |  10 |   - | ns    |
+
+### Write Cycle
+
+| Symbol | Parameter                                | Min | Max | Units |
+|--------|------------------------------------------|-----|-----|-------|
+| tWC    | Write Cycle Time                         |  55 |   - | ns    |
+| tAW    | Address Valid to End of Write            |  50 |   - | ns    |
+| tAS    | Address Setup Time                       |   0 |   - | ns    |
+| tWP    | Write Pulse Width                        |  45 |   - | ns    |
+| tWR    | Write Recovery Time                      |   0 |   - | ns    |
+| tDW    | Data to Write Time Overlap               |  25 |   - | ns    |
+| tDH    | Data Hold from End of Write Time         |   0 |   - | ns    |
+| tOW    | Output Active from End of Write          |   5 |   - | ns    |
+| tWHZ   | Write to Output in High-Z                |   - |  20 | ns    |
+
+### Summary
+
+- DOUT valid 55ns after coincident ADDR and OE: max(tAA, tOE, tOLZ).
+- DOUT held 10ns after ADDR changes (tOH).
+- DOUT returns to High-Z 20ns after OE deasserted (tOHZ).
+- CE is permanently asserted, so tACE, tCLZ, tCHZ, and tCW are not relevant.
+- Total write cycle time must be at least 55ns (tWC).
+- ADDR must be valid 50ns before WE deasserts; no hold requirement (tAW, tWR = 0ns).
+- DIN must be valid 25ns before WE deasserts; no hold requirement (tDW, tDH = 0ns).
+- WE pulse width must be at least 45ns (tWP).
+- OE is deasserted during writes, so tOW and tWHZ are not relevant.
