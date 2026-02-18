@@ -39,8 +39,10 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/system_state.c
+    ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
+    ${TEST_DIR}/breakpoint_test.c
     ${TEST_DIR}/char_encoding_test.c
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c

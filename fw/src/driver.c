@@ -29,15 +29,25 @@
 #define REG_CPU     (ADDR_REG | 0x00001)
 #define REG_VIDEO   (ADDR_REG | 0x00002)
 
+// Breakpoint registers (REG_BP_CTL and REG_BP_ADDR_LO share the same address,
+// distinguished by write vs. read)
+#define REG_BP_CTL      (ADDR_REG | 0x00003)
+#define REG_BP_ADDR_LO  (ADDR_REG | 0x00003)
+#define REG_BP_ADDR_HI  (ADDR_REG | 0x00004)
+
 // Status Register
 #define REG_STATUS_GRAPHICS   (1 << 0)
 #define REG_STATUS_CRT        (1 << 1)
 #define REG_STATUS_KEYBOARD   (1 << 2)
+#define REG_STATUS_BP_HALT    (1 << 3)
 
 // CPU Control Register
 #define REG_CPU_READY (1 << 0)
 #define REG_CPU_RESET (1 << 1)
 #define REG_CPU_NMI   (1 << 2)
+
+// Breakpoint Control Register
+#define REG_BP_CTL_CLEAR (1 << 0)
 
 // Video Control Register
 #define REG_VIDEO_80_COL_MODE   (1 << 0)
@@ -660,7 +670,18 @@ void sync_state() {
     // Read CRTC registers from FPGA
     spi_read(ADDR_CRTC, CRTC_REG_COUNT, system_state.pet_crtc_registers);
 
-    // Read graphics mode flag from status register
+    // Read status register flags
     uint8_t status = spi_read_at(REG_STATUS);
     system_state.video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
+    system_state.bp_halted = (status & REG_STATUS_BP_HALT) != 0;
+}
+
+uint16_t bp_hit_addr() {
+    uint8_t lo = spi_read_at(REG_BP_ADDR_LO);
+    uint8_t hi = spi_read_at(REG_BP_ADDR_HI);
+    return ((uint16_t)hi << 8) | lo;
+}
+
+void bp_clear_halt() {
+    spi_write_at(REG_BP_CTL, REG_BP_CTL_CLEAR);
 }

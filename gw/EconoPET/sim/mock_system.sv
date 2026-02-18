@@ -83,6 +83,8 @@ module mock_system (
         .cpu_we_n_o (top_we_n),
         .cpu_we_n_oe(top_we_n_oe),
 
+        .cpu_sync_i(cpu_sync),
+
         .ram_addr_a10_o(ram_addr_a10_o),
         .ram_addr_a11_o(ram_addr_a11_o),
         .ram_addr_a15_o(ram_addr_a15_o),
@@ -110,6 +112,7 @@ module mock_system (
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
     logic [DATA_WIDTH-1:0] cpu_data;
     logic cpu_we_n;
+    logic cpu_sync;
 
     mock_cpu mock_cpu(
         .sys_clock_i(sys_clock),
@@ -119,6 +122,7 @@ module mock_system (
         .data_i(bus_data),
         .data_o(cpu_data),
         .we_n_o(cpu_we_n),
+        .sync_o(cpu_sync),
         .irq_n_i(1'b1),
         .nmi_n_i(1'b1),
         .ready_i(cpu_ready_o)

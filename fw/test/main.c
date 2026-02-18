@@ -2,6 +2,7 @@
 // https://github.com/dlehenbauer/econopet
 
 #include <check.h>
+#include "breakpoint_test.h"
 #include "char_encoding_test.h"
 #include "config_parser_test.h"
 #include "crtc_test.h"
@@ -14,7 +15,8 @@ int run_suite() {
     int number_failed = 0;
 
     // These tests are run in the same process for convenient debugging.
-    SRunner* sr1 = srunner_create(char_encoding_suite());
+    SRunner* sr1 = srunner_create(breakpoint_suite());
+    srunner_add_suite(sr1, char_encoding_suite());
     srunner_add_suite(sr1, config_parser_suite());
     srunner_add_suite(sr1, crtc_suite());
     srunner_add_suite(sr1, keyscan_suite());

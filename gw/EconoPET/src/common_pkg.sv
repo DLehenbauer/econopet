@@ -296,6 +296,7 @@ package common_pkg;
     localparam int unsigned REG_STATUS_GRAPHICS_BIT = 0;    // VIA CA2 (0 = graphics, 1 = text)
     localparam int unsigned REG_STATUS_CRT_BIT      = 1;    // Diagonal CRT size (0 = 12", 1 = 9")
     localparam int unsigned REG_STATUS_KEYBOARD_BIT = 2;    // Keyboard Type (0 = Business, 1 = Graphics)
+    localparam int unsigned REG_STATUS_BP_HALT_BIT  = 3;    // Breakpoint halt (1 = CPU halted on STP fetch)
 
     // Register 1: CPU control
     localparam int unsigned REG_CPU                 = 1;
@@ -309,7 +310,17 @@ package common_pkg;
     localparam int unsigned REG_VIDEO_RAM_MASK_LO_BIT   = 1;    // video_ram_mask[10]
     localparam int unsigned REG_VIDEO_RAM_MASK_HI_BIT   = 2;    // video_ram_mask[11]
 
-    localparam int unsigned REG_COUNT                   = REG_VIDEO + 1'b1;
+    // Register 3: Breakpoint Control (Write) / Breakpoint Address Low (Read)
+    //   Write: bit 0 clears the breakpoint halt
+    //   Read:  low byte of the CPU address where the breakpoint was hit
+    localparam int unsigned REG_BP_CTL                  = 3;
+    localparam int unsigned REG_BP_CTL_CLEAR_BIT        = 0;
+    localparam int unsigned REG_BP_ADDR_LO              = 3;    // Shares address with REG_BP_CTL
+
+    // Register 4: Breakpoint Address High (Read-only)
+    localparam int unsigned REG_BP_ADDR_HI              = 4;
+
+    localparam int unsigned REG_COUNT                   = REG_BP_ADDR_HI + 1'b1;
 
     //
     // Bus

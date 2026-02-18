@@ -212,6 +212,11 @@ module main (
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
 
+    logic reg_cpu_ready;
+    logic bp_halted;
+    logic [CPU_ADDR_WIDTH-1:0] bp_addr;
+    logic bp_clear;
+
     register_file register_file (
         .wb_clock_i(sys_clock_i),
         .wbp_addr_i(wb_addr),
@@ -230,14 +235,37 @@ module main (
         .config_keyboard_i(config_keyboard_i),
 
         // CPU control register
-        .cpu_ready_o(cpu_ready_o),
+        .cpu_ready_o(reg_cpu_ready),
         .cpu_reset_o(cpu_reset_o),
         .cpu_nmi_o(cpu_nmi_o),
+
+        // Breakpoint
+        .bp_halted_i(bp_halted),
+        .bp_addr_i(bp_addr),
+        .bp_clear_o(bp_clear),
 
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
 
         .video_ram_mask_o(video_ram_mask)
+    );
+
+    //
+    // Breakpoint Detection
+    //
+
+    breakpoint breakpoint (
+        .sys_clock_i(sys_clock_i),
+        .cpu_sync_i(cpu_sync_i),
+        .cpu_data_i(cpu_data_i),
+        .cpu_addr_i(cpu_addr_i),
+        .cpu_data_strobe_i(cpu_data_strobe),
+        .cpu_be_i(cpu_be_o),
+        .cpu_ready_i(reg_cpu_ready),
+        .clear_i(bp_clear),
+        .cpu_ready_o(cpu_ready_o),
+        .halted_o(bp_halted),
+        .addr_o(bp_addr)
     );
 
     //

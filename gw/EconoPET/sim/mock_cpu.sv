@@ -17,6 +17,7 @@ module mock_cpu (
     input  logic     [DATA_WIDTH-1:0] data_i,
     output logic     [DATA_WIDTH-1:0] data_o,
     output logic we_n_o,
+    output logic sync_o,
     input  logic irq_n_i,
     input  logic nmi_n_i,
     input  logic ready_i
@@ -26,14 +27,24 @@ module mock_cpu (
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr_next;
     logic [    DATA_WIDTH-1:0] cpu_data_next;
     logic                      cpu_we_next;
+    logic                      cpu_sync;
+
+    // In real hardware, the FPGA detects STP ($DB) on the data bus during PHI2
+    // high and deasserts RDY before the CPU latches the opcode.  The Verilog
+    // 6502 model latches on the rising PHI2 edge (too early for the breakpoint
+    // module to react) and its microcode calls $finish when it encounters STP.
+    // Gate ready combinationally so the core never processes STP, mirroring the
+    // real timing where RDY goes low before the CPU can act on it.
+    wire stp_on_bus = cpu_sync && (data_i == 8'hDB);
 
     cpu6502 cpu(
         .clk(cpu_clock_i),
         .reset(!reset_n_i),
         .nmi(!nmi_n_i),
         .irq(!irq_n_i),
-        .ready(ready_i && !manual_mode),   // Suspend CPU when manual_mode is asserted
+        .ready(ready_i && !manual_mode && !stp_on_bus),
         .write(cpu_we_next),
+        .sync(cpu_sync),
         .address(cpu_addr_next),
         .data_i(data_i),
         .data_o(cpu_data_next)
@@ -107,6 +118,7 @@ module mock_cpu (
             addr_o <= manual_mode ? set_addr_next : cpu_addr_next;
             data_o <= manual_mode ? set_data_next : cpu_data_next;
             we_n_o <= !(manual_mode ? set_we_next : cpu_we_next);
+            sync_o <= manual_mode ? 1'b0 : cpu_sync;
         end
     end
 endmodule

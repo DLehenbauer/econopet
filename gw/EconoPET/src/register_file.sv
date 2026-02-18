@@ -27,6 +27,11 @@ module register_file(
     output logic                     cpu_reset_o,
     output logic                     cpu_nmi_o,
 
+    // Breakpoint
+    input  logic                      bp_halted_i,           // Breakpoint module has halted the CPU
+    input  logic [CPU_ADDR_WIDTH-1:0] bp_addr_i,             // CPU address where breakpoint was hit
+    output logic                      bp_clear_o,            // One-cycle pulse to clear breakpoint halt
+
     // Video register
     output logic                     video_col_80_mode_o,
     output logic [11:10]             video_ram_mask_o
@@ -35,10 +40,12 @@ module register_file(
 
     initial begin
         wbp_ack_o   = '0;
+        bp_clear_o  = '0;
 
         register[REG_STATUS][REG_STATUS_GRAPHICS_BIT] = 1'b0;
         register[REG_STATUS][REG_STATUS_CRT_BIT]      = 1'b0;
         register[REG_STATUS][REG_STATUS_KEYBOARD_BIT] = 1'b0;
+        register[REG_STATUS][REG_STATUS_BP_HALT_BIT]  = 1'b0;
 
         // CPU state at power on:
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;    // Not ready
@@ -49,6 +56,10 @@ module register_file(
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT]        = 1'b0;
         register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT]   = 1'b0;
         register[REG_VIDEO][REG_VIDEO_RAM_MASK_LO_BIT]   = 1'b0;
+
+        // Breakpoint registers at power on:
+        register[REG_BP_CTL]     = '0;
+        register[REG_BP_ADDR_HI] = '0;
     end
 
     // This peripheral always completes WB operations in a single cycle.
@@ -57,10 +68,19 @@ module register_file(
     wire [REG_ADDR_WIDTH-1:0] reg_addr = wbp_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
+        bp_clear_o <= '0;
+
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= register[reg_addr];
             if (wbp_we_i) begin
-                register[reg_addr] <= wbp_data_i;
+                // Writing to REG_BP_CTL pulses bp_clear_o instead of storing
+                // the value (the register address is shared with REG_BP_ADDR_LO
+                // which is read-only).
+                if (reg_addr == REG_BP_CTL[REG_ADDR_WIDTH-1:0]) begin
+                    bp_clear_o <= wbp_data_i[REG_BP_CTL_CLEAR_BIT];
+                end else begin
+                    register[reg_addr] <= wbp_data_i;
+                end
             end
             wbp_ack_o <= 1'b1;
         end else begin
@@ -70,8 +90,12 @@ module register_file(
             // 64 MHz, which is guaranteed to restore overwritten status bits before
             // we process the next SPI command.
             //
-            // Order must match bit order declared in common_pkg.svh.
-            register[REG_STATUS] <= { 5'b0000_0, config_keyboard_i, config_crt_i, video_graphic_i};
+            // Order must match bit order declared in common_pkg.sv.
+            register[REG_STATUS] <= { 4'b0000, bp_halted_i, config_keyboard_i, config_crt_i, video_graphic_i};
+
+            // Refresh breakpoint address registers from the breakpoint module.
+            register[REG_BP_ADDR_LO] <= bp_addr_i[7:0];
+            register[REG_BP_ADDR_HI] <= bp_addr_i[15:8];
         end
     end
 

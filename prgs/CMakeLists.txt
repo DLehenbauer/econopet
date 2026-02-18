@@ -4,4 +4,5 @@
 cmake_minimum_required(VERSION 3.13)
 project(prgs LANGUAGES NONE)
 
+add_subdirectory(bp)
 add_subdirectory(open-bus)

@@ -3,6 +3,7 @@
 
 #include "pch.h"
 
+#include "breakpoint.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
 #include "display/display.h"
@@ -177,6 +178,7 @@ int main() {
     display_init(); // Initialize firmware display subsystem
     usb_init();     // Initialize USB subsystem
     cli_init();     // Start CLI on UART serial
+    bp_init();      // Initialize breakpoint subsystem
     
     // Enter boot menu
     menu_enter();
@@ -186,6 +188,7 @@ int main() {
     while (true) {
         display_task(); // Sync video buffer, render to terminal if needed
         input_task();   // Poll inputs, dispatch based on mode
+        bp_task();      // Check for breakpoint hits and handle them
         menu_task();    // Check for button events to enter menu
     }
 

@@ -28,5 +28,8 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 void set_cpu(bool ready, bool reset, bool nmi);
 void sync_state();
 
+uint16_t bp_hit_addr();
+void bp_clear_halt();
+
 void read_pet_model(system_state_t* const system_state);
 void write_pet_model(const system_state_t* const system_state);

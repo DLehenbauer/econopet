@@ -29,6 +29,11 @@ module register_file_tb;
     logic cpu_reset;
     logic cpu_nmi;
 
+    // Breakpoint
+    logic bp_halted;
+    logic [CPU_ADDR_WIDTH-1:0] bp_addr;
+    logic bp_clear;
+
     // Video control register
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
@@ -54,6 +59,11 @@ module register_file_tb;
         .cpu_ready_o(cpu_ready),
         .cpu_reset_o(cpu_reset),
         .cpu_nmi_o(cpu_nmi),
+
+        // Breakpoint
+        .bp_halted_i(bp_halted),
+        .bp_addr_i(bp_addr),
+        .bp_clear_o(bp_clear),
         
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
@@ -82,6 +92,7 @@ module register_file_tb;
         video_graphic = graphics;
         config_crt = crt;
         config_keyboard = keyboard;
+        bp_halted = 1'b0;
 
         // Register file copies updated status to BRAM on idle clock cycles.
         @(posedge clock);
@@ -91,6 +102,7 @@ module register_file_tb;
         `assert_equal(data[REG_STATUS_GRAPHICS_BIT], video_graphic);
         `assert_equal(data[REG_STATUS_CRT_BIT], config_crt);
         `assert_equal(data[REG_STATUS_KEYBOARD_BIT], config_keyboard);
+        `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b0);
     endtask
 
     task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
@@ -117,6 +129,9 @@ module register_file_tb;
     task run;
         wb.reset;
 
+        bp_halted = 1'b0;
+        bp_addr   = 16'h0000;
+
         // Check power-on state
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset, 1'b1);
@@ -141,6 +156,45 @@ module register_file_tb;
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b0, /* keyboard: */ 1'b1);
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);
         test_status(/* graphics: */ 1'b1, /* crt: */ 1'b0, /* keyboard: */ 1'b0);
+
+        // Breakpoint: BP_HALT appears in status register
+        bp_halted = 1'b1;
+        bp_addr   = 16'hBEEF;
+        @(posedge clock);
+        begin
+            byte data;
+
+            wb.read(REG_STATUS, data);
+            `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b1)
+
+            // Read breakpoint address
+            wb.read(REG_BP_ADDR_LO, data);
+            `assert_equal(data, 8'hEF)
+
+            wb.read(REG_BP_ADDR_HI, data);
+            `assert_equal(data, 8'hBE)
+        end
+
+        // Breakpoint: writing REG_BP_CTL pulses bp_clear
+        `assert_equal(bp_clear, 1'b0)
+        wb.write(REG_BP_CTL, 8'h01);
+        `assert_equal(bp_clear, 1'b1)
+        @(posedge clock);
+        `assert_equal(bp_clear, 1'b0)
+
+        // Breakpoint: writing 0 to REG_BP_CTL does not pulse bp_clear
+        wb.write(REG_BP_CTL, 8'h00);
+        `assert_equal(bp_clear, 1'b0)
+
+        // Breakpoint: REG_BP_CTL write does not overwrite REG_BP_ADDR_LO
+        bp_halted = 1'b0;
+        bp_addr   = 16'hCAFE;
+        @(posedge clock);
+        begin
+            byte data;
+            wb.read(REG_BP_ADDR_LO, data);
+            `assert_equal(data, 8'hFE)
+        end
 
     endtask
 

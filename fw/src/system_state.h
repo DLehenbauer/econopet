@@ -123,6 +123,9 @@ typedef struct system_state_s {
     // Video graphics mode flag (true = graphics/lowercase charset, false = text/uppercase)
     bool video_graphics;
 
+    // True when the FPGA has halted the CPU on a breakpoint (STP opcode)
+    bool bp_halted;
+
     // CRTC (6545) registers read from the FPGA, controlling video timing
     uint8_t pet_crtc_registers[CRTC_REG_COUNT];
 } system_state_t;

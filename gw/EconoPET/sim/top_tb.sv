@@ -283,6 +283,130 @@ module top_tb;
         $display("[%t] End RegisterFile Test", $time);
     endtask
 
+    task static breakpoint_test;
+        logic [DATA_WIDTH-1:0] dout;
+        logic [DATA_WIDTH-1:0] addr_lo;
+        logic [DATA_WIDTH-1:0] addr_hi;
+        integer i;
+
+        $display("[%t] Begin Breakpoint Test", $time);
+
+        // Use the tape buffer ($027A) so the test does not disturb other memory.
+        // Write STP ($DB) at $027A and fill $027B-$0289 with NOP ($EA).
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A), 8'hDB);
+        for (i = 1; i < 16; i = i + 1)
+            mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A + i), 8'hEA);
+
+        // Write reset vector ($FFFC/$FFFD) to point to $027A.
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0FFFC), 8'h7A);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0FFFD), 8'h02);
+
+        // Exit manual mode so the 6502 core drives the bus.
+        mock_system.cpu_start;
+
+        // Release reset (bit 1) but keep CPU halted (ready = 0).
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
+
+        // The Verilog-6502 core requires two clock cycles while RESB is low.
+        @(posedge cpu_clock);
+        @(posedge cpu_clock);
+
+        // Start CPU: assert ready (bit 0), deassert reset (bit 1 still set).
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0001);
+        `assert_equal(cpu_ready, 1'b1);
+
+        // Wait for the reset sequence (~7 cycles) and the opcode fetch at $027A.
+        repeat (20) @(posedge cpu_clock);
+
+        // ---- Verify initial halt ----
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        $display("[%t]   STATUS after STP = %02x", $time, dout);
+        `assert_equal(dout[REG_STATUS_BP_HALT_BIT], 1'b1);
+
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), addr_lo);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_HI), addr_hi);
+        $display("[%t]   Captured address = $%02x%02x", $time, addr_hi, addr_lo);
+        `assert_equal(addr_lo, 8'h7A);
+        `assert_equal(addr_hi, 8'h02);
+
+        // ---- Patch sequence: INC $DB / STP / DEC $DB / STP ----
+        //
+        //   $027A: E6 DB     INC $DB       (if CPU resumes here)
+        //   $027C: DB        STP           (halt, verify INC effect)
+        //   $027D: C6 DB     DEC $DB       (after patching $027C to NOP)
+        //   $027F: DB        STP           (halt, verify DEC restored)
+        //
+        // If the CPU wrongly resumes at $027B instead of $027A, it will
+        // execute $DB (STP) immediately and halt at $027B, not $027C.
+        //
+        // Pre-fill the target zero-page location with a known value.
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h000DB), 8'h41);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A), 8'hE6);  // INC zp
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027B), 8'hDB);  // operand $DB (also STP)
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027C), 8'hDB);  // STP
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027D), 8'hC6);  // DEC zp
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027E), 8'hDB);  // operand $DB
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027F), 8'hDB);  // STP
+
+        // ---- Clear breakpoint (CPU resumes INC $DB, then halts at $027C) ----
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_BP_CTL), 8'h01);
+        repeat (20) @(posedge cpu_clock);
+
+        // ---- Verify halt at $027C (proves CPU resumed at $027A) ----
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        $display("[%t]   STATUS after INC+STP = %02x", $time, dout);
+        `assert_equal(dout[REG_STATUS_BP_HALT_BIT], 1'b1);
+
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), addr_lo);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_HI), addr_hi);
+        $display("[%t]   Halt address = $%02x%02x (expect $027C)", $time, addr_hi, addr_lo);
+        `assert_equal(addr_lo, 8'h7C);
+        `assert_equal(addr_hi, 8'h02);
+
+        // ---- Verify INC $DB took effect ----
+        mock_system.spi_read_at(common_pkg::wb_ram_addr(17'h000DB), dout);
+        $display("[%t]   RAM[$00DB] = %02x (expect $42)", $time, dout);
+        `assert_equal(dout, 8'h42);
+
+        // ---- Patch STP at $027C to NOP so CPU continues to DEC $DB ----
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027C), 8'hEA);  // NOP
+
+        // ---- Clear breakpoint (CPU resumes NOP, DEC $DB, halts at $027F) ----
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_BP_CTL), 8'h01);
+        repeat (20) @(posedge cpu_clock);
+
+        // ---- Verify halt at $027F ----
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        $display("[%t]   STATUS after DEC+STP = %02x", $time, dout);
+        `assert_equal(dout[REG_STATUS_BP_HALT_BIT], 1'b1);
+
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), addr_lo);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_HI), addr_hi);
+        $display("[%t]   Halt address = $%02x%02x (expect $027F)", $time, addr_hi, addr_lo);
+        `assert_equal(addr_lo, 8'h7F);
+        `assert_equal(addr_hi, 8'h02);
+
+        // ---- Verify DEC $DB restored the original value ----
+        mock_system.spi_read_at(common_pkg::wb_ram_addr(17'h000DB), dout);
+        $display("[%t]   RAM[$00DB] = %02x (expect $41)", $time, dout);
+        `assert_equal(dout, 8'h41);
+
+        // ---- Final cleanup: clear last halt ----
+        mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027F), 8'hEA);  // NOP
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_BP_CTL), 8'h01);
+        repeat (10) @(posedge cpu_clock);
+
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), dout);
+        $display("[%t]   STATUS after final clear = %02x", $time, dout);
+        `assert_equal(dout[REG_STATUS_BP_HALT_BIT], 1'b0);
+
+        // ---- Stop CPU and restore initial state (ready=0, reset asserted) ----
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
+        mock_system.cpu_stop;
+
+        $display("[%t] End Breakpoint Test", $time);
+    endtask
+
     task static open_bus_test;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -332,6 +456,7 @@ module top_tb;
         register_file_test;
         bram_test;
         open_bus_test;
+        breakpoint_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;
