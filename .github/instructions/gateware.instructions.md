@@ -58,69 +58,43 @@ For SPI signals specifically, follow the [OSHWA resolution](https://oshwa.org/re
 ## Testbenches
 
 - Name testbenches with `*_tb.sv` suffix
-- Place testbenches in [gw/EconoPET/sim/](gw/EconoPET/sim/)
+- Place testbenches in `gw/EconoPET/sim/`
 - Each testbench is standalone and auto-discovered by CTest
+- Use TB_INIT and assertion macros from `gw/EconoPET/sim/tb.svh`:
+  - `` `TB_INIT `` - emits an `initial` block that sets up VCD dumping, runs the `run` task, and calls `$finish`
+  - `` `assert_equal(actual, expected) `` - compare with detailed error messages
+  - `` `assert_exact_equal(actual, expected) `` - strict equality check
+  - `` `assert_compare(actual, op, expected) `` - comparison with operator
 
-## Running Tests
+## Running Testbenches
 
 ```sh
-ctest --preset gw               # Run all gw tests in parallel (fastest)
-ctest --preset gw -j 1          # Run all gw tests sequentially
-./sim.sh spi_tb                 # Run a single test
-./sim.sh -v spi_tb              # View waveform for a test
-./sim.sh                        # List available tests
+./sim.sh --update    # Regenerate `gw/EconoPET/work_sim/EconoPET.f` after modifying `EconoPET.xml`
+./sim.sh             # List available tests
+./sim.sh --all       # Run all tests in parallel (fastest)
+./sim.sh spi_tb      # Run a single test with output logged to console
 ```
 
 ## Adding New Files
 
 When adding new `*.sv` or `*.v` files, they must be registered in the project:
 
-1. **Edit [EconoPET.xml](gw/EconoPET/EconoPET.xml)** - Add the file to the appropriate section:
-   - Source files (`src/*.sv`): Add `<efx:design_file name="src/mymodule.sv" .../>` in the `<efx:design_info>` section
-   - Simulation files (`sim/*.sv`): Add `<efx:sim_file name="sim/mymodule_tb.sv"/>` in the `<efx:sim_info>` section
+- Source files (`src/*.sv`): Add `<efx:design_file name="src/mymodule.sv" .../>` in the `<efx:design_info>` section
+- Simulation files (`sim/*.sv`): Add `<efx:sim_file name="sim/mymodule_tb.sv"/>` in the `<efx:sim_info>` section
+- Run `./sim.sh --update` from the project root to regenerate `gw/EconoPET/work_sim/EconoPET.f`
 
-2. **Regenerate EconoPET.f** - Run `sim.sh --update` from the project root to regenerate the file list used by Icarus Verilog.
-
-## Development Workflow
-
-1. `ctest --preset gw` - run Verilog simulations
-2. Only if tests pass: `cmake --build --preset gw` - build bitstream
-
-**Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow (~2 min) and simulation catches most issues.
+**Critical:** New source files and testbenches are omitted from the build and test until registered in `EconoPET.xml` and `./sim.sh --update` is run to update the file list in `gw/EconoPET/work_sim/EconoPET.f`.
 
 ## Verification Checklist
 
-Complete these steps in order for all gateware changes:
+- [ ] If the change is testable, add or update a `*_tb.sv` file in `gw/EconoPET/sim/` to add coverage
+- [ ] Update `gw/EconoPET/EconoPET.xml` to register new source and test files or remove deleted files
+- [ ] Run `./sim.sh --update` to regenerate `gw/EconoPET/work_sim/EconoPET.f`
+- [ ] Run `./sim.sh --all` and verify all tests pass
+- [ ] Only if tests pass, run `cmake --build --preset gw`
 
-1. **Compile check** - Ensure changes compile without errors using Icarus Verilog (happens automatically when running simulations).
-
-2. **Create or update testbench** - If the change is testable, add or update a `*_tb.sv` file in [gw/EconoPET/sim/](gw/EconoPET/sim/). Use existing assertion macros from [assert.svh](gw/EconoPET/sim/assert.svh):
-   - `` `assert_equal(actual, expected) `` - compare with detailed error messages
-   - `` `assert_exact_equal(actual, expected) `` - strict equality check
-   - `` `assert_compare(actual, op, expected) `` - comparison with operator
-
-3. **Make testbench standalone** - Each testbench should use `TB_INIT` macro for self-contained execution. Example structure:
-```systemverilog
-`include "./sim/tb.svh"       // Defines TB_INIT macro
-
-import common_pkg::*;         // Import shared types and parameters
-
-module <<testbench_name>>();  // Module name ends in `_tb`
-    task run;
-      // Test logic goes here
-    endtask
-
-    `TB_INIT                  // Initializes testbench and runs `run` task
-endmodule
-```
-
-4. **Run simulations** - Execute `ctest --preset gw` and verify all tests pass.
-
-5. **Build bitstream** (last step) - Only after all simulations pass, run `cmake --build --preset gw`. This step takes ~2 minutes.
+**Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow (~2 min) and simulation catches most issues.
 
 ## External Dependencies
 
-The `/gw/EconoPET/external` directory contains git submodules. Do not modify files in this path without explicit confirmation. When changes seem to require modifying submodule code:
-
-1. Propose alternatives first (wrappers, adapters, compile flags)
-2. Request confirmation before proceeding
+The `/gw/EconoPET/external` directory contains git submodules. Do not modify files in this path without explicit confirmation.
