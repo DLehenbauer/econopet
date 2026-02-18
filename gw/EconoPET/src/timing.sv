@@ -59,17 +59,21 @@ module timing (
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
     assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
-    localparam CPU_tBVD = 30,  // CPU BE to Valid Data (tBVD)
-               CPU_tPWH = 62,  // CPU Clock Pulse Width High (tPWH)
-               CPU_tDSR = 15,  // CPU Data Setup Time (tDSR)
-               CPU_tDHx = 10,  // CPU Data Hold Time (tDHR, tDHW)
-               CPU_tMDS = 40,  // CPU Write Data Delay Time (tMDS)
-               RAM_tAA  = 55,  // RAM Address Access Time (tAA)
-               IOTX_t   = 11;  // IO Transceiver Worst-Case Delay (tPZL)
+    localparam CPU_tBVD  = 30,  // CPU BE to Valid Data (tBVD)
+               CPU_tPWH  = 62,  // CPU Clock Pulse Width High (tPWH)
+               CPU_tDSR  = 15,  // CPU Data Setup Time (tDSR)
+               CPU_tDHx  = 10,  // CPU Data Hold Time (tDHR, tDHW)
+               CPU_tMDS  = 40,  // CPU Write Data Delay Time (tMDS)
+               RAM_tAA   = 55,  // RAM Address Access Time (tAA)
+               IO_tCDR   = 20,  // PIA/VIA Data Bus Delay Time (tCDR)
+               IOTX_t    = 11,  // IO Transceiver Enable Delay (tPZL)
+               IOTX_tPD  =  7;  // IO Transceiver Propagation Delay (tPLH/tPHL budget)
 
     localparam int CYCLES_BVD   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tBVD),
                    CYCLES_IOTX  = common_pkg::ns_to_cycles_with_trace_delay(IOTX_t),
                    CYCLES_AA    = common_pkg::ns_to_cycles_with_trace_delay(RAM_tAA),
+                   CYCLES_MDS   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tMDS),
+                   CYCLES_CDR   = common_pkg::ns_to_cycles_with_trace_delay(IO_tCDR + IOTX_tPD),
                    CYCLES_PWH   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tPWH),
                    CYCLES_DHX   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tDHx);
 
@@ -78,9 +82,21 @@ module timing (
 
     localparam int CPU_BE_START     = CPU_START,
                    CPU_PHI_START    = CPU_BE_START + CYCLES_BVD + CYCLES_IOTX,
-                   CPU_DATA_STROBE  = CPU_PHI_END - 2,
                    CPU_PHI_END      = CPU_BE_END - CYCLES_DHX,      // Hold data for tDHx after end of PHI2
                    CPU_BE_END       = CPU_END - CYCLES_BVD;         // Allow tBVD for bus to return to High-Z
+
+    // Data strobe fires at the earliest cycle when data from all bus drivers
+    // is guaranteed to be valid:
+    //
+    //   RAM read:  address propagation (tBVD) + access time (tAA), each with trace delay
+    //   CPU write: write data delay (tMDS) from rising PHI2, with trace delay
+    //   IO read:   PIA/VIA data delay (tCDR) + transceiver propagation (tPD) from rising PHI2
+    localparam int CPU_DATA_STROBE_RAM = CPU_BE_START + CYCLES_BVD + CYCLES_AA,
+                   CPU_DATA_STROBE_CPU = CPU_PHI_START + CYCLES_MDS,
+                   CPU_DATA_STROBE_IO  = CPU_PHI_START + CYCLES_CDR,
+                   CPU_DATA_STROBE     = (CPU_DATA_STROBE_RAM >= CPU_DATA_STROBE_CPU)
+                                       ? (CPU_DATA_STROBE_RAM >= CPU_DATA_STROBE_IO ? CPU_DATA_STROBE_RAM : CPU_DATA_STROBE_IO)
+                                       : (CPU_DATA_STROBE_CPU >= CPU_DATA_STROBE_IO ? CPU_DATA_STROBE_CPU : CPU_DATA_STROBE_IO);
 
     // Truncate to COUNTER_WIDTH bits
     localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START_W    = COUNTER_WIDTH'(CPU_BE_START),
@@ -150,6 +166,24 @@ module timing (
         if (CPU_DATA_STROBE < CPU_PHI_START || CPU_DATA_STROBE >= CPU_PHI_END)
             $fatal(1, "CPU_DATA_STROBE (%0d) must be in [CPU_PHI_START (%0d), CPU_PHI_END (%0d))",
                 CPU_DATA_STROBE, CPU_PHI_START, CPU_PHI_END);
+
+        // RAM read setup: address out (tBVD + trace) then access time (tAA + trace)
+        if ((CPU_DATA_STROBE - CPU_BE_START) * NS_PER_CYCLE < CPU_tBVD + RAM_tAA + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "RAM read setup %.1fns violates tBVD + tAA + 2*trace >= %0dns",
+                (CPU_DATA_STROBE - CPU_BE_START) * NS_PER_CYCLE,
+                CPU_tBVD + RAM_tAA + 2 * MAX_TRACE_DELAY_NS);
+
+        // CPU write setup: PHI2 to CPU (trace) + write data delay (tMDS) + data back (trace)
+        if ((CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE < CPU_tMDS + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "CPU write setup %.1fns violates tMDS + 2*trace >= %0dns",
+                (CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE,
+                CPU_tMDS + 2 * MAX_TRACE_DELAY_NS);
+
+        // IO read setup: PHI2 to PIA (trace) + data delay (tCDR) + transceiver prop (tPD) + data back (trace)
+        if ((CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE < IO_tCDR + IOTX_tPD + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "IO read setup %.1fns violates tCDR + tPD + 2*trace >= %0dns",
+                (CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE,
+                IO_tCDR + IOTX_tPD + 2 * MAX_TRACE_DELAY_NS);
 
         // Sequential ordering of bus events
         if (!(CPU_BE_START < CPU_PHI_START
