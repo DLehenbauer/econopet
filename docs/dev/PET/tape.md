@@ -571,3 +571,4 @@ non-relocatable) followed by the data, then repeats both for the second copy.
 * Datasheets
   * [Rockwell R6520 PIA](http://archive.6502.org/datasheets/rockwell_r6520_pia.pdf)
   * [Western Digital W65C22 VIA](https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf)
+* [Simon's Mostly Reliable Guide to the Commodore Tape Format](https://eden.mose.org.uk/download/Commodore%20Tape%20Format.pdf)
