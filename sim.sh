@@ -111,7 +111,7 @@ fi
 
 # Run all tests via CTest
 if [ -n "$RUN_ALL" ]; then
-    cd "$BUILD_DIR" && ctest --preset gw --output-on-failure
+    cd "$SCRIPT_DIR" && ctest --preset gw --output-on-failure
     exit $?
 fi
 
