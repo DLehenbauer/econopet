@@ -208,9 +208,9 @@ static uint16_t callback_addr;
 static void* callback_context;
 static uint16_t callback_resume_addr;  // Address to resume at
 
-static uint16_t test_callback(uint16_t addr, void* context) {
+static uint16_t test_callback(uint16_t pc, void* context) {
     callback_invoked = true;
-    callback_addr = addr;
+    callback_addr = pc;
     callback_context = context;
     return callback_resume_addr;
 }

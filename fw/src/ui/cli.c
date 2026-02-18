@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "cli.h"
 
+#include "breakpoint.h"
 #include "console.h"
 #include "diag/log/log.h"
 #include "display/display.h"
@@ -17,6 +18,7 @@ static size_t line_length = 0;
 static bool in_remote_mode = false;
 
 // Forward declarations for command handlers
+static void cmd_bp(const char* args);
 static void cmd_help(const char* args);
 static void cmd_log(const char* args);
 static void cmd_remote(const char* args);
@@ -30,6 +32,7 @@ typedef struct {
 } cli_command_t;
 
 static const cli_command_t commands[] = {
+    { "bp",     "List active breakpoints",                   cmd_bp },
     { "help",   "Show this help message",                    cmd_help },
     { "log",    "Show log [debug|info|warn]",                cmd_log },
     { "remote", "Remote control PET (Ctrl+C to exit)",       cmd_remote },
@@ -43,6 +46,22 @@ static const char* const level_prefixes[] = {
     "I",  // INFO
     "W"   // WARN
 };
+
+static void cmd_bp(const char* args) {
+    (void)args;
+
+    int count = bp_count();
+    if (count == 0) {
+        console_puts("(no active breakpoints)\r\n");
+        return;
+    }
+
+    printf("%d active breakpoint(s):\r\n", count);
+    for (int i = 0; i < count; i++) {
+        printf("  $%04X\r\n", bp_get(i)->addr);
+    }
+    fflush(stdout);
+}
 
 static void cmd_help(const char* args) {
     (void)args;

@@ -15,3 +15,10 @@ void* vetted_malloc(size_t __size);
  */
 #define vet(cond, fmt, ...) \
     do { if (!(cond)) fatal(fmt, ##__VA_ARGS__); } while (0)
+
+/**
+ * Verify that 'index' is in the range [0, length).  Calls fatal() on failure.
+ */
+#define vet_index(index, length) \
+    vet((size_t)(index) < (size_t)(length), \
+        "index out of range: %zu (length %zu)", (size_t)(index), (size_t)(length))

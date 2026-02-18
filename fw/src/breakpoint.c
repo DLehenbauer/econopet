@@ -12,14 +12,6 @@
 #define NOP_OPCODE 0xEA
 #define JMP_OPCODE 0x4C
 
-typedef struct bp_entry_s {
-    uint16_t      addr;        // PET address where breakpoint is set
-    uint8_t       original[3]; // Original bytes before patching (for JMP redirect)
-    bool          active;      // true if STP has been written to SRAM
-    bp_callback_t callback;    // Optional callback invoked when breakpoint fires
-    void*         context;     // User-provided context passed to callback
-} bp_entry_t;
-
 static bp_entry_t bp_table[BP_MAX];
 static int bp_entry_count = 0;
 
@@ -169,4 +161,9 @@ void bp_task() {
 
 int bp_count() {
     return bp_entry_count;
+}
+
+const bp_entry_t* bp_get(int index) {
+    vet_index(index, bp_entry_count);
+    return &bp_table[index];
 }
