@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -158,6 +159,25 @@ void watchdog_enable(unsigned int delay_ms, bool pause_on_debug) {
 // Mock system_reset function (used by fatal to restart)
 void system_reset(void) {
     abort();
+}
+
+// Mock fatal function. Prints the formatted error message to stderr, then calls
+// abort() so that tests can detect it using
+// tcase_add_test_raise_signal(tc, test_fn, SIGABRT) in a forked runner.
+void fatal(const char* const format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "fatal: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+    abort();
+}
+
+void* vetted_malloc(size_t size) {
+    void* p = malloc(size);
+    assert(p != NULL);
+    return p;
 }
 
 // Mock Pico SDK time function - returns microseconds since epoch

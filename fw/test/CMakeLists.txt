@@ -35,7 +35,6 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/window.c
-    ${SRC_DIR}/fatal.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/system_state.c

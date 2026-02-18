@@ -28,7 +28,7 @@ void bp_init();
 // If 'callback' is NULL, the breakpoint logs and resumes at 'addr'.
 // Returns true on success, false if the table is full or a breakpoint already
 // exists at 'addr'.
-bool bp_set(uint16_t addr, bp_callback_t callback, void* context);
+void bp_set(uint16_t addr, bp_callback_t callback, void* context);
 
 // Remove the breakpoint at 'addr'. Restores the original instruction byte and
 // removes the entry from the table. Returns true on success, false if no

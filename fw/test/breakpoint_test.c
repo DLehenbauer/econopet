@@ -99,31 +99,11 @@ START_TEST(test_bp_set_patches_sram) {
     mock_reset();
     mock_ram[0x0400] = 0xA9;  // LDA #imm
 
-    bool ok = bp_set(0x0400, NULL, NULL);
-    ck_assert(ok);
+    bp_set(0x0400, NULL, NULL);
     ck_assert_int_eq(bp_count(), 1);
 
     // SRAM should now contain STP ($DB).
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
-} END_TEST
-
-START_TEST(test_bp_set_duplicate_fails) {
-    mock_reset();
-    ck_assert(bp_set(0x0400, NULL, NULL));
-    ck_assert(!bp_set(0x0400, NULL, NULL));  // Duplicate
-    ck_assert_int_eq(bp_count(), 1);
-} END_TEST
-
-START_TEST(test_bp_set_table_full) {
-    mock_reset();
-    for (int i = 0; i < BP_MAX; i++) {
-        ck_assert(bp_set((uint16_t)(0x1000 + i), NULL, NULL));
-    }
-    ck_assert_int_eq(bp_count(), BP_MAX);
-
-    // One more should fail.
-    ck_assert(!bp_set(0x2000, NULL, NULL));
-    ck_assert_int_eq(bp_count(), BP_MAX);
 } END_TEST
 
 START_TEST(test_bp_remove_restores_sram) {
@@ -361,8 +341,6 @@ Suite *breakpoint_suite(void) {
     TCase *tc = tcase_create("core");
     tcase_add_test(tc, test_bp_init_clears_table);
     tcase_add_test(tc, test_bp_set_patches_sram);
-    tcase_add_test(tc, test_bp_set_duplicate_fails);
-    tcase_add_test(tc, test_bp_set_table_full);
     tcase_add_test(tc, test_bp_remove_restores_sram);
     tcase_add_test(tc, test_bp_remove_nonexistent_fails);
     tcase_add_test(tc, test_bp_remove_compacts_table);

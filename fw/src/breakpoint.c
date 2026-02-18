@@ -6,6 +6,7 @@
 
 #include "diag/log/log.h"
 #include "driver.h"
+#include "fatal.h"
 
 #define STP_OPCODE 0xDB
 #define NOP_OPCODE 0xEA
@@ -37,16 +38,9 @@ void bp_init() {
     memset(bp_table, 0, sizeof(bp_table));
 }
 
-bool bp_set(uint16_t addr, bp_callback_t callback, void* context) {
-    if (bp_find(addr) >= 0) {
-        log_warn("bp_set: breakpoint already exists at $%04X", addr);
-        return false;
-    }
-
-    if (bp_entry_count >= BP_MAX) {
-        log_warn("bp_set: table full (%d/%d)", bp_entry_count, BP_MAX);
-        return false;
-    }
+void bp_set(uint16_t addr, bp_callback_t callback, void* context) {
+    vet(bp_find(addr) < 0, "bp_set: breakpoint already exists at $%04X", addr);
+    vet(bp_entry_count < BP_MAX, "bp_set: table full (%d/%d)", bp_entry_count, BP_MAX);
 
     // Read 3 bytes to support JMP redirect
     uint8_t orig0 = spi_read_at(addr);
@@ -65,7 +59,6 @@ bool bp_set(uint16_t addr, bp_callback_t callback, void* context) {
     spi_write_at(addr, STP_OPCODE);
     log_info("bp_set: $%04X (was $%02X, callback=%s)", addr, orig0,
              callback ? "yes" : "no");
-    return true;
 }
 
 bool bp_remove(uint16_t addr) {
