@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1771356326" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1771375529" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -43,6 +43,7 @@
         <efx:design_file name="src/delay.sv" version="default" library="default"/>
         <efx:design_file name="src/cpu_data_mux.sv" version="default" library="default"/>
         <efx:design_file name="src/open_bus.sv" version="default" library="default"/>
+        <efx:design_file name="src/breakpoint.sv" version="default" library="default"/>
         <efx:top_vhdl_arch name=""/>
     </efx:design_info>
     <efx:constraint_info>
@@ -50,7 +51,6 @@
         <efx:inter_file name=""/>
     </efx:constraint_info>
     <efx:sim_info>
-        <efx:sim_file name="sim/sim.sv"/>
         <efx:sim_file name="sim/spi_driver.sv"/>
         <efx:sim_file name="sim/spi_tb.sv"/>
         <efx:sim_file name="sim/spi1_tb.sv"/>
@@ -85,6 +85,7 @@
         <efx:sim_file name="sim/memory_map_tb.sv"/>
         <efx:sim_file name="sim/cpu_data_mux_tb.sv"/>
         <efx:sim_file name="sim/open_bus_tb.sv"/>
+        <efx:sim_file name="sim/breakpoint_tb.sv"/>
     </efx:sim_info>
     <efx:misc_info/>
     <efx:ip_info/>
