@@ -485,16 +485,28 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     // Parse video-ram-kb from YAML (1-4), then convert to mask (0-3)
     uint32_t video_ram_kb = 1;  // Default: 1KB
 
+    // Temporary buffer for the tape hex blob (decoded via parse_as_hex).
+    uint8_t tape_blob_data[TAPE_CONFIG_SIZE];
+    binary_t tape_blob = {
+        .data = tape_blob_data,
+        .size = 0,
+        .expected = TAPE_CONFIG_SIZE,
+        .capacity = TAPE_CONFIG_SIZE,
+    };
+
     options_t options = {
         .columns = 40,          // Default value
         .video_ram_mask = 0,    // Default value (will be derived from video_ram_kb)
         .usb_keymap = { 0 },    // Default: empty (use default keymap)
+        .tape = { 0 },          // Default: disabled
+        .tape_enabled = false,
     };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
         { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
         { "usb-keymap", parse_as_string, &options.usb_keymap, sizeof(options.usb_keymap) },
+        { "tape", parse_as_hex, &tape_blob, sizeof(tape_blob) },
         { NULL, NULL, NULL, 0 }
     });
 
@@ -508,6 +520,13 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
 
     // Convert KB (1-4) to mask (0-3)
     options.video_ram_mask = video_ram_kb - 1;
+
+    // If the tape hex blob was present, copy the decoded bytes into options.
+    if (tape_blob.size != 0) {
+        assert(tape_blob.size == TAPE_CONFIG_SIZE);
+        memcpy(&options.tape, tape_blob.data, TAPE_CONFIG_SIZE);
+        options.tape_enabled = true;
+    }
 
     if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_options) {
         parser->sink->setup->on_set_options(parser->sink->setup->context, &options);

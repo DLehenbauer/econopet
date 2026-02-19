@@ -18,6 +18,7 @@ configs:
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
+        tape: "2ef415f4c9cad1d4da"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -49,6 +50,7 @@ configs:
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
+        tape: "2ef415f4c9cad1d4da"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for 40 column models.
@@ -99,6 +101,7 @@ configs:
         usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
   - name: "PET 80xx (80 Col 60 Hz)"
     setup:
       - action: "load"
@@ -131,6 +134,7 @@ configs:
         usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
   - name: "PET 2001 (Upgraded ROMs)"
     setup:
       - action: "load"
@@ -160,7 +164,7 @@ configs:
           - action: "copy"
             source: 0xe6f2
             destination: 0xe6eb
-            length: 0x06            
+            length: 0x06
         else:
           # For the business keyboard, we use the editor ROM for the 30xxB, which is almost
           # identical except that:
@@ -183,6 +187,7 @@ configs:
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
+        tape: "eff3d6f3c9cad1d4da"
   - name: "PET 2001 (Original ROMs)"
     setup:
       - action: "load"
@@ -230,6 +235,7 @@ configs:
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
+        tape: "e5f362f3e5e6eef1f9"
   - name: "ColourPET (40 Col 60 Hz)"
     setup:
       - action: "load"
@@ -262,3 +268,4 @@ configs:
         usb-keymap: "/ukm/us.bin"
         columns: 40
         video-ram-kb: 3
+        tape: "2ef415f4c9cad1d4da"

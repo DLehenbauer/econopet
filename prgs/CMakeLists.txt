@@ -6,3 +6,4 @@ project(prgs LANGUAGES NONE)
 
 add_subdirectory(bp)
 add_subdirectory(open-bus)
+add_subdirectory(reload)

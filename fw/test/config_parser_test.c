@@ -32,6 +32,8 @@ typedef struct test_context_s {
     uint32_t last_columns;
     uint32_t last_video_ram_mask;
     char last_usb_keymap[261];
+    tape_config_t last_tape;
+    bool last_tape_enabled;
     uint32_t last_checksum_start;
     uint32_t last_checksum_end;
     uint32_t last_checksum_fix;
@@ -86,6 +88,8 @@ static void test_on_set_options(void* context, options_t* options) {
     ctx->last_video_ram_mask = options->video_ram_mask;
     strncpy(ctx->last_usb_keymap, options->usb_keymap, sizeof(ctx->last_usb_keymap) - 1);
     ctx->last_usb_keymap[sizeof(ctx->last_usb_keymap) - 1] = '\0';
+    ctx->last_tape = options->tape;
+    ctx->last_tape_enabled = options->tape_enabled;
 }
 
 static void test_on_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
@@ -571,6 +575,38 @@ START_TEST(test_validate_sdcard_config_yaml) {
 }
 END_TEST
 
+// Test: Parse config with tape hex blob in set action
+START_TEST(test_parse_set_tape) {
+    // ROM 4 blob: ld210=$F42E; bp=$F415; eal=$C9; eah=$CA; fnlen=$D1; devnum=$D4; fnadr=$DA
+    const char* yaml_content = 
+        "configs:\n"
+        "  - name: Tape Test\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        tape: \"2ef415f4c9cad1d4da\"\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, 0);
+    
+    ck_assert_int_eq(test_ctx.set_options_count, 1);
+    ck_assert(test_ctx.last_tape_enabled);
+    
+    // Verify LD210 address ($F42E)
+    ck_assert_int_eq(test_ctx.last_tape.ld210, 0xF42E);
+    
+    // Verify breakpoint address ($F415 = JSR LD15)
+    ck_assert_int_eq(test_ctx.last_tape.bp_addr, 0xF415);
+    
+    // Verify zero page locations
+    ck_assert_int_eq(test_ctx.last_tape.eal, 0xC9);
+    ck_assert_int_eq(test_ctx.last_tape.eah, 0xCA);
+    ck_assert_int_eq(test_ctx.last_tape.fnlen, 0xD1);
+    ck_assert_int_eq(test_ctx.last_tape.devnum, 0xD4);
+    ck_assert_int_eq(test_ctx.last_tape.fnadr, 0xDA);
+}
+END_TEST
+
 Suite *config_parser_suite(void) {
     Suite *s;
     TCase *tc_core;
@@ -598,6 +634,7 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_multiple_load_files);
     tcase_add_test(tc_core, test_enumerate_all_configs);
     tcase_add_test(tc_core, test_validate_sdcard_config_yaml);
+    tcase_add_test(tc_core, test_parse_set_tape);
     
     suite_add_tcase(s, tc_core);
 

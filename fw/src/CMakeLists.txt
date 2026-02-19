@@ -57,6 +57,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/display.c
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
+    ${FW_SRC_DIR}/tape.c
     ${FW_SRC_DIR}/term_inject.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c

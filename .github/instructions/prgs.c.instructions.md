@@ -1,6 +1,6 @@
 ---
 description: 'C coding conventions for Commodore PET/CBM test and utility programs compiled with CC65'
-applyTo: 'prgs/**/*.c, prgs/**/*.h, prgs/**/*.s, prgs/**/CMakeLists.txt'
+applyTo: 'prgs/**/*.c, prgs/**/*.h, prgs/**/*.s'
 ---
 
 # PET/CBM Program Guidelines

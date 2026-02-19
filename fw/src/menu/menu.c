@@ -23,6 +23,7 @@
 #include "roms/roms.h"
 #include "sd/sd.h"
 #include "system_state.h"
+#include "tape.h"
 #include "usb/keyboard.h"
 
 // When navigating the SD card's file system, this is the maximum number
@@ -169,6 +170,8 @@ void action_set_options(void* context, options_t* options) {
 
     write_pet_model(ctx->system_state);
 
+    tape_init(options->tape_enabled ? &options->tape : NULL);
+
     log_debug("Set options: %lu columns, video RAM mask %lu", options->columns, options->video_ram_mask);
 }
 
@@ -228,6 +231,8 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
 
 void menu_enter(void) {
     log_info("-- Enter Menu --");
+
+    tape_deinit();
 
     system_state.video_source = video_source_firmware;
     

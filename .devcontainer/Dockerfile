@@ -138,6 +138,10 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 #
 #   cc65
 #
+# Install VICE emulator for utilities (petcat)
+#
+#   vice
+#
 # To fix warnings from Cortex-Debug extension:
 # (See https://forums.raspberrypi.com/viewtopic.php?t=333146)
 #
@@ -205,7 +209,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     python3 \
     python3-pip \
     texinfo \
-    universal-ctags
+    universal-ctags \
+    vice
 
 # Fail build if CMake is not installed correctly.
 RUN cmake --version
