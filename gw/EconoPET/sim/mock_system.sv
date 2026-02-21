@@ -17,8 +17,15 @@ module mock_system (
 
     // Bus
     logic [CPU_ADDR_WIDTH-1:0] bus_addr;
-    logic [DATA_WIDTH-1:0]     bus_data;
+    wire  [DATA_WIDTH-1:0]     bus_data;
     logic bus_we_n;
+
+    // Non-RAM drivers produce a value and output-enable that are
+    // conditionally driven onto the shared bus wire.
+    logic [DATA_WIDTH-1:0] bus_data_mux;
+    logic                  bus_data_mux_oe;
+
+    assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
 
     // CPU
     logic cpu_be;
@@ -127,8 +134,6 @@ module mock_system (
         .ready_i(cpu_ready_o)
     );
 
-    logic [DATA_WIDTH-1:0] ram_data;
-
     wire [RAM_ADDR_WIDTH-1:0] ram_addr = {
         ram_addr_a16_o,
         ram_addr_a15_o,
@@ -138,13 +143,12 @@ module mock_system (
         bus_addr[9:0]
     };
 
-    mock_ram mock_ram (
-        .clock_i(sys_clock),
-        .ram_addr_i(ram_addr),
-        .ram_data_i(bus_data),
-        .ram_data_o(ram_data),
-        .ram_we_n_i(ram_we_n_o),
-        .ram_oe_n_i(ram_oe_n_o)
+    mock_sram mock_sram (
+        .addr_i(ram_addr),
+        .data_io(bus_data),
+        .ce_ni(1'b0),
+        .oe_ni(ram_oe_n_o),
+        .we_ni(ram_we_n_o)
     );
 
     mock_bus mock_bus (
@@ -164,17 +168,17 @@ module mock_system (
         .cpu_data_i(cpu_data),
         .cpu_we_n_i(cpu_we_n),
 
-        // Incoming bus outputs from 'mock_ram' module
-        .ram_data_i(ram_data),
-        .ram_oe_n_o(ram_oe_n_o),
-        .ram_we_n_o(ram_we_n_o),
+        // RAM control signals (active-low, directly from FPGA 'top' module)
+        .ram_oe_n_i(ram_oe_n_o),
+        .ram_we_n_i(ram_we_n_o),
 
         // Incoming bus outputs from 'mock_io' module
         .io_data_i(8'h10),
         .io_oe_n_i(io_oe_n),
 
         .bus_addr_o(bus_addr),
-        .bus_data_o(bus_data),
+        .bus_data_o(bus_data_mux),
+        .bus_data_oe_o(bus_data_mux_oe),
         .bus_we_n_o(bus_we_n)
     );
 
@@ -197,12 +201,12 @@ module mock_system (
         //
         // Helpful 6502 opcode reference:
         // http://www.6502.org/tutorials/6502opcodes.html
-        mock_ram.load_rom(16'h8800, "characters-2.901447-10.bin");
-        mock_ram.load_rom(16'hb000, "basic-4-b000.901465-23.bin");
-        mock_ram.load_rom(16'hc000, "basic-4-c000.901465-20.bin");
-        mock_ram.load_rom(16'hd000, "basic-4-d000.901465-21.bin");
-        mock_ram.load_rom(16'he000, "edit-4-80-b-60Hz.901474-03.bin");
-        mock_ram.load_rom(16'hf000, "kernal-4.901465-22.bin");
+        mock_sram.load_rom(16'h8800, "characters-2.901447-10.bin");
+        mock_sram.load_rom(16'hb000, "basic-4-b000.901465-23.bin");
+        mock_sram.load_rom(16'hc000, "basic-4-c000.901465-20.bin");
+        mock_sram.load_rom(16'hd000, "basic-4-d000.901465-21.bin");
+        mock_sram.load_rom(16'he000, "edit-4-80-b-60Hz.901474-03.bin");
+        mock_sram.load_rom(16'hf000, "kernal-4.901465-22.bin");
     endtask
 
     task static ram_fill(
@@ -210,7 +214,7 @@ module mock_system (
         input logic [RAM_ADDR_WIDTH-1:0] end_addr,
         input logic [DATA_WIDTH-1:0] data
     );
-        mock_ram.fill(start_addr, end_addr, data);
+        mock_sram.fill(start_addr, end_addr, data);
     endtask
 
     task static spi_read (

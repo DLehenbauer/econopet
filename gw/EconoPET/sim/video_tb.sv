@@ -27,6 +27,7 @@ module video_tb;
         .cpu_be_o(),
         .cpu_clock_o(),
         .cpu_data_strobe_o(clk1n_en),
+        .cpu_wr_en_o(),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .grant_o(grant),

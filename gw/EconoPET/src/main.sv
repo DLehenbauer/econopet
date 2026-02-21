@@ -148,6 +148,7 @@ module main (
     logic clk16_en;
     logic clk8_en;
     logic cpu_data_strobe;
+    logic cpu_wr_en;
     logic load_sr1;
     logic load_sr2;
     logic [0:0] grant;
@@ -160,6 +161,7 @@ module main (
         .cpu_be_o(cpu_be_o),
         .cpu_clock_o(cpu_clock_o),
         .cpu_data_strobe_o(cpu_data_strobe),
+        .cpu_wr_en_o(cpu_wr_en),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .grant_o(grant),
@@ -534,7 +536,6 @@ module main (
     );
 
     wire cpu_rd_en = cpu_be_o && !cpu_we_i;
-    wire cpu_wr_en = cpu_be_o &&  cpu_we_i && cpu_clock_o;
 
     assign io_oe_o   = io_en   && cpu_be_o && !io_doe;
     assign pia1_cs_o = pia1_en && cpu_be_o && !io_doe;
@@ -542,7 +543,7 @@ module main (
     assign via_cs_o  =  via_en && cpu_be_o;
 
     assign ram_oe_o         = (cpu_rd_en && ram_en) || ram_ctl_oe;
-    assign ram_we_o         = (cpu_wr_en && ram_en && !is_readonly) || ram_ctl_we;
+    assign ram_we_o         = (cpu_wr_en && cpu_we_i && ram_en && !is_readonly) || ram_ctl_we;
 
     assign cpu_addr_oe      = !cpu_be_o;
     assign cpu_addr_o       = ram_ctl_addr[15:0];

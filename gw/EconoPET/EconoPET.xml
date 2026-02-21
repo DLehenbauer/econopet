@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="EconoPET" description="" last_change="1771684167" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="change" place_ood="change" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="EconoPET" description="" last_change="1771699364" sw_version="2025.1.110" last_run_state="pass" last_run_flow="bitstream" config_result_in_sync="sync" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T8Q144"/>
@@ -70,7 +70,8 @@
         <efx:sim_file name="sim/wbp_mux_tb.sv"/>
         <efx:sim_file name="sim/wbc_mux_tb.sv"/>
         <efx:sim_file name="sim/wb_driver.sv"/>
-        <efx:sim_file name="sim/mock_ram.sv"/>
+        <efx:sim_file name="sim/mock_sram.sv"/>
+        <efx:sim_file name="sim/mock_sram_tb.sv"/>
         <efx:sim_file name="sim/mock_cpu.sv"/>
         <efx:sim_file name="sim/mock_bus.sv"/>
         <efx:sim_file name="sim/mock_system.sv"/>

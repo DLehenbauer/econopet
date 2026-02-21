@@ -17,6 +17,7 @@ module timing_tb;
     logic cpu_be;
     logic cpu_clock;
     logic cpu_data_strobe;
+    logic cpu_wr_en;
     logic load_sr1;
     logic load_sr2;
     logic [0:0] grant;
@@ -29,6 +30,7 @@ module timing_tb;
         .cpu_be_o(cpu_be),
         .cpu_clock_o(cpu_clock),
         .cpu_data_strobe_o(cpu_data_strobe),
+        .cpu_wr_en_o(cpu_wr_en),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
         .grant_o(grant),

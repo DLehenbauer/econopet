@@ -10,6 +10,7 @@ module timing (
     output logic cpu_be_o,
     output logic cpu_clock_o,
     output logic cpu_data_strobe_o,
+    output logic cpu_wr_en_o,
     output logic load_sr1_o,
     output logic load_sr2_o,
     output logic [0:0] grant_o,
@@ -21,6 +22,7 @@ module timing (
         cpu_be_o          = 1'b0;
         cpu_clock_o       = 1'b0;
         cpu_data_strobe_o = 1'b0;
+        cpu_wr_en_o       = 1'b0;
     end
 
     localparam COUNTER_WIDTH = 6;
@@ -59,19 +61,18 @@ module timing (
     assign load_sr1_o = grant == CPU_1 && clk8_en_o;
     assign load_sr2_o = (grant == CPU_1 || grant == SPI_1) && clk8_en_o;
 
-    localparam CPU_tBVD  = 30,  // CPU BE to Valid Data (tBVD)
-               CPU_tPWH  = 62,  // CPU Clock Pulse Width High (tPWH)
-               CPU_tDSR  = 15,  // CPU Data Setup Time (tDSR)
-               CPU_tDHx  = 10,  // CPU Data Hold Time (tDHR, tDHW)
-               CPU_tMDS  = 40,  // CPU Write Data Delay Time (tMDS)
-               RAM_tAA   = 55,  // RAM Address Access Time (tAA)
-               IO_tCDR   = 20,  // PIA/VIA Data Bus Delay Time (tCDR)
-               IOTX_t    = 11,  // IO Transceiver Enable Delay (tPZL)
-               IOTX_tPD  =  7;  // IO Transceiver Propagation Delay (tPLH/tPHL budget)
+    // Worst-case data hold time across read (tDHR) and write (tDHW) paths.
+    localparam int CPU_tDHx = common_pkg::max2(CPU_tDHR, CPU_tDHW);
+
+    // Worst-case IO transceiver enable delay across all /OE-to-output paths.
+    localparam int IOTX_t = common_pkg::max4(IOTX_tPZL_A, IOTX_tPZH_A, IOTX_tPZL_B, IOTX_tPZH_B);
+
+    // Worst-case IO transceiver propagation delay across all signal paths.
+    localparam int IOTX_tPD = common_pkg::max4(IOTX_tPLH_AB, IOTX_tPHL_AB, IOTX_tPLH_BA, IOTX_tPHL_BA);
 
     localparam int CYCLES_BVD   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tBVD),
                    CYCLES_IOTX  = common_pkg::ns_to_cycles_with_trace_delay(IOTX_t),
-                   CYCLES_AA    = common_pkg::ns_to_cycles_with_trace_delay(RAM_tAA),
+                   CYCLES_AA    = common_pkg::ns_to_cycles_with_trace_delay(SRAM_tAA),
                    CYCLES_MDS   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tMDS),
                    CYCLES_CDR   = common_pkg::ns_to_cycles_with_trace_delay(IO_tCDR + IOTX_tPD),
                    CYCLES_PWH   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tPWH),
@@ -94,14 +95,20 @@ module timing (
     localparam int CPU_DATA_STROBE_RAM = CPU_BE_START + CYCLES_BVD + CYCLES_AA,
                    CPU_DATA_STROBE_CPU = CPU_PHI_START + CYCLES_MDS,
                    CPU_DATA_STROBE_IO  = CPU_PHI_START + CYCLES_CDR,
-                   CPU_DATA_STROBE     = (CPU_DATA_STROBE_RAM >= CPU_DATA_STROBE_CPU)
-                                       ? (CPU_DATA_STROBE_RAM >= CPU_DATA_STROBE_IO ? CPU_DATA_STROBE_RAM : CPU_DATA_STROBE_IO)
-                                       : (CPU_DATA_STROBE_CPU >= CPU_DATA_STROBE_IO ? CPU_DATA_STROBE_CPU : CPU_DATA_STROBE_IO);
+                   CPU_DATA_STROBE     = common_pkg::max3(CPU_DATA_STROBE_RAM, CPU_DATA_STROBE_CPU, CPU_DATA_STROBE_IO);
+
+    // Write pulse: asserts at CPU_DATA_STROBE (CPU write data is guaranteed
+    // valid) and deasserts one cycle before PHI2 falls. This ensures the
+    // address and data buses are still stable when the SRAM latches on the
+    // rising edge of WE_N.
+    localparam int CPU_WR_START = CPU_DATA_STROBE,
+                   CPU_WR_END   = CPU_PHI_END - 1;
 
     // Truncate to COUNTER_WIDTH bits
     localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START_W    = COUNTER_WIDTH'(CPU_BE_START),
                                        CPU_PHI_START_W   = COUNTER_WIDTH'(CPU_PHI_START),
                                        CPU_DATA_STROBE_W = COUNTER_WIDTH'(CPU_DATA_STROBE),
+                                       CPU_WR_END_W      = COUNTER_WIDTH'(CPU_WR_END),
                                        CPU_PHI_END_W     = COUNTER_WIDTH'(CPU_PHI_END),
                                        CPU_BE_END_W      = COUNTER_WIDTH'(CPU_BE_END);
 
@@ -117,6 +124,10 @@ module timing (
             end
             CPU_DATA_STROBE_W: begin
                 cpu_data_strobe_o <= 1'b1;
+                cpu_wr_en_o <= 1'b1;
+            end
+            CPU_WR_END_W: begin
+                cpu_wr_en_o <= 1'b0;
             end
             CPU_PHI_END_W: begin
                 cpu_clock_o <= 1'b0;
@@ -139,6 +150,8 @@ module timing (
             $fatal(1, "CPU_DATA_STROBE (%0d) does not fit in %0d bits", CPU_DATA_STROBE, COUNTER_WIDTH);
         if (CPU_PHI_END     != int'(CPU_PHI_END_W))
             $fatal(1, "CPU_PHI_END (%0d) does not fit in %0d bits", CPU_PHI_END, COUNTER_WIDTH);
+        if (CPU_WR_END      != int'(CPU_WR_END_W))
+            $fatal(1, "CPU_WR_END (%0d) does not fit in %0d bits", CPU_WR_END, COUNTER_WIDTH);
         if (CPU_BE_END      != int'(CPU_BE_END_W))
             $fatal(1, "CPU_BE_END (%0d) does not fit in %0d bits", CPU_BE_END, COUNTER_WIDTH);
 
@@ -168,10 +181,10 @@ module timing (
                 CPU_DATA_STROBE, CPU_PHI_START, CPU_PHI_END);
 
         // RAM read setup: address out (tBVD + trace) then access time (tAA + trace)
-        if ((CPU_DATA_STROBE - CPU_BE_START) * NS_PER_CYCLE < CPU_tBVD + RAM_tAA + 2 * MAX_TRACE_DELAY_NS)
+        if ((CPU_DATA_STROBE - CPU_BE_START) * NS_PER_CYCLE < CPU_tBVD + SRAM_tAA + 2 * MAX_TRACE_DELAY_NS)
             $fatal(1, "RAM read setup %.1fns violates tBVD + tAA + 2*trace >= %0dns",
                 (CPU_DATA_STROBE - CPU_BE_START) * NS_PER_CYCLE,
-                CPU_tBVD + RAM_tAA + 2 * MAX_TRACE_DELAY_NS);
+                CPU_tBVD + SRAM_tAA + 2 * MAX_TRACE_DELAY_NS);
 
         // CPU write setup: PHI2 to CPU (trace) + write data delay (tMDS) + data back (trace)
         if ((CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE < CPU_tMDS + 2 * MAX_TRACE_DELAY_NS)
@@ -185,14 +198,35 @@ module timing (
                 (CPU_DATA_STROBE - CPU_PHI_START) * NS_PER_CYCLE,
                 IO_tCDR + IOTX_tPD + 2 * MAX_TRACE_DELAY_NS);
 
+        // Write pulse width must meet minimum (tWP)
+        if ((CPU_WR_END - CPU_WR_START) * NS_PER_CYCLE < SRAM_tWP)
+            $fatal(1, "Write pulse %.1fns violates tWP >= %0dns",
+                (CPU_WR_END - CPU_WR_START) * NS_PER_CYCLE, SRAM_tWP);
+
+        // Write data must be valid tDW before end of write
+        if ((CPU_WR_END - CPU_DATA_STROBE) * NS_PER_CYCLE < SRAM_tDW)
+            $fatal(1, "Write data setup %.1fns violates tDW >= %0dns",
+                (CPU_WR_END - CPU_DATA_STROBE) * NS_PER_CYCLE, SRAM_tDW);
+
+        // Address must be valid tAW before end of write (address valid from BE start + tBVD)
+        if ((CPU_WR_END - CPU_BE_START) * NS_PER_CYCLE < SRAM_tAW + CPU_tBVD)
+            $fatal(1, "Write address setup %.1fns violates tAW + tBVD >= %0dns",
+                (CPU_WR_END - CPU_BE_START) * NS_PER_CYCLE, SRAM_tAW + CPU_tBVD);
+
+        // Write pulse must end before PHI2 falls
+        if (CPU_WR_END >= CPU_PHI_END)
+            $fatal(1, "CPU_WR_END (%0d) must be before CPU_PHI_END (%0d)",
+                CPU_WR_END, CPU_PHI_END);
+
         // Sequential ordering of bus events
         if (!(CPU_BE_START < CPU_PHI_START
            && CPU_PHI_START < CPU_DATA_STROBE
-           && CPU_DATA_STROBE < CPU_PHI_END
+           && CPU_DATA_STROBE < CPU_WR_END
+           && CPU_WR_END < CPU_PHI_END
            && CPU_PHI_END < CPU_BE_END
            && CPU_BE_END < CPU_END))
-            $fatal(1, "CPU timing events out of order: BE_START=%0d PHI_START=%0d DATA_STROBE=%0d PHI_END=%0d BE_END=%0d END=%0d",
-                CPU_BE_START, CPU_PHI_START, CPU_DATA_STROBE, CPU_PHI_END, CPU_BE_END, CPU_END);
+            $fatal(1, "CPU timing events out of order: BE_START=%0d PHI_START=%0d DATA_STROBE=%0d WR_END=%0d PHI_END=%0d BE_END=%0d END=%0d",
+                CPU_BE_START, CPU_PHI_START, CPU_DATA_STROBE, CPU_WR_END, CPU_PHI_END, CPU_BE_END, CPU_END);
     end
     // synthesis on
 endmodule

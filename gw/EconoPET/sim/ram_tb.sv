@@ -26,6 +26,14 @@ module ram_tb;
     logic [    DATA_WIDTH-1:0] ram_data_o;
     logic                      ram_data_oe;
 
+    // Bidirectional data bus between the Wishbone RAM peripheral and the SRAM.
+    // The FPGA drives the bus during writes (ram_data_oe asserted). The SRAM
+    // drives the bus during reads (via its bidirectional data_io port).
+    wire [DATA_WIDTH-1:0] ram_data_bus;
+
+    assign ram_data_bus = ram_data_oe ? ram_data_o : {DATA_WIDTH{1'bz}};
+    assign ram_data_i   = ram_data_bus;
+
     ram ram (
         .wb_clock_i(clock),
         .wbp_addr_i(common_pkg::wb_ram_addr(addr)),
@@ -45,13 +53,12 @@ module ram_tb;
         .ram_data_oe(ram_data_oe)
     );
 
-    mock_ram mock_ram (
-        .clock_i(clock),
-        .ram_oe_n_i(!ram_oe_o),
-        .ram_we_n_i(!ram_we_o),
-        .ram_addr_i(ram_addr_o),
-        .ram_data_i(ram_data_o),
-        .ram_data_o(ram_data_i)
+    mock_sram mock_sram (
+        .addr_i(ram_addr_o),
+        .data_io(ram_data_bus),
+        .ce_ni(1'b0),
+        .oe_ni(!ram_oe_o),
+        .we_ni(!ram_we_o)
     );
 
     wb_driver wb (

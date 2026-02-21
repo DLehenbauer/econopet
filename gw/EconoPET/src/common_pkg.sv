@@ -40,8 +40,96 @@ package common_pkg;
         return int'($ceil((time_ns + MAX_TRACE_DELAY_NS) / NS_PER_CYCLE));
     endfunction
 
+    // Icarus Verilog cannot evaluate dynamic-array functions in constant
+    // expressions, so we provide fixed-arity max helpers for use in
+    // localparam initializers.
+
+    function int max2(input int a, input int b);
+        return a > b ? a : b;
+    endfunction
+
+    function int max3(input int a, input int b, input int c);
+        return max2(max2(a, b), c);
+    endfunction
+
+    function int max4(input int a, input int b, input int c, input int d);
+        return max2(max2(a, b), max2(c, d));
+    endfunction
+
     localparam int unsigned DATA_WIDTH      = 8;                    // 6502 and Wishbone data buses are 1 byte wide.
     localparam int unsigned BIT_INDEX_WIDTH = $clog2(DATA_WIDTH);   // Bits required to index into a byte (0-7).
+
+    //
+    // AS6C1008-55PCN SRAM Timing (ns)
+    // See docs/dev/timing.md for details.
+    //
+
+    // Read cycle
+    localparam int SRAM_tRC  = 55;  // Read Cycle Time (min)
+    localparam int SRAM_tAA  = 55;  // Address Access Time (max)
+    localparam int SRAM_tACE = 55;  // Chip Enable Access Time (max)
+    localparam int SRAM_tOE  = 30;  // Output Enable Access Time (max)
+    localparam int SRAM_tCLZ = 10;  // CE to Output Low-Z (max)
+    localparam int SRAM_tOLZ =  5;  // OE to Output Low-Z (max)
+    localparam int SRAM_tCHZ = 20;  // CE Disable to Output High-Z (max)
+    localparam int SRAM_tOHZ = 20;  // OE Disable to Output High-Z (max)
+    localparam int SRAM_tOH  = 10;  // Output Hold from Address Change (min)
+
+    // Write cycle
+    localparam int SRAM_tWC  = 55;  // Write Cycle Time (min)
+    localparam int SRAM_tAW  = 50;  // Address Valid to End of Write (min)
+    localparam int SRAM_tAS  =  0;  // Address Setup Time (min)
+    localparam int SRAM_tWP  = 45;  // Write Pulse Width (min)
+    localparam int SRAM_tWR  =  0;  // Write Recovery Time (min)
+    localparam int SRAM_tDW  = 25;  // Data to Write Time Overlap (min)
+    localparam int SRAM_tDH  =  0;  // Data Hold from End of Write (min)
+    localparam int SRAM_tOW  =  5;  // Output Active from End of Write (min)
+    localparam int SRAM_tWHZ = 20;  // Write to Output High-Z (max)
+
+    //
+    // W65C02S CPU Timing (ns)
+    // See docs/dev/timing.md for details.
+    //
+
+    localparam int CPU_tACC = 70;   // Access Time (min)
+    localparam int CPU_tAH  = 10;   // Address Hold Time (min)
+    localparam int CPU_tADS = 40;   // Address Setup Time (max)
+    localparam int CPU_tBVD = 30;   // BE to Valid Data (max)
+    localparam int CPU_tPWH = 62;   // Clock Pulse Width High (min)
+    localparam int CPU_tPWL = 63;   // Clock Pulse Width Low (min)
+    localparam int CPU_tCYC = 125;  // Cycle Time (min)
+    localparam int CPU_tF   =  5;   // Fall Time (max)
+    localparam int CPU_tR   =  5;   // Rise Time (max)
+    localparam int CPU_tPCH = 10;   // Processor Control Hold Time (min)
+    localparam int CPU_tPCS = 15;   // Processor Control Setup Time (min)
+    localparam int CPU_tDHR = 10;   // Read Data Hold Time (min)
+    localparam int CPU_tDSR = 15;   // Read Data Setup Time (min)
+    localparam int CPU_tMDS = 40;   // Write Data Delay Time (max)
+    localparam int CPU_tDHW = 10;   // Write Data Hold Time (min)
+
+    //
+    // W65C21N/W65C22N PIA/VIA Timing (ns)
+    // See docs/dev/timing.md for details.
+    //
+
+    localparam int IO_tCDR = 20;    // Data Bus Delay Time (max)
+
+    //
+    // SN74LVC4245A Level Shifter Timing (ns)
+    // See docs/dev/timing.md for details.
+    //
+
+    // Propagation delay (max, ceiling)
+    localparam int IOTX_tPHL_AB =  7;   // A to B High-to-Low (max 6.3ns)
+    localparam int IOTX_tPLH_AB =  7;   // A to B Low-to-High (max 6.7ns)
+    localparam int IOTX_tPHL_BA =  7;   // B to A High-to-Low (max 6.1ns)
+    localparam int IOTX_tPLH_BA =  5;   // B to A Low-to-High (max 5.0ns)
+
+    // Enable delay: /OE assert to output valid (max, ceiling)
+    localparam int IOTX_tPZL_A  =  9;   // /OE to A Low (max 9.0ns)
+    localparam int IOTX_tPZH_A  = 10;   // /OE to A High (max 10.0ns)
+    localparam int IOTX_tPZL_B  = 11;   // /OE to B Low (max 10.3ns)
+    localparam int IOTX_tPZH_B  = 10;   // /OE to B High (max 9.8ns)
 
     //
     // PET
