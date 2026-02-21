@@ -102,7 +102,7 @@ module mock_cpu (
 
     // The 65C02 delays the transition of ADDR, DOUT, and WE until >10ns after the negative
     // clock edge.  We simulate this by capturing the next ADDR, DOUT, and WE one sys_clock
-    // cycle after the negative cpu_clock dege.
+    // cycle after the negative cpu_clock edge.
     //
     // See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf, page 26
 

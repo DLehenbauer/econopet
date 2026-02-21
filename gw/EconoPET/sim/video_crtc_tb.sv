@@ -45,6 +45,7 @@ module video_crtc_tb;
     video_crtc video_crtc (
         .wb_clock_i(clock),
         .wbp_addr_i(),           // Wishbone unused for this testbench
+        .wbp_data_i(),
         .wbp_data_o(),
         .wbp_we_i(),
         .wbp_cycle_i(),
@@ -52,6 +53,8 @@ module video_crtc_tb;
         .wbp_stall_o(),
         .wbp_ack_o(),
         .wbp_sel_i(),
+
+        .config_crt_i(1'b0),
 
         .reset_i(res),
         .clk_en_i(clk1n_en),

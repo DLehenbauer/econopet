@@ -22,7 +22,8 @@ module spi1_driver(
         .spi_cs_no(spi_cs_no),
         .spi_sd_i(spi_poci_i),
         .spi_sd_o(spi_pico_o),
-        .spi_data_o(spi_rx_data)
+        .spi_data_o(spi_rx_data),
+        .spi_ack_o()
     );
 
     task reset;

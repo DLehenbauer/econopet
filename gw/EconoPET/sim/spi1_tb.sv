@@ -24,7 +24,8 @@ module spi1_tb;
         .spi_cs_no(spi_cs_n),
         .spi_pico_o(spi_pico),
         .spi_poci_i(spi_poci),
-        .spi_stall_i(spi_stall)
+        .spi_stall_i(spi_stall),
+        .spi_data_o()
     );
 
     logic [WB_ADDR_WIDTH-1:0] addr;
@@ -42,6 +43,7 @@ module spi1_tb;
         .wbc_data_o(wr_data),
         .wbc_we_o(we),
         .wbc_cycle_o(cycle),
+        .wbc_strobe_o(),
         .wbc_stall_i(stall),
         .wbc_ack_i(ack),
 

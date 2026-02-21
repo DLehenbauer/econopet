@@ -93,6 +93,7 @@ module video_tb;
 
         // Wishbone peripheral
         .wbp_addr_i(wbp_addr),
+        .wbp_data_i('0),
         .wbp_data_o(wbp_dout),
         .wbp_we_i(wbp_we),
         .wbp_cycle_i(wbp_cycle),
