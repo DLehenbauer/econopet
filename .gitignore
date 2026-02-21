@@ -76,3 +76,8 @@ prgs/**/*.o
 #
 
 core
+
+#
+# AI agent scratch files
+#
+.agent/
