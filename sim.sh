@@ -104,7 +104,7 @@ if [ -n "$UPDATE_F_FILE" ]; then
 
     # Produce a second '.f' file for Verilator that removes all references to source
     # files under '/opt/efinity/' and 'sim/'.  (Line may start with an optional '-v')
-    grep -v -E '^(-v )?((/opt/efinity/)|(sim/)|(external/65xx))' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
+    grep -v -E '^(-v )?((/opt/efinity/)|(external/65xx))' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
 
     echo
 fi
@@ -120,7 +120,7 @@ fi
 pushd "$PROJ_DIR" || exit 1
 
 if [ -n "$LINT" ]; then
-    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -f "$PROJ_DIR/work_sim/pkgs.f" -f "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f" --top-module top
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" -f "$PROJ_DIR/work_sim/pkgs.f" -f "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f" --top-module top
     exit_on_failure
 fi
 
@@ -151,7 +151,7 @@ fi
 # Compile and run the specified test
 VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
 
-iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/65xx -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
 vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"

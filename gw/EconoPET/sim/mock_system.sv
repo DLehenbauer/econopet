@@ -115,7 +115,6 @@ module mock_system (
     logic cpu_sync;
 
     mock_cpu mock_cpu(
-        .sys_clock_i(sys_clock),
         .cpu_clock_i(cpu_clock_o),
         .reset_n_i(cpu_reset_n_o),
         .addr_o(cpu_addr),

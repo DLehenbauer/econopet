@@ -3,15 +3,10 @@
 
 import common_pkg::*;
 
-// Thin wrapper around Kenneth C. Dyke's 6502 core.
-// https://github.com/kdyke/65xx
-//
-// This wrapper inverts WE, IRQ, NMI and RES to match the silicon.  It also delays
-// the transition of ADDR, DOUT, and WE until one sys_clock cycle after the negative
-// cpu_clock edge to mimic the timing of the 65C02.
+// Thin wrapper around the m6502 CPU core.
+// https://github.com/chrismoos/m6502
 module mock_cpu (
-    input  logic sys_clock_i,               // FPGA system clock
-    input  logic cpu_clock_i,               // CPU clock (PHI2)
+    input  logic cpu_clock_i,   // CPU clock (PHI2)
     input  logic reset_n_i,
     output logic [CPU_ADDR_WIDTH-1:0] addr_o,
     input  logic     [DATA_WIDTH-1:0] data_i,
@@ -24,35 +19,31 @@ module mock_cpu (
 );
     bit manual_mode = 1'b1;
 
-    logic [CPU_ADDR_WIDTH-1:0] cpu_addr_next;
-    logic [    DATA_WIDTH-1:0] cpu_data_next;
-    logic                      cpu_we_next;
-    logic                      cpu_sync;
+    logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
+    logic [    DATA_WIDTH-1:0] cpu_data;
+    logic                      cpu_rw;
 
-    // In real hardware, the FPGA detects STP ($DB) on the data bus during PHI2
-    // high and deasserts RDY before the CPU latches the opcode.  The Verilog
-    // 6502 model latches on the rising PHI2 edge (too early for the breakpoint
-    // module to react) and its microcode calls $finish when it encounters STP.
-    // Gate ready combinationally so the core never processes STP, mirroring the
-    // real timing where RDY goes low before the CPU can act on it.
-    wire stp_on_bus = cpu_sync && (data_i == 8'hDB);
-
-    cpu6502 cpu(
-        .clk(cpu_clock_i),
-        .reset(!reset_n_i),
-        .nmi(!nmi_n_i),
-        .irq(!irq_n_i),
-        .ready(ready_i && !manual_mode && !stp_on_bus),
-        .write(cpu_we_next),
-        .sync(cpu_sync),
-        .address(cpu_addr_next),
-        .data_i(data_i),
-        .data_o(cpu_data_next)
+    cpu_6502 cpu(
+        .i_clk(cpu_clock_i),
+        .o_phi1(),
+        .o_phi2(),
+        .i_reset_n(reset_n_i),
+        .i_rdy(ready_i && !manual_mode),
+        .i_nmi_n(nmi_n_i),
+        .i_irq_n(irq_n_i),
+        .i_so_n(1'b1),
+        .o_sync(),
+        .i_bus_data(data_i),
+        .o_bus_data(cpu_data),
+        .o_bus_addr(cpu_addr),
+        .o_rw(cpu_rw),
+        .i_debug_sel(3'b0),
+        .o_debug_data()
     );
 
-    logic [CPU_ADDR_WIDTH-1:0] set_addr_next;
-    logic [    DATA_WIDTH-1:0] set_data_next;
-    logic                      set_we_next;
+    logic [CPU_ADDR_WIDTH-1:0] set_addr;
+    logic [    DATA_WIDTH-1:0] set_data;
+    logic                      set_we;
 
     task start();
         manual_mode = 1'b0;
@@ -66,11 +57,11 @@ module mock_cpu (
         input  logic [CPU_ADDR_WIDTH-1:0] addr,
         input  logic [    DATA_WIDTH-1:0] data
     );
-        @(posedge cpu_clock_ne);
+        @(negedge cpu_clock_i);
 
-        set_addr_next = addr;
-        set_data_next = data;
-        set_we_next   = 1'b1;
+        set_addr = addr;
+        set_data = data;
+        set_we   = 1'b1;
 
         $display("[%t]   CPU Write %04x <- %02x", $time, addr, data);
 
@@ -78,19 +69,19 @@ module mock_cpu (
 
         // Return to read mode after write completes to avoid unintended
         // repeated writes on subsequent bus cycles
-        @(posedge cpu_clock_ne);
-        set_we_next = 1'b0;
+        @(negedge cpu_clock_i);
+        set_we = 1'b0;
     endtask
 
     task read(
         input  logic [CPU_ADDR_WIDTH-1:0] addr,
         output logic [    DATA_WIDTH-1:0] data
     );
-        @(posedge cpu_clock_ne);
+        @(negedge cpu_clock_i);
 
-        set_addr_next = addr;
-        set_data_next = 'x;
-        set_we_next   = 1'b0;
+        set_addr = addr;
+        set_data = 'x;
+        set_we   = 1'b0;
 
         @(posedge cpu_clock_i);
 
@@ -98,27 +89,22 @@ module mock_cpu (
         $display("[%t]   CPU Read %04x -> %02x", $time, addr, data);
     endtask
 
-    logic cpu_clock_ne;
-
-    // The 65C02 delays the transition of ADDR, DOUT, and WE until >10ns after the negative
-    // clock edge.  We simulate this by capturing the next ADDR, DOUT, and WE one sys_clock
-    // cycle after the negative cpu_clock edge.
+    // The real NMOS 6502 produces ADDR, RW, and SYNC shortly after the positive PHI2
+    // transition and latches the next instruction on the following negative edge.  In
+    // between there is enough time for us to inspect DIN and deassert RDY if the next
+    // instruction is a breakpoint.
     //
-    // See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf, page 26
+    // The m6502 model's 'o_sync' lags 'first_microinstruction' by a half cycle,
+    // so it is not asserted until the end of the opcode-fetch cycle (too late for
+    // breakpoint logic to react).  We use 'first_microinstruction' instead, which
+    // is set on the preceding negedge and therefore already high when PHI2 rises
+    // to start the fetch (matching real hardware timing).
+    wire cpu_sync_early = cpu.first_microinstruction
+                       && !cpu.handle_irq
+                       && !cpu.handle_nmi;
 
-    edge_detect #(/* INITAL_DATA_I */ 0) clock_edge (
-        .clock_i(sys_clock_i),
-        .data_i(cpu_clock_i),
-        .ne_o(cpu_clock_ne),
-        .pe_o()
-    );
-
-    always_ff @(posedge sys_clock_i) begin
-        if (cpu_clock_ne) begin
-            addr_o <= manual_mode ? set_addr_next : cpu_addr_next;
-            data_o <= manual_mode ? set_data_next : cpu_data_next;
-            we_n_o <= !(manual_mode ? set_we_next : cpu_we_next);
-            sync_o <= manual_mode ? 1'b0 : cpu_sync;
-        end
-    end
+    assign addr_o = manual_mode ? set_addr : cpu_addr;
+    assign data_o = manual_mode ? set_data : cpu_data;
+    assign we_n_o = manual_mode ? !set_we  : cpu_rw;
+    assign sync_o = manual_mode ? 1'b0 : cpu_sync_early;
 endmodule
