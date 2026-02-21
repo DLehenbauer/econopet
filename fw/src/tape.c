@@ -32,6 +32,7 @@ static const uint8_t print_loop[] = {
 typedef struct {
     tape_config_t cfg;      // Parsed from config.yaml hex blob
     bool enabled;           // Virtual tape enabled (config had 'tape' key)
+    uint8_t saved_buf[TAPE_BUFFER_CAPACITY]; // Original tape buffer contents
 } tape_state_t;
 
 static tape_state_t state;
@@ -155,14 +156,24 @@ static size_t tape_build_stub(uint8_t* buf, const char* path) {
     return off;
 }
 
-static uint16_t tape_load_callback(uint16_t pc, void* context) {
+// One-shot breakpoint callback at LD210. Restores the tape buffer contents
+// that were saved before the stub was written, then resumes LD210 normally.
+static bp_result_t tape_ld210_callback(uint16_t pc, void* context) {
+    (void)context;
+
+    spi_write(TAPE_BUFFER, state.saved_buf, TAPE_BUFFER_CAPACITY);
+
+    return (bp_result_t){ .pc = pc, .rearm = false };
+}
+
+static bp_result_t tape_load_callback(uint16_t pc, void* context) {
     (void)context;
 
     // The breakpoint fires for every LOAD (tape, disk, etc.), so check
     // the device number first. Only intercept tape devices (1 or 2).
     uint8_t devnum = spi_read_at(state.cfg.devnum);
     if (devnum != 1 && devnum != 2) {
-        return pc;
+        return (bp_result_t){ .pc = pc, .rearm = true };
     }
 
     // Read the requested filename from PET memory.
@@ -185,14 +196,14 @@ static uint16_t tape_load_callback(uint16_t pc, void* context) {
     // Check for empty name or lone "*" (fall through to datasette).
     if (fnlen == 0 || (fnlen == 1 && pattern[0] == '*')) {
         log_info("tape: fall through to datasette");
-        return pc;
+        return (bp_result_t){ .pc = pc, .rearm = true };
     }
 
     // Search SD card for a matching .prg file.
     char path[PATH_MAX];
     if (!find_prg_file(pattern, fnlen, path, sizeof(path))) {
         log_info("tape: no match for \"%s\"", pattern);
-        return pc;
+        return (bp_result_t){ .pc = pc, .rearm = true };
     }
 
     log_info("tape: found %s", path);
@@ -201,14 +212,14 @@ static uint16_t tape_load_callback(uint16_t pc, void* context) {
     FILE* file = fopen(path, "rb");
     if (file == NULL) {
         log_warn("tape: cannot open %s", path);
-        return pc;
+        return (bp_result_t){ .pc = pc, .rearm = true };
     }
 
     uint8_t hdr[2];
     if (fread(hdr, 1, 2, file) != 2) {
         log_warn("tape: short read on header of %s", path);
         fclose(file);
-        return pc;
+        return (bp_result_t){ .pc = pc, .rearm = true };
     }
     uint16_t load_addr = (uint16_t)(hdr[0] | (hdr[1] << 8));
     uint16_t dest = load_addr;
@@ -233,13 +244,20 @@ static uint16_t tape_load_callback(uint16_t pc, void* context) {
     spi_write_at(state.cfg.eal, (uint8_t)(end_addr & 0xFF));
     spi_write_at(state.cfg.eah, (uint8_t)(end_addr >> 8));
 
+    // Save the tape buffer contents before overwriting with the stub.
+    spi_read(TAPE_BUFFER, TAPE_BUFFER_CAPACITY, state.saved_buf);
+
+    // Arm a one-shot breakpoint at LD210 to restore the tape buffer
+    // after the stub has finished executing.
+    bp_set(state.cfg.ld210, tape_ld210_callback, NULL);
+
     // Build the stub in the tape buffer and write it to SRAM.
     uint8_t stub_buf[TAPE_BUFFER_CAPACITY];
     size_t stub_len = tape_build_stub(stub_buf, path);
     spi_write(TAPE_BUFFER, stub_buf, stub_len);
 
     // Redirect execution to the tape buffer.
-    return TAPE_BUFFER;
+    return (bp_result_t){ .pc = TAPE_BUFFER, .rearm = true };
 }
 
 void tape_init(const tape_config_t* cfg) {

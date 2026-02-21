@@ -21,10 +21,13 @@ LOADING message and returns to the BASIC ready prompt.
 7. If found:
    - MCU copies the PRG data into SRAM at the load address from the PRG file
    - MCU sets EAL/EAH to the end address
+   - MCU saves the existing tape buffer contents (for later restoration)
    - MCU writes a stub to the tape buffer that prints
      `FOUND "/SD/PRGS/FILENAME.PRG"` then jumps to the KERNAL's LD210
      routine, which prints "READY.", sets VARTAB, relinks BASIC lines,
      clears variables, and enters the main loop
+   - When the stub's `JMP LD210` fires a second breakpoint at LD210, the
+     MCU restores the original tape buffer contents before resuming
 8. If not found:
    - MCU resumes the KERNAL, which enters the tape path normally (prints
      "PRESS PLAY ON TAPE" and polls the sense pin)
@@ -193,6 +196,10 @@ The MCU writes a small 6502 program to the tape buffer ($027A) that:
 1. Prints a message with the SD card path using CHROUT ($FFD2)
 2. Jumps to the KERNAL's LD210 routine
 
+Before overwriting the tape buffer, the MCU saves its current contents
+(192 bytes) in a local buffer. These are restored when the stub reaches
+LD210 (see [Step 7](#step-7-restore-tape-buffer)).
+
 CHROUT ($FFD2) is in the KERNAL jump table and stable across all ROM
 versions. The LD210 address comes from the config blob.
 
@@ -242,7 +249,18 @@ bytes, leaving 176 bytes for the message (more than enough for any path).
 ### Step 6: Resume Execution
 
 The breakpoint callback returns the stub address ($027A) as the resume
-target. The breakpoint system writes a JMP instruction to redirect execution:
+target. The breakpoint system writes a JMP instruction to redirect execution.
+
+### Step 7: Restore Tape Buffer
+
+The `tape_load_callback` arms a one-shot breakpoint at LD210 (`cfg.ld210`).
+When the stub's `JMP LD210` reaches this breakpoint, the MCU restores the
+saved tape buffer contents, removes the breakpoint, and resumes LD210
+normally. This ensures the tape buffer is left in its original state after
+the virtual load completes.
+
+Because the breakpoint only exists while a virtual load is in progress,
+physical datasette loads never trigger the callback.
 
 ```c
 // Fixed print loop: LDX #0 / LDA msg,X / BEQ done / JSR CHROUT / INX / BNE loop
@@ -286,28 +304,40 @@ static void tape_build_stub(uint8_t* buf, const char* path) {
     buf[off++] = '\0';      // Null terminator
 }
 
-static uint16_t tape_cste1_callback(uint16_t addr, void* context) {
-    // ... read filename, search SD card, copy PRG to SRAM ...
+static bp_result_t tape_load_callback(uint16_t pc, void* context) {
+    // ... check device number, read filename, search SD card ...
 
     if (load_successful) {
         // Set EAL/EAH so LD210 can update VARTAB
         spi_write_at(state.cfg.eal, end_addr & 0xFF);
         spi_write_at(state.cfg.eah, end_addr >> 8);
 
+        // Save tape buffer before overwriting with stub
+        spi_read(TAPE_BUFFER, TAPE_BUFFER_CAPACITY, state.saved_buf);
+
+        // Arm a one-shot breakpoint at LD210 to restore the tape buffer
+        bp_set(state.cfg.ld210, tape_ld210_callback, NULL);
+
         uint8_t buf[192];
         tape_build_stub(buf, path);     // e.g. "/prgs/game.prg"
         uint8_t total = PRINT_LOOP_SIZE + JMP_SIZE + msg_len;
         spi_write(TAPE_BUFFER, buf, total);
-        return TAPE_BUFFER;
+        return (bp_result_t){ .pc = TAPE_BUFFER, .rearm = true };
     }
 
-    return 0;  // Resume CSTE1: KERNAL handles physical tape
+    return (bp_result_t){ .pc = pc, .rearm = true };
+}
+
+// One-shot breakpoint at LD210: restore tape buffer after virtual load.
+static bp_result_t tape_ld210_callback(uint16_t pc, void* context) {
+    spi_write(TAPE_BUFFER, state.saved_buf, TAPE_BUFFER_CAPACITY);
+    return (bp_result_t){ .pc = pc, .rearm = false };
 }
 ```
 
-Returning `0` resumes at the breakpoint address with the original instruction
-restored, so the KERNAL proceeds normally (printing "PRESS PLAY ON TAPE" and
-polling the sense pin).
+The callback returns a `bp_result_t` with the resume address and a `rearm`
+flag. Setting `rearm = false` tells the breakpoint system to remove the
+breakpoint after resuming (one-shot behavior).
 
 ## Wildcard Matching
 
@@ -443,7 +473,7 @@ Offset  Bytes     Field    Value    Meaning
 typedef struct {
     tape_config_t cfg;      // Parsed from config.yaml hex blob
     bool enabled;           // Virtual tape enabled (config had 'tape' key)
-    bool pending;           // Breakpoint fired, waiting to process
+    uint8_t saved_buf[192]; // Original tape buffer contents
 } tape_state_t;
 ```
 

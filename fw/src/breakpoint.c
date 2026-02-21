@@ -31,6 +31,7 @@ void bp_init() {
 }
 
 void bp_set(uint16_t addr, bp_callback_t callback, void* context) {
+    vet(callback != NULL, "bp_set: callback is required");
     vet(bp_find(addr) < 0, "bp_set: breakpoint already exists at $%04X", addr);
     vet(bp_entry_count < BP_MAX, "bp_set: table full (%d/%d)", bp_entry_count, BP_MAX);
 
@@ -49,8 +50,7 @@ void bp_set(uint16_t addr, bp_callback_t callback, void* context) {
     entry->context     = context;
 
     spi_write_at(addr, STP_OPCODE);
-    log_info("bp_set: $%04X (was $%02X, callback=%s)", addr, orig0,
-             callback ? "yes" : "no");
+    log_info("bp_set: $%04X (was $%02X)", addr, orig0);
 }
 
 bool bp_remove(uint16_t addr) {
@@ -101,8 +101,9 @@ void bp_task() {
 
     log_info("Breakpoint hit at $%04X", pc);
 
-    // Determine resume address: callback returns it, or default to pc.
-    uint16_t target = callback ? callback(pc, context) : pc;
+    // Determine resume address and rearm policy from callback.
+    bp_result_t result = callback(pc, context);
+    uint16_t target = result.pc;
     const int16_t offset = (int16_t)(target - pc);
 
     // Build the patch bytes. Initialize to NOPs so the skip cases just set length.
@@ -154,9 +155,17 @@ void bp_task() {
     // Restore any bytes we patched
     spi_write(pc, entry->original, patch_bytes);
 
-    // Re-arm the breakpoint
-    spi_write_at(pc, STP_OPCODE);
-    entry->active = true;
+    if (result.rearm) {
+        // Re-arm the breakpoint
+        spi_write_at(pc, STP_OPCODE);
+        entry->active = true;
+    } else {
+        // One-shot: remove the breakpoint from the table
+        bp_entry_count--;
+        if (idx < bp_entry_count) {
+            bp_table[idx] = bp_table[bp_entry_count];
+        }
+    }
 }
 
 int bp_count() {

@@ -11,32 +11,37 @@
 // only hard limit is the number of addressable locations.
 #define BP_MAX 64
 
+// Result returned by a breakpoint callback.
+typedef struct {
+    uint16_t pc;     // Address where execution should resume
+    bool rearm;      // true = re-arm breakpoint, false = remove after resume
+} bp_result_t;
+
 // Callback invoked when a breakpoint is hit. The callback receives the address
-// where the breakpoint fired and a user-provided context pointer. Returns the
-// address where execution should resume:
-//   - Return pc: normal resume (restore original opcode, clear halt, re-arm)
-//   - Return pc+1..pc+3: skip bytes (write NOPs, clear halt, restore, re-arm)
-//   - Return other address: redirect (write JMP, clear halt, restore, re-arm)
-typedef uint16_t (*bp_callback_t)(uint16_t pc, void* context);
+// where the breakpoint fired and a user-provided context pointer. Returns a
+// bp_result_t specifying where to resume and whether to re-arm:
+//   - addr == pc: normal resume (restore original opcode)
+//   - addr == pc+1..pc+3: skip bytes (write NOPs)
+//   - addr == other: redirect (write JMP)
+//   - rearm == true: re-arm the breakpoint after resuming
+//   - rearm == false: remove the breakpoint (one-shot)
+typedef bp_result_t (*bp_callback_t)(uint16_t pc, void* context);
 
 // A single breakpoint table entry.
 typedef struct bp_entry_s {
     uint16_t      addr;        // PET address where breakpoint is set
     uint8_t       original[3]; // Original bytes before patching (for JMP redirect)
     bool          active;      // true if STP has been written to SRAM
-    bp_callback_t callback;    // Optional callback invoked when breakpoint fires
+    bp_callback_t callback;    // Callback invoked when breakpoint fires
     void*         context;     // User-provided context passed to callback
 } bp_entry_t;
 
 // Initialize the breakpoint subsystem (clears the table).
 void bp_init();
 
-// Set a breakpoint at 'addr' with an optional callback and context. Reads the
-// original bytes from SRAM, saves them in the table, and writes STP ($DB) to
-// 'addr'. When the breakpoint fires, the callback determines where to resume.
-// If 'callback' is NULL, the breakpoint logs and resumes at 'addr'.
-// Returns true on success, false if the table is full or a breakpoint already
-// exists at 'addr'.
+// Set a breakpoint at 'addr'. Reads the original bytes from SRAM, saves them
+// in the table, and writes STP ($DB) to 'addr'. When the breakpoint fires,
+// the callback determines where to resume and whether to re-arm.
 void bp_set(uint16_t addr, bp_callback_t callback, void* context);
 
 // Remove the breakpoint at 'addr'. Restores the original instruction byte and

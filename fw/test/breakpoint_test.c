@@ -86,6 +86,12 @@ static void mock_reset(void) {
     bp_init();
 }
 
+// Default callback: resume at pc with re-arm.
+static bp_result_t default_callback(uint16_t pc, void* context) {
+    (void)context;
+    return (bp_result_t){ .pc = pc, .rearm = true };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -99,7 +105,7 @@ START_TEST(test_bp_set_patches_sram) {
     mock_reset();
     mock_ram[0x0400] = 0xA9;  // LDA #imm
 
-    bp_set(0x0400, NULL, NULL);
+    bp_set(0x0400, default_callback, NULL);
     ck_assert_int_eq(bp_count(), 1);
 
     // SRAM should now contain STP ($DB).
@@ -110,7 +116,7 @@ START_TEST(test_bp_remove_restores_sram) {
     mock_reset();
     mock_ram[0x0400] = 0xA9;
 
-    bp_set(0x0400, NULL, NULL);
+    bp_set(0x0400, default_callback, NULL);
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
 
     bool ok = bp_remove(0x0400);
@@ -128,9 +134,9 @@ START_TEST(test_bp_remove_nonexistent_fails) {
 
 START_TEST(test_bp_remove_compacts_table) {
     mock_reset();
-    bp_set(0x0100, NULL, NULL);
-    bp_set(0x0200, NULL, NULL);
-    bp_set(0x0300, NULL, NULL);
+    bp_set(0x0100, default_callback, NULL);
+    bp_set(0x0200, default_callback, NULL);
+    bp_set(0x0300, default_callback, NULL);
     ck_assert_int_eq(bp_count(), 3);
 
     // Remove the middle entry.
@@ -147,7 +153,7 @@ START_TEST(test_bp_task_restores_and_rearms) {
     mock_reset();
     mock_ram[0x0400] = 0x4C;  // JMP abs
 
-    bp_set(0x0400, NULL, NULL);
+    bp_set(0x0400, default_callback, NULL);
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
 
     // Simulate FPGA halt at $0400.
@@ -191,8 +197,8 @@ START_TEST(test_bp_set_saves_original) {
     mock_ram[0x0300] = 0x60;  // RTS
     mock_ram[0x0400] = 0xEA;  // NOP
 
-    bp_set(0x0300, NULL, NULL);
-    bp_set(0x0400, NULL, NULL);
+    bp_set(0x0300, default_callback, NULL);
+    bp_set(0x0400, default_callback, NULL);
 
     // Remove them and check originals are restored.
     bp_remove(0x0300);
@@ -207,12 +213,13 @@ static bool callback_invoked;
 static uint16_t callback_addr;
 static void* callback_context;
 static uint16_t callback_resume_addr;  // Address to resume at
+static bool callback_rearm;            // Whether to re-arm breakpoint
 
-static uint16_t test_callback(uint16_t pc, void* context) {
+static bp_result_t test_callback(uint16_t pc, void* context) {
     callback_invoked = true;
     callback_addr = pc;
     callback_context = context;
-    return callback_resume_addr;
+    return (bp_result_t){ .pc = callback_resume_addr, .rearm = callback_rearm };
 }
 
 START_TEST(test_bp_callback_auto_resume) {
@@ -224,6 +231,7 @@ START_TEST(test_bp_callback_auto_resume) {
     callback_addr = 0;
     callback_context = NULL;
     callback_resume_addr = 0x0400;  // Resume at pc (normal)
+    callback_rearm = true;
 
     int test_context = 42;
     bp_set(0x0400, test_callback, &test_context);
@@ -258,6 +266,7 @@ START_TEST(test_bp_callback_skip_one_byte) {
     // Reset callback state
     callback_invoked = false;
     callback_resume_addr = 0x0401;  // Skip 1 byte (NOP)
+    callback_rearm = true;
 
     bp_set(0x0400, test_callback, NULL);
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
@@ -285,6 +294,7 @@ START_TEST(test_bp_callback_skip_two_bytes) {
     // Reset callback state
     callback_invoked = false;
     callback_resume_addr = 0x0402;  // Skip 2 bytes (NOP NOP)
+    callback_rearm = true;
 
     bp_set(0x0400, test_callback, NULL);
 
@@ -312,6 +322,7 @@ START_TEST(test_bp_callback_redirect_jmp) {
     // Reset callback state
     callback_invoked = false;
     callback_resume_addr = 0x9000;  // Redirect far away (JMP)
+    callback_rearm = true;
 
     bp_set(0x0400, test_callback, NULL);
 
@@ -329,6 +340,35 @@ START_TEST(test_bp_callback_redirect_jmp) {
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
     ck_assert_uint_eq(mock_ram[0x0401], 0x12);
     ck_assert_uint_eq(mock_ram[0x0402], 0x34);
+} END_TEST
+
+START_TEST(test_bp_callback_oneshot) {
+    mock_reset();
+    mock_ram[0x0400] = 0x4C;  // JMP abs
+
+    // Reset callback state
+    callback_invoked = false;
+    callback_resume_addr = 0x0400;  // Resume at pc
+    callback_rearm = false;         // One-shot: remove after resume
+
+    bp_set(0x0400, test_callback, NULL);
+    ck_assert_int_eq(bp_count(), 1);
+
+    // Simulate FPGA halt at $0400.
+    system_state.bp_halted = true;
+    mock_bp_addr = 0x0400;
+    mock_bp_cleared = false;
+
+    bp_task();
+
+    ck_assert(callback_invoked);
+    ck_assert(mock_bp_cleared);
+
+    // Original bytes should be restored (no STP).
+    ck_assert_uint_eq(mock_ram[0x0400], 0x4C);
+
+    // Breakpoint should have been removed from the table.
+    ck_assert_int_eq(bp_count(), 0);
 } END_TEST
 
 // ---------------------------------------------------------------------------
@@ -351,6 +391,7 @@ Suite *breakpoint_suite(void) {
     tcase_add_test(tc, test_bp_callback_skip_one_byte);
     tcase_add_test(tc, test_bp_callback_skip_two_bytes);
     tcase_add_test(tc, test_bp_callback_redirect_jmp);
+    tcase_add_test(tc, test_bp_callback_oneshot);
     suite_add_tcase(s, tc);
 
     return s;
