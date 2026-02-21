@@ -24,3 +24,6 @@
 [submodule "rom/external/cbm-edit-rom"]
 	path = rom/external/cbm-edit-rom
 	url = https://github.com/DLehenbauer/cbm-edit-rom.git
+[submodule "gw/EconoPET/external/m6502"]
+	path = gw/EconoPET/external/m6502
+	url = https://github.com/DLehenbauer/m6502.git

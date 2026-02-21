@@ -15,7 +15,7 @@ ARG OPENOCD_VERSION="sdk-2.0.0"
 ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
 
 # From https://github.com/verilator/verilator/releases
-ARG VERILATOR_VERSION="v5.030"
+ARG VERILATOR_VERSION="v5.044"
 
 # From https://github.com/steveicarus/iverilog/releases
 ARG IVERILOG_VERSION="v12_0"
@@ -305,6 +305,11 @@ RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_
     tar -xzf /tmp/caddy.tar.gz -C /tmp && \
     install -m 0755 /tmp/caddy /usr/local/bin/caddy && \
     rm -f /tmp/caddy.tar.gz
+
+# Install uv (Python package manager for m6502 tests)
+# (See: https://github.com/astral-sh/uv)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Download required ROMs (with MD5 verification)
 # Note: Build context is the .devcontainer folder, so copy relative to it.
