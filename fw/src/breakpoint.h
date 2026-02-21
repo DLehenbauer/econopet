@@ -30,7 +30,7 @@ typedef bp_result_t (*bp_callback_t)(uint16_t pc, void* context);
 // A single breakpoint table entry.
 typedef struct bp_entry_s {
     uint16_t      addr;        // PET address where breakpoint is set
-    uint8_t       original[3]; // Original bytes before patching (for JMP redirect)
+    uint8_t       original;    // Original byte at addr (replaced by STP)
     bool          active;      // true if STP has been written to SRAM
     bp_callback_t callback;    // Callback invoked when breakpoint fires
     void*         context;     // User-provided context passed to callback
@@ -39,7 +39,7 @@ typedef struct bp_entry_s {
 // Initialize the breakpoint subsystem (clears the table).
 void bp_init();
 
-// Set a breakpoint at 'addr'. Reads the original bytes from SRAM, saves them
+// Set a breakpoint at 'addr'. Reads the original byte from SRAM, saves it
 // in the table, and writes STP ($DB) to 'addr'. When the breakpoint fires,
 // the callback determines where to resume and whether to re-arm.
 void bp_set(uint16_t addr, bp_callback_t callback, void* context);

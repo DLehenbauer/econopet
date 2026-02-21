@@ -33,6 +33,13 @@ uint8_t spi_read_at(uint32_t addr) {
     return mock_ram[addr];
 }
 
+void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
+    for (size_t i = 0; i < byteLength; i++) {
+        ck_assert_uint_lt(addr + i, MOCK_RAM_SIZE);
+        pDest[i] = mock_ram[addr + i];
+    }
+}
+
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
     last_write_addr = addr;
     last_write_data = data;

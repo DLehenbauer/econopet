@@ -54,6 +54,11 @@ Include files in this exact order with blank lines between groups:
 - Use simple includes: `#include "pch.h"` or `#include "subdir/header.h"`
 - Never use relative paths like `../../pch.h` (the include path already contains `fw/src`)
 
+## Const Correctness
+
+- Default all variables, parameters, and pointers to `const`
+- Use `const` pointee types (`const T *`) unless the pointed-to data is modified
+
 ## Testing
 
 - Tests use the [Check](https://libcheck.github.io/check/) framework

@@ -35,22 +35,17 @@ void bp_set(uint16_t addr, bp_callback_t callback, void* context) {
     vet(bp_find(addr) < 0, "bp_set: breakpoint already exists at $%04X", addr);
     vet(bp_entry_count < BP_MAX, "bp_set: table full (%d/%d)", bp_entry_count, BP_MAX);
 
-    // Read 3 bytes to support JMP redirect
-    uint8_t orig0 = spi_read_at(addr);
-    uint8_t orig1 = spi_read_at(addr + 1);
-    uint8_t orig2 = spi_read_at(addr + 2);
+    uint8_t orig = spi_read_at(addr);
 
     bp_entry_t* entry = &bp_table[bp_entry_count++];
-    entry->addr        = addr;
-    entry->original[0] = orig0;
-    entry->original[1] = orig1;
-    entry->original[2] = orig2;
-    entry->active      = true;
-    entry->callback    = callback;
-    entry->context     = context;
+    entry->addr     = addr;
+    entry->original = orig;
+    entry->active   = true;
+    entry->callback = callback;
+    entry->context  = context;
 
     spi_write_at(addr, STP_OPCODE);
-    log_info("bp_set: $%04X (was $%02X)", addr, orig0);
+    log_info("bp_set: $%04X (was $%02X)", addr, orig);
 }
 
 bool bp_remove(uint16_t addr) {
@@ -64,10 +59,10 @@ bool bp_remove(uint16_t addr) {
 
     // Restore original instruction if the breakpoint is currently armed.
     if (entry->active) {
-        spi_write_at(addr, entry->original[0]);
+        spi_write_at(addr, entry->original);
     }
 
-    log_info("bp_remove: $%04X (restored $%02X)", addr, entry->original[0]);
+    log_info("bp_remove: $%04X (restored $%02X)", addr, entry->original);
 
     // Compact the table by moving the last entry into the vacated slot.
     bp_entry_count--;
@@ -84,26 +79,38 @@ void bp_task() {
     }
 
     const uint16_t pc = bp_hit_addr();
-    const int idx = bp_find(pc);
 
-    if (idx < 0) {
-        // The halt address does not match any table entry. While unexpected, this can
-        // happen if the user program contains a $DB opcode, which is the "illegal"
-        // `DCP abs,Y` on the original 6502.
-        log_warn("bp_task: halt at $%04X not found in table", pc);
-        bp_clear_halt();
-        return;
+    // Capture the fields we need before invoking the callback, since it may add
+    // or remove breakpoints (which compacts the table and invalidates pointers).
+    bp_callback_t callback;
+    void* context;
+    uint8_t original[3];
+    {
+        const int idx = bp_find(pc);
+
+        if (idx < 0) {
+            // The halt address does not match any table entry. While unexpected, this can
+            // happen if the user program contains a $DB opcode, which is the "illegal"
+            // `DCP abs,Y` on the original 6502.
+            log_warn("bp_task: halt at $%04X not found in table", pc);
+            bp_clear_halt();
+            return;
+        }
+        const bp_entry_t* const bp = &bp_table[idx];
+        callback = bp->callback;
+        context = bp->context;
+        original[0] = bp->original;
     }
 
-    bp_entry_t* entry = &bp_table[idx];
-    bp_callback_t callback = entry->callback;
-    void* context = entry->context;
+    // Build a local copy of the 3 original bytes at pc. The first byte was saved
+    // in the table entry (replaced by STP). The next two are still in SRAM.
+    spi_read(pc + 1, 2, &original[1]);
 
     log_info("Breakpoint hit at $%04X", pc);
 
     // Determine resume address and rearm policy from callback.
-    bp_result_t result = callback(pc, context);
-    uint16_t target = result.pc;
+    const bp_result_t result = callback(pc, context);
+    const uint16_t target = result.pc;
     const int16_t offset = (int16_t)(target - pc);
 
     // Build the patch bytes. Initialize to NOPs so the skip cases just set length.
@@ -112,7 +119,7 @@ void bp_task() {
 
     if (offset == 0) {
         // For a zero offset, we can just restore the original opcode.
-        patch[0] = entry->original[0];
+        patch[0] = original[0];
         patch_bytes = 1;
     } else if (1 <= offset && offset <= 3) {
         // For forward offsets that are less than or equal to the length of a JMP
@@ -128,17 +135,18 @@ void bp_task() {
 
     log_info("bp_resume_at: $%04X -> $%04X (was %02X %02X %02X, patch %02X %02X %02X)",
              pc, target,
-             entry->original[0], entry->original[1], entry->original[2],
+             original[0], original[1], original[2],
              patch[0],
-             patch_bytes > 1
-                ? patch[1]
-                : entry->original[1],
-             patch_bytes > 2
-                ? patch[2]
-                : entry->original[2]);
+             patch_bytes > 1 ? patch[1] : original[1],
+             patch_bytes > 2 ? patch[2] : original[2]);
 
     spi_write(pc, patch, patch_bytes);
-    entry->active = false;
+
+    // Mark inactive via a fresh lookup (the index may have shifted).
+    const int cur_idx = bp_find(pc);
+    if (cur_idx >= 0) {
+        bp_table[cur_idx].active = false;
+    }
 
     // Clear the FPGA halt so the CPU resumes.
     bp_clear_halt();
@@ -153,18 +161,18 @@ void bp_task() {
     }
 
     // Restore any bytes we patched
-    spi_write(pc, entry->original, patch_bytes);
+    spi_write(pc, original, patch_bytes);
 
     if (result.rearm) {
-        // Re-arm the breakpoint
-        spi_write_at(pc, STP_OPCODE);
-        entry->active = true;
-    } else {
-        // One-shot: remove the breakpoint from the table
-        bp_entry_count--;
-        if (idx < bp_entry_count) {
-            bp_table[idx] = bp_table[bp_entry_count];
+        // Re-arm the breakpoint (re-lookup since table may have shifted).
+        const int rearm_idx = bp_find(pc);
+        if (rearm_idx >= 0) {
+            spi_write_at(pc, STP_OPCODE);
+            bp_table[rearm_idx].active = true;
         }
+    } else {
+        // One-shot: remove the breakpoint from the table (bytes already restored).
+        bp_remove(pc);
     }
 }
 
