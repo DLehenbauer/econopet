@@ -236,7 +236,7 @@ configs:
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "e5f362f3e5e6eef1f9"
-  - name: "ColourPET (40 Col 60 Hz)"
+  - name: "ColourPET (40 Col 60 Hz) [ALPHA]"
     setup:
       - action: "load"
         files:
