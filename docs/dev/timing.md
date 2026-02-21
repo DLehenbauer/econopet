@@ -183,3 +183,52 @@ The timing values below bound propagation and enable/disable delays used when bu
 - DIN must be valid 25ns before WE deasserts; no hold requirement (tDW, tDH = 0ns).
 - WE pulse width must be at least 45ns (tWP).
 - OE is deasserted during writes, so tOW and tWHZ are not relevant.
+
+## IS61WV1288EEBLL-10TLI (SRAM)
+
+### Read Cycle
+
+| Symbol | Parameter | Min | Max | Units |
+|--------|-----------|-----|-----|-------|
+| tRC | Read Cycle Time | 10 | - | ns |
+| tAA | Address Access Time | - | 10 | ns |
+| tOHA | Output Hold Time | 2.0 | - | ns |
+| tACE | $\overline{CE}$ Access Time | - | 10 | ns |
+| tDOE | $\overline{OE}$ Access Time | - | 4.5 | ns |
+| tHZOE | $\overline{OE}$ to High-Z Output | - | 4 | ns |
+| tLZOE | $\overline{OE}$ to Low-Z Output | 0 | - | ns |
+| tHZCE | $\overline{CE}$ to High-Z Output | 0 | 4 | ns |
+| tLZCE | $\overline{CE}$ to Low-Z Output | 3 | - | ns |
+| tPU | Power Up Time | 0 | - | ns |
+| tPD | Power Down Time | - | 10 | ns |
+
+### Write Cycle
+
+| Symbol | Parameter | Min | Max | Units |
+|--------|-----------|-----|-----|-------|
+| tWC | Write Cycle Time | 10 | - | ns |
+| tSCE | $\overline{CE}$ to Write End | 8 | - | ns |
+| tAW | Address Setup Time to Write End | 8 | - | ns |
+| tHA | Address Hold from Write End | 0 | - | ns |
+| tSA | Address Setup Time | 0 | - | ns |
+| tPWE1 | $\overline{WE}$ Pulse Width | 8 | - | ns |
+| tPWE2 | $\overline{WE}$ Pulse Width ($\overline{OE}$ = LOW) | 10 | - | ns |
+| tSD | Data Setup to Write End | 6 | - | ns |
+| tHD | Data Hold from Write End | 0 | - | ns |
+| tHZWE | $\overline{WE}$ LOW to High-Z Output | - | 5 | ns |
+| tLZWE | $\overline{WE}$ HIGH to Low-Z Output | 2 | - | ns |
+
+### Summary
+
+- DOUT valid 10ns after coincident ADDR and $\overline{CE}$ (tAA, tACE).
+- DOUT valid 4.5ns after $\overline{OE}$ asserted (tDOE).
+- DOUT held 2.0ns after ADDR changes (tOHA).
+- DOUT returns to High-Z 4ns after $\overline{OE}$ or $\overline{CE}$ deasserted (tHZOE, tHZCE).
+- Total write cycle time must be at least 10ns (tWC).
+- ADDR must be valid 8ns before $\overline{WE}$ or $\overline{CE}$ deasserts (tAW).
+- ADDR must be set up 0ns before $\overline{WE}$ or $\overline{CE}$ asserts (tSA).
+- ADDR must be held 0ns after $\overline{WE}$ or $\overline{CE}$ deasserts (tHA).
+- DIN must be valid 6ns before $\overline{WE}$ or $\overline{CE}$ deasserts (tSD).
+- DIN must be held 0ns after $\overline{WE}$ or $\overline{CE}$ deasserts (tHD).
+- $\overline{WE}$ pulse width must be at least 8ns (tPWE1) or 10ns if $\overline{OE}$ is LOW (tPWE2).
+- $\overline{CE}$ must be asserted for at least 8ns before write end (tSCE).
