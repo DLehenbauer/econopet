@@ -93,7 +93,8 @@ module ram (
     //                      |    |
     //                      |25ns|
 
-    localparam write_hold_count = common_pkg::ns_to_cycles(45);
+    localparam READ_HOLD_COUNT  = common_pkg::ns_to_cycles(SRAM_tAA);
+    localparam WRITE_HOLD_COUNT = common_pkg::ns_to_cycles(SRAM_tWP);
 
     localparam bit [3:0] READY   = 4'b0001,
                          READING = 4'b0010,
@@ -134,7 +135,7 @@ module ram (
                 end
             end
             READING: begin
-                if (cycle_count == 3) begin
+                if (cycle_count == $bits(cycle_count)'(READ_HOLD_COUNT)) begin
                     cycle_count <= '0;
                     wbp_data_o <= ram_data_i;
                     wbp_ack_o <= 1'b1;
@@ -148,7 +149,7 @@ module ram (
                 state <= READY;
             end
             WRITING: begin
-                if (cycle_count == $bits(cycle_count)'(write_hold_count)) begin
+                if (cycle_count == $bits(cycle_count)'(WRITE_HOLD_COUNT)) begin
                     wbp_ack_o   <= 1'b1;
                     wbp_stall_o <= '0;
                     ram_we_o    <= '0;
@@ -162,4 +163,67 @@ module ram (
             end
         endcase
     end
+
+    // synthesis off
+
+    // OE is asserted in READY and deasserted in READING when cycle_count
+    // matches, giving (READ_HOLD_COUNT + 1) cycles of OE.  The HIGHZ state
+    // adds one cycle before READY, so the total read cycle (address valid to
+    // next possible address change) is (READ_HOLD_COUNT + 3) cycles.
+    localparam int READ_OE_CYCLES    = READ_HOLD_COUNT + 1;
+    localparam int READ_TOTAL_CYCLES = READ_HOLD_COUNT + 3;
+
+    // WE is asserted in READY and deasserted in WRITING when cycle_count
+    // matches, giving (WRITE_HOLD_COUNT + 1) cycles of WE.  WRITING returns
+    // directly to READY, so the total write cycle is (WRITE_HOLD_COUNT + 2).
+    localparam int WRITE_WE_CYCLES    = WRITE_HOLD_COUNT + 1;
+    localparam int WRITE_TOTAL_CYCLES = WRITE_HOLD_COUNT + 2;
+
+    initial begin
+        // Hold counts must fit in cycle_count width
+        if (READ_HOLD_COUNT > 2**$bits(cycle_count) - 1)
+            $fatal(1, "READ_HOLD_COUNT (%0d) exceeds cycle_count max (%0d)",
+                READ_HOLD_COUNT, 2**$bits(cycle_count) - 1);
+        if (WRITE_HOLD_COUNT > 2**$bits(cycle_count) - 1)
+            $fatal(1, "WRITE_HOLD_COUNT (%0d) exceeds cycle_count max (%0d)",
+                WRITE_HOLD_COUNT, 2**$bits(cycle_count) - 1);
+
+        // Read: OE pulse must allow address access time plus round-trip
+        // trace delay (address out to SRAM, data back to FPGA)
+        if (READ_OE_CYCLES * NS_PER_CYCLE < SRAM_tAA + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "Read OE pulse %.1fns violates tAA + 2*trace >= %0dns",
+                READ_OE_CYCLES * NS_PER_CYCLE, SRAM_tAA + 2 * MAX_TRACE_DELAY_NS);
+
+        // Read: OE pulse must allow output enable access time plus
+        // round-trip trace delay
+        if (READ_OE_CYCLES * NS_PER_CYCLE < SRAM_tOE + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "Read OE pulse %.1fns violates tOE + 2*trace >= %0dns",
+                READ_OE_CYCLES * NS_PER_CYCLE, SRAM_tOE + 2 * MAX_TRACE_DELAY_NS);
+
+        // Read: total cycle must meet minimum read cycle time
+        if (READ_TOTAL_CYCLES * NS_PER_CYCLE < SRAM_tRC)
+            $fatal(1, "Read cycle %.1fns violates tRC >= %0dns",
+                READ_TOTAL_CYCLES * NS_PER_CYCLE, SRAM_tRC);
+
+        // Write: WE pulse must meet minimum pulse width
+        if (WRITE_WE_CYCLES * NS_PER_CYCLE < SRAM_tWP)
+            $fatal(1, "Write WE pulse %.1fns violates tWP >= %0dns",
+                WRITE_WE_CYCLES * NS_PER_CYCLE, SRAM_tWP);
+
+        // Write: address must be valid at least tAW before WE deasserts
+        if (WRITE_WE_CYCLES * NS_PER_CYCLE < SRAM_tAW)
+            $fatal(1, "Write address setup %.1fns violates tAW >= %0dns",
+                WRITE_WE_CYCLES * NS_PER_CYCLE, SRAM_tAW);
+
+        // Write: data must be valid at least tDW before WE deasserts
+        if (WRITE_WE_CYCLES * NS_PER_CYCLE < SRAM_tDW)
+            $fatal(1, "Write data setup %.1fns violates tDW >= %0dns",
+                WRITE_WE_CYCLES * NS_PER_CYCLE, SRAM_tDW);
+
+        // Write: total cycle must meet minimum write cycle time
+        if (WRITE_TOTAL_CYCLES * NS_PER_CYCLE < SRAM_tWC)
+            $fatal(1, "Write cycle %.1fns violates tWC >= %0dns",
+                WRITE_TOTAL_CYCLES * NS_PER_CYCLE, SRAM_tWC);
+    end
+    // synthesis on
 endmodule
