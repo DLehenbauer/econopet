@@ -7,13 +7,15 @@
 #include "display/window.h"
 
 typedef void (*on_enter_config_fn_t)(void* context);
-typedef void (*on_exit_config_fn_t)(void* context, const char* name);
+typedef void (*on_exit_config_fn_t)(void* context, const char* id, const char* name);
+typedef void (*on_default_fn_t)(void* context, const char* id);
 
 // Struct for sinking parsed data
 typedef struct config_sink_s {
     void* const context;
     const on_enter_config_fn_t on_enter_config;
     const on_exit_config_fn_t on_exit_config;
+    const on_default_fn_t on_default;
     const setup_sink_t* const setup;
 } config_sink_t;
 

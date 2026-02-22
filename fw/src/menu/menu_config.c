@@ -10,8 +10,11 @@
 #include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
+#include "fatal.h"
 #include "global.h"
 #include "input.h"
+#include "pet.h"
+#include "roms/roms.h"
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
@@ -42,6 +45,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .setup = setup_sink,
         .on_enter_config = NULL,
         .on_exit_config = NULL,
+        .on_default = NULL,
     };
     
     parse_config_file("/config.yaml", &sink, selected_config);
@@ -50,17 +54,33 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
 typedef struct context_s {
     const window_t* const window;
     unsigned int config_count;
+    char default_id[41];
+    int default_index;
 } context_t;
 
-void on_config_callback(void* context, const char* name) {
+static void on_default_callback(void* context, const char* id) {
     context_t* const ctx = (context_t*) context;
-    window_puts(ctx->window, window_xy(ctx->window, 0, ctx->config_count++), name);
+    strncpy(ctx->default_id, id, sizeof(ctx->default_id) - 1);
+    ctx->default_id[sizeof(ctx->default_id) - 1] = '\0';
 }
 
-void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink) {
+static void on_config_callback(void* context, const char* id, const char* name) {
+    context_t* const ctx = (context_t*) context;
+    window_puts(ctx->window, window_xy(ctx->window, 0, ctx->config_count), name);
+
+    if (ctx->default_id[0] != '\0' && strcmp(id, ctx->default_id) == 0) {
+        ctx->default_index = (int) ctx->config_count;
+    }
+
+    ctx->config_count++;
+}
+
+void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot) {
     context_t context = {
         .window = window,
         .config_count = 0,
+        .default_id = { 0 },
+        .default_index = -1,
     };
 
     config_sink_t sink = {
@@ -68,6 +88,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         .setup = NULL,
         .on_enter_config = NULL,
         .on_exit_config = on_config_callback,
+        .on_default = on_default_callback,
     };
 
     // Fill window with spaces
@@ -75,7 +96,27 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
 
     parse_config_file("/config.yaml", &sink, -1);
 
-    unsigned int selected_config = 0;
+    bool has_default = context.default_id[0] != '\0';
+    bool default_matched = has_default && context.default_index >= 0;
+
+    vet(!has_default || default_matched,
+        "/config.yaml: unknown default '%s'", context.default_id);
+
+    // If the machine was powered on and a default config was specified, automatically
+    // boot it without showing the menu.
+    if (is_boot && default_matched) {
+        log_info("Auto-booting default config: '%s' (index %d)", context.default_id, context.default_index);
+        return load_config(setup_sink, context.default_index);
+    }
+
+    // Play the happy boot tune via NMI now that we know we are showing the menu.
+    pet_nmi();
+
+    // Pre-select the default config (if found) or the first config
+    unsigned int selected_config = default_matched
+        ? (unsigned int) context.default_index
+        : 0;
+    
     window_reverse(window, window_xy(window, 0, selected_config), 40);
 
     while (true) {

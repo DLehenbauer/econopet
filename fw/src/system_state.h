@@ -120,7 +120,7 @@ typedef struct system_state_s {
     // Video character buffer (shared between PET, DVI output, and terminal)
     uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];
 
-    // Video graphics mode flag (true = graphics/lowercase charset, false = text/uppercase)
+    // Video graphics mode flag (false = lowercase/business charset, true = uppercase/graphics charset)
     bool video_graphics;
 
     // True when the FPGA has halted the CPU on a breakpoint (STP opcode)

@@ -181,7 +181,7 @@ int main() {
     bp_init();      // Initialize breakpoint subsystem
     
     // Enter boot menu
-    menu_enter();
+    menu_enter(/* is_boot: */ true);
 
     // PET is configured and running.  Enter main loop to synchronize displays, service
     // input queues, and check for menu/reset button.

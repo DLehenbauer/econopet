@@ -121,7 +121,7 @@ CPU's RDY pin. With the breakpoint module, it becomes:
 
 ```
 register_file.cpu_ready_o ──┐
-                             ├── breakpoint.cpu_ready_o ──> top.sv RDY pin
+                            ├── breakpoint.cpu_ready_o ──> top.sv RDY pin
 breakpoint.halted ──────────┘
 ```
 

@@ -6,4 +6,4 @@
 #include "config/config_setup.h"
 #include "display/window.h"
 
-void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink);
+void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot);

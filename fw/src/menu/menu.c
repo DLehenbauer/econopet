@@ -229,7 +229,7 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
     }
 }
 
-void menu_enter(void) {
+void menu_enter(bool is_boot) {
     log_info("-- Enter Menu --");
 
     tape_deinit();
@@ -258,7 +258,7 @@ void menu_enter(void) {
         .system_state = &system_state,
     };
 
-    menu_config_show(&window, &setup_sink);
+    menu_config_show(&window, &setup_sink, is_boot);
 
     system_state.video_source = video_source_pet;
     pet_reset();
@@ -275,7 +275,7 @@ void menu_task(void) {
             pet_reset();
             break;
         case KEY_BTN_LONG:
-            menu_enter();
+            menu_enter(/* is_boot: */ false);
             break;
         default:
             break;

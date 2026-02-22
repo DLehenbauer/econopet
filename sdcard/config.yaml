@@ -1,5 +1,9 @@
+# Uncomment the following line to set the default configuration to load on power on.
+# default: pet-40xx-60hz
+
 configs:
-  - name: "CBM 40xx (40 Col 50 Hz)"
+  - id: pet-40xx-50hz
+    name: "CBM 40xx (40 Col 50 Hz)"
     setup:
       - action: "load"
         files:
@@ -31,7 +35,8 @@ configs:
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
-  - name: "PET 40xx (40 Col 60 Hz)"
+  - id: pet-40xx-60hz
+    name: "PET 40xx (40 Col 60 Hz)"
     setup:
       - action: "load"
         files:
@@ -63,7 +68,8 @@ configs:
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
-  - name: "CBM 80xx (80 Col 50 Hz)"
+  - id: pet-80xx-50hz
+    name: "CBM 80xx (80 Col 50 Hz)"
     setup:
       - action: "load"
         files:
@@ -102,7 +108,8 @@ configs:
         columns: 80
         video-ram-kb: 2
         tape: "2ef415f4c9cad1d4da"
-  - name: "PET 80xx (80 Col 60 Hz)"
+  - id: pet-80xx-60hz
+    name: "PET 80xx (80 Col 60 Hz)"
     setup:
       - action: "load"
         files:
@@ -135,7 +142,8 @@ configs:
         columns: 80
         video-ram-kb: 2
         tape: "2ef415f4c9cad1d4da"
-  - name: "PET 2001 (Upgraded ROMs)"
+  - id: pet-2001
+    name: "PET 2001 (Upgraded ROMs)"
     setup:
       - action: "load"
         files:
@@ -188,7 +196,8 @@ configs:
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "eff3d6f3c9cad1d4da"
-  - name: "PET 2001 (Original ROMs)"
+  - id: pet-2001-rom1
+    name: "PET 2001 (Original ROMs)"
     setup:
       - action: "load"
         files:
@@ -236,7 +245,8 @@ configs:
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "e5f362f3e5e6eef1f9"
-  - name: "ColourPET (40 Col 60 Hz) [ALPHA]"
+  - id: colourpet-40
+    name: "ColourPET (40 Col 60 Hz) [ALPHA]"
     setup:
       - action: "load"
         files:

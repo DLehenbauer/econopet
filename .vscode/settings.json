@@ -37,13 +37,15 @@
     
     // Ignore submodules
     "git.ignoredRepositories": [
-        "fw/external/libyaml",
-        "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico",
-        "fw/external/pico-vfs",
-        "fw/external/PicoDVI",
-        "gw/EconoPET/external/65xx",
-        "gw/EconoPET/external/icesid",
-        "gw/EconoPET/external/verilog-6502"
+        // "fw/external/libyaml",
+        // "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico",
+        // "fw/external/pico-vfs",
+        // "fw/external/PicoDVI",
+        // "gw/EconoPET/external/m6502",
+        // "gw/EconoPET/external/65xx",
+        // "gw/EconoPET/external/icesid",
+        // "gw/EconoPET/external/verilog-6502",
+        // "rom/external/cbm-edit-rom"
     ],
     "chat.tools.terminal.autoApprove": {
         "cmake": true,

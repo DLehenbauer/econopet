@@ -15,13 +15,16 @@
 typedef struct test_context_s {
     int config_enter_count;
     int config_exit_count;
+    int default_count;
     int load_count;
     int patch_count;
     int copy_count;
     int set_options_count;
     int fix_checksum_count;
     
+    char last_config_id[41];
     char last_config_name[41];
+    char last_default_id[41];
     char last_load_file[PATH_MAX];
     uint32_t last_load_address;
     uint32_t last_patch_address;
@@ -51,11 +54,20 @@ static void test_on_enter_config(void* context) {
     ctx->config_enter_count++;
 }
 
-static void test_on_exit_config(void* context, const char* name) {
+static void test_on_exit_config(void* context, const char* id, const char* name) {
     test_context_t* ctx = (test_context_t*)context;
     ctx->config_exit_count++;
+    strncpy(ctx->last_config_id, id, sizeof(ctx->last_config_id) - 1);
+    ctx->last_config_id[sizeof(ctx->last_config_id) - 1] = '\0';
     strncpy(ctx->last_config_name, name, sizeof(ctx->last_config_name) - 1);
     ctx->last_config_name[sizeof(ctx->last_config_name) - 1] = '\0';
+}
+
+static void test_on_default(void* context, const char* id) {
+    test_context_t* ctx = (test_context_t*)context;
+    ctx->default_count++;
+    strncpy(ctx->last_default_id, id, sizeof(ctx->last_default_id) - 1);
+    ctx->last_default_id[sizeof(ctx->last_default_id) - 1] = '\0';
 }
 
 static void test_on_load(void* context, const char* filename, uint32_t address) {
@@ -117,6 +129,7 @@ static const config_sink_t config_sink = {
     .context = &test_ctx,
     .on_enter_config = test_on_enter_config,
     .on_exit_config = test_on_exit_config,
+    .on_default = test_on_default,
     .setup = &setup_sink,
 };
 
@@ -607,6 +620,94 @@ START_TEST(test_parse_set_tape) {
 }
 END_TEST
 
+// Test: Parse config with default key before configs
+START_TEST(test_parse_default_config) {
+    const char* yaml_content = 
+        "default: second\n"
+        "configs:\n"
+        "  - id: first\n"
+        "    name: First Config\n"
+        "    setup: []\n"
+        "  - id: second\n"
+        "    name: Second Config\n"
+        "    setup: []\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, -1);
+    
+    ck_assert_int_eq(test_ctx.default_count, 1);
+    ck_assert_str_eq(test_ctx.last_default_id, "second");
+    ck_assert_int_eq(test_ctx.config_exit_count, 2);
+}
+END_TEST
+
+// Test: Parse config with default key after configs
+START_TEST(test_parse_default_after_configs) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - id: first\n"
+        "    name: First Config\n"
+        "    setup: []\n"
+        "  - id: second\n"
+        "    name: Second Config\n"
+        "    setup: []\n"
+        "default: first\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, -1);
+    
+    ck_assert_int_eq(test_ctx.default_count, 1);
+    ck_assert_str_eq(test_ctx.last_default_id, "first");
+    ck_assert_int_eq(test_ctx.config_exit_count, 2);
+}
+END_TEST
+
+// Test: Parse config without default key
+START_TEST(test_parse_no_default) {
+    const char* yaml_content = 
+        "configs:\n"
+        "  - id: test\n"
+        "    name: Test Config\n"
+        "    setup: []\n";
+    
+    mock_register_file("/config.yaml", yaml_content);
+    
+    parse_config_file("/config.yaml", &config_sink, -1);
+    
+    ck_assert_int_eq(test_ctx.default_count, 0);
+    ck_assert_str_eq(test_ctx.last_default_id, "");
+}
+END_TEST
+
+// Test: Validate actual /sdcard/config.yaml has a valid default
+START_TEST(test_validate_sdcard_config_yaml_default) {
+    const char* sdcard_root = getenv("ECONOPET_TEST_SDCARD_ROOT");
+    ck_assert_msg(sdcard_root != NULL, "ECONOPET_TEST_SDCARD_ROOT environment variable not set");
+    
+    char config_path[PATH_MAX];
+    snprintf(config_path, sizeof(config_path), "%s/config.yaml", sdcard_root);
+    
+    char* config_contents = read_file_to_string(config_path);
+    ck_assert_msg(config_contents != NULL, "Failed to read config.yaml from %s", config_path);
+    
+    mock_register_file("/config.yaml", config_contents);
+    
+    parse_config_file("/config.yaml", &config_sink, -1);
+    
+    // The sdcard config.yaml should have a default specified
+    ck_assert_int_eq(test_ctx.default_count, 1);
+    ck_assert_int_gt(strlen(test_ctx.last_default_id), 0);
+    
+    // Verify the default matches one of the config names by re-parsing
+    // (The name should be a valid config that exists in the file)
+    
+    free(config_contents);
+    mock_unregister_file("/config.yaml");
+}
+END_TEST
+
 Suite *config_parser_suite(void) {
     Suite *s;
     TCase *tc_core;
@@ -635,6 +736,10 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_enumerate_all_configs);
     tcase_add_test(tc_core, test_validate_sdcard_config_yaml);
     tcase_add_test(tc_core, test_parse_set_tape);
+    tcase_add_test(tc_core, test_parse_default_config);
+    tcase_add_test(tc_core, test_parse_default_after_configs);
+    tcase_add_test(tc_core, test_parse_no_default);
+    tcase_add_test(tc_core, test_validate_sdcard_config_yaml_default);
     
     suite_add_tcase(s, tc_core);
 

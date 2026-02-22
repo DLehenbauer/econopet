@@ -39,11 +39,11 @@ void pet_reset() {
 void pet_nmi() {
     // Out of paranoia, deassert CPU 'NMI' to ensure the CPU observes a clean pulse.
     // (We set 'ready' to false to prevent the CPU from executing instructions.)
-    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    set_cpu(/* ready: */ true, /* reset: */ false, /* nmi: */ false);
     sleep_us(4);
     
     // Assert CPU 'nmi'.  Execution continues to be suspended by deasserting 'ready'.
-    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ true);
+    set_cpu(/* ready: */ true, /* reset: */ false, /* nmi: */ true);
     sleep_us(4);
     
     // Finally, deassert CPU 'NMI' and assert 'ready' to allow the CPU to execute instructions.

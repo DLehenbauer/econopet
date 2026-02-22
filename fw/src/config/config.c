@@ -662,16 +662,18 @@ static void parse_config(parser_t* parser) {
         parser->sink->on_enter_config(parser->sink->context);
     }
 
+    char id[41] = { 0 };
     char name[41] = { 0 };
 
     parse_mapping(parser, (const map_dispatch_entry_t[]) {
+        { "id", parse_as_string, &id, sizeof(id) },
         { "name", parse_as_string, &name, sizeof(name) },
         { "setup", parse_action_list, NULL, 0 },
         { NULL, NULL, NULL, 0 }
     });
 
     if (parser->sink->on_exit_config) {
-        parser->sink->on_exit_config(parser->sink->context, name);
+        parser->sink->on_exit_config(parser->sink->context, id, name);
     }
     
     // Increment config index and clear executing flag after processing this config
@@ -688,6 +690,19 @@ static void parse_config_list(parser_t* parser, void* context, size_t context_si
     parse_sequence(parser, parse_config);
 }
 
+// Helper function to parse the top-level 'default' key
+static void parse_default(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    parse_expect_type(parser, YAML_SCALAR_EVENT);
+    const char* name = get_current_string(parser);
+
+    if (parser->sink->on_default) {
+        parser->sink->on_default(parser->sink->context, name);
+    }
+}
+
 void parse_config_file(const char* filename, const config_sink_t* const sink, int target_index) {
     parser_t parser;
 
@@ -697,6 +712,7 @@ void parse_config_file(const char* filename, const config_sink_t* const sink, in
     
     parse_mapping(&parser, (const map_dispatch_entry_t[]) {
         { "configs", parse_config_list, NULL, 0 },
+        { "default", parse_default, NULL, 0 },
         { "data", parse_skip, NULL, 0 },
         { NULL, NULL, NULL, 0 }
     });
