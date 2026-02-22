@@ -42,9 +42,7 @@
         // "fw/external/pico-vfs",
         // "fw/external/PicoDVI",
         // "gw/EconoPET/external/m6502",
-        // "gw/EconoPET/external/65xx",
         // "gw/EconoPET/external/icesid",
-        // "gw/EconoPET/external/verilog-6502",
         // "rom/external/cbm-edit-rom"
     ],
     "chat.tools.terminal.autoApprove": {

@@ -104,7 +104,7 @@ if [ -n "$UPDATE_F_FILE" ]; then
 
     # Produce a second '.f' file for Verilator that removes all references to source
     # files under '/opt/efinity/' and 'sim/'.  (Line may start with an optional '-v')
-    grep -v -E '^(-v )?((/opt/efinity/)|(external/65xx))' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
+    grep -v -E '^(-v )?(/opt/efinity/)' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
 
     echo
 fi

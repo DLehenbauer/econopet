@@ -5,12 +5,6 @@
 [submodule "fw/external/no-OS-FatFS-SD-SPI-RPi-Pico"]
 	path = fw/external/no-OS-FatFS-SD-SPI-RPi-Pico
 	url = https://github.com/carlk3/no-OS-FatFS-SD-SPI-RPi-Pico.git
-[submodule "gw/EconoPET/external/verilog-6502"]
-	path = gw/EconoPET/external/verilog-6502
-	url = https://github.com/Arlet/verilog-6502.git
-[submodule "gw/EconoPET/external/65xx"]
-	path = gw/EconoPET/external/65xx
-	url = https://github.com/kdyke/65xx.git
 [submodule "fw/external/pico-vfs"]
 	path = fw/external/pico-vfs
 	url = https://github.com/dlehenbauer/pico-vfs.git

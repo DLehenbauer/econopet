@@ -307,7 +307,7 @@ module top_tb;
         // Release reset (bit 1) but keep CPU halted (ready = 0).
         mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
 
-        // The Verilog-6502 core requires two clock cycles while RESB is low.
+        // The m6502 core requires two clock cycles while RESB is low.
         @(posedge cpu_clock);
         @(posedge cpu_clock);
 
@@ -470,7 +470,7 @@ module top_tb;
         `assert_equal(cpu_ready, 1'b0);
         `assert_equal(cpu_reset_n, 1'b0);
         
-        // Like the W65C02S, the Verilog-6502 core requires that RESB be held low for two
+        // Like the W65C02S, the m6502 core requires that RESB be held low for two
         // clock cycles after power on.
         @(cpu_clock);
         @(cpu_clock);

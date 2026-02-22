@@ -250,7 +250,7 @@ module mock_system (
     task static cpu_reset;
         manual_reset_n = 1'b0;
         
-        // Verilog-6502 requires two cycles to reset.
+        // m6502 requires two cycles to reset.
         @(cpu_clock_o);
         @(cpu_clock_o);
         
