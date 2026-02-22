@@ -83,7 +83,12 @@ module mock_cpu (
         set_data = 'x;
         set_we   = 1'b0;
 
+        // The W65C02S latches read data near the falling edge of PHI2 (data
+        // must be valid tDSR before that edge). Capture at negedge to give
+        // external devices (SRAM, PIA, etc.) the full PHI2-high period to
+        // drive valid data onto the bus.
         @(posedge cpu_clock_i);
+        @(negedge cpu_clock_i);
 
         data = data_i;
         $display("[%t]   CPU Read %04x -> %02x", $time, addr, data);
