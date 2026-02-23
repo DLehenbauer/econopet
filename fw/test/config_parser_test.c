@@ -696,9 +696,8 @@ START_TEST(test_validate_sdcard_config_yaml_default) {
     
     parse_config_file("/config.yaml", &config_sink, -1);
     
-    // The sdcard config.yaml should have a default specified
-    ck_assert_int_eq(test_ctx.default_count, 1);
-    ck_assert_int_gt(strlen(test_ctx.last_default_id), 0);
+    // The sdcard config.yaml ships with no default specified (commented out)
+    ck_assert_int_eq(test_ctx.default_count, 0);
     
     // Verify the default matches one of the config names by re-parsing
     // (The name should be a valid config that exists in the file)
