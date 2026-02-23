@@ -6,4 +6,5 @@ project(prgs LANGUAGES NONE)
 
 add_subdirectory(bp)
 add_subdirectory(open-bus)
+add_subdirectory(oregon-trail)
 add_subdirectory(reload)

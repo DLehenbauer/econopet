@@ -1,7 +1,6 @@
 # EconoPET Release Notes
 
-For user manual, firmware updates, and more, visit the
-[project page](https://dlehenbauer.github.io/econopet).
+For the user manual, firmware updates, and more, visit the [project page](https://dlehenbauer.github.io/econopet).
 
 ## Updating Firmware
 
@@ -15,10 +14,10 @@ For detailed instructions, see the [user manual](https://dlehenbauer.github.io/e
 
 ### v0.2.0 (2026-02-22)
 
-- Virtual tape loading from SD card
-- HDMI output now supports limited CRTC emulation
-- Default configuration support (set `default:` in `config.yaml`)
-- ColourPET preview
+- High-Speed Virtual Datasette (see `/prgs/README.md`)
+- HDMI output now supports limited CRTC emulation (R1, R6, R9, R12-R13)
+- Optionally load a default configuration when powered on (set `default:` in `config.yaml`)
+- ColourPET preview (RGBI output on HDMI, color buffer starts at $8800)
 
 ### v0.1.0 (2025-08-29)
 
