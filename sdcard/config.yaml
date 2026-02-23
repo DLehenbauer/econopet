@@ -256,24 +256,21 @@ configs:
             file: "/roms/basic-4-c000.901465-20.bin"
           - address: 0xd000
             file: "/roms/basic-4-d000.901465-21.bin"
-          - address: 0xe000
-            file: "/roms/colourpet-test.bin"
           - address: 0xf000
             file: "/roms/kernal-4.901465-22.bin"
           - address: 0x68000
             file: "/roms/characters-2.901447-10.bin"
-      # - if: "graphics"
-      #   then:
-      #     # Commodore never produced an edit ROM for the graphics keyboard for 80 column models.
-      #     # This patch replaces the original keyscan routine with one adapted from the 40 column
-      #     # edit rom '901499-01'.
-      #     - action: "patch"
-      #       address: 0x0e545
-      #       hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
-      #     # Graphics keyboard scanmap from '901499-01'
-      #     - action: "patch"
-      #       address: 0x0e6d1
-      #       hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+      - if: "graphics"
+        then:
+          - action: "load"
+            files:
+              - address: 0xe000
+                file: "/roms/colourpet-n40.bin"
+        else:
+          - action: "load"
+            files:
+              - address: 0xe000
+                file: "/roms/colourpet-b40.bin"
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         columns: 40
