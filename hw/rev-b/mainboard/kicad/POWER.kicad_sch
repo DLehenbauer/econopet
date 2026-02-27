@@ -6,8 +6,8 @@
 	(paper "A")
 	(title_block
 		(title "EconoPET 40/8096")
-		(date "2023-10-01")
-		(rev "A")
+		(date "2026-02-27")
+		(rev "B")
 		(company "https://is.gd/6hpvh6")
 		(comment 1 "Unspecified resistors are 1% / 62.5mW")
 		(comment 2 "Unspecified capacitors are 25V")
