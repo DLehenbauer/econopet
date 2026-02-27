@@ -1,0 +1,4 @@
+(sym_lib_table
+  (lib (name "Mainboard-rescue")(type "Legacy")(uri "${KIPRJMOD}/Mainboard-rescue.lib")(options "")(descr ""))
+  (lib (name "PET")(type "KiCad")(uri "D:/gh/pet/hw/PET.kicad_sym")(options "")(descr ""))
+)
