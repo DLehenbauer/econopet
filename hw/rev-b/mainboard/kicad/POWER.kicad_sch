@@ -4602,7 +4602,7 @@
 		(uuid "4a333138-062a-4541-87e1-d6ef03b1e3dd")
 	)
 	(junction
-		(at 31.75 177.8)
+		(at 31.75 186.69)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "4a92afb1-a93f-4828-93a4-84fb40d8e110")
@@ -4698,7 +4698,7 @@
 		(uuid "6f6a616d-5297-4ff4-ba86-d255b9895d7c")
 	)
 	(junction
-		(at 39.37 177.8)
+		(at 39.37 186.69)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7131ee3d-de36-4b6f-a391-6695d97d81c2")
@@ -5011,7 +5011,7 @@
 	)
 	(wire
 		(pts
-			(xy 31.75 177.8) (xy 39.37 177.8)
+			(xy 31.75 186.69) (xy 39.37 186.69)
 		)
 		(stroke
 			(width 0)
@@ -6071,7 +6071,7 @@
 	)
 	(wire
 		(pts
-			(xy 17.78 177.8) (xy 20.32 177.8)
+			(xy 17.78 186.69) (xy 20.32 186.69)
 		)
 		(stroke
 			(width 0)
@@ -6431,7 +6431,7 @@
 	)
 	(wire
 		(pts
-			(xy 17.78 179.07) (xy 17.78 177.8)
+			(xy 17.78 187.96) (xy 17.78 186.69)
 		)
 		(stroke
 			(width 0)
@@ -6481,7 +6481,7 @@
 	)
 	(wire
 		(pts
-			(xy 39.37 177.8) (xy 39.37 176.53)
+			(xy 39.37 186.69) (xy 39.37 185.42)
 		)
 		(stroke
 			(width 0)
@@ -6691,7 +6691,7 @@
 	)
 	(wire
 		(pts
-			(xy 25.4 177.8) (xy 31.75 177.8)
+			(xy 25.4 186.69) (xy 31.75 186.69)
 		)
 		(stroke
 			(width 0)
@@ -6751,7 +6751,7 @@
 	)
 	(wire
 		(pts
-			(xy 39.37 179.07) (xy 39.37 177.8)
+			(xy 39.37 187.96) (xy 39.37 186.69)
 		)
 		(stroke
 			(width 0)
@@ -7562,7 +7562,7 @@
 	)
 	(text "Mounting Holes"
 		(exclude_from_sim no)
-		(at 19.05 165.1 0)
+		(at 17.78 173.99 0)
 		(effects
 			(font
 				(size 1.5 1.5)
@@ -7844,15 +7844,15 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 63.5 172.72 0)
+		(at 66.04 181.61 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061fe0c6d")
-		(property "Reference" "H3"
-			(at 66.04 171.5516 0)
+		(property "Reference" "H2"
+			(at 68.58 180.4416 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7860,8 +7860,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "MountingHole"
-			(at 66.04 173.863 0)
+		(property "Value" "MountingHole_Screw"
+			(at 68.58 182.753 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7869,8 +7869,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "PET:PET_MountingHole_4mm"
-			(at 63.5 172.72 0)
+		(property "Footprint" "MountingHole:MountingHole_4mm"
+			(at 66.04 181.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7879,7 +7879,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 63.5 172.72 0)
+			(at 66.04 181.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7888,7 +7888,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 63.5 172.72 0)
+			(at 66.04 181.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7899,7 +7899,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "H3")
+					(reference "H2")
 					(unit 1)
 				)
 			)
@@ -8369,7 +8369,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole_Pad")
-		(at 39.37 173.99 0)
+		(at 39.37 182.88 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8377,7 +8377,7 @@
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000062f5095d")
 		(property "Reference" "H1"
-			(at 41.91 171.6786 0)
+			(at 41.91 180.5686 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8386,7 +8386,7 @@
 			)
 		)
 		(property "Value" "MountingHole_Pad"
-			(at 41.91 173.99 0)
+			(at 41.91 182.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8395,7 +8395,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_4mm_Pad"
-			(at 39.37 173.99 0)
+			(at 39.37 182.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8404,7 +8404,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 39.37 173.99 0)
+			(at 39.37 182.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8413,7 +8413,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 39.37 173.99 0)
+			(at 39.37 182.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8435,7 +8435,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 22.86 177.8 270)
+		(at 22.86 186.69 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8443,7 +8443,7 @@
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000062fc42f8")
 		(property "Reference" "R5"
-			(at 22.86 172.8216 90)
+			(at 22.86 181.7116 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8451,7 +8451,7 @@
 			)
 		)
 		(property "Value" "68"
-			(at 22.86 175.133 90)
+			(at 22.86 184.023 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8459,7 +8459,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 22.86 177.8 0)
+			(at 22.86 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8468,7 +8468,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311830_UNI-ROYAL-Uniroyal-Elec-0805W8F680JT5E_C17802.pdf"
-			(at 22.86 177.8 0)
+			(at 22.86 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8477,7 +8477,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 22.86 177.8 0)
+			(at 22.86 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8486,7 +8486,7 @@
 			)
 		)
 		(property "LCSC" "C17802"
-			(at 22.86 177.8 90)
+			(at 22.86 186.69 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8655,15 +8655,15 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 39.37 190.5 0)
+		(at 66.04 196.85 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
 		(uuid "08c6c80e-117f-4db8-b3f5-0fe312f44206")
-		(property "Reference" "H2"
-			(at 41.91 189.3316 0)
+		(property "Reference" "H4"
+			(at 68.58 195.6816 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8671,8 +8671,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "MountingHole"
-			(at 41.91 191.643 0)
+		(property "Value" "MountingHole_Pillar"
+			(at 68.58 197.993 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8680,8 +8680,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "PET:PET_MountingHole_4mm"
-			(at 39.37 190.5 0)
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
+			(at 66.04 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8689,8 +8689,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 39.37 190.5 0)
+		(property "Datasheet" "https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt"
+			(at 66.04 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8699,7 +8699,16 @@
 			)
 		)
 		(property "Description" ""
-			(at 39.37 190.5 0)
+			(at 66.04 196.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "MOUSER" "144-LCBSBM-7-01A-RT"
+			(at 66.04 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8710,7 +8719,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "H2")
+					(reference "H4")
 					(unit 1)
 				)
 			)
@@ -8850,7 +8859,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 17.78 179.07 0)
+		(at 17.78 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -8859,7 +8868,7 @@
 		(fields_autoplaced yes)
 		(uuid "0e51d82e-d0a5-400c-ab79-ed642a59db19")
 		(property "Reference" "#PWR011"
-			(at 17.78 185.42 0)
+			(at 17.78 194.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8868,7 +8877,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 17.78 184.15 0)
+			(at 17.78 193.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8876,7 +8885,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 17.78 179.07 0)
+			(at 17.78 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8885,7 +8894,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 17.78 179.07 0)
+			(at 17.78 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8894,7 +8903,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 17.78 179.07 0)
+			(at 17.78 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10190,7 +10199,7 @@
 	)
 	(symbol
 		(lib_id "power:PWR_FLAG")
-		(at 31.75 177.8 0)
+		(at 31.75 186.69 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -10199,7 +10208,7 @@
 		(fields_autoplaced yes)
 		(uuid "3bba8eff-b5a2-4efc-9bf2-f1b251189469")
 		(property "Reference" "#FLG01"
-			(at 31.75 175.895 0)
+			(at 31.75 184.785 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10208,7 +10217,7 @@
 			)
 		)
 		(property "Value" "PWR_FLAG"
-			(at 31.75 172.72 0)
+			(at 31.75 181.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10216,7 +10225,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 31.75 177.8 0)
+			(at 31.75 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10225,7 +10234,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 31.75 177.8 0)
+			(at 31.75 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10234,7 +10243,7 @@
 			)
 		)
 		(property "Description" "Special symbol for telling ERC where power comes from"
-			(at 31.75 177.8 0)
+			(at 31.75 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12743,15 +12752,15 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 63.5 190.5 0)
+		(at 39.37 196.85 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
 		(uuid "a711bf4d-422b-4985-ab81-aad070900231")
-		(property "Reference" "H4"
-			(at 66.04 189.3316 0)
+		(property "Reference" "H3"
+			(at 41.91 195.6816 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12759,8 +12768,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "MountingHole"
-			(at 66.04 191.643 0)
+		(property "Value" "MountingHole_Pillar"
+			(at 41.91 197.993 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12768,8 +12777,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "PET:PET_MountingHole_4mm"
-			(at 63.5 190.5 0)
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
+			(at 39.37 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12777,8 +12786,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 63.5 190.5 0)
+		(property "Datasheet" "https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt"
+			(at 39.37 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12787,7 +12796,16 @@
 			)
 		)
 		(property "Description" ""
-			(at 63.5 190.5 0)
+			(at 39.37 196.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "MOUSER" "144-LCBSBM-7-01A-RT"
+			(at 39.37 196.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12798,7 +12816,7 @@
 		(instances
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "H4")
+					(reference "H3")
 					(unit 1)
 				)
 			)
@@ -13041,7 +13059,7 @@
 	)
 	(symbol
 		(lib_id "EconoPET:CHASSIS_GND")
-		(at 39.37 179.07 0)
+		(at 39.37 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -13049,7 +13067,7 @@
 		(dnp no)
 		(uuid "c1e129c8-f973-4e5f-ac36-aff3c5b8ac74")
 		(property "Reference" "#PWR013"
-			(at 39.37 184.15 0)
+			(at 39.37 193.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13058,7 +13076,7 @@
 			)
 		)
 		(property "Value" "CHASSIS_GND"
-			(at 39.37 182.88 0)
+			(at 39.37 191.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13066,7 +13084,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 39.37 180.34 0)
+			(at 39.37 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13075,7 +13093,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 39.37 180.34 0)
+			(at 39.37 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13084,7 +13102,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 39.37 179.07 0)
+			(at 39.37 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
