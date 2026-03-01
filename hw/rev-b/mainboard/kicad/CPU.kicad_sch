@@ -6356,7 +6356,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "EconoPET:SW_PUSH_1P1T_6x3.5mm_H4.3_APEM_MJTP1243"
+		(property "Footprint" "LCSC:SW-SMD_L3.9-W3.0-P4.45"
 			(at 90.17 184.15 0)
 			(effects
 				(font
@@ -6365,7 +6365,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8588886944068096000"
 			(at 90.17 184.15 0)
 			(effects
 				(font
@@ -6402,6 +6402,15 @@
 			)
 		)
 		(property "MOUSER" "611-PTS636SK43LFS"
+			(at 95.25 184.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C720477"
 			(at 95.25 184.15 0)
 			(effects
 				(font
@@ -6517,7 +6526,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "EconoPET:SW_PUSH_1P1T_6x3.5mm_H4.3_APEM_MJTP1243"
+		(property "Footprint" "LCSC:SW-SMD_L3.9-W3.0-P4.45"
 			(at 120.65 184.15 0)
 			(effects
 				(font
@@ -6526,7 +6535,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8588886944068096000"
 			(at 120.65 184.15 0)
 			(effects
 				(font
@@ -6563,6 +6572,15 @@
 			)
 		)
 		(property "MOUSER" "611-PTS636SK43LFS"
+			(at 125.73 184.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C720477"
 			(at 125.73 184.15 0)
 			(effects
 				(font

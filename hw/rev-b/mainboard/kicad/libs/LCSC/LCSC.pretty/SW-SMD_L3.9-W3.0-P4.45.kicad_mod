@@ -1,27 +1,182 @@
-(module easyeda2kicad:SW-SMD_L3.9-W3.0-P4.45 (layer F.Cu) (tedit 5DC5F6A4)
+(footprint "SW-SMD_L3.9-W3.0-P4.45"
+	(version 20240108)
+	(generator "pcbnew")
+	(generator_version "8.0")
+	(layer "F.Cu")
+	(descr "LCSC# C720477")
+	(property "Reference" "REF**"
+		(at 0 -4 0)
+		(layer "F.SilkS")
+		(uuid "0473bd66-4277-49bb-93cf-fb4b4ed3c969")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "SW-SMD_L3.9-W3.0-P4.45"
+		(at 0 4 0)
+		(layer "F.Fab")
+		(uuid "76422e68-8d52-42c1-aea5-f13f35bdac99")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Footprint" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "c186e524-1f54-42b3-a6f7-bb54ea170757")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "fc30e1bc-222e-44d9-bccb-6a23ed250583")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "e66a7931-416c-4f50-ae9f-5e22284d954c")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
 	(attr smd)
-	(fp_text reference REF** (at 0 -4.0) (layer F.SilkS)
-		(effects (font (size 1 1) (thickness 0.15)))
+	(fp_line
+		(start -2.03 -1.54)
+		(end -2.03 -1.11)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "25629923-3a4a-4520-9062-b8e4d63bbea2")
 	)
-	(fp_text value SW-SMD_L3.9-W3.0-P4.45 (at 0 4.0) (layer F.Fab)
-		(effects (font (size 1 1) (thickness 0.15)))
+	(fp_line
+		(start -2.03 1.54)
+		(end -2.03 1.11)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "39453d8a-6841-4e70-bfb3-5b945615eed1")
 	)
-	(fp_text user %R (at 0 0) (layer F.Fab)
-		(effects (font (size 1 1) (thickness 0.15)))
+	(fp_line
+		(start 2.03 -1.54)
+		(end -2.03 -1.54)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "ff2e58cb-946b-4fab-9895-e157df15103b")
 	)
-	(fp_line (start -2.03 -1.54) (end -2.03 -1.11) (layer F.SilkS) (width 0.15))
-	(fp_line (start -2.03 1.54) (end -2.03 1.11) (layer F.SilkS) (width 0.15))
-	(fp_line (start 2.03 1.11) (end 2.03 1.54) (layer F.SilkS) (width 0.15))
-	(fp_line (start 2.03 -1.54) (end 2.03 -1.11) (layer F.SilkS) (width 0.15))
-	(fp_line (start 2.03 -1.54) (end -2.03 -1.54) (layer F.SilkS) (width 0.15))
-	(fp_line (start 2.03 1.54) (end -2.03 1.54) (layer F.SilkS) (width 0.15))
-	(pad 1 smd rect (at -2.18 0.00 0.00) (size 1.23 1.86) (layers F.Cu F.Paste F.Mask))
-	(pad 2 smd rect (at 2.18 0.00 0.00) (size 1.23 1.86) (layers F.Cu F.Paste F.Mask))
-	(fp_circle (center 2.50 -1.47) (end 2.53 -1.47) (layer F.Fab) (width 0.06))
-	(fp_circle (center 0.00 0.00) (end 0.90 0.00) (layer F.SilkS) (width 0.25))
-	(model "${KIPRJMOD}/workspaces/econopet/tools/lcsc-import/././hw/rev-b/mainboard/kicad/libs/LCSC/LCSC.3dshapes/SW-SMD_L3.9-W2.9-H2.0-LS4.8.wrl"
-		(offset (xyz 0.000 -0.000 -0.000))
-		(scale (xyz 1 1 1))
-		(rotate (xyz 0 0 0))
+	(fp_line
+		(start 2.03 -1.54)
+		(end 2.03 -1.11)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "a0b3dd83-8b3e-44dd-b60e-c233ce7485c6")
+	)
+	(fp_line
+		(start 2.03 1.11)
+		(end 2.03 1.54)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "3b50f618-dba8-4081-b4ee-fcfc9aa79c85")
+	)
+	(fp_line
+		(start 2.03 1.54)
+		(end -2.03 1.54)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "33351813-8255-41d1-b499-a8460a8445de")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 0.9 0)
+		(stroke
+			(width 0.25)
+			(type solid)
+		)
+		(fill none)
+		(layer "F.SilkS")
+		(uuid "4bb1759a-5b90-40ab-afcc-949c5bdb3030")
+	)
+	(fp_circle
+		(center 2.5 -1.47)
+		(end 2.53 -1.47)
+		(stroke
+			(width 0.06)
+			(type solid)
+		)
+		(fill none)
+		(layer "F.Fab")
+		(uuid "ddc7bfa5-2c33-4c68-8d5b-8b4f045fb824")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(uuid "e838bf63-64b3-4e13-bb83-1c5ff28bf8ff")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -2.18 0)
+		(size 1.23 1.86)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "954e649a-2341-4d12-920d-09e37f0a7785")
+	)
+	(pad "2" smd rect
+		(at 2.18 0)
+		(size 1.23 1.86)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(uuid "2e2a9254-bf40-4eeb-b5e2-c9e89bc2ef67")
+	)
+	(model "${KIPRJMOD}/libs/LCSC/LCSC.3dshapes/SW-SMD_L3.9-W2.9-H2.0-LS4.8.wrl"
+		(offset
+			(xyz 0 -0 -0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
 	)
 )
