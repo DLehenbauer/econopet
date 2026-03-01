@@ -150,9 +150,12 @@ RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VE
 # Tools for website:
 #
 #   advancecomp
+#
+# Python support for various tools:
+#
 #   python3
 #   python3-pip
-#
+#   python3-venv
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -208,6 +211,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     pkg-config \
     python3 \
     python3-pip \
+    python3-venv \
     texinfo \
     universal-ctags \
     vice
