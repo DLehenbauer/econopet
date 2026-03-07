@@ -226,6 +226,21 @@ velocity of ~6 ns/m (FR-4 microstrip), trace delays are estimated as:
 For timing constraint purposes, a conservative board delay budget of 2 ns
 covers all signals.
 
+The maximum trace delay is derived from first principles in `common_pkg.sv`:
+
+```systemverilog
+// Signal velocity = c / sqrt(Dk), where c = 299.79 mm/ns.
+localparam real SPEED_OF_LIGHT_MM_PER_NS = 299.79;
+localparam real TRACE_VELOCITY_MM_PER_NS = SPEED_OF_LIGHT_MM_PER_NS / $sqrt(PCB_DIELECTRIC_CONSTANT);
+localparam real MAX_TRACE_LENGTH_MM      = 250.0;
+localparam int  MAX_TRACE_DELAY_NS       = int'($ceil(MAX_TRACE_LENGTH_MM / TRACE_VELOCITY_MM_PER_NS));
+```
+
+The `PCB_DIELECTRIC_CONSTANT` is 4.5 (FR-4 per JLCPCB specs), giving a trace
+velocity of ~141.3 mm/ns and a `MAX_TRACE_DELAY_NS` of 2. The helper function
+`ns_to_cycles_with_trace_delay()` adds this budget to any component timing
+parameter before converting to `sys_clock_i` cycles.
+
 ## SPI Interface
 
 The SPI bus connects the RP2040 MCU to the FPGA:
