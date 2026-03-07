@@ -80,4 +80,5 @@ core
 #
 # AI agent scratch files
 #
-.agent/
+.cache/ai/*
+!.cache/**/.gitkeep

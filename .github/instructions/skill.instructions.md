@@ -182,6 +182,11 @@ Include scripts when:
 - Warn users before irreversible actions
 - Document any network operations or external calls
 
+### Scratch Data
+
+- Store repo-local disposable AI logs, traces, and temporary state under `.cache/ai/`
+- Treat `.cache/ai/` as safe to delete and keep it out of Git except for an optional `.gitkeep`
+
 ## Name Validation
 
 Valid:
