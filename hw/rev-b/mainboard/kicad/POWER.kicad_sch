@@ -9917,7 +9917,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "376a7382-da39-459d-b850-81b030fc254f")
 		(property "Reference" "C7"
 			(at 74.6252 40.7416 0)
@@ -9928,7 +9928,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "11000u"
+		(property "Value" "330uF"
 			(at 74.6252 43.053 0)
 			(effects
 				(font
@@ -9937,7 +9937,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "EconoPET:CP_Radial_D16.0mm_P7.50mm"
+		(property "Footprint" "EconoPET:CP_Radial_D16.0mm_P5.00mm_P7.50mm"
 			(at 72.39 41.91 0)
 			(effects
 				(font
@@ -9946,7 +9946,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.chemi-con.co.jp/products/relatedfiles/capacitor/catalog/LBVLL-e.PDF"
+		(property "Datasheet" "https://industrial.panasonic.com/cdbs/www-data/pdf/RDF0000/ABA0000C1018.pdf"
 			(at 72.39 41.91 0)
 			(effects
 				(font
@@ -9964,7 +9964,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "661-BV250L113AL40S"
+		(property "MOUSER" "667-EEU-FM1V331"
 			(at 72.39 41.91 0)
 			(effects
 				(font
@@ -12829,7 +12829,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "a71bdd89-6b16-43f2-a51f-66dc152cf877")
 		(property "Reference" "C89"
 			(at 61.9252 40.7416 0)
