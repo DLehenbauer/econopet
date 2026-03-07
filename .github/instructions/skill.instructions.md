@@ -184,8 +184,7 @@ Include scripts when:
 
 ### Scratch Data
 
-- Store repo-local disposable AI logs, traces, and temporary state under `.cache/ai/`
-- Treat `.cache/ai/` as safe to delete and keep it out of Git except for an optional `.gitkeep`
+- Store repo-local AI logs, traces, and temporary state under `.cache/ai/`
 
 ## Name Validation
 
@@ -221,17 +220,11 @@ Before publishing a skill:
 - [ ] `name` is lowercase with hyphens, at most 64 characters, matches directory name
 - [ ] `description` clearly states WHAT it does, WHEN to use it, and relevant KEYWORDS
 - [ ] Body includes when to use, prerequisites, and step-by-step workflows
-- [ ] SKILL.md body kept under 500 lines
+- [ ] If SKILL.md exceeds 500 lines, warn the user but do not shorten it unless asked
 - [ ] Large workflows split into `references/` with clear links from SKILL.md
 - [ ] Scripts include help documentation and error handling
 - [ ] Relative paths used for all resource references
 - [ ] No hardcoded credentials or secrets
-
-Validate with the skills-ref reference library:
-
-```
-skills-ref validate ./my-skill
-```
 
 ## Additional Resources
 
