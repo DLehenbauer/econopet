@@ -22,8 +22,8 @@ ARG IVERILOG_VERSION="v12_0"
 
 # Efinity software requires a free license from Efinix. Please do the right thing.
 # From https://www.efinixinc.com/support/
-ARG EFINITY_MAJOR_MINOR="2025.1"
-ARG EFINITY_PATCH="110"
+ARG EFINITY_MAJOR_MINOR="2025.2"
+ARG EFINITY_PATCH="288.2.10"
 
 # From https://apt.kitware.com/
 # Pin to 3.x: CMake 4.x removed compat with cmake_minimum_required(VERSION < 3.5)
