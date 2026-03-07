@@ -43,8 +43,7 @@ cmake --build --preset sdcard       # Build SD card package
 # Test
 ctest --preset all                  # Run all tests
 ctest --preset fw                   # Run firmware tests only
-ctest --preset gw                   # Run gateware tests in parallel (fastest)
-ctest --preset gw                   # Run gateware tests sequentially
+ctest --preset gw                   # Run gateware tests
 ```
 
 ## License
