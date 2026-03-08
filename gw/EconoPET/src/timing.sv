@@ -33,27 +33,29 @@ module timing (
         cycle_count <= cycle_count + 1'b1;
     end
 
-    logic [2:0] grant = 3'b111;
+    typedef enum logic [2:0] {
+        VIDEO_1 = 3'd0,
+        VIDEO_2 = 3'd1,
+        SPI_1   = 3'd2,
+        VIDEO_3 = 3'd3,
+        VIDEO_4 = 3'd4,
+        SPI_2   = 3'd5,
+        CPU_1   = 3'd6,
+        CPU_2   = 3'd7
+    } grant_t;
+
+    grant_t grant = CPU_2;
 
     always_ff @(posedge sys_clock_i) begin
         clk8_en_o <= '0;
 
         if (cycle_count[2:0] == 3'b000) begin
             clk8_en_o  <= 1'b1;
-            grant      <= grant + 1'b1;
+            grant      <= grant_t'(grant + 3'd1);
         end
             
         clk16_en_o <= cycle_count[1:0] == 2'b00;
     end
-
-    localparam VIDEO_1 = 3'd0,
-               VIDEO_2 = 3'd1,
-               SPI_1   = 3'd2,
-               VIDEO_3 = 3'd3,
-               VIDEO_4 = 3'd4,
-               SPI_2   = 3'd5,
-               CPU_1   = 3'd6,
-               CPU_2   = 3'd7;
 
     assign grant_valid_o = grant != CPU_1 && grant != CPU_2 && clk8_en_o;
     assign grant_o = (grant == SPI_1 || grant == SPI_2) ? 1'b1 : 1'b0;
