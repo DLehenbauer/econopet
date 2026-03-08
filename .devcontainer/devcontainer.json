@@ -11,12 +11,12 @@
             "extensions": [
                 "chris-hock.pioasm",
                 "DavidAnson.vscode-markdownlint",
+                "GitHub.copilot-chat",
                 "marus25.cortex-debug",
                 "mcu-debug.peripheral-viewer",
                 "ms-vscode.cpptools-extension-pack",
                 "mshr-h.veriloghdl",
                 "mutantdino.resourcemonitor",
-                "saoudrizwan.claude-dev",
                 "shd101wyy.markdown-preview-enhanced",
                 "streetsidesoftware.code-spell-checker",
                 "xaver.clang-format"
