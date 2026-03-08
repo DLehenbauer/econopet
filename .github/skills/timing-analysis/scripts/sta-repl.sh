@@ -16,7 +16,7 @@
 set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-WORKSPACE_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+export WORKSPACE_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
 PROJECT_DIR="$WORKSPACE_ROOT/gw/EconoPET"
 PROJECT_XML="$PROJECT_DIR/EconoPET.xml"
 

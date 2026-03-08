@@ -24,6 +24,24 @@ Efinix Efinity static timing analysis (STA) tools.
 - The FPGA bitstream must have been built at least once (`cmake --build --preset gw`)
   so that timing data exists for analysis.
 
+## Evidence Log
+
+The `.cache/ai/` directory is pre-created and always exists. Before reading
+files, running commands, or editing constraints, create or update
+`.cache/ai/timing-analysis.md`.
+
+Keep one running log for the full task. After each step, append:
+
+- The action
+- The evidence (file path and line numbers, exact command, report excerpt, or
+  RTL/SDC snippet)
+- The observation or inference supported by that evidence
+- The decision, or the next question to answer
+
+Base every constraint recommendation, SDC edit, and timing-closure conclusion
+on logged evidence. If the log does not justify a decision, do not make it yet.
+Gather more evidence and record it first.
+
 ## Key Files
 
 | File | Purpose |
@@ -42,28 +60,6 @@ background process. Always pipe commands non-interactively:
 echo '<tcl commands>; exit' \
     | .github/skills/timing-analysis/scripts/sta-repl.sh 2>&1
 ```
-
-## Evidence Log
-
-Before reading files, running commands, or editing constraints, create or
-update `.cache/ai/timing-analysis.md`:
-
-```sh
-touch .cache/ai/timing-analysis.md
-```
-
-Keep a running log for the entire task. After every step, append:
-
-- The action you took
-- The evidence you gathered (file path and line numbers, exact command, report
-  excerpt, or RTL/SDC snippet)
-- The observation or inference supported by that evidence
-- The decision you made (or the next question to answer)
-
-Every constraint recommendation, SDC edit, and timing-closure conclusion must
-be evidence based. If the log does not contain evidence that justifies a
-decision, do not make that decision yet. Gather more evidence first and record
-it in the log.
 
 ## Workflow
 
@@ -84,15 +80,16 @@ assumptions.
 
 ### 2. Assess Current State and log the findings
 
-Run `check_timing` first. It is the single most informative command, reporting
-exactly how many ports are unconstrained:
+Run `check_timing` first. It reports how many ports are unconstrained. Always use `-verbose`
+and redirect to a file. The `sta-repl.sh` script exports `WORKSPACE_ROOT`, accessible in TCL
+as `$::env(WORKSPACE_ROOT)`:
 
 ```sh
-echo 'check_timing; exit' \
+echo 'check_timing -verbose -file $::env(WORKSPACE_ROOT)/.cache/ai/check_timing.txt; exit' \
     | .github/skills/timing-analysis/scripts/sta-repl.sh 2>&1
 ```
 
-Add `-verbose` to list every violating pin. The output table shows:
+Then read `.cache/ai/check_timing.txt` to inspect the results. The output table shows:
 
 | Section | What it means |
 |---------|---------------|
