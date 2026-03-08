@@ -147,7 +147,9 @@ module main (
 
     logic clk16_en;
     logic clk8_en;
-    logic cpu_data_strobe;
+    logic cpu_addr_strobe;  // Pulsed when cpu_addr_i is valid
+    logic cpu_data_strobe;  // Pulsed when cpu_data_i is valid (when cpu_we_i=1 -> cpu is writing)
+    logic cpu_hold_strobe;  // Pulsed when CPU tDHx has been met
     logic cpu_wr_en;
     logic load_sr1;
     logic load_sr2;
@@ -159,8 +161,10 @@ module main (
         .clk16_en_o(clk16_en),
         .clk8_en_o(clk8_en),
         .cpu_be_o(cpu_be_o),
+        .cpu_addr_strobe_o(cpu_addr_strobe),
         .cpu_clock_o(cpu_clock_o),
         .cpu_data_strobe_o(cpu_data_strobe),
+        .cpu_hold_strobe_o(cpu_hold_strobe),
         .cpu_wr_en_o(cpu_wr_en),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),

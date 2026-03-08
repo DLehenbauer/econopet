@@ -9,7 +9,9 @@ module timing (
     output logic clk8_en_o,
     output logic cpu_be_o,
     output logic cpu_clock_o,
-    output logic cpu_data_strobe_o,
+    output logic cpu_addr_strobe_o, // Pulsed when cpu_addr_i is valid
+    output logic cpu_data_strobe_o, // Pulsed when cpu_data_i is valid (when cpu_we_i=1 -> cpu is writing)
+    output logic cpu_hold_strobe_o, // Pulsed when CPU tDHx has been met
     output logic cpu_wr_en_o,
     output logic load_sr1_o,
     output logic load_sr2_o,
@@ -21,7 +23,9 @@ module timing (
         clk8_en_o         = 1'b0;
         cpu_be_o          = 1'b0;
         cpu_clock_o       = 1'b0;
+        cpu_addr_strobe_o = 1'b0;
         cpu_data_strobe_o = 1'b0;
+        cpu_hold_strobe_o = 1'b0;
         cpu_wr_en_o       = 1'b0;
     end
 
@@ -84,6 +88,7 @@ module timing (
                    CPU_END   = CPU_START + 16;  // CPU controls bus for two consecutive slots (250ns)
 
     localparam int CPU_BE_START     = CPU_START,
+                   CPU_ADDR_STROBE  = CPU_START + CYCLES_BVD - 1,   // Asserts 1 cycle before cpu_addr_i is valid
                    CPU_PHI_START    = CPU_BE_START + CYCLES_BVD + CYCLES_IOTX,
                    CPU_PHI_END      = CPU_BE_END - CYCLES_DHX,      // Hold data for tDHx after end of PHI2
                    CPU_BE_END       = CPU_END - CYCLES_BVD;         // Allow tBVD for bus to return to High-Z
@@ -106,20 +111,32 @@ module timing (
     localparam int CPU_WR_START = CPU_DATA_STROBE,
                    CPU_WR_END   = CPU_PHI_END - 1;
 
+    // Fires on the last cycle where the CPU is still required to hold the bus.
+    // When the hold budget is only one sys_clock_i cycle, this can coincide
+    // with the falling PHI2 edge.
+    localparam int CPU_HOLD_STROBE = CPU_BE_END - 1;
+
     // Truncate to COUNTER_WIDTH bits
-    localparam bit [COUNTER_WIDTH-1:0] CPU_BE_START_W    = COUNTER_WIDTH'(CPU_BE_START),
+    localparam bit [COUNTER_WIDTH-1:0] CPU_ADDR_STROBE_W = COUNTER_WIDTH'(CPU_ADDR_STROBE),
+                                       CPU_BE_START_W    = COUNTER_WIDTH'(CPU_BE_START),
                                        CPU_PHI_START_W   = COUNTER_WIDTH'(CPU_PHI_START),
                                        CPU_DATA_STROBE_W = COUNTER_WIDTH'(CPU_DATA_STROBE),
+                                       CPU_HOLD_STROBE_W = COUNTER_WIDTH'(CPU_HOLD_STROBE),
                                        CPU_WR_END_W      = COUNTER_WIDTH'(CPU_WR_END),
                                        CPU_PHI_END_W     = COUNTER_WIDTH'(CPU_PHI_END),
                                        CPU_BE_END_W      = COUNTER_WIDTH'(CPU_BE_END);
 
     always_ff @(posedge sys_clock_i) begin
+        cpu_addr_strobe_o <= '0;
         cpu_data_strobe_o <= '0;
+        cpu_hold_strobe_o <= cycle_count == CPU_HOLD_STROBE_W;
 
         unique case (cycle_count)
             CPU_BE_START_W: begin
                 cpu_be_o <= 1'b1;
+            end
+            CPU_ADDR_STROBE_W: begin
+                cpu_addr_strobe_o <= 1'b1;
             end
             CPU_PHI_START_W: begin
                 cpu_clock_o <= 1'b1;
@@ -144,6 +161,8 @@ module timing (
     // synthesis off
     initial begin
         // Verify all cycle_count constants fit in COUNTER_WIDTH bits
+        if (CPU_ADDR_STROBE != int'(CPU_ADDR_STROBE_W))
+            $fatal(1, "CPU_ADDR_STROBE (%0d) does not fit in %0d bits", CPU_ADDR_STROBE, COUNTER_WIDTH);
         if (CPU_BE_START    != int'(CPU_BE_START_W))
             $fatal(1, "CPU_BE_START (%0d) does not fit in %0d bits", CPU_BE_START, COUNTER_WIDTH);
         if (CPU_PHI_START   != int'(CPU_PHI_START_W))
@@ -154,6 +173,8 @@ module timing (
             $fatal(1, "CPU_PHI_END (%0d) does not fit in %0d bits", CPU_PHI_END, COUNTER_WIDTH);
         if (CPU_WR_END      != int'(CPU_WR_END_W))
             $fatal(1, "CPU_WR_END (%0d) does not fit in %0d bits", CPU_WR_END, COUNTER_WIDTH);
+        if (CPU_HOLD_STROBE != int'(CPU_HOLD_STROBE_W))
+            $fatal(1, "CPU_HOLD_STROBE (%0d) does not fit in %0d bits", CPU_HOLD_STROBE, COUNTER_WIDTH);
         if (CPU_BE_END      != int'(CPU_BE_END_W))
             $fatal(1, "CPU_BE_END (%0d) does not fit in %0d bits", CPU_BE_END, COUNTER_WIDTH);
 
@@ -167,10 +188,23 @@ module timing (
             $fatal(1, "BE setup time %.1fns violates tBVD + tIOTX >= %0dns",
                 (CPU_PHI_START - CPU_BE_START) * NS_PER_CYCLE, CPU_tBVD + IOTX_t);
 
+        // Address strobe fires one cycle before cpu_addr_i is valid, so require
+        // BE to have been asserted long enough that the address will be valid on
+        // the next cycle.
+        if ((CPU_ADDR_STROBE - CPU_BE_START + 1) * NS_PER_CYCLE < CPU_tBVD + 2 * MAX_TRACE_DELAY_NS)
+            $fatal(1, "Address strobe setup %.1fns violates tBVD + trace >= %0dns",
+                (CPU_ADDR_STROBE - CPU_BE_START + 1) * NS_PER_CYCLE,
+                CPU_tBVD + 2 * MAX_TRACE_DELAY_NS);
+
         // Data must be held after PHI2 falls (tDHx)
         if ((CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE < CPU_tDHx)
             $fatal(1, "Data hold time %.1fns violates tDHx >= %0dns",
                 (CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE, CPU_tDHx);
+
+        // Hold strobe must not fire until the CPU hold requirement has been met.
+        if ((CPU_HOLD_STROBE - CPU_PHI_END + 1) * NS_PER_CYCLE < CPU_tDHx)
+            $fatal(1, "Hold strobe %.1fns violates tDHx >= %0dns",
+                (CPU_HOLD_STROBE - CPU_PHI_END + 1) * NS_PER_CYCLE, CPU_tDHx);
 
         // Bus must return to high-Z before next arbiter slot (tBVD)
         if ((CPU_END - CPU_BE_END) * NS_PER_CYCLE < CPU_tBVD)
@@ -221,14 +255,16 @@ module timing (
                 CPU_WR_END, CPU_PHI_END);
 
         // Sequential ordering of bus events
-        if (!(CPU_BE_START < CPU_PHI_START
+        if (!(CPU_BE_START < CPU_ADDR_STROBE
+           && CPU_ADDR_STROBE < CPU_PHI_START
            && CPU_PHI_START < CPU_DATA_STROBE
            && CPU_DATA_STROBE < CPU_WR_END
            && CPU_WR_END < CPU_PHI_END
-           && CPU_PHI_END < CPU_BE_END
+           && CPU_PHI_END <= CPU_HOLD_STROBE
+           && CPU_HOLD_STROBE < CPU_BE_END
            && CPU_BE_END < CPU_END))
-            $fatal(1, "CPU timing events out of order: BE_START=%0d PHI_START=%0d DATA_STROBE=%0d WR_END=%0d PHI_END=%0d BE_END=%0d END=%0d",
-                CPU_BE_START, CPU_PHI_START, CPU_DATA_STROBE, CPU_WR_END, CPU_PHI_END, CPU_BE_END, CPU_END);
+            $fatal(1, "CPU timing events out of order: BE_START=%0d ADDR_STROBE=%0d PHI_START=%0d DATA_STROBE=%0d WR_END=%0d PHI_END=%0d HOLD_STROBE=%0d BE_END=%0d CPU_END=%0d",
+                CPU_BE_START, CPU_ADDR_STROBE, CPU_PHI_START, CPU_DATA_STROBE, CPU_WR_END, CPU_PHI_END, CPU_HOLD_STROBE, CPU_BE_END, CPU_END);
     end
     // synthesis on
 endmodule

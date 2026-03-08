@@ -15,8 +15,10 @@ module timing_tb;
     logic clk16_en;
     logic clk8_en;
     logic cpu_be;
+    logic cpu_addr_strobe;
     logic cpu_clock;
     logic cpu_data_strobe;
+    logic cpu_hold_strobe;
     logic cpu_wr_en;
     logic load_sr1;
     logic load_sr2;
@@ -29,7 +31,9 @@ module timing_tb;
         .clk8_en_o(clk8_en),
         .cpu_be_o(cpu_be),
         .cpu_clock_o(cpu_clock),
+        .cpu_addr_strobe_o(cpu_addr_strobe),
         .cpu_data_strobe_o(cpu_data_strobe),
+        .cpu_hold_strobe_o(cpu_hold_strobe),
         .cpu_wr_en_o(cpu_wr_en),
         .load_sr1_o(load_sr1),
         .load_sr2_o(load_sr2),
@@ -63,10 +67,26 @@ module timing_tb;
         @(posedge cpu_clock);
         $display("[%t] cpu_clock at %0.2f mHz", $time, stopwatch.freq_mhz());
 
+        @(posedge cpu_addr_strobe);
+        stopwatch.start();
+        @(posedge cpu_addr_strobe);
+        $display("[%t] cpu_addr_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+
         @(posedge cpu_data_strobe);
         stopwatch.start();
         @(posedge cpu_data_strobe);
         $display("[%t] cpu_data_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge cpu_hold_strobe);
+        stopwatch.start();
+        @(posedge cpu_hold_strobe);
+        $display("[%t] cpu_hold_strobe at %0.2f mHz", $time, stopwatch.freq_mhz());
+
+        @(posedge cpu_hold_strobe);
+        `assert_equal(cpu_be, 1'b1)
+        @(posedge clock);
+        @(negedge clock);
+        `assert_equal(cpu_be, 1'b0)
 
         @(posedge load_sr1);
         stopwatch.start();
