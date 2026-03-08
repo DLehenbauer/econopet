@@ -5,6 +5,45 @@ PROJ_NAME="EconoPET"
 PROJ_DIR="$SCRIPT_DIR/gw/$PROJ_NAME"
 BUILD_DIR="$SCRIPT_DIR/build"
 
+generate_filelists() {
+    mkdir -p "$PROJ_DIR/work_sim"
+
+    python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/pkgs.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+xml_path, sim_f_path, pkgs_f_path, timescale_f_path = sys.argv[1:]
+
+ns = {"efx": "http://www.efinixinc.com/enf_proj"}
+root = ET.parse(xml_path).getroot()
+
+design_files = [
+    node.attrib["name"]
+    for node in root.findall("./efx:design_info/efx:design_file", ns)
+]
+sim_files = [
+    node.attrib["name"]
+    for node in root.findall("./efx:sim_info/efx:sim_file", ns)
+]
+
+package_files = [path for path in design_files if path.endswith("_pkg.sv")]
+design_files = [path for path in design_files if not path.endswith("_pkg.sv")]
+
+# Header files are included from source and should not be compiled as top-level units.
+sim_files = [path for path in sim_files if not path.endswith(".svh")]
+
+with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
+    for path in package_files + sim_files + design_files:
+        sim_f.write(f"{path}\n")
+
+# Keep this compatibility file for existing build trees that still reference it.
+open(pkgs_f_path, "w", encoding="utf-8").close()
+
+with open(timescale_f_path, "w", encoding="utf-8", newline="\n") as timescale_f:
+    timescale_f.write("+timescale+1ns/1ps\n")
+PY
+}
+
 # Helper function to check the exit code, pop the directory, and exit on failure
 exit_on_failure() {
     local EXIT_CODE=$?
@@ -20,7 +59,7 @@ show_help() {
     echo "Run gateware simulation tests."
     echo
     echo "Options:"
-    echo "  -u, --update    Update the .f file from Efinity project"
+    echo "  -u, --update    Regenerate simulation file lists from project XML"
     echo "  -l, --lint      Run Verilator lint check"
     echo "  -m, --map       Run Efinity map flow after simulation"
     echo "  -v, --view      View waveform in GTKWave (requires TEST_NAME)"
@@ -86,24 +125,7 @@ if [ -n "$VIEW_WAVE" ]; then
 fi
 
 if [ -n "$UPDATE_F_FILE" ]; then
-    # Invoke 'efx_run' to generate/update the '\work_sim\<proj>.f' file.
-    "$(dirname "$0")/gw/efx.sh" --flow rtlsim
-
-    # Icarus Verilog requires that package files are listed before other files.
-    # We use the '_pkg.sv' suffix to identify these files so we can extract them to
-    # a separate 'pkgs.f' file:
-
-    # Extract references to 'src/*_pkg.sv' to a new file
-    grep -E '^\s*src/.*_pkg\.sv' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/pkgs.f"
-
-    # Remove references to 'src/_pkg.sv' from the original file:
-    grep -v -E '^\s*src/.*_pkg\.sv' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.tmp.f"
-    mv "$PROJ_DIR/work_sim/$PROJ_NAME.tmp.f" "$PROJ_DIR/work_sim/$PROJ_NAME.f"
-
-    # Produce a second '.f' file for Verilator that removes all references to source
-    # files under '/opt/efinity/' and 'sim/'.  (Line may start with an optional '-v')
-    grep -v -E '^(-v )?(/opt/efinity/)' "$PROJ_DIR/work_sim/$PROJ_NAME.f" > "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f"
-
+    generate_filelists
     echo
 fi
 
@@ -113,12 +135,12 @@ if [ -n "$RUN_ALL" ]; then
     exit $?
 fi
 
-# 'efx_run' produces relative paths to simulation files. Therefore, we must execute
-# iverilog from the root of the project directory.
+# The generated file lists use project-relative paths. Therefore, execute iverilog
+# from the root of the project directory.
 pushd "$PROJ_DIR" || exit 1
 
 if [ -n "$LINT" ]; then
-    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" -f "$PROJ_DIR/work_sim/pkgs.f" -f "$PROJ_DIR/work_sim/$PROJ_NAME.verilator.f" --top-module top
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" --top-module top
     exit_on_failure
 fi
 
@@ -149,7 +171,7 @@ fi
 # Compile and run the specified test
 VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
 
-iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/pkgs.f" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
 vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"

@@ -34,7 +34,6 @@ foreach(TB_FILE ${TB_FILES})
         COMMAND ${CMAKE_COMMAND} -E make_directory ${WORK_SIM_DIR}
         COMMAND cd ${PROJ_DIR} && ${IVERILOG} -g2009 -s "${TB_NAME}"
             -o ${VVP_FILE}
-            -f ${WORK_SIM_DIR}/pkgs.f
             -f ${WORK_SIM_DIR}/EconoPET.f
             -f ${WORK_SIM_DIR}/timescale.f
             -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
