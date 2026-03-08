@@ -91,6 +91,7 @@ When adding new `*.sv` or `*.v` files, they must be registered in the project:
 - [ ] Update `gw/EconoPET/EconoPET.xml` to register new source and test files or remove deleted files
 - [ ] Run `./sim.sh --update` to regenerate `gw/EconoPET/work_sim/EconoPET.f`
 - [ ] Run `./sim.sh --all` and verify all tests pass
+- [ ] Update timing constraints per [timing-analysis/SKILL.md](/.github/skills/timing-analysis/SKILL.md)
 - [ ] Only if tests pass, run `cmake --build --preset gw`
 
 **Critical:** Never start gateware build when simulation tests are failing. The gateware build is slow (~2 min) and simulation catches most issues.
