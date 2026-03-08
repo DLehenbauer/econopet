@@ -155,18 +155,23 @@ set_output_delay -clock sys_clock_i -min 0                [get_ports {spi_stall_
 # Open-Drain / Constant CPU Control Outputs
 # ============================================================================
 #
-# cpu_reset_n, cpu_irq_n, cpu_nmi_n: active-low open-drain signals driven via
-# OE. The _o port is tied to 0 (constant), the _oe port controls assertion.
-# cpu_we_n_o is tied low (constant), cpu_we_n_oe is driven.
-# These are quasi-static or constant. False path is appropriate.
+# cpu_reset_n, cpu_irq_n, cpu_nmi_n: active-low open-drain signals. The _o
+# data port is tied to 0 (constant), the _oe port controls assertion.
+#
+# Constant outputs (tied off in RTL, confirmed in mapped netlist):
+#   cpu_reset_n_o, cpu_irq_n_o, cpu_nmi_n_o = 0
+#   cpu_we_n_o = 1
+#   cpu_irq_n_oe = 0  (IRQ never driven by FPGA)
+#   cpu_we_n_oe = 0   (CPU always drives RWB)
 
 set_false_path -to [get_ports {cpu_reset_n_o cpu_irq_n_o cpu_nmi_n_o}]
 set_false_path -to [get_ports {cpu_we_n_o}]
+set_false_path -to [get_ports {cpu_irq_n_oe cpu_we_n_oe}]
 
-set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {cpu_reset_n_oe cpu_nmi_n_oe cpu_irq_n_oe}]
-set_output_delay -clock sys_clock_i -min 0                [get_ports {cpu_reset_n_oe cpu_nmi_n_oe cpu_irq_n_oe}]
-set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {cpu_we_n_oe}]
-set_output_delay -clock sys_clock_i -min 0                [get_ports {cpu_we_n_oe}]
+# Quasi-static OE outputs (written by MCU via SPI register file, change only
+# during initialization). Board-delay constraint provides a basic fabric check.
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {cpu_reset_n_oe cpu_nmi_n_oe}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {cpu_reset_n_oe cpu_nmi_n_oe}]
 
 # ============================================================================
 # Debug / Status / Unused Outputs
@@ -179,6 +184,13 @@ set_false_path -to [get_ports {status_no}]
 set_false_path -to [get_ports {spare_o[*]}]
 set_false_path -to [get_ports {spi1_sd_o}]
 set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
+
+# SPI1 bus and pmod1_i are unused in the current design and optimized away by
+# synthesis. Constraints are omitted to avoid warnings. If these ports gain
+# fanout in a future revision, add false-path constraints here.
+#
+# set_false_path -from [get_ports {spi1_cs_ni spi1_sck_i spi1_sd_i}]
+# set_false_path -from [get_ports {pmod1_i[*]}]
 
 # ============================================================================
 # CPU Bus Inputs (pad to sys_clock_i domain)
@@ -212,6 +224,12 @@ set_false_path -from [get_ports {config_crt_i config_keyboard_i}]
 set_false_path -from [get_ports {graphic_i}]
 set_false_path -from [get_ports {diag_i via_cb2_i}]
 set_false_path -from [get_ports {cpu_reset_n_i}]
+
+# cpu_irq_n_i and cpu_nmi_n_i are currently optimized away by synthesis (no
+# fanout). Constraints are omitted to avoid warnings. If these ports gain
+# fanout in a future revision, add false-path constraints here.
+#
+# set_false_path -from [get_ports {cpu_irq_n_i cpu_nmi_n_i}]
 
 # pmod2_i is passed through combinationally to pmod1_o (debug loopback).
 # No synchronous timing requirement.
