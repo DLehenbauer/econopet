@@ -83,8 +83,6 @@ if [ -n "$VIEW_WAVE" ]; then
         echo "Usage: $0 -v TEST_NAME"
         exit 1
     fi
-    gtkwave "$PROJ_DIR/work_sim/${TEST_NAME}.vcd" &
-    exit $?
 fi
 
 if [ -n "$UPDATE_F_FILE" ]; then
@@ -160,6 +158,10 @@ exit_on_failure
 if [ -n "$EFX_MAP" ]; then
     "$SCRIPT_DIR/gw/efx.sh" --flow map
     exit_on_failure
+fi
+
+if [ -n "$VIEW_WAVE" ]; then
+    gtkwave "$PROJ_DIR/work_sim/${TEST_NAME}.vcd" &
 fi
 
 popd
