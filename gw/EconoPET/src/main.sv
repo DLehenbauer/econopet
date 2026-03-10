@@ -592,6 +592,9 @@ module main (
         assert(!io_oe_o  ||  cpu_be_o)     else $fatal(1, "IO must not be active unless CPU is driving bus");
         assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
         
+        assert(!ram_we_o || ram_ctl_doe || (cpu_driving_data_bus && cpu_clock_o))
+            else $fatal(1, "RAM_WE asserted but valid data not driven to bus");
+        
         assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {cpu, ram, io, fpga}=%b", dbg_data_bus_drivers);
         assert($onehot0(dbg_ram_oe_we)) else $fatal(1, "RAM must be reading or writing, not both: {ram_oe, ram_we}=%b", dbg_ram_oe_we);
     end
