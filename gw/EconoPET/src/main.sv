@@ -572,10 +572,16 @@ module main (
     // synthesis off
     
     // At most one source may drive the CPU data bus at a time:
-    //   io_oe_o       - External IO chips (PIA1, PIA2, VIA) via transceiver
+    //   cpu           - CPU (writing to bus when be_o and we_i are asserted)
     //   ram_oe_o      - External SRAM (output enabled)
+    //   io_oe_o       - External IO chips (PIA1, PIA2, VIA) when selected and CPU is reading
     //   cpu_data_oe   - FPGA (keyboard intercept, CRTC, WB-RAM bridge)
-    wire [2:0] dbg_data_bus_drivers = {io_oe_o, ram_oe_o, cpu_data_oe};
+    wire cpu_driving_data_bus = cpu_be_o && cpu_we_i;
+    wire ram_driving_data_bus = ram_oe_o;
+    wire io_driving_data_bus = io_oe_o && !cpu_we_i;
+    wire fpga_driving_data_bus = cpu_data_oe;
+
+    wire [3:0] dbg_data_bus_drivers = {cpu_driving_data_bus, ram_driving_data_bus, io_driving_data_bus, fpga_driving_data_bus};
     wire [1:0] dbg_ram_oe_we = {ram_oe_o, ram_we_o};
 
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin
@@ -586,7 +592,7 @@ module main (
         assert(!io_oe_o  ||  cpu_be_o)     else $fatal(1, "IO must not be active unless CPU is driving bus");
         assert(!io_oe_o  || !ram_we_o)     else $fatal(1, "IO and RAM_WE must not be active at same time");
         
-        assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {io, ram, fpga}=%b", dbg_data_bus_drivers);
+        assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {cpu, ram, io, fpga}=%b", dbg_data_bus_drivers);
         assert($onehot0(dbg_ram_oe_we)) else $fatal(1, "RAM must be reading or writing, not both: {ram_oe, ram_we}=%b", dbg_ram_oe_we);
     end
     // synthesis on
