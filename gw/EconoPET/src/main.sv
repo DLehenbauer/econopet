@@ -534,7 +534,7 @@ module main (
         .COUNT(4)
     ) cpu_data_mux (
         .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout }),
-        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe, io_doe & !cpu_we_i }),
+        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe & cpu_be_o, io_doe & cpu_be_o & !cpu_we_i }),
         .data_o(cpu_data_o),
         .oe_o(cpu_data_oe)
     );
