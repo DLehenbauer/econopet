@@ -175,15 +175,20 @@ iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f
 exit_on_failure
 
 vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"
-exit_on_failure
+VVP_EXIT_CODE=$?
+
+if [ -n "$VIEW_WAVE" ]; then
+    gtkwave "$PROJ_DIR/work_sim/${TEST_NAME}.vcd" &
+fi
+
+if [ $VVP_EXIT_CODE -ne 0 ]; then
+    popd
+    exit $VVP_EXIT_CODE
+fi
 
 if [ -n "$EFX_MAP" ]; then
     "$SCRIPT_DIR/gw/efx.sh" --flow map
     exit_on_failure
-fi
-
-if [ -n "$VIEW_WAVE" ]; then
-    gtkwave "$PROJ_DIR/work_sim/${TEST_NAME}.vcd" &
 fi
 
 popd
