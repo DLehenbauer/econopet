@@ -29,21 +29,23 @@ Instructions for developing SystemVerilog gateware for the Efinix FPGA.
 
 | Suffix | Meaning | Example |
 |--------|---------|---------|
-| `_i` | Input port | `clock_i`, `data_i` |
-| `_o` | Output port | `data_o`, `valid_o` |
+| `_i` | Input port | `clock_i` |
+| `_o` | Output port | `data_o` |
 | `_n` | Active-low  | `reset_n` |
 | `_ni` | Active-low input | `cs_ni` |
 | `_no` | Active-low output | `irq_no` |
-| `_en` | Enable signal | `clk8_en`, `write_en` |
+| `_en` | Enable signal | `write_en` |
 | `_oe` | Output enable | `data_oe` |
+| `_d` | Combinational next state (D input) | `state_d` |
+| `_q` | Registered output (Q output) | `state_q` |
 
 ### Wishbone Bus Prefixes
 
 | Prefix | Meaning | Example |
 |--------|---------|---------|
-| `wb_` | Shared Wishbone bus signals | `wb_addr`, `wb_cycle` |
-| `wbc_` | Wishbone controller signals | `wbc_addr_i`, `wbc_cycle_i` |
-| `wbp_` | Wishbone peripheral signals | `wbp_din_o`, `wbp_ack_o` |
+| `wb_` | Shared Wishbone bus signals | `wb_addr` |
+| `wbc_` | Wishbone controller signals | `wbc_addr_o` |
+| `wbp_` | Wishbone peripheral signals | `wbp_addr_i` |
 
 ### SPI Signal Names
 
