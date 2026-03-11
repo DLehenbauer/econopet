@@ -167,7 +167,7 @@ module address_decoding (
                     // verilator lint_off CASEOVERLAP
                     CPU_ADDR_WIDTH'('b1000_????_????_????): select <= VRAM;   // VRAM : 8000-8FFF (intentionally overlaps with SID)
                     // verilator lint_on CASEOVERLAP
-                    CPU_ADDR_WIDTH'('b1110_1000_0000_????): select <= UNMAPPED; // Open bus: E800-E80F
+                    CPU_ADDR_WIDTH'('b1110_1000_0000_????): select <= UNMAPPED; //      : E800-E80F (Unmapped)
                     CPU_ADDR_WIDTH'('b1110_1000_0001_????): select <= PIA1;     // PIA1 : E810-E81F
                     CPU_ADDR_WIDTH'('b1110_1000_001?_????): select <= PIA2;     // PIA2 : E820-E83F
                     CPU_ADDR_WIDTH'('b1110_1000_01??_????): select <= VIA;      // VIA  : E840-E87F
