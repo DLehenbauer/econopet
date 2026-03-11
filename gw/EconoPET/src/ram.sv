@@ -115,7 +115,7 @@ module ram (
     end
 
     always_ff @(posedge wb_clock_i) begin
-        case (state)
+        unique case (state)
             READY: begin
                 wbp_ack_o   <= '0;
                 wbp_stall_o <= '0;
