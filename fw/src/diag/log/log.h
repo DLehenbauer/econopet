@@ -38,11 +38,6 @@
 #define LOG_WARN_ENTRIES 8
 #endif
 
-// Configuration: echo log messages to serial (printf)
-#ifndef LOG_ECHO_SERIAL
-#define LOG_ECHO_SERIAL 1
-#endif
-
 /**
  * Log severity levels, ordered from lowest to highest priority.
  */
