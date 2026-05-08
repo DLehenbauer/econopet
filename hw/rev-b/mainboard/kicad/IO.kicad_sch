@@ -6016,7 +6016,7 @@
 		)
 		(uuid "5e27f565-c85a-4f3b-9862-58c0accdd5e3")
 	)
-	(hierarchical_label "BVERT"
+	(hierarchical_label "BVSYNC"
 		(shape input)
 		(at 240.03 68.58 0)
 		(fields_autoplaced yes)

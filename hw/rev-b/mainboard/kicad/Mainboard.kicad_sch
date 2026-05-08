@@ -22,12 +22,6 @@
 		(uuid "044de712-d3da-40ed-9c9f-d91ef285c74c")
 	)
 	(junction
-		(at 109.22 134.62)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "19069e0d-ec58-401e-8889-9e0b9837a764")
-	)
-	(junction
 		(at 74.93 31.75)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -371,6 +365,16 @@
 	)
 	(wire
 		(pts
+			(xy 104.14 127) (xy 116.84 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "32653dec-b041-45d0-be2c-4089b31814a5")
+	)
+	(wire
+		(pts
 			(xy 194.31 105.41) (xy 205.74 105.41)
 		)
 		(stroke
@@ -381,7 +385,7 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 166.37) (xy 109.22 134.62)
+			(xy 109.22 134.62) (xy 109.22 166.37)
 		)
 		(stroke
 			(width 0)
@@ -538,16 +542,6 @@
 			(type default)
 		)
 		(uuid "54603515-902b-42ce-88de-5fce264d9d07")
-	)
-	(wire
-		(pts
-			(xy 104.14 134.62) (xy 109.22 134.62)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "560efb63-644c-4816-a2b8-b305c9f38e95")
 	)
 	(wire
 		(pts
@@ -1151,6 +1145,16 @@
 	)
 	(wire
 		(pts
+			(xy 104.14 134.62) (xy 109.22 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e8a9841f-963d-4ab7-9e61-cebbdd6a9a5b")
+	)
+	(wire
+		(pts
 			(xy 142.24 54.61) (xy 168.91 54.61)
 		)
 		(stroke
@@ -1188,16 +1192,6 @@
 			(type default)
 		)
 		(uuid "f14f26e8-73c8-4d83-aba6-a97672a407ea")
-	)
-	(wire
-		(pts
-			(xy 109.22 134.62) (xy 116.84 134.62)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f1f95e00-2ff0-4fbd-80d0-97094bf71752")
 	)
 	(wire
 		(pts
@@ -2032,6 +2026,16 @@
 			)
 			(uuid "0467a466-5aea-4097-812f-0ab5fab8d392")
 		)
+		(pin "BVSYNC" output
+			(at 104.14 127 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "f140477c-7a18-4034-ab10-466a6f184cee")
+		)
 		(instances
 			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a"
@@ -2676,15 +2680,15 @@
 			)
 			(uuid "56becf0e-5612-4172-b4a6-79c790bc29e6")
 		)
-		(pin "BVERT" input
-			(at 116.84 134.62 180)
+		(pin "BVSYNC" input
+			(at 116.84 127 180)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
 			)
-			(uuid "713e1c36-7640-45c8-af67-ff6e5a7363c5")
+			(uuid "4f5ca0df-b15c-4e94-91e3-7f3da491ed2e")
 		)
 		(instances
 			(project "Mainboard"

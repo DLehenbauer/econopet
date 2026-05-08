@@ -9994,6 +9994,16 @@
 	)
 	(wire
 		(pts
+			(xy 368.3 137.16) (xy 375.92 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "58cecc6b-b5ad-4a74-b950-bbc802e84fe4")
+	)
+	(wire
+		(pts
 			(xy 299.72 43.18) (xy 312.42 43.18)
 		)
 		(stroke
@@ -12953,17 +12963,6 @@
 		)
 		(uuid "4a09b4ad-44d1-466d-9d3c-3987ce2fd3b1")
 	)
-	(label "~{TEST}"
-		(at 375.92 137.16 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "4b04cc8e-3b96-4cc2-8033-6ad74214d006")
-	)
 	(label "SPI0_TX"
 		(at 204.47 50.8 180)
 		(fields_autoplaced yes)
@@ -14086,7 +14085,7 @@
 		)
 		(uuid "ed86a288-d29b-49ca-8121-0a7cdbbe3265")
 	)
-	(label "~{TEST}"
+	(label "VSYNC"
 		(at 246.38 86.36 180)
 		(fields_autoplaced yes)
 		(effects
@@ -14645,6 +14644,18 @@
 			(justify left)
 		)
 		(uuid "99835168-4cf4-48ef-830c-15d6e326b5af")
+	)
+	(hierarchical_label "VSYNC"
+		(shape output)
+		(at 368.3 137.16 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "9b0d7f33-7dba-4ead-9a35-23fb02b423df")
 	)
 	(hierarchical_label "~{CRESET}"
 		(shape input)
