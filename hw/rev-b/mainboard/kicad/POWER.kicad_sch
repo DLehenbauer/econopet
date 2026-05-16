@@ -4746,6 +4746,12 @@
 		(uuid "8fed1185-86c8-4fb1-bbde-55dab86bc75a")
 	)
 	(junction
+		(at 125.73 71.12)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "9326e13b-93be-4ffe-8e9a-3dba07a91301")
+	)
+	(junction
 		(at 49.53 67.31)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4936,6 +4942,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "fd7ce710-cc29-4992-b9ee-2f6f2f585b5a")
+	)
+	(junction
+		(at 134.62 71.12)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "fd7f1e26-a4d9-41ff-afb2-a6e3e085e6b7")
 	)
 	(junction
 		(at 199.39 87.63)
@@ -5132,6 +5144,16 @@
 			(type default)
 		)
 		(uuid "0b1391ee-2cab-4156-8cc5-84ff940673a1")
+	)
+	(wire
+		(pts
+			(xy 134.62 78.74) (xy 134.62 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0c2e2063-165c-4a75-a879-a51af1566683")
 	)
 	(wire
 		(pts
@@ -5512,6 +5534,16 @@
 			(type default)
 		)
 		(uuid "2c6ace59-9671-4cdb-8e6c-af5183550633")
+	)
+	(wire
+		(pts
+			(xy 116.84 78.74) (xy 116.84 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2c77d403-8627-4e40-86f7-2ab03252ac84")
 	)
 	(wire
 		(pts
@@ -5945,6 +5977,16 @@
 	)
 	(wire
 		(pts
+			(xy 143.51 71.12) (xy 143.51 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "54c460aa-f32d-4665-b223-712d9bf1fafd")
+	)
+	(wire
+		(pts
 			(xy 135.89 166.37) (xy 151.13 166.37)
 		)
 		(stroke
@@ -5952,6 +5994,16 @@
 			(type default)
 		)
 		(uuid "55263b14-58f4-405a-99bc-f2e04dd1f01c")
+	)
+	(wire
+		(pts
+			(xy 125.73 78.74) (xy 125.73 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5671382e-d63e-4a23-9b27-29b65bc89950")
 	)
 	(wire
 		(pts
@@ -6235,6 +6287,16 @@
 	)
 	(wire
 		(pts
+			(xy 125.73 71.12) (xy 134.62 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6cb13a68-a295-4ee8-b109-32c72a6d3c83")
+	)
+	(wire
+		(pts
 			(xy 125.73 80.01) (xy 134.62 80.01)
 		)
 		(stroke
@@ -6242,6 +6304,16 @@
 			(type default)
 		)
 		(uuid "6d13fcfc-3117-4d43-b980-336b2b679885")
+	)
+	(wire
+		(pts
+			(xy 125.73 71.12) (xy 125.73 73.66)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6df184d2-8d83-431e-a3e3-811d26fad4e8")
 	)
 	(wire
 		(pts
@@ -6995,6 +7067,16 @@
 	)
 	(wire
 		(pts
+			(xy 116.84 71.12) (xy 125.73 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c13ed40e-1c4b-4e32-b3db-91265e5dee3b")
+	)
+	(wire
+		(pts
 			(xy 35.56 62.23) (xy 41.91 62.23)
 		)
 		(stroke
@@ -7145,6 +7227,16 @@
 	)
 	(wire
 		(pts
+			(xy 116.84 73.66) (xy 116.84 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d2d9072c-bbbe-40c2-a711-cdd352893ab4")
+	)
+	(wire
+		(pts
 			(xy 219.71 101.6) (xy 222.25 101.6)
 		)
 		(stroke
@@ -7282,6 +7374,16 @@
 			(type default)
 		)
 		(uuid "e25e48b9-6145-4c8a-b3f2-e0b2f5e901e3")
+	)
+	(wire
+		(pts
+			(xy 134.62 73.66) (xy 134.62 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e26e5117-20e1-4e20-b547-9a288aa72a25")
 	)
 	(wire
 		(pts
@@ -7452,6 +7554,16 @@
 			(type default)
 		)
 		(uuid "f4a6cd83-f12e-4a1e-a976-d4b0cacffeef")
+	)
+	(wire
+		(pts
+			(xy 134.62 71.12) (xy 143.51 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f5a9259f-035f-4b33-aef0-77a1921baaa8")
 	)
 	(wire
 		(pts
@@ -7643,7 +7755,7 @@
 	)
 	(text "+5V Supply"
 		(exclude_from_sim no)
-		(at 102.87 72.39 0)
+		(at 102.87 68.58 0)
 		(effects
 			(font
 				(size 1.5 1.5)
@@ -9251,6 +9363,84 @@
 			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "R13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 125.73 76.2 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1e131f1c-8a12-4a02-8246-50454debe1cc")
+		(property "Reference" "C112"
+			(at 128.0668 75.0316 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "22u"
+			(at 128.0668 77.343 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 125.73 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
+			(at 125.73 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 125.73 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C45783"
+			(at 125.73 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "55c1c327-19f2-488d-bc80-55fb97471114")
+		)
+		(pin "2"
+			(uuid "782dd6b9-5ef8-4adc-8178-272088af1793")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "C112")
 					(unit 1)
 				)
 			)
@@ -11303,7 +11493,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5ab5e1cd-b124-498c-9d97-e31d7b513243")
-		(property "Reference" "C12"
+		(property "Reference" "C111"
 			(at 110.2868 82.6516 0)
 			(effects
 				(font
@@ -11362,6 +11552,84 @@
 		)
 		(pin "2"
 			(uuid "558f3716-4a3d-425d-99fb-b2e4eebb590b")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "C111")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 134.62 76.2 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5b30866c-87a9-4f16-9660-8a3deece91ec")
+		(property "Reference" "C12"
+			(at 136.9568 75.0316 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "22u"
+			(at 136.9568 77.343 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 134.62 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
+			(at 134.62 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 134.62 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C45783"
+			(at 134.62 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "5e2b03f0-513e-478b-834b-0db96667a2a1")
+		)
+		(pin "2"
+			(uuid "1661cf51-5dd5-40fd-8cde-33df2fa8f311")
 		)
 		(instances
 			(project "Mainboard"
@@ -12624,6 +12892,84 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "#PWR024")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 116.84 76.2 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9dfccd71-0fb3-42cb-961e-f9ad5d74c1be")
+		(property "Reference" "C113"
+			(at 119.1768 75.0316 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "22u"
+			(at 119.1768 77.343 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 116.84 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
+			(at 116.84 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 116.84 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C45783"
+			(at 116.84 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "badb7ade-f4cf-45d9-aa9a-4d30f33b97cb")
+		)
+		(pin "2"
+			(uuid "0656335b-cfb2-4f08-af91-0ecbeaaf8422")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "C113")
 					(unit 1)
 				)
 			)
@@ -14709,6 +15055,72 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
 					(reference "J10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 143.51 72.39 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f2411a21-0d5e-45e8-be10-24272a260404")
+		(property "Reference" "#PWR0189"
+			(at 143.51 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 143.51 77.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 143.51 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 143.51 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 143.51 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "231d9b83-cc59-4c8b-be71-8781336b4055")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
+					(reference "#PWR0189")
 					(unit 1)
 				)
 			)
