@@ -19,7 +19,9 @@ set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
-KICAD_PROJECT_DIR="$SCRIPT_DIR/../../hw/rev-b/mainboard/kicad"
+# Resolve to an absolute, canonical path (no '..') so easyeda2kicad's
+# Path.relative_to(Path.cwd()) check in --project-relative mode succeeds.
+KICAD_PROJECT_DIR="$(cd -- "$SCRIPT_DIR/../../hw/rev-b/mainboard/kicad" && pwd)"
 LIB_NAME="LCSC"
 LIB_DIR="$KICAD_PROJECT_DIR/libs/$LIB_NAME"
 

@@ -19,9 +19,9 @@ python3 -m venv "$VENV_DIR"
 # shellcheck source=/dev/null
 source "$VENV_DIR/bin/activate"
 
-echo "Installing easyeda2kicad ..."
+echo "Installing/updating easyeda2kicad ..."
 pip install --upgrade pip
-pip install easyeda2kicad
+pip install --upgrade easyeda2kicad
 
 echo ""
 echo "Setup complete. lcsc-import.sh will activate this venv automatically."
