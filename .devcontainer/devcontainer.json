@@ -9,6 +9,7 @@
         "vscode": {
             // Add the IDs of extensions you want installed when the container is created.
             "extensions": [
+                "bierner.github-markdown-preview",
                 "chris-hock.pioasm",
                 "DavidAnson.vscode-markdownlint",
                 "GitHub.copilot-chat",
@@ -17,7 +18,6 @@
                 "ms-vscode.cpptools-extension-pack",
                 "mshr-h.veriloghdl",
                 "mutantdino.resourcemonitor",
-                "shd101wyy.markdown-preview-enhanced",
                 "streetsidesoftware.code-spell-checker",
                 "xaver.clang-format"
             ]
