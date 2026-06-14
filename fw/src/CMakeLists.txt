@@ -45,6 +45,8 @@ set(FW_EXECUTABLE_NAME "${PROJECT_NAME}.elf")
 
 add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/breakpoint.c
+    ${FW_SRC_DIR}/cbm/filename.c
+    ${FW_SRC_DIR}/cbm/petscii.c
     ${FW_SRC_DIR}/display/char_encoding.c
     ${FW_SRC_DIR}/driver.c
     ${FW_SRC_DIR}/fatal.c
@@ -58,6 +60,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
     ${FW_SRC_DIR}/tape.c
+    ${FW_SRC_DIR}/tape_dir.c
     ${FW_SRC_DIR}/term_inject.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c

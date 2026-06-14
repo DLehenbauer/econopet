@@ -16,3 +16,6 @@ size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size);
 
 typedef void (*sd_read_callback_t)(size_t offset, uint8_t* buffer, size_t bytes_read, void* context);
 void sd_read_file(const char* path, sd_read_callback_t callback, void* context, size_t max_bytes);
+
+// Return the free space on the SD card in bytes. Returns 0 on error.
+uint64_t sd_free_bytes(void);

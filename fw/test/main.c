@@ -10,6 +10,8 @@
 #include "keystate_test.h"
 #include "log_test.h"
 #include "window_test.h"
+#include "petscii_test.h"
+#include "tape_dir_test.h"
 
 int run_suite() {
     int number_failed = 0;
@@ -22,6 +24,8 @@ int run_suite() {
     srunner_add_suite(sr1, keyscan_suite());
     srunner_add_suite(sr1, keystate_suite());
     srunner_add_suite(sr1, log_suite());
+    srunner_add_suite(sr1, petscii_suite());
+    srunner_add_suite(sr1, tape_dir_suite());
     srunner_set_fork_status(sr1, CK_NOFORK);
     srunner_run_all(sr1, CK_VERBOSE);
     number_failed += srunner_ntests_failed(sr1);

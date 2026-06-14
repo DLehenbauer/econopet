@@ -32,6 +32,8 @@ set(TEST_DIR ${FW_DIR}/test)
 
 add_executable(${PROJECT_NAME}
     ${SRC_DIR}/config/config.c
+    ${SRC_DIR}/cbm/filename.c
+    ${SRC_DIR}/cbm/petscii.c
     ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/window.c
@@ -39,6 +41,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/breakpoint.c
+    ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/breakpoint_test.c
@@ -50,6 +53,8 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
     ${TEST_DIR}/mock.c
+    ${TEST_DIR}/petscii_test.c
+    ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/window_test.c
 )
 

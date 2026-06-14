@@ -16,7 +16,9 @@ LOADING message and returns to the BASIC ready prompt.
 4. MCU reads the device number. If not a tape device (1 or 2), the MCU
    resumes the KERNAL so it can handle disk/IEEE LOADs normally
 5. MCU reads the filename from PET memory. If empty or just `*`, the MCU
-   resumes the KERNAL (fall through to physical datasette)
+   resumes the KERNAL (fall through to physical datasette). If the filename is
+   `$`, the MCU generates a directory listing instead (see the Directory
+   Listing section below)
 6. MCU searches `/sd/prgs/` for a matching `.prg` file
 7. If found:
    - MCU copies the PRG data into SRAM at the load address from the PRG file
@@ -349,6 +351,7 @@ since the user did not specify a particular file:
 |-----------------|----------------------------------|
 | `LOAD ""`       | Physical datasette (no file specified) |
 | `LOAD "*"`      | Physical datasette (no file specified) |
+| `LOAD "$"`      | Directory listing (see below)    |
 | `LOAD "A*"`     | First file starting with "a"     |
 | `LOAD "GAME"`   | Exactly "game.prg"               |
 | `LOAD "GAME*"`  | "game.prg", "game2.prg", etc.    |
@@ -383,6 +386,67 @@ bool match_filename(const char* pattern, uint8_t pattern_len,
 }
 ```
 
+## Directory Listing (`LOAD "$"`)
+
+`LOAD "$"` is special-cased to synthesize a directory listing of the loadable
+`.prg` files in `/sd/prgs/`. Listing the directory with `LOAD "$"` is a
+convenience borrowed from Commodore DOS (the virtual tape drive does not
+otherwise emulate a disk drive). After the load completes, the user types `LIST`
+to view it.
+
+The detection happens in `tape_load_callback`, after the device-number gate and
+after the empty/`*` check: if the requested name is exactly `$` (and the device
+is a tape device), the MCU branches to the directory generator instead of
+searching for a file. (A bare `LOAD "$"` defaults to device 1, so it is
+intercepted; `LOAD "$",8` is device 8 and is ignored.)
+
+### How It Works
+
+The listing is built as a synthetic BASIC program (the same trick Commodore DOS
+uses) and written to memory at the BASIC start (`$0401`, universal across all PET
+ROM versions). The MCU then reuses the existing stub + LD210 path: it sets
+EAL/EAH to the end of the synthesized program, writes the print stub to the tape
+buffer, and redirects execution. LD210 prints `READY.`, sets VARTAB, and relinks
+the (fake) BASIC line pointers, leaving a `LIST`-able directory in memory.
+
+Because the program is relinked by LD210/LINKPRG, the line link pointers only
+need to be plausible placeholders. The generator fills them with the correct
+absolute addresses anyway, and terminates the program with a `$0000` link.
+
+### Directory Format
+
+Each "line" is a fake BASIC line whose line number is printed by `LIST`:
+
+| Line          | Line number   | Text                                        |
+|---------------|---------------|---------------------------------------------|
+| Header        | `0`           | RVS-ON, `"ECONOPET        "`, ` SD 2A`      |
+| One per file  | block count   | quoted name (`.prg` suppressed), then `PRG` |
+| Footer        | free blocks   | `BLOCKS FREE.`                              |
+
+- The header reports the EconoPET firmware as the disk name, with an `SD`
+  disk id (for SD card) and a `2A` DOS-type id.
+- The block count is `ceil(file_size / 254)` (at least 1). Leading spaces in the
+  text shrink as the block count grows so the filename quote stays aligned.
+- Filenames are uppercased for the PET default character set and the `.prg`
+  extension is suppressed. The quoted name is padded to a 16-character field.
+- Entries are sorted alphabetically (case-insensitive), since `readdir`
+  returns filesystem order.
+- The footer reports the SD card's free space, obtained from the FAT backend's
+  `f_getfree` and converted to 254-byte blocks. CBM BASIC line numbers cap at
+  63999, so block counts and the free-block total are clamped to that value.
+
+The number of entries is bounded (`MAX_DIR_ENTRIES`, 144, matching the classic
+1541) to keep the synthesized program within the PET's BASIC RAM.
+
+### Rendering
+
+The byte-level formatting lives in `fw/src/tape_dir.c` (`tape_dir_render`),
+which is a pure function with no SPI or filesystem dependencies, so it is unit
+tested directly (`fw/test/tape_dir_test.c`). `tape.c` gathers the entries
+(`readdir` + `stat` for sizes, then sort), queries `sd_free_bytes()`, calls
+`tape_dir_render` (which converts the free bytes to CBM blocks), and streams
+the result to SRAM.
+
 ## Gateware Changes
 
 **None required.** This approach reuses the existing breakpoint infrastructure
@@ -394,6 +458,8 @@ which relies on the FPGA's halt mechanism (triggered by the `STP` opcode).
 
 - `fw/src/tape.h` - Public interface
 - `fw/src/tape.c` - Implementation
+- `fw/src/tape_dir.h` / `fw/src/tape_dir.c` - Directory listing renderer
+  (pure function, unit tested in `fw/test/tape_dir_test.c`)
 
 ### Tape Configuration Blob
 
@@ -580,6 +646,8 @@ auto-detection. Custom or patched ROMs can supply their own blob.
 - No VERIFY support (would require different interception point)
 - No SAVE support (separate feature)
 - Single directory (`/sd/prgs/`) - no subdirectory navigation
+- `LOAD "$"` lists at most `MAX_DIR_ENTRIES` (144) files; only the plain `$`
+  form is recognized (no `$0`, `$:pattern`, etc.)
 
 ## Future Enhancements
 

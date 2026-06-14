@@ -10,11 +10,17 @@
 #include "filesystem/littlefs.h"
 #include "filesystem/vfs.h"
 
+#include "ff.h"
+
 #include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
 #include "global.h"
 #include "hw.h"
+
+// Ensure FatFs is built with variable sector size support.
+_Static_assert(FF_MAX_SS != FF_MIN_SS,
+               "FatFs must use a variable sector size so FATFS::ssize exists");
 
 bool sd_init() {
     // Deassert SD CS
@@ -92,4 +98,17 @@ void sd_read_file(const char* filename, sd_read_callback_t callback, void* conte
     }
 
     release_temp_buffer(&buffer);
+}
+
+uint64_t sd_free_bytes(void) {
+    // The FAT backend (pico-vfs) registers the SD card as FatFs logical drive
+    // "0:". Query it directly for the free cluster count.
+    FATFS* fs = NULL;
+    DWORD free_clusters = 0;
+    if (f_getfree("0:", &free_clusters, &fs) != FR_OK || fs == NULL) {
+        log_warn("sd: f_getfree failed");
+        return 0;
+    }
+
+    return (uint64_t)free_clusters * fs->csize * fs->ssize;
 }
