@@ -1,0 +1,87 @@
+{VERSION 3 0 "IBM INTEL NT" "3.0" }
+{USTYLETAB {CSTYLE "Maple Input" -1 0 "Courier" 0 1 255 0 0 1 0 1 0 0 
+1 0 0 0 0 }{CSTYLE "2D Math" -1 2 "Times" 0 1 0 0 0 0 0 0 2 0 0 0 0 0 
+0 }{CSTYLE "2D Output" 2 20 "" 0 1 0 0 255 1 0 0 0 0 0 0 0 0 0 }
+{PSTYLE "Normal" -1 0 1 {CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 
+0 0 }0 0 0 -1 -1 -1 0 0 0 0 0 0 -1 0 }{PSTYLE "Maple Output" 0 11 1 
+{CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 }3 3 0 -1 -1 -1 0 0 
+0 0 0 0 -1 0 }}
+{SECT 0 {EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 64 "# See https://www.ti
+.com/lit/an/slva237c/slva237c.pdf\n\nrestart:\n" }}}{EXCHG {PARA 0 "> \+
+" 0 "" {MPLTEXT 1 0 229 "# Voltage\n\nrestart:\nR4 := 10*1000;\nq0 := \+
+R6 = (R4 * 1.221) / (VOUT - 1.221);\nR6 := solve(subs(\{VOUT = 6.1\}, \+
+q0));\nevalf(%);\n\n# Closest match using standard values is 1k + 1k5:
+\nR6 := (1 + 1.5) * 1000;\nV_OUT := solve(q0);\nevalf(%);" }}{PARA 11 
+"" 1 "" {XPPMATH 20 "6#>%#R4G\"&++\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "
+6#>%#q0G/%#R6G,$*&\"\"\"F),&%%VOUTG\"\"\"$!%@7!\"$F,!\"\"$\")++@7F/" }
+}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R6G$\"++?c-D!\"'" }}{PARA 11 "" 1 
+"" {XPPMATH 20 "6#$\"++?c-D!\"'" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#
+R6G$\"&+]#!\"\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&V_OUTG$\"++++0h!
+\"*" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"++++0h!\"*" }}}{EXCHG {PARA 
+0 "> " 0 "" {MPLTEXT 1 0 545 "# Inductor size\n\n# Nominal input volta
+ge is 9V (unregulated).  Let's say 16 V to be safe:\nV_IN_MAX := 16;\n
+\n# TPS5430 is rated for 3A max:\nI_OUT := 3;\n\n# 500 kHz switching f
+requency\nF_SW_kHz := 500;\nF_SW := F_SW_kHz * 1000;\n\n# TI recommend
+s 0.2-0.3.  Uses 0.2 in reference design.\nK_IND := 0.2;\n\n# Is this \+
+the maximum ripple voltage?\nV_OUT_MAX := 6.5;\n\nL_MIN := (V_OUT_MAX \+
+* (V_IN_MAX - V_OUT)) / (V_IN_MAX * K_IND * I_OUT * F_SW);\nL_MIN_uH :
+= L_MIN * 10^6;\nevalf(%);\n\n# Choose next available size larger:\nL_
+O_uH := 22;\nL_O := L_O_uH * 10^(-6);\n\n" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%)V_IN_MAXG\"#;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&
+I_OUTG\"\"$" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%)F_SW_kHzG\"$+&" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#>%%F_SWG\"'++]" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%&K_INDG$\"\"#!\"\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "6
+#>%*V_OUT_MAXG$\"#l!\"\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&L_MING$
+\"+)pBY[\"!#9" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%)L_MIN_uHG$\"+)pBY[
+\"!\")" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+)pBY[\"!\")" }}{PARA 11 
+"" 1 "" {XPPMATH 20 "6#>%'L_O_uHG\"#A" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%$L_OG#\"#6\"'++]" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 317 "#
+ Calculate minimum output filter capacitor\nC_O_MIN := 1/((2*Pi * 6000
+)^2 * L_O);\nC_O_MIN_uF := C_O_MIN * 10^(6);\nevalf(%);\n\n# Choose ou
+tput filtering capacitors to match target filter resonant frequency\n#
+ (See next step below)\n\nC_O_EFF_uF := (10 * (1-0.61)) + 2 * (47 * (1
+ - 0.69));\nC_O_EFF := C_O_EFF_uF * 10^(-6);\n" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%(C_O_MING,$*&\"\"\"F'*$)%#PiG\"\"#F'!\"\"#\"\"\"\"%oJ
+" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%+C_O_MIN_uFG,$*&\"\"\"F'*$)%#PiG
+\"\"#F'!\"\"#\"&]7$\"#**" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+&op#)>
+$!\")" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%+C_O_EFF_uFG$\"%/L!\"#" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#>%(C_O_EFFG$\"++++/L!#9" }}}{EXCHG 
+{PARA 0 "> " 0 "" {MPLTEXT 1 0 191 "# Verify filter resonant frequency
+\n# For ceramic, LC resonant frequency should be between 3 kHz and 6 k
+Hz.\n# (Reference design is 4.24 kHz)\n \nF_LC := 1 / (2*Pi*sqrt(L_O *
+ C_O_EFF));\nevalf(%);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%%F_LCG,$*&
+*$-%%sqrtG6#\"%a7\"\"\"F,%#PiG!\"\"#\"'++D\"$F'" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+(G'R%\\%!\"'" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 
+1 0 139 "# Calculate pole and zeros\n\nFp1 := 500000 * (V_OUT / F_LC);
+\nevalf(%);\n\nFz2 := 0.7 * F_LC;\nevalf(%/1000);\n\nFz3 := 2.3 * F_LC
+;\nevalf(%/1000);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$Fp1G,$*&%#PiG
+\"\"\"-%%sqrtG6#\"%a7\"\"\"$\"++]iO]!\"*" }}{PARA 11 "" 1 "" {XPPMATH 
+20 "6#$\"+BvA.c!\"(" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$Fz2G,$*&*$-%
+%sqrtG6#\"%a7\"\"\"F,%#PiG!\"\"$\"+\"eo5z#!\"(" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+-u2YJ!\"*" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$Fz3
+G,$*&*$-%%sqrtG6#\"%a7\"\"\"F,%#PiG!\"\"$\"+2Rlq\"*!\"(" }}{PARA 11 "
+" 1 "" {XPPMATH 20 "6#$\"+Y6rL5!\")" }}}{EXCHG {PARA 0 "> " 0 "" 
+{MPLTEXT 1 0 197 "# Calculate caps\n\nC12 := 1 / (2*Pi * Fp1 * ((R4 * \+
+R6)/(R4 + R6)));\nC12_nF := C12 * 10^9;\nevalf(%);\n\n# For C12, selec
+t next highest available value.\nC12_nF := 220;\nC12 := C12_nF * 10^(-
+9);\nevalf(%);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$C12G,$*&*$-%%sqrt
+G6#\"%a7\"\"\"F,*$)%#PiG\"\"#F,!\"\"$\"+0NblK!#<" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%'C12_nFG,$*&*$-%%sqrtG6#\"%a7\"\"\"F,*$)%#PiG\"\"#F,!
+\"\"$\"+0NblK!\")" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+$Rr;<\"!\"(" 
+}}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'C12_nFG\"$?#" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%$C12G#\"#6\")+++]" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#
+$\"+++++A!#;" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 90 "R7 := 1/(2*
+Pi * Fz2 * C12);\nevalf(%);\n\n# For R7, select closest available valu
+e\nR7 := 220;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R7G,$*$-%%sqrtG6#
+\"%a7\"\"\"$\"+!\\1N\\'!\"*" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+%er
+%*H#!\"(" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R7G\"$?#" }}}{EXCHG 
+{PARA 0 "> " 0 "" {MPLTEXT 1 0 182 "C11 := 1/(2*Pi*Fz3 * R4);\nC11_pF \+
+:= C11 * 10^12;\nevalf(%);\nC11_nF := C11_pF * 10^(-3);\nevalf(%);\n\n
+# For C11, select closest standard value\n# C11_nF := 2.2;\n# C11 := C
+11_nF * 10^(-9);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$C11G,$*$-%%sqrt
+G6#\"%a7\"\"\"$\"+*3EyM%!#?" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'C11_
+pFG,$*$-%%sqrtG6#\"%a7\"\"\"$\"+*3EyM%!\")" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+$>Y'R:!\"'" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%'C1
+1_nFG,$*$-%%sqrtG6#\"%a7\"\"\"$\"+*3EyM%!#6" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#$\"+$>Y'R:!\"*" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 
+0 0 "" }}}}{MARK "3 0 0" 161 }{VIEWOPTS 1 1 0 1 1 1803 }
