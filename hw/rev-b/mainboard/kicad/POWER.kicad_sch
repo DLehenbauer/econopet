@@ -7924,7 +7924,7 @@
 		)
 		(uuid "36373244-3f47-47b9-8cf8-e846bf57bdef")
 	)
-	(text "TPS5430 design with MLCC per:\nhttps://www.ti.com/lit/an/slva237c/slva237c.pdf"
+	(text "TPS5430 design using MLCC per:\nhttps://www.ti.com/lit/an/slva237c/slva237c.pdf"
 		(exclude_from_sim no)
 		(at 170.18 19.05 0)
 		(effects
@@ -8094,9 +8094,9 @@
 		)
 		(uuid "ccfe9cea-dbba-432f-a260-d3dc1aa53e4f")
 	)
-	(text "6.1V @ ~700ma max\n(~350ma per cassette port)\n\nVoltage and limits derived from\nPET schematics and datasheets\n\nVoltage is non-critical as the\ndatasette speed is controlled by\na mechanical governor.\n\nHeatsink does not appear to be\nrequired for a single Datasette.\n\n(Running two Datasettes at the\nsame time hasn't been tested.)\n"
+	(text "Max load of ~400ma observed\nwith a black C2N when motor is\nstalled at end-of-tape during\nrewind.\n\n6.1V @ 1A allows 400ma per\ncassette port with some headroom.\n\nVoltage is non-critical as the\ndatasette speed is controlled by\na mechanical governor."
 		(exclude_from_sim no)
-		(at 232.41 82.55 0)
+		(at 232.41 73.66 0)
 		(effects
 			(font
 				(size 1.27 1.27)
