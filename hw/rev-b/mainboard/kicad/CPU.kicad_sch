@@ -4373,14 +4373,14 @@
 		)
 		(uuid "76aa4ab6-4d6c-492e-a178-9d92d42e7c7f")
 	)
-	(text " RAM\n128KB"
+	(text "128KB\n55NS"
 		(exclude_from_sim no)
-		(at 185.42 104.14 0)
+		(at 187.96 116.84 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify bottom)
 		)
 		(uuid "a1bbbcb7-3394-4d47-a7e2-c5aca5915b62")
 	)
@@ -5370,8 +5370,8 @@
 				)
 			)
 		)
-		(property "Value" "AS6C1008"
-			(at 187.96 96.52 0)
+		(property "Value" "IS62WV1288BLL-55QLI"
+			(at 187.96 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5380,7 +5380,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_DIP:DIP-32_W15.24mm_Socket"
+		(property "Footprint" "LCSC:SOP-32_L20.7-W11.3-P1.27-LS14.1-BL"
 			(at 187.96 95.25 0)
 			(effects
 				(font
@@ -5389,7 +5389,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.mouser.com/datasheet/2/12/AS6C1008feb2007-1511508.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/C1351025.pdf"
 			(at 187.96 95.25 0)
 			(effects
 				(font
@@ -5407,7 +5407,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "913-AS6C1008-55PCN,649-DILB32P223TLF"
+		(property "LCSC" "C1351025"
 			(at 187.96 97.79 0)
 			(effects
 				(font
