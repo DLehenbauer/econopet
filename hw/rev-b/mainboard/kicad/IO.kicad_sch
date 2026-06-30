@@ -5086,6 +5086,17 @@
 		)
 		(uuid "38e0b56a-2fdd-4173-b415-9215dd24a0ee")
 	)
+	(text "VSYNC connects to both PIA1 CB1 and VIA PB5.\n\nPIA CB1 is an input only, and generates the 50/60 Hz Jiffy interrupt.\nVIA PB5 exposes the vertical sync signal as a normal GPIO input. Software\ncan poll PB5 to determine whether the display is currently in vertical blank.\nThis is what the ROM editor does before writing to screen RAM on early PETs\nto avoid \"snow.\" It is also the signal used by the famous \"killer poke\" trick."
+		(exclude_from_sim no)
+		(at 151.13 59.69 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "3f646e49-f958-422f-805d-1655fa939bf6")
+	)
 	(text "PIA1"
 		(exclude_from_sim no)
 		(at 83.82 63.5 0)

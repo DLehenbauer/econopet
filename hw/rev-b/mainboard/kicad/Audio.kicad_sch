@@ -1831,10 +1831,6 @@
 		(color 0 0 0 0)
 		(uuid "e77a7a3f-129b-4c4e-8466-7e8f5463ba66")
 	)
-	(no_connect
-		(at 73.66 109.22)
-		(uuid "a21390c7-dcee-47b5-a973-d1a3d1cd75dd")
-	)
 	(wire
 		(pts
 			(xy 191.77 119.38) (xy 220.98 119.38)
@@ -2044,6 +2040,26 @@
 			(type default)
 		)
 		(uuid "38a5e8a0-0c23-410c-a94e-fd773a5af8ea")
+	)
+	(wire
+		(pts
+			(xy 41.91 111.76) (xy 50.8 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3d8c31ef-e6e6-46d6-bd4e-5a8d2584541b")
+	)
+	(wire
+		(pts
+			(xy 50.8 109.22) (xy 50.8 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3ef154b1-0741-4fc7-a9f3-9778a2f735a3")
 	)
 	(wire
 		(pts
@@ -2297,7 +2313,7 @@
 	)
 	(wire
 		(pts
-			(xy 64.77 115.57) (xy 64.77 119.38)
+			(xy 64.77 118.11) (xy 64.77 119.38)
 		)
 		(stroke
 			(width 0)
@@ -2577,7 +2593,7 @@
 	)
 	(wire
 		(pts
-			(xy 64.77 106.68) (xy 64.77 110.49)
+			(xy 64.77 106.68) (xy 64.77 113.03)
 		)
 		(stroke
 			(width 0)
@@ -2707,6 +2723,16 @@
 	)
 	(wire
 		(pts
+			(xy 73.66 109.22) (xy 50.8 109.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fef94672-c129-4f80-bb5e-b67501dc690b")
+	)
+	(wire
+		(pts
 			(xy 41.91 176.53) (xy 48.26 176.53)
 		)
 		(stroke
@@ -2749,6 +2775,18 @@
 			(justify left)
 		)
 		(uuid "945fc921-e219-4353-be22-9bdeb081537b")
+	)
+	(hierarchical_label "~{AUDIO_DET}"
+		(shape output)
+		(at 41.91 111.76 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "be62bd89-5f95-40ad-a815-0d54109ed7c9")
 	)
 	(hierarchical_label "AUDIO"
 		(shape input)
@@ -3742,7 +3780,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 64.77 113.03 0)
+		(at 64.77 115.57 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -3750,15 +3788,6 @@
 		(dnp no)
 		(uuid "504943f1-2273-469c-a480-921d4818b10d")
 		(property "Reference" "C81"
-			(at 58.166 111.76 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "22n"
 			(at 58.166 114.3 0)
 			(effects
 				(font
@@ -3767,8 +3796,17 @@
 				(justify left)
 			)
 		)
+		(property "Value" "22n"
+			(at 58.166 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 64.77 113.03 0)
+			(at 64.77 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3777,7 +3815,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402B223K500NT_C1532.pdf"
-			(at 64.77 113.03 0)
+			(at 64.77 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3786,7 +3824,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 64.77 113.03 0)
+			(at 64.77 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3795,7 +3833,7 @@
 			)
 		)
 		(property "LCSC" "C1532"
-			(at 64.77 113.03 0)
+			(at 64.77 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)

@@ -415,6 +415,16 @@
 	)
 	(wire
 		(pts
+			(xy 66.04 116.84) (xy 78.74 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3e42bd67-7045-47a6-9870-35830bf8759e")
+	)
+	(wire
+		(pts
 			(xy 142.24 93.98) (xy 149.86 93.98)
 		)
 		(stroke
@@ -472,16 +482,6 @@
 			(type default)
 		)
 		(uuid "49c6b417-8202-4f80-acce-af331b1f2513")
-	)
-	(wire
-		(pts
-			(xy 66.04 116.84) (xy 78.74 116.84)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4c380e0e-a2f8-43a0-9014-c99fb50d9e02")
 	)
 	(wire
 		(pts
@@ -772,6 +772,16 @@
 			(type default)
 		)
 		(uuid "9f4abbc0-6ac3-48f0-b823-2c1c19349540")
+	)
+	(wire
+		(pts
+			(xy 66.04 119.38) (xy 78.74 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a222264e-ebe2-4b21-9043-7d73f17e8fd7")
 	)
 	(wire
 		(pts
@@ -2017,7 +2027,7 @@
 			(uuid "5fc60b06-c977-4aac-bb01-61314619550b")
 		)
 		(pin "AUDIO" output
-			(at 78.74 116.84 180)
+			(at 78.74 119.38 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2035,6 +2045,16 @@
 				(justify right)
 			)
 			(uuid "f140477c-7a18-4034-ab10-466a6f184cee")
+		)
+		(pin "~{AUDIO_DET}" input
+			(at 78.74 116.84 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "b1576796-f95e-40c2-a8b0-4dd79c81b417")
 		)
 		(instances
 			(project "Mainboard"
@@ -2914,7 +2934,7 @@
 	)
 	(sheet
 		(at 40.64 113.03)
-		(size 25.4 7.62)
+		(size 25.4 10.16)
 		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
@@ -2934,7 +2954,7 @@
 			)
 		)
 		(property "Sheetfile" "Audio.kicad_sch"
-			(at 40.64 121.2346 0)
+			(at 40.64 123.7746 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2943,7 +2963,7 @@
 			)
 		)
 		(pin "AUDIO" input
-			(at 66.04 116.84 0)
+			(at 66.04 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2951,6 +2971,16 @@
 				(justify right)
 			)
 			(uuid "27c75c8f-a018-464f-a3ae-b77b4bc1fafb")
+		)
+		(pin "~{AUDIO_DET}" output
+			(at 66.04 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "78248878-5a00-4251-b4e0-74bd55f6c43c")
 		)
 		(instances
 			(project "Mainboard"

@@ -2493,7 +2493,7 @@
 	)
 	(wire
 		(pts
-			(xy 52.07 114.3) (xy 44.45 114.3)
+			(xy 52.07 111.76) (xy 44.45 111.76)
 		)
 		(stroke
 			(width 0)
@@ -2530,6 +2530,16 @@
 			(type default)
 		)
 		(uuid "a0ab535b-bcab-4550-8a15-196c95a5630e")
+	)
+	(wire
+		(pts
+			(xy 45.72 119.38) (xy 52.07 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a1163a2c-3215-4582-9605-73d86e5b6b1d")
 	)
 	(wire
 		(pts
@@ -2703,7 +2713,7 @@
 	)
 	(wire
 		(pts
-			(xy 52.07 116.84) (xy 44.45 116.84)
+			(xy 52.07 114.3) (xy 44.45 114.3)
 		)
 		(stroke
 			(width 0)
@@ -2733,7 +2743,7 @@
 	)
 	(wire
 		(pts
-			(xy 52.07 111.76) (xy 44.45 111.76)
+			(xy 52.07 109.22) (xy 44.45 109.22)
 		)
 		(stroke
 			(width 0)
@@ -2893,7 +2903,7 @@
 	)
 	(wire
 		(pts
-			(xy 52.07 109.22) (xy 44.45 109.22)
+			(xy 52.07 106.68) (xy 44.45 106.68)
 		)
 		(stroke
 			(width 0)
@@ -3253,7 +3263,7 @@
 		(uuid "12f1b916-239f-4d23-8f3f-be017c929f23")
 	)
 	(label "VSYNC"
-		(at 44.45 116.84 0)
+		(at 44.45 114.3 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3440,7 +3450,7 @@
 		(uuid "60b868e3-a9f8-4d20-ae5a-40ca53af4adb")
 	)
 	(label "HORIZ"
-		(at 44.45 111.76 0)
+		(at 44.45 109.22 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3594,7 +3604,7 @@
 		(uuid "cba11463-444d-4fb1-9f76-b3065c51a98b")
 	)
 	(label "VERT"
-		(at 44.45 114.3 0)
+		(at 44.45 111.76 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3638,7 +3648,7 @@
 		(uuid "d9c7258e-64f4-44a0-b9ed-474106f56c42")
 	)
 	(label "VIDEO"
-		(at 44.45 109.22 0)
+		(at 44.45 106.68 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4012,6 +4022,18 @@
 			(justify left)
 		)
 		(uuid "8b7bd606-8d7f-4fbd-a2d5-a4d4e067ee34")
+	)
+	(hierarchical_label "~{AUDIO_DET}"
+		(shape input)
+		(at 45.72 119.38 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "8e896319-16a1-4f1e-bf00-9dd2afe7f67f")
 	)
 	(hierarchical_label "BE"
 		(shape output)
@@ -7093,7 +7115,7 @@
 			(uuid "f0580424-5839-4775-bf71-35398a4a8a94")
 		)
 		(pin "VERT" output
-			(at 52.07 114.3 180)
+			(at 52.07 111.76 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7103,7 +7125,7 @@
 			(uuid "72b6f944-1bdc-469d-9c59-b86fe839c4f0")
 		)
 		(pin "HORIZ" output
-			(at 52.07 111.76 180)
+			(at 52.07 109.22 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7113,7 +7135,7 @@
 			(uuid "9302f627-220f-41e9-809c-0dc0b4dd853d")
 		)
 		(pin "VIDEO" output
-			(at 52.07 109.22 180)
+			(at 52.07 106.68 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7433,7 +7455,7 @@
 			(uuid "21c57d1c-53fd-40c9-b89a-4f9203506591")
 		)
 		(pin "VSYNC" output
-			(at 52.07 116.84 180)
+			(at 52.07 114.3 180)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7441,6 +7463,16 @@
 				(justify left)
 			)
 			(uuid "b1cca2f3-b6dd-4796-8b60-98277cc0359f")
+		)
+		(pin "~{AUDIO_DET}" input
+			(at 52.07 119.38 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "976b83c1-04f9-49e7-a2f9-bf0ad211e6c8")
 		)
 		(instances
 			(project "Mainboard"
@@ -7452,7 +7484,7 @@
 	)
 	(sheet
 		(at 26.035 25.4)
-		(size 19.685 76.2)
+		(size 19.685 74.93)
 		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
@@ -7472,7 +7504,7 @@
 			)
 		)
 		(property "Sheetfile" "MCU.kicad_sch"
-			(at 26.035 102.1846 0)
+			(at 26.035 100.9146 0)
 			(effects
 				(font
 					(size 1.27 1.27)
