@@ -3262,7 +3262,7 @@
 		)
 		(uuid "12f1b916-239f-4d23-8f3f-be017c929f23")
 	)
-	(label "VSYNC"
+	(label "JIFFY"
 		(at 44.45 114.3 0)
 		(fields_autoplaced yes)
 		(effects
@@ -3537,7 +3537,7 @@
 		)
 		(uuid "bf046f55-cad5-4e6d-8fc5-1978a2a4f4dc")
 	)
-	(label "VSYNC"
+	(label "JIFFY"
 		(at 201.93 52.07 0)
 		(fields_autoplaced yes)
 		(effects
@@ -3735,7 +3735,7 @@
 		)
 		(uuid "ff3f0dce-48a8-4a4e-9a85-b6808253807b")
 	)
-	(hierarchical_label "BVSYNC"
+	(hierarchical_label "BJIFFY"
 		(shape output)
 		(at 234.95 52.07 0)
 		(fields_autoplaced yes)
@@ -7454,16 +7454,6 @@
 			)
 			(uuid "21c57d1c-53fd-40c9-b89a-4f9203506591")
 		)
-		(pin "VSYNC" output
-			(at 52.07 114.3 180)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-			(uuid "b1cca2f3-b6dd-4796-8b60-98277cc0359f")
-		)
 		(pin "~{AUDIO_DET}" input
 			(at 52.07 119.38 180)
 			(effects
@@ -7473,6 +7463,16 @@
 				(justify left)
 			)
 			(uuid "976b83c1-04f9-49e7-a2f9-bf0ad211e6c8")
+		)
+		(pin "JIFFY" output
+			(at 52.07 114.3 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "8a11e17c-b621-433b-8e73-6abbbc232abb")
 		)
 		(instances
 			(project "Mainboard"

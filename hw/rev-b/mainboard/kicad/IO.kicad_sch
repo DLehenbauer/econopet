@@ -5075,7 +5075,7 @@
 		)
 		(uuid "fed6a1e7-e233-4dff-87e0-8992a65c8dd0")
 	)
-	(text "470R protects VIA from \"Killer Poke\", which\nputs PB5 in contention with BVERT.\n\nW65C22N drives 1 CMOS load (~3ma).\nBVERT is driven at ~24ma by level shifter.\n(BVERT easily wins against VIA.)\n"
+	(text "1K protects VIA from \"Killer Poke\", which\nputs PB5 in contention with BJIFFY.\n\nW65C22N drives 1 CMOS load (~3ma).\nBJIFFY is driven at ~24ma by level shifter.\n(BJIFFY easily wins against VIA.)\n"
 		(exclude_from_sim no)
 		(at 219.71 153.67 0)
 		(effects
@@ -5086,9 +5086,9 @@
 		)
 		(uuid "38e0b56a-2fdd-4173-b415-9215dd24a0ee")
 	)
-	(text "VSYNC connects to both PIA1 CB1 and VIA PB5.\n\nPIA CB1 is an input only, and generates the 50/60 Hz Jiffy interrupt.\nVIA PB5 exposes the vertical sync signal as a normal GPIO input. Software\ncan poll PB5 to determine whether the display is currently in vertical blank.\nThis is what the ROM editor does before writing to screen RAM on early PETs\nto avoid \"snow.\" It is also the signal used by the famous \"killer poke\" trick."
+	(text "In the original PET, both PIA1 CB1 and VIA PB5 were connected to VERT_DRIVE.\nPIA CB1 is an input only, and generates the 50/60 Hz jiffy interrupt.\nVIA PB5 was intended for detecting when the display was in vertical blank,\nbut was also used as an output in the infamous \"killer poke\" trick.\n\nIn our design, we replace VERT_DRIVE with an independently generated JIFFY\nclock.  Typically, these signals will be identical, but generating them\nseparately affords the option of supporting a 60 Hz refresh rate with a\n50 Hz interrupt and vice-versa."
 		(exclude_from_sim no)
-		(at 151.13 59.69 0)
+		(at 151.13 57.15 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -6027,7 +6027,7 @@
 		)
 		(uuid "5e27f565-c85a-4f3b-9862-58c0accdd5e3")
 	)
-	(hierarchical_label "BVSYNC"
+	(hierarchical_label "BJIFFY"
 		(shape input)
 		(at 240.03 68.58 0)
 		(fields_autoplaced yes)
@@ -7168,7 +7168,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470"
+		(property "Value" "1k"
 			(at 229.108 140.462 90)
 			(effects
 				(font
@@ -7186,7 +7186,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF4700TCE_C25117.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010216_UNI-ROYAL-Uniroyal-Elec-0402WGF1001TCE_C11702.pdf"
 			(at 227.33 143.51 0)
 			(effects
 				(font
@@ -7204,7 +7204,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25117"
+		(property "LCSC" "C11702"
 			(at 227.33 143.51 0)
 			(effects
 				(font

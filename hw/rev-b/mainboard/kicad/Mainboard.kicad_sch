@@ -2036,16 +2036,6 @@
 			)
 			(uuid "0467a466-5aea-4097-812f-0ab5fab8d392")
 		)
-		(pin "BVSYNC" output
-			(at 104.14 127 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-			(uuid "f140477c-7a18-4034-ab10-466a6f184cee")
-		)
 		(pin "~{AUDIO_DET}" input
 			(at 78.74 116.84 180)
 			(effects
@@ -2055,6 +2045,16 @@
 				(justify left)
 			)
 			(uuid "b1576796-f95e-40c2-a8b0-4dd79c81b417")
+		)
+		(pin "BJIFFY" output
+			(at 104.14 127 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "73496ab5-991b-4994-b1fe-6bfc367a2ebf")
 		)
 		(instances
 			(project "Mainboard"
@@ -2700,7 +2700,7 @@
 			)
 			(uuid "56becf0e-5612-4172-b4a6-79c790bc29e6")
 		)
-		(pin "BVSYNC" input
+		(pin "BJIFFY" input
 			(at 116.84 127 180)
 			(effects
 				(font
@@ -2708,7 +2708,7 @@
 				)
 				(justify left)
 			)
-			(uuid "4f5ca0df-b15c-4e94-91e3-7f3da491ed2e")
+			(uuid "3668b1ba-03d3-4d89-9b34-c0286fc5c34a")
 		)
 		(instances
 			(project "Mainboard"

@@ -14063,7 +14063,7 @@
 		)
 		(uuid "ed86a288-d29b-49ca-8121-0a7cdbbe3265")
 	)
-	(label "VSYNC"
+	(label "JIFFY"
 		(at 246.38 86.36 180)
 		(fields_autoplaced yes)
 		(effects
@@ -14635,7 +14635,7 @@
 		)
 		(uuid "99835168-4cf4-48ef-830c-15d6e326b5af")
 	)
-	(hierarchical_label "VSYNC"
+	(hierarchical_label "JIFFY"
 		(shape output)
 		(at 368.3 137.16 180)
 		(fields_autoplaced yes)
