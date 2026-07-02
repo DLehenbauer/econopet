@@ -58,15 +58,15 @@ module top #(
 
     // IO
     output logic io_oe_n_o,
-    output logic pia1_cs_n_o,       // (CS2B)
-    output logic pia2_cs_n_o,       // (CS2B)
-    output logic via_cs_n_o,        // (CS2B)
+    output logic pia1_cs_n_o,           // (CS2B)
+    output logic pia2_cs_n_o,           // (CS2B)
+    output logic via_cs_n_o,            // (CS2B)
 
     // SPI buses
-    input  logic spi0_cs_ni,        // (CS)  Chip Select (active low)
-    input  logic spi0_sck_i,        // (SCK) Serial Clock
-    input  logic spi0_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi0_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi0_cs_ni,            // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,            // (SCK) Serial Clock
+    input  logic spi0_sd_i,             // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,             // (SDO) Serial Data Out (FPGA -> MCU)
     
     input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
     input  logic spi1_sck_i,        // (SCK) Serial Clock
@@ -80,15 +80,17 @@ module top #(
     input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
 
     // Video
-    input  logic graphic_i,
-    output logic h_sync_o,
-    output logic v_sync_o,
+    input  logic graphic_i,         // VIA CA2 pin 39 -> Character ROM A10 (0 = graphics, 1 = text)
+    output logic horiz_drive_o,     // Horizontal drive for native PET video
+    output logic vert_drive_o,      // Vertical drive for native PET video
+    output logic jiffy_clock_o,     // Triggers IRQ on falling edge (VIA CB1 pin 37)
     output logic video_o,
 
     // Audio
     input  logic diag_i,
     input  logic via_cb2_i,
     output logic audio_o,
+    input  logic audio_det_n_i,     // Detects 3.5mm jack insertion (0 = inserted, 1 = not inserted)
 
     // PMOD
     input  logic [8:1] pmod1_i,
@@ -100,7 +102,37 @@ module top #(
     output logic [8:1] pmod2_oe,
 
     // Spare pins
-    output logic [9:0] spare_o
+    input  logic sp1_i,
+    output logic sp1_o,
+    output logic sp1_oe,
+
+    input  logic sp2_i,
+    output logic sp2_o,
+    output logic sp2_oe,
+
+    input  logic sp3_i,
+    output logic sp3_o,
+    output logic sp3_oe,
+
+    input  logic sp4_i,
+    output logic sp4_o,
+    output logic sp4_oe,
+
+    input  logic sp5_i,
+    output logic sp5_o,
+    output logic sp5_oe,
+
+    input  logic sp6_i,
+    output logic sp6_o,
+    output logic sp6_oe,
+
+    input  logic sp7_i,
+    output logic sp7_o,
+    output logic sp7_oe,
+
+    input  logic sp8_i,
+    output logic sp8_o,
+    output logic sp8_oe
 );
     // Turn off red NSTATUS LED to indicate programming was successful.
     assign status_no = 1'b1;
@@ -109,17 +141,6 @@ module top #(
     assign pmod1_o [8:1] = pmod2_i[8:1];
     assign pmod1_oe[8:1] = '1;
     assign pmod2_oe[8:1] = '0;
-
-    // Debug: Temporarily use spare pins to break out some signals for a logic analyzer.
-    // assign spare_o[0] = ram_oe_n_o;
-    // assign spare_o[1] = ram_we_n_o;
-    // assign spare_o[2] = io_oe_n_o;
-    // assign spare_o[3] = pia1_cs_n_o;
-    // assign spare_o[4] = pia2_cs_n_o;
-    // assign spare_o[5] = via_cs_n_o;
-    // assign spare_o[7] = ram_addr_a10_o;
-    // assign spare_o[8] = ram_addr_a11_o;
-    // assign spare_o[9] = ram_addr_a15_o;
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for cpu_addr_o[15:0].
@@ -181,6 +202,13 @@ module top #(
     assign cpu_nmi_n_o  = 0;            // Wire-or only driven when asserted.
     assign cpu_nmi_n_oe = cpu_nmi_o;
 
+    // Configure unused spare pins as inputs.
+    logic [8:1] spare_i_unused;
+
+    assign spare_i_unused = {sp8_i, sp7_i, sp6_i, sp5_i, sp4_i, sp3_i, sp2_i, sp1_i};
+    assign {sp8_o, sp7_o, sp6_o, sp5_o, sp4_o, sp3_o, sp2_o, sp1_o} = '1;
+    assign {sp8_oe, sp7_oe, sp6_oe, sp5_oe, sp4_oe, sp3_oe, sp2_oe, sp1_oe} = '0;
+
     main main (
         .sys_clock_i(sys_clock_i),
 
@@ -222,14 +250,16 @@ module top #(
         // Video
         .config_crt_i(config_crt_i),
         .graphic_i(graphic_i),
-        .h_sync_o(h_sync_o),
-        .v_sync_o(v_sync_o),
+        .horiz_drive_o(horiz_drive_o),
+        .vert_drive_o(vert_drive_o),
+        .jiffy_clock_o(jiffy_clock_o),
         .video_o(video_o),
 
         // Audio
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
         .audio_o(audio_o),
+        .audio_det_i(!audio_det_n_i),
 
         // Keyboard
         .config_keyboard_i(config_keyboard_i),

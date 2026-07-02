@@ -134,10 +134,12 @@ set_false_path -to [get_ports {cpu_addr_oe[*] cpu_data_oe[*]}]
 # All are registered or driven through a delay pipeline in the sys_clock_i
 # domain. Timing is not critical at audio and display refresh rates.
 
-set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {h_sync_o}]
-set_output_delay -clock sys_clock_i -min 0                [get_ports {h_sync_o}]
-set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {v_sync_o}]
-set_output_delay -clock sys_clock_i -min 0                [get_ports {v_sync_o}]
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {horiz_drive_o}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {horiz_drive_o}]
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {vert_drive_o}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {vert_drive_o}]
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {jiffy_clock_o}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {jiffy_clock_o}]
 set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {video_o}]
 set_output_delay -clock sys_clock_i -min 0                [get_ports {video_o}]
 set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {audio_o}]
@@ -181,16 +183,19 @@ set_output_delay -clock sys_clock_i -min 0                [get_ports {cpu_reset_
 # pass-through, or unused ports. False path prevents unnecessary optimization.
 
 set_false_path -to [get_ports {status_no}]
-set_false_path -to [get_ports {spare_o[*]}]
+set_false_path -to [get_ports {sp1_o sp2_o sp3_o sp4_o sp5_o sp6_o sp7_o sp8_o}]
+set_false_path -to [get_ports {sp1_oe sp2_oe sp3_oe sp4_oe sp5_oe sp6_oe sp7_oe sp8_oe}]
 set_false_path -to [get_ports {spi1_sd_o}]
 set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 
-# SPI1 bus and pmod1_i are unused in the current design and optimized away by
+# The following pins are unused in the current design and optimized away by
 # synthesis. Constraints are omitted to avoid warnings. If these ports gain
 # fanout in a future revision, add false-path constraints here.
 #
+# set_false_path -from [get_ports {sp1_i sp2_i sp3_i sp4_i sp5_i sp6_i sp7_i sp8_i}]
 # set_false_path -from [get_ports {spi1_cs_ni spi1_sck_i spi1_sd_i}]
 # set_false_path -from [get_ports {pmod1_i[*]}]
+# set_false_path -from [get_ports {audio_det_n_i}]
 
 # ============================================================================
 # CPU Bus Inputs (pad to sys_clock_i domain)
