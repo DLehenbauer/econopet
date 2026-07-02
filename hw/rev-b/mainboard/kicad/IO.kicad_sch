@@ -5086,9 +5086,9 @@
 		)
 		(uuid "38e0b56a-2fdd-4173-b415-9215dd24a0ee")
 	)
-	(text "In the original PET, both PIA1 CB1 and VIA PB5 were connected to VERT_DRIVE.\nPIA CB1 is an input only, and generates the 50/60 Hz jiffy interrupt.\nVIA PB5 was intended for detecting when the display was in vertical blank,\nbut was also used as an output in the infamous \"killer poke\" trick.\n\nIn our design, we replace VERT_DRIVE with an independently generated JIFFY\nclock.  Typically, these signals will be identical, but generating them\nseparately affords the option of supporting a 60 Hz refresh rate with a\n50 Hz interrupt and vice-versa."
+	(text "In the original PET, both PIA1 CB1 and VIA PB5 were connected to VERT_DRIVE.\nPIA CB1 is an input only, and generates the 50/60 Hz jiffy interrupt.\nVIA PB5 is a GPIO, typically configured as an input, and intended for detecting\nwhen the display was in vertical blank, but was also used as an output in the\ninfamous \"killer poke\" trick.\n\nIn our design, we replace VERT_DRIVE with an independently generated JIFFY\nclock.  Typically, JIFFY and VERT_DRIVE are identical, but generating them\nseparately affords the option of supporting a 60 Hz refresh rate with a\n50 Hz jiffy interrupt and vice-versa."
 		(exclude_from_sim no)
-		(at 151.13 57.15 0)
+		(at 151.13 55.88 0)
 		(effects
 			(font
 				(size 1.27 1.27)
