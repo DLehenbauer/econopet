@@ -29,9 +29,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------------------------------------------------------------------
 if(NOT DEFINED VERILATED_TESTBENCHES)
     set(VERILATED_TESTBENCHES
+        address_decoding_tb
         bram_tb
-        timing_tb
+        breakpoint_tb
+        cpu_data_mux_tb
         keyboard_tb
+        memory_map_tb
+        open_bus_tb
+        register_file_tb
+        spi1_tb
+        spi_tb
+        timing_tb
+        video_crtc_reg_tb
+        video_crtc_tb
+        video_tb
+        wbc_mux_tb
+        wbp_mux_tb
     )
 endif()
 
@@ -59,6 +72,10 @@ set(GW_SIM_WNO
     -Wno-WIDTHTRUNC     # intentional narrow literals in testbench stimulus
     -Wno-PROCASSINIT    # RTL signals with an initializer also assigned procedurally
     -Wno-UNDRIVEN       # testbench-only observation signals left undriven
+    -Wno-DECLFILENAME   # some RTL modules do not match their file name (e.g. address_decoding.sv)
+    -Wno-PINCONNECTEMPTY # testbenches intentionally leave unused DUT outputs unconnected (.pin())
+    -Wno-EOFNEWLINE     # a few testbench sources lack a trailing newline
+    -Wno-SYNCASYNCNET   # testbench observation signals sampled in several always @(posedge) blocks
 )
 
 # ---------------------------------------------------------------------------

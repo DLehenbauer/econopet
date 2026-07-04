@@ -23,6 +23,9 @@ module spi_driver(
         spi_sck.stop;
         spi_cs_no = '1;
         @(posedge clock_i);  // Hold long enough for destination clock to detect edge.
+        #1;                  // Settle past the sampling edge so the idle-high 'spi_cs_no' is
+                             // captured before the caller asserts 'spi_cs_no' (avoids a
+                             // driver/sampler race that hides the CS_N falling edge).
     endtask
 
     task send(
@@ -62,6 +65,9 @@ module spi_driver(
         `assert_equal(spi_cs_no, '0);
         spi_cs_no = 1'b1;
         @(posedge clock_i);  // Hold CS_N long enough for destination clock to detect edge.
+        #1;                  // Settle past the sampling edge so the idle-high 'spi_cs_no' is
+                             // captured before the next command asserts 'spi_cs_no' (avoids a
+                             // driver/sampler race that hides the CS_N falling edge).
     endtask
     ;
 

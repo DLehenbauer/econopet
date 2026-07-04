@@ -208,9 +208,22 @@ if(BUILD_FPGA)
     # gw_sim_tests executable (built in ${SUPER_BUILD_DIR}/gw_sim_tests) and are
     # registered with CTest by gtest_discover_tests (label "gw;verilator").
     set(VERILATED_TESTBENCHES
+        address_decoding_tb
         bram_tb
-        timing_tb
+        breakpoint_tb
+        cpu_data_mux_tb
         keyboard_tb
+        memory_map_tb
+        open_bus_tb
+        register_file_tb
+        spi1_tb
+        spi_tb
+        timing_tb
+        video_crtc_reg_tb
+        video_crtc_tb
+        video_tb
+        wbc_mux_tb
+        wbp_mux_tb
     )
     add_subdirectory(
         ${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/gtest
