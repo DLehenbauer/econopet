@@ -192,7 +192,6 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     gcc \
     gcc-arm-none-eabi \
     gdb-multiarch \
-    git-lfs \
     gperf \
     gtkwave \
     help2man \
@@ -285,24 +284,6 @@ RUN mkdir -p /opt/verible && \
     tar -x -f /tmp/${VERIBLE_ARCHIVE} -C /opt/verible --strip-components 1 && \
     rm -rf /tmp/${VERIBLE_ARCHIVE}
 ENV PATH="/opt/verible/bin:${PATH}"
-
-# Install FNM (Fast Node Manager) for managing Node.js versions
-# (See: https://github.com/Schniz/fnm)
-ENV FNM_DIR="/opt/fnm"
-RUN mkdir -p ${FNM_DIR} && \
-    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir ${FNM_DIR} --skip-shell && \
-    chmod +x ${FNM_DIR}/fnm
-ENV PATH="${FNM_DIR}:$PATH"
-
-# Use FNM to install the latest Node.js LTS version
-RUN eval "$(fnm env)" && \
-    fnm install --lts && \
-    fnm default lts-latest && \
-    node --version && \
-    npm --version
-
-# Setup FNM in shell profile for root user
-RUN echo 'eval "$(fnm env --use-on-cd)"' >> /root/.bashrc
 
 # Install Caddy (static file server to test gh-pages site)
 RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" -o /tmp/caddy.tar.gz && \

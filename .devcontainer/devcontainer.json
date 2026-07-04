@@ -1,9 +1,23 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/debian
+// For format details, see https://aka.ms/devcontainer.json. For config options,
+// see: https://hub.docker.com/r/microsoft/devcontainers-base#about-ubuntu
 {
     "name": "EconoPET",
     "build": {
         "dockerfile": "Dockerfile"
+    },
+    "features": {
+        // Install Node.js (via nvm), plus npm/yarn/pnpm.
+        // (See: https://github.com/devcontainers/features/tree/main/src/node)
+        "ghcr.io/devcontainers/features/node:2": {},
+        // Install Git Large File Support (LFS).
+        // (See: https://github.com/devcontainers/features/tree/main/src/git-lfs)
+        "ghcr.io/devcontainers/features/git-lfs:1": {},
+        // Install the GitHub CLI ('gh').
+        // (See: https://github.com/devcontainers/features/tree/main/src/github-cli)
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        // Install the GitHub Copilot CLI ('copilot').
+        // (See: https://github.com/devcontainers/features/tree/main/src/copilot-cli)
+        "ghcr.io/devcontainers/features/copilot-cli:1": {}
     },
     "customizations": {
         "vscode": {
