@@ -42,6 +42,7 @@ if(NOT DEFINED VERILATED_TESTBENCHES)
         spi1_tb
         spi_tb
         timing_tb
+        top_tb
         video_crtc_reg_tb
         video_crtc_tb
         video_tb
@@ -53,6 +54,14 @@ endif()
 # EconoPET project root (the directory Verilator's -y/-I paths are relative to).
 set(GW_PROJ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 cmake_path(NORMAL_PATH GW_PROJ_DIR)
+
+# top_tb (the full-system testbench) instantiates the SOFT_CPU m6502 core and the
+# icesid SID. These external sources cannot be found via Verilator's -y search:
+# the m6502 core imports its package in the module header (so the package must be
+# compiled first) and the icesid module names do not match their file names. List
+# them explicitly, package first (matching the Efinity project's design_file order).
+set(GW_M6502_PKG ${GW_PROJ_DIR}/external/m6502/rtl/cpu_6502_pkg.sv)
+file(GLOB GW_ICESID_SOURCES ${GW_PROJ_DIR}/external/icesid/icesid/*.v)
 
 # ---------------------------------------------------------------------------
 # Verilator warning policy.
@@ -129,15 +138,26 @@ target_compile_definitions(gw_sim_tests PRIVATE VL_USER_FATAL)
 
 # Verilate each testbench as its own model within the shared executable.
 foreach(tb ${VERILATED_TESTBENCHES})
+    # Most testbenches need only their own source (Verilator finds the rest via -y).
+    # top_tb additionally needs the m6502 package (compiled first) and the icesid
+    # SID sources listed explicitly, plus a PINMISSING waiver (mock_system leaves
+    # many top-level I/O pins unconnected on purpose).
+    set(tb_sources ${GW_PROJ_DIR}/sim/${tb}.sv)
+    set(tb_extra_args "")
+    if(tb STREQUAL "top_tb")
+        list(PREPEND tb_sources ${GW_M6502_PKG} ${GW_ICESID_SOURCES})
+        set(tb_extra_args -Wno-PINMISSING)
+    endif()
+
     verilate(gw_sim_tests
-        SOURCES ${GW_PROJ_DIR}/sim/${tb}.sv
+        SOURCES ${tb_sources}
         PREFIX V${tb}
         TOP_MODULE ${tb}
         VERILATOR_ARGS
             --timing
             --assert
             --sv
-            -Wall ${GW_SIM_WNO}
+            -Wall ${GW_SIM_WNO} ${tb_extra_args}
             -y ${GW_PROJ_DIR}/src
             -y ${GW_PROJ_DIR}/sim
             -y ${GW_PROJ_DIR}/external/m6502/rtl

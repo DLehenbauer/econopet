@@ -221,6 +221,7 @@ if(BUILD_FPGA)
         spi1_tb
         spi_tb
         timing_tb
+        top_tb
         video_crtc_reg_tb
         video_crtc_tb
         video_tb

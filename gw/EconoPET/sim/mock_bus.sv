@@ -44,10 +44,9 @@ module mock_bus (
 
     always_comb begin
         case (addr_drivers)
-            2'b00: bus_addr_o = 'Z;
-            2'b01: bus_addr_o = top_addr_i;
-            2'b10: bus_addr_o = cpu_addr_i;
-            default: bus_addr_o = 'x;
+            2'b01:   bus_addr_o = top_addr_i;
+            2'b10:   bus_addr_o = cpu_addr_i;
+            default: bus_addr_o = '0;   // No driver (2'b00) or contention (2'b11, caught by the assertion below).
         endcase
     end
 
@@ -65,10 +64,9 @@ module mock_bus (
     always_comb begin
         case (we_drivers)
             // CT  C = CPU driving, T = FPGA driving
-            2'b00: bus_we_n_o = 'z;
-            2'b01: bus_we_n_o = top_we_n_i;
-            2'b10: bus_we_n_o = cpu_we_n_i;
-            default: bus_we_n_o = 'x;
+            2'b01:   bus_we_n_o = top_we_n_i;
+            2'b10:   bus_we_n_o = cpu_we_n_i;
+            default: bus_we_n_o = 1'b1;   // WE deasserted when no driver (2'b00) or contention (2'b11).
         endcase
     end
 
