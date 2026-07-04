@@ -25,7 +25,13 @@ module mock_system (
     logic [DATA_WIDTH-1:0] bus_data_mux;
     logic                  bus_data_mux_oe;
 
-    assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
+    // The mock SRAM drives the shared bus during reads (explicit direction ports;
+    // see mock_sram header). Its contribution is resolved onto 'bus_data' here.
+    wire [DATA_WIDTH-1:0] sram_data_o;
+    wire                  sram_data_oe;
+
+    assign bus_data = bus_data_mux_oe ? bus_data_mux :
+                      sram_data_oe    ? sram_data_o  : {DATA_WIDTH{1'bz}};
 
     // CPU
     logic cpu_be;
@@ -145,7 +151,10 @@ module mock_system (
 
     mock_sram mock_sram (
         .addr_i(ram_addr),
-        .data_io(bus_data),
+        .data_i(bus_data),
+        .data_o(sram_data_o),
+        .data_oe(sram_data_oe),
+        .data_valid(),
         .ce_ni(1'b0),
         .oe_ni(ram_oe_n_o),
         .we_ni(ram_we_n_o)

@@ -18,9 +18,19 @@
 //   - Write cycle time (tWC)
 //   - Read cycle time (tRC)
 //
-// The active-low control pins (ce_ni, oe_ni, we_ni) and the bidirectional data bus
-// (data_io) behave like a real SRAM: the chip drives data_io when selected for read
-// and tri-states it otherwise.
+// The active-low control pins (ce_ni, oe_ni, we_ni) model a real SRAM. The data bus
+// is modeled with explicit direction signals rather than a tri-state 'inout' so the
+// model simulates identically under both Icarus Verilog and Verilator (which is
+// 2-state and cannot represent 'z or 'x):
+//
+//   - data_i      : bus value presented to the SRAM (sampled during writes)
+//   - data_o      : value the SRAM drives during reads
+//   - data_oe     : asserted when the SRAM drives the bus (deasserted == high-Z)
+//   - data_valid  : asserted when 'data_o' is determinate (deasserted == indeterminate,
+//                   modeling the SRAM's 'x output during access-time windows)
+//
+// A caller resolves the shared bus externally, e.g.:
+//   assign bus = sram_data_oe ? sram_data_o : (other_oe ? other_data : '0);
 //
 
 import common_pkg::*;
@@ -59,7 +69,10 @@ module mock_sram #(
     parameter int tWHZ  = SRAM_tWHZ
 ) (
     input  logic [ADDR_WIDTH-1:0] addr_i,
-    inout  wire  [      DW-1:0]   data_io,
+    input  logic [      DW-1:0]   data_i,      // Bus value presented to the SRAM (write data)
+    output logic [      DW-1:0]   data_o,      // Value the SRAM drives during reads
+    output logic                  data_oe,     // 1 when the SRAM is driving the bus (else high-Z)
+    output logic                  data_valid,  // 1 when 'data_o' is determinate (else indeterminate)
     input  logic                  ce_ni,
     input  logic                  oe_ni,
     input  logic                  we_ni
@@ -72,9 +85,6 @@ module mock_sram #(
     // -------------------------------------------------------------------------
     // Internal tracking signals
     // -------------------------------------------------------------------------
-    logic [DW-1:0]         data_out;
-    logic                  driving;         // 1 when chip is driving data_io
-
     // Timestamps for timing checks
     time addr_change_time;
     time we_fall_time;
@@ -85,9 +95,15 @@ module mock_sram #(
     logic [DW-1:0]         data_latched;    // Data captured for write
 
     // -------------------------------------------------------------------------
-    // Bidirectional data bus
+    // Data bus outputs (explicit direction; see module header)
     // -------------------------------------------------------------------------
-    assign data_io = driving ? data_out : {DW{1'bz}};
+    // 'data_oe' asserted == chip drives the bus; 'data_valid' asserted == the driven
+    // value is determinate. When the chip is not driving or the value is indeterminate,
+    // 'data_o' is left at an arbitrary value that callers must ignore.
+    initial begin
+        data_oe    = 1'b0;
+        data_valid = 1'b0;
+    end
 
     // -------------------------------------------------------------------------
     // Determine whether the chip should be driving the bus
@@ -105,22 +121,24 @@ module mock_sram #(
             // resolves).
             #(common_pkg::max2(tOLZ, tCLZ));
             if (read_active) begin
-                data_out <= {DW{1'bx}};
-                driving  <= 1'b1;
+                data_o     <= {DW{1'bx}};
+                data_valid <= 1'b0;
+                data_oe    <= 1'b1;
             end
         end else begin
             // Output becomes indeterminate immediately when the read is
             // deactivated, then transitions to high-Z after tOHZ/tCHZ.
-            data_out <= {DW{1'bx}};
+            data_o     <= {DW{1'bx}};
+            data_valid <= 1'b0;
             #(common_pkg::max2(tOHZ, tCHZ));
-            driving <= 1'b0;
+            data_oe <= 1'b0;
         end
     end
 
     // -------------------------------------------------------------------------
     // Read path: address-to-output propagation
     // -------------------------------------------------------------------------
-    // When read_active, data_out reflects mem[addr_i] after tAA from the last
+    // When read_active, data_o reflects mem[addr_i] after tAA from the last
     // address change (or tOE from OE assertion, whichever is later). On an
     // address change while read_active, the previous data is held for tOH
     // before transitioning.
@@ -133,13 +151,15 @@ module mock_sram #(
             // Between tOH and tAA the output is indeterminate.
             #(tOH);
             if (read_active) begin
-                data_out <= {DW{1'bx}};
+                data_o     <= {DW{1'bx}};
+                data_valid <= 1'b0;
             end
 
             // New data becomes valid at tAA from the address change.
             #(tAA - tOH);
             if (read_active) begin
-                data_out <= mem[addr_i];
+                data_o     <= mem[addr_i];
+                data_valid <= 1'b1;
             end
         end
     end
@@ -149,7 +169,8 @@ module mock_sram #(
             // OE just asserted while CE is active and WE is not: start a read.
             #(tOE);
             if (read_active) begin
-                data_out <= mem[addr_i];
+                data_o     <= mem[addr_i];
+                data_valid <= 1'b1;
             end
         end
     end
@@ -158,7 +179,8 @@ module mock_sram #(
         if (!oe_ni && we_ni) begin
             #(tACE);
             if (read_active) begin
-                data_out <= mem[addr_i];
+                data_o     <= mem[addr_i];
+                data_valid <= 1'b1;
             end
         end
     end
@@ -167,7 +189,8 @@ module mock_sram #(
     // Write path
     // -------------------------------------------------------------------------
     // A write occurs on the rising edge of WE (or CE, whichever rises first)
-    // while the other is still asserted. Data is latched at that moment.
+    // while the other is still asserted. The data written is the value present
+    // on the bus during the active write pulse.
     //
     // Timing checks are performed to verify that the controller satisfies
     // minimum setup and pulse-width requirements.
@@ -177,9 +200,23 @@ module mock_sram #(
     end
 
     // Track data changes for setup checking.
-    always @(data_io) begin
+    always @(data_i) begin
         data_stable_time = $time;
     end
+
+    // Capture the presented data continuously while the write pulse is active
+    // (a real SRAM cell follows the input during the transparent write window
+    // and holds the last value at the end of the pulse). Latching here (rather
+    // than sampling 'data_i' at the WE rising edge) makes the commit immune to a
+    // controller that releases the data bus coincident with the WE rising edge
+    // (a zero-hold-time condition that a real device tolerates).
+    // verilator lint_off LATCH
+    always @(data_i or we_ni or ce_ni) begin
+        if (!we_ni && !ce_ni) begin
+            data_latched = data_i;
+        end
+    end
+    // verilator lint_on LATCH
 
     task automatic commit_write(input time write_end_time);
         we_rise_time = write_end_time;
@@ -202,9 +239,9 @@ module mock_sram #(
                      $time, we_rise_time - data_stable_time, tDW);
         end
 
-        // Commit the write
-        mem[addr_i] = data_io;
-        $display("[%t]        SRAM[%h] <- %h", $time, addr_i, data_io);
+        // Commit the write (the value latched during the write pulse).
+        mem[addr_i] = data_latched;
+        $display("[%t]        SRAM[%h] <- %h", $time, addr_i, data_latched);
     endtask
 
     // Write is committed when write mode exits: whichever rises first (WE or CE)

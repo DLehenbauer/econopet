@@ -35,7 +35,9 @@ if(NOT DEFINED VERILATED_TESTBENCHES)
         cpu_data_mux_tb
         keyboard_tb
         memory_map_tb
+        mock_sram_tb
         open_bus_tb
+        ram_tb
         register_file_tb
         spi1_tb
         spi_tb
@@ -76,6 +78,7 @@ set(GW_SIM_WNO
     -Wno-PINCONNECTEMPTY # testbenches intentionally leave unused DUT outputs unconnected (.pin())
     -Wno-EOFNEWLINE     # a few testbench sources lack a trailing newline
     -Wno-SYNCASYNCNET   # testbench observation signals sampled in several always @(posedge) blocks
+    -Wno-BLKSEQ         # SRAM model commits writes with blocking '=' from a clocked task
 )
 
 # ---------------------------------------------------------------------------
