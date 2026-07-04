@@ -43,6 +43,13 @@
             "targets": ["test_project"]
         },
         {
+            "name": "gw_test",
+            "displayName": "Gateware Tests",
+            "description": "Build the Verilator + GoogleTest gateware simulation tests",
+            "configurePreset": "default",
+            "targets": ["gw_sim_tests"]
+        },
+        {
             "name": "gw",
             "displayName": "Gateware",
             "description": "Build only the FPGA gateware",

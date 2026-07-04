@@ -204,10 +204,31 @@ endif()
 
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
-    # Discover testbenches and add each as a separate test
+    # Testbenches migrated to the Verilator + GoogleTest harness. These run via the
+    # gw_sim_tests executable (built in ${SUPER_BUILD_DIR}/gw_sim_tests) and are
+    # registered with CTest by gtest_discover_tests (label "gw;verilator").
+    set(VERILATED_TESTBENCHES
+        bram_tb
+        timing_tb
+        keyboard_tb
+    )
+    add_subdirectory(
+        ${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/gtest
+        ${SUPER_BUILD_DIR}/gw_sim_tests
+    )
+    # Ensure the gateware test binary is built by the aggregate targets so that
+    # `ctest --preset all` finds it.
+    add_dependencies(all_projects gw_sim_tests)
+
+    # Remaining (not-yet-migrated) testbenches still run under Icarus Verilog via
+    # sim.sh. Skip any testbench already covered by the Verilator/gtest harness so
+    # each testbench runs exactly once.
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
         get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
+        if(TB_NAME IN_LIST VERILATED_TESTBENCHES)
+            continue()
+        endif()
         add_test(
             NAME ${TB_NAME}
             COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}

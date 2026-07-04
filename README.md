@@ -37,13 +37,14 @@ cmake --build --preset all          # Build everything
 cmake --build --preset fw           # Build firmware only
 cmake --build --preset fw_test      # Build firmware tests only
 cmake --build --preset gw           # Build gateware only
+cmake --build --preset gw_test      # Build gateware simulation tests only
 cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
 
 # Test
 ctest --preset all                  # Run all tests
 ctest --preset fw                   # Run firmware tests only
-ctest --preset gw                   # Run gateware tests
+ctest --preset gw                   # Run gateware tests (build with 'gw_test' first)
 ```
 
 ## License
