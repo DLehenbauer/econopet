@@ -30,6 +30,7 @@ option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
 option(BUILD_TESTS "Build the firmware unit tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
 option(BUILD_PRGS "Build the test programs" ON)
+option(BUILD_EMULATOR "Build the PET software emulator (sim/)" ON)
 
 # Common build directory
 set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
@@ -157,6 +158,26 @@ if(BUILD_PRGS)
 endif()
 
 # ============================================================================
+# PET Emulator Subproject (C++ software model of the "rest of the machine")
+# ============================================================================
+# A host-side SDL2/Boost emulator (sim/), vendored from dlehenbauer/pet-emulator.
+# It is the starting point for end-to-end simulation of the EconoPET. Built as an
+# isolated ExternalProject so its SDL2/Boost dependencies do not affect the other
+# subprojects' configuration.
+if(BUILD_EMULATOR)
+    ExternalProject_Add(emulator_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/sim
+        BINARY_DIR ${SUPER_BUILD_DIR}/sim
+        CMAKE_ARGS
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
+endif()
+
+# ============================================================================
 # Site/Documentation target
 # ============================================================================
 add_custom_target(site
@@ -179,6 +200,7 @@ add_custom_target(all_projects
         $<$<BOOL:${BUILD_TESTS}>:test_project>
         $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
         $<$<BOOL:${BUILD_PRGS}>:prgs_project>
+        $<$<BOOL:${BUILD_EMULATOR}>:emulator_project>
     COMMENT "Building all enabled subprojects"
 )
 

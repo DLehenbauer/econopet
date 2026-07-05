@@ -40,6 +40,7 @@ cmake --build --preset gw           # Build gateware only
 cmake --build --preset gw_test      # Build gateware simulation tests only
 cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
+cmake --build --preset sim          # Build the PET software emulator (sim/)
 
 # Test
 ctest --preset all                  # Run all tests

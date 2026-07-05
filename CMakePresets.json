@@ -78,6 +78,13 @@
             "targets": ["prgs_project"]
         },
         {
+            "name": "sim",
+            "displayName": "PET Emulator",
+            "description": "Build the host-side PET software emulator (sim/)",
+            "configurePreset": "default",
+            "targets": ["emulator_project"]
+        },
+        {
             "name": "site",
             "displayName": "Site",
             "description": "Build the static site including manual documentation",

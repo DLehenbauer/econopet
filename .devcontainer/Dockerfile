@@ -195,11 +195,14 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     gperf \
     gtkwave \
     help2man \
+    libboost-dev \
+    libboost-system-dev \
     libegl1 \
     libfl-dev \
     libftdi-dev \
     libgl1 \
     libnewlib-arm-none-eabi \
+    libsdl2-dev \
     libstdc++-arm-none-eabi-newlib \
     libtool \
     libusb-1.0-0-dev \
