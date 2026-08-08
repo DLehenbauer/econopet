@@ -7969,12 +7969,6 @@
 		(uuid "4a902924-e380-44f5-b4b3-fa93ae7de514")
 	)
 	(junction
-		(at 229.87 58.42)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "4d727a04-4fd1-4c83-8e9e-6ef153166b1a")
-	)
-	(junction
 		(at 361.95 101.6)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -9144,6 +9138,16 @@
 	)
 	(wire
 		(pts
+			(xy 217.17 58.42) (xy 231.14 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "227a11cc-c943-45b3-bec9-186f9d986132")
+	)
+	(wire
+		(pts
 			(xy 95.25 208.28) (xy 100.33 208.28)
 		)
 		(stroke
@@ -9451,16 +9455,6 @@
 			(type default)
 		)
 		(uuid "38073310-73b1-417c-a982-5edda75068ac")
-	)
-	(wire
-		(pts
-			(xy 229.87 43.18) (xy 229.87 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "38271eba-e6c6-468d-89bc-8d3d16779390")
 	)
 	(bus
 		(pts
@@ -11204,16 +11198,6 @@
 	)
 	(wire
 		(pts
-			(xy 229.87 58.42) (xy 231.14 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a35600ce-6abb-4a03-b84a-45aca038058f")
-	)
-	(wire
-		(pts
 			(xy 22.86 63.5) (xy 22.86 64.77)
 		)
 		(stroke
@@ -11584,16 +11568,6 @@
 	)
 	(wire
 		(pts
-			(xy 229.87 53.34) (xy 229.87 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c45a67bf-b931-42ad-b114-57fba85c04cb")
-	)
-	(wire
-		(pts
 			(xy 55.88 167.64) (xy 55.88 172.72)
 		)
 		(stroke
@@ -11881,16 +11855,6 @@
 			(type default)
 		)
 		(uuid "d5e2779a-7dad-46a9-b3f6-3819edae3760")
-	)
-	(wire
-		(pts
-			(xy 217.17 58.42) (xy 229.87 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d5f1d94f-0965-43be-ac95-d6d4ec341225")
 	)
 	(wire
 		(pts
@@ -12241,6 +12205,16 @@
 			(type default)
 		)
 		(uuid "f19ed7af-c296-4b1d-8218-b84d1b4fe311")
+	)
+	(wire
+		(pts
+			(xy 229.87 44.45) (xy 229.87 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f278774b-0b98-4ef6-ab31-96b41024ed4f")
 	)
 	(wire
 		(pts
@@ -14730,6 +14704,18 @@
 			(justify left)
 		)
 		(uuid "c5077fa6-15f0-4ec1-8d37-269bc2079a83")
+	)
+	(hierarchical_label "SD_~{CS}"
+		(shape input)
+		(at 231.14 58.42 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c8090fbe-1b1c-46d9-8e51-ff8ed2315d56")
 	)
 	(hierarchical_label "SPI1_~{READY}"
 		(shape output)
@@ -20006,7 +19992,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 229.87 50.8 0)
+		(at 229.87 46.99 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -20014,7 +20000,7 @@
 		(dnp no)
 		(uuid "603dce13-2207-48e0-a752-f2a8560734b8")
 		(property "Reference" "C62"
-			(at 232.2068 49.6316 0)
+			(at 232.2068 45.8216 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20023,7 +20009,7 @@
 			)
 		)
 		(property "Value" "4u7 10V"
-			(at 232.2068 51.943 0)
+			(at 232.2068 48.133 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20032,7 +20018,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 229.87 50.8 0)
+			(at 229.87 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20041,7 +20027,7 @@
 			)
 		)
 		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do"
-			(at 229.87 50.8 0)
+			(at 229.87 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20050,7 +20036,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 229.87 50.8 0)
+			(at 229.87 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20059,7 +20045,7 @@
 			)
 		)
 		(property "LCSC" "C23733"
-			(at 229.87 50.8 0)
+			(at 229.87 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22431,8 +22417,8 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 231.14 58.42 90)
-		(mirror x)
+		(at 229.87 49.53 0)
+		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -22440,7 +22426,7 @@
 		(dnp no)
 		(uuid "9fe5f783-9e1e-4e08-97cd-1e8ea00988c3")
 		(property "Reference" "#PWR070"
-			(at 237.49 58.42 0)
+			(at 229.87 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22449,7 +22435,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 236.22 58.42 0)
+			(at 229.87 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22457,7 +22443,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 231.14 58.42 0)
+			(at 229.87 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22466,7 +22452,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 231.14 58.42 0)
+			(at 229.87 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22475,7 +22461,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 231.14 58.42 0)
+			(at 229.87 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
