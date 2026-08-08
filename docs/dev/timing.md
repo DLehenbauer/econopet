@@ -188,35 +188,35 @@ The timing values below bound propagation and enable/disable delays used when bu
 
 ### Read Cycle
 
-| Symbol | Parameter | Min | Max | Units |
-|--------|-----------|-----|-----|-------|
-| tRC | Read Cycle Time | 10 | - | ns |
-| tAA | Address Access Time | - | 10 | ns |
-| tOHA | Output Hold Time | 2.0 | - | ns |
-| tACE | $\overline{CE}$ Access Time | - | 10 | ns |
-| tDOE | $\overline{OE}$ Access Time | - | 4.5 | ns |
-| tHZOE | $\overline{OE}$ to High-Z Output | - | 4 | ns |
-| tLZOE | $\overline{OE}$ to Low-Z Output | 0 | - | ns |
-| tHZCE | $\overline{CE}$ to High-Z Output | 0 | 4 | ns |
-| tLZCE | $\overline{CE}$ to Low-Z Output | 3 | - | ns |
-| tPU | Power Up Time | 0 | - | ns |
-| tPD | Power Down Time | - | 10 | ns |
+| Symbol | Parameter                        | Min | Max | Units |
+|--------|----------------------------------|-----|-----|-------|
+| tRC    | Read Cycle Time                  |  10 |  -  |    ns |
+| tAA    | Address Access Time              |   - |  10 |    ns |
+| tOHA   | Output Hold Time                 | 2.0 |  -  |    ns |
+| tACE   | $\overline{CE}$ Access Time      |   - |  10 |    ns |
+| tDOE   | $\overline{OE}$ Access Time      |   - | 4.5 |    ns |
+| tHZOE  | $\overline{OE}$ to High-Z Output |   - |   4 |    ns |
+| tLZOE  | $\overline{OE}$ to Low-Z Output  |   0 |   - |    ns |
+| tHZCE  | $\overline{CE}$ to High-Z Output |   0 |   4 |    ns |
+| tLZCE  | $\overline{CE}$ to Low-Z Output  |   3 |   - |    ns |
+| tPU    | Power Up Time                    |   0 |   - |    ns |
+| tPD    | Power Down Time                  |   - |  10 |    ns |
 
 ### Write Cycle
 
-| Symbol | Parameter | Min | Max | Units |
-|--------|-----------|-----|-----|-------|
-| tWC | Write Cycle Time | 10 | - | ns |
-| tSCE | $\overline{CE}$ to Write End | 8 | - | ns |
-| tAW | Address Setup Time to Write End | 8 | - | ns |
-| tHA | Address Hold from Write End | 0 | - | ns |
-| tSA | Address Setup Time | 0 | - | ns |
-| tPWE1 | $\overline{WE}$ Pulse Width | 8 | - | ns |
-| tPWE2 | $\overline{WE}$ Pulse Width ($\overline{OE}$ = LOW) | 10 | - | ns |
-| tSD | Data Setup to Write End | 6 | - | ns |
-| tHD | Data Hold from Write End | 0 | - | ns |
-| tHZWE | $\overline{WE}$ LOW to High-Z Output | - | 5 | ns |
-| tLZWE | $\overline{WE}$ HIGH to Low-Z Output | 2 | - | ns |
+| Symbol | Parameter                                           | Min | Max | Units |
+|--------|-----------------------------------------------------|-----|-----|-------|
+| tWC    | Write Cycle Time                                    |  10 |   - |    ns |
+| tSCE   | $\overline{CE}$ to Write End                        |   8 |   - |    ns |
+| tAW    | Address Setup Time to Write End                     |   8 |   - |    ns |
+| tHA    | Address Hold from Write End                         |   0 |   - |    ns |
+| tSA    | Address Setup Time                                  |   0 |   - |    ns |
+| tPWE1  | $\overline{WE}$ Pulse Width                         |   8 |   - |    ns |
+| tPWE2  | $\overline{WE}$ Pulse Width ($\overline{OE}$ = LOW) |  10 |   - |    ns |
+| tSD    | Data Setup to Write End                             |   6 |   - |    ns |
+| tHD    | Data Hold from Write End                            |   0 |   - |    ns |
+| tHZWE  | $\overline{WE}$ LOW to High-Z Output                |   - |   5 |    ns |
+| tLZWE  | $\overline{WE}$ HIGH to Low-Z Output                |   2 |   - |    ns |
 
 ### Summary
 
