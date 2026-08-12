@@ -90,6 +90,7 @@ module main (
     logic kbd_wb_sel;
     logic crtc_wb_sel;
     logic bram_wb_sel;
+    logic ieee_wb_sel;
 
     always_comb begin
         ram_wb_sel = 1'b0;
@@ -97,6 +98,7 @@ module main (
         kbd_wb_sel = 1'b0;
         crtc_wb_sel = 1'b0;
         bram_wb_sel = 1'b0;
+        ieee_wb_sel = 1'b0;
 
         unique casez (wb_addr)
             {WB_RAM_BASE,  {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
@@ -104,6 +106,7 @@ module main (
             {WB_KBD_BASE,  {(WB_ADDR_WIDTH - $bits(WB_KBD_BASE)){1'b?}}}: kbd_wb_sel = 1'b1;
             {WB_CRTC_BASE, {(WB_ADDR_WIDTH - $bits(WB_CRTC_BASE)){1'b?}}}: crtc_wb_sel = 1'b1;
             {WB_BRAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_BRAM_BASE)){1'b?}}}: bram_wb_sel = 1'b1;
+            {WB_IEEE_BASE, {(WB_ADDR_WIDTH - $bits(WB_IEEE_BASE)){1'b?}}}: ieee_wb_sel = 1'b1;
             default: /* do nothing */ ;
         endcase
     end
@@ -663,6 +666,46 @@ module main (
     );
 
     //
+    // IEEE-488 drive emulation
+    //
+
+    logic [DATA_WIDTH-1:0] ieee_wb_din;
+    logic                  ieee_wb_stall;
+    logic                  ieee_wb_ack;
+
+    logic [DATA_WIDTH-1:0] ieee_dout;
+    logic                  ieee_doe;
+
+    ieee ieee (
+        .wb_clock_i(sys_clock_i),
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(ieee_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(ieee_wb_stall),
+        .wbp_ack_o(ieee_wb_ack),
+        .wbp_sel_i(ieee_wb_sel),
+
+        .cpu_be_i(active_be),
+        .cpu_addr_strobe_i(active_addr_strobe),
+        .cpu_data_strobe_i(active_data_strobe),
+        .cpu_data_i(cpu_data_q),
+        .cpu_data_o(ieee_dout),
+        .cpu_data_oe(ieee_doe),
+        .cpu_we_i(active_cpu_we),
+
+        .pia1_cs_i(pia1_en),
+        .pia2_cs_i(pia2_en),
+        .via_cs_i(via_en),
+        .rs_i(active_cpu_addr[VIA_RS_WIDTH-1:0]),
+
+        .diag_i(diag_i),
+        .vert_i(vert_drive_o)
+    );
+
+    //
     // Wishbone
     //
 
@@ -699,9 +742,9 @@ module main (
 
     // One bus -> many peripherals
     wbp_mux #(
-        .COUNT(5)
+        .COUNT(6)
     ) wbp_mux (
-        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel }),
+        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel, ieee_wb_sel }),
 
         // Wishbone Bus
         .wb_din_o(wb_din),
@@ -709,9 +752,9 @@ module main (
         .wb_ack_o(wb_ack),
 
         // Wishbone peripherals to mux
-        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din, bram_wb_din }),
-        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall, bram_wb_stall }),
-        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack, bram_wb_ack })
+        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din, bram_wb_din, ieee_wb_din }),
+        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall, bram_wb_stall, ieee_wb_stall }),
+        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack, bram_wb_ack, ieee_wb_ack })
     );
 
     //
@@ -768,10 +811,10 @@ module main (
 
     // Many controllers -> System data bus
     cpu_data_mux #(
-        .COUNT(6)
+        .COUNT(7)
     ) cpu_data_mux (
-        .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout, dongle_dout, active_cpu_dout }),
-        .oe_i({ open_bus_oe & !dongle_doe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, dongle_doe & active_be & !active_cpu_we, cpu_write_sel }),
+        .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout, ieee_dout, dongle_dout, active_cpu_dout }),
+        .oe_i({ open_bus_oe & !dongle_doe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, ieee_doe & active_be & !active_cpu_we, dongle_doe & active_be & !active_cpu_we, cpu_write_sel }),
         .data_o(cpu_data_mux_out),
         .oe_o(cpu_data_mux_oe)
     );
@@ -787,14 +830,14 @@ module main (
 
     wire cpu_rd_en = active_be && !active_cpu_we;
 
-    // A fabric peripheral claiming the bus (dongle data_oe) must also
+    // A fabric peripheral claiming the bus (IEEE/dongle data_oe) must also
     // suppress the external I/O chip selects, or the FPGA and a real
     // PIA/VIA drive the data bus in the same cycle. io_doe (the keyboard
     // intercept) only shadows PIA1, so pia2/via omit it.
-    assign io_oe_o   = io_en   && active_be && !io_doe && !dongle_doe;
-    assign pia1_cs_o = pia1_en && active_be && !io_doe && !dongle_doe;
-    assign pia2_cs_o = pia2_en && active_be && !dongle_doe;
-    assign via_cs_o  =  via_en && active_be && !dongle_doe;
+    assign io_oe_o   = io_en   && active_be && !io_doe && !ieee_doe && !dongle_doe;
+    assign pia1_cs_o = pia1_en && active_be && !io_doe && !ieee_doe && !dongle_doe;
+    assign pia2_cs_o = pia2_en && active_be && !ieee_doe && !dongle_doe;
+    assign via_cs_o  =  via_en && active_be && !ieee_doe && !dongle_doe;
 
     assign ram_oe_o         = (cpu_rd_en && ram_en) || ram_ctl_oe;
     assign ram_we_o         = (active_wr_en && active_cpu_we && ram_en && !is_readonly

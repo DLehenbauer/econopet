@@ -157,4 +157,42 @@ module spi1_driver(
 
         send('{c, data_i});
     endtask
+
+    // -----------------------------------------------------------------
+    // Burst helpers: stream several commands in ONE held-low CS
+    // transaction (waiting for the FPGA to drain stall between each),
+    // ending with burst_end(). This exercises the multi-command-per-CS
+    // path used by the firmware's batched FIFO fill.
+    // -----------------------------------------------------------------
+    task send_hold(input logic unsigned [DATA_WIDTH-1:0] tx[], input bit start_i);
+        string s;
+        s = "";
+        foreach (tx[i]) begin
+            if (i == '0) s = {s, $sformatf("%8b ", tx[i])};
+            else s = {s, $sformatf("%2h ", tx[i])};
+        end
+        $display("[%t]      SPI1 Send(hold, start=%0b): [ %s]", $time, start_i, s);
+
+        spi_driver.send(tx, /* complete: */ '0, /* start: */ start_i);
+        @(negedge spi_stall_i);
+        spi_data_o <= spi_rx_data;
+    endtask
+
+    task write_at_hold(input [WB_ADDR_WIDTH-1:0] addr_i, input [DATA_WIDTH-1:0] data_i);
+        logic [7:0] c, ah, al;
+        c  = cmd(/* we: */ 1'b1, ADDR_MODE_SEEK, addr_i);
+        ah = addr_hi(addr_i);
+        al = addr_lo(addr_i);
+        send_hold('{c, ah, al, data_i}, /* start: */ 1'b1);
+    endtask
+
+    task write_same_hold(input [DATA_WIDTH-1:0] data_i);
+        logic [7:0] c;
+        c = cmd(/* we: */ 1'b1, ADDR_MODE_SAME, 20'bx);
+        send_hold('{c, data_i}, /* start: */ 1'b0);
+    endtask
+
+    task burst_end();
+        spi_driver.complete;
+    endtask
 endmodule

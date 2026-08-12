@@ -465,6 +465,7 @@ package common_pkg;
     localparam WB_CRTC_BASE = 4'b0101;
     localparam WB_KBD_BASE  = 5'b01100;
     localparam WB_BRAM_BASE = 5'b01101;
+    localparam WB_IEEE_BASE = 5'b01110;
     localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
     localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0011101 };   // SRAM: $E800-EFFF
 
@@ -482,6 +483,21 @@ package common_pkg;
 
     function logic[WB_ADDR_WIDTH-1:0] wb_crtc_addr(input logic[CRTC_ADDR_REG_WIDTH-1:0] register);
         return { WB_CRTC_BASE, (WB_ADDR_WIDTH - CRTC_ADDR_REG_WIDTH - $bits(WB_CRTC_BASE))'('0), register };
+    endfunction
+
+    // IEEE-488 drive emulation registers (see ieee.sv)
+    localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
+    localparam IEEE_REG_CTRL    = 3'd0;   // bit0 = enable, bit1 = flush FIFOs/state
+    localparam IEEE_REG_STATUS  = 3'd1;   // see ieee.sv
+    localparam IEEE_REG_RX      = 3'd2;   // read = head byte, write = pop
+    localparam IEEE_REG_TX      = 3'd3;   // write pushes device->CPU byte
+    localparam IEEE_REG_TX_LAST = 3'd4;   // write pushes final byte (EOI)
+    localparam IEEE_REG_SA      = 3'd5;   // last secondary address byte
+    localparam IEEE_REG_TXS      = 3'd6;  // write pushes status-channel byte
+    localparam IEEE_REG_TXS_LAST = 3'd7;  // write pushes final status byte (EOI)
+
+    function logic[WB_ADDR_WIDTH-1:0] wb_ieee_addr(input logic[IEEE_REG_ADDR_WIDTH-1:0] register);
+        return { WB_IEEE_BASE, (WB_ADDR_WIDTH - IEEE_REG_ADDR_WIDTH - $bits(WB_IEEE_BASE))'('0), register };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_COL_WIDTH-1:0] register);

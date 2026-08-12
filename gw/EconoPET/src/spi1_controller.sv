@@ -83,9 +83,15 @@ module spi1_controller (
     logic [2:0] spi_state = READ_CMD;  // Current state of FSM
     wire spi_valid = spi_state[2];
 
+    // One cycle when the current command's bus cycle completes. Rearms both
+    // FSMs so a held-low CS can stream back-to-back commands (burst FIFO fill).
+    logic cmd_done;
+
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
+            spi_state <= READ_CMD;
+        end else if (cmd_done) begin
             spi_state <= READ_CMD;
         end else if (spi_strobe_pulse) begin
             unique case (spi_state)
@@ -163,6 +169,11 @@ module spi1_controller (
     assign spi_stall_o = wbc_state[0];
     assign wbc_cycle_o = wbc_state[1];
 
+    // (PROCESSING_CMD, request already accepted in a prior cycle, ACK now.)
+    // Non-blocking assignments mean '!wbc_strobe_o' tests the previous-cycle
+    // value, so an ACK coinciding with first acceptance is not counted.
+    assign cmd_done = (wbc_state == PROCESSING_CMD) && !wbc_strobe_o && wbc_ack_i;
+
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
             // Reset the FSM when the MCU deasserts 'spi_cs_ni'.
@@ -173,7 +184,11 @@ module spi1_controller (
                 READY: begin
                     wbc_strobe_o <= 0;
 
-                    if (spi_start_pulse) begin
+                    // Rearm on the first command byte, not the CS edge, so
+                    // 'spi_stall_o' stays low between commands and the MCU can
+                    // stream the next one in the same transaction. Bytes only
+                    // strobe while CS is asserted, so no CS gate is needed.
+                    if (spi_strobe_pulse) begin
                         wbc_state <= RECEIVING_CMD;
                     end
                 end
@@ -188,11 +203,7 @@ module spi1_controller (
                     // While 'wbc_stall_i' is high (slave not ready) we continue to present the request.
                     if (!wbc_stall_i) wbc_strobe_o <= '0;
 
-                    // We only capture an ACK after the request was accepted in a prior cycle.
-                    // Non-blocking assignments mean '!wbc_strobe_o' tests the previous-cycle value.
-                    // This prevents treating an ACK that coincides with the cycle where the request
-                    // is first accepted (stall_i deasserts) as valid immediately.
-                    if (!wbc_strobe_o && wbc_ack_i) begin
+                    if (cmd_done) begin
                         spi_data_tx <= wbc_data_i;
                         wbc_state   <= READY;
                     end
