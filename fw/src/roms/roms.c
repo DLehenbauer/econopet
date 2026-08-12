@@ -19,6 +19,51 @@ const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
 const uint8_t* const p_video_font_000 = rom_chars_e800;
 const uint8_t* const p_video_font_400 = rom_chars_e800 + 0x400;
 
+// Mirror of the config's character ROM. 4KB = SuperPET (all 4 quadrants);
+// 2KB ROMs leave the tail unused.
+#define CUSTOM_CHAR_ROM_MAX_SIZE 4096
+static uint8_t custom_char_rom[CUSTOM_CHAR_ROM_MAX_SIZE];
+static size_t custom_char_rom_load_offset = 0;
+static size_t custom_char_rom_size = 0;
+
+void roms_begin_char_rom_load(void) {
+    custom_char_rom_load_offset = 0;
+    custom_char_rom_size = 0;  // Invalidate (fall back to flash) until load completes.
+}
+
+void roms_append_char_rom_data(const uint8_t* data, size_t len) {
+    if (len > CUSTOM_CHAR_ROM_MAX_SIZE - custom_char_rom_load_offset) {
+        // Larger than any known character ROM -- truncate so the size check
+        // rejects it.
+        len = CUSTOM_CHAR_ROM_MAX_SIZE - custom_char_rom_load_offset;
+    }
+    memcpy(custom_char_rom + custom_char_rom_load_offset, data, len);
+    custom_char_rom_load_offset += len;
+    custom_char_rom_size = custom_char_rom_load_offset;
+}
+
+const uint8_t* roms_get_char_rom(bool video_graphics) {
+    const uint8_t* base = rom_chars_e800;
+    size_t size = sizeof(rom_chars_e800);
+
+    if (custom_char_rom_size == 2048 || custom_char_rom_size == 4096) {
+        base = custom_char_rom;
+        size = custom_char_rom_size;
+    }
+
+    if (size >= 4096) {
+        // 4-quadrant ROM: quadrant is {crtc_chr_option, video_graphics},
+        // matching video.sv. crtc_chr_option is MA13 -- bit 5 of R12.
+        const bool crtc_chr_option =
+            (system_state.pet_crtc_registers[CRTC_R12_START_ADDR_HI] & 0x20) != 0;
+        const unsigned int quadrant = ((unsigned int) crtc_chr_option << 1) | (video_graphics ? 1u : 0u);
+        return base + quadrant * 0x400;
+    }
+
+    // 2KB ROM: video_graphics selects the half.
+    return base + (video_graphics ? 0x400 : 0x000);
+}
+
 void start_menu_rom(menu_rom_boot_reason_t reason) {
     vet(reason < 2, "Menu ROM boot reason out of range: %d", reason);
     
