@@ -5,6 +5,7 @@
 #include "driver.h"
 
 #include "diag/log/log.h"
+
 #include "display/dvi/dvi.h"
 #include "fatal.h"
 #include "global.h"
@@ -435,7 +436,7 @@ uint8_t spi_write_same(uint8_t data) {
  */
 void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
     const uint8_t* p = pSrc;
-    
+
     if (byteLength--) {
         spi_write_at(addr, *p++);
 
@@ -443,6 +444,38 @@ void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
             spi_write_next(*p++);
         }
     }
+}
+
+/**
+ * Pushes 'byteLength' bytes to one fixed address in a single CS transaction:
+ * WRITE_AT for the first byte, then WRITE_SAME per byte (i.e. a FIFO push),
+ * waiting out SPI_STALL_GP between commands. Amortizes the per-command
+ * CS/stall cost -- needed to keep the IEEE-488 TX FIFO fed. Requires the
+ * multi-command-per-CS support in spi1_controller.sv.
+ */
+void spi_write_same_block(uint32_t addr, const uint8_t* const pSrc, size_t byteLength) {
+    if (byteLength == 0) return;
+
+    const uint8_t* p = pSrc;
+
+    cmd_start();
+
+    // First byte carries the address (WRITE_AT).
+    const uint8_t tx0[] = { SPI_CMD_WRITE_AT | (uint8_t)(addr >> 16),
+                            (uint8_t)(addr >> 8), (uint8_t)addr, *p++ };
+    uint8_t rx0[sizeof(tx0)];
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, tx0, rx0, sizeof(tx0));
+
+    // Remaining bytes reuse the same address (WRITE_SAME). Wait for the FPGA to
+    // finish each write (stall low, command FSM rearmed) before the next.
+    for (size_t i = 1; i < byteLength; i++) {
+        while (gpio_get(SPI_STALL_GP));
+        const uint8_t tx[] = { SPI_CMD_WRITE_SAME, *p++ };
+        uint8_t rx[sizeof(tx)];
+        spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
+    }
+
+    cmd_end();
 }
 
 /**

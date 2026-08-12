@@ -42,12 +42,14 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
+    ${SRC_DIR}/ieee/diskimage.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/breakpoint_test.c
     ${TEST_DIR}/char_encoding_test.c
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
+    ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c

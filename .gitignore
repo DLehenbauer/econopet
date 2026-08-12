@@ -74,6 +74,13 @@ fw/src/roms/901447_10.h
 fw/src/roms/menu_rom.h
 
 #
+# SD card payloads
+#
+
+sdcard/roms/
+sdcard/disks/
+
+#
 # CC65
 # 
 

@@ -61,6 +61,7 @@ The `set` action can configure these firmware options:
 | `usb-keymap` | File name | Names the SD card file containing the USB HID code to PET keyboard matrix mapping. |
 | `tape` | ROM-specific bytes | Tells the firmware how to intercept `LOAD` commands for the virtual tape drive. |
 | `cpu` | `physical`, `6502`, `6809`, or `auto` | Selects which CPU drives the bus: the socketed 6502, the soft 6502, the soft 6809 (SuperPET), or auto-detect (physical if populated, else soft 6502). Defaults to `auto`. |
+| `ieee-drive` | `on` or `off` | Enables the virtual IEEE-488 disk drives (units 8 and 9), served from `/disks/drive0..drive3` images on the SD card. Defaults to `off`, leaving the bus free for real drives. |
 
 [^vram-3]: `video-ram-kb: 3` activates the experimental ColourPET 40-column mode.
 
