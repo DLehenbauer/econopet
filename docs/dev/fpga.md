@@ -2,7 +2,6 @@
 
 ## Documentation
 
-* [T8 Datasheet](https://www.efinixinc.com/support/docsdl.php?s=ef&pn=DST8)
 * [T20 Datasheet](https://www.efinixinc.com/docs/trion20-ds-v5.10.pdf)
 * [Trion Interfaces User Guide](https://www.efinixinc.com/support/docsdl.php?s=ef&pn=UG-TINTF)
 * [Efinity Synthesis User Guide](https://www.efinixinc.com/support/docsdl.php?s=ef&pn=UG-EFN-SYNTH)
