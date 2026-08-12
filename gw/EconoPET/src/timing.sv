@@ -89,9 +89,9 @@ module timing (
 
     localparam int CPU_BE_START     = CPU_START,
                    CPU_ADDR_STROBE  = CPU_START + CYCLES_BVD - 1,   // Asserts 1 cycle before cpu_addr_i is valid
+                   CPU_BE_END       = CPU_END - CYCLES_BVD,         // Allow tBVD for bus to return to High-Z
                    CPU_PHI_START    = CPU_BE_START + CYCLES_BVD + CYCLES_IOTX,
-                   CPU_PHI_END      = CPU_BE_END - CYCLES_DHX,      // Hold data for tDHx after end of PHI2
-                   CPU_BE_END       = CPU_END - CYCLES_BVD;         // Allow tBVD for bus to return to High-Z
+                   CPU_PHI_END      = CPU_BE_END - CYCLES_DHX;      // Hold data for tDHx after end of PHI2
 
     // Data strobe fires at the earliest cycle when data from all bus drivers
     // is guaranteed to be valid:

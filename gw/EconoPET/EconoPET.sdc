@@ -212,7 +212,27 @@ set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 # SDC) guarantees data validity.
 
 set_false_path -from [get_ports {cpu_addr_i[*]}]
-set_false_path -from [get_ports {cpu_data_i[*]}]
+# cpu_data_i has a multi-cycle validity window, but a false path lets P&R
+# stretch the pin-to-FF route arbitrarily. Bound it instead.
+set_max_delay -from [get_ports {cpu_data_i[*]}] 25.0
+
+# The soft-CPU cores are clocked by fabric-generated nets (cpu_clock_o, E/Q)
+# that STA does not time, so their crossings to and from the sys_clock domain
+# ride on routing luck: a bad seed stretches one and the CPU misbehaves.
+# Bound every crossing; the cores' internal paths keep their microsecond bus
+# budgets.
+create_generated_clock -name cpu_phi -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {cpu_clock_o}]
+create_generated_clock -name e6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_e}]
+create_generated_clock -name q6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_q}]
+set_max_delay -from [get_clocks {cpu_phi}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {cpu_phi}] 25.0
+set_max_delay -from [get_clocks {e6809}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {e6809}] 25.0
+set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {q6809}] 25.0
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {cpu_phi}]
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {e6809}]
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {q6809}]
 set_false_path -from [get_ports {cpu_we_n_i}]
 set_false_path -from [get_ports {cpu_sync_i}]
 
@@ -236,6 +256,14 @@ set_false_path -from [get_ports {cpu_reset_n_i}]
 #
 # set_false_path -from [get_ports {cpu_irq_n_i cpu_nmi_n_i}]
 
-# pmod2_i is passed through combinationally to pmod1_o (debug loopback).
+# pmod2_i: UART RXD/~CTS, double-flop synchronized inside acia6551 -- async by design.
 # No synchronous timing requirement.
 set_false_path -from [get_ports {pmod2_i[*]}]
+
+# cpu_sel (main.sv): the CPU mux select. Quasi-static -- it
+# changes only during a CPU swap, while both soft CPUs are held in
+# reset and no bus cycle is in flight -- so its (deep, wide) fanout into the
+# address mux and the SID register decode has no synchronous deadline. Without
+# this, placement-dependent cpu_sel paths (e.g. into ram_addr_a15_o or the SID
+# register CEs) show as sub-ns violations that come and go with the PnR seed.
+set_false_path -from [get_cells {main/cpu_sel*}]

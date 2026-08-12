@@ -8,6 +8,7 @@
 //  - Combining OE signals into a single bus-wide OE signal.
 //  - Drive currently unused signals to a known state.
 module top #(
+    parameter int unsigned CPU_STRETCH_ROUNDS = 1,
     parameter integer unsigned WB_ADDR_WIDTH = 20,
     parameter integer unsigned RAM_ADDR_WIDTH = 17,
     parameter integer unsigned CPU_ADDR_WIDTH = 16,
@@ -51,7 +52,7 @@ module top #(
     // RAM
     output logic ram_addr_a10_o,
     output logic ram_addr_a11_o,
-    output logic ram_addr_a15_o,
+        output logic ram_addr_a15_o,
     output logic ram_addr_a16_o,
     output logic ram_oe_n_o,
     output logic ram_we_n_o,
@@ -137,10 +138,20 @@ module top #(
     // Turn off red NSTATUS LED to indicate programming was successful.
     assign status_no = 1'b1;
 
-    // Debug: Temporarily test PMOD ports by having PMOD1 output whatever PMOD2 inputs.
-    assign pmod1_o [8:1] = pmod2_i[8:1];
-    assign pmod1_oe[8:1] = '1;
-    assign pmod2_oe[8:1] = '0;
+    // PMOD1: unused (inputs only, undriven).
+    assign pmod1_o [8:1] = '0;
+    assign pmod1_oe[8:1] = '0;
+
+    // PMOD2: SuperPET RS-232, Digilent Pmod Interface Type-4 UART pinout so
+    // a PmodUSBUART (or any Type-4 USB-serial module) plugs straight in:
+    //   header pin 1 = ~CTS in   (module's RTS#)
+    //   header pin 2 = TXD out   (module's RXD)
+    //   header pin 3 = RXD in    (module's TXD)
+    //   header pin 4 = ~RTS out  (module's CTS#)
+    // 3.3V LVTTL, idle high. Header pins 7-10 (pmod2[5..8]) unused.
+    logic uart_txd, uart_rts_n;
+    assign pmod2_o [8:1] = { 4'b0000, uart_rts_n, 1'b0, uart_txd, 1'b0 };
+    assign pmod2_oe[8:1] = 8'b0000_1010;   // drive header pins 2 (TXD) and 4 (~RTS)
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for cpu_addr_o[15:0].
@@ -209,7 +220,9 @@ module top #(
     assign {sp8_o, sp7_o, sp6_o, sp5_o, sp4_o, sp3_o, sp2_o, sp1_o} = '1;
     assign {sp8_oe, sp7_oe, sp6_oe, sp5_oe, sp4_oe, sp3_oe, sp2_oe, sp1_oe} = '0;
 
-    main main (
+    main #(
+        .CPU_STRETCH_ROUNDS(CPU_STRETCH_ROUNDS)
+    ) main (
         .sys_clock_i(sys_clock_i),
 
         .cpu_reset_i(cpu_reset_i),
@@ -234,6 +247,14 @@ module top #(
         .cpu_we_i(cpu_we_i),
         .cpu_we_o(cpu_we_o),
         .cpu_we_oe(cpu_we_n_oe),
+
+        .uart_txd_o(uart_txd),
+        .uart_rxd_i(pmod2_i[3]),
+        .uart_rts_n_o(uart_rts_n),
+        // The 6551 gates TX on ~CTS, so a floating pin would mute TX. Weak
+        // pull-down on pin 1 (see EconoPET.peri.xml) keeps a 3-wire cable
+        // transmitting.
+        .uart_cts_n_i(pmod2_i[1]),
 
         .ram_addr_a16_o(ram_addr_a16_o),
         .ram_addr_a15_o(ram_addr_a15_o),
