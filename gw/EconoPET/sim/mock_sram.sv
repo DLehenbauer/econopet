@@ -246,9 +246,14 @@ module mock_sram #(
     // Utility tasks (for testbench initialization)
     // -------------------------------------------------------------------------
 
+    // 'file_offset'/'max_bytes' select a sub-range of the image, for ROMs that
+    // pack several banks into one file (e.g. the SuperPET character generator
+    // keeps its ASCII-ordered set in the upper half). Defaults load it all.
     task automatic load_rom(
         input bit [ADDR_WIDTH-1:0] address,
-        input string filename
+        input string filename,
+        input int file_offset = 0,
+        input int max_bytes   = 0
     );
         int file, status;
 
@@ -260,7 +265,9 @@ module mock_sram #(
             $fatal(1, "Unable to open ROM '%s' in '%s'. Verify ECONOPET_ROMS_DIR is set and points to the ROM directory.", filename, `ECONOPET_ROMS_DIR);
         end
 
-        status = $fread(mem, file, 32'(address));
+        if (file_offset != 0) void'($fseek(file, file_offset, 0));
+        status = (max_bytes == 0) ? $fread(mem, file, 32'(address))
+                                  : $fread(mem, file, 32'(address), max_bytes);
         if (status < 1) begin
             $fatal(1, "Error reading file '%s' (status=%0d).", filename, status);
         end
@@ -325,10 +332,74 @@ module mock_sram #(
         end
     endfunction
 
+    // Write the screen as the CRT would render it: real glyphs expanded
+    // through the character ROM into an ASCII PGM. Split out from dump_screen
+    // so benches whose screen bytes are not PET screen codes (SuperPET writes
+    // ASCII) can still capture an image using their own text mapping.
+    task automatic write_screen_pgm(
+        input bit [ADDR_WIDTH-1:0] vram_base,
+        input bit [ADDR_WIDTH-1:0] vrom_base,
+        input int cols,
+        input int rows,
+        input string pgm_file
+    );
+        int file, r, c, line, bit_index;
+        bit [DW-1:0] code, glyph;
+
+        file = $fopen(pgm_file, "w");
+        if (file == 0) begin
+            $display("[%t] write_screen_pgm: cannot open '%s'", $time, pgm_file);
+        end else begin
+            // P2 (ASCII) rather than binary PGM, so both simulators agree.
+            // Full 0/255 range: a maxval of 1 is legal but renders nearly
+            // black in viewers that do not rescale.
+            $fwrite(file, "P2\n%0d %0d\n255\n", cols * 8, rows * 8);
+            for (r = 0; r < rows; r++)
+                for (line = 0; line < 8; line++) begin
+                    for (c = 0; c < cols; c++) begin
+                        code  = mem[vram_base + ADDR_WIDTH'(r * cols + c)];
+                        glyph = mem[vrom_base + ADDR_WIDTH'(int'(code[6:0]) * 8 + line)];
+                        if (code[DW-1]) glyph = ~glyph;     // reverse video
+                        for (bit_index = 7; bit_index >= 0; bit_index--)
+                            $fwrite(file, "%0d ", glyph[bit_index] ? 255 : 0);
+                    end
+                    $fwrite(file, "\n");
+                end
+            $fclose(file);
+            $display("[%t] Wrote %0dx%0d screen image to '%s'",
+                     $time, cols * 8, rows * 8, pgm_file);
+        end
+    endtask
+
+    // Count the lit pixels the screen would render. The sim is deterministic,
+    // so a bench that captures a known screen can assert this exactly: it
+    // catches a blank, half-painted or wrong-charset dump that a text-only
+    // comparison sails straight past.
+    function automatic int screen_lit_pixels(
+        input bit [ADDR_WIDTH-1:0] vram_base,
+        input bit [ADDR_WIDTH-1:0] vrom_base,
+        input int cols,
+        input int rows
+    );
+        int count;
+        bit [DW-1:0] code, glyph;
+
+        count = 0;
+        for (int r = 0; r < rows; r++)
+            for (int line = 0; line < 8; line++)
+                for (int c = 0; c < cols; c++) begin
+                    code  = mem[vram_base + ADDR_WIDTH'(r * cols + c)];
+                    glyph = mem[vrom_base + ADDR_WIDTH'(int'(code[6:0]) * 8 + line)];
+                    if (code[DW-1]) glyph = ~glyph;     // reverse video
+                    for (int b = 0; b < 8; b++) if (glyph[b]) count++;
+                end
+        return count;
+    endfunction
+
     // Dump the text screen as it would appear on the CRT: readable ASCII to the
-    // log, and the real glyphs (expanded through the character ROM) to an ASCII
-    // PGM if 'pgm_file' is non-empty. Call at the end of a bench to show what it
-    // actually rendered rather than trusting a byte comparison.
+    // log, and the real glyphs to an ASCII PGM if 'pgm_file' is non-empty. Call
+    // at the end of a bench to show what it actually rendered rather than
+    // trusting a byte comparison.
     task automatic dump_screen(
         input bit [ADDR_WIDTH-1:0] vram_base,
         input bit [ADDR_WIDTH-1:0] vrom_base,
@@ -336,9 +407,9 @@ module mock_sram #(
         input int rows,
         input string pgm_file       // "" to skip the image and log text only
     );
-        int file, r, c, line, bit_index;
+        int r, c;
         string text;
-        bit [DW-1:0] code, glyph;
+        bit [DW-1:0] code;
 
         $display("[%t] Screen (%0dx%0d) from VRAM $%x:", $time, cols, rows, vram_base);
         for (r = 0; r < rows; r++) begin
@@ -350,30 +421,6 @@ module mock_sram #(
             $display("  |%s|", text);
         end
 
-        if (pgm_file != "") begin
-            file = $fopen(pgm_file, "w");
-            if (file == 0) begin
-                $display("[%t] dump_screen: cannot open '%s'", $time, pgm_file);
-            end else begin
-                // P2 (ASCII) rather than binary PGM, so both simulators agree.
-                // Full 0/255 range: a maxval of 1 is legal but renders nearly
-                // black in viewers that do not rescale.
-                $fwrite(file, "P2\n%0d %0d\n255\n", cols * 8, rows * 8);
-                for (r = 0; r < rows; r++)
-                    for (line = 0; line < 8; line++) begin
-                        for (c = 0; c < cols; c++) begin
-                            code  = mem[vram_base + ADDR_WIDTH'(r * cols + c)];
-                            glyph = mem[vrom_base + ADDR_WIDTH'(int'(code[6:0]) * 8 + line)];
-                            if (code[DW-1]) glyph = ~glyph;     // reverse video
-                            for (bit_index = 7; bit_index >= 0; bit_index--)
-                                $fwrite(file, "%0d ", glyph[bit_index] ? 255 : 0);
-                        end
-                        $fwrite(file, "\n");
-                    end
-                $fclose(file);
-                $display("[%t] Wrote %0dx%0d screen image to '%s'",
-                         $time, cols * 8, rows * 8, pgm_file);
-            end
-        end
+        if (pgm_file != "") write_screen_pgm(vram_base, vrom_base, cols, rows, pgm_file);
     endtask
 endmodule

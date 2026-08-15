@@ -225,6 +225,11 @@ module main (
         cpu_irq_sync <= { cpu_irq_sync[0], cpu_irq_i };
     end
 
+    // Super-OS/9 MMU state (driven by address_decoding below).
+    logic superpet_flat;
+    logic superpet_wp;
+    logic superpet_firq_n;
+
     timing_6809 timing_6809 (
         .sys_clock_i(sys_clock_i),
         .cpu_be_i(timing_cpu_be),
@@ -267,8 +272,10 @@ module main (
         .BS(mc6809_bs),
         .BA(mc6809_ba),
         .nIRQ(!cpu_irq_sync[1]),
-        // No physical FIRQ line on this board (tied +5V on a real SuperPET too).
-        .nFIRQ(1'b1),
+        // No physical FIRQ line on this board (tied +5V on a real SuperPET
+        // too); only the Super-OS/9 MMU pulses it, to wake the core out of
+        // the flat-mode-exiting SYNC.
+        .nFIRQ(superpet_firq_n),
         .nNMI(1'b1),
         .AVMA(mc6809_avma),
         .BUSY(mc6809_busy),
@@ -471,6 +478,9 @@ module main (
     logic unmapped;
     logic is_vram;
     logic is_readonly;
+    logic decoded_a12;
+    logic decoded_a13;
+    logic decoded_a14;
     logic decoded_a15;
     logic decoded_a16;
 
@@ -482,6 +492,7 @@ module main (
         .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_addr_i(active_cpu_addr),
         .cpu_data_i(cpu_data_q),
+        .superpet_en_i(cpu_is_6809),   // SuperPET MMU only when the soft 6809 owns the bus
 
         .ram_en_o(ram_en),
         .pia1_en_o(pia1_en),
@@ -494,8 +505,17 @@ module main (
         .is_vram_o(is_vram),
 
         .is_readonly_o(is_readonly),
+        .decoded_a12_o(decoded_a12),
+        .decoded_a13_o(decoded_a13),
+        .decoded_a14_o(decoded_a14),
         .decoded_a15_o(decoded_a15),
-        .decoded_a16_o(decoded_a16)
+        .decoded_a16_o(decoded_a16),
+
+        // Super-OS/9 MMU: SYNC bus state is BA=1/BS=0 on the 6809.
+        .sync_i(mc6809_ba && !mc6809_bs),
+        .superpet_flat_o(superpet_flat),
+        .superpet_wp_o(superpet_wp),
+        .superpet_firq_n_o(superpet_firq_n)
     );
 
     //
@@ -725,12 +745,33 @@ module main (
     logic [DATA_WIDTH-1:0] cpu_data_mux_out;
     logic                  cpu_data_mux_oe;
 
+    //
+    // SuperPET 6702 security dongle at $EFE0 (Waterloo startup checks it)
+    //
+    logic [DATA_WIDTH-1:0] dongle_dout;
+    logic                  dongle_doe;
+
+    dongle6702 dongle6702 (
+        .sys_clock_i(sys_clock_i),
+        .reset_i(cpu_reset_i),
+        .cpu_be_i(active_be),
+        .cpu_data_strobe_i(active_data_strobe),
+        .cpu_addr_i(active_cpu_addr),
+        .cpu_data_i(cpu_data_q),
+        .cpu_data_o(dongle_dout),
+        .cpu_data_oe(dongle_doe),
+        .cpu_we_i(active_cpu_we),
+        // The dongle exists only in 6809 mode, and flat mode maps $EFE0
+        // as RAM, so gate it off in both cases.
+        .enable_i(cpu_is_6809 && !superpet_flat)
+    );
+
     // Many controllers -> System data bus
     cpu_data_mux #(
-        .COUNT(5)
+        .COUNT(6)
     ) cpu_data_mux (
-        .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout, active_cpu_dout }),
-        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, cpu_write_sel }),
+        .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout, dongle_dout, active_cpu_dout }),
+        .oe_i({ open_bus_oe & !dongle_doe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, dongle_doe & active_be & !active_cpu_we, cpu_write_sel }),
         .data_o(cpu_data_mux_out),
         .oe_o(cpu_data_mux_oe)
     );
@@ -746,20 +787,32 @@ module main (
 
     wire cpu_rd_en = active_be && !active_cpu_we;
 
-    assign io_oe_o   = io_en   && active_be && !io_doe;
-    assign pia1_cs_o = pia1_en && active_be && !io_doe;
-    assign pia2_cs_o = pia2_en && active_be;
-    assign via_cs_o  =  via_en && active_be;
+    // A fabric peripheral claiming the bus (dongle data_oe) must also
+    // suppress the external I/O chip selects, or the FPGA and a real
+    // PIA/VIA drive the data bus in the same cycle. io_doe (the keyboard
+    // intercept) only shadows PIA1, so pia2/via omit it.
+    assign io_oe_o   = io_en   && active_be && !io_doe && !dongle_doe;
+    assign pia1_cs_o = pia1_en && active_be && !io_doe && !dongle_doe;
+    assign pia2_cs_o = pia2_en && active_be && !dongle_doe;
+    assign via_cs_o  =  via_en && active_be && !dongle_doe;
 
     assign ram_oe_o         = (cpu_rd_en && ram_en) || ram_ctl_oe;
-    assign ram_we_o         = (active_wr_en && active_cpu_we && ram_en && !is_readonly) || ram_ctl_we;
+    assign ram_we_o         = (active_wr_en && active_cpu_we && ram_en && !is_readonly
+                                && !superpet_wp) || ram_ctl_we;
 
     // A soft core has no bus pins, so the FPGA drives the address during its
     // window and during every WB<->RAM bridge slot. With the physical 6502
     // selected, the FPGA drives only the bridge slots.
     assign cpu_addr_oe      = cpu_soft || !active_be;
 
-    assign cpu_addr_o       = active_be ? active_cpu_addr : ram_ctl_addr[15:0];
+    // SRAM A12-A14 have no dedicated FPGA pins -- they are wired to the shared
+    // bus. With the soft 6809 the FPGA drives the bus anyway, so 16-bank
+    // $9000-$9FFF switching needs no hardware change: splice the bank-translated
+    // a12-a14 (identity outside the window) into the bus address during the CPU
+    // window. I/O is unaffected -- its selects come from active_cpu_addr and A0-A1.
+    assign cpu_addr_o       = active_be
+        ? { active_cpu_addr[15], decoded_a14, decoded_a13, decoded_a12, active_cpu_addr[11:0] }
+        : ram_ctl_addr[15:0];
 
     // R/W feeds the U8 level shifter and the PIA/VIA R/W inputs with no
     // pull-up on the net (see MAGIC.kicad_sch), so it must be driven

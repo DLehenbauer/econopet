@@ -207,12 +207,14 @@ if(BUILD_FPGA)
     # Each bench runs under Icarus ('iv', the default suite) and Verilator
     # ('vl', opt-in); they settle differently, so disagreements are the point.
     # Full-boot benches are Verilator-only ('boot') -- Icarus would need hours.
-    set(GW_BOOT_TESTS stock6502_boot_tb)
+    set(GW_BOOT_TESTS stock6502_boot_tb superpet_waterloo_tb)
     set(GW_RAND_RESET_DEFAULT 0)
 
     # mc6809i's NMI latch has no reset and must power up inactive.
+    set(GW_RAND_RESET_superpet_top_tb 1)
     set(GW_RAND_RESET_superpet_irq_tb 1)
     set(GW_RAND_RESET_swi_vector_tb 1)
+    set(GW_RAND_RESET_superpet_waterloo_tb 1)
 
     add_test(
         NAME gateware_filelists
