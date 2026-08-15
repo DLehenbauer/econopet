@@ -9,6 +9,16 @@ extern const uint8_t rom_chars_e800[0x800];
 extern const uint8_t* const p_video_font_000;
 extern const uint8_t* const p_video_font_400;
 
+// Character ROM base in FPGA SRAM (see common_pkg::wb_vrom_addr).
+#define CHAR_ROM_SRAM_ADDRESS 0x68000
+
+void roms_begin_char_rom_load(void);
+
+void roms_append_char_rom_data(const uint8_t* data, size_t len);
+
+// 1KB glyph table for the HDMI renderer; falls back to the built-in font.
+const uint8_t* roms_get_char_rom(bool video_graphics);
+
 /**
  * Reason for starting the menu ROM. Each entry corresponds to a jump table
  * entry in the menu ROM at $FF00 (see rom/src/main.s).  Each entry is a multiple
