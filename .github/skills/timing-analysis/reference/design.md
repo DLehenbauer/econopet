@@ -9,7 +9,7 @@ file at `gw/EconoPET/EconoPET.sdc`.
 
 | Property       | Value                                      |
 |----------------|--------------------------------------------|
-| Device         | Efinix Trion T8 (T8Q144)                   |
+| Device         | Efinix Trion T20 (T20Q144)                 |
 | Package        | QFP-144                                    |
 | I/O Standard   | 3.3 V LVTTL / LVCMOS (all banks)          |
 | I/O Registers  | None (all GPIOs are unregistered at the pad) |

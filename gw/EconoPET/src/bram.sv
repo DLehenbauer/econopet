@@ -27,7 +27,7 @@ module bram #(
 
         wbp_ack_o = '0;
 
-        // Per T8 datasheet: block RAM content is random and undefined if not initialized.
+        // Per T20 datasheet: block RAM content is random and undefined if not initialized.
         for (i = 0; i < DATA_DEPTH; i = i + 1) begin
             mem[i] = '0;
         end
