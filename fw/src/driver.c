@@ -608,6 +608,12 @@ void set_cpu_type(cpu_type_t cpu) {
     spi_write_at(REG_CPU_SEL, (uint8_t) cpu);
 }
 
+// set_cpu_type plus the machine-type bit (SuperPET I/O for a 6502 too).
+// Plain set_cpu_type clears it, so the menu always boots a stock PET.
+void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
+    spi_write_at(REG_CPU_SEL, (uint8_t) cpu | (superpet_io ? 0x04 : 0x00));
+}
+
 // Run the physical CPU on a JMP-self at $0400 and check
 // REG_STATUS_PHYS_CPU. An empty socket leaves the bus static.
 static bool detect_physical_cpu(void) {

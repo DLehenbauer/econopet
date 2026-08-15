@@ -302,6 +302,7 @@ configs:
             file: "/roms/characters.901640-01.bin"
       - action: "set"
         cpu: "6809"
+        machine: "superpet"   # implied by cpu 6809; also valid with a 6502
         usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2

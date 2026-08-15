@@ -434,6 +434,10 @@ package common_pkg;
                             CPU_SEL_SOFT_6809           = 2'd1,  // soft MC6809 (SuperPET)
                             CPU_SEL_SOFT_6502           = 2'd2;  // soft MOS 6502 (virtual)
 
+    // REG_CPU_SEL bit 2, machine type: expose the SuperPET expansion I/O to a
+    // 6502 too, as on real hardware. A 6809 enables it regardless.
+    localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
+
     localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
 
     //

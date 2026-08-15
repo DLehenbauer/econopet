@@ -511,7 +511,9 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         .tape_enabled = false,
         .ieee_drive = false,    // Default: disabled
         .cpu = CPU_AUTO,        // Default: physical 6502 if populated, else soft
+        .superpet_io = false,   // Default: stock PET machine
     };
+    char machine_str[16] = { 0 };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
@@ -520,6 +522,7 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         { "tape", parse_as_hex, &tape_blob, sizeof(tape_blob) },
         { "ieee-drive", parse_as_string, &ieee_drive_str, sizeof(ieee_drive_str) },
         { "cpu", parse_as_string, &cpu_str, sizeof(cpu_str) },
+        { "machine", parse_as_string, &machine_str, sizeof(machine_str) },
         { NULL, NULL, NULL, 0 }
     });
 
@@ -533,6 +536,12 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         else if (strcmp(cpu_str, "physical") == 0) options.cpu = CPU_PHYS_6502;
         else if (strcmp(cpu_str, "auto") == 0)     options.cpu = CPU_AUTO;
         else fatal_parse_error(parser, "Invalid cpu: '%s' (expected 6809, 6502, physical, or auto)", cpu_str);
+    }
+
+    if (machine_str[0] != '\0') {
+        if      (strcmp(machine_str, "superpet") == 0) options.superpet_io = true;
+        else if (strcmp(machine_str, "pet") == 0)      options.superpet_io = false;
+        else fatal_parse_error(parser, "Invalid machine: '%s' (expected pet or superpet)", machine_str);
     }
 
     if (options.columns != 40 && options.columns != 80) {

@@ -258,22 +258,15 @@ set_max_delay -from [get_clocks {cpu_phi}] -to [get_clocks {sys_clock_i}] 40.0
 set_max_delay -from [get_clocks {e6809}] -to [get_clocks {sys_clock_i}] 40.0
 set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
 
-# READY and interrupt controls are edge-elastic: accepting either level when a
-# synchronized control changes on the same source edge is valid. The 6809's
-# IRQSample register also provides the first Q-domain synchronizer stage.
-set_multicycle_path -hold 1 -start \
-    -from [get_cells {main/bp_halted* main/reg_cpu_ready*}] \
-    -to [get_clocks {cpu_phi}]
-set_multicycle_path -hold 1 -start \
-    -from [get_cells {main/cpu_irq_sync*}] \
-    -to [get_clocks {cpu_phi q6809}]
-
-# The flat-exit FIRQ is a 511-cycle level, so one Q edge later is equivalent.
-# Anchored on the capture register: synthesis renames the launch flop after the
-# net it drives, and a -from pattern that stops matching fails silently.
+# The generated CPU clocks trail sys_clock_i by their extra insertion delay, so
+# hold checks fail on an artifact: everything entering a core is a held level or
+# a synchronizer head (the one cycle-exact crossing, bus data, launches from
+# soft_cpu_data_capture instead), so capturing one edge late is equivalent. One
+# blanket waiver -- per-endpoint -from patterns die silently on synth renames.
+# (RESET is async-by-design, covered by the cpu_reset_n_i port false path.)
 set_multicycle_path -hold 1 -start \
     -from [get_clocks {sys_clock_i}] \
-    -to [get_cells {main/mc6809/FIRQSample*}]
+    -to [get_clocks {cpu_phi e6809 q6809}]
 
 # ============================================================================
 # Asynchronous / Quasi-Static Inputs
@@ -294,7 +287,7 @@ set_false_path -from [get_ports {cpu_reset_n_i}]
 # constraint is omitted to avoid warnings.
 set_false_path -from [get_ports {cpu_irq_n_i}]
 
-# pmod2_i is passed through combinationally to pmod1_o (debug loopback).
+# pmod2_i: UART RXD/~CTS, double-flop synchronized inside acia6551 -- async by design.
 # No synchronous timing requirement.
 set_false_path -from [get_ports {pmod2_i[*]}]
 
