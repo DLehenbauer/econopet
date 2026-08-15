@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "driver.h"
 
+#include "diag/log/log.h"
 #include "display/dvi/dvi.h"
 #include "fatal.h"
 #include "global.h"
@@ -34,12 +35,14 @@
 #define REG_BP_CTL      (ADDR_REG | 0x00003)
 #define REG_BP_ADDR_LO  (ADDR_REG | 0x00003)
 #define REG_BP_ADDR_HI  (ADDR_REG | 0x00004)
+#define REG_CPU_SEL     (ADDR_REG | 0x00005)
 
 // Status Register
 #define REG_STATUS_GRAPHICS   (1 << 0)
 #define REG_STATUS_CRT        (1 << 1)
 #define REG_STATUS_KEYBOARD   (1 << 2)
 #define REG_STATUS_BP_HALT    (1 << 3)
+#define REG_STATUS_PHYS_CPU   (1 << 4)   // Physical 6502 address activity seen
 
 // CPU Control Register
 #define REG_CPU_READY (1 << 0)
@@ -562,6 +565,41 @@ void set_cpu(bool ready, bool reset, bool nmi) {
     if (reset) { state |= REG_CPU_RESET; }
     if (nmi)   { state |= REG_CPU_NMI; }
     spi_write_at(REG_CPU, state);
+}
+
+// Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
+// is its own register, so it survives the frequent REG_CPU reset/ready writes
+// (set_cpu / pet_reset). No FPGA reconfiguration occurs -- the FPGA keeps
+// generating video, so the CRT never loses sync across a switch.
+void set_cpu_type(cpu_type_t cpu) {
+    spi_write_at(REG_CPU_SEL, (uint8_t) cpu);
+}
+
+// Run the physical CPU on a JMP-self at $0400 and check
+// REG_STATUS_PHYS_CPU. An empty socket leaves the bus static.
+static bool detect_physical_cpu(void) {
+    spi_write_at(0x0400, 0x4C);   // JMP ...
+    spi_write_at(0x0401, 0x00);   // ... $0400
+    spi_write_at(0x0402, 0x04);
+    spi_write_at(0xFFFC, 0x00);   // reset vector -> $0400
+    spi_write_at(0xFFFD, 0x04);
+
+    set_cpu(/* ready: */ false, /* reset: */ true,  /* nmi: */ false);
+    set_cpu_type(CPU_PHYS_6502);   // arms detector
+    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
+    sleep_us(5000);
+    const uint8_t status = spi_read_at(REG_STATUS);
+    set_cpu(/* ready: */ false, /* reset: */ true,  /* nmi: */ false);  // halt again
+    return (status & REG_STATUS_PHYS_CPU) != 0;
+}
+
+bool physical_cpu_present(void) {
+    static int8_t cached = -1;   // -1 = not yet probed
+    if (cached < 0) {
+        cached = detect_physical_cpu() ? 1 : 0;
+        log_info("physical 6502: %s", cached ? "detected" : "not populated (using soft CPU)");
+    }
+    return cached != 0;
 }
 
 /**

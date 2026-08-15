@@ -38,6 +38,10 @@ const uint8_t* roms_get_char_rom(bool video_graphics) {
 }
 
 void start_menu_rom(menu_rom_boot_reason_t reason) {
+    // Menu ROM is 6502 code -- force the soft 6502 even when re-entering
+    // from a 6809 session.
+    set_cpu_type(CPU_SOFT_6502);
+
     vet(reason < 2, "Menu ROM boot reason out of range: %d", reason);
     
     const unsigned int MENU_ROM_START = 0xFF00;

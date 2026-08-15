@@ -172,6 +172,14 @@ void action_set_options(void* context, options_t* options) {
 
     tape_init(options->tape_enabled ? &options->tape : NULL);
 
+    // CPU is halted here (load_config left it not-ready) and re-reset by
+    // pet_reset().
+    cpu_type_t cpu = (cpu_type_t) options->cpu;
+    if (cpu == CPU_AUTO) {
+        cpu = physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502;
+    }
+    set_cpu_type(cpu);
+
     log_debug("Set options: %lu columns, video RAM mask %lu", options->columns, options->video_ram_mask);
 }
 
@@ -233,6 +241,10 @@ void menu_enter(bool is_boot) {
     log_info("-- Enter Menu --");
 
     tape_deinit();
+
+    // The menu ROM needs a 6502: use the socketed CPU if present, else the
+    // soft core (the fabric powers on with the physical CPU selected).
+    set_cpu_type(physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502);
 
     system_state.video_source = video_source_firmware;
     
