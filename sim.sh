@@ -26,14 +26,18 @@ sim_files = [
     for node in root.findall("./efx:sim_info/efx:sim_file", ns)
 ]
 
-package_files = [path for path in design_files if path.endswith("_pkg.sv")]
+# Packages must compile first, whether registered as design or sim files
+# (the m6502 rtl is sim_file-only until it is synthesized).
+package_files = [path for path in design_files + sim_files if path.endswith("_pkg.sv")]
 design_files = [path for path in design_files if not path.endswith("_pkg.sv")]
+sim_files = [path for path in sim_files if not path.endswith("_pkg.sv")]
 
 # Header files are included from source and should not be compiled as top-level units.
 sim_files = [path for path in sim_files if not path.endswith(".svh")]
 
 with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
-    for path in package_files + sim_files + design_files:
+    # A file registered as both design_file and sim_file compiles once.
+    for path in dict.fromkeys(package_files + sim_files + design_files):
         sim_f.write(f"{path}\n")
 
 # Keep this compatibility file for existing build trees that still reference it.
@@ -171,7 +175,8 @@ fi
 # Compile and run the specified test
 VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
 
-iverilog -g2009 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+# m6502 requires SystemVerilog-2012.
+iverilog -g2012 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
 vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"

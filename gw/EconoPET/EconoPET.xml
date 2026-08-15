@@ -76,6 +76,7 @@
         <efx:sim_file name="sim/mock_bus.sv"/>
         <efx:sim_file name="sim/mock_system.sv"/>
         <efx:sim_file name="external/m6502/rtl/cpu_6502.sv"/>
+        <efx:sim_file name="external/m6502/rtl/cpu_6502_pkg.sv"/>
         <efx:sim_file name="external/m6502/rtl/cpu_6502_alu.sv"/>
         <efx:sim_file name="external/m6502/rtl/cpu_6502_instructions.vh"/>
         <efx:sim_file name="external/m6502/rtl/cpu_6502_ir_decoder.sv"/>
