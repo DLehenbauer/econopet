@@ -5,14 +5,11 @@
 set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$SCRIPT_DIR/.venv."
+VENV_DIR="$SCRIPT_DIR/.venv"
 
-# Resolve to an absolute, canonical path (no '..') so easyeda2kicad's
-# Path.relative_to(Path.cwd()) check in --project-relative mode succeeds.
-
-if [[ $# -eq 0 ]]; then
-    echo "Usage: $0 <URL>"
-    echo "Example: $0 https://www.example.com"
+if [[ $# -ne 2 ]]; then
+    echo "Usage: $0 <URL> <IMAGE_FILE>"
+    echo "Example: $0 https://www.example.com Foo.png"
     exit 1
 fi
 
@@ -24,4 +21,4 @@ fi
 
 source "$VENV_DIR/bin/activate"
 
-qr "$1"
+qr --output "$2" "$1"

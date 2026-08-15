@@ -11,7 +11,7 @@
 set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$SCRIPT_DIR/.venv".
+VENV_DIR="$SCRIPT_DIR/.venv"
 
 echo "Creating virtual environment in $VENV_DIR ..."
 python3 -m venv "$VENV_DIR"
@@ -21,7 +21,7 @@ source "$VENV_DIR/bin/activate"
 
 echo "Installing/updating qrcode ..."
 pip install --upgrade pip
-pip install --upgrade qrcode
+pip install --upgrade qrcode[pil]
 
 echo ""
-echo "Setup complete. qr-code.sh will activate this venv automatically."
+echo "Setup complete. qr.sh will activate this venv automatically."

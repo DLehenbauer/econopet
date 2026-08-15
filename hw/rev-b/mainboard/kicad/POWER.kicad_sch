@@ -13546,7 +13546,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Symbol:OSHW-Logo2_7.3x6mm_SilkScreen"
+		(property "Footprint" "Symbol:OSHW-Logo2_9.8x8mm_SilkScreen"
 			(at 19.05 39.37 0)
 			(effects
 				(font
@@ -13690,7 +13690,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "EconoPET:EconoPET_QR"
+		(property "Footprint" "EconoPET:EconoPET_QR_Rev_B"
 			(at 19.05 34.29 0)
 			(effects
 				(font
