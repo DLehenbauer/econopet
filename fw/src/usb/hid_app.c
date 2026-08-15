@@ -97,7 +97,13 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
   log_info("HID device address = %d, instance = %d is unmounted", dev_addr, instance);
-  usb_keyboard_removed(dev_addr, instance);
+
+  // Only keyboard interfaces are tracked at mount -- other HID interfaces on a
+  // composite device would hit fatal() in usb_keyboard_removed().
+  const uint8_t itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
+  if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
+    usb_keyboard_removed(dev_addr, instance);
+  }
 }
 
 // Invoked when received report from device via interrupt endpoint
