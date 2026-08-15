@@ -77,7 +77,13 @@ module mock_bus (
     // and is not represented here.)
     wire top_driving_data = top_data_oe_i;                  // FPGA drives data bus when OE asserted.
     wire cpu_driving_data = cpu_be_i && !cpu_we_n_i;        // CPU drives data bus when writing with BE asserted.
-    wire io_driving_data  = !io_oe_n_i && bus_we_n_o;       // I/O chips drive data bus when IO asserted and CPU/FPGA are reading.
+    // Two-state simulators resolve the released ('z) bus_we_n_o to a defined
+    // level mid-transition, which can flag false contention at the write-window
+    // boundary. Judge I/O drive from whichever WE driver is enabled instead.
+    wire eff_we_n = top_we_n_oe_i ? top_we_n_i
+                  : cpu_be_i      ? cpu_we_n_i
+                  :                 1'b1;    // released: no writer
+    wire io_driving_data  = !io_oe_n_i && eff_we_n;         // I/O chips drive data bus when IO asserted and CPU/FPGA are reading.
     wire [2:0] non_ram_data_drivers = {io_driving_data, cpu_driving_data, top_driving_data};
 
     always_comb begin
