@@ -172,13 +172,19 @@ module mock_sram #(
     // Timing checks are performed to verify that the controller satisfies
     // minimum setup and pulse-width requirements.
 
+    // Both blocks below track the last value driven while WE is low. The
+    // WB->RAM bridge drops its data OE on the same edge WE rises, and a
+    // real SRAM has tDH = 0 -- sampling data_io at the posedge reads a
+    // released bus under Verilator's evaluation order.
     always @(negedge we_ni) begin
         we_fall_time = $time;
+        if (!ce_ni) data_latched = data_io;
     end
 
     // Track data changes for setup checking.
     always @(data_io) begin
         data_stable_time = $time;
+        if (!ce_ni && !we_ni) data_latched = data_io;
     end
 
     task automatic commit_write(input time write_end_time);
@@ -203,8 +209,8 @@ module mock_sram #(
         end
 
         // Commit the write
-        mem[addr_i] = data_io;
-        $display("[%t]        SRAM[%h] <- %h", $time, addr_i, data_io);
+        mem[addr_i] = data_latched;
+        $display("[%t]        SRAM[%h] <- %h", $time, addr_i, data_latched);
     endtask
 
     // Write is committed when write mode exits: whichever rises first (WE or CE)
