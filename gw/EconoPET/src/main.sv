@@ -782,6 +782,9 @@ module main (
     wire io_driving_data_bus = io_oe_o && !active_cpu_we;
     wire fpga_driving_data_bus = cpu_data_oe;
 
+    // Socketed CPU drives write data externally; cpu_driving_data_bus is soft-core only.
+    wire phys_cpu_driving_data_bus = !cpu_soft && active_be && active_cpu_we;
+
     wire [2:0] dbg_data_bus_drivers = {ram_driving_data_bus, io_driving_data_bus, fpga_driving_data_bus};
     wire [1:0] dbg_ram_oe_we = {ram_oe_o, ram_we_o};
 
@@ -793,7 +796,8 @@ module main (
         assert(!io_oe_o  ||  active_be)     else $fatal(1, "IO must not be active unless CPU is driving bus");
         assert(!io_oe_o  || !ram_we_o)      else $fatal(1, "IO and RAM_WE must not be active at same time");
 
-        assert(!ram_we_o || ram_ctl_doe || (cpu_driving_data_bus && active_wr_en))
+        assert(!ram_we_o || ram_ctl_doe
+               || ((cpu_driving_data_bus || phys_cpu_driving_data_bus) && active_wr_en))
             else $fatal(1, "RAM_WE asserted but valid data not driven to bus");
 
         assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {ram, io, fpga}=%b", dbg_data_bus_drivers);
