@@ -207,7 +207,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
         memcpy(tmdsbuf, blank_tmdsbuf, N_TMDS_LANES * WORDS_PER_LANE * sizeof(uint32_t));
-        dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
     } else {
         // Calculate start offset in video_char_buffer for this row.
@@ -279,7 +278,6 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
             }
         }
 
-        dvi_validate_tmds_buffer(tmdsbuf);
         queue_add_blocking(&dvi0.q_tmds_valid, &tmdsbuf);
     }
 }
@@ -358,7 +356,6 @@ void video_init() {
         FONT_HEIGHT,                // ra >= font height = blank line (shows background only)
         0x00                        // no invert
     );
-    dvi_validate_tmds_buffer(blank_tmdsbuf);
 
 #ifndef VIDEO_CORE1_LOOP
     // Prepare initial scanline before starting DVI on core 1.

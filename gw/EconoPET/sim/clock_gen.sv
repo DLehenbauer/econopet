@@ -12,8 +12,11 @@ module clock_gen #(
 
     bit enable = '0;
 
-    always @(posedge enable) begin
-        while (enable) begin
+    // @(posedge enable) never schedules under Verilator --timing.
+    initial begin
+        clock_o = '0;
+        forever begin
+            wait (enable);
             #(PERIOD / 4.0);
             clock_o <= 1'b1;
             #(PERIOD / 2.0);
