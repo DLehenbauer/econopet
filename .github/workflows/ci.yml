@@ -19,6 +19,7 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           runCmd: |
+            set -e
             cmake --preset default
             cmake --build --preset all
             ctest --preset all --output-on-failure
