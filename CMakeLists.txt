@@ -204,18 +204,54 @@ endif()
 
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
+    # Each bench runs under Icarus ('iv', the default suite) and Verilator
+    # ('vl', opt-in); they settle differently, so disagreements are the point.
+    # Full-boot benches are Verilator-only ('boot') -- Icarus would need hours.
+    set(GW_BOOT_TESTS stock6502_boot_tb)
+    set(GW_RAND_RESET_DEFAULT 0)
+
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
         get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
-        add_test(
-            NAME ${TB_NAME}
-            COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        )
-        set_tests_properties(${TB_NAME} PROPERTIES
-            LABELS "gw;sim"
-            TIMEOUT 300
-        )
+
+        if(DEFINED GW_RAND_RESET_${TB_NAME})
+            set(TB_RAND_RESET ${GW_RAND_RESET_${TB_NAME}})
+        else()
+            set(TB_RAND_RESET ${GW_RAND_RESET_DEFAULT})
+        endif()
+
+        if(TB_NAME IN_LIST GW_BOOT_TESTS)
+            add_test(
+                NAME ${TB_NAME}
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            )
+            set_tests_properties(${TB_NAME} PROPERTIES
+                LABELS "gw;sim;vl;boot"
+                TIMEOUT 1800
+            )
+        else()
+            add_test(
+                NAME ${TB_NAME}
+                COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            )
+            set_tests_properties(${TB_NAME} PROPERTIES
+                LABELS "gw;sim;iv"
+                TIMEOUT 300
+            )
+
+            # Verilator variant. Timeout covers compiling the model, not just running it.
+            add_test(
+                NAME ${TB_NAME}_vl
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            )
+            set_tests_properties(${TB_NAME}_vl PROPERTIES
+                LABELS "gw;sim;vl"
+                TIMEOUT 600
+            )
+        endif()
     endforeach()
 endif()
