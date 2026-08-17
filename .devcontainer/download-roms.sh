@@ -20,6 +20,8 @@ mkdir -p "${OUT_DIR}"
 readonly TMP_DIR=$(mktemp -d)
 trap "rm -rf '${TMP_DIR}'" EXIT
 
+readonly ZIMMERS_URL="http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/"
+
 # List of Zimmers.net ROM files and their expected MD5 checksums
 readonly ROM_LIST="$(cat <<'EOF'
 rom-1-c000.901439-01.bin B45778BDC95D67CCB475008718F4466B
@@ -48,6 +50,16 @@ edit-4-80-b-50Hz.901474-04-3681.bin 3E646194DE7458B05A06159AFBDD9427
 edit-4-80-b-60Hz.901474-03.bin DA56995BE008C5F7DB1094E81E5060AA
 kernal-4.901465-22.bin 16EC21443EA5431AB63D511061054E6F
 basic-4-b000.901465-23.bin 43B3A9F5E1C762AF0B3BB6CC71AAFB84
+EOF
+)"
+
+# SuperPET 6809 ROMs (Waterloo -12 revision) and character set, from the
+# SuperPET/ subdirectory.
+readonly SUPERPET_ROM_LIST="$(cat <<'EOF'
+waterloo-a000-bfff.970018-12.bin 84CB402449C6107B7D2B636CB28F0042
+waterloo-c000-dfff.970019-12.bin 0F9BD7123D99892CE80F1E7E438C2194
+waterloo-e000-ffff-970034-12.bin C03098D26DBB1A23737D3286F264BC97
+characters.901640-01.bin DD30641D9E6A221EDD725D1E529DCBDB
 EOF
 )"
 
@@ -97,10 +109,11 @@ ensure_file() {
   fi
 }
 
-download_roms() {
-  local base_url="http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/"
+# Download and verify every "<filename> <md5>" entry of a list from a base URL
+download_rom_list() {
+  local base_url="$1"
+  local rom_list="$2"
 
-  # Download and verify ROMs from list
   while read -r fname md5; do
     [[ -z "${fname:-}" ]] && continue
     
@@ -114,7 +127,15 @@ download_roms() {
         exit 1
       fi
     fi
-  done <<< "${ROM_LIST}"
+  done <<< "${rom_list}"
+}
+
+download_roms() {
+  download_rom_list "${ZIMMERS_URL}" "${ROM_LIST}"
+}
+
+download_superpet_roms() {
+  download_rom_list "${ZIMMERS_URL}SuperPET/" "${SUPERPET_ROM_LIST}"
 }
 
 download_rom1diskmagic() {
@@ -152,5 +173,6 @@ download_colourpet_rom() {
 }
 
 download_roms
+download_superpet_roms
 download_rom1diskmagic
 download_colourpet_rom
