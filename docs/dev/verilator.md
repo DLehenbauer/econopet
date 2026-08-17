@@ -6,14 +6,38 @@
 Verilator's compiled model runs the long boot-style benches orders of
 magnitude faster than iverilog, making them practical to run routinely.
 
+## Via CTest
+
+Every bench is registered twice: `<name>` on Icarus (label `iv`) and
+`<name>_vl` on Verilator (label `vl`). Full-boot benches are Verilator-only
+and take the `boot` label.
+
+    ctest --preset gw        # Icarus, the default suite
+    ctest --preset gw-vl     # same benches under Verilator
+    ctest --preset gw-boot   # full-boot benches, minutes rather than seconds
+
+`work_sim/obj_<name>/` caches the compiled model, so a rerun costs almost
+nothing while a cold run pays the C++ build. That build dominates the short
+benches -- `wbp_mux_tb` is ~4s to compile and 2ms to simulate -- so Verilator
+only wins where simulated time is large. Two concurrent `ctest` runs will
+collide over those directories.
+
 ## Reset randomization
 
 Pass `+verilator+rand+reset+` mode as the second argument:
 
-- `0` (default) -- zero-initialized state; required for the m6502 core,
-  whose `handle_irq` would otherwise power up set and count a spurious IRQ.
-- `1` -- randomized state; required for cores that hang from all-zero
-  X-resolution (e.g. the mc6809).
+Verilator is two-state, so this picks what an uninitialized variable becomes in
+place of X:
+
+- `0` -- zeros. What CTest uses: every in-repo bench passes with it, including
+  the mc6809 ones (`superpet_irq_tb`, `swi_vector_tb`). The m6502 core needs it
+  too, or `handle_irq` powers up set and counts a spurious IRQ.
+- `1` -- all ones (not random).
+- `2` -- random.
+
+The non-zero modes need work in the mocks before they are usable: under all
+ones, `mock_bus` reports false data-bus contention because its control inputs
+power up asserted. Override per bench with `GW_RAND_RESET_<name>`.
 
 ## Known constraints
 

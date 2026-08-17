@@ -43,8 +43,34 @@ cmake --build --preset sdcard       # Build SD card package
 # Test
 ctest --preset all                  # Run all tests
 ctest --preset fw                   # Run firmware tests only
-ctest --preset gw                   # Run gateware tests
+ctest --preset gw                   # Run gateware tests (Icarus)
+ctest --preset gw-vl                # Same benches under Verilator
+ctest --preset gw-boot              # Full-boot benches (Verilator, minutes)
 ```
+
+Gateware benches run under both simulators. `gw` uses Icarus and is the quick
+default; `gw-vl` runs the same benches under Verilator, which is two-state and
+settles differently, so it catches races Icarus tolerates. Both take under a
+minute. `ECONOPET_ROMS_DIR` must point at the ROM images: the configure step
+requires it, and `top_tb` and the boot bench load real ROMs.
+
+`gw-boot` is separate because it simulates seconds of PET time: it boots the
+stock BASIC-4 ROMs on the soft 6502 and passes only once the banner, the RAM
+sizing result and the `READY.` prompt are all on screen. That takes ~5 minutes
+under Verilator and is impractical under Icarus. It prints the screen at the
+end and writes `gw/EconoPET/outflow/stock6502_boot_tb.pgm`:
+
+```
+|*** COMMODORE BASIC 4.0 ***             |
+|                                        |
+| 31743 BYTES FREE                       |
+|                                        |
+|READY.                                  |
+```
+
+`ctest` hides that on success, so use `ctest --preset gw-boot -V` to see it, or
+run `./verilate.sh stock6502_boot_tb 0` directly. See
+[docs/dev/verilator.md](docs/dev/verilator.md) for the Verilator runner.
 
 ## License
 

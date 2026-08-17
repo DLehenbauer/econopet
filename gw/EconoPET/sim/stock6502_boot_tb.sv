@@ -184,6 +184,9 @@ module stock6502_boot_tb;
         mock_sram.load_rom(17'h0D000, "basic-4-d000.901465-21.bin");
         mock_sram.load_rom(17'h0E000, "edit-4-40-n-60Hz.901499-01.bin");
         mock_sram.load_rom(17'h0F000, "kernal-4.901465-22.bin");
+        // VROM window ($E800-$EFFF); the 2KB edit ROM above ends at $E7FF.
+        // Only needed so the end-of-test screen dump can expand real glyphs.
+        mock_sram.load_rom(17'h0E800, "characters-2.901447-10.bin");
 
         mock_sram.fill(17'h08000, 17'h087FF, 8'hAA);   // VRAM sentinel
 
@@ -258,30 +261,20 @@ module stock6502_boot_tb;
             end
         end
 
-        // Banner check: "COMMODORE" in screen codes (03 0F 0D 0D 0F 04 0F 12 05)
-        found = 0;
-        begin
-            // "COMMODORE" in screen codes, packed MSB-first.
-            localparam logic [71:0] PAT = {8'h03,8'h0F,8'h0D,8'h0D,8'h0F,8'h04,8'h0F,8'h12,8'h05};
-            for (int i = 0; !found && i < 2000-9; i++) begin
-                int m;
-                m = 1;
-                for (int j = 0; j < 9; j++)
-                    if (mock_sram.mem[17'(17'h08000+i+j)] != PAT[71-8*j -: 8]) m = 0;
-                if (m) found = 1;
-            end
-        end
+        // A boot that reached the READY prompt shows all three: the banner, the
+        // result of BASIC's RAM sizing, and the prompt itself. Checking only the
+        // banner would pass on a boot that stalled part-way through init.
+        found = mock_sram.screen_contains(17'h08000, 40, 25, "COMMODORE BASIC 4.0")
+             && mock_sram.screen_contains(17'h08000, 40, 25, "BYTES FREE")
+             && mock_sram.screen_contains(17'h08000, 40, 25, "READY.");
+
         if (!found) begin
-            $display("[%t]   VRAM row 0-1 dump:", $time);
-            for (int r = 0; r < 2; r++) begin
-                string line; line = "";
-                for (int c = 0; c < 40; c++)
-                    line = { line, $sformatf("%02x ", mock_sram.mem[17'(17'h08000 + r*40 + c)]) };
-                $display("    %s", line);
-            end
-            $fatal(1, "BASIC banner never appeared -- soft 6502 stock boot is broken");
+            mock_sram.dump_screen(17'h08000, 17'h0E800, 40, 25, "");
+            $fatal(1, "stock boot did not reach the BASIC READY prompt");
         end
-        $display("[%t] END stock BASIC-4 boot (banner found)", $time);
+        mock_sram.dump_screen(17'h08000, 17'h0E800, 40, 25,
+                              "outflow/stock6502_boot_tb.pgm");
+        $display("[%t] END stock BASIC-4 boot (banner, RAM size and READY seen)", $time);
     endtask
 
     // `TB_INIT without $dumpvars (a full-boot VCD is too large).
