@@ -12,6 +12,9 @@ import common_pkg::*;
 // high (the pad floats with the socket empty; that must be harmless for soft
 // CPUs). Wiring mirrors superpet_top_tb (top -> mock_sram + SPI1).
 module stock6502_boot_tb;
+    // Upper bound on the boot, not the time actually spent: the run stops as
+    // soon as READY appears (~1.4s).
+    localparam int BOOT_BUDGET_MS = 2200;
     bit sys_clock;
     clock_gen #(SYS_CLOCK_MHZ) sys_clock_gen (.clock_o(sys_clock));
     initial sys_clock_gen.start;
@@ -242,15 +245,16 @@ module stock6502_boot_tb;
             $display("[%t]   early t=%0dus addr=$%h rw=%b", $time, (us100+1)*100,
                 top.main.m6502_addr, top.main.m6502_rw);
         end
-        for (int ms = 0; ms < 800; ms += 5) begin
-            #5000000;    // 5 ms
-            if (ms % 25 == 0)
-                $display("[%t]   t=%0dms addr=$%h vram0=%02x", $time, ms,
-                    top.main.m6502_addr, mock_sram.mem[17'h08000]);
-        end
-        for (int ms = 800; ms < 2200; ms += 25) begin
+
+        // Poll for the READY prompt and stop as soon as it lands, rather than
+        // burning the whole budget: READY appears around 1.4s, so a fixed 2.2s
+        // wait spent a third of the run watching an idle prompt. The budget is
+        // now only an upper bound. ('break' is avoided -- iverilog rejects it.)
+        found = 1'b0;
+        for (int ms = 0; ms < BOOT_BUDGET_MS && !found; ms += 25) begin
             #25000000;   // 25 ms
-            if (ms % 100 == 0) begin
+            found = mock_sram.screen_contains(17'h08000, 40, 25, "READY.");
+            if (!found && ms % 100 == 0) begin
                 spaces = 0;
                 for (int i = 0; i < 40; i++)
                     if (mock_sram.mem[17'(17'h08000 + i)] == 8'h20) spaces++;

@@ -271,8 +271,9 @@ module mock_sram #(
 
     // Screen code -> printable ASCII, for the text dump below. Codes $00-$1F are
     // @A-Z[\]^_, $20-$3F map straight to ASCII, and the graphics half shows as '.'.
-    // Written without 'return' or byte casts: those crash vvp at runtime
-    // (vthread.cc assertion), even though they elaborate cleanly.
+    // Plain assignments rather than 'return': an earlier formulation tripped a
+    // vvp runtime assertion (vthread.cc of_RET_VEC4). The exact trigger was not
+    // isolated, so this keeps to the simplest form that works in both simulators.
     function automatic [7:0] screen_code_to_ascii(input bit [DW-1:0] code);
         bit [6:0] c;
         begin
