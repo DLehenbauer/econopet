@@ -5,6 +5,10 @@ on:
 
 permissions:
   contents: read
+  packages: write
+
+env:
+  DEVCONTAINER_IMAGE: ghcr.io/dlehenbauer/econopet-devcontainer
 
 jobs:
   build-and-test:
@@ -15,9 +19,19 @@ jobs:
         with:
           lfs: true
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test
         uses: devcontainers/ci@v0.3
         with:
+          imageName: ${{ env.DEVCONTAINER_IMAGE }}
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE }}
+          push: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'always' || 'never' }}
           runCmd: |
             set -e
             cmake --preset default

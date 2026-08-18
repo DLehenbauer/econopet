@@ -265,9 +265,7 @@ RUN cd /tmp/picotool && \
 # Install OpenOCD (built from source for RP2040)
 # (See: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
 RUN cd /tmp/openocd && \
-    git submodule update --init --depth 1 --single-branch \
-        jimtcl src/jtag/drivers/libjaylink && \
-    ./bootstrap nosubmodule && \
+    ./bootstrap && \
     ./configure && \
     make -j$(nproc) && \
     sudo make install && \
