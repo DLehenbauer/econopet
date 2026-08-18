@@ -212,7 +212,12 @@ set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 # SDC) guarantees data validity.
 
 set_false_path -from [get_ports {cpu_addr_i[*]}]
-set_false_path -from [get_ports {cpu_data_i[*]}]
+# cpu_data_i has a multi-cycle validity window, but a false path lets P&R
+# stretch the pin-to-FF route without limit. 25ns (~1.6 sys clocks) is a
+# generous bound over the achievable route while keeping it finite.
+# cpu_addr_i keeps its false path: it is decoded combinationally inside
+# the bus window, with no registered capture to protect.
+set_max_delay -from [get_ports {cpu_data_i[*]}] 25.0
 set_false_path -from [get_ports {cpu_we_n_i}]
 set_false_path -from [get_ports {cpu_sync_i}]
 
