@@ -18,10 +18,14 @@
             "detail": "CMake template build task"
         },
         {
-            "type": "cmake",
+            "type": "process",
             "label": "CMake: Build Firmware",
-            "command": "build",
-            "preset": "fw",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "fw"
+            ],
             "group": "build",
             "problemMatcher": [],
             "detail": "CMake template build task",
@@ -35,11 +39,13 @@
             }
         },
         {
-            "type": "cmake",
+            "type": "process",
             "label": "CMake: Build Firmware Test",
-            "command": "build",
-            "targets": [
-                "firmware-test"
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "fw_test"
             ],
             "group": "build",
             "problemMatcher": [],
