@@ -6,10 +6,10 @@ FROM --platform=${PLATFORM} mcr.microsoft.com/devcontainers/base:${VARIANT}
 
 # From https://github.com/raspberrypi/pico-sdk/releases
 #  and https://github.com/raspberrypi/picotool/releases
-ARG PICO_SDK_VERSION="2.1.1"
+ARG PICO_SDK_VERSION="2.3.0"
 
-# From https://github.com/raspberrypi/openocd/branches
-ARG OPENOCD_VERSION="sdk-2.0.0"
+# From https://github.com/raspberrypi/openocd/tags
+ARG OPENOCD_VERSION="sdk-2.3.0"
 
 # From https://github.com/chipsalliance/verible/releases
 ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
@@ -199,6 +199,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     libfl-dev \
     libftdi-dev \
     libgl1 \
+    libjim-dev \
     libnewlib-arm-none-eabi \
     libstdc++-arm-none-eabi-newlib \
     libtool \
@@ -264,9 +265,11 @@ RUN cd /tmp/picotool && \
 
 # Install OpenOCD (built from source for RP2040)
 # (See: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
+# '--disable-werror': glibc 2.42+ made strchr() const-preserving, which trips
+# OpenOCD's -Werror=discarded-qualifiers in src/jtag/drivers/vdebug.c.
 RUN cd /tmp/openocd && \
     ./bootstrap && \
-    ./configure && \
+    ./configure --disable-werror && \
     make -j$(nproc) && \
     sudo make install && \
     cd /tmp && \

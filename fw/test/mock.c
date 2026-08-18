@@ -131,6 +131,7 @@ void set_cpu(bool ready, bool reset, bool nmi) {
     (void)nmi;
 }
 
+void roms_refresh_char_rom() { }
 void start_menu_rom() { }
 void pet_nmi() { }
 

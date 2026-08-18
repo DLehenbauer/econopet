@@ -90,12 +90,6 @@ void action_load(void* const context, const char* filename, uint32_t address) {
         fatal("Failed to open file '%s'", filename);
     }
 
-    // Mirror character ROM loads for the HDMI renderer.
-    const bool is_char_rom = (address == CHAR_ROM_SRAM_ADDRESS);
-    if (is_char_rom) {
-        roms_begin_char_rom_load();
-    }
-
     // Read remaining bytes to the destination address.
     uint8_t* temp_buffer = acquire_temp_buffer();
     size_t bytes_read;
@@ -104,9 +98,6 @@ void action_load(void* const context, const char* filename, uint32_t address) {
     while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
         checksum_add(temp_buffer, bytes_read, &checksum);
         spi_write(address, temp_buffer, bytes_read);
-        if (is_char_rom) {
-            roms_append_char_rom_data(temp_buffer, bytes_read);
-        }
         address += bytes_read;
 
         // Check for read errors (other than EOF)
