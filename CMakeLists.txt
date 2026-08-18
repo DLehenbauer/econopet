@@ -204,18 +204,29 @@ endif()
 
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
+    add_test(
+        NAME gateware_filelists
+        COMMAND ${CMAKE_SOURCE_DIR}/sim.sh --update-only
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(gateware_filelists PROPERTIES
+        LABELS "sim_setup"
+        FIXTURES_SETUP gateware_filelists
+    )
+
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
         get_filename_component(TB_NAME ${TB_FILE} NAME_WE)
         add_test(
             NAME ${TB_NAME}
-            COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}
+            COMMAND ${CMAKE_SOURCE_DIR}/sim.sh --no-update ${TB_NAME}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         )
         set_tests_properties(${TB_NAME} PROPERTIES
             LABELS "gw;sim"
             TIMEOUT 300
+            FIXTURES_REQUIRED gateware_filelists
         )
     endforeach()
 endif()
