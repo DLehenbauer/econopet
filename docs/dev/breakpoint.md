@@ -39,12 +39,16 @@ to execute a STP instruction.
 | Signal             | Source      | Description                                        |
 |--------------------|-------------|----------------------------------------------------|
 | `sys_clock_i`      | PLL         | 64 MHz system clock                                |
-| `cpu_sync_i`       | W65C02S     | High during opcode fetch (T1 cycle)                |
+| `cpu_sync_i`       | W65C02S     | High during opcode fetch (T1 cycle); see note below   |
 | `cpu_data_i[7:0]`  | Data bus    | Instruction byte fetched by the CPU                |
 | `cpu_data_strobe_i`| timing.sv   | One-cycle pulse when data bus is valid              |
 | `cpu_be_i`         | timing.sv   | Bus enable (high when CPU owns the bus)             |
 | `cpu_ready_i`      | register_file | MCU-controlled RDY (from REG_CPU)                |
 | `clear_i`          | register_file | MCU writes to clear the breakpoint halt           |
+
+With a soft CPU selected, the detector uses that core's own sync instead
+of this pad (`bp_sync` in main.sv). The 6809 has no sync output, so
+breakpoints are 6502-only.
 
 **Outputs:**
 

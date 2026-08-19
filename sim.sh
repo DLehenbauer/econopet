@@ -6,7 +6,7 @@ PROJ_DIR="$SCRIPT_DIR/gw/$PROJ_NAME"
 BUILD_DIR="$SCRIPT_DIR/build"
 
 generate_filelists() {
-    mkdir -p "$PROJ_DIR/work_sim"
+    mkdir -p "$PROJ_DIR/work_sim" "$PROJ_DIR/outflow"
 
     python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/pkgs.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
 import sys

@@ -21,3 +21,8 @@
 [submodule "gw/EconoPET/external/m6502"]
 	path = gw/EconoPET/external/m6502
 	url = https://github.com/DLehenbauer/m6502.git
+[submodule "gw/EconoPET/external/mc6809"]
+	path = gw/EconoPET/external/mc6809
+	# Fork carrying the SWI3 vector fix (cavnex/mc6809 issue 6).
+	url = https://github.com/Rhialto/mc6809.git
+	branch = swi3-vector

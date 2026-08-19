@@ -99,15 +99,46 @@
         {
             "name": "gw",
             "displayName": "Gateware Tests",
-            "description": "Run only gateware simulation tests",
+            "description": "Run the quick gateware simulation tests under Icarus (the default simulator)",
             "configurePreset": "default",
             "filter": {
                 "include": {
-                    "label": "gw"
+                    "label": "iv"
                 }
             },
             "execution": {
-                "jobs": 0
+                "jobs": 8
+            }
+        },
+        {
+            "name": "gw-vl",
+            "displayName": "Gateware Tests (Verilator only)",
+            "description": "Run the quick gateware benches under Verilator only",
+            "configurePreset": "default",
+            "filter": {
+                "include": {
+                    "label": "vl"
+                },
+                "exclude": {
+                    "label": "boot"
+                }
+            },
+            "execution": {
+                "jobs": 8
+            }
+        },
+        {
+            "name": "gw-boot",
+            "displayName": "Gateware Boot Tests",
+            "description": "Run the full-boot gateware benches under Verilator (minutes, not seconds)",
+            "configurePreset": "default",
+            "filter": {
+                "include": {
+                    "label": "boot"
+                }
+            },
+            "execution": {
+                "jobs": 8
             }
         }
     ]

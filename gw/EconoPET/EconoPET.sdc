@@ -218,6 +218,22 @@ set_false_path -from [get_ports {cpu_addr_i[*]}]
 # cpu_addr_i keeps its false path: it is decoded combinationally inside
 # the bus window, with no registered capture to protect.
 set_max_delay -from [get_ports {cpu_data_i[*]}] 25.0
+# The soft cores are clocked by fabric-generated nets (cpu_clock_o, E/Q)
+# that STA does not otherwise time. Declare them as generated clocks and
+# bound both crossing directions; the cores' internal paths keep their
+# microsecond bus budgets.
+create_generated_clock -name cpu_phi -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {cpu_clock_o}]
+create_generated_clock -name e6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_e}]
+create_generated_clock -name q6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_q}]
+set_max_delay -from [get_clocks {cpu_phi}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {cpu_phi}] 25.0
+set_max_delay -from [get_clocks {e6809}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {e6809}] 25.0
+set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {sys_clock_i}] -to [get_clocks {q6809}] 25.0
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {cpu_phi}]
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {e6809}]
+set_false_path -hold -from [get_clocks {sys_clock_i}] -to [get_clocks {q6809}]
 set_false_path -from [get_ports {cpu_we_n_i}]
 set_false_path -from [get_ports {cpu_sync_i}]
 
@@ -235,12 +251,17 @@ set_false_path -from [get_ports {graphic_i}]
 set_false_path -from [get_ports {diag_i via_cb2_i}]
 set_false_path -from [get_ports {cpu_reset_n_i}]
 
-# cpu_irq_n_i and cpu_nmi_n_i are currently optimized away by synthesis (no
-# fanout). Constraints are omitted to avoid warnings. If these ports gain
-# fanout in a future revision, add false-path constraints here.
-#
-# set_false_path -from [get_ports {cpu_irq_n_i cpu_nmi_n_i}]
+# cpu_irq_n_i feeds the soft cores through a double-flop synchronizer --
+# async by design. cpu_nmi_n_i is still optimized away (no fanout); its
+# constraint is omitted to avoid warnings.
+set_false_path -from [get_ports {cpu_irq_n_i}]
 
 # pmod2_i is passed through combinationally to pmod1_o (debug loopback).
 # No synchronous timing requirement.
 set_false_path -from [get_ports {pmod2_i[*]}]
+
+# cpu_sel (main.sv) is quasi-static: it changes only during a CPU swap,
+# while both soft cores are held in reset and no bus cycle is in flight,
+# so its fanout into the address mux and SID decode has no synchronous
+# deadline.
+set_false_path -from [get_cells {main/cpu_sel*}]
