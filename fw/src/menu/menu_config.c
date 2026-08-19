@@ -49,6 +49,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     };
     
     parse_config_file("/config.yaml", &sink, selected_config);
+    roms_refresh_char_rom();
 }
 
 typedef struct context_s {

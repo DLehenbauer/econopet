@@ -71,10 +71,10 @@ For SPI signals specifically, follow the [OSHWA resolution](https://oshwa.org/re
 ## Running Testbenches
 
 ```sh
-./sim.sh --update    # Regenerate `gw/EconoPET/work_sim/EconoPET.f` after modifying `EconoPET.xml`
-./sim.sh             # List available tests
-./sim.sh --all       # Run all tests in parallel (fastest)
-./sim.sh spi_tb      # Run a single test with output logged to console
+./sim.sh                  # Run all tests in parallel
+./sim.sh spi_tb           # Run the specified test only
+./sim.sh --update-only    # Regenerate simulation file lists and exit
+./sim.sh --no-update spi_tb # Run one test with existing file lists
 ```
 
 ## Adding New Files
@@ -83,16 +83,14 @@ When adding new `*.sv` or `*.v` files, they must be registered in the project:
 
 - Source files (`src/*.sv`): Add `<efx:design_file name="src/mymodule.sv" .../>` in the `<efx:design_info>` section
 - Simulation files (`sim/*.sv`): Add `<efx:sim_file name="sim/mymodule_tb.sv"/>` in the `<efx:sim_info>` section
-- Run `./sim.sh --update` from the project root to regenerate `gw/EconoPET/work_sim/EconoPET.f`
 
-**Critical:** New source files and testbenches are omitted from the build and test until registered in `EconoPET.xml` and `./sim.sh --update` is run to update the file list in `gw/EconoPET/work_sim/EconoPET.f`.
+**Critical:** New sources and testbenches must be added in `EconoPET.xml` or they will be excluded from build and test.
 
 ## Verification Checklist
 
 - [ ] If the change is testable, add or update a `*_tb.sv` file in `gw/EconoPET/sim/` to add coverage
 - [ ] Update `gw/EconoPET/EconoPET.xml` to register new source and test files or remove deleted files
-- [ ] Run `./sim.sh --update` to regenerate `gw/EconoPET/work_sim/EconoPET.f`
-- [ ] Run `./sim.sh --all` and verify all tests pass
+- [ ] Run `./sim.sh` and verify all tests pass
 - [ ] Update timing constraints per [timing-analysis/SKILL.md](/.github/skills/timing-analysis/SKILL.md)
 - [ ] Only if tests pass, run `cmake --build --preset gw`
 

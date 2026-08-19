@@ -210,6 +210,16 @@ if(BUILD_FPGA)
     set(GW_BOOT_TESTS stock6502_boot_tb)
     set(GW_RAND_RESET_DEFAULT 0)
 
+    add_test(
+        NAME gateware_filelists
+        COMMAND ${CMAKE_SOURCE_DIR}/sim.sh --update-only
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(gateware_filelists PROPERTIES
+        LABELS "sim_setup"
+        FIXTURES_SETUP gateware_filelists
+    )
+
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
@@ -230,16 +240,18 @@ if(BUILD_FPGA)
             set_tests_properties(${TB_NAME} PROPERTIES
                 LABELS "gw;sim;vl;boot"
                 TIMEOUT 1800
+                FIXTURES_REQUIRED gateware_filelists
             )
         else()
             add_test(
                 NAME ${TB_NAME}
-                COMMAND ${CMAKE_SOURCE_DIR}/sim.sh ${TB_NAME}
+                COMMAND ${CMAKE_SOURCE_DIR}/sim.sh --no-update ${TB_NAME}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
             set_tests_properties(${TB_NAME} PROPERTIES
                 LABELS "gw;sim;iv"
                 TIMEOUT 300
+                FIXTURES_REQUIRED gateware_filelists
             )
 
             # Verilator variant. Timeout covers compiling the model, not just running it.
@@ -251,6 +263,7 @@ if(BUILD_FPGA)
             set_tests_properties(${TB_NAME}_vl PROPERTIES
                 LABELS "gw;sim;vl"
                 TIMEOUT 600
+                FIXTURES_REQUIRED gateware_filelists
             )
         endif()
     endforeach()
