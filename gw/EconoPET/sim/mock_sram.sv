@@ -4,13 +4,14 @@
 //
 // Asynchronous SRAM simulation model with parameterizable timing.
 //
-// Models the behavior of a real SRAM chip (default: AS6C1008-55PCN) including:
+// Models the behavior of a real SRAM chip, including:
 //
 //   - Address-to-output propagation delay (tAA)
 //   - OE-to-output propagation delay (tOE)
 //   - Output hold after address change (tOH)
 //   - Chip enable access time (tACE)
 //   - Transition to/from high-Z on OE/CE changes (tOHZ, tOLZ, tCHZ, tCLZ)
+//   - Output high-Z and turn-on around a write pulse (tWHZ, tOW)
 //   - Write pulse width checking (tWP)
 //   - Address setup relative to end of write (tAW)
 //   - Data setup relative to end of write (tDW)
@@ -18,9 +19,8 @@
 //   - Write cycle time (tWC)
 //   - Read cycle time (tRC)
 //
-// The active-low control pins (ce_ni, oe_ni, we_ni) and the bidirectional data bus
-// (data_io) behave like a real SRAM: the chip drives data_io when selected for read
-// and tri-states it otherwise.
+// Uses separate output-enable signal (data_oe_o) rather than a tri-stated inout
+// to support two-state simulators that resolve a released 'z to a defined level.
 //
 
 import common_pkg::*;
@@ -59,7 +59,9 @@ module mock_sram #(
     parameter int tWHZ  = SRAM_tWHZ
 ) (
     input  logic [ADDR_WIDTH-1:0] addr_i,
-    inout  wire  [      DW-1:0]   data_io,
+    input  logic [      DW-1:0]   data_i,
+    output logic [      DW-1:0]   data_o,
+    output logic                  data_oe_o,
     input  logic                  ce_ni,
     input  logic                  oe_ni,
     input  logic                  we_ni
@@ -72,8 +74,8 @@ module mock_sram #(
     // -------------------------------------------------------------------------
     // Internal tracking signals
     // -------------------------------------------------------------------------
-    logic [DW-1:0]         data_out;
-    logic                  driving;         // 1 when chip is driving data_io
+    logic [DW-1:0]         data_out = {DW{1'bx}};
+    logic                  driving  = 1'b0;  // 1 when chip is driving the data bus
 
     // Timestamps for timing checks
     time addr_change_time;
@@ -85,35 +87,44 @@ module mock_sram #(
     logic [DW-1:0]         data_latched;    // Data captured for write
 
     // -------------------------------------------------------------------------
-    // Bidirectional data bus
+    // Explicit data bus driver
     // -------------------------------------------------------------------------
-    assign data_io = driving ? data_out : {DW{1'bz}};
+    assign data_o    = data_out;
+    assign data_oe_o = driving;
 
     // -------------------------------------------------------------------------
     // Determine whether the chip should be driving the bus
     // -------------------------------------------------------------------------
     // The chip drives the bus during a read: CE asserted, OE asserted, WE
-    // deasserted. Transitions to/from high-Z have propagation delays (tOHZ,
-    // tCHZ for disable and tOLZ, tCLZ for enable).
+    // deasserted. WE overrides OE during a write.
 
     wire read_active = !ce_ni && !oe_ni && we_ni;
 
-    always @(read_active) begin
-        if (read_active) begin
-            // Output transitions from high-Z to low-Z after tOLZ/tCLZ, but
-            // data is not yet valid (indeterminate until the tOE/tACE path
-            // resolves).
-            #(common_pkg::max2(tOLZ, tCLZ));
+    always @(posedge oe_ni) begin
+        data_out <= {DW{1'bx}};
+        #(tOHZ);
+        if (!read_active) driving <= 1'b0;
+    end
+
+    always @(posedge ce_ni) begin
+        data_out <= {DW{1'bx}};
+        #(tCHZ);
+        if (!read_active) driving <= 1'b0;
+    end
+
+    always @(negedge we_ni) begin
+        data_out <= {DW{1'bx}};
+        #(tWHZ);
+        if (!read_active) driving <= 1'b0;
+    end
+
+    always @(posedge we_ni) begin
+        if (!ce_ni && !oe_ni) begin
+            #(tOW);
             if (read_active) begin
-                data_out <= {DW{1'bx}};
+                data_out <= mem[addr_i];
                 driving  <= 1'b1;
             end
-        end else begin
-            // Output becomes indeterminate immediately when the read is
-            // deactivated, then transitions to high-Z after tOHZ/tCHZ.
-            data_out <= {DW{1'bx}};
-            #(common_pkg::max2(tOHZ, tCHZ));
-            driving <= 1'b0;
         end
     end
 
@@ -147,7 +158,9 @@ module mock_sram #(
     always @(negedge oe_ni) begin
         if (!ce_ni && we_ni) begin
             // OE just asserted while CE is active and WE is not: start a read.
-            #(tOE);
+            #(tOLZ);
+            if (read_active) driving <= 1'b1;
+            #(tOE - tOLZ);
             if (read_active) begin
                 data_out <= mem[addr_i];
             end
@@ -156,7 +169,9 @@ module mock_sram #(
 
     always @(negedge ce_ni) begin
         if (!oe_ni && we_ni) begin
-            #(tACE);
+            #(tCLZ);
+            if (read_active) driving <= 1'b1;
+            #(tACE - tCLZ);
             if (read_active) begin
                 data_out <= mem[addr_i];
             end
@@ -178,13 +193,13 @@ module mock_sram #(
     // released bus under Verilator's evaluation order.
     always @(negedge we_ni) begin
         we_fall_time = $time;
-        if (!ce_ni) data_latched = data_io;
+        if (!ce_ni) data_latched = data_i;
     end
 
     // Track data changes for setup checking.
-    always @(data_io) begin
+    always @(data_i) begin
         data_stable_time = $time;
-        if (!ce_ni && !we_ni) data_latched = data_io;
+        if (!ce_ni && !we_ni) data_latched = data_i;
     end
 
     task automatic commit_write(input time write_end_time);

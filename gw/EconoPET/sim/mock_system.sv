@@ -17,7 +17,7 @@ module mock_system (
 
     // Bus
     logic [CPU_ADDR_WIDTH-1:0] bus_addr;
-    wire  [DATA_WIDTH-1:0]     bus_data;
+    logic [    DATA_WIDTH-1:0] bus_data;
     logic bus_we_n;
 
     // Non-RAM drivers produce a value and output-enable that are
@@ -25,7 +25,7 @@ module mock_system (
     logic [DATA_WIDTH-1:0] bus_data_mux;
     logic                  bus_data_mux_oe;
 
-    assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
+    assign bus_data = bus_data_mux;
 
     // CPU
     logic cpu_be;
@@ -38,8 +38,8 @@ module mock_system (
 
     logic [CPU_ADDR_WIDTH-1:0] top_addr;
     logic [CPU_ADDR_WIDTH-1:0] top_addr_oe;
-    logic [DATA_WIDTH-1:0] top_data;
-    logic [DATA_WIDTH-1:0] top_data_oe;
+    logic [    DATA_WIDTH-1:0] top_data;
+    logic [    DATA_WIDTH-1:0] top_data_oe;
     logic top_we_n;
     logic top_we_n_oe;
 
@@ -50,6 +50,8 @@ module mock_system (
     logic ram_addr_a16_o;
     logic ram_oe_n_o;
     logic ram_we_n_o;
+    logic [DATA_WIDTH-1:0] ram_data;
+    logic ram_data_oe;
 
     // IO
     logic io_oe_n;
@@ -118,15 +120,19 @@ module mock_system (
 
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
     logic [DATA_WIDTH-1:0] cpu_data;
+    logic cpu_data_oe;
     logic cpu_we_n;
     logic cpu_sync;
 
     mock_cpu mock_cpu(
         .cpu_clock_i(cpu_clock_o),
         .reset_n_i(cpu_reset_n_o),
+        .be_i(cpu_be),
         .addr_o(cpu_addr),
         .data_i(bus_data),
+        .data_valid_i(bus_data_mux_oe),
         .data_o(cpu_data),
+        .data_oe_o(cpu_data_oe),
         .we_n_o(cpu_we_n),
         .sync_o(cpu_sync),
         .irq_n_i(1'b1),
@@ -145,7 +151,9 @@ module mock_system (
 
     mock_sram mock_sram (
         .addr_i(ram_addr),
-        .data_io(bus_data),
+        .data_i(bus_data),
+        .data_o(ram_data),
+        .data_oe_o(ram_data_oe),
         .ce_ni(1'b0),
         .oe_ni(ram_oe_n_o),
         .we_ni(ram_we_n_o)
@@ -166,11 +174,12 @@ module mock_system (
         .cpu_be_i(cpu_be),
         .cpu_addr_i(cpu_addr),
         .cpu_data_i(cpu_data),
+        .cpu_data_oe_i(cpu_data_oe),
         .cpu_we_n_i(cpu_we_n),
 
-        // RAM control signals (active-low, directly from FPGA 'top' module)
-        .ram_oe_n_i(ram_oe_n_o),
-        .ram_we_n_i(ram_we_n_o),
+        // Incoming bus signals from SRAM
+        .ram_data_i(ram_data),
+        .ram_data_oe_i(ram_data_oe),
 
         // Incoming bus outputs from 'mock_io' module
         .io_data_i(8'h10),

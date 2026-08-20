@@ -28,20 +28,24 @@ module mock_sram_tb;
     localparam int tAW  = SRAM_tAW;
     localparam int tDW  = SRAM_tDW;
     localparam int tACE = SRAM_tACE;
+    localparam int tOW  = SRAM_tOW;
+    localparam int tWHZ = SRAM_tWHZ;
 
     // -------------------------------------------------------------------------
     // DUT signals
     // -------------------------------------------------------------------------
     logic [AW-1:0] addr;
-    wire  [DW-1:0] data;          // bidirectional bus
+    logic [DW-1:0] data;
     logic [DW-1:0] data_drv;      // testbench driver value
     logic          data_drv_en;   // testbench drives bus when 1
+    logic [DW-1:0] sram_data;
+    logic          sram_data_oe;
 
     logic ce_n;
     logic oe_n;
     logic we_n;
 
-    assign data = data_drv_en ? data_drv : {DW{1'bz}};
+    assign data = data_drv_en ? data_drv : sram_data_oe ? sram_data : '0;
 
     // -------------------------------------------------------------------------
     // DUT instantiation
@@ -51,7 +55,9 @@ module mock_sram_tb;
         .DW         (DW)
     ) dut (
         .addr_i  (addr),
-        .data_io (data),
+        .data_i  (data),
+        .data_o  (sram_data),
+        .data_oe_o(sram_data_oe),
         .ce_ni   (ce_n),
         .oe_ni   (oe_n),
         .we_ni   (we_n)
@@ -128,6 +134,8 @@ module mock_sram_tb;
         #(tAA + 1);
 
         // Sample data
+        assert(sram_data_oe)
+            else $fatal(1, "[%0t] Read sampled while SRAM output was disabled", $time);
         r_data = data;
 
         // Deassert OE
@@ -203,7 +211,7 @@ module mock_sram_tb;
         data_drv_en = 1'b0;
 
         #(tOHZ + tCHZ + 1);
-        `assert_exact_equal(data, 8'hzz);
+        `assert_equal(sram_data_oe, 1'b0);
 
         $display("[%t] PASS: high-Z when deselected", $time);
     endtask
@@ -230,18 +238,60 @@ module mock_sram_tb;
         rd = data;
         `assert_equal(rd, 8'hBB);
 
-        // Deassert OE: output becomes indeterminate, then high-Z after tOHZ.
+        // Deassert OE: output remains enabled until tOHZ expires.
         oe_n = 1'b1;
         #1;
-        `assert_exact_equal(data, 8'hxx);
+        `assert_equal(sram_data_oe, 1'b1);
 
         #(tOHZ);
-        `assert_exact_equal(data, 8'hzz);
+        `assert_equal(sram_data_oe, 1'b0);
 
         ce_n = 1'b1;
         #1;
 
         $display("[%t] PASS: high-Z when OE deasserted", $time);
+    endtask
+
+    // -------------------------------------------------------------------------
+    // Test: WE overrides asserted OE, then returns to read mode
+    // -------------------------------------------------------------------------
+    task test_we_overrides_oe;
+        $display("[%t] TEST: WE overrides OE", $time);
+
+        do_write(17'h00380, 8'h5A);
+
+        addr         = 17'h00380;
+        ce_n         = 1'b0;
+        oe_n         = 1'b0;
+        we_n         = 1'b1;
+        data_drv_en  = 1'b0;
+        #(tAA + 1);
+        `assert_equal(sram_data_oe, 1'b1);
+        `assert_equal(data, 8'h5A);
+
+        we_n = 1'b0;
+        #(tWHZ - 1);
+        `assert_equal(sram_data_oe, 1'b1);
+        #2;
+        `assert_equal(sram_data_oe, 1'b0);
+
+        data_drv     = 8'hA5;
+        data_drv_en  = 1'b1;
+        #(tWP);
+        we_n         = 1'b1;
+        data_drv_en  = 1'b0;
+
+        #(tOW - 1);
+        `assert_equal(sram_data_oe, 1'b0);
+        #2;
+        `assert_equal(sram_data_oe, 1'b1);
+        `assert_equal(data, 8'hA5);
+
+        oe_n = 1'b1;
+        #(tOHZ + 1);
+        ce_n = 1'b1;
+
+        $display("[%t] PASS: WE overrides OE", $time);
     endtask
 
     // -------------------------------------------------------------------------
@@ -261,7 +311,7 @@ module mock_sram_tb;
         we_n        = 1'b1;
         data_drv_en = 1'b0;
         #(tOHZ + 1);
-        `assert_exact_equal(data, 8'hzz);
+        `assert_equal(sram_data_oe, 1'b0);
 
         // An external device drives the bus (e.g., CPU talking to I/O)
         data_drv    = 8'h99;
@@ -349,10 +399,9 @@ module mock_sram_tb;
         rd = data;
         `assert_equal(rd, 8'hAA);
 
-        // After tOH, output should be indeterminate ('x)
+        // After tOH, output remains enabled but its value is not specified.
         #2;
-        rd = data;
-        `assert_exact_equal(rd, 8'hxx);
+        `assert_equal(sram_data_oe, 1'b1);
 
         // After tAA, new data should be valid
         #(tAA - tOH);
@@ -388,17 +437,17 @@ module mock_sram_tb;
 
         #5;
 
-        // Assert OE: output goes low-Z at max(tOLZ, tCLZ), then valid at tOE.
+        // Assert OE: CE is already active, so output goes low-Z at tOLZ,
+        // then valid at tOE.
         oe_n = 1'b0;
 
-        // Just after tCLZ (max of tOLZ=5, tCLZ=10), output is driven but
-        // indeterminate.
-        #(tCLZ + 1);
-        rd = data;
-        `assert_exact_equal(rd, 8'hxx);
+        #(tOLZ - 1);
+        `assert_equal(sram_data_oe, 1'b0);
+        #2;
+        `assert_equal(sram_data_oe, 1'b1);
 
         // After tOE total from OE assertion, data should be valid.
-        #(tOE - tCLZ);
+        #(tOE - tOLZ);
         rd = data;
         `assert_equal(rd, 8'hDD);
 
@@ -435,8 +484,7 @@ module mock_sram_tb;
         ce_n = 1'b0;
 
         #(tCLZ + 1);
-        rd = data;
-        `assert_exact_equal(rd, 8'hxx);
+        `assert_equal(sram_data_oe, 1'b1);
 
         // Wait for CE access time
         #(tACE - tCLZ);
@@ -556,6 +604,7 @@ module mock_sram_tb;
         test_overwrite;
         test_highz_deselected;
         test_highz_oe_deasserted;
+        test_we_overrides_oe;
         test_bus_sharing;
         test_read_addr_change;
         test_indeterminate_window;
