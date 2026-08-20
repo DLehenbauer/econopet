@@ -1,7 +1,7 @@
 #!/bin/bash
 # Compile and run a gateware testbench under Verilator (--binary --timing).
 # Usage: ./verilate.sh TEST_NAME [RAND_RESET]
-#   RAND_RESET: 0 (default; required for m6502 benches) or 1 (mc6809 benches).
+#   RAND_RESET: 0 (default; required for m6502), 1 (all ones), or 2 (random).
 # See docs/dev/verilator.md.
 
 SCRIPT_DIR="$(readlink -f $(dirname "$0"))"
