@@ -8,9 +8,12 @@ import common_pkg::*;
 module mock_cpu (
     input  logic cpu_clock_i,   // CPU clock (PHI2)
     input  logic reset_n_i,
+    input  logic be_i,          // Bus Enable
     output logic [CPU_ADDR_WIDTH-1:0] addr_o,
     input  logic     [DATA_WIDTH-1:0] data_i,
+    input  logic                      data_valid_i,
     output logic     [DATA_WIDTH-1:0] data_o,
+    output logic                      data_oe_o,
     output logic we_n_o,
     output logic sync_o,
     input  logic irq_n_i,
@@ -43,7 +46,7 @@ module mock_cpu (
 
     logic [CPU_ADDR_WIDTH-1:0] set_addr;
     logic [    DATA_WIDTH-1:0] set_data;
-    logic                      set_we;
+    logic                      set_we = 1'b0;
 
     task start();
         manual_mode = 1'b0;
@@ -90,6 +93,8 @@ module mock_cpu (
         @(posedge cpu_clock_i);
         @(negedge cpu_clock_i);
 
+        assert(data_valid_i)
+            else $fatal(1, "[%0t] CPU sampled an undriven data bus at $%04x", $time, addr);
         data = data_i;
         $display("[%t]   CPU Read %04x -> %02x", $time, addr, data);
     endtask
@@ -108,8 +113,23 @@ module mock_cpu (
                        && !cpu.handle_irq
                        && !cpu.handle_nmi;
 
-    assign addr_o = manual_mode ? set_addr : cpu_addr;
+    // The W65C02S presents the next cycle's address and RWB tADS after PHI2
+    // falls, by which point the arbiter has already dropped BE. Without that
+    // delay the mock flips RWB inside its own bus window and collides with the
+    // SRAM the FPGA turns on in response.
+    wire [CPU_ADDR_WIDTH-1:0] addr_next = manual_mode ? set_addr : cpu_addr;
+    wire                      we_n_next = manual_mode ? !set_we  : cpu_rw;
+
+    assign #(CPU_tADS) addr_o = addr_next;
+    assign #(CPU_tADS) we_n_o = we_n_next;
+
     assign data_o = manual_mode ? set_data : cpu_data;
-    assign we_n_o = manual_mode ? !set_we  : cpu_rw;
+
+    // BE and RWB together enable the W65C02S's data drivers, which then need
+    // tBVD to reach valid data or high-Z. That turn-on delay is what lets the
+    // SRAM release (tOHZ) before the CPU takes the bus.
+    wire drive_data = be_i && (manual_mode ? set_we : !cpu_rw);
+    assign #(CPU_tBVD) data_oe_o = drive_data;
+
     assign sync_o = manual_mode ? 1'b0 : cpu_sync_early;
 endmodule
