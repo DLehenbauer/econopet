@@ -33,6 +33,8 @@ module superpet_irq_tb;
     logic                  bus_data_mux_oe;
 
     assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
+    logic [DATA_WIDTH-1:0] ram_data;
+    logic                  ram_data_oe;
 
     bit   manual_reset_n = 1'b1;
     logic cpu_reset_n;
@@ -122,7 +124,9 @@ module superpet_irq_tb;
 
     mock_sram mock_sram (
         .addr_i(ram_addr),
-        .data_io(bus_data),
+        .data_i(bus_data),
+        .data_o(ram_data),
+        .data_oe_o(ram_data_oe),
         .ce_ni(1'b0),
         .oe_ni(ram_oe_n_o),
         .we_ni(ram_we_n_o)
@@ -141,10 +145,11 @@ module superpet_irq_tb;
         .cpu_be_i(1'b0),
         .cpu_addr_i({CPU_ADDR_WIDTH{1'b0}}),
         .cpu_data_i({DATA_WIDTH{1'b0}}),
+        .cpu_data_oe_i(1'b0),
         .cpu_we_n_i(1'b1),
 
-        .ram_oe_n_i(ram_oe_n_o),
-        .ram_we_n_i(ram_we_n_o),
+        .ram_data_i(ram_data),
+        .ram_data_oe_i(ram_data_oe),
 
         .io_data_i(8'h10),
         .io_oe_n_i(io_oe_n),

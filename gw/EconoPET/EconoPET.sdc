@@ -218,11 +218,11 @@ set_false_path -from [get_ports {cpu_addr_i[*]}]
 # cpu_addr_i keeps its false path: it is decoded combinationally inside
 # the bus window, with no registered capture to protect.
 set_max_delay -from [get_ports {cpu_data_i[*]}] 25.0
-# The soft cores are clocked by fabric-generated nets (cpu_clock_o, E/Q)
+# The soft cores are clocked by fabric-generated nets (soft_cpu_clock, E/Q)
 # that STA does not otherwise time. Declare them as generated clocks and
 # bound both crossing directions; the cores' internal paths keep their
 # microsecond bus budgets.
-create_generated_clock -name cpu_phi -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {cpu_clock_o}]
+create_generated_clock -name cpu_phi -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/soft_cpu_clock}]
 create_generated_clock -name e6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_e}]
 create_generated_clock -name q6809 -source [get_ports {sys_clock_i}] -divide_by 64 [get_nets {main/cpu6809_q}]
 set_max_delay -from [get_clocks {cpu_phi}] -to [get_clocks {sys_clock_i}] 40.0

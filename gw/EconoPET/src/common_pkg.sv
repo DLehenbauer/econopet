@@ -129,7 +129,8 @@ package common_pkg;
     // See docs/dev/timing.md for details.
     //
 
-    localparam int IO_tCDR = 20;    // Data Bus Delay Time (max)
+    localparam int IO_tCDR  = 20;   // Data Bus Delay Time (max)
+    localparam int IO_tHOLD = 10;   // Worst-case address, R/W, and write-data hold after falling PHI2 (min)
 
     //
     // SN74LVC4245A Level Shifter Timing (ns)

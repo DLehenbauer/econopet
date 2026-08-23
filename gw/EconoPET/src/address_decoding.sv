@@ -16,12 +16,20 @@ module memory_control (
     output logic bank_a15_o,
     output logic bank_ro_o
 );
-    // RAM expansion is disabled at power on.
-    logic [DATA_WIDTH-1:0] mem_ctl = 8'b0xxx_xxxx;
+    // RAM expansion is disabled at power on. Only MEM_CTL_ENABLE has to be
+    // known; the rest stay X so 4-state sims flag reads before configuration.
+`ifdef VERILATOR
+    // The two-state model randomizes the whole partially-X vector, including its known bit.
+    localparam logic [DATA_WIDTH-1:0] MEM_CTL_INIT = '0;
+`else
+    localparam logic [DATA_WIDTH-1:0] MEM_CTL_INIT = 8'b0xxx_xxxx;
+`endif
+
+    logic [DATA_WIDTH-1:0] mem_ctl = MEM_CTL_INIT;
 
     always_ff @(posedge sys_clock_i) begin
         if (reset_i) begin
-            mem_ctl <= 8'b0xxx_xxxx;
+            mem_ctl <= MEM_CTL_INIT;
         end else if (cpu_wr_strobe_i && cpu_addr_i == 16'hFFF0) begin
             mem_ctl <= cpu_data_i;
         end

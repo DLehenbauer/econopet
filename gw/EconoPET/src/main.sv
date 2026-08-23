@@ -147,6 +147,7 @@ module main (
     logic clk8_en;
     logic cpu_addr_strobe;  // Pulsed when cpu_addr_i is valid
     logic cpu_data_strobe;  // Pulsed when cpu_data_i is valid (when cpu_we_i=1 -> cpu is writing)
+    logic cpu_data_en;      // Safe external write-data drive window
     logic cpu_hold_strobe;  // Pulsed when CPU tDHx has been met
     logic cpu_wr_en;
     logic load_sr1;
@@ -157,6 +158,7 @@ module main (
     // timing.sv's cpu_be_o drives internal RAM-address muxing (via
     // timing_cpu_be) and, in 6502 mode, the physical W65C02S's bus-enable.
     logic timing_cpu_be;
+    logic soft_cpu_clock;
 
     // CPU select, driven by the register file below (REG_CPU_SEL).
     // Three options share one bitstream; switching does not reconfigure the
@@ -178,9 +180,11 @@ module main (
         .clk16_en_o(clk16_en),
         .clk8_en_o(clk8_en),
         .cpu_be_o(timing_cpu_be),
-        .cpu_addr_strobe_o(cpu_addr_strobe),
         .cpu_clock_o(cpu_clock_o),
+        .soft_cpu_clock_o(soft_cpu_clock),
+        .cpu_addr_strobe_o(cpu_addr_strobe),
         .cpu_data_strobe_o(cpu_data_strobe),
+        .cpu_data_en_o(cpu_data_en),
         .cpu_hold_strobe_o(cpu_hold_strobe),
         .cpu_wr_en_o(cpu_wr_en),
         .load_sr1_o(load_sr1),
@@ -239,9 +243,9 @@ module main (
         .cpu6809_wr_en_o(cpu6809_wr_en)
     );
 
-    // Registered bus copy for soft-6809 consumers: one short pin-to-FF path
-    // instead of an unconstrained fan-out cone. Paired with the delayed data
-    // strobe in timing_6809. Video/WB keep the raw pins.
+    // Capture read data before external PHI2 falls. The soft cores advance
+    // later, after a peripheral may have released its read-data output.
+    // Video/WB keep the raw pins.
     logic [DATA_WIDTH-1:0] cpu_data_q;
     always_ff @(posedge sys_clock_i) begin
         cpu_data_q <= cpu_data_i;
@@ -271,9 +275,9 @@ module main (
         .RegData(mc6809_regdata)
     );
 
-    // Soft MOS 6502 core (external/m6502) -- the virtual PET CPU. Clocked by
-    // the same ~1MHz PET clock the physical W65C02S uses (cpu_clock_o), so it
-    // shares the physical CPU's bus timing (timing_cpu_be / cpu_*_strobe).
+    // Soft MOS 6502 core (external/m6502) -- the virtual PET CPU. Its falling
+    // clock edge follows external PHI2 by the PIA/VIA hold interval, so the
+    // core naturally keeps its bus outputs stable while those devices latch.
     // Held in reset unless selected; outputs muxed into active_* below.
     logic [CPU_ADDR_WIDTH-1:0] m6502_addr;
     logic [    DATA_WIDTH-1:0] m6502_dout;
@@ -281,7 +285,7 @@ module main (
     logic                      m6502_sync;  // opcode-fetch marker (SYNC)
 
     cpu_6502 cpu_6502 (
-        .i_clk(cpu_clock_o),
+        .i_clk(soft_cpu_clock),
         .o_phi1(),
         .o_phi2(),
         .i_reset_n(!cpu_reset_i && cpu_is_soft6502),
@@ -290,7 +294,7 @@ module main (
         .i_irq_n(!cpu_irq_sync[1]),   // real PET IRQ (PIA1 CB1 etc.)
         .i_so_n(1'b1),
         .o_sync(m6502_sync),
-        .i_bus_data(cpu_data_i),
+        .i_bus_data(cpu_data_q),
         .o_bus_data(m6502_dout),
         .o_bus_addr(m6502_addr),
         .o_rw(m6502_rw),
@@ -300,10 +304,8 @@ module main (
 
     // Muxed "active CPU" signals that every downstream consumer uses, so the
     // same decode/peripheral/bus logic serves whichever CPU owns the bus.
-    // Address/write-select/write-data are a 3-way select (6809 / soft 6502 /
-    // physical 6502 pins). The bus-enable + timing strobes are shared by both
-    // 6502 variants (they run at the base arbiter cadence), so those stay a
-    // 2-way "6809 vs base" mux.
+    // Address and R/W remain live because each soft core now advances only
+    // after the external PHI2 hold interval.
     wire [CPU_ADDR_WIDTH-1:0] active_cpu_addr    = cpu_is_6809     ? mc6809_addr
                                                  : cpu_is_soft6502 ? m6502_addr
                                                  :                   cpu_addr_i;
@@ -704,23 +706,30 @@ module main (
         .data_oe(open_bus_oe)
     );
 
-    // Soft cores have no bus pins, so the FPGA drives their write data.
-    wire cpu_driving_data_bus = cpu_soft && active_be && active_cpu_we;
+    // Soft cores have no bus pins, so the FPGA drives their write data. The mux
+    // selects it for the whole BE window, which gives the registered pad output
+    // time to settle before the enable below opens.
+    wire cpu_write_sel = cpu_soft && active_be && active_cpu_we;
+
+    // Mirror a physical CPU's write-data window: high-Z until the data-valid
+    // point (tMDS past rising PHI2), then held past WE's rising edge until BE
+    // drops, so releasing the driver never races the SRAM latch.
+    wire cpu_driving_data_bus = cpu_write_sel && cpu_data_en;
 
     logic [DATA_WIDTH-1:0] cpu_data_mux_out;
+    logic                  cpu_data_mux_oe;
 
     // Many controllers -> System data bus
     cpu_data_mux #(
         .COUNT(5)
     ) cpu_data_mux (
         .data_i({ open_bus_dout, ram_ctl_dout, crtc_dout, io_dout, active_cpu_dout }),
-        // The write term drives data for the whole BE window (like a real
-        // CPU), not just cpu_wr_en -- dropping data at WE's rising edge
-        // races the SRAM latch.
-        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, cpu_driving_data_bus }),
+        .oe_i({ open_bus_oe, ram_ctl_doe, crtc_oe & active_be, io_doe & active_be & !active_cpu_we, cpu_write_sel }),
         .data_o(cpu_data_mux_out),
-        .oe_o(cpu_data_oe)
+        .oe_o(cpu_data_mux_oe)
     );
+
+    assign cpu_data_oe = cpu_write_sel ? cpu_data_en : cpu_data_mux_oe;
 
     // Register the pad output; the mux select cone can miss timing. Sources
     // are stable for multiple cycles, so the delay is harmless. cpu_data_oe
@@ -787,6 +796,37 @@ module main (
 
     wire [2:0] dbg_data_bus_drivers = {ram_driving_data_bus, io_driving_data_bus, fpga_driving_data_bus};
     wire [1:0] dbg_ram_oe_we = {ram_oe_o, ram_we_o};
+
+    // PIA/VIA latch on PHI2's falling edge, and therefore require ADDR, DATA, and RW
+    // to be held stable for a short time after PHI2 drops.
+    logic [CPU_ADDR_WIDTH-1:0] dbg_prev_cpu_addr;
+    logic                      dbg_prev_cpu_we;
+    logic [    DATA_WIDTH-1:0] dbg_prev_cpu_data;
+    logic                      dbg_prev_be = 1'b0;
+    logic                      dbg_prev_data_oe = 1'b0;
+    always_ff @(posedge sys_clock_i) begin
+        // The delayed soft-core falling edges keep ADDR and R/W stable for the
+        // entire BE window.
+        if (cpu_soft && active_be && dbg_prev_be) begin
+            assert (active_cpu_addr === dbg_prev_cpu_addr)
+                else $fatal(1, "active_cpu_addr changed %h -> %h while BE asserted", dbg_prev_cpu_addr, active_cpu_addr);
+            assert (active_cpu_we === dbg_prev_cpu_we)
+                else $fatal(1, "active_cpu_we changed %b -> %b while BE asserted", dbg_prev_cpu_we, active_cpu_we);
+        end
+
+        // We assert that the FPGA's write-data output is stable while the CPU is
+        // driving the bus.
+        if (cpu_driving_data_bus && dbg_prev_data_oe) begin
+            assert (cpu_data_o === dbg_prev_cpu_data)
+                else $fatal(1, "cpu_data_o changed %h -> %h while driving write data", dbg_prev_cpu_data, cpu_data_o);
+        end
+
+        dbg_prev_be       <= active_be;
+        dbg_prev_cpu_addr <= active_cpu_addr;
+        dbg_prev_cpu_we   <= active_cpu_we;
+        dbg_prev_data_oe  <= cpu_driving_data_bus;
+        dbg_prev_cpu_data <= cpu_data_o;
+    end
 
     always_ff @(posedge sys_clock_i or negedge sys_clock_i) begin
         assert(!active_be || !ram_wb_stall) else $fatal(1, "WB<->RAM bridge must be stalled when CPU is driving bus");
