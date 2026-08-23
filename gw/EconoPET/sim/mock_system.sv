@@ -25,7 +25,7 @@ module mock_system (
     logic [DATA_WIDTH-1:0] bus_data_mux;
     logic                  bus_data_mux_oe;
 
-    assign bus_data = bus_data_mux;
+    assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
 
     // CPU
     logic cpu_be;
