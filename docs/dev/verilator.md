@@ -26,21 +26,24 @@ collide over those directories.
 
 Pass `+verilator+rand+reset+` mode as the second argument:
 
-Verilator is two-state, so this picks what an uninitialized variable becomes in
-place of X:
+Verilator is two-state. The runner maps explicit X values according to
+`--x-assign unique` and uses this mode to pick what an uninitialized variable
+becomes:
 
-- `0` -- zeros. What CTest uses: every in-repo bench passes with it, including
-  the mc6809 ones (`superpet_irq_tb`, `swi_vector_tb`). The m6502 core needs it
-  too, or `handle_irq` powers up set and counts a spurious IRQ.
-- `1` -- all ones (not random).
+- `0` -- zeros. This is the default and is required for the m6502 core, whose
+  `handle_irq` would otherwise power up set and count a spurious IRQ.
+- `1` -- all ones.
 - `2` -- random.
 
-The non-zero modes need work in the mocks before they are usable: under all
-ones, `mock_bus` reports false data-bus contention because its control inputs
-power up asserted. Override per bench with `GW_RAND_RESET_<name>`.
+Override individual benches with `GW_RAND_RESET_<name>` when an upstream model
+requires a particular power-up state.
 
 ## Known constraints
 
+- Verilator resolves a released (`'z`) net to a defined level, so bus ownership
+  cannot be inferred from the bus value. `sim/mock_sram.sv`, `sim/mock_cpu.sv`,
+  and `sim/mock_bus.sv` therefore carry an explicit output-enable alongside
+  each data value and assert `$onehot0` over the enables at the sampling edge.
 - `sim/mock_sram.sv` must latch write data during the WE-low window: the
   WB->RAM bridge drops its data output enable on the edge WE rises, and
   Verilator's evaluation order otherwise commits a released bus.
