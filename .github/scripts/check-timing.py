@@ -50,8 +50,7 @@ def parse_relationships(report: Path) -> dict[str, list[tuple[float, str, str]]]
                 continue
 
             try:
-                slack = float(fields[-2])
-                float(fields[-3])
+                _constraint, slack = map(float, fields[-3:-1])
             except ValueError:
                 continue
 
