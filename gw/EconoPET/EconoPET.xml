@@ -73,6 +73,7 @@
         <efx:sim_file name="sim/bram_tb.sv"/>
         <efx:sim_file name="sim/ram_tb.sv"/>
         <efx:sim_file name="sim/timing_tb.sv"/>
+        <efx:sim_file name="sim/sid_voice_tb.sv"/>
         <efx:sim_file name="sim/register_file_tb.sv"/>
         <efx:sim_file name="sim/keyboard_tb.sv"/>
         <efx:sim_file name="sim/video_tb.sv"/>

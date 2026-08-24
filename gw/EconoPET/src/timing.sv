@@ -283,6 +283,25 @@ module timing (
            && CPU_BE_END < CPU_END))
             $fatal(1, "CPU timing events out of order: BE_START=%0d ADDR_STROBE=%0d PHI_START=%0d DATA_STROBE=%0d WR_END=%0d PHI_END=%0d HOLD_STROBE=%0d BE_END=%0d CPU_END=%0d",
                 CPU_BE_START, CPU_ADDR_STROBE, CPU_PHI_START, CPU_DATA_STROBE, CPU_WR_END, CPU_PHI_END, CPU_HOLD_STROBE, CPU_BE_END, CPU_END);
+
+        // EconoPET.sdc derives exact '-edges' waveforms from these arbiter
+        // cycle labels. STA cannot read these localparams, so a datasheet
+        // constant change would silently invalidate the clock model. The SDC
+        // helper separately accounts for cycle_count's initial phase.
+        // timing_6809 registers E off cpu_clock_o and Q off the address strobe
+        // and write-enable window, so both lag their source by one cycle.
+        if (CPU_PHI_START != 52 || CPU_BE_END != 61)
+            $fatal(1, "EconoPET.sdc cpu_phi arbiter cycles {52 61} are stale: PHI_START=%0d BE_END=%0d",
+                CPU_PHI_START, CPU_BE_END);
+        if (CPU_PHI_START + 1 != 53 || CPU_PHI_END + 1 != 61)
+            $fatal(1, "EconoPET.sdc e6809 arbiter cycles {53 61} are stale: PHI_START+1=%0d PHI_END+1=%0d",
+                CPU_PHI_START + 1, CPU_PHI_END + 1);
+        if (CPU_ADDR_STROBE + 1 != 51 || CPU_WR_END + 1 != 60)
+            $fatal(1, "EconoPET.sdc q6809 arbiter cycles {51 60} are stale: ADDR_STROBE+1=%0d WR_END+1=%0d",
+                CPU_ADDR_STROBE + 1, CPU_WR_END + 1);
+        if (CPU_DATA_STROBE + 1 != 56)
+            $fatal(1, "EconoPET.sdc soft_cpu_data_capture arbiter cycle 56 is stale: DATA_STROBE+1=%0d",
+                CPU_DATA_STROBE + 1);
     end
     // synthesis on
 endmodule

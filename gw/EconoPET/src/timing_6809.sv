@@ -19,7 +19,6 @@ module timing_6809 (
     input  logic cpu_be_i,           // timing.sv's cpu_be_o
     input  logic cpu_clock_i,        // timing.sv's cpu_clock_o (PHI2-shaped pulse)
     input  logic cpu_addr_strobe_i,
-    input  logic cpu_data_strobe_i,
     input  logic cpu_hold_strobe_i,
     input  logic cpu_wr_en_i,
 
@@ -27,7 +26,6 @@ module timing_6809 (
     output logic cpu6809_e_o,
     output logic cpu6809_q_o,
     output logic cpu6809_addr_strobe_o,
-    output logic cpu6809_data_strobe_o,
     output logic cpu6809_hold_strobe_o,
     output logic cpu6809_wr_en_o
 );
@@ -38,19 +36,9 @@ module timing_6809 (
     assign cpu6809_hold_strobe_o = cpu_hold_strobe_i;
     assign cpu6809_wr_en_o       = cpu_wr_en_i;
 
-    // The 6809-side data strobe is delayed one sys clock so consumers
-    // sample the registered bus copy (main.sv cpu_data_q), buying a full
-    // cycle of pin-to-FF routing budget for data that was already valid at
-    // CPU_DATA_STROBE.
-    logic data_strobe_q = 1'b0;
-    always_ff @(posedge sys_clock_i) begin
-        data_strobe_q <= cpu_data_strobe_i;
-    end
-    assign cpu6809_data_strobe_o = data_strobe_q;
-
     // E: registered copy of cpu_clock_i (the PHI2-shaped pulse), so the E
-    // edges land one sys clock after the arbiter's -- matching the delayed
-    // data strobe above.
+    // edges land one sys clock after the arbiter's. main.sv provides the
+    // shared captured-data strobe used by both soft cores.
     logic e_reg = 1'b0;
     always_ff @(posedge sys_clock_i) begin
         e_reg <= cpu_clock_i;

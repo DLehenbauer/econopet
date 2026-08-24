@@ -216,7 +216,7 @@ module main (
     logic [111:0] mc6809_regdata;
 
     logic cpu6809_be, cpu6809_e, cpu6809_q;
-    logic cpu6809_addr_strobe, cpu6809_data_strobe, cpu6809_hold_strobe, cpu6809_wr_en;
+    logic cpu6809_addr_strobe, cpu6809_hold_strobe, cpu6809_wr_en;
 
     // cpu_irq_i is asynchronous to sys_clock_i (wire-ORed by the real
     // PIA1/PIA2/VIA chips), so double-flop it before mc6809i's nIRQ.
@@ -230,7 +230,6 @@ module main (
         .cpu_be_i(timing_cpu_be),
         .cpu_clock_i(cpu_clock_o),
         .cpu_addr_strobe_i(cpu_addr_strobe),
-        .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),
         .cpu_wr_en_i(cpu_wr_en),
 
@@ -238,21 +237,28 @@ module main (
         .cpu6809_e_o(cpu6809_e),
         .cpu6809_q_o(cpu6809_q),
         .cpu6809_addr_strobe_o(cpu6809_addr_strobe),
-        .cpu6809_data_strobe_o(cpu6809_data_strobe),
         .cpu6809_hold_strobe_o(cpu6809_hold_strobe),
         .cpu6809_wr_en_o(cpu6809_wr_en)
     );
 
     // Capture read data before external PHI2 falls. The soft cores advance
     // later, after a peripheral may have released its read-data output.
-    // Video/WB keep the raw pins.
-    logic [DATA_WIDTH-1:0] cpu_data_q;
+    // Delay the consumer strobe so same-edge consumers see the new capture.
+    // Both soft cores and the physical CPU share this captured-data boundary.
+    // Video/WB keep the raw pins and raw strobe.
+    logic [DATA_WIDTH-1:0] cpu_data_q = '0;
+    logic [DATA_WIDTH-1:0] soft_cpu_data_q = '0;
+    logic                  cpu_data_strobe_q = 1'b0;
     always_ff @(posedge sys_clock_i) begin
-        cpu_data_q <= cpu_data_i;
+        if (cpu_data_strobe) cpu_data_q <= cpu_data_i;
+        cpu_data_strobe_q <= cpu_data_strobe;
+    end
+    always_ff @(posedge cpu_data_strobe_q) begin
+        soft_cpu_data_q <= cpu_data_i;
     end
 
     mc6809i mc6809 (
-        .D(cpu_data_q),
+        .D(soft_cpu_data_q),
         .DOut(mc6809_dout),
         .ADDR(mc6809_addr),
         .RnW(mc6809_rnw),
@@ -294,7 +300,7 @@ module main (
         .i_irq_n(!cpu_irq_sync[1]),   // real PET IRQ (PIA1 CB1 etc.)
         .i_so_n(1'b1),
         .o_sync(m6502_sync),
-        .i_bus_data(cpu_data_q),
+        .i_bus_data(soft_cpu_data_q),
         .o_bus_data(m6502_dout),
         .o_bus_addr(m6502_addr),
         .o_rw(m6502_rw),
@@ -315,7 +321,7 @@ module main (
     wire [    DATA_WIDTH-1:0] active_cpu_dout    = cpu_is_6809 ? mc6809_dout : m6502_dout;
     wire                      active_be          = cpu_is_6809 ? cpu6809_be           : timing_cpu_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe  : cpu_addr_strobe;
-    wire                      active_data_strobe = cpu_is_6809 ? cpu6809_data_strobe  : cpu_data_strobe;
+    wire                      active_data_strobe = cpu_data_strobe_q;
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en        : cpu_wr_en;
 
     // Physical-6502 presence detector. When the physical CPU is selected
