@@ -117,7 +117,7 @@ def main() -> int:
 
     failed = False
     for kind, entries in relationships.items():
-        slack, launch_clock, capture_clock = min(entries)
+        slack, launch_clock, capture_clock = min(entries, key=lambda entry: entry[0])
         print(
             f"Worst {kind} slack: {slack:.3f} ns "
             f"({launch_clock} -> {capture_clock})"
