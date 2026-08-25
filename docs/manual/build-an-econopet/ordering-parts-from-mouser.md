@@ -42,5 +42,6 @@ SC1628|358-SC1628|1|32GB microSD card (known good, but feel free to try what you
 RASPC722X|502-RASPC722X|1|DC Power Jack (optional: for standalone use)|[datasheet](https://www.mouser.com/datasheet/3/144/1/rapc722x_cd.pdf)
 LCBSBM-7-01A-RT|144-LCBSBM-7-01A-RT|2 or 4|PCB Mounting Pillar (get 4 if using standalone)|[datasheet](https://www.essentracomponents.com/en-us/p/self-adhesive-pcb-support-pillars-non-locking/lcbsbm-7-01a-rt)
 EEU-FM1V331|667-EEU-FM1V331|1|330uF 35V low-ESR capacitor (C89)|[datasheet](https://industrial.panasonic.com/cdbs/www-data/pdf/RDF0000/ABA0000C1018.pdf)
+25YXJ4700M16X31.5|232-25YXJ4700M16X315|1|4700uF 25V low-ESR capacitor (C7, 7.5mm lead spacing, 16mm diameter)|[datasheet](https://www.mouser.com/datasheet/3/3655/1/YXJ.pdf)
 
 Next: [Assembling the board](assembling-the-board.md)

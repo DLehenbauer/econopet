@@ -20,7 +20,7 @@ Most through-hole parts are symmetrical or keyed, but pay attention to:
 
 - ICs and IC sockets: align the notch with the silkscreen (notch toward the top of the board).
 - DIP switch: orient so the "ON" side faces toward the FPGA, matching the silkscreen.
-- Polarized capacitor (C89): the longer lead is positive (+). Match the PCB '+' marking. C89 has multiple hole patterns.  Use the closest pair of holes to match the capacitor lead spacing.
+- Polarized capacitors (C89 and C7): the longer lead is positive (+). Match the PCB '+' marking. C89 has multiple hole patterns. Use the closest pair of holes to match the capacitor lead spacing.
 - Shrouded SWD/JTAG connector: the connector is keyed. Orient the notch toward the HDMI connector, matching the silkscreen.
 
 ## Header splitting and keying

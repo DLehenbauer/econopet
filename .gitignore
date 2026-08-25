@@ -57,6 +57,7 @@ build/
 
 site/dist
 site/node_modules
+site/.venv
 
 #
 # ROMs
