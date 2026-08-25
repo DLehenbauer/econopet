@@ -52,6 +52,13 @@ gw/EconoPET/work_syn/**/*
 build/
 
 #
+# Python
+#
+
+__pycache__/
+*.py[cod]
+
+#
 # Site
 #
 

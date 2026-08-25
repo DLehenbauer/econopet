@@ -32,6 +32,36 @@ set spi_freq_mhz 24
 set spi_period_ns [ns_from_mhz $spi_freq_mhz]
 create_clock -period $spi_period_ns -name spi0_sck_i [get_ports {spi0_sck_i}]
 
+# The soft-core clocks are short pulses from timing.sv's 64-cycle arbiter, not
+# 50%-duty clock divisions. Cycle numbers below are the arbiter's cycle_count
+# value matched by the registered assignment that drives each edge; timing.sv
+# asserts them against its own constants, so keep the two in sync.
+set sys_cycles_per_frame 64
+
+# cycle_count initializes to 63. The first sys_clock_i rising edge processes
+# cycle 63, the second processes cycle 0, and arbiter cycle N therefore occurs
+# on source clock edge 2N+3.
+proc arbiter_clock_edges { rise fall } {
+    global sys_cycles_per_frame
+    return [list [expr { 2 * $rise + 3 }] \
+                 [expr { 2 * $fall + 3 }] \
+                 [expr { 2 * ($rise + $sys_cycles_per_frame) + 3 }]]
+}
+
+#                                                              rise fall
+create_generated_clock -name cpu_phi -source [get_ports {sys_clock_i}] \
+    -edges [arbiter_clock_edges 52 61] [get_nets {main/soft_cpu_clock}]
+create_generated_clock -name e6809 -source [get_ports {sys_clock_i}] \
+    -edges [arbiter_clock_edges 53 61] [get_nets {main/cpu6809_e}]
+create_generated_clock -name q6809 -source [get_ports {sys_clock_i}] \
+    -edges [arbiter_clock_edges 51 60] [get_nets {main/cpu6809_q}]
+
+# cpu_data_strobe_q is a one-cycle pulse that clocks soft_cpu_data_q at arbiter
+# cycle 56. Model that real launch clock so STA derives the five-cycle setup
+# and full-frame hold relationships without a data-path exception.
+create_generated_clock -name soft_cpu_data_capture -source [get_ports {sys_clock_i}] \
+    -edges [arbiter_clock_edges 56 57] [get_nets {main/cpu_data_strobe_q}]
+
 # Declare clock domains asynchronous (must list all groups explicitly).
 set_clock_groups -asynchronous \
     -group {sys_clock_i} \
@@ -212,14 +242,31 @@ set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 # SDC) guarantees data validity.
 
 set_false_path -from [get_ports {cpu_addr_i[*]}]
-# cpu_data_i has a multi-cycle validity window, but a false path lets P&R
-# stretch the pin-to-FF route without limit. 25ns (~1.6 sys clocks) is a
-# generous bound over the achievable route while keeping it finite.
-# cpu_addr_i keeps its false path: it is decoded combinationally inside
-# the bus window, with no registered capture to protect.
-set_max_delay -from [get_ports {cpu_data_i[*]}] 25.0
 set_false_path -from [get_ports {cpu_we_n_i}]
 set_false_path -from [get_ports {cpu_sync_i}]
+
+# cpu_data_i has a multi-cycle bus-valid window, but a false path would let P&R
+# stretch the pin-to-FF route without limit. cpu_data_strobe is registered, so
+# data guaranteed valid at that phase must reach cpu_data_q by the following
+# sys_clock_i edge. Applying the one-period bound to every data-input endpoint
+# is conservative for the other raw-pin consumers.
+set_max_delay -from [get_ports {cpu_data_i[*]}] $sys_period_ns
+
+# Other crossings are control/status signals with generous protocol budgets.
+# The cores' internal paths retain their microsecond clock period.
+set_max_delay -from [get_clocks {cpu_phi}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {e6809}] -to [get_clocks {sys_clock_i}] 40.0
+set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
+
+# READY and interrupt controls are edge-elastic: accepting either level when a
+# synchronized control changes on the same source edge is valid. The 6809's
+# IRQSample register also provides the first Q-domain synchronizer stage.
+set_multicycle_path -hold 1 -start \
+    -from [get_cells {main/bp_halted* main/reg_cpu_ready*}] \
+    -to [get_clocks {cpu_phi}]
+set_multicycle_path -hold 1 -start \
+    -from [get_cells {main/cpu_irq_sync*}] \
+    -to [get_clocks {cpu_phi q6809}]
 
 # ============================================================================
 # Asynchronous / Quasi-Static Inputs
@@ -235,12 +282,17 @@ set_false_path -from [get_ports {graphic_i}]
 set_false_path -from [get_ports {diag_i via_cb2_i}]
 set_false_path -from [get_ports {cpu_reset_n_i}]
 
-# cpu_irq_n_i and cpu_nmi_n_i are currently optimized away by synthesis (no
-# fanout). Constraints are omitted to avoid warnings. If these ports gain
-# fanout in a future revision, add false-path constraints here.
-#
-# set_false_path -from [get_ports {cpu_irq_n_i cpu_nmi_n_i}]
+# cpu_irq_n_i feeds the soft cores through a double-flop synchronizer --
+# async by design. cpu_nmi_n_i is still optimized away (no fanout); its
+# constraint is omitted to avoid warnings.
+set_false_path -from [get_ports {cpu_irq_n_i}]
 
 # pmod2_i is passed through combinationally to pmod1_o (debug loopback).
 # No synchronous timing requirement.
 set_false_path -from [get_ports {pmod2_i[*]}]
+
+# cpu_sel (main.sv) is quasi-static: it changes only during a CPU swap,
+# while both soft cores are held in reset and no bus cycle is in flight,
+# so its fanout into the address mux and SID decode has no synchronous
+# deadline.
+set_false_path -from [get_cells {main/cpu_sel*}]

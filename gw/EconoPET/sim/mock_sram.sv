@@ -283,4 +283,97 @@ module mock_sram #(
 
         $display("[%t] Filled SRAM [$%x-$%x] with $%h", $time, start_addr, stop_addr, data);
     endtask
+
+    // Screen code -> printable ASCII, for the text dump below. Codes $00-$1F are
+    // @A-Z[\]^_, $20-$3F map straight to ASCII, and the graphics half shows as '.'.
+    // Plain assignments rather than 'return': an earlier formulation tripped a
+    // vvp runtime assertion (vthread.cc of_RET_VEC4). The exact trigger was not
+    // isolated, so this keeps to the simplest form that works in both simulators.
+    function automatic [7:0] screen_code_to_ascii(input bit [DW-1:0] code);
+        bit [6:0] c;
+        begin
+            c = code[6:0];                  // bit 7 is reverse video
+            if (c == 7'h00)      screen_code_to_ascii = 8'h40;               // @
+            else if (c <= 7'h1A) screen_code_to_ascii = 8'h41 + {1'b0, c} - 8'h01;
+            else if (c <= 7'h1F) screen_code_to_ascii = 8'h5B + {1'b0, c} - 8'h1B;
+            else if (c <= 7'h3F) screen_code_to_ascii = {1'b0, c};
+            else                 screen_code_to_ascii = 8'h2E;               // '.'
+        end
+    endfunction
+
+    // Search the text screen for a string, comparing through the same screen
+    // code -> ASCII mapping the dump uses. Wraps at the end of a row, matching
+    // how the PET wraps long lines.
+    function automatic bit screen_contains(
+        input bit [ADDR_WIDTH-1:0] vram_base,
+        input int cols,
+        input int rows,
+        input string needle
+    );
+        int n, i, j;
+        bit hit;
+        begin
+            n = needle.len();
+            screen_contains = 1'b0;
+            for (i = 0; i <= cols * rows - n; i++) begin
+                hit = 1'b1;
+                for (j = 0; j < n; j++)
+                    if (screen_code_to_ascii(mem[vram_base + ADDR_WIDTH'(i + j)])
+                        != needle[j]) hit = 1'b0;
+                if (hit) screen_contains = 1'b1;
+            end
+        end
+    endfunction
+
+    // Dump the text screen as it would appear on the CRT: readable ASCII to the
+    // log, and the real glyphs (expanded through the character ROM) to an ASCII
+    // PGM if 'pgm_file' is non-empty. Call at the end of a bench to show what it
+    // actually rendered rather than trusting a byte comparison.
+    task automatic dump_screen(
+        input bit [ADDR_WIDTH-1:0] vram_base,
+        input bit [ADDR_WIDTH-1:0] vrom_base,
+        input int cols,
+        input int rows,
+        input string pgm_file       // "" to skip the image and log text only
+    );
+        int file, r, c, line, bit_index;
+        string text;
+        bit [DW-1:0] code, glyph;
+
+        $display("[%t] Screen (%0dx%0d) from VRAM $%x:", $time, cols, rows, vram_base);
+        for (r = 0; r < rows; r++) begin
+            text = "";
+            for (c = 0; c < cols; c++) begin
+                code = mem[vram_base + ADDR_WIDTH'(r * cols + c)];
+                text = { text, $sformatf("%c", screen_code_to_ascii(code)) };
+            end
+            $display("  |%s|", text);
+        end
+
+        if (pgm_file != "") begin
+            file = $fopen(pgm_file, "w");
+            if (file == 0) begin
+                $display("[%t] dump_screen: cannot open '%s'", $time, pgm_file);
+            end else begin
+                // P2 (ASCII) rather than binary PGM, so both simulators agree.
+                // Full 0/255 range: a maxval of 1 is legal but renders nearly
+                // black in viewers that do not rescale.
+                $fwrite(file, "P2\n%0d %0d\n255\n", cols * 8, rows * 8);
+                for (r = 0; r < rows; r++)
+                    for (line = 0; line < 8; line++) begin
+                        for (c = 0; c < cols; c++) begin
+                            code  = mem[vram_base + ADDR_WIDTH'(r * cols + c)];
+                            glyph = mem[vrom_base + ADDR_WIDTH'(int'(code[6:0]) * 8 + line)];
+                            if (code[DW-1]) glyph = ~glyph;     // reverse video
+                            for (bit_index = 7; bit_index >= 0; bit_index--)
+                                $fwrite(file, "%0d ", glyph[bit_index] ? 255 : 0);
+                        end
+                        $fwrite(file, "\n");
+                    end
+                $fclose(file);
+                $display("[%t] Wrote %0dx%0d screen image to '%s'",
+                         $time, cols * 8, rows * 8, pgm_file);
+            end
+        end
+    endtask
 endmodule

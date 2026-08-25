@@ -36,6 +36,7 @@ foreach(TB_FILE ${TB_FILES})
             -o ${VVP_FILE}
             -f ${WORK_SIM_DIR}/EconoPET.f
             -f ${WORK_SIM_DIR}/timescale.f
+            -Iexternal/m6502/rtl
             -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
         WORKING_DIRECTORY ${PROJ_DIR}
         COMMENT "Compiling ${TB_NAME} with iverilog"
