@@ -9,8 +9,10 @@ module timing (
     output logic clk8_en_o,
     output logic cpu_be_o,
     output logic cpu_clock_o,
+    output logic soft_cpu_clock_o,
     output logic cpu_addr_strobe_o, // Pulsed when cpu_addr_i is valid
     output logic cpu_data_strobe_o, // Pulsed when cpu_data_i is valid (when cpu_we_i=1 -> cpu is writing)
+    output logic cpu_data_en_o,     // High over the CPU's write-data window (CPU_DATA_STROBE..CPU_BE_END)
     output logic cpu_hold_strobe_o, // Pulsed when CPU tDHx has been met
     output logic cpu_wr_en_o,
     output logic load_sr1_o,
@@ -23,8 +25,10 @@ module timing (
         clk8_en_o         = 1'b0;
         cpu_be_o          = 1'b0;
         cpu_clock_o       = 1'b0;
+        soft_cpu_clock_o  = 1'b0;
         cpu_addr_strobe_o = 1'b0;
         cpu_data_strobe_o = 1'b0;
+        cpu_data_en_o     = 1'b0;
         cpu_hold_strobe_o = 1'b0;
         cpu_wr_en_o       = 1'b0;
     end
@@ -70,6 +74,9 @@ module timing (
     // Worst-case data hold time across read (tDHR) and write (tDHW) paths.
     localparam int CPU_tDHx = common_pkg::max2(CPU_tDHR, CPU_tDHW);
 
+    // Worst-case hold time after falling PHI2 across the CPU and IO devices.
+    localparam int BUS_tHOLD = common_pkg::max2(CPU_tDHx, IO_tHOLD);
+
     // Worst-case IO transceiver enable delay across all /OE-to-output paths.
     localparam int IOTX_t = common_pkg::max4(IOTX_tPZL_A, IOTX_tPZH_A, IOTX_tPZL_B, IOTX_tPZH_B);
 
@@ -82,7 +89,7 @@ module timing (
                    CYCLES_MDS   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tMDS),
                    CYCLES_CDR   = common_pkg::ns_to_cycles_with_trace_delay(IO_tCDR + IOTX_tPD),
                    CYCLES_PWH   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tPWH),
-                   CYCLES_DHX   = common_pkg::ns_to_cycles_with_trace_delay(CPU_tDHx);
+                   CYCLES_HOLD  = common_pkg::ns_to_cycles_with_trace_delay(BUS_tHOLD);
 
     localparam int CPU_START = CPU_1 * 8,       // Each arbiter reservation is 8 cycles (125ns)
                    CPU_END   = CPU_START + 16;  // CPU controls bus for two consecutive slots (250ns)
@@ -91,7 +98,7 @@ module timing (
                    CPU_ADDR_STROBE  = CPU_START + CYCLES_BVD - 1,   // Asserts 1 cycle before cpu_addr_i is valid
                    CPU_BE_END       = CPU_END - CYCLES_BVD,         // Allow tBVD for bus to return to High-Z
                    CPU_PHI_START    = CPU_BE_START + CYCLES_BVD + CYCLES_IOTX,
-                   CPU_PHI_END      = CPU_BE_END - CYCLES_DHX;      // Hold data for tDHx after end of PHI2
+                   CPU_PHI_END      = CPU_BE_END - CYCLES_HOLD;     // Hold the bus after external PHI2 falls
 
     // Data strobe fires at the earliest cycle when data from all bus drivers
     // is guaranteed to be valid:
@@ -139,11 +146,13 @@ module timing (
                 cpu_addr_strobe_o <= 1'b1;
             end
             CPU_PHI_START_W: begin
-                cpu_clock_o <= 1'b1;
+                cpu_clock_o      <= 1'b1;
+                soft_cpu_clock_o <= 1'b1;
             end
             CPU_DATA_STROBE_W: begin
                 cpu_data_strobe_o <= 1'b1;
-                cpu_wr_en_o <= 1'b1;
+                cpu_data_en_o     <= 1'b1;
+                cpu_wr_en_o       <= 1'b1;
             end
             CPU_WR_END_W: begin
                 cpu_wr_en_o <= 1'b0;
@@ -152,7 +161,9 @@ module timing (
                 cpu_clock_o <= 1'b0;
             end
             CPU_BE_END_W: begin
-                cpu_be_o <= 1'b0;
+                soft_cpu_clock_o <= 1'b0;
+                cpu_data_en_o    <= 1'b0;
+                cpu_be_o         <= 1'b0;
             end
             default: /* do nothing */;
         endcase
@@ -196,10 +207,17 @@ module timing (
                 (CPU_ADDR_STROBE - CPU_BE_START + 1) * NS_PER_CYCLE,
                 CPU_tBVD + 2 * MAX_TRACE_DELAY_NS);
 
-        // Data must be held after PHI2 falls (tDHx)
-        if ((CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE < CPU_tDHx)
-            $fatal(1, "Data hold time %.1fns violates tDHx >= %0dns",
-                (CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE, CPU_tDHx);
+        // The physical CPU and IO devices require the bus to remain stable
+        // after external PHI2 falls.
+        if ((CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE < BUS_tHOLD)
+            $fatal(1, "Bus hold time %.1fns violates tHOLD >= %0dns",
+                (CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE, BUS_tHOLD);
+
+        // Soft cores advance on their falling clock edge, so that edge must
+        // follow the external PHI2 hold interval.
+        if ((CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE < IO_tHOLD)
+            $fatal(1, "Soft CPU clock delay %.1fns violates IO hold >= %0dns",
+                (CPU_BE_END - CPU_PHI_END) * NS_PER_CYCLE, IO_tHOLD);
 
         // Hold strobe must not fire until the CPU hold requirement has been met.
         if ((CPU_HOLD_STROBE - CPU_PHI_END + 1) * NS_PER_CYCLE < CPU_tDHx)
@@ -265,6 +283,25 @@ module timing (
            && CPU_BE_END < CPU_END))
             $fatal(1, "CPU timing events out of order: BE_START=%0d ADDR_STROBE=%0d PHI_START=%0d DATA_STROBE=%0d WR_END=%0d PHI_END=%0d HOLD_STROBE=%0d BE_END=%0d CPU_END=%0d",
                 CPU_BE_START, CPU_ADDR_STROBE, CPU_PHI_START, CPU_DATA_STROBE, CPU_WR_END, CPU_PHI_END, CPU_HOLD_STROBE, CPU_BE_END, CPU_END);
+
+        // EconoPET.sdc derives exact '-edges' waveforms from these arbiter
+        // cycle labels. STA cannot read these localparams, so a datasheet
+        // constant change would silently invalidate the clock model. The SDC
+        // helper separately accounts for cycle_count's initial phase.
+        // timing_6809 registers E off cpu_clock_o and Q off the address strobe
+        // and write-enable window, so both lag their source by one cycle.
+        if (CPU_PHI_START != 52 || CPU_BE_END != 61)
+            $fatal(1, "EconoPET.sdc cpu_phi arbiter cycles {52 61} are stale: PHI_START=%0d BE_END=%0d",
+                CPU_PHI_START, CPU_BE_END);
+        if (CPU_PHI_START + 1 != 53 || CPU_PHI_END + 1 != 61)
+            $fatal(1, "EconoPET.sdc e6809 arbiter cycles {53 61} are stale: PHI_START+1=%0d PHI_END+1=%0d",
+                CPU_PHI_START + 1, CPU_PHI_END + 1);
+        if (CPU_ADDR_STROBE + 1 != 51 || CPU_WR_END + 1 != 60)
+            $fatal(1, "EconoPET.sdc q6809 arbiter cycles {51 60} are stale: ADDR_STROBE+1=%0d WR_END+1=%0d",
+                CPU_ADDR_STROBE + 1, CPU_WR_END + 1);
+        if (CPU_DATA_STROBE + 1 != 56)
+            $fatal(1, "EconoPET.sdc soft_cpu_data_capture arbiter cycle 56 is stale: DATA_STROBE+1=%0d",
+                CPU_DATA_STROBE + 1);
     end
     // synthesis on
 endmodule

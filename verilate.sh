@@ -19,7 +19,10 @@ fi
 
 cd "$PROJ_DIR" || exit 1
 
-verilator --binary --timing -j "$(nproc)" \
+# Build threads per model; lower it if running many of these at once.
+VERILATOR_JOBS="${VERILATOR_JOBS:-$(nproc)}"
+
+verilator --binary --timing -j "$VERILATOR_JOBS" \
     --x-assign unique --x-initial unique \
     -Wno-fatal -Wno-lint -Wno-style \
     --timescale 1ns/1ps \

@@ -49,6 +49,47 @@ Minimum Phi2 pulse width is high 62ns and low 63ns (tPWH, tPWL).
 
 - At maximum clock rate, RAM has 70ns between ADDR stabilizing and the beginning of the read setup time (tACC).
 
+## Soft-CPU Bus Timing
+
+The physical PIA and VIA use `cpu_clock_o` as PHI2. The soft CPUs use separate
+fabric clocks so their bus state does not advance until after the external
+peripherals have observed falling PHI2 and completed their hold interval.
+
+Within the 64-cycle, 64MHz arbiter frame:
+
+| Event | Arbiter cycle | Purpose |
+|-------|--------------:|---------|
+| External PHI2 rises | 52 | Starts the physical peripheral transfer |
+| CPU data strobe | 55 | External read or write data is guaranteed valid |
+| External PHI2 falls | 60 | PIA and VIA latch the transfer |
+| Soft 6809 Q falls | 60 | Samples synchronized interrupt inputs |
+| Soft 6502 clock and 6809 E fall | 61 | Advances the selected soft CPU |
+
+The 15.625ns interval from external PHI2 falling at cycle 60 to the soft-CPU
+falling edge at cycle 61 exceeds the VIA's worst-case 10ns hold requirement.
+Consequently, soft-CPU address, R/W, and write data remain stable without
+adding bus latches.
+
+`cpu_data_strobe` is itself registered. `main.sv` observes it on the following
+system-clock edge, captures `cpu_data_q` for system-clock consumers, and raises
+the delayed consumer strobe. That pulse also clocks `soft_cpu_data_q`, an
+independent copy used only by the soft cores. This gives external data one
+system-clock period to reach both capture registers. The soft-core copy remains
+stable for five more system cycles before the selected core falls.
+
+`EconoPET.sdc` models the short soft-core pulses with explicit generated-clock
+edges. The first rising edge processes the initial `cycle_count` value 63, so
+arbiter cycle 0 is processed on the second rising edge. SDC numbers every
+source-clock transition (rise 1, fall 2, next rise 3), so arbiter cycle N
+corresponds to source edge `2N+3`. The SDC also constrains the pin-to-capture
+path to one system period. The delayed `cpu_data_strobe_q` pulse directly clocks
+`soft_cpu_data_q` at cycle 56 and is declared as its generated launch clock.
+STA can therefore derive the five-cycle setup and full-frame hold relationships
+without a data-path exception. Keeping `cpu_data_q` on `sys_clock_i` separately
+gives its consumers an ordinary one-cycle relationship. Remaining hold
+adjustments are limited to edge-elastic READY/interrupt controls. The 6809's
+IRQ sample register provides the first Q-domain synchronizer stage.
+
 ## W65C21N (PIA)
 
 ([Datasheet](https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf))
@@ -73,9 +114,9 @@ Minimum Phi2 pulse width is high 62ns and low 63ns (tPWH, tPWL).
 ### Summary
 
 - Minimum Phi2 pulse width is high 35ns and low 35ns (tCYC, tC)
-- ADDR, RWD, CS2B must be stable at least 8ns before rising Phi2 (tACR, tACW) and may be released 0ns after falling edge (tCAR, tCAW)
-- Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR) and should be held 5ns before falling edge (tHR)
-- Peripheral write data must be set up 10ns before rising Phi2 (tDCW) and held 5ns after falling edge (tHW)
+- ADDR, RWD, CS2B must be stable at least 8ns before rising Phi2 (tACR, tACW) and may be released 0ns after falling Phi2 (tCAR, tCAW)
+- Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR) and is held 5ns after falling Phi2 (tHR)
+- Peripheral write data must be set up 10ns before falling Phi2 (tDCW) and held 5ns after falling Phi2 (tHW)
 - Peripheral-side data can appear within 20ns after rising Phi2 (tCPW)
 
 ## W65C22N (VIA)
@@ -89,12 +130,12 @@ Minimum Phi2 pulse width is high 62ns and low 63ns (tPWH, tPWL).
 | tPWL   | Phase 2 Pulse Width Low                       |  35 |   - | ns    |
 | tR,F   | Phase 2 Transition                            |   - |   5 | ns    |
 | tACR   | CSx, RSx, RWB Setup - READ                    |  10 |   - | ns    |
-| tCAR   | CSx, RSx, RWB Hold (PHI2 rising edge) - READ  |  10 |   - | ns    |
+| tCAR   | CSx, RSx, RWB Hold (PHI2 falling edge) - READ |  10 |   - | ns    |
 | tCDR   | Data Bus Delay                                |   - |  20 | ns    |
 | tHR    | Data Bus Hold Time                            |  10 |   - | ns    |
 | tPCR   | Peripheral Data Setup                         |  10 |   - | ns    |
 | tACW   | CSx, RSx, RWB Setup - WRITE                   |  10 |   - | ns    |
-| tCAW   | CSx, RSx, RWB Hold (PHI2 rising edge) - WRITE |  10 |   - | ns    |
+| tCAW   | CSx, RSx, RWB Hold (PHI2 falling edge) - WRITE | 10 |   - | ns    |
 | tDCW   | Data Bus Setup                                |  10 |   - | ns    |
 | tHW    | Data Bus Hold                                 |  10 |   - | ns    |
 | tCPW   | Peripheral Data Delay                         |   - | 250 | ns    |
@@ -102,9 +143,9 @@ Minimum Phi2 pulse width is high 62ns and low 63ns (tPWH, tPWL).
 ### Summary
 
 - Minimum Phi2 pulse width is high 35ns and low 35ns (tPWH, tPWL)
-- ADDR/CSx/RSx/RWB stable at least 10ns before rising Phi2 (tACR, tACW) and held 10ns after rising edge (tCAR, tCAW).
-- Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR) and should be held ~10ns around the edge (tHR, tPCR ~10ns setup).
-- Peripheral write data must be set up 10ns before rising Phi2 (tDCW) and held 10ns after rising edge (tHW).
+- ADDR/CSx/RSx/RWB must be stable at least 10ns before rising Phi2 (tACR, tACW) and held 10ns after falling Phi2 (tCAR, tCAW).
+- Peripheral read data becomes valid within 20ns after rising Phi2 (tCDR) and is held 10ns after falling Phi2 (tHR).
+- Peripheral write data must be set up 10ns before falling Phi2 (tDCW) and held 10ns after falling Phi2 (tHW).
 - Peripheral-side data can appear within ~250ns after rising Phi2 (tCPW).
 
 ## SN74LVC4245A (Level Shifter)

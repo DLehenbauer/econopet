@@ -6,6 +6,22 @@
 Verilator's compiled model runs the long boot-style benches orders of
 magnitude faster than iverilog, making them practical to run routinely.
 
+## Via CTest
+
+Every bench is registered twice: `<name>` on Icarus (label `iv`) and
+`<name>_vl` on Verilator (label `vl`). Full-boot benches are Verilator-only
+and take the `boot` label.
+
+    ctest --preset gw        # Icarus, the default suite
+    ctest --preset gw-vl     # same benches under Verilator
+    ctest --preset gw-boot   # full-boot benches, minutes rather than seconds
+
+`work_sim/obj_<name>/` caches the compiled model, so a rerun costs almost
+nothing while a cold run pays the C++ build. That build dominates the short
+benches -- `wbp_mux_tb` is ~4s to compile and 2ms to simulate -- so Verilator
+only wins where simulated time is large. Two concurrent `ctest` runs will
+collide over those directories.
+
 ## Reset randomization
 
 Pass `+verilator+rand+reset+` mode as the second argument:
@@ -18,6 +34,9 @@ becomes:
   `handle_irq` would otherwise power up set and count a spurious IRQ.
 - `1` -- all ones.
 - `2` -- random.
+
+Override individual benches with `GW_RAND_RESET_<name>` when an upstream model
+requires a particular power-up state.
 
 ## Known constraints
 

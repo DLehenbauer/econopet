@@ -69,7 +69,7 @@ add_custom_command(
     COMMENT "Compiling FPGA bitstream using Efinity tools (be patient)"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     ${XML_CHECK_COMMAND}
-    COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}"
+    COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}" --pnr_opts seed=0
     ${XML_RESTORE_COMMAND}
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"

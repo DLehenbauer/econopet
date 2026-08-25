@@ -19,10 +19,14 @@ module spi_driver(
 );
     clock_gen #(SPI_SCK_MHZ) spi_sck (.clock_o(spi_sck_o));
 
+    // spi1_controller syncs CS_N through 2 flops + an edge detector, so the
+    // level needs three destination-clock edges to reach pe_o/ne_o.
+    localparam int CS_SETTLE_EDGES = 3;
+
     task reset;
         spi_sck.stop;
         spi_cs_no = '1;
-        @(posedge clock_i);  // Hold long enough for destination clock to detect edge.
+        repeat (CS_SETTLE_EDGES) @(posedge clock_i);
     endtask
 
     task send(
@@ -61,7 +65,7 @@ module spi_driver(
     task complete;
         `assert_equal(spi_cs_no, '0);
         spi_cs_no = 1'b1;
-        @(posedge clock_i);  // Hold CS_N long enough for destination clock to detect edge.
+        repeat (CS_SETTLE_EDGES) @(posedge clock_i);
     endtask
     ;
 

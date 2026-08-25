@@ -21,11 +21,14 @@ module register_file(
     input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
     input  logic                     config_crt_i,          // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     input  logic                     config_keyboard_i,     // Keyboard type (0 = Business, 1 = Graphics)
+    input  logic                     phys_cpu_active_i,     // Physical 6502 address activity detected
 
     // CPU register
     output logic                     cpu_ready_o,
     output logic                     cpu_reset_o,
     output logic                     cpu_nmi_o,
+    output logic [1:0]               cpu_sel_o,          // CPU_SEL_* (phys 6502 / soft 6809 / soft 6502)
+    output logic                     cpu_sel_wr_o,       // 1-cycle pulse when REG_CPU_SEL is written (arms/clears the detector)
 
     // Breakpoint
     input  logic                      bp_halted_i,           // Breakpoint module has halted the CPU
@@ -39,8 +42,9 @@ module register_file(
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
     initial begin
-        wbp_ack_o   = '0;
-        bp_clear_o  = '0;
+        wbp_ack_o    = '0;
+        bp_clear_o   = '0;
+        cpu_sel_wr_o = '0;
 
         register[REG_STATUS][REG_STATUS_GRAPHICS_BIT] = 1'b0;
         register[REG_STATUS][REG_STATUS_CRT_BIT]      = 1'b0;
@@ -51,6 +55,10 @@ module register_file(
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;    // Not ready
         register[REG_CPU][REG_CPU_RESET_BIT] = 1'b1;    // Reset
         register[REG_CPU][REG_CPU_NMI_BIT]   = 1'b0;    // Not NMI
+
+        // CPU select at power on: the physical 6502, matching a stock
+        // board. Firmware selects soft cores explicitly (menu and configs).
+        register[REG_CPU_SEL][1:0] = CPU_SEL_PHYS_6502;
 
         // Video state at power on: 40 column mode, 1KB video RAM
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT]        = 1'b0;
@@ -68,7 +76,8 @@ module register_file(
     wire [REG_ADDR_WIDTH-1:0] reg_addr = wbp_addr_i[REG_ADDR_WIDTH-1:0];
 
     always_ff @(posedge wb_clock_i) begin
-        bp_clear_o <= '0;
+        bp_clear_o   <= '0;
+        cpu_sel_wr_o <= '0;
 
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= register[reg_addr];
@@ -80,6 +89,11 @@ module register_file(
                     bp_clear_o <= wbp_data_i[REG_BP_CTL_CLEAR_BIT];
                 end else begin
                     register[reg_addr] <= wbp_data_i;
+                    // Writing the CPU-select register arms/clears the physical-
+                    // CPU activity detector (see main.sv).
+                    if (reg_addr == REG_CPU_SEL[REG_ADDR_WIDTH-1:0]) begin
+                        cpu_sel_wr_o <= 1'b1;
+                    end
                 end
             end
             wbp_ack_o <= 1'b1;
@@ -91,7 +105,7 @@ module register_file(
             // we process the next SPI command.
             //
             // Order must match bit order declared in common_pkg.sv.
-            register[REG_STATUS] <= { 4'b0000, bp_halted_i, config_keyboard_i, config_crt_i, video_graphic_i};
+            register[REG_STATUS] <= { 3'b000, phys_cpu_active_i, bp_halted_i, config_keyboard_i, config_crt_i, video_graphic_i};
 
             // Refresh breakpoint address registers from the breakpoint module.
             register[REG_BP_ADDR_LO] <= bp_addr_i[7:0];
@@ -102,6 +116,7 @@ module register_file(
     assign cpu_ready_o         = register[REG_CPU][REG_CPU_READY_BIT];
     assign cpu_reset_o         = register[REG_CPU][REG_CPU_RESET_BIT];
     assign cpu_nmi_o           = register[REG_CPU][REG_CPU_NMI_BIT];
+    assign cpu_sel_o           = register[REG_CPU_SEL][1:0];
     
     assign video_col_80_mode_o = register[REG_VIDEO][REG_VIDEO_COL_80_BIT];
     assign video_ram_mask_o    = register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT:REG_VIDEO_RAM_MASK_LO_BIT];

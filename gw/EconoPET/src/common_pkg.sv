@@ -108,11 +108,29 @@ package common_pkg;
     localparam int CPU_tDHW = 10;   // Write Data Hold Time (min)
 
     //
+    // MC6809E CPU Timing (ns) -- standard grade (1 MHz)
+    // Source: https://www.bitsavers.org/components/motorola/_dataSheets/6809E.pdf
+    //
+    // tCYC is checked by timing_6809.sv; the rest are recorded for reference.
+    //
+
+    localparam int CPU6809_tCYC = 1000;  // Cycle Time (min)
+    localparam int CPU6809_PWEL = 450;   // Pulse Width, E Low (min)
+    localparam int CPU6809_PWEH = 450;   // Pulse Width, E High (min)
+    localparam int CPU6809_tEQ1 = 200;   // Delay Time, E to Q Rise (min)
+    localparam int CPU6809_tAD  = 200;   // Address Delay Time from E Low (max)
+    localparam int CPU6809_tDSR = 80;    // Read Data Setup Time (min)
+    localparam int CPU6809_tDHR = 10;    // Read Data Hold Time (min)
+    localparam int CPU6809_tDDQ = 200;   // Write Data Delay Time from Q (max)
+    localparam int CPU6809_tDHW = 30;    // Write Data Hold Time (min)
+
+    //
     // W65C21N/W65C22N PIA/VIA Timing (ns)
     // See docs/dev/timing.md for details.
     //
 
-    localparam int IO_tCDR = 20;    // Data Bus Delay Time (max)
+    localparam int IO_tCDR  = 20;   // Data Bus Delay Time (max)
+    localparam int IO_tHOLD = 10;   // Worst-case address, R/W, and write-data hold after falling PHI2 (min)
 
     //
     // SN74LVC4245A Level Shifter Timing (ns)
@@ -385,6 +403,7 @@ package common_pkg;
     localparam int unsigned REG_STATUS_CRT_BIT      = 1;    // Diagonal CRT size (0 = 12", 1 = 9")
     localparam int unsigned REG_STATUS_KEYBOARD_BIT = 2;    // Keyboard Type (0 = Business, 1 = Graphics)
     localparam int unsigned REG_STATUS_BP_HALT_BIT  = 3;    // Breakpoint halt (1 = CPU halted on STP fetch)
+    localparam int unsigned REG_STATUS_PHYS_CPU_BIT = 4;    // Physical 6502 detected (probe loop seen at $0400)
 
     // Register 1: CPU control
     localparam int unsigned REG_CPU                 = 1;
@@ -408,7 +427,14 @@ package common_pkg;
     // Register 4: Breakpoint Address High (Read-only)
     localparam int unsigned REG_BP_ADDR_HI              = 4;
 
-    localparam int unsigned REG_COUNT                   = REG_BP_ADDR_HI + 1'b1;
+    // Register 5: CPU select. Separate from REG_CPU so the
+    // firmware's reset/ready writes can't clobber it.
+    localparam int unsigned REG_CPU_SEL                 = 5;
+    localparam logic [1:0]  CPU_SEL_PHYS_6502           = 2'd0,  // physical W65C02S
+                            CPU_SEL_SOFT_6809           = 2'd1,  // soft MC6809 (SuperPET)
+                            CPU_SEL_SOFT_6502           = 2'd2;  // soft MOS 6502 (virtual)
+
+    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
 
     //
     // Bus
