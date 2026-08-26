@@ -26,6 +26,25 @@ uint8_t spi_write_same(uint8_t data);
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 
 void set_cpu(bool ready, bool reset, bool nmi);
+
+// In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
+// the FPGA.
+typedef enum {
+    CPU_PHYS_6502 = 0,   // socketed W65C02S (optional; may be depopulated)
+    CPU_SOFT_6809 = 1,   // soft MC6809 (SuperPET)
+    CPU_SOFT_6502 = 2,   // soft MOS 6502 (virtual PET CPU; the default)
+    CPU_AUTO      = 0xFF, // firmware policy (NOT a REG_CPU_SEL value): use the
+                          // physical 6502 if detected, else the soft 6502.
+} cpu_type_t;
+
+// Caller must hold the CPU halted across the switch. CPU_AUTO is not a
+// valid argument.
+void set_cpu_type(cpu_type_t cpu);
+
+// True if a W65C02S is socketed. First call probes (clobbers $0400-$0402
+// and $FFFC), then caches.
+bool physical_cpu_present(void);
+
 void sync_state();
 
 uint16_t bp_hit_addr();

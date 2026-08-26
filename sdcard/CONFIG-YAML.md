@@ -60,6 +60,7 @@ The `set` action can configure these firmware options:
 | `video-ram-kb` | `1`, `2`, `3`[^vram-3], `4`, or `8`[^vram-8] | Selects the amount of video RAM. |
 | `usb-keymap` | File name | Names the SD card file containing the USB HID code to PET keyboard matrix mapping. |
 | `tape` | ROM-specific bytes | Tells the firmware how to intercept `LOAD` commands for the virtual tape drive. |
+| `cpu` | `physical`, `6502`, `6809`, or `auto` | Selects which CPU drives the bus: the socketed 6502, the soft 6502, the soft 6809 (SuperPET), or auto-detect (physical if populated, else soft 6502). Defaults to `auto`. |
 
 [^vram-3]: `video-ram-kb: 3` activates the experimental ColourPET 40-column mode.
 

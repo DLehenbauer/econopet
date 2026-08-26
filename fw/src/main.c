@@ -179,6 +179,9 @@ int main() {
     usb_init();     // Initialize USB subsystem
     cli_init();     // Start CLI on UART serial
     bp_init();      // Initialize breakpoint subsystem
+
+    // Probe before any config is loaded -- it clobbers $0400-$0402 and $FFFC.
+    physical_cpu_present();
     
     // Enter boot menu
     menu_enter(/* is_boot: */ true);
