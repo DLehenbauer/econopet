@@ -116,6 +116,7 @@ module mmu_tb;
         repeat (2) @(posedge sys_clock);
         sync_st <= 0;
         `assert_equal(flat, 1'b0);
+        @(posedge sys_clock);                        // firq_n is registered
         `assert_equal(firq_n, 1'b0);                 // FIRQ asserted (pulse)
         decode_at(16'h9000);
         `assert_equal({a15, a14, a13, a12}, 4'd0);   // back to bank 0

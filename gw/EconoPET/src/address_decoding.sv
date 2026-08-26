@@ -63,6 +63,7 @@ module memory_control (
     logic superpet_flat   = 1'b0;
     logic superpet_firq_dis = 1'b0;
     logic [9:0] firq_timer = '0;
+    logic       firq_n_q   = 1'b1;
 
     // FIRQ pulse held ~8 E cycles: long enough for the core to leave SYNC
     // and take the vector, short enough to end before the handler returns.
@@ -72,6 +73,10 @@ module memory_control (
     always_ff @(posedge sys_clock_i) begin
         if (firq_timer != 0) firq_timer <= firq_timer - 1'b1;
 
+        // 'firq_timer == 0' can glitch on a borrow, so register it: the core
+        // samples this on q6809 and must see only the old or the new level.
+        firq_n_q <= (firq_timer == 0);
+
         if (reset_i) begin
             mem_ctl <= MEM_CTL_INIT;
             superpet_bank <= 4'b0000;
@@ -80,6 +85,7 @@ module memory_control (
             superpet_flat   <= 1'b0;
             superpet_firq_dis <= 1'b0;
             firq_timer <= '0;
+            firq_n_q   <= 1'b1;
         end else if (superpet_en_i && sync_i && superpet_flat) begin
             superpet_flat     <= 1'b0;
             superpet_bank <= 4'b0000;
@@ -101,7 +107,7 @@ module memory_control (
     end
 
     assign superpet_flat_o   = superpet_flat;
-    assign superpet_firq_n_o = firq_timer == 0;
+    assign superpet_firq_n_o = firq_n_q;
     assign superpet_ramwp_o  = superpet_ramwp;
     assign superpet_bank_o   = superpet_bank;
 

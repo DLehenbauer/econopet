@@ -268,6 +268,13 @@ set_multicycle_path -hold 1 -start \
     -from [get_cells {main/cpu_irq_sync*}] \
     -to [get_clocks {cpu_phi q6809}]
 
+# The flat-exit FIRQ is a 511-cycle level, so one Q edge later is equivalent.
+# Anchored on the capture register: synthesis renames the launch flop after the
+# net it drives, and a -from pattern that stops matching fails silently.
+set_multicycle_path -hold 1 -start \
+    -from [get_clocks {sys_clock_i}] \
+    -to [get_cells {main/mc6809/FIRQSample*}]
+
 # ============================================================================
 # Asynchronous / Quasi-Static Inputs
 # ============================================================================
