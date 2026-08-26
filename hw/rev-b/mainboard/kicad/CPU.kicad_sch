@@ -6347,7 +6347,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "RESET"
+		(property "Value" "TS-1088-AR02016"
 			(at 96.4692 185.293 90)
 			(effects
 				(font
@@ -6401,7 +6401,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 95.25 184.15 0)
 			(effects
 				(font
@@ -6517,7 +6517,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "NMI"
+		(property "Value" "TS-1088-AR02016"
 			(at 126.9492 185.293 90)
 			(effects
 				(font
@@ -6571,7 +6571,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 125.73 184.15 0)
 			(effects
 				(font

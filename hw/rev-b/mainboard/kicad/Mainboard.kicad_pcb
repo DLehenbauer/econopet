@@ -13500,7 +13500,7 @@
 				)
 			)
 		)
-		(property "Value" "RESET"
+		(property "Value" "TS-1088-AR02016"
 			(at 0 4 90)
 			(layer "F.Fab")
 			(uuid "e7a58620-d34e-4473-9668-8437e21ba0ac")
@@ -13573,7 +13573,7 @@
 				)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -40495,7 +40495,7 @@
 				)
 			)
 		)
-		(property "Value" "NMI"
+		(property "Value" "TS-1088-AR02016"
 			(at 0 4 90)
 			(layer "F.Fab")
 			(uuid "6270a74e-6689-46dc-884d-7b4c0a18160f")
@@ -40568,7 +40568,7 @@
 				)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -74970,7 +74970,7 @@
 				)
 			)
 		)
-		(property "Value" "BOOTSEL"
+		(property "Value" "TS-1088-AR02016"
 			(at 0 4 180)
 			(layer "F.Fab")
 			(uuid "8d427505-de7a-4e50-8a6f-88ac71d433d9")
@@ -75056,7 +75056,7 @@
 				)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -80216,7 +80216,7 @@
 				)
 			)
 		)
-		(property "Value" "RUN"
+		(property "Value" "TS-1088-AR02016"
 			(at 0 4 90)
 			(layer "F.Fab")
 			(uuid "8a84d72c-1ecf-409b-a9ce-4aafae9e7d57")
@@ -80302,7 +80302,7 @@
 				)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")

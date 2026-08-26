@@ -1187,7 +1187,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "BOOTSEL"
+		(property "Value" "TS-1088-AR02016"
 			(at 123.1392 109.093 90)
 			(effects
 				(font
@@ -1250,7 +1250,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 121.92 107.95 0)
 			(effects
 				(font

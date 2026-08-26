@@ -7556,7 +7556,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "RUN"
+		(property "Value" "TS-1088-AR02016"
 			(at 72.3392 123.063 90)
 			(effects
 				(font
@@ -7619,7 +7619,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "611-PTS636SK43LFS"
+		(property "MOUSER" ""
 			(at 71.12 121.92 0)
 			(effects
 				(font
