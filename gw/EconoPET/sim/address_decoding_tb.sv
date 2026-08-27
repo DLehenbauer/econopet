@@ -39,6 +39,9 @@ module address_decoding_tb();
         .cpu_be_i(cpu_be),
         .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_data_i(cpu_data),
+        // Stock PET decode under test; 6809-mode decode is covered by mmu_tb.
+        .superpet_en_i(1'b0),
+        .sync_i(1'b0),
 
         .cpu_addr_i(cpu_addr[CPU_ADDR_WIDTH-1:0]),
         .ram_en_o(ram_en),

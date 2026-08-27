@@ -283,3 +283,25 @@ configs:
         columns: 40
         video-ram-kb: 3
         tape: "2ef415f4c9cad1d4da"
+
+  - id: superpet
+    name: "SuperPET 6809 (Waterloo)"
+    setup:
+      # Waterloo ROMs are not included; download from
+      # https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/
+      # and place in /roms/.
+      - action: "load"
+        files:
+          - address: 0xa000
+            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+          - address: 0xc000
+            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+          - address: 0xe000
+            file: "/roms/waterloo-e000-ffff-970034-12.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - action: "set"
+        cpu: "6809"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
