@@ -31,15 +31,22 @@ module spi_driver(
 
     task send(
         input logic unsigned [7:0] tx[],
-        input bit complete_i = 1'b1
+        input bit complete_i = 1'b1,
+        input bit start_i    = 1'b1   // 0 = continue an already-asserted CS (burst)
     );
         integer byte_index;
         integer bit_index;
 
-        `assert_equal(spi_cs_no, 1'b1);
+        if (start_i) begin
+            `assert_equal(spi_cs_no, 1'b1);
+            spi_cs_no = '0;
+        end else begin
+            // Continuation of a held-low CS: another command in the same
+            // transaction. CS must already be asserted.
+            `assert_equal(spi_cs_no, 1'b0);
+        end
 
         tx_byte   = tx[0];
-        spi_cs_no = '0;
         #1;
         spi_sck.start;
 

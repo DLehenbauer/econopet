@@ -118,6 +118,22 @@ module spi1_tb;
         spi1_driver.read_same();
     endtask
 
+    // Burst variants: keep CS asserted across commands (one transaction).
+    task write_at_hold(
+        input logic [WB_ADDR_WIDTH-1:0] addr_i,
+        input logic [DATA_WIDTH-1:0] data_i
+    );
+        set_expected(/* addr: */ addr_i, /* we: */ 1'b1, /* data: */ data_i);
+        spi1_driver.write_at_hold(addr_i, data_i);
+    endtask
+
+    task write_same_hold(
+        input logic [DATA_WIDTH-1:0] data_i
+    );
+        set_expected(/* addr: */ expected_addr, /* we: */ 1'b1, /* data: */ data_i);
+        spi1_driver.write_same_hold(data_i);
+    endtask
+
     always @(posedge spi_cs_n) begin
         @(posedge clock)  // 2FF stage 1
         @(posedge clock)  // 2FF stage 2
@@ -211,6 +227,34 @@ module spi1_tb;
         read_same();
         write_next(8'h60);
         read_at(20'h04001);
+
+        // Multiple commands in ONE held-low CS transaction (the batched FIFO
+        // fill path). Each command must produce its own bus cycle with the
+        // correct address/data -- the WRITE_SAME commands must all target the
+        // same address the WRITE_AT seeded (FIFO-style push).
+        $display("[%t] Test 6: Burst write (multi-command per CS)", $time);
+        write_at_hold(20'h07000, 8'hB0);
+        write_same_hold(8'hB1);
+        write_same_hold(8'hB2);
+        write_same_hold(8'hB3);
+        write_same_hold(8'hB4);
+        spi1_driver.burst_end();
+        `assert_equal(expected_addr, 20'h07000);   // address never moved
+
+        // Long burst: firmware pushes a whole 254-byte record in one CS
+        // transaction.
+        $display("[%t] Test 6b: Long burst (200 commands, one CS)", $time);
+        write_at_hold(20'h08000, 8'h00);
+        for (int i = 1; i < 200; i++) begin
+            write_same_hold(i[7:0]);   // each must land at 0x08000 with data=i
+        end
+        spi1_driver.burst_end();
+        `assert_equal(expected_addr, 20'h08000);
+
+        // A normal single command must still work immediately after a burst.
+        $display("[%t] Test 7: Single command after burst", $time);
+        write_at(20'h07001, 8'hCC);
+        read_at(20'h07000);
 
     endtask
 
