@@ -273,12 +273,18 @@ module main (
     logic [DATA_WIDTH-1:0] cpu_data_q = '0;
     logic [DATA_WIDTH-1:0] soft_cpu_data_q = '0;
     logic                  cpu_data_strobe_q = 1'b0;
+    logic [DATA_WIDTH-1:0] read_data_q = '0;
     always_ff @(posedge sys_clock_i) begin
-        if (cpu_data_strobe) cpu_data_q <= cpu_data_i;
+        if (cpu_data_strobe) begin
+            cpu_data_q <= cpu_data_i;
+            // Injected read data must not race its own pad round trip
+            // (hardware-marginal; sim's ideal feedback hides it).
+            read_data_q <= cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
+        end
         cpu_data_strobe_q <= cpu_data_strobe;
     end
     always_ff @(posedge cpu_data_strobe_q) begin
-        soft_cpu_data_q <= cpu_data_i;
+        soft_cpu_data_q <= read_data_q;
     end
 
     mc6809i mc6809 (

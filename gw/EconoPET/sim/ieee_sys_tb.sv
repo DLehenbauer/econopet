@@ -59,6 +59,16 @@ module ieee_sys_tb;
     logic spi_sck, spi_cs_n, spi_pico, spi_poci, spi_stall;
     logic [7:0] spi_rx_data;
 
+    // Pad model: self-driven data reaches the input pin one clock after OE
+    // asserts; RAM/IO stay combinational (budgeted in CPU_DATA_STROBE).
+    logic [DATA_WIDTH-1:0] top_data_pad;
+    logic                  top_oe_pad;
+    always_ff @(posedge sys_clock) begin
+        top_data_pad <= top_data;
+        top_oe_pad   <= top_data_oe[0];
+    end
+    wire [DATA_WIDTH-1:0] pad_data_i = top_oe_pad ? top_data_pad : bus_data;
+
     top top (
         .sys_clock_i(sys_clock),
 
@@ -74,7 +84,7 @@ module ieee_sys_tb;
         .cpu_addr_i ({CPU_ADDR_WIDTH{1'b0}}),
         .cpu_addr_o (top_addr),
         .cpu_addr_oe(top_addr_oe),
-        .cpu_data_i (bus_data),
+        .cpu_data_i (pad_data_i),
         .cpu_data_o (top_data),
         .cpu_data_oe(top_data_oe),
         .cpu_we_n_i (1'b1),      // Physical CPU off-bus in 6809 mode
