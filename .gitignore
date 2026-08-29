@@ -100,3 +100,8 @@ core
 #
 .cache/ai/*
 !.cache/**/.gitkeep
+
+#
+# VS Code Local History extension
+#
+**/.history/
