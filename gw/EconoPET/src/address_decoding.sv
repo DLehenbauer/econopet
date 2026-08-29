@@ -12,9 +12,9 @@ module memory_control (
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     input  logic [    DATA_WIDTH-1:0] cpu_data_i,
 
-    // 1 only when the soft 6809 owns the bus. Gates the SuperPET-specific MMU
-    // ($EFFC/$EFF8 latches, flat mode) so a 6502 sees a stock
-    // PET/8096 map. The 8096 $FFF0 expansion banking below is not gated (it's a
+    // 1 on a SuperPET machine (soft 6809, or a 6502 with the machine-type
+    // bit). Gates the SuperPET MMU ($EFFC/$EFF8 latches, flat mode); off, a
+    // 6502 sees a stock PET/8096 map. The 8096 $FFF0 banking is not gated (a
     // stock PET-8096 feature available to either CPU).
     input  logic                      superpet_en_i,
 
@@ -168,8 +168,8 @@ module address_decoding #(
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
     input  logic [    DATA_WIDTH-1:0] cpu_data_i,
 
-    // 1 only when the soft 6809 owns the bus; gates the SuperPET MMU
-    // (see memory_control) so a 6502 sees a stock PET/8096 map.
+    // 1 on a SuperPET machine (see memory_control); off, a 6502 sees a
+    // stock PET/8096 map.
     input  logic                      superpet_en_i,
 
     output logic                      ram_en_o,
@@ -301,8 +301,8 @@ module address_decoding #(
                     CPU_ADDR_WIDTH'('b1110_1000_01??_????): select <= VIA;      // VIA  : E840-E87F
                     CPU_ADDR_WIDTH'('b1110_1000_1???_????): select <= CRTC;     // CRTC : E880-E8FF
                     // SuperPET I/O: 6702 ($EFE0), 6551 ($EFF0), latches ($EFF8/$EFFC).
-                    // Unmapped so the peripherals can override open_bus in main.sv;
-                    // stock ROM with a 6502 selected.
+                    // Unmapped so the peripherals can override open_bus in
+                    // main.sv; stock ROM on a stock machine.
                     CPU_ADDR_WIDTH'('b1110_1111_1???_????): select <= superpet_en_i ? UNMAPPED : ROM;
                     default:                                select <= ROM;      // ROM  : A000-E7FF, E900-EF7F, F000-FFFF
                 endcase

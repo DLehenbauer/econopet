@@ -42,6 +42,7 @@ typedef enum {
 // Caller must hold the CPU halted across the switch. CPU_AUTO is not a
 // valid argument.
 void set_cpu_type(cpu_type_t cpu);
+void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io);
 
 // True if a W65C02S is socketed. First call probes (clobbers $0400-$0402
 // and $FFFC), then caches.

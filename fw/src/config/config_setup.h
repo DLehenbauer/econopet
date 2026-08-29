@@ -26,6 +26,8 @@ typedef struct options_s {
                              // images; default off = real drives on the bus.
     uint8_t cpu;             // cpu_type_t (driver.h); CPU_AUTO if the
                              // 'cpu' key is absent.
+    bool superpet_io;        // machine: superpet -- expansion I/O visible to
+                             // a 6502 too. Implied by cpu: 6809.
 } options_t;
 
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);

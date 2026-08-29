@@ -28,6 +28,7 @@ module register_file(
     output logic                     cpu_reset_o,
     output logic                     cpu_nmi_o,
     output logic [1:0]               cpu_sel_o,          // CPU_SEL_* (phys 6502 / soft 6809 / soft 6502)
+    output logic                     superpet_io_o,      // machine type: SuperPET I/O visible to a 6502 too
     output logic                     cpu_sel_wr_o,       // 1-cycle pulse when REG_CPU_SEL is written (arms/clears the detector)
 
     // Breakpoint
@@ -59,6 +60,7 @@ module register_file(
         // CPU select at power on: the physical 6502, matching a stock
         // board. Firmware selects soft cores explicitly (menu and configs).
         register[REG_CPU_SEL][1:0] = CPU_SEL_PHYS_6502;
+        register[REG_CPU_SEL][CPU_SEL_SUPERPET_IO_BIT] = 1'b0;
 
         // Video state at power on: 40 column mode, 1KB video RAM
         register[REG_VIDEO][REG_VIDEO_COL_80_BIT]        = 1'b0;
@@ -117,6 +119,7 @@ module register_file(
     assign cpu_reset_o         = register[REG_CPU][REG_CPU_RESET_BIT];
     assign cpu_nmi_o           = register[REG_CPU][REG_CPU_NMI_BIT];
     assign cpu_sel_o           = register[REG_CPU_SEL][1:0];
+    assign superpet_io_o = register[REG_CPU_SEL][CPU_SEL_SUPERPET_IO_BIT];
     
     assign video_col_80_mode_o = register[REG_VIDEO][REG_VIDEO_COL_80_BIT];
     assign video_ram_mask_o    = register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT:REG_VIDEO_RAM_MASK_LO_BIT];

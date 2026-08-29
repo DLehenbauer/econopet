@@ -277,7 +277,7 @@
             <efxpt:output_enable_config name="pmod1_oe[8]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="pmod2[1]" gpio_def="GPIOL_54" mode="inout" bus_name="pmod2" is_lvds_gpio="false" io_standard="3.3 V LVTTL / LVCMOS">
-            <efxpt:input_config name="pmod2_i[1]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="none" is_schmitt_trigger="false" ddio_type="none"/>
+            <efxpt:input_config name="pmod2_i[1]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pulldown" is_schmitt_trigger="true" ddio_type="none"/>
             <efxpt:output_config name="pmod2_o[1]" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
             <efxpt:output_enable_config name="pmod2_oe[1]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
@@ -287,7 +287,7 @@
             <efxpt:output_enable_config name="pmod2_oe[2]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="pmod2[3]" gpio_def="GPIOL_65" mode="inout" bus_name="pmod2" is_lvds_gpio="false" io_standard="3.3 V LVTTL / LVCMOS">
-            <efxpt:input_config name="pmod2_i[3]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="none" is_schmitt_trigger="false" ddio_type="none"/>
+            <efxpt:input_config name="pmod2_i[3]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="true" ddio_type="none"/>
             <efxpt:output_config name="pmod2_o[3]" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
             <efxpt:output_enable_config name="pmod2_oe[3]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>

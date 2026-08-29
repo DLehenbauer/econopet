@@ -179,7 +179,7 @@ void action_set_options(void* context, options_t* options) {
     if (cpu == CPU_AUTO) {
         cpu = physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502;
     }
-    set_cpu_type(cpu);
+    set_cpu_type_machine(cpu, options->superpet_io || cpu == CPU_SOFT_6809);
 
     ieee_drive_set_enabled(options->ieee_drive);
 
