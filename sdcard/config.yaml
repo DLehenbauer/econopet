@@ -305,3 +305,4 @@ configs:
         usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
+        ieee-drive: "on"

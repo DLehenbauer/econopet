@@ -11,6 +11,7 @@
 #include "driver.h"
 #include "global.h"
 #include "hw.h"
+#include "ieee/ieee_drive.h"
 #include "input.h"
 #include "menu/menu.h"
 #include "pet.h"
@@ -179,6 +180,7 @@ int main() {
     usb_init();     // Initialize USB subsystem
     cli_init();     // Start CLI on UART serial
     bp_init();      // Initialize breakpoint subsystem
+    ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
 
     // Probe before any config is loaded -- it clobbers $0400-$0402 and $FFFC.
     physical_cpu_present();
@@ -189,7 +191,9 @@ int main() {
     // PET is configured and running.  Enter main loop to synchronize displays, service
     // input queues, and check for menu/reset button.
     while (true) {
+        ieee_drive_task();  // Service IEEE-488 FIFOs; an underrun desyncs the loader
         display_task(); // Sync video buffer, render to terminal if needed
+        ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render
         input_task();   // Poll inputs, dispatch based on mode
         bp_task();      // Check for breakpoint hits and handle them
         menu_task();    // Check for button events to enter menu

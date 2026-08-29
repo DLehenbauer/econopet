@@ -32,6 +32,12 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/prgs/README.md" DESTINATION "${sdcard_root_dir}/prgs")
 file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
 
+# Optional IEEE-488 drive images: sdcard/disks/drive0.d80|d64, drive1.d80|d64
+# (gitignored, like roms). Copied into the package when present.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/disks")
+    file(COPY "${CMAKE_CURRENT_LIST_DIR}/disks" DESTINATION "${sdcard_root_dir}")
+endif()
+
 # Copy any ROM .bin files produced by the 'rom' target into sdcard/roms
 # (exclude the special firmware-embedded 'menu.rom'). Print status for each.
 # The sdcard project builds under ${CMAKE_CURRENT_BINARY_DIR} which is

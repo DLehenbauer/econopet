@@ -22,6 +22,8 @@ typedef struct options_s {
     char usb_keymap[261];    // USB keymap file path (empty = use default)
     tape_config_t tape;      // Virtual tape config blob (all zeros = disabled)
     bool tape_enabled;       // True if 'tape' key was present in config.yaml
+    bool ieee_drive;         // Virtual IEEE-488 disk drive (units 8/9) from SD
+                             // images; default off = real drives on the bus.
     uint8_t cpu;             // cpu_type_t (driver.h); CPU_AUTO if the
                              // 'cpu' key is absent.
 } options_t;

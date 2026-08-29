@@ -19,6 +19,8 @@ uint8_t spi_read_prev();
 uint8_t spi_read_same();
 
 void spi_write(uint32_t addr, const uint8_t* const pSrc, size_t byteLength);
+
+void spi_write_same_block(uint32_t addr, const uint8_t* const pSrc, size_t byteLength);
 uint8_t spi_write_at(uint32_t addr, uint8_t data);
 uint8_t spi_write_next(uint8_t data);
 uint8_t spi_write_prev(uint8_t data);
