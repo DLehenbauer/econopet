@@ -215,6 +215,16 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
 
         const uint ra = y % geo.scanlines_per_row;
 
+        // The IEEE-drive overlay row renders with the standard text charset
+        // even when the screen runs another quadrant (APL): its content is
+        // ASCII painted by firmware, not by the PET.
+        const uint text_row  = y / geo.scanlines_per_row;
+        const uint last_row  = geo.visible_scanlines / geo.scanlines_per_row - 1;
+        const uint8_t* row_rom =
+            (system_state.overlay_ascii_row && text_row == last_row)
+                ? roms_get_ascii_char_rom()
+                : p_char_rom;
+
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
 
@@ -233,7 +243,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 &colorbuf[row_start],
                 &tmdsbuf[geo.left_margin_words],
                 first_chars,
-                p_char_rom,
+                row_rom,
                 ra,
                 geo.invert_mask
             );
@@ -243,7 +253,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                 &colorbuf[row_start],
                 &tmdsbuf[geo.left_margin_words],
                 first_chars,
-                p_char_rom,
+                row_rom,
                 ra,
                 geo.invert_mask
             );
@@ -261,7 +271,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                     &colorbuf[0],
                     &tmdsbuf[geo.left_margin_words + first_words],
                     second_chars,
-                    p_char_rom,
+                    row_rom,
                     ra,
                     geo.invert_mask
                 );
@@ -271,7 +281,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
                     &colorbuf[0],
                     &tmdsbuf[geo.left_margin_words + first_words],
                     second_chars,
-                    p_char_rom,
+                    row_rom,
                     ra,
                     geo.invert_mask
                 );

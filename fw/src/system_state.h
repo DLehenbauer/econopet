@@ -123,6 +123,16 @@ typedef struct system_state_s {
     // Video graphics mode flag (false = lowercase/business charset, true = uppercase/graphics charset)
     bool video_graphics;
 
+    // True when the SuperPET charset is active (lowercase at ASCII $61-$7A),
+    // so overlay text passes lowercase through instead of ascii_to_vrom.
+    bool superpet_charset;
+
+    // When true, the DVI renderer draws the last text row with the standard
+    // ASCII/text character quadrant regardless of the active charset, so the
+    // IEEE-drive overlay stays readable when software (e.g. Waterloo APL)
+    // switches the screen to another quadrant.
+    volatile bool overlay_ascii_row;
+
     // True when the FPGA has halted the CPU on a breakpoint (STP opcode)
     bool bp_halted;
 

@@ -45,6 +45,7 @@
 #define IEEE_ST_TX_EMPTY     0x08
 #define IEEE_ST_ATN          0x10
 #define IEEE_ST_LISTENING    0x20
+#define IEEE_ST_TALK_STARVED 0x80
 #define IEEE_ST_TALKING      0x40
 
 #define DEV_ADDR 8
@@ -71,10 +72,21 @@ typedef struct {
 static drive_t drives[NUM_DRIVES];
 static bool emulation_enabled = false;
 
+// Bumped on every successful mount; the HUD overlay flashes on change.
+static unsigned mount_generation = 0;
+
+unsigned ieee_drive_mount_generation(void) {
+    return mount_generation;
+}
+
 // Library of images found in /disks at boot.
 #define MAX_LIBRARY 24
 static char library[MAX_LIBRARY][32];
 static unsigned int library_count = 0;
+
+static char toast[48];
+static uint32_t toast_until_ms = 0;
+static bool overlay_debug_on = false;  // F8 toggles the status line
 
 static void scan_library(void) {
     DIR* dir = opendir("/disks");
@@ -90,6 +102,11 @@ static void scan_library(void) {
     }
     closedir(dir);
     log_info("ieee: %u disk image(s) in /disks", library_count);
+}
+
+static void show_toast(const char* msg) {
+    snprintf(toast, sizeof(toast), "%s", msg);
+    toast_until_ms = to_ms_since_boot(get_absolute_time()) + 3000;
 }
 
 // ----------------------------------------------------------------------------
@@ -188,6 +205,7 @@ static bool mount_image(unsigned int n, int idx) {
     drives[n].present = true;
     drives[n].library_index = idx;
     snprintf(drives[n].name, sizeof(drives[n].name), "%s", library[idx]);
+    mount_generation++;
     log_info("ieee: drive %u = %s (%ld bytes)", n, path, size);
     chain_cache_build(n);
     return true;
@@ -244,6 +262,17 @@ static uint8_t ch15_unit = 0;    // unit whose ch15 command is being collected
 static uint8_t open_unit = 0;    // unit of the OPEN name being collected
 static uint8_t file_unit = 0;    // unit of the open sequential file
 
+// Debug counters for the HDMI overlay.
+static uint32_t dbg_cmds = 0;
+static uint32_t dbg_data = 0;
+static uint8_t dbg_last_cmd = 0;
+static char dbg_open_result = '-';   // '-' none, 'Y' found, 'N' not found
+
+// Per-slot activity for the HUD's read/write markers, attributed to the slot
+// of the exact channel each byte flows on (sequential via 'stream_drive', REL
+// via the channel's 'drive' field). Counts file data only.
+static uint32_t hud_read[NUM_DRIVES];
+static uint32_t hud_write[NUM_DRIVES];
 static uint8_t  stream_drive = 0;   // slot of the current sequential read stream
 
 static bool collecting_name = false;
@@ -354,7 +383,8 @@ static void rel_serve(rel_channel_t* rc) {
     if (n > 1) spi_write_same_block(IEEE_REG_TX, buf, n - 1u);
     spi_write_at(IEEE_REG_TX_LAST, buf[n - 1]);
     rc->bufptr += n;
-    streamed_bytes += n;   // REL read, attributed to this channel's slot
+    streamed_bytes += n;
+    hud_read[rc->drive & 3] += n;   // REL read, attributed to this channel's slot
 }
 
 // Begin collecting a record write on this channel (kernel did LISTEN +
@@ -476,6 +506,7 @@ static void resolve_open(void) {
     diskimage_entry_t entry;
     if (!diskimage_find(&drives[n].image, open_name, &entry)) {
         status_code[open_unit] = st_code_file_not_found;
+        dbg_open_result = 'N';
         log_info("ieee: OPEN '%s': not found", open_name);
         return;
     }
@@ -502,6 +533,7 @@ static void resolve_open(void) {
                 && !diskchain_build(&rc->chain, &drives[n].image,
                                     entry.start_track, entry.start_sector))) {
             status_code[open_unit] = st_code_file_not_found;
+            dbg_open_result = 'N';
             log_info("ieee: REL OPEN '%s' failed", open_name);
             return;
         }
@@ -516,6 +548,7 @@ static void resolve_open(void) {
         rc->reclen = entry.record_len ? entry.record_len : 129;
         rel_position(rc, 1, 0);
         status_code[open_unit] = st_code_ok;
+        dbg_open_result = 'R';
         log_info("ieee: REL OPEN '%s' ok (chan %u, reclen %u, %lu bytes)",
                  open_name, rc->chan, rc->reclen,
                  (unsigned long) diskchain_size(&rc->chain));
@@ -524,6 +557,7 @@ static void resolve_open(void) {
 
     if (!diskstream_open(&stream, &drives[n].image, entry.start_track, entry.start_sector)) {
         status_code[open_unit] = st_code_file_not_found;
+        dbg_open_result = 'N';
         log_info("ieee: OPEN '%s': stream open failed", open_name);
         return;
     }
@@ -535,6 +569,7 @@ static void resolve_open(void) {
     file_unit = open_unit;
     status_code[open_unit] = st_code_ok;
     streamed_bytes = 0;
+    dbg_open_result = 'Y';
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
 
@@ -563,11 +598,16 @@ static void push_status(unsigned int unit) {
 
 // Fill the TX FIFO from the open stream until the fabric reports no room
 // for another chunk.
+static uint32_t starved_events = 0;
+
+
 static void service_tx(void) {
     // An underrun mid-record times out the kernel's counted read.
     uint8_t buf[TX_BURST_CHUNK];
 
     for (;;) {
+        uint8_t st = spi_read_at(IEEE_REG_STATUS);
+        if (st & IEEE_ST_TALK_STARVED) starved_events++;
 
         uint8_t ctrl = spi_read_at(IEEE_REG_CTRL);
         if (!(ctrl & IEEE_CTRL_RD_TX_ROOM)) return;
@@ -585,6 +625,7 @@ static void service_tx(void) {
                 // EOI'd filler so the kernel sees a clean (if short) end.
                 if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
                 streamed_bytes += n;
+                hud_read[stream_drive & 3] += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
                 status_code[stream_drive >> 1] = st_code_read_error;
                 spi_write_at(IEEE_REG_TX_LAST, 0x0D);
@@ -597,11 +638,13 @@ static void service_tx(void) {
 
         if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
         streamed_bytes += n;
+        hud_read[stream_drive & 3] += n;
 
         if (last) {
             // Final byte carries EOI: separate address, so not part of the burst.
             spi_write_at(IEEE_REG_TX_LAST, last_byte);
             streamed_bytes++;
+            hud_read[stream_drive & 3]++;
             log_info("ieee: stream complete, %lu bytes", (unsigned long) streamed_bytes);
             streaming = false;
             stream_finished = true;
@@ -611,6 +654,8 @@ static void service_tx(void) {
 }
 
 static void handle_command(uint8_t cmd) {
+    dbg_cmds++;
+    dbg_last_cmd = cmd;
     switch (cmd & 0xE0) {
         case 0x20:  // LISTEN / UNLISTEN
             if (cmd == 0x3F) {
@@ -730,7 +775,185 @@ void ieee_drive_set_enabled(bool en) {
     }
 }
 
+// Lazy mount: a cycle keypress only advances the selection; the mount
+// commits in lazy_mount_task once the taps stop, so cycling stays instant.
+#define LAZY_MOUNT_MS 1500
+static int      pending_idx[NUM_DRIVES] = {-1, -1, -1, -1};
+static uint32_t pending_ms[NUM_DRIVES];
+
+bool ieee_drive_cycle(unsigned int n) {
+    // Advance slot n's selection; the mount itself is deferred (see
+    // lazy_mount_task).
+    char msg[48];
+
+    if (n >= NUM_DRIVES) return false;
+    if (library_count == 0) {
+        show_toast("NO IMAGES IN /DISKS");
+        return false;
+    }
+    if (streaming || file_open_ok) {
+        show_toast("DRIVE BUSY");
+        return false;
+    }
+
+    int cur = (pending_idx[n] >= 0) ? pending_idx[n] : drives[n].library_index;
+    int next = (cur + 1) % (int) library_count;
+    pending_idx[n] = next;
+    pending_ms[n] = to_ms_since_boot(get_absolute_time());
+    snprintf(msg, sizeof(msg), "D%u: %s", n, library[next]);
+    show_toast(msg);
+    return true;
+}
+
+// Commit a settled selection; at most one mount per pass.
+static void lazy_mount_task(void) {
+    const uint32_t now = to_ms_since_boot(get_absolute_time());
+    char msg[48];
+
+    for (unsigned int n = 0; n < NUM_DRIVES; n++) {
+        if (pending_idx[n] < 0) continue;
+        if ((now - pending_ms[n]) < LAZY_MOUNT_MS) continue;
+
+        int want = pending_idx[n];
+        pending_idx[n] = -1;
+
+        // A transfer started during the debounce: swapping the disk under it
+        // now would be a surprise -- drop the selection instead.
+        if (streaming || file_open_ok) {
+            show_toast("DRIVE BUSY");
+            continue;
+        }
+        // Cycled full circle back to the image already mounted: nothing to do.
+        if (drives[n].present && want == drives[n].library_index) continue;
+
+        // Try each candidate once from the selection onward; skip images that
+        // fail to mount so one bad file can't wedge the rotation.
+        for (unsigned int tries = 0; tries < library_count; tries++) {
+            int idx = (want + (int) tries) % (int) library_count;
+            if (mount_image(n, idx)) {
+                file_open_ok = false;   // any open file was on the old disk
+                stream_finished = false;
+                snprintf(msg, sizeof(msg), "D%u: %s", n, drives[n].name);
+                show_toast(msg);
+                return;                 // one mount per pass
+            }
+        }
+        show_toast("NO MOUNTABLE IMAGE");
+    }
+}
+
+bool ieee_drive_hotkey(unsigned char hid_keycode) {
+    // F1-F4 (0x3A-0x3D) cycle the four slots, F8 (0x41) toggles the status
+    // line, F11 (0x44) lists mounts. The PET has no function keys, so these
+    // shadow nothing in the keymap.
+    char msg[48];
+
+    switch (hid_keycode) {
+        case 0x41:   // F8: toggle the bottom-right debug status line
+            overlay_debug_on = !overlay_debug_on;
+            show_toast(overlay_debug_on ? "DEBUG OVERLAY ON" : "DEBUG OVERLAY OFF");
+            return true;
+        case 0x3A: ieee_drive_cycle(0); return true;   // F1
+        case 0x3B: ieee_drive_cycle(1); return true;   // F2
+        case 0x3C: ieee_drive_cycle(2); return true;   // F3
+        case 0x3D: ieee_drive_cycle(3); return true;   // F4
+        case 0x44: {
+            // Unit-9 slots included only when mounted (toast stays short for
+            // the common two-drive setup; long name sets truncate).
+            unsigned int pos = 0;
+            for (unsigned int i = 0; i < NUM_DRIVES && pos < sizeof(msg); i++) {
+                if (i >= 2 && !drives[i].present) continue;
+                pos += (unsigned int) snprintf(msg + pos, sizeof(msg) - pos,
+                                               "%sD%u:%s", i ? " " : "", i,
+                                               drives[i].present ? drives[i].name : "-");
+            }
+            show_toast(msg);
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+void ieee_drive_overlay_text(char* out, unsigned int len) {
+    if (toast_until_ms != 0
+        && to_ms_since_boot(get_absolute_time()) < toast_until_ms) {
+        snprintf(out, len, "%s", toast);   // toasts always show (transient)
+        return;
+    }
+    if (!overlay_debug_on) { out[0] = '\0'; return; }   // F8 hid the status line
+    ieee_drive_debug_status(out, len);
+}
+
+void ieee_drive_hud_status(char* out, unsigned int len) {
+    // Disk-status line for the on-CRT HUD: mounted images plus a per-drive
+    // read/write marker. Unit-9 slots (D2/D3) appear only while mounted.
+    static uint32_t prev_read[NUM_DRIVES], prev_write[NUM_DRIVES];
+    static uint32_t act_ms[NUM_DRIVES];              // last-activity time per slot
+    static char     act_type[NUM_DRIVES] = {' ', ' ', ' ', ' '};
+
+    const uint32_t now = to_ms_since_boot(get_absolute_time());
+
+    for (int i = 0; i < NUM_DRIVES; i++) {
+        if (hud_read[i] != prev_read[i]) {
+            prev_read[i] = hud_read[i];
+            act_ms[i] = now;
+            act_type[i] = 'R';
+        }
+        if (hud_write[i] != prev_write[i]) {
+            prev_write[i] = hud_write[i];
+            act_ms[i] = now;
+            act_type[i] = 'W';
+        }
+    }
+    // Keep the read marker lit through a continuous sequential stream even if
+    // the byte delta between calls is missed ('streaming' is only true then).
+    if (streaming) {
+        act_ms[stream_drive & 3] = now;
+        act_type[stream_drive & 3] = 'R';
+    }
+
+    const bool blink = ((now / 250) & 1);   // ~2 Hz
+    unsigned int pos = 0;
+    for (int i = 0; i < NUM_DRIVES && pos < len; i++) {
+        char m;
+        if (i >= 2 && !drives[i].present && pending_idx[i] < 0) continue;
+        m = ((now - act_ms[i]) < 400 && blink) ? act_type[i] : ' ';
+        // A pending (not yet committed) selection shows immediately with a
+        // '*' so cycling gives instant feedback; the lazy mount and its REL
+        // preload land a moment later.
+        if (pending_idx[i] >= 0) {
+            pos += (unsigned int) snprintf(out + pos, len - pos, "%sD%d:%s*",
+                                           i ? " " : "", i, library[pending_idx[i]]);
+        } else {
+            pos += (unsigned int) snprintf(out + pos, len - pos, "%sD%d:%s%c",
+                                           i ? " " : "", i,
+                                           drives[i].present ? drives[i].name : "-", m);
+        }
+    }
+}
+
+void ieee_drive_debug_status(char* out, unsigned int len) {
+    if (!emulation_enabled) {
+        snprintf(out, len, "IEEE OFF D0:%c D1:%c",
+                 drives[0].present ? 'Y' : 'N', drives[1].present ? 'Y' : 'N');
+        return;
+    }
+
+    uint8_t st = spi_read_at(IEEE_REG_STATUS);
+
+    // ST=FPGA status  K=last cmd  C/D=cmd/data counts
+    // S=streamed bytes  V=starved events  O=open result + OPEN name
+    snprintf(out, len, "ST%02X K%02X C%lu D%lu S%lu V%lu O%c %s",
+             st, dbg_last_cmd,
+             (unsigned long) dbg_cmds, (unsigned long) dbg_data,
+             (unsigned long) streamed_bytes, (unsigned long) starved_events,
+             dbg_open_result, open_name);
+}
+
 void ieee_drive_task(void) {
+    lazy_mount_task();   // deferred disk swaps run even with emulation off
+
     if (!emulation_enabled) return;
 
     // Drain the RX FIFO (commands and listener data).
@@ -745,6 +968,7 @@ void ieee_drive_task(void) {
         if (is_atn) {
             handle_command(byte);
         } else {
+            dbg_data++;
             if (collecting_name && open_name_len < sizeof(open_name) - 1) {
                 open_name[open_name_len++] = (char) byte;
             } else if (collecting_ch15 && ch15_cmd_len < sizeof(ch15_cmd)) {
@@ -752,7 +976,8 @@ void ieee_drive_task(void) {
             } else if (listen_chan != 0xFF) {
                 rel_channel_t* wrc = rel_find(listen_unit, listen_chan);
                 if (wrc != NULL && wrc->wr_active) {
-                    rel_write_byte(wrc, byte);   // REL write on this channel's slot
+                    rel_write_byte(wrc, byte);
+                    hud_write[wrc->drive & 3]++;   // REL write on this channel's slot
                 }
             }
         }

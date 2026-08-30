@@ -470,6 +470,7 @@ package common_pkg;
     localparam WB_KBD_BASE  = 5'b01100;
     localparam WB_BRAM_BASE = 5'b01101;
     localparam WB_IEEE_BASE = 5'b01110;
+    localparam WB_HUD_BASE  = 5'b01111;
     localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
     localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0011101 };   // SRAM: $E800-EFFF
 
@@ -506,6 +507,23 @@ package common_pkg;
 
     function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_COL_WIDTH-1:0] register);
         return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_COL_WIDTH - $bits(WB_KBD_BASE))'('0), register };
+    endfunction
+
+    // Address layout within the HUD base (9 bits): bit 8 selects the control
+    // registers; bits [7:0] index the 256-byte text buffer (bit 8 = 0) or the
+    // control register (bit 8 = 1).
+    localparam int unsigned HUD_ADDR_WIDTH = 9;
+    localparam int unsigned HUD_BUF_SIZE   = 256;
+    localparam bit [HUD_ADDR_WIDTH-1:0] HUD_CTRL_FLAG = 9'h100;   // OR into address to reach control regs
+
+    // Control registers (accessed with bit 8 set).
+    localparam bit [3:0] HUD_REG_CTRL   = 4'd0,   // bit0 = enable
+                         HUD_REG_OFF_LO = 4'd1,   // VRAM base offset [7:0]
+                         HUD_REG_OFF_HI = 4'd2,   // VRAM base offset [10:8]
+                         HUD_REG_LEN    = 4'd3;    // characters to overlay (0 = none)
+
+    function logic[WB_ADDR_WIDTH-1:0] wb_hud_addr(input logic[HUD_ADDR_WIDTH-1:0] offset);
+        return { WB_HUD_BASE, (WB_ADDR_WIDTH - HUD_ADDR_WIDTH - $bits(WB_HUD_BASE))'('0), offset };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_bram_addr(input logic[BRAM_ADDR_WIDTH-1:0] address);

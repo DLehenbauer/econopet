@@ -8,6 +8,8 @@
 #include "diag/mem.h"
 #include "display/display.h"
 #include "display/dvi/dvi.h"
+#include "display/hud.h"
+#include "display/hud_trigger.h"
 #include "driver.h"
 #include "global.h"
 #include "hw.h"
@@ -100,7 +102,7 @@ void fpga_init() {
     gpio_set_dir(SPI_STALL_GP, GPIO_IN);
 
     // When no programmer is attached, the onboard 100k pull-down will hold the FPGA in reset.
-    // If CRESET_N is is high, we know a JTAG programmer is attached and skip FPGA configuration.
+    // If CRESET_N is high, we know a JTAG programmer is attached and skip FPGA configuration.
     if (gpio_get(FPGA_CRESET_GP)) {
         log_warn("FPGA config skipped: Programmer attached");
         return;
@@ -180,11 +182,12 @@ int main() {
     usb_init();     // Initialize USB subsystem
     cli_init();     // Start CLI on UART serial
     bp_init();      // Initialize breakpoint subsystem
+    hud_init();     // Start with the HUD overlay disabled
     ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
 
     // Probe before any config is loaded -- it clobbers $0400-$0402 and $FFFC.
     physical_cpu_present();
-    
+
     // Enter boot menu
     menu_enter(/* is_boot: */ true);
 
@@ -195,6 +198,8 @@ int main() {
         display_task(); // Sync video buffer, render to terminal if needed
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render
         input_task();   // Poll inputs, dispatch based on mode
+        hud_trigger_task(); // Real-PET-keyboard chord toggles the on-CRT HUD
+                            // overlay (matrix is fresh after input_task)
         bp_task();      // Check for breakpoint hits and handle them
         menu_task();    // Check for button events to enter menu
     }
