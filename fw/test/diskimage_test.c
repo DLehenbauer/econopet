@@ -176,6 +176,57 @@ START_TEST(test_rel_chain_build_and_read) {
 }
 END_TEST
 
+START_TEST(test_hdd_flat_container) {
+    // 100-sector flat hard-disk REL container: record stream of 128-byte
+    // halves + $0D pads (the FORMAT.OS/9 layout, see diskimage_type_hdd).
+    const uint32_t size = 100u * 258u;
+    mem_image_t mem = { malloc(size), size };
+    for (uint32_t r = 0; r < 200; r++) {
+        memset(mem.data + r * 129, (int) (0x20 + r), 128);
+        mem.data[r * 129 + 128] = 0x0D;
+    }
+
+    diskimage_t img;
+    ck_assert(!diskimage_open_hdd(&img, mem_read, &mem, 100));   // not 258-aligned
+    ck_assert(!diskimage_open_hdd(&img, mem_read, &mem, 0));
+    ck_assert(diskimage_open_hdd(&img, mem_read, &mem, size));
+    ck_assert_int_eq(img.type, diskimage_type_hdd);
+    img.write = mem_write;
+
+    // Synthetic directory: exactly one REL entry, the d8d9 descriptors' name.
+    diskimage_entry_t e;
+    ck_assert(diskimage_entry(&img, 0, &e));
+    ck_assert_str_eq(e.name, "OS9 DRIVE A");
+    ck_assert_int_eq(e.file_type, DISKIMAGE_FTYPE_REL);
+    ck_assert_int_eq(e.record_len, 129);
+    ck_assert(!diskimage_entry(&img, 1, &e));
+    ck_assert(diskimage_find(&img, "0:OS9 DRIVE A", &e));
+    ck_assert(!diskimage_find(&img, "OS9 DRIVE B", &e));
+
+    // Flat chain: identity mapping over the whole record stream.
+    static diskchain_t ch;
+    ck_assert(diskchain_build(&ch, &img, e.start_track, e.start_sector));
+    ck_assert(ch.flat);
+    ck_assert_uint_eq(diskchain_size(&ch), size);
+
+    uint8_t buf[129], back[129];
+    ck_assert(diskchain_read(&ch, 5u * 129u, buf, 129));
+    ck_assert_uint_eq(buf[0], 0x25);
+    ck_assert_uint_eq(buf[128], 0x0D);
+    ck_assert(diskchain_read(&ch, size - 1, buf, 1));
+    ck_assert(!diskchain_read(&ch, size - 1, buf, 2));
+
+    memset(buf, 0xAA, 128);
+    buf[128] = 0x0D;
+    ck_assert(diskchain_write(&ch, 42u * 129u, buf, 129));
+    ck_assert(diskchain_read(&ch, 42u * 129u, back, 129));
+    ck_assert_mem_eq(buf, back, 129);
+    ck_assert(!diskchain_write(&ch, size - 10, buf, 20));
+
+    free(mem.data);
+}
+END_TEST
+
 // Optional: exercise a real Waterloo language image when provided via env.
 START_TEST(test_real_image_if_available) {
     const char* path = getenv("ECONOPET_TEST_D80");
@@ -219,6 +270,7 @@ Suite* diskimage_suite(void) {
     tcase_add_test(tc, test_open_rejects_bad_size);
     tcase_add_test(tc, test_find_and_stream_synthetic_d64);
     tcase_add_test(tc, test_rel_chain_build_and_read);
+    tcase_add_test(tc, test_hdd_flat_container);
     tcase_add_test(tc, test_real_image_if_available);
     suite_add_tcase(s, tc);
     return s;

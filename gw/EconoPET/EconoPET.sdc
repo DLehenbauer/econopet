@@ -268,6 +268,12 @@ set_multicycle_path -hold 1 -start \
     -from [get_clocks {sys_clock_i}] \
     -to [get_clocks {cpu_phi e6809 q6809}]
 
+# read_data_q updates only at the frame's data strobe, one cycle before this
+# capture edge -- a held level the insertion-delayed capture cannot race.
+set_multicycle_path -hold 1 -start \
+    -from [get_clocks {sys_clock_i}] \
+    -to [get_clocks {soft_cpu_data_capture}]
+
 # ============================================================================
 # Asynchronous / Quasi-Static Inputs
 # ============================================================================

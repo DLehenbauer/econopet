@@ -75,6 +75,7 @@
         <efx:sim_file name="sim/superpet_top_tb.sv"/>
         <efx:sim_file name="sim/superpet_waterloo_tb.sv"/>
         <efx:sim_file name="sim/ieee_tb.sv"/>
+        <efx:sim_file name="sim/ieee_sys_tb.sv"/>
         <efx:sim_file name="sim/acia6551_tb.sv"/>
         <efx:sim_file name="sim/stopwatch.sv"/>
         <efx:sim_file name="sim/top_tb.sv"/>

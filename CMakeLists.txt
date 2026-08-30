@@ -212,6 +212,7 @@ if(BUILD_FPGA)
 
     # mc6809i's NMI latch has no reset and must power up inactive.
     set(GW_RAND_RESET_superpet_top_tb 1)
+    set(GW_RAND_RESET_ieee_sys_tb 1)
     set(GW_RAND_RESET_superpet_irq_tb 1)
     set(GW_RAND_RESET_swi_vector_tb 1)
     set(GW_RAND_RESET_superpet_waterloo_tb 1)
