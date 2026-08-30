@@ -26,11 +26,18 @@ module wb_driver (
         // Driver does not yet handle pipelined requests
         `assert_equal(wb_strobe_o, '0);
 
-        wb_cycle_o  <= 1'b1;
-        wb_strobe_o <= 1'b1;
+        // Skew all output changes 1ns off the clock edge. Verilator executes a
+        // task's '<=' as blocking and resumes '@(posedge)' waiters before the
+        // clocked processes sample, so edge-aligned raises/drops race the DUT:
+        // a mid-timestep caller would drop strobe before it is ever sampled
+        // (bench hangs), and an edge-aligned raise is sampled a cycle early.
+        #1;
+        wb_cycle_o  = 1'b1;
+        wb_strobe_o = 1'b1;
 
         while (wb_stall_i) @(posedge wb_clock_i);
-        @(posedge wb_clock_i) wb_strobe_o <= '0;
+        @(posedge wb_clock_i);
+        #1 wb_strobe_o = 1'b0;
     endtask
 
     task wait_for_ack;
@@ -41,7 +48,7 @@ module wb_driver (
     task end_bus_cycle;
         `assert_equal(wb_cycle_o, 1'b1);
         `assert_equal(wb_strobe_o, '0);
-        wb_cycle_o <= '0;
+        wb_cycle_o = '0;   // always off-edge here (follows the #1-skewed drop)
     endtask
 
     task write(

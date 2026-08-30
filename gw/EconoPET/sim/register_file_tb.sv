@@ -179,7 +179,7 @@ module register_file_tb;
         `assert_equal(bp_clear, 1'b0)
         wb.write(REG_BP_CTL, 8'h01);
         `assert_equal(bp_clear, 1'b1)
-        @(posedge clock);
+        @(posedge clock) #1;   // past the NBA that ends the one-cycle pulse
         `assert_equal(bp_clear, 1'b0)
 
         // Breakpoint: writing 0 to REG_BP_CTL does not pulse bp_clear
