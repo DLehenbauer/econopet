@@ -37,10 +37,20 @@ const uint8_t* roms_get_char_rom(bool video_graphics) {
     return custom_char_rom + quadrant * 0x400;
 }
 
+const uint8_t* roms_get_ascii_char_rom(void) {
+    // Quadrant 2 is the plain ASCII layout ('A' at $41, 'a' at $61), regardless
+    // of the live CRTC charset selection, so overlay text stays readable when
+    // software switches quadrants (e.g. Waterloo APL). Only configs that load a
+    // 4KB generator fill it; a 2KB one leaves it stale.
+    return custom_char_rom + 2 * 0x400;
+}
+
 void start_menu_rom(menu_rom_boot_reason_t reason) {
     // Menu ROM is 6502 code -- force the soft 6502 even when re-entering
     // from a 6809 session.
     set_cpu_type(CPU_SOFT_6502);
+
+    system_state.superpet_charset = false;   // menu ROM uses the stock charset
 
     vet(reason < 2, "Menu ROM boot reason out of range: %d", reason);
     

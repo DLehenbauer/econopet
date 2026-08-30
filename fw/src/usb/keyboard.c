@@ -5,8 +5,10 @@
 #include "keyboard.h"
 
 #include "diag/log/log.h"
+#include "display/hud_trigger.h"
 #include "driver.h"
 #include "fatal.h"
+#include "ieee/ieee_drive.h"
 #include "keyscan.h"
 #include "keystate.h"
 #include "usb.h"
@@ -130,6 +132,15 @@ void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
 }
 
 void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
+    // Host hotkeys (disk swapping etc.) claim keys the PET never sees.
+    if (ieee_drive_hotkey(keycode)) {
+        return;
+    }
+    // F7 toggles the on-CRT HUD overlay (also visible over HDMI).
+    if (hud_trigger_hotkey(keycode)) {
+        return;
+    }
+
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
 
     usb_keymap_entry_t keyInfo = s_keymap[

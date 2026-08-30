@@ -181,6 +181,8 @@ void action_set_options(void* context, options_t* options) {
     }
     set_cpu_type_machine(cpu, options->superpet_io || cpu == CPU_SOFT_6809);
 
+    ctx->system_state->superpet_charset = (cpu == CPU_SOFT_6809);
+
     ieee_drive_set_enabled(options->ieee_drive);
 
     log_debug("Set options: %lu columns, video RAM mask %lu, ieee-drive %s",

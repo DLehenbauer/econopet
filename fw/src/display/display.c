@@ -7,6 +7,8 @@
 #include "char_encoding.h"
 #include "driver.h"
 #include "dvi/dvi.h"
+#include "hud.h"
+#include "ieee/ieee_drive.h"
 #include "system_state.h"
 
 // Terminal escape sequences
@@ -82,8 +84,33 @@ void display_task(void) {
 
     // Sync video buffer based on video source
     if (system_state.video_source == video_source_pet) {
-        // Read PET video RAM into buffer (6502 drives display)
+        // Read PET video RAM into buffer (6502 drives display).
         spi_read(0x8000, system_state.video_ram_bytes, video_char_buffer);
+
+        // Drive status line, painted reverse-video into the bottom row after
+        // each VRAM sync.
+        {
+            char dbg[48];
+            ieee_drive_overlay_text(dbg, sizeof(dbg));
+            unsigned int n = strlen(dbg);
+            // The HUD paints codes for the text quadrant too, so the row must
+            // be charset-forced whenever either overlay is visible.
+            system_state.overlay_ascii_row = (n > 0) || hud_is_active();
+            const unsigned int cols = (unsigned int) system_state.pet_display_columns;
+            if (n > cols - 2) n = cols - 2;
+            uint8_t* row = video_char_buffer + 24 * cols + (cols - n);
+            for (unsigned int i = 0; i < n; i++) {
+                // Waterloo charset keeps lowercase at $61-$7A; the stock PET
+                // charset does not.
+                uint8_t ch = (uint8_t) dbg[i];
+                uint8_t code = (system_state.superpet_charset && ch >= 'a' && ch <= 'z')
+                    ? ch
+                    : ascii_to_vrom(ch);
+                row[i] = code | 0x80;
+            }
+        }
+
+        hud_paint_hdmi(video_char_buffer, system_state.video_ram_bytes);
     } else {
         // Write buffer to PET video RAM (firmware drives display)
         spi_write(0x8000, video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);

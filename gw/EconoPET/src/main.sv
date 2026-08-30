@@ -97,6 +97,7 @@ module main (
     logic crtc_wb_sel;
     logic bram_wb_sel;
     logic ieee_wb_sel;
+    logic hud_wb_sel;
 
     always_comb begin
         ram_wb_sel = 1'b0;
@@ -105,6 +106,7 @@ module main (
         crtc_wb_sel = 1'b0;
         bram_wb_sel = 1'b0;
         ieee_wb_sel = 1'b0;
+        hud_wb_sel = 1'b0;
 
         unique casez (wb_addr)
             {WB_RAM_BASE,  {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
@@ -113,6 +115,7 @@ module main (
             {WB_CRTC_BASE, {(WB_ADDR_WIDTH - $bits(WB_CRTC_BASE)){1'b?}}}: crtc_wb_sel = 1'b1;
             {WB_BRAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_BRAM_BASE)){1'b?}}}: bram_wb_sel = 1'b1;
             {WB_IEEE_BASE, {(WB_ADDR_WIDTH - $bits(WB_IEEE_BASE)){1'b?}}}: ieee_wb_sel = 1'b1;
+            {WB_HUD_BASE,  {(WB_ADDR_WIDTH - $bits(WB_HUD_BASE)){1'b?}}}: hud_wb_sel = 1'b1;
             default: /* do nothing */ ;
         endcase
     end
@@ -553,6 +556,9 @@ module main (
 
     logic [WB_ADDR_WIDTH-1:0] video_addr;    // Captured address for read
     logic [   DATA_WIDTH-1:0] video_din;     // Peripheral -> Video (WE=0)
+    // Must be declared before the video instantiation -- Synplify infers an
+    // implicit undriven net from a forward reference.
+    logic [   DATA_WIDTH-1:0] video_din_ov;
     logic                     video_we;
     logic                     video_cycle;
     logic                     video_strobe;
@@ -571,7 +577,7 @@ module main (
         // Wishbone controller used to fetch VRAM/VROM data
         .wb_clock_i(sys_clock_i),
         .wbc_addr_o(video_addr),
-        .wbc_data_i(video_din),
+        .wbc_data_i(video_din_ov),   // HUD overlay substitutes VRAM reads in-range
         .wbc_we_o(video_we),
         .wbc_cycle_o(video_cycle),
         .wbc_strobe_o(video_strobe),
@@ -732,6 +738,41 @@ module main (
     );
 
     //
+    // HUD overlay device (see hud.sv)
+    //
+
+    logic [DATA_WIDTH-1:0] hud_wb_din;    // HUD peripheral -> bus (register read-back)
+    logic                  hud_wb_stall;
+    logic                  hud_wb_ack;
+
+    logic                  hud_ov_active; // substitute the video read this cycle
+    logic [DATA_WIDTH-1:0] hud_ov_char;   // HUD character to substitute
+
+    hud hud (
+        .wb_clock_i(sys_clock_i),
+
+        // Peripheral (MCU writes buffer + control regs)
+        .wbp_addr_i(wb_addr),
+        .wbp_data_i(wb_dout),
+        .wbp_data_o(hud_wb_din),
+        .wbp_we_i(wb_we),
+        .wbp_cycle_i(wb_cycle),
+        .wbp_strobe_i(wb_strobe),
+        .wbp_stall_o(hud_wb_stall),
+        .wbp_ack_o(hud_wb_ack),
+        .wbp_sel_i(hud_wb_sel),
+
+        // Scan-out substitution over the video controller's VRAM reads
+        .vid_addr_i(video_addr),
+        .ov_active_o(hud_ov_active),
+        .ov_char_o(hud_ov_char)
+    );
+
+    // Substituted character flows through video.sv's existing character-ROM
+    // path unchanged.
+    assign video_din_ov = hud_ov_active ? hud_ov_char : video_din;
+
+    //
     // Wishbone
     //
 
@@ -768,9 +809,9 @@ module main (
 
     // One bus -> many peripherals
     wbp_mux #(
-        .COUNT(6)
+        .COUNT(7)
     ) wbp_mux (
-        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel, ieee_wb_sel }),
+        .wbp_sel_i({ ram_wb_sel, reg_wb_sel, kbd_wb_sel, crtc_wb_sel, bram_wb_sel, ieee_wb_sel, hud_wb_sel }),
 
         // Wishbone Bus
         .wb_din_o(wb_din),
@@ -778,9 +819,9 @@ module main (
         .wb_ack_o(wb_ack),
 
         // Wishbone peripherals to mux
-        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din, bram_wb_din, ieee_wb_din }),
-        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall, bram_wb_stall, ieee_wb_stall }),
-        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack, bram_wb_ack, ieee_wb_ack })
+        .wbp_din_i({ ram_wb_din, reg_wb_din, kbd_wb_din, crtc_wb_din, bram_wb_din, ieee_wb_din, hud_wb_din }),
+        .wbp_stall_i({ ram_wb_stall, reg_wb_stall, kbd_wb_stall, crtc_wb_stall, bram_wb_stall, ieee_wb_stall, hud_wb_stall }),
+        .wbp_ack_i({ ram_wb_ack, reg_wb_ack, kbd_wb_ack, crtc_wb_ack, bram_wb_ack, ieee_wb_ack, hud_wb_ack })
     );
 
     //
