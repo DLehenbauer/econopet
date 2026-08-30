@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -31,7 +34,7 @@ jobs:
         with:
           imageName: ${{ env.DEVCONTAINER_IMAGE }}
           cacheFrom: ${{ env.DEVCONTAINER_IMAGE }}
-          push: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'always' || 'never' }}
+          push: ${{ github.event_name == 'push' && 'always' || 'never' }}
           runCmd: |
             set -e
             cmake --preset default

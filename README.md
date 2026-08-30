@@ -77,3 +77,5 @@ run `./verilate.sh stock6502_boot_tb 0` directly. See
 This project is released under the [CC0 1.0 Universal](LICENSE) (CC0) license, placing it in the public domain.
 
 **Exception:** external dependencies are subject to their own licenses as noted in their respective source code and in [NOTICE.md](NOTICE.md).
+
+[![CI](https://github.com/DLehenbauer/econopet/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DLehenbauer/econopet/actions/workflows/ci.yml)
