@@ -10,6 +10,7 @@
 // Commodore disk image container. Supports:
 //   .d64 (2031/4040, 35 tracks, 174848 bytes) -- directory at 18/1
 //   .d80 (8050, 77 tracks, 533248 bytes)      -- directory at 39/1
+//   .hdd (flat OS-9 record stream, 258-byte pairs) -- synthetic directory
 //
 // Access is through a caller-supplied read callback so images can stream
 // from the SD card (FatFs) without holding 533KB in RAM; tests supply a
@@ -19,6 +20,11 @@ typedef enum {
     diskimage_type_none = 0,
     diskimage_type_d64,
     diskimage_type_d80,
+    // Flat REL container (.hdd): the raw record stream of one reclen-129
+    // file "OS9 DRIVE A" -- each 256-byte RBF sector as two 128-byte records
+    // + a $0D pad, the layout FORMAT.OS/9 produces inside a d80.
+    // 32766-sector ceiling.
+    diskimage_type_hdd,
 } diskimage_type_t;
 
 // Read 'len' bytes at byte 'offset' of the image into 'buf'.
@@ -57,6 +63,10 @@ typedef struct {
 // Detects the image type from 'size'. Returns false if the size matches no
 // supported container.
 bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);
+
+// Opens a flat hard-disk REL container (see diskimage_type_hdd). 'size' must
+// be a whole number of 258-byte sector-record pairs.
+bool diskimage_open_hdd(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);
 
 // Looks up 'name' (case-insensitive; '*' suffix wildcard; an optional
 // leading drive prefix like "0:", "1:" or "1." is stripped) in the
@@ -97,6 +107,10 @@ bool diskstream_next(diskstream_t* st, uint8_t* out, bool* last);
 
 typedef struct {
     const diskimage_t* img;
+    // Flat mode (hdd containers): the record stream is the file itself, so
+    // reads/writes are identity-mapped byte offsets and ts[] is unused.
+    bool flat;
+    uint32_t flat_size;                   // record-stream length in flat mode
     uint16_t count;                       // sectors in the chain
     uint16_t last_used;                   // data bytes used in final sector
     uint8_t ts[DISKCHAIN_MAX_SECTORS][2]; // track/sector of each chain link

@@ -84,7 +84,8 @@ static void scan_library(void) {
     while ((e = readdir(dir)) != NULL && library_count < MAX_LIBRARY) {
         const char* dot = strrchr(e->d_name, '.');
         if (dot == NULL) continue;
-        if (strcasecmp(dot, ".d80") != 0 && strcasecmp(dot, ".d64") != 0) continue;
+        if (strcasecmp(dot, ".d80") != 0 && strcasecmp(dot, ".d64") != 0
+            && strcasecmp(dot, ".hdd") != 0) continue;
         if (strlen(e->d_name) >= sizeof(library[0])) continue;
         strcpy(library[library_count++], e->d_name);
     }
@@ -173,8 +174,15 @@ static bool mount_image(unsigned int n, int idx) {
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
 
+    // .hdd = flat hard-disk REL container (any 258-multiple size); everything
+    // else opens by the exact d64/d80 container sizes.
+    const char* dot = strrchr(library[idx], '.');
+    bool is_hdd = (dot != NULL && strcasecmp(dot, ".hdd") == 0);
+
     diskimage_t img;
-    if (!diskimage_open(&img, file_read, f, (uint32_t) size)) {
+    bool opened = is_hdd ? diskimage_open_hdd(&img, file_read, f, (uint32_t) size)
+                         : diskimage_open(&img, file_read, f, (uint32_t) size);
+    if (!opened) {
         log_info("ieee: %s has unsupported size %ld, ignored", path, size);
         fclose(f);
         return false;
@@ -207,8 +215,9 @@ static void mount_drive(unsigned int n) {
     char preferred[16];
     drives[n].library_index = -1;
 
-    for (unsigned int ext = 0; ext < 2; ext++) {
-        snprintf(preferred, sizeof(preferred), "drive%u.%s", n, ext ? "d64" : "d80");
+    static const char* exts[] = {"hdd", "d80", "d64"};   // hard disk outranks floppies
+    for (unsigned int ext = 0; ext < 3; ext++) {
+        snprintf(preferred, sizeof(preferred), "drive%u.%s", n, exts[ext]);
         int idx = library_find(preferred);
         if (idx >= 0 && mount_image(n, idx)) return;
     }

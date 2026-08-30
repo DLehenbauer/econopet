@@ -53,6 +53,21 @@ bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_
     }
 }
 
+bool diskimage_open_hdd(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size) {
+    img->read = read;
+    img->write = NULL;
+    img->ctx = ctx;
+    img->size = size;
+
+    // One 258-byte record pair per 256-byte RBF sector; at least one sector.
+    if (size == 0 || size % 258u != 0) {
+        img->type = diskimage_type_none;
+        return false;
+    }
+    img->type = diskimage_type_hdd;
+    return true;
+}
+
 static void dir_start(const diskimage_t* img, uint8_t* track, uint8_t* sector) {
     if (img->type == diskimage_type_d80) {
         *track = 39;
@@ -64,6 +79,18 @@ static void dir_start(const diskimage_t* img, uint8_t* track, uint8_t* sector) {
 }
 
 bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry_t* out) {
+    // One synthetic entry: the REL file the Super-OS/9 d8d9 descriptors
+    // OPEN ("0:OS9 DRIVE A,L").
+    if (img->type == diskimage_type_hdd) {
+        if (index != 0) return false;
+        strcpy(out->name, "OS9 DRIVE A");
+        out->file_type = DISKIMAGE_FTYPE_REL;
+        out->start_track = 0;
+        out->start_sector = 0;
+        out->record_len = 129;
+        return true;
+    }
+
     uint8_t track, sector;
     dir_start(img, &track, &sector);
 
@@ -190,6 +217,18 @@ bool diskstream_next(diskstream_t* st, uint8_t* out, bool* last) {
 // ---------------------------------------------------------------------------
 
 bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uint8_t sector) {
+    // No chain: the record stream is the file, so offsets are
+    // identity-mapped.
+    if (img->type == diskimage_type_hdd) {
+        ch->img = img;
+        ch->flat = true;
+        ch->flat_size = img->size;
+        ch->count = 0;
+        ch->last_used = 0;
+        return true;
+    }
+    ch->flat = false;
+
     // Read whole tracks, not per-link 2-byte headers: links mostly hop
     // within a track, and each small SD read is a full transaction --
     // walking a large REL file per-link takes seconds.
@@ -229,11 +268,16 @@ bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uin
 }
 
 uint32_t diskchain_size(const diskchain_t* ch) {
+    if (ch->flat) return ch->flat_size;
     if (ch->count == 0) return 0;
     return (uint32_t) (ch->count - 1) * 254u + ch->last_used;
 }
 
 bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t len) {
+    if (ch->flat) {
+        if (off + len > ch->flat_size) return false;
+        return len == 0 || ch->img->read(ch->img->ctx, off, buf, len);
+    }
     while (len > 0) {
         uint16_t sec = (uint16_t) (off / 254u);
         uint16_t within = (uint16_t) (off % 254u);
@@ -255,6 +299,10 @@ bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t 
 
 bool diskchain_write(const diskchain_t* ch, uint32_t off, const uint8_t* buf, uint16_t len) {
     if (ch->img->write == NULL) return false;
+    if (ch->flat) {
+        if (off + len > ch->flat_size) return false;
+        return len == 0 || ch->img->write(ch->img->ctx, off, buf, len);
+    }
     while (len > 0) {
         uint16_t sec = (uint16_t) (off / 254u);
         uint16_t within = (uint16_t) (off % 254u);
