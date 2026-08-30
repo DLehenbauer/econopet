@@ -101,7 +101,8 @@ module ieee (
 
     always_ff @(posedge wb_clock_i) begin
         snap_dly <= {snap_dly[1:0], cpu_addr_strobe_i};
-        if (cpu_addr_strobe_i) snap_valid <= 1'b0;
+        // BE fall ends the cycle -- a stale snapshot must not inject into the next.
+        if (cpu_addr_strobe_i || !cpu_be_i) snap_valid <= 1'b0;
         if (snap_dly[2]) begin
             snap_valid <= 1'b1;
             snap_pia1 <= pia1_cs_i;
@@ -222,8 +223,9 @@ module ieee (
     logic byte_consumed = 1'b0;
 
     // RX push request from the acceptor
-    logic rx_push;
-    logic [8:0] rx_push_data;
+    logic rx_push = 1'b0;          // init: else a phantom push under rand reset
+    logic [8:0] rx_push_data = '0;
+
 
     // Data-FIFO flush, requested by the MCU (on OPEN/CLOSE) via CTRL bit 2.
     // UNTALK deliberately flushes nothing: the kernel reads files in several
@@ -411,10 +413,10 @@ module ieee (
         !rx_empty
     };
 
-    logic rx_pop_req, tx_push_req, txs_push_req;
+    logic rx_pop_req = 1'b0, tx_push_req = 1'b0, txs_push_req = 1'b0;
     logic mcu_tx_flush;
-    logic [8:0] tx_push_data;
-    logic [8:0] txs_push_data;
+    logic [8:0] tx_push_data = '0;
+    logic [8:0] txs_push_data = '0;
 
     always_ff @(posedge wb_clock_i) begin
         wbp_ack_o <= 1'b0;
