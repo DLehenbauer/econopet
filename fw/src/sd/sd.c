@@ -98,6 +98,7 @@ void sd_read_file(const char* filename, sd_read_callback_t callback, void* conte
     }
 
     release_temp_buffer(&buffer);
+    fclose(file);
 }
 
 uint64_t sd_free_bytes(void) {
