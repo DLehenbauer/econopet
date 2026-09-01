@@ -18,9 +18,9 @@ module clock_gen #(
         forever begin
             wait (enable);
             #(PERIOD / 4.0);
-            clock_o <= 1'b1;
+            clock_o = 1'b1;
             #(PERIOD / 2.0);
-            clock_o <= '0;
+            clock_o = '0;
             #(PERIOD / 4.0);
         end
     end

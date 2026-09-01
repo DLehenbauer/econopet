@@ -62,7 +62,7 @@ module spi1_driver(
         @(negedge spi_stall_i);
 
         $display("[%t]      SPI1 Received: [ %2h ]", $time, spi_rx_data);
-        spi_data_o <= spi_rx_data;
+        spi_data_o = spi_rx_data;
 
         spi_driver.complete;
     endtask
@@ -175,7 +175,7 @@ module spi1_driver(
 
         spi_driver.send(tx, /* complete: */ '0, /* start: */ start_i);
         @(negedge spi_stall_i);
-        spi_data_o <= spi_rx_data;
+        spi_data_o = spi_rx_data;
     endtask
 
     task write_at_hold(input [WB_ADDR_WIDTH-1:0] addr_i, input [DATA_WIDTH-1:0] data_i);
