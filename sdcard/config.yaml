@@ -287,9 +287,6 @@ configs:
   - id: superpet
     name: "SuperPET 6809 (Waterloo)"
     setup:
-      # Waterloo ROMs are not included; download from
-      # https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/
-      # and place in /roms/.
       - action: "load"
         files:
           - address: 0xa000
