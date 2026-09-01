@@ -88,7 +88,7 @@
         {
             "name": "fw",
             "displayName": "Firmware Tests",
-            "description": "Run only firmware unit tests",
+            "description": "Run only firmware tests",
             "configurePreset": "default",
             "filter": {
                 "include": {
@@ -99,15 +99,26 @@
         {
             "name": "gw",
             "displayName": "Gateware Tests",
-            "description": "Run the quick gateware simulation tests under Icarus (the default simulator)",
+            "description": "Run the quick gateware benches under Icarus and Verilator",
+            "configurePreset": "default",
+            "filter": {
+                "include": {
+                    "label": "iv|vl"
+                },
+                "exclude": {
+                    "label": "boot"
+                }
+            }
+        },
+        {
+            "name": "gw-iv",
+            "displayName": "Gateware Tests (Icarus only)",
+            "description": "Run the quick gateware benches under Icarus only",
             "configurePreset": "default",
             "filter": {
                 "include": {
                     "label": "iv"
                 }
-            },
-            "execution": {
-                "jobs": 8
             }
         },
         {
@@ -122,23 +133,17 @@
                 "exclude": {
                     "label": "boot"
                 }
-            },
-            "execution": {
-                "jobs": 8
             }
         },
         {
             "name": "gw-boot",
             "displayName": "Gateware Boot Tests",
-            "description": "Run the full-boot gateware benches under Verilator (minutes, not seconds)",
+            "description": "Run the full-boot gateware benches under Verilator (slow)",
             "configurePreset": "default",
             "filter": {
                 "include": {
                     "label": "boot"
                 }
-            },
-            "execution": {
-                "jobs": 8
             }
         }
     ]

@@ -41,18 +41,17 @@ cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
 
 # Test
-ctest --preset all                  # Run all tests
-ctest --preset fw                   # Run firmware tests only
-ctest --preset gw                   # Run gateware tests (Icarus)
-ctest --preset gw-vl                # Same benches under Verilator
-ctest --preset gw-boot              # Full-boot benches (Verilator, minutes)
+ctest --preset all --parallel       # Run all tests
+ctest --preset fw --parallel        # Run firmware tests only
+ctest --preset gw --parallel        # Run gateware unit tests only
+ctest --preset gw-boot --parallel   # Run full-boot benches (Verilator, minutes)
 ```
 
-Gateware benches run under both simulators. `gw` uses Icarus and is the quick
-default; `gw-vl` runs the same benches under Verilator, which is two-state and
-settles differently, so it catches races Icarus tolerates. Both take under a
-minute. `ECONOPET_ROMS_DIR` must point at the ROM images: the configure step
-requires it, and `top_tb` and the boot bench load real ROMs.
+Gateware benches run under both simulators. `gw` runs both quick suites;
+`gw-iv` and `gw-vl` run only Icarus or Verilator, respectively. Verilator is
+two-state and settles differently, so it catches races Icarus tolerates. Each
+suite takes under a minute. `ECONOPET_ROMS_DIR` must point at the ROM images:
+the configure step requires it, and `top_tb` and the boot bench load real ROMs.
 
 `gw-boot` is separate because it simulates seconds of PET time: it boots the
 stock BASIC-4 ROMs on the soft 6502 and passes only once the banner, the RAM

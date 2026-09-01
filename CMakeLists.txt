@@ -204,9 +204,8 @@ endif()
 
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
-    # Each bench runs under Icarus ('iv', the default suite) and Verilator
-    # ('vl', opt-in); they settle differently, so disagreements are the point.
-    # Full-boot benches are Verilator-only ('boot') -- Icarus would need hours.
+    # When reasonable to do so, benches run under both Icarus Verilog and Verilator.
+    # Slower benches (e.g., boot tests) are run only under Verilator.
     set(GW_BOOT_TESTS stock6502_boot_tb superpet_waterloo_tb)
     set(GW_RAND_RESET_DEFAULT 0)
 

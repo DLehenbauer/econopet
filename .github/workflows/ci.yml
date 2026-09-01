@@ -41,4 +41,4 @@ jobs:
             cmake --build --preset all
             python3 -m unittest discover -s .github/scripts
             python3 .github/scripts/check-timing.py build/gw/outflow/EconoPET.timing.rpt
-            ctest --preset all --output-on-failure
+            ctest --preset all --parallel --output-on-failure

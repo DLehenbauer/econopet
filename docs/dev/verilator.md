@@ -8,13 +8,16 @@ magnitude faster than iverilog, making them practical to run routinely.
 
 ## Via CTest
 
-Every bench is registered twice: `<name>` on Icarus (label `iv`) and
+Quick benches are registered twice: `<name>` on Icarus (label `iv`) and
 `<name>_vl` on Verilator (label `vl`). Full-boot benches are Verilator-only
 and take the `boot` label.
 
-    ctest --preset gw        # Icarus, the default suite
-    ctest --preset gw-vl     # same benches under Verilator
-    ctest --preset gw-boot   # full-boot benches, minutes rather than seconds
+```sh
+ctest --preset gw --parallel        # quick benches under both simulators
+ctest --preset gw-iv --parallel     # quick benches under Icarus only
+ctest --preset gw-vl --parallel     # quick benches under Verilator only
+ctest --preset gw-boot --parallel   # full-boot benches (slow)
+```
 
 `work_sim/obj_<name>/` caches the compiled model, so a rerun costs almost
 nothing while a cold run pays the C++ build. That build dominates the short
