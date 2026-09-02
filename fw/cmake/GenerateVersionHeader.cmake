@@ -18,23 +18,29 @@ endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/GitVersion.cmake")
 
-# Write via a temporary so that an unchanged header keeps its timestamp and
-# does not force a rebuild of everything that includes it.
+# Write via a temporary and only replace the header when it actually changes,
+# so that rebuilding at the same commit does not recompile everything that
+# includes it. Staying quiet in that case also keeps this off the build log.
+set(version_header_tmp "${VERSION_HEADER_OUT}.tmp")
+
 configure_file(
     "${VERSION_HEADER_IN}"
-    "${VERSION_HEADER_OUT}.tmp"
+    "${version_header_tmp}"
     @ONLY
 )
 
-execute_process(
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VERSION_HEADER_OUT}.tmp"
-            "${VERSION_HEADER_OUT}"
-    RESULT_VARIABLE copy_result
-)
+if(EXISTS "${VERSION_HEADER_OUT}")
+    file(READ "${VERSION_HEADER_OUT}" version_header_existing)
+    file(READ "${version_header_tmp}" version_header_new)
+    string(COMPARE EQUAL "${version_header_existing}" "${version_header_new}"
+        version_header_unchanged)
+else()
+    set(version_header_unchanged FALSE)
+endif()
 
-file(REMOVE "${VERSION_HEADER_OUT}.tmp")
-
-if(NOT copy_result EQUAL 0)
-    message(FATAL_ERROR "Failed to write ${VERSION_HEADER_OUT}")
+if(NOT version_header_unchanged)
+    file(RENAME "${version_header_tmp}" "${VERSION_HEADER_OUT}")
+    message(STATUS "Firmware v${PROJECT_VERSION} (${GIT_DESCRIPTION})")
+else()
+    file(REMOVE "${version_header_tmp}")
 endif()
