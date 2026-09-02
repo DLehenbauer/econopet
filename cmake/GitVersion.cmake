@@ -9,10 +9,10 @@
 #   GIT_HASH   - Short git commit hash (e.g., "abc1234")
 #   GIT_DIRTY  - 1 if working tree has uncommitted changes, 0 otherwise
 #
-# These are captured whenever this module is included, so a caller that includes
-# it while configuring will report the commit as of the last configure. Callers
-# that need the commit to track every build (such as the SD card package) run
-# this module from a script invoked as a build step instead.
+# These are captured whenever this module is included, so including it while
+# configuring would report the commit as of the last configure. Both callers
+# therefore include it from a script run as a build step instead, keeping the
+# recorded commit in step with the tree being built.
 #
 # Usage:
 #   include(${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake)

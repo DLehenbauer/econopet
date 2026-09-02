@@ -8,15 +8,8 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 # Include ROM header generation function
 include(${FW_DIR}/cmake/AddRomHeader.cmake)
 
-# Include git version information
-include(${FW_DIR}/../cmake/GitVersion.cmake)
-
-# Generate version header in build directory
-configure_file(
-    ${FW_DIR}/cmake/version.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/version.h
-    @ONLY
-)
+# Include version header generation function
+include(${FW_DIR}/cmake/AddVersionHeader.cmake)
 
 # Include external projects
 set(FW_EXTERNAL_DIR ${FW_DIR}/external)
@@ -162,6 +155,9 @@ add_rom_header(${FW_EXECUTABLE_NAME}
     ${ECONOPET_ROM_BIN_DIR}/menu.rom
     ${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h
 )
+
+# Generate version header in build directory
+add_version_header(${FW_EXECUTABLE_NAME})
 
 # Add build directory to include path for generated ROM headers
 target_include_directories(${FW_EXECUTABLE_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
