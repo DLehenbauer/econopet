@@ -10,17 +10,38 @@ permissions:
   contents: read
   packages: write
 
+# Pull request runs are superseded by newer pushes to the same PR, but runs on
+# main are never cancelled (each main commit keeps its own status). Ordering of
+# racing main runs is handled by the 'lkg-main' tag claim below.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   DEVCONTAINER_IMAGE: ghcr.io/dlehenbauer/econopet-devcontainer
+
+  # Name of the moving tag that marks the last known good commit on main.
+  LKG_TAG: lkg-main
+
+  # Uploaded artifact name. GitHub wraps the artifact in a zip named
+  # '<name>.zip', so this is also the filename testers download.
+  LKG_ARTIFACT: EconoPET-40-8096-A-firmware-lkg-main
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Push the 'lkg-main' tag
+      packages: write   # Push the devcontainer image to ghcr.io
+      actions: write    # Delete superseded artifacts (scoped to this repo)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
+          # Full history is required for the ancestry check that keeps
+          # 'lkg-main' advancing monotonically.
+          fetch-depth: 0
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -42,3 +63,143 @@ jobs:
             python3 -m unittest discover -s .github/scripts
             python3 .github/scripts/check-timing.py build/gw/outflow/EconoPET.timing.rpt
             ctest --preset all --parallel --output-on-failure
+
+      # The steps below only run for a green build of a commit on main, because
+      # a failed step above ends the job.
+      #
+      # Invariant: the SD card package is the *only* artifact this workflow
+      # uploads. Adding a second upload would break the promise that testers
+      # always find exactly one download on the run page.
+
+      # Claim 'lkg-main' for this commit. The tag doubles as a compare-and-swap
+      # lock so that racing or out-of-order main builds cannot regress it: a
+      # commit already contained in the tagged commit loses and publishes
+      # nothing, and the atomic lease on the push resolves simultaneous claims.
+      - name: Claim lkg-main
+        id: claim
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DLehenbauer/econopet'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          published=false
+
+          for attempt in 1 2 3; do
+            git fetch --force --no-tags origin "refs/tags/${LKG_TAG}:refs/tags/${LKG_TAG}" || true
+
+            if old_commit=$(git rev-parse -q --verify "refs/tags/${LKG_TAG}^{commit}"); then
+              # Expected remote value for the lease is the tag object itself.
+              lease="refs/tags/${LKG_TAG}:$(git rev-parse "refs/tags/${LKG_TAG}")"
+
+              if git merge-base --is-ancestor "${COMMIT_SHA}" "${old_commit}"; then
+                echo "lkg-main already points at ${old_commit}, which contains ${COMMIT_SHA}."
+                echo "A newer main commit owns lkg-main. Skipping publish."
+                break
+              fi
+            else
+              # Empty expected value asserts the tag does not exist yet.
+              lease="refs/tags/${LKG_TAG}:"
+            fi
+
+            git tag --force --annotate \
+              -m "Last known good build of main" \
+              -m "Commit: ${COMMIT_SHA}" \
+              -m "Run: ${RUN_URL}" \
+              -m "Built: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+              "${LKG_TAG}" "${COMMIT_SHA}"
+
+            if git push "--force-with-lease=${lease}" origin "refs/tags/${LKG_TAG}"; then
+              published=true
+              break
+            fi
+
+            echo "Lost the race to update ${LKG_TAG} (attempt ${attempt}). Re-evaluating."
+            sleep 5
+          done
+
+          echo "published=${published}" >> "${GITHUB_OUTPUT}"
+
+      # Copy the package out of the build tree (owned by the devcontainer user)
+      # and record provenance for bug reports.
+      - name: Stage SD card package
+        if: steps.claim.outputs.published == 'true'
+        env:
+          STAGE_DIR: ${{ runner.temp }}/lkg
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          zips=(build/sdcard/EconoPET-*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one build/sdcard/EconoPET-*.zip, found ${#zips[@]}."
+            exit 1
+          fi
+          zip_name=$(basename "${zips[0]}")
+
+          sudo cp -r build/sdcard/sdcard_root "${STAGE_DIR}"
+          sudo chown -R "$(id -u):$(id -g)" "${STAGE_DIR}"
+
+          {
+            echo "EconoPET last known good build of main"
+            echo
+            echo "Commit:  ${COMMIT_SHA}"
+            echo "Short:   $(git rev-parse --short "${COMMIT_SHA}")"
+            echo "Subject: $(git log -1 --pretty=%s "${COMMIT_SHA}")"
+            echo "Branch:  main"
+            echo "Tag:     ${LKG_TAG}"
+            echo "Run:     ${RUN_URL}"
+            echo "Built:   $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "Package: ${zip_name}"
+          } > "${STAGE_DIR}/BUILD-INFO.txt"
+
+          ls -lR "${STAGE_DIR}"
+
+      # Uploading the staged contents (rather than the zip built by CMake) keeps
+      # the download a single unzip away from a ready-to-use SD card.
+      - name: Upload SD card package
+        id: upload
+        if: steps.claim.outputs.published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.LKG_ARTIFACT }}
+          path: ${{ runner.temp }}/lkg/*
+          if-no-files-found: error
+          overwrite: true
+
+      # Artifacts are per-run objects, so the upload above does not replace the
+      # one from the previous main build. Delete the older copies (matched by
+      # exact name) so exactly one download remains. Deleting after uploading
+      # avoids a window with no package available.
+      - name: Prune superseded artifacts
+        if: steps.claim.outputs.published == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_ID: ${{ steps.upload.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+
+          # Without a known id to keep, pruning would delete the artifact this
+          # run just uploaded.
+          if [ -z "${KEEP_ID}" ]; then
+            echo "::warning::No uploaded artifact id available. Skipping prune."
+            exit 0
+          fi
+
+          gh api --paginate -X GET "repos/${GITHUB_REPOSITORY}/actions/artifacts" \
+            -f "name=${LKG_ARTIFACT}" \
+            --jq '.artifacts[] | select(.expired == false) | .id' \
+          | while read -r id; do
+              if [ "${id}" != "${KEEP_ID}" ]; then
+                echo "Deleting superseded artifact ${id}"
+                gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" \
+                  || echo "::warning::Could not delete artifact ${id}"
+              fi
+            done
