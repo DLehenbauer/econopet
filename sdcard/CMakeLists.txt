@@ -107,7 +107,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake")
 
 string(TIMESTAMP ECONOPET_DATE "%y%m%d" UTC)
 string(TIMESTAMP sdcard_build_time "%Y-%m-%dT%H:%M:%SZ" UTC)
-set(sdcard_version "${ECONOPET_DATE}.0")
+set(sdcard_version "${ECONOPET_DATE}")
 
 if(GIT_DIRTY)
     set(sdcard_dirty "true")
@@ -127,6 +127,15 @@ configure_file(
 # on the same day remain distinguishable.
 set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${sdcard_version}-${GIT_HASH}.zip")
 set(sdcard_zip_path "${CMAKE_CURRENT_BINARY_DIR}/${sdcard_zip_name}")
+
+# Because the name above changes with the commit and the date, reconfiguring
+# would otherwise leave the previous package sitting beside the new one.
+file(GLOB sdcard_stale_zips "${CMAKE_CURRENT_BINARY_DIR}/EconoPET-*.zip")
+list(REMOVE_ITEM sdcard_stale_zips "${sdcard_zip_path}")
+if(sdcard_stale_zips)
+    message(STATUS "Removing superseded package(s): ${sdcard_stale_zips}")
+    file(REMOVE ${sdcard_stale_zips})
+endif()
 
 add_custom_command(
     OUTPUT "${sdcard_zip_path}"
