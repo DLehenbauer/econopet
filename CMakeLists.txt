@@ -189,6 +189,19 @@ add_custom_target(default_target ALL DEPENDS all_projects)
 # Testing Integration
 # ============================================================================
 
+# One pseudo-random seed per ctest run, shared by every test so a failing run can be
+# replayed in full via ECONOPET_TEST_SEED. A pre-test hook (rather than a fixture) so
+# the seed always prints, even when every test passes. See docs/dev/testing.md.
+set(ECONOPET_TEST_SEED_FILE "${CMAKE_BINARY_DIR}/test.seed")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/CTestCustom.cmake.in"
+    "${CMAKE_BINARY_DIR}/CTestCustom.cmake"
+    @ONLY
+)
+
+# Applied to every test so seed.sh can resolve the shared seed.
+set(ECONOPET_TEST_ENV "ECONOPET_TEST_SEED_FILE=${ECONOPET_TEST_SEED_FILE}")
+
 # Add firmware tests to root CTest
 if(BUILD_TESTS)
     add_test(
@@ -198,7 +211,7 @@ if(BUILD_TESTS)
     set_tests_properties(firmware_tests PROPERTIES
         LABELS "fw;unit"
         DEPENDS test_project
-        ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard"
+        ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard;${ECONOPET_TEST_ENV}"
     )
 endif()
 
@@ -247,6 +260,7 @@ if(BUILD_FPGA)
                 LABELS "gw;sim;vl;boot"
                 TIMEOUT 1800
                 FIXTURES_REQUIRED gateware_filelists
+                ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         else()
             add_test(
@@ -258,6 +272,7 @@ if(BUILD_FPGA)
                 LABELS "gw;sim;iv"
                 TIMEOUT 300
                 FIXTURES_REQUIRED gateware_filelists
+                ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
 
             # Verilator variant. Timeout covers compiling the model, not just running it.
@@ -270,6 +285,7 @@ if(BUILD_FPGA)
                 LABELS "gw;sim;vl"
                 TIMEOUT 600
                 FIXTURES_REQUIRED gateware_filelists
+                ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         endif()
     endforeach()

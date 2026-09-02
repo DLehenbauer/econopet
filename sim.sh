@@ -182,6 +182,9 @@ if [ -z "$NO_UPDATE" ]; then
     exit $?
 fi
 
+# Invoke seed.sh to get the effective test seed (empty if none is set).
+SEED="$("$SCRIPT_DIR/seed.sh")" || exit 1
+
 # The generated file lists use project-relative paths. Therefore, execute iverilog
 # from the root of the project directory.
 pushd "$PROJ_DIR" || exit 1
@@ -204,7 +207,13 @@ VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
 iverilog -g2012 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
 exit_on_failure
 
-vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE"
+VVP_ARGS=()
+if [ -n "$SEED" ]; then
+    echo "Test seed: ${SEED} (replay with ECONOPET_TEST_SEED=${SEED})"
+    VVP_ARGS+=("+seed=${SEED}")
+fi
+
+vvp -l"$PROJ_DIR/outflow/${TEST_NAME}.rtl.simlog" "$VVP_FILE" "${VVP_ARGS[@]}"
 VVP_EXIT_CODE=$?
 
 if [ $VVP_EXIT_CODE -ne 0 ]; then

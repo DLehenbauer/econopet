@@ -1,0 +1,1 @@
+set(CTEST_CUSTOM_PRE_TEST "\"@CMAKE_SOURCE_DIR@/seed.sh\" --write \"@ECONOPET_TEST_SEED_FILE@\"")

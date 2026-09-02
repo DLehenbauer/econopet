@@ -69,7 +69,8 @@ end and writes `gw/EconoPET/outflow/stock6502_boot_tb.pgm`:
 
 `ctest` hides that on success, so use `ctest --preset gw-boot -V` to see it, or
 run `./verilate.sh stock6502_boot_tb 0` directly. See
-[docs/dev/verilator.md](docs/dev/verilator.md) for the Verilator runner.
+[docs/dev/verilator.md](docs/dev/verilator.md) for the Verilator runner and
+[docs/dev/testing.md](docs/dev/testing.md) for test seeding and replay.
 
 ## License
 

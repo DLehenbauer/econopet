@@ -14,6 +14,9 @@ if [ -z "$TEST_NAME" ]; then
     exit 1
 fi
 
+# Invoke seed.sh to get the effective test seed (empty if none is set).
+SEED="$("$SCRIPT_DIR/seed.sh")" || exit 1
+
 # Reuse sim.sh's generated file list.
 [ -f "$PROJ_DIR/work_sim/EconoPET.f" ] || "$SCRIPT_DIR/sim.sh" -u >/dev/null
 
@@ -32,4 +35,10 @@ verilator --binary --timing -j "$VERILATOR_JOBS" \
     -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" \
     -f work_sim/EconoPET.f || exit $?
 
-exec "work_sim/obj_${TEST_NAME}/${TEST_NAME}_vl" "+verilator+rand+reset+${RAND_RESET}"
+VERILATOR_ARGS=("+verilator+rand+reset+${RAND_RESET}")
+if [ -n "$SEED" ]; then
+    echo "Test seed: ${SEED} (replay with ECONOPET_TEST_SEED=${SEED})"
+    VERILATOR_ARGS+=("+verilator+seed+${SEED}" "+seed=${SEED}")
+fi
+
+exec "work_sim/obj_${TEST_NAME}/${TEST_NAME}_vl" "${VERILATOR_ARGS[@]}"

@@ -41,6 +41,9 @@ becomes:
 Override individual benches with `GW_RAND_RESET_<name>` when an upstream model
 requires a particular power-up state.
 
+Mode `2` draws from the seed described in [testing.md](testing.md), which
+`verilate.sh` passes as `+verilator+seed+N`.
+
 ## Known constraints
 
 - Verilator resolves a released (`'z`) net to a defined level, so bus ownership

@@ -37,8 +37,8 @@ module top_tb;
         mock_system.spi_read_at(common_pkg::wb_ram_addr(17'h1ffff), dout);
 
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $random();
-            value = $random();
+            addr = $urandom();
+            value = $urandom();
             mock_system.spi_write_at(common_pkg::wb_ram_addr(addr), value);
             mock_system.spi_read_at(common_pkg::wb_ram_addr(addr), dout);
             `assert_equal(dout, value);
@@ -56,8 +56,8 @@ module top_tb;
         $display("[%t] Begin CPU/RAM Test", $time);
 
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $random();
-            value = $random();
+            addr = $urandom();
+            value = $urandom();
             mock_system.cpu_write({ 1'b0, addr }, value);
             mock_system.cpu_read({ 1'b0, addr }, dout);
             `assert_equal(dout, value);
@@ -222,12 +222,12 @@ module top_tb;
         test_addrs[4] = BRAM_LAST_ADDR - 1;
         test_addrs[5] = BRAM_LAST_ADDR;
 
-        test_values[0] = $random();
-        test_values[1] = $random();
-        test_values[2] = $random();
-        test_values[3] = $random();
-        test_values[4] = $random();
-        test_values[5] = $random();
+        test_values[0] = $urandom();
+        test_values[1] = $urandom();
+        test_values[2] = $urandom();
+        test_values[3] = $urandom();
+        test_values[4] = $urandom();
+        test_values[5] = $urandom();
 
         // Write addresses at/near boundaries
         for (i = 0; i < NUM_BOUNDARY_TESTS; i = i + 1) begin
@@ -244,8 +244,8 @@ module top_tb;
 
         // Test random addresses
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $random();
-            value = $random();
+            addr = $urandom();
+            value = $urandom();
             $display("[%t]   BRAM[0x%03x] <- 0x%02x", $time, addr, value);
             mock_system.spi_write_at(common_pkg::wb_bram_addr(addr), value);
             mock_system.spi_read_at(common_pkg::wb_bram_addr(addr), dout);

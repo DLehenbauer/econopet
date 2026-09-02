@@ -11,6 +11,8 @@
 `define assert_equal(ACTUAL, EXPECTED) `assert_compare(ACTUAL, ==, EXPECTED)
 `define assert_exact_equal(ACTUAL, EXPECTED) `assert_compare(ACTUAL, ===, EXPECTED)
 
-`define TB_INIT initial begin $dumpfile($sformatf("work_sim/%m.vcd")); $dumpvars(0); $display("[%t] BEGIN %m", $time); run; #1 $display("[%t] END %m", $time); $finish; end
+// Note: Macros defined on a single line to prevent line numbers from changing during expansion [iverilog 12]
+// Icarus has no global RNG seed, so seed $urandom from the +seed plusarg supplied by sim.sh/verilate.sh.
+`define TB_INIT int tb_seed; initial begin if ($value$plusargs("seed=%d", tb_seed)) void'($urandom(tb_seed)); $dumpfile($sformatf("work_sim/%m.vcd")); $dumpvars(0); $display("[%t] BEGIN %m", $time); run; #1 $display("[%t] END %m", $time); $finish; end
 
 `endif
