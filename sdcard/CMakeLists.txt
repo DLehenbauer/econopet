@@ -103,8 +103,29 @@ add_custom_command(
 )
 
 # Create a zip archive of the SD card contents
-string(TIMESTAMP ECONOPET_DATE "%y%m%d")
-set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${ECONOPET_DATE}.0.zip")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake")
+
+string(TIMESTAMP ECONOPET_DATE "%y%m%d" UTC)
+string(TIMESTAMP sdcard_build_time "%Y-%m-%dT%H:%M:%SZ" UTC)
+set(sdcard_version "${ECONOPET_DATE}.0")
+
+if(GIT_DIRTY)
+    set(sdcard_dirty "true")
+else()
+    set(sdcard_dirty "false")
+endif()
+
+# Record what went into the package, so that a downloaded zip can be traced back
+# to the commit it was built from.
+configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/build-info.yaml.in"
+    "${sdcard_root_dir}/build-info.yaml"
+    @ONLY
+)
+
+# The commit is part of the name so that packages built from different commits
+# on the same day remain distinguishable.
+set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${sdcard_version}-${GIT_HASH}.zip")
 set(sdcard_zip_path "${CMAKE_CURRENT_BINARY_DIR}/${sdcard_zip_name}")
 
 add_custom_command(
@@ -114,6 +135,7 @@ add_custom_command(
     WORKING_DIRECTORY "${sdcard_root_dir}"
     DEPENDS "${sdcard_root_dir}/firmware.uf2"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
+            "${sdcard_root_dir}/build-info.yaml"
             ${sdcard_rom_outputs}
     COMMENT "Zipping SD card contents to ${sdcard_zip_path}"
     VERBATIM

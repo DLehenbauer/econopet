@@ -3,7 +3,7 @@ project("firmware-test"
     LANGUAGES C)
 
 # Include git version information
-include(${FW_DIR}/cmake/GitVersion.cmake)
+include(${FW_DIR}/../cmake/GitVersion.cmake)
 
 # Generate version header in build directory
 configure_file(

@@ -9,7 +9,7 @@ add_compile_options(-Wall -Wextra -Wnull-dereference)
 include(${FW_DIR}/cmake/AddRomHeader.cmake)
 
 # Include git version information
-include(${FW_DIR}/cmake/GitVersion.cmake)
+include(${FW_DIR}/../cmake/GitVersion.cmake)
 
 # Generate version header in build directory
 configure_file(

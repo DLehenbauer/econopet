@@ -49,17 +49,12 @@ jobs:
       # The steps below only run for a green build of a commit on main, because
       # a failed step above ends the job.
 
-      # Copy the package out of the build tree so that BUILD-INFO.txt can be
-      # added without polluting it. The devcontainer runs as root, so the build
-      # tree is root-owned, but world-readable: copying it unprivileged gives
-      # the runner ownership of the copy.
-      - name: Stage SD card package
-        id: stage
+      # CMake names the package for the version and commit it was built from,
+      # and includes 'build-info.yaml' in it, so the artifact is just what is
+      # already in the build tree under a matching name.
+      - name: Name SD card package
+        id: package
         if: env.PUBLISH == 'true'
-        env:
-          STAGE_DIR: ${{ runner.temp }}/package
-          COMMIT_SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -69,36 +64,14 @@ jobs:
             echo "::error::Expected exactly one build/sdcard/EconoPET-*.zip, found ${#zips[@]}."
             exit 1
           fi
+
+          # GitHub wraps the artifact in '<name>.zip', so dropping the extension
+          # here reproduces the CMake filename on download.
           zip_name=$(basename "${zips[0]}")
-          short_sha=$(git rev-parse --short "${COMMIT_SHA}")
+          echo "name=${zip_name%.zip}" >> "${GITHUB_OUTPUT}"
 
-          # Every green build on main keeps its own package, so the name carries
-          # the CMake version stamp and the commit it was built from. GitHub
-          # wraps the artifact in '<name>.zip', so this is also the filename
-          # testers download.
-          artifact_name="${zip_name%.zip}-${short_sha}"
-          echo "artifact-name=${artifact_name}" >> "${GITHUB_OUTPUT}"
-
-          # 'cp -r' copies into an existing destination, which would add a
-          # directory level to the artifact, so start from a clean slate.
-          rm -rf "${STAGE_DIR}"
-          cp -r build/sdcard/sdcard_root "${STAGE_DIR}"
-
-          {
-            echo "EconoPET build of main"
-            echo
-            echo "Package: ${artifact_name}.zip"
-            echo "Commit:  ${COMMIT_SHA}"
-            echo "Subject: $(git log -1 --pretty=%s "${COMMIT_SHA}")"
-            echo "Branch:  main"
-            echo "Run:     ${RUN_URL}"
-            echo "Built:   $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          } > "${STAGE_DIR}/BUILD-INFO.txt"
-
-          ls -lR "${STAGE_DIR}"
-
-      # Uploading the staged contents (rather than the zip built by CMake) keeps
-      # the download a single unzip away from a ready-to-use SD card.
+      # Uploading the package contents (rather than the zip built by CMake)
+      # keeps the download a single unzip away from a ready-to-use SD card.
       #
       # Keep this the last step of the job so that the download URL it prints is
       # the last thing in the log.
@@ -106,8 +79,8 @@ jobs:
         if: env.PUBLISH == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.stage.outputs.artifact-name }}
-          path: ${{ runner.temp }}/package
+          name: ${{ steps.package.outputs.name }}
+          path: build/sdcard/sdcard_root
           if-no-files-found: error
           # Allow a re-run of the same commit to replace its package.
           overwrite: true
