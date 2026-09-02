@@ -49,9 +49,9 @@ jobs:
       # The steps below only run for a green build of a commit on main, because
       # a failed step above ends the job.
 
-      # CMake names the package for the version and commit it was built from,
-      # and includes 'build-info.yaml' in it, so the artifact is just what is
-      # already in the build tree under a matching name.
+      # The build names the package for the version and commit it was built
+      # from, and includes 'build-info.txt' in it, so the artifact is just what
+      # is already in the build tree under a matching name.
       - name: Name SD card package
         id: package
         if: env.PUBLISH == 'true'
@@ -66,7 +66,7 @@ jobs:
           fi
 
           # GitHub wraps the artifact in '<name>.zip', so dropping the extension
-          # here reproduces the CMake filename on download.
+          # here reproduces the package filename on download.
           zip_name=$(basename "${zips[0]}")
           echo "name=${zip_name%.zip}" >> "${GITHUB_OUTPUT}"
 

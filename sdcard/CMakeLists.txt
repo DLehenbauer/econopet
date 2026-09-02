@@ -102,55 +102,20 @@ add_custom_command(
     VERBATIM
 )
 
-# Create a zip archive of the SD card contents
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake")
-
-string(TIMESTAMP ECONOPET_DATE "%y%m%d" UTC)
-string(TIMESTAMP sdcard_build_time "%Y-%m-%dT%H:%M:%SZ" UTC)
-set(sdcard_version "${ECONOPET_DATE}")
-
-if(GIT_DIRTY)
-    set(sdcard_dirty "true")
-else()
-    set(sdcard_dirty "false")
-endif()
-
-# Record what went into the package, so that a downloaded zip can be traced back
-# to the commit it was built from.
-configure_file(
-    "${CMAKE_CURRENT_LIST_DIR}/build-info.yaml.in"
-    "${sdcard_root_dir}/build-info.yaml"
-    @ONLY
-)
-
-# The commit is part of the name so that packages built from different commits
-# on the same day remain distinguishable.
-set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${sdcard_version}-${GIT_HASH}.zip")
-set(sdcard_zip_path "${CMAKE_CURRENT_BINARY_DIR}/${sdcard_zip_name}")
-
-# Because the name above changes with the commit and the date, reconfiguring
-# would otherwise leave the previous package sitting beside the new one.
-file(GLOB sdcard_stale_zips "${CMAKE_CURRENT_BINARY_DIR}/EconoPET-*.zip")
-list(REMOVE_ITEM sdcard_stale_zips "${sdcard_zip_path}")
-if(sdcard_stale_zips)
-    message(STATUS "Removing superseded package(s): ${sdcard_stale_zips}")
-    file(REMOVE ${sdcard_stale_zips})
-endif()
-
-add_custom_command(
-    OUTPUT "${sdcard_zip_path}"
-    # Zip only the contents of ${sdcard_root_dir}
-    COMMAND ${CMAKE_COMMAND} -E tar cf "${sdcard_zip_path}" --format=zip .
-    WORKING_DIRECTORY "${sdcard_root_dir}"
+# Package the SD card contents. The zip is named for the version and commit it
+# was built from, and carries a matching 'build-info.txt', both of which are
+# produced by the packaging script so that they describe the tree as of the
+# build rather than as of the last configure. That makes the zip filename
+# unknown here, so this is a custom target (which always runs) rather than a
+# custom command producing a named output.
+add_custom_target(sdcard ALL
+    COMMAND ${CMAKE_COMMAND}
+            -DSDCARD_ROOT_DIR=${sdcard_root_dir}
+            -DSDCARD_ZIP_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_LIST_DIR}/Package.cmake"
     DEPENDS "${sdcard_root_dir}/firmware.uf2"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
-            "${sdcard_root_dir}/build-info.yaml"
             ${sdcard_rom_outputs}
-    COMMENT "Zipping SD card contents to ${sdcard_zip_path}"
+    COMMENT "Packaging SD card contents"
     VERBATIM
-)
-
-# Define 'sdcard' target that performs the copy; included in default 'all' build
-add_custom_target(sdcard ALL
-    DEPENDS "${sdcard_zip_path}"
 )
