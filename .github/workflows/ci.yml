@@ -12,8 +12,7 @@ permissions:
 
 # Supersede in-progress runs of the same pull request. Runs on main get a group
 # of their own (keyed by run id) so that they never queue behind or cancel each
-# other: every main commit keeps its own status, and ordering of racing main
-# runs is handled by the 'lkg-main' tag claim below.
+# other: every commit on main keeps its own status and its own package.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
@@ -21,21 +20,12 @@ concurrency:
 env:
   DEVCONTAINER_IMAGE: ghcr.io/dlehenbauer/econopet-devcontainer
 
-  # Name of the moving tag that marks the last known good commit on main.
-  LKG_TAG: lkg-main
-
-  # Uploaded artifact name. GitHub wraps the artifact in a zip named
-  # '<name>.zip', so this is also the filename testers download.
-  LKG_ARTIFACT: EconoPET-40-8096-A-firmware-lkg-main
-
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     permissions:
       contents: read    # This job runs code from the branch under test
       packages: write   # Push the devcontainer image to ghcr.io
-    outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     env:
       # Publish only from green builds of commits on main in this repository.
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DLehenbauer/econopet' }}
@@ -71,17 +61,14 @@ jobs:
 
       # The steps below only run for a green build of a commit on main, because
       # a failed step above ends the job.
-      #
-      # Invariant: the SD card package is the *only* artifact this workflow
-      # uploads. Adding a second upload would break the promise that testers
-      # always find exactly one download on the run page.
 
       # Copy the package out of the build tree (owned by the devcontainer user)
       # and record provenance for bug reports.
       - name: Stage SD card package
+        id: stage
         if: env.PUBLISH == 'true'
         env:
-          STAGE_DIR: ${{ runner.temp }}/lkg
+          STAGE_DIR: ${{ runner.temp }}/package
           COMMIT_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -94,6 +81,14 @@ jobs:
             exit 1
           fi
           zip_name=$(basename "${zips[0]}")
+          short_sha=$(git rev-parse --short "${COMMIT_SHA}")
+
+          # Every green build on main keeps its own package, so the name carries
+          # the CMake version stamp and the commit it was built from. GitHub
+          # wraps the artifact in '<name>.zip', so this is also the filename
+          # testers download.
+          artifact_name="${zip_name%.zip}-${short_sha}"
+          echo "artifact-name=${artifact_name}" >> "${GITHUB_OUTPUT}"
 
           # 'cp -r' copies into an existing destination, which would add a
           # directory level to the artifact, so start from a clean slate.
@@ -102,19 +97,14 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" "${STAGE_DIR}"
 
           {
-            echo "EconoPET last known good build of main"
+            echo "EconoPET build of main"
             echo
+            echo "Package: ${artifact_name}.zip"
             echo "Commit:  ${COMMIT_SHA}"
-            echo "Short:   $(git rev-parse --short "${COMMIT_SHA}")"
             echo "Subject: $(git log -1 --pretty=%s "${COMMIT_SHA}")"
             echo "Branch:  main"
-            echo "Tag:     ${LKG_TAG}"
             echo "Run:     ${RUN_URL}"
             echo "Built:   $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            # Name of the versioned zip built by CMake. It is not included in
-            # this download (which unzips directly to the SD card contents),
-            # but it carries the date-based version stamp of this package.
-            echo "Version: ${zip_name}"
           } > "${STAGE_DIR}/BUILD-INFO.txt"
 
           ls -lR "${STAGE_DIR}"
@@ -122,132 +112,14 @@ jobs:
       # Uploading the staged contents (rather than the zip built by CMake) keeps
       # the download a single unzip away from a ready-to-use SD card.
       #
-      # The package is uploaded before 'lkg-main' is claimed so that the tag
-      # never points at a commit whose artifact is missing. A run that then
-      # loses the claim withdraws its own upload.
+      # Keep this the last step of the job so that the download URL it prints is
+      # the last thing in the log.
       - name: Upload SD card package
-        id: upload
         if: env.PUBLISH == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.LKG_ARTIFACT }}
-          path: ${{ runner.temp }}/lkg
+          name: ${{ steps.stage.outputs.artifact-name }}
+          path: ${{ runner.temp }}/package
           if-no-files-found: error
+          # Allow a re-run of the same commit to replace its package.
           overwrite: true
-
-  # Advancing 'lkg-main' needs a write-capable token, so it lives in a job that
-  # runs no repository code: only git and the GitHub API. That keeps the token
-  # out of reach of the build, which executes scripts from the branch under
-  # test.
-  publish:
-    needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DLehenbauer/econopet'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write   # Push the 'lkg-main' tag
-      actions: write    # Withdraw this run's artifact when it loses the claim
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Full history is required for the ancestry check that keeps
-          # 'lkg-main' advancing monotonically. Blobs are not.
-          fetch-depth: 0
-          filter: blob:none
-
-      # Claim 'lkg-main' for this commit. The tag doubles as a compare-and-swap
-      # lock so that racing or out-of-order main builds cannot regress it: a
-      # commit already contained in the tagged commit loses and publishes
-      # nothing, and the atomic lease on the push resolves simultaneous claims.
-      - name: Claim lkg-main
-        id: claim
-        # Tag bookkeeping is not part of the build result, so a failure here
-        # leaves the run green. The step below then withdraws the package,
-        # keeping the tag and the published artifact consistent.
-        continue-on-error: true
-        env:
-          COMMIT_SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          published=false
-
-          for attempt in 1 2 3; do
-            # Checkout fetches tags, so drop any local copy first: the remote is
-            # the only authority, and a stale local tag would build a lease that
-            # can never match.
-            git tag --delete "${LKG_TAG}" >/dev/null 2>&1 || true
-            git fetch --force --no-tags origin "refs/tags/${LKG_TAG}:refs/tags/${LKG_TAG}" || true
-
-            if old_commit=$(git rev-parse -q --verify "refs/tags/${LKG_TAG}^{commit}"); then
-              # Expected remote value for the lease is the tag object itself.
-              lease="refs/tags/${LKG_TAG}:$(git rev-parse "refs/tags/${LKG_TAG}")"
-
-              # 'merge-base --is-ancestor' counts a commit as its own ancestor,
-              # so compare explicitly. Re-claiming the tagged commit is allowed
-              # in order to regenerate an expired or deleted artifact.
-              if [ "${COMMIT_SHA}" != "${old_commit}" ] \
-                && git merge-base --is-ancestor "${COMMIT_SHA}" "${old_commit}"; then
-                echo "lkg-main already points at ${old_commit}, which contains ${COMMIT_SHA}."
-                echo "A newer main commit owns lkg-main. Withdrawing this package."
-                break
-              fi
-            else
-              # Empty expected value asserts the tag does not exist yet.
-              lease="refs/tags/${LKG_TAG}:"
-            fi
-
-            git tag --force --annotate \
-              -m "Last known good build of main" \
-              -m "Commit: ${COMMIT_SHA}" \
-              -m "Run: ${RUN_URL}" \
-              -m "Built: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
-              "${LKG_TAG}" "${COMMIT_SHA}"
-
-            if git push "--force-with-lease=${lease}" origin "refs/tags/${LKG_TAG}"; then
-              published=true
-              # Record the claim as soon as it is won, so that a later failure
-              # cannot leave the tag advanced while the package is withdrawn.
-              echo "published=true" >> "${GITHUB_OUTPUT}"
-              break
-            fi
-
-            echo "Lost the race to update ${LKG_TAG} (attempt ${attempt}). Re-evaluating."
-            sleep 5
-          done
-
-          if [ "${published}" != "true" ]; then
-            echo "published=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      # A run that loses the claim built an older commit, yet its run page can
-      # be the most recent successful one on main. Testers following the
-      # 'latest successful run' link would find a stale package there, so
-      # withdraw it and let them fall back to the run that owns the tag.
-      #
-      # Packages of superseded commits are left alone: they sit on run pages
-      # nobody is directed to, and repository retention expires them.
-      #
-      # Artifact bookkeeping is not part of the build result, so failures here
-      # only warn.
-      - name: Withdraw superseded package
-        if: steps.claim.outputs.published != 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARTIFACT_ID: ${{ needs.build-and-test.outputs.artifact-id }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${ARTIFACT_ID}" ]; then
-            echo "::warning::No artifact id from the build job. Nothing to withdraw."
-            exit 0
-          fi
-
-          echo "This commit did not claim ${LKG_TAG}. Withdrawing its package."
-          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
-            || echo "::warning::Could not delete artifact ${ARTIFACT_ID}"

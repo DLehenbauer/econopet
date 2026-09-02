@@ -74,23 +74,22 @@ run `./verilate.sh stock6502_boot_tb 0` directly. See
 ### Alpha builds
 
 Every push to `main` that builds cleanly and passes the full test suite uploads
-the resulting SD card package as a workflow artifact named
-`EconoPET-40-8096-A-firmware-lkg-main.zip`. It is a plain build artifact (not a
-published release) intended for alpha testers.
+the resulting SD card package as a workflow artifact. It is a plain build
+artifact (not a published release) intended for alpha testers.
 
-To download it, open the
+To download one, open the
 [latest successful CI run on main](https://github.com/DLehenbauer/econopet/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess)
 and grab the artifact listed at the bottom of the run summary. Downloading
 requires being signed in to GitHub. Unzip the contents onto the root of an SD
 card. `BUILD-INFO.txt` inside records the commit, the build time and the CI run
 that produced it, which is worth quoting in bug reports.
 
-The `lkg-main` tag tracks the commit the artifact was built from. It only ever
-moves forward along the history of `main`, so a build that finishes out of order
-never regresses it: such a build withdraws its own package rather than leave a
-stale download at the top of the run list. Packages from earlier commits stay on
-their own run pages until they expire under the repository's retention policy.
-Because `lkg-main` is force-updated, use `git fetch --tags --force` to follow it.
+Each green build keeps its own package, named for its version and the commit it
+was built from (for example
+`EconoPET-40-8096-A-firmware-260902.0-f39fb6b.zip`). Earlier packages stay
+available on their own run pages until they expire under the repository's
+retention policy, so it is possible to fall back to a previous build or to work
+backwards through them to find where a regression appeared.
 
 ## License
 
