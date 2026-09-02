@@ -71,26 +71,6 @@ end and writes `gw/EconoPET/outflow/stock6502_boot_tb.pgm`:
 run `./verilate.sh stock6502_boot_tb 0` directly. See
 [docs/dev/verilator.md](docs/dev/verilator.md) for the Verilator runner.
 
-### Alpha builds
-
-Every push to `main` that builds cleanly and passes the full test suite uploads
-the resulting SD card package as a workflow artifact. It is a plain build
-artifact (not a published release) intended for alpha testers.
-
-To download one, open the
-[latest successful CI run on main](https://github.com/DLehenbauer/econopet/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess)
-and grab the artifact listed at the bottom of the run summary. Downloading
-requires being signed in to GitHub. Unzip the contents onto the root of an SD
-card. `BUILD-INFO.txt` inside records the commit, the build time and the CI run
-that produced it, which is worth quoting in bug reports.
-
-Each green build keeps its own package, named for its version and the commit it
-was built from (for example
-`EconoPET-40-8096-A-firmware-260902.0-f39fb6b.zip`). Earlier packages stay
-available on their own run pages until they expire under the repository's
-retention policy, so it is possible to fall back to a previous build or to work
-backwards through them to find where a regression appeared.
-
 ## License
 
 This project is released under the [CC0 1.0 Universal](LICENSE) (CC0) license, placing it in the public domain.

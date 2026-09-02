@@ -62,8 +62,10 @@ jobs:
       # The steps below only run for a green build of a commit on main, because
       # a failed step above ends the job.
 
-      # Copy the package out of the build tree (owned by the devcontainer user)
-      # and record provenance for bug reports.
+      # Copy the package out of the build tree so that BUILD-INFO.txt can be
+      # added without polluting it. The devcontainer runs as root, so the build
+      # tree is root-owned, but world-readable: copying it unprivileged gives
+      # the runner ownership of the copy.
       - name: Stage SD card package
         id: stage
         if: env.PUBLISH == 'true'
@@ -92,9 +94,8 @@ jobs:
 
           # 'cp -r' copies into an existing destination, which would add a
           # directory level to the artifact, so start from a clean slate.
-          sudo rm -rf "${STAGE_DIR}"
-          sudo cp -r build/sdcard/sdcard_root "${STAGE_DIR}"
-          sudo chown -R "$(id -u):$(id -g)" "${STAGE_DIR}"
+          rm -rf "${STAGE_DIR}"
+          cp -r build/sdcard/sdcard_root "${STAGE_DIR}"
 
           {
             echo "EconoPET build of main"
