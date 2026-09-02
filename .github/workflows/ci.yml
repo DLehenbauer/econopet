@@ -156,7 +156,10 @@ jobs:
             echo "Tag:     ${LKG_TAG}"
             echo "Run:     ${RUN_URL}"
             echo "Built:   $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "Package: ${zip_name}"
+            # Name of the versioned zip built by CMake. It is not included in
+            # this download (which unzips directly to the SD card contents),
+            # but it carries the date-based version stamp of this package.
+            echo "Version: ${zip_name}"
           } > "${STAGE_DIR}/BUILD-INFO.txt"
 
           ls -lR "${STAGE_DIR}"
