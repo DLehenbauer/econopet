@@ -10,12 +10,13 @@ permissions:
   contents: read
   packages: write
 
-# Pull request runs are superseded by newer pushes to the same PR, but runs on
-# main are never cancelled (each main commit keeps its own status). Ordering of
-# racing main runs is handled by the 'lkg-main' tag claim below.
+# Supersede in-progress runs of the same pull request. Runs on main get a group
+# of their own (keyed by run id) so that they never queue behind or cancel each
+# other: every main commit keeps its own status, and ordering of racing main
+# runs is handled by the 'lkg-main' tag claim below.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   DEVCONTAINER_IMAGE: ghcr.io/dlehenbauer/econopet-devcontainer
@@ -78,6 +79,10 @@ jobs:
       - name: Claim lkg-main
         id: claim
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DLehenbauer/econopet'
+        # Tag bookkeeping is not part of the build result, so a failure here
+        # leaves the job green and simply publishes nothing (the steps below
+        # require 'published').
+        continue-on-error: true
         env:
           COMMIT_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -90,13 +95,21 @@ jobs:
           published=false
 
           for attempt in 1 2 3; do
-            git fetch --force --no-tags origin "refs/tags/${LKG_TAG}:refs/tags/${LKG_TAG}" || true
+            # Checkout fetches tags, so drop any local copy first: the remote is
+            # the only authority, and a stale local tag would build a lease that
+            # can never match.
+            git tag --delete "${LKG_TAG}" >/dev/null 2>&1 || true
+            git fetch --no-tags origin "refs/tags/${LKG_TAG}:refs/tags/${LKG_TAG}" || true
 
             if old_commit=$(git rev-parse -q --verify "refs/tags/${LKG_TAG}^{commit}"); then
               # Expected remote value for the lease is the tag object itself.
               lease="refs/tags/${LKG_TAG}:$(git rev-parse "refs/tags/${LKG_TAG}")"
 
-              if git merge-base --is-ancestor "${COMMIT_SHA}" "${old_commit}"; then
+              # 'merge-base --is-ancestor' counts a commit as its own ancestor,
+              # so compare explicitly. Re-claiming the tagged commit is allowed
+              # in order to regenerate an expired or deleted artifact.
+              if [ "${COMMIT_SHA}" != "${old_commit}" ] \
+                && git merge-base --is-ancestor "${COMMIT_SHA}" "${old_commit}"; then
                 echo "lkg-main already points at ${old_commit}, which contains ${COMMIT_SHA}."
                 echo "A newer main commit owns lkg-main. Skipping publish."
                 break
@@ -172,7 +185,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.LKG_ARTIFACT }}
-          path: ${{ runner.temp }}/lkg/*
+          path: ${{ runner.temp }}/lkg
           if-no-files-found: error
           overwrite: true
 
@@ -189,20 +202,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Without a known id to keep, pruning would delete the artifact this
-          # run just uploaded.
-          if [ -z "${KEEP_ID}" ]; then
-            echo "::warning::No uploaded artifact id available. Skipping prune."
-            exit 0
-          fi
-
+          # Artifact ids increase monotonically, so deleting only ids below the
+          # one just uploaded can never remove a newer package. That also makes
+          # a missing or unparsable id a no-op rather than a purge.
           gh api --paginate -X GET "repos/${GITHUB_REPOSITORY}/actions/artifacts" \
             -f "name=${LKG_ARTIFACT}" \
-            --jq '.artifacts[] | select(.expired == false) | .id' \
+            --jq '.artifacts[] | select(.expired == false and .id < (env.KEEP_ID // "" | tonumber? // 0)) | .id' \
           | while read -r id; do
-              if [ "${id}" != "${KEEP_ID}" ]; then
-                echo "Deleting superseded artifact ${id}"
-                gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" \
-                  || echo "::warning::Could not delete artifact ${id}"
-              fi
+              echo "Deleting superseded artifact ${id}"
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" \
+                || echo "::warning::Could not delete artifact ${id}"
             done
