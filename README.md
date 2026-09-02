@@ -87,10 +87,10 @@ that produced it, which is worth quoting in bug reports.
 
 The `lkg-main` tag tracks the commit the artifact was built from. It only ever
 moves forward along the history of `main`, so a build that finishes out of order
-never regresses it. Only one artifact is kept: each new green build on `main`
-replaces the previous one, and artifacts also expire per the repository's
-default retention. Because `lkg-main` is force-updated, use `git fetch --tags
---force` to follow it.
+never regresses it: such a build withdraws its own package rather than leave a
+stale download at the top of the run list. Packages from earlier commits stay on
+their own run pages until they expire under the repository's retention policy.
+Because `lkg-main` is force-updated, use `git fetch --tags --force` to follow it.
 
 ## License
 

@@ -145,7 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # Push the 'lkg-main' tag
-      actions: write    # Delete superseded artifacts (scoped to this repo)
+      actions: write    # Withdraw this run's artifact when it loses the claim
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -224,49 +224,30 @@ jobs:
             echo "published=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      # Leave exactly one artifact behind. The winner deletes the packages of
-      # earlier commits; a superseded run deletes the package it just uploaded.
-      # Either way the deletions happen after this run's upload, so there is no
-      # window in which no package is available.
+      # A run that loses the claim built an older commit, yet its run page can
+      # be the most recent successful one on main. Testers following the
+      # 'latest successful run' link would find a stale package there, so
+      # withdraw it and let them fall back to the run that owns the tag.
+      #
+      # Packages of superseded commits are left alone: they sit on run pages
+      # nobody is directed to, and repository retention expires them.
       #
       # Artifact bookkeeping is not part of the build result, so failures here
       # only warn.
-      - name: Reconcile artifacts
+      - name: Withdraw superseded package
+        if: steps.claim.outputs.published != 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ needs.build-and-test.outputs.artifact-id }}
-          PUBLISHED: ${{ steps.claim.outputs.published }}
         run: |
           set -euo pipefail
 
-          delete() {
-            echo "Deleting artifact $1"
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/$1" \
-              || echo "::warning::Could not delete artifact $1"
-          }
-
-          if [ "${PUBLISHED}" != "true" ]; then
-            if [ -n "${ARTIFACT_ID}" ]; then
-              echo "This commit did not claim ${LKG_TAG}. Withdrawing its package."
-              delete "${ARTIFACT_ID}"
-            else
-              echo "::warning::No artifact id from the build job. Nothing to withdraw."
-            fi
-            exit 0
-          fi
-
           if [ -z "${ARTIFACT_ID}" ]; then
-            echo "::warning::No artifact id from the build job. Leaving artifacts untouched."
+            echo "::warning::No artifact id from the build job. Nothing to withdraw."
             exit 0
           fi
 
-          # Artifact ids increase monotonically, so deleting only ids below the
-          # one just uploaded can never remove a newer package. That also makes
-          # a missing or unparsable id a no-op rather than a purge.
-          gh api --paginate -X GET "repos/${GITHUB_REPOSITORY}/actions/artifacts" \
-            -f "name=${LKG_ARTIFACT}" \
-            --jq '.artifacts[] | select(.expired == false and .id < (env.ARTIFACT_ID // "" | tonumber? // 0)) | .id' \
-          | while read -r id; do
-              delete "${id}"
-            done
+          echo "This commit did not claim ${LKG_TAG}. Withdrawing its package."
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            || echo "::warning::Could not delete artifact ${ARTIFACT_ID}"
