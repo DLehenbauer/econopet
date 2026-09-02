@@ -250,7 +250,14 @@ jobs:
             if [ -n "${ARTIFACT_ID}" ]; then
               echo "This commit did not claim ${LKG_TAG}. Withdrawing its package."
               delete "${ARTIFACT_ID}"
+            else
+              echo "::warning::No artifact id from the build job. Nothing to withdraw."
             fi
+            exit 0
+          fi
+
+          if [ -z "${ARTIFACT_ID}" ]; then
+            echo "::warning::No artifact id from the build job. Leaving artifacts untouched."
             exit 0
           fi
 
