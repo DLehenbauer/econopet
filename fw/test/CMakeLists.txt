@@ -2,15 +2,8 @@ project("firmware-test"
     VERSION 0.1.0
     LANGUAGES C)
 
-# Include git version information
-include(${FW_DIR}/cmake/GitVersion.cmake)
-
-# Generate version header in build directory
-configure_file(
-    ${FW_DIR}/cmake/version.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/version.h
-    @ONLY
-)
+# Include version header generation function
+include(${FW_DIR}/cmake/AddVersionHeader.cmake)
 
 # Include external projects
 set(EXTERNAL_DIR ${FW_DIR}/external)
@@ -65,6 +58,9 @@ target_link_libraries(${PROJECT_NAME}
     subunit
     m
     yaml)
+
+# Generate version header in build directory
+add_version_header(${PROJECT_NAME})
 
 # Include directories
 include_directories(

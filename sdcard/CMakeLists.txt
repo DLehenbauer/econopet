@@ -102,24 +102,20 @@ add_custom_command(
     VERBATIM
 )
 
-# Create a zip archive of the SD card contents
-string(TIMESTAMP ECONOPET_DATE "%y%m%d")
-set(sdcard_zip_name "EconoPET-40-8096-A-firmware-${ECONOPET_DATE}.0.zip")
-set(sdcard_zip_path "${CMAKE_CURRENT_BINARY_DIR}/${sdcard_zip_name}")
-
-add_custom_command(
-    OUTPUT "${sdcard_zip_path}"
-    # Zip only the contents of ${sdcard_root_dir}
-    COMMAND ${CMAKE_COMMAND} -E tar cf "${sdcard_zip_path}" --format=zip .
-    WORKING_DIRECTORY "${sdcard_root_dir}"
+# Package the SD card contents. The zip is named for the version and commit it
+# was built from, and carries a matching 'build-info.yaml', both of which are
+# produced by the packaging script so that they describe the tree as of the
+# build rather than as of the last configure. That makes the zip filename
+# unknown here, so this is a custom target (which always runs) rather than a
+# custom command producing a named output.
+add_custom_target(sdcard ALL
+    COMMAND ${CMAKE_COMMAND}
+            -DSDCARD_ROOT_DIR=${sdcard_root_dir}
+            -DSDCARD_ZIP_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_LIST_DIR}/Package.cmake"
     DEPENDS "${sdcard_root_dir}/firmware.uf2"
             "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
             ${sdcard_rom_outputs}
-    COMMENT "Zipping SD card contents to ${sdcard_zip_path}"
+    COMMENT "Packaging SD card contents"
     VERBATIM
-)
-
-# Define 'sdcard' target that performs the copy; included in default 'all' build
-add_custom_target(sdcard ALL
-    DEPENDS "${sdcard_zip_path}"
 )
