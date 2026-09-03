@@ -30,7 +30,7 @@ VERILATOR_JOBS="${VERILATOR_JOBS:-$(nproc)}"
 
 verilator --binary --timing -j "$VERILATOR_JOBS" \
     --x-assign unique --x-initial unique \
-    -Wno-fatal -Wno-lint -Wno-style \
+    -Wno-fatal -Wno-lint -Wno-style verilator.vlt \
     --timescale 1ns/1ps \
     --top-module "$TEST_NAME" \
     --Mdir "work_sim/obj_${TEST_NAME}" -o "${TEST_NAME}_vl" \

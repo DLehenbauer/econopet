@@ -347,9 +347,8 @@ module main (
     wire [CPU_ADDR_WIDTH-1:0] active_cpu_addr    = cpu_is_6809     ? mc6809_addr
                                                  : cpu_is_soft6502 ? m6502_addr
                                                  :                   cpu_addr_i;
-    wire                      active_cpu_we      = cpu_is_6809     ? !mc6809_rnw
-                                                 : cpu_is_soft6502 ? !m6502_rw
-                                                 :                   cpu_we_i;
+    wire                      soft_cpu_we        = cpu_is_6809 ? !mc6809_rnw : !m6502_rw;
+    wire                      active_cpu_we      = cpu_soft ? soft_cpu_we   : cpu_we_i;
     wire [    DATA_WIDTH-1:0] active_cpu_dout    = cpu_is_6809 ? mc6809_dout : m6502_dout;
     wire                      active_be          = cpu_is_6809 ? cpu6809_be           : timing_cpu_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe  : cpu_addr_strobe;
@@ -920,7 +919,7 @@ module main (
     // whenever a soft core owns the bus -- and released for the physical
     // CPU, which drives its own R/W pin.
     assign cpu_we_oe        = cpu_soft && active_be;
-    assign cpu_we_o         = active_cpu_we;
+    assign cpu_we_o         = soft_cpu_we;
 
     wire ram_addr_a10_mask = !is_vram | video_ram_mask[10];
     wire ram_addr_a11_mask = !is_vram | video_ram_mask[11];
