@@ -206,19 +206,19 @@ module mock_sram #(
         we_rise_time = write_end_time;
 
         // Check write pulse width (tWP)
-        if ((we_rise_time - we_fall_time) < tWP) begin
+        if ((we_rise_time - we_fall_time) < time'(tWP)) begin
             $display("[%t] SRAM WARNING: Write pulse width violation: %0d ns < tWP(%0d ns)",
                      $time, we_rise_time - we_fall_time, tWP);
         end
 
         // Check address setup (tAW): address must be valid tAW before end of write
-        if ((we_rise_time - addr_change_time) < tAW) begin
+        if ((we_rise_time - addr_change_time) < time'(tAW)) begin
             $display("[%t] SRAM WARNING: Address setup violation: %0d ns < tAW(%0d ns)",
                      $time, we_rise_time - addr_change_time, tAW);
         end
 
         // Check data setup (tDW): data must be valid tDW before end of write
-        if ((we_rise_time - data_stable_time) < tDW) begin
+        if ((we_rise_time - data_stable_time) < time'(tDW)) begin
             $display("[%t] SRAM WARNING: Data setup violation: %0d ns < tDW(%0d ns)",
                      $time, we_rise_time - data_stable_time, tDW);
         end

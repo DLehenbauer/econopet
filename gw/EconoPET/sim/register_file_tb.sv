@@ -67,7 +67,11 @@ module register_file_tb;
         
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
-        .video_ram_mask_o(video_ram_mask)
+        .video_ram_mask_o(video_ram_mask),
+        .phys_cpu_active_i(1'b0),
+        .cpu_sel_o(),
+        .superpet_io_o(),
+        .cpu_sel_wr_o()
     );
 
     wb_driver wb (

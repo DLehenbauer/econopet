@@ -190,14 +190,14 @@ module acia6551 (
                         frame[0] = 1'b0;
                         for (int i = 0; i < 8; i++)
                             if (i < word_len) frame[1 + i] = tx_hold[i];
-                        pos = 1 + word_len;
+                        pos = 1 + int'(word_len);
                         if (parity_en) begin
                             frame[pos] = parity_bit(tx_hold, word_len);
                             pos = pos + 1;
                         end
                         // stop bits are '1' which frame already holds
                         tx_shift <= frame;
-                        tx_bits  <= 4'(1 + word_len + (parity_en ? 1 : 0)
+                        tx_bits  <= 4'(1 + int'(word_len) + (parity_en ? 1 : 0)
                                        + (two_stop ? 2 : 1));
                         tx_sub   <= '0;
                         tx_empty <= 1'b1;           // holding reg free immediately

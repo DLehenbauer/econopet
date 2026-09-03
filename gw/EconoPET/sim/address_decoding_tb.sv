@@ -56,7 +56,13 @@ module address_decoding_tb();
         .is_readonly_o(is_readonly),
 
         .decoded_a15_o(decoded_a15),
-        .decoded_a16_o(decoded_a16)
+        .decoded_a16_o(decoded_a16),
+        .decoded_a12_o(),
+        .decoded_a13_o(),
+        .decoded_a14_o(),
+        .superpet_flat_o(),
+        .superpet_wp_o(),
+        .superpet_firq_n_o()
     );
 
     task check(

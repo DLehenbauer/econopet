@@ -397,8 +397,10 @@ package common_pkg;
     // Register file
     //
 
+    localparam int unsigned REG_ADDR_WIDTH = 3;
+
     // Register 0: Status (Read-only)
-    localparam int unsigned REG_STATUS              = 0;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_STATUS = 0;
     localparam int unsigned REG_STATUS_GRAPHICS_BIT = 0;    // VIA CA2 (0 = graphics, 1 = text)
     localparam int unsigned REG_STATUS_CRT_BIT      = 1;    // Diagonal CRT size (0 = 12", 1 = 9")
     localparam int unsigned REG_STATUS_KEYBOARD_BIT = 2;    // Keyboard Type (0 = Business, 1 = Graphics)
@@ -406,13 +408,13 @@ package common_pkg;
     localparam int unsigned REG_STATUS_PHYS_CPU_BIT = 4;    // Physical 6502 detected (probe loop seen at $0400)
 
     // Register 1: CPU control
-    localparam int unsigned REG_CPU                 = 1;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_CPU   = 1;
     localparam int unsigned REG_CPU_READY_BIT       = 0;
     localparam int unsigned REG_CPU_RESET_BIT       = 1;
     localparam int unsigned REG_CPU_NMI_BIT         = 2;
     
     // Register 2: Video Control
-    localparam int unsigned REG_VIDEO                   = 2;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_VIDEO     = 2;
     localparam int unsigned REG_VIDEO_COL_80_BIT        = 0;
     localparam int unsigned REG_VIDEO_RAM_MASK_LO_BIT   = 1;    // video_ram_mask[10]
     localparam int unsigned REG_VIDEO_RAM_MASK_HI_BIT   = 2;    // video_ram_mask[11]
@@ -420,16 +422,16 @@ package common_pkg;
     // Register 3: Breakpoint Control (Write) / Breakpoint Address Low (Read)
     //   Write: bit 0 clears the breakpoint halt
     //   Read:  low byte of the CPU address where the breakpoint was hit
-    localparam int unsigned REG_BP_CTL                  = 3;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_BP_CTL    = 3;
     localparam int unsigned REG_BP_CTL_CLEAR_BIT        = 0;
-    localparam int unsigned REG_BP_ADDR_LO              = 3;    // Shares address with REG_BP_CTL
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_BP_ADDR_LO = 3;   // Shares address with REG_BP_CTL
 
     // Register 4: Breakpoint Address High (Read-only)
-    localparam int unsigned REG_BP_ADDR_HI              = 4;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_BP_ADDR_HI = 4;
 
     // Register 5: CPU select. Separate from REG_CPU so the
     // firmware's reset/ready writes can't clobber it.
-    localparam int unsigned REG_CPU_SEL                 = 5;
+    localparam logic [REG_ADDR_WIDTH-1:0] REG_CPU_SEL   = 5;
     localparam logic [1:0]  CPU_SEL_PHYS_6502           = 2'd0,  // physical W65C02S
                             CPU_SEL_SOFT_6809           = 2'd1,  // soft MC6809 (SuperPET)
                             CPU_SEL_SOFT_6502           = 2'd2;  // soft MOS 6502 (virtual)
@@ -438,7 +440,7 @@ package common_pkg;
     // 6502 too, as on real hardware. A 6809 enables it regardless.
     localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
 
-    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
+    localparam int unsigned REG_COUNT                   = int'(REG_CPU_SEL) + 1;
 
     //
     // Bus
@@ -449,7 +451,6 @@ package common_pkg;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
     localparam int unsigned CPU_ADDR_WIDTH  = 16;
-    localparam int unsigned REG_ADDR_WIDTH  = $clog2(REG_COUNT);
 
     // TODO: Consider arranging our address space such that the MCU can read VRAM,
     //       keyboard status, and the status register in a single SPI transaction.

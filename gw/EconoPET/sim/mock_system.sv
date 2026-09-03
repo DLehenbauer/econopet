@@ -75,6 +75,10 @@ module mock_system (
     logic config_keyboard = 1'b0;
 
     top top (
+        `TOP_UNUSED_PORTS
+        .cpu_reset_n_i(cpu_reset_n_o),
+        .cpu_irq_n_i(1'b1),
+        .cpu_nmi_n_i(1'b1),
         .sys_clock_i(sys_clock),
 
         .cpu_be_o(cpu_be),
@@ -210,12 +214,12 @@ module mock_system (
         //
         // Helpful 6502 opcode reference:
         // http://www.6502.org/tutorials/6502opcodes.html
-        mock_sram.load_rom(16'h8800, "characters-2.901447-10.bin");
-        mock_sram.load_rom(16'hb000, "basic-4-b000.901465-23.bin");
-        mock_sram.load_rom(16'hc000, "basic-4-c000.901465-20.bin");
-        mock_sram.load_rom(16'hd000, "basic-4-d000.901465-21.bin");
-        mock_sram.load_rom(16'he000, "edit-4-80-b-60Hz.901474-03.bin");
-        mock_sram.load_rom(16'hf000, "kernal-4.901465-22.bin");
+        mock_sram.load_rom(17'h08800, "characters-2.901447-10.bin");
+        mock_sram.load_rom(17'h0b000, "basic-4-b000.901465-23.bin");
+        mock_sram.load_rom(17'h0c000, "basic-4-c000.901465-20.bin");
+        mock_sram.load_rom(17'h0d000, "basic-4-d000.901465-21.bin");
+        mock_sram.load_rom(17'h0e000, "edit-4-80-b-60Hz.901474-03.bin");
+        mock_sram.load_rom(17'h0f000, "kernal-4.901465-22.bin");
     endtask
 
     task static ram_fill(

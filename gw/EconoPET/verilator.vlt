@@ -2,5 +2,8 @@
 // https://github.com/dlehenbauer/econopet
 
 `verilator_config
+lint_off -rule CASEX -file "external/mc6809/mc6809i.v"
 lint_off -rule SIDEEFFECT -file "external/mc6809/mc6809i.v"
 lint_off -rule UNOPTFLAT -file "external/mc6809/mc6809i.v"
+lint_off -rule WIDTHEXPAND -file "external/mc6809/mc6809i.v"
+lint_off -rule UNOPTFLAT -file "src/main.sv" -match "*active_cpu_addr*"

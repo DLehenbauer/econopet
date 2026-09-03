@@ -17,7 +17,7 @@ module top_tb;
     );
 
     task static test_rw(
-        input logic [RAM_ADDR_WIDTH-1:0] addr_i,
+        input logic [WB_ADDR_WIDTH-1:0] addr_i,
         input logic [    DATA_WIDTH-1:0] data_i
     );
         logic [DATA_WIDTH-1:0] dout;
@@ -28,7 +28,7 @@ module top_tb;
 
     task static spi_ram_test;
         integer i;
-        bit   [WB_ADDR_WIDTH-2:0] addr;        // Constrain to RAM address space $0000-$7FFF
+        bit   [RAM_ADDR_WIDTH-1:0] addr;
         logic [   DATA_WIDTH-1:0] dout;
         bit   [   DATA_WIDTH-1:0] value;
 
@@ -37,8 +37,8 @@ module top_tb;
         mock_system.spi_read_at(common_pkg::wb_ram_addr(17'h1ffff), dout);
 
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $urandom();
-            value = $urandom();
+            addr = RAM_ADDR_WIDTH'($urandom());
+            value = DATA_WIDTH'($urandom());
             mock_system.spi_write_at(common_pkg::wb_ram_addr(addr), value);
             mock_system.spi_read_at(common_pkg::wb_ram_addr(addr), dout);
             `assert_equal(dout, value);
@@ -56,8 +56,8 @@ module top_tb;
         $display("[%t] Begin CPU/RAM Test", $time);
 
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $urandom();
-            value = $urandom();
+            addr = (CPU_ADDR_WIDTH-1)'($urandom());
+            value = DATA_WIDTH'($urandom());
             mock_system.cpu_write({ 1'b0, addr }, value);
             mock_system.cpu_read({ 1'b0, addr }, dout);
             `assert_equal(dout, value);
@@ -77,25 +77,25 @@ module top_tb;
             value = { 4'b1011, col[3:0] };
             
             $display("[%t]   Keyboard[%0d] <- %02x (WB)", $time, col, value);
-            mock_system.spi_write_at(common_pkg::wb_kbd_addr(col), value);
+            mock_system.spi_write_at(common_pkg::wb_kbd_addr(KBD_COL_WIDTH'(col)), value);
 
             // Read from CPU
-            mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
-            mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+            mock_system.cpu_write(16'hE810 + CPU_ADDR_WIDTH'(PIA_PORTA), value);
+            mock_system.cpu_read(16'hE810 + CPU_ADDR_WIDTH'(PIA_PORTB), dout);
             $display("[%t]   Keyboard[%0d] -> %02x (CPU)", $time, col, dout);
             `assert_equal(dout, value);
 
             // Value read by CPU should be available via WB
-            mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
+            mock_system.spi_read_at(common_pkg::wb_kbd_addr(KBD_COL_WIDTH'(col)), dout);
             $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
             `assert_equal(dout, value);
 
             // Keyboard interception should not interfere with RAM access.
-            test_rw(common_pkg::wb_ram_addr(17'h0E810 + PIA_PORTA), ~value);
-            test_rw(common_pkg::wb_ram_addr(17'h0E810 + PIA_PORTB), ~value);
+            test_rw(common_pkg::wb_ram_addr(17'h0E810 + RAM_ADDR_WIDTH'(PIA_PORTA)), ~value);
+            test_rw(common_pkg::wb_ram_addr(17'h0E810 + RAM_ADDR_WIDTH'(PIA_PORTB)), ~value);
             
             // Writing to RAM should not interfere with keyboard interception.
-            mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+            mock_system.cpu_read(16'hE810 + CPU_ADDR_WIDTH'(PIA_PORTB), dout);
             `assert_equal(dout, value);
         end
 
@@ -112,12 +112,12 @@ module top_tb;
         // Test 1: Write CRTC registers via CPU, verify via SPI wishbone
         $display("[%t]   Test 1: CPU writes, SPI reads", $time);
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            mock_system.cpu_write(16'hE880, r);
+            mock_system.cpu_write(16'hE880, DATA_WIDTH'(r));
             value = { 3'b101, r[4:0] };
             mock_system.cpu_write(16'hE881, value);
             $display("[%t]     CRTC[%0d] <- %02x (CPU)", $time, r, value);
 
-            mock_system.spi_read_at(common_pkg::wb_crtc_addr(r), dout);
+            mock_system.spi_read_at(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), dout);
             `assert_equal(dout, value);
         end
 
@@ -126,10 +126,10 @@ module top_tb;
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
             // Use different value pattern to distinguish from Test 1
             value = { 3'b110, r[4:0] };
-            mock_system.spi_write_at(common_pkg::wb_crtc_addr(r), value);
+            mock_system.spi_write_at(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), value);
             $display("[%t]     CRTC[%0d] <- %02x (SPI)", $time, r, value);
 
-            mock_system.spi_read_at(common_pkg::wb_crtc_addr(r), dout);
+            mock_system.spi_read_at(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), dout);
             `assert_equal(dout, value);
         end
 
@@ -162,7 +162,7 @@ module top_tb;
         // implementation returns 0 for all registers.
         $display("[%t]   Test 2: Data register reads", $time);
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            mock_system.cpu_write(16'hE880, r);         // Select register r
+            mock_system.cpu_write(16'hE880, DATA_WIDTH'(r)); // Select register r
             mock_system.cpu_read(16'hE881, dout);       // Read from CRTC data register
             $display("[%t]     CRTC[%0d] -> %02x (CPU)", $time, r, dout);
             `assert_equal(dout, 8'h00);                 // Expect 0 for all reads
@@ -172,8 +172,8 @@ module top_tb;
         // After CRTC read, keyboard should still work correctly.
         $display("[%t]   Test 3: CRTC/IO mutual exclusion", $time);
         mock_system.spi_write_at(common_pkg::wb_kbd_addr(0), 8'hA5);
-        mock_system.cpu_write(16'hE810 + PIA_PORTA, 8'h00);  // Select column 0
-        mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+        mock_system.cpu_write(16'hE810 + CPU_ADDR_WIDTH'(PIA_PORTA), 8'h00); // Select column 0
+        mock_system.cpu_read(16'hE810 + CPU_ADDR_WIDTH'(PIA_PORTB), dout);
         `assert_equal(dout, 8'hA5);
 
         $display("[%t] End CRTC Read Test", $time);
@@ -187,8 +187,8 @@ module top_tb;
         $display("[%t] Begin SID Write Test", $time);
 
         for (r = 0; r < SID_REG_COUNT; r = r + 1) begin
-            value = { 3'b101, r };
-            mock_system.cpu_write(16'h8F00 + r, value);
+            value = { 3'b101, SID_ADDR_REG_WIDTH'(r) };
+            mock_system.cpu_write(16'h8F00 + CPU_ADDR_WIDTH'(r), value);
             $display("[%t]   SID[%0d] -> %02x", $time, r, value);
 
             // TODO: Implement read-back from SID registers.
@@ -222,12 +222,12 @@ module top_tb;
         test_addrs[4] = BRAM_LAST_ADDR - 1;
         test_addrs[5] = BRAM_LAST_ADDR;
 
-        test_values[0] = $urandom();
-        test_values[1] = $urandom();
-        test_values[2] = $urandom();
-        test_values[3] = $urandom();
-        test_values[4] = $urandom();
-        test_values[5] = $urandom();
+        test_values[0] = DATA_WIDTH'($urandom());
+        test_values[1] = DATA_WIDTH'($urandom());
+        test_values[2] = DATA_WIDTH'($urandom());
+        test_values[3] = DATA_WIDTH'($urandom());
+        test_values[4] = DATA_WIDTH'($urandom());
+        test_values[5] = DATA_WIDTH'($urandom());
 
         // Write addresses at/near boundaries
         for (i = 0; i < NUM_BOUNDARY_TESTS; i = i + 1) begin
@@ -244,8 +244,8 @@ module top_tb;
 
         // Test random addresses
         for (i = 0; i < 10; i = i + 1) begin
-            addr = $urandom();
-            value = $urandom();
+            addr = BRAM_ADDR_WIDTH'($urandom());
+            value = DATA_WIDTH'($urandom());
             $display("[%t]   BRAM[0x%03x] <- 0x%02x", $time, addr, value);
             mock_system.spi_write_at(common_pkg::wb_bram_addr(addr), value);
             mock_system.spi_read_at(common_pkg::wb_bram_addr(addr), dout);
@@ -295,7 +295,7 @@ module top_tb;
         // Write STP ($DB) at $027A and fill $027B-$0289 with NOP ($EA).
         mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A), 8'hDB);
         for (i = 1; i < 16; i = i + 1)
-            mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A + i), 8'hEA);
+            mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0027A + RAM_ADDR_WIDTH'(i)), 8'hEA);
 
         // Write reset vector ($FFFC/$FFFD) to point to $027A.
         mock_system.spi_write_at(common_pkg::wb_ram_addr(17'h0FFFC), 8'h7A);
@@ -480,7 +480,7 @@ module top_tb;
         `assert_equal(cpu_ready, 1'b1);
         `assert_equal(cpu_reset_n, 1'b1);
 
-        mock_system.spi_read_at(16'h8000, cpu_dout);
+        mock_system.spi_read_at(20'h08000, cpu_dout);
         for (count = 0; count <= 25; count = count + 1) begin
             mock_system.spi_read(cpu_dout);
         end

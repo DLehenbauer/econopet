@@ -60,6 +60,7 @@ module superpet_top_tb;
     logic [7:0] spi_rx_data;
 
     top top (
+        `TOP_UNUSED_PORTS
         .sys_clock_i(sys_clock),
 
         .cpu_be_o(cpu_be),

@@ -284,7 +284,7 @@ module ieee (
                     // a byte, instead of ACKing a command we silently drop.)
                     if (atn_active) begin
                         // Command byte: update protocol state and forward to MCU.
-                        casez (~pia2_pb_out)
+                        priority casez (~pia2_pb_out)
                             8'h3F:   listening <= 1'b0;                       // UNLISTEN
                             8'h5F:   talking <= 1'b0;                       // UNTALK (channel data persists)
                             8'b001?_????: listening <= (~pia2_pb_out & 8'h1E) == {3'b0, DEV_ADDR[4:1], 1'b0} ? 1'b1 : 1'b0;
@@ -294,7 +294,7 @@ module ieee (
                                 // Fresh status per request: the kernel re-reads
                                 // channel 15 often; stale unread status bytes
                                 // must not misalign the next read.
-                                if (talking && (~pia2_pb_out & 8'h0F) == 4'hF)
+                                if (talking && (~pia2_pb_out[3:0] == 4'hF))
                                     txs_flush <= 1'b1;
                             end
                             8'b1110_????: if (listening) begin
@@ -304,12 +304,12 @@ module ieee (
                                 // for real data channels: ch15 CLOSE/OPEN is
                                 // the DOS command channel and must not drop
                                 // an in-flight stream (firmware ignores it).
-                                if ((~pia2_pb_out & 8'h0F) != 4'hF)
+                                if (~pia2_pb_out[3:0] != 4'hF)
                                     tx_flush <= 1'b1;
                             end
                             8'b1111_????: if (listening) begin
                                 sa <= ~pia2_pb_out;                           // OPEN
-                                if ((~pia2_pb_out & 8'h0F) != 4'hF)
+                                if (~pia2_pb_out[3:0] != 4'hF)
                                     tx_flush <= 1'b1;
                             end
                             default: ;

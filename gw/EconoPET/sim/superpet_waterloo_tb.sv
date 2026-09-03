@@ -77,6 +77,8 @@ module superpet_waterloo_tb;
     end
 
     top top (
+        `TOP_UNUSED_PORTS
+        .cpu_nmi_n_i(1'b1),
         .sys_clock_i(sys_clock),
 
         .cpu_be_o(cpu_be),

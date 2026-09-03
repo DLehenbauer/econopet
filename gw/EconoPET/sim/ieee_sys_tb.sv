@@ -70,6 +70,7 @@ module ieee_sys_tb;
     wire [DATA_WIDTH-1:0] pad_data_i = top_oe_pad ? top_data_pad : bus_data;
 
     top top (
+        `TOP_UNUSED_PORTS
         .sys_clock_i(sys_clock),
 
         .cpu_be_o(cpu_be),
