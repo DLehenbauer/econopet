@@ -101,6 +101,7 @@ module ieee_tb;
     // ------------------------------------------------------------------
     // CPU-side helpers (register-level bus cycles)
     // ------------------------------------------------------------------
+    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic p1, input logic p2, input logic v,
                              input logic [3:0] r, input logic [7:0] val);
         // All bus signals driven with NBA (<=): the DUT's FFs sample on the
@@ -124,6 +125,7 @@ module ieee_tb;
         cpu_be <= 0; cpu_we <= 0; pia1_cs <= 0; pia2_cs <= 0; via_cs <= 0;
         repeat (g_tail) @(posedge sys_clock);
     endtask
+    /* verilator lint_on INITIALDLY */
 
     // Read returns injected value when the DUT drives, else 8'hFF (open bus).
     task automatic cpu_read(input logic p1, input logic p2, input logic v,

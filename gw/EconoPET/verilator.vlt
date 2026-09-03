@@ -7,13 +7,3 @@ lint_off -rule CASEX -file "external/mc6809/mc6809i.v"
 lint_off -rule SIDEEFFECT -file "external/mc6809/mc6809i.v"
 lint_off -rule UNOPTFLAT -file "external/mc6809/mc6809i.v"
 lint_off -rule WIDTHEXPAND -file "external/mc6809/mc6809i.v"
-
-// This physical bus feedback is intentional and not safe to rewrite as acyclic logic.
-lint_off -rule UNOPTFLAT -file "src/main.sv" -match "*active_cpu_addr*"
-
-// These testbench drivers intentionally use NBA scheduling at clock boundaries.
-lint_off -rule INITIALDLY -file "sim/acia6551_tb.sv"
-lint_off -rule INITIALDLY -file "sim/ieee_tb.sv"
-lint_off -rule INITIALDLY -file "sim/mmu_tb.sv"
-lint_off -rule INITIALDLY -file "sim/spi1_tb.sv"
-lint_off -rule INITIALDLY -file "sim/wb_driver.sv"

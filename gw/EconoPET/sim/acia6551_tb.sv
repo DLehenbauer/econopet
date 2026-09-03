@@ -25,6 +25,7 @@ module acia6551_tb;
     assign rxd = drive_rx ? rx_line : txd;
 
     // Send one 1200-baud 8N1 frame on the line (833333ns per bit).
+    /* verilator lint_off INITIALDLY */
     task automatic send_rx_frame(input logic [7:0] b);
         rx_line <= 1'b0;  #833333;
         for (int i = 0; i < 8; i++) begin
@@ -90,6 +91,7 @@ module acia6551_tb;
         be <= 0;
         repeat (2) @(posedge sys_clock);
     endtask
+    /* verilator lint_on INITIALDLY */
 
     // Poll status until (value & mask) == want; returns the observing read's
     // full status value (that read also clears the IRQ flag, so callers must

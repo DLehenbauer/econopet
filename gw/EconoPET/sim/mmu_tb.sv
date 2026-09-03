@@ -38,6 +38,7 @@ module mmu_tb;
         .superpet_firq_n_o(firq_n)
     );
 
+    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic [15:0] a, input logic [7:0] v);
         @(posedge sys_clock);
         addr <= a; data <= v; be <= 1;
@@ -136,6 +137,7 @@ module mmu_tb;
         `assert_equal(firq_n, 1'b1);                 // no pulse
         $display("[%t] END MMU test", $time);
     endtask
+    /* verilator lint_on INITIALDLY */
 
     `TB_INIT
 endmodule

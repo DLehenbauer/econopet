@@ -344,9 +344,11 @@ module main (
     // same decode/peripheral/bus logic serves whichever CPU owns the bus.
     // Address and R/W remain live because each soft core now advances only
     // after the external PHI2 hold interval.
+    /* verilator lint_off UNOPTFLAT */
     wire [CPU_ADDR_WIDTH-1:0] active_cpu_addr    = cpu_is_6809     ? mc6809_addr
                                                  : cpu_is_soft6502 ? m6502_addr
                                                  :                   cpu_addr_i;
+    /* verilator lint_on UNOPTFLAT */
     wire                      soft_cpu_we        = cpu_is_6809 ? !mc6809_rnw : !m6502_rw;
     wire                      active_cpu_we      = cpu_soft ? soft_cpu_we   : cpu_we_i;
     wire [    DATA_WIDTH-1:0] active_cpu_dout    = cpu_is_6809 ? mc6809_dout : m6502_dout;

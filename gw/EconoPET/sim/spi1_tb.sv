@@ -59,6 +59,7 @@ module spi1_tb;
     logic                     expected_we;
     logic [   DATA_WIDTH-1:0] expected_data;
 
+    /* verilator lint_off INITIALDLY */
     task set_expected(input logic [WB_ADDR_WIDTH-1:0] addr_i,
                       input logic we_i,
                       input logic [DATA_WIDTH-1:0] data_i = 8'hxx);
@@ -66,6 +67,7 @@ module spi1_tb;
         expected_data <= data_i;
         expected_we   <= we_i;
     endtask
+    /* verilator lint_on INITIALDLY */
 
     task write_at(
         input logic [WB_ADDR_WIDTH-1:0] addr_i,
