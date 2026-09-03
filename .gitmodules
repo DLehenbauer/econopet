@@ -23,5 +23,6 @@
 	url = https://github.com/DLehenbauer/m6502.git
 [submodule "gw/EconoPET/external/mc6809"]
 	path = gw/EconoPET/external/mc6809
-	# Fork of cavnex/mc6809 carrying Rhialto's SWI3 vector fix (upstream issue 6).
+	# Fork of cavnex/mc6809 carrying Rhialto's SWI3 vector fix (upstream issue 6)
+	# and an asynchronous reset for NMILatched (upstream issue 3).
 	url = https://github.com/DLehenbauer/mc6809.git

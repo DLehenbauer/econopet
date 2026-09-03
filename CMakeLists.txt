@@ -222,13 +222,6 @@ if(BUILD_FPGA)
     set(GW_BOOT_TESTS stock6502_boot_tb superpet_waterloo_tb)
     set(GW_RAND_RESET_DEFAULT 0)
 
-    # mc6809i's NMI latch has no reset and must power up inactive.
-    set(GW_RAND_RESET_superpet_top_tb 1)
-    set(GW_RAND_RESET_ieee_sys_tb 1)
-    set(GW_RAND_RESET_superpet_irq_tb 1)
-    set(GW_RAND_RESET_swi_vector_tb 1)
-    set(GW_RAND_RESET_superpet_waterloo_tb 1)
-
     add_test(
         NAME gateware_filelists
         COMMAND ${CMAKE_SOURCE_DIR}/sim.sh --update-only
