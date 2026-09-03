@@ -103,7 +103,7 @@ add_custom_command(
 )
 
 # Package the SD card contents. The zip is named for the version and commit it
-# was built from, and carries a matching 'build-info.txt', both of which are
+# was built from, and carries a matching 'build-info.yaml', both of which are
 # produced by the packaging script so that they describe the tree as of the
 # build rather than as of the last configure. That makes the zip filename
 # unknown here, so this is a custom target (which always runs) rather than a

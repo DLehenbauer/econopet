@@ -32,7 +32,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and test
+      - name: Build and Test
         uses: devcontainers/ci@v0.3
         with:
           imageName: ${{ env.DEVCONTAINER_IMAGE }}
@@ -46,36 +46,19 @@ jobs:
             python3 .github/scripts/check-timing.py build/gw/outflow/EconoPET.timing.rpt
             ctest --preset all --parallel --output-on-failure
 
-      # The steps below only run for a green build of a commit on main, because
-      # a failed step above ends the job.
-
-      # The build names the package for the version and commit it was built
-      # from, and includes 'build-info.txt' in it, so the artifact is just what
-      # is already in the build tree under a matching name.
-      - name: Name SD card package
+      # Get the firmware package name from the file written by CMake and assign
+      # it to `steps.package.outputs.name` for use in the upload step.
+      - name: Get Firmware Package Name
         id: package
         if: env.PUBLISH == 'true'
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
+        run: echo "name=$(< build/sdcard/firmware-package-name.txt)" >> "${GITHUB_OUTPUT}"
 
-          zips=(build/sdcard/EconoPET-*.zip)
-          if [ "${#zips[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one build/sdcard/EconoPET-*.zip, found ${#zips[@]}."
-            exit 1
-          fi
-
-          # GitHub wraps the artifact in '<name>.zip', so dropping the extension
-          # here reproduces the package filename on download.
-          zip_name=$(basename "${zips[0]}")
-          echo "name=${zip_name%.zip}" >> "${GITHUB_OUTPUT}"
-
-      # Uploading the package contents (rather than the zip built by CMake)
-      # keeps the download a single unzip away from a ready-to-use SD card.
+      # `actions/upload-artifact` always creates a zip archive. Upload the package
+      # directory to avoid wrapping the zip produced by CMake inside another zip.
       #
       # Keep this the last step of the job so that the download URL it prints is
       # the last thing in the log.
-      - name: Upload SD card package
+      - name: Upload Firmware Package
         if: env.PUBLISH == 'true'
         uses: actions/upload-artifact@v4
         with:
