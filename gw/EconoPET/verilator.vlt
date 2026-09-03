@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+
+`verilator_config
+lint_off -rule DECLFILENAME -file "external/icesid/icesid/*.v"
+lint_off -rule DEFPARAM -file "external/icesid/icesid/*.v"
+lint_off -rule TIMESCALEMOD -file "external/m6502/rtl/*.sv"
+lint_off -rule GENUNNAMED -file "external/mc6809/mc6809i.v"
+lint_off -rule VARHIDDEN -file "external/mc6809/mc6809i.v"
