@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
 # Compile and run a gateware testbench under Verilator (--binary --timing).
 # Usage: ./verilate.sh TEST_NAME [RAND_RESET]
 #   RAND_RESET: 0 (default; required for m6502), 1 (all ones), or 2 (random).

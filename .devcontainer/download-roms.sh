@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
 # Download PET ROMs and verify MD5 checksums.
-# Usage: .devcontainer/download-roms.sh <destination_dir>
+#
+# Usage:
+#   .devcontainer/download-roms.sh <destination_dir>
+
 set -euo pipefail
 
 usage() {

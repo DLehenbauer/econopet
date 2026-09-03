@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
+# Run gateware simulation tests under Icarus Verilog.
+#
+# Usage:
+#   ./sim.sh [OPTIONS] [TEST_NAME]   (--help lists the options)
 
 SCRIPT_DIR="$(readlink -f $(dirname "$0"))"
 PROJ_NAME="EconoPET"

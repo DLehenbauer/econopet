@@ -1,4 +1,13 @@
 #!/usr/bin/perl
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
+# Compare memorymap-ocr.csv against memorymap-gen.csv and report labels found
+# in only one file, labels whose addresses disagree, and malformed addresses.
+# Both file names are relative to the working directory.
+#
+# Usage:
+#   cd docs/dev/PET && scripts/compare-mmap.sh
 
 use strict;
 use warnings;

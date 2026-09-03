@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
 # Resolve the pseudo-random seed shared by every test in a run.
 # Usage: ./seed.sh                print the effective seed (empty if none is set)
 #        ./seed.sh --write FILE   pick a seed and write it to FILE

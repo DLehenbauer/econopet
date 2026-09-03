@@ -1,6 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
+#
+# Renders a URL as a QR code image using the qrcode package.  Runs setup.sh
+# first if the virtual environment does not exist yet.
+#
+# Usage:
+#   tools/qr-code/qr.sh <URL> <IMAGE_FILE>
+#   tools/qr-code/qr.sh https://www.example.com Foo.png
 
 set -e
 

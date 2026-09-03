@@ -1,4 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
+# Run an Efinity flow against gw/EconoPET/EconoPET.xml with the Efinity
+# environment sourced.  Arguments are passed through to efx_run.py.
+#
+# Usage:
+#   gw/efx.sh [EFX_RUN_OPTIONS]
+
 set -e
 
 source $EFINITY_HOME/bin/setup.sh

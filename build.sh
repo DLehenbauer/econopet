@@ -1,4 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
+# Clean build of the CMake super-project, followed by the full test suite.
+#
+# Usage:
+#   ./build.sh
+
 set -e
 
 # Save current directory and change to the directory containing this script
@@ -13,11 +21,11 @@ trap 'cd "$ORIG_PWD"' EXIT
 rm -rf ./build
 
 # Configure CMake super-project
-cmake -S . -B build -G Ninja
+cmake --preset default
 
 # Building all subprojects
-cmake --build build
+cmake --build --preset all
 
 # Run unit tests
 echo "Running unit tests..."
-ctest --test-dir build --output-on-failure --verbose
+ctest --preset all --parallel --output-on-failure --verbose

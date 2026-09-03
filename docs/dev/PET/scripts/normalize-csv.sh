@@ -1,4 +1,12 @@
 #!/usr/bin/perl
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
+# Rewrite a CSV stream with uniform quoting and escaping so that two exports
+# can be diffed without formatting noise.
+#
+# Usage:
+#   scripts/normalize-csv.sh < in.csv > out.csv
 
 use strict;
 use warnings;

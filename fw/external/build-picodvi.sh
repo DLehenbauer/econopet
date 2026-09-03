@@ -1,6 +1,13 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
 # Build PicoDVI configured for EconoPET hardware.
 # EconoPET may require extra time for 12 MHz crystal to stabilize.
 # EconoPET uses same pinout as 'micromod_cfg'
+#
+# Usage:
+#   fw/external/build-picodvi.sh
 
 pushd PicoDVI/software && rm -rf build && mkdir build
 cd build

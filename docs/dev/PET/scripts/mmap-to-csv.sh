@@ -1,7 +1,12 @@
 #!/usr/bin/perl
-
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+#
 # Convert PET concordance exported by 'cbmsymbols' tool to CSV format
 # (See https://github.com/ethandicks/cbmsymbols)
+#
+# Usage:
+#   scripts/mmap-to-csv.sh <concordance_file> > memorymap-gen.csv
 
 use strict;
 use warnings;
