@@ -33,6 +33,7 @@ module acia6551_tb;
         end
         rx_line <= 1'b1;  #833333;
     endtask
+    /* verilator lint_on INITIALDLY */
 
     task automatic wait_irq_high;
         int guard;
@@ -65,6 +66,7 @@ module acia6551_tb;
         .irq_o(irq)
     );
 
+    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic [15:0] a, input logic [7:0] v);
         @(posedge sys_clock);
         addr <= a; din <= v; we <= 1; be <= 1;
