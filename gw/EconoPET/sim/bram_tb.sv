@@ -56,8 +56,8 @@ module bram_tb #(
 
     task run;
         wb.reset;
-        wb.write(10'h00, 8'h55);
-        wb.read(10'h00, data_rd);
+        wb.write(WB_ADDR_WIDTH'(0), 8'h55);
+        wb.read(WB_ADDR_WIDTH'(0), data_rd);
         `assert_equal(data_rd, 8'h55);
 
     endtask

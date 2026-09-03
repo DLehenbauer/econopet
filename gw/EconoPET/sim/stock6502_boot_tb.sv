@@ -184,7 +184,7 @@ module stock6502_boot_tb;
 
     task static run;
         int spaces;
-        int found;
+        bit found;
         $display("[%t] BEGIN stock BASIC-4 boot on soft 6502", $time);
         spi1_driver.reset;
 

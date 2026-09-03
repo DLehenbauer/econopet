@@ -139,7 +139,7 @@ module video_crtc_tb;
         integer i;
 
         foreach(values[i]) begin
-            select(/* register: */ i);
+            select(/* register: */ DATA_WIDTH'(i));
             write(/* data: */ values[i]);
             //crtc_assert(/* expected: */ values[i]);
         end
@@ -226,7 +226,7 @@ module video_crtc_tb;
 
             $display("[%t]   Test: Data register reads", $time);
             for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-                select(r);
+                select(DATA_WIDTH'(r));
                 read_data(data);
                 `assert_equal(data, 8'h00);
             end

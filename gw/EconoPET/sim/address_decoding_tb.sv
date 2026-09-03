@@ -110,10 +110,12 @@ module address_decoding_tb();
     );
         integer delta;
 
-        delta = 1'b1;
+        delta = 1;
         $display("[%t]   %12s: $%04x-$%04x", $time, name, CPU_ADDR_WIDTH'(start_addr), CPU_ADDR_WIDTH'(end_addr));
 
-        for (cpu_addr = start_addr; cpu_addr <= end_addr; cpu_addr = cpu_addr + delta) begin
+        for (cpu_addr = (CPU_ADDR_WIDTH+1)'(start_addr);
+             int'(cpu_addr) <= end_addr;
+             cpu_addr = (CPU_ADDR_WIDTH+1)'(int'(cpu_addr) + delta)) begin
             // Clock edge captures new input address.
             @(posedge sys_clock);
 
@@ -135,12 +137,12 @@ module address_decoding_tb();
 `ifndef PARANOID
             // If not running exhaustive tests, accelerate simulation by randomly skipping addresses.
             // The logic below ensures that we always test the first and last two addresses in the range.
-            if (cpu_addr > start_addr) begin
+            if (int'(cpu_addr) > start_addr) begin
                 delta = $urandom_range(1, (end_addr - start_addr) / 2);
 
                 // If the delta is too large, adjust it to ensure we don't skip the last two addresses.
-                if (cpu_addr + delta > end_addr - 1) begin
-                    delta = end_addr - cpu_addr - 1;
+                if (int'(cpu_addr) + delta > end_addr - 1) begin
+                    delta = end_addr - int'(cpu_addr) - 1;
 
                     // Once we've reached the last couple addresses, ensure forward progress.
                     if (delta < 1) begin

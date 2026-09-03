@@ -180,7 +180,7 @@ module video_tb;
         integer i;
 
         foreach(values[i]) begin
-            select(/* register: */ i);
+            select(/* register: */ DATA_WIDTH'(i));
             write(/* data: */ values[i]);
             //crtc_assert(/* expected: */ values[i]);
         end
@@ -193,7 +193,7 @@ module video_tb;
         wb.reset;
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            wb.read(common_pkg::wb_crtc_addr(r), value);
+            wb.read(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), value);
             $display("[%t]   R%0d = %d", $time, r, value);
         end
 

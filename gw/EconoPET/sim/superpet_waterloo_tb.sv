@@ -213,7 +213,8 @@ module superpet_waterloo_tb;
         line = "";
         base = row * 80;
         for (int col = 0; col < 80; col++) begin
-            line = { line, $sformatf("%c", screen_to_ascii(mock_sram.mem[17'(17'h08000 + base + col)])) };
+            line = { line, $sformatf("%c", screen_to_ascii(
+                mock_sram.mem[17'h08000 + RAM_ADDR_WIDTH'(base) + RAM_ADDR_WIDTH'(col)])) };
         end
         $display("[%t]   SCREEN[%0d]: %s", $time, row, line);
     endtask
@@ -226,11 +227,12 @@ module superpet_waterloo_tb;
         tlen = text.len();
         found = 1'b0;
         for (int i = 0; !found && i + tlen <= 2000; i++) begin
-            int match;
-            match = 1;
+            bit match;
+            match = 1'b1;
             for (int j = 0; j < tlen; j++) begin
-                if (screen_to_ascii(mock_sram.mem[17'(17'h08000 + i + j)]) != byte'(text[j]))
-                    match = 0;
+                if (screen_to_ascii(mock_sram.mem[
+                    17'h08000 + RAM_ADDR_WIDTH'(i) + RAM_ADDR_WIDTH'(j)]) != byte'(text[j]))
+                    match = 1'b0;
             end
             if (match) found = 1'b1;
         end

@@ -40,7 +40,7 @@ module register_file_tb;
 
     register_file register_file (
         .wb_clock_i(clock),
-        .wbp_addr_i(common_pkg::wb_reg_addr(addr)),
+        .wbp_addr_i(addr),
         .wbp_data_i(pico),
         .wbp_data_o(poci),
         .wbp_we_i(we),
@@ -101,7 +101,7 @@ module register_file_tb;
         // Register file copies updated status to BRAM on idle clock cycles.
         @(posedge clock);
 
-        wb.read(REG_STATUS, data);
+        wb.read(common_pkg::wb_reg_addr(REG_STATUS), data);
 
         `assert_equal(data[REG_STATUS_GRAPHICS_BIT], video_graphic);
         `assert_equal(data[REG_STATUS_CRT_BIT], config_crt);
@@ -112,13 +112,13 @@ module register_file_tb;
     task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
         logic [DATA_WIDTH-1:0] data_rd;
 
-        wb.write(addr, data);
-        wb.read(addr, data_rd);
+        wb.write(common_pkg::wb_reg_addr(addr), data);
+        wb.read(common_pkg::wb_reg_addr(addr), data_rd);
         `assert_exact_equal(data_rd, data);
     endtask
 
     task test_cpu_reg(input logic reset, input logic ready, input logic nmi);
-        test_reg(REG_CPU, {6'bxxxx_x, nmi, reset, ready});
+        test_reg(REG_CPU, {5'bxxxxx, nmi, reset, ready});
         `assert_equal(cpu_reset, reset);
         `assert_equal(cpu_ready, ready);
         `assert_equal(cpu_nmi, nmi);
@@ -168,26 +168,26 @@ module register_file_tb;
         begin
             byte data;
 
-            wb.read(REG_STATUS, data);
+            wb.read(common_pkg::wb_reg_addr(REG_STATUS), data);
             `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b1)
 
             // Read breakpoint address
-            wb.read(REG_BP_ADDR_LO, data);
+            wb.read(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), data);
             `assert_equal(data, 8'hEF)
 
-            wb.read(REG_BP_ADDR_HI, data);
+            wb.read(common_pkg::wb_reg_addr(REG_BP_ADDR_HI), data);
             `assert_equal(data, 8'hBE)
         end
 
         // Breakpoint: writing REG_BP_CTL pulses bp_clear
         `assert_equal(bp_clear, 1'b0)
-        wb.write(REG_BP_CTL, 8'h01);
+        wb.write(common_pkg::wb_reg_addr(REG_BP_CTL), 8'h01);
         `assert_equal(bp_clear, 1'b1)
         @(posedge clock);
         `assert_equal(bp_clear, 1'b0)
 
         // Breakpoint: writing 0 to REG_BP_CTL does not pulse bp_clear
-        wb.write(REG_BP_CTL, 8'h00);
+        wb.write(common_pkg::wb_reg_addr(REG_BP_CTL), 8'h00);
         `assert_equal(bp_clear, 1'b0)
 
         // Breakpoint: REG_BP_CTL write does not overwrite REG_BP_ADDR_LO
@@ -196,7 +196,7 @@ module register_file_tb;
         @(posedge clock);
         begin
             byte data;
-            wb.read(REG_BP_ADDR_LO, data);
+            wb.read(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), data);
             `assert_equal(data, 8'hFE)
         end
 

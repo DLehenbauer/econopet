@@ -37,7 +37,7 @@ module keyboard_tb;
 
     keyboard keyboard (
         .wb_clock_i(clock),
-        .wbp_addr_i(common_pkg::wb_kbd_addr(addr)),
+        .wbp_addr_i(addr),
         .wbp_data_i(pico),
         .wbp_data_o(poci),
         .wbp_we_i(we),
@@ -124,14 +124,14 @@ module keyboard_tb;
         input logic [PIA_RS_WIDTH-1:0] rs,
         input logic [  DATA_WIDTH-1:0] data
     );
-        cpu_write(16'hE810 + rs, data);
+        cpu_write(16'hE810 + CPU_ADDR_WIDTH'(rs), data);
     endtask
 
     task cpu_read_pia1(
         input  logic [PIA_RS_WIDTH-1:0] rs,
         output logic [  DATA_WIDTH-1:0] data
     );
-        cpu_read(16'hE810 + rs, data);
+        cpu_read(16'hE810 + CPU_ADDR_WIDTH'(rs), data);
     endtask
 
     task cpu_select_col(
@@ -155,7 +155,7 @@ module keyboard_tb;
 
         $display("[%t]   Keyboard cols must be initialized to 8'hFF at power on.", $time);
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
-            wb.read(col, data_rd);
+            wb.read(WB_ADDR_WIDTH'(col), data_rd);
             $display("[%t]     col %0d = %2h %x", $time, col, data_rd, usb_kbd[col]);
             `assert_equal(data_rd, 8'hFF);
         end
@@ -165,30 +165,30 @@ module keyboard_tb;
         // First pass read/writes unique values to all cols.
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'h5, col[3:0] };
-            wb.write(col, value);
+            wb.write(WB_ADDR_WIDTH'(col), value);
             $display("[%t]     col %0d <- %2h (WB)", $time, col, value);
 
             // Read back returns FF until the CPU reads the column.
-            wb.read(col, data_rd);
+            wb.read(WB_ADDR_WIDTH'(col), data_rd);
             $display("[%t]     col %0d -> %2h (WB)", $time, col, data_rd);
             `assert_equal(data_rd, 8'hFF);
 
-            cpu_select_col(col);
+            cpu_select_col(DATA_WIDTH'(col));
             cpu_read_current_col(data);
             $display("[%t]     col %0d -> %2h (CPU)", $time, col, data);
             `assert_equal(data, value);
             
-            wb.read(col, data_rd);
+            wb.read(WB_ADDR_WIDTH'(col), data_rd);
             $display("[%t]     col %0d -> %2h (WB)", $time, col, data_rd);
             `assert_equal(data_rd, value);
         end
 
         // Second pass ensures unique values were not overwritten and resets all cols to 8'hFF.
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
-            wb.read(col, data_rd);
+            wb.read(WB_ADDR_WIDTH'(col), data_rd);
             $display("[%t]     col %0d -> %2h (WB)", $time, col, data_rd);
             `assert_equal(data_rd, { 4'h5, col[3:0] });
-            wb.write(col, 8'hff);
+            wb.write(WB_ADDR_WIDTH'(col), 8'hff);
         end
 
     endtask

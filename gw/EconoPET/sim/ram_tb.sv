@@ -47,7 +47,7 @@ module ram_tb;
 
     ram ram (
         .wb_clock_i(clock),
-        .wbp_addr_i(common_pkg::wb_ram_addr(addr)),
+        .wbp_addr_i(addr),
         .wbp_data_i(pico),
         .wbp_data_o(poci),
         .wbp_we_i(we),
@@ -86,20 +86,20 @@ module ram_tb;
         .wb_stall_i(stall)
     );
 
-    task test_rd(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+    task test_rd(input logic [RAM_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
         logic [DATA_WIDTH-1:0] data_rd;
 
         wb.read(common_pkg::wb_ram_addr(addr), data_rd);
         `assert_equal(data_rd, data);
     endtask
 
-    task test_wr(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+    task test_wr(input logic [RAM_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
         logic [DATA_WIDTH-1:0] data_rd;
 
         wb.write(common_pkg::wb_ram_addr(addr), data);
     endtask
 
-    task test_rw(input logic [WB_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
+    task test_rw(input logic [RAM_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
         test_wr(addr, data);
         test_rd(addr, data);
     endtask

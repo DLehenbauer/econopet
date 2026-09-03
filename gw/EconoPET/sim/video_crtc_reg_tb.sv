@@ -150,7 +150,7 @@ module video_crtc_reg_tb;
         integer i;
 
         foreach(values[i]) begin
-            select(/* register: */ i);
+            select(/* register: */ DATA_WIDTH'(i));
             write(/* data: */ values[i]);
             //crtc_assert(/* expected: */ values[i]);
         end
@@ -168,14 +168,14 @@ module video_crtc_reg_tb;
         $display("[%t]   Test 1: Wishbone write, Wishbone read", $time);
         // Use value (r + 0xA0) for each register - distinct from 9" and 12" defaults
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            wb.write(common_pkg::wb_crtc_addr(r), 8'hA0 + r);
+            wb.write(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), 8'hA0 + DATA_WIDTH'(r));
         end
 
         @(posedge clock);
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            wb.read(common_pkg::wb_crtc_addr(r), data);
-            `assert_equal(data, 8'hA0 + r);
+            wb.read(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), data);
+            `assert_equal(data, 8'hA0 + DATA_WIDTH'(r));
         end
 
         // Verify register outputs are correctly updated, accounting for truncation        
@@ -194,14 +194,14 @@ module video_crtc_reg_tb;
         // Test 2: CPU write, Wishbone read
         $display("[%t]   Test 2: CPU write, Wishbone read", $time);
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            cpu_write(r, 8'hB0 + r);
+            cpu_write(DATA_WIDTH'(r), 8'hB0 + DATA_WIDTH'(r));
         end
 
         @(posedge clock);
 
         for (r = 0; r < CRTC_REG_COUNT; r = r + 1) begin
-            wb.read(common_pkg::wb_crtc_addr(r), data);
-            `assert_equal(data, 8'hB0 + r);
+            wb.read(common_pkg::wb_crtc_addr(CRTC_ADDR_REG_WIDTH'(r)), data);
+            `assert_equal(data, 8'hB0 + DATA_WIDTH'(r));
         end
 
         // Verify register outputs are correctly updated with new values
