@@ -16,6 +16,9 @@ env:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      # Publish only from green builds of commits on main in this repository.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'DLehenbauer/econopet' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +32,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and test
+      - name: Build and Test
         uses: devcontainers/ci@v0.3
         with:
           imageName: ${{ env.DEVCONTAINER_IMAGE }}
@@ -42,3 +45,25 @@ jobs:
             python3 -m unittest discover -s .github/scripts
             python3 .github/scripts/check-timing.py build/gw/outflow/EconoPET.timing.rpt
             ctest --preset all --parallel --output-on-failure
+
+      # Get the firmware package name from the file written by CMake and assign
+      # it to `steps.package.outputs.name` for use in the upload step.
+      - name: Get Firmware Package Name
+        id: package
+        if: env.PUBLISH == 'true'
+        run: echo "name=$(< build/sdcard/firmware-package-name.txt)" >> "${GITHUB_OUTPUT}"
+
+      # `actions/upload-artifact` always creates a zip archive. Upload the package
+      # directory to avoid wrapping the zip produced by CMake inside another zip.
+      #
+      # Keep this the last step of the job so that the download URL it prints is
+      # the last thing in the log.
+      - name: Upload Firmware Package
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: build/sdcard/sdcard_root
+          if-no-files-found: error
+          # Allow a re-run of the same commit to replace its package.
+          overwrite: true
