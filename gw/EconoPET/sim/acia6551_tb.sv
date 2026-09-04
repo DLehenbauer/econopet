@@ -25,15 +25,13 @@ module acia6551_tb;
     assign rxd = drive_rx ? rx_line : txd;
 
     // Send one 1200-baud 8N1 frame on the line (833333ns per bit).
-    /* verilator lint_off INITIALDLY */
     task automatic send_rx_frame(input logic [7:0] b);
-        rx_line <= 1'b0;  #833333;
+        rx_line = 1'b0;  #833333;
         for (int i = 0; i < 8; i++) begin
-            rx_line <= b[i]; #833333;
+            rx_line = b[i]; #833333;
         end
-        rx_line <= 1'b1;  #833333;
+        rx_line = 1'b1;  #833333;
     endtask
-    /* verilator lint_on INITIALDLY */
 
     task automatic wait_irq_high;
         int guard;
@@ -66,34 +64,32 @@ module acia6551_tb;
         .irq_o(irq)
     );
 
-    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic [15:0] a, input logic [7:0] v);
         @(posedge sys_clock);
-        addr <= a; din <= v; we <= 1; be <= 1;
+        addr = a; din = v; we = 1; be = 1;
         repeat (3) @(posedge sys_clock);
-        data_strobe <= 1;
+        data_strobe = 1;
         @(posedge sys_clock);
-        data_strobe <= 0;
+        data_strobe = 0;
         @(posedge sys_clock);
-        be <= 0; we <= 0;
+        be = 0; we = 0;
         repeat (2) @(posedge sys_clock);
     endtask
 
     task automatic cpu_read(input logic [15:0] a, output logic [7:0] v);
         @(posedge sys_clock);
-        addr <= a; we <= 0; be <= 1;
+        addr = a; we = 0; be = 1;
         repeat (3) @(posedge sys_clock);
-        data_strobe <= 1;
+        data_strobe = 1;
         @(posedge sys_clock);
         // Sample at the strobe edge -- the value the DUT itself keyed its
         // read side-effects on (the real 6809 captures at this instant too).
         v = doe ? dout : 8'hFF;
-        data_strobe <= 0;
+        data_strobe = 0;
         @(posedge sys_clock);
-        be <= 0;
+        be = 0;
         repeat (2) @(posedge sys_clock);
     endtask
-    /* verilator lint_on INITIALDLY */
 
     // Poll status until (value & mask) == want; returns the observing read's
     // full status value (that read also clears the IRQ flag, so callers must
@@ -190,7 +186,7 @@ module acia6551_tb;
         cpu_write(16'hEFF3, 8'b0001_1000);   // 1200 8N1
         cpu_write(16'hEFF2, 8'b0000_1001);   // cmd $09: RX IRQ enabled
         cpu_read(16'hEFF1, v);               // clear any stale latch
-        drive_rx <= 1'b1;
+        drive_rx = 1'b1;
         send_rx_frame(8'h0D);                // a real CR at 1200
         wait_irq_high;
         cpu_read(16'hEFF1, v);               // the poll's status read
@@ -209,7 +205,7 @@ module acia6551_tb;
         `assert_equal(v[7], 1'b1);
         cpu_read(16'hEFF0, got);
         `assert_equal(got, 8'h41);
-        drive_rx <= 1'b0;
+        drive_rx = 1'b0;
         $display("[%t]   bridge RX poll ritual ok", $time);
 
         // Programmed reset: command bits 4:0 -> 00010, parity bits kept

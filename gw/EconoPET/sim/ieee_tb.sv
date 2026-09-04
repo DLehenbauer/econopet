@@ -101,48 +101,42 @@ module ieee_tb;
     // ------------------------------------------------------------------
     // CPU-side helpers (register-level bus cycles)
     // ------------------------------------------------------------------
-    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic p1, input logic p2, input logic v,
                              input logic [3:0] r, input logic [7:0] val);
-        // All bus signals driven with NBA (<=): the DUT's FFs sample on the
-        // same posedges this task wakes on, so blocking drives race the
-        // sampling (a 1-clock strobe can be cleared before some FFs see it).
-        // On real hardware these are FF outputs -- NBA models that.
         @(posedge sys_clock);
-        rs <= r; cpu_data <= val; cpu_we <= 1; cpu_be <= 1;
-        cpu_addr_strobe <= 1;
+        rs = r; cpu_data = val; cpu_we = 1; cpu_be = 1;
+        cpu_addr_strobe = 1;
         @(posedge sys_clock);
-        cpu_addr_strobe <= 0;
+        cpu_addr_strobe = 0;
         // Chip-selects settle after the strobe on real hardware (the decode
         // is registered off an address that is itself a clock behind the
         // strobe) -- model that so a too-early snapshot in the DUT fails.
-        pia1_cs <= p1; pia2_cs <= p2; via_cs <= v;
+        pia1_cs = p1; pia2_cs = p2; via_cs = v;
         repeat (4) @(posedge sys_clock);
-        cpu_data_strobe <= 1;
+        cpu_data_strobe = 1;
         @(posedge sys_clock);
-        cpu_data_strobe <= 0;
+        cpu_data_strobe = 0;
         @(posedge sys_clock);
-        cpu_be <= 0; cpu_we <= 0; pia1_cs <= 0; pia2_cs <= 0; via_cs <= 0;
+        cpu_be = 0; cpu_we = 0; pia1_cs = 0; pia2_cs = 0; via_cs = 0;
         repeat (g_tail) @(posedge sys_clock);
     endtask
-    /* verilator lint_on INITIALDLY */
 
     // Read returns injected value when the DUT drives, else 8'hFF (open bus).
     task automatic cpu_read(input logic p1, input logic p2, input logic v,
                             input logic [3:0] r, output logic [7:0] val);
         @(posedge sys_clock);
-        rs <= r; cpu_we <= 0; cpu_be <= 1;
-        cpu_addr_strobe <= 1;
+        rs = r; cpu_we = 0; cpu_be = 1;
+        cpu_addr_strobe = 1;
         @(posedge sys_clock);
-        cpu_addr_strobe <= 0;
-        pia1_cs <= p1; pia2_cs <= p2; via_cs <= v;   // CS settles after strobe
+        cpu_addr_strobe = 0;
+        pia1_cs = p1; pia2_cs = p2; via_cs = v;   // CS settles after strobe
         repeat (5) @(posedge sys_clock);
         val = dut_doe ? dut_data : 8'hFF;
-        cpu_data_strobe <= 1;      // the CPU's read of this register
+        cpu_data_strobe = 1;      // the CPU's read of this register
         @(posedge sys_clock);
-        cpu_data_strobe <= 0;
+        cpu_data_strobe = 0;
         @(posedge sys_clock);
-        cpu_be <= 0; pia1_cs <= 0; pia2_cs <= 0; via_cs <= 0;
+        cpu_be = 0; pia1_cs = 0; pia2_cs = 0; via_cs = 0;
         repeat (g_tail) @(posedge sys_clock);
     endtask
 

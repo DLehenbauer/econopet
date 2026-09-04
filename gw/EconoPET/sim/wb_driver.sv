@@ -22,16 +22,15 @@ module wb_driver (
         @(posedge wb_clock_i);
     endtask
 
-    /* verilator lint_off INITIALDLY */
     task start_bus_cycle;
         // Driver does not yet handle pipelined requests
         `assert_equal(wb_strobe_o, '0);
 
-        wb_cycle_o  <= 1'b1;
-        wb_strobe_o <= 1'b1;
+        wb_cycle_o  = 1'b1;
+        wb_strobe_o = 1'b1;
 
         while (wb_stall_i) @(posedge wb_clock_i);
-        @(posedge wb_clock_i) wb_strobe_o <= '0;
+        @(posedge wb_clock_i) wb_strobe_o = '0;
     endtask
 
     task wait_for_ack;
@@ -42,9 +41,8 @@ module wb_driver (
     task end_bus_cycle;
         `assert_equal(wb_cycle_o, 1'b1);
         `assert_equal(wb_strobe_o, '0);
-        wb_cycle_o <= '0;
+        wb_cycle_o = '0;
     endtask
-    /* verilator lint_on INITIALDLY */
 
     task write(
         input logic [WB_ADDR_WIDTH-1:0] addr_i,

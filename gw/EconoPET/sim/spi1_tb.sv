@@ -59,15 +59,13 @@ module spi1_tb;
     logic                     expected_we;
     logic [   DATA_WIDTH-1:0] expected_data;
 
-    /* verilator lint_off INITIALDLY */
     task set_expected(input logic [WB_ADDR_WIDTH-1:0] addr_i,
                       input logic we_i,
                       input logic [DATA_WIDTH-1:0] data_i = 8'hxx);
-        expected_addr <= addr_i;
-        expected_data <= data_i;
-        expected_we   <= we_i;
+        expected_addr = addr_i;
+        expected_data = data_i;
+        expected_we   = we_i;
     endtask
-    /* verilator lint_on INITIALDLY */
 
     task write_at(
         input logic [WB_ADDR_WIDTH-1:0] addr_i,
@@ -161,7 +159,7 @@ module spi1_tb;
         // Setting ack clears cycle on next clock edge.
         @(posedge clock) begin
             `assert_equal(cycle, '1);
-            ack <= '0;
+            ack = '0;
         end
 
         @(posedge clock) begin
@@ -178,11 +176,11 @@ module spi1_tb;
         `assert_equal(we, expected_we);
         if (we) `assert_equal(wr_data, expected_data);
 
-        @(posedge clock) ack <= 1'b1;
+        @(posedge clock) ack = 1'b1;
         #1 $display("[%t]        (stall=%b, cycle=%b, ack=%b)", $time, spi_stall, cycle, ack);
         @(negedge spi_stall);
         $display("[%t]        (stall=%b, cycle=%b, ack=%b)", $time, spi_stall, cycle, ack);
-        ack <= 1'b0;
+        ack = 1'b0;
     end
 
     task run;

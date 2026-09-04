@@ -38,23 +38,22 @@ module mmu_tb;
         .superpet_firq_n_o(firq_n)
     );
 
-    /* verilator lint_off INITIALDLY */
     task automatic cpu_write(input logic [15:0] a, input logic [7:0] v);
         @(posedge sys_clock);
-        addr <= a; data <= v; be <= 1;
+        addr = a; data = v; be = 1;
         repeat (2) @(posedge sys_clock);
-        wr_strobe <= 1;
+        wr_strobe = 1;
         @(posedge sys_clock);
-        wr_strobe <= 0;
+        wr_strobe = 0;
         @(posedge sys_clock);
-        be <= 0;
+        be = 0;
         repeat (2) @(posedge sys_clock);
     endtask
 
     // Present an address (read decode settles while be)
     task automatic decode_at(input logic [15:0] a);
         @(posedge sys_clock);
-        addr <= a; be <= 1;
+        addr = a; be = 1;
         repeat (3) @(posedge sys_clock);
     endtask
 
@@ -68,33 +67,33 @@ module mmu_tb;
         `assert_equal({a15, a14, a13, a12}, 4'd7);   // bank 7 in a15..a12
         `assert_equal(a16, 1'b1);
         `assert_equal(ram_en, 1'b1);
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
 
         // --- STB $EFFC form also banks (pair decode, VICE-faithful) ---
         cpu_write(16'hEFFC, 8'h03);
         decode_at(16'h9000);
         `assert_equal({a15, a14, a13, a12}, 4'd3);
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
 
         // --- System latch is locked (ctrlwp): $EFF8 write must NOT take ---
         cpu_write(16'hEFF8, 8'h00);                  // try to engage RAM WP
         decode_at(16'h9000);
         `assert_equal(wp, 1'b0);                     // still writable
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
 
         // --- Unlock (bit 7 high), engage RAM WP, verify, then release ---
         cpu_write(16'hEFFC, 8'h83);                  // unlock + keep bank 3
         cpu_write(16'hEFF8, 8'h00);                  // D1=0: write-protect
         decode_at(16'h9ABC);
         `assert_equal(wp, 1'b1);                     // banked window protected
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
         decode_at(16'h1234);
         `assert_equal(wp, 1'b0);                     // main RAM unaffected
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
         cpu_write(16'hEFF8, 8'h02);                  // D1=1: read/write again
         decode_at(16'h9ABC);
         `assert_equal(wp, 1'b0);
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
 
         // --- Flat mode: everything is RAM in the upper 64K ---
         cpu_write(16'hEFFC, 8'h40);                  // bit6: flat
@@ -104,24 +103,24 @@ module mmu_tb;
         `assert_equal(is_ro, 1'b0);
         `assert_equal(a16, 1'b1);
         `assert_equal({a15, a14, a13, a12}, 4'hC);   // identity mapping
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
         decode_at(16'hE823);                         // normally PIA2
         `assert_equal(pia2_en, 1'b0);
         `assert_equal(ram_en, 1'b1);
-        be <= 0; repeat (2) @(posedge sys_clock);
+        be = 0; repeat (2) @(posedge sys_clock);
 
         // --- SYNC exits flat mode: bank 0, re-locked, FIRQ pulse ---
         `assert_equal(firq_n, 1'b1);
         @(posedge sys_clock);
-        sync_st <= 1;
+        sync_st = 1;
         repeat (2) @(posedge sys_clock);
-        sync_st <= 0;
+        sync_st = 0;
         `assert_equal(flat, 1'b0);
         @(posedge sys_clock);                        // firq_n is registered
         `assert_equal(firq_n, 1'b0);                 // FIRQ asserted (pulse)
         decode_at(16'h9000);
         `assert_equal({a15, a14, a13, a12}, 4'd0);   // back to bank 0
-        be <= 0;
+        be = 0;
         // pulse must end on its own (~16us)
         repeat (1100) @(posedge sys_clock);
         `assert_equal(firq_n, 1'b1);
@@ -130,14 +129,13 @@ module mmu_tb;
         cpu_write(16'hEFFC, 8'h60);                  // flat + FIRQ disable
         `assert_equal(flat, 1'b1);
         @(posedge sys_clock);
-        sync_st <= 1;
+        sync_st = 1;
         repeat (2) @(posedge sys_clock);
-        sync_st <= 0;
+        sync_st = 0;
         `assert_equal(flat, 1'b0);
         `assert_equal(firq_n, 1'b1);                 // no pulse
         $display("[%t] END MMU test", $time);
     endtask
-    /* verilator lint_on INITIALDLY */
 
     `TB_INIT
 endmodule
