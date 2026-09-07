@@ -40,7 +40,7 @@ module video_crtc(
     logic [ 7:0] h_total;
     logic [ 7:0] h_displayed;
     logic [ 7:0] h_sync_pos;
-    logic [ 3:0] h_sync_width;
+    logic [ 4:0] h_sync_width;
     logic [ 4:0] v_sync_width;
     logic [ 6:0] v_total;
     logic [ 4:0] v_adjust;
@@ -85,7 +85,7 @@ module video_crtc(
     // Horizontal
 
     logic [7:0] h_total_counter = '0;
-    logic [3:0] h_sync_counter  = '0;
+    logic [4:0] h_sync_counter  = '0;
     logic       h_display       = 1'b1;
     logic       h_sync          = '0;
 

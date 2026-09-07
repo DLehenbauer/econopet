@@ -218,8 +218,14 @@ endif()
 # Add Verilog simulation tests to root CTest
 if(BUILD_FPGA)
     # When reasonable to do so, benches run under both Icarus Verilog and Verilator.
-    # Slower benches (e.g., boot tests) are run only under Verilator.
-    set(GW_BOOT_TESTS stock6502_boot_tb superpet_waterloo_tb)
+    # The following tests are Verilator-only because they run slowly under Icarus Verilog:
+    set(GW_VERILATOR_ONLY_TESTS
+        stock6502_boot_tb
+        superpet_waterloo_tb
+        video_crtc_timing_tb
+    )
+    set(GW_TEST_EXTRA_LABELS_stock6502_boot_tb boot)
+    set(GW_TEST_EXTRA_LABELS_superpet_waterloo_tb boot)
     set(GW_RAND_RESET_DEFAULT 0)
 
     add_test(
@@ -243,14 +249,20 @@ if(BUILD_FPGA)
             set(TB_RAND_RESET ${GW_RAND_RESET_DEFAULT})
         endif()
 
-        if(TB_NAME IN_LIST GW_BOOT_TESTS)
+        if(TB_NAME IN_LIST GW_VERILATOR_ONLY_TESTS)
             add_test(
                 NAME ${TB_NAME}
                 COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
+
+            set(TB_LABELS "gw;sim;vl")
+            if(DEFINED GW_TEST_EXTRA_LABELS_${TB_NAME})
+                list(APPEND TB_LABELS ${GW_TEST_EXTRA_LABELS_${TB_NAME}})
+            endif()
+
             set_tests_properties(${TB_NAME} PROPERTIES
-                LABELS "gw;sim;vl;boot"
+                LABELS "${TB_LABELS}"
                 TIMEOUT 1800
                 FIXTURES_REQUIRED gateware_filelists
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"

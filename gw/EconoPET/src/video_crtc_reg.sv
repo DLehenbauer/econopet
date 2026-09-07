@@ -27,8 +27,8 @@ module video_crtc_reg (
     output logic [ 7:0] r0_h_total_o,
     output logic [ 7:0] r1_h_displayed_o,
     output logic [ 7:0] r2_h_sync_pos_o,
-    output logic [ 3:0] r3_h_sync_width_o,
-    output logic [ 4:0] r3_v_sync_width_o,
+    output logic [ 4:0] r3_h_sync_width_o,      // H/V-Sync extended from 4 to 5 bits to support 9-inch PET timings,
+    output logic [ 4:0] r3_v_sync_width_o,      // which require longer sync pulses than the original CRTC can generate.
     output logic [ 6:0] r4_v_total_o,
     output logic [ 4:0] r5_v_adjust_o,
     output logic [ 6:0] r6_v_displayed_o,
@@ -43,7 +43,7 @@ module video_crtc_reg (
     logic [DATA_WIDTH-1:0] r[CRTC_REG_COUNT_LOCAL-1:0];         // Storage for R0..31
 
     initial begin
-        // 8032 Power-On State
+        // North American 8032 60 Hz text-mode power-on state
         r[CRTC_R0_H_TOTAL]           = 8'h31;
         r[CRTC_R1_H_DISPLAYED]       = 8'h28;
         r[CRTC_R2_H_SYNC_POS]        = 8'h29;
@@ -82,7 +82,7 @@ module video_crtc_reg (
             r0_h_total_o       <= 8'd63;
             r1_h_displayed_o   <= 8'd40;
             r2_h_sync_pos_o    <= 8'd48;
-            r3_h_sync_width_o  <= 4'd15;
+            r3_h_sync_width_o  <= 5'd24;
             r3_v_sync_width_o  <= 5'd20;
             r4_v_total_o       <= 7'd31;
             r5_v_adjust_o      <= 5'd04;
@@ -94,7 +94,7 @@ module video_crtc_reg (
             r0_h_total_o        <= r[CRTC_R0_H_TOTAL];
             r1_h_displayed_o    <= r[CRTC_R1_H_DISPLAYED];
             r2_h_sync_pos_o     <= r[CRTC_R2_H_SYNC_POS];
-            r3_h_sync_width_o   <= r[CRTC_R3_SYNC_WIDTH][3:0];
+            r3_h_sync_width_o   <= { 1'b0, r[CRTC_R3_SYNC_WIDTH][3:0] };
             r3_v_sync_width_o   <= r[CRTC_R3_SYNC_WIDTH][7:4] == 0  // Per Datasheet, when bits 4-7 are all
                                     ? 5'h10                         // "0", VSYNC will be 16 scan lines wide.
                                     : { 1'b0, r[CRTC_R3_SYNC_WIDTH][7:4] };

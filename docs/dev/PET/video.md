@@ -14,25 +14,39 @@ HSync  | 15.63 KHz  |    64us  |   24us | Active High | Video pin 5 (consistent 
 VSync  | 60.12 Hz   | 16.64ms  | 1.28ms | Active Low  | Video pin 3 (consistent with 15.632 KHz / 260 lines = ~60.122 Hz)
 Video  |          - |        - |      - | Active Low  | -
 
-### CRTC for 9" monitor
+### EconoPET 9" timing override
 
-Closest CRTC settings:
+The 9" mode overrides the CRTC register outputs to reproduce the timing
+[documented by Thomas Skibo](https://github.com/skibo/attiny2313_petvid) as closely as is possible using the CRTC.  Conveniently, the math works out such that 1us = one 8-pixel character.
 
 Register | Value | Description
 ---------|-------|-----------------------------------------------
  R0      |   63  | H_TOTAL = 8 MHz pixel clock / 8 pixel char / (64 chars - 1) = 15.625 KHz
  R1      |   40  | H_DISPLAYED = 40 columns
- R2      |   48  | H_SYNC_POS
- R3[3:0] |   15  | H_SYNC_WIDTH = 15
- R3[7:4] |    0  | V_SYNC_WIDTH = 16 -- (Ideally = 20 -- See note below)
+ R2      |   48  | H_SYNC_POS = 48 us into each line, 16 us before the next line
+ R3[3:0] |   24  | H_SYNC_WIDTH = 24 us (EconoPET internally extends H_SYNC_WIDTH to 5 bits)
+ R3[7:4] |   20  | V_SYNC_WIDTH = 20 scan-line lines (EconoPET internally extends V_SYNC_WIDTH to 5 bits)
  R4      |   31  | V_TOTAL = 15.625 KHz / ((33 rows - 1) * 8 lines per row) = 61.04 Hz
  R5      |    4  | V_LINE_ADJUST = 15.625 KHz / (33 rows * 8 lines per row + 5 lines) = 60.10 Hz
  R6      |   25  | V_DISPLAYED = 25 rows
- R7      |   28  | V_SYNC_POS
+ R7      |   28  | V_SYNC_POS = character-row position
  R9      |    7  | SCAN_LINE = 8 pixel character height (-1)
 
-Note that the maximum V_SYNC_WIDTH of 16 is a little short.  Ideally, V_SYNC_WIDTH would be 20, but
-this is outside the range supported by the CRTC.
+HSYNC is active high for 24 us every 64 us. The CRTC display-enable signal
+starts 16 us after the internal HSYNC rising edge and lasts 40 us. The video
+output pipeline adds approximately 1.9 us relative to the HORZ output
+pipeline, producing a measured 17.8 us from HORZ rising edge to video data.
+VSYNC is active low for 20 lines (1.28 ms), with a 260-line frame period of
+16.64 ms (about 60.1 Hz).
+
+The CRTC can position VSYNC only on an 8-line character-row boundary. R7=28
+starts it at frame line 224, four lines after the measured line 220. This gives
+24 blank lines before VSYNC and 16 after it, rather than the measured 20/20
+split. VSYNC also changes at the line boundary, 48 us before HSYNC, rather than
+the measured 5 us. R7=27 has the same four-line error in the opposite direction,
+so R7=28 retains the existing closest CRTC configuration.
+
+`video_crtc_timing_tb` verifies these timings under Verilator.
 
 ## CRTC
 
@@ -43,13 +57,16 @@ The CRTC has a single RS (Register Select) input that is tied to A0.
 
 ### Timing (CRTC)
 
-Measurements from 8032 (60 Hz) at power on:
+Measurements from a North American 8032 (60 Hz) at power on:
 
 Signal | Frequency  | Period   | Width  | Polarity    | Source
 -------|------------|----------|--------|-------------|-----------
 HSync  |     20 KHz |    50us  |   15us | Active Low  | Video pin 5
 VSync  | 60.062 Hz  | 16.65ms  |  800us | Active Low  | Video pin 3
 Video  |          - |        - |      - | Active High | -
+
+`video_crtc_timing_tb` verifies these power-on timings and their original CRTC
+counter positions.
 
 ## Reference
 

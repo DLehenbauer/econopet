@@ -59,12 +59,13 @@ module video_crtc_reg_tb;
     logic        cs;
     logic        we;
     logic        rs;
+    logic        config_crt;
     logic [7:0]  crtc_data_i;
 
     logic [ 7:0] r0_h_total;
     logic [ 7:0] r1_h_displayed;
     logic [ 7:0] r2_h_sync_pos;
-    logic [ 3:0] r3_h_sync_width;
+    logic [ 4:0] r3_h_sync_width;
     logic [ 4:0] r3_v_sync_width;
     logic [ 6:0] r4_v_total;
     logic [ 4:0] r5_v_adjust;
@@ -90,7 +91,7 @@ module video_crtc_reg_tb;
         .we_i(we),
         .rs_i(rs),
         .data_i(crtc_data_i),
-        .config_crt_i(1'b0),
+        .config_crt_i(config_crt),
 
         .r0_h_total_o(r0_h_total),
         .r1_h_displayed_o(r1_h_displayed),
@@ -163,6 +164,7 @@ module video_crtc_reg_tb;
         wb.reset;
         cs = '0;
         we = '0;
+        config_crt = '0;
 
         // Test 1: Write and read back all CRTC registers via Wishbone
         $display("[%t]   Test 1: Wishbone write, Wishbone read", $time);
@@ -182,7 +184,7 @@ module video_crtc_reg_tb;
         `assert_equal(r0_h_total, 8'hA0);                   // R0[7:0]
         `assert_equal(r1_h_displayed, 8'hA1);               // R1[7:0]
         `assert_equal(r2_h_sync_pos, 8'hA2);                // R2[7:0]
-        `assert_equal(r3_h_sync_width, 4'h3);               // R3[3:0]
+        `assert_equal(r3_h_sync_width, 5'h3);               // R3[3:0]
         `assert_equal(r3_v_sync_width, 5'hA);               // R3[7:4]
         `assert_equal(r4_v_total, 7'h24);                   // R4[6:0]
         `assert_equal(r5_v_adjust, 5'h05);                  // R5[4:0]
@@ -208,14 +210,31 @@ module video_crtc_reg_tb;
         `assert_equal(r0_h_total, 8'hB0);                   // R0[7:0]
         `assert_equal(r1_h_displayed, 8'hB1);               // R1[7:0]
         `assert_equal(r2_h_sync_pos, 8'hB2);                // R2[7:0]
-        `assert_equal(r3_h_sync_width, 4'h3);               // R3[3:0]
-        `assert_equal(r3_v_sync_width, 5'h0B);              // R3[7:4]
+        `assert_equal(r3_h_sync_width, 5'h3);               // R3[3:0]
+        `assert_equal(r3_v_sync_width, 5'hB);               // R3[7:4]
         `assert_equal(r4_v_total, 7'h34);                   // R4[6:0]
         `assert_equal(r5_v_adjust, 5'h15);                  // R5[4:0]
         `assert_equal(r6_v_displayed, 7'h36);               // R6[6:0]
         `assert_equal(r7_v_sync_pos, 7'h37);                // R7[6:0]
         `assert_equal(r9_max_scan_line, 5'h19);             // R9[4:0]
         `assert_equal(r1213_start_addr, {6'h3C, 8'hBD});    // { R12[5:0], R13[7:0] }
+
+        // Test 3: 9-inch VDU CRTC timing override
+        $display("[%t]   Test 3: 9-inch VDU timing", $time);
+        config_crt = 1'b1;
+        @(posedge clock);
+        @(negedge clock);
+        `assert_equal(r0_h_total, 8'd63);                   // 64 us line period
+        `assert_equal(r1_h_displayed, 8'd40);               // 40 displayed characters
+        `assert_equal(r2_h_sync_pos, 8'd48);                // 16 us before next line
+        `assert_equal(r3_h_sync_width, 5'd24);              // 24 us pulse width
+        `assert_equal(r3_v_sync_width, 5'd20);              // 20 scan lines
+        `assert_equal(r4_v_total, 7'd31);                   // 32 character rows
+        `assert_equal(r5_v_adjust, 5'd04);                  // 4 additional scan lines
+        `assert_equal(r6_v_displayed, 7'd25);               // 25 displayed rows
+        `assert_equal(r7_v_sync_pos, 7'd28);                // Vertical sync row
+        `assert_equal(r9_max_scan_line, 5'd07);             // 8 scan lines per row
+        `assert_equal(r1213_start_addr, 14'h1000);          // Display start address
 
     endtask
 

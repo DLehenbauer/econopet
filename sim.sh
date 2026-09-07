@@ -42,6 +42,11 @@ sim_files = [path for path in sim_files if not path.endswith("_pkg.sv")]
 # Header files are included from source and should not be compiled as top-level units.
 sim_files = [path for path in sim_files if not path.endswith(".svh")]
 
+# Verilator-only benches may use SystemVerilog features unsupported by Icarus.
+# They are compiled explicitly by verilate.sh, not through this shared file list.
+verilator_only_testbenches = {"sim/video_crtc_timing_tb.sv"}
+sim_files = [path for path in sim_files if path not in verilator_only_testbenches]
+
 with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
     # A file registered as both design_file and sim_file compiles once.
     for path in dict.fromkeys(package_files + sim_files + design_files):

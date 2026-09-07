@@ -28,6 +28,14 @@ cd "$PROJ_DIR" || exit 1
 # Build threads per model; lower it if running many of these at once.
 VERILATOR_JOBS="${VERILATOR_JOBS:-$(nproc)}"
 
+VERILATOR_ONLY_TESTBENCHES=(video_crtc_timing_tb)
+VERILATOR_ONLY_SOURCES=()
+for VERILATOR_ONLY_TESTBENCH in "${VERILATOR_ONLY_TESTBENCHES[@]}"; do
+    if [ "$TEST_NAME" = "$VERILATOR_ONLY_TESTBENCH" ]; then
+        VERILATOR_ONLY_SOURCES+=("sim/${TEST_NAME}.sv")
+    fi
+done
+
 verilator --binary --timing -j "$VERILATOR_JOBS" \
     --x-assign unique --x-initial unique \
     -Wno-fatal -Wno-lint -Wno-style \
@@ -36,7 +44,7 @@ verilator --binary --timing -j "$VERILATOR_JOBS" \
     --Mdir "work_sim/obj_${TEST_NAME}" -o "${TEST_NAME}_vl" \
     -Iexternal/m6502/rtl \
     -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" \
-    -f work_sim/EconoPET.f || exit $?
+    -f work_sim/EconoPET.f "${VERILATOR_ONLY_SOURCES[@]}" || exit $?
 
 VERILATOR_ARGS=("+verilator+rand+reset+${RAND_RESET}")
 if [ -n "$SEED" ]; then
