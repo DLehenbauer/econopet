@@ -1690,7 +1690,7 @@
 		)
 		(uuid "8db212f4-248e-414c-a215-fa70d4173c3d")
 	)
-	(text "USB 1.1 Host over USB-C connector\n\nThe 56k pullups on CC1 and CC2 identify the\nport as downstream facing, supplying 5V/900ma.\n\nThe diode prevents connected devices from\ninadvertently backpowering the EconoPET.\n\nV_{F} < 0.5V should be within USB spec of\n5V +/-10%.\n\nThe 47u capacitor helps with current inrush\n(although hot insertion is not recommened.)\n\nConsider using an independently powered USB\nhub as an extra layer of protection.\n"
+	(text "USB 1.1 Host over USB-C connector\n\nThe 56k pullups on CC1 and CC2 identify the\nport as downstream facing, supplying 5V/900ma.\n\nThe diode prevents connected devices from\ninadvertently backpowering the EconoPET.\n\nV_{F} < 0.5V should be within USB spec of\n5V +/-10% (4.5V - 5.5V).\n\nThe 47u capacitor helps with current inrush\n(although hot insertion is not recommened.)\n\nConsider using an independently powered USB\nhub as an extra layer of protection.\n"
 		(exclude_from_sim no)
 		(at 95.25 137.16 0)
 		(effects

@@ -1,0 +1,133 @@
+{VERSION 3 0 "IBM INTEL NT" "3.0" }
+{USTYLETAB {CSTYLE "Maple Input" -1 0 "Courier" 0 1 255 0 0 1 0 1 0 0 
+1 0 0 0 0 }{CSTYLE "2D Math" -1 2 "Times" 0 1 0 0 0 0 0 0 2 0 0 0 0 0 
+0 }{CSTYLE "2D Output" 2 20 "" 0 1 0 0 255 1 0 0 0 0 0 0 0 0 0 }
+{PSTYLE "Normal" -1 0 1 {CSTYLE "" -1 -1 "" 0 1 0 0 0 0 0 0 0 0 0 0 0 
+0 0 }0 0 0 -1 -1 -1 0 0 0 0 0 0 -1 0 }{PSTYLE "Heading 1" 0 3 1 
+{CSTYLE "" -1 -1 "" 1 18 0 0 0 0 0 1 0 0 0 0 0 0 0 }1 0 0 0 8 4 0 0 0 
+0 0 0 -1 0 }{PSTYLE "Maple Output" 0 11 1 {CSTYLE "" -1 -1 "" 0 1 0 0 
+0 0 0 0 0 0 0 0 0 0 0 }3 3 0 -1 -1 -1 0 0 0 0 0 0 -1 0 }}
+{SECT 0 {EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 353 "restart:\n\n# https
+://www.nist.gov/pml/owm/metric-si-prefixes\np := 10^(-12);\nn := 10^(-
+9);\nu := 10^(-6);\nM := 10^6;\nk := 10^3;\n\n# Compute effective resi
+stance of parallel resistors\nR_Parallel := proc()\n    local i, R, re
+sult;\n\n    R := [args];\n    result := 0;\n\n    for i from 1 to nop
+s(R) do\n        result := result + 1/R[i];\n    od;\n\n    1/result;
+\nend:" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%\"pG#\"\"\"\".++++++\"" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#>%\"nG#\"\"\"\"+++++5" }}{PARA 11 "" 
+1 "" {XPPMATH 20 "6#>%\"uG#\"\"\"\"(+++\"" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%\"MG\"(+++\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%\"k
+G\"%+5" }}}{SECT 0 {PARA 3 "" 0 "" {TEXT -1 31 "8.2.2 Detailed Design \+
+Procedure" }}{PARA 0 "" 0 "" {TEXT -1 74 "From TPS56427x Datasheet:\nh
+ttps://www.ti.com/lit/ds/symlink/tps564247.pdf\n" }}{EXCHG {PARA 0 "> \+
+" 0 "" {MPLTEXT 1 0 81 "eq1 := I_OUT[LL] = (1 / (2 * L * f[SW])) * (((
+V[IN] - V[OUT]) * V[OUT]) / V[IN]);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6
+#>%$eq1G/&%&I_OUTG6#%#LLG,$*&*&,&&%\"VG6#%#ING\"\"\"&F/6#%$OUTG!\"\"F2
+F3F2\"\"\"*(%\"LG\"\"\"&%\"fG6#%#SWG\"\"\"F.\"\"\"!\"\"#F2\"\"#" }}}
+{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 70 "eq2 := L = (V[OUT] * (1 - (V
+[OUT]/V[IN])))/(2 * Frequency * NOC[min]);" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%$eq2G/%\"LG,$*&*&&%\"VG6#%$OUTG\"\"\",&F.F.*&F*\"\"\"
+&F+6#%#ING!\"\"!\"\"F.F1*&%*FrequencyG\"\"\"&%$NOCG6#%$minG\"\"\"F5#F.
+\"\"#" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 34 "eq3 := V[OUT] = 0.
+6 * (1 + R1/R2);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$eq3G/&%\"VG6#%$
+OUTG,&$\"\"'!\"\"\"\"\"*&%#R1G\"\"\"%#R2G!\"\"F+" }}}{EXCHG {PARA 0 ">
+ " 0 "" {MPLTEXT 1 0 45 "eq4 := f[P] = 1/(2*Pi*sqrt(L[OUT] * C[OUT]));
+" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$eq4G/&%\"fG6#%\"PG,$*&\"\"\"F,*
+&%#PiG\"\"\"-%%sqrtG6#*&&%\"LG6#%$OUTG\"\"\"&%\"CGF6F8F,!\"\"#F8\"\"#
+" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 77 "eq5 := Il[PP] = V[OUT]/
+V[IN(MAX)] * (V[IN(MAX)] - V[OUT]) / (L[OUT] * f[SW]);" }}{PARA 11 "" 
+1 "" {XPPMATH 20 "6#>%$eq5G/&%#IlG6#%#PPG*&*&&%\"VG6#%$OUTG\"\"\",&&F-
+6#-%#ING6#%$MAXGF0F,!\"\"F0\"\"\"*(F2\"\"\"&%\"LGF.\"\"\"&%\"fG6#%#SWG
+\"\"\"!\"\"" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 37 "eq6 := Il[PE
+AK] = I_OUT + rhs(eq5)/2;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%$eq6G/&
+%#IlG6#%%PEAKG,&%&I_OUTG\"\"\"*&*&&%\"VG6#%$OUTGF,,&&F06#-%#ING6#%$MAX
+GF,F/!\"\"F,\"\"\"*(F4\"\"\"&%\"LGF1\"\"\"&%\"fG6#%#SWG\"\"\"!\"\"#F,
+\"\"#" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 55 "eq7 := I_LO(RMS) =
+ sqrt(I_OUT^2 + 1/12 * rhs(eq5) ^ 2);" }}{PARA 11 "" 1 "" {XPPMATH 20 
+"6#>%$eq7G/-%%I_LOG6#%$RMSG,$*$-%%sqrtG6#,&*$)%&I_OUTG\"\"#\"\"\"\"#O*
+&*&)&%\"VG6#%$OUTGF3F4),&&F:6#-%#ING6#%$MAXG\"\"\"F9!\"\"F3F4F4*()F?\"
+\"#F4)&%\"LGF;\"\"#F4)&%\"fG6#%#SWG\"\"#F4!\"\"\"\"$F4#FE\"\"'" }}}
+{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 77 "eq8 := I_CO(RMS) = (V[OUT] *
+ (V[IN] - V[OUT]))/(sqrt(12)*V[IN]*L[OUT]*f[SW]);" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%$eq8G/-%%I_COG6#%$RMSG,$*&*(&%\"VG6#%$OUTG\"\"\",&&F.
+6#%#INGF1F-!\"\"F1-%%sqrtG6#\"\"$\"\"\"F;*(F3\"\"\"&%\"LGF/\"\"\"&%\"f
+G6#%#SWG\"\"\"!\"\"#F1\"\"'" }}}}{SECT 0 {PARA 3 "" 0 "" {TEXT -1 6 "I
+nputs" }}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 1842 "#################
+##############\n# 5.05V\n################################\n\nV[OUT(TAR
+GET)] := 5.05;\n\n# Maximum output current for 5.05V is ~1.7A:\n#   25
+0ma baseline\n#   900ma USB 1.1\n#   200ma for PMOD\n#   350ma buffer
+\n# But we set the TPS54624x max of 4A to be safe.\nI_OUT := 4;\n\n# F
+or 5V, we prefer parallel resistors of similar values to statistically
+\n# minimize error due to the 1% tolerance. \nR1[ACTUAL] := evalf(R_Pa
+rallel(120*k, 220*k));\nR2[ACTUAL] := evalf(R_Parallel(20*k, 22*k));\n
+\n# Derate capacitors for 5.05V\nC_4u7 := 4.7 * (1 - 0.6644926) * u; #
+ https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do\nC_10u :=  10 *
+ (1 - 0.5385295) * u; # https://product.samsungsem.com/mlcc/CL10A106MA
+8NRN.do\nC_22u :=  22 * (1 - 0.5230603) * u; # https://product.samsung
+sem.com/mlcc/CL21A226MAQNNN.do\n\n################################\n# \+
+6.1V\n################################\n\nV[OUT(TARGET)] := 6.1;\n\n# \+
+Maximum output current for 6.1V is ~1.2A:\n#   400ma - Datasette A (bl
+ack C2N stalled at end-of-tape rewind)\n#   400ma - Datasette B (\")\n
+#   400ma - Buffer\n# But we set the TPS54624x max of 4A to be safe.\n
+I_OUT := 4;\n\n# For 6V the voltage is less critical, so we just use a
+vailable 0402 1% resistors.\n\nR1[ACTUAL] := 120*k;\nR2[ACTUAL] := 13*
+k;\n\n# Derate capacitors for 6.1V\nC_4u7 := 4.7 * (1 - 0.7272049) * u
+; # https://product.samsungsem.com/mlcc/CL05A475MP5NRN.do\nC_10u :=  1
+0 * (1 - 0.6176601) * u; # https://product.samsungsem.com/mlcc/CL10A10
+6MA8NRN.do\nC_22u :=  22 * (1 - 0.6025791) * u; # https://product.sams
+ungsem.com/mlcc/CL21A226MAQNNN.do\n\n################################
+\n# Common\n################################\n\nL[ACTUAL] := 1.8*u:\nC
+[OUT(ACTUAL)] := C_22u + C_22u;\n\n# Unregulated supply is about 12V u
+nloaded.  We'll use the TPS54624x max of 16V to be safe.\nV[IN(MAX)] :
+= 16;\n\n# Maximum switching frequency is 1.2 MHz\nf[SW] := 1.2*M;" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"VG6#-%$OUTG6#%'TARGETG$\"$0&!\"#
+" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&I_OUTG\"\"%" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#>&%#R1G6#%'ACTUALG$\"+#)eqkx!\"&" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>&%#R2G6#%'ACTUALG$\"+[!>w/\"!\"&" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>%&C_4u7G$\"+!y%)od\"!#:" }}{PARA 11 "" 1 "" {XPPMATH 
+20 "6#>%&C_10uG$\"++]q9Y!#:" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&C_22
+uG$\"+StE\\5!#9" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"VG6#-%$OUTG6#%
+'TARGETG$\"#h!\"\"" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&I_OUTG\"\"%" 
+}}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%#R1G6#%'ACTUALG\"'++7" }}{PARA 
+11 "" 1 "" {XPPMATH 20 "6#>&%#R2G6#%'ACTUALG\"&+I\"" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#>%&C_4u7G$\"+qp8#G\"!#:" }}{PARA 11 "" 1 "" {XPPMATH 
+20 "6#>%&C_10uG$\"++!*RBQ!#:" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%&C_2
+2uG$\"++)fKu)!#:" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"CG6#-%$OUTG6#
+%'ACTUALG$\"+g>l[<!#9" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"VG6#-%#I
+NG6#%$MAXG\"#;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"fG6#%#SWG$\")++
++7!\"\"" }}}}{SECT 0 {PARA 3 "" 0 "" {TEXT -1 42 "8.2.2.2 Output Volta
+ge Resistors Selection" }}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 222 "#
+ 8.2.2.2 Output Voltage Resistors Selection\n\n# It is suggested to us
+e a 10k resistor for R2 to start the design.\n# Solve for the ideal va
+lue of R1.\nsolve(subs(\{\n    V[OUT] = V[OUT(TARGET)],\n    R2 = 10*k
+\n  \},\n  eq3), R1);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+nmmm\"*!
+\"&" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 102 "# Choose closest av
+ailable values.\n\nR1 := R1[ACTUAL];\nR2 := R2[ACTUAL];\n\nV[OUT] := s
+olve(eq3, V[OUT]);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R1G\"'++7" }}
+{PARA 11 "" 1 "" {XPPMATH 20 "6#>%#R2G\"&+I\"" }}{PARA 11 "" 1 "" 
+{XPPMATH 20 "6#>&%\"VG6#%$OUTG$\"+Q:YQh!\"*" }}}}{SECT 0 {PARA 3 "" 0 
+"" {TEXT -1 31 "8.2.2.3 Output Filter Selection" }}{EXCHG {PARA 0 "> \+
+" 0 "" {MPLTEXT 1 0 130 "L[OUT] := L[ACTUAL];\n\n# Calcuate required e
+ffective capacitance for ideal f[P] of 30kHz\nsolve(subs(\{\n    f[P] \+
+= 30*k\n  \}, eq4))/u;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"LG6#%$O
+UTG$\"+++++=!#:" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+7&)fj:!\")" }}}
+{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 35 "C[OUT] := C[OUT(ACTUAL)];\nC
+[OUT]/u;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#>&%\"CG6#%$OUTG$\"+g>l[<!#
+9" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+g>l[<!\")" }}}{EXCHG {PARA 0 
+"> " 0 "" {MPLTEXT 1 0 60 "# Calculate the actual f[P] (target is 30 k
+Hz): \nsolve(eq4);" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#$\"+vE#o$G!\"&" 
+}}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 44 "# Inductor peak-to-peak r
+ipple current \neq5;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#/&%#IlG6#%#PPG
+$\"+=?e^<!\"*" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 28 "# Inductor
+ peak current\neq6;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#/&%#IlG6#%%PEAK
+G$\"+45zv[!\"*" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 27 "# Inducto
+r RMS current\neq7;" }}{PARA 11 "" 1 "" {XPPMATH 20 "6#/-%%I_LOG6#%$RM
+SG$\"+&3K=.%!\"*" }}}{EXCHG {PARA 0 "> " 0 "" {MPLTEXT 1 0 322 "# Requ
+ired RMS current rating for each capacitor\n# For the 22uF @ 1 MHz:\n#
+\n#    2A -> +4 C\n#    3A -> +12 C\n#    4A -> +22 C\n#\n# https://we
+blib.samsungsem.com/mlcc/mlcc-ec.do?partNumber=CL21A226MAQNNN\n#\n# (N
+ote that I_CO(RMS) should be divided across parallel capacitors).\neva
+lf(subs(\{\n    V[IN] = V[IN(MAX)]\n  \},\n  eq8));" }}{PARA 11 "" 1 "
+" {XPPMATH 20 "6#/-%%I_COG6#%$RMSG$\"+_<Qc]!#5" }}}{EXCHG {PARA 0 "> \+
+" 0 "" {MPLTEXT 1 0 0 "" }}}}}{MARK "4 3 0 0" 15 }{VIEWOPTS 1 1 0 1 1 
+1803 }
