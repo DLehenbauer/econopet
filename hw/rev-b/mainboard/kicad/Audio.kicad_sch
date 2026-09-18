@@ -1754,6 +1754,12 @@
 		(uuid "580a43c5-f757-4043-92f2-b562a5c4156e")
 	)
 	(junction
+		(at 31.75 168.91)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "58a90296-e944-4523-8978-582377f03cd3")
+	)
+	(junction
 		(at 191.77 119.38)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -1802,10 +1808,22 @@
 		(uuid "b9b1a79b-bd65-4923-afb1-c1f10cbfc8d7")
 	)
 	(junction
+		(at 41.91 176.53)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "b9efeecb-abe9-4174-8347-40c15889f0fe")
+	)
+	(junction
 		(at 73.66 119.38)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c1843945-59c4-4a51-99e8-87f5ab74dced")
+	)
+	(junction
+		(at 31.75 176.53)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d063cea9-dbfb-4883-801e-ecd95be1dcf9")
 	)
 	(junction
 		(at 191.77 71.12)
@@ -1830,6 +1848,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "e77a7a3f-129b-4c4e-8466-7e8f5463ba66")
+	)
+	(junction
+		(at 41.91 168.91)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "f8d1973d-59a2-4b66-bfbb-c4582f04de12")
 	)
 	(wire
 		(pts
@@ -2183,6 +2207,16 @@
 	)
 	(wire
 		(pts
+			(xy 31.75 168.91) (xy 31.75 170.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5b66e152-f579-4dcd-9a2d-2cea8633ee4e")
+	)
+	(wire
+		(pts
 			(xy 48.26 176.53) (xy 54.61 176.53)
 		)
 		(stroke
@@ -2393,6 +2427,16 @@
 	)
 	(wire
 		(pts
+			(xy 31.75 176.53) (xy 41.91 176.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a1e9db76-50ef-48f3-8b8b-4ebe13610d40")
+	)
+	(wire
+		(pts
 			(xy 191.77 45.72) (xy 191.77 46.99)
 		)
 		(stroke
@@ -2420,6 +2464,36 @@
 			(type default)
 		)
 		(uuid "acd61938-c154-458a-8b98-d2d05904a0f1")
+	)
+	(wire
+		(pts
+			(xy 31.75 168.91) (xy 41.91 168.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b49fc9b7-4cc6-40af-a247-8aa4254dcba6")
+	)
+	(wire
+		(pts
+			(xy 31.75 175.26) (xy 31.75 176.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b92f50b0-7a07-459f-921c-0ef7eba6aa12")
+	)
+	(wire
+		(pts
+			(xy 21.59 170.18) (xy 21.59 168.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ba3c880f-7f37-4edb-97cc-98e5569c875a")
 	)
 	(wire
 		(pts
@@ -2510,6 +2584,26 @@
 			(type default)
 		)
 		(uuid "cc203cff-d35b-4cda-9513-44ebe6f09b7b")
+	)
+	(wire
+		(pts
+			(xy 21.59 176.53) (xy 31.75 176.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cec44235-9433-461b-8a1d-84c8bdaa6eb0")
+	)
+	(wire
+		(pts
+			(xy 21.59 175.26) (xy 21.59 176.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d173e4d0-4604-4dac-86d0-4f2080584792")
 	)
 	(wire
 		(pts
@@ -2630,6 +2724,16 @@
 			(type default)
 		)
 		(uuid "ef143ec5-dbe5-464c-98a2-0a259895f467")
+	)
+	(wire
+		(pts
+			(xy 21.59 168.91) (xy 31.75 168.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f172c372-7579-4ba3-b2b1-5150754a44e6")
 	)
 	(wire
 		(pts
@@ -3673,6 +3777,84 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 21.59 172.72 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "45afe96e-e98f-455b-b57c-84b15e607ca9")
+		(property "Reference" "C113"
+			(at 23.9268 171.5516 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "22u"
+			(at 23.9268 173.863 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 21.59 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL21A226MAQNNN.do"
+			(at 21.59 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 21.59 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C45783"
+			(at 21.59 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d5c9ed04-308a-47da-aab0-82c4da10c4e5")
+		)
+		(pin "2"
+			(uuid "36d6559b-db80-4ef7-86d9-3a2020e5d0fb")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
+					(reference "C113")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Diode:1N4148WS")
 		(at 175.26 76.2 90)
 		(unit 1)
@@ -3851,6 +4033,84 @@
 			(project ""
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
 					(reference "C81")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 31.75 172.72 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5074dd2f-cc3d-4d94-9b33-89fd1cf31c1a")
+		(property "Reference" "C114"
+			(at 34.0868 171.5516 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1u"
+			(at 34.0868 173.863 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 31.75 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://product.samsungsem.com/mlcc/CL05A105KA5NQN.do"
+			(at 31.75 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 31.75 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C52923"
+			(at 31.75 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "3c0d01d3-c6e4-425b-bcea-2b1c432614a6")
+		)
+		(pin "2"
+			(uuid "e2df6752-5cf3-447e-95ba-2a0ed1b47a45")
+		)
+		(instances
+			(project "Mainboard"
+				(path "/2eea20e6-112c-411a-b615-885ae773135a/5178399f-3ceb-4969-8efa-17e54018f3f1"
+					(reference "C114")
 					(unit 1)
 				)
 			)
