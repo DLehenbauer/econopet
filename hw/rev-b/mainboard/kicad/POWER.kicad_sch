@@ -9507,7 +9507,7 @@
 				)
 			)
 		)
-		(property "Value" "TPS564242DRLR"
+		(property "Value" "TPS564247DRLR"
 			(at 148.59 77.47 0)
 			(effects
 				(font
@@ -9542,7 +9542,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer" "TI(德州仪器)"
+		(property "Manufacturer" "Texas Instruments"
 			(at 148.59 100.33 0)
 			(effects
 				(font
@@ -9560,16 +9560,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C5219267"
-			(at 148.59 105.41 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC Part" "C5219267"
+		(property "LCSC" "C5244316"
 			(at 148.59 105.41 0)
 			(effects
 				(font
@@ -11719,8 +11710,8 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5f104674-61cd-4d59-83f4-a275f0c99081")
-		(property "Reference" "C15"
-			(at 129.54 40.64 0)
+		(property "Reference" "C7"
+			(at 128.27 40.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11782,7 +11773,7 @@
 		(instances
 			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "C15")
+					(reference "C7")
 					(unit 1)
 				)
 			)
@@ -14785,7 +14776,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "ec51ceb9-fafd-4dda-91a0-2485a67876b0")
-		(property "Reference" "C7"
+		(property "Reference" "C15"
 			(at 107.7468 40.7416 0)
 			(effects
 				(font
@@ -14848,7 +14839,7 @@
 		(instances
 			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a/00000000-0000-0000-0000-000061ed99de"
-					(reference "C7")
+					(reference "C15")
 					(unit 1)
 				)
 			)
@@ -15314,7 +15305,7 @@
 				)
 			)
 		)
-		(property "Value" "TPS564242DRLR"
+		(property "Value" "TPS564247DRLR"
 			(at 149.86 29.21 0)
 			(effects
 				(font
@@ -15349,7 +15340,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer" "TI(德州仪器)"
+		(property "Manufacturer" "Texas Instruments"
 			(at 149.86 52.07 0)
 			(effects
 				(font
@@ -15367,16 +15358,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C5219267"
-			(at 149.86 57.15 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC Part" "C5219267"
+		(property "LCSC" "C5244316"
 			(at 149.86 57.15 0)
 			(effects
 				(font
