@@ -8743,7 +8743,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C129580"
+		(property "LCSC Part #" "C129580"
+			(at 128.27 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 128.27 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 128.27 50.8 0)
 			(effects
 				(font
@@ -8876,7 +8894,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C129580"
+		(property "LCSC Part #" "C129580"
+			(at 128.27 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 128.27 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 128.27 162.56 0)
 			(effects
 				(font
@@ -9010,7 +9046,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C513513"
+		(property "MOUSER" ""
 			(at 69.85 182.88 0)
 			(effects
 				(font
@@ -9019,7 +9055,25 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" ""
+		(property "LCSC Part #" "C513513"
+			(at 69.85 182.88 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 69.85 182.88 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 69.85 182.88 0)
 			(effects
 				(font
@@ -9133,7 +9187,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C307331"
+		(property "LCSC Part #" "C307331"
+			(at 34.29 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 34.29 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 34.29 138.43 0)
 			(effects
 				(font
@@ -9211,7 +9283,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C307331"
+		(property "LCSC Part #" "C307331"
+			(at 44.45 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 44.45 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 44.45 138.43 0)
 			(effects
 				(font
@@ -9289,7 +9379,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C307331"
+		(property "LCSC Part #" "C307331"
+			(at 55.88 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 55.88 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 55.88 138.43 0)
 			(effects
 				(font
@@ -9367,7 +9475,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C307331"
+		(property "LCSC Part #" "C307331"
+			(at 66.04 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 66.04 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 66.04 138.43 0)
 			(effects
 				(font
@@ -9445,7 +9571,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C307331"
+		(property "LCSC Part #" "C307331"
+			(at 76.2 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 76.2 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 76.2 138.43 0)
 			(effects
 				(font
@@ -9474,7 +9618,7 @@
 		(at 238.76 119.38 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(dnp no)
 		(uuid "00000000-0000-0000-0000-000061923421")
@@ -9513,6 +9657,24 @@
 			)
 		)
 		(property "Description" ""
+			(at 238.76 119.38 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 238.76 119.38 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 238.76 119.38 0)
 			(effects
 				(font
@@ -9658,7 +9820,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C513513"
+		(property "MOUSER" ""
 			(at 69.85 101.6 0)
 			(effects
 				(font
@@ -9667,7 +9829,25 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" ""
+		(property "LCSC Part #" "C513513"
+			(at 69.85 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 69.85 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 69.85 101.6 0)
 			(effects
 				(font
@@ -9783,7 +9963,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C513513"
+		(property "MOUSER" ""
 			(at 69.85 55.88 0)
 			(effects
 				(font
@@ -9792,7 +9972,25 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" ""
+		(property "LCSC Part #" "C513513"
+			(at 69.85 55.88 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 69.85 55.88 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 69.85 55.88 0)
 			(effects
 				(font
@@ -9906,7 +10104,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25117"
+		(property "LCSC Part #" "C25117"
+			(at 109.22 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 109.22 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 109.22 160.02 0)
 			(effects
 				(font
@@ -10117,7 +10333,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25510"
+		(property "LCSC Part #" "C25510"
+			(at 109.22 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 109.22 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 109.22 53.34 0)
 			(effects
 				(font
@@ -10213,7 +10447,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C29718"
+		(property "LCSC Part #" "C29718"
+			(at 170.18 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 170.18 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 170.18 139.7 0)
 			(effects
 				(font
@@ -10309,7 +10561,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C29718"
+		(property "LCSC Part #" "C29718"
+			(at 219.71 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 219.71 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 219.71 139.7 0)
 			(effects
 				(font
@@ -10677,6 +10947,24 @@
 				(hide yes)
 			)
 		)
+		(property "FT Position Offset" ""
+			(at 213.36 40.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
+			(at 213.36 40.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "aca5a959-1364-470d-8d27-0ca61f7b20d5")
 		)
@@ -10794,7 +11082,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1980"
+		(property "LCSC Part #" "C1980"
+			(at 219.71 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 219.71 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 219.71 78.74 0)
 			(effects
 				(font
@@ -10957,7 +11263,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25510"
+		(property "LCSC Part #" "C25510"
+			(at 109.22 43.18 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 109.22 43.18 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 109.22 43.18 0)
 			(effects
 				(font
@@ -11053,7 +11377,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C29718"
+		(property "LCSC Part #" "C29718"
+			(at 186.69 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 186.69 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 186.69 139.7 0)
 			(effects
 				(font
@@ -11150,7 +11492,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25510"
+		(property "LCSC Part #" "C25510"
+			(at 109.22 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 109.22 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 109.22 154.94 0)
 			(effects
 				(font
@@ -11246,7 +11606,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C23733"
+		(property "LCSC Part #" "C23733"
+			(at 231.14 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 231.14 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 231.14 52.07 0)
 			(effects
 				(font
@@ -11389,7 +11767,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1980"
+		(property "LCSC Part #" "C1980"
+			(at 186.69 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 186.69 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 186.69 78.74 0)
 			(effects
 				(font
@@ -11485,7 +11881,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1980"
+		(property "LCSC Part #" "C1980"
+			(at 170.18 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 170.18 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 170.18 78.74 0)
 			(effects
 				(font
@@ -11713,7 +12127,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25117"
+		(property "LCSC Part #" "C25117"
+			(at 109.22 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 109.22 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 109.22 162.56 0)
 			(effects
 				(font
@@ -12185,7 +12617,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C29718"
+		(property "LCSC Part #" "C29718"
+			(at 203.2 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 203.2 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 203.2 139.7 0)
 			(effects
 				(font
@@ -12281,7 +12731,25 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1980"
+		(property "LCSC Part #" "C1980"
+			(at 203.2 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Position Offset" ""
+			(at 203.2 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
 			(at 203.2 78.74 0)
 			(effects
 				(font

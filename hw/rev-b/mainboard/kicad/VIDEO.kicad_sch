@@ -732,6 +732,24 @@
 				(hide yes)
 			)
 		)
+		(property "FT Position Offset" ""
+			(at 146.05 92.71 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "FT Rotation Offset" ""
+			(at 146.05 92.71 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "ae7bb939-26e4-4a8e-a82e-737aa770ab0e")
 		)
