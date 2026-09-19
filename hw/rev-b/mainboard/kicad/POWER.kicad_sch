@@ -2802,7 +2802,7 @@
 						(type background)
 					)
 				)
-				(pin unspecified line
+				(pin power_in line
 					(at -10.16 2.54 0)
 					(length 2.54)
 					(name "VIN"
@@ -2820,7 +2820,7 @@
 						)
 					)
 				)
-				(pin unspecified line
+				(pin output line
 					(at 10.16 2.54 180)
 					(length 2.54)
 					(name "SW"
@@ -2838,7 +2838,7 @@
 						)
 					)
 				)
-				(pin unspecified line
+				(pin power_in line
 					(at -1.27 -7.62 90)
 					(length 2.54)
 					(name "GND"
@@ -2856,7 +2856,7 @@
 						)
 					)
 				)
-				(pin unspecified line
+				(pin power_in line
 					(at 1.27 -7.62 90)
 					(length 2.54)
 					(name "AGND"
@@ -2874,7 +2874,7 @@
 						)
 					)
 				)
-				(pin unspecified line
+				(pin input line
 					(at -10.16 -2.54 0)
 					(length 2.54)
 					(name "EN"
@@ -2892,7 +2892,7 @@
 						)
 					)
 				)
-				(pin unspecified line
+				(pin input line
 					(at 10.16 -2.54 180)
 					(length 2.54)
 					(name "FB"
@@ -4688,6 +4688,12 @@
 		(uuid "a3ee5b95-af7d-4f14-954c-83faab482326")
 	)
 	(junction
+		(at 33.02 185.42)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "a94aacd4-5f06-48dc-b9dc-19fead01dee3")
+	)
+	(junction
 		(at 133.35 52.07)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5274,6 +5280,16 @@
 			(type default)
 		)
 		(uuid "269eb770-2a1c-4579-9c9a-a0544b85df33")
+	)
+	(wire
+		(pts
+			(xy 33.02 185.42) (xy 40.64 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "26acbc6a-8c7d-4853-9504-b0159654bd54")
 	)
 	(polyline
 		(pts
@@ -6777,7 +6793,7 @@
 	)
 	(wire
 		(pts
-			(xy 26.67 185.42) (xy 40.64 185.42)
+			(xy 26.67 185.42) (xy 33.02 185.42)
 		)
 		(stroke
 			(width 0)
@@ -10775,7 +10791,7 @@
 	)
 	(symbol
 		(lib_id "power:PWR_FLAG")
-		(at 33.02 186.69 0)
+		(at 33.02 185.42 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -10783,7 +10799,7 @@
 		(dnp no)
 		(uuid "3bba8eff-b5a2-4efc-9bf2-f1b251189469")
 		(property "Reference" "#FLG01"
-			(at 33.02 184.785 0)
+			(at 33.02 183.515 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10792,7 +10808,7 @@
 			)
 		)
 		(property "Value" "PWR_FLAG"
-			(at 33.02 180.34 0)
+			(at 33.02 179.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10800,7 +10816,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 33.02 186.69 0)
+			(at 33.02 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10809,7 +10825,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 33.02 186.69 0)
+			(at 33.02 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10818,7 +10834,7 @@
 			)
 		)
 		(property "Description" "Special symbol for telling ERC where power comes from"
-			(at 33.02 186.69 0)
+			(at 33.02 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
