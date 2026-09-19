@@ -9463,7 +9463,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/26522-0402WGF3302TCE/C25779"
 			(at 184.15 95.25 0)
 			(effects
 				(font
@@ -9648,7 +9648,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23524-0603WAF1302T5E/C22797"
 			(at 181.61 46.99 0)
 			(effects
 				(font
@@ -11831,7 +11831,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23958-0603WAF6802T5E/C23231"
 			(at 176.53 95.25 0)
 			(effects
 				(font
@@ -12090,7 +12090,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "33pF"
+		(property "Value" "33p"
 			(at 173.99 86.36 0)
 			(effects
 				(font
@@ -12108,7 +12108,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 166.37 85.09 0)
 			(effects
 				(font
@@ -13527,7 +13527,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23864-0603WAF3303T5E/C23137"
 			(at 176.53 85.09 0)
 			(effects
 				(font
@@ -14348,7 +14348,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23864-0603WAF3303T5E/C23137"
 			(at 184.15 85.09 0)
 			(effects
 				(font
@@ -14741,7 +14741,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/26551-0603WAF1203T5E/C25808"
 			(at 181.61 36.83 0)
 			(effects
 				(font
@@ -15494,7 +15494,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "33pF"
+		(property "Value" "33p"
 			(at 175.26 38.1 0)
 			(effects
 				(font
@@ -15512,7 +15512,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 167.64 36.83 0)
 			(effects
 				(font

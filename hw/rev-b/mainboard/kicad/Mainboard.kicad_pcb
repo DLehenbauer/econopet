@@ -23230,7 +23230,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/26551-0603WAF1203T5E/C25808"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -32281,7 +32281,7 @@
 				)
 			)
 		)
-		(property "Value" "33pF"
+		(property "Value" "33p"
 			(at 0 1.16 0)
 			(layer "F.Fab")
 			(uuid "c81b7c21-80cf-45cb-9c29-0574e9e427ac")
@@ -32305,7 +32305,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -39596,7 +39596,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23524-0603WAF1302T5E/C22797"
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -56832,7 +56832,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23864-0603WAF3303T5E/C23137"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -61926,7 +61926,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23958-0603WAF6802T5E/C23231"
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -76648,7 +76648,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/23864-0603WAF3303T5E/C23137"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -80633,7 +80633,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://jlcpcb.com/partdetail/26522-0402WGF3302TCE/C25779"
 			(at 0 0 90)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -82821,7 +82821,7 @@
 				)
 			)
 		)
-		(property "Value" "33pF"
+		(property "Value" "33p"
 			(at 0 1.16 0)
 			(layer "F.Fab")
 			(uuid "b3622e2f-5337-47d6-82f1-38fd1e4fefb0")
@@ -82845,7 +82845,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_FH--Guangdong-Fenghua-Advanced-Tech-0402CG330J500NT_C1562.pdf"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
