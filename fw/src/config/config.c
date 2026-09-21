@@ -91,6 +91,12 @@ static void on_action_copy(const parser_t* const parser, uint32_t source, uint32
     }
 }
 
+static void on_action_mount(const parser_t* const parser, uint32_t device, uint32_t drive, const char* filename) {
+    if (parser->executing && parser->sink->setup && parser->sink->setup->on_mount) {
+        parser->sink->setup->on_mount(parser->sink->setup->context, device, drive, filename);
+    }
+}
+
 static void on_action_fix_checksum(const parser_t* const parser, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum) {
     if (parser->executing && parser->sink->setup && parser->sink->setup->on_fix_checksum) {
         parser->sink->setup->on_fix_checksum(parser->sink->setup->context, start_addr, end_addr, fix_addr, checksum);
@@ -479,6 +485,34 @@ static void parse_action_copy(parser_t* parser, void* context, size_t context_si
     on_action_copy(parser, source, destination, length);
 }
 
+static void parse_action_mount(parser_t* parser, void* context, size_t context_size) {
+    (void)context;
+    (void)context_size;
+
+    uint32_t device = 0;
+    uint32_t drive = 0;
+    char filename[64] = { 0 };
+
+    parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
+        { "device", parse_as_uint32, &device, sizeof(device) },
+        { "drive", parse_as_uint32, &drive, sizeof(drive) },
+        { "file", parse_as_string, filename, sizeof(filename) },
+        { NULL, NULL, NULL, 0 }
+    });
+
+    if (device < 8 || device > 11) {
+        fatal_parse_error(parser, "Invalid IEEE device: %u (must be 8-11)", device);
+    }
+    if (drive >= 2) {
+        fatal_parse_error(parser, "Invalid IEEE drive: %u (must be 0 or 1)", drive);
+    }
+    if (filename[0] == '\0') {
+        fatal_parse_error(parser, "Missing disk image filename");
+    }
+
+    on_action_mount(parser, device, drive, filename);
+}
+
 static void parse_action_set(parser_t* parser, void* context, size_t context_size) {
     (void)context;
     (void)context_size;
@@ -495,10 +529,6 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         .capacity = TAPE_CONFIG_SIZE,
     };
 
-    // 'ieee-drive' defaults off (real drives on the bus); "on"/"true"/"1"
-    // enables units 8 and 9.
-    char ieee_drive_str[8] = { 0 };
-
     // 'cpu' selects the in-fabric CPU; default auto (the
     // physical 6502 when populated, else the soft core).
     char cpu_str[16] = { 0 };
@@ -509,7 +539,6 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         .usb_keymap = { 0 },    // Default: empty (use default keymap)
         .tape = { 0 },          // Default: disabled
         .tape_enabled = false,
-        .ieee_drive = false,    // Default: disabled
         .cpu = CPU_AUTO,        // Default: physical 6502 if populated, else soft
         .superpet_io = false,   // Default: stock PET machine
     };
@@ -520,15 +549,10 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
         { "usb-keymap", parse_as_string, &options.usb_keymap, sizeof(options.usb_keymap) },
         { "tape", parse_as_hex, &tape_blob, sizeof(tape_blob) },
-        { "ieee-drive", parse_as_string, &ieee_drive_str, sizeof(ieee_drive_str) },
         { "cpu", parse_as_string, &cpu_str, sizeof(cpu_str) },
         { "machine", parse_as_string, &machine_str, sizeof(machine_str) },
         { NULL, NULL, NULL, 0 }
     });
-
-    options.ieee_drive = (strcmp(ieee_drive_str, "on") == 0)
-                      || (strcmp(ieee_drive_str, "true") == 0)
-                      || (strcmp(ieee_drive_str, "1") == 0);
 
     if (cpu_str[0] != '\0') {
         if      (strcmp(cpu_str, "6809") == 0)     options.cpu = CPU_SOFT_6809;
@@ -600,6 +624,8 @@ static void parse_action(parser_t* parser, void* context, size_t context_size) {
         parse_action_patch(parser, NULL, 0);
     } else if (strcmp(action, "copy") == 0) {
         parse_action_copy(parser, NULL, 0);
+    } else if (strcmp(action, "mount") == 0) {
+        parse_action_mount(parser, NULL, 0);
     } else if (strcmp(action, "set") == 0) {
         parse_action_set(parser, NULL, 0);
     } else if (strcmp(action, "fix-checksum") == 0) {

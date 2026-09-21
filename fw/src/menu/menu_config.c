@@ -12,6 +12,7 @@
 #include "driver.h"
 #include "fatal.h"
 #include "global.h"
+#include "ieee/ieee_drive.h"
 #include "input.h"
 #include "pet.h"
 #include "roms/roms.h"
@@ -22,6 +23,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
 
     // Suspend the CPU while we're loading the config.
     set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    ieee_drive_unmount_all();
 
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
     // transferred on the data bus.  This has the effect of making it appear that unmapped

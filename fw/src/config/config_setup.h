@@ -22,8 +22,6 @@ typedef struct options_s {
     char usb_keymap[261];    // USB keymap file path (empty = use default)
     tape_config_t tape;      // Virtual tape config blob (all zeros = disabled)
     bool tape_enabled;       // True if 'tape' key was present in config.yaml
-    bool ieee_drive;         // Virtual IEEE-488 disk drive (units 8/9) from SD
-                             // images; default off = real drives on the bus.
     uint8_t cpu;             // cpu_type_t (driver.h); CPU_AUTO if the
                              // 'cpu' key is absent.
     bool superpet_io;        // machine: superpet -- expansion I/O visible to
@@ -33,6 +31,7 @@ typedef struct options_s {
 typedef void (*on_load_fn_t)(void* user_data, const char* filename, uint32_t address);
 typedef void (*on_patch_fn_t)(void* user_data, uint32_t address, const binary_t* binary);
 typedef void (*on_copy_fn_t)(void* user_data, uint32_t source, uint32_t destination, uint32_t length);
+typedef void (*on_mount_fn_t)(void* user_data, uint32_t device, uint32_t drive, const char* filename);
 typedef void (*on_set_options_fn_t)(void* user_data, options_t* options);
 typedef void (*on_fix_checksum_fn_t)(void* user_data, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t checksum);
 
@@ -44,6 +43,7 @@ typedef struct setup_sink_s {
     const on_load_fn_t on_load;
     const on_patch_fn_t on_patch;
     const on_copy_fn_t on_copy;
+    const on_mount_fn_t on_mount;
     const on_set_options_fn_t on_set_options;
     const on_fix_checksum_fn_t on_fix_checksum;
 

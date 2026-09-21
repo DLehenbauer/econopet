@@ -3,7 +3,7 @@
 
 import common_pkg::*;
 
-// IEEE-488 disk-drive emulation (devices 8 and 9).
+// IEEE-488 disk-drive emulation (devices 8 through 11).
 //
 // Sits between the soft CPU and the physical PIA2/VIA the same way
 // keyboard.sv sits in front of PIA1: it SNOOPS the CPU's writes to the
@@ -193,13 +193,12 @@ module ieee (
     // ------------------------------------------------------------------
     // Device protocol state
     // ------------------------------------------------------------------
-    // The emulation answers TWO unit addresses, DEV_ADDR and DEV_ADDR+1
-    // (devices 8 and 9) -- each a dual-drive unit, so Super-OS/9's d8d9
-    // configuration sees four drives. The fabric doesn't care WHICH unit is
+    // The emulation answers four unit addresses, DEV_ADDR through DEV_ADDR+3
+    // (devices 8 through 11), each a dual-drive unit. The fabric doesn't care WHICH unit is
     // addressed: handshake state, sa, and the FIFOs are shared (only one
     // talker/listener is ever active at a time), and the MCU learns the unit
     // from the raw LISTEN/TALK command bytes forwarded through the RX FIFO.
-    // DEV_ADDR must stay even so the pair is a single address-mask match.
+    // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
 
     logic listening = 1'b0;
@@ -284,11 +283,11 @@ module ieee (
                     // a byte, instead of ACKing a command we silently drop.)
                     if (atn_active) begin
                         // Command byte: update protocol state and forward to MCU.
-                        casez (~pia2_pb_out)
+                        priority casez (~pia2_pb_out)
                             8'h3F:   listening <= 1'b0;                       // UNLISTEN
-                            8'h5F:   talking <= 1'b0;                       // UNTALK (channel data persists)
-                            8'b001?_????: listening <= (~pia2_pb_out & 8'h1E) == {3'b0, DEV_ADDR[4:1], 1'b0} ? 1'b1 : 1'b0;
-                            8'b010?_????: talking   <= (~pia2_pb_out & 8'h1E) == {3'b0, DEV_ADDR[4:1], 1'b0} ? 1'b1 : 1'b0;
+                            8'h5F:   talking <= 1'b0;                         // UNTALK (channel data persists)
+                            8'b001?_????: listening <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
+                            8'b010?_????: talking   <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
                             8'b011?_????: if (listening || talking) begin
                                 sa <= ~pia2_pb_out;                           // secondary (data)
                                 // Fresh status per request: the kernel re-reads
