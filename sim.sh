@@ -156,11 +156,17 @@ if [ -n "$UPDATE_ONLY" ]; then
     exit 0
 fi
 
+if [ -z "${ECONOPET_MEDIA_DIR:-}" ]; then
+    echo "Error: ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks."
+    exit 1
+fi
+ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
+
 # Lint is not a CTest simulation, but it uses the same generated file list.
 if [ -n "$LINT" ]; then
     generate_filelists
     pushd "$PROJ_DIR" || exit 1
-    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" --top-module top
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" --top-module top
     exit_on_failure
     popd
     exit 0
@@ -216,7 +222,7 @@ fi
 VVP_FILE="$PROJ_DIR/work_sim/${TEST_NAME}.vvp"
 
 # m6502 requires SystemVerilog-2012.
-iverilog -g2012 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\"
+iverilog -g2012 -s "$TEST_NAME" -o"$VVP_FILE" -f"$PROJ_DIR/work_sim/$PROJ_NAME.f" -f"$PROJ_DIR/work_sim/timescale.f" -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\"
 exit_on_failure
 
 VVP_ARGS=()

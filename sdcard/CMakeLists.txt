@@ -10,16 +10,18 @@ project(sdcard)
 set(sdcard_root_dir ${CMAKE_CURRENT_BINARY_DIR}/sdcard_root)
 set(sdcard_rom_dir ${sdcard_root_dir}/roms)
 
-# Determine ROM source directory from environment (required)
-if(NOT DEFINED ENV{ECONOPET_ROMS_DIR} OR "$ENV{ECONOPET_ROMS_DIR}" STREQUAL "")
-    message(FATAL_ERROR "ECONOPET_ROMS_DIR environment variable is not set. Set it to the directory containing ROM files.")
+# ECONOPET_MEDIA_DIR is required and contains roms/ and disks/.
+if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
+    if(DEFINED ENV{ECONOPET_MEDIA_DIR} AND NOT "$ENV{ECONOPET_MEDIA_DIR}" STREQUAL "")
+        set(ECONOPET_MEDIA_DIR "$ENV{ECONOPET_MEDIA_DIR}")
+    endif()
 endif()
 
-set(roms_source_dir "$ENV{ECONOPET_ROMS_DIR}")
-message(STATUS "Using ROMs from: ${roms_source_dir}")
-if(NOT IS_DIRECTORY "${roms_source_dir}")
-    message(FATAL_ERROR "ROM source directory not found: ${roms_source_dir}. Check the ECONOPET_ROMS_DIR environment variable is set to a valid directory.")
+if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
+    message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks.")
 endif()
+
+message(STATUS "Using media from: ${ECONOPET_MEDIA_DIR}")
 
 # Copy static files from the source 'sdcard' directory to the build output
 # during configuration.
@@ -30,7 +32,8 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/README.md" DESTINATION "${sdcard_root_dir}"
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/../NOTICE.md" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/prgs/README.md" DESTINATION "${sdcard_root_dir}/prgs")
-file(COPY "${roms_source_dir}/" DESTINATION "${sdcard_rom_dir}")
+file(COPY "${ECONOPET_MEDIA_DIR}/roms" DESTINATION "${sdcard_root_dir}")
+file(COPY "${ECONOPET_MEDIA_DIR}/disks" DESTINATION "${sdcard_root_dir}")
 
 # Optional IEEE-488 drive images: sdcard/disks/drive0.d80|d64, drive1.d80|d64
 # (gitignored, like roms). Copied into the package when present.

@@ -299,10 +299,10 @@ RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Download required ROMs (with MD5 verification)
+# Download required ROMs and disks (with MD5 verification)
 # Note: Build context is the .devcontainer folder, so copy relative to it.
-ENV ECONOPET_ROMS_DIR="/opt/econopet/roms"
-COPY download-roms.sh /tmp/download-roms.sh
-RUN chmod +x /tmp/download-roms.sh && \
-    /tmp/download-roms.sh ${ECONOPET_ROMS_DIR} && \
-    rm -f /tmp/download-roms.sh
+ENV ECONOPET_MEDIA_DIR="/opt/econopet/media"
+COPY download.sh /tmp/download.sh
+RUN chmod +x /tmp/download.sh && \
+    /tmp/download.sh /opt/econopet && \
+    rm -f /tmp/download.sh

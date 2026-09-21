@@ -17,6 +17,12 @@ if [ -z "$TEST_NAME" ]; then
     exit 1
 fi
 
+if [ -z "${ECONOPET_MEDIA_DIR:-}" ]; then
+    echo "Error: ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks."
+    exit 1
+fi
+ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
+
 # Invoke seed.sh to get the effective test seed (empty if none is set).
 SEED="$("$SCRIPT_DIR/seed.sh")" || exit 1
 
@@ -43,7 +49,7 @@ verilator --binary --timing -j "$VERILATOR_JOBS" \
     --top-module "$TEST_NAME" \
     --Mdir "work_sim/obj_${TEST_NAME}" -o "${TEST_NAME}_vl" \
     -Iexternal/m6502/rtl \
-    -DECONOPET_ROMS_DIR=\"${ECONOPET_ROMS_DIR}\" \
+    -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" \
     -f work_sim/EconoPET.f "${VERILATOR_ONLY_SOURCES[@]}" || exit $?
 
 VERILATOR_ARGS=("+verilator+rand+reset+${RAND_RESET}")

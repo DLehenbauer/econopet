@@ -13,9 +13,9 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "ECONOPET_ROMS_DIR": {
+                "ECONOPET_MEDIA_DIR": {
                     "type": "PATH",
-                    "value": "$env{ECONOPET_ROMS_DIR}"
+                    "value": "$env{ECONOPET_MEDIA_DIR}"
                 }
             }
         }
