@@ -25,6 +25,7 @@ fi
 readonly INSTALL_DIR="$1"
 readonly DOWNLOAD_DIR="${INSTALL_DIR}/downloads"
 readonly MEDIA_DIR="${INSTALL_DIR}/media"
+readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "${DOWNLOAD_DIR}" "${MEDIA_DIR}/roms" "${MEDIA_DIR}/disks"
 
 # URL | archive member (- for raw or gzip) | installed media path (- to keep basename) | MD5
@@ -154,3 +155,14 @@ install_media_list() {
 }
 
 install_media_list "${MEDIA_LIST}"
+
+# Waterloo2 was distributed as two D64s. Merge every file type into one D80
+# for the virtual IEEE drive, then remove the temporary source images.
+readonly WATERLOO_DISK_DIR="${MEDIA_DIR}/disks/superpet"
+readonly WATERLOO_DISK_ONE="${WATERLOO_DISK_DIR}/Waterloo2-Language-1.d64"
+readonly WATERLOO_DISK_TWO="${WATERLOO_DISK_DIR}/Waterloo2-Language-2.d64"
+readonly WATERLOO_D80="${WATERLOO_DISK_DIR}/Waterloo2-Languages.d80"
+python3 "${SCRIPT_DIR}/merge-d64-to-d80.py" "${WATERLOO_D80}.part" \
+  "${WATERLOO_DISK_ONE}" "${WATERLOO_DISK_TWO}"
+mv "${WATERLOO_D80}.part" "${WATERLOO_D80}"
+rm -f "${WATERLOO_DISK_ONE}" "${WATERLOO_DISK_TWO}"

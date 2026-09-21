@@ -303,6 +303,7 @@ ENV PATH="/root/.local/bin:${PATH}"
 # Note: Build context is the .devcontainer folder, so copy relative to it.
 ENV ECONOPET_MEDIA_DIR="/opt/econopet/media"
 COPY download.sh /tmp/download.sh
+COPY merge-d64-to-d80.py /tmp/merge-d64-to-d80.py
 RUN chmod +x /tmp/download.sh && \
     /tmp/download.sh /opt/econopet && \
-    rm -f /tmp/download.sh
+    rm -f /tmp/download.sh /tmp/merge-d64-to-d80.py

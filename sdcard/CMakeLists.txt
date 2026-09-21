@@ -23,9 +23,14 @@ endif()
 
 message(STATUS "Using media from: ${ECONOPET_MEDIA_DIR}")
 
+# Reset the generated staging area so stale files from a previous configure/build
+# don't linger in the packaged SD card contents.
+file(REMOVE_RECURSE "${sdcard_root_dir}")
+file(MAKE_DIRECTORY "${sdcard_root_dir}")
+file(MAKE_DIRECTORY "${sdcard_rom_dir}")
+
 # Copy static files from the source 'sdcard' directory to the build output
 # during configuration.
-file(MAKE_DIRECTORY "${sdcard_rom_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/config.yaml" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/bootloader.uf2" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/README.md" DESTINATION "${sdcard_root_dir}")
@@ -34,12 +39,6 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/prgs/README.md" DESTINATION "${sdcard_root_dir}/prgs")
 file(COPY "${ECONOPET_MEDIA_DIR}/roms" DESTINATION "${sdcard_root_dir}")
 file(COPY "${ECONOPET_MEDIA_DIR}/disks" DESTINATION "${sdcard_root_dir}")
-
-# Optional IEEE-488 drive images: sdcard/disks/drive0.d80|d64, drive1.d80|d64
-# (gitignored, like roms). Copied into the package when present.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/disks")
-    file(COPY "${CMAKE_CURRENT_LIST_DIR}/disks" DESTINATION "${sdcard_root_dir}")
-endif()
 
 # Copy any ROM .bin files produced by the 'rom' target into sdcard/roms
 # (exclude the special firmware-embedded 'menu.rom'). Print status for each.
