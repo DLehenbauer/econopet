@@ -1,6 +1,6 @@
 # Build an EconoPET
 
-> **⚠️ Warning:** Rev A is not perfect. Before ordering, review the currently [known issues](https://github.com/DLehenbauer/econopet/issues?q=state%3Aopen%20label%3A40%2F8096-A) and understand that new issues may be discovered over time.
+> **⚠️ Warning:** Rev A is not perfect. Before ordering, review the currently [known issues](https://github.com/DLehenbauer/econopet/issues?q=is%3Aissue%20label%3Arev-a%20label%3Aerrata) and understand that new issues may be discovered over time.
 
 Building an EconoPET requires ordering PCBs from a manufacturer, some basic soldering skills and flashing firmware to a microcontroller. It is recommended that you read through all steps before ordering parts to ensure you are comfortable with the full process.
 
