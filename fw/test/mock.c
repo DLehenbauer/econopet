@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include "mock.h"
+
 #include <assert.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -11,9 +13,98 @@
 #include <string.h>
 #include <time.h>
 
-#include "system_state.h"
+#include <check.h>
+
+#include "driver.h"
 #include "sd/sd.h"
-#include "mock.h"
+#include "system_state.h"
+
+// ---------------------------------------------------------------------------
+// Driver mocks
+// ---------------------------------------------------------------------------
+
+uint8_t mock_ram[MOCK_RAM_SIZE];
+
+uint8_t spi_read_at(uint32_t addr) {
+    ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
+    return mock_ram[addr];
+}
+
+void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
+    for (size_t i = 0; i < byteLength; i++) {
+        ck_assert_uint_lt(addr + i, MOCK_RAM_SIZE);
+        pDest[i] = mock_ram[addr + i];
+    }
+}
+
+uint8_t spi_write_at(uint32_t addr, uint8_t data) {
+    if (addr < MOCK_RAM_SIZE) {
+        mock_ram[addr] = data;
+    }
+    return 0;
+}
+
+void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
+    for (size_t i = 0; i < byteLength; i++) {
+        if (addr + i < MOCK_RAM_SIZE) {
+            mock_ram[addr + i] = pSrc[i];
+        }
+    }
+}
+
+uint8_t spi_read_next(void) { return 0; }
+uint8_t spi_read_prev(void) { return 0; }
+
+void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
+    (void)addr;
+    (void)byte;
+    (void)byteLength;
+}
+
+void set_cpu(bool ready, bool reset, bool nmi) {
+    (void)ready;
+    (void)reset;
+    (void)nmi;
+}
+
+// ---------------------------------------------------------------------------
+// Breakpoint mocks
+// ---------------------------------------------------------------------------
+
+static uint16_t mock_bp_addr;
+static bool mock_bp_cleared;
+
+uint16_t bp_hit_addr(void) {
+    return mock_bp_addr;
+}
+
+void bp_clear_halt(void) {
+    mock_bp_cleared = true;
+    system_state.bp_halted = false;
+}
+
+// ---------------------------------------------------------------------------
+// Test fixture helpers
+// ---------------------------------------------------------------------------
+
+void mock_reset(void) {
+    memset(mock_ram, 0xEA, sizeof(mock_ram));
+    system_state.bp_halted = false;
+    mock_bp_addr = 0;
+    mock_bp_cleared = false;
+}
+
+void mock_breakpoint_set_hit_addr(uint16_t addr) {
+    mock_bp_addr = addr;
+}
+
+bool mock_breakpoint_halt_was_cleared(void) {
+    return mock_bp_cleared;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory file system mocks
+// ---------------------------------------------------------------------------
 
 // In-memory file system for testing
 typedef struct mem_file_s {
@@ -104,7 +195,10 @@ FILE* sd_open(const char* path, const char* mode) {
     exit(1);
 }
 
-// Mock display functions
+// ---------------------------------------------------------------------------
+// Display mocks
+// ---------------------------------------------------------------------------
+
 void display_window_begin(const void* window) {
     (void)window;
 }
@@ -116,7 +210,10 @@ void display_window_show(const void* window) {
 
 void display_task(void) { }
 
-// Mock input functions
+// ---------------------------------------------------------------------------
+// Input mocks
+// ---------------------------------------------------------------------------
+
 void input_init(void) { }
 
 void input_task(void) { }
@@ -125,48 +222,34 @@ int input_getch(void) {
     return EOF;
 }
 
-void set_cpu(bool ready, bool reset, bool nmi) {
-    (void)ready;
-    (void)reset;
-    (void)nmi;
-}
+// ---------------------------------------------------------------------------
+// ROM, PET, and IEEE mocks
+// ---------------------------------------------------------------------------
 
 void roms_refresh_char_rom() { }
-void start_menu_rom() { }
 void pet_nmi() { }
 void ieee_drive_unmount_all() { }
 
-void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
-    (void)addr;
-    (void)byte;
-    (void)byteLength;
-}
+// ---------------------------------------------------------------------------
+// Diagnostic mocks
+// ---------------------------------------------------------------------------
 
 void test_ram() { }
 
-// Mock Pico SDK functions for test builds
+// ---------------------------------------------------------------------------
+// Pico SDK mocks
+// ---------------------------------------------------------------------------
 
-// Wait for interrupt (no-op in tests)
-void __wfi() { }
-
-// Nop operation for tight loop contents
-void tight_loop_contents(void) { }
-
-// Mock watchdog enable function (used to reset the system in fatal errors)
-void watchdog_enable(unsigned int delay_ms, bool pause_on_debug) {
-    assert(delay_ms == 0);
-    assert(pause_on_debug == true);
-    abort();
+uint64_t time_us_64(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ULL + (uint64_t)ts.tv_nsec / 1000ULL;
 }
 
-// Mock system_reset function (used by fatal to restart)
-void system_reset(void) {
-    abort();
-}
+// ---------------------------------------------------------------------------
+// System mocks
+// ---------------------------------------------------------------------------
 
-// Mock fatal function. Prints the formatted error message to stderr, then calls
-// abort() so that tests can detect it using
-// tcase_add_test_raise_signal(tc, test_fn, SIGABRT) in a forked runner.
 void fatal(const char* const format, ...) {
     va_list args;
     va_start(args, format);
@@ -181,11 +264,4 @@ void* vetted_malloc(size_t size) {
     void* p = malloc(size);
     assert(p != NULL);
     return p;
-}
-
-// Mock Pico SDK time function - returns microseconds since epoch
-uint64_t time_us_64(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000ULL + (uint64_t)ts.tv_nsec / 1000ULL;
 }

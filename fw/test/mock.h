@@ -1,7 +1,16 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+#define MOCK_RAM_SIZE 0x10000
+
+extern uint8_t mock_ram[MOCK_RAM_SIZE];
+
+void mock_reset(void);
+void mock_breakpoint_set_hit_addr(uint16_t addr);
+bool mock_breakpoint_halt_was_cleared(void);
 
 // Stub Pico SDK types and macros for non-Pico builds
 #define __in_flash(x) x
@@ -16,10 +25,6 @@ typedef struct hid_keyboard_report_s {
     uint8_t keycode[6];
 } hid_keyboard_report_t;
 
-// Mock Pico SDK functions
-void __wfi();
-void tight_loop_contents(void);
-void watchdog_enable(unsigned int delay_ms, bool pause_on_debug);
 uint64_t time_us_64(void);
 
 // In-memory file system for testing
