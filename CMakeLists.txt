@@ -12,15 +12,18 @@ include(ExternalProject)
 # Enable testing at the super-project level
 enable_testing()
 
-# Resolve ECONOPET_ROMS_DIR (documented in CMakePresets.json; may be empty initially)
-# Priority: 1) Cache variable from preset or -D flag, 2) Environment variable, 3) Fatal error
-if(NOT DEFINED ECONOPET_ROMS_DIR OR "${ECONOPET_ROMS_DIR}" STREQUAL "")
-    if(DEFINED ENV{ECONOPET_ROMS_DIR} AND NOT "$ENV{ECONOPET_ROMS_DIR}" STREQUAL "")
-        set(ECONOPET_ROMS_DIR "$ENV{ECONOPET_ROMS_DIR}" CACHE PATH "Path to ROM files")
+# Resolve ECONOPET_MEDIA_DIR (documented in CMakePresets.json)
+if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
+    if(DEFINED ENV{ECONOPET_MEDIA_DIR} AND NOT "$ENV{ECONOPET_MEDIA_DIR}" STREQUAL "")
+        set(ECONOPET_MEDIA_DIR "$ENV{ECONOPET_MEDIA_DIR}" CACHE PATH "Path to SD card media files")
     else()
-        message(FATAL_ERROR "ECONOPET_ROMS_DIR must be set (via preset cache variable or environment variable).")
+        message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set (via preset cache variable or environment variable).")
     endif()
 endif()
+message(STATUS "ECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}")
+
+# ROMs always live in the roms subdirectory of the media tree.
+set(ECONOPET_ROMS_DIR "${ECONOPET_MEDIA_DIR}/roms")
 message(STATUS "ECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}")
 
 # Determine if we should build all subprojects or specific ones
@@ -60,6 +63,7 @@ if(BUILD_FPGA)
         BINARY_DIR ${SUPER_BUILD_DIR}/gw
         CMAKE_ARGS
             -G Ninja
+            -DECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target fpga_bitstream
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
@@ -133,6 +137,7 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
             -DPICO_PLATFORM=rp2040
             -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
             -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+            -DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}
             -DFIRMWARE_UF2=${FIRMWARE_UF2}
             -DFPGA_BITSTREAM=${FPGA_BITSTREAM}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
@@ -199,8 +204,11 @@ configure_file(
     @ONLY
 )
 
-# Applied to every test so seed.sh can resolve the shared seed.
-set(ECONOPET_TEST_ENV "ECONOPET_TEST_SEED_FILE=${ECONOPET_TEST_SEED_FILE}")
+# Applied to every test so seed.sh can resolve the shared seed and the gateware
+# scripts can derive the ROM path from the configured media tree.
+set(ECONOPET_TEST_ENV
+    "ECONOPET_TEST_SEED_FILE=${ECONOPET_TEST_SEED_FILE};ECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}"
+)
 
 # Add firmware tests to root CTest
 if(BUILD_TESTS)

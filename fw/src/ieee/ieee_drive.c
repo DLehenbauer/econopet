@@ -4,7 +4,6 @@
 #include "pch.h"
 #include "ieee_drive.h"
 
-#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -18,12 +17,12 @@
 // ieee.sv for semantics).
 #define ADDR_IEEE (0b01110 << 15)
 
-#define IEEE_REG_CTRL    (ADDR_IEEE + 0)
-#define IEEE_REG_STATUS  (ADDR_IEEE + 1)
-#define IEEE_REG_RX      (ADDR_IEEE + 2)
-#define IEEE_REG_TX      (ADDR_IEEE + 3)
-#define IEEE_REG_TX_LAST (ADDR_IEEE + 4)
-#define IEEE_REG_SA      (ADDR_IEEE + 5)
+#define IEEE_REG_CTRL     (ADDR_IEEE + 0)
+#define IEEE_REG_STATUS   (ADDR_IEEE + 1)
+#define IEEE_REG_RX       (ADDR_IEEE + 2)
+#define IEEE_REG_TX       (ADDR_IEEE + 3)
+#define IEEE_REG_TX_LAST  (ADDR_IEEE + 4)
+#define IEEE_REG_SA       (ADDR_IEEE + 5)
 #define IEEE_REG_TXS      (ADDR_IEEE + 6)   // status-channel TX
 #define IEEE_REG_TXS_LAST (ADDR_IEEE + 7)   // status-channel TX, final byte (EOI)
 
@@ -49,12 +48,12 @@
 
 #define DEV_ADDR 8
 
-// The fabric answers devices DEV_ADDR and DEV_ADDR+1 (units 8 and 9), each a
-// dual-drive unit -- Super-OS/9's d8d9 configuration uses all four drives.
-// Mount slot = unit * 2 + drive, so slots 0/1 are device 8's "0:"/"1:" drives
-// and slots 2/3 are device 9's.
-#define NUM_UNITS  2
-#define NUM_DRIVES 4
+// The fabric answers devices 8 through 11, each a dual-drive unit. Mount
+// slot = unit * 2 + drive, so slots 0/1 map to device 8 and slots 6/7 map
+// to device 11.
+#define NUM_UNITS  4
+#define NUM_DRIVES 8
+#define MAX_IMAGE_PATH 64
 
 // ----------------------------------------------------------------------------
 // Disk images
@@ -64,34 +63,11 @@ typedef struct {
     FILE* file;
     diskimage_t image;
     bool present;
-    char name[32];              // image filename currently "inserted"
-    int library_index;          // index into the image library, or -1
+    char name[MAX_IMAGE_PATH];  // image path currently "inserted"
 } drive_t;
 
 static drive_t drives[NUM_DRIVES];
 static bool emulation_enabled = false;
-
-// Library of images found in /disks at boot.
-#define MAX_LIBRARY 24
-static char library[MAX_LIBRARY][32];
-static unsigned int library_count = 0;
-
-static void scan_library(void) {
-    DIR* dir = opendir("/disks");
-    if (dir == NULL) return;
-
-    struct dirent* e;
-    while ((e = readdir(dir)) != NULL && library_count < MAX_LIBRARY) {
-        const char* dot = strrchr(e->d_name, '.');
-        if (dot == NULL) continue;
-        if (strcasecmp(dot, ".d80") != 0 && strcasecmp(dot, ".d64") != 0
-            && strcasecmp(dot, ".hdd") != 0) continue;
-        if (strlen(e->d_name) >= sizeof(library[0])) continue;
-        strcpy(library[library_count++], e->d_name);
-    }
-    closedir(dir);
-    log_info("ieee: %u disk image(s) in /disks", library_count);
-}
 
 // ----------------------------------------------------------------------------
 // REL chain cache (built at mount time)
@@ -155,12 +131,11 @@ static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) 
     return fflush(f) == 0;      // persist promptly: power-off safety
 }
 
-// Mounts library entry 'idx' into drive 'n'. Returns true on success.
-static bool mount_image(unsigned int n, int idx) {
-    if (idx < 0 || (unsigned int) idx >= library_count) return false;
+// Mounts a path relative to /disks into drive 'n'. Returns true on success.
+static bool mount_image(unsigned int n, const char* filename) {
 
-    char path[48];
-    snprintf(path, sizeof(path), "/disks/%s", library[idx]);
+    char path[MAX_IMAGE_PATH + 8];
+    snprintf(path, sizeof(path), "/disks/%s", filename);
     // Read-write when the card allows it (REL record writes, OS-9 format);
     // fall back to read-only rather than failing the mount.
     bool writable = true;
@@ -176,7 +151,7 @@ static bool mount_image(unsigned int n, int idx) {
 
     // .hdd = flat hard-disk REL container (any 258-multiple size); everything
     // else opens by the exact d64/d80 container sizes.
-    const char* dot = strrchr(library[idx], '.');
+    const char* dot = strrchr(filename, '.');
     bool is_hdd = (dot != NULL && strcasecmp(dot, ".hdd") == 0);
 
     diskimage_t img;
@@ -194,34 +169,10 @@ static bool mount_image(unsigned int n, int idx) {
     drives[n].image.ctx = f;
     drives[n].image.write = writable ? file_write : NULL;
     drives[n].present = true;
-    drives[n].library_index = idx;
-    snprintf(drives[n].name, sizeof(drives[n].name), "%s", library[idx]);
+    snprintf(drives[n].name, sizeof(drives[n].name), "%s", filename);
     log_info("ieee: drive %u = %s (%ld bytes)", n, path, size);
     chain_cache_build(n);
     return true;
-}
-
-static int library_find(const char* name) {
-    for (unsigned int i = 0; i < library_count; i++) {
-        if (strcasecmp(library[i], name) == 0) return (int) i;
-    }
-    return -1;
-}
-
-static void mount_drive(unsigned int n) {
-    // Prefer the conventional name (drive0.d80 etc.), else the nth image.
-    // Unit-9 slots (2/3) mount by conventional name only; the nth-image
-    // fallback would populate a second unit unasked.
-    char preferred[16];
-    drives[n].library_index = -1;
-
-    static const char* exts[] = {"hdd", "d80", "d64"};   // hard disk outranks floppies
-    for (unsigned int ext = 0; ext < 3; ext++) {
-        snprintf(preferred, sizeof(preferred), "drive%u.%s", n, exts[ext]);
-        int idx = library_find(preferred);
-        if (idx >= 0 && mount_image(n, idx)) return;
-    }
-    if (n < 2 && n < library_count) mount_image(n, (int) n);
 }
 
 // ----------------------------------------------------------------------------
@@ -240,12 +191,14 @@ typedef enum {
 
 // Per-unit DOS status: each IEEE unit has its own channel-15 command channel,
 // so status is tracked and served per unit.
-static status_code_t status_code[NUM_UNITS] = {st_code_power_on, st_code_power_on};
+static status_code_t status_code[NUM_UNITS] = {
+    st_code_power_on, st_code_power_on, st_code_power_on, st_code_power_on
+};
 
 static bool mcu_listening = false;  // mirrors the FPGA's addressed state
 static bool mcu_talking = false;
 
-// Which unit (0 = device 8, 1 = device 9) the current LISTEN/TALK addressed.
+// Which unit (0 = device 8 through 3 = device 11) the current LISTEN/TALK addressed.
 // The secondary address that follows binds channels/status to that unit.
 static uint8_t listen_unit = 0;
 static uint8_t talk_unit = 0;
@@ -632,7 +585,7 @@ static void handle_command(uint8_t cmd) {
                 listen_chan = 0xFF;
             } else {
                 uint8_t a = cmd & 0x1F;
-                mcu_listening = (a == DEV_ADDR || a == DEV_ADDR + 1);
+                mcu_listening = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
                 if (mcu_listening) listen_unit = (uint8_t) (a - DEV_ADDR);
             }
             break;
@@ -645,7 +598,7 @@ static void handle_command(uint8_t cmd) {
                 streaming = false;
             } else {
                 uint8_t a = cmd & 0x1F;
-                mcu_talking = (a == DEV_ADDR || a == DEV_ADDR + 1);
+                mcu_talking = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
                 if (mcu_talking) talk_unit = (uint8_t) (a - DEV_ADDR);
             }
             break;
@@ -714,29 +667,49 @@ static void handle_command(uint8_t cmd) {
 // Public API
 // ----------------------------------------------------------------------------
 
-void ieee_drive_init(void) {
-    scan_library();
-    for (unsigned int n = 0; n < NUM_DRIVES; n++) mount_drive(n);
+static void sync_emulation_enabled(void) {
+    bool has_mounted_drive = false;
+    for (unsigned int drive = 0; drive < NUM_DRIVES; drive++) {
+        if (drives[drive].present) {
+            has_mounted_drive = true;
+            break;
+        }
+    }
+    emulation_enabled = has_mounted_drive;
+    if (emulation_enabled) {
+        spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
+        log_info("ieee: virtual drive enabled");
+    } else {
+        spi_write_at(IEEE_REG_CTRL, 0);
+        log_info("ieee: virtual drive off (real hardware bus)");
+    }
+}
 
-    // Virtual drive is OFF by default: the machine behaves like a stock PET
-    // with real hardware drives on the IEEE-488 bus (the fabric stays
-    // transparent). A config that opts in with 'ieee-drive: on' turns it on
-    // via ieee_drive_set_enabled() during menu apply.
+void ieee_drive_init(void) {
+    // The machine behaves like a stock PET until a configuration mounts an
+    // image. With no images, the fabric remains transparent to real drives.
     emulation_enabled = false;
     spi_write_at(IEEE_REG_CTRL, 0);   // ensure fabric transparent at boot
 }
 
-// Enable/disable the virtual drive (only if an image is mounted).
-void ieee_drive_set_enabled(bool en) {
-    emulation_enabled = en && (drives[0].present || drives[1].present
-                               || drives[2].present || drives[3].present);
-    if (emulation_enabled) {
-        spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
-        log_info("ieee: virtual drive enabled (device %u)", DEV_ADDR);
-    } else {
-        spi_write_at(IEEE_REG_CTRL, 0);   // transparent -> real hardware bus
-        log_info("ieee: virtual drive off (real hardware bus)");
+void ieee_drive_unmount_all(void) {
+    for (unsigned int n = 0; n < NUM_DRIVES; n++) {
+        if (drives[n].file != NULL) fclose(drives[n].file);
+        drives[n] = (drive_t) { 0 };
+        for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) {
+            chain_cache[n][i].valid = false;
+        }
     }
+    sync_emulation_enabled();
+}
+
+bool ieee_drive_mount(unsigned int drive, const char* filename) {
+    if (drive >= NUM_DRIVES) return false;
+
+    bool mounted = mount_image(drive, filename);
+    if (!mounted) log_info("ieee: could not mount disk image: /disks/%s", filename);
+    if (mounted) sync_emulation_enabled();
+    return mounted;
 }
 
 void ieee_drive_task(void) {

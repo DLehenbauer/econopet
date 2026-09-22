@@ -19,6 +19,7 @@ typedef struct test_context_s {
     int load_count;
     int patch_count;
     int copy_count;
+    int mount_count;
     int set_options_count;
     int fix_checksum_count;
     
@@ -32,6 +33,9 @@ typedef struct test_context_s {
     uint32_t last_copy_source;
     uint32_t last_copy_dest;
     uint32_t last_copy_length;
+    uint32_t last_mount_device;
+    uint32_t last_mount_drive;
+    char last_mount_file[64];
     uint32_t last_columns;
     uint32_t last_video_ram_mask;
     char last_usb_keymap[261];
@@ -44,6 +48,7 @@ typedef struct test_context_s {
 } test_context_t;
 
 static test_context_t test_ctx;
+static const char* mounted_image_root = NULL;
 
 // Global shared test state (sink structs with const members must be initialized statically)
 static system_state_t sys_state; // defaults applied in setup()
@@ -93,6 +98,24 @@ static void test_on_copy(void* context, uint32_t source, uint32_t destination, u
     ctx->last_copy_length = length;
 }
 
+static void test_on_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
+    test_context_t* ctx = (test_context_t*)context;
+    ctx->mount_count++;
+    ctx->last_mount_device = device;
+    ctx->last_mount_drive = drive;
+    strncpy(ctx->last_mount_file, filename, sizeof(ctx->last_mount_file) - 1);
+    ctx->last_mount_file[sizeof(ctx->last_mount_file) - 1] = '\0';
+
+    if (mounted_image_root != NULL) {
+        char image_path[PATH_MAX];
+        snprintf(image_path, sizeof(image_path), "%s/disks/%s", mounted_image_root, filename);
+        FILE* image = fopen(image_path, "rb");
+        ck_assert_msg(image != NULL,
+                      "Configured IEEE image '%s' is missing", image_path);
+        fclose(image);
+    }
+}
+
 static void test_on_set_options(void* context, options_t* options) {
     test_context_t* ctx = (test_context_t*)context;
     ctx->set_options_count++;
@@ -120,6 +143,7 @@ static const setup_sink_t setup_sink = {
     .on_load = test_on_load,
     .on_patch = test_on_patch,
     .on_copy = test_on_copy,
+    .on_mount = test_on_mount,
     .on_set_options = test_on_set_options,
     .on_fix_checksum = test_on_fix_checksum,
     .system_state = &sys_state,
@@ -187,6 +211,27 @@ START_TEST(test_parse_load_action) {
     ck_assert_int_eq(test_ctx.load_count, 1);
     ck_assert_str_eq(test_ctx.last_load_file, "basic.bin");
     ck_assert_int_eq(test_ctx.last_load_address, 0xC000);
+}
+END_TEST
+
+START_TEST(test_parse_mount_action) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Mount Test\n"
+        "    setup:\n"
+        "      - action: mount\n"
+        "        device: 11\n"
+        "        drive: 1\n"
+        "        file: superpet/Waterloo2-Languages.d80\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+
+    ck_assert_int_eq(test_ctx.mount_count, 1);
+    ck_assert_int_eq(test_ctx.last_mount_device, 11);
+    ck_assert_int_eq(test_ctx.last_mount_drive, 1);
+    ck_assert_str_eq(test_ctx.last_mount_file, "superpet/Waterloo2-Languages.d80");
 }
 END_TEST
 
@@ -552,6 +597,8 @@ START_TEST(test_validate_sdcard_config_yaml) {
     // Read the actual config.yaml file from disk
     const char* sdcard_root = getenv("ECONOPET_TEST_SDCARD_ROOT");
     ck_assert_msg(sdcard_root != NULL, "ECONOPET_TEST_SDCARD_ROOT environment variable not set");
+    const char* media_root = getenv("ECONOPET_MEDIA_DIR");
+    ck_assert_msg(media_root != NULL, "ECONOPET_MEDIA_DIR environment variable not set");
     
     char config_path[PATH_MAX];
     snprintf(config_path, sizeof(config_path), "%s/config.yaml", sdcard_root);
@@ -570,6 +617,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
     ck_assert_int_eq(num_configs, 8);  // Should have exactly 8 configs
     
     // Now load each config by index to verify they're all valid
+    mounted_image_root = media_root;
     for (int i = 0; i < num_configs; i++) {
         memset(&test_ctx, 0, sizeof(test_ctx));
         parse_config_file("/config.yaml", &config_sink, i);
@@ -581,6 +629,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
         // Should have a valid config name
         ck_assert_int_gt(strlen(test_ctx.last_config_name), 0);
     }
+    mounted_image_root = NULL;
     
     // Clean up
     free(config_contents);
@@ -718,6 +767,7 @@ Suite *config_parser_suite(void) {
     
     tcase_add_test(tc_core, test_parse_minimal_config);
     tcase_add_test(tc_core, test_parse_load_action);
+    tcase_add_test(tc_core, test_parse_mount_action);
     tcase_add_test(tc_core, test_parse_patch_action);
     tcase_add_test(tc_core, test_parse_copy_action);
     tcase_add_test(tc_core, test_parse_set_action);

@@ -491,6 +491,39 @@ module ieee_tb;
         mcu_drain_rx;
         $display("[%t]   unit 9 (DEV_ADDR+1) listen/talk verified", $time);
 
+        // --- Unit 11: the four-address range also answers device 11. ---
+        ctl_atn(1);
+        ctl_send(8'h2B);                   // LISTEN 11
+        ctl_send(8'h60);                   // secondary 0
+        ctl_atn(0);
+        ctl_send(8'h5A);
+        ctl_atn(1);
+        ctl_send(8'h3F);                   // UNLISTEN
+        ctl_atn(0);
+        begin
+            int base;
+            base = rx_bytes.size();
+            mcu_drain_rx;
+            `assert_equal(rx_bytes.size(), base + 4);
+            `assert_equal(rx_isatn[base + 0], 1); `assert_equal(rx_bytes[base + 0], 8'h2B);
+            `assert_equal(rx_isatn[base + 1], 1); `assert_equal(rx_bytes[base + 1], 8'h60);
+            `assert_equal(rx_isatn[base + 2], 0); `assert_equal(rx_bytes[base + 2], 8'h5A);
+            `assert_equal(rx_isatn[base + 3], 1); `assert_equal(rx_bytes[base + 3], 8'h3F);
+        end
+        mcu_write(IEEE_REG_TX_LAST, 8'h7B);
+        ctl_atn(1);
+        ctl_send(8'h4B);                   // TALK 11
+        ctl_send(8'h60);                   // secondary 0
+        ctl_atn(0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, 8'h7B);
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);                   // UNTALK
+        ctl_atn(0);
+        mcu_drain_rx;
+        $display("[%t]   unit 11 listen/talk verified", $time);
+
         // Idle: device releases everything
         mcu_read(IEEE_REG_STATUS, st);
         `assert_equal(st[6], 0);           // not talking

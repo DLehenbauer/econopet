@@ -50,8 +50,9 @@ ctest --preset gw-boot --parallel   # Run full-boot benches (Verilator, minutes)
 Gateware benches run under both simulators. `gw` runs both quick suites;
 `gw-iv` and `gw-vl` run only Icarus or Verilator, respectively. Verilator is
 two-state and settles differently, so it catches races Icarus tolerates. Each
-suite takes under a minute. `ECONOPET_ROMS_DIR` must point at the ROM images:
-the configure step requires it, and `top_tb` and the boot bench load real ROMs.
+suite takes under a minute. `ECONOPET_MEDIA_DIR` must point at the directory
+containing `roms/` and `disks/`; `top_tb` and the boot bench load real ROMs
+from its `roms/` subdirectory.
 
 `gw-boot` is separate because it simulates seconds of PET time: it boots the
 stock BASIC-4 ROMs on the soft 6502 and passes only once the banner, the RAM

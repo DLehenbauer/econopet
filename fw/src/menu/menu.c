@@ -181,12 +181,18 @@ void action_set_options(void* context, options_t* options) {
     }
     set_cpu_type_machine(cpu, options->superpet_io || cpu == CPU_SOFT_6809);
 
-    ieee_drive_set_enabled(options->ieee_drive);
+    log_debug("Set options: %lu columns, video RAM mask %lu",
+              options->columns, options->video_ram_mask);
 
-    log_debug("Set options: %lu columns, video RAM mask %lu, ieee-drive %s",
-              options->columns, options->video_ram_mask,
-              options->ieee_drive ? "on" : "off");
+}
 
+void action_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
+    (void)context;
+
+    unsigned int slot = (device - 8) * 2 + drive;
+    if (!ieee_drive_mount(slot, filename)) {
+        fatal("IEEE device %lu drive %lu could not mount '%s'", device, drive, filename);
+    }
 }
 
 void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
@@ -271,6 +277,7 @@ void menu_enter(bool is_boot) {
         .on_load = action_load,
         .on_patch = action_patch,
         .on_copy = action_copy,
+        .on_mount = action_mount,
         .on_set_options = action_set_options,
         .on_fix_checksum = action_fix_checksum,
         .system_state = &system_state,

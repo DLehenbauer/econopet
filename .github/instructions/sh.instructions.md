@@ -55,7 +55,7 @@ make
 - Use `set -e` so a failed step stops the script. Add `-uo pipefail` when the script has pipelines or reads variables that may be unset.
 - Quote expansions (`"$VAR"`, `"$@"`) and give optional arguments a default (`"${2:-0}"`).
 - Resolve paths relative to the script, not the caller's working directory (`SCRIPT_DIR="$(readlink -f $(dirname "$0"))"`).
-- Name scripts in lowercase with hyphens (`download-roms.sh`, `lcsc-import.sh`).
+- Name scripts in lowercase with hyphens (`download.sh`, `lcsc-import.sh`).
 
 ## Validation
 

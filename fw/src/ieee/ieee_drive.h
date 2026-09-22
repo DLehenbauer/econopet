@@ -5,10 +5,9 @@
 
 #include <stdbool.h>
 
-// IEEE-488 disk-drive emulation (devices 8 and 9, two drives each), backed
-// by Commodore disk images on the SD card:
-//
-//   /disks/drive0..drive3.{d80,d64,hdd} -> slots 0-3 (slot = unit*2 + drive)
+// IEEE-488 disk-drive emulation (devices 8 through 11, two drives each),
+// backed by Commodore disk images in /disks on the SD card. Slots 0-7 map to
+// (device - 8) * 2 + drive.
 //
 // The FPGA (ieee.sv) runs the bus handshake and exposes byte FIFOs over
 // SPI/Wishbone; this module implements the DOS layer: OPEN by filename,
@@ -16,13 +15,16 @@
 // and CBM relative files (Super-OS/9).
 //
 
-// Scans /disks and mounts the conventional images. Leaves the fabric
-// transparent (emulation off) until ieee_drive_set_enabled(true).
+// Initializes IEEE-488 emulation with no mounted images. The fabric remains
+// transparent until an image is mounted.
 void ieee_drive_init(void);
 
-// Enables/disables the virtual drives. When off, the fabric is transparent
-// so real IEEE-488 drives on the bus work as on a stock PET.
-void ieee_drive_set_enabled(bool en);
+// Removes all mounted disk images.
+void ieee_drive_unmount_all(void);
+
+// Mounts a path relative to /disks into a slot (0-7). Returns false when the
+// file was not found or is not a supported disk image.
+bool ieee_drive_mount(unsigned int drive, const char* filename);
 
 // Services the fabric FIFOs; call every main-loop pass.
 void ieee_drive_task(void);

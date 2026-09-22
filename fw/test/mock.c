@@ -134,6 +134,7 @@ void set_cpu(bool ready, bool reset, bool nmi) {
 void roms_refresh_char_rom() { }
 void start_menu_rom() { }
 void pet_nmi() { }
+void ieee_drive_unmount_all() { }
 
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)addr;
