@@ -297,14 +297,14 @@ configs:
             file: "/roms/waterloo-e000-ffff-970034-12.bin"
           - address: 0x68000
             file: "/roms/characters.901640-01.bin"
-      - action: "mount"
-        device: 8
-        drive: 0
-        file: "superpet/os9/os9-systemdisk.d80"
+      # The SuperPET menu expects the Waterloo Languages disk in device 8, drive 1.
       - action: "mount"
         device: 8
         drive: 1
         file: "superpet/Waterloo2-Languages.d80"
+      # Mount the OS/9 system diskette in device 8, drive 0.
+      - action: "mount"
+        file: "superpet/os9/os9-systemdisk.d80"
       - action: "set"
         cpu: "6809"
         machine: "superpet"   # implied by cpu 6809; also valid with a 6502

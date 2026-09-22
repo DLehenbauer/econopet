@@ -489,8 +489,10 @@ static void parse_action_mount(parser_t* parser, void* context, size_t context_s
     (void)context;
     (void)context_size;
 
-    uint32_t device = 0;
+    // If the user does not specify a device or drive, default to device 8, drive 0.
+    uint32_t device = 8;
     uint32_t drive = 0;
+
     char filename[64] = { 0 };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {

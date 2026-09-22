@@ -69,10 +69,11 @@ path relative to `/disks`. The path is opened directly; for example, use
 `example.d80` for `/disks/example.d80`:
 
 ```yaml
+      # If not specified, the default device is 8 and the default drive is 0.
       - action: "mount"
-        device: 8
-        drive: 0
         file: "example1.d80"
+      # Available devices are 8 through 11.  Each device is a dual-drive unit
+      # with two drives: drive 0 and drive 1.
       - action: "mount"
         device: 8
         drive: 1
