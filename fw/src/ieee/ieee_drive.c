@@ -692,7 +692,37 @@ void ieee_drive_init(void) {
     spi_write_at(IEEE_REG_CTRL, 0);   // ensure fabric transparent at boot
 }
 
+static void reset_session(void) {
+    memset(rel_chans, 0, sizeof(rel_chans));
+    for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
+        status_code[unit] = st_code_power_on;
+    }
+    mcu_listening = false;
+    mcu_talking = false;
+    listen_unit = 0;
+    talk_unit = 0;
+    ch15_unit = 0;
+    open_unit = 0;
+    file_unit = 0;
+    stream_drive = 0;
+    collecting_name = false;
+    memset(open_name, 0, sizeof(open_name));
+    open_name_len = 0;
+    open_chan = 0;
+    file_open_ok = false;
+    file_chan = 0;
+    memset(&stream, 0, sizeof(stream));
+    streaming = false;
+    stream_finished = false;
+    streamed_bytes = 0;
+    memset(ch15_cmd, 0, sizeof(ch15_cmd));
+    ch15_cmd_len = 0;
+    collecting_ch15 = false;
+    listen_chan = 0xFF;
+}
+
 void ieee_drive_unmount_all(void) {
+    reset_session();
     for (unsigned int n = 0; n < NUM_DRIVES; n++) {
         if (drives[n].file != NULL) fclose(drives[n].file);
         drives[n] = (drive_t) { 0 };
