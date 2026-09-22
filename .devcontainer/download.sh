@@ -137,26 +137,38 @@ install_media_file() {
   local download="${DOWNLOAD_DIR}/${url##*/}"
   local destination="${MEDIA_DIR}/${media_path}"
   local partial="${destination}.part"
+  local attempt
 
   mkdir -p "$(dirname "${destination}")"
-  download_file "${url}" "${download}"
 
-  # Normalize zip, gzip, and raw sources into one staged destination file.
-  case "${download}" in
-    *.zip)
-      unzip -p "${download}" "${member}" > "${partial}"
-      ;;
-    *.gz)
-      gzip -dc "${download}" > "${partial}"
-      ;;
-    *)
-      cp "${download}" "${partial}"
-      ;;
-  esac
+  for attempt in 1 2; do
+    download_file "${url}" "${download}"
 
-  # Publish the staged file only after its contents have been authenticated.
-  verify_file "${partial}" "${md5}" || exit 1
-  mv "${partial}" "${destination}"
+    # Normalize zip, gzip, and raw sources into one staged destination file.
+    if ! {
+      case "${download}" in
+        *.zip)
+          unzip -p "${download}" "${member}" > "${partial}"
+          ;;
+        *.gz)
+          gzip -dc "${download}" > "${partial}"
+          ;;
+        *)
+          cp "${download}" "${partial}"
+          ;;
+      esac
+    } || ! verify_file "${partial}" "${md5}"; then
+      rm -f "${partial}" "${download}"
+      if [[ "${attempt}" -eq 2 ]]; then
+        return 1
+      fi
+      echo "[RETRY] Re-downloading $(basename "${download}")"
+      continue
+    fi
+
+    mv "${partial}" "${destination}"
+    return
+  done
 }
 
 # Parse the manifest one row at a time and install each payload in order.
