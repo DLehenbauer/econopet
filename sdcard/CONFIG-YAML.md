@@ -66,23 +66,22 @@ The `set` action can configure these firmware options:
 Use the `mount` action to select the images inserted by a configuration.
 `device` is `8` through `11`, `drive` is `0` or `1`, and `file` is the image
 path relative to `/disks`. The path is opened directly; for example, use
-`superpet/os9/os9-system.d80` for `/disks/superpet/os9/os9-system.d80`:
+`example.d80` for `/disks/example.d80`:
 
 ```yaml
       - action: "mount"
         device: 8
         drive: 0
-        file: "os9-system.d80"
+        file: "example1.d80"
       - action: "mount"
         device: 8
         drive: 1
-        file: "os9-data.d80"
+        file: "example2.d80"
 ```
 
-Disk images are not mounted by filename automatically. Mounting an image
-enables the virtual IEEE-488 drives; selecting another configuration removes
-the images mounted by the previous configuration and disables emulation when
-no images remain.
+Mounting an image enables the virtual IEEE-488 drives. Selecting another
+configuration removes the images mounted by the previous configuration and
+disables emulation when no images remain.
 
 [^vram-3]: `video-ram-kb: 3` activates the experimental ColourPET 40-column mode.
 
