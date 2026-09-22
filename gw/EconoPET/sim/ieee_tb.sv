@@ -249,11 +249,80 @@ module ieee_tb;
         mcu_write(IEEE_REG_CTRL, 8'h03);
         mcu_write(IEEE_REG_CTRL, 8'h01);
 
+        // CTRL flush clears every FIFO, while data-only flush preserves the
+        // status FIFO. The data FIFO advertises room only for complete
+        // 64-byte bursts and accepts exactly its advertised capacity.
+        mcu_write(IEEE_REG_TX, 8'hA0);
+        mcu_write(IEEE_REG_TXS, 8'hB0);
+        mcu_write(IEEE_REG_CTRL, 8'h03);
+        @(posedge sys_clock);
+        `assert_equal(dut.rx_count, 0);
+        `assert_equal(dut.tx_count, 0);
+        `assert_equal(dut.txs_count, 0);
+
+        mcu_write(IEEE_REG_TX, 8'hA0);
+        mcu_write(IEEE_REG_TXS, 8'hB0);
+        mcu_write(IEEE_REG_CTRL, 8'h05);
+        @(posedge sys_clock);
+        `assert_equal(dut.tx_count, 0);
+        `assert_equal(dut.txs_count, 1);
+        mcu_write(IEEE_REG_CTRL, 8'h03);
+        @(posedge sys_clock);
+
+        for (int i = 0; i < 960; i++) mcu_write(IEEE_REG_TX, i[7:0]);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal(d[1], 1'b1);
+        mcu_write(IEEE_REG_TX, 8'hC0);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal(d[1], 1'b0);
+        for (int i = 0; i < 63; i++) mcu_write(IEEE_REG_TX, i[7:0]);
+        mcu_read(IEEE_REG_STATUS, st);
+        `assert_equal(st[2], 1'b1);
+        mcu_write(IEEE_REG_CTRL, 8'h05);
+        @(posedge sys_clock);
+        mcu_read(IEEE_REG_STATUS, st);
+        `assert_equal(st[2], 1'b0);
+        `assert_equal(st[3], 1'b1);
+
         // Kernel-style init of controller-side registers
         cpu_write(0, 1, 0, 4'd1, 8'h3C);   // PIA2 CRA: CA2 high (NDAC released)
         cpu_write(0, 1, 0, 4'd3, 8'h3C);   // PIA2 CRB: CB2 high (DAV released)
         cpu_write(0, 1, 0, 4'd2, 8'hFF);   // DIO released
         cpu_write(0, 0, 1, 4'd0, 8'hFF);   // VIA ORB: ATN/NRFD released
+
+        // Status and file data use separate FIFOs. A status transaction must
+        // not consume the queued file bytes, and each LAST register applies
+        // EOI only to its respective FIFO.
+        mcu_write(IEEE_REG_TX, 8'hA0);
+        mcu_write(IEEE_REG_TX_LAST, 8'hA1);
+        ctl_atn(1);
+        ctl_send(8'h48);                   // TALK 8
+        ctl_send(8'h6F);                   // secondary 15
+        ctl_atn(0);
+        mcu_push("S", 1);
+        ctl_recv(d, eoi);
+        `assert_equal(d, "S");
+        `assert_equal(eoi, 1'b0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, 8'h0D);
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);                   // UNTALK
+        ctl_send(8'h48);                   // TALK 8
+        ctl_send(8'h60);                   // secondary 0
+        ctl_atn(0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, 8'hA0);
+        `assert_equal(eoi, 1'b0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, 8'hA1);
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);                   // UNTALK
+        ctl_atn(0);
+        mcu_drain_rx;
+        rx_bytes.delete();
+        rx_isatn.delete();
 
         // --- Command phase: LISTEN 8, OPEN ch0, name, UNLISTEN ---
         ctl_atn(1);
@@ -266,14 +335,29 @@ module ieee_tb;
         ctl_send(8'h3F);                   // UNLISTEN
         ctl_atn(0);
 
-        // MCU sees the tagged command/data stream
+        // RX reads must be side-effect-free because SPI prefetches the next
+        // register. Only a write to RX pops the current tagged entry.
+        mcu_read(IEEE_REG_STATUS, st);
+        `assert_equal(st[0], 1'b1);
+        `assert_equal(st[1], 1'b1);
+        mcu_read(IEEE_REG_RX, d);
+        `assert_equal(d, 8'h28);
+        mcu_read(IEEE_REG_RX, d);
+        `assert_equal(d, 8'h28);
+        mcu_write(IEEE_REG_RX, 8'h00);
+        mcu_read(IEEE_REG_STATUS, st);
+        `assert_equal(st[0], 1'b1);
+        `assert_equal(st[1], 1'b1);
+        mcu_read(IEEE_REG_RX, d);
+        `assert_equal(d, 8'hF0);
+
+        // MCU sees the remaining tagged command/data stream.
         mcu_drain_rx;
-        `assert_equal(rx_bytes.size(), 14);
-        `assert_equal(rx_isatn[0], 1);  `assert_equal(rx_bytes[0], 8'h28);
-        `assert_equal(rx_isatn[1], 1);  `assert_equal(rx_bytes[1], 8'hF0);
-        `assert_equal(rx_isatn[2], 0);  `assert_equal(rx_bytes[2], "1");
-        `assert_equal(rx_isatn[12], 0); `assert_equal(rx_bytes[12], "G");
-        `assert_equal(rx_isatn[13], 1); `assert_equal(rx_bytes[13], 8'h3F);
+        `assert_equal(rx_bytes.size(), 13);
+        `assert_equal(rx_isatn[0], 1);  `assert_equal(rx_bytes[0], 8'hF0);
+        `assert_equal(rx_isatn[1], 0);  `assert_equal(rx_bytes[1], "1");
+        `assert_equal(rx_isatn[11], 0); `assert_equal(rx_bytes[11], "G");
+        `assert_equal(rx_isatn[12], 1); `assert_equal(rx_bytes[12], 8'h3F);
         mcu_read(IEEE_REG_SA, d);
         `assert_equal(d, 8'hF0);
 

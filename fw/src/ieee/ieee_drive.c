@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(PICO_RP2040)
 #include "pico/time.h"
+#endif
 
 #include "diag/log/log.h"
 #include "diskimage.h"
@@ -264,6 +266,36 @@ static uint8_t ch15_cmd[40];
 static unsigned int ch15_cmd_len = 0;
 static bool collecting_ch15 = false;
 static uint8_t listen_chan = 0xFF;  // active LISTEN data channel, $FF = none
+
+// Resets DOS and protocol state that must not outlive initialization.
+static void reset_protocol_state(void) {
+    for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
+        status_code[unit] = st_code_power_on;
+    }
+
+    mcu_listening = false;
+    mcu_talking = false;
+    listen_unit = 0;
+    talk_unit = 0;
+    ch15_unit = 0;
+    open_unit = 0;
+    file_unit = 0;
+    stream_drive = 0;
+    collecting_name = false;
+    open_name_len = 0;
+    open_chan = 0;
+    file_open_ok = false;
+    file_chan = 0;
+    stream = (diskstream_t) { 0 };
+    streaming = false;
+    stream_finished = false;
+    streamed_bytes = 0;
+    memset(rel_chans, 0, sizeof(rel_chans));
+    memset(ch15_cmd, 0, sizeof(ch15_cmd));
+    ch15_cmd_len = 0;
+    collecting_ch15 = false;
+    listen_chan = 0xFF;
+}
 
 // Position the engine at record 'rec', byte 'pos' within it, and compute
 // the trimmed length (last non-zero byte), like vdrive_rel_position.
@@ -686,10 +718,9 @@ static void sync_emulation_enabled(void) {
 }
 
 void ieee_drive_init(void) {
-    // The machine behaves like a stock PET until a configuration mounts an
-    // image. With no images, the fabric remains transparent to real drives.
-    emulation_enabled = false;
-    spi_write_at(IEEE_REG_CTRL, 0);   // ensure fabric transparent at boot
+    // Initialization always starts from a stock-PET bus and fresh DOS state.
+    ieee_drive_unmount_all();
+    reset_protocol_state();
 }
 
 void ieee_drive_unmount_all(void) {
