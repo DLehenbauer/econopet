@@ -17,12 +17,12 @@
 // ieee.sv for semantics).
 #define ADDR_IEEE (0b01110 << 15)
 
-#define IEEE_REG_CTRL    (ADDR_IEEE + 0)
-#define IEEE_REG_STATUS  (ADDR_IEEE + 1)
-#define IEEE_REG_RX      (ADDR_IEEE + 2)
-#define IEEE_REG_TX      (ADDR_IEEE + 3)
-#define IEEE_REG_TX_LAST (ADDR_IEEE + 4)
-#define IEEE_REG_SA      (ADDR_IEEE + 5)
+#define IEEE_REG_CTRL     (ADDR_IEEE + 0)
+#define IEEE_REG_STATUS   (ADDR_IEEE + 1)
+#define IEEE_REG_RX       (ADDR_IEEE + 2)
+#define IEEE_REG_TX       (ADDR_IEEE + 3)
+#define IEEE_REG_TX_LAST  (ADDR_IEEE + 4)
+#define IEEE_REG_SA       (ADDR_IEEE + 5)
 #define IEEE_REG_TXS      (ADDR_IEEE + 6)   // status-channel TX
 #define IEEE_REG_TXS_LAST (ADDR_IEEE + 7)   // status-channel TX, final byte (EOI)
 
