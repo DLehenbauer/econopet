@@ -250,6 +250,9 @@ uint64_t time_us_64(void) {
 // System mocks
 // ---------------------------------------------------------------------------
 
+// Mock fatal function. Prints the formatted error message to stderr, then calls
+// abort().  If the test case expects fatal to be called, use
+// `tcase_add_test_raise_signal(tc, test_fn, SIGABRT)` in a forked runner.
 void fatal(const char* const format, ...) {
     va_list args;
     va_start(args, format);
