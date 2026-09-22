@@ -4,91 +4,13 @@
 #include "pch.h"
 #include "breakpoint_test.h"
 
-#include <string.h>
-
 #include "breakpoint.h"
 #include "diag/log/log.h"
-#include "driver.h"
+#include "mock.h"
+#include "system_state.h"
 
-// ---------------------------------------------------------------------------
-// Mock SRAM and FPGA state used by the driver stubs below.
-// ---------------------------------------------------------------------------
-
-#define MOCK_RAM_SIZE 0x10000
-static uint8_t mock_ram[MOCK_RAM_SIZE];
-
-static uint16_t mock_bp_addr;
-static bool     mock_bp_cleared;
-
-// Track the last spi_write_at call for assertions.
-static uint32_t last_write_addr;
-static uint8_t  last_write_data;
-
-// ---------------------------------------------------------------------------
-// Driver stubs (these replace the real SPI functions during testing).
-// ---------------------------------------------------------------------------
-
-uint8_t spi_read_at(uint32_t addr) {
-    ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
-    return mock_ram[addr];
-}
-
-void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
-    for (size_t i = 0; i < byteLength; i++) {
-        ck_assert_uint_lt(addr + i, MOCK_RAM_SIZE);
-        pDest[i] = mock_ram[addr + i];
-    }
-}
-
-uint8_t spi_write_at(uint32_t addr, uint8_t data) {
-    last_write_addr = addr;
-    last_write_data = data;
-    if (addr < MOCK_RAM_SIZE) {
-        mock_ram[addr] = data;
-    }
-    return 0;
-}
-
-void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
-    for (size_t i = 0; i < byteLength; i++) {
-        if (addr + i < MOCK_RAM_SIZE) {
-            mock_ram[addr + i] = pSrc[i];
-        }
-    }
-}
-
-uint8_t spi_read_next(void) {
-    return 0;
-}
-
-uint8_t spi_read_prev(void) {
-    return 0;
-}
-
-uint16_t bp_hit_addr(void) {
-    return mock_bp_addr;
-}
-
-void bp_clear_halt(void) {
-    mock_bp_cleared = true;
-    system_state.bp_halted = false;
-}
-
-void sleep_us(uint64_t us) {
-    (void)us;
-}
-
-// ---------------------------------------------------------------------------
-// Helper to reset mock state before each test.
-// ---------------------------------------------------------------------------
-
-static void mock_reset(void) {
-    memset(mock_ram, 0xEA, sizeof(mock_ram));  // Fill with NOP
-    system_state.bp_halted = false;
-    mock_bp_addr    = 0;
-    mock_bp_cleared = false;
-    last_write_addr = 0;
-    last_write_data = 0;
+static void reset_breakpoint_test(void) {
+    mock_reset();
     log_init();
     bp_init();
 }
@@ -104,12 +26,12 @@ static bp_result_t default_callback(uint16_t pc, void* context) {
 // ---------------------------------------------------------------------------
 
 START_TEST(test_bp_init_clears_table) {
-    mock_reset();
+    reset_breakpoint_test();
     ck_assert_int_eq(bp_count(), 0);
 } END_TEST
 
 START_TEST(test_bp_set_patches_sram) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0xA9;  // LDA #imm
 
     bp_set(0x0400, default_callback, NULL);
@@ -120,7 +42,7 @@ START_TEST(test_bp_set_patches_sram) {
 } END_TEST
 
 START_TEST(test_bp_remove_restores_sram) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0xA9;
 
     bp_set(0x0400, default_callback, NULL);
@@ -135,12 +57,12 @@ START_TEST(test_bp_remove_restores_sram) {
 } END_TEST
 
 START_TEST(test_bp_remove_nonexistent_fails) {
-    mock_reset();
+    reset_breakpoint_test();
     ck_assert(!bp_remove(0x0400));
 } END_TEST
 
 START_TEST(test_bp_remove_compacts_table) {
-    mock_reset();
+    reset_breakpoint_test();
     bp_set(0x0100, default_callback, NULL);
     bp_set(0x0200, default_callback, NULL);
     bp_set(0x0300, default_callback, NULL);
@@ -157,7 +79,7 @@ START_TEST(test_bp_remove_compacts_table) {
 } END_TEST
 
 START_TEST(test_bp_task_restores_and_rearms) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0x4C;  // JMP abs
 
     bp_set(0x0400, default_callback, NULL);
@@ -165,13 +87,12 @@ START_TEST(test_bp_task_restores_and_rearms) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr   = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     bp_task();
 
     // The halt should have been cleared.
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // After resume the breakpoint should be re-armed (STP written back).
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
@@ -181,24 +102,23 @@ START_TEST(test_bp_task_restores_and_rearms) {
 } END_TEST
 
 START_TEST(test_bp_task_unknown_addr) {
-    mock_reset();
+    reset_breakpoint_test();
 
     // No breakpoints set, but FPGA halted (e.g., user program contained STP).
     system_state.bp_halted = true;
-    mock_bp_addr   = 0x0800;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0800);
 
     bp_task();
 
     // Halt should still be cleared.
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // Table should remain empty.
     ck_assert_int_eq(bp_count(), 0);
 } END_TEST
 
 START_TEST(test_bp_set_saves_original) {
-    mock_reset();
+    reset_breakpoint_test();
 
     // Set different values at two addresses.
     mock_ram[0x0300] = 0x60;  // RTS
@@ -230,7 +150,7 @@ static bp_result_t test_callback(uint16_t pc, void* context) {
 }
 
 START_TEST(test_bp_callback_auto_resume) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0x4C;  // JMP abs
 
     // Reset callback state
@@ -246,8 +166,7 @@ START_TEST(test_bp_callback_auto_resume) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     // Run bp_task which should invoke the callback and auto-resume.
     bp_task();
@@ -258,14 +177,14 @@ START_TEST(test_bp_callback_auto_resume) {
     ck_assert_ptr_eq(callback_context, &test_context);
 
     // The halt should have been cleared (auto-resume happened).
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // Breakpoint should be re-armed.
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
 } END_TEST
 
 START_TEST(test_bp_callback_skip_one_byte) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0xA9;  // Original: LDA #imm
     mock_ram[0x0401] = 0x12;
     mock_ram[0x0402] = 0x34;
@@ -280,20 +199,19 @@ START_TEST(test_bp_callback_skip_one_byte) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     bp_task();
 
     ck_assert(callback_invoked);
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // After re-arm, STP should be back at $0400, original byte restored
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
 } END_TEST
 
 START_TEST(test_bp_callback_skip_two_bytes) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0xA9;  // Original bytes
     mock_ram[0x0401] = 0x12;
     mock_ram[0x0402] = 0x34;
@@ -307,13 +225,12 @@ START_TEST(test_bp_callback_skip_two_bytes) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     bp_task();
 
     ck_assert(callback_invoked);
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // Originals should be restored, STP re-armed
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
@@ -321,7 +238,7 @@ START_TEST(test_bp_callback_skip_two_bytes) {
 } END_TEST
 
 START_TEST(test_bp_callback_redirect_jmp) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0xA9;  // Original bytes
     mock_ram[0x0401] = 0x12;
     mock_ram[0x0402] = 0x34;
@@ -335,13 +252,12 @@ START_TEST(test_bp_callback_redirect_jmp) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     bp_task();
 
     ck_assert(callback_invoked);
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // Originals should be restored, STP re-armed
     ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
@@ -350,7 +266,7 @@ START_TEST(test_bp_callback_redirect_jmp) {
 } END_TEST
 
 START_TEST(test_bp_callback_oneshot) {
-    mock_reset();
+    reset_breakpoint_test();
     mock_ram[0x0400] = 0x4C;  // JMP abs
 
     // Reset callback state
@@ -363,13 +279,12 @@ START_TEST(test_bp_callback_oneshot) {
 
     // Simulate FPGA halt at $0400.
     system_state.bp_halted = true;
-    mock_bp_addr = 0x0400;
-    mock_bp_cleared = false;
+    mock_breakpoint_set_hit_addr(0x0400);
 
     bp_task();
 
     ck_assert(callback_invoked);
-    ck_assert(mock_bp_cleared);
+    ck_assert(mock_breakpoint_halt_was_cleared());
 
     // Original bytes should be restored (no STP).
     ck_assert_uint_eq(mock_ram[0x0400], 0x4C);
