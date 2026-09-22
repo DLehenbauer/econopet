@@ -1,7 +1,8 @@
-#define _GNU_SOURCE
-
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
+
+// Exposes the GNU fopencookie() declaration used by the custom file mock.
+#define _GNU_SOURCE
 
 #include "mock.h"
 
