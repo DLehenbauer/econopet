@@ -14,6 +14,7 @@
 #include "diag/log/log.h"
 #include "diskimage.h"
 #include "driver.h"
+#include "ieee_protocol.h"
 
 // FPGA register block (see gw common_pkg.sv WB_IEEE_BASE = 5'b01110 and
 // ieee.sv for semantics).
@@ -56,6 +57,10 @@
 #define NUM_UNITS  4
 #define NUM_DRIVES 8
 #define MAX_IMAGE_PATH 64
+
+static void ieee_ctrl_write(uint8_t value) {
+    spi_write_at(IEEE_REG_CTRL, value);
+}
 
 // ----------------------------------------------------------------------------
 // Disk images
@@ -325,7 +330,7 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 static void rel_serve(rel_channel_t* rc) {
     uint8_t buf[254];
 
-    spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+    ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
     while (!rc->missing && (int32_t) rc->bufptr > rc->length) {
         rel_position(rc, rc->cur_record + 1, 0);
@@ -459,7 +464,7 @@ static void resolve_open(void) {
     streaming = false;
     stream_finished = false;
     // New file: discard any stale queued data from a previous channel.
-    spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+    ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
     if (!drives[n].present) {
         status_code[open_unit] = st_code_file_not_found;
@@ -605,9 +610,9 @@ static void service_tx(void) {
 }
 
 static void handle_command(uint8_t cmd) {
-    switch (cmd & 0xE0) {
-        case 0x20:  // LISTEN / UNLISTEN
-            if (cmd == 0x3F) {
+    switch (IEEE_CMD_CLASS(cmd)) {
+        case IEEE_CMD_LISTEN_BASE:  // LISTEN / UNLISTEN
+            if (cmd == IEEE_CMD_UNLISTEN) {
                 if (collecting_name) resolve_open();
                 if (collecting_ch15) { collecting_ch15 = false; ch15_execute(); }
                 for (int i = 0; i < MAX_REL_CHANNELS; i++)
@@ -616,29 +621,29 @@ static void handle_command(uint8_t cmd) {
                 mcu_listening = false;
                 listen_chan = 0xFF;
             } else {
-                uint8_t a = cmd & 0x1F;
+                uint8_t a = IEEE_CMD_ADDRESS(cmd);
                 mcu_listening = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
                 if (mcu_listening) listen_unit = (uint8_t) (a - DEV_ADDR);
             }
             break;
 
-        case 0x40:  // TALK / UNTALK
-            if (cmd == 0x5F) {
+        case IEEE_CMD_TALK_BASE:  // TALK / UNTALK
+            if (cmd == IEEE_CMD_UNTALK) {
                 mcu_talking = false;
                 // Channel data persists across UNTALK (continuation) -- just
                 // pause the top-up until the next TALK on the data channel.
                 streaming = false;
             } else {
-                uint8_t a = cmd & 0x1F;
+                uint8_t a = IEEE_CMD_ADDRESS(cmd);
                 mcu_talking = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
                 if (mcu_talking) talk_unit = (uint8_t) (a - DEV_ADDR);
             }
             break;
 
-        case 0x60:  // secondary address (data channel)
+        case IEEE_CMD_SECONDARY_BASE:  // secondary address (data channel)
             if (mcu_listening) {
                 rel_channel_t* wrc;
-                listen_chan = cmd & 0x0F;
+                listen_chan = IEEE_CMD_CHANNEL(cmd);
                 if (listen_chan == 15) {
                     collecting_ch15 = true;
                     ch15_unit = listen_unit;
@@ -648,7 +653,7 @@ static void handle_command(uint8_t cmd) {
                 }
             }
             if (mcu_talking) {
-                uint8_t chan = cmd & 0x0F;
+                uint8_t chan = IEEE_CMD_CHANNEL(cmd);
                 rel_channel_t* rc;
                 if (chan == 15) {
                     push_status(talk_unit);
@@ -666,25 +671,25 @@ static void handle_command(uint8_t cmd) {
             }
             break;
 
-        case 0xE0:  // CLOSE ($Ex) / OPEN ($Fx)
-            if ((cmd & 0xF0) == 0xF0) {
+        case IEEE_CMD_CLOSE_BASE:  // CLOSE ($Ex) / OPEN ($Fx)
+            if (IEEE_CMD_IS_OPEN(cmd)) {
                 if (mcu_listening) {
-                    open_chan = cmd & 0x0F;
+                    open_chan = IEEE_CMD_CHANNEL(cmd);
                     open_unit = listen_unit;
                     collecting_name = true;
                     open_name_len = 0;
                 }
             } else {
                 if (mcu_listening) {
-                    rel_channel_t* rc = rel_find(listen_unit, cmd & 0x0F);
+                    rel_channel_t* rc = rel_find(listen_unit, IEEE_CMD_CHANNEL(cmd));
                     if (rc != NULL) {
                         rc->in_use = false;
-                        spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
-                    } else if (listen_unit == file_unit && (cmd & 0x0F) == file_chan) {
+                        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+                    } else if (listen_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
                         file_open_ok = false;
                         streaming = false;
                         stream_finished = false;
-                        spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+                        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
                     }
                 }
             }
@@ -709,10 +714,10 @@ static void sync_emulation_enabled(void) {
     }
     emulation_enabled = has_mounted_drive;
     if (emulation_enabled) {
-        spi_write_at(IEEE_REG_CTRL, IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
+        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
         log_info("ieee: virtual drive enabled");
     } else {
-        spi_write_at(IEEE_REG_CTRL, 0);
+        ieee_ctrl_write(0);
         log_info("ieee: virtual drive off (real hardware bus)");
     }
 }
