@@ -36,6 +36,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
+    ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/breakpoint_test.c
@@ -43,6 +44,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
+    ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
@@ -58,6 +60,10 @@ target_link_libraries(${PROJECT_NAME}
     subunit
     m
     yaml)
+
+# Route firmware fopen() calls through mock.c so registered disk fixtures use
+# in-memory cookie-backed FILE handles, while other paths use the real fopen().
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen)
 
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})

@@ -15,8 +15,8 @@
 // and CBM relative files (Super-OS/9).
 //
 
-// Initializes IEEE-488 emulation with no mounted images. The fabric remains
-// transparent until an image is mounted.
+// Initializes IEEE-488 emulation with no mounted images and fresh DOS/channel
+// state. The fabric remains transparent until an image is mounted.
 void ieee_drive_init(void);
 
 // Removes all mounted disk images.
