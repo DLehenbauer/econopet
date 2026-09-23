@@ -218,15 +218,14 @@ module main (
     //
     // SuperPET soft 6809
     //
-    // mc6809i is the vendored cavnex/mc6809 core (external/mc6809), wired
-    // directly (not through the mc6809.v/mc6809e.v wrappers) because
-    // timing_6809 generates E/Q itself rather than relying on the wrapper's
-    // own MRDY-gated clock-phase generator.
+    // superpet_mc6809 wraps the vendored cavnex/mc6809 core. timing_6809
+    // supplies E/Q directly rather than using the vendor wrappers' own
+    // MRDY-gated clock-phase generator.
     //
 
     logic [DATA_WIDTH-1:0] mc6809_dout;
     logic [CPU_ADDR_WIDTH-1:0] mc6809_addr;
-    logic mc6809_rnw, mc6809_bs, mc6809_ba, mc6809_avma, mc6809_busy, mc6809_lic;
+    logic mc6809_rnw, mc6809_busy, mc6809_lic, mc6809_sync;
     logic [111:0] mc6809_regdata;
 
     logic cpu6809_be, cpu6809_e, cpu6809_q;
@@ -287,30 +286,27 @@ module main (
         soft_cpu_data_q <= read_data_q;
     end
 
-    mc6809i mc6809 (
-        .D(soft_cpu_data_q),
-        .DOut(mc6809_dout),
-        .ADDR(mc6809_addr),
-        .RnW(mc6809_rnw),
-        .E(cpu6809_e),
-        .Q(cpu6809_q),
-        .BS(mc6809_bs),
-        .BA(mc6809_ba),
-        .nIRQ(!(cpu_irq_sync[1] || acia_irq)),
-        // No physical FIRQ line on this board (tied +5V on a real SuperPET
-        // too); only the Super-OS/9 MMU pulses it, to wake the core out of
-        // the flat-mode-exiting SYNC.
-        .nFIRQ(superpet_firq_n),
-        .nNMI(1'b1),
-        .AVMA(mc6809_avma),
-        .BUSY(mc6809_busy),
-        .LIC(mc6809_lic),
-        .nHALT(1'b1),
+    superpet_mc6809 mc6809 (
+        .data_i(soft_cpu_data_q),
+        .data_o(mc6809_dout),
+        .addr_o(mc6809_addr),
+        .rnw_o(mc6809_rnw),
+        .e_i(cpu6809_e),
+        .q_i(cpu6809_q),
+        .irq_ni(!(cpu_irq_sync[1] || acia_irq)),
+        // The MMU daughterboard disconnects the motherboard socket's FIRQ pin;
+        // its BA/BS decode is the relocated 6809's only FIRQ source.
+        .mmu_firq_ni(superpet_firq_n),
+        .nmi_ni(1'b1),
+        .busy_o(mc6809_busy),
+        .lic_o(mc6809_lic),
+        .halt_ni(1'b1),
         // Held in reset whenever the physical 6502 owns the bus, so the soft
         // core is quiescent and never drives the shared bus in 6502 mode.
-        .nRESET(!cpu_reset_i && cpu_is_6809),
-        .nDMABREQ(1'b1),
-        .RegData(mc6809_regdata)
+        .reset_ni(!cpu_reset_i && cpu_is_6809),
+        .dmabreq_ni(1'b1),
+        .regdata_o(mc6809_regdata),
+        .sync_o(mc6809_sync)
     );
 
     // Soft MOS 6502 core (external/m6502) -- the virtual PET CPU. Its falling
@@ -540,8 +536,7 @@ module main (
         .decoded_a15_o(decoded_a15),
         .decoded_a16_o(decoded_a16),
 
-        // Super-OS/9 MMU: SYNC bus state is BA=1/BS=0 on the 6809.
-        .sync_i(mc6809_ba && !mc6809_bs),
+        .sync_i(mc6809_sync),
         .superpet_flat_o(superpet_flat),
         .superpet_wp_o(superpet_wp),
         .superpet_firq_n_o(superpet_firq_n)
@@ -565,7 +560,6 @@ module main (
     logic [   DATA_WIDTH-1:0] crtc_wb_din;   // CRTC read back via Wishbone
     logic                     crtc_wb_stall;
     logic                     crtc_wb_ack;
-
 
     video video (
         // Wishbone controller used to fetch VRAM/VROM data

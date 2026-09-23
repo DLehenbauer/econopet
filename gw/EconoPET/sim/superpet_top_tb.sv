@@ -176,6 +176,15 @@ module superpet_top_tb;
         .spi_data_o(spi_rx_data)
     );
 
+    always_ff @(posedge sys_clock) begin
+        if (top.main.superpet_flat) begin
+            assert(!top.main.acia6551.enable_i)
+                else $fatal(1, "ACIA enabled in MMU flat mode");
+            assert(!top.main.dongle6702.enable_i)
+                else $fatal(1, "6702 enabled in MMU flat mode");
+        end
+    end
+
     task static spi_read (output logic [DATA_WIDTH-1:0] data_o);
         spi1_driver.read_next;
         data_o = spi_rx_data;
@@ -248,30 +257,30 @@ module superpet_top_tb;
         `assert_equal(dout, 8'h42);
 
         // --- Phase 2: SuperPET $9000-$9FFF bank switching ---
-        //   $0300: 86 05        LDA #$05        ; select bank 5
+        // Reproduces TEST.BANKS' first failing case. The program does not
+        // touch $EFF8 because the physical RAM R/W switch is in WRITE.
+        //
+        //   $0300: 86 0F        LDA #$0F        ; select bank 15
         //   $0302: B7 EF FC     STA $EFFC
-        //   $0305: 86 AA        LDA #$AA        ; write $AA to bank 5's $9000
-        //   $0307: B7 90 00     STA $9000
+        //   $0305: 86 00        LDA #$00
+        //   $0307: B7 90 00     STA $9000       ; bank 15 must be writable
         //   $030A: 86 00        LDA #$00        ; select bank 0
         //   $030C: B7 EF FC     STA $EFFC
-        //   $030F: 86 BB        LDA #$BB        ; write $BB to bank 0's $9000
+        //   $030F: 86 55        LDA #$55
         //   $0311: B7 90 00     STA $9000
-        //   $0314: 86 05        LDA #$05        ; select bank 5 again
+        //   $0314: 86 0F        LDA #$0F        ; select bank 15 again
         //   $0316: B7 EF FC     STA $EFFC
-        //   $0319: B6 90 00     LDA $9000       ; read back -- should be $AA,
-        //                                       ; not $BB, if bank 5's data
-        //                                       ; survived switching away
-        //                                       ; and back.
+        //   $0319: B6 90 00     LDA $9000       ; must still contain $00
         //   $031C: B7 02 00     STA $0200
-        //   $031F: 20 FE        BRA $031F (infinite self-loop)
-        $display("[%t]   Phase 2: bank switching ($EFFC)", $time);
+        //   $031F: 20 FE        BRA $031F
+        $display("[%t]   Phase 2: TEST.BANKS bank-15 latch sequence", $time);
         spi_write_at(common_pkg::wb_ram_addr(17'h00300), 8'h86);
-        spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'h05);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'h0F);
         spi_write_at(common_pkg::wb_ram_addr(17'h00302), 8'hB7);
         spi_write_at(common_pkg::wb_ram_addr(17'h00303), 8'hEF);
         spi_write_at(common_pkg::wb_ram_addr(17'h00304), 8'hFC);
         spi_write_at(common_pkg::wb_ram_addr(17'h00305), 8'h86);
-        spi_write_at(common_pkg::wb_ram_addr(17'h00306), 8'hAA);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00306), 8'h00);
         spi_write_at(common_pkg::wb_ram_addr(17'h00307), 8'hB7);
         spi_write_at(common_pkg::wb_ram_addr(17'h00308), 8'h90);
         spi_write_at(common_pkg::wb_ram_addr(17'h00309), 8'h00);
@@ -281,12 +290,12 @@ module superpet_top_tb;
         spi_write_at(common_pkg::wb_ram_addr(17'h0030D), 8'hEF);
         spi_write_at(common_pkg::wb_ram_addr(17'h0030E), 8'hFC);
         spi_write_at(common_pkg::wb_ram_addr(17'h0030F), 8'h86);
-        spi_write_at(common_pkg::wb_ram_addr(17'h00310), 8'hBB);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00310), 8'h55);
         spi_write_at(common_pkg::wb_ram_addr(17'h00311), 8'hB7);
         spi_write_at(common_pkg::wb_ram_addr(17'h00312), 8'h90);
         spi_write_at(common_pkg::wb_ram_addr(17'h00313), 8'h00);
         spi_write_at(common_pkg::wb_ram_addr(17'h00314), 8'h86);
-        spi_write_at(common_pkg::wb_ram_addr(17'h00315), 8'h05);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00315), 8'h0F);
         spi_write_at(common_pkg::wb_ram_addr(17'h00316), 8'hB7);
         spi_write_at(common_pkg::wb_ram_addr(17'h00317), 8'hEF);
         spi_write_at(common_pkg::wb_ram_addr(17'h00318), 8'hFC);
@@ -300,6 +309,7 @@ module superpet_top_tb;
         spi_write_at(common_pkg::wb_ram_addr(17'h00320), 8'hFE);
 
         spi_write_at(common_pkg::wb_ram_addr(17'h00200), 8'h00);  // poison
+        spi_write_at(common_pkg::wb_ram_addr(17'h1F000), 8'h55);  // failed-write sentinel
 
         $display("[%t]   Re-asserting and releasing reset for phase 2", $time);
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
@@ -308,8 +318,89 @@ module superpet_top_tb;
 
         #800000;
 
+        $display("[%t]   RAM[$0200] (direct peek) = $%02x (expect $00)", $time, mock_sram.mem[17'h00200]);
+        `assert_equal(mock_sram.mem[17'h00200], 8'h00);
+        `assert_equal(mock_sram.mem[17'h10000], 8'h55);
+        `assert_equal(mock_sram.mem[17'h1F000], 8'h00);
+
+        // --- Phase 3: Super-OS/9 flat-mode SYNC exit ---
+        // FIRQ remains masked after reset, so the MMU request wakes SYNC
+        // without taking the vector.
+        //
+        // Main RAM:
+        //   $0300: 12 12        NOP / NOP
+        //   $0302: C6 40        LDB #$40       ; enter flat mode
+        //   $0304: F7 EF FC     STB $EFFC
+        //   $030D: C6 40        LDB #$40       ; re-enter flat mode
+        //   $030F: F7 EF FC     STB $EFFC
+        //   $0316: B7 02 00     STA $0200      ; store flat $EFFC readback
+        //   $0319: 20 FE        BRA $0319
+        //
+        // Expansion RAM:
+        //   $0307: C6 AA        LDB #$AA
+        //   $0309: F7 EF FC     STB $EFFC       ; must be an expansion-RAM write
+        //   $030C: 13           SYNC            ; return to banked mode
+        //   $0312: B6 EF FC     LDA $EFFC       ; must still read $AA after re-entry
+        //   $0315: 13           SYNC            ; return to banked mode
+        //
+        // FIRQ vector:
+        //   $0400: 86 EE        LDA #$EE        ; unexpected FIRQ handler
+        //   $0402: B7 02 00     STA $0200
+        //   $0405: 20 FE        BRA $0405
+        $display("[%t]   Phase 3: flat-mode SYNC exit", $time);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00300), 8'h12);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'h12);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00302), 8'hC6);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00303), 8'h40);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00304), 8'hF7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00305), 8'hEF);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00306), 8'hFC);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0030D), 8'hC6);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0030E), 8'h40);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0030F), 8'hF7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00310), 8'hEF);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00311), 8'hFC);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00316), 8'hB7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00317), 8'h02);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00318), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00319), 8'h20);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0031A), 8'hFE);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10307), 8'hC6);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10308), 8'hAA);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10309), 8'hF7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h1030A), 8'hEF);
+        spi_write_at(common_pkg::wb_ram_addr(17'h1030B), 8'hFC);
+        spi_write_at(common_pkg::wb_ram_addr(17'h1030C), 8'h13);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10312), 8'hB6);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10313), 8'hEF);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10314), 8'hFC);
+        spi_write_at(common_pkg::wb_ram_addr(17'h10315), 8'h13);
+
+        spi_write_at(common_pkg::wb_ram_addr(17'h00400), 8'h86);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00401), 8'hEE);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00402), 8'hB7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00403), 8'h02);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00404), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00405), 8'h20);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00406), 8'hFE);
+
+        spi_write_at(common_pkg::wb_ram_addr(17'h0FFF6), 8'h04);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0FFF7), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0FFFE), 8'h03);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0FFFF), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00200), 8'h00);
+
+        $display("[%t]   Re-asserting and releasing reset for phase 3", $time);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
+        #20000;
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+
+        #800000;
+
         $display("[%t]   RAM[$0200] (direct peek) = $%02x (expect $AA)", $time, mock_sram.mem[17'h00200]);
         `assert_equal(mock_sram.mem[17'h00200], 8'hAA);
+        $display("[%t]   expansion RAM[$EFFC] = $%02x (expect $AA)", $time, mock_sram.mem[17'h1EFFC]);
+        `assert_equal(mock_sram.mem[17'h1EFFC], 8'hAA);
 
         $display("[%t] END SuperPET 6809 smoke test", $time);
     endtask
