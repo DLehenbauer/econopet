@@ -720,7 +720,6 @@ static void sync_emulation_enabled(void) {
 void ieee_drive_init(void) {
     // Initialization always starts from a stock-PET bus and fresh DOS state.
     ieee_drive_unmount_all();
-    reset_protocol_state();
 }
 
 void ieee_drive_unmount_all(void) {
@@ -731,6 +730,7 @@ void ieee_drive_unmount_all(void) {
             chain_cache[n][i].valid = false;
         }
     }
+    reset_protocol_state();
     sync_emulation_enabled();
 }
 
