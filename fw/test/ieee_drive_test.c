@@ -45,14 +45,28 @@ static void enqueue_name(const char* name) {
     for (const char* c = name; *c != '\0'; c++) mock_ieee_enqueue_rx(false, (uint8_t) *c);
 }
 
-// Asserts the status FIFO holds exactly one expected DOS line with EOI on CR.
-static void assert_status(const char* expected) {
-    const size_t length = strlen(expected);
-    ck_assert_uint_eq(mock_ieee_status_count(), length);
+// Asserts the status FIFO contains a complete dual-drive DOS status record.
+static void assert_status(unsigned int expected_code, unsigned int expected_drive) {
+    char line[40];
+    const size_t length = mock_ieee_status_count();
+    unsigned int code, track, sector, drive;
+    char message[24];
+    int consumed = 0;
+
+    ck_assert_uint_lt(length, sizeof(line));
     for (size_t index = 0; index < length; index++) {
-        ck_assert_uint_eq(mock_ieee_status_byte(index), (uint8_t) expected[index]);
+        line[index] = (char) mock_ieee_status_byte(index);
         ck_assert_int_eq(mock_ieee_status_eoi(index), index == length - 1);
     }
+    line[length] = '\0';
+
+    ck_assert_int_eq(sscanf(line, "%2u,%23[^,],%2u,%2u,%u\r%n",
+                            &code, message, &track, &sector, &drive, &consumed), 5);
+    ck_assert_int_eq(consumed, length);
+    ck_assert_uint_eq(code, expected_code);
+    ck_assert_uint_eq(track, 0);
+    ck_assert_uint_eq(sector, 0);
+    ck_assert_uint_eq(drive, expected_drive);
 }
 
 // Converts external device/drive coordinates to the production mount slot.
@@ -153,7 +167,7 @@ START_TEST(test_d64_mount_open_status_and_stream) {
     // Read the completed OPEN status through the unit's command channel.
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
-    assert_status("00, OK,00,00\r");
+    assert_status(0, drive);
 
     // Readdress the file channel and inspect the complete sector-chain stream.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(0));
@@ -239,7 +253,7 @@ START_TEST(test_power_on_status_is_served_before_any_operation) {
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // Newly mounted units report the firmware power-on identification.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status(73, 0);
 }
 END_TEST
 
@@ -254,7 +268,7 @@ START_TEST(test_status_read_resets_to_ok) {
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The first read observes status 73.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status(73, 0);
 
     // Consume the mock response, then readdress channel 15.
     mock_ieee_clear_status();
@@ -262,7 +276,7 @@ START_TEST(test_status_read_resets_to_ok) {
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // Status reads acknowledge the line, leaving the next read at status 00.
-    assert_status("00, OK,00,00\r");
+    assert_status(0, 0);
 }
 END_TEST
 
@@ -280,7 +294,7 @@ START_TEST(test_missing_file_reports_status_62) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The failed directory lookup must become DOS error 62 on channel 15.
-    assert_status("62,FILE NOT FOUND,00,00\r");
+    assert_status(62, drive);
 }
 END_TEST
 
@@ -303,7 +317,7 @@ START_TEST(test_status_is_isolated_per_unit) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(target_device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The untouched neighbor retains its independent power-on status.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status(73, 0);
 }
 END_TEST
 
@@ -418,7 +432,7 @@ START_TEST(test_initialize_command_clears_error_status) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // I clears the pending file-not-found error to DOS status 00.
-    assert_status("00, OK,00,00\r");
+    assert_status(0, drive);
 }
 END_TEST
 
@@ -450,7 +464,7 @@ START_TEST(test_corrupt_sequential_chain_reports_read_error) {
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The incomplete chain records DOS read error 23 on channel 15.
-    assert_status("23,READ ERROR,00,00\r");
+    assert_status(23, drive);
 }
 END_TEST
 
@@ -469,7 +483,7 @@ START_TEST(test_validate_command_clears_error_status) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // V clears the pending file-not-found error to DOS status 00.
-    assert_status("00, OK,00,00\r");
+    assert_status(0, drive);
 }
 END_TEST
 
@@ -564,7 +578,7 @@ START_TEST(test_relative_position_past_end_reports_50) {
 
     // The command channel exposes the missing-record DOS status.
     // The command channel exposes the missing-record DOS status.
-    assert_status("50,RECORD NOT PRESENT,00,00\r");
+    assert_status(50, drive);
 }
 END_TEST
 
@@ -589,7 +603,7 @@ START_TEST(test_relative_write_to_read_only_image_reports_26) {
 
     // The command channel must report write protection instead of success.
     // A failed commit must report write protection rather than status 00.
-    assert_status("26,WRITE PROTECT ON,00,00\r");
+    assert_status(26, drive);
 }
 END_TEST
 
@@ -742,7 +756,7 @@ START_TEST(test_relative_write_past_record_reports_51) {
     ieee_drive_task();
 
     // The excess byte must surface as DOS record-overflow status 51.
-    assert_status("51,OVERFLOW IN RECORD,00,00\r");
+    assert_status(51, drive);
 }
 END_TEST
 
