@@ -51,8 +51,8 @@ typedef enum pet_display_columns_e {
 } pet_display_columns_t;
 
 typedef enum video_source_e {
-    video_source_pet,       // HDMI shows what 6502 writes to $8000
-    video_source_firmware,  // HDMI shows firmware-controlled buffer
+    video_source_pet,       // $8000 mirrored to `video_char_buffer`
+    video_source_firmware,  // `video_char_buffer` mirrored to $8000
 } video_source_t;
 
 typedef enum term_mode_e {
@@ -66,6 +66,11 @@ typedef enum term_input_dest_e {
     term_input_to_pet,      // Inject as PET keystrokes
     term_input_to_firmware, // Route to firmware (menu, etc.)
 } term_input_dest_t;
+
+typedef enum video_graphics_mode_e {
+    video_graphics_mode_graphics, // CA2 low: uppercase/graphics charset
+    video_graphics_mode_text,     // CA2 high: lowercase/text charset
+} video_graphics_mode_t;
 
 typedef struct __attribute__((packed)) usb_keymap_entry_s {
     // First byte contains PET keyboard matrix row/col packed as nibbles
@@ -120,8 +125,8 @@ typedef struct system_state_s {
     // Video character buffer (shared between PET, DVI output, and terminal)
     uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];
 
-    // Video graphics mode flag (false = lowercase/business charset, true = uppercase/graphics charset)
-    bool video_graphics;
+    // Character-ROM charset selected by PET VIA CA2/A10.
+    video_graphics_mode_t video_graphics_mode;
 
     // True when the FPGA has halted the CPU on a breakpoint (STP opcode)
     bool bp_halted;

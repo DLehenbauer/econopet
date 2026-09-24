@@ -244,10 +244,7 @@ static bp_result_t tape_load_directory(uint16_t pc) {
 
     uint64_t free_bytes = sd_free_bytes();
 
-    // system_state.video_graphics mirrors the PET's CA2/char-ROM A10 line, where
-    // 0 selects the graphics charset and 1 selects the text/business charset. So
-    // the graphics charset is active when video_graphics is false.
-    bool graphics_charset = !system_state.video_graphics;
+    bool graphics_charset = system_state.video_graphics_mode == video_graphics_mode_graphics;
 
     static uint8_t image[DIR_IMAGE_CAPACITY];
     size_t image_len = tape_dir_render(image, sizeof(image), BASIC_START,
@@ -396,7 +393,7 @@ static bp_result_t tape_load_callback(uint16_t pc, void* context) {
     char msg[STUB_MAX_LINE1 + 1];
     snprintf(msg, sizeof(msg), "%s%.*s", found_prefix,
              (int)(STUB_MAX_LINE1 - (sizeof(found_prefix) - 1)), path);
-    bool graphics_charset = !system_state.video_graphics;
+    bool graphics_charset = system_state.video_graphics_mode == video_graphics_mode_graphics;
     uint8_t stub_buf[TAPE_BUFFER_CAPACITY];
     size_t stub_len = tape_build_stub(stub_buf, msg, graphics_charset);
     spi_write(TAPE_BUFFER, stub_buf, stub_len);
