@@ -747,7 +747,9 @@ void sync_state() {
 
     // Read status register flags
     uint8_t status = spi_read_at(REG_STATUS);
-    system_state.video_graphics = (status & REG_STATUS_GRAPHICS) != 0;
+    system_state.video_graphics_mode = (status & REG_STATUS_GRAPHICS) != 0
+        ? video_graphics_mode_text
+        : video_graphics_mode_graphics;
     system_state.bp_halted = (status & REG_STATUS_BP_HALT) != 0;
 }
 

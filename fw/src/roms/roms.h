@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "system_state.h"
+
 #define MENU_ROM_START_ADDRESS 0xFF00
 
 extern const uint8_t rom_chars_e800[0x800];
@@ -13,7 +15,7 @@ extern const uint8_t* const p_video_font_400;
 void roms_refresh_char_rom(void);
 
 // 1KB glyph table for the HDMI renderer.
-const uint8_t* roms_get_char_rom(bool video_graphics);
+const uint8_t* roms_get_char_rom(video_graphics_mode_t mode);
 
 /**
  * Reason for starting the menu ROM. Each entry corresponds to a jump table

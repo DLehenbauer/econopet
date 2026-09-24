@@ -202,7 +202,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
         );
 
         // Select graphics/text character ROM
-        p_char_rom = roms_get_char_rom(system_state.video_graphics);
+        p_char_rom = roms_get_char_rom(system_state.video_graphics_mode);
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);
