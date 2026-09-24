@@ -11,6 +11,13 @@
 #include "system_state.h"
 
 static void reset_breakpoint_test(void) {
+    // Breakpoint tests share a process, so remove entries left by the prior test
+    // before simulating startup with an empty table.
+    while (bp_count() > 0) {
+        const uint16_t addr = bp_get(0)->addr;
+        ck_assert(bp_remove(addr));
+    }
+
     mock_reset();
     log_init();
     bp_init();
@@ -27,11 +34,9 @@ static bp_result_t default_callback(uint16_t pc, void* context) {
 // ---------------------------------------------------------------------------
 
 START_TEST(test_bp_init_clears_fpga_and_mcu_state) {
-    reset_breakpoint_test();
-    bp_set(0x0400, default_callback, NULL);
-
     // Simulate an FPGA halt that was latched before the MCU restarted.
     mock_reset();
+    log_init();
     system_state.bp_halted = true;
     bp_init();
 
@@ -50,6 +55,13 @@ START_TEST(test_bp_init_accepts_ready_cpu_in_reset) {
 
     ck_assert(mock_breakpoint_halt_was_cleared());
     ck_assert(get_cpu() == (CPU_READY | CPU_RESET));
+} END_TEST
+
+START_TEST(test_bp_init_rejects_nonempty_table) {
+    reset_breakpoint_test();
+    bp_set(0x0400, default_callback, NULL);
+
+    bp_init();
 } END_TEST
 
 START_TEST(test_bp_set_patches_sram) {
@@ -338,6 +350,15 @@ Suite *breakpoint_suite(void) {
     tcase_add_test(tc, test_bp_callback_redirect_jmp);
     tcase_add_test(tc, test_bp_callback_oneshot);
     suite_add_tcase(s, tc);
+    return s;
+}
 
+Suite *breakpoint_fatal_suite(void) {
+    Suite *s = suite_create("breakpoint-fatal");
+
+    TCase *tc = tcase_create("core");
+    tcase_add_test_raise_signal(tc, test_bp_init_rejects_nonempty_table, SIGABRT);
+
+    suite_add_tcase(s, tc);
     return s;
 }

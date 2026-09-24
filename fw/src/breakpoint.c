@@ -26,7 +26,9 @@ static int bp_find(uint16_t addr) {
 }
 
 void bp_init() {
-    // Require that the CPU is current reset or halted to prevent a race with
+    vet(bp_entry_count == 0, "bp_init: breakpoint table must be empty");
+
+    // Require that the CPU is currently in reset or halted to prevent a race with
     // the CPU hitting a breakpoint while we are clearing the breakpoint state.
     const cpu_state_t cpu_state = get_cpu();
     vet((cpu_state & CPU_RESET) || !(cpu_state & CPU_READY), "bp_init: CPU must be in reset or halted");
