@@ -56,3 +56,7 @@
 #else
     #include "../test/mock.h"
 #endif
+
+#ifndef MIN
+    #define MIN(a, b) ((b) > (a) ? (a) : (b))
+#endif

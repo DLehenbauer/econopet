@@ -154,7 +154,11 @@ void action_set_options(void* context, options_t* options) {
             ctx->system_state->pet_display_columns = pet_display_columns_40;
             break;
         default:
-            vet(options->columns == 80, "Invalid 'columns:' in config (got %d)", options->columns);
+            vet(
+                options->columns == 80,
+                "Invalid 'columns:' in config (got %lu)",
+                (unsigned long) options->columns
+            );
             ctx->system_state->pet_display_columns = pet_display_columns_80;
             break;
     }

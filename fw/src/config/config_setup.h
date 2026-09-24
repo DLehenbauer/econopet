@@ -12,8 +12,6 @@
 typedef struct binary_s {
     uint8_t* data;
     size_t size;
-    size_t capacity;
-    size_t expected;
 } binary_t;
 
 typedef struct options_s {

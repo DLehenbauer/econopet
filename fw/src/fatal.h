@@ -5,13 +5,16 @@
 
 #include <stddef.h>
 
-void __attribute__((noreturn)) fatal(const char* const format, ...);
+// Format a fatal message into fixed storage, display it, then halt.
+void fatal(const char* const format, ...)
+    __attribute__((format(printf, 1, 2), noreturn));
+
 void* vetted_malloc(size_t __size);
 
 /**
  * Firmware assertion macro. If the condition is false, displays the formatted
  * error message on the PET's native display, HDMI output, and serial terminal,
- * then halts until the user presses [RETURN] or the menu button.
+ * then halts.
  */
 #define vet(cond, fmt, ...) \
     do { if (!(cond)) fatal(fmt, ##__VA_ARGS__); } while (0)

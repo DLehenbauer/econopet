@@ -4,10 +4,8 @@
 #include "pch.h"
 #include "config.h"
 
-#include "display/display.h"
 #include "driver.h"
 #include "fatal.h"
-#include "global.h"
 #include "sd/sd.h"
 #include "system_state.h"
 
@@ -28,43 +26,52 @@ typedef struct parser_s {
 
 typedef void (*parse_callback_t)(parser_t* parser);
 
-static void vfatal_parse_error(parser_t* parser, const char* format, va_list args) {
-    const window_t window = window_create(system_state.video_char_buffer, 40, 25);
-    display_window_begin(&window);
-
-    uint8_t* pOut = window_println(&window, window.start, "E: error parsing file:");
-    window_reverse(&window, window.start, 2);
-    pOut = window_println(&window, pOut, "'%s'", parser->filename);
-    pOut = window_println(&window, pOut, "");
-    
-    if (parser->parser.problem != NULL) {
-        pOut = window_println(&window, pOut,
-            "Line %zu, Column %zu: ",
-            parser->parser.problem_mark.line + 1,
-            parser->parser.problem_mark.column + 1);
-        pOut = window_println(&window, pOut,
-            parser->parser.problem);
-    } else {
-        pOut = window_println(&window, pOut,
-            "Line %zu, Column %zu: ",
-            parser->event.start_mark.line + 1,
-            parser->event.start_mark.column + 1);
+static void __attribute__((format(printf, 2, 0), noreturn)) vfatal_parse_error(
+    const parser_t* const parser,
+    const char* const format,
+    va_list args
+) {
+    char message[256];
+    const int written = vsnprintf(message, sizeof(message), format, args);
+    if (written < 0) {
+        strcpy(message, "unable to display error details");
+    } else if ((size_t) written >= sizeof(message)) {
+        strcpy(message, "error details too long to display");
     }
 
-    pOut = window_vprintln(&window, pOut, format, args);
+    const char* const problem = parser->parser.problem;
+    const yaml_mark_t* const mark = problem != NULL
+        ? &parser->parser.problem_mark
+        : &parser->event.start_mark;
 
-    display_window_show(&window);
-    abort();
+    fatal(
+        "error parsing file:\n'%s'\n\nLine %zu, Column %zu:\n%s%s%s",
+        parser->filename,
+        mark->line + 1,
+        mark->column + 1,
+        problem != NULL ? problem : "",
+        problem != NULL ? "\n" : "",
+        message
+    );
 }
 
-void fatal_parse_error(parser_t* parser, const char* const format, ...) {
+static void __attribute__((format(printf, 2, 3), noreturn)) fatal_parse_error(
+    const parser_t* const parser,
+    const char* const format,
+    ...
+) {
     va_list args;
     va_start(args, format);
     vfatal_parse_error(parser, format, args);
     va_end(args);
 }
 
-void vet_parser(parser_t* parser, bool condition, const char* const format, ...) {
+static void __attribute__((format(printf, 3, 4))) vet_parser(
+    const parser_t* const parser,
+    bool condition,
+    const char* const format,
+    ...
+) {
     if (!condition) {
         va_list args;
         va_start(args, format);
@@ -324,29 +331,24 @@ static void parse_as_uint32(parser_t* parser, void* context, size_t context_size
     return parse_uint32(parser, (uint32_t*) context);
 }
 
-static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
-    (void)context_size;
+static void parse_hex(parser_t* parser, binary_t* binary) {
     parse_expect_type(parser, YAML_SCALAR_EVENT);
-    assert(context_size == sizeof(binary_t));
 
-    binary_t* binary = (binary_t*) context;
-    if (binary->size != 0) {
+    if (binary->data != NULL || binary->size != 0) {
         fatal_parse_error(parser, "duplicate binary/hex entry");
     }
 
     const char* str = get_current_string(parser);
 
     size_t len = strlen(str);
-    if (binary->expected != 0 && len != binary->expected * 2) {
-        fatal_parse_error(parser, "expected %zu chars, got %zu", binary->expected, len);
+    if (len == 0) {
+        fatal_parse_error(parser, "hex string must not be empty");
     } else if (len % 2 != 0) {
         fatal_parse_error(parser, "hex string must have even length");
     }
 
     binary->size = len / 2;
-    if (binary->size > binary->capacity) {
-        fatal_parse_error(parser, "hex string exceeds expected size");
-    }
+    binary->data = vetted_malloc(binary->size);
 
     for (size_t write_index = 0, read_index = 0; write_index < binary->size; write_index++) {
         char hex_byte[3] = { str[read_index++], str[read_index++], '\0' };
@@ -358,6 +360,32 @@ static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
         }
 
         binary->data[write_index] = (uint8_t) value;
+    }
+}
+
+static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
+    (void) context_size;
+    assert(context_size == sizeof(binary_t));
+    parse_hex(parser, (binary_t*) context);
+}
+
+typedef struct fixed_hex_context_s {
+    binary_t* output;
+    size_t expected_size;
+} fixed_hex_context_t;
+
+static void parse_as_fixed_hex(parser_t* parser, void* context, size_t context_size) {
+    assert(context_size == sizeof(fixed_hex_context_t));
+    const fixed_hex_context_t* const fixed_hex = (const fixed_hex_context_t*) context;
+    parse_hex(parser, fixed_hex->output);
+
+    if (fixed_hex->output->size != fixed_hex->expected_size) {
+        fatal_parse_error(
+            parser,
+            "expected %zu chars, got %zu",
+            fixed_hex->expected_size * 2,
+            fixed_hex->output->size * 2
+        );
     }
 }
 
@@ -449,13 +477,7 @@ static void parse_action_patch(parser_t* parser, void* context, size_t context_s
 
     uint32_t address = 0;
 
-    uint8_t* binary_data = acquire_temp_buffer();
-    binary_t binary = {
-        .data = binary_data,
-        .size = 0,
-        .expected = 0,
-        .capacity = TEMP_BUFFER_SIZE
-    };
+    binary_t binary = { 0 };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "address", parse_as_uint32, &address, sizeof(uint32_t) },
@@ -464,7 +486,7 @@ static void parse_action_patch(parser_t* parser, void* context, size_t context_s
     });
 
     on_action_patch(parser, address, &binary);
-    release_temp_buffer(&binary_data);
+    free(binary.data);
 }
 
 static void parse_action_copy(parser_t* parser, void* context, size_t context_size) {
@@ -503,10 +525,18 @@ static void parse_action_mount(parser_t* parser, void* context, size_t context_s
     });
 
     if (device < 8 || device > 11) {
-        fatal_parse_error(parser, "Invalid IEEE device: %u (must be 8-11)", device);
+        fatal_parse_error(
+            parser,
+            "Invalid IEEE device: %lu (must be 8-11)",
+            (unsigned long) device
+        );
     }
     if (drive >= 2) {
-        fatal_parse_error(parser, "Invalid IEEE drive: %u (must be 0 or 1)", drive);
+        fatal_parse_error(
+            parser,
+            "Invalid IEEE drive: %lu (must be 0 or 1)",
+            (unsigned long) drive
+        );
     }
     if (filename[0] == '\0') {
         fatal_parse_error(parser, "Missing disk image filename");
@@ -522,13 +552,10 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     // Parse video-ram-kb from YAML (1-4), then convert to mask (0-3)
     uint32_t video_ram_kb = 1;  // Default: 1KB
 
-    // Temporary buffer for the tape hex blob (decoded via parse_as_hex).
-    uint8_t tape_blob_data[TAPE_CONFIG_SIZE];
-    binary_t tape_blob = {
-        .data = tape_blob_data,
-        .size = 0,
-        .expected = TAPE_CONFIG_SIZE,
-        .capacity = TAPE_CONFIG_SIZE,
+    binary_t tape_blob = { 0 };
+    fixed_hex_context_t tape_hex = {
+        .output = &tape_blob,
+        .expected_size = TAPE_CONFIG_SIZE,
     };
 
     // 'cpu' selects the in-fabric CPU; default auto (the
@@ -550,7 +577,7 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
         { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
         { "usb-keymap", parse_as_string, &options.usb_keymap, sizeof(options.usb_keymap) },
-        { "tape", parse_as_hex, &tape_blob, sizeof(tape_blob) },
+        { "tape", parse_as_fixed_hex, &tape_hex, sizeof(tape_hex) },
         { "cpu", parse_as_string, &cpu_str, sizeof(cpu_str) },
         { "machine", parse_as_string, &machine_str, sizeof(machine_str) },
         { NULL, NULL, NULL, 0 }
@@ -571,11 +598,19 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     }
 
     if (options.columns != 40 && options.columns != 80) {
-        fatal_parse_error(parser, "Invalid number of columns: %u (must be 40 or 80)", options.columns);
+        fatal_parse_error(
+            parser,
+            "Invalid number of columns: %lu (must be 40 or 80)",
+            (unsigned long) options.columns
+        );
     }
 
     if (video_ram_kb < 1 || video_ram_kb > 4) {
-        fatal_parse_error(parser, "Invalid video RAM size: %u KB (must be 1-4)", video_ram_kb);
+        fatal_parse_error(
+            parser,
+            "Invalid video RAM size: %lu KB (must be 1-4)",
+            (unsigned long) video_ram_kb
+        );
     }
 
     // Convert KB (1-4) to mask (0-3)
@@ -583,7 +618,6 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
 
     // If the tape hex blob was present, copy the decoded bytes into options.
     if (tape_blob.size != 0) {
-        assert(tape_blob.size == TAPE_CONFIG_SIZE);
         memcpy(&options.tape, tape_blob.data, TAPE_CONFIG_SIZE);
         options.tape_enabled = true;
     }
@@ -591,6 +625,8 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
     if (parser->executing && parser->sink->setup && parser->sink->setup->on_set_options) {
         parser->sink->setup->on_set_options(parser->sink->setup->context, &options);
     }
+
+    free(tape_blob.data);
 }
 
 static void parse_action_fix_checksum(parser_t* parser, void* context, size_t context_size) {

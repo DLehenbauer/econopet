@@ -126,12 +126,25 @@ uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char*
     return start;
 }
 
-// Write a null-terminated string to the window buffer. The string is truncated
-// if it exceeds the window size.
+// Write a null-terminated string to the window buffer. Newlines advance to the
+// next row and carriage returns are ignored. The string is truncated if it
+// exceeds the window size.
 //
 // The function returns the pointer to the next position in the window buffer after the string.
 uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str) {
-    return window_puts_n(window, start, str, /* length: */ window_chars_remaining(window, window->start));
+    while (*str != '\0' && start < window->end) {
+        if (*str == '\n') {
+            const size_t offset = (size_t)(start - window->start);
+            const size_t next_row = ((offset / window->width) + 1) * window->width;
+            const size_t window_size = (size_t)(window->end - window->start);
+            start = window->start + MIN(next_row, window_size);
+        } else if (*str != '\r') {
+            *start++ = ascii_to_vrom((uint8_t)*str);
+        }
+        str++;
+    }
+
+    return start;
 }
 
 uint8_t* window_vprint(const window_t* const window, uint8_t* start, const char* const format, va_list args) {
@@ -140,10 +153,9 @@ uint8_t* window_vprint(const window_t* const window, uint8_t* start, const char*
     const unsigned int remaining = window_chars_remaining(window, start);
     assert(remaining <= sizeof(buffer));
 
-    size_t written = vsnprintf(buffer, remaining, format, args);
-    window_puts(window, start, buffer);
+    vsnprintf(buffer, remaining, format, args);
 
-    return start + written;
+    return window_puts(window, start, buffer);
 }
 
 uint8_t* window_print(const window_t* const window, uint8_t* start, const char* const format, ...) {
