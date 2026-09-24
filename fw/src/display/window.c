@@ -132,14 +132,22 @@ uint8_t* window_puts_n(const window_t* const window, uint8_t* start, const char*
 //
 // The function returns the pointer to the next position in the window buffer after the string.
 uint8_t* window_puts(const window_t* const window, uint8_t* start, const char* str) {
+    bool wrapped = false;
+
     while (*str != '\0' && start < window->end) {
         if (*str == '\n') {
-            const size_t offset = (size_t)(start - window->start);
-            const size_t next_row = ((offset / window->width) + 1) * window->width;
-            const size_t window_size = (size_t)(window->end - window->start);
-            start = window->start + MIN(next_row, window_size);
+            if (wrapped) {
+                wrapped = false;
+            } else {
+                const size_t offset = (size_t)(start - window->start);
+                const size_t next_row = ((offset / window->width) + 1) * window->width;
+                const size_t window_size = (size_t)(window->end - window->start);
+                start = window->start + MIN(next_row, window_size);
+            }
         } else if (*str != '\r') {
             *start++ = ascii_to_vrom((uint8_t)*str);
+            wrapped = start < window->end &&
+                (size_t)(start - window->start) % window->width == 0;
         }
         str++;
     }

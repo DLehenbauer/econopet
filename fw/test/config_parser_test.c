@@ -834,6 +834,49 @@ START_TEST(test_parser_error_replaces_oversized_message) {
 }
 END_TEST
 
+START_TEST(test_parser_rejects_short_tape_before_allocation) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Short Tape\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        tape: 00\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("expected 18 chars, got 2");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_rejects_long_tape_before_allocation) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Long Tape\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        tape: 000000000000000000000000000000\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("expected 18 chars, got 30");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_rejects_multiline_config_name) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: \"First\\ncontinued\"\n"
+        "    setup: []\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("config name must be a single line");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
 Suite *config_parser_suite(void) {
     Suite *s;
     TCase *tc_core;
@@ -882,6 +925,9 @@ Suite *config_parser_fatal_suite(void) {
     tcase_add_test_raise_signal(tc, test_parser_error_reports_semantic_location, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_reports_yaml_problem, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_replaces_oversized_message, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_short_tape_before_allocation, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_long_tape_before_allocation, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_multiline_config_name, SIGABRT);
     suite_add_tcase(s, tc);
 
     return s;

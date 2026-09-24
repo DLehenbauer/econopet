@@ -148,6 +148,17 @@ START_TEST(test_window_puts_ignores_carriage_returns) {
     ck_buffer_overflow();
 } END_TEST
 
+START_TEST(test_window_puts_newline_after_full_row_does_not_skip_row) {
+    window_t window = create_test_window();
+
+    uint8_t* result = window_puts(&window, window.start, "ABCDE\r\nF");
+
+    ck_assert_ptr_eq(result, window.start + 6);
+    ck_assert_mem_eq(buffer, "ABCDEF", 6);
+    ck_assert_uint_eq(buffer[2 * WIDTH], 0x00);
+    ck_buffer_overflow();
+} END_TEST
+
 Suite *window_suite(void) {
     Suite* s = suite_create("Window");
 
@@ -162,6 +173,7 @@ Suite *window_suite(void) {
     tcase_add_test(test_cases, test_window_hline_full_buffer);
     tcase_add_test(test_cases, test_window_puts_handles_newlines);
     tcase_add_test(test_cases, test_window_puts_ignores_carriage_returns);
+    tcase_add_test(test_cases, test_window_puts_newline_after_full_row_does_not_skip_row);
 
     suite_add_tcase(s, test_cases);
 

@@ -331,7 +331,7 @@ static void parse_as_uint32(parser_t* parser, void* context, size_t context_size
     return parse_uint32(parser, (uint32_t*) context);
 }
 
-static void parse_hex(parser_t* parser, binary_t* binary) {
+static void parse_hex(parser_t* parser, binary_t* binary, size_t expected_size) {
     parse_expect_type(parser, YAML_SCALAR_EVENT);
 
     if (binary->data != NULL || binary->size != 0) {
@@ -345,6 +345,13 @@ static void parse_hex(parser_t* parser, binary_t* binary) {
         fatal_parse_error(parser, "hex string must not be empty");
     } else if (len % 2 != 0) {
         fatal_parse_error(parser, "hex string must have even length");
+    } else if (expected_size != 0 && len != expected_size * 2) {
+        fatal_parse_error(
+            parser,
+            "expected %zu chars, got %zu",
+            expected_size * 2,
+            len
+        );
     }
 
     binary->size = len / 2;
@@ -366,7 +373,7 @@ static void parse_hex(parser_t* parser, binary_t* binary) {
 static void parse_as_hex(parser_t* parser, void* context, size_t context_size) {
     (void) context_size;
     assert(context_size == sizeof(binary_t));
-    parse_hex(parser, (binary_t*) context);
+    parse_hex(parser, (binary_t*) context, 0);
 }
 
 typedef struct fixed_hex_context_s {
@@ -377,16 +384,7 @@ typedef struct fixed_hex_context_s {
 static void parse_as_fixed_hex(parser_t* parser, void* context, size_t context_size) {
     assert(context_size == sizeof(fixed_hex_context_t));
     const fixed_hex_context_t* const fixed_hex = (const fixed_hex_context_t*) context;
-    parse_hex(parser, fixed_hex->output);
-
-    if (fixed_hex->output->size != fixed_hex->expected_size) {
-        fatal_parse_error(
-            parser,
-            "expected %zu chars, got %zu",
-            fixed_hex->expected_size * 2,
-            fixed_hex->output->size * 2
-        );
-    }
+    parse_hex(parser, fixed_hex->output, fixed_hex->expected_size);
 }
 
 typedef void (*map_dispatch_fn_t)(parser_t* parser, void* context, size_t context_size);
@@ -769,6 +767,8 @@ static void parse_config(parser_t* parser) {
         { "setup", parse_action_list, NULL, 0 },
         { NULL, NULL, NULL, 0 }
     });
+
+    vet_parser(parser, strpbrk(name, "\r\n") == NULL, "config name must be a single line");
 
     if (parser->sink->on_exit_config) {
         parser->sink->on_exit_config(parser->sink->context, id, name);
