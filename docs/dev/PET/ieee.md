@@ -145,7 +145,10 @@ Address | CRA (Bit 2) | CRB (Bit 2) | Read | Write
   * [Part 3: The Commodore DOS Layer](https://www.pagetable.com/?p=1038)
 * [PET and the IEEE488 Bus](http://www.primrosebank.net/computers/pet/documents/PET_and_the_IEEE488_Bus_text.pdf)
 * [The Hewlett-Packard Interface Bus (HP-IB)](https://www.hp9845.net/9845/tutorials/hpib/)
-* [ROM Disassembly](https://www.zimmers.net/anonftp/pub/cbm/src/pet/pet_rom4_disassembly.txt)
+* ROM Disassembly
+  * [Kernal 4.0](https://www.zimmers.net/anonftp/pub/cbm/src/pet/pet_rom4_disassembly.txt)
+  * [4040](https://github.com/mist64/cbmsrc/tree/master/DOS_4040)
+  * [8250](https://github.com/mist64/cbmsrc/tree/master/DOS_8250)
 * Datasheets
   * [Western Digital W65C21](https://www.westerndesigncenter.com/wdc/documentation/w65c21.pdf)
   * [Rockwell R6520](http://archive.6502.org/datasheets/rockwell_r6520_pia.pdf)
