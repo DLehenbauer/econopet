@@ -6,3 +6,4 @@
 #include <check.h>
 
 Suite *breakpoint_suite(void);
+Suite *breakpoint_fatal_suite(void);

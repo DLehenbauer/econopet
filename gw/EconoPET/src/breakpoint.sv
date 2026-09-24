@@ -39,6 +39,7 @@ module breakpoint (
     always_ff @(posedge sys_clock_i) begin
         if (clear_i) begin
             halted <= 1'b0;
+            // Preserve the last hit address in `bp_addr`.
         end else if (cpu_data_strobe_i && cpu_be_i && cpu_sync_i && cpu_data_i == STP_OPCODE) begin
             halted  <= 1'b1;
             bp_addr <= cpu_addr_i;
