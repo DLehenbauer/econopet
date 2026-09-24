@@ -201,6 +201,13 @@ typedef enum {
 static status_code_t status_code[NUM_UNITS] = {
     st_code_power_on, st_code_power_on, st_code_power_on, st_code_power_on
 };
+static uint8_t status_drive[NUM_UNITS];
+
+static void set_drive_status(uint8_t drive, status_code_t code) {
+    const uint8_t unit = drive >> 1;
+    status_code[unit] = code;
+    status_drive[unit] = drive & 1u;
+}
 
 static bool mcu_listening = false;  // mirrors the FPGA's addressed state
 static bool mcu_talking = false;
@@ -276,6 +283,7 @@ static uint8_t listen_chan = 0xFF;  // active LISTEN data channel, $FF = none
 static void reset_protocol_state(void) {
     for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
         status_code[unit] = st_code_power_on;
+        status_drive[unit] = 0;
     }
 
     mcu_listening = false;
@@ -336,14 +344,14 @@ static void rel_serve(rel_channel_t* rc) {
         rel_position(rc, rc->cur_record + 1, 0);
     }
     if (rc->missing) {
-        status_code[rc->drive >> 1] = st_code_record_missing;
+        set_drive_status(rc->drive, st_code_record_missing);
         spi_write_at(IEEE_REG_TX_LAST, 0x0D);
         return;
     }
 
     uint16_t n = (uint16_t) (rc->length - rc->bufptr + 1);
     if (!diskchain_read(&rc->chain, rc->bufptr, buf, n)) {
-        status_code[rc->drive >> 1] = st_code_read_error;
+        set_drive_status(rc->drive, st_code_read_error);
         spi_write_at(IEEE_REG_TX_LAST, 0x0D);
         return;
     }
@@ -371,7 +379,7 @@ static void rel_write_begin(rel_channel_t* rc) {
 
 static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
     if (rc->wr_pos + rc->wr_count >= rc->reclen) {
-        status_code[rc->drive >> 1] = st_code_record_overflow;   // 51: drop the excess
+        set_drive_status(rc->drive, st_code_record_overflow);   // 51: drop the excess
         return;
     }
     rc->wr_buf[rc->wr_count++] = byte;
@@ -384,19 +392,19 @@ static void rel_write_commit(rel_channel_t* rc) {
     uint8_t rec[254];
     rc->wr_active = false;
     if (rc->missing) {
-        status_code[rc->drive >> 1] = st_code_record_missing;
+        set_drive_status(rc->drive, st_code_record_missing);
         return;
     }
     uint32_t base = (rc->cur_record - 1) * (uint32_t) rc->reclen;
     if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
-        status_code[rc->drive >> 1] = st_code_read_error;
+        set_drive_status(rc->drive, st_code_read_error);
         return;
     }
     memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
     memset(rec + rc->wr_pos + rc->wr_count, 0,
            rc->reclen - rc->wr_pos - rc->wr_count);
     if (!diskchain_write(&rc->chain, base, rec, rc->reclen)) {
-        status_code[rc->drive >> 1] = st_code_write_protect;     // 26: read-only image
+        set_drive_status(rc->drive, st_code_write_protect);     // 26: read-only image
         log_info("ieee: REL write failed (read-only?) rec %lu",
                  (unsigned long) rc->cur_record);
         return;
@@ -418,7 +426,8 @@ static void ch15_execute(void) {
             status_code[ch15_unit] = st_code_file_not_found;
         } else {
             rel_position(rc, rec, pos);
-            status_code[ch15_unit] = rc->missing ? st_code_record_missing : st_code_ok;
+            set_drive_status(rc->drive,
+                             rc->missing ? st_code_record_missing : st_code_ok);
         }
     } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
         status_code[ch15_unit] = st_code_ok;
@@ -467,14 +476,14 @@ static void resolve_open(void) {
     ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
     if (!drives[n].present) {
-        status_code[open_unit] = st_code_file_not_found;
+        set_drive_status((uint8_t) n, st_code_file_not_found);
         log_info("ieee: OPEN '%s': no disk image mounted", open_name);
         return;
     }
 
     diskimage_entry_t entry;
     if (!diskimage_find(&drives[n].image, open_name, &entry)) {
-        status_code[open_unit] = st_code_file_not_found;
+        set_drive_status((uint8_t) n, st_code_file_not_found);
         log_info("ieee: OPEN '%s': not found", open_name);
         return;
     }
@@ -500,12 +509,12 @@ static void resolve_open(void) {
             || (cached == NULL
                 && !diskchain_build(&rc->chain, &drives[n].image,
                                     entry.start_track, entry.start_sector))) {
-            status_code[open_unit] = st_code_file_not_found;
+            set_drive_status((uint8_t) n, st_code_file_not_found);
             log_info("ieee: REL OPEN '%s' failed", open_name);
             return;
         }
         if (entry.record_len > 254) {   // CBM max; larger = corrupt image, and
-            status_code[open_unit] = st_code_file_not_found;   // would overrun
+            set_drive_status((uint8_t) n, st_code_file_not_found); // would overrun
             log_info("ieee: REL OPEN '%s' bad reclen %u", open_name, entry.record_len);
             return;                     // the 254-byte record buffers
         }
@@ -514,7 +523,7 @@ static void resolve_open(void) {
         rc->chan = open_chan & 0x0F;
         rc->reclen = entry.record_len ? entry.record_len : 129;
         rel_position(rc, 1, 0);
-        status_code[open_unit] = st_code_ok;
+        set_drive_status((uint8_t) n, st_code_ok);
         log_info("ieee: REL OPEN '%s' ok (chan %u, reclen %u, %lu bytes)",
                  open_name, rc->chan, rc->reclen,
                  (unsigned long) diskchain_size(&rc->chain));
@@ -522,7 +531,7 @@ static void resolve_open(void) {
     }
 
     if (!diskstream_open(&stream, &drives[n].image, entry.start_track, entry.start_sector)) {
-        status_code[open_unit] = st_code_file_not_found;
+        set_drive_status((uint8_t) n, st_code_file_not_found);
         log_info("ieee: OPEN '%s': stream open failed", open_name);
         return;
     }
@@ -532,7 +541,7 @@ static void resolve_open(void) {
     stream_finished = false;
     file_chan = open_chan;
     file_unit = open_unit;
-    status_code[open_unit] = st_code_ok;
+    set_drive_status((uint8_t) n, st_code_ok);
     streamed_bytes = 0;
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
@@ -551,7 +560,8 @@ static void push_status(unsigned int unit) {
         case st_code_power_on:       text = "ECONOPET IEEE"; break;
         default:                     text = ""; break;
     }
-    int n = snprintf(line, sizeof(line), "%02u,%s,00,00", (unsigned int) status_code[unit], text);
+    int n = snprintf(line, sizeof(line), "%02u,%s,00,00,%u",
+                     (unsigned int) status_code[unit], text, status_drive[unit]);
 
     for (int i = 0; i < n; i++) spi_write_at(IEEE_REG_TXS, (uint8_t) line[i]);
     spi_write_at(IEEE_REG_TXS_LAST, 0x0D);
@@ -585,7 +595,7 @@ static void service_tx(void) {
                 if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
                 streamed_bytes += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
-                status_code[stream_drive >> 1] = st_code_read_error;
+                set_drive_status(stream_drive, st_code_read_error);
                 spi_write_at(IEEE_REG_TX_LAST, 0x0D);
                 streaming = false;
                 return;
