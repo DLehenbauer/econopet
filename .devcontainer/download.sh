@@ -67,6 +67,7 @@ http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/character
 https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disks/superpet/os9/-|a772ba7ad5d2f6a635a092f80f80d45c
 https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-1.d64.gz|-|disks/superpet/-|0c32478f4636b8387b62da3dde1f2acb
 https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-2.d64.gz|-|disks/superpet/-|9c9db97f8f56ae408b098abab6db7a5b
+https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz|-|disks/superpet/-|0d062e32b06e0285fae2cc9800b97fc9
 https://github.com/sjgray/cbm-edit-rom/raw/refs/heads/master/binaries/ColourPET/VICE/colourpet-c1-80-b-60-esc-wedge-reboot-backarrow-VICE%20(2017-03-03).bin|-|roms/colourpet-c1-80-b-60.bin|34fc9984ea9710d513a79ecec9a7bdb1
 https://www.insanerocketry.com/personal/rom1diskmagic.zip|rom1diskmagic/rom1diskrom/rom1diskrom_v15.bin|roms/-|b13d678c248748a1440151b5f78fb385
 EOF
@@ -185,13 +186,16 @@ install_media_list() {
 # post-processing.
 install_media_list "${MEDIA_LIST}"
 
-# Waterloo2 was distributed as two D64s. Merge these into one D80, then remove
-# the temporary source images.
+# Waterloo2 was distributed as two D64s. Merge these into one D80, add the
+# memory-test programs, then remove the temporary source images.
 readonly WATERLOO_DISK_DIR="${MEDIA_DIR}/disks/superpet"
 readonly WATERLOO_DISK_ONE="${WATERLOO_DISK_DIR}/Waterloo2-Language-1.d64"
 readonly WATERLOO_DISK_TWO="${WATERLOO_DISK_DIR}/Waterloo2-Language-2.d64"
 readonly WATERLOO_D80="${WATERLOO_DISK_DIR}/Waterloo2-Languages.d80"
-python3 "${SCRIPT_DIR}/merge-d64-to-d80.py" "${WATERLOO_D80}.part" \
-  "${WATERLOO_DISK_ONE}" "${WATERLOO_DISK_TWO}"
+readonly TESTRAM_D80="${WATERLOO_DISK_DIR}/testram9000.d80"
+python3 "${SCRIPT_DIR}/merge-disks.py" "${WATERLOO_D80}.part" \
+  --source "${WATERLOO_DISK_ONE}" '*' \
+  --source "${WATERLOO_DISK_TWO}" '*' \
+  --source "${TESTRAM_D80}" test.main test.banks test.os9
 mv "${WATERLOO_D80}.part" "${WATERLOO_D80}"
-rm -f "${WATERLOO_DISK_ONE}" "${WATERLOO_DISK_TWO}"
+rm -f "${WATERLOO_DISK_ONE}" "${WATERLOO_DISK_TWO}" "${TESTRAM_D80}"
