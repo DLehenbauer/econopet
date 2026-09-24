@@ -103,6 +103,13 @@ void fpga_init() {
     // If CRESET_N is is high, we know a JTAG programmer is attached and skip FPGA configuration.
     if (gpio_get(FPGA_CRESET_GP)) {
         log_warn("FPGA config skipped: Programmer attached");
+
+        // Because we skipped FPGA configuration, the FPGA state is unknown.
+        // Manually synchronize the FPGA's state to match the expected initial
+        // state.
+        
+        // Initial CPU state per `gw/EconoPET/src/register_file.sv`:
+        set_cpu(/* ready: */ true, /* reset: */ true, /* nmi: */ false);
         return;
     }
 
@@ -176,10 +183,10 @@ int main() {
     // We now are generating a valid video signal for the PET, so it's safe to proceed
     // with the rest of the initialization.
 
-    display_init(); // Initialize firmware display subsystem
-    usb_init();     // Initialize USB subsystem
-    cli_init();     // Start CLI on UART serial
-    bp_init();      // Initialize breakpoint subsystem
+    display_init();     // Initialize firmware display subsystem
+    usb_init();         // Initialize USB subsystem
+    cli_init();         // Start CLI on UART serial
+    bp_init();          // Initialize breakpoint subsystem
     ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
 
     // Probe before any config is loaded -- it clobbers $0400-$0402 and $FFFC.
