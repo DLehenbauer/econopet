@@ -27,14 +27,36 @@ uint8_t spi_write_prev(uint8_t data);
 uint8_t spi_write_same(uint8_t data);
 void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
 
-void set_cpu(bool ready, bool reset, bool nmi);
+/**
+ * CPU control flags.
+ *
+ * CPU_HALT is zero (the absence of CPU_READY) and is provided as a readability
+ * aid at call sites (for example, `set_cpu(CPU_HALT)`).
+ *
+ * Callers of 'get_cpu()` should test for the absence of CPU_READY to determine
+ * if the CPU is halted (e.g., `bool halted = !(get_cpu() & CPU_READY)`).
+ *
+ * Values align with the REG_CPU_* flags in `gw/EconoPET/src/common_pkg.sv`.
+ */
+typedef enum {
+    CPU_HALT  = 0,
+    CPU_READY = 1 << 0,
+    CPU_RESET = 1 << 1,
+    CPU_NMI   = 1 << 2,
+} cpu_state_t;
+
+// Set the CPU control flags.
+void set_cpu(cpu_state_t state);
+
+// Return the current CPU control flags.
+cpu_state_t get_cpu(void);
 
 // In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
 // the FPGA.
 typedef enum {
-    CPU_PHYS_6502 = 0,   // socketed W65C02S (optional; may be depopulated)
-    CPU_SOFT_6809 = 1,   // soft MC6809 (SuperPET)
-    CPU_SOFT_6502 = 2,   // soft MOS 6502 (virtual PET CPU; the default)
+    CPU_PHYS_6502 = 0,    // socketed W65C02S (optional; may be depopulated)
+    CPU_SOFT_6809 = 1,    // soft MC6809 (SuperPET)
+    CPU_SOFT_6502 = 2,    // soft MOS 6502 (virtual PET CPU; the default)
     CPU_AUTO      = 0xFF, // firmware policy (NOT a REG_CPU_SEL value): use the
                           // physical 6502 if detected, else the soft 6502.
 } cpu_type_t;

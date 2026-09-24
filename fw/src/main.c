@@ -109,7 +109,7 @@ void fpga_init() {
         // state.
         
         // Initial CPU state per `gw/EconoPET/src/register_file.sv`:
-        set_cpu(/* ready: */ true, /* reset: */ true, /* nmi: */ false);
+        set_cpu(CPU_READY | CPU_RESET);
         return;
     }
 

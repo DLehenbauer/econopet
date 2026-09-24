@@ -201,10 +201,14 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
-void set_cpu(bool ready, bool reset, bool nmi) {
-    (void)ready;
-    (void)reset;
-    (void)nmi;
+static cpu_state_t mock_cpu_state;
+
+void set_cpu(cpu_state_t state) {
+    mock_cpu_state = state;
+}
+
+cpu_state_t get_cpu(void) {
+    return mock_cpu_state;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +237,7 @@ void mock_reset(void) {
     system_state.bp_halted = false;
     mock_bp_addr = 0;
     mock_bp_cleared = false;
+    mock_cpu_state = CPU_RESET;
 }
 
 void mock_breakpoint_set_hit_addr(uint16_t addr) {

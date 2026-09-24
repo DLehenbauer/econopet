@@ -45,11 +45,6 @@
 #define REG_STATUS_BP_HALT    (1 << 3)
 #define REG_STATUS_PHYS_CPU   (1 << 4)   // Physical 6502 address activity seen
 
-// CPU Control Register
-#define REG_CPU_READY (1 << 0)
-#define REG_CPU_RESET (1 << 1)
-#define REG_CPU_NMI   (1 << 2)
-
 // Breakpoint Control Register
 #define REG_BP_CTL_CLEAR (1 << 0)
 
@@ -578,26 +573,29 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
 
 /**
  * Controls the PET CPU state via the CPU control register.
- * 
- * This function writes to REG_CPU, which controls three CPU signals:
- * - READY: CPU clock enable (false = halted, true = running)
- * - RESET: CPU reset signal (true = held in reset)
- * - NMI: Non-maskable interrupt (true = NMI asserted)
  *
- * These signals allow the RP2040 to control the 6502 CPU (via the FPGA),
- * enabling operations like halting execution to modify memory, triggering resets,
- * or injecting NMI interrupts.
- * 
- * @param ready If true, CPU clock is enabled (CPU runs); if false, CPU is halted
- * @param reset If true, CPU is held in reset state
- * @param nmi If true, NMI (non-maskable interrupt) is asserted
+ * This function writes to REG_CPU, which controls three CPU signals:
+ * - READY: CPU clock enable
+ * - RESET: CPU reset signal
+ * - NMI: Non-maskable interrupt
+ *
+ * These signals allow the RP2040 to control the CPU, enabling operations like
+ * halting execution to modify memory, triggering resets, or injecting NMI
+ * interrupts.
+ *
+ * @param state CPU control flags
  */
-void set_cpu(bool ready, bool reset, bool nmi) {
-    uint8_t state = 0;
-    if (ready) { state |= REG_CPU_READY; }
-    if (reset) { state |= REG_CPU_RESET; }
-    if (nmi)   { state |= REG_CPU_NMI; }
-    spi_write_at(REG_CPU, state);
+void set_cpu(cpu_state_t state) {
+    spi_write_at(REG_CPU, (uint8_t)state);
+}
+
+/**
+ * Reads the current CPU control state directly from the FPGA register.
+ *
+ * @return Current CPU control state.
+ */
+cpu_state_t get_cpu(void) {
+    return (cpu_state_t)spi_read_at(REG_CPU);
 }
 
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
@@ -623,12 +621,12 @@ static bool detect_physical_cpu(void) {
     spi_write_at(0xFFFC, 0x00);   // reset vector -> $0400
     spi_write_at(0xFFFD, 0x04);
 
-    set_cpu(/* ready: */ false, /* reset: */ true,  /* nmi: */ false);
+    set_cpu(CPU_RESET);
     set_cpu_type(CPU_PHYS_6502);   // arms detector
-    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
+    set_cpu(CPU_READY);
     sleep_us(5000);
     const uint8_t status = spi_read_at(REG_STATUS);
-    set_cpu(/* ready: */ false, /* reset: */ true,  /* nmi: */ false);  // halt again
+    set_cpu(CPU_RESET);  // halt again
     return (status & REG_STATUS_PHYS_CPU) != 0;
 }
 

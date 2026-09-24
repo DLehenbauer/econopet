@@ -22,7 +22,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     log_info("Loading config: %d", selected_config);
 
     // Suspend the CPU while we're loading the config.
-    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    set_cpu(CPU_HALT);
     ieee_drive_unmount_all();
 
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
@@ -153,7 +153,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
             }
             case 'T':
             case 't': {
-                set_cpu(/*ready: */ false, /* reset:*/ false, /* nmi: */ false);
+                set_cpu(CPU_HALT);
                 test_ram();
             }
 

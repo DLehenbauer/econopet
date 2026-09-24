@@ -17,8 +17,7 @@ void pet_reset() {
     // (See: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf)
 
     // Out of paranoia, deassert CPU 'reset' to ensure the CPU observes a clean reset pulse.
-    // (We set 'ready' to false to prevent the CPU from executing instructions.)
-    set_cpu(/* ready: */ false, /* reset: */ false, /* nmi: */ false);
+    set_cpu(CPU_HALT);
     sleep_us(4);
 
     usb_keyboard_reset(&system_state);
@@ -28,24 +27,23 @@ void pet_reset() {
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));           // Clear keyboard matrix
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));           // Clear USB keyboard matrix
     
-    // Assert CPU 'reset'.  Execution continues to be suspended by deasserting 'ready'.
-    set_cpu(/* ready: */ false, /* reset: */ true, /* nmi: */ false);
+    // Assert CPU 'reset' while execution remains suspended.
+    set_cpu(CPU_RESET);
     sleep_us(4);
     
-    // Finally, deassert CPU 'reset' and assert 'ready' to allow the CPU to execute instructions.
-    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
+    // Finally, deassert CPU 'reset' and allow the CPU to execute instructions.
+    set_cpu(CPU_READY);
 }
 
 void pet_nmi() {
     // Out of paranoia, deassert CPU 'NMI' to ensure the CPU observes a clean pulse.
-    // (We set 'ready' to false to prevent the CPU from executing instructions.)
-    set_cpu(/* ready: */ true, /* reset: */ false, /* nmi: */ false);
+    set_cpu(CPU_READY);
     sleep_us(4);
     
-    // Assert CPU 'nmi'.  Execution continues to be suspended by deasserting 'ready'.
-    set_cpu(/* ready: */ true, /* reset: */ false, /* nmi: */ true);
+    // Assert CPU 'nmi'.
+    set_cpu(CPU_READY | CPU_NMI);
     sleep_us(4);
     
-    // Finally, deassert CPU 'NMI' and assert 'ready' to allow the CPU to execute instructions.
-    set_cpu(/* ready: */ true,  /* reset: */ false, /* nmi: */ false);
+    // Finally, deassert CPU 'NMI'.
+    set_cpu(CPU_READY);
 }

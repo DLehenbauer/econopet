@@ -47,7 +47,7 @@ void start_menu_rom(menu_rom_boot_reason_t reason) {
     const unsigned int MENU_ROM_START = 0xFF00;
 
     // Suspended CPU while initializing ROMs.
-    set_cpu(/* ready */ false, /* reset */ false, /* nmi: */ false);
+    set_cpu(CPU_HALT);
 
     // Query the PET model (according to the onboard DIP switches).
     read_pet_model(&system_state);
