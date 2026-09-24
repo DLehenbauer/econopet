@@ -36,7 +36,8 @@ typedef struct bp_entry_s {
     void*         context;     // User-provided context passed to callback
 } bp_entry_t;
 
-// Initialize the breakpoint subsystem (clears the table).
+// Initialize the breakpoint subsystem. Clears FPGA breakpoint state and clears
+// the firmware table.  Requires the CPU to be reset or halted.
 void bp_init();
 
 // Set a breakpoint at 'addr'. Reads the original byte from SRAM, saves it

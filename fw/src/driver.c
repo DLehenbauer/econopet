@@ -759,4 +759,5 @@ uint16_t bp_hit_addr() {
 
 void bp_clear_halt() {
     spi_write_at(REG_BP_CTL, REG_BP_CTL_CLEAR);
+    system_state.bp_halted = false;
 }

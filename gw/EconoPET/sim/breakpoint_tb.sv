@@ -97,6 +97,9 @@ module breakpoint_tb;
 
         `assert_equal(halted, 1'b0)
         `assert_equal(cpu_ready_out, 1'b1)
+
+        // The last hit breakpoint address should still be retained.
+        `assert_equal(bp_addr, 16'h1234)
     endtask
 
     task test_no_halt_when_sync_low;

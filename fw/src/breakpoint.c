@@ -26,6 +26,16 @@ static int bp_find(uint16_t addr) {
 }
 
 void bp_init() {
+    // Require that the CPU is current reset or halted to prevent a race with
+    // the CPU hitting a breakpoint while we are clearing the breakpoint state.
+    const cpu_state_t cpu_state = get_cpu();
+    vet((cpu_state & CPU_RESET) || !(cpu_state & CPU_READY), "bp_init: CPU must be in reset or halted");
+
+    // Ensure the FPGA is not halted due to a previous breakpoint.  This can
+    // happen on startup if the MCU is reset while an FPGA programmer is
+    // attached, which causes FPGA configuration to be skipped.
+    bp_clear_halt();
+
     bp_entry_count = 0;
     memset(bp_table, 0, sizeof(bp_table));
 }
@@ -108,7 +118,7 @@ void bp_task() {
 
     log_info("Breakpoint hit at $%04X", pc);
 
-    // Determine resume address and rearm policy from callback.
+    // Determine resume address and rearm policy from the callback.
     const bp_result_t result = callback(pc, context);
     const uint16_t target = result.pc;
     const int16_t offset = (int16_t)(target - pc);
@@ -155,7 +165,7 @@ void bp_task() {
     // and re-arm the breakpoint.
     for (int i = 0; i < patch_bytes; i++) {
         // The FPGA bus arbiter services SPI in a 2:1 ratio to the CPU, so each pair
-        // of reads allows ensures the CPU executes at least one instruction.
+        // of reads ensures the CPU executes at least one instruction.
         spi_read_next();
         spi_read_prev();
     }

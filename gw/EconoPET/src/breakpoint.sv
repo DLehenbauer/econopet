@@ -34,11 +34,16 @@ module breakpoint (
     localparam logic [DATA_WIDTH-1:0] STP_OPCODE = 8'hDB;
 
     logic halted = 1'b0;
-    logic [CPU_ADDR_WIDTH-1:0] bp_addr = '0;
+
+    // Initialize the "last hit" address to a location unlikely to contain
+    // executable code to help make it obvious that a breakpoint has not yet
+    // been hit.  We choose the 6502 reset vector.
+    logic [CPU_ADDR_WIDTH-1:0] bp_addr = 16'hfffc;
 
     always_ff @(posedge sys_clock_i) begin
         if (clear_i) begin
             halted <= 1'b0;
+            // Preserve the last hit address in `bp_addr`.
         end else if (cpu_data_strobe_i && cpu_be_i && cpu_sync_i && cpu_data_i == STP_OPCODE) begin
             halted  <= 1'b1;
             bp_addr <= cpu_addr_i;

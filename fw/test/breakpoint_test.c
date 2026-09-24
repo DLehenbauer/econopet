@@ -6,6 +6,7 @@
 
 #include "breakpoint.h"
 #include "diag/log/log.h"
+#include "driver.h"
 #include "mock.h"
 #include "system_state.h"
 
@@ -25,9 +26,30 @@ static bp_result_t default_callback(uint16_t pc, void* context) {
 // Tests
 // ---------------------------------------------------------------------------
 
-START_TEST(test_bp_init_clears_table) {
+START_TEST(test_bp_init_clears_fpga_and_mcu_state) {
     reset_breakpoint_test();
+    bp_set(0x0400, default_callback, NULL);
+
+    // Simulate an FPGA halt that was latched before the MCU restarted.
+    mock_reset();
+    system_state.bp_halted = true;
+    bp_init();
+
     ck_assert_int_eq(bp_count(), 0);
+    ck_assert(mock_breakpoint_halt_was_cleared());
+    ck_assert(!system_state.bp_halted);
+    ck_assert(get_cpu() == CPU_RESET);
+} END_TEST
+
+START_TEST(test_bp_init_accepts_ready_cpu_in_reset) {
+    mock_reset();
+    log_init();
+    set_cpu(CPU_READY | CPU_RESET);
+
+    bp_init();
+
+    ck_assert(mock_breakpoint_halt_was_cleared());
+    ck_assert(get_cpu() == (CPU_READY | CPU_RESET));
 } END_TEST
 
 START_TEST(test_bp_set_patches_sram) {
@@ -301,7 +323,8 @@ Suite *breakpoint_suite(void) {
     Suite *s = suite_create("breakpoint");
 
     TCase *tc = tcase_create("core");
-    tcase_add_test(tc, test_bp_init_clears_table);
+    tcase_add_test(tc, test_bp_init_clears_fpga_and_mcu_state);
+    tcase_add_test(tc, test_bp_init_accepts_ready_cpu_in_reset);
     tcase_add_test(tc, test_bp_set_patches_sram);
     tcase_add_test(tc, test_bp_remove_restores_sram);
     tcase_add_test(tc, test_bp_remove_nonexistent_fails);
