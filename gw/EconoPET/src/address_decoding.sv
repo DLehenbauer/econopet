@@ -23,7 +23,7 @@ module memory_control (
     output logic bank_ro_o,
 
     // SuperPET latches -- see the block comment inside. sync_i is the 6809's
-    // SYNC bus state (BA=1, BS=0), the Super-OS/9 MMU's flat-mode exit.
+    // BA=1/BS=0 SYNC acknowledge decoded by the Super-OS/9 MMU.
     input  logic       sync_i,
     output logic [3:0] superpet_bank_o,
     output logic       superpet_ramwp_o,
@@ -43,71 +43,85 @@ module memory_control (
 
     // SuperPET latches, faithful to VICE petmem.c store_super_io() and the
     // CommonPET replica netlist:
+    //
     //   $EFFC-$EFFD  bank select pair (the loader's STD $EFFC works because
     //                D's low byte -- the bank -- lands on $EFFD last):
     //                  [3:0] bank at $9000-$9FFF
-    //                  [5]   FIRQ disable        (Super-OS/9 MMU only)
-    //                  [6]   flat all-RAM mode   (Super-OS/9 MMU only)
+    //                  [5]   SYNC/FIRQ disable   (Super-OS/9 MMU only) *SEE NOTE*
+    //                  [6]   flat all-RAM mode   (Super-OS/9 MMU only) *SEE NOTE*
     //                  [7]   0 = write-protect the system latch
     //   $EFF8-$EFFB  system latch, writable only while unlocked:
     //                  [1]   0 = write-protect the expansion RAM
     //                  ([0] CPU select and [3] diag are not modeled)
     //   $EFFE-$EFFF  ROM/RAM select for $9xxx -- always RAM with the 6809
     //                active on real hardware; not modeled.
-    // Super-OS/9 MMU exit: executing SYNC (sync_i) while flat drops back to
-    // banked mode (bank 0, latches re-protected) and pulses FIRQ to wake
-    // the core, unless FIRQ-disable was set.
+    //
+    // The MMU schematic and netlist decode SYNC as BA=1/BS=0. Unless disabled
+    // by bit 5, that combinational trigger asserts FIRQ and clears this entire
+    // $EFFC latch. The motherboard system latch at $EFF8 is separate: clearing
+    // $EFFC re-protects it through bit 7 but does not change its RAM-WP state.
+    //
+    // NOTE: Naberezny's prose table appears to reverse bits 5 and 6. Gate-level
+    //       netlist tracing and TPUG TEST.OS9's LDB #$40 / STB $EFFC establish
+    //       that D5 ($20) disables the SYNC-triggered latch clear and /FIRQ, while
+    //       D6 ($40) enables the flat 64KB OS-9 mapping.
     logic [3:0] superpet_bank = 4'b0000;
     logic superpet_ctrlwp = 1'b1;    // system latch write-protected
-    logic superpet_ramwp  = 1'b0;    // expansion RAM writable
+    // EconoPET has no input for the SuperPET's physical RAM R/W selector.
+    // Start writable, matching VICE and the switch setting required by TPUG
+    // TEST.BANKS, while retaining programmable $EFF8 behavior.
+    logic superpet_ramwp  = 1'b0;
     logic superpet_flat   = 1'b0;
-    logic superpet_firq_dis = 1'b0;
-    logic [9:0] firq_timer = '0;
-    logic       firq_n_q   = 1'b1;
+    logic superpet_sync_dis = 1'b0;
+    logic superpet_flat_pending = 1'b0;
+    logic superpet_flat_pending_valid = 1'b0;
 
-    // FIRQ pulse held ~8 E cycles: long enough for the core to leave SYNC
-    // and take the vector, short enough to end before the handler returns.
-    // One E cycle = 64 sys_clocks (one 6809 bus cycle per arbiter round).
-    localparam logic [9:0] FIRQ_RELOAD = 10'd511;
+    wire superpet_mmu_trigger = superpet_en_i && sync_i && !superpet_sync_dis;
+    // U1 forces the motherboard-facing address to $9xxx while flat, so
+    // logical control-register addresses are expansion RAM accesses only.
+    wire motherboard_wr_strobe = cpu_wr_strobe_i && !superpet_flat;
 
     always_ff @(posedge sys_clock_i) begin
-        if (firq_timer != 0) firq_timer <= firq_timer - 1'b1;
-
-        // 'firq_timer == 0' can glitch on a borrow, so register it: the core
-        // samples this on q6809 and must see only the old or the new level.
-        firq_n_q <= (firq_timer == 0);
-
         if (reset_i) begin
             mem_ctl <= MEM_CTL_INIT;
             superpet_bank <= 4'b0000;
             superpet_ctrlwp <= 1'b1;
-            superpet_ramwp  <= 1'b0;
             superpet_flat   <= 1'b0;
-            superpet_firq_dis <= 1'b0;
-            firq_timer <= '0;
-            firq_n_q   <= 1'b1;
-        end else if (superpet_en_i && sync_i && superpet_flat) begin
-            superpet_flat     <= 1'b0;
+            superpet_sync_dis <= 1'b0;
+            superpet_flat_pending <= 1'b0;
+            superpet_flat_pending_valid <= 1'b0;
+        end else if (superpet_mmu_trigger) begin
             superpet_bank <= 4'b0000;
-            superpet_ctrlwp   <= 1'b1;
-            if (!superpet_firq_dis) firq_timer <= FIRQ_RELOAD;
-            superpet_firq_dis <= 1'b0;
-        end else if (cpu_wr_strobe_i && cpu_addr_i == 16'hFFF0) begin
+            superpet_ctrlwp <= 1'b1;
+            superpet_flat <= 1'b0;
+            superpet_sync_dis <= 1'b0;
+            superpet_flat_pending <= 1'b0;
+            superpet_flat_pending_valid <= 1'b0;
+        end else if (superpet_flat_pending_valid && !cpu_be_i) begin
+            superpet_flat <= superpet_flat_pending;
+            superpet_flat_pending_valid <= 1'b0;
+        end else if (motherboard_wr_strobe && cpu_addr_i == 16'hFFF0) begin
             // 8096 expansion banking -- a stock PET-8096 feature, available to
             // either CPU (not gated by superpet_en_i).
             mem_ctl <= cpu_data_i;
-        end else if (superpet_en_i && cpu_wr_strobe_i && (cpu_addr_i & 16'hFFFE) == 16'hEFFC) begin
+        end else if (superpet_en_i && motherboard_wr_strobe
+                     && (cpu_addr_i & 16'hFFFE) == 16'hEFFC) begin
             superpet_bank <= cpu_data_i[3:0];
-            superpet_firq_dis <= cpu_data_i[5];
-            superpet_flat     <= cpu_data_i[6];
+            superpet_sync_dis <= cpu_data_i[5];
             superpet_ctrlwp   <= !cpu_data_i[7];
-        end else if (superpet_en_i && cpu_wr_strobe_i && (cpu_addr_i & 16'hFFFC) == 16'hEFF8) begin
+            // The physical latch changes at the end of the control cycle.
+            // Defer D6 until the bus slot is idle so this STB cannot become
+            // an expansion-RAM write when the flat address mux switches.
+            superpet_flat_pending <= cpu_data_i[6];
+            superpet_flat_pending_valid <= 1'b1;
+        end else if (superpet_en_i && motherboard_wr_strobe
+                     && (cpu_addr_i & 16'hFFFC) == 16'hEFF8) begin
             if (!superpet_ctrlwp) superpet_ramwp <= !cpu_data_i[1];
         end
     end
 
     assign superpet_flat_o   = superpet_flat;
-    assign superpet_firq_n_o = firq_n_q;
+    assign superpet_firq_n_o = !superpet_mmu_trigger;
     assign superpet_ramwp_o  = superpet_ramwp;
     assign superpet_bank_o   = superpet_bank;
 
@@ -337,7 +351,10 @@ module address_decoding #(
     assign decoded_a12_o    = (SUPERPET_FULL_BANK && superpet_9k_sel) ? superpet_bank[0] : cpu_addr_i[12];
     assign decoded_a13_o    = (SUPERPET_FULL_BANK && superpet_9k_sel) ? superpet_bank[1] : cpu_addr_i[13];
     assign decoded_a14_o    = (SUPERPET_FULL_BANK && superpet_9k_sel) ? superpet_bank[2] : cpu_addr_i[14];
-    assign decoded_a15_o    = superpet_9k_sel ? superpet_bank[3] : (bank_en ? bank_a15 : cpu_addr_i[15]);
+    assign decoded_a15_o    = superpet_flat ? cpu_addr_i[15]
+                            : superpet_9k_sel ? superpet_bank[3]
+                            : bank_en ? bank_a15
+                            : cpu_addr_i[15];
     // Flat mode: identity mapping into the upper 64K (a16=1) -- the same
     // physical region the banked window pages through, seen linearly.
     assign decoded_a16_o    = superpet_flat || bank_en || superpet_9k_sel;

@@ -362,6 +362,47 @@ START_TEST(test_close_then_reopen_streams_file) {
 }
 END_TEST
 
+// Verifies media unmount invalidates channels backed by the removed image.
+START_TEST(test_unmount_clears_open_sequential_channel) {
+    // Exhaust BASIC so stale state would answer a later TALK with its EOF reply.
+    mount_d64(IEEE_FIRST_DEVICE, 0, "first.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(0));
+    enqueue_name("BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
+                    IEEE_CMD_SECONDARY(0));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 264);
+
+    mock_ieee_clear_data();
+    ieee_drive_unmount_all();
+    mount_d64(IEEE_FIRST_DEVICE, 0, "second.d64", true);
+
+    // Remounting media must not resurrect a channel opened on the old image.
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
+                    IEEE_CMD_SECONDARY(0));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+}
+END_TEST
+
+// Verifies unmount discards REL channels that reference the removed image.
+START_TEST(test_unmount_clears_open_relative_channel) {
+    mount_d64(IEEE_FIRST_DEVICE, 0, "first.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(2));
+    enqueue_name("DATA,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    ieee_drive_unmount_all();
+    mount_d64(IEEE_FIRST_DEVICE, 0, "second.d64", true);
+
+    // TALK alone cannot reuse the REL chain cached for the previous image.
+    enqueue_command(IEEE_CMD_TALK(IEEE_FIRST_DEVICE), IEEE_CMD_SECONDARY(2));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+}
+END_TEST
+
 // Verifies commands directed at unimplemented primary addresses are ignored.
 START_TEST(test_non_target_addresses_are_ignored) {
     static const unsigned int non_target_devices[] = { 0, 7, 12, 31 };
@@ -829,6 +870,8 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE);
     tcase_add_loop_test(test_case, test_close_then_reopen_streams_file,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_test(test_case, test_unmount_clears_open_sequential_channel);
+    tcase_add_test(test_case, test_unmount_clears_open_relative_channel);
     tcase_add_test(test_case, test_non_target_addresses_are_ignored);
     tcase_add_test(test_case, test_secondary_address_alias_selects_data_channel);
     tcase_add_loop_test(test_case, test_corrupt_sequential_chain_reports_read_error,
