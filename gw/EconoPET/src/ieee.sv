@@ -257,15 +257,10 @@ module ieee (
             prev_atn_n     <= 1'b1;
         end else begin
             if (atn_active || listening) begin
-                // Acceptor role. Abort any in-flight talker handshake. If
-                // the CPU already READ the in-flight byte ($E820) but ATN
-                // arrived before its NDAC release, the byte was delivered --
-                // pop it now or the next TALK re-serves a duplicate.
+                // Acceptor role. ATN aborts any talker byte that has not been
+                // accepted by releasing NDAC. A CPU read of $E820 is private
+                // controller state, not an IEEE bus acknowledgement.
                 if (talk_st != T_IDLE) begin
-                    if (talk_st == T_ACK && byte_consumed) begin
-                        if (serving_status) txs_pop <= 1'b1;
-                        else                tx_pop  <= 1'b1;
-                    end
                     talk_st   <= T_IDLE;
                     dev_dav_n <= 1'b1;
                     dev_dio   <= 8'hFF;
