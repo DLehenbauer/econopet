@@ -16,6 +16,16 @@ module top_tb;
         .cpu_ready_o(cpu_ready)
     );
 
+    task static future_gpio_test;
+        `assert_equal(mock_system.top.spi1_sdo_o, 1'b0);
+        `assert_equal(mock_system.top.spi1_sdo_oe, 1'b0);
+        `assert_equal(mock_system.top.i2c0_scl_oe, 1'b0);
+        `assert_equal(mock_system.top.i2c0_sda_oe, 1'b0);
+        `assert_equal(mock_system.top.i2c1_scl_oe, 1'b0);
+        `assert_equal(mock_system.top.i2c1_sda_oe, 1'b0);
+        `assert_equal(mock_system.top.mcu_cec_oe, 1'b0);
+    endtask
+
     task static test_rw(
         input logic [RAM_ADDR_WIDTH-1:0] addr_i,
         input logic [    DATA_WIDTH-1:0] data_i
@@ -445,6 +455,7 @@ module top_tb;
 
 
         mock_system.init;
+        future_gpio_test;
         // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
         spi_ram_test;
