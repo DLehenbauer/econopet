@@ -162,7 +162,6 @@ module top #(
     // so the FPGA cannot contend with another device on the shared nets.
     assign spi1_sdo_o  = 1'b0;
     assign spi1_sdo_oe = 1'b0;
-
     assign i2c0_scl_o  = 1'b0;
     assign i2c0_scl_oe = 1'b0;
     assign i2c0_sda_o  = 1'b0;
@@ -171,8 +170,8 @@ module top #(
     assign i2c1_scl_oe = 1'b0;
     assign i2c1_sda_o  = 1'b0;
     assign i2c1_sda_oe = 1'b0;
-    assign mcu_cec_o    = 1'b0;
-    assign mcu_cec_oe   = 1'b0;
+    assign mcu_cec_o   = 1'b0;
+    assign mcu_cec_oe  = 1'b0;
 
     // PMOD1: unused (inputs only, undriven).
     assign pmod1_o [8:1] = '0;
