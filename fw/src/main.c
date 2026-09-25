@@ -199,11 +199,11 @@ int main() {
     // input queues, and check for menu/reset button.
     while (true) {
         ieee_drive_task();  // Service IEEE-488 FIFOs; an underrun desyncs the loader
-        display_task(); // Sync video buffer, render to terminal if needed
+        display_task();     // Sync video buffer, render to terminal if needed
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render
-        input_task();   // Poll inputs, dispatch based on mode
-        bp_task();      // Check for breakpoint hits and handle them
-        menu_task();    // Check for button events to enter menu
+        input_task();       // Poll inputs, dispatch based on mode
+        bp_task();          // Check for breakpoint hits and handle them
+        menu_task();        // Check for button events to enter menu
     }
 
     __builtin_unreachable();

@@ -37,6 +37,7 @@ int run_suite() {
 
     // These tests are run in a separate process as they intentionally assert.
     SRunner* sr2 = srunner_create(breakpoint_fatal_suite());
+    srunner_add_suite(sr2, config_parser_fatal_suite());
     srunner_add_suite(sr2, window_suite());
     srunner_run_all(sr2, CK_VERBOSE);
     number_failed += srunner_ntests_failed(sr2);

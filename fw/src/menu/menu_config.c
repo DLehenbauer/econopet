@@ -69,7 +69,12 @@ static void on_default_callback(void* context, const char* id) {
 
 static void on_config_callback(void* context, const char* id, const char* name) {
     context_t* const ctx = (context_t*) context;
-    window_puts(ctx->window, window_xy(ctx->window, 0, ctx->config_count), name);
+    window_puts_n(
+        ctx->window,
+        window_xy(ctx->window, 0, ctx->config_count),
+        name,
+        ctx->window->width
+    );
 
     if (ctx->default_id[0] != '\0' && strcmp(id, ctx->default_id) == 0) {
         ctx->default_index = (int) ctx->config_count;

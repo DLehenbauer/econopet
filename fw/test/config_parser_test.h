@@ -6,3 +6,4 @@
 #include <check.h>
 
 Suite* config_parser_suite(void);
+Suite* config_parser_fatal_suite(void);
