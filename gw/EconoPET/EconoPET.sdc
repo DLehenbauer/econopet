@@ -215,7 +215,8 @@ set_output_delay -clock sys_clock_i -min 0                [get_ports {cpu_reset_
 set_false_path -to [get_ports {status_no}]
 set_false_path -to [get_ports {sp1_o sp2_o sp3_o sp4_o sp5_o sp6_o sp7_o sp8_o}]
 set_false_path -to [get_ports {sp1_oe sp2_oe sp3_oe sp4_oe sp5_oe sp6_oe sp7_oe sp8_oe}]
-set_false_path -to [get_ports {spi1_sd_o}]
+set_false_path -to [get_ports {spi1_sdo_o i2c0_scl_o i2c0_sda_o i2c1_scl_o i2c1_sda_o mcu_cec_o}]
+set_false_path -to [get_ports {spi1_sdo_oe i2c0_scl_oe i2c0_sda_oe i2c1_scl_oe i2c1_sda_oe mcu_cec_oe}]
 set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 
 # The following pins are unused in the current design and optimized away by
@@ -223,7 +224,8 @@ set_false_path -to [get_ports {pmod1_o[*] pmod1_oe[*] pmod2_o[*] pmod2_oe[*]}]
 # fanout in a future revision, add false-path constraints here.
 #
 # set_false_path -from [get_ports {sp1_i sp2_i sp3_i sp4_i sp5_i sp6_i sp7_i sp8_i}]
-# set_false_path -from [get_ports {spi1_cs_ni spi1_sck_i spi1_sd_i}]
+# set_false_path -from [get_ports {spi1_cs_ni spi1_sck_i spi1_sd_i spi1_sdo_i}]
+# set_false_path -from [get_ports {i2c0_scl_i i2c0_sda_i i2c1_scl_i i2c1_sda_i mcu_cec_i}]
 # set_false_path -from [get_ports {pmod1_i[*]}]
 # set_false_path -from [get_ports {audio_det_n_i}]
 
