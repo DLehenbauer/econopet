@@ -140,8 +140,14 @@ D80 path primarily targets single-sided 8050 behavior:
 
 ### PET controller-side behavior
 
-Use these PET KERNAL 4.0 sources to verify what the emulated drive must observe
-and return:
+PET ROM 1/2 has a known broken IEEE input implementation and is not a native
+compatibility target. Cover the corrected PET KERNAL 2.0 used by ROM 3 and PET
+KERNAL 4.0/4.1:
+
+- PET KERNAL 2.0 IEEE primitives and controller sequences:
+  [KERNAL_PET_2.0_REC/ob1src](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src)
+- PET KERNAL 4.0 reconstructed IEEE primitives and controller sequences:
+  [KERNAL_PET_4.0_REC/ob1src](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/ob1src)
 
 - IEEE send/receive primitives, TALK, LISTEN, UNTALK, UNLISTEN, secondary
   addressing, EOI, and handshakes:
@@ -152,6 +158,13 @@ and return:
   [KERNAL_PET_4.0_1979-10-23/ob3src](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_1979-10-23/ob3src)
 - CHKIN/CHRIN and channel input behavior:
   [KERNAL_PET_4.0_1979-10-23/ob4src](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_1979-10-23/ob4src)
+
+Keep KERNAL 2 and KERNAL 4 UNTALK coverage separate. KERNAL 2 loads `$5F` and
+enters `LIST1`, which releases NRFD and NDAC before `LIST4` asserts ATN.
+KERNAL 4 `UNTLK` asserts ATN first, then sends `$5F` through `LIST1`. Both
+versions use the same externally observable `ACPTR` order: assert NDAC, release
+NRFD, wait for DAV, assert NRFD, sample EOI, read DIO, release NDAC, wait for
+DAV release, then re-arm NDAC while leaving NRFD asserted.
 
 ### SuperPET Waterloo 6809 controller behavior
 
