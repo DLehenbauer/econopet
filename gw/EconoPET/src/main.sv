@@ -511,6 +511,7 @@ module main (
         .sys_clock_i(sys_clock_i),
         
         .cpu_be_i(active_be),
+        .cpu_addr_strobe_i(active_addr_strobe),
         .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_addr_i(active_cpu_addr),
         .cpu_data_i(cpu_data_q),

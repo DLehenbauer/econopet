@@ -11,7 +11,7 @@ module mmu_tb;
     clock_gen #(SYS_CLOCK_MHZ) clock_gen (.clock_o(sys_clock));
     initial clock_gen.start;
 
-    logic reset = 0, be = 0, wr_strobe = 0, sync_st = 0;
+    logic reset = 0, be = 0, addr_strobe = 0, wr_strobe = 0, sync_st = 0;
     logic [15:0] addr = '0;
     logic [7:0] data = '0;
     logic ram_en, sid_en, pia1_en, pia2_en, via_en, crtc_en, io_en, unmapped, is_vram, is_ro;
@@ -32,6 +32,7 @@ module mmu_tb;
         .reset_i(reset),
         .sys_clock_i(sys_clock),
         .cpu_be_i(be),
+        .cpu_addr_strobe_i(addr_strobe),
         .cpu_wr_strobe_i(wr_strobe),
         .cpu_addr_i(addr),
         .cpu_data_i(data),
@@ -49,22 +50,31 @@ module mmu_tb;
     );
 
     task automatic cpu_write(input logic [15:0] a, input logic [7:0] v);
+        @(negedge sys_clock);
+        addr = a;
+        data = v;
+        be = 1'b1;
+        addr_strobe = 1'b1;
         @(posedge sys_clock);
-        addr <= a; data <= v; be <= 1;
-        repeat (2) @(posedge sys_clock);
-        wr_strobe <= 1;
+        @(negedge sys_clock);
+        addr_strobe = 1'b0;
+        wr_strobe = 1'b1;
         @(posedge sys_clock);
-        wr_strobe <= 0;
-        @(posedge sys_clock);
-        be <= 0;
+        @(negedge sys_clock);
+        wr_strobe = 1'b0;
+        be = 1'b0;
         repeat (2) @(posedge sys_clock);
     endtask
 
-    // Present an address (read decode settles while be)
+    // Capture one CPU transaction at the address-valid strobe.
     task automatic decode_at(input logic [15:0] a);
+        @(negedge sys_clock);
+        addr = a;
+        be = 1'b1;
+        addr_strobe = 1'b1;
         @(posedge sys_clock);
-        addr <= a; be <= 1;
-        repeat (3) @(posedge sys_clock);
+        @(negedge sys_clock);
+        addr_strobe = 1'b0;
     endtask
 
     task automatic check_decode(
@@ -100,6 +110,7 @@ module mmu_tb;
 
     task static check_flat_map;
         be = 1'b1;
+        addr_strobe = 1'b1;
         for (int unsigned a = 0; a < 65536; a++) begin
             @(negedge sys_clock);
             addr = 16'(a);
@@ -113,6 +124,7 @@ module mmu_tb;
             if (wp !== 1'b0)
                 $fatal(1, "[%0t] flat write protection active at $%04x", $time, a);
         end
+        addr_strobe = 1'b0;
         be = 1'b0;
         repeat (2) @(posedge sys_clock);
     endtask
@@ -178,18 +190,50 @@ module mmu_tb;
         cpu_write(16'hEFFC, 8'h80);
         cpu_write(16'hEFF8, 8'h02);                  // restore writable state
 
-        // Enable 8096 expansion mapping and selects block 1 for $8000-$BFFF. We
-        // will verify later that writes to $FFF0 in SuperPET flat mode did not
-        // alter the 8096 expansion mapping.
-        cpu_write(16'hFFF0, 8'h84);
+        // Enable 8096 block 1 at $8000-$BFFF while retaining I/O peek-through.
+        // Later, verify that a flat-mode $FFF0 write cannot alter this state.
+        cpu_write(16'hFFF0, 8'hC4);
         decode_at(16'hA123);
         `assert_equal(a16, 1'b1);
         `assert_equal(a15, 1'b1);
         be <= 0; repeat (2) @(posedge sys_clock);
 
-        // --- Flat mode: everything is RAM in the upper 64K ---
-        cpu_write(16'hEFFC, 8'hC0);                  // flat + system latch unlocked
+        // --- U3 changes immediately, while the active transaction is stable ---
+        @(negedge sys_clock);
+        addr = 16'hEFFC;
+        data = 8'hC0;                                // flat + system latch unlocked
+        be = 1'b1;
+        addr_strobe = 1'b1;
+        @(posedge sys_clock);
+        #1;
+        `assert_equal(flat, 1'b0);
+        `assert_equal(unmapped, 1'b1);
+        `assert_equal(ram_en, 1'b0);
+        `assert_equal(a16, 1'b0);
+        `assert_equal(a15, 1'b1);
+        @(negedge sys_clock);
+        addr_strobe = 1'b0;
+        wr_strobe = 1'b1;
+        @(posedge sys_clock);
+        #1;
         `assert_equal(flat, 1'b1);
+        `assert_equal(unmapped, 1'b1);
+        `assert_equal(ram_en, 1'b0);
+        `assert_equal(a16, 1'b0);
+        `assert_equal(a15, 1'b1);
+        @(negedge sys_clock);
+        wr_strobe = 1'b0;
+        @(posedge sys_clock);
+        #1;
+        `assert_equal(unmapped, 1'b1);
+        `assert_equal(ram_en, 1'b0);
+        `assert_equal(a16, 1'b0);
+        `assert_equal(a15, 1'b1);
+        @(negedge sys_clock);
+        be = 1'b0;
+        repeat (2) @(posedge sys_clock);
+
+        // --- Flat mode: every logical address is upper expansion RAM ---
         decode_at(16'hC123);                         // normally ROM
         `assert_equal(ram_en, 1'b1);
         `assert_equal(is_ro, 1'b0);
