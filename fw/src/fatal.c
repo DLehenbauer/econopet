@@ -23,12 +23,7 @@ static void __attribute__((noreturn)) fatal_no_alloc(const char* const message) 
 
     uint8_t* const pOut = window_puts(&window, window.start, FATAL_PREFIX);
     window_reverse(&window, window.start, 2);
-    pOut = window_vprintln(&window, pOut, format, args);
-
-    if (errno != 0) {
-        pOut = window_println(&window, pOut, "");
-        pOut = window_print(&window, pOut, "(%d): %s", errno, strerror(errno));
-    }
+    window_puts(&window, pOut, message);
     
     system_state.video_source = video_source_firmware;  // Copy from `video_char_buffer` to $8000
     system_state.term_mode = term_mode_video;           // Also copy to the terminal
