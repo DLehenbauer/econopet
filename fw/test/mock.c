@@ -466,16 +466,34 @@ uint32_t to_ms_since_boot(absolute_time_t time) {
 // System mocks
 // ---------------------------------------------------------------------------
 
+static const char* expected_fatal_substring;
+
+void mock_expect_fatal_message(const char* substring) {
+    expected_fatal_substring = substring;
+}
+
 // Mock fatal function. Prints the formatted error message to stderr, then calls
 // abort().  If the test case expects fatal to be called, use
 // `tcase_add_test_raise_signal(tc, test_fn, SIGABRT)` in a forked runner.
 void fatal(const char* const format, ...) {
+    char message[2048];
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "fatal: ");
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
+    vsnprintf(message, sizeof(message), format, args);
     va_end(args);
+
+    if (expected_fatal_substring != NULL &&
+        strstr(message, expected_fatal_substring) == NULL) {
+        fprintf(
+            stderr,
+            "fatal message did not contain '%s': %s\n",
+            expected_fatal_substring,
+            message
+        );
+        _Exit(EXIT_FAILURE);
+    }
+
+    fprintf(stderr, "fatal: %s\n", message);
     abort();
 }
 

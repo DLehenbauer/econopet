@@ -53,3 +53,6 @@ void mock_unregister_file(const char* path);
 
 // Clear all registered in-memory files
 void mock_clear_files(void);
+
+// Require the next fatal message to contain the given text.
+void mock_expect_fatal_message(const char* substring);

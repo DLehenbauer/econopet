@@ -2,10 +2,12 @@
 // https://github.com/dlehenbauer/econopet
 
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "config/config.h"
+#include "global.h"
 #include "mock.h"
 #include "sd/sd.h"
 #include "system_state.h"
@@ -222,7 +224,7 @@ START_TEST(test_parse_mount_action) {
         "      - action: mount\n"
         "        device: 11\n"
         "        drive: 1\n"
-        "        file: superpet/Waterloo2-Languages.d80\n";
+        "        file: some/disk.d64\n";
 
     mock_register_file("/config.yaml", yaml_content);
 
@@ -231,7 +233,26 @@ START_TEST(test_parse_mount_action) {
     ck_assert_int_eq(test_ctx.mount_count, 1);
     ck_assert_int_eq(test_ctx.last_mount_device, 11);
     ck_assert_int_eq(test_ctx.last_mount_drive, 1);
-    ck_assert_str_eq(test_ctx.last_mount_file, "superpet/Waterloo2-Languages.d80");
+    ck_assert_str_eq(test_ctx.last_mount_file, "some/disk.d64");
+}
+END_TEST
+
+START_TEST(test_parse_mount_action_defaults) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Mount Defaults Test\n"
+        "    setup:\n"
+        "      - action: mount\n"
+        "        file: some/disk.d80\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+
+    ck_assert_int_eq(test_ctx.mount_count, 1);
+    ck_assert_int_eq(test_ctx.last_mount_device, 8);
+    ck_assert_int_eq(test_ctx.last_mount_drive, 0);
+    ck_assert_str_eq(test_ctx.last_mount_file, "some/disk.d80");
 }
 END_TEST
 
@@ -756,6 +777,106 @@ START_TEST(test_validate_sdcard_config_yaml_default) {
 }
 END_TEST
 
+START_TEST(test_parser_error_reports_semantic_location) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Invalid Action\n"
+        "    setup:\n"
+        "      - action: invalid\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("Line 4, Column 17:\nUnknown action 'invalid'");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_error_reports_yaml_problem) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: \"Malformed\n"
+        "    setup: []\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message(
+        "Line 4, Column 1:\nfound unexpected end of stream"
+    );
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_error_replaces_oversized_message) {
+    char key[951];
+    memset(key, 'x', sizeof(key) - 1);
+    key[sizeof(key) - 1] = '\0';
+
+    char yaml_content[1100];
+    const int written = snprintf(
+        yaml_content,
+        sizeof(yaml_content),
+        "configs:\n"
+        "  - name: Long Error\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        %s: 1\n",
+        key
+    );
+    ck_assert_int_gt(written, 0);
+    ck_assert_int_lt(written, (int) sizeof(yaml_content));
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message(
+        "Line 5, Column 9:\nerror details too long to display"
+    );
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_rejects_short_tape_before_allocation) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Short Tape\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        tape: 00\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("expected 18 chars, got 2");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_rejects_long_tape_before_allocation) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: Long Tape\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        tape: 000000000000000000000000000000\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("expected 18 chars, got 30");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+START_TEST(test_parser_rejects_multiline_config_name) {
+    const char* yaml_content =
+        "configs:\n"
+        "  - name: \"First\\ncontinued\"\n"
+        "    setup: []\n";
+
+    mock_register_file("/config.yaml", yaml_content);
+    mock_expect_fatal_message("config name must be a single line");
+
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
 Suite *config_parser_suite(void) {
     Suite *s;
     TCase *tc_core;
@@ -768,6 +889,7 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_minimal_config);
     tcase_add_test(tc_core, test_parse_load_action);
     tcase_add_test(tc_core, test_parse_mount_action);
+    tcase_add_test(tc_core, test_parse_mount_action_defaults);
     tcase_add_test(tc_core, test_parse_patch_action);
     tcase_add_test(tc_core, test_parse_copy_action);
     tcase_add_test(tc_core, test_parse_set_action);
@@ -791,6 +913,22 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_validate_sdcard_config_yaml_default);
     
     suite_add_tcase(s, tc_core);
+
+    return s;
+}
+
+Suite *config_parser_fatal_suite(void) {
+    Suite* s = suite_create("config_parser-fatal");
+    TCase* tc = tcase_create("Core");
+
+    tcase_add_checked_fixture(tc, setup, teardown);
+    tcase_add_test_raise_signal(tc, test_parser_error_reports_semantic_location, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_error_reports_yaml_problem, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_error_replaces_oversized_message, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_short_tape_before_allocation, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_long_tape_before_allocation, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_multiline_config_name, SIGABRT);
+    suite_add_tcase(s, tc);
 
     return s;
 }
