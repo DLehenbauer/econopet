@@ -768,6 +768,8 @@ static void parse_config(parser_t* parser) {
         { NULL, NULL, NULL, 0 }
     });
 
+    // Menu rendering requires the stored (possibly truncated) name to contain
+    // no line breaks.  Line breaks beyond the truncation point are ignored.
     vet_parser(parser, strpbrk(name, "\r\n") == NULL, "config name must be a single line");
 
     if (parser->sink->on_exit_config) {
