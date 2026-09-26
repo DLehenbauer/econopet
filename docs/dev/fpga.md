@@ -19,9 +19,11 @@ Zadig software as administrator.
 3. Choose Options > List All Devices.
 4. Repeat the following steps for each interface. The interface names end with (Interface N),
 where N is the channel number.
-• Select libusb-win32 in the Driver drop-down list.
-• Click Replace Driver.
+    1. Select libusb-win32 in the Driver drop-down list.
+    2. Click Replace Driver.
 5. Close the Zadig software.
+
+(Mine show as `Dual RS232-HS (Interface n)`)
 
 ## T8
 
