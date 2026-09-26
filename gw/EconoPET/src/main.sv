@@ -72,11 +72,6 @@ module main (
     input  logic spi0_sck_i,        // (SCK) Serial Clock
     input  logic spi0_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi0_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
-    
-    input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,        // (SCK) Serial Clock
-    input  logic spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
 
     output logic spi_stall_o        // Flow control for SPI (0 = Ready, 1 = Busy)
 );

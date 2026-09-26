@@ -68,12 +68,33 @@ module top #(
     input  logic spi0_sd_i,             // (SDI) Serial Data In (MCU -> FPGA)
     output logic spi0_sd_o,             // (SDO) Serial Data Out (FPGA -> MCU)
     
-    input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,        // (SCK) Serial Clock
-    input  logic spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi1_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi1_cs_ni,            // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,            // (SCK) Serial Clock
+    input  logic spi1_sd_i,             // (SDI) Serial Data In (MCU -> FPGA)
+    input  logic spi1_sdo_i,            // Shared FPGA SDO / MCU SDI / SD-card DAT0
+    output logic spi1_sdo_o,
+    output logic spi1_sdo_oe,
 
     output logic spi_stall_o,       // Flow control for SPI (0 = Ready, 1 = Busy)
+
+    // Future bidirectional interfaces
+    input  logic i2c0_scl_i,
+    output logic i2c0_scl_o,
+    output logic i2c0_scl_oe,
+    input  logic i2c0_sda_i,
+    output logic i2c0_sda_o,
+    output logic i2c0_sda_oe,
+
+    input  logic i2c1_scl_i,
+    output logic i2c1_scl_o,
+    output logic i2c1_scl_oe,
+    input  logic i2c1_sda_i,
+    output logic i2c1_sda_o,
+    output logic i2c1_sda_oe,
+
+    input  logic mcu_cec_i,
+    output logic mcu_cec_o,
+    output logic mcu_cec_oe,
 
     // Config from DIP switch
     input logic config_crt_i,       // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
@@ -136,6 +157,21 @@ module top #(
 );
     // Turn off red NSTATUS LED to indicate programming was successful.
     assign status_no = 1'b1;
+
+    // These interfaces are reserved for future use. Keep every output disabled
+    // so the FPGA cannot contend with another device on the shared nets.
+    assign spi1_sdo_o  = 1'b0;
+    assign spi1_sdo_oe = 1'b0;
+    assign i2c0_scl_o  = 1'b0;
+    assign i2c0_scl_oe = 1'b0;
+    assign i2c0_sda_o  = 1'b0;
+    assign i2c0_sda_oe = 1'b0;
+    assign i2c1_scl_o  = 1'b0;
+    assign i2c1_scl_oe = 1'b0;
+    assign i2c1_sda_o  = 1'b0;
+    assign i2c1_sda_oe = 1'b0;
+    assign mcu_cec_o   = 1'b0;
+    assign mcu_cec_oe  = 1'b0;
 
     // PMOD1: unused (inputs only, undriven).
     assign pmod1_o [8:1] = '0;
@@ -287,10 +323,6 @@ module top #(
         .spi0_sck_i(spi0_sck_i),
         .spi0_sd_i(spi0_sd_i),
         .spi0_sd_o(spi0_sd_o),
-        .spi1_cs_ni(spi1_cs_ni),
-        .spi1_sck_i(spi1_sck_i),
-        .spi1_sd_i(spi1_sd_i),
-        .spi1_sd_o(spi1_sd_o),
         .spi_stall_o(spi_stall_o)
     );
 endmodule
