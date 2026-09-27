@@ -15,11 +15,11 @@ BUILD_DIR="$SCRIPT_DIR/build"
 generate_filelists() {
     mkdir -p "$PROJ_DIR/work_sim" "$PROJ_DIR/outflow"
 
-    python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/pkgs.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
+    python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
-xml_path, sim_f_path, pkgs_f_path, timescale_f_path = sys.argv[1:]
+xml_path, sim_f_path, timescale_f_path = sys.argv[1:]
 
 ns = {"efx": "http://www.efinixinc.com/enf_proj"}
 root = ET.parse(xml_path).getroot()
@@ -51,9 +51,6 @@ with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
     # A file registered as both design_file and sim_file compiles once.
     for path in dict.fromkeys(package_files + sim_files + design_files):
         sim_f.write(f"{path}\n")
-
-# Keep this compatibility file for existing build trees that still reference it.
-open(pkgs_f_path, "w", encoding="utf-8").close()
 
 with open(timescale_f_path, "w", encoding="utf-8", newline="\n") as timescale_f:
     timescale_f.write("+timescale+1ns/1ps\n")
@@ -180,7 +177,7 @@ if [ -z "$NO_UPDATE" ]; then
         exit 1
     fi
 
-    CTEST_ARGS=(--preset gw --output-on-failure)
+    CTEST_ARGS=(--preset gw --parallel --output-on-failure)
     if [ -n "$TEST_NAME" ]; then
         CTEST_ARGS+=(--tests-regex "^${TEST_NAME}$")
     fi

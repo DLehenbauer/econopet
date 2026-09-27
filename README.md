@@ -35,7 +35,7 @@ cmake --preset default              # Do this first
 # Build
 cmake --build --preset all          # Build everything
 cmake --build --preset fw           # Build firmware only
-cmake --build --preset fw_test      # Build firmware tests only
+cmake --build --preset fw-test      # Build firmware tests only
 cmake --build --preset gw           # Build gateware only
 cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
@@ -68,7 +68,7 @@ end and writes `gw/EconoPET/outflow/stock6502_boot_tb.pgm`:
 |READY.                                  |
 ```
 
-`ctest` hides that on success, so use `ctest --preset gw-boot -V` to see it, or
+`ctest` hides that on success, so use `ctest --preset gw-boot --parallel -V` to see it, or
 run `./verilate.sh stock6502_boot_tb 0` directly. See
 [docs/dev/verilator.md](docs/dev/verilator.md) for the Verilator runner and
 [docs/dev/testing.md](docs/dev/testing.md) for test seeding and replay.

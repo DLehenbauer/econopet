@@ -334,9 +334,9 @@ resolve each gate before declaring the task complete.
 Use the relevant commands:
 
 ```sh
-cmake --build --preset fw_test
-ctest --preset fw --output-on-failure
-ctest --preset gw -R 'ieee_(sys_)?tb' --output-on-failure
+cmake --build --preset fw-test
+ctest --preset fw --parallel --output-on-failure
+ctest --preset gw --parallel -R 'ieee_.*tb' --output-on-failure
 ```
 
 Run both Icarus and Verilator variants when gateware behavior changes:

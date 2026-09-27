@@ -71,8 +71,8 @@ Use `PICO_PLATFORM` for conditional compilation between real hardware and host t
 ## Development Workflow
 
 1. `cmake --build --preset fw` - build firmware
-2. `cmake --build --preset fw_test` - build tests
-3. `ctest --preset fw` - run tests
+2. `cmake --build --preset fw-test` - build tests
+3. `ctest --preset fw --parallel` - run tests
 
 ## External Dependencies
 
