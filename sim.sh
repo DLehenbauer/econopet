@@ -16,7 +16,9 @@ generate_filelists() {
     mkdir -p "$PROJ_DIR/work_sim" "$PROJ_DIR/outflow"
 
     python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
+import os
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 xml_path, sim_f_path, timescale_f_path = sys.argv[1:]
@@ -55,8 +57,22 @@ def write_if_changed(path, content):
     except FileNotFoundError:
         pass
 
-    with open(path, "w", encoding="utf-8", newline="\n") as file:
-        file.write(content)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="\n",
+            dir=os.path.dirname(path),
+            delete=False,
+        ) as file:
+            temporary_path = file.name
+            file.write(content)
+
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
 
 # A file registered as both design_file and sim_file compiles once.
 sim_file_content = "".join(
