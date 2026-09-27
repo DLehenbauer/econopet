@@ -48,7 +48,9 @@ endforeach()
 list(REMOVE_DUPLICATES SIM_SOURCE_FILES)
 
 add_custom_command(
-    OUTPUT ${SIM_FILELIST}
+    OUTPUT
+        ${SIM_FILELIST}
+        ${TIMESCALE_FILE}
     COMMAND ${REPO_DIR}/sim.sh --update-only
     DEPENDS
         "${REPO_DIR}/sim.sh"

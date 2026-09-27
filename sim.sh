@@ -47,13 +47,23 @@ sim_files = [path for path in sim_files if not path.endswith(".svh")]
 verilator_only_testbenches = {"sim/video_crtc_timing_tb.sv"}
 sim_files = [path for path in sim_files if path not in verilator_only_testbenches]
 
-with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
-    # A file registered as both design_file and sim_file compiles once.
-    for path in dict.fromkeys(package_files + sim_files + design_files):
-        sim_f.write(f"{path}\n")
+def write_if_changed(path, content):
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as file:
+            if file.read() == content:
+                return
+    except FileNotFoundError:
+        pass
 
-with open(timescale_f_path, "w", encoding="utf-8", newline="\n") as timescale_f:
-    timescale_f.write("+timescale+1ns/1ps\n")
+    with open(path, "w", encoding="utf-8", newline="\n") as file:
+        file.write(content)
+
+# A file registered as both design_file and sim_file compiles once.
+sim_file_content = "".join(
+    f"{path}\n" for path in dict.fromkeys(package_files + sim_files + design_files)
+)
+write_if_changed(sim_f_path, sim_file_content)
+write_if_changed(timescale_f_path, "+timescale+1ns/1ps\n")
 PY
 }
 
