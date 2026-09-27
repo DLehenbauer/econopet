@@ -256,7 +256,7 @@ If no command name is provided, ask the user before proceeding.
 ## Validation
 
 - Build: `cmake --build --preset fw`
-- Test: `ctest --preset fw`
+- Test: `ctest --preset fw --parallel`
 ```
 
 ## Testing and Iteration

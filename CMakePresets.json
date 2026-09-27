@@ -36,7 +36,7 @@
             "targets": ["firmware_project"]
         },
         {
-            "name": "fw_test",
+            "name": "fw-test",
             "displayName": "Firmware Tests",
             "description": "Build only the firmware unit tests",
             "configurePreset": "default",
@@ -80,16 +80,24 @@
     ],
     "testPresets": [
         {
+            "name": "test-base",
+            "hidden": true,
+            "configurePreset": "default",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
             "name": "all",
             "displayName": "All Tests",
             "description": "Run all available tests",
-            "configurePreset": "default"
+            "inherits": "test-base"
         },
         {
             "name": "fw",
             "displayName": "Firmware Tests",
             "description": "Run only firmware tests",
-            "configurePreset": "default",
+            "inherits": "test-base",
             "filter": {
                 "include": {
                     "label": "fw"
@@ -100,7 +108,7 @@
             "name": "gw",
             "displayName": "Gateware Tests",
             "description": "Run the quick gateware benches under Icarus and Verilator",
-            "configurePreset": "default",
+            "inherits": "test-base",
             "filter": {
                 "include": {
                     "label": "iv|vl"
@@ -114,7 +122,7 @@
             "name": "gw-iv",
             "displayName": "Gateware Tests (Icarus only)",
             "description": "Run the quick gateware benches under Icarus only",
-            "configurePreset": "default",
+            "inherits": "test-base",
             "filter": {
                 "include": {
                     "label": "iv"
@@ -125,7 +133,7 @@
             "name": "gw-vl",
             "displayName": "Gateware Tests (Verilator only)",
             "description": "Run the quick gateware benches under Verilator only",
-            "configurePreset": "default",
+            "inherits": "test-base",
             "filter": {
                 "include": {
                     "label": "vl"
@@ -139,7 +147,7 @@
             "name": "gw-boot",
             "displayName": "Gateware Boot Tests",
             "description": "Run the full-boot gateware benches under Verilator (slow)",
-            "configurePreset": "default",
+            "inherits": "test-base",
             "filter": {
                 "include": {
                     "label": "boot"
