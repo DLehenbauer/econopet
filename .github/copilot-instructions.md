@@ -26,9 +26,9 @@ Key interfaces:
 ```sh
 cmake --preset default              # Configure (run first)
 cmake --build --preset fw           # Build firmware only
-cmake --build --preset fw_test      # Build firmware tests
-ctest --preset fw                   # Run firmware tests
-ctest --preset gw                   # Run gateware simulations (fast)
+cmake --build --preset fw-test      # Build firmware tests
+ctest --preset fw --parallel        # Run firmware tests
+ctest --preset gw --parallel        # Run gateware simulations (fast)
 cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 ```
 

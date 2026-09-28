@@ -45,7 +45,7 @@
             "args": [
                 "--build",
                 "--preset",
-                "fw_test"
+                "fw-test"
             ],
             "group": "build",
             "problemMatcher": [],
