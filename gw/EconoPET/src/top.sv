@@ -14,8 +14,8 @@ module top #(
     parameter integer unsigned DATA_WIDTH = 8
 ) (
     // FPGA
-    input  logic sys_clock_i,   // 64 MHz clock (from PLL)
-    output logic status_no,     // Red NSTATUS LED (0 = On, 1 = Off)
+    input  logic sys_clock_i,       // 64 MHz clock (from PLL)
+    output logic status_no,         // Red NSTATUS LED (0 = On, 1 = Off)
 
     // CPU
     input  logic cpu_reset_n_i,
@@ -58,20 +58,20 @@ module top #(
 
     // IO
     output logic io_oe_n_o,
-    output logic pia1_cs_n_o,           // (CS2B)
-    output logic pia2_cs_n_o,           // (CS2B)
-    output logic via_cs_n_o,            // (CS2B)
+    output logic pia1_cs_n_o,       // (CS2B)
+    output logic pia2_cs_n_o,       // (CS2B)
+    output logic via_cs_n_o,        // (CS2B)
 
     // SPI buses
-    input  logic spi0_cs_ni,            // (CS)  Chip Select (active low)
-    input  logic spi0_sck_i,            // (SCK) Serial Clock
-    input  logic spi0_sd_i,             // (SDI) Serial Data In (MCU -> FPGA)
-    output logic spi0_sd_o,             // (SDO) Serial Data Out (FPGA -> MCU)
+    input  logic spi0_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi0_sck_i,        // (SCK) Serial Clock
+    input  logic spi0_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    output logic spi0_sd_o,         // (SDO) Serial Data Out (FPGA -> MCU)
     
-    input  logic spi1_cs_ni,            // (CS)  Chip Select (active low)
-    input  logic spi1_sck_i,            // (SCK) Serial Clock
-    input  logic spi1_sd_i,             // (SDI) Serial Data In (MCU -> FPGA)
-    input  logic spi1_sdo_i,            // Shared FPGA SDO / MCU SDI / SD-card DAT0
+    input  logic spi1_cs_ni,        // (CS)  Chip Select (active low)
+    input  logic spi1_sck_i,        // (SCK) Serial Clock
+    input  logic spi1_sd_i,         // (SDI) Serial Data In (MCU -> FPGA)
+    input  logic spi1_sdo_i,        // Shared FPGA SDO / MCU SDI / SD-card DAT0
     output logic spi1_sdo_o,
     output logic spi1_sdo_oe,
 
@@ -108,10 +108,11 @@ module top #(
     output logic video_o,
 
     // Audio
-    input  logic diag_i,
-    input  logic via_cb2_i,
-    output logic audio_o,
-    input  logic audio_det_n_i,     // Detects 3.5mm jack insertion (0 = inserted, 1 = not inserted)
+    input  logic diag_i,            // PIA1 PA7 pin 9: (0 = diag/sound off, 1 = normal/sound on)
+    input  logic via_cb2_i,         // VIA CB2 pin 19: shift register used for 1-bit sound
+    output logic audio_l_o,         // Audio left  : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
+    output logic audio_r_o,         // Audio right : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
+    input  logic audio_det_i,       // Detects 3.5mm jack insertion (0 = not inserted, 1 = inserted)
 
     // PMOD
     input  logic [8:1] pmod1_i,
@@ -312,7 +313,8 @@ module top #(
         // Audio
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
-        .audio_o(audio_o),
+        .audio_l_o(audio_l_o),
+        .audio_r_o(audio_r_o),
         .audio_det_i(!audio_det_n_i),
 
         // Keyboard

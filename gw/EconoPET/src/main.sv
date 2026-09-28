@@ -5,7 +5,7 @@ import common_pkg::*;
 
 module main (
     // FPGA
-    input  logic sys_clock_i,   // 64 MHz clock (from PLL)
+    input  logic sys_clock_i,       // 64 MHz clock (from PLL)
 
     // CPU
     input  logic cpu_reset_i,
@@ -62,9 +62,10 @@ module main (
     output logic video_o,
 
     // Audio
-    input  logic diag_i,
-    input  logic via_cb2_i,
-    output logic audio_o,
+    input  logic diag_i,            // PIA1 PA7 pin 9: (0 = diag/sound off, 1 = normal/sound on)
+    input  logic via_cb2_i,         // VIA CB2 pin 19: shift register used for 1-bit sound
+    output logic audio_l_o,         // Audio left  : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
+    output logic audio_r_o,         // Audio right : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
     input  logic audio_det_i,       // Detects 3.5mm jack insertion (0 = not inserted, 1 = inserted)
 
     // SPI buses
@@ -620,7 +621,8 @@ module main (
         .data_o(),                 // TODO: Read back from SID?
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
-        .audio_o(audio_o)
+        .audio_l_o(audio_l_o),
+        .audio_r_o(audio_r_o)
     );
 
     //

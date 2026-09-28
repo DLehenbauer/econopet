@@ -865,6 +865,16 @@
 	)
 	(wire
 		(pts
+			(xy 66.04 121.92) (xy 78.74 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b3a9e302-1d44-4220-829a-6bb26a24296f")
+	)
+	(wire
+		(pts
 			(xy 168.91 119.38) (xy 142.24 119.38)
 		)
 		(stroke
@@ -2026,16 +2036,6 @@
 			)
 			(uuid "5fc60b06-c977-4aac-bb01-61314619550b")
 		)
-		(pin "AUDIO" output
-			(at 78.74 119.38 180)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-			(uuid "0467a466-5aea-4097-812f-0ab5fab8d392")
-		)
 		(pin "~{AUDIO_DET}" input
 			(at 78.74 116.84 180)
 			(effects
@@ -2055,6 +2055,26 @@
 				(justify right)
 			)
 			(uuid "73496ab5-991b-4994-b1fe-6bfc367a2ebf")
+		)
+		(pin "AUDIO_R" output
+			(at 78.74 121.92 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "33a4ddb4-8bb3-4d31-8c6d-415202b7b419")
+		)
+		(pin "AUDIO_L" output
+			(at 78.74 119.38 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "1c9b7a4e-b0f8-4c92-9454-d8a971a110e0")
 		)
 		(instances
 			(project "Mainboard"
@@ -2934,7 +2954,7 @@
 	)
 	(sheet
 		(at 40.64 113.03)
-		(size 25.4 10.16)
+		(size 25.4 12.7)
 		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
@@ -2954,23 +2974,13 @@
 			)
 		)
 		(property "Sheetfile" "Audio.kicad_sch"
-			(at 40.64 123.7746 0)
+			(at 40.64 126.3146 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left top)
 			)
-		)
-		(pin "AUDIO" input
-			(at 66.04 119.38 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-			(uuid "27c75c8f-a018-464f-a3ae-b77b4bc1fafb")
 		)
 		(pin "~{AUDIO_DET}" output
 			(at 66.04 116.84 0)
@@ -2981,6 +2991,26 @@
 				(justify right)
 			)
 			(uuid "78248878-5a00-4251-b4e0-74bd55f6c43c")
+		)
+		(pin "AUDIO_R" input
+			(at 66.04 121.92 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "db9365a3-2947-4d3c-b6ca-a10175f6e964")
+		)
+		(pin "AUDIO_L" input
+			(at 66.04 119.38 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "d9e7027f-0ced-4514-865d-7068cfc7ba8f")
 		)
 		(instances
 			(project "Mainboard"

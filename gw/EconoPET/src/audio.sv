@@ -37,9 +37,10 @@ module audio (
     input  logic [                   7:0] data_i,       // writing to SID
     output logic [                   7:0] data_o,       // reading from SID
 
-    input  logic diag_i,
-    input  logic via_cb2_i,
-    output logic audio_o
+    input  logic diag_i,        // PIA1 PA7 pin 9: (0 = sound off, 1 = sound on)
+    input  logic via_cb2_i,     // VIA CB2 pin 19: shift register used for 1-bit sound
+    output logic audio_l_o,     // Audio left  : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
+    output logic audio_r_o,     // Audio right : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
 );
     wire sid_wr_en = cpu_wr_strobe_i && sid_en_i;
 
@@ -73,6 +74,10 @@ module audio (
         .clk_i  (sys_clock_i),
         .reset_i(reset_i),
         .dac_i  (mixed),
-        .dac_o  (audio_o)
+        .dac_o  (audio_l_o)
     );
+
+    // For now, the left and right audio channels both emit the same 1-bit ΔΣ
+    // encoded waveform.
+    assign audio_r_o = audio_l_o;
 endmodule

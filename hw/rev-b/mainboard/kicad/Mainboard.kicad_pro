@@ -38,8 +38,8 @@
         "other_text_upright": false,
         "pads": {
           "drill": 0.0,
-          "height": 5.8,
-          "width": 6.4
+          "height": 0.64,
+          "width": 0.54
         },
         "silk_line_width": 0.15,
         "silk_text_italic": false,
@@ -68,8 +68,6 @@
         "clearance|105883012|112745000|23f3d3bf-b2f1-4c13-8003-386980087deb|e9e643d5-d1e1-4f04-8d78-fa486cd92e87",
         "clearance|105883012|135203968|dcefe94e-53a2-4977-bd7e-f9c70315b2c1|dd2796d2-2957-4860-871f-3bbf42754b25",
         "clearance|105883012|135703967|096cf05d-f3a4-4fd2-9dfb-83b23c7157d8|dcefe94e-53a2-4977-bd7e-f9c70315b2c1",
-        "clearance|106148012|112330001|536a99e0-aa3f-4d12-80f7-6c60fd0e879a|23f3d3bf-b2f1-4c13-8003-386980087deb",
-        "clearance|106148012|135288968|544c8284-9f26-497f-8528-acdc909ad165|dd2796d2-2957-4860-871f-3bbf42754b25",
         "silk_edge_clearance|333637497|189040250|94db1cc3-33b9-4003-ad6b-dbd9d7137f77|bda9bc9d-8ab1-47a8-ba9a-890695342daf",
         "silk_edge_clearance|340517500|146057000|e2157212-8284-43bc-bd86-b0edeb6d421f|c9422b3f-631d-436d-a889-658a1040c62b",
         "silk_edge_clearance|342577503|189040250|94db1cc3-33b9-4003-ad6b-dbd9d7137f77|42a5d01e-b265-431d-93a1-017c42e0ed72",
