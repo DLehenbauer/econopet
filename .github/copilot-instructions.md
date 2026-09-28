@@ -44,6 +44,17 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 
 Include the SPDX license header in all new source files (see `fw/src/main.c` for example).
 
+### Linting
+
+- Fix lint causes. Suppress only demonstrated false positives, at the narrowest
+  scope available. Explain each suppression beside it.
+
+### Stubs and Documentation
+
+- Stubs must assert with a useful message, never return placeholders or succeed.
+- Document every function and non-obvious caller or consumer.
+- Document multi-step procedures as numbered actions with expected results.
+
 ## Environment Variables
 
 | Variable | Purpose |
