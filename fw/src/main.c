@@ -188,7 +188,8 @@ void fpga_init() {
     // CPU_RESET is asserted.
     set_cpu(CPU_RESET | CPU_READY);
     cpu_state = get_cpu();
-    vet(cpu_state == (CPU_READY | CPU_RESET), "fpga_init: failed to set CPU_READY, got %u", (unsigned int) cpu_state);
+    vet(cpu_state == (CPU_READY | CPU_RESET),
+        "fpga_init: failed to set CPU_READY, got %u", (unsigned int) cpu_state);
 
     // Finally, restore the original CPU state.
     set_cpu(CPU_RESET);

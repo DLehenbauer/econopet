@@ -48,6 +48,9 @@
 // Breakpoint Control Register
 #define REG_BP_CTL_CLEAR (1 << 0)
 
+// CPU Control Register
+#define CPU_CONTROL_MASK (CPU_READY | CPU_RESET | CPU_NMI)
+
 // Video Control Register
 #define REG_VIDEO_80_COL_MODE   (1 << 0)
 #define REG_VIDEO_RAM_MASK_LO   (1 << 1)
@@ -595,7 +598,7 @@ void set_cpu(cpu_state_t state) {
  * @return Current CPU control state.
  */
 cpu_state_t get_cpu(void) {
-    return (cpu_state_t)spi_read_at(REG_CPU);
+    return (cpu_state_t)(spi_read_at(REG_CPU) & CPU_CONTROL_MASK);
 }
 
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
