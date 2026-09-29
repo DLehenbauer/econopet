@@ -9,6 +9,7 @@
 #include "display/display.h"
 #include "display/dvi/dvi.h"
 #include "driver.h"
+#include "fatal.h"
 #include "global.h"
 #include "hw.h"
 #include "ieee/ieee_drive.h"
@@ -51,6 +52,11 @@ void fpga_read_bitstream_callback(size_t offset, uint8_t* buffer, size_t bytes_r
     spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
 }
 
+// An MCU reset stops the PWM clock source while the JTAG-configured FPGA
+// remains programmed. Allow 10 ms for its PLL to relock before SPI access
+// (measured lock time is approximately 3 ms).
+#define FPGA_PLL_LOCK_WAIT_MS 10
+
 void fpga_init() {
     gpio_init(FPGA_CRESET_GP);
 
@@ -82,7 +88,7 @@ void fpga_init() {
     log_debug("FLASH_SIZE=0x%08x XOSC_DELAY=%d", PICO_FLASH_SIZE_BYTES, PICO_XOSC_STARTUP_DELAY_MULTIPLIER);
     measure_freqs(fpga_div);
 
-    // Initialize FPGA_SPI at 24 MHz (default format is to SPI mode 0).
+    // Initialize FPGA_SPI at 24 MHz (default format is SPI mode 0).
     const int baudrate = spi_init(FPGA_SPI_INSTANCE, FPGA_SPI_MHZ * MHZ);
     gpio_set_function(FPGA_SPI_SCK_GP, GPIO_FUNC_SPI);
     gpio_set_function(FPGA_SPI_SDO_GP, GPIO_FUNC_SPI);
@@ -99,66 +105,94 @@ void fpga_init() {
     gpio_init(SPI_STALL_GP);
     gpio_set_dir(SPI_STALL_GP, GPIO_IN);
 
-    // When no programmer is attached, the onboard 100k pull-down will hold the FPGA in reset.
-    // If CRESET_N is is high, we know a JTAG programmer is attached and skip FPGA configuration.
+    // When no programmer is attached, the onboard 100k pull-down will hold the
+    // FPGA in reset. If CRESET_N is high, we know a JTAG programmer is attached
+    // and skip FPGA configuration.
     if (gpio_get(FPGA_CRESET_GP)) {
         log_warn("FPGA config skipped: Programmer attached");
+
+        // The FPGA remains programmed after an MCU-only reset, but its PWM
+        // reference clock has restarted. Wait for its PLL to relock before
+        // attempting communication.
+        sleep_ms(FPGA_PLL_LOCK_WAIT_MS);
 
         // Because we skipped FPGA configuration, the FPGA state is unknown.
         // Manually synchronize the FPGA's state to match the expected initial
         // state.
-        
-        // Initial CPU state per `gw/EconoPET/src/register_file.sv`:
-        set_cpu(CPU_READY | CPU_RESET);
-        return;
+
+        // Initial CPU state per `register_file.sv`:
+        set_cpu(CPU_RESET);
+    } else {
+        // Create a clean CRESET_N pulse to initiate FPGA configuration.
+        gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
+        gpio_put(FPGA_CRESET_GP, 1);
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+        gpio_put(FPGA_CRESET_GP, 0);
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+
+        // Efinix requires SPI mode 3 for configuration.
+        spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+
+        // Changes in clock polarity do not seem to take effect until the next
+        // write.  Send a single byte while CS_N is deasserted to transition SCK
+        // to high.
+        fpga_write_zeros(/* count: */ 1);
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+
+        // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to
+        // select passive vs. active SPI configuration.  (0 = Passive, 1 =
+        // Active)
+        gpio_put(FPGA_SPI_CSN_GP, 0);
+
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+        gpio_put(FPGA_CRESET_GP, 1);
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+
+        // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must
+        // enable 'Generate SPI Raw Binary Configuration File' under ~File ~Edit
+        // Project ~Bitstream Generation.
+        sd_read_file("/fpga/EconoPET.hex.bin", fpga_read_bitstream_callback, NULL, SIZE_MAX);
+
+        // To ensure successful configuration, the microprocessor must continue
+        // to supply the configuration clock to the Trion FPGA for at least 100
+        // cycles after sending the last configuration data.
+        //
+        // Efinix example clocks out 1000 zero bits to generate extra clock
+        // cycles.
+        fpga_write_zeros(/* count: */ 125);
+
+        // Deassert CS_N to signal end of configuration.
+        sleep_ms(1);  // t_CRESET_N = 320 ns
+        gpio_put(FPGA_SPI_CSN_GP, 1);
+
+        // Restore SPI mode 0
+        spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+        // Changes in clock polarity do not seem to take effect until the next
+        // write.  Send a single byte while CS_N is deasserted to transition SCK
+        // to low.
+        fpga_write_zeros(/* count: */ 1);
+
+        log_info("FPGA configured");
     }
 
-    // Create a clean CRESET_N pulse to initiate FPGA configuration.
-    gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
-    gpio_put(FPGA_CRESET_GP, 1);
-    sleep_ms(1);  // t_CRESET_N = 320 ns
-    gpio_put(FPGA_CRESET_GP, 0);
-    sleep_ms(1);  // t_CRESET_N = 320 ns
+    // At this point, we expect the FPGA to have entered user mode and the SPI
+    // interface to be ready for commands.  We verify this by reading back the
+    // initial CPU state defined in `register_file.sv`.
+    cpu_state_t cpu_state = get_cpu();
+    vet(cpu_state == CPU_RESET,
+        "fpga_init: initial CPU state must be CPU_RESET, got %u", (unsigned int) cpu_state);
 
-    // Efinix requires SPI mode 3 for configuration.
-    spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    // Perform a basic self-test by toggling the CPU_READY state while holding
+    // the CPU in the RESET state.  Note that the CPU remains halted when
+    // CPU_RESET is asserted.
+    set_cpu(CPU_RESET | CPU_READY);
+    cpu_state = get_cpu();
+    vet(cpu_state == (CPU_READY | CPU_RESET),
+        "fpga_init: failed to set CPU_READY, got %u", (unsigned int) cpu_state);
 
-    // Changes in clock polarity do not seem to take effect until the next write.  Send
-    // a single byte while CS_N is deasserted to transition SCK to high.
-    fpga_write_zeros(/* count: */ 1);
-    sleep_ms(1);  // t_CRESET_N = 320 ns
-
-    // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to select passive
-    // vs. active SPI configuration.  (0 = Passive, 1 = Active)
-    gpio_put(FPGA_SPI_CSN_GP, 0);
-
-    sleep_ms(1);  // t_CRESET_N = 320 ns
-    gpio_put(FPGA_CRESET_GP, 1);
-    sleep_ms(1);  // t_CRESET_N = 320 ns
-
-    // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must enable 'Generate SPI Raw
-    // Binary Configuration File' under ~File ~Edit Project ~Bitstream Generation.
-    sd_read_file("/fpga/EconoPET.hex.bin", fpga_read_bitstream_callback, NULL, SIZE_MAX);
-
-    // To ensure successful configuration, the microprocessor must continue to supply the
-    // configuration clock to the Trion FPGA for at least 100 cycles after sending the last
-    // configuration data.
-    //
-    // Efinix example clocks out 1000 zero bits to generate extra clock cycles.
-    fpga_write_zeros(/* count: */ 125);
-
-    // Deassert CS_N to signal end of configuration.
-    sleep_ms(1);  // t_CRESET_N = 320 ns
-    gpio_put(FPGA_SPI_CSN_GP, 1);
-
-    // Restore SPI mode 0
-    spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-
-    // Changes in clock polarity do not seem to take effect until the next write.  Send
-    // a single byte while CS_N is deasserted to transition SCK to low.
-    fpga_write_zeros(/* count: */ 1);
-
-    log_info("FPGA configured");
+    // Finally, restore the original CPU state.
+    set_cpu(CPU_RESET);
 }
 
 int main() {
