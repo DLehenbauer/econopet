@@ -189,7 +189,7 @@ ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
 if [ -n "$LINT" ]; then
     generate_filelists
     pushd "$PROJ_DIR" || exit 1
-    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" --top-module top
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" verilator.vlt --top-module top
     exit_on_failure
     popd
     exit 0

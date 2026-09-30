@@ -50,7 +50,7 @@ verilator --binary --timing -j "$VERILATOR_JOBS" \
     --Mdir "work_sim/obj_${TEST_NAME}" -o "${TEST_NAME}_vl" \
     -Iexternal/m6502/rtl \
     -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" \
-    -f work_sim/EconoPET.f "${VERILATOR_ONLY_SOURCES[@]}" || exit $?
+    -f work_sim/EconoPET.f verilator.vlt "${VERILATOR_ONLY_SOURCES[@]}" || exit $?
 
 VERILATOR_ARGS=("+verilator+rand+reset+${RAND_RESET}")
 if [ -n "$SEED" ]; then
