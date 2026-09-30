@@ -382,6 +382,7 @@ typedef struct fixed_hex_context_s {
 } fixed_hex_context_t;
 
 static void parse_as_fixed_hex(parser_t* parser, void* context, size_t context_size) {
+    (void) context_size;
     assert(context_size == sizeof(fixed_hex_context_t));
     const fixed_hex_context_t* const fixed_hex = (const fixed_hex_context_t*) context;
     parse_hex(parser, fixed_hex->output, fixed_hex->expected_size);
