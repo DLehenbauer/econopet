@@ -13,6 +13,7 @@ void mock_breakpoint_set_hit_addr(uint16_t addr);
 bool mock_breakpoint_halt_was_cleared(void);
 
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
+void mock_pet_reset(void);
 size_t mock_ieee_data_count(void);
 uint8_t mock_ieee_data_byte(size_t index);
 bool mock_ieee_data_eoi(size_t index);

@@ -437,6 +437,7 @@ module main (
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
         .phys_cpu_active_i(phys_cpu_active),
+        .reset_i(cpu_reset_i),
 
         // CPU control register
         .cpu_ready_o(reg_cpu_ready),
@@ -693,6 +694,8 @@ module main (
 
     ieee ieee (
         .wb_clock_i(sys_clock_i),
+        .ifc_i(cpu_reset_i),
+
         .wbp_addr_i(wb_addr),
         .wbp_data_i(wb_dout),
         .wbp_data_o(ieee_wb_din),

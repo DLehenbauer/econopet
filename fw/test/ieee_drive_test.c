@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "driver.h"
 #include "diskimage_test.h"
 #include "ieee/diskimage.h"
 #include "ieee/ieee_drive.h"
@@ -239,7 +240,59 @@ START_TEST(test_power_on_status_is_served_before_any_operation) {
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // Newly mounted units report the firmware power-on identification.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status("73,CBM DOS V2,00,00\r");
+}
+END_TEST
+
+// Verifies PET RES/IEEE IFC resets DOS state without ejecting mounted media.
+START_TEST(test_reset_preserves_mount_and_restores_power_on_status) {
+    const unsigned int device = loop_device(_i);
+    const unsigned int drive = loop_drive(_i);
+
+    // Simulate media mounted before the PET is reset. The final OPEN verifies
+    // that reset clears DOS state without ejecting this image.
+    mount_d64(device, drive, "drive.d64", true);
+
+    // Leave the emulated drive in non-power-on state. The missing-file OPEN
+    // creates both completed protocol activity and a pending DOS error that
+    // must not survive reset.
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
+    enqueue_name("MISSING");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    // Simulate PET RES/IEEE IFC reaching the FPGA. Synchronization must expose
+    // the retained reset event to firmware even after the immediate fabric
+    // FIFO flush has completed.
+    mock_pet_reset();
+    sync_state();
+    ck_assert(system_state.pet_reset_pending);
+
+    // Simulate firmware servicing the retained event. DOS/channel state is
+    // reset before acknowledgement, and a subsequent synchronization must
+    // observe that the FPGA event has been cleared.
+    ieee_drive_reset();
+    pet_reset_acknowledge();
+    sync_state();
+    ck_assert(!system_state.pet_reset_pending);
+
+    // Reading channel 15 vets that the pre-reset FILE NOT FOUND status was
+    // discarded and replaced by the exact 4040 power-on response.
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("73,CBM DOS V2,00,00\r");
+    mock_ieee_clear_status();
+
+    // Reopen a known file from the original image. Its complete payload and
+    // final EOI prove that reset preserved the mount and restored usable
+    // protocol state.
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
+    enqueue_filename_for_drive(drive, "BASIC,PRG");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(0));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 264);
+    ck_assert_uint_eq(mock_ieee_data_byte(0), 2);
+    ck_assert(mock_ieee_data_eoi(263));
 }
 END_TEST
 
@@ -254,7 +307,7 @@ START_TEST(test_status_read_resets_to_ok) {
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The first read observes status 73.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status("73,CBM DOS V2,00,00\r");
 
     // Consume the mock response, then readdress channel 15.
     mock_ieee_clear_status();
@@ -284,6 +337,89 @@ START_TEST(test_missing_file_reports_status_62) {
 }
 END_TEST
 
+// Verifies a dual-D80 unit reports the drive that produced each status.
+START_TEST(test_d80_pair_status_reports_selected_drive) {
+    const unsigned int device = loop_device_only(_i);
+
+    // Simulate a complete dual-drive 8050 unit so both drive numbers share the
+    // same DOS 2.7 model and status channel.
+    mount_d80(device, 0, "zero.d80", true);
+    mount_d80(device, 1, "one.d80", true);
+
+    for (unsigned int drive = 0; drive < IEEE_DRIVES_PER_DEVICE; drive++) {
+        // Select each drive with its filename prefix and deliberately fail an
+        // OPEN. This associates the resulting FILE NOT FOUND status with the
+        // drive that performed the directory lookup.
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
+        enqueue_filename_for_drive(drive, "MISSING");
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+                        IEEE_CMD_SECONDARY(15));
+        ieee_drive_task();
+
+        // Vet the exact DOS 2.7 status shape, including the originating drive
+        // number in the fifth field.
+        char expected[40];
+        snprintf(expected, sizeof(expected), "62,FILE NOT FOUND,00,00,%u\r", drive);
+        assert_status(expected);
+
+        // Consume the response and leave TALK mode so the other drive begins
+        // from an independent protocol exchange.
+        mock_ieee_clear_status();
+        enqueue_command(IEEE_CMD_UNTALK);
+    }
+}
+END_TEST
+
+// Verifies a mixed unit formats status according to the originating drive.
+START_TEST(test_mixed_models_follow_selected_drive) {
+    const unsigned int device = loop_device_only(_i / IEEE_DRIVES_PER_DEVICE);
+    const unsigned int d80_drive = (unsigned int) _i % IEEE_DRIVES_PER_DEVICE;
+    const unsigned int d64_drive = d80_drive ^ 1u;
+
+    // Simulate both mixed-drive orders. Each loop case swaps which local drive
+    // contains D80 media, ensuring model selection is not tied to one slot.
+    mount_d80(device, d80_drive, "drive.d80", true);
+    mount_d64(device, d64_drive, "drive.d64", true);
+
+    // Read status before selecting a drive. This vets the hybrid unit's
+    // deterministic power-on rule: drive 0 chooses the initial DOS model.
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status(d80_drive == 0
+        ? "73,CBM DOS V2.7,00,00,0\r"
+        : "73,CBM DOS V2,00,00\r");
+    mock_ieee_clear_status();
+
+    for (unsigned int drive = 0; drive < IEEE_DRIVES_PER_DEVICE; drive++) {
+        // Address each local drive and fail an OPEN. The pending status now has
+        // an unambiguous originating drive whose mounted media selects the
+        // emulated DOS model.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
+        enqueue_filename_for_drive(drive, "MISSING");
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+                        IEEE_CMD_SECONDARY(15));
+        ieee_drive_task();
+
+        if (drive == d80_drive) {
+            // The D80 side must use DOS 2.7's five-field status and report its
+            // local drive number.
+            char expected[40];
+            snprintf(expected, sizeof(expected), "62,FILE NOT FOUND,00,00,%u\r",
+                     drive);
+            assert_status(expected);
+        } else {
+            // The D64 side must use the 4040 four-field status even though its
+            // sibling drive in the same unit contains D80 media.
+            assert_status("62,FILE NOT FOUND,00,00\r");
+        }
+
+        // Discard this response so the next drive's assertion cannot pass on
+        // stale channel-15 bytes.
+        mock_ieee_clear_status();
+    }
+}
+END_TEST
+
 // ---------------------------------------------------------------------------
 // Addressing and command-channel behavior
 // ---------------------------------------------------------------------------
@@ -303,7 +439,7 @@ START_TEST(test_status_is_isolated_per_unit) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(target_device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The untouched neighbor retains its independent power-on status.
-    assert_status("73,ECONOPET IEEE,00,00\r");
+    assert_status("73,CBM DOS V2,00,00\r");
 }
 END_TEST
 
@@ -825,8 +961,14 @@ START_TEST(test_d80_mount_open_and_stream) {
     // Mount the 8050-style D80 fixture.
     mount_d80(device, drive, "drive.d80", true);
 
+    // The 8050 DOS ROM reports its own power-on banner and drive field.
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("73,CBM DOS V2.7,00,00,0\r");
+    mock_ieee_clear_status();
+
     // Open BASIC and request its data stream through channel 0.
-    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(0));
     enqueue_filename_for_drive(drive, "BASIC");
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(0));
     ieee_drive_task();
@@ -848,6 +990,8 @@ END_TEST
 Suite* ieee_drive_suite(void) {
     const int FOR_EACH_DEVICE_AND_DRIVE = IEEE_DEVICE_COUNT * IEEE_DRIVES_PER_DEVICE;
     const int FOR_EACH_DEVICE = IEEE_DEVICE_COUNT;
+    const int FOR_EACH_DEVICE_AND_MODEL_ORDER =
+        IEEE_DEVICE_COUNT * IEEE_DRIVES_PER_DEVICE;
 
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("d64");
@@ -860,10 +1004,16 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_power_on_status_is_served_before_any_operation,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_reset_preserves_mount_and_restores_power_on_status,
+                        0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_status_read_resets_to_ok,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_missing_file_reports_status_62,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_d80_pair_status_reports_selected_drive,
+                        0, FOR_EACH_DEVICE);
+    tcase_add_loop_test(test_case, test_mixed_models_follow_selected_drive,
+                        0, FOR_EACH_DEVICE_AND_MODEL_ORDER);
     tcase_add_loop_test(test_case, test_status_is_isolated_per_unit,
                         0, FOR_EACH_DEVICE);
     tcase_add_loop_test(test_case, test_drive_prefix_selects_second_drive_in_unit,

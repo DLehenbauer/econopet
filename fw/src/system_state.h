@@ -131,6 +131,10 @@ typedef struct system_state_s {
     // True when the FPGA has halted the CPU on a breakpoint (STP opcode)
     bool bp_halted;
 
+    // True when the latest FPGA status synchronization observed PET RES/IFC.
+    // Reset handlers clear this after acknowledging the FPGA event.
+    bool pet_reset_pending;
+
     // CRTC (6545) registers read from the FPGA, controlling video timing
     uint8_t pet_crtc_registers[CRTC_REG_COUNT];
 } system_state_t;

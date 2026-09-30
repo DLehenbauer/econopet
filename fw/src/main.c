@@ -118,9 +118,7 @@ void fpga_init() {
 
         // Because we skipped FPGA configuration, the FPGA state is unknown.
         // Manually synchronize the FPGA's state to match the expected initial
-        // state.
-
-        // Initial CPU state per `register_file.sv`:
+        // state. (Initial CPU state per `register_file.sv`)
         set_cpu(CPU_RESET);
     } else {
         // Create a clean CRESET_N pulse to initiate FPGA configuration.
@@ -232,6 +230,7 @@ int main() {
     // PET is configured and running.  Enter main loop to synchronize displays, service
     // input queues, and check for menu/reset button.
     while (true) {
+        pet_reset_task();   // Reset firmware-owned state after every PET RES assertion
         ieee_drive_task();  // Service IEEE-488 FIFOs; an underrun desyncs the loader
         display_task();     // Sync video buffer, render to terminal if needed
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render

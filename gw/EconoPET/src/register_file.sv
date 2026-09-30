@@ -6,51 +6,50 @@ import common_pkg::*;
 module register_file(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
-    input  logic                     wb_clock_i,
-    input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
-    input  logic [   DATA_WIDTH-1:0] wbp_data_i,
-    output logic [   DATA_WIDTH-1:0] wbp_data_o,
-    input  logic                     wbp_we_i,
-    input  logic                     wbp_cycle_i,
-    input  logic                     wbp_strobe_i,
-    output logic                     wbp_stall_o,
-    output logic                     wbp_ack_o,
-    input  logic                     wbp_sel_i,              // Asserted when selected by 'wbp_addr_i'
+    input  logic                      wb_clock_i,
+    input  logic [WB_ADDR_WIDTH-1:0]  wbp_addr_i,
+    input  logic [   DATA_WIDTH-1:0]  wbp_data_i,
+    output logic [   DATA_WIDTH-1:0]  wbp_data_o,
+    input  logic                      wbp_we_i,
+    input  logic                      wbp_cycle_i,
+    input  logic                      wbp_strobe_i,
+    output logic                      wbp_stall_o,
+    output logic                      wbp_ack_o,
+    input  logic                      wbp_sel_i,         // Asserted when selected by 'wbp_addr_i'
 
     // Status register
-    input  logic                     video_graphic_i,       // VIA CA2 (0 = graphics, 1 = text)
-    input  logic                     config_crt_i,          // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
-    input  logic                     config_keyboard_i,     // Keyboard type (0 = Business, 1 = Graphics)
-    input  logic                     phys_cpu_active_i,     // Physical 6502 address activity detected
+    input  logic                      video_graphic_i,   // VIA CA2 (0 = graphics, 1 = text)
+    input  logic                      config_crt_i,      // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    input  logic                      config_keyboard_i, // Keyboard type (0 = Business, 1 = Graphics)
+    input  logic                      phys_cpu_active_i, // Physical 6502 address activity detected
+    input  logic                      reset_i,           // Assert to set the sticky PET reset pending flag
 
     // CPU register
-    output logic                     cpu_ready_o,
-    output logic                     cpu_reset_o,
-    output logic                     cpu_nmi_o,
-    output logic [1:0]               cpu_sel_o,          // CPU_SEL_* (phys 6502 / soft 6809 / soft 6502)
-    output logic                     superpet_io_o,      // machine type: SuperPET I/O visible to a 6502 too
-    output logic                     cpu_sel_wr_o,       // 1-cycle pulse when REG_CPU_SEL is written (arms/clears the detector)
+    output logic                      cpu_ready_o,
+    output logic                      cpu_reset_o,
+    output logic                      cpu_nmi_o,
+    output logic [1:0]                cpu_sel_o,         // CPU_SEL_* (phys 6502 / soft 6809 / soft 6502)
+    output logic                      superpet_io_o,     // machine type: SuperPET I/O visible to a 6502 too
+    output logic                      cpu_sel_wr_o,      // 1-cycle pulse when REG_CPU_SEL is written (arms/clears the detector)
 
     // Breakpoint
-    input  logic                      bp_halted_i,           // Breakpoint module has halted the CPU
-    input  logic [CPU_ADDR_WIDTH-1:0] bp_addr_i,             // CPU address where breakpoint was hit
-    output logic                      bp_clear_o,            // One-cycle pulse to clear breakpoint halt
+    input  logic                      bp_halted_i,       // Breakpoint module has halted the CPU
+    input  logic [CPU_ADDR_WIDTH-1:0] bp_addr_i,         // CPU address where breakpoint was hit
+    output logic                      bp_clear_o,        // One-cycle pulse to clear breakpoint halt
 
     // Video register
-    output logic                     video_col_80_mode_o,
-    output logic [11:10]             video_ram_mask_o
+    output logic                      video_col_80_mode_o,
+    output logic [11:10]              video_ram_mask_o
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
+    logic reset_pending = 1'b0;
 
     initial begin
         wbp_ack_o    = '0;
         bp_clear_o   = '0;
         cpu_sel_wr_o = '0;
 
-        register[REG_STATUS][REG_STATUS_GRAPHICS_BIT] = 1'b0;
-        register[REG_STATUS][REG_STATUS_CRT_BIT]      = 1'b0;
-        register[REG_STATUS][REG_STATUS_KEYBOARD_BIT] = 1'b0;
-        register[REG_STATUS][REG_STATUS_BP_HALT_BIT]  = 1'b0;
+        register[REG_STATUS] = '0;
 
         // CPU state at power on:
         register[REG_CPU][REG_CPU_READY_BIT] = 1'b0;    // Not ready
@@ -80,6 +79,14 @@ module register_file(
     always_ff @(posedge wb_clock_i) begin
         bp_clear_o   <= '0;
         cpu_sel_wr_o <= '0;
+        // Reset wins over a simultaneous firmware acknowledgement, so an
+        // event cannot be lost while firmware is servicing a prior reset.
+        if (reset_i) reset_pending <= 1'b1;
+        else if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i && wbp_we_i
+                 && reg_addr == REG_STATUS[REG_ADDR_WIDTH-1:0]
+                 && wbp_data_i[REG_STATUS_RESET_PENDING_BIT]) begin
+            reset_pending <= 1'b0;
+        end
 
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= register[reg_addr];
@@ -87,7 +94,9 @@ module register_file(
                 // Writing to REG_BP_CTL pulses bp_clear_o instead of storing
                 // the value (the register address is shared with REG_BP_ADDR_LO
                 // which is read-only).
-                if (reg_addr == REG_BP_CTL[REG_ADDR_WIDTH-1:0]) begin
+                if (reg_addr == REG_STATUS[REG_ADDR_WIDTH-1:0]) begin
+                    // REG_STATUS is read-only except RESET_PENDING W1C above.
+                end else if (reg_addr == REG_BP_CTL[REG_ADDR_WIDTH-1:0]) begin
                     bp_clear_o <= wbp_data_i[REG_BP_CTL_CLEAR_BIT];
                 end else begin
                     register[reg_addr] <= wbp_data_i;
@@ -107,7 +116,9 @@ module register_file(
             // we process the next SPI command.
             //
             // Order must match bit order declared in common_pkg.sv.
-            register[REG_STATUS] <= { 3'b000, phys_cpu_active_i, bp_halted_i, config_keyboard_i, config_crt_i, video_graphic_i};
+            register[REG_STATUS] <= { 2'b00, reset_pending, phys_cpu_active_i,
+                                      bp_halted_i, config_keyboard_i, config_crt_i,
+                                      video_graphic_i};
 
             // Refresh breakpoint address registers from the breakpoint module.
             register[REG_BP_ADDR_LO] <= bp_addr_i[7:0];

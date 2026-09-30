@@ -19,12 +19,16 @@
 // state. The fabric remains transparent until an image is mounted.
 void ieee_drive_init(void);
 
+// Resets DOS and channel state for PET RES/IEEE IFC while preserving mounted
+// images and whether virtual-drive emulation is enabled.
+void ieee_drive_reset(void);
+
 // Removes all mounted disk images.
 void ieee_drive_unmount_all(void);
 
 // Mounts a path relative to /disks into a slot (0-7). Returns false when the
 // file was not found or is not a supported disk image.
-bool ieee_drive_mount(unsigned int drive, const char* filename);
+bool ieee_drive_mount(unsigned int slot, const char* filename);
 
 // Services the fabric FIFOs; call every main-loop pass.
 void ieee_drive_task(void);

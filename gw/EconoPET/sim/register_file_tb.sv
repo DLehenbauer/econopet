@@ -23,6 +23,7 @@ module register_file_tb;
     logic video_graphic;
     logic config_crt;
     logic config_keyboard;
+    logic reset;
 
     // CPU control register
     logic cpu_ready;
@@ -54,6 +55,7 @@ module register_file_tb;
         .video_graphic_i(video_graphic),
         .config_crt_i(config_crt),
         .config_keyboard_i(config_keyboard),
+        .reset_i(reset),
 
         // CPU control register
         .cpu_ready_o(cpu_ready),
@@ -105,6 +107,27 @@ module register_file_tb;
         `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b0);
     endtask
 
+    task test_reset_pending;
+        byte data;
+
+        reset = 1'b1;
+        repeat (2) @(posedge clock);
+        wb.read(REG_STATUS, data);
+        `assert_equal(data[REG_STATUS_RESET_PENDING_BIT], 1'b1);
+
+        // A W1C acknowledgement concurrent with reset cannot lose the reset.
+        wb.write(REG_STATUS, 1 << REG_STATUS_RESET_PENDING_BIT);
+        wb.read(REG_STATUS, data);
+        `assert_equal(data[REG_STATUS_RESET_PENDING_BIT], 1'b1);
+
+        reset = 1'b0;
+        @(posedge clock);
+        wb.write(REG_STATUS, 1 << REG_STATUS_RESET_PENDING_BIT);
+        @(posedge clock);                 // idle cycle refreshes status readback
+        wb.read(REG_STATUS, data);
+        `assert_equal(data[REG_STATUS_RESET_PENDING_BIT], 1'b0);
+    endtask
+
     task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
         logic [DATA_WIDTH-1:0] data_rd;
 
@@ -131,6 +154,7 @@ module register_file_tb;
 
         bp_halted = 1'b0;
         bp_addr   = 16'h0000;
+        reset     = 1'b0;
 
         // Check power-on state
         `assert_equal(cpu_ready, 1'b0);
@@ -156,6 +180,7 @@ module register_file_tb;
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b0, /* keyboard: */ 1'b1);
         test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);
         test_status(/* graphics: */ 1'b1, /* crt: */ 1'b0, /* keyboard: */ 1'b0);
+        test_reset_pending;
 
         // Breakpoint: BP_HALT appears in status register
         bp_halted = 1'b1;

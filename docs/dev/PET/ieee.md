@@ -50,6 +50,22 @@ VIA  | E840    | IRB      |  7  | PB7   | DAV (In)
 REN is held permanently low by the PET
 IFC is tied to RESB
 
+### Virtual drive reset and status
+
+EconoPET's virtual IEEE drive treats every PET RES/IFC assertion as a drive
+reset. The FPGA releases its emulated IEEE lines and discards pending bus
+transactions immediately. Firmware synchronizes the retained PET-reset-pending
+bit into `system_state`, then resets DOS/channel state without ejecting mounted
+images before acknowledging the bit.
+
+Status formatting follows the drive that produced the status. D64 images use
+4040 behavior and report four fields, while D80 and `.hdd` images use 8050
+behavior and report a fifth drive-number field. This also applies when a
+dual-drive unit contains mixed image types. Power-on status follows drive 0,
+or the sole mounted drive when drive 0 is empty. Therefore, D64 power-on status
+is `73,CBM DOS V2,00,00`, while D80 and `.hdd` power-on status is
+`73,CBM DOS V2.7,00,00,0`.
+
 ## ROM
 
 PIA Addressing

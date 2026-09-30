@@ -38,6 +38,10 @@ uint8_t mock_ram[MOCK_RAM_SIZE];
 #define MOCK_IEEE_TXS      (MOCK_IEEE_BASE + 6)
 #define MOCK_IEEE_TXS_LAST (MOCK_IEEE_BASE + 7)
 
+#define MOCK_REG_BASE   (0b010u << 17)
+#define MOCK_REG_STATUS (MOCK_REG_BASE + 0)
+#define MOCK_REG_STATUS_RESET_PENDING 0x20
+
 #define MOCK_IEEE_RX_CAPACITY 32
 #define MOCK_IEEE_TX_CAPACITY 1024
 #define MOCK_IEEE_TXS_CAPACITY 32
@@ -61,6 +65,8 @@ static struct {
     size_t status_count;
 } mock_ieee;
 
+static uint8_t mock_reg_status;
+
 static bool mock_ieee_addr(uint32_t addr) {
     return addr >= MOCK_IEEE_BASE && addr < MOCK_IEEE_BASE + 8;
 }
@@ -80,6 +86,20 @@ void mock_ieee_enqueue_rx(bool atn, uint8_t byte) {
     mock_ieee.rx[index].atn = atn;
     mock_ieee.rx[index].byte = byte;
     mock_ieee.rx_count++;
+}
+
+void mock_pet_reset(void) {
+    mock_reg_status |= MOCK_REG_STATUS_RESET_PENDING;
+    mock_ieee_flush(false);
+}
+
+void sync_state(void) {
+    system_state.pet_reset_pending =
+        (spi_read_at(MOCK_REG_STATUS) & MOCK_REG_STATUS_RESET_PENDING) != 0;
+}
+
+void pet_reset_acknowledge(void) {
+    spi_write_at(MOCK_REG_STATUS, MOCK_REG_STATUS_RESET_PENDING);
 }
 
 size_t mock_ieee_data_count(void) {
@@ -137,14 +157,15 @@ uint8_t spi_read_at(uint32_t addr) {
             return mock_ieee.rx_count == 0 ? 0 : mock_ieee.rx[mock_ieee.rx_head].byte;
         }
     }
+    if (addr == MOCK_REG_STATUS) return mock_reg_status;
+
     ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
     return mock_ram[addr];
 }
 
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
     for (size_t i = 0; i < byteLength; i++) {
-        ck_assert_uint_lt(addr + i, MOCK_RAM_SIZE);
-        pDest[i] = mock_ram[addr + i];
+        pDest[i] = spi_read_at(addr + i);
     }
 }
 
@@ -174,6 +195,12 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
         }
         return 0;
     }
+    if (addr == MOCK_REG_STATUS) {
+        if (data & MOCK_REG_STATUS_RESET_PENDING) {
+            mock_reg_status &= (uint8_t) ~MOCK_REG_STATUS_RESET_PENDING;
+        }
+        return 0;
+    }
     if (addr < MOCK_RAM_SIZE) {
         mock_ram[addr] = data;
     }
@@ -182,9 +209,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
 
 void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
     for (size_t i = 0; i < byteLength; i++) {
-        if (addr + i < MOCK_RAM_SIZE) {
-            mock_ram[addr + i] = pSrc[i];
-        }
+        spi_write_at(addr + i, pSrc[i]);
     }
 }
 
@@ -234,6 +259,7 @@ void bp_clear_halt(void) {
 void mock_reset(void) {
     memset(mock_ram, 0xEA, sizeof(mock_ram));
     memset(&mock_ieee, 0, sizeof(mock_ieee));
+    mock_reg_status = 0;
     system_state.bp_halted = false;
     mock_bp_addr = 0;
     mock_bp_cleared = false;

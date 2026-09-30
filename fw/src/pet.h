@@ -4,4 +4,5 @@
 #pragma once
 
 void pet_reset();
+void pet_reset_task();
 void pet_nmi();
