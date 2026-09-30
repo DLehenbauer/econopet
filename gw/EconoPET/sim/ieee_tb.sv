@@ -555,6 +555,7 @@ module ieee_tb;
         ctl_send(8'h29);                   // LISTEN 9
         ctl_send(8'h62);                   // secondary 2
         ctl_atn(0);
+        mcu_write(IEEE_REG_CTRL, 8'h09);   // firmware confirms open listener
         ctl_send(8'h55);                   // one data byte
         ctl_atn(1);
         ctl_send(8'h3F);                   // UNLISTEN
@@ -591,6 +592,7 @@ module ieee_tb;
         ctl_send(8'h2B);                   // LISTEN 11
         ctl_send(8'h60);                   // secondary 0
         ctl_atn(0);
+        mcu_write(IEEE_REG_CTRL, 8'h09);   // firmware confirms open listener
         ctl_send(8'h5A);
         ctl_atn(1);
         ctl_send(8'h3F);                   // UNLISTEN
