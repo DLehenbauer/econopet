@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+`timescale 1ns / 1ps
+
 module sync2 #(
     INITAL_DATA_I = '0,
     INITAL_DATA_O = INITAL_DATA_I

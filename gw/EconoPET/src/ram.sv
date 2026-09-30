@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+`timescale 1ns / 1ps
+
 import common_pkg::*;
 
 // Wishbone peripheral that allows the MCU to access RAM (via SPI bridge).
