@@ -199,8 +199,8 @@ START_TEST(test_replacing_mount_uses_new_image) {
 }
 END_TEST
 
-// Verifies the post-EOF continuation response expected by the current drive.
-START_TEST(test_read_past_eof_returns_eoied_carriage_return) {
+// Verifies a completed sequential stream does not fabricate another byte.
+START_TEST(test_read_past_eof_queues_no_data) {
     const unsigned int device = loop_device(_i);
     const unsigned int drive = loop_drive(_i);
 
@@ -217,13 +217,11 @@ START_TEST(test_read_past_eof_returns_eoied_carriage_return) {
     // Model the controller consuming the first EOF-terminated response.
     mock_ieee_clear_data();
 
-    // Resume the same channel after EOF and inspect the continuation reply.
+    // Resume the same channel after EOF. The bus layer will report its normal
+    // sender timeout because the exhausted channel has no byte to transmit.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(0));
     ieee_drive_task();
-    // A post-EOF TALK returns only a carriage return marked EOI.
-    ck_assert_uint_eq(mock_ieee_data_count(), 1);
-    ck_assert_uint_eq(mock_ieee_data_byte(0), '\r');
-    ck_assert(mock_ieee_data_eoi(0));
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
 }
 END_TEST
 
@@ -479,15 +477,13 @@ START_TEST(test_corrupt_sequential_chain_reports_read_error) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(0));
     ieee_drive_task();
 
-    // Valid prefix bytes are sent, followed by an EOI'd carriage-return fallback.
-    ck_assert_uint_eq(mock_ieee_data_count(), 255);
+    // Only valid prefix bytes are sent. The failed successor cannot invent a
+    // payload byte or EOI; the controller observes a sender timeout instead.
+    ck_assert_uint_eq(mock_ieee_data_count(), 254);
     for (size_t index = 0; index < 254; index++) {
         ck_assert_uint_eq(mock_ieee_data_byte(index), index + 2);
         ck_assert(!mock_ieee_data_eoi(index));
     }
-    ck_assert_uint_eq(mock_ieee_data_byte(254), '\r');
-    ck_assert(mock_ieee_data_eoi(254));
-
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
     ieee_drive_task();
     // The incomplete chain records DOS read error 23 on channel 15.
@@ -856,7 +852,7 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
-    tcase_add_loop_test(test_case, test_read_past_eof_returns_eoied_carriage_return,
+    tcase_add_loop_test(test_case, test_read_past_eof_queues_no_data,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_power_on_status_is_served_before_any_operation,
                         0, FOR_EACH_DEVICE_AND_DRIVE);

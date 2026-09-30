@@ -580,13 +580,12 @@ static void service_tx(void) {
             bool is_last;
             if (!diskstream_next(&stream, &byte, &is_last)) {
                 // Natural EOF exits via 'is_last'; reaching here mid-file means
-                // an SD read error. Flush what we gathered, then close with an
-                // EOI'd filler so the kernel sees a clean (if short) end.
+                // an SD read error. Flush valid bytes and leave the talker
+                // empty so the controller observes its normal sender timeout.
                 if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
                 streamed_bytes += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
                 status_code[stream_drive >> 1] = st_code_read_error;
-                spi_write_at(IEEE_REG_TX_LAST, 0x0D);
                 streaming = false;
                 return;
             }
@@ -660,11 +659,7 @@ static void handle_command(uint8_t cmd) {
                 } else if ((rc = rel_find(talk_unit, chan)) != NULL) {
                     rel_serve(rc);
                 } else if (file_open_ok && talk_unit == file_unit && chan == file_chan) {
-                    if (stream_finished) {
-                        // Read past EOF: real CBM DOS answers a lone EOI'd
-                        // CR with clean status, not a read error.
-                        spi_write_at(IEEE_REG_TX_LAST, 0x0D);
-                    } else {
+                    if (!stream_finished) {
                         streaming = true;
                     }
                 }
