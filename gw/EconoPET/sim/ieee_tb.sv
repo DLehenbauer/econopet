@@ -217,6 +217,16 @@ module ieee_tb;
         ctl_nrfd(0);
     endtask
 
+    // Waterloo ROM $C14F-$C16D: release NRFD, release NDAC, wait for DAV to
+    // clear, then assert ATN. The fast DUT may already have another byte in
+    // flight, but this sequence does not read that byte from DIO.
+    task automatic ctl_waterloo_terminate;
+        ctl_nrfd(0);
+        ctl_ndac(0);
+        ctl_wait(8'h80, 8'h80);
+        ctl_atn(1);
+    endtask
+
     task automatic mcu_push(input string s, input bit final_cr);
         for (int i = 0; i < s.len(); i++) mcu_write(3'd6, s[i]);          // TXS
         if (final_cr) mcu_write(3'd7, 8'h0D);                             // TXS_LAST
@@ -399,16 +409,14 @@ module ieee_tb;
             ctl_recv(d, eoi);
             `assert_equal(d, 8'h40 + i[7:0]);
         end
-        // ...then terminate exactly like the Waterloo kernel (C150): the
+        // ...then terminate exactly like the Waterloo ROM at $C14F: the
         // per-byte loop has already re-armed NDAC, so this fast talker has
         // byte 10's DAV asserted. The kernel now releases NRFD and NDAC
         // without reading DIO -- line-identical to an accept -- waits for
         // DAV to clear, and only then asserts ATN. The DUT must NOT pop
         // byte 10 (pop-on-consumption); the resume loop below starts at 10
         // and is off-by-one if the phantom accept is not suppressed.
-        ctl_ndac(0);                       // release without a data read
-        ctl_wait(8'h80, 8'h80);            // talker backs off (DAV released)
-        ctl_atn(1);
+        ctl_waterloo_terminate;
         ctl_send(8'h5F);                   // UNTALK mid-file
         ctl_send(8'h48);
         ctl_send(8'h6F);                   // status again
@@ -470,7 +478,7 @@ module ieee_tb;
         mcu_drain_rx;
         $display("[%t]   RX-full backpressure verified", $time);
 
-        // --- ATN abort after consumption must pop (no duplicate byte) ---
+        // --- ATN before NDAC release must preserve the byte ---
         for (int i = 0; i < 4; i++) mcu_write(IEEE_REG_TX, 8'h60 + i[7:0]);
         mcu_write(IEEE_REG_TX_LAST, 8'h64);
         ctl_atn(1);
@@ -480,14 +488,14 @@ module ieee_tb;
         ctl_ndac(1);
         ctl_nrfd(0);
         ctl_wait(8'h80, 8'h00);            // DAV asserted: byte 0 in flight
-        cpu_read(0, 1, 0, 4'd0, d);        // CPU reads $E820 (consumes)...
+        cpu_read(0, 1, 0, 4'd0, d);        // private CPU read is not a bus ACK
         `assert_equal(~d, 8'h60);
-        ctl_atn(1);                        // ...but asserts ATN before NDAC release
+        ctl_atn(1);                        // abort before releasing NDAC
         ctl_send(8'h5F);                   // UNTALK
         ctl_send(8'h48);
         ctl_send(8'h61);                   // TALK again
         ctl_atn(0);
-        for (int i = 1; i < 5; i++) begin  // stream must resume at byte 1
+        for (int i = 0; i < 5; i++) begin  // stream must resume at byte 0
             ctl_recv(d, eoi);
             `assert_equal(d, 8'h60 + i[7:0]);
         end
@@ -496,7 +504,7 @@ module ieee_tb;
         ctl_send(8'h5F);
         ctl_atn(0);
         mcu_drain_rx;
-        $display("[%t]   ATN-after-consume pop verified", $time);
+        $display("[%t]   ATN-before-NDAC abort verified", $time);
 
         // --- dense counted-read + terminate + resume (the Super-OS/9 REL
         // per-record pattern) at a tight 1MHz cadence ---
@@ -521,9 +529,8 @@ module ieee_tb;
                     `assert_equal(d, 8'h80 + i[7:0]);
                 end
                 // ...terminate mid-record exactly like the kernel (no DIO read).
-                ctl_ndac(0);
-                ctl_wait(8'h80, 8'h80);      // talker backs off (DAV released)
-                ctl_atn(1); ctl_send(8'h5F); ctl_send(8'h48); ctl_send(8'h60); ctl_atn(0);
+                ctl_waterloo_terminate;
+                ctl_send(8'h5F); ctl_send(8'h48); ctl_send(8'h60); ctl_atn(0);
                 // Resume: MUST continue at byte 'cnt' (off-by-one if dup/drop).
                 for (int i = cnt; i < 25; i++) begin
                     ctl_recv(d, eoi);
