@@ -377,7 +377,8 @@ module ieee_tb;
         mcu_push("00, OK,00,00", 1);
         // controller becomes acceptor
         begin
-            string status_str = "";
+            string status_str;
+            status_str = "";
             eoi = 0;
             while (!eoi) begin
                 ctl_recv(d, eoi);
@@ -515,9 +516,11 @@ module ieee_tb;
         // byte_consumed guard must NOT pop it, or the resume is off-by-one.
         // Several records: the race is timing-dependent.
         begin
-            int saved_tail = g_tail;
+            int saved_tail;
+            saved_tail = g_tail;
             for (int rec = 0; rec < 6; rec++) begin
-                int cnt = 8 + rec;            // vary the counted length per record
+                int cnt;
+                cnt = 8 + rec;                // vary the counted length per record
                 mcu_drain_rx;
                 for (int i = 0; i < 24; i++) mcu_write(IEEE_REG_TX, 8'h80 + i[7:0]);
                 mcu_write(IEEE_REG_TX_LAST, 8'h98);   // 25 bytes (0x80..0x98)
