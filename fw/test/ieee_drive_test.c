@@ -700,8 +700,8 @@ START_TEST(test_relative_record_lengths_stream_exactly) {
 }
 END_TEST
 
-// Verifies an empty REL record is skipped when serving the next available record.
-START_TEST(test_empty_relative_record_is_transparent) {
+// Verifies an empty REL record remains observable and advances after EOF.
+START_TEST(test_empty_relative_record_returns_nul_then_advances) {
     const unsigned int device = loop_device(_i);
     const unsigned int drive = loop_drive(_i);
     // Zero record 1 of DATA while leaving record 2 intact in the fixture.
@@ -716,7 +716,16 @@ START_TEST(test_empty_relative_record_is_transparent) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(2));
     ieee_drive_task();
 
-    // Serving skips the empty record and returns record 2 across its boundary.
+    // A classic drive returns the record's first zero byte with EOI.
+    ck_assert_uint_eq(mock_ieee_data_count(), 1);
+    ck_assert_uint_eq(mock_ieee_data_byte(0), 0);
+    ck_assert(mock_ieee_data_eoi(0));
+
+    mock_ieee_clear_data();
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(2));
+    ieee_drive_task();
+
+    // The next TALK begins record 2 across the fixture's sector boundary.
     ck_assert_uint_eq(mock_ieee_data_count(), 129);
     for (size_t index = 0; index < 125; index++) {
         ck_assert_uint_eq(mock_ieee_data_byte(index), 0xa0);
@@ -892,7 +901,7 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_relative_record_lengths_stream_exactly,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
-    tcase_add_loop_test(test_case, test_empty_relative_record_is_transparent,
+    tcase_add_loop_test(test_case, test_empty_relative_record_returns_nul_then_advances,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_relative_channels_are_isolated_between_units,
                         0, FOR_EACH_DEVICE);

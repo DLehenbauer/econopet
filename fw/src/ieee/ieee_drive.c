@@ -325,14 +325,20 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 }
 
 // Serve the current (trimmed) record into the fabric TX FIFO, EOI on its
-// last byte. Empty records are transparent: reads flow into the next
-// record, exactly like vdrive_rel_read.
+// last byte. An empty record returns one zero byte before advancing.
 static void rel_serve(rel_channel_t* rc) {
     uint8_t buf[254];
 
     ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
     while (!rc->missing && (int32_t) rc->bufptr > rc->length) {
+        const uint32_t base = (rc->cur_record - 1) * (uint32_t) rc->reclen;
+        if (rc->length < (int32_t) base) {
+            spi_write_at(IEEE_REG_TX_LAST, 0x00);
+            streamed_bytes++;
+            rel_position(rc, rc->cur_record + 1, 0);
+            return;
+        }
         rel_position(rc, rc->cur_record + 1, 0);
     }
     if (rc->missing) {
