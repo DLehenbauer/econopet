@@ -118,9 +118,7 @@ void fpga_init() {
 
         // Because we skipped FPGA configuration, the FPGA state is unknown.
         // Manually synchronize the FPGA's state to match the expected initial
-        // state.
-
-        // Initial CPU state per `register_file.sv`:
+        // state. (Initial CPU state per `register_file.sv`)
         set_cpu(CPU_RESET);
     } else {
         // Create a clean CRESET_N pulse to initiate FPGA configuration.

@@ -398,12 +398,12 @@ package common_pkg;
     //
 
     // Register 0: Status (Read-only)
-    localparam int unsigned REG_STATUS              = 0;
-    localparam int unsigned REG_STATUS_GRAPHICS_BIT = 0;    // VIA CA2 (0 = graphics, 1 = text)
-    localparam int unsigned REG_STATUS_CRT_BIT      = 1;    // Diagonal CRT size (0 = 12", 1 = 9")
-    localparam int unsigned REG_STATUS_KEYBOARD_BIT = 2;    // Keyboard Type (0 = Business, 1 = Graphics)
-    localparam int unsigned REG_STATUS_BP_HALT_BIT  = 3;    // Breakpoint halt (1 = CPU halted on STP fetch)
-    localparam int unsigned REG_STATUS_PHYS_CPU_BIT = 4;    // Physical 6502 detected (probe loop seen at $0400)
+    localparam int unsigned REG_STATUS                   = 0;
+    localparam int unsigned REG_STATUS_GRAPHICS_BIT      = 0;   // VIA CA2 (0 = graphics, 1 = text)
+    localparam int unsigned REG_STATUS_CRT_BIT           = 1;   // Diagonal CRT size (0 = 12", 1 = 9")
+    localparam int unsigned REG_STATUS_KEYBOARD_BIT      = 2;   // Keyboard Type (0 = Business, 1 = Graphics)
+    localparam int unsigned REG_STATUS_BP_HALT_BIT       = 3;   // Breakpoint halt (1 = CPU halted on STP fetch)
+    localparam int unsigned REG_STATUS_PHYS_CPU_BIT      = 4;   // Physical 6502 detected (probe loop seen at $0400)
 
     // Register 1: CPU control
     localparam int unsigned REG_CPU                 = 1;
@@ -491,12 +491,14 @@ package common_pkg;
 
     // IEEE-488 drive emulation registers (see ieee.sv)
     localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
-    localparam IEEE_REG_CTRL    = 3'd0;   // bit0 = enable, bit1 = flush FIFOs/state
-    localparam IEEE_REG_STATUS  = 3'd1;   // see ieee.sv
-    localparam IEEE_REG_RX      = 3'd2;   // read = head byte, write = pop
-    localparam IEEE_REG_TX      = 3'd3;   // write pushes device->CPU byte
-    localparam IEEE_REG_TX_LAST = 3'd4;   // write pushes final byte (EOI)
-    localparam IEEE_REG_SA      = 3'd5;   // last secondary address byte
+    // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
+    // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
+    localparam IEEE_REG_CTRL     = 3'd0;
+    localparam IEEE_REG_STATUS   = 3'd1;  // see ieee.sv
+    localparam IEEE_REG_RX       = 3'd2;  // read = head byte, write = pop
+    localparam IEEE_REG_TX       = 3'd3;  // write pushes device->CPU byte
+    localparam IEEE_REG_TX_LAST  = 3'd4;  // write pushes final byte (EOI)
+    localparam IEEE_REG_SA       = 3'd5;  // last secondary address byte
     localparam IEEE_REG_TXS      = 3'd6;  // write pushes status-channel byte
     localparam IEEE_REG_TXS_LAST = 3'd7;  // write pushes final status byte (EOI)
 

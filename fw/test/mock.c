@@ -143,8 +143,7 @@ uint8_t spi_read_at(uint32_t addr) {
 
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
     for (size_t i = 0; i < byteLength; i++) {
-        ck_assert_uint_lt(addr + i, MOCK_RAM_SIZE);
-        pDest[i] = mock_ram[addr + i];
+        pDest[i] = spi_read_at(addr + i);
     }
 }
 
@@ -182,9 +181,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
 
 void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
     for (size_t i = 0; i < byteLength; i++) {
-        if (addr + i < MOCK_RAM_SIZE) {
-            mock_ram[addr + i] = pSrc[i];
-        }
+        spi_write_at(addr + i, pSrc[i]);
     }
 }
 
