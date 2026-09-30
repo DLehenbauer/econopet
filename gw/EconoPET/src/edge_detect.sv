@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+`timescale 1ns / 1ps
+
 module edge_detect #(
     INITAL_DATA_I = '0
 ) (
