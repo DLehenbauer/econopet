@@ -230,7 +230,6 @@ int main() {
     // PET is configured and running.  Enter main loop to synchronize displays, service
     // input queues, and check for menu/reset button.
     while (true) {
-        pet_reset_task();   // Reset firmware-owned state after every PET RES assertion
         ieee_drive_task();  // Service IEEE-488 FIFOs; an underrun desyncs the loader
         display_task();     // Sync video buffer, render to terminal if needed
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render

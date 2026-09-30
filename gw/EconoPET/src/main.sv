@@ -437,7 +437,6 @@ module main (
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
         .phys_cpu_active_i(phys_cpu_active),
-        .reset_i(cpu_reset_i),
 
         // CPU control register
         .cpu_ready_o(reg_cpu_ready),

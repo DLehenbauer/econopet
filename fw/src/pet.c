@@ -4,7 +4,6 @@
 #include "pch.h"
 #include "pet.h"
 
-#include "diag/log/log.h"
 #include "driver.h"
 #include "ieee/ieee_drive.h"
 #include "system_state.h"
@@ -22,6 +21,7 @@ void pet_reset() {
     set_cpu(CPU_HALT);
     sleep_us(4);
 
+    ieee_drive_reset();
     usb_keyboard_reset(&system_state);
 
     memset(system_state.video_char_buffer, 0x20, 0x800);            // Clear video character buffer
@@ -35,18 +35,6 @@ void pet_reset() {
     
     // Finally, deassert CPU 'reset' and allow the CPU to execute instructions.
     set_cpu(CPU_READY);
-}
-
-void pet_reset_task() {
-    if (!system_state.pet_reset_pending) return;
-
-    log_info("PET external reset");
-
-    // Add every firmware-owned peripheral reset here before acknowledging.
-    ieee_drive_reset();
-
-    // Clear the reset pending flag.
-    pet_reset_acknowledge();
 }
 
 void pet_nmi() {

@@ -244,7 +244,8 @@ START_TEST(test_power_on_status_is_served_before_any_operation) {
 }
 END_TEST
 
-// Verifies PET RES/IEEE IFC resets DOS state without ejecting mounted media.
+// Verifies a firmware-initiated reset flushes fabric and DOS state without
+// ejecting mounted media.
 START_TEST(test_reset_preserves_mount_and_restores_power_on_status) {
     const unsigned int device = loop_device(_i);
     const unsigned int drive = loop_drive(_i);
@@ -261,20 +262,15 @@ START_TEST(test_reset_preserves_mount_and_restores_power_on_status) {
     enqueue_command(IEEE_CMD_UNLISTEN);
     ieee_drive_task();
 
-    // Simulate PET RES/IEEE IFC reaching the FPGA. Synchronization must expose
-    // the retained reset event to firmware even after the immediate fabric
-    // FIFO flush has completed.
-    mock_pet_reset();
-    sync_state();
-    ck_assert(system_state.pet_reset_pending);
+    // Queue the pending error response so reset must discard both firmware
+    // state and bytes already written to the fabric.
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    ck_assert_uint_gt(mock_ieee_status_count(), 0);
 
-    // Simulate firmware servicing the retained event. DOS/channel state is
-    // reset before acknowledgement, and a subsequent synchronization must
-    // observe that the FPGA event has been cleared.
     ieee_drive_reset();
-    pet_reset_acknowledge();
-    sync_state();
-    ck_assert(!system_state.pet_reset_pending);
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    ck_assert_uint_eq(mock_ieee_status_count(), 0);
 
     // Reading channel 15 vets that the pre-reset FILE NOT FOUND status was
     // discarded and replaced by the exact 4040 power-on response.
@@ -293,6 +289,43 @@ START_TEST(test_reset_preserves_mount_and_restores_power_on_status) {
     ck_assert_uint_eq(mock_ieee_data_count(), 264);
     ck_assert_uint_eq(mock_ieee_data_byte(0), 2);
     ck_assert(mock_ieee_data_eoi(263));
+}
+END_TEST
+
+// Verifies I/V use an explicit 0/1 drive and otherwise retain the ROM's
+// last-drive default. Mixed image types make the selected formatter visible.
+START_TEST(test_initialize_and_validate_commands_select_status_drive) {
+    const unsigned int device = loop_device_only(_i);
+
+    mount_d64(device, 0, "drive0.d64", true);
+    mount_d80(device, 1, "drive1.d80", true);
+
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(15));
+    enqueue_name("I1");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("00, OK,00,00,1\r");
+    mock_ieee_clear_status();
+
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(15));
+    enqueue_name("V");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("00, OK,00,00,1\r");
+    mock_ieee_clear_status();
+
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(15));
+    enqueue_name("I0");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("00, OK,00,00\r");
+    mock_ieee_clear_status();
+
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(15));
+    enqueue_name("V");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(15));
+    ieee_drive_task();
+    assert_status("00, OK,00,00\r");
 }
 END_TEST
 
@@ -1030,6 +1063,8 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_validate_command_clears_error_status,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_initialize_and_validate_commands_select_status_drive,
+                        0, IEEE_DEVICE_COUNT);
     tcase_add_loop_test(test_case, test_relative_file_position_and_read,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_relative_position_within_record,

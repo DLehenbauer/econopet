@@ -469,8 +469,14 @@ static void ch15_execute(void) {
                        rc->missing ? st_code_record_missing : st_code_ok, 0, 0);
         }
     } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
-        set_status(ch15_unit * DRIVES_PER_UNIT + drive_status[ch15_unit].drive,
-                   st_code_ok, 0, 0);
+        uint8_t drive = drive_status[ch15_unit].drive;
+        for (unsigned int index = 1; index < ch15_cmd_len; index++) {
+            if (ch15_cmd[index] == '0' || ch15_cmd[index] == '1') {
+                drive = (uint8_t) (ch15_cmd[index] - '0');
+                break;
+            }
+        }
+        set_status(ch15_unit * DRIVES_PER_UNIT + drive, st_code_ok, 0, 0);
     } else {
         log_info("ieee: ch15 command %02x len %u (ignored)", ch15_cmd[0], ch15_cmd_len);
     }
@@ -793,6 +799,7 @@ void ieee_drive_init(void) {
 
 void ieee_drive_reset(void) {
     reset_protocol_state();
+    if (emulation_enabled) ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
 }
 
 void ieee_drive_unmount_all(void) {

@@ -22,7 +22,6 @@ module register_file(
     input  logic                      config_crt_i,      // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     input  logic                      config_keyboard_i, // Keyboard type (0 = Business, 1 = Graphics)
     input  logic                      phys_cpu_active_i, // Physical 6502 address activity detected
-    input  logic                      reset_i,           // Assert to set the sticky PET reset pending flag
 
     // CPU register
     output logic                      cpu_ready_o,
@@ -42,7 +41,6 @@ module register_file(
     output logic [11:10]              video_ram_mask_o
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
-    logic reset_pending = 1'b0;
 
     initial begin
         wbp_ack_o    = '0;
@@ -79,14 +77,6 @@ module register_file(
     always_ff @(posedge wb_clock_i) begin
         bp_clear_o   <= '0;
         cpu_sel_wr_o <= '0;
-        // Reset wins over a simultaneous firmware acknowledgement, so an
-        // event cannot be lost while firmware is servicing a prior reset.
-        if (reset_i) reset_pending <= 1'b1;
-        else if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i && wbp_we_i
-                 && reg_addr == REG_STATUS[REG_ADDR_WIDTH-1:0]
-                 && wbp_data_i[REG_STATUS_RESET_PENDING_BIT]) begin
-            reset_pending <= 1'b0;
-        end
 
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= register[reg_addr];
@@ -95,7 +85,7 @@ module register_file(
                 // the value (the register address is shared with REG_BP_ADDR_LO
                 // which is read-only).
                 if (reg_addr == REG_STATUS[REG_ADDR_WIDTH-1:0]) begin
-                    // REG_STATUS is read-only except RESET_PENDING W1C above.
+                    // REG_STATUS is read-only.
                 end else if (reg_addr == REG_BP_CTL[REG_ADDR_WIDTH-1:0]) begin
                     bp_clear_o <= wbp_data_i[REG_BP_CTL_CLEAR_BIT];
                 end else begin
@@ -116,7 +106,7 @@ module register_file(
             // we process the next SPI command.
             //
             // Order must match bit order declared in common_pkg.sv.
-            register[REG_STATUS] <= { 2'b00, reset_pending, phys_cpu_active_i,
+            register[REG_STATUS] <= { 3'b000, phys_cpu_active_i,
                                       bp_halted_i, config_keyboard_i, config_crt_i,
                                       video_graphic_i};
 

@@ -51,9 +51,6 @@ void set_cpu(cpu_state_t state);
 // Return the current CPU control flags.
 cpu_state_t get_cpu(void);
 
-// Acknowledge the pending PET reset after resetting firmware-owned state.
-void pet_reset_acknowledge(void);
-
 // In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
 // the FPGA.
 typedef enum {

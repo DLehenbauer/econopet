@@ -44,7 +44,6 @@
 #define REG_STATUS_KEYBOARD      (1 << 2)
 #define REG_STATUS_BP_HALT       (1 << 3)
 #define REG_STATUS_PHYS_CPU      (1 << 4) // Physical 6502 address activity seen
-#define REG_STATUS_RESET_PENDING (1 << 5) // W1C after firmware reset handling
 
 // Breakpoint Control Register
 #define REG_BP_CTL_CLEAR (1 << 0)
@@ -602,11 +601,6 @@ cpu_state_t get_cpu(void) {
     return (cpu_state_t)(spi_read_at(REG_CPU) & CPU_CONTROL_MASK);
 }
 
-void pet_reset_acknowledge(void) {
-    spi_write_at(REG_STATUS, REG_STATUS_RESET_PENDING);
-    system_state.pet_reset_pending = false;
-}
-
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
 // is its own register, so it survives the frequent REG_CPU reset/ready writes
 // (set_cpu / pet_reset). No FPGA reconfiguration occurs -- the FPGA keeps
@@ -742,7 +736,7 @@ void write_pet_model(const system_state_t* const system_state) {
  *    - Used by the RP2040 to emulate CRTC when generating DVI/TMDS video
  * 
  * 4. Read status flags from the FPGA
- *    - Updates graphics mode, breakpoint halt, and PET-reset-pending state
+ *    - Updates graphics mode and breakpoint halt
  */
 void sync_state() {
     // Write USB keyboard matrix state to FPGA
@@ -760,7 +754,6 @@ void sync_state() {
         ? video_graphics_mode_text
         : video_graphics_mode_graphics;
     system_state.bp_halted = (status & REG_STATUS_BP_HALT) != 0;
-    system_state.pet_reset_pending = (status & REG_STATUS_RESET_PENDING) != 0;
 }
 
 uint16_t bp_hit_addr() {

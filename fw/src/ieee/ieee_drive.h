@@ -19,8 +19,8 @@
 // state. The fabric remains transparent until an image is mounted.
 void ieee_drive_init(void);
 
-// Resets DOS and channel state for PET RES/IEEE IFC while preserving mounted
-// images and whether virtual-drive emulation is enabled.
+// Resets DOS and channel state and flushes the fabric FIFOs for a
+// firmware-initiated PET reset. Mounted images remain attached.
 void ieee_drive_reset(void);
 
 // Removes all mounted disk images.

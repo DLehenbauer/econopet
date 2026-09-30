@@ -52,11 +52,14 @@ IFC is tied to RESB
 
 ### Virtual drive reset and status
 
-EconoPET's virtual IEEE drive treats every PET RES/IFC assertion as a drive
-reset. The FPGA releases its emulated IEEE lines and discards pending bus
-transactions immediately. Firmware synchronizes the retained PET-reset-pending
-bit into `system_state`, then resets DOS/channel state without ejecting mounted
-images before acknowledging the bit.
+Firmware-initiated PET resets reset DOS/channel state and flush the FPGA's IEEE
+FIFOs before releasing the CPU, without ejecting mounted images. This is the
+normal reset path used by the menu and long MENU-button hold.
+
+Externally resetting only the CPU or MCU is a development edge case. The FPGA
+still releases emulated IEEE lines while RES/IFC is asserted, but firmware-owned
+peripheral state is not guaranteed to be coordinated. Power-cycle the board or
+use a firmware-initiated reset for normal operation.
 
 Status formatting follows the drive that produced the status. D64 images use
 4040 behavior and report four fields, while D80 and `.hdd` images use 8050
@@ -65,6 +68,10 @@ dual-drive unit contains mixed image types. Power-on status follows drive 0,
 or the sole mounted drive when drive 0 is empty. Therefore, D64 power-on status
 is `73,CBM DOS V2,00,00`, while D80 and `.hdd` power-on status is
 `73,CBM DOS V2.7,00,00,0`.
+
+Channel-15 `I` and `V` commands use an explicit drive 0/1 when present and
+otherwise retain the previous drive, matching the ROM's `SIMPRS`/`SETANY`
+selection.
 
 ## ROM
 
