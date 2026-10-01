@@ -821,7 +821,7 @@
 		(uuid "e7af4da1-0717-46e5-9b07-c4de446ded4e")
 	)
 	(fp_text user "on"
-		(at 5.63 -0.89 -90)
+		(at 6.2 0 -90)
 		(unlocked yes)
 		(layer "F.SilkS" knockout)
 		(uuid "5e5d9ec1-89a5-4a08-8db9-d4b0127b186d")
@@ -830,7 +830,6 @@
 				(size 1 1)
 				(thickness 0.15)
 			)
-			(justify left bottom)
 		)
 	)
 	(fp_text user "1"
