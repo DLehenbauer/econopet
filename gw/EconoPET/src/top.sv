@@ -98,6 +98,7 @@ module top #(
 
     // Config from DIP switch
     input logic config_crt_i,       // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
+    input logic config_hz_i,        // Refresh rate (0 = 60 Hz, 1 = 50 Hz)
     input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
 
     // Video
@@ -304,6 +305,7 @@ module top #(
 
         // Video
         .config_crt_i(config_crt_i),
+        .config_hz_i(config_hz_i),
         .graphic_i(graphic_i),
         .horiz_drive_o(horiz_drive_o),
         .vert_drive_o(vert_drive_o),
