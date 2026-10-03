@@ -61,6 +61,8 @@ module top #(
     output logic pia1_cs_n_o,       // (CS2B)
     output logic pia2_cs_n_o,       // (CS2B)
     output logic via_cs_n_o,        // (CS2B)
+    output logic pia1_clock_o,      // Isolated Phi2 clock for PIA1. Used to read keyboard
+                                    // matrix while CPU is halted.  PIA2/VIA share cpu_clock.
 
     // SPI buses
     input  logic spi0_cs_ni,        // (CS)  Chip Select (active low)
@@ -136,14 +138,6 @@ module top #(
     input  logic sp3_i,
     output logic sp3_o,
     output logic sp3_oe,
-
-    input  logic sp4_i,
-    output logic sp4_o,
-    output logic sp4_oe,
-
-    input  logic sp5_i,
-    output logic sp5_o,
-    output logic sp5_oe,
 
     input  logic sp6_i,
     output logic sp6_o,
@@ -253,9 +247,9 @@ module top #(
     // Configure unused spare pins as inputs.
     logic [8:1] spare_i_unused;
 
-    assign spare_i_unused = {sp8_i, sp7_i, sp6_i, sp5_i, sp4_i, sp3_i, sp2_i, sp1_i};
-    assign {sp8_o, sp7_o, sp6_o, sp5_o, sp4_o, sp3_o, sp2_o, sp1_o} = '1;
-    assign {sp8_oe, sp7_oe, sp6_oe, sp5_oe, sp4_oe, sp3_oe, sp2_oe, sp1_oe} = '0;
+    assign spare_i_unused = {sp8_i, sp7_i, sp6_i, sp3_i, sp2_i, sp1_i};
+    assign {sp8_o, sp7_o, sp6_o, sp3_o, sp2_o, sp1_o} = '1;
+    assign {sp8_oe, sp7_oe, sp6_oe, sp3_oe, sp2_oe, sp1_oe} = '0;
 
     main main (
         .sys_clock_i(sys_clock_i),
@@ -302,6 +296,7 @@ module top #(
         .pia1_cs_o(pia1_cs_o),
         .pia2_cs_o(pia2_cs_o),
         .via_cs_o(via_cs_o),
+        .pia1_clock_o(pia1_clock_o),
 
         // Video
         .config_crt_i(config_crt_i),

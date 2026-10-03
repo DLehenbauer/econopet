@@ -1235,6 +1235,16 @@
 	)
 	(wire
 		(pts
+			(xy 104.14 110.49) (xy 116.84 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f2a019bf-87d3-4367-ada6-c4eeb4533b1b")
+	)
+	(wire
+		(pts
 			(xy 71.12 85.09) (xy 78.74 85.09)
 		)
 		(stroke
@@ -2076,6 +2086,16 @@
 			)
 			(uuid "1c9b7a4e-b0f8-4c92-9454-d8a971a110e0")
 		)
+		(pin "BPHI2_PIA1" output
+			(at 104.14 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+			(uuid "ac4ef341-4adb-4a51-8d84-b6c669180840")
+		)
 		(instances
 			(project "Mainboard"
 				(path "/2eea20e6-112c-411a-b615-885ae773135a"
@@ -2729,6 +2749,16 @@
 				(justify left)
 			)
 			(uuid "3668b1ba-03d3-4d89-9b34-c0286fc5c34a")
+		)
+		(pin "BPHI2_PIA1" input
+			(at 116.84 110.49 180)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+			(uuid "f759e80b-9fd1-4644-81f1-8afa4fa10607")
 		)
 		(instances
 			(project "Mainboard"

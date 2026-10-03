@@ -8824,7 +8824,7 @@
 	)
 	(wire
 		(pts
-			(xy 237.49 86.36) (xy 246.38 86.36)
+			(xy 234.95 86.36) (xy 246.38 86.36)
 		)
 		(stroke
 			(width 0)
@@ -9504,7 +9504,7 @@
 	)
 	(wire
 		(pts
-			(xy 237.49 73.66) (xy 237.49 86.36)
+			(xy 234.95 73.66) (xy 234.95 86.36)
 		)
 		(stroke
 			(width 0)
@@ -10864,6 +10864,16 @@
 	)
 	(wire
 		(pts
+			(xy 388.62 137.16) (xy 396.24 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "86a0369f-6b97-4ed0-998d-77d084dd6e03")
+	)
+	(wire
+		(pts
 			(xy 388.62 134.62) (xy 417.83 134.62)
 		)
 		(stroke
@@ -11104,7 +11114,7 @@
 	)
 	(wire
 		(pts
-			(xy 309.88 73.66) (xy 237.49 73.66)
+			(xy 309.88 73.66) (xy 234.95 73.66)
 		)
 		(stroke
 			(width 0)
@@ -13360,17 +13370,6 @@
 		)
 		(uuid "7ac1c182-665e-44d2-9f4b-29eff3fd84bd")
 	)
-	(label "CBUS0"
-		(at 388.62 137.16 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7adc0ccc-6582-4eb1-a072-9878ac4eb817")
-	)
 	(label "PMOD1_4"
 		(at 287.02 38.1 180)
 		(fields_autoplaced yes)
@@ -13844,14 +13843,14 @@
 		)
 		(uuid "c02f9433-74e0-40f8-80a1-87cdd21e955c")
 	)
-	(label "CBUS0"
-		(at 304.8 86.36 0)
+	(label "PHI2_PIA1"
+		(at 246.38 86.36 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "c14e7236-c617-4b7f-8c68-0cc8ce5c65ee")
 	)
@@ -14153,13 +14152,13 @@
 		(uuid "ed86a288-d29b-49ca-8121-0a7cdbbe3265")
 	)
 	(label "JIFFY"
-		(at 246.38 86.36 180)
+		(at 304.8 86.36 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
 		(uuid "eef3c34d-71f0-4c37-b296-920e34229998")
 	)
@@ -14423,6 +14422,18 @@
 			(justify right)
 		)
 		(uuid "36c7f60e-49bd-4dc1-9ec6-307c4c83e8cf")
+	)
+	(hierarchical_label "PHI2_PIA1"
+		(shape output)
+		(at 368.3 137.16 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "3905a118-24b2-4786-a0ce-bef72cbba573")
 	)
 	(hierarchical_label "SPI0_~{CS}"
 		(shape input)
@@ -14738,13 +14749,13 @@
 	)
 	(hierarchical_label "JIFFY"
 		(shape output)
-		(at 368.3 137.16 180)
+		(at 396.24 137.16 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right)
+			(justify left)
 		)
 		(uuid "9b0d7f33-7dba-4ead-9a35-23fb02b423df")
 	)

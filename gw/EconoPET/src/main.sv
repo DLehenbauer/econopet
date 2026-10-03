@@ -45,10 +45,13 @@ module main (
     output logic ram_oe_o,
     output logic ram_we_o,
 
+    // IO
     output logic io_oe_o,
     output logic pia1_cs_o,
     output logic pia2_cs_o,
     output logic via_cs_o,
+    output logic pia1_clock_o,      // Isolated Phi2 clock for PIA1. Used to read keyboard
+                                    // matrix while CPU is halted.  PIA2/VIA share cpu_clock.
 
     // Config from DIP switch
     input logic config_crt_i,       // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
@@ -203,6 +206,11 @@ module main (
         .grant_o(grant),
         .grant_valid_o(grant_valid)
     );
+    
+    // PIA1 has an isolated PHI2 clock to allow us to read the keyboard matrix
+    // without advancing the CPU or the VIA.  For now, we just tie it to the
+    // shared CPU clock.
+    assign pia1_clock_o = cpu_clock_o;
 
     // Physical 6502 bus-enable. In 6809 mode the physical CPU stays socketed
     // but off the bus (BE low -> its address/data/R-W buffers are high-Z) so

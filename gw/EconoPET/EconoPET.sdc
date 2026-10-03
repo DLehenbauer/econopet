@@ -172,8 +172,10 @@ set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {jiffy_cloc
 set_output_delay -clock sys_clock_i -min 0                [get_ports {jiffy_clock_o}]
 set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {video_o}]
 set_output_delay -clock sys_clock_i -min 0                [get_ports {video_o}]
-set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {audio_o}]
-set_output_delay -clock sys_clock_i -min 0                [get_ports {audio_o}]
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {audio_l_o}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {audio_l_o}]
+set_output_delay -clock sys_clock_i -max $board_delay_max [get_ports {audio_r_o}]
+set_output_delay -clock sys_clock_i -min 0                [get_ports {audio_r_o}]
 
 # ============================================================================
 # MCU-Facing Outputs (sys_clock_i domain)
