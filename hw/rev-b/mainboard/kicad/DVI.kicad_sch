@@ -1134,12 +1134,6 @@
 		)
 	)
 	(junction
-		(at 121.92 113.03)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "025794d7-081e-41e5-9c7e-a8e61fe6b60e")
-	)
-	(junction
 		(at 200.66 60.96)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -1168,12 +1162,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a3f2fc00-3365-4be0-a356-aa76e76db826")
-	)
-	(junction
-		(at 116.84 102.87)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "b4b15e0d-0214-4cad-b474-1297b39433b2")
 	)
 	(junction
 		(at 185.42 119.38)
@@ -1308,16 +1296,6 @@
 			(type default)
 		)
 		(uuid "0f9ee2ad-20f2-4885-8c4d-f51365676868")
-	)
-	(wire
-		(pts
-			(xy 154.94 113.03) (xy 154.94 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "12aeeb1a-7ce3-4778-8e0a-251be12f5a36")
 	)
 	(wire
 		(pts
@@ -1491,16 +1469,6 @@
 	)
 	(wire
 		(pts
-			(xy 85.09 102.87) (xy 116.84 102.87)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "58fdb661-382a-4b9c-ba7f-a09570e36c46")
-	)
-	(wire
-		(pts
 			(xy 200.66 60.96) (xy 200.66 59.69)
 		)
 		(stroke
@@ -1581,16 +1549,6 @@
 	)
 	(wire
 		(pts
-			(xy 151.13 102.87) (xy 151.13 97.79)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "90b9a2e2-e76e-4bad-bc10-b4ad914cac91")
-	)
-	(wire
-		(pts
 			(xy 182.88 119.38) (xy 185.42 119.38)
 		)
 		(stroke
@@ -1628,16 +1586,6 @@
 			(type default)
 		)
 		(uuid "a0653d1f-5373-49cf-bb37-0c9cfbc33019")
-	)
-	(wire
-		(pts
-			(xy 85.09 113.03) (xy 121.92 113.03)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a17562cc-f25c-49ae-b45f-02456267d3cf")
 	)
 	(wire
 		(pts
@@ -1711,7 +1659,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 87.63) (xy 116.84 102.87)
+			(xy 116.84 87.63) (xy 116.84 97.79)
 		)
 		(stroke
 			(width 0)
@@ -1731,17 +1679,7 @@
 	)
 	(wire
 		(pts
-			(xy 151.13 97.79) (xy 167.64 97.79)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c519d95c-5e8f-4840-8475-808fa42717b2")
-	)
-	(wire
-		(pts
-			(xy 121.92 87.63) (xy 121.92 113.03)
+			(xy 121.92 87.63) (xy 121.92 100.33)
 		)
 		(stroke
 			(width 0)
@@ -1811,16 +1749,6 @@
 	)
 	(wire
 		(pts
-			(xy 154.94 100.33) (xy 167.64 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "da30074a-d9a3-43b9-bbb4-de0b5c0e7bdd")
-	)
-	(wire
-		(pts
 			(xy 154.94 92.71) (xy 167.64 92.71)
 		)
 		(stroke
@@ -1861,7 +1789,7 @@
 	)
 	(wire
 		(pts
-			(xy 121.92 113.03) (xy 154.94 113.03)
+			(xy 121.92 100.33) (xy 167.64 100.33)
 		)
 		(stroke
 			(width 0)
@@ -1881,7 +1809,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 102.87) (xy 151.13 102.87)
+			(xy 116.84 97.79) (xy 167.64 97.79)
 		)
 		(stroke
 			(width 0)
@@ -1899,17 +1827,6 @@
 			(justify left bottom)
 		)
 		(uuid "3b49edf3-df0b-435b-8fe2-88e1ea44cfed")
-	)
-	(text "CEC, SCL, and SDA are for experimentation and\ndisconnected by solder jumpers by default.\n\nDANGER: Closing the DVI_SCL/DVI_SDA jumpers pulls\nthe corresponding RP2040 GPIO pins to +5V.\n\nOnly do this if you know what you're doing."
-		(exclude_from_sim no)
-		(at 80.01 134.62 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "562d2cde-6ebc-46df-8ca7-9609ce469af9")
 	)
 	(text "DVI TMDS protocol over an HDMI-compatible\nconnector (not HDMI certified).\n\nSee: https://github.com/Wren6991/PicoDVI"
 		(exclude_from_sim no)
@@ -2146,18 +2063,6 @@
 		)
 		(uuid "e31ec542-e9a0-4090-aec7-98cd3d3f5ae2")
 	)
-	(hierarchical_label "SCL"
-		(shape input)
-		(at 85.09 102.87 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "18e183d7-e258-4b9c-bb67-01cd8ac76896")
-	)
 	(hierarchical_label "{DVI}"
 		(shape input)
 		(at 85.09 64.77 180)
@@ -2181,18 +2086,6 @@
 			(justify right)
 		)
 		(uuid "9189903c-573c-445e-b064-bad9cba43b8a")
-	)
-	(hierarchical_label "SDA"
-		(shape bidirectional)
-		(at 85.09 113.03 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "a594597a-5189-45ba-a659-e484ed28d9fa")
 	)
 	(symbol
 		(lib_id "Device:R_Small")
