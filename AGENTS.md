@@ -1,4 +1,4 @@
-# EconoPET Copilot Instructions
+# EconoPET Agent Instructions
 
 ## Project Overview
 
@@ -49,11 +49,22 @@ Include the SPDX license header in all new source files (see `fw/src/main.c` for
 - Fix lint causes. Suppress only demonstrated false positives, at the narrowest
   scope available. Explain each suppression beside it.
 
-### Stubs and Documentation
+### Stubs
 
 - Stubs must assert with a useful message, never return placeholders or succeed.
-- Document every function and non-obvious caller or consumer.
-- Document multi-step procedures as numbered actions with expected results.
+
+### Documentation
+
+- Document every function, method, and task concisely: explain its purpose and,
+  when not obvious, its callers or users.
+- Precede each step of a multi-step procedure with a concise comment explaining
+  its intent and any non-obvious rationale. Do not number steps.
+
+### Magic Numbers
+
+- Name states, modes, register addresses, bit masks, and limits instead of using
+  numeric literals.
+- Reuse existing definitions.
 
 ## Environment Variables
 

@@ -116,7 +116,7 @@ static bool cmd_example(const char *args) {
 Use relative Markdown links to pull in workspace files as context. Paths are resolved relative to the prompt file location.
 
 ```markdown
-Follow the coding conventions in [firmware instructions](../instructions/firmware.instructions.md).
+Follow the coding conventions in [firmware instructions](../../fw/AGENTS.md).
 
 Use [driver.h](../../fw/src/driver.h) as the interface reference.
 ```
@@ -181,7 +181,7 @@ Limit each prompt file to one task. A prompt that tries to scaffold, test, docum
 Reference shared `.instructions.md` files rather than repeating project conventions in every prompt:
 
 ```markdown
-Follow the conventions in [C firmware guidelines](../instructions/firmware.instructions.md)
+Follow the conventions in [C firmware guidelines](../../fw/AGENTS.md)
 and [gateware guidelines](../instructions/gateware.instructions.md).
 ```
 
@@ -233,7 +233,7 @@ Create a new SPI command handler in the firmware following existing patterns.
 ## Context
 
 - See [driver.h](../../fw/src/driver.h) for the existing command interface
-- Follow conventions in [firmware guidelines](../instructions/firmware.instructions.md)
+- Follow conventions in [firmware guidelines](../../fw/AGENTS.md)
 
 ## Inputs
 
