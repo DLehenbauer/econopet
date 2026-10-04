@@ -83,6 +83,6 @@ void* vetted_malloc(size_t __size) {
 #endif
 
 void vet_path_length(size_t length) {
-    vet(length < SD_PATH_MAX, "Path exceeds %u characters (got %zu)",
+    vet(length < SD_PATH_MAX, "SD path exceeds %u characters (got %zu)",
         (unsigned int) (SD_PATH_MAX - 1), length);
 }
