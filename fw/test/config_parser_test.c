@@ -196,7 +196,7 @@ static const config_sink_t config_sink = {
 // Clears callback observations and restores graphics-keyboard/CRTC defaults.
 static void setup(void) {
     // Remove any previously registered mock files
-    mock_clear_files();
+    test_clear_files();
     
     // Clear the test context
     memset(&test_ctx, 0, sizeof(test_ctx));
@@ -209,7 +209,7 @@ static void setup(void) {
 
 // Removes registered fixtures after each parser test.
 static void teardown(void) {
-    mock_clear_files();
+    test_clear_files();
 }
 
 // Test: Parse minimal valid config
@@ -220,7 +220,7 @@ START_TEST(test_parse_minimal_config) {
         "  - name: Test Config\n"
         "    setup: []\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the selected configuration and check mapping callbacks.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -243,7 +243,7 @@ START_TEST(test_parse_load_action) {
         "          - file: basic.bin\n"
         "            address: 0xC000\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the parsed load request.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -266,7 +266,7 @@ START_TEST(test_parse_mount_action) {
         "        drive: 1\n"
         "        file: some/disk.d64\n";
 
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
 
     // Execute the fixture and inspect the parsed mount request.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -288,7 +288,7 @@ START_TEST(test_parse_mount_action_defaults) {
         "      - action: mount\n"
         "        file: some/disk.d80\n";
 
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
 
     // Execute the fixture and inspect the defaulted mount coordinates.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -311,7 +311,7 @@ START_TEST(test_parse_patch_action) {
         "        address: 0x8000\n"
         "        hex: DEADBEEF\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the decoded patch request.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -334,7 +334,7 @@ START_TEST(test_parse_copy_action) {
         "        destination: 0x2000\n"
         "        length: 256\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the copy range.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -356,7 +356,7 @@ START_TEST(test_parse_set_action) {
         "      - action: set\n"
         "        columns: 80\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect explicit and default display options.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -378,7 +378,7 @@ START_TEST(test_parse_set_video_ram_1kb) {
         "      - action: set\n"
         "        video-ram-kb: 1\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect its address mask.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -398,7 +398,7 @@ START_TEST(test_parse_set_video_ram_2kb) {
         "      - action: set\n"
         "        video-ram-kb: 2\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect its address mask.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -418,7 +418,7 @@ START_TEST(test_parse_set_video_ram_3kb) {
         "      - action: set\n"
         "        video-ram-kb: 3\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the ColourPET address mask.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -438,7 +438,7 @@ START_TEST(test_parse_set_video_ram_4kb) {
         "      - action: set\n"
         "        video-ram-kb: 4\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect its address mask.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -459,7 +459,7 @@ START_TEST(test_parse_set_columns_and_video_ram) {
         "        columns: 80\n"
         "        video-ram-kb: 2\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect both parsed options.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -480,7 +480,7 @@ START_TEST(test_parse_set_keymap_action) {
         "      - action: set\n"
         "        usb-keymap: custom_keymap.bin\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the retained filename.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -503,7 +503,7 @@ START_TEST(test_parse_fix_checksum_action) {
         "        fix-addr: 0xE001\n"
         "        checksum: 0x42\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and inspect the checksum callback arguments.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -534,7 +534,7 @@ START_TEST(test_parse_multiple_configs_select_second) {
         "      - action: set\n"
         "        columns: 40\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Select second config (index 1)
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_SECOND);
@@ -563,7 +563,7 @@ START_TEST(test_parse_conditional_graphics) {
         "          - action: set\n"
         "            columns: 80\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute with the graphics-keyboard default and inspect the selected branch.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -589,7 +589,7 @@ START_TEST(test_parse_conditional_business) {
         "          - action: set\n"
         "            columns: 80\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Override system state for business keyboard scenario
     sys_state.pet_keyboard_model = pet_keyboard_model_business;
@@ -617,7 +617,7 @@ START_TEST(test_parse_multiple_load_files) {
         "          - file: file3.bin\n"
         "            address: 0xE000\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the action and check that the final load callback retains its file.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -644,7 +644,7 @@ START_TEST(test_enumerate_all_configs) {
         "      - action: set\n"
         "        columns: 80\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Enumerate mode: target_index = -1
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -699,7 +699,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
     ck_assert_msg(config_contents != NULL, "Failed to read config.yaml from %s", config_path);
     
     // Register the file contents with the mock file system
-    mock_register_file("/config.yaml", config_contents);
+    test_register_file("/config.yaml", config_contents);
     
     // First, enumerate to count the number of configs
     memset(&test_ctx, 0, sizeof(test_ctx));
@@ -725,7 +725,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
     
     // Clean up
     free(config_contents);
-    mock_unregister_file("/config.yaml");
+    test_unregister_file("/config.yaml");
 }
 END_TEST
 
@@ -739,7 +739,7 @@ START_TEST(test_parse_set_tape) {
         "      - action: set\n"
         "        tape: \"2ef415f4c9cad1d4da\"\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Execute the fixture and check the decoded tape fields.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -775,7 +775,7 @@ START_TEST(test_parse_default_config) {
         "    name: Second Config\n"
         "    setup: []\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Enumerate mappings and inspect the reported default ID.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -799,7 +799,7 @@ START_TEST(test_parse_default_after_configs) {
         "    setup: []\n"
         "default: first\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Enumerate mappings and inspect the reported default ID.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -819,7 +819,7 @@ START_TEST(test_parse_no_default) {
         "    name: Test Config\n"
         "    setup: []\n";
     
-    mock_register_file("/config.yaml", yaml_content);
+    test_register_file("/config.yaml", yaml_content);
     
     // Enumerate mappings and ensure no default callback was emitted.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -841,7 +841,7 @@ START_TEST(test_validate_sdcard_config_yaml_default) {
     char* config_contents = read_file_to_string(config_path);
     ck_assert_msg(config_contents != NULL, "Failed to read config.yaml from %s", config_path);
     
-    mock_register_file("/config.yaml", config_contents);
+    test_register_file("/config.yaml", config_contents);
     
     // Enumerate its mappings and inspect the shipped default policy.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -851,7 +851,7 @@ START_TEST(test_validate_sdcard_config_yaml_default) {
     
     // Release the host buffer and its registered copy.
     free(config_contents);
-    mock_unregister_file("/config.yaml");
+    test_unregister_file("/config.yaml");
 }
 END_TEST
 
@@ -864,8 +864,8 @@ START_TEST(test_parser_error_reports_semantic_location) {
         "    setup:\n"
         "      - action: invalid\n";
 
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message("Line 4, Column 17:\nUnknown action 'invalid'");
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message("Line 4, Column 17:\nUnknown action 'invalid'");
 
     // Trigger the parser's fatal path under the suite's expected abort.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -880,8 +880,8 @@ START_TEST(test_parser_error_reports_yaml_problem) {
         "  - name: \"Malformed\n"
         "    setup: []\n";
 
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message(
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message(
         "Line 4, Column 1:\nfound unexpected end of stream"
     );
 
@@ -912,8 +912,8 @@ START_TEST(test_parser_error_replaces_oversized_message) {
     ck_assert_int_lt(written, (int) sizeof(yaml_content));
 
     // Require a bounded replacement diagnostic instead of the oversized key.
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message(
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message(
         "Line 5, Column 9:\nerror details too long to display"
     );
 
@@ -932,8 +932,8 @@ START_TEST(test_parser_rejects_short_tape_before_allocation) {
         "      - action: set\n"
         "        tape: 00\n";
 
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message("expected 18 chars, got 2");
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message("expected 18 chars, got 2");
 
     // Trigger tape validation under the suite's expected abort.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -950,8 +950,8 @@ START_TEST(test_parser_rejects_long_tape_before_allocation) {
         "      - action: set\n"
         "        tape: 000000000000000000000000000000\n";
 
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message("expected 18 chars, got 30");
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message("expected 18 chars, got 30");
 
     // Trigger tape validation under the suite's expected abort.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -966,8 +966,8 @@ START_TEST(test_parser_rejects_multiline_config_name) {
         "  - name: \"First\\ncontinued\"\n"
         "    setup: []\n";
 
-    mock_register_file("/config.yaml", yaml_content);
-    mock_expect_fatal_message("config name must be a single line");
+    test_register_file("/config.yaml", yaml_content);
+    test_expect_fatal_message("config name must be a single line");
 
     // Trigger name validation under the suite's expected abort.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -1008,7 +1008,7 @@ START_TEST(test_config_text_capacity_preserves_existing_behavior) {
         expected, suffix, expected, suffix, expected, suffix);
     ck_assert_int_ge(written, 0);
     ck_assert_uint_lt((size_t) written, sizeof(yaml));
-    mock_register_file("/config.yaml", yaml);
+    test_register_file("/config.yaml", yaml);
 
     // Enumeration captures text without executing the setup action.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
@@ -1055,7 +1055,7 @@ START_TEST(test_menu_default_text_capacity) {
         id, suffix, id, suffix);
     ck_assert_int_ge(written, 0);
     ck_assert_uint_lt((size_t) written, sizeof(yaml));
-    mock_register_file("/config.yaml", yaml);
+    test_register_file("/config.yaml", yaml);
 
     // Exercise production menu callbacks and confirm only the default setup runs.
     const unsigned int width = CONFIG_TEXT_CAPACITY - 1;
@@ -1113,14 +1113,14 @@ START_TEST(test_sd_make_path_rejects_overlong_path) {
     if (_i == SD_DIR_NONE) name[0] = '/';
     name[length] = '\0';
     char path[SD_PATH_MAX];
-    mock_expect_fatal_message("SD path exceeds 255 characters (got 256)");
+    test_expect_fatal_message("SD path exceeds 255 characters (got 256)");
     sd_make_path(path, _i, name);
 }
 END_TEST
 
 // Checks invalid directory categories are diagnosed rather than defaulted.
 START_TEST(test_sd_dir_rejects_invalid_category) {
-    mock_expect_fatal_message("invalid SD directory");
+    test_expect_fatal_message("invalid SD directory");
     sd_dir_prefix(_i == 0 ? -1 : SD_DIR_COUNT);
 }
 END_TEST
@@ -1168,7 +1168,7 @@ static void register_boundary_path(enum test_path_kind kind, bool oversized,
     const int written = snprintf(yaml, sizeof(yaml), format, path);
     ck_assert_int_ge(written, 0);
     ck_assert_uint_lt((size_t) written, sizeof(yaml));
-    mock_register_file("/config.yaml", yaml);
+    test_register_file("/config.yaml", yaml);
 }
 
 // Verifies every path-bearing action retains the complete maximum-length path.
@@ -1189,7 +1189,7 @@ END_TEST
 START_TEST(test_parser_rejects_overlong_sd_path) {
     char path[SD_PATH_MAX + 1];
     register_boundary_path(_i, true, path);
-    mock_expect_fatal_message("SD path exceeds");
+    test_expect_fatal_message("SD path exceeds");
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
 }
 END_TEST
@@ -1203,7 +1203,7 @@ START_TEST(test_mock_sd_path_boundary) {
     memset(path, 'a', sizeof(path) - 1);
     path[0] = '/';
     path[sizeof(path) - 1] = '\0';
-    mock_register_file(path, "boundary");
+    test_register_file(path, "boundary");
     FILE* file = sd_open(path, "r");
     ck_assert_ptr_nonnull(file);
     char content[sizeof("boundary")] = { 0 };
@@ -1219,15 +1219,15 @@ START_TEST(test_mock_sd_rejects_overlong_path) {
     memset(path, 'a', SD_PATH_MAX);
     path[0] = '/';
     path[SD_PATH_MAX] = '\0';
-    mock_expect_fatal_message("SD path exceeds");
+    test_expect_fatal_message("SD path exceeds");
     if (_i == 0) sd_open(path, "r");
-    else mock_register_file(path, "overlong");
+    else test_register_file(path, "overlong");
 }
 END_TEST
 
 // Verifies the shared helper rejects the first invalid and largest byte lengths.
 START_TEST(test_vet_path_length_rejects_overlong_path) {
-    mock_expect_fatal_message("SD path exceeds 255 characters");
+    test_expect_fatal_message("SD path exceeds 255 characters");
     vet_path_length(_i == 0 ? SD_PATH_MAX : SIZE_MAX);
 }
 END_TEST

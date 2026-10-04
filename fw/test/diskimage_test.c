@@ -333,7 +333,7 @@ START_TEST(test_stream_preserves_short_and_sector_boundary_lengths) {
     // Exercise short files and the one-byte transition beyond a full sector.
     static const unsigned int lengths[] = { 1, 2, 253, 254, 255 };
 
-    for (size_t test = 0; test < ARRAY_SIZE(lengths); test++) {
+    for (size_t test = 0; test < count_of(lengths); test++) {
         const unsigned int length = lengths[test];
         mem_image_t mem = { .data = diskimage_test_make_d64(), .size = DISKIMAGE_D64_SIZE };
         diskimage_t img;

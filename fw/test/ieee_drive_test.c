@@ -55,7 +55,7 @@ static void enqueue_commands(const uint8_t* commands, size_t count) {
 // channel-15 command payloads, and file writes) is enqueued separately.
 #define enqueue_command(...) do { \
     const uint8_t commands[] = { __VA_ARGS__ }; \
-    enqueue_commands(commands, ARRAY_SIZE(commands)); \
+    enqueue_commands(commands, count_of(commands)); \
 } while (0)
 
 // Queues an untagged PETSCII filename or command payload.
@@ -88,7 +88,7 @@ static void mount_image(unsigned int device, unsigned int drive, const char* fil
     // Transfer fixture bytes to the registered filesystem before releasing them.
     char path[SD_PATH_MAX];
     sd_make_path(path, SD_DIR_DISKS, filename);
-    mock_register_binary_file(path, image, image_size, writable);
+    test_register_binary_file(path, image, image_size, writable);
     free(image);
     // Mount through the public drive API using the corresponding slot.
     ck_assert(ieee_drive_mount(device_slot(device, drive), filename));
@@ -148,7 +148,7 @@ static void setup(void) {
 // Unmounts images and clears mock files so every test starts isolated.
 static void teardown(void) {
     ieee_drive_unmount_all();
-    mock_clear_files();
+    test_clear_files();
 }
 
 // ---------------------------------------------------------------------------
@@ -609,7 +609,7 @@ START_TEST(test_non_target_addresses_are_ignored) {
     mount_d64(IEEE_FIRST_DEVICE, IEEE_DRIVE_FIRST, "drive.d64", true);
 
     // Exercise addresses outside the implemented range, including address 31.
-    for (size_t index = 0; index < ARRAY_SIZE(non_target_devices); index++) {
+    for (size_t index = 0; index < count_of(non_target_devices); index++) {
         const unsigned int device = non_target_devices[index];
         enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
         enqueue_name("BASIC");
@@ -877,7 +877,7 @@ START_TEST(test_relative_record_lengths_stream_exactly) {
     const unsigned int drive = loop_drive(_i);
 
     // Rebuild DATA at representative legal record lengths, including both bounds.
-    for (size_t test = 0; test < ARRAY_SIZE(lengths); test++) {
+    for (size_t test = 0; test < count_of(lengths); test++) {
         const unsigned int length = lengths[test];
         char filename[SD_PATH_MAX];
         uint8_t* image = diskimage_test_make_d64();
@@ -1086,7 +1086,7 @@ START_TEST(test_mount_rejects_overlong_path) {
 
     filename[length] = 'b';
     filename[length + 1] = '\0';
-    mock_expect_fatal_message("SD path exceeds 255 characters (got 256)");
+    test_expect_fatal_message("SD path exceeds 255 characters (got 256)");
     ieee_drive_mount(device_slot(IEEE_FIRST_DEVICE, IEEE_DRIVE_FIRST), filename);
 }
 END_TEST

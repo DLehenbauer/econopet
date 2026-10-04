@@ -122,8 +122,8 @@ int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
         /*      PET_KEY_T_B: */ 'T',
     };
     
-    static_assert((ARRAY_SIZE(pet_keys) == ARRAY_SIZE(term_keys_unshifted))
-        && (ARRAY_SIZE(pet_keys) == ARRAY_SIZE(term_keys_shifted)),
+    static_assert((count_of(pet_keys) == count_of(term_keys_unshifted))
+        && (count_of(pet_keys) == count_of(term_keys_shifted)),
         "Key event arrays must be the same size");
     
     while (true) {
@@ -132,7 +132,7 @@ int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
             return EOF;
         }
 
-        for (size_t i = 0; i < ARRAY_SIZE(pet_keys); i++) {
+        for (size_t i = 0; i < count_of(pet_keys); i++) {
             if (event == pet_keys[i]) {
                 return keyscan_is_shifted(matrix)
                     ? term_keys_shifted[i]
