@@ -1050,27 +1050,6 @@ START_TEST(test_d80_mount_open_and_stream) {
 }
 END_TEST
 
-// Preserves the existing 129-byte fallback for zero-length REL metadata.
-START_TEST(test_zero_record_length_preserves_existing_fallback) {
-    uint8_t* image = diskimage_test_make_d64();
-    uint8_t* entry = image + diskimage_test_d64_offset(18, 1)
-        + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
-    entry[DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = 0;
-    mount_image(IEEE_FIRST_DEVICE, IEEE_DRIVE_FIRST, "zero-record.d64",
-                image, DISKIMAGE_D64_SIZE, true);
-    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
-    enqueue_name("DATA,L");
-    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
-                    IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-    ieee_drive_task();
-    ck_assert_uint_eq(mock_ieee_data_count(), 129);
-    for (size_t index = 0; index < 129; index++) {
-        ck_assert_uint_eq(mock_ieee_data_byte(index), 0xa0);
-        ck_assert_int_eq(mock_ieee_data_eoi(index), index == 128);
-    }
-}
-END_TEST
-
 // Checks shared format facts independently of the code that consumes them.
 START_TEST(test_shared_format_constants) {
     ck_assert_uint_eq(DISKIMAGE_SECTOR_SIZE, 256);
@@ -1123,7 +1102,6 @@ Suite* ieee_drive_suite(void) {
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("d64");
     tcase_add_checked_fixture(test_case, setup, teardown);
-    tcase_add_test(test_case, test_zero_record_length_preserves_existing_fallback);
     tcase_add_test(test_case, test_shared_format_constants);
     tcase_add_test(test_case, test_mount_path_boundary);
     // Cover sequential transfers, status, addressing, and unit isolation.

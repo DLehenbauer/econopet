@@ -13,6 +13,7 @@
 #include "config/config.h"
 #include "fatal.h"
 #include "global.h"
+#include "menu/menu_config.h"
 #include "mock.h"
 #include "sd/sd.h"
 #include "system_state.h"
@@ -43,7 +44,10 @@ typedef struct test_context_s {
     
     char last_config_id[CONFIG_TEXT_CAPACITY];
     char last_config_name[CONFIG_TEXT_CAPACITY];
-    char last_default_id[CONFIG_TEXT_CAPACITY];
+    char last_default_id[CONFIG_TEXT_CAPACITY + 1];
+    size_t last_config_id_length;
+    size_t last_config_name_length;
+    size_t last_default_id_length;
     char last_load_file[SD_PATH_MAX];
     uint32_t last_load_address;
     uint32_t last_patch_address;
@@ -81,6 +85,8 @@ static void test_on_enter_config(void* context) {
 static void test_on_exit_config(void* context, const char* id, const char* name) {
     test_context_t* ctx = (test_context_t*)context;
     ctx->config_exit_count++;
+    ctx->last_config_id_length = strlen(id);
+    ctx->last_config_name_length = strlen(name);
     strncpy(ctx->last_config_id, id, sizeof(ctx->last_config_id) - 1);
     ctx->last_config_id[sizeof(ctx->last_config_id) - 1] = '\0';
     strncpy(ctx->last_config_name, name, sizeof(ctx->last_config_name) - 1);
@@ -91,6 +97,7 @@ static void test_on_exit_config(void* context, const char* id, const char* name)
 static void test_on_default(void* context, const char* id) {
     test_context_t* ctx = (test_context_t*)context;
     ctx->default_count++;
+    ctx->last_default_id_length = strlen(id);
     strncpy(ctx->last_default_id, id, sizeof(ctx->last_default_id) - 1);
     ctx->last_default_id[sizeof(ctx->last_default_id) - 1] = '\0';
 }
@@ -983,6 +990,11 @@ START_TEST(test_config_text_capacity_preserves_existing_behavior) {
     // Register a boundary-length ID and name, optionally followed by one more byte.
     const char expected[] = "0123456789012345678901234567890123456789";
     const char* suffix = _i == 0 ? "" : "X";
+    char expected_default[CONFIG_TEXT_CAPACITY + 1];
+    const int default_length = snprintf(
+        expected_default, sizeof(expected_default), "%s%s", expected, suffix);
+    ck_assert_int_ge(default_length, 0);
+    ck_assert_uint_lt((size_t) default_length, sizeof(expected_default));
     char yaml[TEST_OVERSIZED_YAML_CAPACITY];
     const int written = snprintf(
         yaml, sizeof(yaml),
@@ -1000,16 +1012,59 @@ START_TEST(test_config_text_capacity_preserves_existing_behavior) {
 
     // Enumeration captures text without executing the setup action.
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
+    ck_assert_uint_eq(test_ctx.last_config_id_length, strlen(expected));
+    ck_assert_uint_eq(test_ctx.last_config_name_length, strlen(expected));
     ck_assert_str_eq(test_ctx.last_config_id, expected);
     ck_assert_str_eq(test_ctx.last_config_name, expected);
-    ck_assert_str_eq(test_ctx.last_default_id, expected);
+    ck_assert_uint_eq(test_ctx.last_default_id_length, (size_t) default_length);
+    ck_assert_str_eq(test_ctx.last_default_id, expected_default);
     ck_assert_uint_eq(test_ctx.set_options_count, 0);
 
     // Selection executes the same action without changing the stored text.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
     ck_assert_uint_eq(test_ctx.set_options_count, 1);
+    ck_assert_uint_eq(test_ctx.last_config_id_length, strlen(expected));
+    ck_assert_uint_eq(test_ctx.last_config_name_length, strlen(expected));
     ck_assert_str_eq(test_ctx.last_config_id, expected);
     ck_assert_str_eq(test_ctx.last_config_name, expected);
+    ck_assert_uint_eq(test_ctx.last_default_id_length, (size_t) default_length);
+    ck_assert_str_eq(test_ctx.last_default_id, expected_default);
+}
+END_TEST
+
+// Verifies the menu matches its truncated default ID and boots the second entry.
+START_TEST(test_menu_default_text_capacity) {
+    // Put the boundary-length default after a distinct, nondefault menu entry.
+    const char id[] = "0123456789012345678901234567890123456789";
+    const char* suffix = _i == 0 ? "" : "X";
+    char yaml[TEST_OVERSIZED_YAML_CAPACITY];
+    const int written = snprintf(
+        yaml, sizeof(yaml),
+        "default: '%s%s'\n"
+        "configs:\n"
+        "  - id: other\n"
+        "    name: Other\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 40\n"
+        "  - id: '%s%s'\n"
+        "    name: Default\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n",
+        id, suffix, id, suffix);
+    ck_assert_int_ge(written, 0);
+    ck_assert_uint_lt((size_t) written, sizeof(yaml));
+    mock_register_file("/config.yaml", yaml);
+
+    // Exercise production menu callbacks and confirm only the default setup runs.
+    const unsigned int width = CONFIG_TEXT_CAPACITY - 1;
+    const unsigned int height = 2;
+    uint8_t buffer[width * height];
+    const window_t window = window_create(buffer, width, height);
+    menu_config_show(&window, &setup_sink, true);
+    ck_assert_uint_eq(test_ctx.set_options_count, 1);
+    ck_assert_uint_eq(test_ctx.last_columns, pet_display_columns_80);
 }
 END_TEST
 
@@ -1189,6 +1244,7 @@ Suite *config_parser_suite(void) {
     tcase_add_checked_fixture(tc_core, setup, teardown);
     tcase_add_test(tc_core, test_shared_config_constants);
     tcase_add_loop_test(tc_core, test_config_text_capacity_preserves_existing_behavior, 0, 2);
+    tcase_add_loop_test(tc_core, test_menu_default_text_capacity, 0, 2);
     tcase_add_loop_test(tc_core, test_parse_maximum_sd_path, 0, TEST_PATH_KIND_COUNT);
     tcase_add_test(tc_core, test_mock_sd_path_boundary);
     tcase_add_test(tc_core, test_sd_dir_prefixes);
