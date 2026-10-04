@@ -3,8 +3,6 @@
 
 #pragma once
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
 // Standard includes
 #include <assert.h>
 #include <errno.h>
@@ -54,9 +52,6 @@
     #include "bsp/board.h"
     #include "tusb.h"
 #else
-    #include "../test/mock.h"
-#endif
-
-#ifndef MIN
-    #define MIN(a, b) ((b) > (a) ? (a) : (b))
+    // Test support for non-Pico platforms
+    #include "test_support.h"
 #endif

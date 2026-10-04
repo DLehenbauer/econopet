@@ -2,7 +2,7 @@ project("firmware-test"
     VERSION 0.1.0
     LANGUAGES C)
 
-# Include version header generation function
+# Load version generation and locate external dependencies for the host target.
 include(${FW_DIR}/cmake/AddVersionHeader.cmake)
 
 # Include external projects
@@ -19,9 +19,10 @@ set(BUILD_TESTING ON CACHE BOOL "Enable testing for the rest of the project" FOR
 FIND_PATH(CHECK_INCLUDE_DIR check.h)
 FIND_LIBRARY(CHECK_LIBRARIES NAMES check)
 
-# Include source files
+# Combine firmware logic, firmware-specific mocks, and shared host support.
 set(SRC_DIR ${FW_DIR}/src)
 set(TEST_DIR ${FW_DIR}/test)
+get_filename_component(TEST_SUPPORT_DIR "${FW_DIR}/../test/support" ABSOLUTE)
 
 add_executable(${PROJECT_NAME}
     ${SRC_DIR}/config/config.c
@@ -51,21 +52,24 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
+    ${TEST_SUPPORT_DIR}/test_support.c
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/window_test.c
 )
 
+# Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}
     ${CHECK_LIBRARIES}
     subunit
     m
     yaml)
 
-# Route firmware fopen() calls through mock.c so registered disk fixtures use
+# Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen)
+target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")
 
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})
