@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 #include <array>
+#include <iterator>
 #include <limits>
 #include <set>
 #include <string>
@@ -244,8 +245,79 @@ TEST(DiskFixture, CopyAndMovePreserveIndependentOwnership) {
     EXPECT_EQ(payload(first, 1), (std::vector<uint8_t>{3}));
     auto moved = std::move(copy);
     EXPECT_EQ(payload(moved, 1), (std::vector<uint8_t>{2}));
+    EXPECT_TRUE(copy.bytes().empty());
     EXPECT_THROW(copy.prg("ZOMBIE", {4}), std::logic_error);
     EXPECT_THROW(copy.corrupt(0, {1}), std::logic_error);
+    moved.prg("THIRD", {4});
+    EXPECT_EQ(payload(moved, 2), (std::vector<uint8_t>{4}));
+
+    // Move assignment replaces existing ownership and leaves the source invalid.
+    D64 assigned;
+    assigned.prg("REPLACED", {5});
+    assigned = std::move(moved);
+    EXPECT_EQ(payload(assigned, 2), (std::vector<uint8_t>{4}));
+    EXPECT_TRUE(moved.bytes().empty());
+    EXPECT_THROW(moved.seq("ZOMBIE", {6}), std::logic_error);
+    EXPECT_THROW(moved.corrupt(0, {}), std::logic_error);
+    assigned.usr("FOURTH", {7});
+    EXPECT_EQ(payload(assigned, 3), (std::vector<uint8_t>{7}));
+
+    // Copy assignment restores a moved-from fixture with independent storage.
+    moved = assigned;
+    moved.prg("FIFTH", {8});
+    EXPECT_EQ(payload(moved, 4), (std::vector<uint8_t>{8}));
+    EXPECT_NE(moved.bytes(), assigned.bytes());
+
+    // Moving an invalid source must not resurrect its construction authority.
+    D64 invalid = std::move(copy);
+    EXPECT_THROW(invalid.prg("ZOMBIE", {9}), std::logic_error);
+    D64 invalid_copy = invalid;
+    EXPECT_THROW(invalid_copy.corrupt(0, {}), std::logic_error);
+    assigned = std::move(invalid);
+    EXPECT_THROW(assigned.corrupt(0, {}), std::logic_error);
+
+    // Self-move assignment preserves both ordinary and corrupted fixture states.
+    const auto before = moved.bytes();
+    auto* const self = &moved;
+    moved = std::move(*self);
+    EXPECT_EQ(moved.bytes(), before);
+    moved.prg("SIXTH", {10});
+    moved.corrupt(0, {1});
+    D64 corrupted = std::move(moved);
+    EXPECT_THROW(corrupted.prg("NO REPAIR", {11}), std::logic_error);
+    EXPECT_THROW(moved.corrupt(0, {}), std::logic_error);
+    corrupted.corrupt(1, {2});
+}
+
+// Payload overlap rejects atomically, while adjacent and empty ranges are legal.
+TEST(DiskFixture, PayloadAliasingRejectsBeforeMutation) {
+    std::vector<uint8_t> storage(DISKIMAGE_D64_SIZE + 2, 0x5a);
+    uint8_t* const image = storage.data() + 1;
+    d64_fixture_layout_t layout;
+    ASSERT_EQ(d64_fixture_empty(&layout, image, DISKIMAGE_D64_SIZE), nullptr);
+    const auto before = storage;
+    const auto before_layout = layout;
+    const std::array<std::pair<size_t, size_t>, 4> overlaps{{
+        {1, 1}, {D64::offset(17, 0) + 1, 4}, {0, 2}, {DISKIMAGE_D64_SIZE, 2},
+    }};
+    for (const auto& range : overlaps) {
+        const char* const error = d64_fixture_prg(&layout, image, DISKIMAGE_D64_SIZE,
+            "ALIAS", storage.data() + range.first, range.second, nullptr, 0);
+        ASSERT_NE(error, nullptr);
+        EXPECT_STREQ(error, "D64 file: payload overlaps image storage");
+        EXPECT_EQ(storage, before);
+        EXPECT_EQ(layout.files, before_layout.files);
+        EXPECT_EQ(layout.initialized, before_layout.initialized);
+        EXPECT_TRUE(std::equal(std::begin(layout.used), std::end(layout.used),
+            std::begin(before_layout.used)));
+    }
+    ASSERT_EQ(d64_fixture_prg(&layout, image, DISKIMAGE_D64_SIZE,
+        "BEFORE", storage.data(), 1, nullptr, 0), nullptr);
+    ASSERT_EQ(d64_fixture_prg(&layout, image, DISKIMAGE_D64_SIZE,
+        "AFTER", image + DISKIMAGE_D64_SIZE, 1, nullptr, 0), nullptr);
+    ASSERT_EQ(d64_fixture_prg(&layout, image, DISKIMAGE_D64_SIZE,
+        "EMPTY", image, 0, nullptr, 0), nullptr);
+    EXPECT_EQ(layout.files, 3u);
 }
 
 // C callers get diagnostics and unchanged storage/state for every preflight failure.

@@ -40,7 +40,8 @@ const char* d64_fixture_empty(d64_fixture_layout_t* layout, uint8_t* image, size
 // address). An empty payload owns one empty sector. NULL/0 chain selects automatic
 // allocation. An explicit chain must have exactly max(1, ceil(length/254)) free
 // data sectors. All checks precede mutation of the image and construction state.
-// Initialize state with d64_fixture_empty first. Payload must not overlap image.
+// Initialize state with d64_fixture_empty first. Nonempty payload overlapping
+// image storage is rejected before mutation. Zero-length payloads may alias.
 const char* d64_fixture_prg(d64_fixture_layout_t* layout, uint8_t* image, size_t size,
     const char* name, const uint8_t* payload, size_t length,
     const d64_fixture_sector_t* chain, size_t chain_length);

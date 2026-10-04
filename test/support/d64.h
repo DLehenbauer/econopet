@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "d64_fixture.h"
@@ -19,6 +20,29 @@ public:
     // Create a named empty filesystem, not an anonymous zero-filled container.
     D64() : image_(DISKIMAGE_D64_SIZE) {
         check(d64_fixture_empty(&layout_, image_.data(), image_.size()));
+    }
+
+    // Copies retain independent image storage and construction state.
+    D64(const D64&) = default;
+    D64& operator=(const D64&) = default;
+
+    // Transfer ownership and explicitly invalidate the source in every library.
+    D64(D64&& other) noexcept
+        : image_(std::move(other.image_)), layout_(other.layout_),
+          corrupted_(other.corrupted_), valid_(other.valid_) {
+        other.invalidate();
+    }
+
+    // Replace ownership, preserving self-moves and invalidating any other source.
+    D64& operator=(D64&& other) noexcept {
+        if (this != &other) {
+            image_ = std::move(other.image_);
+            layout_ = other.layout_;
+            corrupted_ = other.corrupted_;
+            valid_ = other.valid_;
+            other.invalidate();
+        }
+        return *this;
     }
 
     // Return an explicitly empty, formatted fixture.
@@ -53,7 +77,7 @@ public:
     // Deliberately replace bytes for malformed-media tests. Corruption prevents
     // further checked file installation, but the image remains mountable as raw.
     D64& corrupt(size_t offset, const std::vector<uint8_t>& bytes) {
-        if (image_.size() != DISKIMAGE_D64_SIZE)
+        if (!valid_ || image_.size() != DISKIMAGE_D64_SIZE)
             throw std::logic_error("D64 corruption: moved-from fixture");
         if (offset > image_.size() || bytes.size() > image_.size() - offset)
             throw std::out_of_range("D64 corruption: byte range outside image");
@@ -81,13 +105,22 @@ private:
 
     // Moved-from storage and explicitly corrupted metadata are not buildable.
     void require_buildable() const {
-        if (image_.size() != DISKIMAGE_D64_SIZE || corrupted_)
+        if (!valid_ || image_.size() != DISKIMAGE_D64_SIZE || corrupted_)
             throw std::logic_error("D64 file: moved-from or corrupted fixture");
+    }
+
+    // Make moved-from bytes and allocation state deterministically empty.
+    void invalidate() noexcept {
+        image_.clear();
+        layout_ = {};
+        corrupted_ = false;
+        valid_ = false;
     }
 
     std::vector<uint8_t> image_;
     d64_fixture_layout_t layout_{};
     bool corrupted_ = false;
+    bool valid_ = true;
 };
 
 } // namespace disk_fixture

@@ -245,6 +245,48 @@ START_TEST(test_shared_d64_builder_round_trips_files) {
 }
 END_TEST
 
+// ASCII authoring names encode punctuation before production PETSCII lookup.
+START_TEST(test_fixture_punctuation_uses_petscii_lookup) {
+    static const char* const ascii_names[] = {"a_b", "a\\b", "a`b", "a{b", "a|b", "a}b", "a~b"};
+    static const uint8_t punctuation[] = {0xa4, 0xbf, 0xad, 0xb3, 0xdd, 0xab, 0xb1};
+    mem_image_t mem = {.data = malloc(DISKIMAGE_D64_SIZE), .size = DISKIMAGE_D64_SIZE};
+    ck_assert_ptr_nonnull(mem.data);
+    d64_fixture_layout_t layout;
+    const char* error = d64_fixture_empty(&layout, mem.data, mem.size);
+    ck_assert_msg(error == NULL, "%s", error);
+    diskimage_t img;
+    ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
+    for (size_t file = 0; file < count_of(ascii_names); ++file) {
+        const uint8_t payload = (uint8_t) file;
+        error = d64_fixture_prg(&layout, mem.data, mem.size, ascii_names[file],
+            &payload, 1, NULL, 0);
+        ck_assert_msg(error == NULL, "%s", error);
+        uint8_t encoded[16];
+        error = d64_fixture_name(ascii_names[file], encoded);
+        ck_assert_msg(error == NULL, "%s", error);
+        ck_assert_uint_eq(encoded[0], 'A');
+        ck_assert_uint_eq(encoded[1], punctuation[file]);
+        ck_assert_uint_eq(encoded[2], 'B');
+        char query[4];
+        memcpy(query, encoded, sizeof(query) - 1);
+        query[sizeof(query) - 1] = '\0';
+        diskimage_entry_t entry;
+        ck_assert(!diskimage_find(&img, ascii_names[file], &entry));
+        ck_assert(diskimage_find(&img, query, &entry));
+        ck_assert_str_eq(entry.name, query);
+        diskstream_t stream;
+        ck_assert(diskstream_open(&stream, &img, entry.start_track, entry.start_sector));
+        uint8_t byte;
+        bool last;
+        ck_assert(diskstream_next(&stream, &byte, &last));
+        ck_assert_uint_eq(byte, payload);
+        ck_assert(last);
+        ck_assert(!diskstream_next(&stream, &byte, &last));
+    }
+    free(mem.data);
+}
+END_TEST
+
 // Verifies directory lookup and sequential streaming for the standard D64 fixture.
 START_TEST(test_find_and_stream_synthetic_d64) {
     // Open the fixture through the same callback interface used by the driver.
@@ -672,6 +714,7 @@ Suite* diskimage_suite(void) {
     tcase_add_test(tc, test_disk_geometry_matches_rom_zones);
     tcase_add_test(tc, test_disk_geometry_rejects_invalid_inputs);
     tcase_add_test(tc, test_shared_d64_builder_round_trips_files);
+    tcase_add_test(tc, test_fixture_punctuation_uses_petscii_lookup);
     tcase_add_test(tc, test_find_and_stream_synthetic_d64);
     tcase_add_loop_test(tc, test_directory_walks_full_sector_and_successor, 0, 2);
     tcase_add_test(tc, test_stream_stops_on_read_failure);

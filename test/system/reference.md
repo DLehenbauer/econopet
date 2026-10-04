@@ -58,11 +58,19 @@ directory type bytes `$81` and `$83` respectively.
 
 Read immutable storage through `bytes()` for independent assertions or a
 consumer that copies the image. Copies own independent images and allocation
-state. Moved-from fixtures reject further construction or corruption.
+state. Move construction and assignment explicitly invalidate the source and
+empty its bytes. Moved-from fixtures reject further construction or corruption,
+including after copying or moving that invalid state. Assigning a valid fixture
+restores usability. Self-move assignment leaves the fixture unchanged.
 
 Names contain 1..16 printable ASCII characters, excluding DOS delimiters
 `:,=*?"`. The existing pure PETSCII encoder folds letters into uppercase and
 maps punctuation (for example `_` becomes `$A4`). Names are padded with `$A0`.
+This is an ASCII authoring interface, not the production lookup encoding.
+`diskimage_find()` accepts PETSCII names received from IEEE traffic and does not
+transcode ASCII punctuation. To query a fixture using its authoring name, call
+`d64_fixture_name()`, copy the encoded bytes before the first `$A0` padding byte
+into a NUL-terminated query, and pass that PETSCII query to production lookup.
 Duplicate encoded names, directory exhaustion (144 files), data exhaustion
 (664 sectors), and oversize payloads reject before changing bytes or ownership.
 Directory storage uses track 18. Data allocation is deterministic (tracks
@@ -80,8 +88,9 @@ at image end. Consumers may still read the raw bytes, with no implicit repair.
 Firmware C unit tests use the same
 [`d64_fixture.h`](../support/d64_fixture.h) construction core and diagnostics.
 Check every returned diagnostic (`NULL` means success). The C API also permits
-explicit checked sector lists for sparse-chain tests. Its payload storage must
-not overlap image storage. Build ordinary files before applying direct
+explicit checked sector lists for sparse-chain tests. Nonempty payloads that
+overlap image storage reject before mutation. Zero-length payloads may alias.
+Build ordinary files before applying direct
 malformed-media patches. The specialized REL fixture builds a checked sparse
 USR chain, then explicitly patches its type and record length for whitebox
 tests (no REL side sectors).

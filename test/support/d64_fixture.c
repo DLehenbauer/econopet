@@ -104,6 +104,15 @@ const char* d64_fixture_file(d64_fixture_layout_t* layout, uint8_t* image, size_
     if (length != 0 && payload == NULL) return "D64 file: missing payload";
     if (length > D64_FIXTURE_DATA_SECTORS * DISKIMAGE_SECTOR_PAYLOAD_SIZE)
         return "D64 file: payload exceeds data capacity";
+    if (length != 0) {
+        // Compare address differences, avoiding unrelated-pointer ordering and overflow.
+        const uintptr_t payload_start = (uintptr_t) payload;
+        const uintptr_t image_start = (uintptr_t) image;
+        const bool overlaps = payload_start >= image_start
+            ? payload_start - image_start < size
+            : image_start - payload_start < length;
+        if (overlaps) return "D64 file: payload overlaps image storage";
+    }
     if (layout->files >= D64_FIXTURE_FILES) return "D64 file: directory full";
     uint8_t encoded[16];
     const char* const error = d64_fixture_name(name, encoded);
