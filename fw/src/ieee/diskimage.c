@@ -6,6 +6,11 @@
 #include <ctype.h>
 #include <string.h>
 
+_Static_assert(
+    DISKIMAGE_DIRECTORY_ENTRY_SIZE * DISKIMAGE_DIRECTORY_ENTRIES_PER_SECTOR
+        == DISKIMAGE_SECTOR_SIZE,
+    "directory entries must fill one disk sector");
+
 // Sectors per track by zone. Track numbers are 1-based.
 static unsigned int d64_sectors(unsigned int track) {
     if (track <= 17) return 21;
@@ -26,18 +31,19 @@ static uint32_t track_offset(const diskimage_t* img, unsigned int track) {
     for (unsigned int t = 1; t < track; t++) {
         sectors += (img->type == diskimage_type_d80) ? d80_sectors(t) : d64_sectors(t);
     }
-    return sectors * 256u;
+    return sectors * DISKIMAGE_SECTOR_SIZE;
 }
 
-static bool read_sector(const diskimage_t* img, uint8_t track, uint8_t sector, uint8_t buf[256]) {
+static bool read_sector(const diskimage_t* img, uint8_t track, uint8_t sector,
+                        uint8_t buf[DISKIMAGE_SECTOR_SIZE]) {
     if (track == 0) return false;
     unsigned int max_track = (img->type == diskimage_type_d80) ? 77 : 35;
     if (track > max_track) return false;
     unsigned int spt = (img->type == diskimage_type_d80) ? d80_sectors(track) : d64_sectors(track);
     if (sector >= spt) return false;
 
-    uint32_t offset = track_offset(img, track) + (uint32_t) sector * 256u;
-    return img->read(img->ctx, offset, buf, 256);
+    uint32_t offset = track_offset(img, track) + (uint32_t) sector * DISKIMAGE_SECTOR_SIZE;
+    return img->read(img->ctx, offset, buf, DISKIMAGE_SECTOR_SIZE);
 }
 
 bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size) {
@@ -98,11 +104,12 @@ bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry
     unsigned int guard = 0;             // malformed-chain protection
 
     while (track != 0 && guard++ < 256) {
-        uint8_t buf[256];
+        uint8_t buf[DISKIMAGE_SECTOR_SIZE];
         if (!read_sector(img, track, sector, buf)) return false;
 
-        for (unsigned int i = 0; i < 8; i++) {
-            const uint8_t* e = &buf[i * 32];
+        const uint8_t* const end = buf
+            + DISKIMAGE_DIRECTORY_ENTRIES_PER_SECTOR * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        for (const uint8_t* e = buf; e < end; e += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
             uint8_t ftype = e[2];
             if ((ftype & 0x80) == 0 || (ftype & 0x07) == DISKIMAGE_FTYPE_DEL) continue;
 
@@ -117,7 +124,7 @@ bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry
                 out->file_type = ftype & 0x07;
                 out->start_track = e[3];
                 out->start_sector = e[4];
-                out->record_len = e[23];
+                out->record_len = e[DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET];
                 return true;
             }
         }
@@ -165,7 +172,7 @@ bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t*
 static bool load_sector(diskstream_t* st, uint8_t track, uint8_t sector) {
     // A chain cannot have more links than the image has sectors; a longer walk
     // means a circular T/S chain in a corrupt image and must not stream forever.
-    if (st->sectors >= st->img->size / 256) return false;
+    if (st->sectors >= st->img->size / DISKIMAGE_SECTOR_SIZE) return false;
     st->sectors++;
     if (!read_sector(st->img, track, sector, st->buf)) return false;
 
@@ -177,7 +184,7 @@ static bool load_sector(diskstream_t* st, uint8_t track, uint8_t sector) {
         if (st->end < 2) st->end = 2;   // empty/degenerate
     } else {
         st->last_sector = false;
-        st->end = 256;
+        st->end = DISKIMAGE_SECTOR_SIZE;
     }
     return true;
 }
@@ -232,7 +239,7 @@ bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uin
     // Read whole tracks, not per-link 2-byte headers: links mostly hop
     // within a track, and each small SD read is a full transaction --
     // walking a large REL file per-link takes seconds.
-    static uint8_t trkbuf[29 * 256];    // largest track (8050 tracks 1-39)
+    static uint8_t trkbuf[29 * DISKIMAGE_SECTOR_SIZE];    // largest track (8050 tracks 1-39)
     unsigned int buf_track = 0;         // 0 = nothing buffered
 
     ch->img = img;
@@ -248,11 +255,12 @@ bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uin
                                                              : d64_sectors(track);
         if (sector >= spt) return false;
         if (track != buf_track) {
-            if (!img->read(img->ctx, track_offset(img, track), trkbuf, spt * 256u))
+            if (!img->read(img->ctx, track_offset(img, track), trkbuf,
+                           spt * DISKIMAGE_SECTOR_SIZE))
                 return false;
             buf_track = track;
         }
-        const uint8_t* hdr = &trkbuf[(unsigned int) sector * 256u];
+        const uint8_t* hdr = &trkbuf[(unsigned int) sector * DISKIMAGE_SECTOR_SIZE];
         ch->ts[ch->count][0] = track;
         ch->ts[ch->count][1] = sector;
         ch->count++;
@@ -287,8 +295,8 @@ bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t 
         uint16_t take = (uint16_t) (avail - within);
         if (take > len) take = len;
         uint32_t soff = track_offset(ch->img, ch->ts[sec][0])
-                        + (uint32_t) ch->ts[sec][1] * 256u;
-        if (soff + 256u > ch->img->size) return false;
+                        + (uint32_t) ch->ts[sec][1] * DISKIMAGE_SECTOR_SIZE;
+        if (soff + DISKIMAGE_SECTOR_SIZE > ch->img->size) return false;
         if (!ch->img->read(ch->img->ctx, soff + 2 + within, buf, take)) return false;
         buf += take;
         off += take;
@@ -312,8 +320,8 @@ bool diskchain_write(const diskchain_t* ch, uint32_t off, const uint8_t* buf, ui
         uint16_t take = (uint16_t) (avail - within);
         if (take > len) take = len;
         uint32_t soff = track_offset(ch->img, ch->ts[sec][0])
-                        + (uint32_t) ch->ts[sec][1] * 256u;
-        if (soff + 256u > ch->img->size) return false;
+                        + (uint32_t) ch->ts[sec][1] * DISKIMAGE_SECTOR_SIZE;
+        if (soff + DISKIMAGE_SECTOR_SIZE > ch->img->size) return false;
         if (!ch->img->write(ch->img->ctx, soff + 2 + within, buf, take)) return false;
         buf += take;
         off += take;

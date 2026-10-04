@@ -50,6 +50,14 @@ typedef enum pet_display_columns_e {
     pet_display_columns_80 = 80,
 } pet_display_columns_t;
 
+// FPGA video RAM address-mask encodings. ColourPET splits character and color RAM.
+typedef enum pet_video_ram_mask_e {
+    pet_video_ram_mask_1kb = 0,
+    pet_video_ram_mask_2kb = 1,
+    pet_video_ram_mask_colourpet = 2,
+    pet_video_ram_mask_4kb = 3,
+} pet_video_ram_mask_t;
+
 typedef enum video_source_e {
     video_source_pet,       // $8000 mirrored to `video_char_buffer`
     video_source_firmware,  // `video_char_buffer` mirrored to $8000
@@ -112,7 +120,7 @@ typedef struct system_state_s {
     //  10 = 1KB at $8000 + 1KB at $8800 (40 column color)
     //  11 = 4KB at $8000 (80 column color)
     // This is configured by the firmware and sent to the FPGA via SPI.
-    uint8_t video_ram_mask;
+    uint8_t video_ram_mask;  // pet_video_ram_mask_t encoded for the FPGA.
 
     // Precomputed size of video RAM in bytes. Updated whenever video_ram_mask changes.
     size_t video_ram_bytes;

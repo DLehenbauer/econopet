@@ -164,7 +164,7 @@ void action_set_options(void* context, options_t* options) {
     }
 
     // Validate and set video RAM mask (must be 0-3)
-    vet(options->video_ram_mask <= 3,
+    vet(options->video_ram_mask <= pet_video_ram_mask_4kb,
         "Invalid video RAM mask in config (got %lu, expected 0-3)", options->video_ram_mask);
     system_state_set_video_ram_mask(ctx->system_state, (uint8_t) options->video_ram_mask);
 

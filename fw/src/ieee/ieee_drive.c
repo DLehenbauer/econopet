@@ -16,40 +16,8 @@
 #include "driver.h"
 #include "fatal.h"
 #include "ieee_protocol.h"
+#include "ieee_registers.h"
 #include "sd/sd.h"
-
-// FPGA register block (see gw common_pkg.sv WB_IEEE_BASE = 5'b01110 and
-// ieee.sv for semantics).
-#define ADDR_IEEE (0b01110 << 15)
-
-#define IEEE_REG_CTRL     (ADDR_IEEE + 0)
-#define IEEE_REG_STATUS   (ADDR_IEEE + 1)
-#define IEEE_REG_RX       (ADDR_IEEE + 2)
-#define IEEE_REG_TX       (ADDR_IEEE + 3)
-#define IEEE_REG_TX_LAST  (ADDR_IEEE + 4)
-#define IEEE_REG_SA       (ADDR_IEEE + 5)
-#define IEEE_REG_TXS      (ADDR_IEEE + 6)   // status-channel TX
-#define IEEE_REG_TXS_LAST (ADDR_IEEE + 7)   // status-channel TX, final byte (EOI)
-
-#define IEEE_CTRL_ENABLE     0x01   // write bit
-#define IEEE_CTRL_FLUSH      0x02   // write bit
-#define IEEE_CTRL_DATA_FLUSH 0x04   // write bit: flush the data TX FIFO only
-
-// CTRL register READ-back bits (asymmetric with the write bits above).
-#define IEEE_CTRL_RD_TX_ROOM 0x02   // data TX FIFO has room for >= TX_BURST_CHUNK
-
-// Data TX FIFO burst-fill chunk. Must match TX_BURST_CHUNK in ieee.sv: the
-// fabric's tx_room watermark guarantees space for this many bytes, so a burst
-// of up to this size never overflows.
-#define TX_BURST_CHUNK 64
-
-#define IEEE_ST_RX_AVAIL     0x01
-#define IEEE_ST_RX_ATN       0x02
-#define IEEE_ST_TX_FULL      0x04
-#define IEEE_ST_TX_EMPTY     0x08
-#define IEEE_ST_ATN          0x10
-#define IEEE_ST_LISTENING    0x20
-#define IEEE_ST_TALKING      0x40
 
 #define DEV_ADDR 8
 
@@ -282,7 +250,7 @@ typedef struct {
     bool     wr_active;
     uint16_t wr_pos;        // start position within the record (from P)
     uint16_t wr_count;
-    uint8_t  wr_buf[254];
+    uint8_t  wr_buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     diskchain_t chain;
 } rel_channel_t;
 
@@ -351,7 +319,7 @@ static drive_model_t get_drive_model(unsigned int slot) {
 // Position the engine at record 'rec', byte 'pos' within it, and compute
 // the trimmed length (last non-zero byte), like vdrive_rel_position.
 static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
-    uint8_t buf[254];
+    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->cur_record = rec;
     rc->missing = (rec == 0)
         || rec > diskchain_size(&rc->chain) / rc->reclen;
@@ -374,7 +342,7 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 // last byte. Empty records are transparent: reads flow into the next
 // record, exactly like vdrive_rel_read.
 static void rel_serve(rel_channel_t* rc) {
-    uint8_t buf[254];
+    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
 
     ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
@@ -427,7 +395,7 @@ static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
 // tail is zero-filled (what the read side's null-trim recovers), and the
 // engine advances.
 static void rel_write_commit(rel_channel_t* rc) {
-    uint8_t rec[254];
+    uint8_t rec[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->wr_active = false;
     if (rc->missing) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
@@ -561,15 +529,16 @@ static void resolve_open(void) {
             log_info("ieee: REL OPEN '%s' failed", open_name);
             return;
         }
-        if (entry.record_len > 254) {   // CBM max; larger = corrupt image, and
+        if (entry.record_len > DISKIMAGE_REL_MAX_RECORD_LENGTH) {
             set_status(slot, st_code_file_not_found, 0, 0);
             log_info("ieee: REL OPEN '%s' bad reclen %u", open_name, entry.record_len);
-            return;                     // the 254-byte record buffers
+            return;
         }
         rc->in_use = true;
         rc->slot = (uint8_t) slot;
         rc->chan = open_chan & 0x0F;
-        rc->reclen = entry.record_len ? entry.record_len : 129;
+        rc->reclen = entry.record_len >= DISKIMAGE_REL_MIN_RECORD_LENGTH
+            ? entry.record_len : 129;
         rel_position(rc, 1, 0);
         set_status(slot, st_code_ok, 0, 0);
         log_info("ieee: REL OPEN '%s' ok (chan %u, reclen %u, %lu bytes)",
@@ -597,7 +566,7 @@ static void resolve_open(void) {
 
 static void push_status(unsigned int unit) {
     const char* text;
-    char line[40];
+    char line[IEEE_STATUS_LINE_CAPACITY];
     const drive_status_t status = drive_status[unit];
     const drive_model_t model =
         get_drive_model(unit * DRIVES_PER_UNIT + status.drive);
@@ -623,6 +592,8 @@ static void push_status(unsigned int unit) {
         : snprintf(line, sizeof(line), "%02u,%s,%02u,%02u",
                    (unsigned int) status.code, text, status.track, status.sector);
 
+    vet(n >= 0 && (size_t) n <= IEEE_STATUS_TEXT_MAX,
+        "IEEE status text exceeds its %u-byte capacity", IEEE_STATUS_TEXT_MAX);
     for (int i = 0; i < n; i++) spi_write_at(IEEE_REG_TXS, (uint8_t) line[i]);
     spi_write_at(IEEE_REG_TXS_LAST, 0x0D);
 

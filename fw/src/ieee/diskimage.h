@@ -45,6 +45,20 @@ typedef struct {
 #define DISKIMAGE_D64_SIZE 174848u
 #define DISKIMAGE_D80_SIZE 533248u
 
+// D64 and D80 sectors have a fixed byte size, independent of their contents.
+#define DISKIMAGE_SECTOR_SIZE 256u
+
+// Legal nonzero REL record lengths. The drive's existing zero-length metadata
+// fallback is separate from this range.
+#define DISKIMAGE_REL_MIN_RECORD_LENGTH 1u
+#define DISKIMAGE_REL_MAX_RECORD_LENGTH 254u
+
+// Directory sectors contain eight 32-byte slots. Offsets are relative to the
+// slot start (the first slot includes the sector link at bytes 0 and 1).
+#define DISKIMAGE_DIRECTORY_ENTRY_SIZE 32u
+#define DISKIMAGE_DIRECTORY_ENTRIES_PER_SECTOR 8u
+#define DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET 23u
+
 // CBM directory entry file types (low 3 bits of the type byte).
 #define DISKIMAGE_FTYPE_DEL 0
 #define DISKIMAGE_FTYPE_SEQ 1
@@ -80,7 +94,7 @@ bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry
 // Sequential reader over a file's sector chain.
 typedef struct {
     const diskimage_t* img;
-    uint8_t buf[256];
+    uint8_t buf[DISKIMAGE_SECTOR_SIZE];
     uint16_t pos;       // next byte offset within buf (2..)
     uint16_t end;       // one past last valid byte offset within buf
     bool last_sector;   // buf is the final sector of the chain

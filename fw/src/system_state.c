@@ -6,7 +6,7 @@
 
 system_state_t system_state = {
     .pet_display_columns = pet_display_columns_40,
-    .video_ram_mask = 0,        // 1KB
+    .video_ram_mask = pet_video_ram_mask_1kb,
     .video_ram_bytes = 1024,    // 1KB    
     .video_source = video_source_firmware,
     .term_mode = term_mode_cli,

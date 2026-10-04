@@ -33,6 +33,12 @@ Each item in `configs` describes one boot menu option:
 | `name` | A human-readable name to show in the boot menu. |
 | `setup` | A list of actions to perform when this configuration is selected. |
 
+The parser stores up to 40 text bytes for configuration IDs and names, plus
+the terminating null. Longer values are truncated. The parser forwards the
+`default` scalar unchanged, but the boot menu stores only its first 40 text
+bytes when matching configuration IDs. Keep IDs, names, and `default` within
+this limit so the menu and default selection use the intended text.
+
 ## Setup actions
 
 Each item in a `setup` list is an action. The `action` property tells the
