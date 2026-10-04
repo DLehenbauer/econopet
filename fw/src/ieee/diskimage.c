@@ -11,38 +11,64 @@ _Static_assert(
         == DISKIMAGE_SECTOR_SIZE,
     "directory entries must fill one disk sector");
 
-// Sectors per track by zone. Track numbers are 1-based.
-static unsigned int d64_sectors(unsigned int track) {
-    if (track <= 17) return 21;
-    if (track <= 24) return 19;
-    if (track <= 30) return 18;
-    return 17;
-}
+typedef struct {
+    unsigned int last_track;
+    unsigned int sectors;
+} diskimage_zone_t;
 
-static unsigned int d80_sectors(unsigned int track) {
-    if (track <= 39) return 29;
-    if (track <= 53) return 27;
-    if (track <= 64) return 25;
-    return 23;
-}
+// 4040 TRKTBL/SECTRK and single-sided 8050 NTRK80/NSEC80 define these zones.
+static const diskimage_zone_t d64_zones[] = {
+    {17, 21}, {24, 19}, {30, 18}, {DISKIMAGE_D64_TRACK_COUNT, 17},
+};
+static const diskimage_zone_t d80_zones[] = {
+    {39, 29}, {53, 27}, {64, 25}, {DISKIMAGE_D80_TRACK_COUNT, 23},
+};
 
-static uint32_t track_offset(const diskimage_t* img, unsigned int track) {
-    uint32_t sectors = 0;
-    for (unsigned int t = 1; t < track; t++) {
-        sectors += (img->type == diskimage_type_d80) ? d80_sectors(t) : d64_sectors(t);
+bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned int* sectors) {
+    if (sectors == NULL || track == 0) return false;
+    const diskimage_zone_t* zones;
+    size_t count;
+    switch (type) {
+        case diskimage_type_d64:
+            zones = d64_zones;
+            count = sizeof(d64_zones) / sizeof(d64_zones[0]);
+            break;
+        case diskimage_type_d80:
+            zones = d80_zones;
+            count = sizeof(d80_zones) / sizeof(d80_zones[0]);
+            break;
+        default:
+            return false;
     }
-    return sectors * DISKIMAGE_SECTOR_SIZE;
+    if (track > zones[count - 1].last_track) return false;
+    for (size_t zone = 0; zone < count; ++zone) {
+        if (track <= zones[zone].last_track) {
+            *sectors = zones[zone].sectors;
+            return true;
+        }
+    }
+    return false;
 }
 
+bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned int sector,
+    uint32_t* offset) {
+    unsigned int sectors;
+    if (offset == NULL || !diskimage_track_sectors(type, track, &sectors) || sector >= sectors)
+        return false;
+    uint32_t preceding = sector;
+    for (unsigned int current = 1; current < track; ++current) {
+        if (!diskimage_track_sectors(type, current, &sectors)) return false;
+        preceding += sectors;
+    }
+    *offset = preceding * DISKIMAGE_SECTOR_SIZE;
+    return true;
+}
+
+// Read one sector after validating its coordinates with the shared geometry.
 static bool read_sector(const diskimage_t* img, uint8_t track, uint8_t sector,
                         uint8_t buf[DISKIMAGE_SECTOR_SIZE]) {
-    if (track == 0) return false;
-    unsigned int max_track = (img->type == diskimage_type_d80) ? 77 : 35;
-    if (track > max_track) return false;
-    unsigned int spt = (img->type == diskimage_type_d80) ? d80_sectors(track) : d64_sectors(track);
-    if (sector >= spt) return false;
-
-    uint32_t offset = track_offset(img, track) + (uint32_t) sector * DISKIMAGE_SECTOR_SIZE;
+    uint32_t offset;
+    if (!diskimage_sector_offset(img->type, track, sector, &offset)) return false;
     return img->read(img->ctx, offset, buf, DISKIMAGE_SECTOR_SIZE);
 }
 
@@ -246,16 +272,14 @@ bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uin
     ch->count = 0;
     ch->last_used = 0;
 
-    unsigned int max_track = (img->type == diskimage_type_d80) ? 77 : 35;
-
     while (track != 0) {
         if (ch->count >= DISKCHAIN_MAX_SECTORS) return false;
-        if (track > max_track) return false;
-        unsigned int spt = (img->type == diskimage_type_d80) ? d80_sectors(track)
-                                                             : d64_sectors(track);
-        if (sector >= spt) return false;
+        unsigned int spt;
+        if (!diskimage_track_sectors(img->type, track, &spt) || sector >= spt) return false;
         if (track != buf_track) {
-            if (!img->read(img->ctx, track_offset(img, track), trkbuf,
+            uint32_t offset;
+            if (!diskimage_sector_offset(img->type, track, 0, &offset)) return false;
+            if (!img->read(img->ctx, offset, trkbuf,
                            spt * DISKIMAGE_SECTOR_SIZE))
                 return false;
             buf_track = track;
@@ -278,7 +302,7 @@ bool diskchain_build(diskchain_t* ch, const diskimage_t* img, uint8_t track, uin
 uint32_t diskchain_size(const diskchain_t* ch) {
     if (ch->flat) return ch->flat_size;
     if (ch->count == 0) return 0;
-    return (uint32_t) (ch->count - 1) * 254u + ch->last_used;
+    return (uint32_t) (ch->count - 1) * DISKIMAGE_SECTOR_PAYLOAD_SIZE + ch->last_used;
 }
 
 bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t len) {
@@ -287,15 +311,16 @@ bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t 
         return len == 0 || ch->img->read(ch->img->ctx, off, buf, len);
     }
     while (len > 0) {
-        uint16_t sec = (uint16_t) (off / 254u);
-        uint16_t within = (uint16_t) (off % 254u);
+        uint16_t sec = (uint16_t) (off / DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+        uint16_t within = (uint16_t) (off % DISKIMAGE_SECTOR_PAYLOAD_SIZE);
         if (sec >= ch->count) return false;
-        uint16_t avail = (sec == ch->count - 1) ? ch->last_used : 254u;
+        uint16_t avail = (sec == ch->count - 1) ? ch->last_used : DISKIMAGE_SECTOR_PAYLOAD_SIZE;
         if (within >= avail) return false;
         uint16_t take = (uint16_t) (avail - within);
         if (take > len) take = len;
-        uint32_t soff = track_offset(ch->img, ch->ts[sec][0])
-                        + (uint32_t) ch->ts[sec][1] * DISKIMAGE_SECTOR_SIZE;
+        uint32_t soff;
+        if (!diskimage_sector_offset(ch->img->type, ch->ts[sec][0], ch->ts[sec][1], &soff))
+            return false;
         if (soff + DISKIMAGE_SECTOR_SIZE > ch->img->size) return false;
         if (!ch->img->read(ch->img->ctx, soff + 2 + within, buf, take)) return false;
         buf += take;
@@ -312,15 +337,16 @@ bool diskchain_write(const diskchain_t* ch, uint32_t off, const uint8_t* buf, ui
         return len == 0 || ch->img->write(ch->img->ctx, off, buf, len);
     }
     while (len > 0) {
-        uint16_t sec = (uint16_t) (off / 254u);
-        uint16_t within = (uint16_t) (off % 254u);
+        uint16_t sec = (uint16_t) (off / DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+        uint16_t within = (uint16_t) (off % DISKIMAGE_SECTOR_PAYLOAD_SIZE);
         if (sec >= ch->count) return false;
-        uint16_t avail = (sec == ch->count - 1) ? ch->last_used : 254u;
+        uint16_t avail = (sec == ch->count - 1) ? ch->last_used : DISKIMAGE_SECTOR_PAYLOAD_SIZE;
         if (within >= avail) return false;
         uint16_t take = (uint16_t) (avail - within);
         if (take > len) take = len;
-        uint32_t soff = track_offset(ch->img, ch->ts[sec][0])
-                        + (uint32_t) ch->ts[sec][1] * DISKIMAGE_SECTOR_SIZE;
+        uint32_t soff;
+        if (!diskimage_sector_offset(ch->img->type, ch->ts[sec][0], ch->ts[sec][1], &soff))
+            return false;
         if (soff + DISKIMAGE_SECTOR_SIZE > ch->img->size) return false;
         if (!ch->img->write(ch->img->ctx, soff + 2 + within, buf, take)) return false;
         buf += take;

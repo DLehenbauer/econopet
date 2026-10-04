@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+#pragma once
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "d64_fixture.h"
+
+namespace disk_fixture {
+
+// Own a formatted, transport-independent 35-track image and its allocation state.
+class D64 {
+public:
+    // Create a named empty filesystem, not an anonymous zero-filled container.
+    D64() : image_(DISKIMAGE_D64_SIZE) {
+        check(d64_fixture_empty(&layout_, image_.data(), image_.size()));
+    }
+
+    // Return an explicitly empty, formatted fixture.
+    static D64 empty() { return D64{}; }
+
+    // Encode an ASCII name as uppercase PETSCII, and store payload bytes exactly.
+    // No load address is added. Validation failure leaves this fixture unchanged.
+    D64& prg(const std::string& name, const std::vector<uint8_t>& payload) {
+        return file(DISKIMAGE_FTYPE_PRG, name, payload);
+    }
+
+    // Store an ordinary sequential file with the same checked ownership.
+    D64& seq(const std::string& name, const std::vector<uint8_t>& payload) {
+        return file(DISKIMAGE_FTYPE_SEQ, name, payload);
+    }
+
+    // Store a user file with the same checked ownership.
+    D64& usr(const std::string& name, const std::vector<uint8_t>& payload) {
+        return file(DISKIMAGE_FTYPE_USR, name, payload);
+    }
+
+    // Observe immutable bytes for mounting or independent parser assertions.
+    const std::vector<uint8_t>& bytes() const { return image_; }
+
+    // Resolve checked D64 coordinates without involving a transport or parser.
+    static size_t offset(unsigned int track, unsigned int sector) {
+        size_t result;
+        check(d64_fixture_offset(track, sector, &result));
+        return result;
+    }
+
+    // Deliberately replace bytes for malformed-media tests. Corruption prevents
+    // further checked file installation, but the image remains mountable as raw.
+    D64& corrupt(size_t offset, const std::vector<uint8_t>& bytes) {
+        if (image_.size() != DISKIMAGE_D64_SIZE)
+            throw std::logic_error("D64 corruption: moved-from fixture");
+        if (offset > image_.size() || bytes.size() > image_.size() - offset)
+            throw std::out_of_range("D64 corruption: byte range outside image");
+        if (bytes.empty()) return *this;
+        std::copy(bytes.begin(), bytes.end(), image_.begin() + offset);
+        corrupted_ = true;
+        return *this;
+    }
+
+private:
+    // All ordinary file types share validation, encoding and allocation.
+    D64& file(unsigned int type, const std::string& name, const std::vector<uint8_t>& payload) {
+        require_buildable();
+        if (name.find('\0') != std::string::npos)
+            throw std::invalid_argument("D64 filename: embedded NUL");
+        check(d64_fixture_file(&layout_, image_.data(), image_.size(), type, name.c_str(),
+            payload.data(), payload.size(), nullptr, 0));
+        return *this;
+    }
+
+    // Translate shared C diagnostics into checked authoring failures.
+    static void check(const char* error) {
+        if (error != nullptr) throw std::invalid_argument(error);
+    }
+
+    // Moved-from storage and explicitly corrupted metadata are not buildable.
+    void require_buildable() const {
+        if (image_.size() != DISKIMAGE_D64_SIZE || corrupted_)
+            throw std::logic_error("D64 file: moved-from or corrupted fixture");
+    }
+
+    std::vector<uint8_t> image_;
+    d64_fixture_layout_t layout_{};
+    bool corrupted_ = false;
+};
+
+} // namespace disk_fixture
