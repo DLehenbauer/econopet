@@ -33,6 +33,10 @@ Each item in `configs` describes one boot menu option:
 | `name` | A human-readable name to show in the boot menu. |
 | `setup` | A list of actions to perform when this configuration is selected. |
 
+The firmware stores up to 40 text bytes for configuration IDs and names, plus
+the terminating null. Longer values are truncated. Keep IDs and names within
+this limit so the menu and default selection use the intended text.
+
 ## Setup actions
 
 Each item in a `setup` list is an action. The `action` property tells the

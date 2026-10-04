@@ -92,13 +92,13 @@ uint8_t* diskimage_test_make_d64(void) {
     // Entry 1 = REL "DATA" at 16/2, reclen 129. Chain hops 16/2 -> 16/0 ->
     // 15/3 -> 16/5: the track changes 16 -> 15 -> 16 exercise the whole-track
     // buffering in diskchain_build (reload after leaving and returning).
-    uint8_t* d1 = &dir[32];
+    uint8_t* d1 = &dir[DISKIMAGE_DIRECTORY_ENTRY_SIZE];
     d1[2] = 0x84;    // closed REL
     d1[3] = 16;
     d1[4] = 2;
     memset(&d1[5], 0xA0, 16);
     memcpy(&d1[5], "DATA", 4);
-    d1[23] = 129;    // record length
+    d1[DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = 129;    // record length
 
     static const uint8_t rel_ts[4][2] = { {16, 2}, {16, 0}, {15, 3}, {16, 5} };
     for (unsigned int k = 0; k < 4; k++) {
@@ -201,6 +201,47 @@ START_TEST(test_find_and_stream_synthetic_d64) {
     ck_assert_uint_eq(byte, 0xE0 + 11);   // final payload byte
 
     // Release the generated image after its callback-backed use is complete.
+    free(mem.data);
+}
+END_TEST
+
+// Verifies all eight directory slots and the first successor slot are visited.
+START_TEST(test_directory_walks_full_sector_and_successor) {
+    const unsigned int entry_count = 9;
+    // Replace the fixture directory with a full sector followed by one entry.
+    const bool d80 = _i != 0;
+    mem_image_t mem = {
+        .data = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64(),
+        .size = d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE,
+    };
+    const uint8_t track = d80 ? 39 : 18;
+    uint8_t* directory = mem.data + (d80 ? d80_offset(track, 1)
+                                        : diskimage_test_d64_offset(track, 1));
+    memset(directory, 0, 2 * DISKIMAGE_SECTOR_SIZE);
+    directory[0] = track;
+    directory[1] = 2;
+    for (unsigned int slot = 0; slot < entry_count; slot++) {
+        uint8_t* entry = directory + slot * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        entry[2] = 0x80 | DISKIMAGE_FTYPE_PRG;
+        entry[3] = 17;
+        entry[4] = (uint8_t) slot;
+        memset(entry + 5, 0xa0, 16);
+        entry[5] = (uint8_t) ('A' + slot);
+    }
+
+    // Require each slot in order, then stop at the end of the second sector.
+    diskimage_t img;
+    diskimage_entry_t entry;
+    ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
+    for (unsigned int index = 0; index < entry_count; index++) {
+        ck_assert(diskimage_entry(&img, index, &entry));
+        const char name[] = { (char) ('A' + index), '\0' };
+        ck_assert_str_eq(entry.name, name);
+        ck_assert_uint_eq(entry.file_type, DISKIMAGE_FTYPE_PRG);
+        ck_assert_uint_eq(entry.start_track, 17);
+        ck_assert_uint_eq(entry.start_sector, index);
+    }
+    ck_assert(!diskimage_entry(&img, entry_count, &entry));
     free(mem.data);
 }
 END_TEST
@@ -424,8 +465,8 @@ START_TEST(test_rel_chain_rejects_out_of_range_start) {
 
     // Lookup still returns the entry, but chain construction must reject it.
     ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
-    directory[32 + 3] = 36;
-    directory[32 + 4] = 0;
+    directory[DISKIMAGE_DIRECTORY_ENTRY_SIZE + 3] = 36;
+    directory[DISKIMAGE_DIRECTORY_ENTRY_SIZE + 4] = 0;
     ck_assert(diskimage_find(&img, "DATA", &entry));
     // Chain construction validates the track before attempting a sector read.
     ck_assert(!diskchain_build(&chain, &img, entry.start_track, entry.start_sector));
@@ -546,6 +587,7 @@ Suite* diskimage_suite(void) {
     TCase* tc = tcase_create("core");
     tcase_add_test(tc, test_open_rejects_bad_size);
     tcase_add_test(tc, test_find_and_stream_synthetic_d64);
+    tcase_add_loop_test(tc, test_directory_walks_full_sector_and_successor, 0, 2);
     tcase_add_test(tc, test_stream_stops_on_read_failure);
     tcase_add_test(tc, test_find_handles_16_byte_names_and_skips_deleted_entries);
     tcase_add_test(tc, test_directory_rejects_out_of_range_link);

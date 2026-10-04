@@ -18,7 +18,7 @@ typedef struct parser_s {
     struct parser_s* previous;
     int depth;
     
-    // Config selection state: -1 for enumerate all, >= 0 to execute specific config
+    // CONFIG_ENUMERATE enumerates all, >= 0 executes a specific configuration.
     int target_index;
     int current_index;
     bool executing;
@@ -583,10 +583,11 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
 
     options_t options = {
         .columns = 40,          // Default value
-        .video_ram_mask = 0,    // Default value (will be derived from video_ram_kb)
+        .video_ram_mask =       // Default value (will be derived from video_ram_kb)
+            pet_video_ram_mask_1kb,
         .usb_keymap = { 0 },    // Default: empty (use default keymap)
-        .tape = { 0 },          // Default: disabled
-        .tape_enabled = false,
+        .tape_enabled = false,  // Default: disabled
+        .tape = { 0 },
         .cpu = CPU_AUTO,        // Default: physical 6502 if populated, else soft
         .superpet_io = false,   // Default: stock PET machine
     };
@@ -780,8 +781,8 @@ static void parse_config(parser_t* parser) {
         parser->sink->on_enter_config(parser->sink->context);
     }
 
-    char id[41] = { 0 };
-    char name[41] = { 0 };
+    char id[CONFIG_TEXT_CAPACITY] = { 0 };
+    char name[CONFIG_TEXT_CAPACITY] = { 0 };
 
     parse_mapping(parser, (const map_dispatch_entry_t[]) {
         { "id", parse_as_string, &id, sizeof(id) },

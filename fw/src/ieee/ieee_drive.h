@@ -15,6 +15,15 @@
 // and CBM relative files (Super-OS/9).
 //
 
+// Capacity for ordinary formatted DOS status lines, not arbitrary channel-15
+// data such as memory-read replies. DOS_4040 and DOS_8250 ramvar place ERRBUF
+// in the final 36 bytes before $4400. Reserve that text, its transmitted CR,
+// and a host C terminating null (which is not transmitted).
+// Sources: https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ramvar
+//          https://github.com/mist64/cbmsrc/blob/master/DOS_8250/ramvar
+#define IEEE_STATUS_TEXT_MAX 36u
+#define IEEE_STATUS_LINE_CAPACITY (IEEE_STATUS_TEXT_MAX + 1u + 1u)
+
 // Initializes IEEE-488 emulation with no mounted images and fresh DOS/channel
 // state. The fabric remains transparent until an image is mounted.
 void ieee_drive_init(void);
