@@ -4,6 +4,10 @@
 #include "pch.h"
 #include "fatal.h"
 
+#include "sd/sd.h"
+
+// Host targets provide fatal() and vetted_malloc() through their existing mocks.
+#if defined(PICO_RP2040)
 #include "display/display.h"
 #include "display/window.h"
 #include "roms/roms.h"
@@ -75,4 +79,10 @@ void* vetted_malloc(size_t __size) {
         fatal_no_alloc("malloc failed");
     }
     return p;
+}
+#endif
+
+void vet_path_length(size_t length) {
+    vet(length < SD_PATH_MAX, "SD path exceeds %u characters (got %zu)",
+        (unsigned int) (SD_PATH_MAX - 1), length);
 }

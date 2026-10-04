@@ -61,6 +61,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/roms/roms.c
     ${FW_SRC_DIR}/roms/checksum.c
     ${FW_SRC_DIR}/sd/sd.c
+    ${FW_SRC_DIR}/sd/path.c
     ${FW_SRC_DIR}/config/config.c
     ${FW_SRC_DIR}/diag/mem.c
     ${FW_SRC_DIR}/diag/log/log.c

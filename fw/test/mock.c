@@ -19,6 +19,7 @@
 #include <check.h>
 
 #include "driver.h"
+#include "fatal.h"
 #include "sd/sd.h"
 #include "system_state.h"
 
@@ -251,7 +252,7 @@ bool mock_breakpoint_halt_was_cleared(void) {
 
 // In-memory file system for testing
 typedef struct mem_file_s {
-    char path[PATH_MAX];
+    char path[SD_PATH_MAX];
     uint8_t* content;
     size_t size;
     size_t capacity;
@@ -279,6 +280,7 @@ void mock_register_file(const char* path, const char* content) {
 void mock_register_binary_file(const char* path, const void* data, size_t size,
                                bool writable) {
     assert(path[0] == '/');
+    vet_path_length(strlen(path));
 
     // Caller must unregister an existing file before re-registering it.
     assert(find_mem_file(path) == NULL);
@@ -325,6 +327,7 @@ void mock_clear_files(void) {
 // Mock implementation of 'sd_open' returns contents of previously registered in-memory files
 // using 'mock_register_file()'.
 FILE* sd_open(const char* path, const char* mode) {
+    vet_path_length(strlen(path));
     assert(path[0] == '/');
     
     // Check if this is an in-memory file

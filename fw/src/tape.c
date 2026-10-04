@@ -13,12 +13,11 @@
 #include "cbm/petscii.h"
 #include "diag/log/log.h"
 #include "driver.h"
+#include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
 #include "system_state.h"
 #include "tape_dir.h"
-
-#define PRGS_DIR "/prgs"
 
 // BASIC program start address (universal across all PET ROM versions). The
 // synthesized directory listing loads here, just like LOAD "$" on a disk drive.
@@ -58,13 +57,14 @@ typedef struct {
 
 static tape_state_t state;
 
-// Search PRGS_DIR for a .prg file matching 'pattern'. On success, writes the
+// Search the programs directory for a .prg file matching 'pattern'. On success, writes the
 // full path (e.g. "/prgs/game.prg") to 'path_out' and returns true.
 static bool find_prg_file(const uint8_t* pattern, uint8_t pattern_len,
-                          char* path_out, size_t path_out_size) {
-    DIR* dir = opendir(PRGS_DIR);
+                          char path_out[SD_PATH_MAX]) {
+    const char* prefix = sd_dir_prefix(SD_DIR_PRGS);
+    DIR* dir = opendir(prefix);
     if (dir == NULL) {
-        log_warn("tape: cannot open " PRGS_DIR);
+        log_warn("tape: cannot open %s", prefix);
         return false;
     }
 
@@ -86,11 +86,7 @@ static bool find_prg_file(const uint8_t* pattern, uint8_t pattern_len,
         }
 
         if (cbm_filename_match(pattern, pattern_len, name)) {
-            int n = snprintf(path_out, path_out_size, "%s/%s", PRGS_DIR, name);
-            if (n < 0 || (size_t)n >= path_out_size) {
-                log_warn("tape: path too long for %s", name);
-                continue;
-            }
+            sd_make_path(path_out, SD_DIR_PRGS, name);
             found = true;
             break;
         }
@@ -182,13 +178,14 @@ static int dir_entry_cmp(const void* a, const void* b) {
     return (int)(unsigned char)*sa - (int)(unsigned char)*sb;
 }
 
-// Scan PRGS_DIR for loadable .prg files. For each, record the display name
+// Scan the programs directory for loadable .prg files. For each, record the display name
 // (with the ".prg" extension suppressed) and the block count derived from the
 // file size. Returns the number of entries collected (up to 'max').
 static int gather_dir_entries(tape_dir_entry_t* out, int max) {
-    DIR* dir = opendir(PRGS_DIR);
+    const char* prefix = sd_dir_prefix(SD_DIR_PRGS);
+    DIR* dir = opendir(prefix);
     if (dir == NULL) {
-        log_warn("tape: cannot open " PRGS_DIR);
+        log_warn("tape: cannot open %s", prefix);
         return 0;
     }
 
@@ -217,10 +214,10 @@ static int gather_dir_entries(tape_dir_entry_t* out, int max) {
 
         // Block count from the file size (rounded up, at least one block).
         uint16_t blocks = 1;
-        char path[PATH_MAX];
-        int n = snprintf(path, sizeof(path), "%s/%s", PRGS_DIR, name);
+        char path[SD_PATH_MAX];
+        sd_make_path(path, SD_DIR_PRGS, name);
         struct stat st;
-        if (n > 0 && (size_t)n < sizeof(path) && stat(path, &st) == 0) {
+        if (stat(path, &st) == 0) {
             blocks = tape_dir_blocks_from_bytes((uint64_t)st.st_size, true);
         }
         out[count].blocks = blocks;
@@ -233,7 +230,7 @@ static int gather_dir_entries(tape_dir_entry_t* out, int max) {
 }
 
 // Handle LOAD "$" by synthesizing a Commodore-style directory listing of the
-// loadable .prg files in PRGS_DIR. The listing is a fake BASIC program written
+// loadable .prg files in the programs directory. The listing is a fake BASIC program written
 // to SRAM at the BASIC start. Reusing the LD210 fixup path relinks the lines
 // and returns to READY, so the user can LIST the directory.
 static bp_result_t tape_load_directory(uint16_t pc) {
@@ -281,7 +278,11 @@ static bp_result_t tape_load_directory(uint16_t pc) {
     // Mirror the regular SD load path's "FOUND <path>" message so the user sees
     // the same clue that the virtual tape drive intercepted the command.
     uint8_t stub_buf[TAPE_BUFFER_CAPACITY];
-    size_t stub_len = tape_build_stub(stub_buf, "FOUND " PRGS_DIR "/$", graphics_charset);
+    char message[SD_PATH_MAX];
+    const int n = snprintf(message, sizeof(message), "FOUND %s$",
+                           sd_dir_prefix(SD_DIR_PRGS));
+    vet(n >= 0 && (size_t) n < sizeof(message), "could not format tape directory message");
+    size_t stub_len = tape_build_stub(stub_buf, message, graphics_charset);
     spi_write(TAPE_BUFFER, stub_buf, stub_len);
 
     return (bp_result_t){ .pc = TAPE_BUFFER, .rearm = true };
@@ -328,15 +329,15 @@ static bp_result_t tape_load_callback(uint16_t pc, void* context) {
         return (bp_result_t){ .pc = pc, .rearm = true };
     }
 
-    // LOAD "$" generates a directory listing of PRGS_DIR.
+    // LOAD "$" generates a directory listing of the programs directory.
     if (fnlen == 1 && pattern[0] == '$') {
         log_info("tape: directory listing requested");
         return tape_load_directory(pc);
     }
 
     // Search SD card for a matching .prg file.
-    char path[PATH_MAX];
-    if (!find_prg_file(pattern, fnlen, path, sizeof(path))) {
+    char path[SD_PATH_MAX];
+    if (!find_prg_file(pattern, fnlen, path)) {
         log_info("tape: no match for \"%s\"", log_name);
         return (bp_result_t){ .pc = pc, .rearm = true };
     }
