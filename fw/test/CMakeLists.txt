@@ -53,6 +53,8 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
     ${TEST_SUPPORT_DIR}/test_support.c
+    ${TEST_SUPPORT_DIR}/test_fatal.c
+    ${TEST_SUPPORT_DIR}/d64_fixture.c
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/tape_dir_test.c

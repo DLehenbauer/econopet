@@ -7,6 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Commodore disk image container. Supports:
 //   .d64 (2031/4040, 35 tracks, 174848 bytes) -- directory at 18/1
 //   .d80 (8050, 77 tracks, 533248 bytes)      -- directory at 39/1
@@ -44,9 +48,13 @@ typedef struct {
 
 #define DISKIMAGE_D64_SIZE 174848u
 #define DISKIMAGE_D80_SIZE 533248u
+#define DISKIMAGE_D64_TRACK_COUNT 35u
+#define DISKIMAGE_D80_TRACK_COUNT 77u
 
 // D64 and D80 sectors have a fixed byte size, independent of their contents.
 #define DISKIMAGE_SECTOR_SIZE 256u
+#define DISKIMAGE_SECTOR_LINK_SIZE 2u
+#define DISKIMAGE_SECTOR_PAYLOAD_SIZE (DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE)
 
 // Legal nonzero REL record lengths. The drive's existing zero-length metadata
 // fallback is separate from this range.
@@ -74,6 +82,13 @@ typedef struct {
     uint8_t record_len; // REL files: record length (0 otherwise)
 } diskimage_entry_t;
 
+// Pure D64/D80 geometry shared by image I/O and fixture construction.
+// Return false for unsupported types, invalid coordinates, or missing outputs.
+// Outputs are unchanged on failure.
+bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned int* sectors);
+bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned int sector,
+    uint32_t* offset);
+
 // Detects the image type from 'size'. Returns false if the size matches no
 // supported container.
 bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);
@@ -82,9 +97,10 @@ bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_
 // be a whole number of 258-byte sector-record pairs.
 bool diskimage_open_hdd(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);
 
-// Looks up 'name' (case-insensitive; '*' suffix wildcard; an optional
-// leading drive prefix like "0:", "1:" or "1." is stripped) in the
-// directory. Returns true and fills 'out' when found.
+// Looks up a PETSCII 'name' (ASCII is not transcoded), case-insensitively.
+// Directory entry names also retain their PETSCII bytes. Supports '*' suffix
+// wildcards and strips optional drive prefixes like "0:", "1:", or "1.".
+// Returns true and fills 'out' when found.
 bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t* out);
 
 // Iterates directory entries: 'index' counts valid (non-DEL) entries from 0.
@@ -144,3 +160,7 @@ bool diskchain_read(const diskchain_t* ch, uint32_t off, uint8_t* buf, uint16_t 
 // stream (write-through to the underlying image; fails on a read-only
 // image or past end of chain). Sector links are never modified.
 bool diskchain_write(const diskchain_t* ch, uint32_t off, const uint8_t* buf, uint16_t len);
+
+#ifdef __cplusplus
+}
+#endif

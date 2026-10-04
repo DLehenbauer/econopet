@@ -15,7 +15,6 @@
 #define MICROSECONDS_PER_SECOND 1000000
 #define NANOSECONDS_PER_MICROSECOND 1000
 #define MICROSECONDS_PER_MILLISECOND 1000
-#define TEST_FATAL_MESSAGE_CAPACITY 2048
 
 typedef struct mem_file_s {
     char path[SD_PATH_MAX];
@@ -190,39 +189,6 @@ absolute_time_t get_absolute_time(void) {
 // Converts a host microsecond timestamp to Pico-compatible milliseconds.
 uint32_t to_ms_since_boot(absolute_time_t time) {
     return (uint32_t) (time / MICROSECONDS_PER_MILLISECOND);
-}
-
-static const char* expected_fatal_substring;
-
-// Sets the diagnostic substring required by the next expected fatal error.
-void test_expect_fatal_message(const char* substring) {
-    expected_fatal_substring = substring;
-}
-
-// Checks expected diagnostics before aborting, including in Release builds.
-void fatal(const char* const format, ...) {
-    // Format the complete diagnostic before checking the test expectation.
-    char message[TEST_FATAL_MESSAGE_CAPACITY];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-
-    // Fail distinctly on a mismatched diagnostic instead of the expected abort.
-    if (expected_fatal_substring != NULL &&
-        strstr(message, expected_fatal_substring) == NULL) {
-        fprintf(
-            stderr,
-            "fatal message did not contain '%s': %s\n",
-            expected_fatal_substring,
-            message
-        );
-        _Exit(EXIT_FAILURE);
-    }
-
-    // Emit the accepted diagnostic and preserve firmware fatal termination.
-    fprintf(stderr, "fatal: %s\n", message);
-    abort();
 }
 
 // Provides the firmware allocator with the existing host allocation assertion.
