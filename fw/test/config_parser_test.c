@@ -7,11 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include "config/config.h"
+#include "fatal.h"
 #include "global.h"
 #include "mock.h"
 #include "sd/sd.h"
 #include "system_state.h"
 #include "config_parser_test.h"
+
+enum test_path_kind {
+    TEST_PATH_LOAD,
+    TEST_PATH_KEYMAP,
+    TEST_PATH_MOUNT,
+    TEST_PATH_KIND_COUNT,
+};
 
 // Test fixture data structure
 typedef struct test_context_s {
@@ -28,7 +36,7 @@ typedef struct test_context_s {
     char last_config_id[41];
     char last_config_name[41];
     char last_default_id[41];
-    char last_load_file[PATH_MAX];
+    char last_load_file[SD_PATH_MAX];
     uint32_t last_load_address;
     uint32_t last_patch_address;
     size_t last_patch_size;
@@ -37,10 +45,10 @@ typedef struct test_context_s {
     uint32_t last_copy_length;
     uint32_t last_mount_device;
     uint32_t last_mount_drive;
-    char last_mount_file[64];
+    char last_mount_file[SD_PATH_MAX];
     uint32_t last_columns;
     uint32_t last_video_ram_mask;
-    char last_usb_keymap[261];
+    char last_usb_keymap[sizeof(((options_t*) 0)->usb_keymap)];
     tape_config_t last_tape;
     bool last_tape_enabled;
     uint32_t last_checksum_start;
@@ -110,7 +118,8 @@ static void test_on_mount(void* context, uint32_t device, uint32_t drive, const 
 
     if (mounted_image_root != NULL) {
         char image_path[PATH_MAX];
-        snprintf(image_path, sizeof(image_path), "%s/disks/%s", mounted_image_root, filename);
+        snprintf(image_path, sizeof(image_path), "%s%s%s", mounted_image_root,
+                 sd_dir_prefix(SD_DIR_DISKS), filename);
         FILE* image = fopen(image_path, "rb");
         ck_assert_msg(image != NULL,
                       "Configured IEEE image '%s' is missing", image_path);
@@ -877,6 +886,170 @@ START_TEST(test_parser_rejects_multiline_config_name) {
 }
 END_TEST
 
+static const char* const expected_sd_prefixes[SD_DIR_COUNT] = {
+    [SD_DIR_NONE] = "",
+    [SD_DIR_ROOT] = "/",
+    [SD_DIR_DISKS] = "/disks/",
+    [SD_DIR_ROMS] = "/roms/",
+    [SD_DIR_PRGS] = "/prgs/",
+    [SD_DIR_UKM] = "/ukm/",
+    [SD_DIR_FPGA] = "/fpga/",
+};
+
+// Checks the SD layout independently of the production prefix lookup.
+START_TEST(test_sd_dir_prefixes) {
+    for (sd_dir_t directory = SD_DIR_NONE;
+         directory < SD_DIR_COUNT; directory++) {
+        ck_assert_str_eq(sd_dir_prefix(directory), expected_sd_prefixes[directory]);
+    }
+}
+END_TEST
+
+// Checks that every directory retains a complete 255-byte path and its null.
+START_TEST(test_sd_make_path_boundary) {
+    const char* prefix = expected_sd_prefixes[_i];
+    const size_t prefix_length = strlen(prefix);
+    char name[SD_PATH_MAX];
+    const size_t length = SD_PATH_MAX - 1 - prefix_length;
+    memset(name, 'a', length);
+    if (_i == SD_DIR_NONE) name[0] = '/';
+    name[length] = '\0';
+
+    char path[SD_PATH_MAX];
+    sd_make_path(path, _i, name);
+    ck_assert_uint_eq(strlen(path), 255);
+    ck_assert_int_eq(memcmp(path, prefix, prefix_length), 0);
+    ck_assert_str_eq(path + prefix_length, name);
+}
+END_TEST
+
+// Checks the first invalid full path length for every directory prefix.
+START_TEST(test_sd_make_path_rejects_overlong_path) {
+    const size_t length = SD_PATH_MAX - strlen(expected_sd_prefixes[_i]);
+    char name[SD_PATH_MAX + 1];
+    memset(name, 'a', length);
+    if (_i == SD_DIR_NONE) name[0] = '/';
+    name[length] = '\0';
+    char path[SD_PATH_MAX];
+    mock_expect_fatal_message("SD path exceeds 255 characters (got 256)");
+    sd_make_path(path, _i, name);
+}
+END_TEST
+
+// Checks invalid directory categories are diagnosed rather than defaulted.
+START_TEST(test_sd_dir_rejects_invalid_category) {
+    mock_expect_fatal_message("invalid SD directory");
+    sd_dir_prefix(_i == 0 ? -1 : SD_DIR_COUNT);
+}
+END_TEST
+
+// Registers a path at the selected action's limit, optionally one byte too long.
+static void register_boundary_path(enum test_path_kind kind, bool oversized,
+                                   char* path) {
+    const sd_dir_t directory = kind == TEST_PATH_MOUNT
+        ? SD_DIR_DISKS : SD_DIR_NONE;
+    const size_t capacity = SD_PATH_MAX - strlen(sd_dir_prefix(directory));
+    const size_t length = capacity - 1 + oversized;
+    memset(path, 'a', length);
+    path[length] = '\0';
+    if (kind != TEST_PATH_MOUNT) path[0] = '/';
+
+    const char* format = NULL;
+    switch (kind) {
+        case TEST_PATH_LOAD:
+            format = "configs:\n"
+                     "  - name: Boundary\n"
+                     "    setup:\n"
+                     "      - action: load\n"
+                     "        files:\n"
+                     "          - file: '%s'\n"
+                     "            address: 0xC000\n";
+            break;
+        case TEST_PATH_KEYMAP:
+            format = "configs:\n"
+                     "  - name: Boundary\n"
+                     "    setup:\n"
+                     "      - action: set\n"
+                     "        usb-keymap: '%s'\n";
+            break;
+        case TEST_PATH_MOUNT:
+            format = "configs:\n"
+                     "  - name: Boundary\n"
+                     "    setup:\n"
+                     "      - action: mount\n"
+                     "        file: '%s'\n";
+            break;
+        default:
+            ck_abort_msg("invalid boundary path kind");
+    }
+    char yaml[1100];
+    const int written = snprintf(yaml, sizeof(yaml), format, path);
+    ck_assert_int_ge(written, 0);
+    ck_assert_uint_lt((size_t) written, sizeof(yaml));
+    mock_register_file("/config.yaml", yaml);
+}
+
+// Verifies every path-bearing action retains the complete maximum-length path.
+START_TEST(test_parse_maximum_sd_path) {
+    char path[SD_PATH_MAX];
+    register_boundary_path(_i, false, path);
+    parse_config_file("/config.yaml", &config_sink, 0);
+    switch (_i) {
+        case TEST_PATH_LOAD: ck_assert_str_eq(test_ctx.last_load_file, path); break;
+        case TEST_PATH_KEYMAP: ck_assert_str_eq(test_ctx.last_usb_keymap, path); break;
+        case TEST_PATH_MOUNT: ck_assert_str_eq(test_ctx.last_mount_file, path); break;
+        default: ck_abort_msg("invalid boundary path kind");
+    }
+}
+END_TEST
+
+// Verifies overlong paths produce a diagnostic rather than a truncated callback.
+START_TEST(test_parser_rejects_overlong_sd_path) {
+    char path[SD_PATH_MAX + 1];
+    register_boundary_path(_i, true, path);
+    mock_expect_fatal_message("SD path exceeds");
+    parse_config_file("/config.yaml", &config_sink, 0);
+}
+END_TEST
+
+// Verifies fixture storage and SD reads retain the terminating byte at the limit.
+START_TEST(test_mock_sd_path_boundary) {
+    ck_assert_uint_eq(SD_PATH_MAX, 256);
+    vet_path_length(0);
+    vet_path_length(SD_PATH_MAX - 1);
+    char path[SD_PATH_MAX];
+    memset(path, 'a', sizeof(path) - 1);
+    path[0] = '/';
+    path[sizeof(path) - 1] = '\0';
+    mock_register_file(path, "boundary");
+    FILE* file = sd_open(path, "r");
+    ck_assert_ptr_nonnull(file);
+    char content[sizeof("boundary")] = { 0 };
+    ck_assert_uint_eq(fread(content, 1, sizeof(content) - 1, file), sizeof(content) - 1);
+    ck_assert_str_eq(content, "boundary");
+    fclose(file);
+}
+END_TEST
+
+// Verifies host SD reads and fixture registration reject overlong paths.
+START_TEST(test_mock_sd_rejects_overlong_path) {
+    char path[SD_PATH_MAX + 1];
+    memset(path, 'a', SD_PATH_MAX);
+    path[0] = '/';
+    path[SD_PATH_MAX] = '\0';
+    mock_expect_fatal_message("SD path exceeds");
+    if (_i == 0) sd_open(path, "r");
+    else mock_register_file(path, "overlong");
+}
+END_TEST
+
+// Verifies the shared helper rejects the first invalid and largest byte lengths.
+START_TEST(test_vet_path_length_rejects_overlong_path) {
+    mock_expect_fatal_message("SD path exceeds 255 characters");
+    vet_path_length(_i == 0 ? SD_PATH_MAX : SIZE_MAX);
+}
+END_TEST
+
 Suite *config_parser_suite(void) {
     Suite *s;
     TCase *tc_core;
@@ -885,6 +1058,10 @@ Suite *config_parser_suite(void) {
     tc_core = tcase_create("Core");
 
     tcase_add_checked_fixture(tc_core, setup, teardown);
+    tcase_add_loop_test(tc_core, test_parse_maximum_sd_path, 0, TEST_PATH_KIND_COUNT);
+    tcase_add_test(tc_core, test_mock_sd_path_boundary);
+    tcase_add_test(tc_core, test_sd_dir_prefixes);
+    tcase_add_loop_test(tc_core, test_sd_make_path_boundary, 0, SD_DIR_COUNT);
     
     tcase_add_test(tc_core, test_parse_minimal_config);
     tcase_add_test(tc_core, test_parse_load_action);
@@ -922,6 +1099,16 @@ Suite *config_parser_fatal_suite(void) {
     TCase* tc = tcase_create("Core");
 
     tcase_add_checked_fixture(tc, setup, teardown);
+    tcase_add_loop_test_raise_signal(tc, test_parser_rejects_overlong_sd_path,
+                                    SIGABRT, 0, TEST_PATH_KIND_COUNT);
+    tcase_add_loop_test_raise_signal(tc, test_mock_sd_rejects_overlong_path,
+                                    SIGABRT, 0, 2);
+    tcase_add_loop_test_raise_signal(tc, test_vet_path_length_rejects_overlong_path,
+                                    SIGABRT, 0, 2);
+    tcase_add_loop_test_raise_signal(tc, test_sd_make_path_rejects_overlong_path,
+                                    SIGABRT, 0, SD_DIR_COUNT);
+    tcase_add_loop_test_raise_signal(tc, test_sd_dir_rejects_invalid_category,
+                                    SIGABRT, 0, 2);
     tcase_add_test_raise_signal(tc, test_parser_error_reports_semantic_location, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_reports_yaml_problem, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_replaces_oversized_message, SIGABRT);

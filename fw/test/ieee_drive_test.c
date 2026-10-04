@@ -9,15 +9,18 @@
 #include "pch.h"
 #include "ieee_drive_test.h"
 
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "driver.h"
 #include "diskimage_test.h"
+#include "fatal.h"
 #include "ieee/diskimage.h"
 #include "ieee/ieee_drive.h"
 #include "ieee/ieee_protocol.h"
 #include "mock.h"
+#include "sd/sd.h"
 
 #define IEEE_FIRST_DEVICE 8u
 #define IEEE_DEVICE_COUNT 4u
@@ -67,8 +70,8 @@ static unsigned int device_slot(unsigned int device, unsigned int drive) {
 // Registers an image with the mock filesystem and mounts it in one drive slot.
 static void mount_image(unsigned int device, unsigned int drive, const char* filename,
                         uint8_t* image, size_t image_size, bool writable) {
-    char path[64];
-    snprintf(path, sizeof(path), "/disks/%s", filename);
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, filename);
     mock_register_binary_file(path, image, image_size, writable);
     free(image);
     ck_assert(ieee_drive_mount(device_slot(device, drive), filename));
@@ -1015,6 +1018,31 @@ START_TEST(test_d80_mount_open_and_stream) {
 }
 END_TEST
 
+// Mounts the longest full SD path without truncating its filename.
+START_TEST(test_mount_path_boundary) {
+    char filename[SD_PATH_MAX];
+    const size_t length = SD_PATH_MAX - 1 - strlen(sd_dir_prefix(SD_DIR_DISKS));
+    memset(filename, 'a', length);
+    filename[length] = '\0';
+    mount_d64(IEEE_FIRST_DEVICE, 0, filename, true);
+}
+END_TEST
+
+// Verifies an overlong mount is fatal instead of reopening a truncated filename.
+START_TEST(test_mount_rejects_overlong_path) {
+    char filename[SD_PATH_MAX];
+    const size_t length = SD_PATH_MAX - 1 - strlen(sd_dir_prefix(SD_DIR_DISKS));
+    memset(filename, 'a', length);
+    filename[length] = '\0';
+    mount_d64(IEEE_FIRST_DEVICE, 0, filename, true);
+
+    filename[length] = 'b';
+    filename[length + 1] = '\0';
+    mock_expect_fatal_message("SD path exceeds 255 characters (got 256)");
+    ieee_drive_mount(device_slot(IEEE_FIRST_DEVICE, 0), filename);
+}
+END_TEST
+
 // Host-level IEEE protocol tests. These mount images through ieee_drive, inject
 // LISTEN/TALK/OPEN commands through the FPGA-register mock, and assert the
 // bus-visible data, status, and EOI response.
@@ -1029,6 +1057,7 @@ Suite* ieee_drive_suite(void) {
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("d64");
     tcase_add_checked_fixture(test_case, setup, teardown);
+    tcase_add_test(test_case, test_mount_path_boundary);
     tcase_add_loop_test(test_case, test_d64_mount_open_status_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
@@ -1087,6 +1116,16 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_d80_mount_open_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    suite_add_tcase(suite, test_case);
+    return suite;
+}
+
+// Builds forked mount tests whose invalid paths must abort.
+Suite* ieee_drive_fatal_suite(void) {
+    Suite* suite = suite_create("ieee_drive-fatal");
+    TCase* test_case = tcase_create("paths");
+    tcase_add_checked_fixture(test_case, setup, teardown);
+    tcase_add_test_raise_signal(test_case, test_mount_rejects_overlong_path, SIGABRT);
     suite_add_tcase(suite, test_case);
     return suite;
 }

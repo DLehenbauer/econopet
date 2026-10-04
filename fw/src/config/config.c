@@ -314,6 +314,24 @@ static void parse_as_string(parser_t* parser, void* context, size_t context_size
     return parse_string(parser, (char*) context, context_size);
 }
 
+// Keeps the output capacity and the caller's directory explicit for path parsing.
+typedef struct {
+    char (*output)[SD_PATH_MAX];
+    sd_dir_t directory;
+} path_context_t;
+
+// Preserves the scalar, checking its full path with the caller's directory prefix.
+static void parse_as_path(parser_t* parser, void* context, size_t context_size) {
+    assert(context_size == sizeof(path_context_t));
+    const path_context_t* const path_context = context;
+    parse_expect_type(parser, YAML_SCALAR_EVENT);
+    const char* path = get_current_string(parser);
+    const size_t length = strlen(path);
+    const char* prefix = sd_dir_prefix(path_context->directory);
+    vet_path_length(length + strlen(prefix));
+    memcpy(*path_context->output, path, length + 1);
+}
+
 static void parse_uint32(parser_t* parser, uint32_t* value) {
     parse_expect_type(parser, YAML_SCALAR_EVENT);
     const char* buffer = get_current_string(parser);
@@ -440,11 +458,12 @@ static void parse_sequence(parser_t* parser, parse_callback_t on_item_fn) {
 }
 
 static void parse_action_load_file_entry(parser_t* parser) {
-    char file[261] = { 0 };     // Windows OS max path length is 260 characters
+    char file[SD_PATH_MAX] = { 0 };
+    path_context_t file_path = { &file, SD_DIR_NONE };
     uint32_t address = 0;
     
     parse_mapping(parser, (const map_dispatch_entry_t[]) {
-        { "file", parse_as_string, &file, sizeof(file) },
+        { "file", parse_as_path, &file_path, sizeof(file_path) },
         { "address", parse_as_uint32, &address, sizeof(address) },
         { NULL, NULL, NULL, 0 }
     });
@@ -514,12 +533,13 @@ static void parse_action_mount(parser_t* parser, void* context, size_t context_s
     uint32_t device = 8;
     uint32_t drive = 0;
 
-    char filename[64] = { 0 };
+    char filename[SD_PATH_MAX] = { 0 };
+    path_context_t image_path = { &filename, SD_DIR_DISKS };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "device", parse_as_uint32, &device, sizeof(device) },
         { "drive", parse_as_uint32, &drive, sizeof(drive) },
-        { "file", parse_as_string, filename, sizeof(filename) },
+        { "file", parse_as_path, &image_path, sizeof(image_path) },
         { NULL, NULL, NULL, 0 }
     });
 
@@ -570,12 +590,13 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         .cpu = CPU_AUTO,        // Default: physical 6502 if populated, else soft
         .superpet_io = false,   // Default: stock PET machine
     };
+    path_context_t keymap_path = { &options.usb_keymap, SD_DIR_NONE };
     char machine_str[16] = { 0 };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
         { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
-        { "usb-keymap", parse_as_string, &options.usb_keymap, sizeof(options.usb_keymap) },
+        { "usb-keymap", parse_as_path, &keymap_path, sizeof(keymap_path) },
         { "tape", parse_as_fixed_hex, &tape_hex, sizeof(tape_hex) },
         { "cpu", parse_as_string, &cpu_str, sizeof(cpu_str) },
         { "machine", parse_as_string, &machine_str, sizeof(machine_str) },
