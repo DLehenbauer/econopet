@@ -47,6 +47,12 @@ firmware what kind of action to perform:
 | `fix-checksum` | Modifies the byte at the target address so memory matches the desired Commodore checksum after patching. |
 | `set` | Configures firmware options. |
 
+SD paths have a capacity of 256 bytes including the terminating null, matching
+pico-vfs. The full path may contain at most 255 bytes, including any directory
+prefix. `load` files and `usb-keymap` values are complete paths. `mount` filenames
+are relative to `/disks/`, leaving at most 248 bytes for the filename. Overlong
+paths are fatal errors, not truncated filenames.
+
 Setup lists may also contain `if` / `then` / `else` entries. These are used when
 a configuration needs different setup steps for different hardware, such as
 loading different ROMs for the graphics and business keyboards.

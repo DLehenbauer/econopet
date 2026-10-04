@@ -7,6 +7,7 @@
 #include "blockdevice/flash.h"
 #include "blockdevice/sd.h"
 #include "filesystem/fat.h"
+#include "filesystem/filesystem.h"
 #include "filesystem/littlefs.h"
 #include "filesystem/vfs.h"
 
@@ -17,6 +18,9 @@
 #include "fatal.h"
 #include "global.h"
 #include "hw.h"
+
+_Static_assert(SD_PATH_MAX == PATH_MAX,
+               "SD path capacity must match pico-vfs");
 
 // Ensure FatFs is built with variable sector size support.
 _Static_assert(FF_MAX_SS != FF_MIN_SS,
@@ -39,7 +43,7 @@ bool sd_init() {
 
     filesystem_t* fat = filesystem_fat_create();
 
-    if (fs_mount("/", fat, sd) == -1) {
+    if (fs_mount(sd_dir_prefix(SD_DIR_ROOT), fat, sd) == -1) {
         log_warn("fs_mount error: %s", strerror(errno));
         return false;
     }
@@ -48,6 +52,7 @@ bool sd_init() {
 }
 
 FILE* sd_open(const char* path, const char* mode) {
+    vet_path_length(strlen(path));
     if (path[0] != '/') {
         fatal("path must start with '/', but got '%s'", path);
     }

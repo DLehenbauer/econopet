@@ -8,6 +8,31 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// SD-card path capacity in bytes, including the terminating null. Match the
+// pinned pico-vfs's 256-byte buffers: 255 single-byte path characters plus the
+// null. Directory prefixes count toward this limit. Keep it separate from the
+// host OS's PATH_MAX.
+#define SD_PATH_MAX 256
+
+typedef enum {
+    SD_DIR_NONE,  // No prefix for an already complete path.
+    SD_DIR_ROOT,
+    SD_DIR_DISKS,
+    SD_DIR_ROMS,
+    SD_DIR_PRGS,
+    SD_DIR_UKM,
+    SD_DIR_FPGA,
+    SD_DIR_COUNT,
+} sd_dir_t;
+
+// Returns the directory's absolute prefix, including the trailing slash.
+// NONE returns an empty prefix. An invalid directory is fatal.
+const char* sd_dir_prefix(sd_dir_t directory);
+
+// Builds a prefixed path in an SD_PATH_MAX-byte buffer. A formatting error or
+// overlong full path is fatal, never silently truncated.
+void sd_make_path(char path[SD_PATH_MAX], sd_dir_t directory, const char* name);
+
 bool sd_init();
 
 FILE* sd_open(const char* path, const char* mode);

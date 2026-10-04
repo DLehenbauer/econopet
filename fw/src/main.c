@@ -149,7 +149,9 @@ void fpga_init() {
         // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must
         // enable 'Generate SPI Raw Binary Configuration File' under ~File ~Edit
         // Project ~Bitstream Generation.
-        sd_read_file("/fpga/EconoPET.hex.bin", fpga_read_bitstream_callback, NULL, SIZE_MAX);
+        char bitstream_path[SD_PATH_MAX];
+        sd_make_path(bitstream_path, SD_DIR_FPGA, "EconoPET.hex.bin");
+        sd_read_file(bitstream_path, fpga_read_bitstream_callback, NULL, SIZE_MAX);
 
         // To ensure successful configuration, the microprocessor must continue
         // to supply the configuration clock to the Trion FPGA for at least 100

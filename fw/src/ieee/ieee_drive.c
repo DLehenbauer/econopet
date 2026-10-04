@@ -14,7 +14,9 @@
 #include "diag/log/log.h"
 #include "diskimage.h"
 #include "driver.h"
+#include "fatal.h"
 #include "ieee_protocol.h"
+#include "sd/sd.h"
 
 // FPGA register block (see gw common_pkg.sv WB_IEEE_BASE = 5'b01110 and
 // ieee.sv for semantics).
@@ -57,7 +59,6 @@
 #define NUM_UNITS       4
 #define DRIVES_PER_UNIT 2
 #define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
-#define MAX_IMAGE_PATH  64
 
 static void ieee_ctrl_write(uint8_t value) {
     spi_write_at(IEEE_REG_CTRL, value);
@@ -71,7 +72,7 @@ typedef struct {
     FILE* file;
     diskimage_t image;
     bool present;
-    char name[MAX_IMAGE_PATH];  // image path currently "inserted"
+    char name[SD_PATH_MAX];  // image path currently "inserted"
 } drive_t;
 
 static drive_t drives[NUM_DRIVES];
@@ -152,8 +153,8 @@ static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) 
 // Mounts a path relative to /disks into a global drive slot.
 static bool mount_image(unsigned int slot, const char* filename) {
 
-    char path[MAX_IMAGE_PATH + 8];
-    snprintf(path, sizeof(path), "/disks/%s", filename);
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, filename);
     // Read-write when the card allows it (REL record writes, OS-9 format);
     // fall back to read-only rather than failing the mount.
     bool writable = true;
