@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+`timescale 1ns / 1ps
+
 import common_pkg::*;
 
 module main (
@@ -704,6 +706,8 @@ module main (
 
     ieee ieee (
         .wb_clock_i(sys_clock_i),
+        .ifc_i(cpu_reset_i),
+
         .wbp_addr_i(wb_addr),
         .wbp_data_i(wb_dout),
         .wbp_data_o(ieee_wb_din),

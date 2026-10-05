@@ -5,6 +5,7 @@
 #include "pet.h"
 
 #include "driver.h"
+#include "ieee/ieee_drive.h"
 #include "system_state.h"
 #include "usb/keyboard.h"
 
@@ -20,6 +21,7 @@ void pet_reset() {
     set_cpu(CPU_HALT);
     sleep_us(4);
 
+    ieee_drive_reset();
     usb_keyboard_reset(&system_state);
 
     memset(system_state.video_char_buffer, 0x20, 0x800);            // Clear video character buffer

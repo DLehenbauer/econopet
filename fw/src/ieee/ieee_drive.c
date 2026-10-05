@@ -14,49 +14,19 @@
 #include "diag/log/log.h"
 #include "diskimage.h"
 #include "driver.h"
+#include "fatal.h"
 #include "ieee_protocol.h"
-
-// FPGA register block (see gw common_pkg.sv WB_IEEE_BASE = 5'b01110 and
-// ieee.sv for semantics).
-#define ADDR_IEEE (0b01110 << 15)
-
-#define IEEE_REG_CTRL     (ADDR_IEEE + 0)
-#define IEEE_REG_STATUS   (ADDR_IEEE + 1)
-#define IEEE_REG_RX       (ADDR_IEEE + 2)
-#define IEEE_REG_TX       (ADDR_IEEE + 3)
-#define IEEE_REG_TX_LAST  (ADDR_IEEE + 4)
-#define IEEE_REG_SA       (ADDR_IEEE + 5)
-#define IEEE_REG_TXS      (ADDR_IEEE + 6)   // status-channel TX
-#define IEEE_REG_TXS_LAST (ADDR_IEEE + 7)   // status-channel TX, final byte (EOI)
-
-#define IEEE_CTRL_ENABLE     0x01   // write bit
-#define IEEE_CTRL_FLUSH      0x02   // write bit
-#define IEEE_CTRL_DATA_FLUSH 0x04   // write bit: flush the data TX FIFO only
-
-// CTRL register READ-back bits (asymmetric with the write bits above).
-#define IEEE_CTRL_RD_TX_ROOM 0x02   // data TX FIFO has room for >= TX_BURST_CHUNK
-
-// Data TX FIFO burst-fill chunk. Must match TX_BURST_CHUNK in ieee.sv: the
-// fabric's tx_room watermark guarantees space for this many bytes, so a burst
-// of up to this size never overflows.
-#define TX_BURST_CHUNK 64
-
-#define IEEE_ST_RX_AVAIL     0x01
-#define IEEE_ST_RX_ATN       0x02
-#define IEEE_ST_TX_FULL      0x04
-#define IEEE_ST_TX_EMPTY     0x08
-#define IEEE_ST_ATN          0x10
-#define IEEE_ST_LISTENING    0x20
-#define IEEE_ST_TALKING      0x40
+#include "ieee_registers.h"
+#include "sd/sd.h"
 
 #define DEV_ADDR 8
 
 // The fabric answers devices 8 through 11, each a dual-drive unit. Mount
-// slot = unit * 2 + drive, so slots 0/1 map to device 8 and slots 6/7 map
-// to device 11.
-#define NUM_UNITS  4
-#define NUM_DRIVES 8
-#define MAX_IMAGE_PATH 64
+// slot = unit * DRIVES_PER_UNIT + drive, so slots 0/1 map to device 8 and
+// slots 6/7 map to device 11.
+#define NUM_UNITS       4
+#define DRIVES_PER_UNIT 2
+#define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
 
 static void ieee_ctrl_write(uint8_t value) {
     spi_write_at(IEEE_REG_CTRL, value);
@@ -70,11 +40,16 @@ typedef struct {
     FILE* file;
     diskimage_t image;
     bool present;
-    char name[MAX_IMAGE_PATH];  // image path currently "inserted"
+    char name[SD_PATH_MAX];  // image path currently "inserted"
 } drive_t;
 
 static drive_t drives[NUM_DRIVES];
 static bool emulation_enabled = false;
+
+typedef enum {
+    drive_model_4040,
+    drive_model_8050,
+} drive_model_t;
 
 // ----------------------------------------------------------------------------
 // REL chain cache (built at mount time)
@@ -92,34 +67,39 @@ typedef struct {
 
 static chain_cache_entry_t chain_cache[NUM_DRIVES][CHAIN_CACHE_SLOTS];
 
-static void chain_cache_build(unsigned int n) {
+static void chain_cache_build(unsigned int slot) {
     uint32_t t0 = to_ms_since_boot(get_absolute_time());
-    unsigned int slot = 0;
+    unsigned int cache_slot = 0;
     diskimage_entry_t e;
 
-    for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) chain_cache[n][i].valid = false;
+    for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++)
+        chain_cache[slot][i].valid = false;
 
-    for (unsigned int i = 0; diskimage_entry(&drives[n].image, i, &e); i++) {
+    for (unsigned int i = 0; diskimage_entry(&drives[slot].image, i, &e); i++) {
         if (e.file_type != DISKIMAGE_FTYPE_REL) continue;
-        if (slot >= CHAIN_CACHE_SLOTS) {
-            log_info("ieee: drive %u: more REL files than %u cache slots", n, CHAIN_CACHE_SLOTS);
+        if (cache_slot >= CHAIN_CACHE_SLOTS) {
+            log_info("ieee: drive %u: more REL files than %u cache slots",
+                     slot, CHAIN_CACHE_SLOTS);
             break;
         }
-        chain_cache_entry_t* c = &chain_cache[n][slot];
-        if (!diskchain_build(&c->chain, &drives[n].image, e.start_track, e.start_sector))
+        chain_cache_entry_t* c = &chain_cache[slot][cache_slot];
+        if (!diskchain_build(&c->chain, &drives[slot].image,
+                             e.start_track, e.start_sector))
             continue;
         c->track = e.start_track;
         c->sector = e.start_sector;
         c->valid = true;
-        slot++;
+        cache_slot++;
     }
-    log_info("ieee: drive %u: %u REL chain(s) cached in %lu ms", n, slot,
+    log_info("ieee: drive %u: %u REL chain(s) cached in %lu ms",
+             slot, cache_slot,
              (unsigned long) (to_ms_since_boot(get_absolute_time()) - t0));
 }
 
-static const diskchain_t* chain_cache_find(unsigned int n, uint8_t track, uint8_t sector) {
+static const diskchain_t* chain_cache_find(unsigned int slot, uint8_t track,
+                                           uint8_t sector) {
     for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) {
-        chain_cache_entry_t* c = &chain_cache[n][i];
+        chain_cache_entry_t* c = &chain_cache[slot][i];
         if (c->valid && c->track == track && c->sector == sector) return &c->chain;
     }
     return NULL;
@@ -138,11 +118,11 @@ static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) 
     return fflush(f) == 0;      // persist promptly: power-off safety
 }
 
-// Mounts a path relative to /disks into drive 'n'. Returns true on success.
-static bool mount_image(unsigned int n, const char* filename) {
+// Mounts a path relative to /disks into a global drive slot.
+static bool mount_image(unsigned int slot, const char* filename) {
 
-    char path[MAX_IMAGE_PATH + 8];
-    snprintf(path, sizeof(path), "/disks/%s", filename);
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, filename);
     // Read-write when the card allows it (REL record writes, OS-9 format);
     // fall back to read-only rather than failing the mount.
     bool writable = true;
@@ -170,15 +150,15 @@ static bool mount_image(unsigned int n, const char* filename) {
         return false;
     }
 
-    if (drives[n].file != NULL) fclose(drives[n].file);
-    drives[n].file = f;
-    drives[n].image = img;
-    drives[n].image.ctx = f;
-    drives[n].image.write = writable ? file_write : NULL;
-    drives[n].present = true;
-    snprintf(drives[n].name, sizeof(drives[n].name), "%s", filename);
-    log_info("ieee: drive %u = %s (%ld bytes)", n, path, size);
-    chain_cache_build(n);
+    if (drives[slot].file != NULL) fclose(drives[slot].file);
+    drives[slot].file = f;
+    drives[slot].image = img;
+    drives[slot].image.ctx = f;
+    drives[slot].image.write = writable ? file_write : NULL;
+    drives[slot].present = true;
+    snprintf(drives[slot].name, sizeof(drives[slot].name), "%s", filename);
+    log_info("ieee: drive %u = %s (%ld bytes)", slot, path, size);
+    chain_cache_build(slot);
     return true;
 }
 
@@ -196,11 +176,31 @@ typedef enum {
     st_code_power_on = 73,
 } status_code_t;
 
+typedef struct {
+    status_code_t code;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t drive;
+} drive_status_t;
+
 // Per-unit DOS status: each IEEE unit has its own channel-15 command channel,
 // so status is tracked and served per unit.
-static status_code_t status_code[NUM_UNITS] = {
-    st_code_power_on, st_code_power_on, st_code_power_on, st_code_power_on
+static drive_status_t drive_status[NUM_UNITS] = {
+    { .code = st_code_power_on },
+    { .code = st_code_power_on },
+    { .code = st_code_power_on },
+    { .code = st_code_power_on },
 };
+
+static void set_status(unsigned int slot, status_code_t code, uint8_t track,
+                       uint8_t sector) {
+    drive_status[slot / DRIVES_PER_UNIT] = (drive_status_t) {
+        .code = code,
+        .track = track,
+        .sector = sector,
+        .drive = (uint8_t) (slot % DRIVES_PER_UNIT),
+    };
+}
 
 static bool mcu_listening = false;  // mirrors the FPGA's addressed state
 static bool mcu_talking = false;
@@ -213,7 +213,7 @@ static uint8_t ch15_unit = 0;    // unit whose ch15 command is being collected
 static uint8_t open_unit = 0;    // unit of the OPEN name being collected
 static uint8_t file_unit = 0;    // unit of the open sequential file
 
-static uint8_t  stream_drive = 0;   // slot of the current sequential read stream
+static uint8_t stream_slot = 0;
 
 static bool collecting_name = false;
 static char open_name[48];
@@ -237,7 +237,7 @@ static uint32_t streamed_bytes = 0;
 typedef struct {
     bool in_use;
     uint8_t chan;           // secondary address 0-14 (unique per unit, not globally)
-    uint8_t drive;          // mount slot 0-3 this channel is on (unit = drive >> 1)
+    uint8_t slot;           // global mount slot backing this channel
     uint8_t reclen;
     // Absolute byte offsets into the record stream (vdrive-rel.c semantics).
     // length = offset of the last non-zero byte; CBM DOS trims trailing
@@ -250,7 +250,7 @@ typedef struct {
     bool     wr_active;
     uint16_t wr_pos;        // start position within the record (from P)
     uint16_t wr_count;
-    uint8_t  wr_buf[254];
+    uint8_t  wr_buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     diskchain_t chain;
 } rel_channel_t;
 
@@ -262,7 +262,7 @@ static rel_channel_t rel_chans[MAX_REL_CHANNELS];
 static rel_channel_t* rel_find(uint8_t unit, uint8_t chan) {
     for (int i = 0; i < MAX_REL_CHANNELS; i++)
         if (rel_chans[i].in_use && rel_chans[i].chan == chan
-            && (rel_chans[i].drive >> 1) == unit) return &rel_chans[i];
+            && rel_chans[i].slot / DRIVES_PER_UNIT == unit) return &rel_chans[i];
     return NULL;
 }
 
@@ -275,7 +275,7 @@ static uint8_t listen_chan = 0xFF;  // active LISTEN data channel, $FF = none
 // Resets DOS and protocol state that must not outlive initialization.
 static void reset_protocol_state(void) {
     for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
-        status_code[unit] = st_code_power_on;
+        set_status(unit * DRIVES_PER_UNIT, st_code_power_on, 0, 0);
     }
 
     mcu_listening = false;
@@ -285,7 +285,7 @@ static void reset_protocol_state(void) {
     ch15_unit = 0;
     open_unit = 0;
     file_unit = 0;
-    stream_drive = 0;
+    stream_slot = 0;
     collecting_name = false;
     open_name_len = 0;
     open_chan = 0;
@@ -302,10 +302,24 @@ static void reset_protocol_state(void) {
     listen_chan = 0xFF;
 }
 
+static drive_model_t get_drive_model(unsigned int slot) {
+    // First check for a disk present in the requested drive.  If that drive is
+    // empty, try the other drive in the same unit.  If both drives are empty,
+    // return the default drive model (4040).
+    if (!drives[slot].present) slot ^= 1u;
+    if (!drives[slot].present) return drive_model_4040;
+
+    // Determine the drive model based on the type of the mounted disk image.
+    const diskimage_type_t type = drives[slot].image.type;
+    return type == diskimage_type_d80 || type == diskimage_type_hdd
+        ? drive_model_8050
+        : drive_model_4040;
+}
+
 // Position the engine at record 'rec', byte 'pos' within it, and compute
 // the trimmed length (last non-zero byte), like vdrive_rel_position.
 static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
-    uint8_t buf[254];
+    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->cur_record = rec;
     rc->missing = (rec == 0)
         || rec > diskchain_size(&rc->chain) / rc->reclen;
@@ -328,7 +342,7 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 // last byte. Empty records are transparent: reads flow into the next
 // record, exactly like vdrive_rel_read.
 static void rel_serve(rel_channel_t* rc) {
-    uint8_t buf[254];
+    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
 
     ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
@@ -336,14 +350,14 @@ static void rel_serve(rel_channel_t* rc) {
         rel_position(rc, rc->cur_record + 1, 0);
     }
     if (rc->missing) {
-        status_code[rc->drive >> 1] = st_code_record_missing;
+        set_status(rc->slot, st_code_record_missing, 0, 0);
         spi_write_at(IEEE_REG_TX_LAST, 0x0D);
         return;
     }
 
     uint16_t n = (uint16_t) (rc->length - rc->bufptr + 1);
     if (!diskchain_read(&rc->chain, rc->bufptr, buf, n)) {
-        status_code[rc->drive >> 1] = st_code_read_error;
+        set_status(rc->slot, st_code_read_error, 0, 0);
         spi_write_at(IEEE_REG_TX_LAST, 0x0D);
         return;
     }
@@ -371,7 +385,7 @@ static void rel_write_begin(rel_channel_t* rc) {
 
 static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
     if (rc->wr_pos + rc->wr_count >= rc->reclen) {
-        status_code[rc->drive >> 1] = st_code_record_overflow;   // 51: drop the excess
+        set_status(rc->slot, st_code_record_overflow, 0, 0);
         return;
     }
     rc->wr_buf[rc->wr_count++] = byte;
@@ -381,22 +395,22 @@ static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
 // tail is zero-filled (what the read side's null-trim recovers), and the
 // engine advances.
 static void rel_write_commit(rel_channel_t* rc) {
-    uint8_t rec[254];
+    uint8_t rec[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->wr_active = false;
     if (rc->missing) {
-        status_code[rc->drive >> 1] = st_code_record_missing;
+        set_status(rc->slot, st_code_record_missing, 0, 0);
         return;
     }
     uint32_t base = (rc->cur_record - 1) * (uint32_t) rc->reclen;
     if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
-        status_code[rc->drive >> 1] = st_code_read_error;
+        set_status(rc->slot, st_code_read_error, 0, 0);
         return;
     }
     memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
     memset(rec + rc->wr_pos + rc->wr_count, 0,
            rc->reclen - rc->wr_pos - rc->wr_count);
     if (!diskchain_write(&rc->chain, base, rec, rc->reclen)) {
-        status_code[rc->drive >> 1] = st_code_write_protect;     // 26: read-only image
+        set_status(rc->slot, st_code_write_protect, 0, 0);
         log_info("ieee: REL write failed (read-only?) rec %lu",
                  (unsigned long) rc->cur_record);
         return;
@@ -415,13 +429,23 @@ static void ch15_execute(void) {
         uint32_t rec = ch15_cmd[2] | ((uint32_t) ch15_cmd[3] << 8);
         uint8_t pos = (ch15_cmd_len >= 5 && ch15_cmd[4] >= 1) ? (uint8_t) (ch15_cmd[4] - 1) : 0;
         if (rc == NULL) {
-            status_code[ch15_unit] = st_code_file_not_found;
+            set_status(ch15_unit * DRIVES_PER_UNIT
+                       + drive_status[ch15_unit].drive,
+                       st_code_file_not_found, 0, 0);
         } else {
             rel_position(rc, rec, pos);
-            status_code[ch15_unit] = rc->missing ? st_code_record_missing : st_code_ok;
+            set_status(rc->slot,
+                       rc->missing ? st_code_record_missing : st_code_ok, 0, 0);
         }
     } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
-        status_code[ch15_unit] = st_code_ok;
+        uint8_t drive = drive_status[ch15_unit].drive;
+        for (unsigned int index = 1; index < ch15_cmd_len; index++) {
+            if (ch15_cmd[index] == '0' || ch15_cmd[index] == '1') {
+                drive = (uint8_t) (ch15_cmd[index] - '0');
+                break;
+            }
+        }
+        set_status(ch15_unit * DRIVES_PER_UNIT + drive, st_code_ok, 0, 0);
     } else {
         log_info("ieee: ch15 command %02x len %u (ignored)", ch15_cmd[0], ch15_cmd_len);
     }
@@ -445,19 +469,20 @@ static void resolve_open(void) {
 
     // Slot = the addressed unit's pair, plus the drive number from the
     // "0:"/"1:" (or "0."/"1.") prefix; default drive 0 of that unit.
-    unsigned int n = open_unit * 2u;
+    unsigned int slot = open_unit * DRIVES_PER_UNIT;
     if ((open_name[0] == '0' || open_name[0] == '1')
         && (open_name[1] == ':' || open_name[1] == '.')) {
-        n = open_unit * 2u + (unsigned int) (open_name[0] - '0');
+        slot = open_unit * DRIVES_PER_UNIT
+             + (unsigned int) (open_name[0] - '0');
     }
     // Fall back to the unit's other drive only for ordinary files: OS-9's
     // per-drive REL containers are drive-specific, and aliasing them can
     // corrupt the mounted system disk.
     bool is_os9_vol = (strstr(open_name, "OS9 DRIVE") != NULL)
                    || (strstr(open_name, "os9 drive") != NULL);
-    if (!drives[n].present && drives[n ^ 1u].present && !is_os9_vol) {
-        log_info("ieee: drive %u empty, using drive %u", n, n ^ 1u);
-        n ^= 1u;
+    if (!drives[slot].present && drives[slot ^ 1u].present && !is_os9_vol) {
+        log_info("ieee: drive %u empty, using drive %u", slot, slot ^ 1u);
+        slot ^= 1u;
     }
 
     file_open_ok = false;
@@ -466,15 +491,15 @@ static void resolve_open(void) {
     // New file: discard any stale queued data from a previous channel.
     ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
 
-    if (!drives[n].present) {
-        status_code[open_unit] = st_code_file_not_found;
+    if (!drives[slot].present) {
+        set_status(slot, st_code_file_not_found, 0, 0);
         log_info("ieee: OPEN '%s': no disk image mounted", open_name);
         return;
     }
 
     diskimage_entry_t entry;
-    if (!diskimage_find(&drives[n].image, open_name, &entry)) {
-        status_code[open_unit] = st_code_file_not_found;
+    if (!diskimage_find(&drives[slot].image, open_name, &entry)) {
+        set_status(slot, st_code_file_not_found, 0, 0);
         log_info("ieee: OPEN '%s': not found", open_name);
         return;
     }
@@ -491,73 +516,91 @@ static void resolve_open(void) {
         // Use the mount-time chain cache; live build only for chains it
         // doesn't know (e.g. more REL files than cache slots).
         const diskchain_t* cached = (rc != NULL)
-            ? chain_cache_find(n, entry.start_track, entry.start_sector)
+            ? chain_cache_find(slot, entry.start_track, entry.start_sector)
             : NULL;
         if (cached != NULL) {
             rc->chain = *cached;
         }
         if (rc == NULL
             || (cached == NULL
-                && !diskchain_build(&rc->chain, &drives[n].image,
+                && !diskchain_build(&rc->chain, &drives[slot].image,
                                     entry.start_track, entry.start_sector))) {
-            status_code[open_unit] = st_code_file_not_found;
+            set_status(slot, st_code_file_not_found, 0, 0);
             log_info("ieee: REL OPEN '%s' failed", open_name);
             return;
         }
-        if (entry.record_len > 254) {   // CBM max; larger = corrupt image, and
-            status_code[open_unit] = st_code_file_not_found;   // would overrun
+        if (entry.record_len > DISKIMAGE_REL_MAX_RECORD_LENGTH) {
+            set_status(slot, st_code_file_not_found, 0, 0);
             log_info("ieee: REL OPEN '%s' bad reclen %u", open_name, entry.record_len);
-            return;                     // the 254-byte record buffers
+            return;
         }
         rc->in_use = true;
-        rc->drive = (uint8_t) n;
+        rc->slot = (uint8_t) slot;
         rc->chan = open_chan & 0x0F;
-        rc->reclen = entry.record_len ? entry.record_len : 129;
+        rc->reclen = entry.record_len >= DISKIMAGE_REL_MIN_RECORD_LENGTH
+            ? entry.record_len : 129;
         rel_position(rc, 1, 0);
-        status_code[open_unit] = st_code_ok;
+        set_status(slot, st_code_ok, 0, 0);
         log_info("ieee: REL OPEN '%s' ok (chan %u, reclen %u, %lu bytes)",
                  open_name, rc->chan, rc->reclen,
                  (unsigned long) diskchain_size(&rc->chain));
         return;
     }
 
-    if (!diskstream_open(&stream, &drives[n].image, entry.start_track, entry.start_sector)) {
-        status_code[open_unit] = st_code_file_not_found;
+    if (!diskstream_open(&stream, &drives[slot].image,
+                         entry.start_track, entry.start_sector)) {
+        set_status(slot, st_code_file_not_found, 0, 0);
         log_info("ieee: OPEN '%s': stream open failed", open_name);
         return;
     }
 
     file_open_ok = true;
-    stream_drive = (uint8_t) n;
+    stream_slot = (uint8_t) slot;
     stream_finished = false;
     file_chan = open_chan;
     file_unit = open_unit;
-    status_code[open_unit] = st_code_ok;
+    set_status(slot, st_code_ok, 0, 0);
     streamed_bytes = 0;
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
 
 static void push_status(unsigned int unit) {
     const char* text;
-    char line[40];
+    char line[IEEE_STATUS_LINE_CAPACITY];
+    const drive_status_t status = drive_status[unit];
+    const drive_model_t model =
+        get_drive_model(unit * DRIVES_PER_UNIT + status.drive);
 
-    switch (status_code[unit]) {
-        case st_code_ok:             text = " OK"; break;
-        case st_code_read_error:     text = "READ ERROR"; break;
-        case st_code_write_protect:  text = "WRITE PROTECT ON"; break;
-        case st_code_record_missing: text = "RECORD NOT PRESENT"; break;
+    switch (status.code) {
+        case st_code_ok:              text = " OK"; break;
+        case st_code_read_error:      text = "READ ERROR"; break;
+        case st_code_write_protect:   text = "WRITE PROTECT ON"; break;
+        case st_code_record_missing:  text = "RECORD NOT PRESENT"; break;
         case st_code_record_overflow: text = "OVERFLOW IN RECORD"; break;
-        case st_code_file_not_found: text = "FILE NOT FOUND"; break;
-        case st_code_power_on:       text = "ECONOPET IEEE"; break;
-        default:                     text = ""; break;
+        case st_code_file_not_found:  text = "FILE NOT FOUND"; break;
+        case st_code_power_on:
+            text = model == drive_model_8050
+                ? "CBM DOS V2.7"
+                : "CBM DOS V2";
+            break;
+        default:                      text = ""; break;
     }
-    int n = snprintf(line, sizeof(line), "%02u,%s,00,00", (unsigned int) status_code[unit], text);
+    const int n = model == drive_model_8050
+        ? snprintf(line, sizeof(line), "%02u,%s,%02u,%02u,%u",
+                   (unsigned int) status.code, text, status.track, status.sector,
+                   status.drive)
+        : snprintf(line, sizeof(line), "%02u,%s,%02u,%02u",
+                   (unsigned int) status.code, text, status.track, status.sector);
 
+    vet(n >= 0 && (size_t) n <= IEEE_STATUS_TEXT_MAX,
+        "IEEE status text exceeds its %u-byte capacity", IEEE_STATUS_TEXT_MAX);
     for (int i = 0; i < n; i++) spi_write_at(IEEE_REG_TXS, (uint8_t) line[i]);
     spi_write_at(IEEE_REG_TXS_LAST, 0x0D);
 
     // Reading the status channel resets it, like a real drive.
-    status_code[unit] = st_code_ok;
+    drive_status[unit].code = st_code_ok;
+    drive_status[unit].track = 0;
+    drive_status[unit].sector = 0;
 }
 
 // Fill the TX FIFO from the open stream until the fabric reports no room
@@ -567,7 +610,6 @@ static void service_tx(void) {
     uint8_t buf[TX_BURST_CHUNK];
 
     for (;;) {
-
         uint8_t ctrl = spi_read_at(IEEE_REG_CTRL);
         if (!(ctrl & IEEE_CTRL_RD_TX_ROOM)) return;
 
@@ -585,7 +627,7 @@ static void service_tx(void) {
                 if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
                 streamed_bytes += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
-                status_code[stream_drive >> 1] = st_code_read_error;
+                set_status(stream_slot, st_code_read_error, 0, 0);
                 spi_write_at(IEEE_REG_TX_LAST, 0x0D);
                 streaming = false;
                 return;
@@ -706,8 +748,8 @@ static void handle_command(uint8_t cmd) {
 
 static void sync_emulation_enabled(void) {
     bool has_mounted_drive = false;
-    for (unsigned int drive = 0; drive < NUM_DRIVES; drive++) {
-        if (drives[drive].present) {
+    for (unsigned int slot = 0; slot < NUM_DRIVES; slot++) {
+        if (drives[slot].present) {
             has_mounted_drive = true;
             break;
         }
@@ -727,22 +769,27 @@ void ieee_drive_init(void) {
     ieee_drive_unmount_all();
 }
 
+void ieee_drive_reset(void) {
+    reset_protocol_state();
+    if (emulation_enabled) ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
+}
+
 void ieee_drive_unmount_all(void) {
-    for (unsigned int n = 0; n < NUM_DRIVES; n++) {
-        if (drives[n].file != NULL) fclose(drives[n].file);
-        drives[n] = (drive_t) { 0 };
+    for (unsigned int slot = 0; slot < NUM_DRIVES; slot++) {
+        if (drives[slot].file != NULL) fclose(drives[slot].file);
+        drives[slot] = (drive_t) { 0 };
         for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) {
-            chain_cache[n][i].valid = false;
+            chain_cache[slot][i].valid = false;
         }
     }
     reset_protocol_state();
     sync_emulation_enabled();
 }
 
-bool ieee_drive_mount(unsigned int drive, const char* filename) {
-    if (drive >= NUM_DRIVES) return false;
+bool ieee_drive_mount(unsigned int slot, const char* filename) {
+    if (slot >= NUM_DRIVES) return false;
 
-    bool mounted = mount_image(drive, filename);
+    bool mounted = mount_image(slot, filename);
     if (!mounted) log_info("ieee: could not mount disk image: /disks/%s", filename);
     if (mounted) sync_emulation_enabled();
     return mounted;

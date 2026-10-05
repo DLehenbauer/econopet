@@ -33,6 +33,12 @@ Each item in `configs` describes one boot menu option:
 | `name` | A human-readable name to show in the boot menu. |
 | `setup` | A list of actions to perform when this configuration is selected. |
 
+The parser stores up to 40 text bytes for configuration IDs and names, plus
+the terminating null. Longer values are truncated. The parser forwards the
+`default` scalar unchanged, but the boot menu stores only its first 40 text
+bytes when matching configuration IDs. Keep IDs, names, and `default` within
+this limit so the menu and default selection use the intended text.
+
 ## Setup actions
 
 Each item in a `setup` list is an action. The `action` property tells the
@@ -46,6 +52,12 @@ firmware what kind of action to perform:
 | `mount` | Inserts a disk image from `/disks` into an IEEE drive slot. |
 | `fix-checksum` | Modifies the byte at the target address so memory matches the desired Commodore checksum after patching. |
 | `set` | Configures firmware options. |
+
+SD paths have a capacity of 256 bytes including the terminating null, matching
+pico-vfs. The full path may contain at most 255 bytes, including any directory
+prefix. `load` files and `usb-keymap` values are complete paths. `mount` filenames
+are relative to `/disks/`, leaving at most 248 bytes for the filename. Overlong
+paths are fatal errors, not truncated filenames.
 
 Setup lists may also contain `if` / `then` / `else` entries. These are used when
 a configuration needs different setup steps for different hardware, such as

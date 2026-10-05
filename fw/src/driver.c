@@ -39,14 +39,17 @@
 #define REG_CPU_SEL     (ADDR_REG | 0x00005)
 
 // Status Register
-#define REG_STATUS_GRAPHICS   (1 << 0)
-#define REG_STATUS_CRT        (1 << 1)
-#define REG_STATUS_KEYBOARD   (1 << 2)
-#define REG_STATUS_BP_HALT    (1 << 3)
-#define REG_STATUS_PHYS_CPU   (1 << 4)   // Physical 6502 address activity seen
+#define REG_STATUS_GRAPHICS      (1 << 0)
+#define REG_STATUS_CRT           (1 << 1)
+#define REG_STATUS_KEYBOARD      (1 << 2)
+#define REG_STATUS_BP_HALT       (1 << 3)
+#define REG_STATUS_PHYS_CPU      (1 << 4) // Physical 6502 address activity seen
 
 // Breakpoint Control Register
 #define REG_BP_CTL_CLEAR (1 << 0)
+
+// CPU Control Register
+#define CPU_CONTROL_MASK (CPU_READY | CPU_RESET | CPU_NMI)
 
 // Video Control Register
 #define REG_VIDEO_80_COL_MODE   (1 << 0)
@@ -595,7 +598,7 @@ void set_cpu(cpu_state_t state) {
  * @return Current CPU control state.
  */
 cpu_state_t get_cpu(void) {
-    return (cpu_state_t)spi_read_at(REG_CPU);
+    return (cpu_state_t)(spi_read_at(REG_CPU) & CPU_CONTROL_MASK);
 }
 
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
@@ -732,8 +735,8 @@ void write_pet_model(const system_state_t* const system_state) {
  *    - CRTC (cathode ray tube controller) registers control video timing
  *    - Used by the RP2040 to emulate CRTC when generating DVI/TMDS video
  * 
- * 4. Read graphics mode flag from status register (upper/lower case)
- *    - Used by the RP2040 to renderer characters when generating DVI/TMDS video
+ * 4. Read status flags from the FPGA
+ *    - Updates graphics mode and breakpoint halt
  */
 void sync_state() {
     // Write USB keyboard matrix state to FPGA

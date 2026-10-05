@@ -9,6 +9,10 @@
 void fatal(const char* const format, ...)
     __attribute__((format(printf, 1, 2), noreturn));
 
+// Verifies a full SD-card path's byte length (excluding null, including directory
+// prefixes) is below SD_PATH_MAX. A failed check is fatal, never truncating.
+void vet_path_length(size_t length);
+
 void* vetted_malloc(size_t __size);
 
 /**

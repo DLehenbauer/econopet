@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+`timescale 1ns / 1ps
+
 // Top module encapsulates/normalizes platform and hardware quirks before connecting
 // signals to the main module.  This includes:
 //

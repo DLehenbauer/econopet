@@ -16,6 +16,7 @@ module ieee_tb;
     bit sys_clock;
     clock_gen #(SYS_CLOCK_MHZ) sys_clock_gen (.clock_o(sys_clock));
     initial sys_clock_gen.start;
+    logic ifc = 1'b0;
 
     // Wishbone (MCU side)
     logic [WB_ADDR_WIDTH-1:0] wb_addr = '0;
@@ -41,6 +42,7 @@ module ieee_tb;
 
     ieee dut (
         .wb_clock_i(sys_clock),
+        .ifc_i(ifc),
         .wbp_addr_i(wb_addr),
         .wbp_data_i(wb_dout),
         .wbp_data_o(wb_din),
@@ -245,6 +247,12 @@ module ieee_tb;
 
         $display("[%t] BEGIN IEEE drive emulation test", $time);
 
+        // Initialize IFC-resettable DUT state before the first test.
+        ifc = 1'b1;
+        repeat (2) @(posedge sys_clock);
+        ifc = 1'b0;
+        repeat (2) @(posedge sys_clock);
+
         // MCU: enable + flush
         mcu_write(IEEE_REG_CTRL, 8'h03);
         mcu_write(IEEE_REG_CTRL, 8'h01);
@@ -369,7 +377,8 @@ module ieee_tb;
         mcu_push("00, OK,00,00", 1);
         // controller becomes acceptor
         begin
-            string status_str = "";
+            string status_str;
+            status_str = "";
             eoi = 0;
             while (!eoi) begin
                 ctl_recv(d, eoi);
@@ -507,9 +516,11 @@ module ieee_tb;
         // byte_consumed guard must NOT pop it, or the resume is off-by-one.
         // Several records: the race is timing-dependent.
         begin
-            int saved_tail = g_tail;
+            int saved_tail;
+            saved_tail = g_tail;
             for (int rec = 0; rec < 6; rec++) begin
-                int cnt = 8 + rec;            // vary the counted length per record
+                int cnt;
+                cnt = 8 + rec;                // vary the counted length per record
                 mcu_drain_rx;
                 for (int i = 0; i < 24; i++) mcu_write(IEEE_REG_TX, 8'h80 + i[7:0]);
                 mcu_write(IEEE_REG_TX_LAST, 8'h98);   // 25 bytes (0x80..0x98)
@@ -607,6 +618,63 @@ module ieee_tb;
         ctl_atn(0);
         mcu_drain_rx;
         $display("[%t]   unit 11 listen/talk verified", $time);
+
+        // IFC must clear a live protocol exchange. IFC deassertion must
+        // neither restore stale outputs nor create an RX entry.
+        rx_bytes.delete();
+        rx_isatn.delete();
+        mcu_write(IEEE_REG_TX, 8'hA5);
+        mcu_push("S", 1);
+        ctl_atn(1);
+        ctl_send(8'h28);                   // LISTEN 8
+        ctl_send(8'h61);                   // secondary 1
+        ctl_atn(0);
+        ctl_send(8'h55);                   // listener data: RX is non-empty
+        `assert_compare(dut.rx_count, >, 0);
+        `assert_compare(dut.tx_count, >, 0);
+        `assert_compare(dut.txs_count, >, 0);
+        `assert_equal(dut.listening, 1'b1);
+
+        ifc = 1'b1;
+        repeat (2) @(posedge sys_clock);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal(d[0], 1'b1);         // enable survives IFC
+        `assert_equal(dut.rx_count, 0);
+        `assert_equal(dut.tx_count, 0);
+        `assert_equal(dut.txs_count, 0);
+        `assert_equal(dut.listening, 1'b0);
+        `assert_equal(dut.talking, 1'b0);
+        `assert_equal(dut.sa, 8'h00);
+        `assert_equal(dut.talk_st, 2'd0);  // T_IDLE
+        `assert_equal(dut.dev_nrfd_n, 1'b1);
+        `assert_equal(dut.dev_ndac_n, 1'b1);
+        `assert_equal(dut.dev_dav_n, 1'b1);
+        `assert_equal(dut.dev_eoi_n, 1'b1);
+        `assert_equal(dut.dev_dio, 8'hFF);
+        `assert_equal(dut.cpu_data_oe, 1'b0);
+
+        ifc = 1'b0;
+        repeat (2) @(posedge sys_clock);
+        mcu_read(IEEE_REG_STATUS, st);
+        `assert_equal(st[0], 1'b0);        // no phantom command after IFC
+
+        // The PET reinitializes its PIA/VIA after RES before its first command.
+        cpu_write(0, 1, 0, 4'd1, 8'h3C);
+        cpu_write(0, 1, 0, 4'd3, 8'h3C);
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);
+        cpu_write(0, 0, 1, 4'd0, 8'hFF);
+        ctl_atn(1);
+        ctl_send(8'h28);                   // first post-IFC command
+        ctl_atn(0);
+        mcu_drain_rx;
+        `assert_equal(rx_bytes.size(), 1);
+        `assert_equal(rx_isatn[0], 1'b1);
+        `assert_equal(rx_bytes[0], 8'h28);
+        ctl_atn(1);
+        ctl_send(8'h3F);                   // UNLISTEN
+        ctl_atn(0);
+        mcu_drain_rx;
+        $display("[%t]   IFC reset and post-reset recovery verified", $time);
 
         // Idle: device releases everything
         mcu_read(IEEE_REG_STATUS, st);

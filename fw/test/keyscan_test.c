@@ -92,10 +92,10 @@ START_TEST(test_keyscan_getch) {
         '\n',
     };
 
-    static_assert(ARRAY_SIZE(pet_keys) == ARRAY_SIZE(expected_keys_unshifted),
+    static_assert(count_of(pet_keys) == count_of(expected_keys_unshifted),
         "Key event arrays must be the same size");
     
-    for (size_t i = 0; i < ARRAY_SIZE(pet_keys); i++) {
+    for (size_t i = 0; i < count_of(pet_keys); i++) {
         press_key(matrix, pet_keys[i]);
         ck_assert_int_eq(keyscan_getch(matrix), expected_keys_unshifted[i]);
         release_key(matrix, pet_keys[i]);
@@ -120,12 +120,12 @@ START_TEST(test_keyscan_getch) {
         '\n',
     };
 
-    static_assert(ARRAY_SIZE(expected_keys_shifted) == ARRAY_SIZE(expected_keys_unshifted),
+    static_assert(count_of(expected_keys_shifted) == count_of(expected_keys_unshifted),
         "Key event arrays must be the same size");
 
-    for (size_t i = 0; i < ARRAY_SIZE(shift_keys); i++) {
+    for (size_t i = 0; i < count_of(shift_keys); i++) {
         press_key(matrix, shift_keys[i]);
-        for (size_t j = 0; j < ARRAY_SIZE(expected_keys_shifted); j++) {
+        for (size_t j = 0; j < count_of(expected_keys_shifted); j++) {
             press_key(matrix, pet_keys[j]);
             ck_assert_int_eq(keyscan_getch(matrix), expected_keys_shifted[j]);
             release_key(matrix, pet_keys[j]);

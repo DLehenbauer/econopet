@@ -6,3 +6,6 @@
 #include <check.h>
 
 Suite* ieee_drive_suite(void);
+
+// Returns path-validation tests that require a forked runner for fatal errors.
+Suite* ieee_drive_fatal_suite(void);

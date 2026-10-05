@@ -25,6 +25,11 @@ benches -- `wbp_mux_tb` is ~4s to compile and 2ms to simulate -- so Verilator
 only wins where simulated time is large. Two concurrent `ctest` runs will
 collide over those directories.
 
+`sim.sh --update-only` atomically replaces generated simulation file lists only
+when their contents change. Parallel subproject CTest build fixtures can
+therefore share those lists without observing a partially written file or
+invalidating unchanged cached Icarus images.
+
 ## Reset randomization
 
 Pass `+verilator+rand+reset+` mode as the second argument:

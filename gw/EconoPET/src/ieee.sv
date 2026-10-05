@@ -32,6 +32,7 @@ import common_pkg::*;
 //   TALK ch15 status re-check, CLOSE, final status read.
 module ieee (
     input  logic wb_clock_i,
+    input  logic ifc_i,
 
     // Wishbone peripheral (MCU side)
     input  logic [WB_ADDR_WIDTH-1:0] wbp_addr_i,
@@ -100,16 +101,26 @@ module ieee (
     logic snap_valid = 1'b0;
 
     always_ff @(posedge wb_clock_i) begin
-        snap_dly <= {snap_dly[1:0], cpu_addr_strobe_i};
-        // BE fall ends the cycle -- a stale snapshot must not inject into the next.
-        if (cpu_addr_strobe_i || !cpu_be_i) snap_valid <= 1'b0;
-        if (snap_dly[2]) begin
-            snap_valid <= 1'b1;
-            snap_pia1 <= pia1_cs_i;
-            snap_pia2 <= pia2_cs_i;
-            snap_via  <= via_cs_i;
-            snap_rs   <= rs_i;
-            snap_we   <= cpu_we_i;
+        if (ifc_i) begin
+            snap_pia1  <= 1'b0;
+            snap_pia2  <= 1'b0;
+            snap_via   <= 1'b0;
+            snap_rs    <= '0;
+            snap_we    <= 1'b0;
+            snap_dly   <= '0;
+            snap_valid <= 1'b0;
+        end else begin
+            snap_dly <= {snap_dly[1:0], cpu_addr_strobe_i};
+            // BE fall ends the cycle -- a stale snapshot must not inject into the next.
+            if (cpu_addr_strobe_i || !cpu_be_i) snap_valid <= 1'b0;
+            if (snap_dly[2]) begin
+                snap_valid <= 1'b1;
+                snap_pia1  <= pia1_cs_i;
+                snap_pia2  <= pia2_cs_i;
+                snap_via   <= via_cs_i;
+                snap_rs    <= rs_i;
+                snap_we    <= cpu_we_i;
+            end
         end
     end
 
@@ -117,7 +128,13 @@ module ieee (
     wire cpu_wr = cpu_data_strobe_i && snap_we;
 
     always_ff @(posedge wb_clock_i) begin
-        if (cpu_wr) begin
+        if (ifc_i) begin
+            pia2_pb_out <= 8'hFF;
+            pia2_cra    <= 8'h00;
+            pia2_crb    <= 8'h00;
+            via_orb     <= 8'hFF;
+            pia1_pa_out <= 4'h0;
+        end else if (cpu_wr) begin
             if (snap_pia2) begin
                 unique case (pia_rs)
                     2'd1: pia2_cra <= cpu_data_i;
@@ -244,15 +261,31 @@ module ieee (
         tx_flush <= 1'b0;
         txs_flush <= 1'b0;
 
-        if (flush || !enable) begin
-            listening <= 1'b0;
-            talking   <= 1'b0;
-            talk_st   <= T_IDLE;
-            dev_nrfd_n <= 1'b1;
-            dev_ndac_n <= 1'b1;
-            dev_dav_n  <= 1'b1;
-            dev_eoi_n  <= 1'b1;
-            dev_dio    <= 8'hFF;
+        if (ifc_i) begin
+            listening      <= 1'b0;
+            talking        <= 1'b0;
+            sa             <= 8'h00;
+            talk_st        <= T_IDLE;
+            byte_consumed  <= 1'b0;
+            dev_nrfd_n     <= 1'b1;
+            dev_ndac_n     <= 1'b1;
+            dev_dav_n      <= 1'b1;
+            dev_eoi_n      <= 1'b1;
+            dev_dio        <= 8'hFF;
+            prev_bus_dav_n <= 1'b1;
+            prev_atn_n     <= 1'b1;
+            rx_push_data   <= '0;
+        end else if (flush || !enable) begin
+            listening      <= 1'b0;
+            talking        <= 1'b0;
+            sa             <= 8'h00;
+            talk_st        <= T_IDLE;
+            byte_consumed  <= 1'b0;
+            dev_nrfd_n     <= 1'b1;
+            dev_ndac_n     <= 1'b1;
+            dev_dav_n      <= 1'b1;
+            dev_eoi_n      <= 1'b1;
+            dev_dio        <= 8'hFF;
             prev_bus_dav_n <= 1'b1;
             prev_atn_n     <= 1'b1;
         end else begin
@@ -293,7 +326,7 @@ module ieee (
                                 // Fresh status per request: the kernel re-reads
                                 // channel 15 often; stale unread status bytes
                                 // must not misalign the next read.
-                                if (talking && (~pia2_pb_out & 8'h0F) == 4'hF)
+                                if (talking && (~pia2_pb_out & 8'h0F) == 8'h0F)
                                     txs_flush <= 1'b1;
                             end
                             8'b1110_????: if (listening) begin
@@ -303,12 +336,12 @@ module ieee (
                                 // for real data channels: ch15 CLOSE/OPEN is
                                 // the DOS command channel and must not drop
                                 // an in-flight stream (firmware ignores it).
-                                if ((~pia2_pb_out & 8'h0F) != 4'hF)
+                                if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             8'b1111_????: if (listening) begin
                                 sa <= ~pia2_pb_out;                           // OPEN
-                                if ((~pia2_pb_out & 8'h0F) != 4'hF)
+                                if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             default: ;
@@ -425,11 +458,19 @@ module ieee (
         tx_push_req <= 1'b0;
         txs_push_req <= 1'b0;
 
+        if (ifc_i) begin
+            tx_push_data <= '0;
+            txs_push_data <= '0;
+        end
+
+        // IFC resets the emulated drive, but the MCU control plane remains
+        // available so firmware can configure the drive while PET RES is held.
         if (wb_req) begin
             wbp_ack_o <= 1'b1;
             unique case (reg_addr)
                 IEEE_REG_CTRL: begin
-                    // bit0 = enable; bit1 = tx_room (see TX_BURST_CHUNK above)
+                    // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
+                    // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
                     wbp_data_o <= {6'b0, tx_room, enable};
                     if (wbp_we_i) begin
                         enable       <= wbp_data_i[0];
@@ -444,18 +485,18 @@ module ieee (
                 // it requires an explicit WRITE to IEEE_REG_RX.
                 IEEE_REG_RX: begin
                     wbp_data_o <= rx_mem[rx_rd][7:0];
-                    if (wbp_we_i && !rx_empty) rx_pop_req <= 1'b1;
+                    if (wbp_we_i && !ifc_i && !rx_empty) rx_pop_req <= 1'b1;
                 end
                 IEEE_REG_TX: begin
                     wbp_data_o <= 8'h00;   // write-only (data TX FIFO push)
-                    if (wbp_we_i && !tx_full) begin
+                    if (wbp_we_i && !ifc_i && !tx_full) begin
                         tx_push_req  <= 1'b1;
                         tx_push_data <= {1'b0, wbp_data_i};
                     end
                 end
                 IEEE_REG_TX_LAST: begin
                     wbp_data_o <= 8'h00;   // write-only (data TX FIFO push, EOI)
-                    if (wbp_we_i && !tx_full) begin
+                    if (wbp_we_i && !ifc_i && !tx_full) begin
                         tx_push_req  <= 1'b1;
                         tx_push_data <= {1'b1, wbp_data_i};
                     end
@@ -463,14 +504,14 @@ module ieee (
                 IEEE_REG_SA: wbp_data_o <= sa;
                 IEEE_REG_TXS: begin
                     wbp_data_o <= 8'h00;   // write-only (status TX FIFO push)
-                    if (wbp_we_i && !txs_full) begin
+                    if (wbp_we_i && !ifc_i && !txs_full) begin
                         txs_push_req  <= 1'b1;
                         txs_push_data <= {1'b0, wbp_data_i};
                     end
                 end
                 IEEE_REG_TXS_LAST: begin
                     wbp_data_o <= 8'h00;   // write-only (status TX FIFO push, EOI)
-                    if (wbp_we_i && !txs_full) begin
+                    if (wbp_we_i && !ifc_i && !txs_full) begin
                         txs_push_req  <= 1'b1;
                         txs_push_data <= {1'b1, wbp_data_i};
                     end
@@ -482,7 +523,7 @@ module ieee (
 
     // FIFO pointer/storage updates (single writer per FIFO side).
     always_ff @(posedge wb_clock_i) begin
-        if (flush) begin
+        if (ifc_i || flush) begin
             rx_wr <= '0; rx_rd <= '0; rx_count <= '0;
             tx_wr <= '0; tx_rd <= '0; tx_count <= '0;
             txs_wr <= '0; txs_rd <= '0; txs_count <= '0;
@@ -554,23 +595,28 @@ module ieee (
     };
 
     always_ff @(posedge wb_clock_i) begin
-        cpu_data_oe <= 1'b0;
+        if (ifc_i) begin
+            cpu_data_o  <= 8'hFF;
+            cpu_data_oe <= 1'b0;
+        end else begin
+            cpu_data_oe <= 1'b0;
 
-        if (cpu_addr_strobe_i) cpu_data_oe <= 1'b0;
-        if (enable && cpu_be_i && snap_valid && !snap_we) begin
-            if (snap_pia2 && pia_rs == 2'd0) begin
-                // $E820 DIO in: inject only while our talker drives data;
-                // otherwise the (empty) physical bus reads $FF anyway.
-                cpu_data_o  <= bus_dio;
-                cpu_data_oe <= dev_driving_dio;
-            end else if (snap_via && snap_rs == 4'd0) begin
-                // $E840: full composed port B.
-                cpu_data_o  <= via_pb_composed;
-                cpu_data_oe <= 1'b1;
-            end else if (snap_pia1 && pia_rs == 2'd0 && !dev_eoi_n) begin
-                // $E810: only while asserting EOI (bit 6 low).
-                cpu_data_o  <= pia1_pa_composed;
-                cpu_data_oe <= 1'b1;
+            if (cpu_addr_strobe_i) cpu_data_oe <= 1'b0;
+            if (enable && cpu_be_i && snap_valid && !snap_we) begin
+                if (snap_pia2 && pia_rs == 2'd0) begin
+                    // $E820 DIO in: inject only while our talker drives data;
+                    // otherwise the (empty) physical bus reads $FF anyway.
+                    cpu_data_o  <= bus_dio;
+                    cpu_data_oe <= dev_driving_dio;
+                end else if (snap_via && snap_rs == 4'd0) begin
+                    // $E840: full composed port B.
+                    cpu_data_o  <= via_pb_composed;
+                    cpu_data_oe <= 1'b1;
+                end else if (snap_pia1 && pia_rs == 2'd0 && !dev_eoi_n) begin
+                    // $E810: only while asserting EOI (bit 6 low).
+                    cpu_data_o  <= pia1_pa_composed;
+                    cpu_data_oe <= 1'b1;
+                end
             end
         end
     end

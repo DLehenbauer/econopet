@@ -57,7 +57,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
 typedef struct context_s {
     const window_t* const window;
     unsigned int config_count;
-    char default_id[41];
+    char default_id[CONFIG_TEXT_CAPACITY];
     int default_index;
 } context_t;
 
@@ -102,7 +102,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     // Fill window with spaces
     window_fill(window, 0x20);
 
-    parse_config_file("/config.yaml", &sink, -1);
+    parse_config_file("/config.yaml", &sink, CONFIG_ENUMERATE);
 
     bool has_default = context.default_id[0] != '\0';
     bool default_matched = has_default && context.default_index >= 0;

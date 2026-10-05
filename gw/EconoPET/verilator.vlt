@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+
+`verilator_config
+
+// The vendored 6502 RTL relies on its consumer's simulation timescale.
+lint_off -rule TIMESCALEMOD -file "*external/m6502/rtl/*.sv"
+
+// The vendored 6809 core intentionally uses combinational feedback.
+lint_off -rule UNOPTFLAT -file "*external/mc6809/mc6809i.v"

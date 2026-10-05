@@ -1,58 +1,43 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "test_support.h"
+
 #define MOCK_RAM_SIZE 0x10000
+#define MOCK_IEEE_RX_CAPACITY 32
+#define MOCK_IEEE_TX_CAPACITY 1024
+#define MOCK_IEEE_TXS_CAPACITY 32
 
 extern uint8_t mock_ram[MOCK_RAM_SIZE];
 
+// Resets RAM, register FIFOs, CPU flags, and breakpoint observations.
 void mock_reset(void);
+// Sets the address returned by the mocked breakpoint register.
 void mock_breakpoint_set_hit_addr(uint16_t addr);
+// Reports whether the breakpoint halt was cleared since reset.
 bool mock_breakpoint_halt_was_cleared(void);
 
+// Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
+// Returns the number of captured file-channel bytes.
 size_t mock_ieee_data_count(void);
+// Returns a captured file-channel byte, asserting the index is valid.
 uint8_t mock_ieee_data_byte(size_t index);
+// Returns a captured file-channel byte's EOI marker.
 bool mock_ieee_data_eoi(size_t index);
+// Discards captured file-channel bytes without changing other FIFOs.
 void mock_ieee_clear_data(void);
+// Returns the number of captured command-channel bytes.
 size_t mock_ieee_status_count(void);
+// Returns a captured command-channel byte, asserting the index is valid.
 uint8_t mock_ieee_status_byte(size_t index);
+// Returns a captured command-channel byte's EOI marker.
 bool mock_ieee_status_eoi(size_t index);
+// Discards captured command-channel bytes without changing other FIFOs.
 void mock_ieee_clear_status(void);
-
-// Stub Pico SDK types and macros for non-Pico builds
-#define __in_flash(x) x
-#define __not_in_flash_func(x) x
-typedef unsigned int uint;
-typedef uint64_t absolute_time_t;
-
-// Mock HID keyboard report structure
-// (See /opt/pico-sdk/lib/tinyusb/src/class/hid/hid.h)
-typedef struct hid_keyboard_report_s {
-    uint8_t modifier;
-    uint8_t reserved;
-    uint8_t keycode[6];
-} hid_keyboard_report_t;
-
-uint64_t time_us_64(void);
-absolute_time_t get_absolute_time(void);
-uint32_t to_ms_since_boot(absolute_time_t time);
-
-// In-memory file system for testing
-// Register a file with given path and content in memory
-void mock_register_file(const char* path, const char* content);
-
-// Register a mutable or read-only binary file for code that uses stdio.
-void mock_register_binary_file(const char* path, const void* data, size_t size,
-                               bool writable);
-
-// Remove a specific file from memory
-void mock_unregister_file(const char* path);
-
-// Clear all registered in-memory files
-void mock_clear_files(void);
-
-// Require the next fatal message to contain the given text.
-void mock_expect_fatal_message(const char* substring);

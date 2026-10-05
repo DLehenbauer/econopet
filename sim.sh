@@ -15,11 +15,13 @@ BUILD_DIR="$SCRIPT_DIR/build"
 generate_filelists() {
     mkdir -p "$PROJ_DIR/work_sim" "$PROJ_DIR/outflow"
 
-    python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/pkgs.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
+    python3 - "$PROJ_DIR/$PROJ_NAME.xml" "$PROJ_DIR/work_sim/$PROJ_NAME.f" "$PROJ_DIR/work_sim/timescale.f" <<'PY'
+import os
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
-xml_path, sim_f_path, pkgs_f_path, timescale_f_path = sys.argv[1:]
+xml_path, sim_f_path, timescale_f_path = sys.argv[1:]
 
 ns = {"efx": "http://www.efinixinc.com/enf_proj"}
 root = ET.parse(xml_path).getroot()
@@ -47,16 +49,37 @@ sim_files = [path for path in sim_files if not path.endswith(".svh")]
 verilator_only_testbenches = {"sim/video_crtc_timing_tb.sv"}
 sim_files = [path for path in sim_files if path not in verilator_only_testbenches]
 
-with open(sim_f_path, "w", encoding="utf-8", newline="\n") as sim_f:
-    # A file registered as both design_file and sim_file compiles once.
-    for path in dict.fromkeys(package_files + sim_files + design_files):
-        sim_f.write(f"{path}\n")
+def write_if_changed(path, content):
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as file:
+            if file.read() == content:
+                return
+    except FileNotFoundError:
+        pass
 
-# Keep this compatibility file for existing build trees that still reference it.
-open(pkgs_f_path, "w", encoding="utf-8").close()
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="\n",
+            dir=os.path.dirname(path),
+            delete=False,
+        ) as file:
+            temporary_path = file.name
+            file.write(content)
 
-with open(timescale_f_path, "w", encoding="utf-8", newline="\n") as timescale_f:
-    timescale_f.write("+timescale+1ns/1ps\n")
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
+# A file registered as both design_file and sim_file compiles once.
+sim_file_content = "".join(
+    f"{path}\n" for path in dict.fromkeys(package_files + sim_files + design_files)
+)
+write_if_changed(sim_f_path, sim_file_content)
+write_if_changed(timescale_f_path, "+timescale+1ns/1ps\n")
 PY
 }
 
@@ -166,7 +189,7 @@ ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
 if [ -n "$LINT" ]; then
     generate_filelists
     pushd "$PROJ_DIR" || exit 1
-    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" --top-module top
+    verilator --lint-only --language 1800-2009 --timescale-override 1ns/1ps -y src -Iexternal/m6502/rtl -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" -f "$PROJ_DIR/work_sim/$PROJ_NAME.f" verilator.vlt --top-module top
     exit_on_failure
     popd
     exit 0
@@ -180,7 +203,7 @@ if [ -z "$NO_UPDATE" ]; then
         exit 1
     fi
 
-    CTEST_ARGS=(--preset gw --output-on-failure)
+    CTEST_ARGS=(--preset gw --parallel --output-on-failure)
     if [ -n "$TEST_NAME" ]; then
         CTEST_ARGS+=(--tests-regex "^${TEST_NAME}$")
     fi

@@ -1,4 +1,4 @@
-# EconoPET Copilot Instructions
+# EconoPET Agent Instructions
 
 ## Project Overview
 
@@ -26,9 +26,9 @@ Key interfaces:
 ```sh
 cmake --preset default              # Configure (run first)
 cmake --build --preset fw           # Build firmware only
-cmake --build --preset fw_test      # Build firmware tests
-ctest --preset fw                   # Run firmware tests
-ctest --preset gw                   # Run gateware simulations (fast)
+cmake --build --preset fw-test      # Build firmware tests
+ctest --preset fw --parallel        # Run firmware tests
+ctest --preset gw --parallel        # Run gateware simulations (fast)
 cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 ```
 
@@ -43,6 +43,28 @@ cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
 ### File Headers
 
 Include the SPDX license header in all new source files (see `fw/src/main.c` for example).
+
+### Linting
+
+- Fix lint causes. Suppress only demonstrated false positives, at the narrowest
+  scope available. Explain each suppression beside it.
+
+### Stubs
+
+- Stubs must assert with a useful message, never return placeholders or succeed.
+
+### Documentation
+
+- Document every function, method, and task concisely: explain its purpose and,
+  when not obvious, its callers or users.
+- Precede each step of a multi-step procedure with a concise comment explaining
+  its intent and any non-obvious rationale. Do not number steps.
+
+### Magic Numbers
+
+- Name states, modes, register addresses, bit masks, and limits instead of using
+  numeric literals.
+- Reuse existing definitions.
 
 ## Environment Variables
 
