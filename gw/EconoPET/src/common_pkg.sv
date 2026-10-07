@@ -4,6 +4,226 @@
 `timescale 1ns / 1ps
 
 package common_pkg;
+    // ========================================================================
+    // BEGIN SHARED HARDWARE CONTRACT
+    //
+    // EconoPET hardware contract used for communication between the MCU and FPGA.
+    // *_BIT is an index, *_MASK a mask, and *_ADDR a byte address.
+    //
+    // IMPORTANT: Keep exported C/C++ definitions in `fw/src/hardware_contract.h`
+    //            in sync with their counterparts here. RTL-only definitions
+    //            and derivations are retained alongside them.
+    //            The generated `system.HardwareContract.MatchesCommonPackage`
+    //            test enforces consistency.
+    // ========================================================================
+
+    // CPU and Wishbone buses are byte-addressed.
+    localparam int unsigned DATA_WIDTH      = 8;                    // 6502 and Wishbone data buses are 1 byte wide.
+    localparam int unsigned CPU_ADDR_WIDTH  = 16;
+    localparam int unsigned RAM_ADDR_WIDTH  = 17;
+    localparam int unsigned BRAM_ADDR_WIDTH = 12;
+    localparam int unsigned WB_ADDR_WIDTH   = 20;
+
+    // Note: WB_RAM_DECODE_PREFIX reserves an extra bit for the RAM address.  This double
+    //       maps the RAM address space as follows:
+    //
+    //         $00000-$1ffff -> $00000-$1ffff
+    //         $20000-$3ffff -> $00000-$1ffff
+    //
+    //       This allows SPI / wishbone reads and writes to "wrap-around".  This
+    //       is particularly useful for 'read_next' at 0x1ffff, which otherwise
+    //       would stall indefinitely because attempting to read $20000 would
+    //       deselect the wishbone RAM peripheral.
+    localparam WB_RAM_DECODE_PREFIX  = 2'b00;
+    localparam WB_REG_DECODE_PREFIX  = 4'b0100;
+    localparam WB_CRTC_DECODE_PREFIX = 4'b0101;
+    localparam WB_KBD_DECODE_PREFIX  = 5'b01100;
+    localparam WB_BRAM_DECODE_PREFIX = 5'b01101;
+    localparam WB_IEEE_DECODE_PREFIX = 5'b01110;
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_RAM_BASE_ADDR = {WB_RAM_DECODE_PREFIX, 18'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_REG_BASE_ADDR = {WB_REG_DECODE_PREFIX, 16'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_CRTC_BASE_ADDR = {WB_CRTC_DECODE_PREFIX, 16'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_KBD_BASE_ADDR = {WB_KBD_DECODE_PREFIX, 15'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_BRAM_BASE_ADDR = {WB_BRAM_DECODE_PREFIX, 15'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_BASE_ADDR = {WB_IEEE_DECODE_PREFIX, 15'b0};
+
+    //
+    // Register file
+    //
+
+    // Register 0: Status (Read-only)
+    localparam int unsigned REG_STATUS                   = 0;
+    localparam int unsigned REG_STATUS_GRAPHICS_BIT      = 0;   // VIA CA2 (0 = graphics, 1 = text)
+    localparam int unsigned REG_STATUS_CRT_BIT           = 1;   // Diagonal CRT size (0 = 12", 1 = 9")
+    localparam int unsigned REG_STATUS_KEYBOARD_BIT      = 2;   // Keyboard Type (0 = Business, 1 = Graphics)
+    localparam int unsigned REG_STATUS_BP_HALT_BIT       = 3;   // Breakpoint halt (1 = CPU halted on STP fetch)
+    localparam int unsigned REG_STATUS_PHYS_CPU_BIT      = 4;   // Physical 6502 detected (probe loop seen at $0400)
+
+    // Register 1: CPU control
+    localparam int unsigned REG_CPU                 = 1;
+    localparam int unsigned REG_CPU_READY_BIT       = 0;
+    localparam int unsigned REG_CPU_RESET_BIT       = 1;
+    localparam int unsigned REG_CPU_NMI_BIT         = 2;
+
+    // Register 2: Video Control
+    localparam int unsigned REG_VIDEO                   = 2;
+    localparam int unsigned REG_VIDEO_COL_80_BIT        = 0;
+    localparam int unsigned REG_VIDEO_RAM_MASK_LO_BIT   = 1;    // video_ram_mask[10]
+    localparam int unsigned REG_VIDEO_RAM_MASK_HI_BIT   = 2;    // video_ram_mask[11]
+
+    // Register 3: Breakpoint Control (Write) / Breakpoint Address Low (Read)
+    //   Write: bit 0 clears the breakpoint halt
+    //   Read:  low byte of the CPU address where the breakpoint was hit
+    localparam int unsigned REG_BP_CTL                  = 3;
+    localparam int unsigned REG_BP_CTL_CLEAR_BIT        = 0;
+    localparam int unsigned REG_BP_ADDR_LO              = 3;    // Shares address with REG_BP_CTL
+
+    // Register 4: Breakpoint Address High (Read-only)
+    localparam int unsigned REG_BP_ADDR_HI              = 4;
+
+    // Register 5: CPU select. Separate from REG_CPU so the
+    // firmware's reset/ready writes can't clobber it.
+    localparam int unsigned REG_CPU_SEL                 = 5;
+    localparam logic [1:0]  CPU_SEL_PHYS_6502           = 2'd0,  // physical W65C02S
+                            CPU_SEL_SOFT_6809           = 2'd1,  // soft MC6809 (SuperPET)
+                            CPU_SEL_SOFT_6502           = 2'd2;  // soft MOS 6502 (virtual)
+
+    // REG_CPU_SEL bit 2, machine type: expose the SuperPET expansion I/O to a
+    // 6502 too, as on real hardware. A 6809 enables it regardless.
+    localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
+
+    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
+
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_GRAPHICS_MASK = 1 << REG_STATUS_GRAPHICS_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_CRT_MASK = 1 << REG_STATUS_CRT_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_KEYBOARD_MASK = 1 << REG_STATUS_KEYBOARD_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_BP_HALT_MASK = 1 << REG_STATUS_BP_HALT_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_PHYS_CPU_MASK = 1 << REG_STATUS_PHYS_CPU_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_CPU_READY_MASK = 1 << REG_CPU_READY_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_CPU_RESET_MASK = 1 << REG_CPU_RESET_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_CPU_NMI_MASK = 1 << REG_CPU_NMI_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_CPU_MASK = REG_CPU_READY_MASK | REG_CPU_RESET_MASK | REG_CPU_NMI_MASK;
+    localparam logic [DATA_WIDTH-1:0] CPU_SEL_SUPERPET_IO_MASK = 1 << CPU_SEL_SUPERPET_IO_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_VIDEO_COL_80_MASK = 1 << REG_VIDEO_COL_80_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK_LO_MASK = 1 << REG_VIDEO_RAM_MASK_LO_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK_HI_MASK = 1 << REG_VIDEO_RAM_MASK_HI_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK =
+        ((1 << (REG_VIDEO_RAM_MASK_HI_BIT - REG_VIDEO_RAM_MASK_LO_BIT + 1)) - 1) << REG_VIDEO_RAM_MASK_LO_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_BP_CTL_CLEAR_MASK = 1 << REG_BP_CTL_CLEAR_BIT;
+
+    // Configuration pin levels, not firmware model enum values.
+    localparam bit CONFIG_CRT_CRTC = 1'b0;
+    localparam bit CONFIG_CRT_FIXED = 1'b1;
+    localparam bit CONFIG_KEYBOARD_BUSINESS = 1'b0;
+    localparam bit CONFIG_KEYBOARD_GRAPHICS = 1'b1;
+
+    // SPI command byte: direction, address mode, reserved bit, address high nibble.
+    localparam int unsigned SPI_CMD_WRITE_BIT = 7;
+    localparam int unsigned SPI_CMD_STEP_BIT = 5;
+    localparam int unsigned SPI_CMD_DECREMENT_BIT = 6;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_MODE_MASK = (1 << SPI_CMD_STEP_BIT) | (1 << SPI_CMD_DECREMENT_BIT);
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_ABSOLUTE_MODE = 1 << SPI_CMD_DECREMENT_BIT;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_OPCODE_MASK = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_MODE_MASK;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_RESERVED_MASK = 8'h10;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_ADDRESS_HIGH_MASK = 8'h0f;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_AT = SPI_CMD_ABSOLUTE_MODE;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_NEXT = 1 << SPI_CMD_STEP_BIT;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_PREV = SPI_CMD_MODE_MASK;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_SAME = 8'h00;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_AT = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_AT;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_NEXT = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_NEXT;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_PREV = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_PREV;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_SAME = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_SAME;
+
+    // RTL-only width and mapping helper for the shared register addresses.
+    localparam int unsigned REG_ADDR_WIDTH  = $clog2(REG_COUNT);
+
+    // Map a register-file index into the Wishbone byte address space.
+    function logic[WB_ADDR_WIDTH-1:0] wb_reg_addr(input logic[REG_ADDR_WIDTH-1:0] register);
+        return { WB_REG_DECODE_PREFIX, (WB_ADDR_WIDTH - REG_ADDR_WIDTH - $bits(WB_REG_DECODE_PREFIX))'('0), register };
+    endfunction
+
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_STATUS_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_STATUS));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_CPU_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_CPU));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_VIDEO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_VIDEO));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_CTL_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_CTL));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_LO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_LO));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_HI_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_HI));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_CPU_SEL_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_CPU_SEL));
+
+    // IEEE register indices and count.
+    // Reads have no side effects because SPI pipelining can prefetch adjacent registers.
+    // STATUS and SA ignore writes. TX/TXS registers read as zero and ignore writes
+    // when their FIFO is full. RX pops and TX/TXS pushes are suppressed during IFC.
+    localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_CTRL = 0;     // Asymmetric control writes and read-back flags below.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_STATUS = 1;   // Read-only FIFO and bus status.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_RX = 2;       // Read peeks at the head byte, any write pops if nonempty.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;       // Write enqueues a data-channel byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX_LAST = 4;  // Write enqueues a data-channel byte with EOI.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read-only last secondary-address byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;      // Write enqueues a status-channel (15) byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS_LAST = 7; // Write enqueues a status-channel byte with EOI.
+    localparam int unsigned IEEE_REG_COUNT = (IEEE_REG_TXS_LAST + 1);
+
+    // Map an IEEE register index into the Wishbone byte address space.
+    function logic[WB_ADDR_WIDTH-1:0] wb_ieee_addr(input logic[IEEE_REG_ADDR_WIDTH-1:0] register);
+        return { WB_IEEE_DECODE_PREFIX, (WB_ADDR_WIDTH - IEEE_REG_ADDR_WIDTH - $bits(WB_IEEE_DECODE_PREFIX))'('0), register };
+    endfunction
+
+    // IEEE Wishbone byte addresses.
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_CTRL_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_CTRL));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_STATUS_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_STATUS));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_RX_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_RX));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TX_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TX));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TX_LAST_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TX_LAST));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_SA_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_SA));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TXS_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TXS));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TXS_LAST_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TXS_LAST));
+
+    // IEEE control-write bit indices and masks.
+    // ENABLE is replaced on every CTRL write, so include it when flushing to stay
+    // enabled. FLUSH and DATA_FLUSH are one-shot requests, not read-back flags.
+    localparam int unsigned IEEE_CTRL_ENABLE_BIT = 0;     // Enable the emulated drive.
+    localparam int unsigned IEEE_CTRL_FLUSH_BIT = 1;      // Flush FIFOs and protocol state.
+    localparam int unsigned IEEE_CTRL_DATA_FLUSH_BIT = 2; // Flush only the data TX FIFO.
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_ENABLE_MASK = (1 << IEEE_CTRL_ENABLE_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_FLUSH_MASK = (1 << IEEE_CTRL_FLUSH_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_DATA_FLUSH_MASK = (1 << IEEE_CTRL_DATA_FLUSH_BIT);
+
+    // IEEE control-read bit indices and masks (asymmetric with writes).
+    localparam int unsigned IEEE_CTRL_RD_ENABLE_BIT = 0;  // Drive is enabled.
+    localparam int unsigned IEEE_CTRL_RD_TX_ROOM_BIT = 1; // Data TX FIFO has room for IEEE_TX_BURST_CHUNK bytes.
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_ENABLE_MASK = (1 << IEEE_CTRL_RD_ENABLE_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_TX_ROOM_MASK = (1 << IEEE_CTRL_RD_TX_ROOM_BIT);
+
+    // IEEE status bits (bit 7 is talk starvation, not RX EOI).
+    localparam int unsigned IEEE_ST_RX_AVAIL_BIT = 0; // RX FIFO has a byte available to peek or pop.
+    localparam int unsigned IEEE_ST_RX_ATN_BIT = 1;   // ATN tag of the RX head (valid when RX_AVAIL is set).
+    localparam int unsigned IEEE_ST_TX_FULL_BIT = 2;  // Data TX FIFO is full.
+    localparam int unsigned IEEE_ST_TX_EMPTY_BIT = 3; // Data TX FIFO is empty.
+    localparam int unsigned IEEE_ST_ATN_BIT = 4;          // Bus ATN is asserted (active low on the wire).
+    localparam int unsigned IEEE_ST_LISTENING_BIT = 5;    // Drive is addressed as a listener.
+    localparam int unsigned IEEE_ST_TALKING_BIT = 6;      // Drive is addressed as a talker.
+    localparam int unsigned IEEE_ST_TALK_STARVED_BIT = 7; // Active talk FIFO is empty while the controller waits.
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_RX_AVAIL_MASK = (1 << IEEE_ST_RX_AVAIL_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_RX_ATN_MASK = (1 << IEEE_ST_RX_ATN_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_TX_FULL_MASK = (1 << IEEE_ST_TX_FULL_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_TX_EMPTY_MASK = (1 << IEEE_ST_TX_EMPTY_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_ATN_MASK = (1 << IEEE_ST_ATN_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_LISTENING_MASK = (1 << IEEE_ST_LISTENING_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_TALKING_MASK = (1 << IEEE_ST_TALKING_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_ST_TALK_STARVED_MASK = (1 << IEEE_ST_TALK_STARVED_BIT);
+
+    // IEEE data FIFO capacity guaranteed by TX room.
+    // A burst of at most this many bytes cannot overflow after observing TX_ROOM.
+    // This guarantee and TX_FULL/TX_EMPTY concern data TX, not the status FIFO.
+    // TALK_STARVED instead follows the active FIFO (status TX when SA selects 15).
+    localparam int unsigned IEEE_TX_BURST_CHUNK = 64;
+
+    // END SHARED HARDWARE CONTRACT
+    // ========================================================================
+
     //
     // Timing
     //
@@ -58,7 +278,6 @@ package common_pkg;
         return max2(max2(a, b), max2(c, d));
     endfunction
 
-    localparam int unsigned DATA_WIDTH      = 8;                    // 6502 and Wishbone data buses are 1 byte wide.
     localparam int unsigned BIT_INDEX_WIDTH = $clog2(DATA_WIDTH);   // Bits required to index into a byte (0-7).
 
     //
@@ -396,128 +615,37 @@ package common_pkg;
     localparam int unsigned IO_REG_ADDR_WIDTH = $clog2(IO_REG_COUNT);
 
     //
-    // Register file
-    //
-
-    // Register 0: Status (Read-only)
-    localparam int unsigned REG_STATUS                   = 0;
-    localparam int unsigned REG_STATUS_GRAPHICS_BIT      = 0;   // VIA CA2 (0 = graphics, 1 = text)
-    localparam int unsigned REG_STATUS_CRT_BIT           = 1;   // Diagonal CRT size (0 = 12", 1 = 9")
-    localparam int unsigned REG_STATUS_KEYBOARD_BIT      = 2;   // Keyboard Type (0 = Business, 1 = Graphics)
-    localparam int unsigned REG_STATUS_BP_HALT_BIT       = 3;   // Breakpoint halt (1 = CPU halted on STP fetch)
-    localparam int unsigned REG_STATUS_PHYS_CPU_BIT      = 4;   // Physical 6502 detected (probe loop seen at $0400)
-
-    // Register 1: CPU control
-    localparam int unsigned REG_CPU                 = 1;
-    localparam int unsigned REG_CPU_READY_BIT       = 0;
-    localparam int unsigned REG_CPU_RESET_BIT       = 1;
-    localparam int unsigned REG_CPU_NMI_BIT         = 2;
-    
-    // Register 2: Video Control
-    localparam int unsigned REG_VIDEO                   = 2;
-    localparam int unsigned REG_VIDEO_COL_80_BIT        = 0;
-    localparam int unsigned REG_VIDEO_RAM_MASK_LO_BIT   = 1;    // video_ram_mask[10]
-    localparam int unsigned REG_VIDEO_RAM_MASK_HI_BIT   = 2;    // video_ram_mask[11]
-
-    // Register 3: Breakpoint Control (Write) / Breakpoint Address Low (Read)
-    //   Write: bit 0 clears the breakpoint halt
-    //   Read:  low byte of the CPU address where the breakpoint was hit
-    localparam int unsigned REG_BP_CTL                  = 3;
-    localparam int unsigned REG_BP_CTL_CLEAR_BIT        = 0;
-    localparam int unsigned REG_BP_ADDR_LO              = 3;    // Shares address with REG_BP_CTL
-
-    // Register 4: Breakpoint Address High (Read-only)
-    localparam int unsigned REG_BP_ADDR_HI              = 4;
-
-    // Register 5: CPU select. Separate from REG_CPU so the
-    // firmware's reset/ready writes can't clobber it.
-    localparam int unsigned REG_CPU_SEL                 = 5;
-    localparam logic [1:0]  CPU_SEL_PHYS_6502           = 2'd0,  // physical W65C02S
-                            CPU_SEL_SOFT_6809           = 2'd1,  // soft MC6809 (SuperPET)
-                            CPU_SEL_SOFT_6502           = 2'd2;  // soft MOS 6502 (virtual)
-
-    // REG_CPU_SEL bit 2, machine type: expose the SuperPET expansion I/O to a
-    // 6502 too, as on real hardware. A 6809 enables it regardless.
-    localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
-
-    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
-
-    //
     // Bus
     //
 
-    localparam int unsigned WB_ADDR_WIDTH   = 20;
-    localparam int unsigned RAM_ADDR_WIDTH  = 17;
     localparam int unsigned VRAM_ADDR_WIDTH = 11;
     localparam int unsigned VROM_ADDR_WIDTH = 12;
-    localparam int unsigned CPU_ADDR_WIDTH  = 16;
-    localparam int unsigned REG_ADDR_WIDTH  = $clog2(REG_COUNT);
 
     // TODO: Consider arranging our address space such that the MCU can read VRAM,
     //       keyboard status, and the status register in a single SPI transaction.
 
-    // Note: WB_RAM_BASE reserves an extra bit for the RAM address.  This double
-    //       maps the RAM address space as follows:
-    //
-    //         $00000-$1ffff -> $00000-$1ffff
-    //         $20000-$3ffff -> $00000-$1ffff
-    //
-    //       This allows SPI / wishbone reads and writes to "wrap-around".  This
-    //       is particularily useful for 'read_next' at 0x1ffff, which otherwise
-    //       would stall indefinately because attempting to read $20000 would
-    //       deselect the wishbone RAM peripheral.
-    localparam WB_RAM_BASE  = 2'b00;
-    localparam WB_REG_BASE  = 4'b0100;
-    localparam WB_CRTC_BASE = 4'b0101;
-    localparam WB_KBD_BASE  = 5'b01100;
-    localparam WB_BRAM_BASE = 5'b01101;
-    localparam WB_IEEE_BASE = 5'b01110;
-    localparam WB_VRAM_BASE = { WB_RAM_BASE, 7'b0010000 };   // SRAM: $8000-87FF
-    localparam WB_VROM_BASE = { WB_RAM_BASE, 7'b0011101 };   // SRAM: $E800-EFFF
-
-    // BRAM address width for character ROM (4KB = 2^12 bytes)
-    localparam int unsigned BRAM_ADDR_WIDTH = 12;
+    localparam WB_VRAM_DECODE_PREFIX = { WB_RAM_DECODE_PREFIX, 7'b0010000 };   // SRAM: $8000-87FF
+    localparam WB_VROM_DECODE_PREFIX = { WB_RAM_DECODE_PREFIX, 7'b0011101 };   // SRAM: $E800-EFFF
 
     // TODO: Move some of these address helpers to ../sim?
     function logic[WB_ADDR_WIDTH-1:0] wb_ram_addr(input logic[RAM_ADDR_WIDTH-1:0] address);
-        return { WB_RAM_BASE, 1'b0, address };
-    endfunction
-
-    function logic[WB_ADDR_WIDTH-1:0] wb_reg_addr(input logic[REG_ADDR_WIDTH-1:0] register);
-        return { WB_REG_BASE, (WB_ADDR_WIDTH - REG_ADDR_WIDTH - $bits(WB_REG_BASE))'('0), register };
+        return { WB_RAM_DECODE_PREFIX, 1'b0, address };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_crtc_addr(input logic[CRTC_ADDR_REG_WIDTH-1:0] register);
-        return { WB_CRTC_BASE, (WB_ADDR_WIDTH - CRTC_ADDR_REG_WIDTH - $bits(WB_CRTC_BASE))'('0), register };
-    endfunction
-
-    // IEEE-488 drive emulation registers (see ieee.sv)
-    localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
-    // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
-    // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
-    localparam IEEE_REG_CTRL     = 3'd0;
-    localparam IEEE_REG_STATUS   = 3'd1;  // see ieee.sv
-    localparam IEEE_REG_RX       = 3'd2;  // read = head byte, write = pop
-    localparam IEEE_REG_TX       = 3'd3;  // write pushes device->CPU byte
-    localparam IEEE_REG_TX_LAST  = 3'd4;  // write pushes final byte (EOI)
-    localparam IEEE_REG_SA       = 3'd5;  // last secondary address byte
-    localparam IEEE_REG_TXS      = 3'd6;  // write pushes status-channel byte
-    localparam IEEE_REG_TXS_LAST = 3'd7;  // write pushes final status byte (EOI)
-
-    function logic[WB_ADDR_WIDTH-1:0] wb_ieee_addr(input logic[IEEE_REG_ADDR_WIDTH-1:0] register);
-        return { WB_IEEE_BASE, (WB_ADDR_WIDTH - IEEE_REG_ADDR_WIDTH - $bits(WB_IEEE_BASE))'('0), register };
+        return { WB_CRTC_DECODE_PREFIX, (WB_ADDR_WIDTH - CRTC_ADDR_REG_WIDTH - $bits(WB_CRTC_DECODE_PREFIX))'('0), register };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_COL_WIDTH-1:0] register);
-        return { WB_KBD_BASE, (WB_ADDR_WIDTH - KBD_COL_WIDTH - $bits(WB_KBD_BASE))'('0), register };
+        return { WB_KBD_DECODE_PREFIX, (WB_ADDR_WIDTH - KBD_COL_WIDTH - $bits(WB_KBD_DECODE_PREFIX))'('0), register };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_bram_addr(input logic[BRAM_ADDR_WIDTH-1:0] address);
-        return { WB_BRAM_BASE, (WB_ADDR_WIDTH - BRAM_ADDR_WIDTH - $bits(WB_BRAM_BASE))'('0), address };
+        return { WB_BRAM_DECODE_PREFIX, (WB_ADDR_WIDTH - BRAM_ADDR_WIDTH - $bits(WB_BRAM_DECODE_PREFIX))'('0), address };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_vram_addr(input logic[VRAM_ADDR_WIDTH-1:0] address);
-        return { WB_VRAM_BASE, address };
+        return { WB_VRAM_DECODE_PREFIX, address };
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_vrom_addr(input logic[VROM_ADDR_WIDTH-1:0] address);

@@ -15,8 +15,8 @@
 #include "diskimage.h"
 #include "driver.h"
 #include "fatal.h"
+#include "hardware_contract.h"
 #include "ieee_protocol.h"
-#include "ieee_registers.h"
 #include "sd/sd.h"
 
 #define DEV_ADDR 8
@@ -29,7 +29,7 @@
 #define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
 
 static void ieee_ctrl_write(uint8_t value) {
-    spi_write_at(IEEE_REG_CTRL, value);
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, value);
 }
 
 // ----------------------------------------------------------------------------
@@ -344,28 +344,28 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 static void rel_serve(rel_channel_t* rc) {
     uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
 
-    ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
 
     while (!rc->missing && (int32_t) rc->bufptr > rc->length) {
         rel_position(rc, rc->cur_record + 1, 0);
     }
     if (rc->missing) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
-        spi_write_at(IEEE_REG_TX_LAST, 0x0D);
+        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
         return;
     }
 
     uint16_t n = (uint16_t) (rc->length - rc->bufptr + 1);
     if (!diskchain_read(&rc->chain, rc->bufptr, buf, n)) {
         set_status(rc->slot, st_code_read_error, 0, 0);
-        spi_write_at(IEEE_REG_TX_LAST, 0x0D);
+        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
         return;
     }
     // Burst, not per-byte: per-byte SPI can't outrun the CPU's drain. The
     // FIFO was just flushed and a record is <= 254 bytes, so it can't
     // overflow.
-    if (n > 1) spi_write_same_block(IEEE_REG_TX, buf, n - 1u);
-    spi_write_at(IEEE_REG_TX_LAST, buf[n - 1]);
+    if (n > 1) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n - 1u);
+    spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, buf[n - 1]);
     rc->bufptr += n;
     streamed_bytes += n;   // REL read, attributed to this channel's slot
 }
@@ -489,7 +489,7 @@ static void resolve_open(void) {
     streaming = false;
     stream_finished = false;
     // New file: discard any stale queued data from a previous channel.
-    ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
 
     if (!drives[slot].present) {
         set_status(slot, st_code_file_not_found, 0, 0);
@@ -594,8 +594,8 @@ static void push_status(unsigned int unit) {
 
     vet(n >= 0 && (size_t) n <= IEEE_STATUS_TEXT_MAX,
         "IEEE status text exceeds its %u-byte capacity", IEEE_STATUS_TEXT_MAX);
-    for (int i = 0; i < n; i++) spi_write_at(IEEE_REG_TXS, (uint8_t) line[i]);
-    spi_write_at(IEEE_REG_TXS_LAST, 0x0D);
+    for (int i = 0; i < n; i++) spi_write_at(ECONOPET_WB_IEEE_TXS_ADDR, (uint8_t) line[i]);
+    spi_write_at(ECONOPET_WB_IEEE_TXS_LAST_ADDR, 0x0D);
 
     // Reading the status channel resets it, like a real drive.
     drive_status[unit].code = st_code_ok;
@@ -607,28 +607,28 @@ static void push_status(unsigned int unit) {
 // for another chunk.
 static void service_tx(void) {
     // An underrun mid-record times out the kernel's counted read.
-    uint8_t buf[TX_BURST_CHUNK];
+    uint8_t buf[ECONOPET_IEEE_TX_BURST_CHUNK];
 
     for (;;) {
-        uint8_t ctrl = spi_read_at(IEEE_REG_CTRL);
-        if (!(ctrl & IEEE_CTRL_RD_TX_ROOM)) return;
+        uint8_t ctrl = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
+        if (!(ctrl & ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK)) return;
 
         size_t n = 0;
         bool last = false;
         uint8_t last_byte = 0;
 
-        while (n < TX_BURST_CHUNK) {
+        while (n < ECONOPET_IEEE_TX_BURST_CHUNK) {
             uint8_t byte;
             bool is_last;
             if (!diskstream_next(&stream, &byte, &is_last)) {
                 // Natural EOF exits via 'is_last'; reaching here mid-file means
                 // an SD read error. Flush what we gathered, then close with an
                 // EOI'd filler so the kernel sees a clean (if short) end.
-                if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
+                if (n > 0) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n);
                 streamed_bytes += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
                 set_status(stream_slot, st_code_read_error, 0, 0);
-                spi_write_at(IEEE_REG_TX_LAST, 0x0D);
+                spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
                 streaming = false;
                 return;
             }
@@ -636,12 +636,12 @@ static void service_tx(void) {
             buf[n++] = byte;
         }
 
-        if (n > 0) spi_write_same_block(IEEE_REG_TX, buf, n);
+        if (n > 0) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n);
         streamed_bytes += n;
 
         if (last) {
             // Final byte carries EOI: separate address, so not part of the burst.
-            spi_write_at(IEEE_REG_TX_LAST, last_byte);
+            spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, last_byte);
             streamed_bytes++;
             log_info("ieee: stream complete, %lu bytes", (unsigned long) streamed_bytes);
             streaming = false;
@@ -705,7 +705,7 @@ static void handle_command(uint8_t cmd) {
                     if (stream_finished) {
                         // Read past EOF: real CBM DOS answers a lone EOI'd
                         // CR with clean status, not a read error.
-                        spi_write_at(IEEE_REG_TX_LAST, 0x0D);
+                        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
                     } else {
                         streaming = true;
                     }
@@ -726,12 +726,12 @@ static void handle_command(uint8_t cmd) {
                     rel_channel_t* rc = rel_find(listen_unit, IEEE_CMD_CHANNEL(cmd));
                     if (rc != NULL) {
                         rc->in_use = false;
-                        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                     } else if (listen_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
                         file_open_ok = false;
                         streaming = false;
                         stream_finished = false;
-                        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_DATA_FLUSH);
+                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                     }
                 }
             }
@@ -756,7 +756,7 @@ static void sync_emulation_enabled(void) {
     }
     emulation_enabled = has_mounted_drive;
     if (emulation_enabled) {
-        ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
+        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_FLUSH_MASK);
         log_info("ieee: virtual drive enabled");
     } else {
         ieee_ctrl_write(0);
@@ -771,7 +771,7 @@ void ieee_drive_init(void) {
 
 void ieee_drive_reset(void) {
     reset_protocol_state();
-    if (emulation_enabled) ieee_ctrl_write(IEEE_CTRL_ENABLE | IEEE_CTRL_FLUSH);
+    if (emulation_enabled) ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_FLUSH_MASK);
 }
 
 void ieee_drive_unmount_all(void) {
@@ -800,12 +800,12 @@ void ieee_drive_task(void) {
 
     // Drain the RX FIFO (commands and listener data).
     for (unsigned int i = 0; i < 64; i++) {
-        uint8_t st = spi_read_at(IEEE_REG_STATUS);
-        if (!(st & IEEE_ST_RX_AVAIL)) break;
+        uint8_t st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
+        if (!(st & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) break;
 
-        bool is_atn = (st & IEEE_ST_RX_ATN) != 0;
-        uint8_t byte = spi_read_at(IEEE_REG_RX);
-        spi_write_at(IEEE_REG_RX, 0);   // explicit pop (reads are side-effect-free)
+        bool is_atn = (st & ECONOPET_IEEE_ST_RX_ATN_MASK) != 0;
+        uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
+        spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
 
         if (is_atn) {
             handle_command(byte);

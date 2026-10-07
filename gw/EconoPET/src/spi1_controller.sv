@@ -98,16 +98,16 @@ module spi1_controller (
         end else if (spi_strobe_pulse) begin
             unique case (spi_state)
                 READ_CMD: begin
-                    wbc_we_o  <= spi_data_rx[7];  // Bit 7: Transfer direction (0 = reading, 1 = writing)
+                    wbc_we_o  <= spi_data_rx[SPI_CMD_WRITE_BIT];
 
-                    if (spi_data_rx[6:5] == 2'b10) begin
+                    if ((spi_data_rx & SPI_CMD_MODE_MASK) == SPI_CMD_ABSOLUTE_MODE) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
                         wbc_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
                         spi_state  <= READ_ADDR_HI_ARG;
                     end else begin
                         // Otherwise increment/decrement the previous address.
-                        wbc_addr_o <= wbc_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[6]}}, spi_data_rx[5]};
-                        spi_state <= spi_data_rx[7]
+                        wbc_addr_o <= wbc_addr_o + {{(WB_ADDR_WIDTH - 1){spi_data_rx[SPI_CMD_DECREMENT_BIT]}}, spi_data_rx[SPI_CMD_STEP_BIT]};
+                        spi_state <= spi_data_rx[SPI_CMD_WRITE_BIT]
                             ? READ_DATA_ARG
                             : VALID;
                     end

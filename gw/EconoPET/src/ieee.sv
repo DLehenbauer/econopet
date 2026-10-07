@@ -189,11 +189,9 @@ module ieee (
     // Burst-fill flow control: the MCU fills the FIFO with batched WRITE_SAME
     // bursts (one held-low CS transaction per chunk) to keep up with the 1MHz
     // CPU drain. 'tx_room' tells the MCU there is space for a whole chunk, so
-    // it can push TX_BURST_CHUNK bytes without checking full per byte and
+    // it can push IEEE_TX_BURST_CHUNK bytes without checking full per byte and
     // without risking an overflow (over-full writes are silently dropped).
-    // The firmware DOS layer (follow-up PR) must match TX_BURST_CHUNK = 64..
-    localparam int unsigned TX_BURST_CHUNK = 64;
-    wire tx_room = tx_count <= ($clog2(TX_DEPTH)+1)'(TX_DEPTH - TX_BURST_CHUNK);
+    wire tx_room = tx_count <= ($clog2(TX_DEPTH)+1)'(TX_DEPTH - IEEE_TX_BURST_CHUNK);
 
     // Separate FIFO for the command/status channel (sa 15), so status reads
     // can never be polluted by queued file data and vice versa.
@@ -434,16 +432,15 @@ module ieee (
                         && (serving_status ? txs_empty : tx_empty)
                         && !cpu_ndac_n && bus_nrfd_n;  // acceptor actually waiting
 
-    wire [7:0] status = {
-        talk_starved,
-        talking,
-        listening,
-        atn_active,
-        tx_empty,
-        tx_full,
-        rx_mem[rx_rd][8],   // head-of-RX is an ATN command byte
-        !rx_empty
-    };
+    wire [DATA_WIDTH-1:0] status;
+    assign status[IEEE_ST_TALK_STARVED_BIT] = talk_starved;
+    assign status[IEEE_ST_TALKING_BIT] = talking;
+    assign status[IEEE_ST_LISTENING_BIT] = listening;
+    assign status[IEEE_ST_ATN_BIT] = atn_active;
+    assign status[IEEE_ST_TX_EMPTY_BIT] = tx_empty;
+    assign status[IEEE_ST_TX_FULL_BIT] = tx_full;
+    assign status[IEEE_ST_RX_ATN_BIT] = rx_mem[rx_rd][8];
+    assign status[IEEE_ST_RX_AVAIL_BIT] = !rx_empty;
 
     logic rx_pop_req = 1'b0, tx_push_req = 1'b0, txs_push_req = 1'b0;
     logic mcu_tx_flush;
@@ -471,11 +468,12 @@ module ieee (
                 IEEE_REG_CTRL: begin
                     // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
                     // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
-                    wbp_data_o <= {6'b0, tx_room, enable};
+                    wbp_data_o <= (tx_room ? IEEE_CTRL_RD_TX_ROOM_MASK : DATA_WIDTH'(0))
+                                | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
-                        enable       <= wbp_data_i[0];
-                        flush        <= wbp_data_i[1];
-                        mcu_tx_flush <= wbp_data_i[2];   // flush data TX only
+                        enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
+                        flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
+                        mcu_tx_flush <= wbp_data_i[IEEE_CTRL_DATA_FLUSH_BIT];
                     end
                 end
                 IEEE_REG_STATUS: wbp_data_o <= status;

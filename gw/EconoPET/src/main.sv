@@ -109,12 +109,12 @@ module main (
         ieee_wb_sel = 1'b0;
 
         unique casez (wb_addr)
-            {WB_RAM_BASE,  {(WB_ADDR_WIDTH - $bits(WB_RAM_BASE)){1'b?}}}: ram_wb_sel = 1'b1;
-            {WB_REG_BASE,  {(WB_ADDR_WIDTH - $bits(WB_REG_BASE)){1'b?}}}: reg_wb_sel = 1'b1;
-            {WB_KBD_BASE,  {(WB_ADDR_WIDTH - $bits(WB_KBD_BASE)){1'b?}}}: kbd_wb_sel = 1'b1;
-            {WB_CRTC_BASE, {(WB_ADDR_WIDTH - $bits(WB_CRTC_BASE)){1'b?}}}: crtc_wb_sel = 1'b1;
-            {WB_BRAM_BASE, {(WB_ADDR_WIDTH - $bits(WB_BRAM_BASE)){1'b?}}}: bram_wb_sel = 1'b1;
-            {WB_IEEE_BASE, {(WB_ADDR_WIDTH - $bits(WB_IEEE_BASE)){1'b?}}}: ieee_wb_sel = 1'b1;
+            {WB_RAM_DECODE_PREFIX,  {(WB_ADDR_WIDTH - $bits(WB_RAM_DECODE_PREFIX)){1'b?}}}: ram_wb_sel = 1'b1;
+            {WB_REG_DECODE_PREFIX,  {(WB_ADDR_WIDTH - $bits(WB_REG_DECODE_PREFIX)){1'b?}}}: reg_wb_sel = 1'b1;
+            {WB_KBD_DECODE_PREFIX,  {(WB_ADDR_WIDTH - $bits(WB_KBD_DECODE_PREFIX)){1'b?}}}: kbd_wb_sel = 1'b1;
+            {WB_CRTC_DECODE_PREFIX, {(WB_ADDR_WIDTH - $bits(WB_CRTC_DECODE_PREFIX)){1'b?}}}: crtc_wb_sel = 1'b1;
+            {WB_BRAM_DECODE_PREFIX, {(WB_ADDR_WIDTH - $bits(WB_BRAM_DECODE_PREFIX)){1'b?}}}: bram_wb_sel = 1'b1;
+            {WB_IEEE_DECODE_PREFIX, {(WB_ADDR_WIDTH - $bits(WB_IEEE_DECODE_PREFIX)){1'b?}}}: ieee_wb_sel = 1'b1;
             default: /* do nothing */ ;
         endcase
     end

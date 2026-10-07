@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hardware_contract.h"
 #include "system_state.h"
 
 void driver_init();
@@ -40,9 +41,9 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength);
  */
 typedef enum {
     CPU_HALT  = 0,
-    CPU_READY = 1 << 0,
-    CPU_RESET = 1 << 1,
-    CPU_NMI   = 1 << 2,
+    CPU_READY = ECONOPET_REG_CPU_READY_MASK,
+    CPU_RESET = ECONOPET_REG_CPU_RESET_MASK,
+    CPU_NMI   = ECONOPET_REG_CPU_NMI_MASK,
 } cpu_state_t;
 
 // Set the CPU control flags.
@@ -54,9 +55,9 @@ cpu_state_t get_cpu(void);
 // In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
 // the FPGA.
 typedef enum {
-    CPU_PHYS_6502 = 0,    // socketed W65C02S (optional; may be depopulated)
-    CPU_SOFT_6809 = 1,    // soft MC6809 (SuperPET)
-    CPU_SOFT_6502 = 2,    // soft MOS 6502 (virtual PET CPU; the default)
+    CPU_PHYS_6502 = ECONOPET_CPU_SEL_PHYS_6502, // socketed W65C02S
+    CPU_SOFT_6809 = ECONOPET_CPU_SEL_SOFT_6809, // soft MC6809 (SuperPET)
+    CPU_SOFT_6502 = ECONOPET_CPU_SEL_SOFT_6502, // soft MOS 6502 (default)
     CPU_AUTO      = 0xFF, // firmware policy (NOT a REG_CPU_SEL value): use the
                           // physical 6502 if detected, else the soft 6502.
 } cpu_type_t;

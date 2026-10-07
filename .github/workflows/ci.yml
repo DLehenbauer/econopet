@@ -41,6 +41,7 @@ jobs:
           runCmd: |
             set -e
             cmake --preset default
+            # The all presets include the host system and hardware contract suite.
             cmake --build --preset all
             python3 -m unittest discover -s .github/scripts
             python3 .github/scripts/check-timing.py build/gw/outflow/EconoPET.timing.rpt

@@ -2,7 +2,7 @@
     "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 13,
+        "minor": 21,
         "patch": 0
     },
     "configurePresets": [
@@ -24,7 +24,7 @@
         {
             "name": "all",
             "displayName": "Build All",
-            "description": "Build all subprojects (ROM, firmware, gateware, tests, SD card)",
+            "description": "Build all subprojects (ROM, firmware, gateware, firmware/system tests, SD card)",
             "configurePreset": "default",
             "targets": ["all_projects"]
         },
@@ -41,6 +41,13 @@
             "description": "Build only the firmware unit tests",
             "configurePreset": "default",
             "targets": ["test_project"]
+        },
+        {
+            "name": "sys-test",
+            "displayName": "System Tests",
+            "description": "Build host fixtures and hardware contract tests",
+            "configurePreset": "default",
+            "targets": ["system_test_project"]
         },
         {
             "name": "gw",
@@ -101,6 +108,17 @@
             "filter": {
                 "include": {
                     "label": "fw"
+                }
+            }
+        },
+        {
+            "name": "sys",
+            "displayName": "System Tests",
+            "description": "Run host fixtures and hardware contract tests",
+            "inherits": "test-base",
+            "filter": {
+                "include": {
+                    "label": "sys"
                 }
             }
         },

@@ -39,3 +39,5 @@ gtest_discover_tests(econopet_system_tests
     TEST_PREFIX "system."
     DISCOVERY_TIMEOUT ${SYSTEM_DISCOVERY_TIMEOUT_SECONDS}
     PROPERTIES LABELS "system\\;host\\;unit" TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
+
+include(hardware_contract.cmake)

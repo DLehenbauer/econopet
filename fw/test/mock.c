@@ -7,7 +7,7 @@
 #include <check.h>
 
 #include "driver.h"
-#include "ieee/ieee_registers.h"
+#include "hardware_contract.h"
 #include "system_state.h"
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ static struct {
 
 // Identifies addresses belonging to the emulated FPGA IEEE register block.
 static bool mock_ieee_addr(uint32_t addr) {
-    return addr >= ADDR_IEEE && addr < ADDR_IEEE + IEEE_REGISTER_COUNT;
+    return addr >= ECONOPET_WB_IEEE_BASE_ADDR && addr < ECONOPET_WB_IEEE_BASE_ADDR + ECONOPET_IEEE_REG_COUNT;
 }
 
 // Flushes captured data, optionally clearing receive and status queues too.
@@ -107,21 +107,25 @@ void mock_ieee_clear_status(void) {
 uint8_t spi_read_at(uint32_t addr) {
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
-        if (addr == IEEE_REG_CTRL) {
-            return mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - TX_BURST_CHUNK
-                ? IEEE_CTRL_RD_TX_ROOM : 0;
+        if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
+            uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_ENABLE_MASK)
+                ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;
+            if (mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK) {
+                ctrl |= ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
+            }
+            return ctrl;
         }
-        if (addr == IEEE_REG_STATUS) {
+        if (addr == ECONOPET_WB_IEEE_STATUS_ADDR) {
             uint8_t status = 0;
             if (mock_ieee.rx_count != 0) {
-                status |= IEEE_ST_RX_AVAIL;
-                if (mock_ieee.rx[mock_ieee.rx_head].atn) status |= IEEE_ST_RX_ATN;
+                status |= ECONOPET_IEEE_ST_RX_AVAIL_MASK;
+                if (mock_ieee.rx[mock_ieee.rx_head].atn) status |= ECONOPET_IEEE_ST_RX_ATN_MASK;
             }
-            if (mock_ieee.data_count == MOCK_IEEE_TX_CAPACITY) status |= IEEE_ST_TX_FULL;
-            if (mock_ieee.data_count == 0) status |= IEEE_ST_TX_EMPTY;
+            if (mock_ieee.data_count == MOCK_IEEE_TX_CAPACITY) status |= ECONOPET_IEEE_ST_TX_FULL_MASK;
+            if (mock_ieee.data_count == 0) status |= ECONOPET_IEEE_ST_TX_EMPTY_MASK;
             return status;
         }
-        if (addr == IEEE_REG_RX) {
+        if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             return mock_ieee.rx_count == 0 ? 0 : mock_ieee.rx[mock_ieee.rx_head].byte;
         }
     }
@@ -141,26 +145,26 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
     // Apply FIFO flush/pop operations and capture outgoing bytes with EOI.
     if (mock_ieee_addr(addr)) {
-        if (addr == IEEE_REG_CTRL) {
+        if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
             mock_ieee.ctrl = data;
-            if (data & IEEE_CTRL_FLUSH) mock_ieee_flush(false);
-            if (data & IEEE_CTRL_DATA_FLUSH) mock_ieee_flush(true);
-        } else if (addr == IEEE_REG_RX) {
+            if (data & ECONOPET_IEEE_CTRL_FLUSH_MASK) mock_ieee_flush(false);
+            if (data & ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK) mock_ieee_flush(true);
+        } else if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             if (mock_ieee.rx_count != 0) {
                 mock_ieee.rx_head = (mock_ieee.rx_head + 1) % MOCK_IEEE_RX_CAPACITY;
                 mock_ieee.rx_count--;
             }
-        } else if (addr == IEEE_REG_TX || addr == IEEE_REG_TX_LAST) {
+        } else if (addr == ECONOPET_WB_IEEE_TX_ADDR || addr == ECONOPET_WB_IEEE_TX_LAST_ADDR) {
             ck_assert_uint_lt(mock_ieee.data_count, MOCK_IEEE_TX_CAPACITY);
             mock_ieee.data[mock_ieee.data_count++] = (mock_ieee_tx_byte_t) {
                 .byte = data,
-                .eoi = addr == IEEE_REG_TX_LAST,
+                .eoi = addr == ECONOPET_WB_IEEE_TX_LAST_ADDR,
             };
-        } else if (addr == IEEE_REG_TXS || addr == IEEE_REG_TXS_LAST) {
+        } else if (addr == ECONOPET_WB_IEEE_TXS_ADDR || addr == ECONOPET_WB_IEEE_TXS_LAST_ADDR) {
             ck_assert_uint_lt(mock_ieee.status_count, MOCK_IEEE_TXS_CAPACITY);
             mock_ieee.status[mock_ieee.status_count++] = (mock_ieee_tx_byte_t) {
                 .byte = data,
-                .eoi = addr == IEEE_REG_TXS_LAST,
+                .eoi = addr == ECONOPET_WB_IEEE_TXS_LAST_ADDR,
             };
         }
         return 0;

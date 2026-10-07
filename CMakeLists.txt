@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
 
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.21...3.27)
 
 # Root super-project that orchestrates building all subprojects
 project(EconoPET_SuperProject NONE)
@@ -31,6 +31,7 @@ option(BUILD_ROM "Build the 6502 ROM subproject" ON)
 option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
 option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
 option(BUILD_TESTS "Build the firmware unit tests" ON)
+option(BUILD_SYSTEM_TESTS "Build the host system and hardware contract tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
 option(BUILD_PRGS "Build the test programs" ON)
 
@@ -125,6 +126,23 @@ if(BUILD_TESTS)
 endif()
 
 # ============================================================================
+# System Tests Subproject (host fixtures and hardware contract)
+# ============================================================================
+if(BUILD_SYSTEM_TESTS)
+    ExternalProject_Add(system_test_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/test/system
+        BINARY_DIR ${SUPER_BUILD_DIR}/system
+        CMAKE_ARGS
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=Release
+            -DBUILD_TESTING=ON
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
+endif()
+
+# ============================================================================
 # SD Card Package (depends on ROM, FPGA, and Firmware)
 # ============================================================================
 if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
@@ -182,6 +200,7 @@ add_custom_target(all_projects
         $<$<BOOL:${BUILD_FPGA}>:fpga_project>
         $<$<BOOL:${BUILD_FIRMWARE}>:firmware_project>
         $<$<BOOL:${BUILD_TESTS}>:test_project>
+        $<$<BOOL:${BUILD_SYSTEM_TESTS}>:system_test_project>
         $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
         $<$<BOOL:${BUILD_PRGS}>:prgs_project>
     COMMENT "Building all enabled subprojects"
@@ -220,6 +239,20 @@ if(BUILD_TESTS)
         LABELS "fw;unit"
         DEPENDS test_project
         ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard;${ECONOPET_TEST_ENV}"
+    )
+endif()
+
+# Run the standalone suite so its host and contract test registration remains authoritative.
+if(BUILD_SYSTEM_TESTS)
+    add_test(
+        NAME system_tests
+        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system
+            --output-on-failure --no-tests=error
+    )
+    set_tests_properties(system_tests PROPERTIES
+        LABELS "sys;system;host;contract"
+        TIMEOUT 300
+        ENVIRONMENT "${ECONOPET_TEST_ENV}"
     )
 endif()
 

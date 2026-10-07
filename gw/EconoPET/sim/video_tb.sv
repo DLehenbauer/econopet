@@ -79,12 +79,13 @@ module video_tb;
     logic        h_sync;
     logic        v_sync;
     logic        dotgen_video;
+    logic        config_crt = CONFIG_CRT_CRTC;
 
     video video (
         .clk8_en_i(clk8_en),
         .clk16_en_i(clk16_en),
 
-        .config_crt_i(1'b0),    // 0 = 12"/CRTC, 1 = 9"/non-CRTC
+        .config_crt_i(config_crt),
 
         // Wishbone controller
         .wb_clock_i(sys_clock),
@@ -186,6 +187,21 @@ module video_tb;
         end
     endtask
 
+    // Check registered video and horizontal-sync input polarity for both CRT types.
+    task test_crt_polarity(input logic crt);
+        localparam POLARITY_TEST_CYCLES = 16;
+        logic expected_video;
+        config_crt = crt;
+        repeat (POLARITY_TEST_CYCLES) begin
+            @(negedge sys_clock);
+            expected_video = video.dotgen_video ^ (crt == CONFIG_CRT_FIXED);
+            `assert_equal(video.h_delay.data_i, !video.crtc_h_sync ^ (crt == CONFIG_CRT_FIXED));
+            @(posedge sys_clock);
+            #1;
+            `assert_equal(dotgen_video, expected_video);
+        end
+    endtask
+
     task run;
         integer r;
         logic [DATA_WIDTH-1:0] value;
@@ -246,6 +262,10 @@ module video_tb;
 
         @(posedge v_sync);
         $display("[%t] VSYNC at %0.2f Hz", $time, stopwatch.freq_hz());
+
+        // Exercise both electrical polarities after the normal timing checks.
+        test_crt_polarity(CONFIG_CRT_FIXED);
+        test_crt_polarity(CONFIG_CRT_CRTC);
 
     endtask
 

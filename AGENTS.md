@@ -30,6 +30,8 @@ cmake --build --preset fw-test      # Build firmware tests
 ctest --preset fw --parallel        # Run firmware tests
 ctest --preset gw --parallel        # Run gateware simulations (fast)
 cmake --build --preset gw           # Build FPGA bitstream (slow, ~2 min)
+cmake --build --preset sys-test     # Build host fixtures and hardware contract tests
+ctest --preset sys --parallel       # Run host fixtures and hardware contract tests
 ```
 
 ## Code Conventions

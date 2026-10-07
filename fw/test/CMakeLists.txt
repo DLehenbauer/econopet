@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_SUPPORT_DIR}/d64_fixture.c
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
+    ${TEST_DIR}/system_state_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/window_test.c
 )

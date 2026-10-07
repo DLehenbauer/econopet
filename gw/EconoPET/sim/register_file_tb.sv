@@ -145,17 +145,19 @@ module register_file_tb;
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b1);
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
 
-        // Test video register with all combinations of col_80_mode and ram_mask
-        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b00);
-        test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'b00);
-        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b01);
-        test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b10);
-        test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'b11);
+        // Check the wire field independently and exercise every legal encoding.
+        `assert_equal(REG_VIDEO_RAM_MASK, 8'h06);
+        for (int unsigned ram_mask = 0; ram_mask < (1 << $bits(video_ram_mask)); ram_mask++) begin
+            test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'(ram_mask));
+            test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'(ram_mask));
+        end
         test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b00);
 
-        test_status(/* graphics: */ 1'b0, /* crt: */ 1'b0, /* keyboard: */ 1'b1);
-        test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);
-        test_status(/* graphics: */ 1'b1, /* crt: */ 1'b0, /* keyboard: */ 1'b0);
+        // Configuration status must preserve every pair of named raw pin levels.
+        test_status(1'b0, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_GRAPHICS);
+        test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_BUSINESS);
+        test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_GRAPHICS);
+        test_status(1'b1, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_BUSINESS);
 
         // Breakpoint: BP_HALT appears in status register
         bp_halted = 1'b1;

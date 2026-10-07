@@ -78,7 +78,7 @@ module video_crtc_reg (
     end
 
     always_ff @(posedge wb_clock_i) begin
-        if (config_crt_i) begin
+        if (config_crt_i == CONFIG_CRT_FIXED) begin
             r0_h_total_o       <= 8'd63;
             r1_h_displayed_o   <= 8'd40;
             r2_h_sync_pos_o    <= 8'd48;
