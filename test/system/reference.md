@@ -2,6 +2,14 @@
 
 ## Building fixture tests
 
+Build production with `RelWithDebInfo`. Build tests, simulator integration,
+frameworks, and their dependencies with `Debug`, including production sources
+compiled for host tests. Root presets apply this split.
+
+Build Verilator-generated models and runtime separately with optimized
+`RelWithDebInfo` flags and SV assertions enabled. Keep linked test, framework,
+and firmware sources in `Debug`, without model optimization flags or `NDEBUG`.
+
 The root presets require CMake 3.21 or later and build and run this suite,
 including the hardware contract test:
 
@@ -24,7 +32,7 @@ The hardware contract consistency test requires Icarus Verilog (`iverilog`
 and `vvp`). It elaborates only the production constants, not a simulated board.
 
 ```sh
-cmake -S test/system -B build/host-fixtures -G Ninja
+cmake -S test/system -B build/host-fixtures -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/host-fixtures
 ctest --test-dir build/host-fixtures --output-on-failure
 ```

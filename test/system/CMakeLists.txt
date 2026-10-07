@@ -3,6 +3,13 @@
 
 cmake_minimum_required(VERSION 3.20...3.31)
 project(econopet-system-tests LANGUAGES C CXX)
+# Frameworks and fixtures always retain their Debug-only paranoid checks.
+if("${CMAKE_BUILD_TYPE}" STREQUAL "")
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build configuration" FORCE)
+endif()
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(FATAL_ERROR "Host system tests require CMAKE_BUILD_TYPE=Debug")
+endif()
 include(CTest)
 
 # Compile transport-independent fixtures without a board or firmware runtime.
