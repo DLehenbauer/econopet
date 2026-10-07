@@ -72,6 +72,8 @@ target_link_libraries(${PROJECT_NAME}
 # Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen)
+# Preserve useful stack frames in Debug tests.
+target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")
 
 # Generate version header in build directory

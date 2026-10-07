@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
 
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.21...3.27)
 
 # Root super-project that orchestrates building all subprojects
 project(EconoPET_SuperProject NONE)
@@ -47,7 +47,7 @@ if(BUILD_ROM)
         BINARY_DIR ${SUPER_BUILD_DIR}/rom
         CMAKE_ARGS
             -G Ninja
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
@@ -111,8 +111,6 @@ if(BUILD_TESTS)
         -DPICO_PLATFORM=host
         -DPICO_NO_HARDWARE=1
         -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
-        "-DCMAKE_C_FLAGS_DEBUG=-ggdb -fno-omit-frame-pointer -fno-inline"
-        "-DCMAKE_CXX_FLAGS_DEBUG=-ggdb -fno-omit-frame-pointer -fno-inline"
     )
     
     ExternalProject_Add(test_project
@@ -134,7 +132,7 @@ if(BUILD_SYSTEM_TESTS)
         BINARY_DIR ${SUPER_BUILD_DIR}/system
         CMAKE_ARGS
             -G Ninja
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Debug
             -DBUILD_TESTING=ON
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""

@@ -151,6 +151,76 @@ static void teardown(void) {
     test_clear_files();
 }
 
+// Checks enable readback independently of the data FIFO's burst-room threshold.
+START_TEST(test_mock_ctrl_readback) {
+    const size_t burst_limit = MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK;
+    const uint8_t enabled_room =
+        ECONOPET_IEEE_CTRL_RD_ENABLE_MASK | ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
+
+    // Enable and disable while the empty FIFO has room for a whole burst.
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK);
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, ECONOPET_IEEE_CTRL_ENABLE_MASK);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), enabled_room);
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK);
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, ECONOPET_IEEE_CTRL_ENABLE_MASK);
+
+    // The last complete burst fits at the threshold, but not one byte beyond it.
+    for (size_t index = 0; index < burst_limit; index++) {
+        spi_write_at(ECONOPET_WB_IEEE_TX_ADDR, 0);
+    }
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), enabled_room);
+    spi_write_at(ECONOPET_WB_IEEE_TX_ADDR, 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_ENABLE_MASK);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_ENABLE_MASK);
+
+    // Disabling must not manufacture room, and draining must not re-enable.
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), 0);
+    mock_ieee_clear_data();
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK);
+}
+END_TEST
+
+// Checks both flush commands and ensures their write-only bits never leak into reads.
+START_TEST(test_mock_ctrl_flush_readback) {
+    const uint8_t flush_commands[] = {
+        ECONOPET_IEEE_CTRL_FLUSH_MASK,
+        ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK,
+    };
+    const uint8_t enable_flags[] = { 0, ECONOPET_IEEE_CTRL_ENABLE_MASK };
+    const size_t beyond_burst_limit = MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK + 1;
+
+    for (size_t flush = 0; flush < count_of(flush_commands); flush++) {
+        for (size_t enable = 0; enable < count_of(enable_flags); enable++) {
+            const uint8_t enabled = enable_flags[enable] ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;
+            const bool flush_all = flush_commands[flush] == ECONOPET_IEEE_CTRL_FLUSH_MASK;
+
+            // Populate every FIFO before replacing enable and issuing the flush.
+            mock_reset();
+            spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, ECONOPET_IEEE_CTRL_ENABLE_MASK);
+            mock_ieee_enqueue_rx(false, 0);
+            spi_write_at(ECONOPET_WB_IEEE_TX_ADDR, 0);
+            spi_write_at(ECONOPET_WB_IEEE_TXS_ADDR, 0);
+            spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, enable_flags[enable] | flush_commands[flush]);
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR),
+                enabled | ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK);
+            ck_assert_uint_eq(mock_ieee_data_count(), 0);
+            ck_assert_uint_eq(mock_ieee_status_count(), flush_all ? 0 : 1);
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK,
+                flush_all ? 0 : ECONOPET_IEEE_ST_RX_AVAIL_MASK);
+
+            // Refilling removes room even when the stored FLUSH bit shares its encoding.
+            for (size_t index = 0; index < beyond_burst_limit; index++) {
+                spi_write_at(ECONOPET_WB_IEEE_TX_ADDR, 0);
+            }
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), enabled);
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), enabled);
+        }
+    }
+}
+END_TEST
+
 // ---------------------------------------------------------------------------
 // Sequential files and status channel
 // ---------------------------------------------------------------------------
@@ -1102,6 +1172,8 @@ Suite* ieee_drive_suite(void) {
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("d64");
     tcase_add_checked_fixture(test_case, setup, teardown);
+    tcase_add_test(test_case, test_mock_ctrl_readback);
+    tcase_add_test(test_case, test_mock_ctrl_flush_readback);
     tcase_add_test(test_case, test_shared_format_constants);
     tcase_add_test(test_case, test_mount_path_boundary);
     // Cover sequential transfers, status, addressing, and unit isolation.

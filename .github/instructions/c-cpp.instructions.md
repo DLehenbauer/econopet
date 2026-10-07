@@ -10,6 +10,17 @@ firmware, shared test support, and system integration tests. Follow additional
 target-specific instructions for toolchain and platform requirements. Do not
 rewrite external dependencies to enforce these conventions.
 
+## Build
+
+- Build production with `RelWithDebInfo`.
+- Build tests, simulator integration, frameworks, and their dependencies with
+  `Debug`, including production sources compiled for tests.
+- Compile Verilator-generated models and runtime separately with optimized
+  `RelWithDebInfo` flags (Verilator `-O3`, C++ `-O3`, native CPU tuning, and LTO).
+  Preserve debug symbols and SV assertions. Keep linked test, framework, and
+  firmware sources in `Debug`. Do not propagate model flags or `NDEBUG` to them.
+- Do not add Release builds or cross-configuration matrices, or undefine `NDEBUG`.
+
 ## Header File Conventions
 
 - `#pragma once` must be the first non-comment line

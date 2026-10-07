@@ -61,6 +61,7 @@
 
 // Video column mode and RAM size field (See common_pkg.sv for more details)
 #define ECONOPET_REG_VIDEO_RAM_MASK_LO_BIT 1u
+#define ECONOPET_REG_VIDEO_RAM_MASK 0x06u
 #define ECONOPET_REG_VIDEO_COL_80_MASK 0x01u
 
 // Breakpoint halt-clear control (See common_pkg.sv for more details)

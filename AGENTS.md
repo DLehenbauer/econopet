@@ -21,7 +21,17 @@ Key interfaces:
 - [gw/EconoPET/src/spi.sv](gw/EconoPET/src/spi.sv) - SPI protocol (gateware side)
 - [fw/src/hw.h](fw/src/hw.h) - GPIO and hardware pin definitions
 
-## Build Commands
+## Build
+
+Build production with CMake `RelWithDebInfo`. Build tests, simulator integration, frameworks,
+and their dependencies with `Debug`, including production sources compiled for
+tests. Use root presets to apply this split. Do not add Release builds or
+cross-configuration test matrices.
+
+Build Verilator-generated models and runtime separately with optimized
+`RelWithDebInfo` flags (Verilator optimization, native CPU tuning, and LTO).
+Preserve SV assertions. Keep linked test, framework, and firmware code in
+`Debug`. Do not propagate model optimization flags or `NDEBUG` to those sources.
 
 ```sh
 cmake --preset default              # Configure (run first)

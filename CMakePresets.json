@@ -2,7 +2,7 @@
     "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 13,
+        "minor": 21,
         "patch": 0
     },
     "configurePresets": [
@@ -13,6 +13,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "ECONOPET_MEDIA_DIR": {
                     "type": "PATH",
                     "value": "$env{ECONOPET_MEDIA_DIR}"

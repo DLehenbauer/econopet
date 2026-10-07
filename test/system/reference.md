@@ -2,7 +2,16 @@
 
 ## Building fixture tests
 
-The root presets build and run this suite, including the hardware contract test:
+Build production with `RelWithDebInfo`. Build tests, simulator integration,
+frameworks, and their dependencies with `Debug`, including production sources
+compiled for host tests. Root presets apply this split.
+
+Build Verilator-generated models and runtime separately with optimized
+`RelWithDebInfo` flags and SV assertions enabled. Keep linked test, framework,
+and firmware sources in `Debug`, without model optimization flags or `NDEBUG`.
+
+The root presets require CMake 3.21 or later and build and run this suite,
+including the hardware contract test:
 
 ```sh
 cmake --preset default
@@ -17,11 +26,13 @@ generated files in `build/system`. The standalone commands below use
 The shared D64 fixtures and their C++ tests run without Verilator, a simulated
 board, ROM media, or firmware transport.
 
+Standalone builds require CMake 3.20 or later.
+
 The hardware contract consistency test requires Icarus Verilog (`iverilog`
 and `vvp`). It elaborates only the production constants, not a simulated board.
 
 ```sh
-cmake -S test/system -B build/host-fixtures -G Ninja
+cmake -S test/system -B build/host-fixtures -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/host-fixtures
 ctest --test-dir build/host-fixtures --output-on-failure
 ```
@@ -59,6 +70,10 @@ Use unsigned literals for every C contract definition, including addresses,
 masks, and counts. Keep derivations in RTL, where applicable. The consistency
 test checks the compiled C values against elaborated RTL, keeping macro expansion
 simple and hardware values easy to inspect without duplicating construction logic.
+
+The video RAM field mask derives from both RTL bit boundaries and is used by
+firmware to reject values that would spill outside the field before encoding.
+This checks the complete field layout without exporting an unused high-bit index.
 
 `system.HardwareContract.MatchesCommonPackage` compares compiled C values
 with independently elaborated SystemVerilog values using a CMake runner.

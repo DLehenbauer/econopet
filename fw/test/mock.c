@@ -108,8 +108,12 @@ uint8_t spi_read_at(uint32_t addr) {
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
-            return mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK
-                ? ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK : 0;
+            uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_ENABLE_MASK)
+                ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;
+            if (mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK) {
+                ctrl |= ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
+            }
+            return ctrl;
         }
         if (addr == ECONOPET_WB_IEEE_STATUS_ADDR) {
             uint8_t status = 0;
