@@ -42,7 +42,11 @@ for VERILATOR_ONLY_TESTBENCH in "${VERILATOR_ONLY_TESTBENCHES[@]}"; do
     fi
 done
 
-verilator --binary --timing -j "$VERILATOR_JOBS" \
+# Optimize this generated-only executable. Compile integrated C/C++ separately in Debug.
+verilator --binary --timing --assert -O3 -j "$VERILATOR_JOBS" \
+    -CFLAGS "-g -DNDEBUG -march=native -flto" \
+    -LDFLAGS "-flto" \
+    -MAKEFLAGS "OPT_FAST=-O3 OPT_SLOW=-O3 OPT_GLOBAL=-O3" \
     --x-assign unique --x-initial unique \
     -Wno-fatal -Wno-lint -Wno-style \
     --timescale 1ns/1ps \

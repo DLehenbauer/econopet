@@ -3,6 +3,16 @@
 `./verilate.sh TEST_NAME [RAND_RESET]` compiles a testbench with
 `verilator --binary --timing` and runs it. Verilator 5.028+.
 
+Build generated models and the Verilator runtime with optimized
+`RelWithDebInfo` flags: Verilator `-O3`, C++ `-O3 -g -DNDEBUG`, native CPU tuning,
+and link-time optimization. Keep SV assertions enabled with `--assert`.
+These locally built executables target the build host, not portable distribution.
+Avoid unsafe math optimizations that change simulation semantics.
+
+Compile linked test, framework, and firmware sources separately in `Debug`
+(without `NDEBUG`). Do not apply generated-model flags to an entire integrated
+test target. The current script builds only generated code and the runtime.
+
 Verilator's compiled model runs the long boot-style benches orders of
 magnitude faster than iverilog, making them practical to run routinely.
 
