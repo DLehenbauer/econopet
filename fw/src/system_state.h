@@ -145,5 +145,8 @@ typedef struct system_state_s {
 
 extern system_state_t system_state;
 
+// Map configuration pin levels to firmware model enums (used by the FPGA driver).
+void system_state_set_config_pins(system_state_t* state, bool crt, bool keyboard);
+
 // Setter to keep derived fields in sync.
 void system_state_set_video_ram_mask(system_state_t* state, uint8_t video_ram_mask);

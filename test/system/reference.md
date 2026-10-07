@@ -2,8 +2,23 @@
 
 ## Building fixture tests
 
+The root presets build and run this suite, including the hardware contract test:
+
+```sh
+cmake --preset default
+cmake --build --preset sys-test
+ctest --preset sys
+```
+
+Both `all` presets include this suite, so it runs in CI. Root builds place its
+generated files in `build/system`. The standalone commands below use
+`build/host-fixtures` instead.
+
 The shared D64 fixtures and their C++ tests run without Verilator, a simulated
 board, ROM media, or firmware transport.
+
+The hardware contract consistency test requires Icarus Verilog (`iverilog`
+and `vvp`). It elaborates only the production constants, not a simulated board.
 
 ```sh
 cmake -S test/system -B build/host-fixtures -G Ninja
@@ -13,6 +28,61 @@ ctest --test-dir build/host-fixtures --output-on-failure
 
 The firmware Check tests also use the shared C builder. Build and run those
 with `cmake --build --preset fw-test` and `ctest --preset fw`.
+
+## Shared hardware contract
+
+[`hardware_contract.h`](../../fw/src/hardware_contract.h) owns the
+SDK-independent C/C++ hardware encodings used by production firmware.
+Corresponding definitions in
+[`common_pkg.sv`](../../gw/EconoPET/src/common_pkg.sv) have the same names
+without the `ECONOPET_` C namespace prefix and are grouped between
+`BEGIN SHARED HARDWARE CONTRACT` and `END SHARED HARDWARE CONTRACT`.
+`_WIDTH` counts bits, `_BIT` is a bit index, `_MASK` is a bit mask, and
+`_ADDR` is a full byte address. `REG_*` values are indices, and
+`WB_*_DECODE_PREFIX` values are decode prefixes (not full addresses).
+`WB_*_BASE_ADDR` values are full window addresses.
+
+The C header exports values used by firmware and the host framework, not every
+RTL definition. Decode prefixes and other RTL-only construction details stay
+in `common_pkg.sv`. The contract covers data/address widths, Wishbone windows,
+register addresses, control/status masks, CPU selections, configuration pin levels,
+SPI encodings, IEEE register bounds and addresses, and the
+IEEE TX burst capacity guaranteed by the room indication. Control-read and
+control-write masks are distinct. IEEE status bit 7 means talk starvation,
+not RX EOI. Firmware policy such as `CPU_AUTO`, and firmware model enums with
+different encodings from configuration pins, are not hardware values.
+Firmware maps configuration pin levels through `system_state_set_config_pins`,
+while RTL uses the named CRT level for fixed timings and output polarity.
+Keyboard status forwards the raw pin level without interpreting it.
+
+Use unsigned literals for every C contract definition, including addresses,
+masks, and counts. Keep derivations in RTL, where applicable. The consistency
+test checks the compiled C values against elaborated RTL, keeping macro expansion
+simple and hardware values easy to inspect without duplicating construction logic.
+
+`system.HardwareContract.MatchesCommonPackage` compares compiled C values
+with independently elaborated SystemVerilog values using a CMake runner.
+Discovery uses the GNU/Clang C preprocessor, accepting legal whitespace,
+comments, and line continuations. Every exported `ECONOPET_*` macro must be
+object-like, use an uppercase name, and contain an unsigned decimal or hexadecimal
+literal with a `u` suffix. Unsupported exports fail configuration instead of
+escaping coverage. A missing RTL counterpart fails compilation and a changed
+value fails CTest. `system.HardwareContract.Discovery` tests these discovery rules.
+Changing either file rebuilds the relevant evaluator.
+
+Run through CTest so the CMake runner checks evaluator execution and compares
+their complete named output:
+
+```sh
+cmake --build build/host-fixtures
+ctest --test-dir build/host-fixtures \
+  -R '^system\.HardwareContract\.' --output-on-failure
+```
+
+The generated `build/host-fixtures/hardware_contract_values.c` and
+`build/host-fixtures/hardware_contract_tb.sv` files expose each evaluated
+constant for review. The comparison itself is in
+[`test.cmake`](hardware_contract/test.cmake).
 
 ## Reusable disk-image fixtures
 

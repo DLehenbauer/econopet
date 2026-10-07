@@ -6,16 +6,18 @@
 
 #include "driver.h"
 #include "fatal.h"
+#include "hardware_contract.h"
 #include "log/log.h"
 
-// SRAM address range (128KB)
-#define SRAM_ADDR_MIN 0x00000
-#define SRAM_ADDR_MAX 0x1FFFF
+// SRAM address range (128KB).
+#define SRAM_ADDR_MIN ECONOPET_WB_RAM_BASE_ADDR
+#define SRAM_ADDR_MAX (SRAM_ADDR_MIN + (1u << ECONOPET_RAM_ADDR_WIDTH) - 1u)
 
 // BRAM address range (4KB character ROM)
-// WB_BRAM_BASE = 5'b01101, followed by 15 zeros = 0x68000
-#define BRAM_ADDR_MIN 0x68000
-#define BRAM_ADDR_MAX 0x68FFF
+#define BRAM_ADDR_MIN ECONOPET_WB_BRAM_BASE_ADDR
+#define BRAM_ADDR_MAX (BRAM_ADDR_MIN + (1u << ECONOPET_BRAM_ADDR_WIDTH) - 1u)
+
+static const int8_t data_bit_max = ECONOPET_DATA_WIDTH - 1u;
 
 // Current test range (set by test functions)
 static int32_t addr_min;
@@ -34,7 +36,7 @@ void check_bit(uint32_t addr, uint8_t actual_byte, uint8_t bit_index, uint8_t ex
 
 uint8_t toggle_bit(uint32_t addr, uint8_t byte, uint8_t bit_index, uint8_t expected_bit) {
     assert(addr_min <= addr && addr <= addr_max);
-    assert(bit_index <= 7);
+    assert(bit_index <= data_bit_max);
 
     check_bit(addr, byte, bit_index, expected_bit);
     return byte ^ (1 << bit_index);
@@ -47,17 +49,17 @@ typedef void march_element_fn(int32_t addr, int8_t bit, last_read_fn* pLastReadF
 void test_each_bit_ascending(march_element_fn* pFn) {
     spi_read_seek(addr_min);    
     for (int32_t addr = addr_min; addr <= addr_max; addr++) {
-        for (int8_t bit = 0; bit < 7; bit++) {
+        for (int8_t bit = 0; bit < data_bit_max; bit++) {
             pFn(addr, bit, spi_read_same);
         }
-        pFn(addr, 7, addr != addr_max ? spi_read_next : spi_read_same);
+        pFn(addr, data_bit_max, addr != addr_max ? spi_read_next : spi_read_same);
     }
 }
 
 void test_each_bit_descending(march_element_fn* pFn) {
     spi_read_seek(addr_max);
     for (int32_t addr = addr_max; addr >= addr_min; addr--) {
-        for (int8_t bit = 7; bit >= 1; bit--) {
+        for (int8_t bit = data_bit_max; bit >= 1; bit--) {
             pFn(addr, bit, spi_read_same);
         }
         pFn(addr, 0, addr != addr_min ? spi_read_prev : spi_read_same);

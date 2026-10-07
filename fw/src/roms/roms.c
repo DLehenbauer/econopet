@@ -3,6 +3,7 @@
 
 #include "driver.h"
 #include "fatal.h"
+#include "hardware_contract.h"
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
@@ -20,8 +21,8 @@ const uint8_t __in_flash(".rom_menu_ff00") rom_menu_ff00[] = {
 const uint8_t* const p_video_font_000 = rom_chars_e800;
 const uint8_t* const p_video_font_400 = rom_chars_e800 + 0x400;
 
-#define CHAR_ROM_SRAM_ADDRESS 0x68000
-#define CHAR_ROM_SRAM_SIZE 4096
+#define CHAR_ROM_SRAM_ADDRESS ECONOPET_WB_BRAM_BASE_ADDR
+#define CHAR_ROM_SRAM_SIZE (1u << ECONOPET_BRAM_ADDR_WIDTH)
 
 static uint8_t custom_char_rom[CHAR_ROM_SRAM_SIZE];
 

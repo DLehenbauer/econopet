@@ -153,9 +153,11 @@ module register_file_tb;
         test_video_reg(/* col_80_mode: */ 1'b1, /* ram_mask: */ 2'b11);
         test_video_reg(/* col_80_mode: */ 1'b0, /* ram_mask: */ 2'b00);
 
-        test_status(/* graphics: */ 1'b0, /* crt: */ 1'b0, /* keyboard: */ 1'b1);
-        test_status(/* graphics: */ 1'b0, /* crt: */ 1'b1, /* keyboard: */ 1'b0);
-        test_status(/* graphics: */ 1'b1, /* crt: */ 1'b0, /* keyboard: */ 1'b0);
+        // Configuration status must preserve every pair of named raw pin levels.
+        test_status(1'b0, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_GRAPHICS);
+        test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_BUSINESS);
+        test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_GRAPHICS);
+        test_status(1'b1, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_BUSINESS);
 
         // Breakpoint: BP_HALT appears in status register
         bp_halted = 1'b1;

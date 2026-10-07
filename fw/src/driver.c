@@ -12,51 +12,6 @@
 #include "hw.h"
 #include "usb/keyboard.h"
 
-//                           WMd_AAAA
-#define SPI_CMD_READ_AT    0b01000000
-#define SPI_CMD_READ_NEXT  0b00100000
-#define SPI_CMD_READ_PREV  0b01100000
-#define SPI_CMD_READ_SAME  0b00000000
-#define SPI_CMD_WRITE_AT   0b11000000
-#define SPI_CMD_WRITE_NEXT 0b10100000
-#define SPI_CMD_WRITE_PREV 0b11100000
-#define SPI_CMD_WRITE_SAME 0b10000000
-
-#define ADDR_KBD  (0b011 << 17)
-#define ADDR_CRTC (0b0101 << 16)
-
-// Register File
-#define ADDR_REG    (0b010 << 17)
-#define REG_STATUS  (ADDR_REG | 0x00000)
-#define REG_CPU     (ADDR_REG | 0x00001)
-#define REG_VIDEO   (ADDR_REG | 0x00002)
-
-// Breakpoint registers (REG_BP_CTL and REG_BP_ADDR_LO share the same address,
-// distinguished by write vs. read)
-#define REG_BP_CTL      (ADDR_REG | 0x00003)
-#define REG_BP_ADDR_LO  (ADDR_REG | 0x00003)
-#define REG_BP_ADDR_HI  (ADDR_REG | 0x00004)
-#define REG_CPU_SEL     (ADDR_REG | 0x00005)
-
-// Status Register
-#define REG_STATUS_GRAPHICS      (1 << 0)
-#define REG_STATUS_CRT           (1 << 1)
-#define REG_STATUS_KEYBOARD      (1 << 2)
-#define REG_STATUS_BP_HALT       (1 << 3)
-#define REG_STATUS_PHYS_CPU      (1 << 4) // Physical 6502 address activity seen
-
-// Breakpoint Control Register
-#define REG_BP_CTL_CLEAR (1 << 0)
-
-// CPU Control Register
-#define CPU_CONTROL_MASK (CPU_READY | CPU_RESET | CPU_NMI)
-
-// Video Control Register
-#define REG_VIDEO_80_COL_MODE   (1 << 0)
-#define REG_VIDEO_RAM_MASK_LO   (1 << 1)
-#define REG_VIDEO_RAM_MASK_HI   (1 << 2)
-#define REG_VIDEO_RAM_MASK_SHIFT 1       // Bit position where the 2-bit RAM mask starts
-
 /**
  * Begins an SPI command transaction with the FPGA.
  * 
@@ -112,7 +67,7 @@ static void cmd_end() {
  */
 void spi_read_seek(uint32_t addr) {
     // Upper 4 bits of the address are encoded in the command byte
-    const uint8_t cmd = SPI_CMD_READ_AT | (addr >> 16);
+    const uint8_t cmd = ECONOPET_SPI_CMD_READ_AT | (addr >> 16);
     const uint8_t addr_hi = addr >> 8;
     const uint8_t addr_lo = addr;
     const uint8_t tx[] = { cmd, addr_hi, addr_lo };
@@ -168,7 +123,7 @@ uint8_t spi_read_at(uint32_t addr) {
  * @return Data byte from the previously queued read operation
  */
 uint8_t spi_read_next() {
-    const uint8_t tx[1] = { SPI_CMD_READ_NEXT };
+    const uint8_t tx[1] = { ECONOPET_SPI_CMD_READ_NEXT };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -199,7 +154,7 @@ uint8_t spi_read_next() {
  * @return Data byte from the previously queued read operation
  */
 uint8_t spi_read_prev() {
-    const uint8_t tx[1] = { SPI_CMD_READ_PREV };
+    const uint8_t tx[1] = { ECONOPET_SPI_CMD_READ_PREV };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -230,7 +185,7 @@ uint8_t spi_read_prev() {
  * @return Data byte from the previously queued read operation
  */
 uint8_t spi_read_same() {
-    const uint8_t tx[1] = { SPI_CMD_READ_SAME };
+    const uint8_t tx[1] = { ECONOPET_SPI_CMD_READ_SAME };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -300,7 +255,7 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
  * @return The byte value from the previously queued read operation (or garbage if no read was queued)
  */
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
-    const uint8_t cmd = SPI_CMD_WRITE_AT | addr >> 16;
+    const uint8_t cmd = ECONOPET_SPI_CMD_WRITE_AT | addr >> 16;
     const uint8_t addr_hi = addr >> 8;
     const uint8_t addr_lo = addr;
     const uint8_t tx[] = { cmd, addr_hi, addr_lo, data };
@@ -320,7 +275,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
  * address pointer that is automatically incremented.
  * 
  * PROTOCOL:
- * TX: [SPI_CMD_WRITE_NEXT, data] (2 bytes)
+ * TX: [ECONOPET_SPI_CMD_WRITE_NEXT, data] (2 bytes)
  * RX: [previously_queued_read, garbage] (2 bytes)
  * 
  * The returned value (rx[0]) is the result of any previously queued READ operation.
@@ -338,7 +293,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
  * @return Previously queued read value (or garbage if no read was queued)
  */
 uint8_t spi_write_next(uint8_t data) {
-    const uint8_t tx [] = { SPI_CMD_WRITE_NEXT, data };
+    const uint8_t tx [] = { ECONOPET_SPI_CMD_WRITE_NEXT, data };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -355,7 +310,7 @@ uint8_t spi_write_next(uint8_t data) {
  * address pointer that is automatically decremented.
  * 
  * PROTOCOL:
- * TX: [SPI_CMD_WRITE_PREV, data] (2 bytes)
+ * TX: [ECONOPET_SPI_CMD_WRITE_PREV, data] (2 bytes)
  * RX: [previously_queued_read, garbage] (2 bytes)
  * 
  * The returned value (rx[0]) is the result of any previously queued READ operation.
@@ -370,7 +325,7 @@ uint8_t spi_write_next(uint8_t data) {
  * @return Previously queued read value (or garbage if no read was queued)
  */
 uint8_t spi_write_prev(uint8_t data) {
-    const uint8_t tx [] = { SPI_CMD_WRITE_PREV, data };
+    const uint8_t tx [] = { ECONOPET_SPI_CMD_WRITE_PREV, data };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -387,7 +342,7 @@ uint8_t spi_write_prev(uint8_t data) {
  * address pointer.
  * 
  * PROTOCOL:
- * TX: [SPI_CMD_WRITE_SAME, data] (2 bytes)
+ * TX: [ECONOPET_SPI_CMD_WRITE_SAME, data] (2 bytes)
  * RX: [previously_queued_read, garbage] (2 bytes)
  * 
  * The returned value (rx[0]) is the result of any previously queued READ operation.
@@ -402,7 +357,7 @@ uint8_t spi_write_prev(uint8_t data) {
  * @return Previously queued read value (or garbage if no read was queued)
  */
 uint8_t spi_write_same(uint8_t data) {
-    const uint8_t tx [] = { SPI_CMD_WRITE_SAME, data };
+    const uint8_t tx [] = { ECONOPET_SPI_CMD_WRITE_SAME, data };
     uint8_t rx[sizeof(tx)];
 
     cmd_start();
@@ -459,7 +414,7 @@ void spi_write_same_block(uint32_t addr, const uint8_t* const pSrc, size_t byteL
     cmd_start();
 
     // First byte carries the address (WRITE_AT).
-    const uint8_t tx0[] = { SPI_CMD_WRITE_AT | (uint8_t)(addr >> 16),
+    const uint8_t tx0[] = { ECONOPET_SPI_CMD_WRITE_AT | (uint8_t)(addr >> 16),
                             (uint8_t)(addr >> 8), (uint8_t)addr, *p++ };
     uint8_t rx0[sizeof(tx0)];
     spi_write_read_blocking(FPGA_SPI_INSTANCE, tx0, rx0, sizeof(tx0));
@@ -468,7 +423,7 @@ void spi_write_same_block(uint32_t addr, const uint8_t* const pSrc, size_t byteL
     // finish each write (stall low, command FSM rearmed) before the next.
     for (size_t i = 1; i < byteLength; i++) {
         while (gpio_get(SPI_STALL_GP));
-        const uint8_t tx[] = { SPI_CMD_WRITE_SAME, *p++ };
+        const uint8_t tx[] = { ECONOPET_SPI_CMD_WRITE_SAME, *p++ };
         uint8_t rx[sizeof(tx)];
         spi_write_read_blocking(FPGA_SPI_INSTANCE, tx, rx, sizeof(tx));
     }
@@ -577,7 +532,7 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
 /**
  * Controls the PET CPU state via the CPU control register.
  *
- * This function writes to REG_CPU, which controls three CPU signals:
+ * This function writes to ECONOPET_WB_CPU_ADDR, which controls three CPU signals:
  * - READY: CPU clock enable
  * - RESET: CPU reset signal
  * - NMI: Non-maskable interrupt
@@ -589,7 +544,7 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
  * @param state CPU control flags
  */
 void set_cpu(cpu_state_t state) {
-    spi_write_at(REG_CPU, (uint8_t)state);
+    spi_write_at(ECONOPET_WB_CPU_ADDR, (uint8_t)state);
 }
 
 /**
@@ -598,25 +553,25 @@ void set_cpu(cpu_state_t state) {
  * @return Current CPU control state.
  */
 cpu_state_t get_cpu(void) {
-    return (cpu_state_t)(spi_read_at(REG_CPU) & CPU_CONTROL_MASK);
+    return (cpu_state_t)(spi_read_at(ECONOPET_WB_CPU_ADDR) & ECONOPET_REG_CPU_MASK);
 }
 
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This
-// is its own register, so it survives the frequent REG_CPU reset/ready writes
+// is its own register, so it survives the frequent ECONOPET_WB_CPU_ADDR reset/ready writes
 // (set_cpu / pet_reset). No FPGA reconfiguration occurs -- the FPGA keeps
 // generating video, so the CRT never loses sync across a switch.
 void set_cpu_type(cpu_type_t cpu) {
-    spi_write_at(REG_CPU_SEL, (uint8_t) cpu);
+    spi_write_at(ECONOPET_WB_CPU_SEL_ADDR, (uint8_t) cpu);
 }
 
 // set_cpu_type plus the machine-type bit (SuperPET I/O for a 6502 too).
 // Plain set_cpu_type clears it, so the menu always boots a stock PET.
 void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
-    spi_write_at(REG_CPU_SEL, (uint8_t) cpu | (superpet_io ? 0x04 : 0x00));
+    spi_write_at(ECONOPET_WB_CPU_SEL_ADDR, (uint8_t) cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
 }
 
 // Run the physical CPU on a JMP-self at $0400 and check
-// REG_STATUS_PHYS_CPU. An empty socket leaves the bus static.
+// ECONOPET_REG_STATUS_PHYS_CPU_MASK. An empty socket leaves the bus static.
 static bool detect_physical_cpu(void) {
     spi_write_at(0x0400, 0x4C);   // JMP ...
     spi_write_at(0x0401, 0x00);   // ... $0400
@@ -628,9 +583,9 @@ static bool detect_physical_cpu(void) {
     set_cpu_type(CPU_PHYS_6502);   // arms detector
     set_cpu(CPU_READY);
     sleep_us(5000);
-    const uint8_t status = spi_read_at(REG_STATUS);
+    const uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
     set_cpu(CPU_RESET);  // halt again
-    return (status & REG_STATUS_PHYS_CPU) != 0;
+    return (status & ECONOPET_REG_STATUS_PHYS_CPU_MASK) != 0;
 }
 
 bool physical_cpu_present(void) {
@@ -646,36 +601,29 @@ bool physical_cpu_present(void) {
  * Reads the PET hardware configuration from the FPGA status register.
  * 
  * The FPGA reads physical DIP switches on the hardware to determine which
- * PET model variant is being emulated. This function reads REG_STATUS and
+ * PET model variant is being emulated. This function reads ECONOPET_WB_STATUS_ADDR and
  * decodes the DIP switch settings into the system_state structure.
  * 
  * Note: DIP switches are active low (0 = ON, 1 = OFF).
  * 
  * STATUS REGISTER BITS:
- * - REG_STATUS_CRT (bit 1): Video type
+ * - ECONOPET_REG_STATUS_CRT_MASK (bit 1): Video type
  *   0 = 12" CRTC display (20kHz, CRTC)
  *   1 = 9" fixed display (15kHz, non-CRTC)
  * 
- * - REG_STATUS_KEYBOARD (bit 2): Keyboard type  
+ * - ECONOPET_REG_STATUS_KEYBOARD_MASK (bit 2): Keyboard type
  *   0 = Business keyboard (no graphics characters)
  *   1 = Graphics keyboard (with graphics characters)
  * 
  * @param system_state Pointer to system state structure to populate with hardware config
  */
 void read_pet_model(system_state_t* const system_state) {
-    uint8_t status = spi_read_at(REG_STATUS);
+    uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
 
-    // Map DIP switch position to model flags. (Note that DIP switch is active low.)
-
-    // PET video type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
-    system_state->pet_video_type = (status & REG_STATUS_CRT) == 0
-        ? pet_video_type_crtc
-        : pet_video_type_fixed;
-
-    // PET keyboard type (0 = Business, 1 = Graphics)
-    system_state->pet_keyboard_model = (status & REG_STATUS_KEYBOARD) == 0
-        ? pet_keyboard_model_business
-        : pet_keyboard_model_graphics;
+    // Extract pin levels before translating to the firmware model enums.
+    system_state_set_config_pins(system_state,
+        (status & ECONOPET_REG_STATUS_CRT_MASK) != 0,
+        (status & ECONOPET_REG_STATUS_KEYBOARD_MASK) != 0);
 }
 
 /**
@@ -686,11 +634,11 @@ void read_pet_model(system_state_t* const system_state) {
  * 
  * Video control register bits:
  * 
- * - REG_VIDEO_80_COL_MODE (bit 0): Column mode
+ * - ECONOPET_REG_VIDEO_COL_80_MASK (bit 0): Column mode
  *   0 = 40 column mode
  *   1 = 80 column mode
  * 
- * - REG_VIDEO_RAM_MASK (bits 2:1): Video RAM size mask
+ * - Video RAM size field (bits 2:1, encoded at ECONOPET_REG_VIDEO_RAM_MASK_LO_BIT)
  *   00 = 1KB at $8000 (40 column monochrome)
  *   01 = 2KB at $8000 (80 column monochrome)
  *   10 = 1KB at $8000 + 1KB at $8800 (40 column color)
@@ -706,12 +654,12 @@ void write_pet_model(const system_state_t* const system_state) {
     uint8_t state = 0;
 
     if (system_state->pet_display_columns == pet_display_columns_80) {
-        state |= REG_VIDEO_80_COL_MODE;
+        state |= ECONOPET_REG_VIDEO_COL_80_MASK;
     }
 
-    state |= (system_state->video_ram_mask << REG_VIDEO_RAM_MASK_SHIFT);
+    state |= (system_state->video_ram_mask << ECONOPET_REG_VIDEO_RAM_MASK_LO_BIT);
 
-    spi_write_at(REG_VIDEO, state);
+    spi_write_at(ECONOPET_WB_VIDEO_ADDR, state);
 }
 
 /**
@@ -723,15 +671,15 @@ void write_pet_model(const system_state_t* const system_state) {
  * 
  * Operations performed:
  * 
- * 1. Write USB keyboard matrix to FPGA (ADDR_KBD)
+ * 1. Write USB keyboard matrix to FPGA (ECONOPET_WB_KBD_BASE_ADDR)
  *    - RP2040 scans USB keyboard and updates usb_key_matrix[]
  *    - FPGA reads this to inject key presses when the CPU reads $E812.
  * 
- * 2. Read PET keyboard matrix from FPGA (ADDR_KBD)
+ * 2. Read PET keyboard matrix from FPGA (ECONOPET_WB_KBD_BASE_ADDR)
  *    - Reads the current PET keyboard state as seen by the CPU.
  *    - This allows RP2040 to know which keys are pressed on the PET keyboard.
  * 
- * 3. Read CRTC registers from FPGA (ADDR_CRTC)
+ * 3. Read CRTC registers from FPGA (ECONOPET_WB_CRTC_BASE_ADDR)
  *    - CRTC (cathode ray tube controller) registers control video timing
  *    - Used by the RP2040 to emulate CRTC when generating DVI/TMDS video
  * 
@@ -740,29 +688,29 @@ void write_pet_model(const system_state_t* const system_state) {
  */
 void sync_state() {
     // Write USB keyboard matrix state to FPGA
-    spi_write(ADDR_KBD, usb_key_matrix, KEY_COL_COUNT);
+    spi_write(ECONOPET_WB_KBD_BASE_ADDR, usb_key_matrix, KEY_COL_COUNT);
 
     // Read PET keyboard matrix from FPGA
-    spi_read(ADDR_KBD, KEY_COL_COUNT, pet_key_matrix);
+    spi_read(ECONOPET_WB_KBD_BASE_ADDR, KEY_COL_COUNT, pet_key_matrix);
 
     // Read CRTC registers from FPGA
-    spi_read(ADDR_CRTC, CRTC_REG_COUNT, system_state.pet_crtc_registers);
+    spi_read(ECONOPET_WB_CRTC_BASE_ADDR, CRTC_REG_COUNT, system_state.pet_crtc_registers);
 
     // Read status register flags
-    uint8_t status = spi_read_at(REG_STATUS);
-    system_state.video_graphics_mode = (status & REG_STATUS_GRAPHICS) != 0
+    uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
+    system_state.video_graphics_mode = (status & ECONOPET_REG_STATUS_GRAPHICS_MASK) != 0
         ? video_graphics_mode_text
         : video_graphics_mode_graphics;
-    system_state.bp_halted = (status & REG_STATUS_BP_HALT) != 0;
+    system_state.bp_halted = (status & ECONOPET_REG_STATUS_BP_HALT_MASK) != 0;
 }
 
 uint16_t bp_hit_addr() {
-    uint8_t lo = spi_read_at(REG_BP_ADDR_LO);
-    uint8_t hi = spi_read_at(REG_BP_ADDR_HI);
+    uint8_t lo = spi_read_at(ECONOPET_WB_BP_LO_ADDR);
+    uint8_t hi = spi_read_at(ECONOPET_WB_BP_HI_ADDR);
     return ((uint16_t)hi << 8) | lo;
 }
 
 void bp_clear_halt() {
-    spi_write_at(REG_BP_CTL, REG_BP_CTL_CLEAR);
+    spi_write_at(ECONOPET_WB_BP_CTL_ADDR, ECONOPET_REG_BP_CTL_CLEAR_MASK);
     system_state.bp_halted = false;
 }

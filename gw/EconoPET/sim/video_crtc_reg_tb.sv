@@ -164,7 +164,7 @@ module video_crtc_reg_tb;
         wb.reset;
         cs = '0;
         we = '0;
-        config_crt = '0;
+        config_crt = CONFIG_CRT_CRTC;
 
         // Test 1: Write and read back all CRTC registers via Wishbone
         $display("[%t]   Test 1: Wishbone write, Wishbone read", $time);
@@ -221,7 +221,7 @@ module video_crtc_reg_tb;
 
         // Test 3: 9-inch VDU CRTC timing override
         $display("[%t]   Test 3: 9-inch VDU timing", $time);
-        config_crt = 1'b1;
+        config_crt = CONFIG_CRT_FIXED;
         @(posedge clock);
         @(negedge clock);
         `assert_equal(r0_h_total, 8'd63);                   // 64 us line period

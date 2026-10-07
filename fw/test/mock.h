@@ -7,9 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hardware_contract.h"
 #include "test_support.h"
 
-#define MOCK_RAM_SIZE 0x10000
+#define MOCK_RAM_SIZE (1u << ECONOPET_CPU_ADDR_WIDTH)
 #define MOCK_IEEE_RX_CAPACITY 32
 #define MOCK_IEEE_TX_CAPACITY 1024
 #define MOCK_IEEE_TXS_CAPACITY 32

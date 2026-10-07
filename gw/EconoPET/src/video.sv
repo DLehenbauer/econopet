@@ -236,6 +236,8 @@ module video (
     //  VSync: Active-L   Active-L
     //  Video: Active-L   Active-H
 
+    wire fixed_crt = config_crt_i == CONFIG_CRT_FIXED;
+
     // Adjust signal delay to match measurements from a 8032 60Hz.
     // H-Sync asserted 300ns before the end of the visible video line.
     delay #(
@@ -244,7 +246,7 @@ module video (
     ) h_delay (
         .clock_i(wb_clock_i),
         .reset_i(cpu_reset_i),
-        .data_i(!crtc_h_sync ^ config_crt_i),   // Adjust polarity based on CRT type
+        .data_i(!crtc_h_sync ^ fixed_crt),
         .data_o(h_sync_o)
     );
 
@@ -261,6 +263,6 @@ module video (
     );
 
     always_ff @(posedge wb_clock_i) begin
-        video_o <= dotgen_video ^ config_crt_i; // Adjust polarity based on CRT type
+        video_o <= dotgen_video ^ fixed_crt;
     end
 endmodule

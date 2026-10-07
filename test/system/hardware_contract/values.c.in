@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "hardware_contract.h"
+
+// Emit the C compiler's evaluated contract constants for comparison with RTL.
+int main(void) {
+@HARDWARE_CONTRACT_C_OUTPUT@
+    return EXIT_SUCCESS;
+}
