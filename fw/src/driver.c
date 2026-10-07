@@ -647,6 +647,12 @@ void read_pet_model(system_state_t* const system_state) {
  * @param system_state Pointer to system state containing display configuration
  */
 void write_pet_model(const system_state_t* const system_state) {
+    // Reject values that would spill outside the hardware's video RAM field.
+    const unsigned int video_ram_mask_max =
+        ECONOPET_REG_VIDEO_RAM_MASK >> ECONOPET_REG_VIDEO_RAM_MASK_LO_BIT;
+    vet(system_state->video_ram_mask <= video_ram_mask_max,
+        "system_state.video_ram_mask (%u) exceeds hardware field maximum (%u)",
+        system_state->video_ram_mask, video_ram_mask_max);
     // Ensure derived fields are consistent.
     vet(system_state->video_ram_bytes == (size_t)(system_state->video_ram_mask + 1) * 1024u,
         "system_state.video_ram_bytes (%zu) inconsistent with video_ram_mask (%u)",

@@ -31,8 +31,8 @@ package common_pkg;
     //         $20000-$3ffff -> $00000-$1ffff
     //
     //       This allows SPI / wishbone reads and writes to "wrap-around".  This
-    //       is particularily useful for 'read_next' at 0x1ffff, which otherwise
-    //       would stall indefinately because attempting to read $20000 would
+    //       is particularly useful for 'read_next' at 0x1ffff, which otherwise
+    //       would stall indefinitely because attempting to read $20000 would
     //       deselect the wishbone RAM peripheral.
     localparam WB_RAM_DECODE_PREFIX  = 2'b00;
     localparam WB_REG_DECODE_PREFIX  = 4'b0100;
@@ -107,6 +107,8 @@ package common_pkg;
     localparam logic [DATA_WIDTH-1:0] REG_VIDEO_COL_80_MASK = 1 << REG_VIDEO_COL_80_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK_LO_MASK = 1 << REG_VIDEO_RAM_MASK_LO_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK_HI_MASK = 1 << REG_VIDEO_RAM_MASK_HI_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_VIDEO_RAM_MASK =
+        ((1 << (REG_VIDEO_RAM_MASK_HI_BIT - REG_VIDEO_RAM_MASK_LO_BIT + 1)) - 1) << REG_VIDEO_RAM_MASK_LO_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_BP_CTL_CLEAR_MASK = 1 << REG_BP_CTL_CLEAR_BIT;
 
     // Configuration pin levels, not firmware model enum values.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
 
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.21...3.27)
 
 # Root super-project that orchestrates building all subprojects
 project(EconoPET_SuperProject NONE)

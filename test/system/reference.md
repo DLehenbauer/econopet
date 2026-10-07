@@ -2,7 +2,8 @@
 
 ## Building fixture tests
 
-The root presets build and run this suite, including the hardware contract test:
+The root presets require CMake 3.21 or later and build and run this suite,
+including the hardware contract test:
 
 ```sh
 cmake --preset default
@@ -16,6 +17,8 @@ generated files in `build/system`. The standalone commands below use
 
 The shared D64 fixtures and their C++ tests run without Verilator, a simulated
 board, ROM media, or firmware transport.
+
+Standalone builds require CMake 3.20 or later.
 
 The hardware contract consistency test requires Icarus Verilog (`iverilog`
 and `vvp`). It elaborates only the production constants, not a simulated board.
@@ -59,6 +62,10 @@ Use unsigned literals for every C contract definition, including addresses,
 masks, and counts. Keep derivations in RTL, where applicable. The consistency
 test checks the compiled C values against elaborated RTL, keeping macro expansion
 simple and hardware values easy to inspect without duplicating construction logic.
+
+The video RAM field mask derives from both RTL bit boundaries and is used by
+firmware to reject values that would spill outside the field before encoding.
+This checks the complete field layout without exporting an unused high-bit index.
 
 `system.HardwareContract.MatchesCommonPackage` compares compiled C values
 with independently elaborated SystemVerilog values using a CMake runner.

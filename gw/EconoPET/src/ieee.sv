@@ -189,7 +189,7 @@ module ieee (
     // Burst-fill flow control: the MCU fills the FIFO with batched WRITE_SAME
     // bursts (one held-low CS transaction per chunk) to keep up with the 1MHz
     // CPU drain. 'tx_room' tells the MCU there is space for a whole chunk, so
-    // it can push TX_BURST_CHUNK bytes without checking full per byte and
+    // it can push IEEE_TX_BURST_CHUNK bytes without checking full per byte and
     // without risking an overflow (over-full writes are silently dropped).
     wire tx_room = tx_count <= ($clog2(TX_DEPTH)+1)'(TX_DEPTH - IEEE_TX_BURST_CHUNK);
 
