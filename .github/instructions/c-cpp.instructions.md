@@ -21,6 +21,20 @@ rewrite external dependencies to enforce these conventions.
   firmware sources in `Debug`. Do not propagate model flags or `NDEBUG` to them.
 - Do not add Release builds or cross-configuration matrices, or undefine `NDEBUG`.
 
+## Invariants and Test Expectations
+
+- Prefer compile-time `static_assert` and `_Static_assert` checks when possible.
+- Enforce production-required invariants with `vet()` from `fatal.h` and a
+  useful diagnostic.
+- Use `assert()` for sufficiently test-covered paranoid production checks
+  (active in Debug tests, elided from production).
+- Use GoogleTest `EXPECT_*`/`ASSERT_*` or Check `ck_assert_*` for expectations
+  and helper checks within the respective framework.
+- Keep required validation, work, and side effects outside assertions and
+  `NDEBUG` guards.
+- Fail stubs explicitly with useful diagnostics. Never return placeholders
+  or succeed.
+
 ## Header File Conventions
 
 - `#pragma once` must be the first non-comment line

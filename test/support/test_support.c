@@ -191,7 +191,7 @@ uint32_t to_ms_since_boot(absolute_time_t time) {
     return (uint32_t) (time / MICROSECONDS_PER_MILLISECOND);
 }
 
-// Provides the firmware allocator with the existing host allocation assertion.
+// Provides the firmware allocator with a Debug-only host allocation check.
 void* vetted_malloc(size_t size) {
     void* p = malloc(size);
     assert(p != NULL);

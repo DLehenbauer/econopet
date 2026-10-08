@@ -322,6 +322,7 @@ typedef struct {
 
 // Preserves the scalar, checking its full path with the caller's directory prefix.
 static void parse_as_path(parser_t* parser, void* context, size_t context_size) {
+    (void)context_size;
     assert(context_size == sizeof(path_context_t));
     const path_context_t* const path_context = context;
     parse_expect_type(parser, YAML_SCALAR_EVENT);

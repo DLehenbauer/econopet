@@ -44,8 +44,8 @@ void press_key(uint8_t matrix[KEY_COL_COUNT], key_event_t key) {
     unsigned int row = PET_KEY_ROW(key);
     unsigned int col = PET_KEY_COL(key);
 
-    assert(row < 8);
-    assert(col < KEY_COL_COUNT);
+    ck_assert_uint_lt(row, 8);
+    ck_assert_uint_lt(col, KEY_COL_COUNT);
 
     matrix[col] &= ~(1 << row);
 }
@@ -54,8 +54,8 @@ void release_key(uint8_t matrix[KEY_COL_COUNT], key_event_t key) {
     unsigned int row = PET_KEY_ROW(key);
     unsigned int col = PET_KEY_COL(key);
 
-    assert(row < 8);
-    assert(col < KEY_COL_COUNT);
+    ck_assert_uint_lt(row, 8);
+    ck_assert_uint_lt(col, KEY_COL_COUNT);
 
     matrix[col] |= (1 << row);
 }
