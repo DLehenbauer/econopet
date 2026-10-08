@@ -35,9 +35,9 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# Discover each fixture invariant as an independently runnable host test.
-add_executable(econopet_system_tests disk_fixture_test.cpp)
-target_compile_features(econopet_system_tests PRIVATE cxx_std_17)
+# Discover fixture and value-type invariants without a simulated board.
+add_executable(econopet_system_tests disk_fixture_test.cpp types_test.cpp)
+target_compile_features(econopet_system_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_system_tests PRIVATE econopet_disk_fixtures GTest::gtest_main)
 set(SYSTEM_DISCOVERY_TIMEOUT_SECONDS 60)
 set(SYSTEM_TEST_TIMEOUT_SECONDS 300)

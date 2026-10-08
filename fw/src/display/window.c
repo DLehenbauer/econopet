@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "window.h"
 
+#include <stddef.h>
+
 #include "char_encoding.h"
 #include "dvi/dvi.h"
 
@@ -25,10 +27,9 @@ static inline void check_start(const window_t* const window, uint8_t* start) {
 
 static inline void check_length(const window_t* const window, uint8_t* start, unsigned int length) {
     (void)window;
-    
-    start += length;
-
-    assert(window->start <= start && start <= window->end);
+    (void)start;
+    (void)length;
+    assert(length <= (size_t)(window->end - start));
 }
 
 uint8_t* window_xy(const window_t* const window, unsigned int x, unsigned int y) {
@@ -46,7 +47,7 @@ uint8_t* window_xy(const window_t* const window, unsigned int x, unsigned int y)
 unsigned int window_char_position(const window_t* const window, uint8_t* start) {
     check_start(window, start);
 
-    const size_t delta = ((void*)start - (void*)window->start);
+    const size_t delta = (size_t)(start - window->start);
     assert(delta < UINT_MAX);
 
     return (unsigned int)delta;
@@ -55,19 +56,19 @@ unsigned int window_char_position(const window_t* const window, uint8_t* start) 
 int window_chars_remaining(const window_t* const window, uint8_t* start) {
     check_start(window, start);
 
-    const int delta = (int)(((void*)window->end) - ((void*)start));
-    assert(INT_MIN < delta && delta < INT_MAX);
+    const ptrdiff_t delta = window->end - start;
+    assert(delta < INT_MAX);
 
-    return delta;
+    return (int)delta;
 }
 
 int window_current_row(const window_t* const window, uint8_t* start) {
     check_start(window, start);
 
-    const int row = (int)window_char_position(window, start) / window->width;
-    assert(INT_MIN < row && row < INT_MAX);
+    const unsigned int row = window_char_position(window, start) / window->width;
+    assert(row < INT_MAX);
 
-    return row;
+    return (int)row;
 }
 
 void window_fill(const window_t* const window, uint8_t c) { memset(window->start, c, window->width * window->height); }

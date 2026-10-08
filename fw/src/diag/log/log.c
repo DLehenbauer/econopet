@@ -97,7 +97,7 @@ void log_init(void) {
 }
 
 static void log_vevent(log_level_t level, const char* format, va_list args) {
-    assert(level < LOG_LEVEL_COUNT);
+    assert((unsigned int)level < LOG_LEVEL_COUNT);
 
     log_ring_t* ring = &log_rings[level];
     log_entry_t* entry = &ring->entries[ring->head];

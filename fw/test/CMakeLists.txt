@@ -48,6 +48,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/ieee_drive_test.c
+    ${TEST_DIR}/invariant_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
