@@ -67,7 +67,7 @@
 // Breakpoint halt-clear control (See common_pkg.sv for more details)
 #define ECONOPET_REG_BP_CTL_CLEAR_MASK 0x01u
 
-// Configuration pin levels, not firmware model enums (See common_pkg.sv for more details)
+// Configuration pin levels (See common_pkg.sv for more details)
 #define ECONOPET_CONFIG_CRT_CRTC 0u
 #define ECONOPET_CONFIG_CRT_FIXED 1u
 #define ECONOPET_CONFIG_KEYBOARD_BUSINESS 0u

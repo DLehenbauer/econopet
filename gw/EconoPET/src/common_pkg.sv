@@ -111,7 +111,7 @@ package common_pkg;
         ((1 << (REG_VIDEO_RAM_MASK_HI_BIT - REG_VIDEO_RAM_MASK_LO_BIT + 1)) - 1) << REG_VIDEO_RAM_MASK_LO_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_BP_CTL_CLEAR_MASK = 1 << REG_BP_CTL_CLEAR_BIT;
 
-    // Configuration pin levels, not firmware model enum values.
+    // Active-low DIP configuration levels.
     localparam bit CONFIG_CRT_CRTC = 1'b0;
     localparam bit CONFIG_CRT_FIXED = 1'b1;
     localparam bit CONFIG_KEYBOARD_BUSINESS = 1'b0;
