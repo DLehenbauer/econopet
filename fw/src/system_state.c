@@ -4,9 +4,9 @@
 #include "pch.h"
 #include "system_state.h"
 
-#include "hardware_contract.h"
-
 system_state_t system_state = {
+    .pet_keyboard_model = pet_keyboard_model_graphics,
+    .pet_video_type = pet_video_type_fixed,
     .pet_display_columns = pet_display_columns_40,
     .video_ram_mask = pet_video_ram_mask_1kb,
     .video_ram_bytes = 1024,    // 1KB    
@@ -28,20 +28,6 @@ system_state_t system_state = {
         [CRTC_R13_START_ADDR_LO] = 0x00, // Display start low
     }
 };
-
-// Translate raw pin levels without changing the firmware enums' opposite polarity.
-void system_state_set_config_pins(system_state_t* state, bool crt, bool keyboard) {
-    static const pet_video_type_t video_types[] = {
-        [ECONOPET_CONFIG_CRT_CRTC] = pet_video_type_crtc,
-        [ECONOPET_CONFIG_CRT_FIXED] = pet_video_type_fixed,
-    };
-    static const pet_keyboard_model_t keyboard_models[] = {
-        [ECONOPET_CONFIG_KEYBOARD_BUSINESS] = pet_keyboard_model_business,
-        [ECONOPET_CONFIG_KEYBOARD_GRAPHICS] = pet_keyboard_model_graphics,
-    };
-    state->pet_video_type = video_types[crt];
-    state->pet_keyboard_model = keyboard_models[keyboard];
-}
 
 void system_state_set_video_ram_mask(system_state_t* state, uint8_t video_ram_mask) {
     state->video_ram_mask = video_ram_mask;

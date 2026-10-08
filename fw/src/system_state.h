@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hardware_contract.h"
+
 // In the 8296, the CRTC can address 8KB of video RAM from $8000-$9FFF.  This is the
 // upper bound on the amount of display RAM we may need to synchronize between PET
 // video, DVI output, and the terminal.
@@ -36,13 +38,13 @@
 #define CRTC_R13_START_ADDR_LO      13  // [7:0] Low 8 bits of display start address.
 
 typedef enum pet_keyboard_model_e {
-    pet_keyboard_model_graphics = 0,
-    pet_keyboard_model_business = 1,
+    pet_keyboard_model_business = ECONOPET_CONFIG_KEYBOARD_BUSINESS,
+    pet_keyboard_model_graphics = ECONOPET_CONFIG_KEYBOARD_GRAPHICS,
 } pet_keyboard_model_t;
 
 typedef enum pet_video_type_e {
-    pet_video_type_fixed = 0,   // non-CRTC (9"/15kHz display)
-    pet_video_type_crtc = 1,    // CRTC (12"/20kHz display)
+    pet_video_type_crtc = ECONOPET_CONFIG_CRT_CRTC,   // CRTC (12"/20kHz display)
+    pet_video_type_fixed = ECONOPET_CONFIG_CRT_FIXED, // non-CRTC (9"/15kHz display)
 } pet_video_type_t;
 
 typedef enum pet_display_columns_e {
@@ -97,7 +99,7 @@ typedef enum usb_keymap_kind_e {
 } usb_keymap_kind_t;
 
 typedef struct system_state_s {
-    // First indexer:  (0 = graphics, 1 = business)
+    // First indexer: pet_keyboard_model_t (0 = business, 1 = graphics)
     // Second indexer: (0 = symbolic, 1 = positional)
     // The third indexer maps USB HID codes to usb_keymap_entry_t.
     usb_keymap_entry_t usb_keymap_data[2][2][512];
@@ -144,9 +146,6 @@ typedef struct system_state_s {
 } system_state_t;
 
 extern system_state_t system_state;
-
-// Map configuration pin levels to firmware model enums (used by the FPGA driver).
-void system_state_set_config_pins(system_state_t* state, bool crt, bool keyboard);
 
 // Setter to keep derived fields in sync.
 void system_state_set_video_ram_mask(system_state_t* state, uint8_t video_ram_mask);

@@ -60,11 +60,17 @@ register addresses, control/status masks, CPU selections, configuration pin leve
 SPI encodings, IEEE register bounds and addresses, and the
 IEEE TX burst capacity guaranteed by the room indication. Control-read and
 control-write masks are distinct. IEEE status bit 7 means talk starvation,
-not RX EOI. Firmware policy such as `CPU_AUTO`, and firmware model enums with
-different encodings from configuration pins, are not hardware values.
-Firmware maps configuration pin levels through `system_state_set_config_pins`,
+not RX EOI. Firmware policy such as `CPU_AUTO` is not a hardware value.
+Firmware display and keyboard model enums use the shared configuration pin
+encodings. The driver's `read_pet_model` stores the decoded status bits directly,
 while RTL uses the named CRT level for fixed timings and output polarity.
 Keyboard status forwards the raw pin level without interpreting it.
+
+USB keymap files use the same business-first, graphics-second model order,
+so firmware indexes them directly with the keyboard model enum. Install the
+regenerated keymaps together with the aligned firmware. Older graphics-first
+files are incompatible. Startup defaults remain Graphics keyboard and Fixed
+display.
 
 Use unsigned literals for every C contract definition, including addresses,
 masks, and counts. Keep derivations in RTL, where applicable. The consistency

@@ -618,12 +618,11 @@ bool physical_cpu_present(void) {
  * @param system_state Pointer to system state structure to populate with hardware config
  */
 void read_pet_model(system_state_t* const system_state) {
-    uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
-
-    // Extract pin levels before translating to the firmware model enums.
-    system_state_set_config_pins(system_state,
-        (status & ECONOPET_REG_STATUS_CRT_MASK) != 0,
-        (status & ECONOPET_REG_STATUS_KEYBOARD_MASK) != 0);
+    const uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
+    system_state->pet_video_type =
+        (pet_video_type_t)((status & ECONOPET_REG_STATUS_CRT_MASK) != 0);
+    system_state->pet_keyboard_model =
+        (pet_keyboard_model_t)((status & ECONOPET_REG_STATUS_KEYBOARD_MASK) != 0);
 }
 
 /**
