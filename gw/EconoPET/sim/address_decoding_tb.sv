@@ -16,6 +16,7 @@ module address_decoding_tb();
                                         // to avoid overflow when looping through the full address range.
     
     logic [DATA_WIDTH-1:0] cpu_data;    // Used to mock  CPU writes to the memory control register.
+    logic cpu_addr_strobe = 1'b0;
     logic cpu_wr_strobe = 1'b0;
 
     logic ram_en;
@@ -37,6 +38,7 @@ module address_decoding_tb();
         .sys_clock_i(sys_clock),
         
         .cpu_be_i(cpu_be),
+        .cpu_addr_strobe_i(cpu_addr_strobe),
         .cpu_wr_strobe_i(cpu_wr_strobe),
         .cpu_data_i(cpu_data),
         // Stock PET decode under test; 6809-mode decode is covered by mmu_tb.
@@ -108,8 +110,11 @@ module address_decoding_tb();
         $display("[%t]   %12s: $%04x-$%04x", $time, name, CPU_ADDR_WIDTH'(start_addr), CPU_ADDR_WIDTH'(end_addr));
 
         for (cpu_addr = start_addr; cpu_addr <= end_addr; cpu_addr = cpu_addr + delta) begin
-            // Clock edge captures new input address.
+            @(negedge sys_clock);
+            cpu_addr_strobe = 1'b1;
             @(posedge sys_clock);
+            @(negedge sys_clock);
+            cpu_addr_strobe = 1'b0;
 
             // Signals are valid after edge.
             #1 check(
@@ -157,10 +162,14 @@ module address_decoding_tb();
     );
         cpu_addr = 17'h0fff0;
         cpu_data = { enabled, io_peek, screen_peek, 'x, select_32, select_10, protect_32, protect_10 };
-        
+
         @(negedge sys_clock);
+        cpu_addr_strobe = 1'b1;
+        @(posedge sys_clock);
+        @(negedge sys_clock);
+        cpu_addr_strobe = 1'b0;
         cpu_wr_strobe = 1'b1;
-        
+        @(posedge sys_clock);
         @(negedge sys_clock);
         cpu_wr_strobe = 1'b0;
     endtask
@@ -309,6 +318,30 @@ module address_decoding_tb();
     endtask
 
     task run;
+        // Reset clears configuration latches, but must not disable manually
+        // driven bus transactions.
+        reset = 1'b1;
+        cpu_addr = 17'h01234;
+        @(negedge sys_clock);
+        cpu_addr_strobe = 1'b1;
+        @(posedge sys_clock);
+        @(negedge sys_clock);
+        cpu_addr_strobe = 1'b0;
+        #1 check(
+            /* expected_ram_en        : */ 1,
+            /* expected_pia1_en       : */ 0,
+            /* expected_pia2_en       : */ 0,
+            /* expected_via_en        : */ 0,
+            /* expected_crtc_en       : */ 0,
+            /* expected_sid_en        : */ 0,
+            /* expected_io_en         : */ 0,
+            /* expected_unmapped      : */ 0,
+            /* expected_is_vram       : */ 0,
+            /* expected_is_readonly   : */ 0,
+            /* expected_a16_15        : */ 2'b00
+        );
+        reset = 1'b0;
+
         check_range(
             /* name                   : */ "RAM",
             /* start_addr             : */ 'h0000,
