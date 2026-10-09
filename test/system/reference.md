@@ -10,6 +10,14 @@ Build Verilator-generated models and runtime separately with optimized
 `RelWithDebInfo` flags and SV assertions enabled. Keep linked test, framework,
 and firmware sources in `Debug`, without model optimization flags or `NDEBUG`.
 
+Use GoogleTest or Check assertions for test expectations. Use `vet()` for
+invariants required in production and `assert()` for test-covered paranoid
+checks that are intentionally elided from production. Do not undefine `NDEBUG`
+or put required work or side effects inside assertions. Host fatal checks use
+[`test_fatal.c`](../support/test_fatal.c).
+The host C++ framework requires C++23. Firmware and external dependencies keep
+their existing language standards.
+
 The root presets require CMake 3.21 or later and build and run this suite,
 including the hardware contract test:
 
@@ -23,8 +31,8 @@ Both `all` presets include this suite, so it runs in CI. Root builds place its
 generated files in `build/system`. The standalone commands below use
 `build/host-fixtures` instead.
 
-The shared D64 fixtures and their C++ tests run without Verilator, a simulated
-board, ROM media, or firmware transport.
+The shared D64 fixtures, checked framework value types, and their C++ tests run
+without Verilator, a simulated board, ROM media, or firmware transport.
 
 Standalone builds require CMake 3.20 or later.
 
@@ -39,6 +47,10 @@ ctest --test-dir build/host-fixtures --output-on-failure
 
 The firmware Check tests also use the shared C builder. Build and run those
 with `cmake --build --preset fw-test` and `ctest --preset fw`.
+
+Keep regression tests in the suite for the feature they exercise. Register
+expected-abort tests with the forked runner, using a separate fatal suite in the
+same feature test file when its normal suite runs without forking.
 
 ## Shared hardware contract
 
@@ -105,6 +117,103 @@ The generated `build/host-fixtures/hardware_contract_values.c` and
 constant for review. The comparison itself is in
 [`test.cmake`](hardware_contract/test.cmake).
 
+## Checked framework value types
+
+Include [`types.h`](types.h) for the standalone C++23 types in `econopet`.
+Construction and arithmetic checks throw standard exceptions independently
+of `NDEBUG`.
+They do not depend on `assert`, board state, or a
+firmware fatal handler. [`types_test.cpp`](types_test.cpp) tests these contracts
+as the independently runnable `BoardTypes` suite:
+
+```sh
+ctest --test-dir build/system -R '^system\.BoardTypes\.' --output-on-failure
+```
+
+Use `build/host-fixtures` instead for the standalone build. Both suites remain
+part of `ctest --preset sys`. Use standard facilities such as `std::span` and
+`std::to_underlying` rather than equivalent custom utilities.
+Hardware encodings come from the production contract, with independent numeric
+expectations alongside the C/RTL consistency tests. Durations and borrowed byte
+views are framework utilities, not hardware encodings.
+
+### Address domains
+
+`CpuAddress`, `SramAddress`, and `WishboneAddress` are distinct types with capacities
+of 64 KiB, 128 KiB, and 1 MiB respectively. Integer construction is explicit,
+rejects negatives and values outside the domain before narrowing, and permits
+no implicit conversion between domains or back to integers. Use `value()` at
+an encoding boundary.
+
+Adding an integer offset checks both endpoints, including extreme signed and
+unsigned inputs. Subtracting two addresses in the same domain returns a signed
+displacement. Invalid construction or offsets throw `std::out_of_range` with
+the domain name, address, and (for offsets) operand.
+
+The Wishbone domain is the FPGA's byte-addressed bus space, accessed over SPI,
+not a separate SPI address space. SPI and peripheral register mappings belong
+to later framework layers.
+
+Fixture code can explicitly choose lower-bank SRAM backing with
+`SramAddress{cpu_address.value()}`. This copies the CPU address bits, not a
+live CPU bank translation or I/O decoder.
+
+### Durations and timestamps
+
+`Cycles` measures full system-clock cycles, not CPU PHI2 cycles. Integer
+durations are checked and may convert implicitly for concise duration
+arguments. `Maximum` leaves room for two simulation half ticks per cycle.
+`half_ticks()` converts without overflow, and `from_half_ticks()` rejects an
+incomplete cycle with `std::logic_error`.
+
+Duration addition and multiplication throw `std::overflow_error` on overflow.
+Multiplication accepts only integral operands and rejects signed negatives with
+`std::out_of_range`, even for a zero duration. Floating-point multipliers do not
+compile.
+Subtraction throws `std::out_of_range` on underflow. `CycleTime` is an explicit
+timestamp constructed from elapsed `Cycles`, not an interchangeable duration
+or integer. Add a duration to obtain a deadline, or subtract ordered timestamps
+to obtain elapsed cycles. Stream diagnostics include units.
+
+### Named flags and encodings
+
+Use the production `cpu_type_t` from [`driver.h`](../../fw/src/driver.h) and
+`pet_video_type_t` and `pet_keyboard_model_t` from
+[`system_state.h`](../../fw/src/system_state.h) directly. Hardware CPU-selection
+APIs must reject `CPU_AUTO`, which is firmware policy, and reserved values.
+USB keymap files use
+business-first, graphics-second model order and firmware indexes them directly
+with the keyboard model enum.
+`std::to_underlying(enum_value)` from `<utility>`
+extracts an enum's underlying integer at a hardware boundary, but does not
+validate arbitrary enum casts. The production enums have non-fixed underlying
+types, so casting integers outside their representable enum ranges is undefined
+behavior in C++.
+
+`Flags<Bit>` represents a byte-sized flag domain whose enum declares `All`.
+`CpuControl` uses `CpuControlBit::{Ready, Reset, Nmi}`. Combine named bits with
+`|`, query individual or composite masks with `contains`, and use `bits()` at a
+wire boundary. `from_bits()` and enum construction reject unknown bits and
+values exceeding byte capacity with `std::invalid_argument` before narrowing,
+even when a wider enum's `All` mask includes high bits. Different flag domains
+cannot mix.
+
+### Borrowed bytes
+
+`ByteView` is a checked wrapper around `std::span<const uint8_t>`. It borrows a
+byte C array, `std::array`, `std::vector`, or mutable/immutable byte span with
+its extent. Fixed-extent spans and span subranges are supported. It deliberately
+has no direct raw pointer/count constructor. A span input supplies its own
+extent, whose validity remains the caller's responsibility.
+
+`size()` reports the borrowed extent and indexed reads throw
+`std::out_of_range` outside it, including for empty spans and containers.
+These checks do not depend on `NDEBUG` (C++23's plain `std::span`
+indexing does not provide this exception contract). Keep the source storage
+alive and do not resize or otherwise invalidate it while the view is in use.
+The view does not own or freeze its bytes, and accepting a span does not extend
+the source lifetime.
+
 ## Reusable disk-image fixtures
 
 [`d64.h`](../support/d64.h) owns a checked 35-track D64 image independently of
@@ -120,10 +229,10 @@ round trips. The 8050 D80 checks use the single-sided `NTRK80`/`NSEC80` tables i
 [DOS 2.7 ROMTBL](https://github.com/mist64/cbmsrc/blob/master/DOS_8250/romtbl).
 Formatting, BAM allocation, file installation, and corruption remain test-only.
 
-Fixture internal invariants use `vet` rather than `assert`, which is disabled by
-`NDEBUG` in Release builds. These framework-independent checks reuse the
+Fixture internal invariants use `vet` for consistent fatal diagnostics,
+independent of `NDEBUG`. These framework-independent checks reuse the
 SDK-independent host fatal implementation in
-[`test_fatal.c`](../support/test_fatal.c), which logs and aborts in every build mode.
+[`test_fatal.c`](../support/test_fatal.c), which checks expected diagnostics and aborts.
 
 ```cpp
 #include "d64.h"

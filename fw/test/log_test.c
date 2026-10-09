@@ -3,7 +3,10 @@
 
 #include "pch.h"
 #include "log_test.h"
-#include "../src/diag/log/log.h"
+
+#include <signal.h>
+
+#include "diag/log/log.h"
 
 START_TEST(test_log_init) {
     log_init();
@@ -166,6 +169,24 @@ START_TEST(test_log_message_truncation) {
     // Message should be truncated to LOG_MESSAGE_LENGTH - 1 (plus null terminator)
     ck_assert_uint_eq(strlen(entry->message), LOG_MESSAGE_LENGTH - 1);
 } END_TEST
+
+static const log_level_t invalid_levels[] = { LOG_LEVEL_COUNT, (log_level_t)-1 };
+
+// Rejects both ends of the invalid log-level domain before indexing its rings.
+START_TEST(test_invalid_log_level) {
+    log_event(invalid_levels[_i], "rejected");
+}
+END_TEST
+
+// Register invalid log levels separately for the forked runner.
+Suite* log_fatal_suite(void) {
+    Suite* const suite = suite_create("Log-fatal");
+    TCase* const checks = tcase_create("log");
+    tcase_add_loop_test_raise_signal(checks, test_invalid_log_level, SIGABRT,
+        0, count_of(invalid_levels));
+    suite_add_tcase(suite, checks);
+    return suite;
+}
 
 Suite *log_suite(void) {
     Suite* s = suite_create("Log");

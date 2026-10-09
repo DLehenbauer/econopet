@@ -47,6 +47,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
+    ${TEST_DIR}/global_test.c
     ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
@@ -59,6 +60,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/system_state_test.c
     ${TEST_DIR}/tape_dir_test.c
+    ${TEST_DIR}/test_support_test.c
     ${TEST_DIR}/window_test.c
 )
 

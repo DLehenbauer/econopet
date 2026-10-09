@@ -2,8 +2,12 @@
 // https://github.com/dlehenbauer/econopet
 
 #include "pch.h"
-#include "../src/display/window.h"
 #include "window_test.h"
+
+#include <limits.h>
+#include <signal.h>
+
+#include "display/window.h"
 
 #define WIDTH 5
 #define HEIGHT 3
@@ -159,6 +163,20 @@ START_TEST(test_window_puts_newline_after_full_row_does_not_skip_row) {
     ck_buffer_overflow();
 } END_TEST
 
+// Rejects null window backing storage in Debug tests.
+START_TEST(test_window_null_storage) {
+    window_create(NULL, 1, 1);
+}
+END_TEST
+
+// Checks length before overflowing pointer arithmetic or writing any bytes.
+START_TEST(test_window_excessive_length) {
+    uint8_t storage = 0;
+    const window_t window = window_create(&storage, 1, 1);
+    window_hline(&window, window.start, UINT_MAX, 0);
+}
+END_TEST
+
 Suite *window_suite(void) {
     Suite* s = suite_create("Window");
 
@@ -168,6 +186,8 @@ Suite *window_suite(void) {
     tcase_add_test(test_cases, test_window_xy);
     tcase_add_test_raise_signal(test_cases, test_window_xy_x_invalid, SIGABRT);
     tcase_add_test_raise_signal(test_cases, test_window_xy_y_invalid, SIGABRT);
+    tcase_add_test_raise_signal(test_cases, test_window_null_storage, SIGABRT);
+    tcase_add_test_raise_signal(test_cases, test_window_excessive_length, SIGABRT);
 
     tcase_add_test(test_cases, test_window_hline_valid_zero_length);
     tcase_add_test(test_cases, test_window_hline_full_buffer);

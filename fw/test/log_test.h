@@ -6,3 +6,6 @@
 #include <check.h>
 
 Suite *log_suite(void);
+
+// Register invalid log-level regressions for forked execution.
+Suite* log_fatal_suite(void);

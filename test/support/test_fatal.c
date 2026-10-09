@@ -19,7 +19,7 @@ void test_expect_fatal_message(const char* substring) {
     expected_fatal_substring = substring;
 }
 
-// Checks expected diagnostics before aborting, including in Release builds.
+// Checks production fatal diagnostics before aborting in host tests.
 void fatal(const char* const format, ...) {
     // Format the complete diagnostic before checking the test expectation.
     char message[TEST_FATAL_MESSAGE_CAPACITY];
