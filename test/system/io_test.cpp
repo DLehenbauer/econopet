@@ -1038,6 +1038,77 @@ TEST(ExternalBus, ResetCancelsInvalidPendingAccess) {
     EXPECT_EQ(devices.pia1().writes().count(), 1);
 }
 
+// Reset must ignore conflicting selects, cancel pending writes, and occur only once.
+TEST(ExternalBus, ResetOverridesOverlappingSelectsAndCancelsPendingWrites) {
+    const std::array overlaps{
+        ChipSelect::Pia1 | ChipSelect::Pia2,
+        ChipSelect::Pia1 | ChipSelect::Via,
+        ChipSelect::Pia2 | ChipSelect::Via,
+        ChipSelects{ChipSelect::All},
+    };
+    for (const auto selected : {ChipSelect::Pia1, ChipSelect::Pia2, ChipSelect::Via}) {
+        for (const auto selects : overlaps) {
+            for (const bool reset_phi2 : {false, true}) {
+                SCOPED_TRACE(testing::Message() << "pending select " << unsigned(std::to_underlying(selected))
+                    << ", reset selects " << unsigned(selects.bits()) << ", reset PHI2 " << reset_phi2);
+                Io devices;
+                // Give every chip non-reset state before leaving a write pending.
+                devices.pia1().set_control(PiaRegister::ControlA, PiaC2High, DeviceSetupTime);
+                devices.pia2().set_control(PiaRegister::ControlA, PiaC2High, DeviceSetupTime);
+                write(devices.via(), ViaRegister::Pcr, ViaPcrBothHigh, DeviceSetupTime);
+                devices.clear_observations();
+                const BusSample pending{true, false, selected,
+                    selected == ChipSelect::Via ? std::to_underlying(ViaRegister::Pcr)
+                        : std::to_underlying(PiaRegister::ControlA),
+                    selected == ChipSelect::Via ? ViaPcrBothHigh : PiaC2High.bits(), true};
+                devices.sample(pending, DeviceSetupTime);
+                // Neither conflicting selects nor an invalid register can block reset.
+                const BusSample reset{reset_phi2, true, selects, MaximumRegisterValue, PortAllHigh, true};
+                ASSERT_NO_THROW(devices.sample(reset, DeviceSetupTime));
+                EXPECT_EQ(devices.pia1().state().pa.cr, PiaDdrAccess.bits());
+                EXPECT_EQ(devices.pia2().state().pa.cr, PiaDdrAccess.bits());
+                EXPECT_EQ(devices.via().state().pcr, ViaControlReset);
+                EXPECT_EQ(devices.clock_count(), 0);
+                EXPECT_EQ(devices.pia1().writes().count(), 0);
+                EXPECT_EQ(devices.pia2().writes().count(), 0);
+                EXPECT_EQ(devices.via().writes().count(), 0);
+                // Releasing reset at low PHI2 must not replay the old high sample.
+                const BusSample low{false, false, ChipSelect::None, 0, 0, false};
+                ASSERT_NO_THROW(devices.sample(low, DeviceSetupTime));
+                EXPECT_EQ(devices.clock_count(), 0);
+                EXPECT_EQ(devices.pia1().writes().count(), 0);
+                EXPECT_EQ(devices.pia2().writes().count(), 0);
+                EXPECT_EQ(devices.via().writes().count(), 0);
+                // A fresh access completes normally after reset cancellation.
+                devices.sample(pending, DeviceSetupTime);
+                devices.sample(low, DeviceSetupTime);
+                EXPECT_EQ(devices.clock_count(), 1);
+                EXPECT_EQ(devices.pia1().writes().count(), selected == ChipSelect::Pia1 ? 1 : 0);
+                EXPECT_EQ(devices.pia2().writes().count(), selected == ChipSelect::Pia2 ? 1 : 0);
+                EXPECT_EQ(devices.via().writes().count(), selected == ChipSelect::Via ? 1 : 0);
+                // Held reset must not repeatedly clear deliberately changed chip state.
+                devices.sample(reset, DeviceSetupTime);
+                devices.pia1().set_control(PiaRegister::ControlA, PiaC2High, DeviceSetupTime);
+                devices.pia2().set_control(PiaRegister::ControlA, PiaC2High, DeviceSetupTime);
+                write(devices.via(), ViaRegister::Pcr, ViaPcrBothHigh, DeviceSetupTime);
+                const auto pia1 = model_values(devices.pia1().state());
+                const auto pia2 = model_values(devices.pia2().state());
+                const auto via = model_values(devices.via().state());
+                auto held = reset;
+                held.phi2 = !reset_phi2;
+                ASSERT_NO_THROW(devices.sample(held, DeviceSetupTime));
+                EXPECT_EQ(model_values(devices.pia1().state()), pia1);
+                EXPECT_EQ(model_values(devices.pia2().state()), pia2);
+                EXPECT_EQ(model_values(devices.via().state()), via);
+                EXPECT_EQ(devices.clock_count(), 1);
+                // Select conflicts remain errors once reset is inactive.
+                held.reset = false;
+                EXPECT_THROW(devices.sample(held, DeviceSetupTime), std::logic_error);
+            }
+        }
+    }
+}
+
 // Verify reset cancels an access but retains inputs, injected faults and history.
 TEST(ExternalBus, ResetCancelsPendingAccessButPreservesInputsFaultsAndHistory) {
     // Complete one write and start a second access before asserting reset.

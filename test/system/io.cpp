@@ -196,8 +196,8 @@ void Via6522::set_timer1_fault(Timer1Fault fault) {
 void Io::sample(const BusSample& bus, CycleTime at) {
     if (edits_.guard) edits_.guard();
     if (edits_.active) throw std::logic_error("device inputs: sampling during editing is not allowed");
-    // Reject simultaneous physical selects before changing any device.
-    if (bus.selects != ChipSelect::None && bus.selects != ChipSelect::Pia1
+    // Reset ignores physical selects and cancels any pending access.
+    if (!bus.reset && bus.selects != ChipSelect::None && bus.selects != ChipSelect::Pia1
         && bus.selects != ChipSelect::Pia2 && bus.selects != ChipSelect::Via) {
         throw std::logic_error("external I/O requires at most one physical chip select");
     }

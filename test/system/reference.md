@@ -142,8 +142,10 @@ and write history.
 
 `Io::sample` captures the preceding stable bus sample once at falling PHI2.
 Repeated high/low samples do not duplicate accesses, deselected devices still
-clock their timers, and reset assertion cancels pending accesses. Multiple
-physical chip selects are rejected. `writes().last()` is optional, so no write
+clock their timers, and reset assertion cancels pending accesses even with
+overlapping selects or an invalid register. Held reset does not repeatedly
+reset the devices. Multiple physical chip selects are rejected when reset is
+inactive. `writes().last()` is optional, so no write
 is distinct from a write of zero. Completed-write records carry the caller's
 full-cycle timestamp, and explicit observation clearing does not reset devices.
 The selected access is validated before any peripheral advances. Unsupported
