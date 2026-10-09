@@ -24,7 +24,7 @@ public:
 
     // Copies retain independent image storage and construction state.
     D64(const D64&) = default;
-    D64& operator=(const D64&) = default;
+    D64& operator=(const D64&) & = default;
 
     // Transfer ownership and explicitly invalidate the source in every library.
     D64(D64&& other) noexcept
@@ -34,7 +34,7 @@ public:
     }
 
     // Replace ownership, preserving self-moves and invalidating any other source.
-    D64& operator=(D64&& other) noexcept {
+    D64& operator=(D64&& other) & noexcept {
         if (this != &other) {
             image_ = std::move(other.image_);
             layout_ = other.layout_;
@@ -50,22 +50,45 @@ public:
 
     // Encode an ASCII name as uppercase PETSCII, and store payload bytes exactly.
     // No load address is added. Validation failure leaves this fixture unchanged.
-    D64& prg(const std::string& name, const std::vector<uint8_t>& payload) {
+    D64& prg(const std::string& name, const std::vector<uint8_t>& payload) & {
         return file(DISKIMAGE_FTYPE_PRG, name, payload);
+    }
+    // Preserve temporary ownership through fluent PRG construction.
+    D64&& prg(const std::string& name, const std::vector<uint8_t>& payload) && {
+        file(DISKIMAGE_FTYPE_PRG, name, payload);
+        return std::move(*this);
     }
 
     // Store an ordinary sequential file with the same checked ownership.
-    D64& seq(const std::string& name, const std::vector<uint8_t>& payload) {
+    D64& seq(const std::string& name, const std::vector<uint8_t>& payload) & {
         return file(DISKIMAGE_FTYPE_SEQ, name, payload);
+    }
+    // Preserve temporary ownership through fluent sequential-file construction.
+    D64&& seq(const std::string& name, const std::vector<uint8_t>& payload) && {
+        file(DISKIMAGE_FTYPE_SEQ, name, payload);
+        return std::move(*this);
     }
 
     // Store a user file with the same checked ownership.
-    D64& usr(const std::string& name, const std::vector<uint8_t>& payload) {
+    D64& usr(const std::string& name, const std::vector<uint8_t>& payload) & {
         return file(DISKIMAGE_FTYPE_USR, name, payload);
+    }
+    // Preserve temporary ownership through fluent user-file construction.
+    D64&& usr(const std::string& name, const std::vector<uint8_t>& payload) && {
+        file(DISKIMAGE_FTYPE_USR, name, payload);
+        return std::move(*this);
     }
 
     // Observe immutable bytes for mounting or independent parser assertions.
-    const std::vector<uint8_t>& bytes() const { return image_; }
+    const std::vector<uint8_t>& bytes() const & { return image_; }
+    // Transfer image storage out of a temporary and invalidate its construction state.
+    std::vector<uint8_t> bytes() && {
+        auto image = std::move(image_);
+        invalidate();
+        return image;
+    }
+    // Copy immutable temporary storage instead of returning a dangling reference.
+    std::vector<uint8_t> bytes() const && { return image_; }
 
     // Resolve checked D64 coordinates without involving a transport or parser.
     static size_t offset(unsigned int track, unsigned int sector) {
@@ -76,7 +99,7 @@ public:
 
     // Deliberately replace bytes for malformed-media tests. Corruption prevents
     // further checked file installation, but the image remains mountable as raw.
-    D64& corrupt(size_t offset, const std::vector<uint8_t>& bytes) {
+    D64& corrupt(size_t offset, const std::vector<uint8_t>& bytes) & {
         if (!valid_ || image_.size() != DISKIMAGE_D64_SIZE)
             throw std::logic_error("D64 corruption: moved-from fixture");
         if (offset > image_.size() || bytes.size() > image_.size() - offset)
@@ -85,6 +108,11 @@ public:
         std::copy(bytes.begin(), bytes.end(), image_.begin() + offset);
         corrupted_ = true;
         return *this;
+    }
+    // Preserve temporary ownership through fluent corruption.
+    D64&& corrupt(size_t offset, const std::vector<uint8_t>& bytes) && {
+        corrupt(offset, bytes);
+        return std::move(*this);
     }
 
 private:

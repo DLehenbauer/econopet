@@ -5,6 +5,7 @@
 #include <limits>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -14,6 +15,21 @@
 
 namespace {
 using disk_fixture::D64;
+
+static_assert(std::is_same_v<decltype(std::declval<D64&>().bytes()),
+    const std::vector<uint8_t>&>);
+static_assert(std::is_same_v<decltype(std::declval<const D64&>().bytes()),
+    const std::vector<uint8_t>&>);
+static_assert(std::is_same_v<decltype(std::declval<D64&&>().bytes()),
+    std::vector<uint8_t>>);
+static_assert(std::is_same_v<decltype(std::declval<const D64&&>().bytes()),
+    std::vector<uint8_t>>);
+static_assert(std::is_same_v<decltype(D64{}.prg("PRG", {})), D64&&>);
+static_assert(std::is_same_v<decltype(D64{}.seq("SEQ", {})), D64&&>);
+static_assert(std::is_same_v<decltype(D64{}.usr("USR", {})), D64&&>);
+static_assert(std::is_same_v<decltype(D64{}.corrupt(0, {})), D64&&>);
+static_assert(!std::is_assignable_v<D64&&, const D64&>);
+static_assert(!std::is_assignable_v<D64&&, D64&&>);
 
 // Decode generated chain bytes independently of the production disk parser.
 std::vector<uint8_t> payload(const D64& disk, unsigned int file) {
@@ -232,6 +248,36 @@ TEST(DiskFixture, GeometryRejectsInvalidTrackAndSector) {
     EXPECT_THROW(D64::offset(24, 19), std::invalid_argument);
     EXPECT_THROW(D64::offset(30, 18), std::invalid_argument);
     EXPECT_THROW(D64::offset(35, 17), std::invalid_argument);
+}
+
+// Rvalue byte access owns storage after the disk or fluent construction expires.
+TEST(DiskFixture, TemporaryByteAccessOwnsStorage) {
+    const auto& empty = D64::empty().bytes();
+    EXPECT_EQ(empty.size(), DISKIMAGE_D64_SIZE);
+    EXPECT_EQ(empty[D64::offset(18, 0)], 18);
+
+    D64 expected;
+    expected.prg("PRG", {1}).seq("SEQ", {2}).usr("USR", {3}).corrupt(0, {0x42});
+    const auto& fluent =
+        D64::empty().prg("PRG", {1}).seq("SEQ", {2}).usr("USR", {3}).corrupt(0, {0x42}).bytes();
+    EXPECT_EQ(fluent, expected.bytes());
+}
+
+// Extracting mutable storage invalidates the disk; const extraction owns a copy.
+TEST(DiskFixture, RvalueByteAccessPreservesMoveAndCopyContracts) {
+    D64 disk;
+    disk.prg("PRG", {0x42});
+    const auto original = disk.bytes();
+    const auto& moved = std::move(disk).bytes();
+    EXPECT_EQ(moved, original);
+    EXPECT_TRUE(disk.bytes().empty());
+    EXPECT_THROW(disk.prg("INVALID", {1}), std::logic_error);
+    EXPECT_THROW(disk.corrupt(0, {}), std::logic_error);
+
+    const D64 immutable;
+    const auto& copied = std::move(immutable).bytes();
+    EXPECT_EQ(copied, immutable.bytes());
+    EXPECT_NE(copied.data(), immutable.bytes().data());
 }
 
 // Copies own independent construction state. Moving cannot leave a writable zombie.

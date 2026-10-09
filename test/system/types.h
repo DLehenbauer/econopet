@@ -35,12 +35,28 @@ public:
     // View a fixed C array for the lifetime of its owner.
     template<size_t Size>
     constexpr ByteView(const uint8_t (&bytes)[Size]) : bytes_(bytes) {}
+    // Reject array members of temporary owners and other mutable array rvalues.
+    template<size_t Size>
+    ByteView(uint8_t (&&)[Size]) = delete;
+    // Reject const array rvalues without affecting borrowed lvalue arrays.
+    template<size_t Size>
+    ByteView(const uint8_t (&&)[Size]) = delete;
     // View a fixed standard array, including an empty one.
     template<size_t Size>
     constexpr ByteView(const std::array<uint8_t, Size>& bytes)
         : bytes_(bytes) {}
+    // Reject temporary arrays whose storage would expire with the full expression.
+    template<size_t Size>
+    ByteView(std::array<uint8_t, Size>&&) = delete;
+    // Reject const temporary arrays for the same lifetime reason.
+    template<size_t Size>
+    ByteView(const std::array<uint8_t, Size>&&) = delete;
     // View a dynamic byte buffer without copying or extending its lifetime.
     constexpr ByteView(const std::vector<uint8_t>& bytes) : bytes_(bytes) {}
+    // Reject temporary vectors whose storage would expire with the full expression.
+    ByteView(std::vector<uint8_t>&&) = delete;
+    // Reject const temporary vectors for the same lifetime reason.
+    ByteView(const std::vector<uint8_t>&&) = delete;
     // Return the borrowed buffer's byte count.
     constexpr size_t size() const { return bytes_.size(); }
     // Read a byte only within the borrowed extent.
