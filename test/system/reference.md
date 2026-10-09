@@ -202,9 +202,14 @@ cannot mix.
 
 `ByteView` is a checked wrapper around `std::span<const uint8_t>`. It borrows a
 byte C array, `std::array`, `std::vector`, or mutable/immutable byte span with
-its extent. Fixed-extent spans and span subranges are supported. It deliberately
+its extent. C arrays, standard arrays, and vectors must be mutable or const
+lvalues, including empty standard containers. Both mutable and const rvalue
+arrays and vectors are rejected to prevent borrowing storage that expires with
+the construction expression. Fixed-extent spans and span subranges are supported, including
+temporary span objects whose backing storage remains alive. It deliberately
 has no direct raw pointer/count constructor. A span input supplies its own
-extent, whose validity remains the caller's responsibility.
+extent, whose validity and backing storage lifetime remain the caller's
+responsibility.
 
 `size()` reports the borrowed extent and indexed reads throw
 `std::out_of_range` outside it, including for empty spans and containers.
@@ -257,8 +262,15 @@ rather than the CR that native DOS writes when closing an unwritten file.
 directory type bytes `$81` and `$83` respectively.
 
 Read immutable storage through `bytes()` for independent assertions or a
-consumer that copies the image. Copies own independent images and allocation
-state. Move construction and assignment explicitly invalidate the source and
+consumer that copies the image. On a named lvalue fixture, `bytes()` borrows
+storage for the fixture's lifetime. On a mutable rvalue it returns an owned
+vector and invalidates the fixture, and on a const rvalue it returns an owned
+copy. Fluent file and corruption methods preserve rvalue ownership, so
+`D64::empty().prg("HELLO", payload).bytes()` also returns an owned vector.
+Keep that vector in a named variable before passing it to `ByteView`.
+
+Copies own independent images and allocation state.
+Move construction and assignment explicitly invalidate the source and
 empty its bytes. Moved-from fixtures reject further construction or corruption,
 including after copying or moving that invalid state. Assigning a valid fixture
 restores usability. Self-move assignment leaves the fixture unchanged.
