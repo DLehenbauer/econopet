@@ -61,7 +61,7 @@ module main (
     input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
 
     // Video
-    input  logic graphic_i,         // VIA CA2 pin 39 -> Character ROM A10 (0 = graphics, 1 = text)
+    input  logic text_mode_i,       // VIA CA2 pin 39 -> Character ROM A10 (0 = upper/graphics, 1 = upper/lower)
     output logic horiz_drive_o,     // Horizontal drive for native PET video
     output logic vert_drive_o,      // Vertical drive for native PET video
     output logic jiffy_clock_o,     // Triggers IRQ on falling edge (VIA CB1 pin 37)
@@ -445,7 +445,7 @@ module main (
         .wbp_sel_i(reg_wb_sel),
 
         // Status register
-        .video_graphic_i(graphic_i),
+        .text_mode_i(text_mode_i),
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
         .phys_cpu_active_i(phys_cpu_active),
@@ -609,7 +609,7 @@ module main (
         .load_sr1_i(load_sr1),
         .load_sr2_i(load_sr2),
         .col_80_mode_i(video_col_80_mode),  // 0 = 40 column mode, 1 = 80 column mode
-        .graphic_i(graphic_i),
+        .text_mode_i(text_mode_i),
         .h_sync_o(horiz_drive_o),
         .v_sync_o(vert_drive_o),
         .video_o(video_o)

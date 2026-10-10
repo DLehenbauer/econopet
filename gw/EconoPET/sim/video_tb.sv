@@ -120,7 +120,7 @@ module video_tb;
 
         // DotGen
         .col_80_mode_i(1'b1),
-        .graphic_i(1'b0),
+        .text_mode_i(1'b0),
         .load_sr1_i(load_sr1),
         .load_sr2_i(load_sr2),
 

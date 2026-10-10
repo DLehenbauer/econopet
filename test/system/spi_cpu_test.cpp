@@ -650,7 +650,7 @@ TEST_F(SystemTest, AssertedVideoStatusBitDenotesTextMode) {
             text ? Ca2FixedHigh : Ca2FixedLow, system.time());
         system.tick(1);
         const auto raw = system.spi().read(fpga::Register::Status);
-        EXPECT_EQ((raw & ECONOPET_REG_STATUS_GRAPHICS_MASK) != 0, text);
+        EXPECT_EQ((raw & ECONOPET_REG_STATUS_TEXT_MODE_MASK) != 0, text);
         EXPECT_EQ(fpga::Status::from_bits(raw).contains(fpga::StatusBit::Text), text);
     }
 }

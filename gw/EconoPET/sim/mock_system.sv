@@ -68,7 +68,7 @@ module mock_system (
     logic [7:0] spi_rx_data;
 
     // Video
-    logic video_graphics = 1'b0;
+    logic text_mode = 1'b0;
 
     // Config
     logic config_crt = 1'b0;
@@ -113,7 +113,7 @@ module mock_system (
         .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
-        .graphic_i(video_graphics),
+        .text_mode_i(text_mode),
         .audio_det_n_i(audio_det_n),
 
         .config_crt_i(config_crt),

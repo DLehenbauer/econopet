@@ -89,7 +89,7 @@ module superpet_soft6502_tb;
         .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
-        .graphic_i(1'b0),
+        .text_mode_i(1'b0),
         .config_crt_i(1'b0),
         .config_keyboard_i(1'b0)
     );

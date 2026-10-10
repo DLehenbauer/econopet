@@ -18,7 +18,7 @@ module register_file(
     input  logic                      wbp_sel_i,         // Asserted when selected by 'wbp_addr_i'
 
     // Status register
-    input  logic                      video_graphic_i,   // VIA CA2 (0 = graphics, 1 = text)
+    input  logic                      text_mode_i,       // VIA CA2 (0 = upper/graphics, 1 = upper/lower)
     input  logic                      config_crt_i,      // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     input  logic                      config_keyboard_i, // Keyboard type (0 = Business, 1 = Graphics)
     input  logic                      phys_cpu_active_i, // Physical 6502 address activity detected
@@ -108,7 +108,7 @@ module register_file(
             // Order must match bit order declared in common_pkg.sv.
             register[REG_STATUS] <= { 3'b000, phys_cpu_active_i,
                                       bp_halted_i, config_keyboard_i, config_crt_i,
-                                      video_graphic_i};
+                                      text_mode_i};
 
             // Refresh breakpoint address registers from the breakpoint module.
             register[REG_BP_ADDR_LO] <= bp_addr_i[7:0];

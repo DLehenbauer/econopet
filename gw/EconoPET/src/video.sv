@@ -46,7 +46,7 @@ module video (
     input  logic load_sr2_i,                      // 2 MHz clock used to load SR of dot generator
     input  logic config_crt_i,                    // Select VDU (0 = 12"/CRTC, 1 = 9"/non-CRTC)
     input  logic col_80_mode_i,                   // (0 = 40 col, 1 = 80 col)
-    input  logic graphic_i,                       // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
+    input  logic text_mode_i,                     // Selects character set via A10 of VROM. (0 = upper/gfx, 1 = lower/upper)
     output logic h_sync_o,                        // Horizontal sync
     output logic v_sync_o,                        // Vertical sync
     output logic video_o                          // Video output
@@ -110,9 +110,9 @@ module video (
     wire  [WB_ADDR_WIDTH-1:0] even_ram_addr = common_pkg::wb_vram_addr(col_80_mode_i
         ? { ma[9:0], 1'b0 }     // 80 column mode
         : { 1'b0, ma[9:0] });   // 40 column mode
-    wire  [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[EVEN_RAM][6:0], ra[2:0] });
+    wire  [WB_ADDR_WIDTH-1:0] even_rom_addr = common_pkg::wb_vrom_addr({ crtc_chr_option, text_mode_i, data[EVEN_RAM][6:0], ra[2:0] });
     wire  [WB_ADDR_WIDTH-1:0] odd_ram_addr  = common_pkg::wb_vram_addr({ ma[9:0], 1'b1 });
-    wire  [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, graphic_i, data[ODD_RAM][6:0], ra[2:0] });
+    wire  [WB_ADDR_WIDTH-1:0] odd_rom_addr  = common_pkg::wb_vrom_addr({ crtc_chr_option, text_mode_i, data[ODD_RAM][6:0], ra[2:0] });
     logic [WB_ADDR_WIDTH-1:0] addrs [3:0];
 
     always_comb begin

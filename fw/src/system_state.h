@@ -77,10 +77,10 @@ typedef enum term_input_dest_e {
     term_input_to_firmware, // Route to firmware (menu, etc.)
 } term_input_dest_t;
 
-typedef enum video_graphics_mode_e {
-    video_graphics_mode_graphics, // CA2 low: uppercase/graphics charset
-    video_graphics_mode_text,     // CA2 high: lowercase/text charset
-} video_graphics_mode_t;
+typedef enum video_text_mode_e {
+    video_text_mode_graphics, // CA2 low: uppercase/graphics charset
+    video_text_mode_lower,    // CA2 high: lowercase/text charset
+} video_text_mode_t;
 
 typedef struct __attribute__((packed)) usb_keymap_entry_s {
     // First byte contains PET keyboard matrix row/col packed as nibbles
@@ -136,7 +136,7 @@ typedef struct system_state_s {
     uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];
 
     // Character-ROM charset selected by PET VIA CA2/A10.
-    video_graphics_mode_t video_graphics_mode;
+    video_text_mode_t video_text_mode;
 
     // True when the FPGA has halted the CPU on a breakpoint (STP opcode)
     bool bp_halted;
