@@ -602,7 +602,56 @@ TEST_F(SystemTest, CpuSelectionReadsAndResetReleaseAcceptSuperpetIoMode) {
         EXPECT_EQ(system.cpu().read_selection(), selection);
         EXPECT_NO_THROW(system.cpu(selection).release_reset());
         EXPECT_FALSE(system.cpu().peek_reset());
+        const bool ready = selection != CPU_SOFT_6809;
+        EXPECT_EQ(system.snapshot().cpu_ready_o, ready);
+        EXPECT_EQ(system.cpu().read_control(),
+            ready ? CpuControl{CpuControlBit::Ready} : CpuControl{});
         EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), configuration);
+    }
+}
+
+TEST_F(SystemTest, CpuControlReadsIgnoreUnspecifiedRegisterBits) {
+    constexpr uint8_t FirstReservedBit = 0x08;
+    const CpuControl known{CpuControlBit::Reset | CpuControlBit::Ready | CpuControlBit::Nmi};
+    for (unsigned reserved = 0; reserved <= UINT8_MAX; reserved += FirstReservedBit) {
+        system.cpu().write_control_raw(static_cast<uint8_t>(reserved | known.bits()));
+        EXPECT_EQ(system.cpu().read_control(), known);
+        EXPECT_NO_THROW(system.cpu().assert_reset());
+        EXPECT_EQ(system.cpu().read_control(), known);
+    }
+    System randomized(system.seed(), System::InitialState::Random);
+    randomized.cpu().write_control_raw(UINT8_MAX);
+    EXPECT_EQ(randomized.cpu().read_control(), known);
+    EXPECT_NO_THROW(randomized.cpu(CPU_SOFT_6502).prepare());
+}
+
+TEST_F(SystemTest, CpuLifecyclePreservesSuperpetModeDuringCoreSelection) {
+    system.cpu().assert_reset();
+    system.spi().write(fpga::Register::CpuSelect,
+        ECONOPET_CPU_SEL_SOFT_6502 | ECONOPET_CPU_SEL_SUPERPET_IO_MASK);
+    for (const auto selected : {CPU_SOFT_6502, CPU_PHYS_6502, CPU_SOFT_6809}) {
+        auto cpu = system.cpu(selected);
+        cpu.select();
+        const auto expected = static_cast<uint8_t>(selected) | ECONOPET_CPU_SEL_SUPERPET_IO_MASK;
+        EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), expected);
+        cpu.prepare();
+        EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), expected);
+        cpu.start();
+        EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), expected);
+        system.cpu().assert_reset();
+    }
+}
+
+TEST_F(SystemTest, AssertedVideoStatusBitDenotesTextMode) {
+    constexpr uint8_t Ca2FixedLow = 0x0c;
+    constexpr uint8_t Ca2FixedHigh = 0x0e;
+    for (const bool text : {false, true}) {
+        io::write(system.io().via(), io::ViaRegister::Pcr,
+            text ? Ca2FixedHigh : Ca2FixedLow, system.time());
+        system.tick(1);
+        const auto raw = system.spi().read(fpga::Register::Status);
+        EXPECT_EQ((raw & ECONOPET_REG_STATUS_GRAPHICS_MASK) != 0, text);
+        EXPECT_EQ(fpga::Status::from_bits(raw).contains(fpga::StatusBit::Text), text);
     }
 }
 

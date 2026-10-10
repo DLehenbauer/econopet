@@ -295,6 +295,7 @@ to later incremental layers.
 
 [`registers.h`](registers.h) defines named FPGA registers, SPI commands,
 status flags, PET peripheral addresses and native reset vectors.
+`StatusBit::Text` denotes the asserted video-mode bit (clear means graphics).
 `spi().read` and `spi().write` use the production SPI/Wishbone path, not a
 memory shortcut. Use `fpga::address(SramAddress)` for direct SRAM access
 (including the upper bank), or a named `fpga::Register`. Valid but unmapped
@@ -349,7 +350,9 @@ distinct from recoverable hardware clock suspension.
 
 `cpu()` offers shared reset, selection/control reads and passive inspection.
 Selection reads decode only the CPU field, independently of the SuperPET I/O
-mode flag. Reset release preserves the selected machine configuration.
+mode flag. Selection, preparation and startup preserve that independent flag.
+CPU-control reads mask unspecified upper register bits before constructing
+typed flags. Raw SPI register reads still return the complete byte.
 `cpu(CPU_SOFT_6502)` or `cpu(CPU_SOFT_6809)` binds core-specific lifecycle
 operations. `prepare()` asserts reset, drains admitted activity and selects
 the core. `write_vector(entry)` requires that bound core quiescent in reset.
@@ -359,7 +362,7 @@ Startup does not imply program completion.
 
 6502 reset vectors use little-endian bytes at $FFFC, while 6809 vectors use
 big-endian bytes at $FFFE. Reset hold is 1,280 system cycles. Release sets READY
-only for soft 6502, clears it for other cores, and verifies resolved reset.
+for both physical and soft 6502, clears it for soft 6809, and verifies resolved reset.
 External reset cannot be overridden. Selection requires quiescent reset, and
 stale bound views cannot release another core or overwrite its vector.
 Direct vector installation also requires an idle, unowned SPI bus. It drains

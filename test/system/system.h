@@ -891,9 +891,10 @@ private:
         }
         throw failure<std::runtime_error>("selected_cpu", "CPU selection register contains an unsupported value");
     }
-    // Read lifecycle control through the real bus.
+    // Read defined lifecycle bits through the real bus (upper register bits are unspecified).
     econopet::CpuControl read_cpu_control() {
-        return econopet::CpuControl::from_bits(spi_read_at(fpga::address(fpga::Register::CpuControl)));
+        return econopet::CpuControl::from_bits(
+            spi_read_at(fpga::address(fpga::Register::CpuControl)) & ECONOPET_REG_CPU_MASK);
     }
     // Read and validate the production selection register.
     cpu_type_t read_cpu_selection() {
@@ -917,7 +918,8 @@ private:
         if (!read_cpu_control().contains(econopet::CpuControlBit::Reset) || !dut_->cpu_reset_active_o
             || ram_write_pending_)
             throw failure<std::logic_error>("select_cpu", "CPU selection requires quiescent asserted reset");
-        const auto selection = static_cast<uint8_t>(cpu);
+        const auto selection = static_cast<uint8_t>(static_cast<uint8_t>(cpu)
+            | (spi_read_at(fpga::address(fpga::Register::CpuSelect)) & ECONOPET_CPU_SEL_SUPERPET_IO_MASK));
         spi_write_at(fpga::address(fpga::Register::CpuSelect), selection);
         if (read_cpu_selection() != cpu)
             throw failure<std::runtime_error>("select_cpu", "CPU selection did not take effect");
@@ -927,7 +929,7 @@ private:
         require_mutable_access();
         remember("release_reset");
         const auto selection = read_cpu_selection();
-        const econopet::CpuControl control = selection == CPU_SOFT_6502
+        const econopet::CpuControl control = selection != CPU_SOFT_6809
             ? econopet::CpuControl{econopet::CpuControlBit::Ready} : econopet::CpuControl{};
         spi_write_at(fpga::address(fpga::Register::CpuControl), control.bits());
         if (read_cpu_control() != control || dut_->cpu_reset_active_o)

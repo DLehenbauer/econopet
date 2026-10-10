@@ -28,12 +28,12 @@ enum class Register : uint32_t {
     IeeeTxStatusLast = ECONOPET_WB_IEEE_TXS_LAST_ADDR,
 };
 enum class StatusBit : uint8_t {
-    Graphics = ECONOPET_REG_STATUS_GRAPHICS_MASK,
+    Text = ECONOPET_REG_STATUS_GRAPHICS_MASK,
     FixedDisplay = ECONOPET_REG_STATUS_CRT_MASK,
     GraphicsKeyboard = ECONOPET_REG_STATUS_KEYBOARD_MASK,
     BreakpointHalt = ECONOPET_REG_STATUS_BP_HALT_MASK,
     PhysicalCpu = ECONOPET_REG_STATUS_PHYS_CPU_MASK,
-    All = Graphics | FixedDisplay | GraphicsKeyboard | BreakpointHalt | PhysicalCpu,
+    All = Text | FixedDisplay | GraphicsKeyboard | BreakpointHalt | PhysicalCpu,
 };
 using Status = econopet::Flags<StatusBit>;
 using econopet::operator|;
