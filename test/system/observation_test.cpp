@@ -40,21 +40,6 @@ static_assert(std::is_nothrow_move_constructible_v<System::ObserverSubscription>
 static_assert(std::is_nothrow_move_assignable_v<System::ObserverSubscription>);
 static_assert(std::is_nothrow_destructible_v<System::ObserverSubscription>);
 
-// Check the exception category, operation and live evidence without clocking.
-template<class Exception, class Operation>
-void expect_failure(System& system, const std::string& operation, Operation action,
-                    const std::string& detail = "") {
-    try {
-        action();
-        FAIL() << "expected " << operation << " to fail";
-    } catch (const Exception& error) {
-        const std::string message = error.what();
-        for (const auto& field : {operation, detail, std::string("cycle="),
-             std::string("half_tick="), std::string("cpu="),
-             "seed=" + std::to_string(system.seed()), std::string("recent={")})
-            EXPECT_NE(message.find(field), std::string::npos) << message;
-    }
-}
 }
 
 TEST_F(SystemTest, BoundedWaitReportsTimeoutAndDoesNotOvershoot) {

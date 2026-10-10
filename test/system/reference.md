@@ -103,8 +103,8 @@ undriven data instead of rejecting recovery.
 Use `drive_physical_cpu`, external reset/interrupt setters, and
 `raw_stimulus(callback)` for pin-level setup. Raw edits commit only after
 successful completion and cannot mutate or clock the board during the callback.
-`drive_spi` drives only SPI0 pin levels (checked transactions and CPU lifecycle
-helpers belong to later layers). Changes do not evaluate the FPGA until `tick`.
+`drive_spi` drives only SPI0 pin levels and cannot steal a scoped transaction's
+pins. Changes do not evaluate the FPGA until `tick`.
 `snapshot()` and `peek_stimulus()` return editable, assignable detached values
 that can outlive their board. Fixture-owned inputs have one access path,
 `snapshot().stimulus`. Resolved bus data, device feedback, harness inputs and
@@ -288,8 +288,120 @@ ctest --test-dir build/system \
   -R '^system\.External(Types|Pia|Via|Bus)\.' --output-on-failure
 ```
 
-Trace publication, board wiring, and real-CPU bus/IRQ integration tests belong
+Trace publication and real-CPU bus/IRQ integration tests belong
 to later incremental layers.
+
+## Checked SPI and CPU lifecycle
+
+[`registers.h`](registers.h) defines named FPGA registers, SPI commands,
+status flags, PET peripheral addresses and native reset vectors.
+`spi().read` and `spi().write` use the production SPI/Wishbone path, not a
+memory shortcut. Use `fpga::address(SramAddress)` for direct SRAM access
+(including the upper bank), or a named `fpga::Register`. Valid but unmapped
+Wishbone addresses reach the real decoder and time out rather than being
+rejected as out of range. These operations advance simulation time and work
+while the CPU is held in reset.
+
+`spi().command(ByteView)` accepts exactly one complete command, rejects
+reserved bits and wrong lengths before clocks or pin changes, and returns
+the first received byte. Production reads are pipelined. `spi().read`
+seeks with `ReadAt`, then clocks the result with `ReadNext`.
+`spi().transaction(callback)` holds CS across complete commands. Its callback
+receives only `SpiCommands::command`, not raw shifting or release controls.
+The scope drains the controller and releases CS before returning.
+Void and value results (including owning move-only values) are supported.
+References, raw pointers and
+`reference_wrapper` results are rejected. Other returned values must not
+retain callback-local or board-borrowed state. These restrictions reject common
+borrowed forms, not all borrowing types. Spans, views and reference-capturing
+callables still require the caller to ensure every referenced object outlives
+its use. The API does not prove that a returned value is detached.
+
+```cpp
+System board;
+const auto address = fpga::address(econopet::SramAddress{0x12345});
+board.spi().write(address, 0x42);
+EXPECT_EQ(board.spi().read(address), 0x42);
+
+const std::array<uint8_t, 2> write_next{
+    fpga::command_byte(fpga::SpiCommand::WriteNext), 0x5a};
+board.spi().transaction([&](auto& commands) {
+    commands.command(write_next);
+});
+```
+
+`spi().raw_transaction(half_period)` explicitly permits partial commands,
+bit/byte shifting and custom positive timing. Call `finish()` to drain the
+controller before releasing CS, or `abort()` for a deliberate reusable release.
+Abort does not roll back an admitted write. Default SCK half-periods are two
+system cycles, and release settles for four. Readiness waits accept the
+inclusive final cycle and inherit enclosing deadlines. No phase is shortened
+to fit a deadline.
+
+An unfinished owner or exception escaping acquisition, work, drain or release
+fails closed: CS is raised, SCK lowered and ownership released without cleanup
+clocks, FPGA evaluation or observer calls. The original exception and timestamp
+are retained. `spi().peek_failed()` then rejects further clocks and active
+transport/deadline work permanently, even if a service callback catches the
+exception. Discard that board and construct another. Passive snapshots, SRAM,
+CPU observations and diagnostics remain usable. This transport policy is
+distinct from recoverable hardware clock suspension.
+
+`cpu()` offers shared reset, selection/control reads and passive inspection.
+Selection reads decode only the CPU field, independently of the SuperPET I/O
+mode flag. Reset release preserves the selected machine configuration.
+`cpu(CPU_SOFT_6502)` or `cpu(CPU_SOFT_6809)` binds core-specific lifecycle
+operations. `prepare()` asserts reset, drains admitted activity and selects
+the core. `write_vector(entry)` requires that bound core quiescent in reset.
+`start(entry)` prepares, installs a native-endian vector, holds reset and
+releases it. `start()` instead uses an already installed vector.
+Startup does not imply program completion.
+
+6502 reset vectors use little-endian bytes at $FFFC, while 6809 vectors use
+big-endian bytes at $FFFE. Reset hold is 1,280 system cycles. Release sets READY
+only for soft 6502, clears it for other cores, and verifies resolved reset.
+External reset cannot be overridden. Selection requires quiescent reset, and
+stale bound views cannot release another core or overwrite its vector.
+Direct vector installation also requires an idle, unowned SPI bus. It drains
+outstanding controller work before patching SRAM, then rechecks CPU
+quiescence. Raw CS release settles for four cycles before checking both SPI
+and admitted Wishbone/SRAM activity. Calling it inside a checked or raw
+transaction is rejected before
+clocks or memory changes.
+Physical-6502 startup requires explicit fixture vector/memory setup, and its
+fetch history is unsupported. `write_control_raw(byte)` is the escape hatch
+for deliberately unusual control sequences.
+
+```cpp
+auto cpu = board.cpu(CPU_SOFT_6502);
+cpu.prepare();
+// Install native machine-code bytes in physical SRAM before writing the vector.
+board.poke(econopet::SramAddress{0x0300}, 0x4c);
+board.poke(econopet::SramAddress{0x0301}, 0x00);
+board.poke(econopet::SramAddress{0x0302}, 0x03);
+cpu.write_vector(econopet::CpuAddress{0x0300});
+const auto checkpoint = cpu.peek_fetch_checkpoint();
+cpu.release_reset();
+board.run_until([&](const System& observed) {
+    return observed.cpu(CPU_SOFT_6502).peek_fetched_at(
+        econopet::CpuAddress{0x0300}, checkpoint);
+}, econopet::Cycles{10000}, "6502 loop fetch");
+```
+
+Native address observations are not necessarily opcode fetches. Fetch history
+is per-address, monotonically checkpointed and preserved across reset and
+selection changes. Soft 6502 records SYNC opcode consumption at its advancing
+falling clock edge,
+using that edge's READY and pre-advance address. A core held on SYNC does not
+advance checkpoints, even as bus arbitration continues.
+Soft 6809 records native SYNC (not exact opcode attribution). Inactive
+cores and SPI accesses do not create CPU observations. Snapshots expose these
+simulation-only native signals without changing production RTL.
+
+SPI/CPU views borrow a persistent board and must not outlive it. Factories
+reject temporary boards. Const-board views expose only passive inspection.
+Active operations and captured transaction handles remain subject to observer
+and input-edit mutation guards.
 
 ## Shared hardware contract
 

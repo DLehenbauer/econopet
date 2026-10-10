@@ -33,7 +33,7 @@ target_include_directories(econopet_fpga_model SYSTEM PUBLIC
     "${VERILATED_DIR}" "${VERILATOR_ROOT}/include")
 
 # Keep board tests independent of ROM media, firmware transport and later APIs.
-add_executable(econopet_board_tests board_test.cpp observation_test.cpp)
+add_executable(econopet_board_tests board_test.cpp observation_test.cpp spi_cpu_test.cpp)
 target_compile_features(econopet_board_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_board_tests PRIVATE econopet_fpga_model econopet_external_io GTest::gtest_main)
 set(BOARD_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}/board")

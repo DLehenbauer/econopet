@@ -9,6 +9,22 @@
 
 #include "system.h"
 
+// Check exception categories and live diagnostic evidence without advancing the board.
+template<class Exception, class Operation>
+void expect_failure(const System& system, const std::string& operation, Operation action,
+                    const std::string& detail = "") {
+    try {
+        action();
+        FAIL() << "expected " << operation << " to fail";
+    } catch (const Exception& error) {
+        const std::string message = error.what();
+        for (const auto& field : {operation, detail, std::string("cycle="),
+             std::string("half_tick="), std::string("cpu="),
+             "seed=" + std::to_string(system.seed()), std::string("recent={")})
+            EXPECT_NE(message.find(field), std::string::npos) << message;
+    }
+}
+
 // Each board test owns a fresh production model without firmware or ROM media.
 class SystemTest : public testing::Test {
 protected:
