@@ -3,14 +3,22 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "Vsystem.h"
 #include "verilated.h"
@@ -21,9 +29,73 @@
 // Own one production FPGA and the physical devices fitted outside its boundary.
 class System {
     friend class SystemTest;
+    struct ObserverEntry {
+        std::function<void(const System&)> callback;
+    };
+    struct ObserverRegistry {
+        std::vector<std::weak_ptr<ObserverEntry>> entries;
+    };
 public:
     static constexpr size_t RamSize = econopet::SramCapacity;
     static constexpr uint8_t IdleRamByte = 0xea; // 6502 NOP in uninitialized SRAM.
+
+    enum class InitialState { Zero, Random };
+
+    // Parse a reproducible simulation seed without process-global RNG state.
+    static uint32_t parse_seed(std::string_view text) {
+        if (text.empty())
+            throw std::invalid_argument("simulation seed: empty seed (expected decimal integer in [1, INT_MAX])");
+        uint32_t value = 0;
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()
+            || value == 0 || value > static_cast<uint32_t>(std::numeric_limits<int>::max()))
+            throw std::invalid_argument("simulation seed: expected decimal integer in [1, INT_MAX]");
+        return value;
+    }
+    // Use a fixed default or an explicit environment seed independently on each board.
+    static uint32_t environment_seed() {
+        const char* text = std::getenv("ECONOPET_SIM_SEED");
+        return text ? parse_seed(text) : DefaultSeed;
+    }
+
+    // Own one observer without retaining or dereferencing its board.
+    class ObserverSubscription {
+    public:
+        // An empty subscription owns no callback.
+        ObserverSubscription() = default;
+        // Disconnect before captures in the enclosing scope are destroyed.
+        ~ObserverSubscription() { reset(); }
+        ObserverSubscription(const ObserverSubscription&) = delete;
+        ObserverSubscription& operator=(const ObserverSubscription&) = delete;
+        // Transfer ownership without changing registration order.
+        ObserverSubscription(ObserverSubscription&&) noexcept = default;
+        // Disconnect the previous callback before taking another registration.
+        ObserverSubscription& operator=(ObserverSubscription&& other) noexcept {
+            if (this != &other) {
+                reset();
+                registry_ = std::move(other.registry_);
+                entry_ = std::move(other.entry_);
+            }
+            return *this;
+        }
+        // Disconnect idempotently, including from inside an executing callback.
+        void reset() noexcept {
+            entry_.reset();
+            registry_.reset();
+        }
+        // Report whether the callback still belongs to a live board.
+        bool connected() const noexcept {
+            return entry_ && !registry_.expired();
+        }
+    private:
+        friend class System;
+        // Retain the callback while keeping board lifetime independent.
+        ObserverSubscription(const std::shared_ptr<ObserverRegistry>& registry,
+                             std::shared_ptr<ObserverEntry> entry)
+            : registry_(registry), entry_(std::move(entry)) {}
+        std::weak_ptr<ObserverRegistry> registry_;
+        std::shared_ptr<ObserverEntry> entry_;
+    };
 
     // Hold physical CPU address/control, releasing write data for a read.
     struct CpuStimulus {
@@ -122,8 +194,11 @@ public:
     };
 
     // Initialize inactive pins and SRAM before settling the production top.
-    System()
-        : context_(make_context()), dut_(std::make_unique<Vsystem>(context_.get())),
+    System() : System(environment_seed()) {}
+
+    // Seed the private context before model construction consumes randomness.
+    explicit System(uint32_t seed, InitialState initial = InitialState::Zero)
+        : context_(make_context(seed, initial)), dut_(std::make_unique<Vsystem>(context_.get())),
           io_([this] { require_mutable_access(); }) {
         ram_.fill(IdleRamByte);
         dut_->sys_clock_i = 0;
@@ -136,6 +211,7 @@ public:
         dut_->via_cb2_i = 1;
         drive_spi(true, false, false);
         tick(InitialSettleCycles);
+        remember("board initialized");
     }
 
     // Finalize the model while its private context is still alive.
@@ -155,12 +231,100 @@ public:
     uint64_t half_ticks() const { return context_->time(); }
     // Report a suspended tick that requires external reset before continuation.
     bool clock_faulted() const { return clock_faulted_; }
+    // Report the actual context seed independently of test-runner shuffle seeds.
+    uint32_t seed() const { return static_cast<uint32_t>(context_->randSeed()); }
+    // Report the startup policy independently of board reset.
+    InitialState initial_state() const {
+        return context_->randReset() == RandomInitialState ? InitialState::Random : InitialState::Zero;
+    }
+    // Format bounded, read-only evidence even at an interrupted half-cycle.
+    std::string diagnostic(const std::string& operation, const std::string& detail) const {
+        std::ostringstream out;
+        out << operation << ": " << detail << " [cycle=" << time().value()
+            << ", half_tick=" << half_ticks() % econopet::HalfTicksPerCycle << ", cpu=";
+        switch (dut_->cpu_selection_o) {
+        case ECONOPET_CPU_SEL_PHYS_6502: out << "physical6502"; break;
+        case ECONOPET_CPU_SEL_SOFT_6502: out << "soft6502"; break;
+        case ECONOPET_CPU_SEL_SOFT_6809: out << "soft6809"; break;
+        default: out << "invalid(" << unsigned(dut_->cpu_selection_o) << ')'; break;
+        }
+        out << ", seed=" << seed() << ", initial_state="
+            << (initial_state() == InitialState::Random ? "random" : "zero")
+            << ", reset=" << unsigned(dut_->cpu_reset_active_o)
+            << ", clock_faulted=" << clock_faulted()
+            << ", cpu_address=0x" << std::hex << dut_->cpu_addr_o
+            << ", sram_address=0x" << ram_address().value()
+            << ", spi_cs=" << unsigned(dut_->spi_cs_ni)
+            << ", spi_stall=" << unsigned(dut_->spi_stall_o) << std::dec
+            << ", recent={";
+        for (size_t index = 0; index < event_count_; ++index) {
+            const auto& event = recent_[(event_next_ + recent_.size() - event_count_ + index) % recent_.size()];
+            if (index) out << ", ";
+            out << event.half_ticks / econopet::HalfTicksPerCycle;
+            if (event.half_ticks % econopet::HalfTicksPerCycle) out << "+1/2";
+            out << ':' << event.operation << "(0x" << std::hex << event.address
+                << ",0x" << unsigned(event.data) << std::dec << ')';
+        }
+        return out.str() + "}]";
+    }
+    // Preserve exception categories while adding live board evidence.
+    template<class Exception>
+    Exception failure(const std::string& operation, const std::string& detail) const {
+        return Exception(diagnostic(operation, detail));
+    }
+    // Sample each completed cycle with a scoped, observation-only callback.
+    [[nodiscard]] ObserverSubscription observe(std::function<void(const System&)> observer) {
+        require_mutable_access();
+        if (!observer) throw failure<std::invalid_argument>("observe", "observer callback must not be empty");
+        prune_observers();
+        auto entry = std::make_shared<ObserverEntry>(ObserverEntry{std::move(observer)});
+        observers_->entries.push_back(entry);
+        return ObserverSubscription(observers_, std::move(entry));
+    }
+    // Poll a const board at the initial boundary and every cycle through the deadline.
+    template<class Predicate>
+    void run_until(Predicate done, econopet::Cycles budget, const std::string& reason) {
+        service_until(std::move(done), [](System& board, econopet::Cycles) { board.tick(1); }, budget, reason);
+    }
+    // Alternate passive completion checks with active work under an inherited deadline.
+    template<class Predicate, class Operation>
+    void service_until(Predicate done, Operation service, econopet::Cycles budget, const std::string& reason) {
+        static_assert(std::is_invocable_r_v<bool, Predicate&, const System&>,
+                      "completion predicates must observe const System&");
+        static_assert(std::is_invocable_v<Operation&, System&, econopet::Cycles>,
+                      "active operations must accept System& and remaining Cycles");
+        require_mutable_access();
+        const auto at = deadline_ && budget > deadline_->at - time()
+            ? deadline_->at : time() + budget;
+        DeadlineScope deadline(*this, at, reason);
+        remember("deadline begin");
+        const auto observe_done = [&] {
+            if (clock_faulted_)
+                throw failure<std::logic_error>("service_until", "recover the suspended clock before polling");
+            ObservationScope observation(*this);
+            const bool complete = std::invoke(done, std::as_const(*this));
+            observation.check_time();
+            return complete;
+        };
+        for (;;) {
+            const auto before = time();
+            if (observe_done()) return;
+            const auto remaining = deadline_->at - time();
+            if (remaining == econopet::Cycles{0}) timeout(deadline_->reason);
+            std::invoke(service, *this, remaining);
+            if (time() == before) {
+                if (observe_done()) return;
+                tick(1);
+            }
+        }
+    }
     // Read physical SRAM without going through the CPU or SPI bus.
     uint8_t peek(econopet::SramAddress address) const { return ram_[address.value()]; }
     // Patch physical SRAM for fixture setup without advancing the board.
     void poke(econopet::SramAddress address, uint8_t value) {
         require_mutable_access();
         ram_[address.value()] = value;
+        remember("SRAM patch", address.value(), value);
     }
     // Borrow fitted devices from a persistent board for external wiring and setup.
     econopet::io::Io& io() & { require_mutable_access(); return io_; }
@@ -174,20 +338,21 @@ public:
     void set_external_reset(bool asserted) {
         require_mutable_access();
         stimulus_.cpu_reset_n_i = dut_->cpu_reset_n_i = !asserted;
+        remember("external reset", 0, asserted);
     }
     // Drive independent interrupt sources that combine with fitted-device IRQs.
     void set_external_interrupts(bool irq_asserted, bool nmi_asserted) {
         require_mutable_access();
         stimulus_.cpu_irq_n_i = dut_->cpu_irq_n_i = !irq_asserted;
         stimulus_.cpu_nmi_n_i = dut_->cpu_nmi_n_i = !nmi_asserted;
+        remember("external interrupts", 0, irq_asserted | (nmi_asserted << 1));
     }
     // Hold address/control and optional physical CPU write data between ticks.
     void drive_physical_cpu(const CpuStimulus& cpu) {
         require_mutable_access();
         stimulus_.cpu = cpu;
-        dut_->cpu_addr_i = cpu.address.value();
-        dut_->cpu_we_n_i = !cpu.write_data.has_value();
-        dut_->cpu_sync_i = cpu.sync;
+        apply_physical_cpu(cpu);
+        remember("physical CPU", cpu.address.value(), cpu.write_data.value_or(0));
     }
     // Drive SPI0 boundary pins only (no transaction ownership or command policy).
     void drive_spi(bool cs_n, bool clock, bool data) {
@@ -205,7 +370,7 @@ public:
             dut_->config_crt_i = std::to_underlying(display);
             return;
         }
-        throw std::invalid_argument("unsupported display configuration");
+        throw failure<std::invalid_argument>("display", "unsupported display configuration");
     }
     // Set the keyboard DIP input using the production configuration enum.
     void set_keyboard(pet_keyboard_model_t keyboard) {
@@ -216,7 +381,7 @@ public:
             dut_->config_keyboard_i = std::to_underlying(keyboard);
             return;
         }
-        throw std::invalid_argument("unsupported keyboard configuration");
+        throw failure<std::invalid_argument>("keyboard", "unsupported keyboard configuration");
     }
     // Copy fixture-owned levels without retaining their board.
     RawStimulus peek_stimulus() const { return stimulus_; }
@@ -235,6 +400,7 @@ public:
             } scope(editing_stimulus_);
             std::invoke(std::forward<Edit>(edit), copy);
         }
+        remember_stimulus_changes(copy);
         apply_raw_stimulus(copy);
     }
 
@@ -242,10 +408,11 @@ public:
     void tick(econopet::Cycles cycles) {
         require_mutable_access();
         if (clock_faulted_ && stimulus_.cpu_reset_n_i)
-            throw std::logic_error("board clock is suspended after failure: assert external reset before ticking");
+            throw failure<std::logic_error>("tick", "board clock is suspended after failure: assert external reset before ticking");
         const auto remaining = cycles.half_ticks() - (cycles.value() != 0 && phase_ == ClockPhase::HighPending ? 1 : 0);
         if (remaining > std::numeric_limits<uint64_t>::max() - context_->time())
-            throw std::overflow_error("board clock would overflow simulation time");
+            throw failure<std::overflow_error>("tick", "board clock would overflow simulation time");
+        if (deadline_ && cycles > deadline_->at - time()) timeout(deadline_->reason);
         struct TickScope {
             bool& faulted;
             bool completed = false;
@@ -253,8 +420,9 @@ public:
             explicit TickScope(bool& state) : faulted(state) {}
             // Any interrupted tick requires explicit reset recovery.
             ~TickScope() { if (!completed) faulted = true; }
-        } scope(clock_faulted_);
+        };
         for (uint64_t index = 0; index < cycles.value(); ++index) {
+            TickScope scope(clock_faulted_);
             const auto completed = time() + econopet::Cycles{1};
             if (phase_ == ClockPhase::LowPending) {
                 // Present data before the rising edge, or resume here after a low-phase failure.
@@ -279,14 +447,16 @@ public:
             }
             if (ram_we_was_low_ && dut_->ram_we_n_o && ram_write_pending_) {
                 ram_[ram_write_address_.value()] = ram_write_data_;
+                remember("SRAM write", ram_write_address_.value(), ram_write_data_);
                 ram_write_pending_ = false;
             }
             ram_we_was_low_ = !dut_->ram_we_n_o;
             context_->timeInc(1);
             phase_ = ClockPhase::LowPending;
             clock_faulted_ = false;
+            scope.completed = true;
+            notify_observers();
         }
-        scope.completed = true;
     }
 
 private:
@@ -298,24 +468,150 @@ private:
     static constexpr uint8_t DiagnosticPortMask = 1 << 7;
     static constexpr int DefaultSeed = 1;
     static constexpr int ZeroInitialState = 0;
+    static constexpr int RandomInitialState = 2;
 
     // Initialize each model independently without modifying global Verilator RNGs.
-    static std::unique_ptr<VerilatedContext> make_context() {
+    static std::unique_ptr<VerilatedContext> make_context(uint32_t seed, InitialState initial) {
+        if (seed == 0 || seed > static_cast<uint32_t>(std::numeric_limits<int>::max()))
+            throw std::invalid_argument("System initialization: seed must be in [1, INT_MAX]");
+        if (initial != InitialState::Zero && initial != InitialState::Random)
+            throw std::invalid_argument("System initialization: unsupported initial-state policy");
         auto context = std::make_unique<VerilatedContext>();
-        context->randSeed(DefaultSeed);
-        context->randReset(ZeroInitialState);
+        context->randSeed(static_cast<int>(seed));
+        context->randReset(initial == InitialState::Random ? RandomInitialState : ZeroInitialState);
         return context;
     }
+    struct Deadline {
+        econopet::CycleTime at;
+        std::string reason;
+    };
+    // Install the tighter deadline and restore its enclosing scope on every exit.
+    class DeadlineScope {
+    public:
+        // Nested waits cannot extend the active operation's endpoint.
+        DeadlineScope(System& board, econopet::CycleTime at, const std::string& reason)
+            : board_(board), saved_(board.deadline_) {
+            if (!board_.deadline_ || at < board_.deadline_->at)
+                board_.deadline_ = Deadline{at, reason};
+        }
+        // Preserve the outer deadline after success, timeout or callback failure.
+        ~DeadlineScope() { board_.deadline_ = std::move(saved_); }
+        DeadlineScope(const DeadlineScope&) = delete;
+        DeadlineScope& operator=(const DeadlineScope&) = delete;
+    private:
+        System& board_;
+        std::optional<Deadline> saved_;
+    };
+    // Protect predicates and per-cycle observers from captured mutable references.
+    class ObservationScope {
+    public:
+        // Remember exact simulator time, including sub-cycle advancement.
+        explicit ObservationScope(System& board)
+            : board_(board), start_(board.half_ticks()), saved_(board.observing_) {
+            board_.observing_ = true;
+        }
+        // Restore access even when a callback throws.
+        ~ObservationScope() { board_.observing_ = saved_; }
+        ObservationScope(const ObservationScope&) = delete;
+        ObservationScope& operator=(const ObservationScope&) = delete;
+        // Diagnose advancement that bypassed ordinary clock-entry checks.
+        void check_time() const {
+            if (board_.half_ticks() != start_)
+                throw board_.failure<std::logic_error>("observation", "callback advanced simulation time");
+        }
+    private:
+        System& board_;
+        uint64_t start_;
+        bool saved_;
+    };
     // Prevent pin-edit callbacks from mutating or advancing their fitted board.
     void require_mutable_access() const {
+        if (observing_)
+            throw failure<std::logic_error>("observation", "callback cannot mutate or advance the board");
         if (editing_stimulus_ || io_.editing_inputs())
-            throw std::logic_error("pin edit callback cannot mutate or advance the board");
+            throw failure<std::logic_error>("stimulus edit", "callback cannot mutate or advance the board");
+    }
+    // Remove expired registrations without disturbing callback order.
+    void prune_observers() {
+        std::erase_if(observers_->entries, [](const auto& entry) { return entry.expired(); });
+    }
+    // Dispatch after completed I/O, SRAM and time updates, stopping on exceptions.
+    void notify_observers() {
+        if (observers_->entries.empty()) return;
+        prune_observers();
+        ObservationScope observation(*this);
+        for (const auto& registration : observers_->entries) {
+            const auto entry = registration.lock();
+            if (!entry) continue;
+            entry->callback(std::as_const(*this));
+            observation.check_time();
+        }
+    }
+    // Report the inclusive deadline without advancing the board.
+    [[noreturn]] void timeout(const std::string& reason) const {
+        throw failure<std::runtime_error>("deadline", reason + " timed out");
+    }
+    struct RecentEvent {
+        uint64_t half_ticks = 0;
+        const char* operation = "";
+        uint32_t address = 0;
+        uint8_t data = 0;
+    };
+    // Retain a bounded chronological ring without clocks or callback dispatch.
+    void remember(const char* operation, uint32_t address = 0, uint8_t data = 0) {
+        recent_[event_next_] = {half_ticks(), operation, address, data};
+        event_next_ = (event_next_ + 1) % recent_.size();
+        event_count_ = std::min(event_count_ + 1, recent_.size());
+    }
+    // Record only successfully committed changes, preserving the requested pin values.
+    void remember_stimulus_changes(const RawStimulus& next) {
+        if (next.cpu.address != stimulus_.cpu.address)
+            remember("CPU address", next.cpu.address.value());
+        if (next.cpu.write_data.has_value() != stimulus_.cpu.write_data.has_value())
+            remember("CPU write enable", 0, next.cpu.write_data.has_value());
+        if (next.cpu.write_data != stimulus_.cpu.write_data && next.cpu.write_data)
+            remember("CPU write data", 0, *next.cpu.write_data);
+        if (next.cpu.sync != stimulus_.cpu.sync)
+            remember("CPU sync", 0, next.cpu.sync);
+        static constexpr std::pair<const char*, bool RawStimulus::*> boolean_fields[]{
+            {"cpu_reset_n_i", &RawStimulus::cpu_reset_n_i},
+            {"cpu_irq_n_i", &RawStimulus::cpu_irq_n_i},
+            {"cpu_nmi_n_i", &RawStimulus::cpu_nmi_n_i},
+            {"diag_i", &RawStimulus::diag_i},
+            {"audio_det_i", &RawStimulus::audio_det_i},
+            {"config_hz_i", &RawStimulus::config_hz_i},
+            {"spi1_cs_ni", &RawStimulus::spi1_cs_ni},
+            {"spi1_sck_i", &RawStimulus::spi1_sck_i},
+            {"spi1_sd_i", &RawStimulus::spi1_sd_i},
+            {"spi1_sdo_i", &RawStimulus::spi1_sdo_i},
+            {"i2c0_scl_i", &RawStimulus::i2c0_scl_i},
+            {"i2c0_sda_i", &RawStimulus::i2c0_sda_i},
+            {"i2c1_scl_i", &RawStimulus::i2c1_scl_i},
+            {"i2c1_sda_i", &RawStimulus::i2c1_sda_i},
+            {"mcu_cec_i", &RawStimulus::mcu_cec_i},
+        };
+        for (const auto& [name, member] : boolean_fields) {
+            if (next.*member != stimulus_.*member)
+                remember(name, 0, next.*member);
+        }
+        if (next.pmod1_i != stimulus_.pmod1_i) remember("pmod1_i", 0, next.pmod1_i);
+        if (next.pmod2_i != stimulus_.pmod2_i) remember("pmod2_i", 0, next.pmod2_i);
+        for (size_t index = 0; index < next.spare.size(); ++index) {
+            if (next.spare[index] != stimulus_.spare[index])
+                remember("spare", static_cast<uint32_t>(index), next.spare[index]);
+        }
+    }
+    // Apply CPU pin levels without recording a public fixture operation.
+    void apply_physical_cpu(const CpuStimulus& cpu) {
+        dut_->cpu_addr_i = cpu.address.value();
+        dut_->cpu_we_n_i = !cpu.write_data.has_value();
+        dut_->cpu_sync_i = cpu.sync;
     }
     // Apply fixture pins without evaluating the model or changing time.
     void apply_raw_stimulus(const RawStimulus& stimulus) {
         require_mutable_access();
         stimulus_ = stimulus;
-        drive_physical_cpu(stimulus.cpu);
+        apply_physical_cpu(stimulus.cpu);
         dut_->cpu_reset_n_i = stimulus.cpu_reset_n_i;
         dut_->cpu_irq_n_i = stimulus.cpu_irq_n_i;
         dut_->cpu_nmi_n_i = stimulus.cpu_nmi_n_i;
@@ -360,7 +656,7 @@ private:
     uint8_t bus_read_data() const {
         if (physical_cpu_driving()) {
             if (dut_->cpu_data_oe)
-                throw std::runtime_error("physical CPU and FPGA both drive the data bus");
+                throw failure<std::runtime_error>("bus read", "physical CPU and FPGA both drive the data bus");
             return *stimulus_.cpu.write_data;
         }
         if (dut_->cpu_data_oe & DataBusEnabled) return dut_->cpu_data_o;
@@ -378,9 +674,13 @@ private:
             // Reset cancels the unsupported shift read, not SRAM or supported device reads.
             if (dut_->cpu_reset_active_o && reg == std::to_underlying(econopet::io::ViaRegister::Shift))
                 return econopet::io::PortAllHigh;
-            return io_.via().peek(static_cast<econopet::io::ViaRegister>(reg));
+            try {
+                return io_.via().peek(static_cast<econopet::io::ViaRegister>(reg));
+            } catch (const std::logic_error& error) {
+                throw failure<std::logic_error>("I/O read", error.what());
+            }
         }
-        throw std::runtime_error("I/O output enable asserted without a peripheral select");
+        throw failure<std::runtime_error>("I/O read", "I/O output enable asserted without a peripheral select");
     }
     // Connect PHI2, reset, selects, diagnostic sense, jiffy, IRQ and VIA outputs.
     void sample_io(econopet::CycleTime completed) {
@@ -399,14 +699,24 @@ private:
         const econopet::io::ChipSelects selects = (!dut_->pia1_cs_n_o ? ChipSelect::Pia1 : ChipSelect::None)
             | (!dut_->pia2_cs_n_o ? ChipSelect::Pia2 : ChipSelect::None)
             | (!dut_->via_cs_n_o ? ChipSelect::Via : ChipSelect::None);
-        io_.sample({dut_->cpu_clock_o != 0, dut_->cpu_reset_active_o != 0, selects,
-            static_cast<uint8_t>(dut_->cpu_addr_o & econopet::io::ViaRegisterMask),
-            write_bus_data(), dut_->cpu_we_n_o == 0, dut_->pia1_clock_o != 0}, completed);
+        try {
+            io_.sample({dut_->cpu_clock_o != 0, dut_->cpu_reset_active_o != 0, selects,
+                static_cast<uint8_t>(dut_->cpu_addr_o & econopet::io::ViaRegisterMask),
+                write_bus_data(), dut_->cpu_we_n_o == 0, dut_->pia1_clock_o != 0}, completed);
+        } catch (const std::logic_error& error) {
+            throw failure<std::logic_error>("I/O sample", error.what());
+        }
         dut_->io_irq_ni = !io_.irq();
         dut_->graphic_i = io_.via().ca2();
         dut_->via_cb2_i = io_.via().cb2();
     }
 
+    std::array<RecentEvent, 16> recent_{};
+    size_t event_next_ = 0;
+    size_t event_count_ = 0;
+    bool observing_ = false;
+    std::optional<Deadline> deadline_;
+    std::shared_ptr<ObserverRegistry> observers_ = std::make_shared<ObserverRegistry>();
     bool editing_stimulus_ = false;
     bool clock_faulted_ = false;
     ClockPhase phase_ = ClockPhase::LowPending;

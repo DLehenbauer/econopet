@@ -5,6 +5,7 @@
 #include <array>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include <gtest/gtest.h>
@@ -265,9 +266,27 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
         SCOPED_TRACE(writing);
         System board;
         ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits()));
+        unsigned observed = 0;
+        const auto start = board.time();
+        auto subscription = board.observe([&](const System& completed) {
+            ++observed;
+            EXPECT_EQ(completed.time(), start + Cycles{observed});
+            EXPECT_EQ(completed.half_ticks() % HalfTicksPerCycle, 0);
+            EXPECT_FALSE(completed.clock_faulted());
+        });
         board.drive_physical_cpu({ViaShiftAddress,
             writing ? std::optional<uint8_t>{Marker} : std::nullopt, false});
-        EXPECT_THROW(board.tick(ExecutionSlice), std::logic_error);
+        try {
+            board.tick(ExecutionSlice);
+            FAIL() << "unsupported VIA access completed";
+        } catch (const std::logic_error& error) {
+            const std::string message = error.what();
+            EXPECT_NE(message.find("I/O"), std::string::npos) << message;
+            EXPECT_NE(message.find("seed=" + std::to_string(board.seed())), std::string::npos) << message;
+            EXPECT_NE(message.find("cycle=" + std::to_string(board.time().value())), std::string::npos) << message;
+            EXPECT_NE(message.find("half_tick=" + std::to_string(board.half_ticks() % HalfTicksPerCycle)),
+                std::string::npos) << message;
+        }
         ASSERT_TRUE(board.clock_faulted());
         const auto stopped = board.half_ticks();
         const auto completed = board.time();
@@ -276,6 +295,8 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
         const auto pins = board.snapshot();
         const auto writes = board.io().via().writes().count();
         const auto io_clocks = board.io().clock_count();
+        const auto callbacks = observed;
+        EXPECT_EQ(observed, (completed - start).value());
         EXPECT_EQ(board.peek(ResultBacking), System::IdleRamByte);
         // A rejected retry must not silently advance or re-clock any device.
         EXPECT_THROW(board.tick(Cycles{1}), std::logic_error);
@@ -285,11 +306,16 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
         EXPECT_EQ(board.io().via().writes().count(), writes);
         EXPECT_EQ(board.io().clock_count(), io_clocks);
         EXPECT_EQ(board.peek(ResultBacking), System::IdleRamByte);
+        EXPECT_EQ(observed, callbacks);
+        // Active polling cannot claim success on an interrupted hardware clock.
+        EXPECT_THROW(board.run_until([](const System&) { return true; }, 0, "faulted poll"), std::logic_error);
+        EXPECT_NE(board.diagnostic("fault evidence", "").find("clock_faulted=1"), std::string::npos);
         // Reset cancels the access at its retained phase before normal clocks resume.
         board.set_external_reset(true);
         ASSERT_NO_THROW(board.tick(Cycles{0}));
         EXPECT_TRUE(board.clock_faulted());
         EXPECT_EQ(board.half_ticks(), stopped);
+        EXPECT_EQ(observed, callbacks);
         ASSERT_NO_THROW(board.tick(Cycles{1}));
         EXPECT_FALSE(board.clock_faulted());
         EXPECT_EQ(board.time(), completed + Cycles{1});
@@ -297,12 +323,63 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
         EXPECT_TRUE(board.snapshot().cpu_reset_active_o);
         EXPECT_EQ(board.io().via().writes().count(), writes);
         EXPECT_EQ(board.io().clock_count(), io_clocks);
+        EXPECT_EQ(observed, callbacks + 1);
         // Remove the invalid stimulus and demonstrate a fresh physical SRAM access.
         board.drive_physical_cpu({ResultAddress, OtherMarker, false});
         board.set_external_reset(false);
         for (unsigned slice = 0; slice < BusWaitSlices && board.peek(ResultBacking) != OtherMarker; ++slice)
             board.tick(ExecutionSlice);
         EXPECT_EQ(board.peek(ResultBacking), OtherMarker);
+    }
+}
+
+// Catching a hardware rejection cannot bypass health checks before completion.
+TEST_F(SystemTest, ServiceCompletionRequiresClockRecoveryAfterCaughtPeripheralFailure) {
+    enum class Recovery { None, ResetAsserted, Completed };
+    for (const auto recovery : {Recovery::None, Recovery::ResetAsserted, Recovery::Completed}) {
+        SCOPED_TRACE(std::to_underlying(recovery));
+        System board;
+        ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits()));
+        board.drive_physical_cpu({ViaShiftAddress, Marker, false});
+        unsigned predicates = 0;
+        bool caught = false;
+        uint64_t failure_time = 0;
+        const auto wait = [&] {
+            board.service_until([&](const System& observed) {
+                ++predicates;
+                EXPECT_FALSE(observed.clock_faulted());
+                return caught;
+            }, [&](System& active, Cycles) {
+                try {
+                    active.tick(ExecutionSlice);
+                    FAIL() << "unsupported VIA access completed";
+                } catch (const std::logic_error&) {
+                    caught = true;
+                    EXPECT_TRUE(active.clock_faulted());
+                    failure_time = active.half_ticks();
+                    EXPECT_EQ(failure_time % HalfTicksPerCycle, 1);
+                    if (recovery != Recovery::None) {
+                        active.set_external_reset(true);
+                        active.tick(recovery == Recovery::Completed ? Cycles{1} : Cycles{0});
+                    }
+                }
+            }, ExecutionSlice + Cycles{1}, "caught peripheral failure");
+        };
+        if (recovery == Recovery::Completed) {
+            EXPECT_NO_THROW(wait());
+            EXPECT_EQ(predicates, 2u);
+            EXPECT_FALSE(board.clock_faulted());
+            EXPECT_EQ(board.half_ticks(), failure_time + 1);
+        } else {
+            EXPECT_THROW(wait(), std::logic_error);
+            EXPECT_EQ(predicates, 1u);
+            EXPECT_TRUE(board.clock_faulted());
+            EXPECT_EQ(board.half_ticks(), failure_time);
+            board.set_external_reset(true);
+            EXPECT_NO_THROW(board.tick(1));
+        }
+        EXPECT_TRUE(caught);
+        EXPECT_NO_THROW(board.run_until([](const System&) { return true; }, 0, "recovered wait"));
     }
 }
 
@@ -382,6 +459,10 @@ TEST_F(SystemTest, PhysicalCpuStimulusWritesSramAndIoAndReleasesReadData) {
     write_fpga(system, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits());
     ASSERT_FALSE(system.snapshot().cpu_reset_active_o);
     system.poke(ResultBacking, 0);
+    bool observed_commit = false;
+    auto subscription = system.observe([&](const System& observed) {
+        if (observed.peek(ResultBacking) == Marker) observed_commit = true;
+    });
     system.drive_physical_cpu({ResultAddress, Marker, false});
     for (unsigned slice = 0; slice < BusWaitSlices && system.peek(ResultBacking) != Marker; ++slice)
         system.tick(ExecutionSlice);
@@ -391,6 +472,7 @@ TEST_F(SystemTest, PhysicalCpuStimulusWritesSramAndIoAndReleasesReadData) {
     write_fpga(system, WishboneAddress{BankedAddress.value()}, OtherMarker);
     EXPECT_EQ(system.peek(BankedAddress), OtherMarker);
     EXPECT_EQ(system.peek(ResultBacking), Marker);
+    EXPECT_TRUE(observed_commit);
     // Drive an external peripheral and verify the completed physical write.
     system.drive_physical_cpu({ViaDdrAAddress, OtherMarker, false});
     for (unsigned slice = 0; slice < BusWaitSlices

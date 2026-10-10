@@ -2,6 +2,8 @@
 // https://github.com/dlehenbauer/econopet
 #pragma once
 #include <array>
+#include <iostream>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -10,6 +12,15 @@
 // Each board test owns a fresh production model without firmware or ROM media.
 class SystemTest : public testing::Test {
 protected:
+    // Include the actual board seed in assertions independently of shuffle seeds.
+    SystemTest() : seed_trace_(__FILE__, __LINE__,
+        "ECONOPET_SIM_SEED=" + std::to_string(system.seed())) {
+        RecordProperty("simulation_seed", std::to_string(system.seed()));
+    }
+    // Report bounded live evidence for assertion failures outside board APIs.
+    void TearDown() override {
+        if (HasFailure()) std::cerr << system.diagnostic("test failure", "framework assertion") << '\n';
+    }
     // Check actual generated-model pins without duplicating the public snapshot API.
     void expect_stimulus_pins(const System::RawStimulus& expected) const {
         const auto& pins = *system.dut_;
@@ -39,4 +50,6 @@ protected:
         EXPECT_EQ(spare, expected.spare);
     }
     System system;
+private:
+    testing::ScopedTrace seed_trace_;
 };
