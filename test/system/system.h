@@ -5,9 +5,12 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -26,6 +29,7 @@
 #include "driver.h"
 #include "io.h"
 #include "registers.h"
+#include "roms.h"
 #include "system_state.h"
 
 namespace system_detail {
@@ -48,6 +52,16 @@ class System {
 public:
     static constexpr size_t RamSize = econopet::SramCapacity;
     static constexpr uint8_t IdleRamByte = 0xea; // 6502 NOP in uninitialized SRAM.
+
+    using RomSet = test_rom::Set;
+    enum class FixtureOverlap { Reject, Replace };
+
+    // Map an exact-size file into physical SRAM, independently of CPU decoding.
+    struct RomImage {
+        std::filesystem::path path;
+        econopet::SramAddress address;
+        size_t size;
+    };
 
     enum class InitialState { Zero, Random };
 
@@ -444,7 +458,7 @@ public:
         bool horiz_drive_o, vert_drive_o, jiffy_clock_o, video_o, audio_l_o, audio_r_o;
         uint8_t pmod1_o, pmod1_oe, pmod2_o, pmod2_oe;
         std::array<bool, 6> spare_o, spare_oe;
-        bool cpu_reset_active_o;
+        bool cpu_reset_active_o, spi_quiescent_o;
         uint8_t cpu_selection_o;
         econopet::CpuAddress soft6502_addr_o, soft6809_addr_o;
         bool soft6502_fetch_o, soft6809_fetch_o;
@@ -485,7 +499,8 @@ public:
                       bool(p.sp6_o), bool(p.sp7_o), bool(p.sp8_o)},
               spare_oe{bool(p.sp1_oe), bool(p.sp2_oe), bool(p.sp3_oe),
                        bool(p.sp6_oe), bool(p.sp7_oe), bool(p.sp8_oe)},
-              cpu_reset_active_o(p.cpu_reset_active_o), cpu_selection_o(p.cpu_selection_o),
+              cpu_reset_active_o(p.cpu_reset_active_o), spi_quiescent_o(p.spi_quiescent_o),
+              cpu_selection_o(p.cpu_selection_o),
               soft6502_addr_o(p.soft6502_addr_o), soft6809_addr_o(p.soft6809_addr_o),
               soft6502_fetch_o(p.soft6502_fetch_o), soft6809_fetch_o(p.soft6809_fetch_o) {}
     };
@@ -520,6 +535,101 @@ public:
 
     // Inspect a detached copy without evaluating or clocking the FPGA.
     Snapshot snapshot() const { return Snapshot(*dut_, stimulus_); }
+    // Install a complete set from local media, resolving the directory only on use.
+    void load_rom_set(RomSet set, FixtureOverlap overlap = FixtureOverlap::Reject) {
+        require_mutable_access();
+        const char* media = std::getenv("ECONOPET_MEDIA_DIR");
+        if (!media || !*media)
+            throw failure<std::runtime_error>("ROM directory", "ECONOPET_MEDIA_DIR must contain roms/");
+        load_rom_set(set, std::filesystem::path(media) / "roms", overlap);
+    }
+    // Commit revision metadata only after all declared images install successfully.
+    void load_rom_set(RomSet set, const std::filesystem::path& directory,
+                      FixtureOverlap overlap = FixtureOverlap::Reject) {
+        require_mutable_access();
+        const auto metadata = [&] {
+            try {
+                return test_rom::metadata(set);
+            } catch (const std::invalid_argument& error) {
+                throw failure<std::invalid_argument>("load_rom_set", error.what());
+            }
+        }();
+        std::vector<RomImage> images;
+        std::bitset<RamSize> selected_bytes;
+        for (const auto& image : test_rom::images(set)) {
+            images.push_back({directory / image.filename, image.address, image.size});
+            for (size_t index = image.address.value(); index < image.address.value() + image.size; ++index)
+                selected_bytes.set(index);
+        }
+        install_rom_images(images, overlap);
+        selected_rom_ = metadata;
+        selected_rom_bytes_ = selected_bytes;
+        remember("ROM set installed", std::to_underlying(set));
+    }
+    // Inspect declared base revision, not an identity inferred from mutable SRAM.
+    const std::optional<test_rom::Metadata>& selected_rom() const & { return selected_rom_; }
+    // Return owned optional storage when inspecting a temporary board.
+    std::optional<test_rom::Metadata> selected_rom() const && { return selected_rom_; }
+
+    // Validate ranges and file contents before a nonthrowing, clock-free batch commit.
+    void install_rom_images(const std::vector<RomImage>& images,
+                            FixtureOverlap overlap = FixtureOverlap::Reject) {
+        require_mutable_access();
+        require_spi_idle();
+        if (!dut_->cpu_reset_active_o || !dut_->spi_quiescent_o || ram_write_pending_
+            || time() - last_raw_spi_drive_ < SpiReleaseCycles)
+            throw failure<std::logic_error>("install_rom_images", "requires quiescent CPU reset and SPI transport");
+        if (overlap != FixtureOverlap::Reject && overlap != FixtureOverlap::Replace)
+            throw failure<std::invalid_argument>("install_rom_images", "unsupported fixture overlap policy");
+        if (images.empty()) throw failure<std::invalid_argument>("install_rom_images", "requires images");
+        std::bitset<RamSize> incoming;
+        for (const auto& image : images) {
+            if (image.size == 0)
+                throw failure<std::invalid_argument>("install_rom_images", "ROM images must not be empty");
+            if (image.size > ram_.size() - image.address.value())
+                throw failure<std::out_of_range>("install_rom_images", "ROM mapping exceeds physical SRAM at "
+                    + std::to_string(image.address.value()) + ", size=" + std::to_string(image.size));
+            for (size_t index = image.address.value(); index < image.address.value() + image.size; ++index) {
+                if (incoming[index])
+                    throw failure<std::invalid_argument>("install_rom_images", "ROM images overlap within installation");
+                if (fixture_bytes_[index] && overlap == FixtureOverlap::Reject)
+                    throw failure<std::invalid_argument>("install_rom_images", "ROM fixture overlap requires explicit replacement");
+                incoming[index] = true;
+            }
+        }
+        // Read every exact-size image into detached storage before touching SRAM or ownership.
+        std::vector<std::vector<uint8_t>> contents;
+        contents.reserve(images.size());
+        for (const auto& image : images) {
+            std::ifstream rom(image.path, std::ios::binary | std::ios::ate);
+            if (!rom)
+                throw failure<std::runtime_error>("install_rom_images", "cannot open ROM: " + image.path.string());
+            if (rom.tellg() != static_cast<std::streamoff>(image.size))
+                throw failure<std::runtime_error>("install_rom_images", "incorrect ROM size: " + image.path.string());
+            auto& bytes = contents.emplace_back(image.size);
+            rom.seekg(0);
+            if (!rom.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())))
+                throw failure<std::runtime_error>("install_rom_images", "cannot read ROM: " + image.path.string());
+            rom.close();
+            if (!rom)
+                throw failure<std::runtime_error>("install_rom_images", "cannot close ROM: " + image.path.string());
+        }
+        // Generic replacements invalidate identity only when they touch its selected-set bytes.
+        const bool replaces_selected = (incoming & selected_rom_bytes_).any();
+        for (size_t index = 0; index < images.size(); ++index)
+            std::copy(contents[index].begin(), contents[index].end(), ram_.begin() + images[index].address.value());
+        fixture_bytes_ |= incoming;
+        if (replaces_selected) {
+            selected_rom_.reset();
+            selected_rom_bytes_.reset();
+        }
+        remember("ROM images installed", images.size());
+    }
+    // Install one image with the same explicit overlap policy and failure atomicity.
+    void load_rom(const std::filesystem::path& path, econopet::SramAddress address,
+                  size_t size, FixtureOverlap overlap = FixtureOverlap::Reject) {
+        install_rom_images({{path, address, size}}, overlap);
+    }
     // Return completed whole cycles, including when an interrupted cycle is pending.
     econopet::CycleTime time() const {
         return econopet::CycleTime{econopet::Cycles{context_->time() / econopet::HalfTicksPerCycle}};
@@ -666,6 +776,7 @@ public:
         dut_->spi_cs_ni = cs_n;
         dut_->spi_sck_i = clock;
         dut_->spi_sdo_i = data;
+        last_raw_spi_drive_ = time();
     }
     // Set the display DIP input using the production configuration enum.
     void set_display(pet_video_type_t display) {
@@ -1212,6 +1323,9 @@ private:
     std::unique_ptr<Vsystem> dut_;
     RawStimulus stimulus_;
     std::array<uint8_t, RamSize> ram_;
+    std::bitset<RamSize> fixture_bytes_, selected_rom_bytes_;
+    std::optional<test_rom::Metadata> selected_rom_;
+    econopet::CycleTime last_raw_spi_drive_{econopet::Cycles{0}};
     econopet::io::Io io_;
     bool ram_we_was_low_ = false;
     bool ram_write_pending_ = false;

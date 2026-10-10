@@ -409,6 +409,51 @@ reject temporary boards. Const-board views expose only passive inspection.
 Active operations and captured transaction handles remain subject to observer
 and input-edit mutation guards.
 
+## Atomic ROM fixtures
+
+`load_rom(path, SramAddress, size)` and `install_rom_images(images)` install
+exact-size binary images into physical SRAM. The whole batch is validated and
+read into detached buffers before any bytes or fixture ownership change.
+Missing files, incorrect sizes, read failures, invalid mappings and overlaps
+throw with board diagnostics. Success and failure both leave simulation time
+unchanged.
+
+Installation requires asserted CPU reset, a healthy clock, no active SPI
+owner, idle boundary pins and no outstanding SPI/Wishbone/SRAM work. After
+manual `drive_spi()` edits, first clock at least four release cycles with CS
+high and SCK low, then explicitly drain outstanding work. Installation rejects
+unsettled transport without silently advancing, resetting or selecting a CPU.
+
+The default `FixtureOverlap::Reject` disallows replacing fixture-installed
+bytes. `FixtureOverlap::Replace` permits replacing earlier fixtures, but never
+permits overlapping images within the incoming batch. Adjacent images are
+allowed, and all physical SRAM banks are available.
+
+```cpp
+system.load_rom("custom.bin", econopet::SramAddress{0xc000}, 4096);
+system.load_rom_set(System::RomSet::Upgrade, "/local/media/roms",
+                    System::FixtureOverlap::Replace);
+```
+
+Supported complete manifests and revision entry metadata are declared in
+[`roms.h`](roms.h). Each immutable descriptor binds metadata to static image
+arrays. `images(set)` returns a read-only span with static lifetime rather
+than allocating a container. The directory-free `load_rom_set(set)` resolves
+`$ECONOPET_MEDIA_DIR/roms` only when called, never during test discovery.
+Synthetic loader tests require no ROM media. Pure manifest and complete
+routine-entry checks in [`rom_catalog_test.cpp`](rom_catalog_test.cpp) run in
+the host target with `BUILD_BOARD_TESTS=OFF`, without Verilator. Both supported
+Commodore revisions provide CIOUT, so only the revision-specific TRANS1 entry
+is optional. Actual ROM execution belongs to later layers.
+
+`selected_rom()` describes the declared base revision, not a content hash.
+Complete-set metadata commits atomically with its bytes. A failed installation
+preserves the prior selection. Deliberate `poke()` patches and reset preserve
+this base identity. Generic installation outside the selected set also
+preserves it, while replacement touching any selected-set byte invalidates it.
+The const-lvalue accessor borrows optional storage from its board. The rvalue
+accessor returns owned optional storage. Revision entries have static lifetime.
+
 ## Shared hardware contract
 
 [`hardware_contract.h`](../../fw/src/hardware_contract.h) owns the

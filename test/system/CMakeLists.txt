@@ -48,8 +48,8 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# Discover fixture, value-type and peripheral invariants without a simulated board.
-add_executable(econopet_system_tests disk_fixture_test.cpp io_test.cpp types_test.cpp registers_test.cpp)
+# Discover fixture, catalog, value-type and peripheral invariants without a simulated board.
+add_executable(econopet_system_tests disk_fixture_test.cpp io_test.cpp types_test.cpp registers_test.cpp rom_catalog_test.cpp)
 target_compile_features(econopet_system_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_system_tests PRIVATE
     econopet_disk_fixtures econopet_external_io GTest::gtest_main)
