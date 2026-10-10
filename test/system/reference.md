@@ -487,6 +487,9 @@ start and includes its endpoint.
 Recorders subscribe to completed-cycle boundaries, do not clock the board,
 and are movable but not copyable. Move assignment stops the destination's
 previous subscription. `stop()` is idempotent and preserves past evidence.
+Event sources prune expired and stopped registrations when attaching new
+recorders as well as when emitting, so idle sources do not accumulate stale
+subscription storage across repeated recorder lifetimes.
 Recorders and detached captures can outlive their board. Const-lvalue access
 borrows records and timestamps. Rvalue recorder access copies shared storage
 without disrupting active sampling. Rvalue capture access transfers owned

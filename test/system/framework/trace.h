@@ -210,13 +210,14 @@ struct TraceState {
 template<class Record>
 class TraceSource {
 public:
-    // Attach storage owned by a scoped recorder.
-    void subscribe(const std::shared_ptr<TraceState<Record>>& state) { subscribers_.push_back(state); }
+    // Attach storage while removing idle registrations that no longer receive events.
+    void subscribe(const std::shared_ptr<TraceState<Record>>& state) {
+        prune();
+        subscribers_.push_back(state);
+    }
     // Deliver a source event to each live recorder in registration order.
     void emit(econopet::CycleTime at, Record record) {
-        subscribers_.erase(std::remove_if(subscribers_.begin(), subscribers_.end(),
-            [](const auto& weak) { const auto state = weak.lock(); return !state || !state->active; }),
-            subscribers_.end());
+        prune();
         try {
             for (const auto& weak : subscribers_)
                 if (const auto state = weak.lock()) state->append(at, record);
@@ -237,6 +238,13 @@ public:
         subscribers_.clear();
     }
 private:
+    // Release expired and stopped subscription storage even if the source never emits.
+    void prune() {
+        std::erase_if(subscribers_, [](const auto& weak) {
+            const auto state = weak.lock();
+            return !state || !state->active;
+        });
+    }
     std::vector<std::weak_ptr<TraceState<Record>>> subscribers_;
 };
 

@@ -42,6 +42,64 @@ struct CountedRecord {
     CountedRecord(const CountedRecord& other) : copies(other.copies), value(other.value) { ++*copies; }
     CountedRecord(CountedRecord&&) noexcept = default;
 };
+
+// Measure retained shared control blocks without exposing a source's private subscriptions.
+template<class T>
+struct CountingAllocator {
+    using value_type = T;
+    std::shared_ptr<size_t> outstanding;
+    // Share allocation accounting across allocator copies and rebinds.
+    explicit CountingAllocator(std::shared_ptr<size_t> counter) : outstanding(std::move(counter)) {}
+    // Preserve the counter when allocate_shared rebinds to its control-block type.
+    template<class U>
+    CountingAllocator(const CountingAllocator<U>& other) : outstanding(other.outstanding) {}
+    // Count successful shared storage allocations, including their weak-reference control blocks.
+    T* allocate(size_t count) {
+        T* result = std::allocator<T>{}.allocate(count);
+        ++*outstanding;
+        return result;
+    }
+    // Detect when the final strong or weak owner releases shared storage.
+    void deallocate(T* pointer, size_t count) {
+        std::allocator<T>{}.deallocate(pointer, count);
+        --*outstanding;
+    }
+    // Allocators sharing accounting can deallocate each other's storage.
+    template<class U>
+    bool operator==(const CountingAllocator<U>& other) const { return outstanding == other.outstanding; }
+};
+}
+
+TEST(TraceCore, IdleSubscriptionsPruneExpiredAndStoppedSharedStorage) {
+    TraceSource<uint8_t> source;
+    const auto outstanding = std::make_shared<size_t>(0);
+    const auto initial = storage();
+    const CountingAllocator<TraceState<uint8_t>> allocator{outstanding};
+    constexpr unsigned SubscriptionCount = 100;
+    for (unsigned index = 0; index < SubscriptionCount; ++index) {
+        auto state = std::allocate_shared<TraceState<uint8_t>>(allocator, *initial);
+        source.subscribe(state);
+        ASSERT_EQ(*outstanding, 1u) << "expired subscription at iteration " << index;
+        state.reset();
+    }
+    source.stop();
+    EXPECT_EQ(*outstanding, 0u);
+    auto stopped = std::allocate_shared<TraceState<uint8_t>>(allocator, *initial);
+    source.subscribe(stopped);
+    for (unsigned index = 0; index < SubscriptionCount; ++index) {
+        stopped->active = false;
+        auto next = std::allocate_shared<TraceState<uint8_t>>(allocator, *initial);
+        source.subscribe(next);
+        stopped.reset();
+        ASSERT_EQ(*outstanding, 1u) << "stopped subscription at iteration " << index;
+        stopped = std::move(next);
+    }
+    source.emit(CycleTime{Cycles{1}}, 0x42);
+    stopped->cover(CycleTime{Cycles{1}});
+    stopped->capture().require_count(1, "remaining active subscriber");
+    source.stop();
+    stopped.reset();
+    EXPECT_EQ(*outstanding, 0u);
 }
 
 TEST(TraceCore, WindowSelectionCopiesOnlySelectedRecordsAndValidatesBeforeCopying) {
