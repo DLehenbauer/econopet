@@ -196,6 +196,9 @@ void Via6522::set_timer1_fault(Timer1Fault fault) {
 void Io::sample(const BusSample& bus, CycleTime at) {
     if (edits_.guard) edits_.guard();
     if (edits_.active) throw std::logic_error("device inputs: sampling during editing is not allowed");
+    const bool cpu_falling = previous_.phi2 && !bus.phi2 && !previous_.reset;
+    const bool pia1_falling = previous_.pia1_phi2.value_or(previous_.phi2)
+        && !bus.pia1_phi2.value_or(bus.phi2) && !previous_.reset;
     // Reset ignores physical selects and cancels any pending access.
     if (!bus.reset && bus.selects != ChipSelect::None && bus.selects != ChipSelect::Pia1
         && bus.selects != ChipSelect::Pia2 && bus.selects != ChipSelect::Via) {
@@ -208,23 +211,27 @@ void Io::sample(const BusSample& bus, CycleTime at) {
             pia2_.reset();
             via_.reset();
         }
-    } else if (previous_.phi2 && !bus.phi2 && !previous_.reset) {
+    } else if (cpu_falling || pia1_falling) {
         // Decode the preceding stable sample, not the new falling-edge levels.
         const Pia6520::BusAccess pia_access{
             static_cast<PiaRegister>(previous_.reg & PiaRegisterMask), previous_.data, previous_.write, at};
         const Via6522::BusAccess via_access{
             static_cast<ViaRegister>(previous_.reg), previous_.data, previous_.write, at};
         // Preflight the selected access before any device can advance or latch IRQs.
-        if (previous_.selects == ChipSelect::Pia1 || previous_.selects == ChipSelect::Pia2) {
+        if ((pia1_falling && previous_.selects == ChipSelect::Pia1)
+            || (cpu_falling && previous_.selects == ChipSelect::Pia2)) {
             Pia6520::validate(pia_access.reg);
-        } else if (previous_.selects == ChipSelect::Via) {
+        } else if (cpu_falling && previous_.selects == ChipSelect::Via) {
             Via6522::validate(via_access);
         }
-        // Clock all devices only after the complete access has passed validation.
-        pia1_.clock(previous_.selects == ChipSelect::Pia1 ? std::optional<Pia6520::BusAccess>(pia_access) : std::nullopt);
-        pia2_.clock(previous_.selects == ChipSelect::Pia2 ? std::optional<Pia6520::BusAccess>(pia_access) : std::nullopt);
-        via_.clock(previous_.selects == ChipSelect::Via ? std::optional<Via6522::BusAccess>(via_access) : std::nullopt);
-        ++clocks_;
+        // Advance each fitted chip only at its own validated PHI2 boundary.
+        if (pia1_falling)
+            pia1_.clock(previous_.selects == ChipSelect::Pia1 ? std::optional<Pia6520::BusAccess>(pia_access) : std::nullopt);
+        if (cpu_falling) {
+            pia2_.clock(previous_.selects == ChipSelect::Pia2 ? std::optional<Pia6520::BusAccess>(pia_access) : std::nullopt);
+            via_.clock(previous_.selects == ChipSelect::Via ? std::optional<Via6522::BusAccess>(via_access) : std::nullopt);
+            ++clocks_;
+        }
     }
     // Retain the current levels for the next latch/reset transition.
     previous_ = bus;

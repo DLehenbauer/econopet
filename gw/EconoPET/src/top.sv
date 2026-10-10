@@ -314,7 +314,7 @@ module top #(
         .via_cb2_i(via_cb2_i),
         .audio_l_o(audio_l_o),
         .audio_r_o(audio_r_o),
-        .audio_det_i(!audio_det_n_i),
+        .audio_det_i(audio_det_i),
 
         // Keyboard
         .config_keyboard_i(config_keyboard_i),
