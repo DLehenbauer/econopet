@@ -23,6 +23,18 @@ target_include_directories(econopet_disk_fixtures PUBLIC "${ECONOPET_ROOT}/test/
 target_include_directories(econopet_disk_fixtures PUBLIC "${ECONOPET_ROOT}/fw/src")
 set_target_properties(econopet_disk_fixtures PROPERTIES C_STANDARD 11)
 
+# Build digital peripheral adapters independently of the FPGA simulator.
+set(CHIPS_INCLUDE_DIR "${ECONOPET_ROOT}/test/external/chips/chips")
+if(NOT EXISTS "${CHIPS_INCLUDE_DIR}/m6520.h" OR NOT EXISTS "${CHIPS_INCLUDE_DIR}/m6522.h")
+    message(FATAL_ERROR
+        "Missing chips models. Run: git submodule update --init test/external/chips")
+endif()
+add_library(econopet_external_io STATIC io.cpp)
+target_compile_features(econopet_external_io PUBLIC cxx_std_23)
+target_include_directories(econopet_external_io SYSTEM PUBLIC "${CHIPS_INCLUDE_DIR}")
+target_include_directories(econopet_external_io PUBLIC
+    "${CMAKE_CURRENT_LIST_DIR}" "${ECONOPET_ROOT}/fw/src")
+
 if(NOT BUILD_TESTING)
     return()
 endif()
@@ -35,10 +47,11 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# Discover fixture and value-type invariants without a simulated board.
-add_executable(econopet_system_tests disk_fixture_test.cpp types_test.cpp)
+# Discover fixture, value-type and peripheral invariants without a simulated board.
+add_executable(econopet_system_tests disk_fixture_test.cpp io_test.cpp types_test.cpp)
 target_compile_features(econopet_system_tests PRIVATE cxx_std_23)
-target_link_libraries(econopet_system_tests PRIVATE econopet_disk_fixtures GTest::gtest_main)
+target_link_libraries(econopet_system_tests PRIVATE
+    econopet_disk_fixtures econopet_external_io GTest::gtest_main)
 set(SYSTEM_DISCOVERY_TIMEOUT_SECONDS 60)
 set(SYSTEM_TEST_TIMEOUT_SECONDS 300)
 # Preserve the label list through GoogleTest's generated CTest property list.

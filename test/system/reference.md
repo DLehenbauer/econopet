@@ -31,10 +31,16 @@ Both `all` presets include this suite, so it runs in CI. Root builds place its
 generated files in `build/system`. The standalone commands below use
 `build/host-fixtures` instead.
 
-The shared D64 fixtures, checked framework value types, and their C++ tests run
+The shared D64 fixtures, checked framework value types, external PIA/VIA models,
+and their C++ tests run
 without Verilator, a simulated board, ROM media, or firmware transport.
 
 Standalone builds require CMake 3.20 or later.
+Initialize the pinned peripheral model dependency before configuring:
+
+```sh
+git submodule update --init test/external/chips
+```
 
 The hardware contract consistency test requires Icarus Verilog (`iverilog`
 and `vvp`). It elaborates only the production constants, not a simulated board.
@@ -51,6 +57,117 @@ with `cmake --build --preset fw-test` and `ctest --preset fw`.
 Keep regression tests in the suite for the feature they exercise. Register
 expected-abort tests with the forked runner, using a separate fatal suite in the
 same feature test file when its normal suite runs without forking.
+
+## External PIA/VIA models
+
+[`io.h`](io.h) and [`io.cpp`](io.cpp) adapt the pinned
+[`chips`](../external/chips) digital models. The `econopet_external_io` library
+builds in Debug, independently of GoogleTest and the FPGA simulator. Its tests
+are in [`io_test.cpp`](io_test.cpp).
+
+The submodule requires the [DLehenbauer/chips fork](https://github.com/DLehenbauer/chips),
+pinned to [`264ddc2`](https://github.com/DLehenbauer/chips/commit/264ddc2fe7a5127eeb0e87e44af6ca2314818706),
+rather than upstream `floooh/chips`. The adapters depend on its:
+
+- MOS 6520 model and `m6520_peek`/`m6522_peek` functions, which preview
+  register reads with current input levels without advancing the original
+  model or acknowledging its interrupts or handshakes.
+- PIA C2 fixes for manual levels, read-A/write-B handshake strobes, one-cycle
+  pulses, and preservation of externally driven control-input levels.
+- VIA fixes for independent control-input edge sampling, preservation of
+  input levels, IRQ summary gating after enable changes, and ignoring IFR
+  summary-bit writes when acknowledging source flags.
+- VIA timer-load pipeline restart, underflow detection only on actual count
+  edges (including maximum loads), and reset suppression of one-shot
+  interrupts until the timers are rearmed.
+- T2 pulse counting from resolved PB6 levels across DDR/output changes,
+  independently of external/output disagreement or the port input latch.
+
+Dependency updates must preserve them and pass the peripheral regressions.
+PIA/VIA control and GPIO pin encodings must also match (checked at compile time).
+
+`Pia6520` models DDR/output-latch isolation, mixed GPIO, both control-input
+edge polarities, interrupt flags/enables, and fixed/handshake/pulse C2 outputs.
+`Via6522` models unlatched GPIO, T1 one-shot/free-running timers, timed or
+PB6-counted T2, IFR/IER, control-input interrupts, and fixed/handshake C2
+outputs. VIA shift-register accesses, input latching, PB7 timer output, and C2
+pulse-output modes throw before changing device state or write observations.
+These are digital models, not analog loading or propagation-delay models.
+T2 pulse counting observes the resolved PB6 pin: DDR selects the external
+input or output latch. External transitions cannot count while PB6 is driven
+as an output, and stable levels never generate repeated pulses. Output-latch
+and direction changes count only when they produce a resolved falling edge.
+
+Access fitted devices with `pia1()`, `pia2()`, and `via()`. Use named
+`PiaRegister`, `ViaRegister`, control flags, and interrupt sources.
+PIA control composites such as `PiaC2High` pass directly to `set_control`.
+Use `.bits()` only when encoding a raw bus or assembly byte.
+Use `ChipSelect::None`, `ChipSelect::Pia1`, `ChipSelect::Pia2`, and
+`ChipSelect::Via` directly when constructing `ChipSelects` bus selections.
+
+```cpp
+using namespace econopet;
+using namespace econopet::io;
+
+Io devices;
+auto& pia = devices.pia1();
+const CycleTime at{Cycles{0}};
+
+// Configure external inputs and a mixed-direction port.
+pia.inputs([](Inputs& levels) { levels.port_a = 0xa5; });
+pia.set_control(PiaRegister::ControlA, PiaDdrAccess, at);
+write(pia, PiaRegister::PortA, 0x0f, at + Cycles{1});
+// Select port access and a fixed high CA2 output, then drive the output latch.
+pia.set_control(PiaRegister::ControlA, PiaC2High, at + Cycles{2});
+write(pia, PiaRegister::PortA, 0x03, at + Cycles{3});
+// Observe without acknowledgment, then complete a read.
+const auto presented = pia.peek(PiaRegister::PortA);
+const auto completed = read(pia, PiaRegister::PortA, at + Cycles{4});
+```
+
+`read(device, reg, at)` and `write(device, reg, data, at)` each advance that
+peripheral by one clock, not the board clock. Reads return the presented value
+before acknowledging flags or handshakes. `peek` and `peek_inputs` change
+nothing. Keep `clock(access)` for timestamped PHI2 bus integration.
+
+`inputs(callback)` edits detached levels and commits only after successful
+callback completion and mutation-guard checks. Callback or guard failures
+discard the edit. Nested edits and peripheral mutation during a fitted
+device's callback are rejected across all fitted devices.
+
+`Pia6520`, `Via6522`, and `Io` are noncopyable and nonmovable. Device references
+must not outlive their `Io` owner. Copy `state()` or use `peek_inputs()` for
+detached snapshots. Reset preserves externally driven inputs, injected faults,
+and write history.
+
+`Io::sample` captures the preceding stable bus sample once at falling PHI2.
+Repeated high/low samples do not duplicate accesses, deselected devices still
+clock their timers, and reset assertion cancels pending accesses even with
+overlapping selects or an invalid register. Held reset does not repeatedly
+reset the devices. Multiple physical chip selects are rejected when reset is
+inactive. `writes().last()` is optional, so no write
+is distinct from a write of zero. Completed-write records carry the caller's
+full-cycle timestamp, and explicit observation clearing does not reset devices.
+The selected access is validated before any peripheral advances. Unsupported
+VIA modes or out-of-range registers leave every device, write history, cycle
+count, and pending bus sample unchanged. Retrying the rejected falling edge
+rejects again without ticking. Present a corrected high sample before completing
+the access, or assert reset to cancel it.
+
+`Via6522::Timer1Fault::StuckInterruptFlag` is an explicit synthetic overlay.
+It does not modify normal timer state, survives reset, and raises IRQ only
+when the corresponding source is enabled. Removing the fault exposes the
+normal underlying interrupt flags again.
+
+Run the standalone peripheral checks with:
+
+```sh
+ctest --test-dir build/system \
+  -R '^system\.External(Types|Pia|Via|Bus)\.' --output-on-failure
+```
+
+Trace publication, board wiring, and real-CPU bus/IRQ integration tests belong
+to later incremental layers.
 
 ## Shared hardware contract
 
