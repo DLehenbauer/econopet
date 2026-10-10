@@ -73,6 +73,7 @@ module mock_system (
     // Config
     logic config_crt = 1'b0;
     logic config_keyboard = 1'b0;
+    logic audio_det_n = 1'b1;
 
     top top (
         .sys_clock_i(sys_clock),
@@ -113,6 +114,7 @@ module mock_system (
         .spi_stall_o(spi_stall),
 
         .graphic_i(video_graphics),
+        .audio_det_n_i(audio_det_n),
 
         .config_crt_i(config_crt),
         .config_keyboard_i(config_keyboard)

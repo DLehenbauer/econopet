@@ -9,6 +9,12 @@ module top_tb;
     logic cpu_clock;
     logic cpu_reset_n;
     logic cpu_ready;
+    logic fixture_audio_det = 1'b0;
+
+    system audio_fixture (
+        .sys_clock_i(1'b0),
+        .audio_det_i(fixture_audio_det)
+    );
 
     mock_system mock_system (
         .cpu_clock_o(cpu_clock),
@@ -24,6 +30,27 @@ module top_tb;
         `assert_equal(mock_system.top.i2c1_scl_oe, 1'b0);
         `assert_equal(mock_system.top.i2c1_sda_oe, 1'b0);
         `assert_equal(mock_system.top.mcu_cec_oe, 1'b0);
+    endtask
+
+    // Normalize both physical jack-detect levels at the production boundary.
+    task static audio_detect_test;
+        mock_system.audio_det_n = 1'b1;
+        #1;
+        `assert_equal(mock_system.top.main.audio_det_i, 1'b0);
+        mock_system.audio_det_n = 1'b0;
+        #1;
+        `assert_equal(mock_system.top.main.audio_det_i, 1'b1);
+        mock_system.audio_det_n = 1'b1;
+        // Check the simulator's active-high fixture input through both boundaries.
+        fixture_audio_det = 1'b0;
+        #1;
+        `assert_equal(audio_fixture.top.audio_det_n_i, 1'b1);
+        `assert_equal(audio_fixture.top.main.audio_det_i, 1'b0);
+        fixture_audio_det = 1'b1;
+        #1;
+        `assert_equal(audio_fixture.top.audio_det_n_i, 1'b0);
+        `assert_equal(audio_fixture.top.main.audio_det_i, 1'b1);
+        fixture_audio_det = 1'b0;
     endtask
 
     task static test_rw(
@@ -456,6 +483,7 @@ module top_tb;
 
         mock_system.init;
         future_gpio_test;
+        audio_detect_test;
         // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
         spi_ram_test;

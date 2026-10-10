@@ -295,6 +295,7 @@ private:
     static constexpr uint16_t SharedRamAddressMask = 0x73ff;
     static constexpr uint8_t DataBusEnabled = 1;
     static constexpr uint8_t JiffyPortMask = 1 << 5;
+    static constexpr uint8_t DiagnosticPortMask = 1 << 7;
     static constexpr int DefaultSeed = 1;
     static constexpr int ZeroInitialState = 0;
 
@@ -381,10 +382,14 @@ private:
         }
         throw std::runtime_error("I/O output enable asserted without a peripheral select");
     }
-    // Connect PHI2, reset, selects, jiffy, IRQ and VIA outputs to fitted devices.
+    // Connect PHI2, reset, selects, diagnostic sense, jiffy, IRQ and VIA outputs.
     void sample_io(econopet::CycleTime completed) {
-        // Feed the board's jiffy level into its PIA input and VIA GPIO input.
-        io_.pia1().inputs([&](auto& inputs) { inputs.cb1 = dut_->jiffy_clock_o; });
+        // Feed shared physical levels while preserving unrelated fixture inputs.
+        io_.pia1().inputs([&](auto& inputs) {
+            inputs.cb1 = dut_->jiffy_clock_o;
+            inputs.port_a = static_cast<uint8_t>((inputs.port_a & ~DiagnosticPortMask)
+                | (stimulus_.diag_i ? DiagnosticPortMask : 0));
+        });
         io_.via().inputs([&](auto& inputs) {
             inputs.port_b = static_cast<uint8_t>((inputs.port_b & ~JiffyPortMask)
                 | (dut_->jiffy_clock_o ? JiffyPortMask : 0));

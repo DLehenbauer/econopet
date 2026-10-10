@@ -225,7 +225,7 @@ module system (
         .via_cb2_i,
         .audio_l_o,
         .audio_r_o,
-        .audio_det_i,
+        .audio_det_n_i(!audio_det_i),
         .pmod1_i,
         .pmod1_o,
         .pmod1_oe,

@@ -28,6 +28,7 @@ constexpr SramAddress BankedAddress{0x10400};
 constexpr CpuAddress ViaDdrAAddress{0xe840 + std::to_underlying(ViaRegister::DdrA)};
 constexpr uint8_t Marker = 0x42;
 constexpr uint8_t OtherMarker = 0x5a;
+constexpr uint8_t DiagnosticPortMask = 1 << 7;
 constexpr uint8_t ViaPcrReset = 0;
 constexpr CpuAddress ViaShiftAddress{0xe840 + std::to_underlying(ViaRegister::Shift)};
 constexpr CpuAddress ProgramAddress{0x0200};
@@ -180,6 +181,24 @@ TEST_F(SystemTest, RawStimulusMapsEveryFixtureInputToItsActualPin) {
         EXPECT_TRUE(system.snapshot().spi_cs_ni);
         EXPECT_FALSE(system.snapshot().spi_sck_i);
         EXPECT_TRUE(system.snapshot().sys_clock_i);
+    }
+}
+
+// The diagnostic switch controls PIA1 PA7 without replacing unrelated fixture inputs.
+TEST_F(SystemTest, DiagnosticSwitchReachesFittedPia1WithoutChangingOtherInputs) {
+    ASSERT_NO_FATAL_FAILURE(write_fpga(system, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits()));
+    auto& pia = system.io().pia1();
+    pia.set_control(PiaRegister::ControlA, PiaPortAccess, system.time());
+    for (const uint8_t other_inputs : {Marker, OtherMarker}) {
+        pia.inputs([&](auto& inputs) { inputs.port_a = other_inputs; });
+        for (const bool normal : {false, true, false, true}) {
+            SCOPED_TRACE(normal);
+            system.raw_stimulus([&](auto& inputs) { inputs.diag_i = normal; });
+            system.tick(Cycles{1});
+            const uint8_t expected = other_inputs | (normal ? DiagnosticPortMask : 0);
+            EXPECT_EQ(read(pia, PiaRegister::PortA, system.time()), expected);
+            EXPECT_EQ(pia.peek_inputs().port_a, expected);
+        }
     }
 }
 

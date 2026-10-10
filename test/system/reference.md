@@ -77,7 +77,11 @@ without replacing SPI, Wishbone, address decoding, CPU selection, or video logic
 ownership, previews read data, completes peripheral accesses at falling PHI2,
 and commits SRAM data when write enable releases. Fitted devices receive the
 physical reset, selects and jiffy input, and feed IRQ, graphics and audio levels
-back to the FPGA. PIA1 follows its isolated keyboard-scanning clock while PIA2
+back to the FPGA. The diagnostic switch also drives fitted PIA1 PA7 without
+replacing the other port-A input levels. `RawStimulus::audio_det_i` is active-high
+(true means a jack is inserted). The wrapper converts it to the production
+active-low `audio_det_n_i` pin, which `top` normalizes back to active-high for `main`.
+PIA1 follows its isolated keyboard-scanning clock while PIA2
 and the VIA follow CPU PHI2. `peek` and `poke` access physical SRAM for fixture setup,
 not CPU-visible addresses or the SPI bridge.
 
