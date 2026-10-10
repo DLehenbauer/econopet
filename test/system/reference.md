@@ -112,6 +112,71 @@ FPGA outputs remain separate snapshot members. Editing a snapshot does not
 edit the board. The board is noncopyable/nonmovable, and borrowed `io()` devices must
 not outlive it.
 
+## Observation, deadlines and failures
+
+`observe(callback)` returns a move-only `ObserverSubscription`. Keep it alive
+for the interval to observe. Callbacks receive `const System&` after each full
+cycle's FPGA evaluation, peripheral updates, SRAM commits and time advancement.
+No callback runs for `tick(0)`. Subscribers run in registration order.
+Disconnecting a subscription is idempotent and takes effect during dispatch,
+including when a callback disconnects itself or a later subscriber. An executing
+callback retains its captures until it returns. A subscription may outlive its
+board, but does not keep the board alive.
+
+Observers and completion predicates cannot mutate or clock the board through
+captured references, register observers, or mutate retained fitted devices.
+Read-only snapshots, SRAM/device inspection and diagnostics remain available.
+An observer exception propagates unchanged and stops that cycle's dispatch.
+The completed cycle is retained and the board remains clockable after the
+throwing subscription is removed. This differs from an interrupted hardware
+access, which still requires the external-reset recovery described above.
+
+`run_until(predicate, budget, reason)` checks completion immediately, then
+after each cycle through the inclusive final boundary. `service_until` uses
+the same predicate contract, but passes a mutable board and the remaining
+`Cycles` to an active service callback. If service makes no clock progress,
+completion is checked again, then one cycle is clocked if still incomplete.
+An already complete zero-budget wait succeeds without work. An incomplete
+zero-budget wait times out without service or clocks. Oversized clock requests
+are rejected before advancing. Nested waits inherit the tighter deadline and
+restore the enclosing deadline on every exit. Predicate and service exceptions
+propagate unchanged, and guards are restored. Clock health is checked before
+every completion predicate. If active service catches a hardware rejection,
+it must complete external-reset recovery before completion can be observed.
+Merely asserting reset without completing the retained cycle is not recovery.
+
+```cpp
+System board;
+const auto start = board.time();
+unsigned samples = 0;
+auto subscription = board.observe([&](const System& observed) {
+    EXPECT_EQ(observed.time(), start + econopet::Cycles{++samples});
+});
+board.run_until([&](const System& observed) {
+    return observed.time() == start + econopet::Cycles{7};
+}, econopet::Cycles{7}, "seven observed cycles");
+subscription.reset();
+```
+
+The default simulation seed is 1, or the decimal value of `ECONOPET_SIM_SEED`.
+Valid seeds are in `[1, INT_MAX]`. `System(seed)` supplies a per-board override.
+Startup is zero-initialized unless `System(seed, System::InitialState::Random)`
+is requested. The seed and policy are installed before model construction and
+do not alter a peer board's RNG. These are simulation seeds, not FPGA placement
+seeds. `SystemTest` records the actual seed in test properties and assertion
+traces, and reports diagnostics when a test fails.
+
+`diagnostic(operation, detail)` formats read-only evidence with the completed
+cycle, half-cycle phase, CPU selection, seed, startup policy, reset/fault state,
+bus address, SPI levels and up to 16 recent fixture/deadline/SRAM events.
+Successful raw-stimulus edits record changed fields and their requested values,
+including CPU direction/data and indexed spare pins. Unchanged fields, no-op
+edits and discarded callbacks do not add history entries.
+Timeouts and board-side access rejections attach this evidence while preserving
+their standard exception category. `failure<Exception>(operation, detail)`
+constructs an exception with the same evidence for later framework layers.
+Diagnostics do not clock, dispatch callbacks or acknowledge peripheral reads.
+
 ## External PIA/VIA models
 
 [`io.h`](io.h) and [`io.cpp`](io.cpp) adapt the pinned
