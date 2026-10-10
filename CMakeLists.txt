@@ -124,7 +124,7 @@ if(BUILD_TESTS)
 endif()
 
 # ============================================================================
-# System Tests Subproject (host fixtures and hardware contract)
+# System Tests Subproject (host fixtures, hardware contract and production board)
 # ============================================================================
 if(BUILD_SYSTEM_TESTS)
     ExternalProject_Add(system_test_project
@@ -134,6 +134,7 @@ if(BUILD_SYSTEM_TESTS)
             -G Ninja
             -DCMAKE_BUILD_TYPE=Debug
             -DBUILD_TESTING=ON
+            -DBUILD_BOARD_TESTS=ON
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE

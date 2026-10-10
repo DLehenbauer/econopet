@@ -932,6 +932,43 @@ TEST(ExternalBus, WritesLatchOnceAtFallingPhi2UsingFinalStableData) {
         std::to_underlying(PiaRegister::PortA), 0, false}, DeviceSetupTime), std::logic_error);
 }
 
+// Keyboard scanning clocks PIA1 independently while the CPU and other devices stop.
+TEST(ExternalBus, IsolatedPia1ClockCompletesWritesWithoutClockingOtherDevices) {
+    Io devices;
+    const auto pia2 = model_values(devices.pia2().state());
+    const auto via = model_values(devices.via().state());
+    BusSample bus{false, false, ChipSelect::Pia1, std::to_underlying(PiaRegister::ControlA),
+        PiaC2High.bits(), true, true};
+    devices.sample(bus, DeviceSetupTime);
+    EXPECT_EQ(devices.pia1().writes().count(), 0);
+    bus.pia1_phi2 = false;
+    devices.sample(bus, DeviceSetupTime);
+    EXPECT_EQ(devices.pia1().peek(PiaRegister::ControlA), PiaC2High.bits());
+    EXPECT_EQ(devices.pia1().writes().count(), 1);
+    EXPECT_EQ(devices.clock_count(), 0);
+    EXPECT_EQ(model_values(devices.pia2().state()), pia2);
+    EXPECT_EQ(model_values(devices.via().state()), via);
+    devices.sample(bus, DeviceSetupTime);
+    EXPECT_EQ(devices.pia1().writes().count(), 1);
+}
+
+// CPU PHI2 cannot complete a PIA1 write while its isolated clock remains high.
+TEST(ExternalBus, IsolatedPia1ClockCanHoldAcrossCpuFallingEdge) {
+    Io devices;
+    BusSample bus{true, false, ChipSelect::Pia1, std::to_underlying(PiaRegister::ControlA),
+        PiaC2High.bits(), true, true};
+    devices.sample(bus, DeviceSetupTime);
+    bus.phi2 = false;
+    devices.sample(bus, DeviceSetupTime);
+    EXPECT_EQ(devices.clock_count(), 1);
+    EXPECT_EQ(devices.pia1().writes().count(), 0);
+    bus.pia1_phi2 = false;
+    devices.sample(bus, DeviceSetupTime);
+    EXPECT_EQ(devices.clock_count(), 1);
+    EXPECT_EQ(devices.pia1().writes().count(), 1);
+    EXPECT_EQ(devices.pia1().peek(PiaRegister::ControlA), PiaC2High.bits());
+}
+
 // Reject the latched VIA access before any chip advances, including on retry.
 TEST(ExternalBus, InvalidViaAccessPreservesAllDevicesAndRecovers) {
     constexpr uint8_t TimerLoad = 7;

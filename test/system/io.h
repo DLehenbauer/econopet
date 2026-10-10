@@ -357,6 +357,8 @@ struct BusSample {
     uint8_t reg;
     uint8_t data;
     bool write;
+    // Default to CPU PHI2, or supply the board's isolated PIA1 clock.
+    std::optional<bool> pia1_phi2 = std::nullopt;
 };
 
 // Latches the stable bus just before falling PHI2, exactly once per cycle.

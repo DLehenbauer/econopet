@@ -34,6 +34,9 @@ generated files in `build/system`. The standalone commands below use
 The shared D64 fixtures, checked framework value types, external PIA/VIA models,
 and their C++ tests run
 without Verilator, a simulated board, ROM media, or firmware transport.
+Standalone configuration defaults to `BUILD_BOARD_TESTS=OFF`. Root presets
+enable the production-top board tests as well, requiring Verilator but no ROM
+media or firmware transport.
 
 Standalone builds require CMake 3.20 or later.
 Initialize the pinned peripheral model dependency before configuring:
@@ -51,12 +54,63 @@ cmake --build build/host-fixtures
 ctest --test-dir build/host-fixtures --output-on-failure
 ```
 
+To include board simulation in a standalone build, configure with
+`-DBUILD_BOARD_TESTS=ON`. Its SID lookup table is copied into the generated
+board-test runtime directory, so tests do not rely on the source working directory.
+
 The firmware Check tests also use the shared C builder. Build and run those
 with `cmake --build --preset fw-test` and `ctest --preset fw`.
 
 Keep regression tests in the suite for the feature they exercise. Register
 expected-abort tests with the forked runner, using a separate fatal suite in the
 same feature test file when its normal suite runs without forking.
+
+## Production-top simulator foundation
+
+[`system.h`](system.h) owns an independent Verilator context, the production
+FPGA model, physical SRAM, and fitted PIA/VIA devices. The simulation-only
+[`system.sv`](../../gw/EconoPET/sim/system.sv) wraps production `top.sv`
+without replacing SPI, Wishbone, address decoding, CPU selection, or video logic.
+[`SystemTest`](framework/system_test.h) gives each test a fresh board.
+
+`tick(Cycles)` advances whole 64 MHz system clocks. It resolves CPU/FPGA data
+ownership, previews read data, completes peripheral accesses at falling PHI2,
+and commits SRAM data when write enable releases. Fitted devices receive the
+physical reset, selects and jiffy input, and feed IRQ, graphics and audio levels
+back to the FPGA. The diagnostic switch also drives fitted PIA1 PA7 without
+replacing the other port-A input levels. `RawStimulus::audio_det_i` is active-high
+(true means a jack is inserted). The wrapper converts it to the production
+active-low `audio_det_n_i` pin, which `top` normalizes back to active-high for `main`.
+PIA1 follows its isolated keyboard-scanning clock while PIA2
+and the VIA follow CPU PHI2. `peek` and `poke` access physical SRAM for fixture setup,
+not CPU-visible addresses or the SPI bridge.
+
+If a tick rejects an access after the FPGA advances, it suspends at the exact
+phase rather than rolling state back or rounding the simulator counter.
+`clock_faulted()` identifies this state, `half_ticks()` retains its exact
+timestamp, and `time()` remains readable as the last completed whole cycle.
+Snapshots, SRAM and peripheral inspection remain available. Further ticks
+require external reset assertion. `set_external_reset(true)` followed by
+`tick(Cycles{1})` cancels the rejected access and completes the retained cycle
+(including only its remaining half when interrupted in the high phase).
+Remove invalid stimulus before releasing reset. A zero-cycle tick does not
+recover the clock.
+Reset does not override normal SRAM or FPGA bus resolution, so SPI memory
+inspection remains available while either reset driver holds the CPU.
+Only an unsupported VIA shift-register read canceled by reset is treated as
+undriven data instead of rejecting recovery.
+
+Use `drive_physical_cpu`, external reset/interrupt setters, and
+`raw_stimulus(callback)` for pin-level setup. Raw edits commit only after
+successful completion and cannot mutate or clock the board during the callback.
+`drive_spi` drives only SPI0 pin levels (checked transactions and CPU lifecycle
+helpers belong to later layers). Changes do not evaluate the FPGA until `tick`.
+`snapshot()` and `peek_stimulus()` return editable, assignable detached values
+that can outlive their board. Fixture-owned inputs have one access path,
+`snapshot().stimulus`. Resolved bus data, device feedback, harness inputs and
+FPGA outputs remain separate snapshot members. Editing a snapshot does not
+edit the board. The board is noncopyable/nonmovable, and borrowed `io()` devices must
+not outlive it.
 
 ## External PIA/VIA models
 
@@ -141,6 +195,9 @@ detached snapshots. Reset preserves externally driven inputs, injected faults,
 and write history.
 
 `Io::sample` captures the preceding stable bus sample once at falling PHI2.
+`BusSample::pia1_phi2` optionally supplies the isolated PIA1 clock (otherwise
+PIA1 follows CPU PHI2). Isolated PIA1 edges do not advance PIA2, the VIA or the
+CPU PHI2 clock count.
 Repeated high/low samples do not duplicate accesses, deselected devices still
 clock their timers, and reset assertion cancels pending accesses even with
 overlapping selects or an invalid register. Held reset does not repeatedly

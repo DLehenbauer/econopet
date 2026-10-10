@@ -117,7 +117,7 @@ module top #(
     input  logic via_cb2_i,         // VIA CB2 pin 19: shift register used for 1-bit sound
     output logic audio_l_o,         // Audio left  : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
     output logic audio_r_o,         // Audio right : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
-    input  logic audio_det_i,       // Detects 3.5mm jack insertion (0 = not inserted, 1 = inserted)
+    input  logic audio_det_n_i,     // Detects 3.5mm jack insertion (0 = inserted, 1 = not inserted)
 
     // PMOD
     input  logic [8:1] pmod1_i,

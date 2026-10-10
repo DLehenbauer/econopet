@@ -46,7 +46,7 @@
         {
             "name": "sys-test",
             "displayName": "System Tests",
-            "description": "Build host fixtures and hardware contract tests",
+            "description": "Build host fixtures, hardware contract and production-top board tests",
             "configurePreset": "default",
             "targets": ["system_test_project"]
         },
@@ -115,7 +115,7 @@
         {
             "name": "sys",
             "displayName": "System Tests",
-            "description": "Run host fixtures and hardware contract tests",
+            "description": "Run host fixtures, hardware contract and production-top board tests",
             "inherits": "test-base",
             "filter": {
                 "include": {

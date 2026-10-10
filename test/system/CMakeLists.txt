@@ -11,6 +11,7 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(FATAL_ERROR "Host system tests require CMAKE_BUILD_TYPE=Debug")
 endif()
 include(CTest)
+option(BUILD_BOARD_TESTS "Build production-top board simulation tests with Verilator" OFF)
 
 # Compile transport-independent fixtures without a board or firmware runtime.
 get_filename_component(ECONOPET_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
@@ -61,3 +62,7 @@ gtest_discover_tests(econopet_system_tests
     PROPERTIES LABELS "system\\;host\\;unit" TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
 
 include(hardware_contract.cmake)
+
+if(BUILD_BOARD_TESTS)
+    include(board.cmake)
+endif()

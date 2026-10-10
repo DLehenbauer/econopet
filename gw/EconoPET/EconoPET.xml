@@ -78,6 +78,7 @@
         <efx:sim_file name="sim/superpet_waterloo_tb.sv"/>
         <efx:sim_file name="sim/ieee_tb.sv"/>
         <efx:sim_file name="sim/ieee_sys_tb.sv"/>
+        <efx:sim_file name="sim/system.sv"/>
         <efx:sim_file name="sim/acia6551_tb.sv"/>
         <efx:sim_file name="sim/stopwatch.sv"/>
         <efx:sim_file name="sim/top_tb.sv"/>
@@ -85,6 +86,7 @@
         <efx:sim_file name="sim/ram_tb.sv"/>
         <efx:sim_file name="sim/timing_tb.sv"/>
         <efx:sim_file name="sim/sid_voice_tb.sv"/>
+        <efx:sim_file name="sim/sid_env_tb.sv"/>
         <efx:sim_file name="sim/register_file_tb.sv"/>
         <efx:sim_file name="sim/keyboard_tb.sv"/>
         <efx:sim_file name="sim/video_tb.sv"/>

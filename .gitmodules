@@ -10,6 +10,7 @@
 	url = https://github.com/dlehenbauer/pico-vfs.git
 [submodule "gw/EconoPET/external/icesid"]
 	path = gw/EconoPET/external/icesid
+	# Fork with pulse-width pipelining and parallel envelope carry/borrow logic.
 	url = https://github.com/DLehenbauer/icesid
 	branch = efinix-t8
 [submodule "fw/external/libyaml"]
