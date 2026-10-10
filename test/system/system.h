@@ -423,7 +423,7 @@ public:
     // Detached boundary values never expose writable generated-model storage.
     struct Snapshot {
         RawStimulus stimulus;
-        bool graphic_i, via_cb2_i;
+        bool text_mode_i, via_cb2_i;
         bool sys_clock_i, spi_cs_ni, spi_sck_i, spi_sdo_i;
         bool config_crt_i, config_keyboard_i, io_irq_ni;
         uint8_t cpu_data_i;
@@ -453,7 +453,7 @@ public:
         friend class System;
         // Copy the last evaluated boundary without retaining its board.
         explicit Snapshot(const Vsystem& p, const RawStimulus& inputs)
-            : stimulus(inputs), graphic_i(p.graphic_i), via_cb2_i(p.via_cb2_i),
+            : stimulus(inputs), text_mode_i(p.text_mode_i), via_cb2_i(p.via_cb2_i),
               sys_clock_i(p.sys_clock_i), spi_cs_ni(p.spi_cs_ni), spi_sck_i(p.spi_sck_i),
               spi_sdo_i(p.spi_sdo_i), config_crt_i(p.config_crt_i),
               config_keyboard_i(p.config_keyboard_i), io_irq_ni(p.io_irq_ni),
@@ -504,7 +504,7 @@ public:
         dut_->io_irq_ni = 1;
         set_display(pet_video_type_crtc);
         set_keyboard(pet_keyboard_model_business);
-        dut_->graphic_i = 0;
+        dut_->text_mode_i = 0;
         dut_->via_cb2_i = 1;
         drive_spi(true, false, false);
         tick(InitialSettleCycles);
@@ -1188,7 +1188,7 @@ private:
             throw failure<std::logic_error>("I/O sample", error.what());
         }
         dut_->io_irq_ni = !io_.irq();
-        dut_->graphic_i = io_.via().ca2();
+        dut_->text_mode_i = io_.via().ca2();
         dut_->via_cb2_i = io_.via().cb2();
     }
 

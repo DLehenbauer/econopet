@@ -241,7 +241,7 @@ static bp_result_t tape_load_directory(uint16_t pc) {
 
     uint64_t free_bytes = sd_free_bytes();
 
-    bool graphics_charset = system_state.video_graphics_mode == video_graphics_mode_graphics;
+    bool graphics_charset = system_state.video_text_mode == video_text_mode_graphics;
 
     static uint8_t image[DIR_IMAGE_CAPACITY];
     size_t image_len = tape_dir_render(image, sizeof(image), BASIC_START,
@@ -394,7 +394,7 @@ static bp_result_t tape_load_callback(uint16_t pc, void* context) {
     char msg[STUB_MAX_LINE1 + 1];
     snprintf(msg, sizeof(msg), "%s%.*s", found_prefix,
              (int)(STUB_MAX_LINE1 - (sizeof(found_prefix) - 1)), path);
-    bool graphics_charset = system_state.video_graphics_mode == video_graphics_mode_graphics;
+    bool graphics_charset = system_state.video_text_mode == video_text_mode_graphics;
     uint8_t stub_buf[TAPE_BUFFER_CAPACITY];
     size_t stub_len = tape_build_stub(stub_buf, msg, graphics_charset);
     spi_write(TAPE_BUFFER, stub_buf, stub_len);

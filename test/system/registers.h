@@ -28,7 +28,7 @@ enum class Register : uint32_t {
     IeeeTxStatusLast = ECONOPET_WB_IEEE_TXS_LAST_ADDR,
 };
 enum class StatusBit : uint8_t {
-    Text = ECONOPET_REG_STATUS_GRAPHICS_MASK,
+    Text = ECONOPET_REG_STATUS_TEXT_MODE_MASK,
     FixedDisplay = ECONOPET_REG_STATUS_CRT_MASK,
     GraphicsKeyboard = ECONOPET_REG_STATUS_KEYBOARD_MASK,
     BreakpointHalt = ECONOPET_REG_STATUS_BP_HALT_MASK,

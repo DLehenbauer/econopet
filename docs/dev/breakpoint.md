@@ -86,18 +86,18 @@ Extend the register file to expose breakpoint status and the captured address.
 
 **New/changed registers:**
 
-| Register        | Addr      | Bits  | R/W | Description                              |
-|-----------------|-----------|-------|-----|------------------------------------------|
-| `REG_STATUS`    | `0x40000` | `[3]` | R   | Breakpoint hit (1 = halted on STP)       |
-| `REG_BP_ADDR_LO`| `0x40003`| `[7:0]`| R  | Low byte of breakpoint address           |
-| `REG_BP_ADDR_HI`| `0x40004`| `[7:0]`| R  | High byte of breakpoint address          |
+| Register        | Addr      | Bits   | R/W | Description                        |
+|-----------------|-----------|--------|-----|------------------------------------|
+| `REG_STATUS`    | `0x40000` | `[3]`  | R   | Breakpoint hit (1 = halted on STP) |
+| `REG_BP_ADDR_LO`| `0x40003` | `[7:0]`| R  | Low byte of breakpoint address      |
+| `REG_BP_ADDR_HI`| `0x40004` | `[7:0]`| R  | High byte of breakpoint address     |
 
 **`REG_STATUS` bit layout (updated):**
 
 | Bit | Name          | Description                                      |
 |-----|---------------|--------------------------------------------------|
-|  0  | `GRAPHICS`    | VIA CA2 (0 = graphics, 1 = text)                 |
-|  1  | `CRT`         | Display type (0 = 12"/CRTC, 1 = 9"/non-CRTC)    |
+|  0  | `TEXT_MODE`   | VIA CA2 (0 = upper/graphics, 1 = lower/upper)    |
+|  1  | `CRT`         | Display type (0 = 12"/CRTC, 1 = 9"/non-CRTC)     |
 |  2  | `KEYBOARD`    | Keyboard type (0 = business, 1 = graphics)       |
 |  3  | `BP_HALT`     | Breakpoint halt (1 = CPU halted on STP fetch)    |
 

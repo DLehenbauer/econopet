@@ -15,7 +15,7 @@ extern const uint8_t* const p_video_font_400;
 void roms_refresh_char_rom(void);
 
 // 1KB glyph table for the HDMI renderer.
-const uint8_t* roms_get_char_rom(video_graphics_mode_t mode);
+const uint8_t* roms_get_char_rom(video_text_mode_t mode);
 
 /**
  * Reason for starting the menu ROM. Each entry corresponds to a jump table

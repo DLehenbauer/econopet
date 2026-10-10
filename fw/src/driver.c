@@ -703,9 +703,9 @@ void sync_state() {
 
     // Read status register flags
     uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
-    system_state.video_graphics_mode = (status & ECONOPET_REG_STATUS_GRAPHICS_MASK) != 0
-        ? video_graphics_mode_text
-        : video_graphics_mode_graphics;
+    system_state.video_text_mode = (status & ECONOPET_REG_STATUS_TEXT_MODE_MASK) != 0
+        ? video_text_mode_lower
+        : video_text_mode_graphics;
     system_state.bp_halted = (status & ECONOPET_REG_STATUS_BP_HALT_MASK) != 0;
 }
 

@@ -406,6 +406,6 @@ The following inputs are asynchronous and should be false-pathed or
 constrained with `set_max_delay`:
 
 - `config_crt_i`, `config_keyboard_i`: DIP switch settings (static)
-- `graphic_i`: VIA CA2 output (asynchronous to sys_clock_i)
+- `text_mode_i`: VIA CA2 output (asynchronous to sys_clock_i)
 - `diag_i`, `via_cb2_i`: Audio-related inputs
 - `cpu_reset_n_i`, `cpu_irq_n_i`, `cpu_nmi_n_i`: Active-low open-drain signals

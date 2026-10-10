@@ -119,7 +119,7 @@ module superpet_waterloo_tb;
         .spi0_sd_o  (spi_poci),
         .spi_stall_o(spi_stall),
 
-        .graphic_i(1'b0),
+        .text_mode_i(1'b0),
 
         .config_crt_i(1'b0),
         .config_keyboard_i(1'b0)
@@ -250,7 +250,7 @@ module superpet_waterloo_tb;
         mock_sram.load_rom(17'h0E000, "waterloo-e000-ffff-970034-12.bin");
         // Character ROM, only so the end-of-test image can expand real glyphs.
         // $800 is quadrant 2 (SuperPET text) of the four 1K quadrants indexed
-        // by {crtc_chr_option, video_graphics}; see video.sv/roms_get_char_rom.
+        // by {crtc_chr_option, text_mode}; see video.sv/roms_get_char_rom.
         // Held at $8800 -- past the screen, clear of the $9000 ROM window.
         mock_sram.load_rom(17'h08800, "characters.901640-01.bin", 'h800, 'h800);
 

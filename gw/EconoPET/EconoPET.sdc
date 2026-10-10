@@ -288,7 +288,7 @@ set_multicycle_path -hold 1 -start \
 # not edge-sensitive synchronizers.
 
 set_false_path -from [get_ports {config_crt_i config_keyboard_i}]
-set_false_path -from [get_ports {graphic_i}]
+set_false_path -from [get_ports {text_mode_i}]
 set_false_path -from [get_ports {diag_i via_cb2_i}]
 set_false_path -from [get_ports {cpu_reset_n_i}]
 

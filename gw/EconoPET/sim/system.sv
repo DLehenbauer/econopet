@@ -95,7 +95,7 @@ module system (
     input logic config_keyboard_i,  // Keyboard type (0 = Business, 1 = Graphics)
 
     // Video
-    input  logic graphic_i,         // VIA CA2 -> Character ROM A10 (0 = graphics, 1 = text)
+    input  logic text_mode_i,       // VIA CA2 -> Character ROM A10 (0 = upper/graphics, 1 = upper/lower)
     output logic horiz_drive_o,     // Horizontal drive for native PET video
     output logic vert_drive_o,      // Vertical drive for native PET video
     output logic jiffy_clock_o,     // Triggers IRQ on falling edge (VIA CB1)
@@ -241,7 +241,7 @@ module system (
         .config_crt_i,
         .config_hz_i,
         .config_keyboard_i,
-        .graphic_i,
+        .text_mode_i,
         .horiz_drive_o,
         .vert_drive_o,
         .jiffy_clock_o,

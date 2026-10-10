@@ -506,7 +506,7 @@ TEST_F(SystemTest, FittedDevicesDriveFeedbackAndResetPreservesInputsAndHistory) 
     via.set_timer1_fault(Via6522::Timer1Fault::StuckInterruptFlag);
     via.set_interrupts(ViaInterruptBit::Timer1, true, system.time());
     system.tick(Cycles{1});
-    EXPECT_TRUE(system.snapshot().graphic_i);
+    EXPECT_TRUE(system.snapshot().text_mode_i);
     EXPECT_TRUE(system.snapshot().via_cb2_i);
     EXPECT_FALSE(system.snapshot().io_irq_ni);
     EXPECT_EQ(system.io().pia1().peek_inputs().cb1, system.snapshot().jiffy_clock_o);

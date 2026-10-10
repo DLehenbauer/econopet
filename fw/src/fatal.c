@@ -31,7 +31,7 @@ static void __attribute__((noreturn)) fatal_no_alloc(const char* const message) 
     
     system_state.video_source = video_source_firmware;  // Copy from `video_char_buffer` to $8000
     system_state.term_mode = term_mode_video;           // Also copy to the terminal
-    system_state.video_graphics_mode = video_graphics_mode_text;
+    system_state.video_text_mode = video_text_mode_lower;
     display_task();
 
     // Put core0 into an infinite low-power wait loop. Core 1 continues running

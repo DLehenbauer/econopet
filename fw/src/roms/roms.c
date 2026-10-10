@@ -30,13 +30,13 @@ void roms_refresh_char_rom(void) {
     spi_read(CHAR_ROM_SRAM_ADDRESS, sizeof(custom_char_rom), custom_char_rom);
 }
 
-const uint8_t* roms_get_char_rom(video_graphics_mode_t mode) {
+const uint8_t* roms_get_char_rom(video_text_mode_t mode) {
     // Quadrant is {crtc_chr_option, mode}, matching video.sv.
     // crtc_chr_option is MA13 -- bit 5 of R12.
     const bool crtc_chr_option =
         (system_state.pet_crtc_registers[CRTC_R12_START_ADDR_HI] & 0x20) != 0;
     const unsigned int quadrant =
-        ((unsigned int) crtc_chr_option << 1) | (mode == video_graphics_mode_text ? 1u : 0u);
+        ((unsigned int) crtc_chr_option << 1) | (mode == video_text_mode_lower ? 1u : 0u);
     return custom_char_rom + quadrant * 0x400;
 }
 
@@ -55,7 +55,7 @@ void start_menu_rom(menu_rom_boot_reason_t reason) {
 
     // Ensure we are in 40 column mode on startup.
     system_state.pet_display_columns = pet_display_columns_40;
-    system_state.video_graphics_mode = video_graphics_mode_graphics;
+    system_state.video_text_mode = video_text_mode_graphics;
     system_state_set_video_ram_mask(&system_state, pet_video_ram_mask_1kb);
     write_pet_model(&system_state);
 

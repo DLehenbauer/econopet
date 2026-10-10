@@ -76,7 +76,7 @@ without replacing SPI, Wishbone, address decoding, CPU selection, or video logic
 `tick(Cycles)` advances whole 64 MHz system clocks. It resolves CPU/FPGA data
 ownership, previews read data, completes peripheral accesses at falling PHI2,
 and commits SRAM data when write enable releases. Fitted devices receive the
-physical reset, selects and jiffy input, and feed IRQ, graphics and audio levels
+physical reset, selects and jiffy input, and feed IRQ, text-mode and audio levels
 back to the FPGA. The diagnostic switch also drives fitted PIA1 PA7 without
 replacing the other port-A input levels. `RawStimulus::audio_det_i` is active-high
 (true means a jack is inserted). The wrapper converts it to the production
@@ -84,6 +84,8 @@ active-low `audio_det_n_i` pin, which `top` normalizes back to active-high for `
 PIA1 follows its isolated keyboard-scanning clock while PIA2
 and the VIA follow CPU PHI2. `peek` and `poke` access physical SRAM for fixture setup,
 not CPU-visible addresses or the SPI bridge.
+The VIA CA2 level reaches the FPGA and snapshots as `text_mode_i`
+(high selects upper/lowercase text, low selects uppercase/graphics).
 
 If a tick rejects an access after the FPGA advances, it suspends at the exact
 phase rather than rolling state back or rounding the simulator counter.
@@ -295,7 +297,8 @@ to later incremental layers.
 
 [`registers.h`](registers.h) defines named FPGA registers, SPI commands,
 status flags, PET peripheral addresses and native reset vectors.
-`StatusBit::Text` denotes the asserted video-mode bit (clear means graphics).
+`StatusBit::Text` uses `ECONOPET_REG_STATUS_TEXT_MODE_MASK` for the asserted
+video-mode bit (clear means graphics).
 `spi().read` and `spi().write` use the production SPI/Wishbone path, not a
 memory shortcut. Use `fpga::address(SramAddress)` for direct SRAM access
 (including the upper bank), or a named `fpga::Register`. Valid but unmapped

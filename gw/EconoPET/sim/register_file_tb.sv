@@ -20,7 +20,7 @@ module register_file_tb;
     logic                     stall;
 
     // Status register
-    logic video_graphic;
+    logic text_mode;
     logic config_crt;
     logic config_keyboard;
 
@@ -51,7 +51,7 @@ module register_file_tb;
         .wbp_sel_i(1'b1),
 
         // Status register
-        .video_graphic_i(video_graphic),
+        .text_mode_i(text_mode),
         .config_crt_i(config_crt),
         .config_keyboard_i(config_keyboard),
 
@@ -86,10 +86,10 @@ module register_file_tb;
         assert (stall == 0) else $fatal(1, "Register access must not stall Wishbone bus");
     end
 
-    task test_status(input bit graphics, input bit crt, input bit keyboard);
+    task test_status(input bit text, input bit crt, input bit keyboard);
         byte data;
 
-        video_graphic = graphics;
+        text_mode = text;
         config_crt = crt;
         config_keyboard = keyboard;
         bp_halted = 1'b0;
@@ -99,7 +99,7 @@ module register_file_tb;
 
         wb.read(REG_STATUS, data);
 
-        `assert_equal(data[REG_STATUS_GRAPHICS_BIT], video_graphic);
+        `assert_equal(data[REG_STATUS_TEXT_MODE_BIT], text_mode);
         `assert_equal(data[REG_STATUS_CRT_BIT], config_crt);
         `assert_equal(data[REG_STATUS_KEYBOARD_BIT], config_keyboard);
         `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b0);
