@@ -576,6 +576,8 @@ public:
                             FixtureOverlap overlap = FixtureOverlap::Reject) {
         require_mutable_access();
         require_spi_idle();
+        if (reset_pin_unsettled_)
+            throw failure<std::logic_error>("install_rom_images", "reset pin change requires a completed tick");
         if (!dut_->cpu_reset_active_o || !dut_->spi_quiescent_o || ram_write_pending_
             || time() - last_raw_spi_drive_ < SpiReleaseCycles)
             throw failure<std::logic_error>("install_rom_images", "requires quiescent CPU reset and SPI transport");
@@ -751,6 +753,7 @@ public:
     // Drive the external reset source, not the production CPU-control register.
     void set_external_reset(bool asserted) {
         require_mutable_access();
+        if (stimulus_.cpu_reset_n_i != !asserted) reset_pin_unsettled_ = true;
         stimulus_.cpu_reset_n_i = dut_->cpu_reset_n_i = !asserted;
         remember("external reset", 0, asserted);
     }
@@ -872,6 +875,7 @@ public:
             context_->timeInc(1);
             phase_ = ClockPhase::LowPending;
             clock_faulted_ = false;
+            reset_pin_unsettled_ = false;
             scope.completed = true;
             record_cpu_cycle();
             notify_observers();
@@ -1202,6 +1206,7 @@ private:
     // Apply fixture pins without evaluating the model or changing time.
     void apply_raw_stimulus(const RawStimulus& stimulus) {
         require_mutable_access();
+        if (stimulus.cpu_reset_n_i != stimulus_.cpu_reset_n_i) reset_pin_unsettled_ = true;
         stimulus_ = stimulus;
         apply_physical_cpu(stimulus.cpu);
         dut_->cpu_reset_n_i = stimulus.cpu_reset_n_i;
@@ -1318,6 +1323,7 @@ private:
     bool soft_6809_fetch_active_ = false;
     bool editing_stimulus_ = false;
     bool clock_faulted_ = false;
+    bool reset_pin_unsettled_ = false;
     ClockPhase phase_ = ClockPhase::LowPending;
     std::unique_ptr<VerilatedContext> context_;
     std::unique_ptr<Vsystem> dut_;

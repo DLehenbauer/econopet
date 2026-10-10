@@ -331,6 +331,78 @@ TEST_F(SystemTest, RomInstallationCannotRaceAnOwnedOrFailedSpiTransaction) {
     EXPECT_FALSE(system.selected_rom());
 }
 
+TEST_F(SystemTest, RomInstallationRejectsUnclockedExternalResetRelease) {
+    RomFiles files;
+    files.write_set(System::RomSet::Upgrade, Marker);
+    const auto path = files.write("replacement.bin", 1, OtherMarker);
+    for (const bool raw : {false, true}) {
+        SCOPED_TRACE(raw);
+        System board;
+        board.load_rom_set(System::RomSet::Upgrade, files.directory);
+        // Leave the external pin as the sole reset source.
+        board.set_external_reset(true);
+        board.tick(1);
+        board.spi().write(fpga::Register::CpuControl, CpuControl{CpuControlBit::Ready}.bits());
+        ASSERT_TRUE(board.cpu().peek_reset());
+        if (raw) board.raw_stimulus([](auto& pins) { pins.cpu_reset_n_i = true; });
+        else board.set_external_reset(false);
+        ASSERT_TRUE(board.cpu().peek_reset()); // Last evaluated reset is intentionally stale.
+        const auto before = sram_image(board);
+        const auto start = board.time();
+        expect_failure<std::logic_error>(board, "install_rom_images", [&] {
+            board.load_rom(path, SramAddress{0xc000}, 1, System::FixtureOverlap::Replace);
+        });
+        EXPECT_EQ(sram_image(board), before);
+        ASSERT_TRUE(board.selected_rom());
+        EXPECT_EQ(board.selected_rom()->set, System::RomSet::Upgrade);
+        expect_failure<std::logic_error>(board, "install_rom_images", [&] {
+            board.load_rom_set(System::RomSet::Upgrade, files.directory, System::FixtureOverlap::Replace);
+        });
+        EXPECT_EQ(sram_image(board), before);
+        EXPECT_EQ(board.time(), start);
+        ASSERT_TRUE(board.selected_rom());
+        EXPECT_EQ(board.selected_rom()->set, System::RomSet::Upgrade);
+        board.tick(1);
+        EXPECT_FALSE(board.cpu().peek_reset());
+        EXPECT_THROW(board.load_rom(path, Probe, 1), std::logic_error);
+        board.set_external_reset(true);
+        board.tick(1);
+        board.load_rom(path, Probe, 1);
+        EXPECT_EQ(board.peek(Probe), OtherMarker);
+    }
+}
+
+TEST_F(SystemTest, RomResetSettlementRequiresACompletedTickButNotUnchangedEdits) {
+    RomFiles files;
+    const auto path = files.write("image.bin", 1, Marker);
+    // No-op reset edits, unrelated edits and rejected detached edits do not invalidate settlement.
+    system.set_external_reset(false);
+    system.raw_stimulus([](auto& pins) { pins.diag_i = !pins.diag_i; });
+    EXPECT_THROW(system.raw_stimulus([](auto& pins) {
+        pins.cpu_reset_n_i = false;
+        throw std::runtime_error("discard reset edit");
+    }), std::runtime_error);
+    system.load_rom(path, Probe, 1);
+    for (const bool raw : {false, true}) {
+        SCOPED_TRACE(raw);
+        // Changing a pin twice still requires evaluation even if its original value is restored.
+        if (raw) system.raw_stimulus([](auto& pins) { pins.cpu_reset_n_i = false; });
+        else system.set_external_reset(true);
+        system.set_external_reset(false);
+        system.tick(0);
+        const auto before = sram_image(system);
+        const auto start = system.time();
+        expect_failure<std::logic_error>(system, "install_rom_images", [&] {
+            system.load_rom(path, Probe + 1, 1, System::FixtureOverlap::Replace);
+        }, "completed tick");
+        EXPECT_EQ(sram_image(system), before);
+        EXPECT_EQ(system.time(), start);
+        system.tick(1);
+        system.load_rom(path, Probe + 1, 1, System::FixtureOverlap::Replace);
+        EXPECT_EQ(system.peek(Probe + 1), Marker);
+    }
+}
+
 TEST_F(SystemTest, RomInstallationRejectsUnsettledRawSpiReleaseWithoutClocking) {
     RomFiles files;
     const auto path = files.write("image.bin", 1, OtherMarker);

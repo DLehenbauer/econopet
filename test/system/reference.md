@@ -423,6 +423,10 @@ owner, idle boundary pins and no outstanding SPI/Wishbone/SRAM work. After
 manual `drive_spi()` edits, first clock at least four release cycles with CS
 high and SCK low, then explicitly drain outstanding work. Installation rejects
 unsettled transport without silently advancing, resetting or selecting a CPU.
+Changing the external reset pin through `set_external_reset()` or
+`raw_stimulus()` also requires a completed tick before installation. The last
+evaluated reset output alone is not evidence of quiescence after a pin edit.
+No-op edits do not invalidate settlement, and `tick(0)` does not establish it.
 
 The default `FixtureOverlap::Reject` disallows replacing fixture-installed
 bytes. `FixtureOverlap::Replace` permits replacing earlier fixtures, but never
