@@ -290,8 +290,9 @@ ctest --test-dir build/system \
   -R '^system\.External(Types|Pia|Via|Bus)\.' --output-on-failure
 ```
 
-Trace publication and real-CPU bus/IRQ integration tests belong
-to later incremental layers.
+Owned write publication and real-CPU peripheral-write capture are described
+under [Owned traces](#owned-traces). Full CPU/peripheral IRQ integration suites
+remain later incremental layers.
 
 ## Checked SPI and CPU lifecycle
 
@@ -457,6 +458,90 @@ this base identity. Generic installation outside the selected set also
 preserves it, while replacement touching any selected-set byte invalidates it.
 The const-lvalue accessor borrows optional storage from its board. The rvalue
 accessor returns owned optional storage. Revision entries have static lifetime.
+
+## Owned traces
+
+[`framework/trace.h`](framework/trace.h) provides detached source-bound
+windows, captures, shared event storage and weak event publication.
+[`framework/observations.h`](framework/observations.h) adds scoped board
+recorders. No scheduler, assembler, program execution or IEEE wire decoder
+is required.
+
+```cpp
+auto writes = system.trace_peripheral_writes();
+auto video = system.trace_av(test_observation::AvSampling::EveryCycle);
+const auto start = system.time();
+system.tick(100);
+const auto window = system.trace_window(start, system.time());
+const auto captured = writes.capture(window);
+captured.require_absent("no physical peripheral writes");
+```
+
+Windows use `(start, end]` boundaries and a retained identity unique to each
+board, not merely matching timestamps. Foreign, reversed, future, early and
+stopped-recorder intervals are rejected. An empty covered interval is valid.
+`capture()` without a window preserves all retained records, including the
+initial A/V sample. Selecting a window excludes that initial sample at its
+start and includes its endpoint.
+
+Recorders subscribe to completed-cycle boundaries, do not clock the board,
+and are movable but not copyable. Move assignment stops the destination's
+previous subscription. `stop()` is idempotent and preserves past evidence.
+Recorders and detached captures can outlive their board. Const-lvalue access
+borrows records and timestamps. Rvalue recorder access copies shared storage
+without disrupting active sampling. Rvalue capture access transfers owned
+storage and invalidates the source's coverage, as does moving a capture.
+An emptied or moved-from capture cannot prove absence.
+
+Coverage is explicit. A skipped observer boundary, detector exception or
+event-publication failure cannot turn incomplete evidence into a passing
+zero-count assertion. Failed physical I/O sampling invalidates all active
+physical-write subscribers, even if a chip write committed before model
+publication threw. Reset recovery does not restore the affected recorder's
+coverage. Exceptions propagate without replacing detector payloads.
+After a detector failure, stop its recorder before continuing. Assertions
+include the requested interval. `require_count()` retains repeated events,
+including several events at the same cycle, and `require_order()` compares a
+projection of the captured values against an exact sequence.
+Selecting a window validates live storage before copying and binary-searches
+its timestamp range. Both live recorders and detached captures copy only the
+requested records, rather than copying all retained history first.
+
+Available board sources are:
+
+- `trace_peripheral_writes()` for completed physical PIA1/PIA2/VIA bus writes
+  in dispatch order (canonical register addresses, including mirrored accesses).
+- `trace_pia1_writes()`, `trace_pia2_writes()` and `trace_via_writes()` for all
+  completed writes to a fitted chip, including direct host model setup.
+  Clearing model counters or resetting a chip does not erase subscribed
+  evidence. Direct model writes are not physical CPU-bus events. Supply the
+  board's current time for timestamp-explicit setup writes.
+- `trace_signal(Signal)` for transitions of reset, IRQ, NMI, READY, video,
+  horizontal/vertical drive, jiffy, left/right audio and fitted-device IRQs.
+  The initial level establishes a baseline, not an invented transition.
+  CPU reset is active-high assertion state. CPU IRQ/NMI retain their FPGA
+  output pin polarity, and fitted-device IRQs are active-high assertions.
+- `trace_av()` for digital video, horizontal/vertical drive, jiffy and stereo
+  audio levels. `ChangesOnly` records an initial sample and changes to any
+  bundled level. `EveryCycle` additionally samples each completed cycle.
+  These are digital boundary samples, not rendered frames or analog audio.
+- `trace_events<Event>(detector)` for an observation-only detector returning
+  `optional<Event>` at completed-cycle boundaries. Detectors and trace factory
+  creation obey the existing observer and input-edit mutation guards.
+
+`EventTrace<Event>` is a manual timestamped log, not a coverage-bearing
+recorder. It only appends events, rejects backwards timestamps and exposes
+owned records. Coverage-bearing count, order and absence assertions belong
+to `TraceCapture`, not the manual log.
+`require_stable()` and `require_absent()` check observation-only predicates
+initially and at every completed cycle through the inclusive endpoint.
+They do not observe pulses between cycle boundaries.
+
+Pure trace storage and model-publication tests run without Verilator in
+[`trace_core_test.cpp`](trace_core_test.cpp). Board sampling and lifetime tests
+are in [`trace_board_test.cpp`](trace_board_test.cpp). Configured execution,
+phase-bound windows, firmware sources and IEEE wire captures remain later
+incremental layers.
 
 ## Shared hardware contract
 
