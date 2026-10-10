@@ -144,12 +144,37 @@ module system (
 
     // Resolved open-drain reset observed by production top and both soft cores.
     output logic cpu_reset_active_o,
-    output logic [1:0] cpu_selection_o
+    output logic [1:0] cpu_selection_o,
+    output logic spi_quiescent_o,
+    output logic soft6502_fetch_o,
+    output logic [15:0] soft6502_fetch_addr_o,
+    output logic [15:0] soft6502_addr_o,
+    output logic soft6809_fetch_o,
+    output logic [15:0] soft6809_addr_o
 );
     // The board's pulled-up reset net combines the FPGA and external drivers.
     wire cpu_reset_n = cpu_reset_n_i && (!cpu_reset_n_oe || cpu_reset_n_o);
     assign cpu_reset_active_o = !cpu_reset_n;
     assign cpu_selection_o = top.main.cpu_sel;
+    assign spi_quiescent_o = !spi_stall_o && !top.main.wb_cycle
+        && !top.main.ram_wb_stall && !top.main.ram_ctl_we && !top.main.ram_ctl_oe;
+    assign soft6502_addr_o = top.main.m6502_addr;
+    assign soft6809_addr_o = top.main.mc6809_addr;
+    wire soft6502_reset_n = cpu_reset_n && top.main.cpu_is_soft6502;
+    // Record the opcode consumed at the core's advancing edge, before its address changes.
+    always @(negedge top.main.soft_cpu_clock or negedge soft6502_reset_n) begin
+        if (!soft6502_reset_n) begin
+            soft6502_fetch_o <= 1'b0;
+            soft6502_fetch_addr_o <= '0;
+        end else begin
+            soft6502_fetch_o <= top.main.cpu_ready_o && top.main.m6502_sync;
+            if (top.main.cpu_ready_o && top.main.m6502_sync)
+                soft6502_fetch_addr_o <= top.main.m6502_addr;
+        end
+    end
+    assign soft6809_fetch_o = top.main.cpu_is_6809 && cpu_reset_n
+        && !top.main.active_be && top.main.mc6809_sync
+        && top.main.active_cpu_addr == top.main.mc6809_addr;
 
     top top (
         .sys_clock_i,

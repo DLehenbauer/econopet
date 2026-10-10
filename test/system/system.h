@@ -23,8 +23,18 @@
 #include "Vsystem.h"
 #include "verilated.h"
 
+#include "driver.h"
 #include "io.h"
+#include "registers.h"
 #include "system_state.h"
+
+namespace system_detail {
+template<class> struct IsReferenceWrapper : std::false_type {};
+template<class T> struct IsReferenceWrapper<std::reference_wrapper<T>> : std::true_type {};
+template<class T>
+concept AllowedSpiResult = !std::is_reference_v<T> && !std::is_pointer_v<T>
+    && !IsReferenceWrapper<std::remove_cv_t<T>>::value;
+}
 
 // Own one production FPGA and the physical devices fitted outside its boundary.
 class System {
@@ -97,6 +107,289 @@ public:
         std::shared_ptr<ObserverEntry> entry_;
     };
 
+    // Own selected SPI until completion or deliberate raw abort.
+    class SpiTransaction {
+    public:
+        // Fail closed without clocking or invoking observers during unwinding.
+        ~SpiTransaction() { if (!closed_) system_.fail_spi("SPI abandoned"); }
+        SpiTransaction(const SpiTransaction&) = delete;
+        SpiTransaction& operator=(const SpiTransaction&) = delete;
+        SpiTransaction(SpiTransaction&&) = delete;
+        SpiTransaction& operator=(SpiTransaction&&) = delete;
+
+        // Exchange a complete byte while this scope owns the selected bus.
+        uint8_t byte(uint8_t value) {
+            require_open();
+            if (raw_) system_.remember("raw SPI byte", 0, value);
+            return system_.exchange_spi_byte(value, half_period_);
+        }
+        // Validate a command and return its first byte from the production RX pipeline.
+        uint8_t command(econopet::ByteView bytes) {
+            require_open();
+            system_.validate_spi_command(bytes);
+            system_.remember_spi_command(bytes);
+            system_.wait_ready();
+            const auto received = byte(bytes[0]);
+            for (size_t index = 1; index < bytes.size(); ++index) byte(bytes[index]);
+            return received;
+        }
+        // Clock a raw bit with fixture-selected mode-0 timing.
+        bool bit(bool value) {
+            require_open();
+            if (!raw_) throw system_.failure<std::logic_error>("SPI bit", "requires a raw transaction");
+            return system_.exchange_spi_bit(value, half_period_);
+        }
+        // Drain the production controller, then release CS and settle the bus.
+        void finish() {
+            require_open();
+            system_.wait_ready();
+            close();
+        }
+        // Release a raw CS scope without rolling back an already issued request.
+        void abort() {
+            require_open();
+            if (!raw_) throw system_.failure<std::logic_error>("SPI abort", "requires a raw transaction");
+            close();
+        }
+    private:
+        friend class System;
+        // Reserve the bus before any clock or callback can fail.
+        SpiTransaction(System& system, bool raw, econopet::Cycles half_period)
+            : system_(system), raw_(raw), half_period_(half_period) {
+            system_.require_spi_idle();
+            if (half_period.value() == 0)
+                throw system_.failure<std::invalid_argument>("SPI transaction", "half period must be positive");
+            system_.spi_active_ = true;
+            system_.remember(raw ? "raw SPI begin" : "SPI begin");
+            try {
+                if (!raw_) system_.wait_ready();
+                system_.dut_->spi_cs_ni = 0;
+                if (!raw_) system_.tick(half_period_);
+            } catch (...) {
+                system_.fail_spi("SPI setup failed");
+                throw;
+            }
+        }
+        // Reject closed scopes, failed boards and captured-reference mutation.
+        void require_open() const {
+            system_.require_mutable_access();
+            if (closed_ || system_.spi_failed_ || !system_.spi_active_ || system_.dut_->spi_cs_ni)
+                throw system_.failure<std::logic_error>("SPI transfer/release", "requires an active selected transaction");
+        }
+        // Mark completion only after all release clocks succeed.
+        void close() {
+            system_.dut_->spi_cs_ni = 1;
+            system_.dut_->spi_sck_i = 0;
+            system_.tick(SpiReleaseCycles);
+            system_.spi_active_ = false;
+            closed_ = true;
+            system_.remember("SPI closed");
+        }
+        System& system_;
+        bool raw_;
+        econopet::Cycles half_period_;
+        bool closed_ = false;
+    };
+
+    template<class Board> class SpiView;
+    // Borrow complete-command access only for a checked callback's lifetime.
+    class SpiCommands {
+    public:
+        SpiCommands(const SpiCommands&) = delete;
+        SpiCommands& operator=(const SpiCommands&) = delete;
+        // Validate and issue one command while preserving the production pipeline.
+        uint8_t command(econopet::ByteView bytes) { return transaction_.command(bytes); }
+    private:
+        template<class> friend class SpiView;
+        // Bind commands to the callback's transaction owner.
+        explicit SpiCommands(SpiTransaction& transaction) : transaction_(transaction) {}
+        SpiTransaction& transaction_;
+    };
+
+    // Borrow active SPI transport and passive failure state from a persistent board.
+    template<class Board>
+    class SpiView {
+    public:
+        // Bind the view without clocking or retaining the board.
+        explicit SpiView(Board& board) : board_(board) {}
+        SpiView(Board&&) = delete;
+        // Read a checked address through the real pipelined SPI/Wishbone bus.
+        uint8_t read(econopet::WishboneAddress address) requires (!std::is_const_v<Board>) {
+            return board_.spi_read_at(address);
+        }
+        // Read a named register through the same transport.
+        uint8_t read(fpga::Register reg) requires (!std::is_const_v<Board>) {
+            return read(fpga::address(reg));
+        }
+        // Write a checked address using production address decoding.
+        void write(econopet::WishboneAddress address, uint8_t value) requires (!std::is_const_v<Board>) {
+            board_.spi_write_at(address, value);
+        }
+        // Write a named register, preserving byte-level register semantics.
+        void write(fpga::Register reg, uint8_t value) requires (!std::is_const_v<Board>) {
+            write(fpga::address(reg), value);
+        }
+        // Issue exactly one validated command under scoped CS ownership.
+        uint8_t command(econopet::ByteView bytes) requires (!std::is_const_v<Board>) {
+            return board_.spi_command(bytes);
+        }
+        // Finish before returning a value (hidden borrows remain the caller's responsibility).
+        template<class Work>
+            requires (!std::is_const_v<Board>) && std::invocable<Work, SpiCommands&>
+                && system_detail::AllowedSpiResult<std::invoke_result_t<Work, SpiCommands&>>
+        auto transaction(Work&& work) {
+            using Result = std::invoke_result_t<Work, SpiCommands&>;
+            auto owner = board_.spi_transaction();
+            SpiCommands commands(owner);
+            if constexpr (std::is_void_v<Result>) {
+                std::invoke(std::forward<Work>(work), commands);
+                owner.finish();
+            } else {
+                auto result = std::invoke(std::forward<Work>(work), commands);
+                owner.finish();
+                return result;
+            }
+        }
+        // Opt into partial commands, custom bit timing and deliberate aborts.
+        SpiTransaction raw_transaction(econopet::Cycles half_period = SpiHalfPeriodCycles)
+            requires (!std::is_const_v<Board>) {
+            return SpiTransaction(board_, true, half_period);
+        }
+        // Inspect fail-closed transport state without clocks.
+        bool peek_failed() const { return board_.spi_failed_; }
+        // Wait for production STALL to clear under the inclusive inherited deadline.
+        void wait_ready(econopet::Cycles budget = SpiStallBudget) requires (!std::is_const_v<Board>) {
+            board_.wait_ready(budget);
+        }
+    private:
+        Board& board_;
+    };
+
+    // Borrow shared CPU lifecycle controls, optionally bound to a selected core.
+    template<class Board>
+    class CpuView {
+    public:
+        // Bind and validate a target without a bus transaction.
+        explicit CpuView(Board& board, std::optional<cpu_type_t> target = {})
+            : board_(board), target_(target) {
+            if (target) board_.validate_cpu(*target);
+        }
+        CpuView(Board&&, std::optional<cpu_type_t> = {}) = delete;
+        // Read selection through SPI, validating the returned encoding.
+        cpu_type_t read_selection() requires (!std::is_const_v<Board>) { return board_.read_cpu_selection(); }
+        // Inspect selected core directly without clocks.
+        cpu_type_t peek_selection() const { return board_.decode_cpu(board_.dut_->cpu_selection_o); }
+        // Read CPU control flags through production SPI.
+        econopet::CpuControl read_control() requires (!std::is_const_v<Board>) { return board_.read_cpu_control(); }
+        // Inspect the resolved physical reset net.
+        bool peek_reset() const { return board_.dut_->cpu_reset_active_o; }
+        // Inspect the shared monotonic fetch/SYNC checkpoint.
+        uint64_t peek_fetch_checkpoint() const { return board_.fetch_sequence_; }
+        // Assert shared reset and drain admitted bus activity without clearing history.
+        void assert_reset() requires (!std::is_const_v<Board>) { board_.assert_reset(); }
+        // Select this core only while CPU control has established reset quiescence.
+        void select() requires (!std::is_const_v<Board>) { board_.select_cpu(target()); }
+        // Establish reset and selection before installing fixture code or vectors.
+        void prepare() requires (!std::is_const_v<Board>) {
+            const auto selected = target();
+            board_.assert_reset();
+            board_.select_cpu(selected);
+        }
+        // Release reset with the selected core's READY policy.
+        void release_reset() requires (!std::is_const_v<Board>) {
+            board_.require_mutable_access();
+            if (target_ && peek_selection() != *target_)
+                throw board_.template failure<std::logic_error>("release_reset", "bound CPU is not selected");
+            board_.release_reset();
+        }
+        // Install a native-endian reset vector only while this core is quiescent.
+        void write_vector(econopet::CpuAddress entry) requires (!std::is_const_v<Board>) {
+            board_.require_mutable_access();
+            const auto selected = target();
+            if (selected == CPU_PHYS_6502)
+                throw board_.template failure<std::logic_error>("CPU vector", "physical CPU vectors require explicit memory setup");
+            if (!peek_reset() || peek_selection() != selected || board_.ram_write_pending_)
+                throw board_.template failure<std::logic_error>("CPU vector", "requires the bound CPU quiescent in reset");
+            board_.require_spi_idle();
+            // Propagate unscoped raw CS release before inspecting admitted Wishbone work.
+            board_.tick(SpiReleaseCycles);
+            board_.run_until([](const System& board) {
+                return board.dut_->spi_quiescent_o && !board.ram_write_pending_;
+            }, SpiStallBudget, "CPU vector transport quiescence");
+            if (!peek_reset() || peek_selection() != selected || board_.ram_write_pending_)
+                throw board_.template failure<std::logic_error>("CPU vector", "CPU lost quiescence while draining SPI");
+            const bool little = selected == CPU_SOFT_6502;
+            const auto vector = little ? pet::Reset6502 : pet::Reset6809;
+            const auto low = static_cast<uint8_t>(entry.value());
+            const auto high = static_cast<uint8_t>(entry.value() >> 8);
+            board_.poke(econopet::SramAddress{vector.value()}, little ? low : high);
+            board_.poke(econopet::SramAddress{(vector + 1).value()}, little ? high : low);
+        }
+        // Start using the already installed vector without claiming execution completion.
+        void start() requires (!std::is_const_v<Board>) { start_impl({}); }
+        // Quiesce, install this core's reset vector and start execution.
+        void start(econopet::CpuAddress entry) requires (!std::is_const_v<Board>) { start_impl(entry); }
+        // Inspect this core's current bus address, not necessarily an opcode fetch.
+        econopet::CpuAddress peek_address() const {
+            switch (target()) {
+            case CPU_PHYS_6502: return board_.stimulus_.cpu.address;
+            case CPU_SOFT_6502: return econopet::CpuAddress{board_.dut_->soft6502_addr_o};
+            case CPU_SOFT_6809: return econopet::CpuAddress{board_.dut_->soft6809_addr_o};
+            case CPU_AUTO: break;
+            }
+            throw board_.template failure<std::logic_error>("CPU address", "unsupported CPU");
+        }
+        // Inspect opcode history for 6502, or native SYNC observations for 6809.
+        bool peek_fetched_at(econopet::CpuAddress address, uint64_t checkpoint) const {
+            switch (target()) {
+            case CPU_SOFT_6502: return board_.soft_6502_fetches_[address.value()] > checkpoint;
+            case CPU_SOFT_6809: return board_.soft_6809_fetches_[address.value()] > checkpoint;
+            case CPU_PHYS_6502:
+                throw board_.template failure<std::logic_error>("CPU fetch", "physical CPU fetch history is unsupported");
+            case CPU_AUTO: break;
+            }
+            throw board_.template failure<std::logic_error>("CPU fetch", "unsupported CPU");
+        }
+        // Bypass lifecycle ordering for unusual raw control-sequence tests.
+        void write_control_raw(uint8_t value) requires (!std::is_const_v<Board>) {
+            board_.spi_write_at(fpga::address(fpga::Register::CpuControl), value);
+        }
+    private:
+        // Share ordered reset/select/vector/hold/release steps between overloads.
+        void start_impl(std::optional<econopet::CpuAddress> entry) {
+            board_.require_mutable_access();
+            const auto selected = target();
+            if (entry && selected == CPU_PHYS_6502)
+                throw board_.template failure<std::logic_error>("CPU start", "physical CPU vectors require explicit memory setup");
+            prepare();
+            if (entry) write_vector(*entry);
+            board_.tick(ResetHoldCycles);
+            release_reset();
+        }
+        // Require an explicit core for core-specific operations.
+        cpu_type_t target() const {
+            if (!target_) throw board_.template failure<std::logic_error>("CPU target", "operation requires cpu(selection)");
+            return *target_;
+        }
+        Board& board_;
+        std::optional<cpu_type_t> target_;
+    };
+
+    // Borrow active SPI and passive failure inspection from a persistent owner.
+    SpiView<System> spi() & { return SpiView<System>(*this); }
+    // Borrow only passive SPI inspection from a const owner.
+    SpiView<const System> spi() const & { return SpiView<const System>(*this); }
+    SpiView<System> spi() && = delete;
+    SpiView<const System> spi() const && = delete;
+    // Borrow shared lifecycle controls or bind them to a validated CPU.
+    CpuView<System> cpu(std::optional<cpu_type_t> target = {}) & { return CpuView<System>(*this, target); }
+    // Borrow passive CPU inspection from a const owner.
+    CpuView<const System> cpu(std::optional<cpu_type_t> target = {}) const & {
+        return CpuView<const System>(*this, target);
+    }
+    CpuView<System> cpu(std::optional<cpu_type_t> = {}) && = delete;
+    CpuView<const System> cpu(std::optional<cpu_type_t> = {}) const && = delete;
+
     // Hold physical CPU address/control, releasing write data for a read.
     struct CpuStimulus {
         econopet::CpuAddress address;
@@ -153,6 +446,8 @@ public:
         std::array<bool, 6> spare_o, spare_oe;
         bool cpu_reset_active_o;
         uint8_t cpu_selection_o;
+        econopet::CpuAddress soft6502_addr_o, soft6809_addr_o;
+        bool soft6502_fetch_o, soft6809_fetch_o;
 
     private:
         friend class System;
@@ -190,7 +485,9 @@ public:
                       bool(p.sp6_o), bool(p.sp7_o), bool(p.sp8_o)},
               spare_oe{bool(p.sp1_oe), bool(p.sp2_oe), bool(p.sp3_oe),
                        bool(p.sp6_oe), bool(p.sp7_oe), bool(p.sp8_oe)},
-              cpu_reset_active_o(p.cpu_reset_active_o), cpu_selection_o(p.cpu_selection_o) {}
+              cpu_reset_active_o(p.cpu_reset_active_o), cpu_selection_o(p.cpu_selection_o),
+              soft6502_addr_o(p.soft6502_addr_o), soft6809_addr_o(p.soft6809_addr_o),
+              soft6502_fetch_o(p.soft6502_fetch_o), soft6809_fetch_o(p.soft6809_fetch_o) {}
     };
 
     // Initialize inactive pins and SRAM before settling the production top.
@@ -253,10 +550,15 @@ public:
             << ", reset=" << unsigned(dut_->cpu_reset_active_o)
             << ", clock_faulted=" << clock_faulted()
             << ", cpu_address=0x" << std::hex << dut_->cpu_addr_o
+            << ", 6502_address=0x" << dut_->soft6502_addr_o
+            << ", 6809_address=0x" << dut_->soft6809_addr_o
             << ", sram_address=0x" << ram_address().value()
             << ", spi_cs=" << unsigned(dut_->spi_cs_ni)
             << ", spi_stall=" << unsigned(dut_->spi_stall_o) << std::dec
-            << ", recent={";
+            << ", spi_failed=" << spi_failed_ << ", last_spi_absolute_address=";
+        if (last_spi_absolute_address_) out << "0x" << std::hex << *last_spi_absolute_address_ << std::dec;
+        else out << "none";
+        out << ", recent={";
         for (size_t index = 0; index < event_count_; ++index) {
             const auto& event = recent_[(event_next_ + recent_.size() - event_count_ + index) % recent_.size()];
             if (index) out << ", ";
@@ -294,11 +596,13 @@ public:
         static_assert(std::is_invocable_v<Operation&, System&, econopet::Cycles>,
                       "active operations must accept System& and remaining Cycles");
         require_mutable_access();
+        if (spi_failed_) throw failure<std::logic_error>("service_until", "deadline operation on an unusable SPI board");
         const auto at = deadline_ && budget > deadline_->at - time()
             ? deadline_->at : time() + budget;
         DeadlineScope deadline(*this, at, reason);
         remember("deadline begin");
         const auto observe_done = [&] {
+            if (spi_failed_) throw failure<std::logic_error>("service_until", "deadline operation on an unusable SPI board");
             if (clock_faulted_)
                 throw failure<std::logic_error>("service_until", "recover the suspended clock before polling");
             ObservationScope observation(*this);
@@ -357,6 +661,8 @@ public:
     // Drive SPI0 boundary pins only (no transaction ownership or command policy).
     void drive_spi(bool cs_n, bool clock, bool data) {
         require_mutable_access();
+        if (spi_active_ || spi_failed_)
+            throw failure<std::logic_error>("drive_spi", "raw pins require an unowned, usable SPI bus");
         dut_->spi_cs_ni = cs_n;
         dut_->spi_sck_i = clock;
         dut_->spi_sdo_i = data;
@@ -407,6 +713,7 @@ public:
     // Advance complete system clocks, resolving external devices at both phases.
     void tick(econopet::Cycles cycles) {
         require_mutable_access();
+        if (spi_failed_) throw failure<std::logic_error>("tick", "board is unusable after an unfinished SPI transaction");
         if (clock_faulted_ && stimulus_.cpu_reset_n_i)
             throw failure<std::logic_error>("tick", "board clock is suspended after failure: assert external reset before ticking");
         const auto remaining = cycles.half_ticks() - (cycles.value() != 0 && phase_ == ClockPhase::HighPending ? 1 : 0);
@@ -455,6 +762,7 @@ public:
             phase_ = ClockPhase::LowPending;
             clock_faulted_ = false;
             scope.completed = true;
+            record_cpu_cycle();
             notify_observers();
         }
     }
@@ -469,6 +777,179 @@ private:
     static constexpr int DefaultSeed = 1;
     static constexpr int ZeroInitialState = 0;
     static constexpr int RandomInitialState = 2;
+    static constexpr econopet::Cycles SpiHalfPeriodCycles{2};
+    static constexpr econopet::Cycles SpiReleaseCycles{4};
+    static constexpr econopet::Cycles SpiStallBudget{10000};
+    static constexpr econopet::Cycles ResetHoldCycles{1280};
+
+    // Preserve command validation categories and add read-only board context.
+    void validate_spi_command(econopet::ByteView bytes) const {
+        try {
+            fpga::validate_command(bytes);
+        } catch (const std::invalid_argument& error) {
+            throw failure<std::invalid_argument>("SPI command", error.what());
+        }
+    }
+    // Record validated absolute command intent without guessing the RTL pointer.
+    void remember_spi_command(econopet::ByteView bytes) {
+        const auto command = bytes[0] & ECONOPET_SPI_CMD_OPCODE_MASK;
+        if (command == std::to_underlying(fpga::SpiCommand::ReadAt)
+            || command == std::to_underlying(fpga::SpiCommand::WriteAt))
+            last_spi_absolute_address_ = (uint32_t(bytes[0] & ECONOPET_SPI_CMD_ADDRESS_HIGH_MASK) << 16)
+                | (uint32_t(bytes[1]) << 8) | bytes[2];
+        remember("SPI command", last_spi_absolute_address_.value_or(0), bytes[0]);
+    }
+    // Reject failed boards, interrupted clocks and competing external or scoped owners.
+    void require_spi_idle() const {
+        require_mutable_access();
+        if (spi_failed_ || clock_faulted_)
+            throw failure<std::logic_error>("SPI begin", "SPI transaction requires a usable board");
+        if (spi_active_ || !dut_->spi_cs_ni || dut_->spi_sck_i)
+            throw failure<std::logic_error>("SPI begin", "SPI transaction requires an idle, unowned bus");
+    }
+    // Release ownership and retain the failure without clocks or callback execution.
+    void fail_spi(const char* operation) noexcept {
+        dut_->spi_cs_ni = 1;
+        dut_->spi_sck_i = 0;
+        spi_active_ = false;
+        spi_failed_ = true;
+        remember(operation);
+    }
+    // Await real controller readiness using the inclusive inherited deadline.
+    void wait_ready(econopet::Cycles budget = SpiStallBudget) {
+        if (spi_failed_) throw failure<std::logic_error>("wait_ready", "SPI wait on an unusable board");
+        run_until([](const System& board) { return !board.snapshot().spi_stall_o; },
+            budget, "FPGA SPI controller readiness");
+    }
+    // Shift one mode-0 bit using complete clock slices, never shortening a deadline phase.
+    bool exchange_spi_bit(bool value, econopet::Cycles half_period) {
+        require_mutable_access();
+        dut_->spi_sdo_i = value;
+        dut_->spi_sck_i = 0;
+        tick(half_period);
+        dut_->spi_sck_i = 1;
+        tick(half_period);
+        return dut_->spi_sdi_o;
+    }
+    // Clock a complete byte, including its final falling SCK edge.
+    uint8_t exchange_spi_byte(uint8_t value, econopet::Cycles half_period) {
+        uint8_t received = 0;
+        for (unsigned bit = 0; bit < SpiByteBits; ++bit) {
+            received = static_cast<uint8_t>((received << 1) | exchange_spi_bit((value & SpiTopBit) != 0, half_period));
+            value <<= 1;
+        }
+        dut_->spi_sck_i = 0;
+        tick(half_period);
+        return received;
+    }
+    // Acquire a normal checked multi-command scope.
+    SpiTransaction spi_transaction() { return SpiTransaction(*this, false, SpiHalfPeriodCycles); }
+    // Validate before acquiring ownership and return the first received command byte.
+    uint8_t spi_command(econopet::ByteView bytes) {
+        require_spi_idle();
+        validate_spi_command(bytes);
+        auto owner = spi_transaction();
+        const auto received = owner.command(bytes);
+        owner.finish();
+        return received;
+    }
+    // Seek then clock out the pipelined response using the production protocol.
+    uint8_t spi_read_at(econopet::WishboneAddress address) {
+        require_spi_idle();
+        remember("SPI read FPGA", address.value());
+        const std::array<uint8_t, 3> seek{
+            fpga::command_byte(fpga::SpiCommand::ReadAt, address),
+            static_cast<uint8_t>(address.value() >> 8), static_cast<uint8_t>(address.value())};
+        spi_command(seek);
+        const std::array<uint8_t, 1> next{fpga::command_byte(fpga::SpiCommand::ReadNext)};
+        return spi_command(next);
+    }
+    // Write a complete absolute command with full address-width preservation.
+    void spi_write_at(econopet::WishboneAddress address, uint8_t value) {
+        require_spi_idle();
+        remember("SPI write FPGA", address.value(), value);
+        const std::array<uint8_t, 4> bytes{
+            fpga::command_byte(fpga::SpiCommand::WriteAt, address),
+            static_cast<uint8_t>(address.value() >> 8), static_cast<uint8_t>(address.value()), value};
+        spi_command(bytes);
+    }
+    // Validate production CPU choices before a bus operation.
+    void validate_cpu(cpu_type_t cpu) const {
+        switch (cpu) {
+        case CPU_PHYS_6502: case CPU_SOFT_6502: case CPU_SOFT_6809: return;
+        case CPU_AUTO: break;
+        }
+        throw failure<std::invalid_argument>("select_cpu", "unsupported CPU selection");
+    }
+    // Decode hardware bits without constructing an invalid production enum.
+    cpu_type_t decode_cpu(uint8_t value) const {
+        constexpr uint8_t SelectionMask = ECONOPET_CPU_SEL_SOFT_6502 | ECONOPET_CPU_SEL_SOFT_6809;
+        switch (value & SelectionMask) {
+        case ECONOPET_CPU_SEL_PHYS_6502: return CPU_PHYS_6502;
+        case ECONOPET_CPU_SEL_SOFT_6502: return CPU_SOFT_6502;
+        case ECONOPET_CPU_SEL_SOFT_6809: return CPU_SOFT_6809;
+        }
+        throw failure<std::runtime_error>("selected_cpu", "CPU selection register contains an unsupported value");
+    }
+    // Read defined lifecycle bits through the real bus (upper register bits are unspecified).
+    econopet::CpuControl read_cpu_control() {
+        return econopet::CpuControl::from_bits(
+            spi_read_at(fpga::address(fpga::Register::CpuControl)) & ECONOPET_REG_CPU_MASK);
+    }
+    // Read and validate the production selection register.
+    cpu_type_t read_cpu_selection() {
+        return decode_cpu(spi_read_at(fpga::address(fpga::Register::CpuSelect)));
+    }
+    // Assert reset and drain admitted activity while preserving unrelated control bits.
+    void assert_reset() {
+        require_mutable_access();
+        remember("assert_reset");
+        const auto control = read_cpu_control() | econopet::CpuControlBit::Reset;
+        spi_write_at(fpga::address(fpga::Register::CpuControl), control.bits());
+        tick(ResetHoldCycles);
+        if (!read_cpu_control().contains(econopet::CpuControlBit::Reset) || !dut_->cpu_reset_active_o
+            || ram_write_pending_)
+            throw failure<std::runtime_error>("assert_reset", "CPU reset did not establish quiescence");
+    }
+    // Select a core only after reset has stopped admitted bus activity.
+    void select_cpu(cpu_type_t cpu) {
+        require_mutable_access();
+        validate_cpu(cpu);
+        if (!read_cpu_control().contains(econopet::CpuControlBit::Reset) || !dut_->cpu_reset_active_o
+            || ram_write_pending_)
+            throw failure<std::logic_error>("select_cpu", "CPU selection requires quiescent asserted reset");
+        const auto selection = static_cast<uint8_t>(static_cast<uint8_t>(cpu)
+            | (spi_read_at(fpga::address(fpga::Register::CpuSelect)) & ECONOPET_CPU_SEL_SUPERPET_IO_MASK));
+        spi_write_at(fpga::address(fpga::Register::CpuSelect), selection);
+        if (read_cpu_selection() != cpu)
+            throw failure<std::runtime_error>("select_cpu", "CPU selection did not take effect");
+    }
+    // Release shared reset with the selected core's READY policy and verify it.
+    void release_reset() {
+        require_mutable_access();
+        remember("release_reset");
+        const auto selection = read_cpu_selection();
+        const econopet::CpuControl control = selection != CPU_SOFT_6809
+            ? econopet::CpuControl{econopet::CpuControlBit::Ready} : econopet::CpuControl{};
+        spi_write_at(fpga::address(fpga::Register::CpuControl), control.bits());
+        if (read_cpu_control() != control || dut_->cpu_reset_active_o)
+            throw failure<std::runtime_error>("release_reset", "CPU reset did not release with the required READY state");
+    }
+    // Edge-detect native CPU observations without changing RTL or clearing history.
+    void record_cpu_cycle() {
+        if (dut_->soft6502_fetch_o && !soft_6502_fetch_active_) {
+            soft_6502_fetches_[dut_->soft6502_fetch_addr_o] = ++fetch_sequence_;
+            remember("6502 fetch", dut_->soft6502_fetch_addr_o);
+        }
+        if (dut_->soft6809_fetch_o && !soft_6809_fetch_active_) {
+            soft_6809_fetches_[dut_->soft6809_addr_o] = ++fetch_sequence_;
+            remember("6809 SYNC", dut_->soft6809_addr_o);
+        }
+        soft_6502_fetch_active_ = dut_->soft6502_fetch_o;
+        soft_6809_fetch_active_ = dut_->soft6809_fetch_o;
+    }
+    static constexpr unsigned SpiByteBits = 8;
+    static constexpr uint8_t SpiTopBit = 0x80;
 
     // Initialize each model independently without modifying global Verilator RNGs.
     static std::unique_ptr<VerilatedContext> make_context(uint32_t seed, InitialState initial) {
@@ -717,6 +1198,13 @@ private:
     bool observing_ = false;
     std::optional<Deadline> deadline_;
     std::shared_ptr<ObserverRegistry> observers_ = std::make_shared<ObserverRegistry>();
+    bool spi_active_ = false;
+    bool spi_failed_ = false;
+    std::optional<uint32_t> last_spi_absolute_address_;
+    std::array<uint64_t, econopet::CpuAddressCapacity> soft_6502_fetches_{}, soft_6809_fetches_{};
+    uint64_t fetch_sequence_ = 0;
+    bool soft_6502_fetch_active_ = false;
+    bool soft_6809_fetch_active_ = false;
     bool editing_stimulus_ = false;
     bool clock_faulted_ = false;
     ClockPhase phase_ = ClockPhase::LowPending;
