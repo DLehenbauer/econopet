@@ -11,6 +11,7 @@
 #include "m6520.h"
 #include "m6522.h"
 
+#include "framework/trace.h"
 #include "types.h"
 
 namespace econopet::io {
@@ -211,6 +212,10 @@ public:
     uint64_t count() const { return count_; }
     // Return the latest timestamped write, or none since construction/clearing.
     const std::optional<WriteRecord<Register>>& last() const { return last_; }
+    // Tap completed writes independently of clearable history, with weak recorder ownership.
+    void trace(const std::shared_ptr<test_observation::TraceState<WriteRecord<Register>>>& state) const {
+        source_.subscribe(state);
+    }
     // Discard history without changing peripheral state.
     void clear() { count_ = 0; last_.reset(); }
     // Observe a completed access, ignoring reads.
@@ -218,12 +223,14 @@ public:
         if (access.write) {
             ++count_;
             last_ = WriteRecord<Register>{access.reg, access.data, access.at};
+            source_.emit(access.at, *last_);
         }
     }
 
 private:
     uint64_t count_ = 0;
     std::optional<WriteRecord<Register>> last_;
+    mutable test_observation::TraceSource<WriteRecord<Register>> source_;
 };
 
 // MOS 6520: DDR/latch isolation, mixed GPIO, edge IRQs and all C2 modes.

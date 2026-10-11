@@ -27,6 +27,7 @@
 #include "verilated.h"
 
 #include "driver.h"
+#include "framework/trace.h"
 #include "io.h"
 #include "registers.h"
 #include "roms.h"
@@ -62,6 +63,36 @@ public:
         econopet::SramAddress address;
         size_t size;
     };
+
+    // Capture evaluated digital video, sync and stereo audio levels.
+    test_observation::AvTrace trace_av(
+        test_observation::AvSampling sampling = test_observation::AvSampling::ChangesOnly) &;
+    test_observation::AvTrace trace_av(test_observation::AvSampling) && = delete;
+    // Capture transitions from a selected board or fitted-device signal.
+    test_observation::ScopedRecorder<test_observation::SignalTransition>
+        trace_signal(test_observation::Signal signal) &;
+    // Capture each fitted chip's completed writes, including direct host model setup.
+    test_observation::ScopedRecorder<econopet::io::WriteRecord<econopet::io::PiaRegister>>
+        trace_pia1_writes() &;
+    test_observation::ScopedRecorder<econopet::io::WriteRecord<econopet::io::PiaRegister>>
+        trace_pia2_writes() &;
+    test_observation::ScopedRecorder<econopet::io::WriteRecord<econopet::io::ViaRegister>>
+        trace_via_writes() &;
+    // Capture only completed physical CPU-bus peripheral writes.
+    test_observation::ScopedRecorder<test_observation::PeripheralWrite> trace_peripheral_writes() &;
+    // Sample an observation-only optional event detector at completed-cycle boundaries.
+    template<class Event, class Detector>
+    test_observation::ScopedRecorder<Event> trace_events(Detector detector) &;
+    // Borrow stable board identity without retaining the simulator.
+    const std::shared_ptr<const int>& observation_source() const & { return observation_source_; }
+    // Retain identity independently of a temporary board.
+    std::shared_ptr<const int> observation_source() const && { return observation_source_; }
+    // Define a completed source-bound interval without clocking.
+    test_observation::TraceWindow trace_window(econopet::CycleTime start, econopet::CycleTime end) const {
+        if (end > time())
+            throw failure<std::out_of_range>("trace window", "endpoint is in the future");
+        return test_observation::TraceWindow(observation_source_, start, end);
+    }
 
     enum class InitialState { Zero, Random };
 
@@ -1281,6 +1312,12 @@ private:
     }
     // Connect PHI2, reset, selects, diagnostic sense, jiffy, IRQ and VIA outputs.
     void sample_io(econopet::CycleTime completed) {
+        struct PublicationScope {
+            test_observation::TraceSource<test_observation::PeripheralWrite>& source;
+            bool completed = false;
+            // A failed sample may already have committed a chip write before its source threw.
+            ~PublicationScope() { if (!completed) source.invalidate(); }
+        } publication{peripheral_writes_};
         // Feed shared physical levels while preserving unrelated fixture inputs.
         io_.pia1().inputs([&](auto& inputs) {
             inputs.cb1 = dut_->jiffy_clock_o;
@@ -1296,6 +1333,7 @@ private:
         const econopet::io::ChipSelects selects = (!dut_->pia1_cs_n_o ? ChipSelect::Pia1 : ChipSelect::None)
             | (!dut_->pia2_cs_n_o ? ChipSelect::Pia2 : ChipSelect::None)
             | (!dut_->via_cs_n_o ? ChipSelect::Via : ChipSelect::None);
+        const std::array writes{io_.pia1().writes().count(), io_.pia2().writes().count(), io_.via().writes().count()};
         try {
             io_.sample({dut_->cpu_clock_o != 0, dut_->cpu_reset_active_o != 0, selects,
                 static_cast<uint8_t>(dut_->cpu_addr_o & econopet::io::ViaRegisterMask),
@@ -1303,9 +1341,22 @@ private:
         } catch (const std::logic_error& error) {
             throw failure<std::logic_error>("I/O sample", error.what());
         }
+        // Publish only accesses completed by this physical sample, not prior host model writes.
+        const auto record_write = [&](const auto& history, uint64_t before, const char* chip,
+                                      econopet::CpuAddress base) {
+            if (history.count() != before) {
+                const auto& last = *history.last();
+                remember(chip, base.value() + std::to_underlying(last.reg), last.data);
+                peripheral_writes_.emit(last.at, {last.at, base + std::to_underlying(last.reg), last.data});
+            }
+        };
+        record_write(io_.pia1().writes(), writes[0], "PIA1 write", pet::Pia1PortA);
+        record_write(io_.pia2().writes(), writes[1], "PIA2 write", pet::Pia2PortA);
+        record_write(io_.via().writes(), writes[2], "VIA write", pet::ViaPortB);
         dut_->io_irq_ni = !io_.irq();
         dut_->text_mode_i = io_.via().ca2();
         dut_->via_cb2_i = io_.via().cb2();
+        publication.completed = true;
     }
 
     std::array<RecentEvent, 16> recent_{};
@@ -1314,6 +1365,8 @@ private:
     bool observing_ = false;
     std::optional<Deadline> deadline_;
     std::shared_ptr<ObserverRegistry> observers_ = std::make_shared<ObserverRegistry>();
+    std::shared_ptr<const int> observation_source_ = std::make_shared<const int>(0);
+    test_observation::TraceSource<test_observation::PeripheralWrite> peripheral_writes_;
     bool spi_active_ = false;
     bool spi_failed_ = false;
     std::optional<uint32_t> last_spi_absolute_address_;
@@ -1338,3 +1391,5 @@ private:
     econopet::SramAddress ram_write_address_;
     uint8_t ram_write_data_ = 0;
 };
+
+#include "framework/observations.h"
