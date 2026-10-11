@@ -542,9 +542,128 @@ They do not observe pulses between cycle boundaries.
 
 Pure trace storage and model-publication tests run without Verilator in
 [`trace_core_test.cpp`](trace_core_test.cpp). Board sampling and lifetime tests
-are in [`trace_board_test.cpp`](trace_board_test.cpp). Configured execution,
-phase-bound windows, firmware sources and IEEE wire captures remain later
-incremental layers.
+are in [`trace_board_test.cpp`](trace_board_test.cpp). Phase-bound windows,
+firmware sources and IEEE wire captures remain later
+incremental layers. Configured board runs are described below.
+
+## Deterministic scheduling and configured runs
+
+[`scheduler.h`](scheduler.h) exposes `Scheduler`, a scoped absolute-time
+orchestrator. [`framework/run.h`](framework/run.h) supplies the single-use
+configuration returned by `system.execution()`. Neither is a second clock
+owner. Both borrow a persistent board, and callback captures must remain alive
+through execution. Scheduler and configuration owners cannot be copied or moved.
+Both classes are concrete `System` collaborators, not generic board interfaces.
+The scheduler's non-template implementation is
+[`framework/scheduler.cpp`](framework/scheduler.cpp). Explicit registration-order
+overrides are private configuration plumbing. Public authors use `at()` and
+`every()`, which assign registration order automatically.
+
+```cpp
+const auto start = system.time();
+Scheduler schedule(system);
+schedule.at(start + econopet::Cycles{2}, [](System& board) {
+    board.set_external_interrupts(true, false);
+});
+schedule.every(start + econopet::Cycles{3}, econopet::Cycles{3},
+               MissedService::Reject, [](System& board, econopet::Cycles remaining) {
+    // Service may use SPI or tick within the shared remaining budget.
+    board.tick(std::min(econopet::Cycles{1}, remaining));
+});
+schedule.run_until([start](const System& board) {
+    return board.time() == start + econopet::Cycles{10};
+}, 10, "scheduled board run");
+```
+
+One scheduler can attach to a board at a time. Destruction detaches pending
+work without clocks. Stimulus events are ordered by absolute timestamp, then
+registration order, and execute before evaluation of the next full cycle.
+This includes cycles advanced by SPI. The stimulus interval is `[start, end)`:
+an event at the endpoint stays pending until the next cycle or explicit
+service pass. `tick(0)` does not dispatch it.
+
+Stimulus callbacks may change fixture inputs but cannot tick, run active waits,
+start SPI, drive SPI pins, transfer/release a captured transaction, or change
+and reenter their schedule. Completed-cycle observers still run after hardware
+and external device sampling. A stimulus exception retains its payload and
+consumes that event without replay. The scheduler then fails closed until it
+is destroyed. A pre-evaluation stimulus failure is not a hardware clock fault.
+Hardware sampling failures retain the existing exact half-cycle suspension
+and external reset recovery contract. Scheduler work rejects a suspended clock,
+and boundary stimulus is not replayed when completing an interrupted high phase.
+
+Periodic service is cooperative active work. It only runs when `step()` or
+`run_until()` polls it, never recursively during clocks inside an active
+service or SPI. Due services are ordered by due timestamp and registration
+order. Zero-clock peers run at their shared due time before fallback ticking.
+If no work is due, one fallback cycle advances the board.
+
+`MissedService::Reject` reports late work before invoking it, including when
+its prior callback overran the next slot. `Coalesce` invokes once at the current
+time and advances to the first original-phase slot strictly after completion.
+Service receives the earliest inherited deadline's remaining budget, not its
+period. Callback errors propagate and make the scheduler unusable rather than
+silently retrying partially completed work.
+Health is checked after active callbacks and before accepting completion.
+Catching a stimulus exception inside service does not repair the failed
+scheduler or allow a successful run. This applies to anchored and after-slice
+services, and to checked lifecycle operations that catch service failures.
+Exceptions from configured service (including after-slice work and rejected
+strict deadlines) leave the schedule failed even when the lifecycle catches
+them. No subsequent service, completion check or successful return repairs it.
+Periodic work is exhausted after its final representable occurrence instead
+of failing when its next timestamp would exceed the simulation clock range.
+
+```cpp
+auto trace = system.trace_av(test_observation::AvSampling::EveryCycle);
+const auto window = system.execution()
+    .within(10)
+    .after(2, [](System& board) { board.set_external_interrupts(true, false); })
+    .every(3, MissedService::Coalesce, [](System&, econopet::Cycles) {})
+    .run("configured interval");
+trace.capture(window).require_count(10, "one sample per completed cycle");
+```
+
+Configuration does not install callbacks or clock until `run()`. `within()`
+is required, and zero budget is valid. Without `until()`, execution advances
+exactly the elapsed budget. With an observation-only predicate, success is
+checked on entry and after each service pass, including the exact deadline.
+False at the deadline throws. Terminal execution consumes the configuration,
+including failures during setup. No automatic reset, selection, vector
+installation or CPU start occurs.
+
+`after()` and phase-anchored `every()` default to `RunAnchor::RunEntry`, measured
+from terminal operation entry (not configuration construction). The first
+periodic service is one period after its anchor. `RunAnchor::CpuRelease`
+requires an explicitly supplied lifecycle and is rejected by board-only
+`run()`, even if a core is selected or already running. The shared `execute()`
+plumbing supports a later checked lifecycle's one-shot release hook and
+preserves author registration order across anchors. This layer tests the hook
+with existing CPU controls, without introducing program builders or phases.
+Successful `execute()` requires that the hook was called exactly once when a
+release lifecycle is declared, even if no release-anchored work was registered.
+Missing release throws instead of discarding pending anchored work. Completion
+checks preserve void, owning value and reference result types, and do not
+replace exceptions escaping the lifecycle operation. A returned reference must
+still outlive its use.
+
+The alternate `every(slice, ServiceTiming::AfterSlice, work)` mode advances
+a whole slice and then performs active work. Callback duration shifts the next
+slice, unlike anchored periodic service. A partial final slice reaches the
+deadline without calling work. A complete final slice may invoke zero-budget
+work, but that work cannot clock beyond the inherited deadline. Boundary
+stimulus is applied before after-slice work. Predicates observe after the
+slice and its work, not at intermediate cycle boundaries. Only one after-slice
+service is allowed, and it cannot mix with phase-anchored services.
+Before any slice clocks, service validates the owning board and requires an
+unowned SPI bus. A release-aware lifecycle must call its release hook before
+starting after-slice service. Invalid service calls fail without clocking either
+board or invoking pending stimulus/work.
+
+The board-only regression suites are
+[`scheduling_test.cpp`](scheduling_test.cpp) and
+[`configured_run_test.cpp`](configured_run_test.cpp). Mixed parked program,
+phase and IEEE tests are excluded until their consuming layers land.
 
 ## Shared hardware contract
 
