@@ -132,6 +132,48 @@ TEST_F(SystemTest, SchedulerRejectsCaughtStimulusFailureBeforePollingCompletion)
     EXPECT_THROW(scheduler.step(system, 1), std::logic_error);
 }
 
+TEST_F(SystemTest, SchedulerExhaustsUnrepresentableRecurrencesWithoutFailure) {
+    for (const auto policy : {MissedService::Reject, MissedService::Coalesce}) {
+        Scheduler scheduler(system);
+        unsigned calls = 0;
+        const auto start = system.time();
+        scheduler.every(start, Cycles{Cycles::Maximum}, policy,
+            [&](System&, Cycles) { ++calls; });
+        EXPECT_NO_THROW(scheduler.step(system, 1));
+        EXPECT_EQ(calls, 1u);
+        EXPECT_EQ(system.time(), start);
+        EXPECT_NO_THROW(scheduler.step(system, 1));
+        EXPECT_EQ(calls, 1u);
+        EXPECT_EQ(system.time(), start + Cycles{1});
+    }
+}
+
+TEST_F(SystemTest, SchedulerKeepsTheLastRepresentableRecurrence) {
+    for (const auto policy : {MissedService::Reject, MissedService::Coalesce}) {
+        Scheduler scheduler(system);
+        const auto start = system.time();
+        unsigned calls = 0;
+        scheduler.every(start, Cycles{Cycles::Maximum - start.value()}, policy,
+            [&](System&, Cycles) { ++calls; });
+        EXPECT_NO_THROW(scheduler.step(system, 1));
+        EXPECT_NO_THROW(scheduler.step(system, 1));
+        EXPECT_EQ(calls, 1u);
+        EXPECT_EQ(system.time(), start + Cycles{1});
+    }
+}
+
+TEST_F(SystemTest, SchedulerStrictMissRemainsFailedAfterCatch) {
+    Scheduler scheduler(system);
+    unsigned calls = 0;
+    scheduler.every(system.time(), 2, MissedService::Reject, [&](System&, Cycles) { ++calls; });
+    system.tick(1);
+    EXPECT_THROW(scheduler.step(system, 2), std::runtime_error);
+    EXPECT_THROW(scheduler.step(system, 2), std::logic_error);
+    EXPECT_THROW(scheduler.run_until([](const System&) { return true; }, 0, "failed strict service"),
+        std::logic_error);
+    EXPECT_EQ(calls, 0u);
+}
+
 TEST_F(SystemTest, SchedulerCoalescesMissedServiceSlotsAndOrdersPeers) {
     Scheduler scheduler(system);
     const auto start = system.time();

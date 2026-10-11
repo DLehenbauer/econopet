@@ -608,6 +608,11 @@ Health is checked after active callbacks and before accepting completion.
 Catching a stimulus exception inside service does not repair the failed
 scheduler or allow a successful run. This applies to anchored and after-slice
 services, and to checked lifecycle operations that catch service failures.
+Exceptions from configured service (including after-slice work and rejected
+strict deadlines) leave the schedule failed even when the lifecycle catches
+them. No subsequent service, completion check or successful return repairs it.
+Periodic work is exhausted after its final representable occurrence instead
+of failing when its next timestamp would exceed the simulation clock range.
 
 ```cpp
 auto trace = system.trace_av(test_observation::AvSampling::EveryCycle);
@@ -650,6 +655,10 @@ work, but that work cannot clock beyond the inherited deadline. Boundary
 stimulus is applied before after-slice work. Predicates observe after the
 slice and its work, not at intermediate cycle boundaries. Only one after-slice
 service is allowed, and it cannot mix with phase-anchored services.
+Before any slice clocks, service validates the owning board and requires an
+unowned SPI bus. A release-aware lifecycle must call its release hook before
+starting after-slice service. Invalid service calls fail without clocking either
+board or invoking pending stimulus/work.
 
 The board-only regression suites are
 [`scheduling_test.cpp`](scheduling_test.cpp) and

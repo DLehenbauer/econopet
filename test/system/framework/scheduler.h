@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,7 +52,7 @@ public:
 private:
     struct Event { econopet::CycleTime at; size_t order; Stimulus callback; };
     struct Periodic {
-        econopet::CycleTime next;
+        std::optional<econopet::CycleTime> next;
         econopet::Cycles period;
         MissedService policy;
         size_t order;

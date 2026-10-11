@@ -69,7 +69,7 @@ void DeterministicScheduler::step(System& board, econopet::Cycles remaining) {
     for (;;) {
         size_t selected = services_.size();
         for (size_t i = 0; i < services_.size(); ++i) {
-            if (services_[i].next > system_.time()) continue;
+            if (!services_[i].next || *services_[i].next > system_.time()) continue;
             if (selected == services_.size() || services_[i].next < services_[selected].next
                 || (services_[i].next == services_[selected].next
                     && services_[i].order < services_[selected].order))
@@ -80,16 +80,21 @@ void DeterministicScheduler::step(System& board, econopet::Cycles remaining) {
             return;
         }
         auto& service = services_[selected];
-        if (service.policy == MissedService::Reject && service.next < system_.time())
-            throw system_.failure<std::runtime_error>("scheduler step", "scheduled service missed cycle " + std::to_string(service.next.value()));
+        if (service.policy == MissedService::Reject && *service.next < system_.time()) {
+            failed_ = true;
+            throw system_.failure<std::runtime_error>("scheduler step", "scheduled service missed cycle " + std::to_string(service.next->value()));
+        }
         servicing_ = true;
         const auto before = system_.time();
         try {
             service.callback(system_, system_.deadline_->at - system_.time());
             require_health();
             const auto slots = service.policy == MissedService::Coalesce
-                ? (system_.time() - service.next).value() / service.period.value() + 1 : 1;
-            service.next = service.next + service.period * slots;
+                ? (system_.time() - *service.next).value() / service.period.value() + 1 : 1;
+            // Retire unreachable recurrences without overflowing duration or timestamp arithmetic.
+            const auto available = econopet::Cycles::Maximum - service.next->value();
+            if (slots > available / service.period.value()) service.next.reset();
+            else service.next = *service.next + service.period * slots;
             servicing_ = false;
         } catch (...) {
             servicing_ = false;

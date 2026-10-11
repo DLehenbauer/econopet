@@ -394,3 +394,86 @@ TEST_F(SystemTest, ConfiguredRunRetainsAuthorOrderAcrossDifferentAnchors) {
     EXPECT_EQ(events, (std::vector<int>{1, 2}));
     EXPECT_EQ(services, (std::vector<int>{1, 2}));
 }
+
+TEST_F(SystemTest, ConfiguredRunCaughtSliceCallbackFailureCannotComplete) {
+    struct Sentinel {};
+    auto run = system.execution();
+    bool caught = false;
+    run.within(6).every(2, ServiceTiming::AfterSlice, [](System& board, Cycles) {
+        board.set_external_interrupts(true, false);
+        throw Sentinel{};
+    });
+    EXPECT_THROW(run.execute(system, "caught slice failure", true,
+        [&](Cycles budget, auto service, auto release, auto done) {
+            release();
+            try {
+                service(system, budget);
+            } catch (const Sentinel&) {
+                caught = true;
+            }
+            EXPECT_THROW(service(system, budget), std::logic_error);
+            EXPECT_THROW(done(std::as_const(system)), std::logic_error);
+            return true;
+        }), std::logic_error);
+    EXPECT_TRUE(caught);
+    EXPECT_FALSE(system.snapshot().stimulus.cpu_irq_n_i);
+    EXPECT_NO_THROW(system.execution().within(1).run());
+}
+
+TEST_F(SystemTest, ConfiguredRunSliceRejectsForeignBoardBeforeMutation) {
+    System other;
+    const auto start = system.time();
+    const auto foreign_start = other.time();
+    unsigned calls = 0;
+    auto run = system.execution();
+    run.within(3).after(0, [&](System&) { ++calls; })
+        .every(2, ServiceTiming::AfterSlice, [&](System&, Cycles) { ++calls; });
+    EXPECT_THROW(run.execute(system, "foreign slice board", false,
+        [&](Cycles budget, auto service, auto, auto) { service(other, budget); }),
+        std::invalid_argument);
+    EXPECT_EQ(system.time(), start);
+    EXPECT_EQ(other.time(), foreign_start);
+    EXPECT_EQ(calls, 0u);
+}
+
+TEST_F(SystemTest, ConfiguredRunSliceRejectsOwnedSpiBeforeClocking) {
+    auto transaction = system.spi().raw_transaction(2);
+    const auto start = system.time();
+    unsigned calls = 0;
+    EXPECT_THROW(system.execution().within(3).every(2, ServiceTiming::AfterSlice,
+        [&](System&, Cycles) { ++calls; }).run(), std::logic_error);
+    EXPECT_EQ(system.time(), start);
+    EXPECT_EQ(calls, 0u);
+    EXPECT_FALSE(system.spi().peek_failed());
+    transaction.abort();
+}
+
+TEST_F(SystemTest, ConfiguredRunSliceRequiresReleaseBeforeService) {
+    const auto start = system.time();
+    unsigned calls = 0;
+    auto run = system.execution();
+    run.within(3).every(2, ServiceTiming::AfterSlice, [&](System&, Cycles) { ++calls; });
+    EXPECT_THROW(run.execute(system, "premature slice", true,
+        [&](Cycles budget, auto service, auto, auto) { service(system, budget); }),
+        std::logic_error);
+    EXPECT_EQ(system.time(), start);
+    EXPECT_EQ(calls, 0u);
+}
+
+TEST_F(SystemTest, ConfiguredRunCaughtMissedServiceCannotComplete) {
+    auto run = system.execution();
+    bool caught = false;
+    run.within(10).every(2, MissedService::Reject, [](System&, Cycles) {});
+    EXPECT_THROW(run.execute(system, "caught strict miss", true,
+        [&](Cycles budget, auto service, auto release, auto) {
+            release();
+            system.tick(3);
+            try {
+                service(system, budget - Cycles{3});
+            } catch (const std::runtime_error&) {
+                caught = true;
+            }
+            return true;
+        }), std::logic_error);
+    EXPECT_TRUE(caught);
+}

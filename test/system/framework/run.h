@@ -130,18 +130,30 @@ public:
             released = true;
         };
         const auto service = [&](System& observed, econopet::Cycles remaining) {
-            schedule.require_health();
-            if (slice_) {
-                const auto elapsed = std::min(slice_->period, remaining);
-                observed.tick(elapsed);
-                if (elapsed == slice_->period) {
-                    schedule.apply_stimulus();
-                    slice_->work(observed, remaining - elapsed);
+            try {
+                schedule.require_health();
+                if (&observed != &board_)
+                    throw board_.failure<std::invalid_argument>("configured service", "configuration belongs to another board");
+                if (slice_) {
+                    schedule.require_registration();
+                    if (board_.spi_active_)
+                        throw board_.failure<std::logic_error>("configured service", "after-slice service requires an unowned SPI bus");
+                    if (has_release && !released)
+                        throw board_.failure<std::logic_error>("configured service", "after-slice service requires CPU release");
+                    const auto elapsed = std::min(slice_->period, remaining);
+                    observed.tick(elapsed);
+                    if (elapsed == slice_->period) {
+                        schedule.apply_stimulus();
+                        slice_->work(observed, remaining - elapsed);
+                    }
+                } else {
+                    schedule.step(observed, remaining);
                 }
-            } else {
-                schedule.step(observed, remaining);
+                schedule.require_health();
+            } catch (...) {
+                schedule.failed_ = true;
+                throw;
             }
-            schedule.require_health();
         };
         const auto done = [&](const System& observed) {
             schedule.require_health();
