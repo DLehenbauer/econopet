@@ -844,6 +844,8 @@ observation guards. Layout and assembly suites share the simulator-independent
 Use lvalue-only `system.program6502()` or `system.program6809()` to create a
 single-use `ProgramBuilder<Cpu>` backed by `System`. The underlying layout and
 assembler remain generic for simulator-independent memory tests.
+Direct builder construction enforces the same active-access guard as the
+factories, including heap allocation from observation predicates or callbacks.
 Construction, reservations and allocation
 are clock-free. The board must outlive the builder and its callbacks.
 

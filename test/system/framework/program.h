@@ -92,6 +92,7 @@ public:
           code_(reserve(layout, overrides.code, "code", RegionKind::Code,
               {econopet::CpuAddress{0x0300}, 0x100})),
           program_(scenario_, code_), configuration_(memory) {
+        memory_.require_mutable_access();
         if constexpr (std::is_same_v<Cpu, Mos6502>) {
             if (stack_.start() != econopet::CpuAddress{0x0100} || stack_.size() != 0x100)
                 throw scenario_.template failure<std::invalid_argument>("program layout",

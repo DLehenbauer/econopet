@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -367,6 +368,45 @@ TEST_F(SystemTest, ProgramBuilderRespectsObservationOnlyGuards) {
     EXPECT_EQ(system.time(), started);
     EXPECT_EQ(memory_image(system), before);
     EXPECT_NO_THROW(test.run([](auto&) {}));
+}
+
+// Direct heap construction must not let an active builder escape an observation callback.
+TEST_F(SystemTest, ProgramBuilderDirectConstructionRejectsObservationAndAllowsActiveUse) {
+    using MosBuilder = test_asm::ProgramBuilder<test_asm::Mos6502>;
+    using McBuilder = test_asm::ProgramBuilder<test_asm::Mc6809>;
+    std::unique_ptr<MosBuilder> mos;
+    std::unique_ptr<McBuilder> mc;
+    const auto before = memory_image(system);
+    const auto started = system.time();
+    const auto reject_construction = [&] {
+        EXPECT_THROW(mos = std::make_unique<MosBuilder>(system, Layout::Pet), std::logic_error);
+        EXPECT_THROW(mc = std::make_unique<McBuilder>(system, Layout::Pet), std::logic_error);
+        EXPECT_FALSE(mos);
+        EXPECT_FALSE(mc);
+    };
+    system.run_until([&](const System&) {
+        reject_construction();
+        return true;
+    }, 0, "direct builder predicate guard");
+    EXPECT_EQ(system.time(), started);
+    EXPECT_EQ(memory_image(system), before);
+    size_t observations = 0;
+    auto subscription = system.observe([&](const System&) {
+        ++observations;
+        reject_construction();
+    });
+    system.tick(1);
+    EXPECT_EQ(observations, 1u);
+    EXPECT_EQ(memory_image(system), before);
+    subscription.reset();
+    mos = std::make_unique<MosBuilder>(system, Layout::Pet);
+    mc = std::make_unique<McBuilder>(system, Layout::Pet);
+    const auto answer = mos->byte("answer");
+    const auto result = mos->within(ExecutionBudget).run([&](auto& p) {
+        p.lda(imm(0x42)).sta(answer);
+    });
+    EXPECT_EQ(result[answer], 0x42);
+    EXPECT_NO_THROW(mc->within(ExecutionBudget).run([](auto&) {}));
 }
 
 // Restricted assembly preserves the Program's CPU, reservation and cursor diagnostics.
