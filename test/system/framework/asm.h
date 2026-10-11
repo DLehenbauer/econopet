@@ -14,13 +14,36 @@
 #include <vector>
 
 #include "framework/memory.h"
+#include "framework/trace.h"
 #include "types.h"
 
+class RunConfiguration;
 namespace test_asm {
+
+enum class Layout { Pet };
+
+struct MemoryRegion {
+    econopet::CpuAddress start;
+    size_t size;
+};
+
+// Explicit reservation overrides for boundary and unusual-layout tests.
+struct LayoutOverrides {
+    std::optional<MemoryRegion> stack;
+    std::optional<MemoryRegion> results;
+    std::optional<MemoryRegion> code;
+    std::optional<MemoryRegion> vectors;
+    std::optional<econopet::CpuAddress> completion;
+    std::vector<std::pair<std::string, MemoryRegion>> workspace;
+};
 
 enum class RegionKind { Code, Stack, Mailbox, Results, Vectors, Data, Workspace };
 
 template<class Memory> class Scenario;
+template<class Cpu, class Memory> class Program;
+template<class Cpu> class ProgramBuilder;
+template<class Cpu, class Memory> class Assembly;
+enum class Capture { No, Yes };
 
 // A reservation can only be obtained from a checked scenario layout.
 class Region {
@@ -57,10 +80,60 @@ private:
     size_t size_;
 };
 
+// A dedicated mailbox issued by a checked layout, not an ordinary result byte.
+class CompletionMarker {
+public:
+    // Return the private CPU completion address.
+    econopet::CpuAddress address() const { return region_.start(); }
+    // Return the freshly installed incomplete value.
+    uint8_t pending() const { return pending_; }
+    // Return the value emitted after all program instructions.
+    uint8_t completed() const { return completed_; }
+private:
+    template<class> friend class Scenario;
+    template<class, class> friend class Program;
+    CompletionMarker(Region region, uint8_t pending, uint8_t completed)
+        : region_(std::move(region)), pending_(pending), completed_(completed) {}
+    Region region_;
+    uint8_t pending_, completed_;
+};
+
+// Detached selected memory and the complete startup-through-completion interval.
+struct ExecutionResult : MemoryCapture {
+    // Own sampled bytes and a source-bound interval independently of the board.
+    ExecutionResult(std::shared_ptr<const int> owner, econopet::CpuAddress start,
+                    std::vector<uint8_t> bytes, econopet::CycleTime started,
+                    econopet::CycleTime completed, test_observation::TraceWindow window)
+        : MemoryCapture(std::move(owner), start, std::move(bytes)), started_(started), completed_(completed),
+          window_(std::move(window)) {}
+    // Borrow the completed run interval from a persistent result.
+    const test_observation::TraceWindow& window() const & { return window_; }
+    // Transfer a temporary result interval.
+    test_observation::TraceWindow window() && { return std::move(window_); }
+    // Copy an immutable temporary result interval.
+    test_observation::TraceWindow window() const && { return window_; }
+    // Report a valid run with no selected bytes.
+    bool empty() const { require_live(); return spans_.empty(); }
+    // Return the complete lifecycle's start before reset and selection.
+    econopet::CycleTime started() const { return started_; }
+    // Return the observed completion boundary without capture clocks.
+    econopet::CycleTime completed() const { return completed_; }
+private:
+    template<class> friend class ProgramBuilder;
+    // Append sampled selected data without clocks.
+    void append(econopet::CpuAddress start, std::vector<uint8_t> bytes) {
+        require_live();
+        spans_.push_back({start, std::move(bytes)});
+    }
+    econopet::CycleTime started_, completed_;
+    test_observation::TraceWindow window_;
+};
+
 // Record fixture-owned CPU memory before installing code or data.
 // Memory supplies peek/poke and failure diagnostics (System or a host fixture).
 template<class Memory>
 class Scenario {
+    template<class> friend class ProgramBuilder;
 public:
     // Borrow persistent explicit lower-bank backing, not live CPU banking or I/O.
     explicit Scenario(Memory& memory) : memory_(memory) {}
@@ -139,8 +212,43 @@ public:
         for (size_t i = 0; i < bytes.size(); ++i)
             memory_.poke(econopet::SramAddress{region.at(offset + i).value()}, bytes[i]);
     }
+    // Issue a dedicated one-byte completion mailbox with distinct values.
+    CompletionMarker completion(const Region& region, uint8_t pending = 0, uint8_t completed = 0x5a) const {
+        require(region, RegionKind::Mailbox);
+        if (region.size() != 1 || pending == completed)
+            throw failure<std::invalid_argument>("completion", "needs one dedicated byte and distinct values");
+        return CompletionMarker(region, pending, completed);
+    }
+
+    // Execute checked code with one captured region under the shared budget.
+    template<class CpuProgram>
+    ExecutionResult run(CpuProgram& program, const Region& results, econopet::Cycles budget,
+                        const std::string& reason) {
+        return run(program, results, budget, reason, [](Memory& board, econopet::Cycles) { board.tick(1); });
+    }
+    // Execute with cooperative active work and an ordinary result reservation.
+    template<class CpuProgram, class Service>
+    ExecutionResult run(CpuProgram& program, const Region& results, econopet::Cycles budget,
+                        const std::string& reason, Service service);
+    // Execute without selecting result bytes.
+    template<class CpuProgram>
+    ExecutionResult run(CpuProgram& program, econopet::Cycles budget, const std::string& reason);
+    // Execute result-free code with active service.
+    template<class CpuProgram, class Service>
+    ExecutionResult run(CpuProgram& program, econopet::Cycles budget, const std::string& reason, Service service);
+    // Use a shared run configuration and an ordinary result reservation.
+    template<class CpuProgram>
+    ExecutionResult run(CpuProgram& program, const Region& results, RunConfiguration& configuration,
+                        const std::string& reason);
+    // Use a shared run configuration without selected result data.
+    template<class CpuProgram>
+    ExecutionResult run(CpuProgram& program, RunConfiguration& configuration, const std::string& reason);
 
 private:
+    // Validate and perform the single checked startup/completion lifecycle.
+    template<class CpuProgram, class Service, class Released, class Predicate>
+    ExecutionResult execute_program(CpuProgram& program, const Region* results, econopet::Cycles budget,
+                                    const std::string& reason, Service service, Released released, Predicate extra, bool capture_results);
     // Reject all layout operations after transferring its identity to another owner.
     void require_live() const {
         if (!owner_) throw failure<std::logic_error>("layout", "fixture scenario was moved from");
@@ -544,6 +652,8 @@ class Program : public FluentInstructions<Cpu, Program<Cpu, Memory>> {
     static_assert(std::is_same_v<Cpu, Mos6502> || std::is_same_v<Cpu, Mc6809>);
     template<class> friend class OwnedInstructions;
     template<class, class> friend class FluentInstructions;
+    template<class> friend class Scenario;
+    template<class, class> friend class Assembly;
 public:
     using CpuType = Cpu;
     // Borrow a persistent layout and assemble only inside its owned code region.
@@ -624,6 +734,27 @@ public:
         const auto bytes = resolved_bytes();
         scenario_.write(region_, 0, bytes);
     }
+    // Append a private completion store and permanent park loop atomically.
+    void finish(const CompletionMarker& marker) {
+        require_live();
+        scenario_.require(marker.region_, RegionKind::Mailbox);
+        if (completion_) throw failure<std::logic_error>("finish", "program already completed");
+        if constexpr (std::is_same_v<Cpu, Mos6502>) {
+            constexpr size_t TerminalSize = 8;
+            require_space(TerminalSize);
+            const auto park = region_.at(bytes_.size() + 5);
+            emit(mos6502::lda_imm(marker.completed()));
+            emit(mos6502::sta_abs(marker.address()));
+            emit(mos6502::jmp_abs(park));
+        } else {
+            constexpr size_t TerminalSize = 7;
+            require_space(TerminalSize);
+            emit(mc6809::ldaa_imm(marker.completed()));
+            emit(mc6809::sta_abs(marker.address()));
+            emit(mc6809::bra(-2));
+        }
+        completion_ = marker;
+    }
     // Return the first instruction address, independently of the cursor.
     econopet::CpuAddress entry() const { require_live(); return region_.start(); }
     // Return the next address, never the one-past address of a full region.
@@ -664,6 +795,7 @@ private:
     // Check the whole instruction or compound store before changing the code buffer.
     void require_space(size_t size) const {
         require_live();
+        if (completion_) throw failure<std::logic_error>("emit", "cannot append instructions after program.finish");
         if (size > region_.size() - bytes_.size())
             throw failure<std::out_of_range>("emit", "fixture program exceeds reserved code region"
                 ", requested=" + std::to_string(size));
@@ -719,6 +851,7 @@ private:
     std::vector<uint8_t> bytes_;
     std::vector<std::shared_ptr<typename Label<Cpu>::State>> labels_;
     std::vector<Fixup> fixups_;
+    std::optional<CompletionMarker> completion_;
 };
 
 

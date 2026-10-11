@@ -734,23 +734,25 @@ outside the captured view and foreign operands reject. Captures and operands
 can outlive both layout and board, and subsequent backing changes do not modify
 captured data. Lvalue `raw_bytes()` borrows immutable storage. Mutable temporary
 access transfers bytes, immutable temporary access copies them. Moving or
-draining a capture invalidates its source for subsequent reads. Captures are
-always nonempty, so no `empty()` state query is provided.
-Named automatic allocation and selective program-result capture are
-deferred until complete program builders exist.
+draining a capture invalidates its source for subsequent reads. View captures
+are always nonempty, so MemoryCapture has no `empty()` state query.
+Complete program builders also support named allocation and selective capture
+(see the checked execution section below).
 
 Pure contract tests are in [`layout_test.cpp`](layout_test.cpp), included even
 with `BUILD_BOARD_TESTS=OFF`. Board backing, diagnostic and observation-guard
-checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Mixed program
-and phase memory cases remain deferred with their consuming layers.
+checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Program
+memory cases are in [`memory_test.cpp`](memory_test.cpp). Phase memory cases
+remain deferred with their consuming layer.
 
 ## CPU-specific assembly and fluent instructions
 
 Explicit `test_asm::mos6502::Program` and `test_asm::mc6809::Program` assemble
 into a previously reserved Code region. They borrow a persistent `Scenario`,
 which in turn borrows its backing memory. Both must outlive the program.
-There is no automatic reset, CPU selection, stack setup, completion marker,
-execution, pause or resume in this layer.
+Assembly and `install()` do not automatically reset or select a CPU, initialize
+its stack or execute code. Checked execution is a separate terminal operation.
+Pause and resume remain deferred.
 
 ```cpp
 test_asm::Scenario layout(system);
@@ -769,7 +771,7 @@ program.install();
 
 This example demonstrates assembly and installation only. `install()` does not
 start the CPU. Authors may use the existing explicit CPU lifecycle themselves,
-but complete checked startup/completion is deferred to the next layer.
+or use the complete checked startup/completion API below.
 
 Fluent operands distinguish byte immediates (`imm()`), word immediates
 (`imm16()`), CPU addresses, 6502 zero-page (`zp()`) and 6809 direct-page offsets
@@ -836,6 +838,111 @@ without a simulator. [`assembly_board_test.cpp`](assembly_board_test.cpp) checks
 clock-free lower-bank installation, backing preservation, board evidence and
 observation guards. Layout and assembly suites share the simulator-independent
 [`host_memory.h`](host_memory.h) test backing.
+
+## Complete checked program execution
+
+Use lvalue-only `system.program6502()` or `system.program6809()` to create a
+single-use `ProgramBuilder<Cpu>` backed by `System`. The underlying layout and
+assembler remain generic for simulator-independent memory tests.
+Direct builder construction enforces the same active-access guard as the
+factories, including heap allocation from observation predicates or callbacks.
+Construction, reservations and allocation
+are clock-free. The board must outlive the builder and its callbacks.
+
+```cpp
+auto test = system.program6502();
+const auto answer = test.byte("answer");
+const auto pointer = test.word("pointer");
+const auto input = test.data("input", econopet::CpuAddress{0x400}, 2,
+                             test_asm::Capture::Yes);
+// Initialize explicit host backing before execution (not a simulated CPU write).
+test.lower_bank("input").initialize(input.word(0, test_asm::ByteOrder::LittleEndian),
+                                    0x1234);
+// Assembly receives a restricted CPU-specific fluent surface.
+const auto result = test.within(20000).run([&](auto& p) {
+    p.lda(test_asm::imm(0x42)).sta(answer).store(pointer, input.address());
+});
+EXPECT_EQ(result[answer], 0x42);
+EXPECT_EQ(result[pointer], input.address().value());
+EXPECT_EQ(result[input], (std::vector<uint8_t>{0x34, 0x12}));
+```
+
+`byte()`, `word()` and `buffer()` allocate uniquely named owned operands in the
+Results arena, captured by default. `word()` selects the CPU's native byte order.
+`data()` reserves external ordinary data, uncaptured by default. Both allocation
+surfaces accept `Capture::Yes` or `Capture::No`. `capture()` opts an existing byte,
+word or sub-buffer into the result without creating another reservation.
+Adjacent, overlapping and duplicate selections are unioned, so a word or buffer
+is readable if its complete extent was selected. Holes and foreign owners
+reject. Captures sample each selected address once without additional clocks.
+
+`Layout::Pet` defaults to a stack at `$0100` (256 bytes), Results at `$0200`
+(255 bytes), a dedicated private completion byte at `$02FF`, Code at `$0300`
+(256 bytes), and Vectors at `$FFF0` (16 bytes). `LayoutOverrides` replaces these
+extents and adds named Workspace reservations. Every extent is nonempty,
+nonwrapping and disjoint. Vectors must contain the selected native reset vector.
+The 6502 hardware stack must be exactly `$0100-$01FF`. The 6809 stack uses a
+representable one-past descending-stack pointer. `lower_bank(name)` admits only
+ordinary Data, Results or Workspace, never the private completion mailbox.
+
+`run()` consumes the builder before invoking assembly. The assembly callback
+cannot install, run, finish or allocate data through its receiver. Recursive
+runs and subsequent builder mutation reject, including after callback failure.
+Assembly may explicitly borrow an ordinary workspace for operands. All labels,
+relocations, ownership, terminal capacity and vector ownership validate before
+the runner changes memory or clocks. Explicit host writes made by user callbacks
+are still user-controlled mutation, not rollback transactions.
+
+The runner masks interrupts and initializes the stack (6502 SEI/LDX/TXS,
+6809 ORCC/LDS), appends a private completion store and terminal park, then enters
+one elapsed deadline covering reset, CPU selection, installation, vector setup,
+release and completion polling. It establishes reset quiescence before writing
+code, freshly zeros Results, preserves Data initialization and resets the marker
+to pending on every start. The native vector is written through the checked CPU
+lifecycle, and release is reported exactly once. Zero budget does not clock or
+install anything. Completion at the final allowed observation boundary succeeds.
+Timeouts, callback errors and model/transport failures propagate without returning
+a success-shaped result. Existing board/SPI reset recovery rules still apply.
+
+`after()`, `every()` and `until()` share the standalone configured-run vocabulary,
+including RunEntry and CpuRelease anchors and after-slice active work. Startup
+counts against RunEntry schedules, whereas CpuRelease schedules and slices start
+only after release. `until()` is an additional condition, never a replacement for
+mandatory fresh completion. An independent `system.execution()` configuration
+can be passed to `run(assemble, configuration)`, but cannot replace a builder's
+authored schedule. `run(assemble, service)` adapts polling work through the same
+`RunConfiguration::service()` and terminal execution path, with no separate
+budget owner. Per-pass service may share stimulus and `until()` conditions, but
+cannot be mixed with periodic or after-slice active work. Invalid service
+configuration rejects before assembly. Inherited caller deadlines always win.
+
+Both builders and explicit Scenario execution return `ExecutionResult`, which
+owns detached selected bytes, `started()`, `completed()` and a
+source-bound `window()` covering the complete run. Operands and captured results
+can outlive both board and builder. Missing or foreign operands throw, and
+`empty()` identifies a valid run with no selected data. Moving invalidates source
+data access. Use `trace.capture(result.window())` to assert CPU I/O during the run.
+All captures use one sorted, disjoint, adjacency-merged span representation.
+`MemoryCapture::raw_bytes()` deliberately preserves contiguous view capture
+behavior (borrow from lvalues, transfer from mutable temporaries, copy from const
+temporaries). It also accepts a contiguous execution capture or an empty result,
+but rejects disjoint selected spans instead of flattening away address gaps.
+The CPU remains released in a terminal park loop after successful completion.
+
+Explicit layouts may issue a one-byte Mailbox `completion()` marker, call
+`program.finish(marker)`, and execute with `scenario.run(program, [results,]
+budget, reason[, service])` or a `RunConfiguration`. Results may be a Results or
+Data reservation, or omitted entirely. Explicit authors supply their own
+stack/interrupt prologue if needed. `finish()` checks its whole terminal sequence
+before appending, and further instruction emission rejects. `install()` alone
+remains clock-free and does not execute even a finished program.
+
+[`execution_core_test.cpp`](execution_core_test.cpp) verifies marker ownership,
+terminal encoding, exact capacity, moves and post-finish rejection without
+Verilator. [`program_test.cpp`](program_test.cpp), [`memory_test.cpp`](memory_test.cpp)
+and [`program_run_test.cpp`](program_run_test.cpp) cover both CPUs, private startup,
+captured data, deadlines, configured anchors, actual repeated I/O and failures.
+Cooperative pause/resume, phase gates and ROM-specific runners remain deferred.
 
 ## Shared hardware contract
 
