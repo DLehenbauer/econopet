@@ -15480,7 +15480,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 139.7 134.62 0)
 			(effects
 				(font
@@ -15489,7 +15489,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2205311900_UNI-ROYAL-Uniroyal-Elec-0402WGF1200TCE_C25079.pdf"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/18125-0805W8F1200T5E/C17437"
 			(at 139.7 134.62 0)
 			(effects
 				(font
@@ -15507,7 +15507,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC Part #" "C25079"
+		(property "LCSC Part #" "C17437"
 			(at 139.7 134.62 0)
 			(effects
 				(font

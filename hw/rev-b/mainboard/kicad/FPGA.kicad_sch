@@ -15395,7 +15395,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 279.4 165.1 0)
 			(effects
 				(font
@@ -16372,7 +16372,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 180.34 149.86 0)
 			(effects
 				(font
@@ -18051,7 +18051,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 278.13 143.51 0)
 			(effects
 				(font
@@ -18906,7 +18906,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 181.61 107.95 0)
 			(effects
 				(font
@@ -19727,7 +19727,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 273.05 195.58 0)
 			(effects
 				(font
@@ -21066,7 +21066,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 180.34 124.46 0)
 			(effects
 				(font
@@ -22065,7 +22065,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 287.02 110.49 0)
 			(effects
 				(font
@@ -23555,7 +23555,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 276.86 88.9 0)
 			(effects
 				(font
@@ -24310,7 +24310,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 88.9 57.15 0)
 			(effects
 				(font
@@ -25294,7 +25294,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 180.34 93.98 0)
 			(effects
 				(font
@@ -26106,7 +26106,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 78.74 167.64 0)
 			(effects
 				(font
@@ -26734,7 +26734,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 177.8 181.61 0)
 			(effects
 				(font
@@ -27614,7 +27614,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/partdetail/Efinix-T20Q144C3/C3278392"
 			(at 278.13 129.54 0)
 			(effects
 				(font
@@ -28403,7 +28403,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.mouser.com/datasheet/3/6118/1/ds04_254.pdf"
 			(at 388.62 194.31 0)
 			(effects
 				(font
@@ -28421,7 +28421,7 @@
 				(hide yes)
 			)
 		)
-		(property "MOUSER" "490-DS04-254-1L-02BK"
+		(property "MOUSER" "490-DS04-254-1L-03BK"
 			(at 386.08 194.31 0)
 			(effects
 				(font
