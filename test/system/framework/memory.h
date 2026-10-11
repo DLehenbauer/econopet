@@ -16,6 +16,7 @@
 
 namespace test_asm {
 
+struct ExecutionResult;
 namespace memory_detail {
 // Check a nonempty subextent without overflowing endpoint arithmetic.
 constexpr bool contains_extent(size_t extent, size_t offset, size_t size) {
@@ -100,6 +101,7 @@ public:
 private:
     template<class> friend class MemoryView;
     friend class MemoryCapture;
+    template<class> friend class ProgramBuilder;
     MemoryBuffer(MemoryByte first, size_t size) : first_(std::move(first)), size_(size) {}
     MemoryByte first_;
     size_t size_;
@@ -110,53 +112,71 @@ class MemoryCapture {
 public:
     // Looks up the same owned byte used by an instruction or fixture operation.
     uint8_t operator[](const MemoryByte& byte) const {
-        return bytes_[require_extent(byte, 1)];
+        const auto selected = require_extent(byte, 1);
+        return (*selected.bytes)[selected.offset];
     }
     // Decodes an owned word using its declared storage order.
     uint16_t operator[](const MemoryWord& word) const {
-        const auto offset = require_extent(word.first_, 2);
-        const auto a = bytes_[offset], b = bytes_[offset + 1];
+        const auto selected = require_extent(word.first_, 2);
+        const auto a = (*selected.bytes)[selected.offset], b = (*selected.bytes)[selected.offset + 1];
         return word.order() == ByteOrder::LittleEndian ? a | (b << 8) : (a << 8) | b;
     }
     // Copies a checked buffer out of the immutable capture.
     std::vector<uint8_t> operator[](const MemoryBuffer& buffer) const {
-        const auto offset = require_extent(buffer.first_, buffer.size());
-        return std::vector<uint8_t>(bytes_.begin() + offset, bytes_.begin() + offset + buffer.size());
+        const auto selected = require_extent(buffer.first_, buffer.size());
+        return std::vector<uint8_t>(selected.bytes->begin() + selected.offset,
+            selected.bytes->begin() + selected.offset + buffer.size());
     }
-    // Exposes the primary raw extent only for explicit low-level framework checks.
-    const std::vector<uint8_t>& raw_bytes() const & { require_live(); return bytes_; }
+    // Borrow contiguous captured bytes, rejecting disjoint selected extents.
+    const std::vector<uint8_t>& raw_bytes() const & {
+        require_contiguous();
+        static const std::vector<uint8_t> Empty;
+        return spans_.empty() ? Empty : spans_.front().bytes;
+    }
     // Transfer raw bytes out of a temporary capture.
     std::vector<uint8_t> raw_bytes() && {
-        require_live();
-        auto bytes = std::move(bytes_);
+        require_contiguous();
+        auto bytes = spans_.empty() ? std::vector<uint8_t>{} : std::move(spans_.front().bytes);
         owner_.reset();
         return bytes;
     }
     // Copy raw bytes out of an immutable temporary capture.
-    std::vector<uint8_t> raw_bytes() const && { require_live(); return bytes_; }
+    std::vector<uint8_t> raw_bytes() const && { return raw_bytes(); }
 private:
+    friend struct ExecutionResult;
+    template<class> friend class ProgramBuilder;
     template<class> friend class MemoryView;
     MemoryCapture(std::shared_ptr<const int> owner, econopet::CpuAddress start, std::vector<uint8_t> bytes)
-        : owner_(std::move(owner)), start_(start), bytes_(std::move(bytes)) {}
+        : owner_(std::move(owner)) {
+        if (!bytes.empty()) spans_.push_back({start, std::move(bytes)});
+    }
     // Validate the complete requested capture extent before copying any data.
-    size_t require_extent(const MemoryByte& first, size_t size) const {
+    struct Selection { const std::vector<uint8_t>* bytes; size_t offset; };
+    Selection require_extent(const MemoryByte& first, size_t size) const {
         require_live();
         if (first.owner_ != owner_)
             throw std::invalid_argument("memory capture: foreign byte " + first.name_
                 + ", CPU address=" + std::to_string(first.address_.value()));
-        if (first.address_.value() < start_.value()
-            || !memory_detail::contains_extent(bytes_.size(), first.address_.value() - start_.value(), size))
-            throw std::invalid_argument("memory capture: missing byte " + first.name_
-                + ", CPU address=" + std::to_string(first.address_.value()) + ", size=" + std::to_string(size));
-        return first.address_.value() - start_.value();
+        for (const auto& span : spans_)
+            if (first.address_.value() >= span.start.value()
+                && memory_detail::contains_extent(span.bytes.size(), first.address_.value() - span.start.value(), size))
+                return {&span.bytes, first.address_.value() - span.start.value()};
+        throw std::invalid_argument("memory capture: missing byte " + first.name_
+            + ", CPU address=" + std::to_string(first.address_.value()) + ", size=" + std::to_string(size));
     }
     // Transferred captures must not report successful detached evidence.
     void require_live() const {
         if (!owner_) throw std::logic_error("memory capture: data was transferred");
     }
+    // Raw bytes cannot flatten disjoint extents without losing their address identities.
+    void require_contiguous() const {
+        require_live();
+        if (spans_.size() > 1)
+            throw std::logic_error("memory capture: raw bytes require a contiguous capture");
+    }
     std::shared_ptr<const int> owner_;
-    econopet::CpuAddress start_;
-    std::vector<uint8_t> bytes_;
+    struct Span { econopet::CpuAddress start; std::vector<uint8_t> bytes; };
+    std::vector<Span> spans_;
 };
 
 // A layout-bound view selects explicit lower-bank backing once.

@@ -27,6 +27,7 @@
 #include "verilated.h"
 
 #include "driver.h"
+#include "framework/asm.h"
 #include "framework/trace.h"
 #include "io.h"
 #include "registers.h"
@@ -56,6 +57,17 @@ class System {
         std::vector<std::weak_ptr<ObserverEntry>> entries;
     };
 public:
+    // Configure a checked complete 6502 program without clocking or mutation.
+    test_asm::ProgramBuilder<test_asm::Mos6502> program6502(
+        test_asm::Layout layout = test_asm::Layout::Pet, const test_asm::LayoutOverrides& overrides = {}) &;
+    // Configure a checked complete 6809 program without clocking or mutation.
+    test_asm::ProgramBuilder<test_asm::Mc6809> program6809(
+        test_asm::Layout layout = test_asm::Layout::Pet, const test_asm::LayoutOverrides& overrides = {}) &;
+    test_asm::ProgramBuilder<test_asm::Mos6502> program6502(
+        test_asm::Layout, const test_asm::LayoutOverrides&) && = delete;
+    test_asm::ProgramBuilder<test_asm::Mc6809> program6809(
+        test_asm::Layout, const test_asm::LayoutOverrides&) && = delete;
+    template<class> friend class test_asm::ProgramBuilder;
     static constexpr size_t RamSize = econopet::SramCapacity;
     static constexpr uint8_t IdleRamByte = 0xea; // 6502 NOP in uninitialized SRAM.
 

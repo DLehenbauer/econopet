@@ -34,6 +34,61 @@ static_assert(!std::is_move_constructible_v<RunConfiguration>);
 static_assert(!std::is_move_constructible_v<Scheduler>);
 }
 
+// Per-pass service owns its cadence and shares exact stimulus, predicate and deadline behavior.
+TEST_F(SystemTest, ConfiguredPollingServiceSharesStimulusAndDeadline) {
+    const auto start = system.time();
+    bool stimulated = false;
+    size_t calls = 0;
+    auto run = system.execution();
+    run.within(3).after(0, [&](System&) { stimulated = true; })
+        .service([&](System& board, Cycles remaining) {
+            EXPECT_TRUE(stimulated);
+            EXPECT_EQ(remaining, Cycles{3} - (board.time() - start));
+            ++calls;
+            board.tick(1);
+        }).run();
+    EXPECT_EQ(calls, 3u);
+    EXPECT_EQ(system.time(), start + Cycles{3});
+    EXPECT_THROW(run.service([](System&, Cycles) {}), std::logic_error);
+}
+
+// Scheduled and per-pass services cannot silently replace one another in either order.
+TEST_F(SystemTest, ConfiguredPollingServiceRejectsConflictingActiveWork) {
+    const auto service = [](System&, Cycles) {};
+    auto polling = system.execution();
+    EXPECT_THROW(polling.service({}), std::invalid_argument);
+    polling.service(service);
+    EXPECT_THROW(polling.service(service), std::logic_error);
+    EXPECT_THROW(polling.every(1, MissedService::Coalesce, service), std::logic_error);
+    EXPECT_THROW(polling.every(1, ServiceTiming::AfterSlice, service), std::logic_error);
+    auto periodic = system.execution();
+    periodic.every(1, MissedService::Coalesce, service);
+    EXPECT_THROW(periodic.service(service), std::logic_error);
+    auto slice = system.execution();
+    slice.every(1, ServiceTiming::AfterSlice, service);
+    EXPECT_THROW(slice.service(service), std::logic_error);
+}
+
+// Polling work cannot hide a failed stimulus by catching its exception during board clocks.
+TEST_F(SystemTest, ConfiguredPollingServiceRetainsStickyFailuresAndZeroBudget) {
+    size_t calls = 0;
+    const auto start = system.time();
+    system.execution().within(0).service([&](System&, Cycles) { ++calls; }).run();
+    EXPECT_EQ(calls, 0u);
+    EXPECT_EQ(system.time(), start);
+    struct Sentinel {};
+    auto run = system.execution();
+    run.within(5).after(1, [](System&) { throw Sentinel{}; })
+        .service([&](System& board, Cycles) {
+            ++calls;
+            try { board.tick(2); } catch (const Sentinel&) {}
+        });
+    EXPECT_THROW(run.run(), std::logic_error);
+    EXPECT_EQ(calls, 1u);
+    EXPECT_THROW(run.run(), std::logic_error);
+    EXPECT_NO_THROW(system.execution().within(1).run());
+}
+
 TEST_F(SystemTest, ConfiguredRunOrdersStimulusAndPhaseAnchoredServices) {
     const auto start = system.time();
     std::vector<int> order;

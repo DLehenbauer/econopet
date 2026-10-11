@@ -88,7 +88,8 @@ TEST(CpuAssembly, Encodes6502FluentSurfaceExactly) {
     HostMemory memory;
     Scenario layout(memory);
     P6502 program(layout, layout.reserve("code", RegionKind::Code, CpuAddress{0x300}, 128));
-    program.sei().cli().txs().rti().rts()
+    EXPECT_EQ(&program.sei().cli().txs().rti().rts(), &program);
+    program
         .lda(imm(0x42)).ldx(imm(0xff))
         .lda(zp(CpuAddress{0x80})).sta(zp(CpuAddress{0x81}))
         .lda(CpuAddress{0x12}).sta(CpuAddress{0x1234})
@@ -109,12 +110,13 @@ TEST(CpuAssembly, Encodes6809FluentSurfaceExactly) {
         .sta(CpuAddress{0x1234}).stb(CpuAddress{0xabcd}).stx(dp(CpuAddress{0xff}))
         .jsr(CpuAddress{0xcdef}).bra_offset(-2).rts().clr_x()
         .clr_x_offset(-16).clr_x_offset(15).raw_clr_indexed_postbyte(0x89);
+    EXPECT_EQ(&program, &program.rts());
     EXPECT_EQ(installed(memory, program), (std::vector<uint8_t>{
         0x86, 0x42, 0xc6, 0xff, 0xcc, 0x12, 0x34, 0x8e, 0xab, 0xcd,
         0x10, 0xce, 0x02, 0x00, 0x1a, 0x50, 0xb6, 0x00, 0x12,
         0xb7, 0x12, 0x34, 0xf7, 0xab, 0xcd, 0x9f, 0xff,
         0xbd, 0xcd, 0xef, 0x20, 0xfe, 0x39, 0x6f, 0x84,
-        0x6f, 0x10, 0x6f, 0x0f, 0x6f, 0x89}));
+        0x6f, 0x10, 0x6f, 0x0f, 0x6f, 0x89, 0x39}));
     EXPECT_EQ(mc6809::lds_imm(CpuAddress{0xabcd}).bytes,
         (std::array<uint8_t, 4>{0x10, 0xce, 0xab, 0xcd}));
     EXPECT_EQ(mc6809::ldx_imm(CpuAddress{0xabcd}).bytes,
@@ -168,6 +170,14 @@ TEST(CpuAssembly, LabelValidationRejectsForeignDuplicateAndUnresolvedTargets) {
     EXPECT_THROW(p.bind(foreign), std::invalid_argument);
     EXPECT_THROW(p.address(foreign), std::invalid_argument);
     EXPECT_THROW(p.jmp(foreign), std::invalid_argument);
+    EXPECT_THROW(p.jsr(foreign), std::invalid_argument);
+    EXPECT_THROW(p.beq(foreign), std::invalid_argument);
+    P6809 mc(layout, code);
+    P6809 other_mc(layout, code);
+    const auto foreign_mc = other_mc.mark("foreign");
+    EXPECT_THROW(mc.jsr(foreign_mc), std::invalid_argument);
+    EXPECT_THROW(mc.bra(foreign_mc), std::invalid_argument);
+    EXPECT_EQ(mc.size(), 0u);
     EXPECT_THROW(p.address(label), std::logic_error);
     p.jmp(label);
     EXPECT_THROW(p.install(), std::logic_error);
