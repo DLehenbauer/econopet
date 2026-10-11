@@ -41,9 +41,14 @@ concept AllowedSpiResult = !std::is_reference_v<T> && !std::is_pointer_v<T>
     && !IsReferenceWrapper<std::remove_cv_t<T>>::value;
 }
 
+class DeterministicScheduler;
+class RunConfiguration;
+
 // Own one production FPGA and the physical devices fitted outside its boundary.
 class System {
     friend class SystemTest;
+    friend class DeterministicScheduler;
+    friend class RunConfiguration;
     struct ObserverEntry {
         std::function<void(const System&)> callback;
     };
@@ -87,6 +92,10 @@ public:
     const std::shared_ptr<const int>& observation_source() const & { return observation_source_; }
     // Retain identity independently of a temporary board.
     std::shared_ptr<const int> observation_source() const && { return observation_source_; }
+    // Configure one board-only run without clocking or installing a scheduler.
+    RunConfiguration execution() &;
+    RunConfiguration execution() && = delete;
+    RunConfiguration execution() const && = delete;
     // Define a completed source-bound interval without clocking.
     test_observation::TraceWindow trace_window(econopet::CycleTime start, econopet::CycleTime end) const {
         if (end > time())
@@ -218,6 +227,8 @@ public:
         // Reject closed scopes, failed boards and captured-reference mutation.
         void require_open() const {
             system_.require_mutable_access();
+            if (system_.dispatching_stimulus_)
+                throw system_.failure<std::logic_error>("SPI transfer/release", "scheduled stimulus cannot transfer or release SPI");
             if (closed_ || system_.spi_failed_ || !system_.spi_active_ || system_.dut_->spi_cs_ni)
                 throw system_.failure<std::logic_error>("SPI transfer/release", "requires an active selected transaction");
         }
@@ -734,6 +745,8 @@ public:
     // Alternate passive completion checks with active work under an inherited deadline.
     template<class Predicate, class Operation>
     void service_until(Predicate done, Operation service, econopet::Cycles budget, const std::string& reason) {
+        if (dispatching_stimulus_)
+            throw failure<std::logic_error>("service_until", "scheduled stimulus cannot run active waits");
         static_assert(std::is_invocable_r_v<bool, Predicate&, const System&>,
                       "completion predicates must observe const System&");
         static_assert(std::is_invocable_v<Operation&, System&, econopet::Cycles>,
@@ -805,6 +818,8 @@ public:
     // Drive SPI0 boundary pins only (no transaction ownership or command policy).
     void drive_spi(bool cs_n, bool clock, bool data) {
         require_mutable_access();
+        if (dispatching_stimulus_)
+            throw failure<std::logic_error>("drive_spi", "scheduled stimulus cannot drive SPI transport");
         if (spi_active_ || spi_failed_)
             throw failure<std::logic_error>("drive_spi", "raw pins require an unowned, usable SPI bus");
         dut_->spi_cs_ni = cs_n;
@@ -858,6 +873,8 @@ public:
     // Advance complete system clocks, resolving external devices at both phases.
     void tick(econopet::Cycles cycles) {
         require_mutable_access();
+        if (dispatching_stimulus_)
+            throw failure<std::logic_error>("tick", "scheduled stimulus cannot advance the clock");
         if (spi_failed_) throw failure<std::logic_error>("tick", "board is unusable after an unfinished SPI transaction");
         if (clock_faulted_ && stimulus_.cpu_reset_n_i)
             throw failure<std::logic_error>("tick", "board clock is suspended after failure: assert external reset before ticking");
@@ -874,6 +891,8 @@ public:
             ~TickScope() { if (!completed) faulted = true; }
         };
         for (uint64_t index = 0; index < cycles.value(); ++index) {
+            // Dispatch once before a new cycle, never replaying inputs during half-cycle recovery.
+            if (phase_ == ClockPhase::LowPending && scheduled_boundary_) scheduled_boundary_();
             TickScope scope(clock_faulted_);
             const auto completed = time() + econopet::Cycles{1};
             if (phase_ == ClockPhase::LowPending) {
@@ -948,6 +967,8 @@ private:
     // Reject failed boards, interrupted clocks and competing external or scoped owners.
     void require_spi_idle() const {
         require_mutable_access();
+        if (dispatching_stimulus_)
+            throw failure<std::logic_error>("SPI begin", "scheduled stimulus cannot start SPI transactions");
         if (spi_failed_ || clock_faulted_)
             throw failure<std::logic_error>("SPI begin", "SPI transaction requires a usable board");
         if (spi_active_ || !dut_->spi_cs_ni || dut_->spi_sck_i)
@@ -1377,6 +1398,8 @@ private:
     bool editing_stimulus_ = false;
     bool clock_faulted_ = false;
     bool reset_pin_unsettled_ = false;
+    bool dispatching_stimulus_ = false;
+    std::function<void()> scheduled_boundary_;
     ClockPhase phase_ = ClockPhase::LowPending;
     std::unique_ptr<VerilatedContext> context_;
     std::unique_ptr<Vsystem> dut_;
@@ -1393,3 +1416,4 @@ private:
 };
 
 #include "framework/observations.h"
+#include "framework/run.h"
