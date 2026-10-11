@@ -667,9 +667,10 @@ phase and IEEE tests are excluded until their consuming layers land.
 
 ## Checked layouts and owned memory
 
-[`framework/asm.h`](framework/asm.h) currently publishes only layout primitives:
-`test_asm::Scenario`, `Region` and `RegionKind`. Instruction encoding, labels,
-program builders and execution remain later layers.
+[`framework/asm.h`](framework/asm.h) publishes layout primitives
+(`test_asm::Scenario`, `Region` and `RegionKind`) and the explicit CPU-specific
+assembly APIs described below. Complete program builders and execution remain
+later layers.
 [`framework/memory.h`](framework/memory.h) supplies lower-bank views, named
 byte/word/buffer handles and detached captures.
 
@@ -742,6 +743,99 @@ Pure contract tests are in [`layout_test.cpp`](layout_test.cpp), included even
 with `BUILD_BOARD_TESTS=OFF`. Board backing, diagnostic and observation-guard
 checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Mixed program
 and phase memory cases remain deferred with their consuming layers.
+
+## CPU-specific assembly and fluent instructions
+
+Explicit `test_asm::mos6502::Program` and `test_asm::mc6809::Program` assemble
+into a previously reserved Code region. They borrow a persistent `Scenario`,
+which in turn borrows its backing memory. Both must outlive the program.
+There is no automatic reset, CPU selection, stack setup, completion marker,
+execution, pause or resume in this layer.
+
+```cpp
+test_asm::Scenario layout(system);
+const auto code = layout.reserve("code", test_asm::RegionKind::Code,
+                                 econopet::CpuAddress{0x300}, 32);
+test_asm::mos6502::Program program(layout, code);
+const auto subroutine = program.label("subroutine");
+const auto stopped = program.label("stopped");
+program.sei().ldx(test_asm::imm(0xff)).txs().jsr(subroutine).jmp(stopped);
+program.bind(subroutine);
+program.lda(test_asm::imm(0x42)).sta(econopet::CpuAddress{0x200}).rts();
+program.bind(stopped);
+program.jmp(stopped);
+program.install();
+```
+
+This example demonstrates assembly and installation only. `install()` does not
+start the CPU. Authors may use the existing explicit CPU lifecycle themselves,
+but complete checked startup/completion is deferred to the next layer.
+
+Fluent operands distinguish byte immediates (`imm()`), word immediates
+(`imm16()`), CPU addresses, 6502 zero-page (`zp()`) and 6809 direct-page offsets
+(`dp()`). Checked constructors reject negative values, narrowing and high
+address bits. Ordinary CPU addresses always select absolute/extended encoding,
+even below `$100`. Direct-page offsets do not set the live 6809 DP register.
+Instructions and labels retain their CPU tag, so cross-ISA emission and calls
+are compile-time errors. Low-level encoder functions return fixed byte arrays
+tagged with their CPU, and accept their declared byte/word scalar types.
+Use the checked immediate helpers before narrowing caller-supplied integers.
+
+6502 fluency includes loads/stores, X initialization, stack-pointer transfer,
+interrupt control/return, subroutine return/calls, jumps and equality branches.
+6809 fluency includes A/B/D/X/S loads, condition-code flags, A/B extended stores,
+direct-page X stores, calls/returns, relative branches and indexed clears.
+6502 address relocations are little-endian, 6809 address relocations big-endian.
+Literal 6809 branch displacements accept exactly `-128..127`, and X-offset
+clears accept exactly `-16..15`. `clr_x()` emits `,X`, not an arbitrary postbyte.
+`raw_clr_indexed_postbyte()` is deliberately unchecked and may require trailing
+bytes supplied by the author.
+
+`label()` creates a named forward reference. Names must be nonempty and unique
+per program. `bind()` assigns its current cursor once, and `mark()` creates a
+label already bound at that cursor. Foreign and moved-from label handles reject.
+The subroutine returns to the jump over its body and then enters the explicit
+stopping loop, rather than falling through into a second return.
+Labels may outlive their handle's original scope but do not extend layout or
+backing lifetime. All created labels (even unused ones) must be bound before
+installation. Relative displacement is calculated from the address following
+the branch instruction using modular 16-bit PC arithmetic, including branches
+across `$FFFF/$0000`, with signed-range checking before any SRAM mutation.
+Invalid or wrong-CPU relocation kinds reject before instruction emission.
+
+Programs own their emitted code. Each instruction and compound word/buffer
+store checks the entire requested capacity before appending. Full regions,
+including the last CPU byte at `$FFFF`, install successfully, but no cursor or
+label may refer to the one-past endpoint. `size()` remains valid at capacity.
+`raw_bytes()` deliberately bypasses opcode validation, not reservation bounds.
+`install()` resolves all references into detached bytes before writing only the
+emitted prefix through the layout's lower-bank `poke` operations. Repeated
+installation is allowed. Board mutation guards remain active, and invalid
+assembly leaves backing memory and simulation time unchanged.
+
+The common `Program<Cpu, Memory>` directly inherits its CPU-specific fluent
+surface. Namespace aliases preserve the author-facing names, and shared append
+logic delegates to the checked emitter. Mixin ownership/diagnostic helpers are
+private implementation plumbing.
+
+Programs cannot copy. Moving a program transfers code and label ownership, and
+all source authoring/installation operations reject. Moving the borrowed
+layout invalidates the existing program's layout reference rather than silently
+rebinding it. Create a new program against the destination layout if needed.
+
+Owned byte loads/stores check layout identity. `store(word, imm16(value))` and
+pointer stores emit two real loads/stores using the word's declared byte order,
+clobbering A and load-related flags. `store(buffer, bytes)` requires exact input
+length. `store_zp()` explicitly selects 6502 zero-page stores and checks both
+addresses before emitting anything. These methods emit CPU operations into code
+(they do not initialize host data).
+
+[`assembly_test.cpp`](assembly_test.cpp) checks exact encodings, typed surfaces,
+labels, signed limits, moves, code bounds, store validation and installation
+without a simulator. [`assembly_board_test.cpp`](assembly_board_test.cpp) checks
+clock-free lower-bank installation, backing preservation, board evidence and
+observation guards. Layout and assembly suites share the simulator-independent
+[`host_memory.h`](host_memory.h) test backing.
 
 ## Shared hardware contract
 
