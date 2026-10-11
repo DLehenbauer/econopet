@@ -665,6 +665,84 @@ The board-only regression suites are
 [`configured_run_test.cpp`](configured_run_test.cpp). Mixed parked program,
 phase and IEEE tests are excluded until their consuming layers land.
 
+## Checked layouts and owned memory
+
+[`framework/asm.h`](framework/asm.h) currently publishes only layout primitives:
+`test_asm::Scenario`, `Region` and `RegionKind`. Instruction encoding, labels,
+program builders and execution remain later layers.
+[`framework/memory.h`](framework/memory.h) supplies lower-bank views, named
+byte/word/buffer handles and detached captures.
+
+```cpp
+test_asm::Scenario layout(system);
+const auto data = layout.reserve("workspace", test_asm::RegionKind::Workspace,
+                                 econopet::CpuAddress{0x400}, 4);
+auto view = layout.lower_bank(data);
+const auto pointer = view.word("pointer", 0, test_asm::ByteOrder::LittleEndian);
+const auto payload = view.buffer("payload", 2, 2);
+const std::array<uint8_t, 2> bytes{0x42, 0xff};
+view.initialize(pointer, econopet::CpuAddress{0x1234});
+view.initialize(payload, bytes);
+const auto captured = view.capture();
+EXPECT_EQ(captured[pointer], 0x1234);
+EXPECT_EQ(captured[payload.byte(1)], 0xff);
+```
+
+Reservations have a nonempty unique name, explicit purpose and nonzero CPU
+extent. Overlap is rejected for every purpose, including contained and enclosing
+ranges. Adjacent reservations are valid. A region may end at `$FFFF`, but
+`at()` never returns a one-past address. `slice()` narrows an existing
+reservation and retains its identity and purpose (it does not reserve an alias).
+Whole-span validation precedes backing writes.
+`layout.region(name)` looks up any reservation purpose. It does not impose the
+ordinary-data restriction of `lower_bank()`.
+
+Layouts borrow persistent backing memory and cannot copy their identity.
+Moving a layout transfers its identity and reservations. All source layout
+operations then reject. Previously obtained regions, operands and views remain
+valid against the destination. Host-only tests use a small memory adapter with
+the same `peek`, `poke` and diagnostic contract as `System`. Views borrow that
+backing memory, which must outlive them, but retain their layout identity after
+the layout itself is destroyed. Views can be copied. Moved-from views reject
+handle construction, reads, writes and capture.
+
+`lower_bank()` accepts only Data, Results and Workspace reservations. Code,
+Stack, Mailbox and Vectors remain reserved for their dedicated uses. Host
+access maps CPU addresses directly to physical SRAM bank zero, regardless of
+CPU selection, banking or I/O decoding. It never uses SPI, clocks or simulated
+CPU writes. A view rejects foreign layout owners and bytes outside its extent,
+including siblings in the same layout. `Scenario::write()` additionally supports
+bounded raw installation in any owned region without adding an assembler.
+Empty writes at a region's endpoint are allowed, but nonempty writes must fit.
+Actual backing mutation still obeys the board's observation guards.
+
+Named operands own their diagnostic names and CPU addresses. Buffer selection,
+sub-buffers and complete words must fit. Words explicitly declare little- or
+big-endian storage independently of the host or selected CPU. Initializers
+reject negative or oversized integers and validate both word bytes or the whole
+buffer before mutation. Buffer input must match its exact length.
+Bulk reads, capture copies and initialization validate the extent once and
+allocate output storage once where needed. Direct address iteration still calls
+the backing object's `peek`/`poke` for each byte, retaining board guards without
+per-byte operand/name construction. Valid scalar writes do not format failure
+diagnostics.
+
+`view.capture()` snapshots the entire view without clocks. Capture reads require
+the same layout identity and bytes present in that snapshot. Same-owner bytes
+outside the captured view and foreign operands reject. Captures and operands
+can outlive both layout and board, and subsequent backing changes do not modify
+captured data. Lvalue `raw_bytes()` borrows immutable storage. Mutable temporary
+access transfers bytes, immutable temporary access copies them. Moving or
+draining a capture invalidates its source for subsequent reads. Captures are
+always nonempty, so no `empty()` state query is provided.
+Named automatic allocation and selective program-result capture are
+deferred until complete program builders exist.
+
+Pure contract tests are in [`layout_test.cpp`](layout_test.cpp), included even
+with `BUILD_BOARD_TESTS=OFF`. Board backing, diagnostic and observation-guard
+checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Mixed program
+and phase memory cases remain deferred with their consuming layers.
+
 ## Shared hardware contract
 
 [`hardware_contract.h`](../../fw/src/hardware_contract.h) owns the
