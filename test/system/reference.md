@@ -1020,6 +1020,10 @@ so it cannot subsequently yield successful capture or resume.
 Shared phase invariants retain the first reset, selection, transport, clock or
 mailbox failure cause. Capture and resume report that cause even if the external
 state is subsequently restored.
+Escaping clock and SPI exceptions sample board faults before falling back to a
+generic execution failure, even during startup before CPU monitoring begins.
+The original exception still escapes unchanged. Subsequent capture/resume
+reports the retained failure rather than masking it with a consumed-handle error.
 
 `pause(assemble, configuration)` and `resume(handle, configuration)` accept fresh
 board-owned RunConfigurations. Startup RunEntry anchors precede reset work,

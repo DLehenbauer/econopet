@@ -429,10 +429,11 @@ private:
     }
     // Retain the first lifecycle or mailbox violation for observers and public operations.
     void check_phase_invariants() const {
-        if (!monitoring_ || failure_ != PhaseFailure::None) return;
+        if (failure_ != PhaseFailure::None) return;
         const auto pins = memory_.snapshot();
         if (memory_.clock_faulted_) failure_ = PhaseFailure::ClockFault;
         else if (memory_.spi_failed_) failure_ = PhaseFailure::TransportFault;
+        else if (!monitoring_) return;
         else if (memory_.reset_pin_unsettled_ || pins.cpu_reset_active_o) failure_ = PhaseFailure::Reset;
         else if (pins.cpu_selection_o != std::to_underlying(SelectedCpu)) failure_ = PhaseFailure::CpuSelection;
         else if (acknowledgment_stage_ == AcknowledgmentStage::Parked) {
@@ -466,6 +467,7 @@ private:
     }
     // Reject foreign, consumed, moved and externally interrupted capabilities without clocks.
     void require_phase(const PhaseHandle& phase, const std::string& operation) const {
+        if (failure_ != PhaseFailure::None) require_phase_health(operation);
         if (!paused_result_ || phase.owner_ != owner_ || phase.index_ != current_)
             throw phase_failure(operation, "invalid or stale phase handle");
         require_phase_health(operation);
@@ -479,6 +481,7 @@ private:
     }
     // Escaping phase failures retire monitoring and forbid future capture or resume.
     void fail_phases() {
+        check_phase_invariants();
         if (failure_ == PhaseFailure::None) failure_ = PhaseFailure::Execution;
         subscription_.reset();
     }

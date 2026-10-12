@@ -571,3 +571,57 @@ TEST_F(SystemTest, PhaseOpcodeHistoryIsFreshAndDistinctFromNative6809Sync) {
     EXPECT_TRUE(cpu.peek_opcode_fetched_at(GateOpcode, checkpoint));
     EXPECT_FALSE(cpu.peek_opcode_fetched_at(GateOpcode, reset_checkpoint));
 }
+
+TEST_F(SystemTest, PhaseEscapingFaultsRetainSpecificCausesBeforeObserverDispatch) {
+    enum class Fault { Clock, Spi, Callback };
+    struct Sentinel {};
+    const auto check = [&](System& board, auto& test, Fault fault) {
+        auto first = test.within(Budget).pause([&](auto& p) {
+            p.pause("ready");
+            if (fault == Fault::Clock) p.lda(pet::ViaShift);
+        });
+        const auto service = [&](System& active, Cycles remaining) {
+            if (fault == Fault::Clock) {
+                active.tick(remaining);
+            } else if (fault == Fault::Spi) {
+                active.spi().transaction([](auto&) { throw Sentinel{}; });
+            } else {
+                throw Sentinel{};
+            }
+        };
+        if (fault == Fault::Clock) {
+            EXPECT_THROW(test.resume(first, Budget, service), std::logic_error);
+            ASSERT_TRUE(board.clock_faulted());
+            ASSERT_FALSE(board.spi().peek_failed());
+        } else {
+            EXPECT_THROW(test.resume(first, Budget, service), Sentinel);
+            ASSERT_EQ(board.spi().peek_failed(), fault == Fault::Spi);
+            ASSERT_FALSE(board.clock_faulted());
+        }
+        const auto stopped = board.half_ticks();
+        const std::string cause = fault == Fault::Clock ? "hardware clock failed during phases"
+            : fault == Fault::Spi ? "SPI transport failed during phases" : "phase execution previously failed";
+        // Even the consumed resume capability must report the retained cause, without more clocks.
+        const auto expect_cause = [&](auto operation) {
+            try {
+                operation();
+                FAIL() << "failed phase was accepted";
+            } catch (const std::logic_error& error) {
+                EXPECT_NE(std::string(error.what()).find(cause), std::string::npos) << error.what();
+            }
+            EXPECT_EQ(board.half_ticks(), stopped);
+        };
+        expect_cause([&] { test.capture(first); });
+        expect_cause([&] { test.resume(first, Budget); });
+        expect_cause([&] { test.capture(first); });
+    };
+    for (const auto fault : {Fault::Clock, Fault::Spi, Fault::Callback}) {
+        SCOPED_TRACE(std::to_underlying(fault));
+        System mos_board(system.seed());
+        auto mos = mos_board.program6502(ProgramMode::Phased);
+        check(mos_board, mos, fault);
+        System mc_board(system.seed());
+        auto mc = mc_board.program6809(ProgramMode::Phased);
+        check(mc_board, mc, fault);
+    }
+}
