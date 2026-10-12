@@ -4,10 +4,12 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 #include "framework/asm.h"
 #include "framework/execution.h"
+#include "framework/phase.h"
 #include "framework/run.h"
 #include "system.h"
 
@@ -56,11 +58,37 @@ public:
     // Returns a checked label address for explicit instruction operands.
     econopet::CpuAddress address(const Label<Cpu>& target) const { return program_.address(target); }
 
+    // Preassemble a register-preserving closed-gate handshake in phased mode only.
+    Assembly& pause(std::string name) {
+        if (!pauses_)
+            throw data_failure<std::logic_error>("program pause", "use builder.pause for phased execution");
+        if (name.empty() || name == TerminalPhase)
+            throw data_failure<std::invalid_argument>("program pause", "requires a nonempty, nonterminal name");
+        append_pause(std::move(name));
+        return *this;
+    }
 private:
     template<class> friend class ProgramBuilder;
     template<class> friend class OwnedInstructions;
     template<class, class> friend class FluentInstructions;
-    explicit Assembly(Program<Cpu, Memory>& program) : program_(program) {}
+    explicit Assembly(Program<Cpu, Memory>& program, std::vector<PausePoint>* pauses = nullptr,
+                      econopet::CpuAddress acknowledgment = {}, econopet::CpuAddress release = {})
+        : program_(program), pauses_(pauses), acknowledgment_(acknowledgment), release_(release) {}
+    static constexpr const char* TerminalPhase = "complete";
+    static constexpr size_t MaximumPhaseTokens = std::numeric_limits<uint8_t>::max();
+    // Save A/flags on the native stack, publish a token and poll until explicitly released.
+    void append_pause(std::string name) {
+        for (const auto& point : *pauses_)
+            if (point.name == name)
+                throw data_failure<std::invalid_argument>("program pause", "duplicate phase " + name);
+        if (pauses_->size() == MaximumPhaseTokens)
+            throw data_failure<std::out_of_range>("program pause", "phase tokens exhausted");
+        require_space(phase_detail::HandshakeSize);
+        const auto token = static_cast<uint8_t>(pauses_->size() + 1);
+        const auto gate_load = program_.address() + phase_detail::GateLoadOffset;
+        emit(phase_detail::handshake<Cpu>(acknowledgment_, release_, token));
+        pauses_->push_back({std::move(name), token, gate_load});
+    }
     // Supplies ownership checks to the shared fluent data instructions.
     void require_data(const MemoryByte& byte) const { program_.require_data(byte); }
     // Adds board evidence to shared data instruction failures.
@@ -71,28 +99,40 @@ private:
     // Preflight a complete compound instruction before emission.
     void require_space(size_t size) const { program_.require_space(size); }
     Program<Cpu, Memory>& program_;
+    std::vector<PausePoint>* pauses_;
+    econopet::CpuAddress acknowledgment_, release_;
 };
 
-// A single-use complete CPU program backed by the production-top simulated board.
+// A single-use CPU program with construction-time storage backed by the simulated board.
 template<class Cpu>
 class ProgramBuilder {
     static_assert(std::is_same_v<Cpu, Mos6502> || std::is_same_v<Cpu, Mc6809>);
 public:
     // Validates all reservations without changing memory, reset or simulation time.
-    ProgramBuilder(System& memory, Layout layout, const LayoutOverrides& overrides = {})
-        : memory_(memory), scenario_(memory),
+    ProgramBuilder(System& memory, Layout layout, const LayoutOverrides& overrides = {},
+                   ProgramMode mode = ProgramMode::Complete)
+        : memory_(memory), scenario_(memory), mode_(mode),
           stack_(reserve(layout, overrides.stack, "stack", RegionKind::Stack,
               {econopet::CpuAddress{0x0100}, 0x100})),
           results_(reserve(layout, overrides.results, "results", RegionKind::Results,
-              {econopet::CpuAddress{0x0200}, 0xff})),
+              {econopet::CpuAddress{0x0200}, mode == ProgramMode::Phased ? 0xfeu : 0xffu})),
           vectors_(reserve(layout, overrides.vectors, "vectors", RegionKind::Vectors,
               {econopet::CpuAddress{0xfff0}, 16})),
           marker_(scenario_.completion(scenario_.reserve("completion", RegionKind::Mailbox,
               overrides.completion.value_or(econopet::CpuAddress{0x02ff}), 1))),
+          release_mailbox_(mode == ProgramMode::Phased
+              ? std::optional{scenario_.reserve("release", RegionKind::Mailbox,
+                  overrides.release.value_or(econopet::CpuAddress{0x02fe}), 1)}
+              : std::nullopt),
           code_(reserve(layout, overrides.code, "code", RegionKind::Code,
               {econopet::CpuAddress{0x0300}, 0x100})),
           program_(scenario_, code_), configuration_(memory) {
         memory_.require_mutable_access();
+        if (mode != ProgramMode::Complete && mode != ProgramMode::Phased)
+            throw scenario_.failure<std::invalid_argument>("program layout", "unknown program mode");
+        if (mode == ProgramMode::Complete && overrides.release)
+            throw scenario_.failure<std::invalid_argument>("program layout", "release override requires phased mode");
+        if (release_mailbox_) release_ = release_mailbox_->start();
         if constexpr (std::is_same_v<Cpu, Mos6502>) {
             if (stack_.start() != econopet::CpuAddress{0x0100} || stack_.size() != 0x100)
                 throw scenario_.template failure<std::invalid_argument>("program layout",
@@ -111,7 +151,7 @@ public:
             scenario_.reserve(name, RegionKind::Workspace, region.start, region.size);
     }
     ProgramBuilder(const ProgramBuilder&) = delete;
-    ProgramBuilder(System&&, Layout, const LayoutOverrides& = {}) = delete;
+    ProgramBuilder(System&&, Layout, const LayoutOverrides& = {}, ProgramMode = ProgramMode::Complete) = delete;
     ProgramBuilder& operator=(const ProgramBuilder&) = delete;
     ProgramBuilder(ProgramBuilder&&) = delete;
     ProgramBuilder& operator=(ProgramBuilder&&) = delete;
@@ -237,7 +277,212 @@ public:
         return run(std::move(assemble));
     }
 
+    // Assemble all phases and start once, returning after the first verified closed gate.
+    template<class Assemble>
+    PhaseHandle pause(Assemble assemble) {
+        return pause(std::move(assemble), configuration_);
+    }
+    // Use the complete runner's configuration owner for startup and first acknowledgment.
+    template<class Assemble>
+    PhaseHandle pause(Assemble assemble, RunConfiguration& configuration) {
+        require_open("program pause");
+        if (&configuration != &configuration_) configuration_.require_replaceable();
+        configuration.validate(memory_, true);
+        require_pause_storage();
+        consumed_ = true;
+        prologue();
+        Assembly<Cpu, System> assembly(program_, &pauses_, marker_.address(), release_);
+        assemble(assembly);
+        assembly.append_pause(Assembly<Cpu, System>::TerminalPhase);
+        // Keep the monitor scoped to the builder, including while the host dwells at a gate.
+        subscription_.emplace(memory_.observe([this](const System& board) { sample_pause(board); }));
+        const auto reason = "program pause " + pauses_.front().name;
+        try {
+            auto execution = configuration.execute(memory_, reason, true, [&](auto budget, auto service, auto released, auto done) {
+                return scenario_.start_program(program_, &results_, marker_, budget, reason, service, released,
+                    [&](const System& board) { return reached() && done(board); },
+                    [&] {
+                        constexpr std::array<uint8_t, 1> ClosedGate{0};
+                        scenario_.write(*release_mailbox_, 0, ClosedGate);
+                        prepared_ = true;
+                    }, false);
+            });
+            started_ = phase_started_ = execution.started();
+            return acknowledge();
+        } catch (...) {
+            fail_phases();
+            throw;
+        }
+    }
+    // Adapt polling work through the same configured phase startup lifecycle.
+    template<class Assemble>
+    PhaseHandle pause(Assemble assemble, RunConfiguration::Service service) {
+        require_open("program pause");
+        configuration_.validate(memory_, true);
+        require_pause_storage();
+        configuration_.service(std::move(service));
+        return pause(std::move(assemble));
+    }
+    // Open the current gate under a fresh configuration without resetting or replacing code.
+    PhaseHandle resume(PhaseHandle& phase, RunConfiguration& configuration) {
+        memory_.require_mutable_access();
+        require_phase(phase, "program resume");
+        if (phase.complete())
+            throw phase_failure("program resume", "terminal phase cannot be released");
+        configuration.validate(memory_, true);
+        memory_.require_spi_idle();
+        const auto reason = "program resume " + pauses_[current_ + 1].name;
+        phase_started_ = memory_.time();
+        try {
+            return configuration.execute(memory_, reason, true, [&](auto budget, auto service, auto released, auto done) {
+                bool opened = false;
+                memory_.service_until([&](const System& board) {
+                    return opened && reached() && done(board);
+                }, [&](System& board, econopet::Cycles remaining) {
+                    if (!opened) {
+                        // Invalidate the old capability before releasing its preassembled continuation.
+                        const auto token = pauses_[current_].token;
+                        ++current_;
+                        acknowledgment_stage_ = AcknowledgmentStage::AwaitingWrite;
+                        paused_result_.reset();
+                        phase.owner_.reset();
+                        board.poke(econopet::SramAddress{marker_.address().value()}, marker_.pending());
+                        board.poke(econopet::SramAddress{release_.value()}, token);
+                        opened = true;
+                        released();
+                    }
+                    service(board, remaining);
+                }, budget, reason);
+                return acknowledge();
+            });
+        } catch (...) {
+            fail_phases();
+            throw;
+        }
+    }
+    // Resume with a single new elapsed budget and ordinary cycle polling.
+    PhaseHandle resume(PhaseHandle& phase, econopet::Cycles budget) {
+        RunConfiguration configuration(memory_);
+        configuration.within(budget);
+        return resume(phase, configuration);
+    }
+    // Adapt per-pass service to the same configured gate release and deadline.
+    PhaseHandle resume(PhaseHandle& phase, econopet::Cycles budget, RunConfiguration::Service service) {
+        RunConfiguration configuration(memory_);
+        configuration.within(budget).service(std::move(service));
+        return resume(phase, configuration);
+    }
+    // Copy detached data sampled at the current acknowledgment, never resampling after host dwell.
+    ExecutionResult capture(const PhaseHandle& phase) const {
+        require_phase(phase, "program capture");
+        return *paused_result_;
+    }
+
 private:
+    enum class AcknowledgmentStage { AwaitingWrite, AwaitingFetch, AwaitingRead, Parked };
+    enum class PhaseFailure {
+        None, ClockFault, TransportFault, Reset, CpuSelection, AcknowledgmentAltered, GateOpened, Execution
+    };
+    // Fail storage preflight without consuming an otherwise usable complete-program builder.
+    void require_pause_storage() const {
+        if (mode_ != ProgramMode::Phased)
+            throw scenario_.failure<std::logic_error>("program pause", "select ProgramMode::Phased at construction");
+        constexpr size_t SavedRegisterBytes = 2;
+        if (stack_.size() < SavedRegisterBytes)
+            throw scenario_.failure<std::out_of_range>("program pause", "stack needs space for saved A and flags");
+    }
+    // Observe real selected-CPU bus activity, ignoring startup reset and non-CPU transport reads.
+    void sample_pause(const System& board) {
+        if (!prepared_ || failure_ != PhaseFailure::None) return;
+        const auto pins = board.snapshot();
+        if (!monitoring_) {
+            if (pins.cpu_reset_active_o || pins.cpu_selection_o != std::to_underlying(SelectedCpu)) return;
+            monitoring_ = true;
+        }
+        check_phase_invariants();
+        if (failure_ != PhaseFailure::None) return;
+        if (!pins.cpu_clock_o) return;
+        const auto address = std::is_same_v<Cpu, Mos6502> ? pins.soft6502_addr_o : pins.soft6809_addr_o;
+        const auto token = pauses_[current_].token;
+        if (acknowledgment_stage_ == AcknowledgmentStage::AwaitingWrite
+            && !pins.cpu_we_n_o && address == marker_.address()
+            && pins.cpu_addr_o == marker_.address() && pins.cpu_data_o == token
+            && !pins.ram_we_n_o && board.ram_address() == econopet::SramAddress{marker_.address().value()}) {
+            acknowledgment_checkpoint_ = board.cpu(SelectedCpu).peek_fetch_checkpoint();
+            acknowledgment_stage_ = AcknowledgmentStage::AwaitingFetch;
+        }
+        // Opcode evidence distinguishes executing the gate load from reading its code as data.
+        if (acknowledgment_stage_ == AcknowledgmentStage::AwaitingFetch
+            && board.cpu(SelectedCpu).peek_opcode_fetched_at(pauses_[current_].gate_load, acknowledgment_checkpoint_))
+            acknowledgment_stage_ = AcknowledgmentStage::AwaitingRead;
+        if (acknowledgment_stage_ == AcknowledgmentStage::AwaitingRead
+            && pins.cpu_we_n_o && address == release_ && pins.cpu_addr_o == release_
+            && !pins.ram_oe_n_o && board.ram_address() == econopet::SramAddress{release_.value()}
+            && board.peek(econopet::SramAddress{marker_.address().value()}) == token
+            && board.peek(econopet::SramAddress{release_.value()}) != token)
+            acknowledgment_stage_ = AcknowledgmentStage::Parked;
+    }
+    // Lifecycle failure must not be hidden by a stale acknowledgment token.
+    bool reached() const {
+        require_phase_health("program pause");
+        return acknowledgment_stage_ == AcknowledgmentStage::Parked;
+    }
+    // Retain the first lifecycle or mailbox violation for observers and public operations.
+    void check_phase_invariants() const {
+        if (!monitoring_ || failure_ != PhaseFailure::None) return;
+        const auto pins = memory_.snapshot();
+        if (memory_.clock_faulted_) failure_ = PhaseFailure::ClockFault;
+        else if (memory_.spi_failed_) failure_ = PhaseFailure::TransportFault;
+        else if (memory_.reset_pin_unsettled_ || pins.cpu_reset_active_o) failure_ = PhaseFailure::Reset;
+        else if (pins.cpu_selection_o != std::to_underlying(SelectedCpu)) failure_ = PhaseFailure::CpuSelection;
+        else if (acknowledgment_stage_ == AcknowledgmentStage::Parked) {
+            if (memory_.peek(econopet::SramAddress{marker_.address().value()}) != pauses_[current_].token)
+                failure_ = PhaseFailure::AcknowledgmentAltered;
+            else if (memory_.peek(econopet::SramAddress{release_.value()}) == pauses_[current_].token)
+                failure_ = PhaseFailure::GateOpened;
+        }
+    }
+    // Surface the retained cause through the same diagnostics at every phase API boundary.
+    void require_phase_health(const std::string& operation) const {
+        check_phase_invariants();
+        switch (failure_) {
+        case PhaseFailure::None: return;
+        case PhaseFailure::ClockFault: throw phase_failure(operation, "hardware clock failed during phases");
+        case PhaseFailure::TransportFault: throw phase_failure(operation, "SPI transport failed during phases");
+        case PhaseFailure::Reset: throw phase_failure(operation, "CPU reset changed during phases");
+        case PhaseFailure::CpuSelection: throw phase_failure(operation, "CPU selection changed during phases");
+        case PhaseFailure::AcknowledgmentAltered: throw phase_failure(operation, "acknowledgment mailbox externally altered");
+        case PhaseFailure::GateOpened: throw phase_failure(operation, "private release gate externally opened");
+        case PhaseFailure::Execution: throw phase_failure(operation, "phase execution previously failed");
+        }
+    }
+    // Snapshot selected data at the exact verified acknowledgment and issue its capability.
+    PhaseHandle acknowledge() {
+        paused_result_.emplace(scenario_.owner_, results_.start(), std::vector<uint8_t>{},
+            started_, memory_.time(), memory_.trace_window(started_, memory_.time()));
+        capture_data(*paused_result_);
+        return PhaseHandle(owner_, current_, pauses_[current_].name, current_ + 1 == pauses_.size(),
+            memory_.trace_window(phase_started_, memory_.time()));
+    }
+    // Reject foreign, consumed, moved and externally interrupted capabilities without clocks.
+    void require_phase(const PhaseHandle& phase, const std::string& operation) const {
+        if (!paused_result_ || phase.owner_ != owner_ || phase.index_ != current_)
+            throw phase_failure(operation, "invalid or stale phase handle");
+        require_phase_health(operation);
+    }
+    // Include private gate addresses and current phase in board-standard failure evidence.
+    std::logic_error phase_failure(const std::string& operation, const std::string& detail) const {
+        return scenario_.failure<std::logic_error>(operation, detail
+            + ", phase=" + (pauses_.empty() ? "not assembled" : pauses_[current_].name)
+            + ", acknowledgment_address=" + std::to_string(marker_.address().value())
+            + ", release_address=" + std::to_string(release_.value()));
+    }
+    // Escaping phase failures retire monitoring and forbid future capture or resume.
+    void fail_phases() {
+        if (failure_ == PhaseFailure::None) failure_ = PhaseFailure::Execution;
+        subscription_.reset();
+    }
+    static constexpr auto SelectedCpu = std::is_same_v<Cpu, Mos6502> ? CPU_SOFT_6502 : CPU_SOFT_6809;
     // Reuses the normal runner's ISA-specific stack and interrupt initialization.
     void prologue() {
         if constexpr (std::is_same_v<Cpu, Mos6502>) {
@@ -293,8 +538,10 @@ private:
 
     System& memory_;
     Scenario<System> scenario_;
+    const ProgramMode mode_;
     Region stack_, results_, vectors_;
     CompletionMarker marker_;
+    std::optional<Region> release_mailbox_;
     Region code_;
     Program<Cpu, System> program_;
     RunConfiguration configuration_;
@@ -302,6 +549,17 @@ private:
     size_t allocated_ = 0;
     std::vector<MemoryBuffer> captured_buffers_;
     bool consumed_ = false;
+    std::shared_ptr<const int> owner_ = std::make_shared<const int>(0);
+    std::vector<PausePoint> pauses_;
+    econopet::CpuAddress release_;
+    size_t current_ = 0;
+    uint64_t acknowledgment_checkpoint_ = 0;
+    bool prepared_ = false, monitoring_ = false;
+    AcknowledgmentStage acknowledgment_stage_ = AcknowledgmentStage::AwaitingWrite;
+    mutable PhaseFailure failure_ = PhaseFailure::None;
+    econopet::CycleTime started_{econopet::Cycles{0}}, phase_started_{econopet::Cycles{0}};
+    std::optional<ExecutionResult> paused_result_;
+    std::optional<System::ObserverSubscription> subscription_;
 };
 
 } // namespace test_asm
@@ -316,4 +574,18 @@ inline test_asm::ProgramBuilder<test_asm::Mc6809> System::program6809(
     test_asm::Layout layout, const test_asm::LayoutOverrides& overrides) & {
     require_mutable_access();
     return {*this, layout, overrides};
+}
+
+// Construct with phase storage selected before authoring data.
+inline test_asm::ProgramBuilder<test_asm::Mos6502> System::program6502(
+    test_asm::ProgramMode mode, test_asm::Layout layout, const test_asm::LayoutOverrides& overrides) & {
+    require_mutable_access();
+    return {*this, layout, overrides, mode};
+}
+
+// Construct the native 6809 builder with the same explicit storage mode.
+inline test_asm::ProgramBuilder<test_asm::Mc6809> System::program6809(
+    test_asm::ProgramMode mode, test_asm::Layout layout, const test_asm::LayoutOverrides& overrides) & {
+    require_mutable_access();
+    return {*this, layout, overrides, mode};
 }

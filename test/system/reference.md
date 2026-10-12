@@ -743,7 +743,7 @@ Pure contract tests are in [`layout_test.cpp`](layout_test.cpp), included even
 with `BUILD_BOARD_TESTS=OFF`. Board backing, diagnostic and observation-guard
 checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Program
 memory cases are in [`memory_test.cpp`](memory_test.cpp). Phase memory cases
-remain deferred with their consuming layer.
+are in [`phase_integration_test.cpp`](phase_integration_test.cpp).
 
 ## CPU-specific assembly and fluent instructions
 
@@ -752,7 +752,8 @@ into a previously reserved Code region. They borrow a persistent `Scenario`,
 which in turn borrows its backing memory. Both must outlive the program.
 Assembly and `install()` do not automatically reset or select a CPU, initialize
 its stack or execute code. Checked execution is a separate terminal operation.
-Pause and resume remain deferred.
+Cooperative pause/resume is available through the builder's restricted facade,
+not through an explicit standalone assembler.
 
 ```cpp
 test_asm::Scenario layout(system);
@@ -942,7 +943,122 @@ terminal encoding, exact capacity, moves and post-finish rejection without
 Verilator. [`program_test.cpp`](program_test.cpp), [`memory_test.cpp`](memory_test.cpp)
 and [`program_run_test.cpp`](program_run_test.cpp) cover both CPUs, private startup,
 captured data, deadlines, configured anchors, actual repeated I/O and failures.
-Cooperative pause/resume, phase gates and ROM-specific runners remain deferred.
+ROM-specific runners remain deferred.
+
+## Cooperative pause/resume
+
+Use `builder.pause(assemble)` instead of `run(assemble)` to preassemble a
+cooperative program. The same fluent callback may call `p.pause("name")` between
+instructions. Every inline pause, its continuation and the terminal `"complete"`
+pause is assembled and validated before clocks or runner memory mutation.
+Names must be nonempty, unique and different from `"complete"`. Each boundary
+uses one unique nonzero byte token, so at most 254 inline pauses plus the terminal
+pause are supported.
+
+```cpp
+auto test = system.program6809(test_asm::ProgramMode::Phased);
+const auto answer = test.word("answer");
+// Assemble both continuations before starting the CPU.
+auto first = test.within(20000).pause([&](auto& p) {
+    p.store(answer, test_asm::imm16(0x1234)).pause("ready");
+    p.store(answer, test_asm::imm16(0x5678));
+});
+const auto initial = test.capture(first);
+EXPECT_EQ(initial[answer], 0x1234);
+// Service or observe the board while the CPU polls its closed private gate.
+system.tick(500);
+auto last = test.resume(first, 20000);
+EXPECT_TRUE(last.complete());
+EXPECT_EQ(test.capture(last)[answer], 0x5678);
+EXPECT_EQ(initial[answer], 0x1234);
+```
+
+`pause()` uses the complete runner's reset/selection, result initialization,
+code/vector installation and native stack prologue. Its one RunConfiguration
+owns the full startup-through-acknowledgment budget. The phase emitter saves A
+and flags on the native stack, stores its token in the private acknowledgment
+mailbox, then repeatedly loads and compares the private release byte. Opening
+the gate restores A and flags before the preassembled continuation. Other
+registers are untouched and the stack pointer is restored. A stack must have
+space for both saved bytes.
+
+Select `ProgramMode::Phased` at construction, before allocating or binding data.
+Default phased Results contain 254 bytes (`$0200-$02FD`), with a separate private
+release Mailbox at `$02FE` and acknowledgment Mailbox at `$02FF`.
+`LayoutOverrides::results` always denotes ordinary data only. Use
+`LayoutOverrides::release` to relocate the separate one-byte release mailbox.
+Reservations reject overlapping overrides, workspace aliases and data aliases.
+Neither host nor assembly `lower_bank()` views expose either mailbox, and data
+allocation/capture need no special gate exclusions. Complete builders retain
+255 default Results bytes and reject `pause()` without consuming the builder.
+The framework resets Results and both mailboxes before release, and never clears
+user data between phases. The terminal handshake itself is the permanent park
+(no unreachable ordinary completion sequence is appended).
+
+Acknowledgment requires a fresh real selected-CPU SRAM write of the current
+token, followed by a real lower-bank read of the still-closed release gate.
+That read must follow a fresh opcode fetch of this phase's preassembled gate-load
+after the token write, not arbitrary user-code mailbox traffic or a data read of
+the handshake's code. The 6502 uses its opcode history. A simulation-only witness
+qualifies the pinned 6809 core's first-byte fetch state. Both are exposed through
+`CpuView::peek_opcode_fetched_at(address, checkpoint)`, using the existing
+monotonic `peek_fetch_checkpoint()`. The existing `peek_fetched_at()` retains
+native 6809 SYNC history (SYNC is an instruction wait, not an opcode-fetch marker).
+A mailbox value, opcode-fetch guess or SPI read alone cannot issue a capability.
+Skipped phase tokens, stale RAM and host-spoofed acknowledgments cannot replace
+the expected bus sequence. After successful acknowledgment, the CPU remains
+released and polls its gate while the host may advance clocks.
+
+`PhaseHandle` is move-only and bound to the issuing builder and current phase.
+`resume(handle, budget)` opens only that phase, consumes its capability and waits
+for the next verified closed gate. It does not reset/select the CPU, patch code,
+replace vectors or reinitialize ordinary data. The automatically appended terminal
+phase cannot be resumed. Zero resume budget does not open the gate or clock.
+Exact final-boundary acknowledgment succeeds, and inherited deadlines always win.
+Timeout or escaping callback/transport/model failure invalidates the phase run,
+so it cannot subsequently yield successful capture or resume.
+Shared phase invariants retain the first reset, selection, transport, clock or
+mailbox failure cause. Capture and resume report that cause even if the external
+state is subsequently restored.
+
+`pause(assemble, configuration)` and `resume(handle, configuration)` accept fresh
+board-owned RunConfigurations. Startup RunEntry anchors precede reset work,
+whereas startup CpuRelease anchors begin at checked CPU release. On resume,
+RunEntry is resume entry and CpuRelease is the gate opening (not a new CPU reset).
+`until()` is an extra observation condition, never a replacement for verified
+park. Periodic, after-slice and per-pass services retain their configured-run
+semantics. `pause(assemble, service)` and `resume(handle, budget, service)` adapt
+polling work through the same configuration path. Invalid foreign, missing-budget
+or conflicting configurations reject before releasing a valid capability.
+Owned/nonidle SPI transport also rejects before gate opening.
+
+Reset or CPU-selection changes invalidate the monitored lifecycle, even if later
+restored. Unclocked external reset changes, failed clocks/transport, altered
+acknowledgments and externally opened gates also reject. Detected lifecycle/gate
+failure is sticky. Resume and builder construction remain active operations
+forbidden from observation callbacks, while frozen phase capture is read-only.
+Destroying the builder unsubscribes its monitor without opening the gate.
+As with complete execution, builders borrow a persistent board.
+
+`capture(handle)` copies the selected `ExecutionResult` sampled exactly at the
+verified acknowledgment (no clocks or later resampling). The result's timestamps
+and window cover original startup through that boundary, while the handle's
+`window()` covers only the current startup/resume interval, excluding host dwell.
+Use `trace.capture(handle)` for per-phase I/O assertions, or
+`trace.capture(test.capture(handle))` for cumulative execution evidence.
+Detached captures and copied windows outlive the builder and board. Consumed
+handles retain their diagnostic names/windows but cannot authorize capture or
+another resume.
+
+[`phase_core_test.cpp`](phase_core_test.cpp) checks exact handshake encoding,
+native-endian gate addresses and atomic capacity without Verilator.
+[`phase_test.cpp`](phase_test.cpp) executes both CPU handshakes and exercises
+register/stack preservation, tokens, stale/spoofed acknowledgment rejection,
+capability lifetimes, reset invalidation and exact deadlines.
+[`phase_integration_test.cpp`](phase_integration_test.cpp) covers owned capture,
+configured startup/resume, actual peripheral traces, closed-gate host intervals
+and cross-layer failure contracts. ROM fixtures and ROM-specific phases remain
+deferred to their consuming layers.
 
 ## Shared hardware contract
 

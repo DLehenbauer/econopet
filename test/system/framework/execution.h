@@ -19,13 +19,27 @@ template<class CpuProgram, class Service, class Released, class Predicate>
 ExecutionResult Scenario<Memory>::execute_program(CpuProgram& program, const Region* results,
     econopet::Cycles budget, const std::string& reason, Service service, Released released, Predicate extra,
     bool capture_results) {
+    program.require_live();
+    if (!program.completion_)
+        throw failure<std::logic_error>("scenario run", "scenario execution requires program.finish");
+    const auto marker = *program.completion_;
+    return start_program(program, results, marker, budget, reason, std::move(service), std::move(released),
+        [marker, extra = std::move(extra)](const Memory& observed) {
+            return observed.peek(econopet::SramAddress{marker.address().value()}) == marker.completed()
+                && extra(observed);
+        }, [] {}, capture_results);
+}
+
+// Resolve all code before clocks, then establish reset, install and release exactly once.
+template<class Memory>
+template<class CpuProgram, class Service, class Released, class Predicate, class Prepared>
+ExecutionResult Scenario<Memory>::start_program(CpuProgram& program, const Region* results,
+    const CompletionMarker& marker, econopet::Cycles budget, const std::string& reason,
+    Service service, Released released, Predicate done, Prepared prepared, bool capture_results) {
     using Cpu = typename CpuProgram::CpuType;
     program.require_live();
     if (&program.scenario_ != this)
         throw failure<std::invalid_argument>("scenario run", "program belongs to another scenario");
-    if (!program.completion_)
-        throw failure<std::logic_error>("scenario run", "scenario execution requires program.finish");
-    const auto marker = *program.completion_;
     require(marker.region_, RegionKind::Mailbox);
     if (results) {
         require_owned(*results);
@@ -44,9 +58,7 @@ ExecutionResult Scenario<Memory>::execute_program(CpuProgram& program, const Reg
     bool initialized = false;
     // Keep startup and polling inside the earliest inherited deadline.
     memory_.service_until([&](const Memory& observed) {
-        return initialized
-            && observed.peek(econopet::SramAddress{marker.address().value()}) == marker.completed()
-            && extra(observed);
+        return initialized && done(observed);
     }, [&](Memory& board, econopet::Cycles remaining) {
         if (initialized) {
             service(board, remaining);
@@ -60,6 +72,7 @@ ExecutionResult Scenario<Memory>::execute_program(CpuProgram& program, const Reg
         write(marker.region_, 0, pending);
         write(program.region_, 0, code);
         cpu.write_vector(program.entry());
+        prepared();
         cpu.release_reset();
         released();
         initialized = true;
