@@ -12,28 +12,47 @@ rewrite external dependencies to enforce these conventions.
 
 ## Build
 
-- Build production with `RelWithDebInfo`.
-- Build tests, simulator integration, frameworks, and their dependencies with
-  `Debug`, including production sources compiled for tests.
-- Compile Verilator-generated models and runtime separately with optimized
-  `RelWithDebInfo` flags (Verilator `-O3`, C++ `-O3`, native CPU tuning, and LTO).
-  Preserve debug symbols and SV assertions. Keep linked test, framework, and
-  firmware sources in `Debug`. Do not propagate model flags or `NDEBUG` to them.
+Choose compilation settings by each target's role, not by the final executable
+it links into. The Verilated code row takes precedence for models and runtime
+linked into tests.
+
+| Code being compiled | Configuration | Required settings |
+| --- | --- | --- |
+| Production code for deployment | `RelWithDebInfo` | Keep debug symbols and define `NDEBUG`. |
+| Test code, simulator integration, test frameworks, and their dependencies (including production sources compiled for tests) | `Debug` | Keep `NDEBUG` undefined so C/C++ assertions and debug-only checks remain active. |
+| Verilator-generated models and Verilator runtime | Fully optimized `RelWithDebInfo` | Use Verilator `-O3`, C++ `-O3`, native CPU tuning, and LTO. Preserve debug symbols and SV assertions. |
+
+- Compile Verilated models and runtime in separate targets. Do not propagate
+  their optimization flags or `NDEBUG` to linked test, framework, or firmware
+  targets.
 - Do not add Release builds or cross-configuration matrices, or undefine `NDEBUG`.
 
 ## Invariants and Test Expectations
 
 - Prefer compile-time `static_assert` and `_Static_assert` checks when possible.
-- Enforce production-required invariants with `vet()` from `fatal.h` and a
-  useful diagnostic.
-- Use `assert()` for sufficiently test-covered paranoid production checks
-  (active in Debug tests, elided from production).
+- Enforce production invariants with `vet()` from `fatal.h`.
+- Use `assert()` and `#ifndef NDEBUG` as testing conveniences to check internal
+  invariants that are difficult or impossible to observe externally (active in
+  Debug tests, elided from production).
 - Use GoogleTest `EXPECT_*`/`ASSERT_*` or Check `ck_assert_*` for expectations
   and helper checks within the respective framework.
 - Keep required validation, work, and side effects outside assertions and
   `NDEBUG` guards.
-- Fail stubs explicitly with useful diagnostics. Never return placeholders
-  or succeed.
+- Fail stubs explicitly. Never return placeholders or succeed.
+
+## Code Review Checklist
+
+Apply this checklist within the mandatory
+[code-review skill](../skills/code-review/SKILL.md) workflow, not as a standalone
+review procedure.
+
+- [ ] Trace ownership, lifetime, aliasing, and invalidation across object
+  operations and callbacks. Verify borrowed storage and class invariants remain
+  valid on normal, exceptional, and concurrent paths.
+- [ ] Evaluate expressions under actual C/C++ type and conversion rules.
+  Check range and undefined behavior before assuming mathematical semantics.
+- [ ] Rely on language/library guarantees, not implementation accidents.
+  Verify exception guarantees and cleanup after partial mutation.
 
 ## Header File Conventions
 
