@@ -21,6 +21,7 @@ class RunConfiguration;
 namespace test_asm {
 
 enum class Layout { Pet };
+enum class ProgramMode { Complete, Phased };
 
 struct MemoryRegion {
     econopet::CpuAddress start;
@@ -34,6 +35,7 @@ struct LayoutOverrides {
     std::optional<MemoryRegion> code;
     std::optional<MemoryRegion> vectors;
     std::optional<econopet::CpuAddress> completion;
+    std::optional<econopet::CpuAddress> release;
     std::vector<std::pair<std::string, MemoryRegion>> workspace;
 };
 
@@ -249,6 +251,11 @@ private:
     template<class CpuProgram, class Service, class Released, class Predicate>
     ExecutionResult execute_program(CpuProgram& program, const Region* results, econopet::Cycles budget,
                                     const std::string& reason, Service service, Released released, Predicate extra, bool capture_results);
+    // Share validated startup between complete programs and privately monitored phase handshakes.
+    template<class CpuProgram, class Service, class Released, class Predicate, class Prepared>
+    ExecutionResult start_program(CpuProgram& program, const Region* results, const CompletionMarker& marker,
+                                    econopet::Cycles budget, const std::string& reason, Service service, Released released,
+                                    Predicate done, Prepared prepared, bool capture_results);
     // Reject all layout operations after transferring its identity to another owner.
     void require_live() const {
         if (!owner_) throw failure<std::logic_error>("layout", "fixture scenario was moved from");

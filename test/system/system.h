@@ -63,6 +63,12 @@ public:
     // Configure a checked complete 6809 program without clocking or mutation.
     test_asm::ProgramBuilder<test_asm::Mc6809> program6809(
         test_asm::Layout layout = test_asm::Layout::Pet, const test_asm::LayoutOverrides& overrides = {}) &;
+    // Establish private phase storage before exposing any data operands.
+    test_asm::ProgramBuilder<test_asm::Mos6502> program6502(test_asm::ProgramMode mode,
+        test_asm::Layout layout = test_asm::Layout::Pet, const test_asm::LayoutOverrides& overrides = {}) &;
+    // Establish private phase storage for the native 6809 runner.
+    test_asm::ProgramBuilder<test_asm::Mc6809> program6809(test_asm::ProgramMode mode,
+        test_asm::Layout layout = test_asm::Layout::Pet, const test_asm::LayoutOverrides& overrides = {}) &;
     test_asm::ProgramBuilder<test_asm::Mos6502> program6502(
         test_asm::Layout, const test_asm::LayoutOverrides&) && = delete;
     test_asm::ProgramBuilder<test_asm::Mc6809> program6809(
@@ -417,6 +423,17 @@ public:
             case CPU_AUTO: break;
             }
             throw board_.template failure<std::logic_error>("CPU fetch", "unsupported CPU");
+        }
+        // Inspect qualified opcode execution after a checkpoint, distinct from native 6809 SYNC.
+        bool peek_opcode_fetched_at(econopet::CpuAddress address, uint64_t checkpoint) const {
+            switch (target()) {
+            case CPU_SOFT_6502: return board_.soft_6502_fetches_[address.value()] > checkpoint;
+            case CPU_SOFT_6809: return board_.soft_6809_opcodes_[address.value()] > checkpoint;
+            case CPU_PHYS_6502:
+                throw board_.template failure<std::logic_error>("CPU opcode fetch", "physical CPU opcode history is unsupported");
+            case CPU_AUTO: break;
+            }
+            throw board_.template failure<std::logic_error>("CPU opcode fetch", "unsupported CPU");
         }
         // Bypass lifecycle ordering for unusual raw control-sequence tests.
         void write_control_raw(uint8_t value) requires (!std::is_const_v<Board>) {
@@ -1124,6 +1141,12 @@ private:
             soft_6809_fetches_[dut_->soft6809_addr_o] = ++fetch_sequence_;
             remember("6809 SYNC", dut_->soft6809_addr_o);
         }
+        // Consecutive first-byte fetches can keep the witness high while changing its address.
+        if (dut_->soft6809_opcode_fetch_o && (!soft_6809_opcode_active_
+            || dut_->soft6809_opcode_fetch_addr_o != soft_6809_opcode_address_))
+            soft_6809_opcodes_[dut_->soft6809_opcode_fetch_addr_o] = ++fetch_sequence_;
+        soft_6809_opcode_active_ = dut_->soft6809_opcode_fetch_o;
+        soft_6809_opcode_address_ = dut_->soft6809_opcode_fetch_addr_o;
         soft_6502_fetch_active_ = dut_->soft6502_fetch_o;
         soft_6809_fetch_active_ = dut_->soft6809_fetch_o;
     }
@@ -1404,6 +1427,9 @@ private:
     bool spi_failed_ = false;
     std::optional<uint32_t> last_spi_absolute_address_;
     std::array<uint64_t, econopet::CpuAddressCapacity> soft_6502_fetches_{}, soft_6809_fetches_{};
+    std::vector<uint64_t> soft_6809_opcodes_ = std::vector<uint64_t>(econopet::CpuAddressCapacity);
+    bool soft_6809_opcode_active_ = false;
+    uint16_t soft_6809_opcode_address_ = 0;
     uint64_t fetch_sequence_ = 0;
     bool soft_6502_fetch_active_ = false;
     bool soft_6809_fetch_active_ = false;

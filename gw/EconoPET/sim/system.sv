@@ -150,6 +150,8 @@ module system (
     output logic [15:0] soft6502_fetch_addr_o,
     output logic [15:0] soft6502_addr_o,
     output logic soft6809_fetch_o,
+    output logic soft6809_opcode_fetch_o,
+    output logic [15:0] soft6809_opcode_fetch_addr_o,
     output logic [15:0] soft6809_addr_o
 );
     // The board's pulled-up reset net combines the FPGA and external drivers.
@@ -175,6 +177,20 @@ module system (
     assign soft6809_fetch_o = top.main.cpu_is_6809 && cpu_reset_n
         && !top.main.active_be && top.main.mc6809_sync
         && top.main.active_cpu_addr == top.main.mc6809_addr;
+    // Native SYNC denotes an instruction wait, not an opcode fetch. Expose the
+    // pinned simulation core's first-byte fetch state without changing that history.
+    always_ff @(negedge top.main.cpu6809_e or negedge cpu_reset_n) begin
+        if (!cpu_reset_n) begin
+            soft6809_opcode_fetch_o <= 1'b0;
+            soft6809_opcode_fetch_addr_o <= '0;
+        end else begin
+            soft6809_opcode_fetch_o <= top.main.cpu_is_6809
+                && top.main.mc6809.core.CpuState == top.main.mc6809.core.CPUSTATE_FETCH_I1;
+            if (top.main.cpu_is_6809
+                && top.main.mc6809.core.CpuState == top.main.mc6809.core.CPUSTATE_FETCH_I1)
+                soft6809_opcode_fetch_addr_o <= top.main.mc6809_addr;
+        end
+    end
 
     top top (
         .sys_clock_i,
