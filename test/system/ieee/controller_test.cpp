@@ -161,13 +161,42 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     controller.command(Secondary(Channel{0}));
     EXPECT_TRUE(system.ieee().peek_talking());
 
+    std::vector<bool> attention_edges;
+    bool previous_atn = system.snapshot().ieee_bus_atn_no;
+    bool sampled_data = false;
+    bool sampled_while_ready = false;
+    auto handshake = system.observe([&](const System& observed) {
+        const auto pins = observed.snapshot();
+        if (pins.ieee_bus_atn_no != previous_atn) {
+            attention_edges.push_back(pins.ieee_bus_atn_no);
+            previous_atn = pins.ieee_bus_atn_no;
+        }
+        if (pins.cpu_clock_o && pins.cpu_we_n_o && pins.cpu_addr_o == pet::Pia2PortA) {
+            sampled_data = true;
+            sampled_while_ready |= pins.ieee_cpu_nrfd_no;
+        }
+    });
     // Queue both bytes while ATN still inhibits the source handshake.
     system.spi().write(fpga::Register::IeeeTx, 'X');
     system.spi().write(fpga::Register::IeeeTxLast, 'Y');
     EXPECT_EQ(controller.receive(), data('X'));
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_FALSE(system.io().pia2().ca2());
+    // Unrelated SPI clocks must not start another byte while the acceptor is busy.
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Talking));
+    EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})),
+        command(Secondary(Channel{0})), data('X')));
     EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_FALSE(system.io().pia2().ca2());
+    EXPECT_TRUE(sampled_data);
+    EXPECT_FALSE(sampled_while_ready);
+    EXPECT_THAT(attention_edges, ElementsAre(true));
     controller.command(Untalk);
     EXPECT_FALSE(system.ieee().peek_talking());
+    EXPECT_THAT(attention_edges, ElementsAre(true, false));
 
     // Passive wire capture includes received data, while RX stores commands only.
     require_sequence(wire.records(), {command(Talk(Device{8})),
@@ -175,6 +204,93 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
         command(Untalk)}, "received wire bytes");
     require_drained_sequence(system, fifo_records({command(Talk(Device{8})),
         command(Secondary(Channel{0})), command(Untalk)}), ByteBudget, "received commands");
+}
+
+// A separately timed physical source checks acceptance without the FPGA talker.
+TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
+    IeeeController controller(system);
+    Scheduler scheduler(system);
+    const auto start = system.time();
+    constexpr Cycles source_period{20000};
+    scheduler.at(start + source_period, [](System& board) {
+        EXPECT_TRUE(board.ieee().peek_nrfd_released());
+        EXPECT_FALSE(board.ieee().peek_ndac_released());
+        board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'X'); });
+        board.io().via().inputs([](auto& inputs) {
+            inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+        });
+    });
+    scheduler.at(start + source_period * 2, [](System& board) {
+        EXPECT_FALSE(board.ieee().peek_nrfd_released());
+        EXPECT_TRUE(board.ieee().peek_ndac_released());
+        board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    });
+    scheduler.at(start + source_period * 3, [](System& board) {
+        EXPECT_TRUE(board.ieee().peek_nrfd_released());
+        EXPECT_FALSE(board.ieee().peek_ndac_released());
+        board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'Y'); });
+        board.io().pia1().inputs([](auto& inputs) {
+            inputs.port_a &= static_cast<uint8_t>(~EoiInput);
+        });
+        board.io().via().inputs([](auto& inputs) {
+            inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+        });
+    });
+    scheduler.at(start + source_period * 4, [](System& board) {
+        EXPECT_FALSE(board.ieee().peek_nrfd_released());
+        EXPECT_TRUE(board.ieee().peek_ndac_released());
+        board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    });
+
+    EXPECT_EQ(controller.receive(), data('X'));
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_FALSE(controller.peek_failed());
+}
+
+// A source that never releases DAV cannot be treated as rearmed or reusable.
+TEST_F(SystemTest, IeeeControllerReceiveRetainsFailureWhileWaitingForDavRelease) {
+    IeeeController controller(system);
+    system.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'X'); });
+    system.io().via().inputs([](auto& inputs) {
+        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+    });
+    EXPECT_THROW(system.service_until([](const System&) { return false; },
+        [&](System&, Cycles) { controller.receive(); },
+        Cycles{30000}, "source never releases DAV"), std::runtime_error);
+    EXPECT_TRUE(controller.peek_failed());
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_TRUE(system.ieee().peek_ndac_released());
+    const auto stopped = system.time();
+    EXPECT_THROW(controller.receive(), std::logic_error);
+    EXPECT_THROW(controller.command(Untalk), std::logic_error);
+    EXPECT_EQ(system.time(), stopped);
+}
+
+// Switching through command mode preserves the next unread byte and its EOI.
+TEST_F(SystemTest, IeeeControllerReceiveContinuesAcrossUntalkAndTalk) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    auto wire = system.trace_ieee();
+    controller.command(Talk(Device{8}));
+    controller.command(Secondary(Channel{0}));
+    system.spi().write(fpga::Register::IeeeTx, 'X');
+    system.spi().write(fpga::Register::IeeeTxLast, 'Y');
+    EXPECT_EQ(controller.receive(), data('X'));
+    controller.command(Untalk);
+    EXPECT_FALSE(system.ieee().peek_talking());
+    controller.command(Talk(Device{8}));
+    controller.command(Secondary(Channel{0}));
+    EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
+    EXPECT_FALSE(system.ieee().peek_nrfd_released());
+    EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})),
+        command(Secondary(Channel{0})), data('X'), command(Untalk),
+        command(Talk(Device{8})), command(Secondary(Channel{0})), data('Y', Eoi::Last)));
+    EXPECT_FALSE(controller.peek_failed());
 }
 
 // Shared active assertions reject missing and trailing records without hiding flags.

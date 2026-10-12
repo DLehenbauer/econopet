@@ -13,6 +13,11 @@ patching or clocking. Do not resume it merely because the old command later
 acknowledges. Start with a fresh board and controller instead.
 Sending waits for both NRFD released (VIA PB6) and NDAC asserted (VIA PB0)
 before asserting DAV, then waits for acceptance and rearming.
+Receiving asserts NDAC before releasing ATN and NRFD. After DAV asserts, it
+asserts NRFD before sampling EOI and data, acknowledges through NDAC release,
+waits for DAV release, and reasserts NDAC. Both acceptor lines remain asserted
+between calls, and consecutive bytes do not toggle ATN. This follows PET
+KERNAL 2.0's `ACPTR`, including its per-byte rearm rather than restarting TALK.
 
 [`transactions.h`](ieee/transactions.h) separates device addresses, secondary
 addresses, and Commodore channels, validating their domains before encoding.
@@ -56,6 +61,7 @@ RTL or physical timing constraints.
 | Primary addressing and termination | PET KERNAL 2.0 and CBM 4040 | [KERNAL `TALK`, `LIST1`, `UNTLK`, `UNLSN`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `DCDE`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | LISTEN `$20+n`, TALK `$40+n`, UNLISTEN `$3F`, UNTALK `$5F` with ATN asserted | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent bus arbitration description](https://www.pagetable.com/?p=1031) |
 | Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
 | Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
+| Per-byte acceptor rearm | PET KERNAL 2.0 | [KERNAL `ACPTR`, `ACP01`, `ACP03`, `ACP05`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) | Assert NRFD before sampling EOI/DIO, release NDAC to accept, wait for DAV release, then reassert NDAC with NRFD still asserted. No intervening ATN edge between consecutive bytes | [controller](ieee/controller.h), [FPGA and independently timed source regressions](ieee/controller_test.cpp) | [Independent receiver handshake and rearm description](https://www.pagetable.com/?p=1023) and [NI handshake-line definitions (manual mirror)](https://documentation.help/NI-488.2/gpib0cs3.html) |
 
 FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
 hardware/test contracts, not Commodore ROM compatibility claims. The existing

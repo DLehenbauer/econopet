@@ -74,11 +74,12 @@ public:
     }
     // Receives one byte and its EOI state using the PET acceptor handshake.
     ieee_test::Record receive() {
-        // Arm the acceptor and sample data only after DAV is asserted.
-        write(pet::ViaPortB, AtnAsserted);
+        // Arm before releasing ATN/NRFD, without reasserting ATN between bytes.
         write(pet::Pia2ControlA, ieee_test::PiaC2Low.bits());
         write(pet::ViaPortB, ieee_test::BusReleased);
         wait_via(pet::Dav, 0);
+        // Block the next byte before sampling EOI and data, as KERNAL ACPTR does.
+        write(pet::ViaPortB, AcceptorBusy);
         const auto eoi = (read(pet::Pia1PortA) & ieee_test::EoiInput) == 0
             ? ieee_test::Eoi::Last : ieee_test::Eoi::More;
         const bool atn = (read(pet::ViaPortB) & pet::Atn) == 0;
@@ -86,6 +87,8 @@ public:
         // Acknowledge the byte and wait for the source to release DAV.
         write(pet::Pia2ControlA, ieee_test::PiaC2High.bits());
         wait_via(pet::Dav, pet::Dav);
+        // Rearm NDAC after DAV releases, keeping NRFD asserted until the next call.
+        write(pet::Pia2ControlA, ieee_test::PiaC2Low.bits());
         return ieee_test::raw_record(value, atn, eoi);
     }
 private:
@@ -95,6 +98,7 @@ private:
     static constexpr econopet::CpuAddress ReadMailbox{0x0205};
     enum MailboxState : uint8_t { MailboxIdle = 0, MailboxPending = 1 };
     static constexpr uint8_t AtnAsserted = ieee_test::BusReleased & ~pet::Atn;
+    static constexpr uint8_t AcceptorBusy = ieee_test::BusReleased & ~pet::Nrfd;
     static constexpr econopet::Cycles StartupBudget = 2000;
     static constexpr econopet::Cycles TransferBudget = 10000;
     static constexpr econopet::Cycles HandshakeBudget = TransferBudget * 200;
