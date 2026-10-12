@@ -1024,6 +1024,10 @@ Escaping clock and SPI exceptions sample board faults before falling back to a
 generic execution failure, even during startup before CPU monitoring begins.
 The original exception still escapes unchanged. Subsequent capture/resume
 reports the retained failure rather than masking it with a consumed-handle error.
+Data and acknowledgment timestamps freeze on the observer cycle that verifies
+the closed gate, not when `pause()` or `resume()` returns. A multi-cycle service
+may finish later, and `until()` may deliberately wait longer. Neither extends
+the result/phase windows or resamples data modified after acknowledgment.
 
 `pause(assemble, configuration)` and `resume(handle, configuration)` accept fresh
 board-owned RunConfigurations. Startup RunEntry anchors precede reset work,

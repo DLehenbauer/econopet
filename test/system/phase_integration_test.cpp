@@ -625,3 +625,89 @@ TEST_F(SystemTest, PhaseEscapingFaultsRetainSpecificCausesBeforeObserverDispatch
         check(mc_board, mc, fault);
     }
 }
+
+TEST_F(SystemTest, PhaseSnapshotsFreezeBeforeServiceOvershootAndExtraPredicateWait) {
+    const auto check = [&](auto make_builder, bool wait_for_predicate) {
+        System reference(system.seed());
+        auto baseline = make_builder(reference);
+        const auto original = baseline.byte("answer");
+        const auto assemble = [](auto& p, const MemoryByte& answer) {
+            p.lda(imm(0x31)).sta(answer).pause("ready");
+            p.lda(imm(0x42)).sta(answer);
+        };
+        auto first_reference = baseline.within(Budget).pause([&](auto& p) { assemble(p, original); });
+        const auto startup_elapsed = first_reference.window().completed() - first_reference.window().started();
+
+        System subject(system.seed());
+        auto test = make_builder(subject);
+        const auto answer = test.byte("answer");
+        constexpr Cycles Slice{512};
+        const Cycles predicate_wait{wait_for_predicate ? 1000u : 0u};
+        const auto start = subject.time();
+        const auto expected_first = start + startup_elapsed;
+        bool startup_mutated = false;
+        auto startup = subject.execution();
+        startup.within(Budget)
+            .after(startup_elapsed + Cycles{1}, [&](System& board) {
+                startup_mutated = true;
+                board.poke(econopet::SramAddress{answer.address().value()}, 0x99);
+            })
+            .until([&](const System& board) { return !(board.time() < expected_first + predicate_wait); })
+            .service([&](System& board, Cycles remaining) { board.tick(std::min(Slice, remaining)); });
+        auto first = test.pause([&](auto& p) { assemble(p, answer); }, startup);
+        ASSERT_TRUE(startup_mutated);
+        EXPECT_GT(subject.time().value(), expected_first.value());
+        EXPECT_EQ(subject.peek(econopet::SramAddress{answer.address().value()}), 0x99);
+        const auto initial = test.capture(first);
+        EXPECT_EQ(initial[answer], 0x31);
+        EXPECT_EQ(initial.started(), start);
+        EXPECT_EQ(initial.completed(), expected_first);
+        EXPECT_EQ(initial.window().completed(), expected_first);
+        EXPECT_EQ(first.window().started(), start);
+        EXPECT_EQ(first.window().completed(), expected_first);
+
+        const auto resumed = subject.time();
+        std::optional<econopet::CycleTime> expected_last;
+        // Host dwell changes where the CPU is in its polling loop when resume opens the gate.
+        auto observer = subject.observe([&](const System& board) {
+            const auto pins = board.snapshot();
+            if (!expected_last && pins.cpu_clock_o && pins.cpu_we_n_o && !pins.ram_oe_n_o
+                && pins.cpu_addr_o == econopet::CpuAddress{0x2fe}
+                && board.peek(econopet::SramAddress{0x2ff}) == 2
+                && board.peek(econopet::SramAddress{0x2fe}) != 2)
+                expected_last = board.time();
+        });
+        bool resume_mutated = false;
+        auto continuation = subject.execution();
+        continuation.within(Budget)
+            .until([&](const System& board) {
+                return expected_last && !(board.time() < *expected_last + predicate_wait);
+            })
+            .service([&](System& board, Cycles remaining) {
+                board.tick(std::min(Slice, remaining));
+                if (expected_last && *expected_last < board.time()) {
+                    resume_mutated = true;
+                    board.poke(econopet::SramAddress{answer.address().value()}, 0xaa);
+                }
+            });
+        auto last = test.resume(first, continuation);
+        ASSERT_TRUE(expected_last);
+        ASSERT_TRUE(resume_mutated);
+        EXPECT_TRUE(last.complete());
+        EXPECT_GT(subject.time().value(), expected_last->value());
+        EXPECT_EQ(subject.peek(econopet::SramAddress{answer.address().value()}), 0xaa);
+        const auto final = test.capture(last);
+        EXPECT_EQ(final[answer], 0x42);
+        EXPECT_EQ(final.started(), start);
+        EXPECT_EQ(final.completed(), *expected_last);
+        EXPECT_EQ(final.window().completed(), *expected_last);
+        EXPECT_EQ(last.window().started(), resumed);
+        EXPECT_EQ(last.window().completed(), *expected_last);
+        EXPECT_EQ(initial[answer], 0x31);
+    };
+    for (const bool wait : {false, true}) {
+        SCOPED_TRACE(wait);
+        check([](System& board) { return board.program6502(ProgramMode::Phased); }, wait);
+        check([](System& board) { return board.program6809(ProgramMode::Phased); }, wait);
+    }
+}

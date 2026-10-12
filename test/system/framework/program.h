@@ -298,7 +298,8 @@ public:
         subscription_.emplace(memory_.observe([this](const System& board) { sample_pause(board); }));
         const auto reason = "program pause " + pauses_.front().name;
         try {
-            auto execution = configuration.execute(memory_, reason, true, [&](auto budget, auto service, auto released, auto done) {
+            configuration.execute(memory_, reason, true, [&](auto budget, auto service, auto released, auto done) {
+                started_ = phase_started_ = memory_.time();
                 return scenario_.start_program(program_, &results_, marker_, budget, reason, service, released,
                     [&](const System& board) { return reached() && done(board); },
                     [&] {
@@ -307,7 +308,6 @@ public:
                         prepared_ = true;
                     }, false);
             });
-            started_ = phase_started_ = execution.started();
             return acknowledge();
         } catch (...) {
             fail_phases();
@@ -419,8 +419,10 @@ private:
             && pins.cpu_we_n_o && address == release_ && pins.cpu_addr_o == release_
             && !pins.ram_oe_n_o && board.ram_address() == econopet::SramAddress{release_.value()}
             && board.peek(econopet::SramAddress{marker_.address().value()}) == token
-            && board.peek(econopet::SramAddress{release_.value()}) != token)
+            && board.peek(econopet::SramAddress{release_.value()}) != token) {
+            freeze_pause();
             acknowledgment_stage_ = AcknowledgmentStage::Parked;
+        }
     }
     // Lifecycle failure must not be hidden by a stale acknowledgment token.
     bool reached() const {
@@ -457,13 +459,19 @@ private:
         case PhaseFailure::Execution: throw phase_failure(operation, "phase execution previously failed");
         }
     }
-    // Snapshot selected data at the exact verified acknowledgment and issue its capability.
-    PhaseHandle acknowledge() {
+    // Freeze selected data and cumulative timing on the observer's verified closed-gate cycle.
+    void freeze_pause() {
         paused_result_.emplace(scenario_.owner_, results_.start(), std::vector<uint8_t>{},
             started_, memory_.time(), memory_.trace_window(started_, memory_.time()));
         capture_data(*paused_result_);
+    }
+    // Issue the already frozen boundary once services and the extra predicate have completed.
+    PhaseHandle acknowledge() {
+        require_phase_health("program acknowledgment");
+        if (!paused_result_ || acknowledgment_stage_ != AcknowledgmentStage::Parked)
+            throw phase_failure("program acknowledgment", "requires a verified frozen pause");
         return PhaseHandle(owner_, current_, pauses_[current_].name, current_ + 1 == pauses_.size(),
-            memory_.trace_window(phase_started_, memory_.time()));
+            memory_.trace_window(phase_started_, paused_result_->completed()));
     }
     // Reject foreign, consumed, moved and externally interrupted capabilities without clocks.
     void require_phase(const PhaseHandle& phase, const std::string& operation) const {
