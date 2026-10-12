@@ -17,6 +17,18 @@ Also follow the [general C/C++ guidelines](../.github/instructions/c-cpp.instruc
 
 Use `PICO_PLATFORM` for conditional compilation between real hardware and host testing.
 
+## Code Review Checklist
+
+Apply this checklist within the mandatory
+[code-review skill](../.github/skills/code-review/SKILL.md) workflow, not as a
+standalone review procedure.
+
+- [ ] Trace hardware/software state through startup, asynchronous events,
+  deferred work, and recovery. Check ordering, observation freshness, and
+  ownership across main-loop and interrupt boundaries.
+- [ ] Check capacity and encoding contracts at shared-helper boundaries.
+- [ ] Verify diagnostics and recovery are usable at the failure's lifecycle stage.
+
 ## Development Workflow
 
 1. `cmake --build --preset fw` - build firmware

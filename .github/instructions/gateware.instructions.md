@@ -57,6 +57,19 @@ For SPI signals specifically, follow the [OSHWA resolution](https://oshwa.org/re
 | `PICO` / `POCI` | (for bidirectional devices) |
 | `CS` | `SS` |
 
+## Code Review Checklist
+
+Apply this checklist within the mandatory
+[code-review skill](../skills/code-review/SKILL.md) workflow, not as a standalone
+review procedure.
+
+- [ ] Trace combinational/sequential behavior cycle by cycle, including
+  arbitration, backpressure, reset, and interrupted transactions.
+- [ ] Check assignment semantics, widths, signedness, initialization, and
+  unknowns against the defined hardware contract.
+- [ ] Reconcile polarity, encoding, and timing across RTL, physical boundaries,
+  constraints, and testbenches.
+
 ## Testbenches
 
 - Name testbenches with `*_tb.sv` suffix
