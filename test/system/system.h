@@ -44,6 +44,7 @@ concept AllowedSpiResult = !std::is_reference_v<T> && !std::is_pointer_v<T>
 
 class DeterministicScheduler;
 class RunConfiguration;
+namespace ieee_test { class WireTrace; }
 
 // Own one production FPGA and the physical devices fitted outside its boundary.
 class System {
@@ -103,6 +104,9 @@ public:
         trace_via_writes() &;
     // Capture only completed physical CPU-bus peripheral writes.
     test_observation::ScopedRecorder<test_observation::PeripheralWrite> trace_peripheral_writes() &;
+    // Capture passive DAV-edge wire evidence independently of RX consumption.
+    ieee_test::WireTrace trace_ieee() &;
+    ieee_test::WireTrace trace_ieee() && = delete;
     // Sample an observation-only optional event detector at completed-cycle boundaries.
     template<class Event, class Detector>
     test_observation::ScopedRecorder<Event> trace_events(Detector detector) &;
@@ -460,6 +464,44 @@ public:
         std::optional<cpu_type_t> target_;
     };
 
+    // Borrow IEEE register transport and passive production-controller observations.
+    template<class Board>
+    class IeeeView {
+    public:
+        // Borrow a persistent mutable or const board without advancing it.
+        explicit IeeeView(Board& board) : board_(board) {}
+        IeeeView(Board&&) = delete;
+        // Read FIFO flags through SPI without acknowledging the head.
+        fpga::IeeeStatus read_status() requires (!std::is_const_v<Board>) {
+            return fpga::IeeeStatus::from_bits(board_.spi().read(fpga::Register::IeeeStatus));
+        }
+        // Read CTRL using its readback domain, not its command flags.
+        fpga::IeeeControlStatus read_control() requires (!std::is_const_v<Board>) {
+            return fpga::IeeeControlStatus::from_bits(board_.spi().read(fpga::Register::IeeeControl));
+        }
+        // Write typed control commands through the physical SPI transport.
+        void write_control(fpga::IeeeControl flags) requires (!std::is_const_v<Board>) {
+            board_.spi().write(fpga::Register::IeeeControl, flags.bits());
+        }
+        // Observe snooped output registers without clocks or side effects.
+        uint8_t peek_via_orb() const { return board_.dut_->ieee_via_orb_o; }
+        uint8_t peek_pia2_pb() const { return board_.dut_->ieee_pia2_pb_out_o; }
+        // Observe controller-side acceptor line release levels.
+        bool peek_nrfd_released() const { return board_.dut_->ieee_cpu_nrfd_no; }
+        bool peek_ndac_released() const { return board_.dut_->ieee_cpu_ndac_no; }
+        // Observe the production protocol roles.
+        bool peek_listening() const { return board_.dut_->ieee_listening_o; }
+        bool peek_talking() const { return board_.dut_->ieee_talking_o; }
+    private:
+        Board& board_;
+    };
+
+    // Borrow IEEE access or observations from a persistent owner.
+    IeeeView<System> ieee() & { return IeeeView<System>(*this); }
+    IeeeView<const System> ieee() const & { return IeeeView<const System>(*this); }
+    IeeeView<System> ieee() && = delete;
+    IeeeView<const System> ieee() const && = delete;
+
     // Borrow active SPI and passive failure inspection from a persistent owner.
     SpiView<System> spi() & { return SpiView<System>(*this); }
     // Borrow only passive SPI inspection from a const owner.
@@ -533,6 +575,9 @@ public:
         uint8_t cpu_selection_o;
         econopet::CpuAddress soft6502_addr_o, soft6809_addr_o;
         bool soft6502_fetch_o, soft6809_fetch_o;
+        uint8_t ieee_via_orb_o, ieee_pia2_pb_out_o, ieee_bus_dio_o;
+        bool ieee_cpu_nrfd_no, ieee_cpu_ndac_no, ieee_listening_o, ieee_talking_o;
+        bool ieee_rx_ready_o, ieee_bus_dav_no, ieee_bus_atn_no, ieee_device_eoi_no;
 
     private:
         friend class System;
@@ -573,7 +618,13 @@ public:
               cpu_reset_active_o(p.cpu_reset_active_o), spi_quiescent_o(p.spi_quiescent_o),
               cpu_selection_o(p.cpu_selection_o),
               soft6502_addr_o(p.soft6502_addr_o), soft6809_addr_o(p.soft6809_addr_o),
-              soft6502_fetch_o(p.soft6502_fetch_o), soft6809_fetch_o(p.soft6809_fetch_o) {}
+              soft6502_fetch_o(p.soft6502_fetch_o), soft6809_fetch_o(p.soft6809_fetch_o),
+              ieee_via_orb_o(p.ieee_via_orb_o), ieee_pia2_pb_out_o(p.ieee_pia2_pb_out_o),
+              ieee_bus_dio_o(p.ieee_bus_dio_o), ieee_cpu_nrfd_no(p.ieee_cpu_nrfd_no),
+              ieee_cpu_ndac_no(p.ieee_cpu_ndac_no), ieee_listening_o(p.ieee_listening_o),
+              ieee_talking_o(p.ieee_talking_o), ieee_rx_ready_o(p.ieee_rx_ready_o),
+              ieee_bus_dav_no(p.ieee_bus_dav_no), ieee_bus_atn_no(p.ieee_bus_atn_no),
+              ieee_device_eoi_no(p.ieee_device_eoi_no) {}
     };
 
     // Initialize inactive pins and SRAM before settling the production top.

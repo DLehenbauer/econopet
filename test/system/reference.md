@@ -1,5 +1,67 @@
 # Host test authoring reference
 
+## IEEE controller and protocol evidence
+
+The board-only IEEE layer requires neither firmware integration nor ROM media.
+[`IeeeController`](ieee/controller.h) installs a small RAM mailbox loop and
+executes every peripheral access on the production soft 6502. The assembler
+owns its mailbox, code, stack, and vectors. Construct it on a fresh board before
+enabling the virtual drive, and keep that board alive for its borrowed lifetime.
+The controller cannot be copied or moved. An interrupted mailbox transfer or
+handshake permanently marks it failed, rejecting further active work before
+patching or clocking. Do not resume it merely because the old command later
+acknowledges. Start with a fresh board and controller instead.
+Sending waits for both NRFD released (VIA PB6) and NDAC asserted (VIA PB0)
+before asserting DAV, then waits for acceptance and rearming.
+
+[`transactions.h`](ieee/transactions.h) separates device addresses, secondary
+addresses, and Commodore channels, validating their domains before encoding.
+Only the typed factories construct commands, using shared production protocol
+constants after validation. Pure transaction, register-domain, record-matcher,
+and diagnostic tests in [`transactions_test.cpp`](ieee/transactions_test.cpp)
+run in the host-only target without Verilator. Board integration cases live in
+[`controller_test.cpp`](ieee/controller_test.cpp).
+Named commands and payloads create exact byte/ATN/EOI records. `raw_send` is the
+explicit escape for malformed command bytes, but still requires known EOI.
+Sequence comparisons check every field and length without board side effects.
+
+[`fifo.h`](ieee/fifo.h) actively samples and acknowledges RX through physical
+SPI. **RX stores byte and ATN only. Status bit 7 means talker starvation, not
+received EOI.** FIFO records therefore carry `Eoi::Unobserved`, and expected
+FIFO sequences must explicitly discard EOI with `fifo_record`/`fifo_records`.
+Do not infer final-byte EOI from FIFO status.
+
+[`WireTrace`](ieee/trace.h), obtained through `board.trace_ieee()`, passively
+records DAV assertion edges at completed-cycle boundaries. It observes
+resolved active-low DIO, ATN, and both controller/device EOI sources, independent
+of RX consumption. Attaching during an asserted DAV does not invent a transfer.
+Its scoped recorder retains source identity, timestamps, and coverage checks.
+
+`rx_empty_now` is one active status sample, not evidence of future silence.
+`require_rx_remains_empty` observes both interval endpoints and every completed
+cycle without consuming RX. Drains share one inherited deadline across nested
+SPI work and enforce explicit record limits. A failed sequence check may
+consume the first mismatch while leaving later records pending.
+
+### Compatibility evidence
+
+The controller is a synthetic test harness, not a replacement PET KERNAL.
+Its command bytes and three-wire handshake derive from the primary routines
+below. Tests use independent literal encodings and the real production bus.
+Simulation wrapper outputs expose existing signals without changing production
+RTL or physical timing constraints.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+| --- | --- | --- | --- | --- | --- |
+| Primary addressing and termination | PET KERNAL 2.0 and CBM 4040 | [KERNAL `TALK`, `LIST1`, `UNTLK`, `UNLSN`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `DCDE`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | LISTEN `$20+n`, TALK `$40+n`, UNLISTEN `$3F`, UNTALK `$5F` with ATN asserted | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent bus arbitration description](https://www.pagetable.com/?p=1031) |
+| Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
+| Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
+
+FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
+hardware/test contracts, not Commodore ROM compatibility claims. The existing
+[fabric RX and status definitions](../../gw/EconoPET/src/ieee.sv) establish the
+byte/ATN layout and separate talk-starved flag.
+
 ## Building fixture tests
 
 Build production with `RelWithDebInfo`. Build tests, simulator integration,

@@ -152,7 +152,20 @@ module system (
     output logic soft6809_fetch_o,
     output logic soft6809_opcode_fetch_o,
     output logic [15:0] soft6809_opcode_fetch_addr_o,
-    output logic [15:0] soft6809_addr_o
+    output logic [15:0] soft6809_addr_o,
+
+    // Passive production IEEE controller, FIFO, and wire evidence.
+    output logic [7:0] ieee_via_orb_o,
+    output logic [7:0] ieee_pia2_pb_out_o,
+    output logic ieee_cpu_nrfd_no,
+    output logic ieee_cpu_ndac_no,
+    output logic ieee_listening_o,
+    output logic ieee_talking_o,
+    output logic ieee_rx_ready_o,
+    output logic ieee_bus_dav_no,
+    output logic ieee_bus_atn_no,
+    output logic ieee_device_eoi_no,
+    output logic [7:0] ieee_bus_dio_o
 );
     // The board's pulled-up reset net combines the FPGA and external drivers.
     wire cpu_reset_n = cpu_reset_n_i && (!cpu_reset_n_oe || cpu_reset_n_o);
@@ -162,6 +175,17 @@ module system (
         && !top.main.ram_wb_stall && !top.main.ram_ctl_we && !top.main.ram_ctl_oe;
     assign soft6502_addr_o = top.main.m6502_addr;
     assign soft6809_addr_o = top.main.mc6809_addr;
+    assign ieee_via_orb_o = top.main.ieee.via_orb;
+    assign ieee_pia2_pb_out_o = top.main.ieee.pia2_pb_out;
+    assign ieee_cpu_nrfd_no = top.main.ieee.cpu_nrfd_n;
+    assign ieee_cpu_ndac_no = top.main.ieee.cpu_ndac_n;
+    assign ieee_listening_o = top.main.ieee.listening;
+    assign ieee_talking_o = top.main.ieee.talking;
+    assign ieee_rx_ready_o = !top.main.ieee.rx_empty;
+    assign ieee_bus_dav_no = top.main.ieee.bus_dav_n;
+    assign ieee_bus_atn_no = top.main.ieee.cpu_atn_n;
+    assign ieee_device_eoi_no = top.main.ieee.dev_eoi_n;
+    assign ieee_bus_dio_o = top.main.ieee.bus_dio;
     wire soft6502_reset_n = cpu_reset_n && top.main.cpu_is_soft6502;
     // Record the opcode consumed at the core's advancing edge, before its address changes.
     always @(negedge top.main.soft_cpu_clock or negedge soft6502_reset_n) begin

@@ -33,9 +33,9 @@ target_include_directories(econopet_fpga_model SYSTEM PUBLIC
     "${VERILATED_DIR}" "${VERILATOR_ROOT}/include")
 
 # Keep board tests independent of ROM media, firmware transport and later APIs.
-add_executable(econopet_board_tests board_test.cpp observation_test.cpp spi_cpu_test.cpp rom_test.cpp trace_board_test.cpp scheduling_test.cpp configured_run_test.cpp layout_board_test.cpp assembly_board_test.cpp program_test.cpp memory_test.cpp program_run_test.cpp phase_test.cpp phase_integration_test.cpp framework/scheduler.cpp)
+add_executable(econopet_board_tests board_test.cpp observation_test.cpp spi_cpu_test.cpp rom_test.cpp trace_board_test.cpp scheduling_test.cpp configured_run_test.cpp layout_board_test.cpp assembly_board_test.cpp program_test.cpp memory_test.cpp program_run_test.cpp phase_test.cpp phase_integration_test.cpp ieee/controller_test.cpp framework/scheduler.cpp)
 target_compile_features(econopet_board_tests PRIVATE cxx_std_23)
-target_link_libraries(econopet_board_tests PRIVATE econopet_fpga_model econopet_external_io GTest::gtest_main)
+target_link_libraries(econopet_board_tests PRIVATE econopet_fpga_model econopet_external_io GTest::gtest_main GTest::gmock)
 set(BOARD_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}/board")
 set_target_properties(econopet_board_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
 
