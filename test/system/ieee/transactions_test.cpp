@@ -12,6 +12,18 @@ using namespace ieee_test;
 using testing::ElementsAre;
 using testing::HasSubstr;
 
+// Reject a public arbitrary category/byte factory, including detail-namespace helpers.
+template<class Factory>
+concept UncheckedCommandFactory = requires {
+    Factory::make(CommandCategory::Listen, uint8_t{0xff});
+};
+static_assert(!UncheckedCommandFactory<detail::CommandFactory>);
+static_assert(!std::is_aggregate_v<Command>);
+static_assert(!std::is_default_constructible_v<Command>);
+static_assert(Listen(Device{8}).byte() == 0x28);
+static_assert(Unlisten.byte() == 0x3f && Unlisten.category() == CommandCategory::Unlisten);
+static_assert(Untalk.byte() == 0x5f && Untalk.category() == CommandCategory::Untalk);
+
 static_assert(!std::is_convertible_v<unsigned, Device>);
 static_assert(!std::is_convertible_v<unsigned, Channel>);
 static_assert(!std::is_convertible_v<Channel, Device>);
@@ -63,6 +75,28 @@ TEST(IeeeTransactions, CheckedCommandDomainsAndEncodings) {
     EXPECT_THROW(ieee_test::SecondaryAddress{32}, std::out_of_range);
     EXPECT_THROW(Open(Channel{16}), std::out_of_range);
     EXPECT_THROW(Listen(Device{31}), std::out_of_range);
+}
+
+// Every legal operand preserves its factory's category and independently encoded byte.
+TEST(IeeeTransactions, AllCheckedFactoriesPreserveCommandConstructionInvariants) {
+    for (uint64_t device = 0; device <= 30; ++device) {
+        EXPECT_EQ(Listen(Device{device}).category(), CommandCategory::Listen);
+        EXPECT_EQ(Listen(Device{device}).byte(), 0x20 + device);
+        EXPECT_EQ(Talk(Device{device}).category(), CommandCategory::Talk);
+        EXPECT_EQ(Talk(Device{device}).byte(), 0x40 + device);
+    }
+    for (uint64_t channel = 0; channel <= 15; ++channel) {
+        EXPECT_EQ(Open(Channel{channel}).category(), CommandCategory::Open);
+        EXPECT_EQ(Open(Channel{channel}).byte(), 0xf0 + channel);
+        EXPECT_EQ(Close(Channel{channel}).category(), CommandCategory::Close);
+        EXPECT_EQ(Close(Channel{channel}).byte(), 0xe0 + channel);
+        EXPECT_EQ(Secondary(Channel{channel}).category(), CommandCategory::Secondary);
+        EXPECT_EQ(Secondary(Channel{channel}).byte(), 0x60 + channel);
+    }
+    for (uint64_t address = 0; address <= 31; ++address) {
+        EXPECT_EQ(Secondary(ieee_test::SecondaryAddress{address}).category(), CommandCategory::Secondary);
+        EXPECT_EQ(Secondary(ieee_test::SecondaryAddress{address}).byte(), 0x60 + address);
+    }
 }
 
 // Named records compose directly with standard exact sequence matchers.

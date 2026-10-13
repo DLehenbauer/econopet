@@ -27,7 +27,11 @@ KERNAL 2.0's `ACPTR`, including its per-byte rearm rather than restarting TALK.
 [`transactions.h`](ieee/transactions.h) separates device addresses, secondary
 addresses, and Commodore channels, validating their domains before encoding.
 Only the typed factories construct commands, using shared production protocol
-constants after validation. Pure transaction, register-domain, record-matcher,
+constants after validation. Construction-access tests ensure there is no public arbitrary category/byte
+factory (including helpers in `detail`). Fixed termination helpers accept no
+caller-selected encoding. Unusual wire commands use `raw_record`/`raw_send`
+rather than forging a typed `Command`.
+Pure transaction, register-domain, record-matcher,
 and diagnostic tests in [`transactions_test.cpp`](ieee/transactions_test.cpp)
 run in the host-only target without Verilator. Board integration cases live in
 [`controller_test.cpp`](ieee/controller_test.cpp).

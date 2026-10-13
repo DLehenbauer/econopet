@@ -65,6 +65,12 @@ public:
     // Return the exact command byte used on DIO.
     constexpr uint8_t byte() const { return byte_; }
 private:
+    friend constexpr Command Listen(Device);
+    friend constexpr Command Talk(Device);
+    friend constexpr Command Open(Channel);
+    friend constexpr Command Close(Channel);
+    friend constexpr Command Secondary(SecondaryAddress);
+    friend constexpr Command Secondary(Channel);
     friend struct detail::CommandFactory;
     // Only typed factories may pair a category with its shared protocol encoding.
     constexpr Command(CommandCategory category, uint8_t byte) : category_(category), byte_(byte) {}
@@ -74,39 +80,43 @@ private:
 
 namespace detail {
 struct CommandFactory {
-    // Assemble an already validated command without revalidating its operand.
-    static constexpr Command make(CommandCategory category, uint8_t byte) {
-        return Command{category, byte};
+    // Construct only the fixed unaddressed termination command.
+    static constexpr Command unlisten() {
+        return Command{CommandCategory::Unlisten, IEEE_CMD_UNLISTEN};
+    }
+    // Construct only the fixed talker termination command.
+    static constexpr Command untalk() {
+        return Command{CommandCategory::Untalk, IEEE_CMD_UNTALK};
     }
 };
 }
 
 // Construct named command values from their checked address domains.
 inline constexpr Command Listen(Device device) {
-    return detail::CommandFactory::make(CommandCategory::Listen, IEEE_CMD_LISTEN(device.value()));
+    return Command{CommandCategory::Listen, IEEE_CMD_LISTEN(device.value())};
 }
 // Construct a talker command from a checked primary address.
 inline constexpr Command Talk(Device device) {
-    return detail::CommandFactory::make(CommandCategory::Talk, IEEE_CMD_TALK(device.value()));
+    return Command{CommandCategory::Talk, IEEE_CMD_TALK(device.value())};
 }
 // Construct an OPEN command from a checked Commodore channel.
 inline constexpr Command Open(Channel channel) {
-    return detail::CommandFactory::make(CommandCategory::Open, IEEE_CMD_OPEN(channel.value()));
+    return Command{CommandCategory::Open, IEEE_CMD_OPEN(channel.value())};
 }
 // Construct a CLOSE command from a checked Commodore channel.
 inline constexpr Command Close(Channel channel) {
-    return detail::CommandFactory::make(CommandCategory::Close, IEEE_CMD_CLOSE(channel.value()));
+    return Command{CommandCategory::Close, IEEE_CMD_CLOSE(channel.value())};
 }
 // Construct a secondary command from a checked five-bit address.
 inline constexpr Command Secondary(SecondaryAddress address) {
-    return detail::CommandFactory::make(CommandCategory::Secondary, IEEE_CMD_SECONDARY(address.value()));
+    return Command{CommandCategory::Secondary, IEEE_CMD_SECONDARY(address.value())};
 }
 // A Commodore channel is also a valid IEEE secondary address.
 inline constexpr Command Secondary(Channel channel) {
-    return detail::CommandFactory::make(CommandCategory::Secondary, IEEE_CMD_SECONDARY(channel.value()));
+    return Command{CommandCategory::Secondary, IEEE_CMD_SECONDARY(channel.value())};
 }
-inline constexpr Command Unlisten = detail::CommandFactory::make(CommandCategory::Unlisten, IEEE_CMD_UNLISTEN);
-inline constexpr Command Untalk = detail::CommandFactory::make(CommandCategory::Untalk, IEEE_CMD_UNTALK);
+inline constexpr Command Unlisten = detail::CommandFactory::unlisten();
+inline constexpr Command Untalk = detail::CommandFactory::untalk();
 
 // Detached wire observation. ATN and EOI mean asserted, not electrical levels.
 struct Record {
