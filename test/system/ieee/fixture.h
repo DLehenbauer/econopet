@@ -10,6 +10,7 @@ namespace ieee_test {
 using econopet::io::PiaC2High;
 using econopet::io::PiaC2Low;
 inline constexpr uint8_t BusReleased = 0xff;
+inline constexpr uint8_t DioOutputs = 0xff;
 inline constexpr uint8_t EoiInput = pet::EoiInput;
 inline constexpr econopet::CpuAddress HarnessStart{0x0300};
 inline constexpr econopet::Cycles ByteBudget = 500000;

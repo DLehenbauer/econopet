@@ -164,7 +164,9 @@ module system (
     output logic ieee_rx_ready_o,
     output logic ieee_bus_dav_no,
     output logic ieee_bus_atn_no,
+    output logic ieee_device_dav_no,
     output logic ieee_device_eoi_no,
+    output logic [7:0] ieee_device_dio_o,
     output logic [7:0] ieee_bus_dio_o
 );
     // The board's pulled-up reset net combines the FPGA and external drivers.
@@ -184,7 +186,9 @@ module system (
     assign ieee_rx_ready_o = !top.main.ieee.rx_empty;
     assign ieee_bus_dav_no = top.main.ieee.bus_dav_n;
     assign ieee_bus_atn_no = top.main.ieee.cpu_atn_n;
+    assign ieee_device_dav_no = top.main.ieee.dev_dav_n;
     assign ieee_device_eoi_no = top.main.ieee.dev_eoi_n;
+    assign ieee_device_dio_o = top.main.ieee.dev_dio;
     assign ieee_bus_dio_o = top.main.ieee.bus_dio;
     wire soft6502_reset_n = cpu_reset_n && top.main.cpu_is_soft6502;
     // Record the opcode consumed at the core's advancing edge, before its address changes.

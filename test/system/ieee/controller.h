@@ -11,7 +11,7 @@
 // Reserves mailbox, code, stack and vectors. Construct before enabling the drive.
 class IeeeController {
 public:
-    // Installs the mailbox loop and selects PIA1's external EOI input.
+    // Installs the mailbox, releases IEEE outputs and configures physical GPIO directions.
     explicit IeeeController(System& system) : system_(system) {
         test_asm::Scenario scenario(system_);
         scenario.reserve("mailbox", test_asm::RegionKind::Mailbox, CommandMailbox, 3);
@@ -35,6 +35,16 @@ public:
         system_.cpu(CPU_SOFT_6502).start(ieee_test::HarnessStart);
         system_.tick(StartupBudget);
         write(pet::Pia1ControlA, ieee_test::PiaC2High.bits());
+        write(pet::Pia2ControlA, ieee_test::PiaC2High.bits());
+        // Preload released DIO before enabling all eight PIA2 port-B outputs.
+        write(pet::Pia2ControlB, ieee_test::PiaC2High.bits());
+        write(pet::Pia2PortB, ieee_test::BusReleased);
+        write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+        write(pet::Pia2PortB, ieee_test::DioOutputs);
+        write(pet::Pia2ControlB, ieee_test::PiaC2High.bits());
+        // Only ATN/NRFD are VIA GPIO outputs, leaving all handshake inputs enabled.
+        write(pet::ViaPortB, ieee_test::BusReleased);
+        write(pet::ViaDdrB, pet::Atn | pet::Nrfd);
     }
     IeeeController(const IeeeController&) = delete;
     IeeeController& operator=(const IeeeController&) = delete;
@@ -76,6 +86,8 @@ public:
     ieee_test::Record receive() {
         // Arm before releasing ATN/NRFD, without reasserting ATN between bytes.
         write(pet::Pia2ControlA, ieee_test::PiaC2Low.bits());
+        // Release ATN while blocked, then advertise readiness in a separate access.
+        write(pet::ViaPortB, AcceptorBusy);
         write(pet::ViaPortB, ieee_test::BusReleased);
         wait_via(pet::Dav, 0);
         // Block the next byte before sampling EOI and data, as KERNAL ACPTR does.

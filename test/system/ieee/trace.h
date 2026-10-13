@@ -30,7 +30,7 @@ private:
         Record record;
     };
 
-    // Resolve active-low fabric, fitted output and external input levels without side effects.
+    // Resolve device, fitted controller and external levels without double-counting CPU snoops.
     static BusSample sample(const System& board) {
         const auto pins = board.snapshot();
         const auto& io = board.io();
@@ -42,14 +42,14 @@ private:
         const auto pia2_outputs = static_cast<uint8_t>(pia2_port.outr | ~pia2_port.ddr);
         const auto& via_port = io.via().state().pb;
         const auto via_outputs = static_cast<uint8_t>(via_port.outr | ~via_port.ddr);
-        const bool dav_released = pins.ieee_bus_dav_no && io.pia2().cb2()
+        const bool dav_released = pins.ieee_device_dav_no && io.pia2().cb2()
             && (via_inputs.port_b & pet::Dav) != 0;
-        const bool atn_released = pins.ieee_bus_atn_no && pia2_inputs.ca1
+        const bool atn_released = pia2_inputs.ca1
             && (via_outputs & pet::Atn) != 0;
         const bool eoi_released = pins.ieee_device_eoi_no && io.pia1().ca2()
             && (pia1_inputs.port_a & pet::EoiInput) != 0;
         const auto byte = static_cast<uint8_t>(
-            ~(pins.ieee_bus_dio_o & pia2_outputs & pia2_inputs.port_a));
+            ~(pins.ieee_device_dio_o & pia2_outputs & pia2_inputs.port_a));
         return {dav_released, raw_record(byte, !atn_released, eoi_released ? Eoi::More : Eoi::Last)};
     }
 };

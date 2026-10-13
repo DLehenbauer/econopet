@@ -23,6 +23,29 @@ static_assert(!std::is_move_constructible_v<IeeeController>);
 
 struct InterruptedTransfer {};
 
+// Mailbox startup must release the bus before enabling its physical GPIO outputs.
+TEST_F(SystemTest, IeeeControllerInitializesPhysicalDirectionsWithoutBusGlitches) {
+    bool drove_low = false;
+    auto startup = system.observe([&](const System& observed) {
+        const auto& pia = observed.io().pia2().state().pb;
+        const auto& via = observed.io().via().state().pb;
+        drove_low |= (pia.ddr & ~pia.outr) != 0
+            || (via.ddr & ~via.outr & (pet::Atn | pet::Nrfd)) != 0
+            || !observed.io().pia2().cb2() || !observed.io().pia2().ca2();
+    });
+    IeeeController controller(system);
+    EXPECT_FALSE(drove_low);
+    EXPECT_EQ(system.io().pia2().state().pb.ddr, 0xff);
+    EXPECT_EQ(system.io().via().state().pb.ddr, 0x06);
+    EXPECT_EQ(system.io().pia1().state().pa.ddr, 0);
+    EXPECT_EQ(system.io().pia2().state().pa.ddr, 0);
+    EXPECT_EQ(system.io().pia2().state().pb.outr, 0xff);
+    EXPECT_EQ(system.io().via().state().pb.outr, 0xff);
+    EXPECT_TRUE(system.io().pia1().ca2());
+    EXPECT_TRUE(system.io().pia2().ca2());
+    EXPECT_TRUE(system.io().pia2().cb2());
+}
+
 // A completed bus write does not make an interrupted mailbox safe to reuse.
 TEST_F(SystemTest, IeeeControllerRejectsReuseAfterInterruptedBusOperation) {
     constexpr econopet::CpuAddress write_address{0x0400};
@@ -79,6 +102,9 @@ TEST_F(SystemTest, IeeeControllerWaitsForListenerReadinessBeforeDav) {
     scheduler.at(accepted_at, [](System& board) {
         EXPECT_FALSE(board.snapshot().ieee_bus_dav_no);
         EXPECT_EQ(board.snapshot().ieee_bus_dio_o, static_cast<uint8_t>(~'A'));
+        EXPECT_FALSE(board.io().pia2().cb2());
+        EXPECT_EQ(M6520_GET_PB(board.io().pia2().state().pins), static_cast<uint8_t>(~'A'));
+        EXPECT_NE(board.io().via().state().pins & M6522_PB1, 0);
         board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Ndac; });
     });
     scheduler.at(rearmed_at, [](System& board) {
@@ -214,21 +240,21 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
     const auto start = system.time();
     constexpr Cycles source_period{20000};
     scheduler.at(start + source_period, [](System& board) {
-        EXPECT_TRUE(board.ieee().peek_nrfd_released());
-        EXPECT_FALSE(board.ieee().peek_ndac_released());
+        EXPECT_NE(board.io().via().state().pins & M6522_PB1, 0);
+        EXPECT_FALSE(board.io().pia2().ca2());
         board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'X'); });
         board.io().via().inputs([](auto& inputs) {
             inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
         });
     });
     scheduler.at(start + source_period * 2, [](System& board) {
-        EXPECT_FALSE(board.ieee().peek_nrfd_released());
-        EXPECT_TRUE(board.ieee().peek_ndac_released());
+        EXPECT_EQ(board.io().via().state().pins & M6522_PB1, 0);
+        EXPECT_TRUE(board.io().pia2().ca2());
         board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
     });
     scheduler.at(start + source_period * 3, [](System& board) {
-        EXPECT_TRUE(board.ieee().peek_nrfd_released());
-        EXPECT_FALSE(board.ieee().peek_ndac_released());
+        EXPECT_NE(board.io().via().state().pins & M6522_PB1, 0);
+        EXPECT_FALSE(board.io().pia2().ca2());
         board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'Y'); });
         board.io().pia1().inputs([](auto& inputs) {
             inputs.port_a &= static_cast<uint8_t>(~EoiInput);
@@ -238,8 +264,8 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
         });
     });
     scheduler.at(start + source_period * 4, [](System& board) {
-        EXPECT_FALSE(board.ieee().peek_nrfd_released());
-        EXPECT_TRUE(board.ieee().peek_ndac_released());
+        EXPECT_EQ(board.io().via().state().pins & M6522_PB1, 0);
+        EXPECT_TRUE(board.io().pia2().ca2());
         board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
     });
 
@@ -251,6 +277,8 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
     EXPECT_THAT(wire.records(), ElementsAre(data('X'), data('Y', Eoi::Last)));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
+    EXPECT_EQ(system.io().via().state().pins & M6522_PB1, 0);
+    EXPECT_FALSE(system.io().pia2().ca2());
     EXPECT_FALSE(controller.peek_failed());
 }
 
@@ -504,6 +532,98 @@ TEST_F(SystemTest, IeeeWireTraceResolvesOnlyEnabledFittedGpioOutputs) {
     pia.set_control(PiaRegister::ControlB, PiaC2Low, system.time());
     system.tick(1);
     EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0)));
+}
+
+// CPU-written latches cannot bypass a subsequent partial/input DDR configuration.
+TEST_F(SystemTest, IeeeWireTraceCpuDirectionChangesReleaseAtnAndDio) {
+    IeeeController controller(system);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2PortB, static_cast<uint8_t>(~'R'));
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, BusReleased);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::ViaDdrB, pet::Atn | pet::Nrfd);
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Atn));
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More)));
+
+    // Only the high nibble drives DIO, with an independent low bit on the input.
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    constexpr uint8_t high_nibble_outputs = 0xf0;
+    controller.write(pet::Pia2PortB, high_nibble_outputs);
+    controller.write(pet::ViaDdrB, 0);
+    system.io().pia2().inputs([](auto& inputs) { inputs.port_a = 0xfe; });
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0x51)));
+
+    // All-input mode releases both retained latches, while external ATN still works.
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, 0);
+    system.io().pia2().inputs([](auto& inputs) {
+        inputs.port_a = BusReleased;
+        inputs.ca1 = false;
+    });
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0x51),
+        raw_record(0, true, Eoi::More)));
+
+    // Reenabling output directions restores the retained byte and controller ATN.
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, BusReleased);
+    controller.write(pet::ViaDdrB, pet::Atn | pet::Nrfd);
+    system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = true; });
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0x51),
+        raw_record(0, true, Eoi::More), raw_record('R', true, Eoi::More)));
+}
+
+// A stale controller DAV snoop is not a second bus participant.
+TEST_F(SystemTest, IeeeWireTraceIgnoresStaleControllerDavAtAttachmentAndCapture) {
+    using econopet::io::PiaRegister;
+    IeeeController controller(system);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2PortB, static_cast<uint8_t>(~'R'));
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, BusReleased);
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    auto& pia = system.io().pia2();
+    pia.set_control(PiaRegister::ControlB, PiaC2High, system.time());
+    system.tick(1);
+    ASSERT_FALSE(system.snapshot().ieee_bus_dav_no);
+    ASSERT_TRUE(pia.cb2());
+    auto wire = system.trace_ieee();
+    system.tick(1);
+    EXPECT_TRUE(wire.records().empty());
+    pia.set_control(PiaRegister::ControlB, PiaC2Low, system.time());
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(data('R')));
+    pia.set_control(PiaRegister::ControlB, PiaC2High, system.time());
+    system.tick(1);
+    pia.set_control(PiaRegister::ControlB, PiaC2Low, system.time());
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(data('R'), data('R')));
+}
+
+// Preserve device DIO without also including a released controller's raw latch.
+TEST_F(SystemTest, IeeeWireTraceDeviceDataIgnoresInputModeControllerLatch) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    controller.command(Talk(Device{8}));
+    controller.command(Secondary(Channel{0}));
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2PortB, static_cast<uint8_t>(~'R'));
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, 0);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    auto wire = system.trace_ieee();
+    system.spi().write(fpga::Register::IeeeTxLast, 'X');
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([&](const System&) { return !wire.records().empty(); },
+        ByteBudget, "device DAV assertion");
+    EXPECT_THAT(wire.records(), ElementsAre(data('X', Eoi::Last)));
 }
 
 } // namespace
