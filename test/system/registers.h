@@ -149,6 +149,7 @@ inline constexpr uint8_t Nrfd = 0x02;
 inline constexpr uint8_t Atn = 0x04;
 inline constexpr uint8_t NrfdInput = 0x40;
 inline constexpr uint8_t Dav = 0x80;
+inline constexpr uint8_t EoiInput = 0x40; // PIA1 PA6, not a VIA port-B line.
 
 // Map a checked VIA register into the PET CPU address space.
 constexpr econopet::CpuAddress address(econopet::io::ViaRegister reg) {

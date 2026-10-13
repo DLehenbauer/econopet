@@ -209,6 +209,7 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
 // A separately timed physical source checks acceptance without the FPGA talker.
 TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
     IeeeController controller(system);
+    auto wire = system.trace_ieee();
     Scheduler scheduler(system);
     const auto start = system.time();
     constexpr Cycles source_period{20000};
@@ -243,9 +244,11 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
     });
 
     EXPECT_EQ(controller.receive(), data('X'));
+    EXPECT_THAT(wire.records(), ElementsAre(data('X')));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
     EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
+    EXPECT_THAT(wire.records(), ElementsAre(data('X'), data('Y', Eoi::Last)));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
     EXPECT_FALSE(controller.peek_failed());
@@ -390,6 +393,117 @@ TEST_F(SystemTest, IeeeTransactionsWireObserversComposeAndDisconnect) {
     controller.write(pet::Pia2ControlB, PiaC2High.bits());
     controller.command(Unlisten);
     EXPECT_THAT(attached.records(), ElementsAre(command(Unlisten)));
+}
+
+// Initial attachment and edge detection must use the same resolved physical DAV.
+TEST_F(SystemTest, IeeeWireTraceAttachesDuringPhysicalDavWithoutInventingAByte) {
+    IeeeController controller(system);
+    system.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~0xa5); });
+    system.io().pia1().inputs([](auto& inputs) {
+        inputs.port_a &= static_cast<uint8_t>(~EoiInput);
+    });
+    system.io().via().inputs([](auto& inputs) {
+        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+    });
+    auto wire = system.trace_ieee();
+    system.tick(10);
+    EXPECT_TRUE(wire.records().empty());
+
+    // A release followed by a new assertion creates exactly one physical byte.
+    system.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    system.tick(1);
+    system.io().via().inputs([](auto& inputs) {
+        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+    });
+    system.tick(10);
+    EXPECT_THAT(wire.records(), ElementsAre(data(0xa5, Eoi::Last)));
+    EXPECT_TRUE(wire.capture().complete());
+}
+
+// Any participant may hold a wire low, regardless of another driver's release.
+TEST_F(SystemTest, IeeeWireTraceResolvesPhysicalInputsAndOverlappingDavDrivers) {
+    IeeeController controller(system);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2PortB, 0xf0);
+    system.io().pia2().inputs([](auto& inputs) {
+        inputs.port_a = 0x0f;
+        inputs.ca1 = false;
+    });
+    system.io().pia1().inputs([](auto& inputs) {
+        inputs.port_a &= static_cast<uint8_t>(~EoiInput);
+    });
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last)));
+
+    // Hand off DAV while it remains asserted, without inventing assertion edges.
+    system.io().via().inputs([](auto& inputs) {
+        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+    });
+    system.tick(1);
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+    system.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last)));
+
+    // Only a complete bus release permits another byte's DAV assertion.
+    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+    system.io().via().inputs([](auto& inputs) {
+        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
+    });
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last),
+        raw_record(0xff, true, Eoi::Last)));
+}
+
+// The fitted PIA can assert DAV in handshake mode without a fabric DAV edge.
+TEST_F(SystemTest, IeeeWireTraceObservesFittedPiaHandshakeOutput) {
+    IeeeController controller(system);
+    controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
+    controller.write(pet::Pia2PortB, BusReleased);
+    controller.write(pet::Pia2ControlB, econopet::io::PiaC2Handshake.bits());
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2PortB, static_cast<uint8_t>(~'R'));
+    EXPECT_FALSE(system.io().pia2().cb2());
+    EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
+    EXPECT_THAT(wire.records(), ElementsAre(data('R')));
+}
+
+// Model outputs drive the bus only where DDR selects output, not from idle latches.
+TEST_F(SystemTest, IeeeWireTraceResolvesOnlyEnabledFittedGpioOutputs) {
+    using econopet::io::PiaRegister;
+    using econopet::io::ViaRegister;
+    using econopet::io::write;
+    IeeeController controller(system);
+    auto& pia = system.io().pia2();
+    auto& via = system.io().via();
+    const auto setup = system.time();
+
+    // Configure fitted outputs independently of the fabric's snooped registers.
+    pia.set_control(PiaRegister::ControlB, econopet::io::PiaDdrAccess, setup);
+    write(pia, PiaRegister::PortB, BusReleased, setup);
+    pia.set_control(PiaRegister::ControlB, PiaC2High, setup);
+    write(pia, PiaRegister::PortB, static_cast<uint8_t>(~'R'), setup);
+    write(via, ViaRegister::DdrB, pet::Atn, setup);
+    write(via, ViaRegister::PortB, static_cast<uint8_t>(BusReleased & ~pet::Atn), setup);
+    ASSERT_EQ(system.snapshot().ieee_bus_dio_o, BusReleased);
+    ASSERT_TRUE(system.snapshot().ieee_bus_atn_no);
+    auto wire = system.trace_ieee();
+    pia.set_control(PiaRegister::ControlB, PiaC2Low, system.time());
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More)));
+
+    // Changing direction releases DIO and ATN while preserving the output latches.
+    pia.set_control(PiaRegister::ControlB, PiaC2High, system.time());
+    system.tick(1);
+    pia.set_control(PiaRegister::ControlB, econopet::io::PiaDdrAccess, system.time());
+    write(pia, PiaRegister::PortB, 0, system.time());
+    pia.set_control(PiaRegister::ControlB, PiaC2High, system.time());
+    write(via, ViaRegister::DdrB, 0, system.time());
+    pia.set_control(PiaRegister::ControlB, PiaC2Low, system.time());
+    system.tick(1);
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0)));
 }
 
 } // namespace

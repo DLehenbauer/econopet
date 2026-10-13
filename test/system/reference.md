@@ -38,8 +38,15 @@ Do not infer final-byte EOI from FIFO status.
 
 [`WireTrace`](ieee/trace.h), obtained through `board.trace_ieee()`, passively
 records DAV assertion edges at completed-cycle boundaries. It observes
-resolved active-low DIO, ATN, and both controller/device EOI sources, independent
-of RX consumption. Attaching during an asserted DAV does not invent a transfer.
+the active-low bus resolved from fabric signals, fitted PIA/VIA outputs, and
+external DAV (VIA PB7), DIO (PIA2 PA), EOI (PIA1 PA6), and ATN (PIA2 CA1)
+inputs, independent of RX consumption. GPIO output latches contribute only
+where DDR enables output. Initial attachment uses the same resolved DAV as
+capture, so an already-active physical transfer is not invented. Overlapping
+drivers cannot create a new DAV edge until every driver releases the bus.
+The `Snapshot::ieee_bus_*` fields remain fabric-only observations, not the
+complete fitted-bus levels. Resolution is observational only (it neither drives
+peripheral inputs nor changes the fabric's CPU-data injection).
 Its scoped recorder retains source identity, timestamps, and coverage checks.
 
 `rx_empty_now` is one active status sample, not evidence of future silence.
@@ -62,6 +69,7 @@ RTL or physical timing constraints.
 | Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
 | Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
 | Per-byte acceptor rearm | PET KERNAL 2.0 | [KERNAL `ACPTR`, `ACP01`, `ACP03`, `ACP05`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) | Assert NRFD before sampling EOI/DIO, release NDAC to accept, wait for DAV release, then reassert NDAC with NRFD still asserted. No intervening ATN edge between consecutive bytes | [controller](ieee/controller.h), [FPGA and independently timed source regressions](ieee/controller_test.cpp) | [Independent receiver handshake and rearm description](https://www.pagetable.com/?p=1023) and [NI handshake-line definitions (manual mirror)](https://documentation.help/NI-488.2/gpib0cs3.html) |
+| Passive physical-source evidence | PET KERNAL 2.0 and PET PIA/VIA wiring | [KERNAL `ACPTR`, `ACP01`, `ACP03`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) samples DAV, EOI and inverted DIO through the fitted input registers | Capture separately driven physical bytes through the PET input-pin map. Compose open-collector levels, honor GPIO direction and never invent an in-flight byte at attachment or driver handoff | [wire sampler](ieee/trace.h), [physical-source, GPIO and overlapping-driver regressions](ieee/controller_test.cpp) | [PET pin map](../../docs/dev/PET/ieee.md) and [independent open-collector bus description](https://www.pagetable.com/?p=1023) |
 
 FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
 hardware/test contracts, not Commodore ROM compatibility claims. The existing

@@ -25,6 +25,7 @@ static_assert(!std::is_constructible_v<fpga::IeeeControl, fpga::IeeeControlStatu
 
 // Readback and command masks remain distinct, and status bit 7 is never EOI.
 TEST(IeeeTransactions, RegisterFlagsPreserveTheirHardwareDomains) {
+    EXPECT_EQ(pet::EoiInput, 0x40);
     EXPECT_EQ((fpga::IeeeControlBit::Enabled | fpga::IeeeControlBit::Flush).bits(), 0x03);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::TxRoom}.bits(), 0x02);
     EXPECT_TRUE(fpga::IeeeStatus::from_bits(0x80).contains(fpga::IeeeStatusBit::TalkStarved));
