@@ -38,6 +38,34 @@ enum class StatusBit : uint8_t {
 using Status = econopet::Flags<StatusBit>;
 using econopet::operator|;
 
+enum class IeeeControlBit : uint8_t {
+    Enabled = ECONOPET_IEEE_CTRL_ENABLE_MASK,
+    Flush = ECONOPET_IEEE_CTRL_FLUSH_MASK,
+    DataFlush = ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK,
+    All = Enabled | Flush | DataFlush,
+};
+using IeeeControl = econopet::Flags<IeeeControlBit>;
+
+enum class IeeeControlStatusBit : uint8_t {
+    Enabled = ECONOPET_IEEE_CTRL_RD_ENABLE_MASK,
+    TxRoom = ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK,
+    All = Enabled | TxRoom,
+};
+using IeeeControlStatus = econopet::Flags<IeeeControlStatusBit>;
+
+enum class IeeeStatusBit : uint8_t {
+    RxReady = ECONOPET_IEEE_ST_RX_AVAIL_MASK,
+    RxAtn = ECONOPET_IEEE_ST_RX_ATN_MASK,
+    TxFull = ECONOPET_IEEE_ST_TX_FULL_MASK,
+    TxEmpty = ECONOPET_IEEE_ST_TX_EMPTY_MASK,
+    Atn = ECONOPET_IEEE_ST_ATN_MASK,
+    Listening = ECONOPET_IEEE_ST_LISTENING_MASK,
+    Talking = ECONOPET_IEEE_ST_TALKING_MASK,
+    TalkStarved = ECONOPET_IEEE_ST_TALK_STARVED_MASK,
+    All = RxReady | RxAtn | TxFull | TxEmpty | Atn | Listening | Talking | TalkStarved,
+};
+using IeeeStatus = econopet::Flags<IeeeStatusBit>;
+
 enum class SpiCommand : uint8_t {
     ReadAt = ECONOPET_SPI_CMD_READ_AT,
     ReadNext = ECONOPET_SPI_CMD_READ_NEXT,
@@ -116,6 +144,13 @@ inline void validate_command(econopet::ByteView bytes) {
 
 // PET physical I/O addresses combine board decoding with chip register indices.
 namespace pet {
+inline constexpr uint8_t Ndac = 0x01;
+inline constexpr uint8_t Nrfd = 0x02;
+inline constexpr uint8_t Atn = 0x04;
+inline constexpr uint8_t NrfdInput = 0x40;
+inline constexpr uint8_t Dav = 0x80;
+inline constexpr uint8_t EoiInput = 0x40; // PIA1 PA6, not a VIA port-B line.
+
 // Map a checked VIA register into the PET CPU address space.
 constexpr econopet::CpuAddress address(econopet::io::ViaRegister reg) {
     if (std::to_underlying(reg) > M6522_REG_RA_NOH)

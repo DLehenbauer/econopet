@@ -1,5 +1,95 @@
 # Host test authoring reference
 
+## IEEE controller and protocol evidence
+
+The board-only IEEE layer requires neither firmware integration nor ROM media.
+[`IeeeController`](ieee/controller.h) installs a small RAM mailbox loop and
+executes every peripheral access on the production soft 6502. The assembler
+owns its mailbox, code, stack, and vectors. Construct it on a fresh board before
+enabling the virtual drive, and keep that board alive for its borrowed lifetime.
+Startup releases DAV, NDAC and EOI, preloads released DIO/ATN/NRFD latches, and
+then enables PIA2 PB0-7 and VIA PB1/PB2 outputs through the CPU mailbox.
+PIA2 PA0-7, PIA1 PA6 and VIA PB0/PB6/PB7 remain inputs. The synthetic harness
+does not configure unrelated keyboard/cassette pins as the full PET ROM does.
+The controller cannot be copied or moved. An interrupted mailbox transfer or
+handshake permanently marks it failed, rejecting further active work before
+patching or clocking. Do not resume it merely because the old command later
+acknowledges. Start with a fresh board and controller instead.
+Sending waits for both NRFD released (VIA PB6) and NDAC asserted (VIA PB0)
+before asserting DAV, then waits for acceptance and rearming.
+Receiving asserts NDAC and releases ATN with NRFD asserted before separately
+releasing NRFD, following the blocked `TKATN` role transition. After DAV asserts, it
+asserts NRFD before sampling EOI and data, acknowledges through NDAC release,
+waits for DAV release, and reasserts NDAC. Both acceptor lines remain asserted
+between calls, and consecutive bytes do not toggle ATN. This follows PET
+KERNAL 2.0's `ACPTR`, including its per-byte rearm rather than restarting TALK.
+
+[`transactions.h`](ieee/transactions.h) separates device addresses, secondary
+addresses, and Commodore channels, validating their domains before encoding.
+Only the typed factories construct commands, using shared production protocol
+constants after validation. Construction-access tests ensure there is no public arbitrary category/byte
+factory (including helpers in `detail`). Fixed termination helpers accept no
+caller-selected encoding. Unusual wire commands use `raw_record`/`raw_send`
+rather than forging a typed `Command`.
+Pure transaction, register-domain, record-matcher,
+and diagnostic tests in [`transactions_test.cpp`](ieee/transactions_test.cpp)
+run in the host-only target without Verilator. Board integration cases live in
+[`controller_test.cpp`](ieee/controller_test.cpp).
+Named commands and payloads create exact byte/ATN/EOI records. `raw_send` is the
+explicit escape for malformed command bytes, but still requires known EOI.
+Sequence comparisons check every field and length without board side effects.
+
+[`fifo.h`](ieee/fifo.h) actively samples and acknowledges RX through physical
+SPI. **RX stores byte and ATN only. Status bit 7 means talker starvation, not
+received EOI.** FIFO records therefore carry `Eoi::Unobserved`, and expected
+FIFO sequences must explicitly discard EOI with `fifo_record`/`fifo_records`.
+Do not infer final-byte EOI from FIFO status.
+
+[`WireTrace`](ieee/trace.h), obtained through `board.trace_ieee()`, passively
+records DAV assertion edges at completed-cycle boundaries. It observes
+the active-low bus resolved from fabric device signals, fitted PIA/VIA outputs, and
+external DAV (VIA PB7), DIO (PIA2 PA), EOI (PIA1 PA6), and ATN (PIA2 CA1)
+inputs, independent of RX consumption. GPIO output latches contribute only
+where DDR enables output. Initial attachment uses the same resolved DAV as
+capture, so an already-active physical transfer is not invented. Overlapping
+drivers cannot create a new DAV edge until every driver releases the bus.
+Controller ATN, DIO and DAV come only from the fitted peripherals. The fabric's
+raw CPU snoops are not additional drivers (they ignore DDR or can retain stale
+controller levels). Device-only DAV/DIO exports preserve the virtual talker's
+contribution without reintroducing those unqualified controller latches.
+The `Snapshot::ieee_bus_*` fields remain fabric-only observations, not the
+complete fitted-bus levels. Resolution is observational only (it neither drives
+peripheral inputs nor changes the fabric's CPU-data injection).
+Its scoped recorder retains source identity, timestamps, and coverage checks.
+
+`rx_empty_now` is one active status sample, not evidence of future silence.
+`require_rx_remains_empty` observes both interval endpoints and every completed
+cycle without consuming RX. Drains share one inherited deadline across nested
+SPI work and enforce explicit record limits. A failed sequence check may
+consume the first mismatch while leaving later records pending.
+
+### Compatibility evidence
+
+The controller is a synthetic test harness, not a replacement PET KERNAL.
+Its command bytes and three-wire handshake derive from the primary routines
+below. Tests use independent literal encodings and the real production bus.
+Simulation wrapper outputs expose existing signals without changing production
+RTL or physical timing constraints.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+| --- | --- | --- | --- | --- | --- |
+| Primary addressing and termination | PET KERNAL 2.0 and CBM 4040 | [KERNAL `TALK`, `LIST1`, `UNTLK`, `UNLSN`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `DCDE`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | LISTEN `$20+n`, TALK `$40+n`, UNLISTEN `$3F`, UNTALK `$5F` with ATN asserted | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent bus arbitration description](https://www.pagetable.com/?p=1031) |
+| Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
+| Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
+| Talk-to-data transition and per-byte acceptor rearm | PET KERNAL 2.0 | [KERNAL `TKATN`, `ER001`, `SCATN`, `ACPTR`, `ACP01`, `ACP03`, `ACP05`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) | Release ATN with NRFD asserted before advertising readiness. Assert NRFD before sampling EOI/DIO, release NDAC to accept, wait for DAV release, then reassert NDAC with NRFD still asserted. No intervening ATN edge between consecutive bytes | [controller](ieee/controller.h), [FPGA and independently timed source regressions](ieee/controller_test.cpp) | [Independent receiver handshake and rearm description](https://www.pagetable.com/?p=1023) and [NI handshake-line definitions (manual mirror)](https://documentation.help/NI-488.2/gpib0cs3.html) |
+| Passive physical-source evidence | PET KERNAL 2.0 and PET PIA/VIA wiring | [KERNAL `ACPTR`, `ACP01`, `ACP03`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) samples DAV, EOI and inverted DIO through the fitted input registers | Capture separately driven physical bytes through the PET input-pin map. Compose open-collector levels, honor GPIO direction and never invent an in-flight byte at attachment or driver handoff | [wire sampler](ieee/trace.h), [physical-source, GPIO and overlapping-driver regressions](ieee/controller_test.cpp) | [PET pin map](../../docs/dev/PET/ieee.md) and [independent open-collector bus description](https://www.pagetable.com/?p=1023) |
+| Physical GPIO initialization and direction | PET KERNAL 4.0 I/O initialization, PET KERNAL 2.0 handshake and PET wiring | [KERNAL 4.0 `CINT`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/oa1src) initializes VIA DDRB and PIA2 DDRB before selecting port access, with [register addresses](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/ossrc). [KERNAL 2.0 `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) drive DIO/ATN/NRFD and read the separate input pins | Enable the harness's DIO and ATN/NRFD outputs with released latches. Partial/input DDR releases disabled outputs despite retained CPU snoops. Preserve external and device contributions | [controller startup](ieee/controller.h), [physical-pin send/receive, CPU DDR, stale-DAV and virtual-source regressions](ieee/controller_test.cpp) | [PET pin map and I/O initialization disassembly](../../docs/dev/PET/ieee.md) |
+
+FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
+hardware/test contracts, not Commodore ROM compatibility claims. The existing
+[fabric RX and status definitions](../../gw/EconoPET/src/ieee.sv) establish the
+byte/ATN layout and separate talk-starved flag.
+
 ## Building fixture tests
 
 Build production with `RelWithDebInfo`. Build tests, simulator integration,
