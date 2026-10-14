@@ -37,6 +37,11 @@ static mem_file_t* find_mem_file(const char* path) {
     return NULL;
 }
 
+// Share duplicate detection with fixture owners before they claim a path.
+bool test_file_registered(const char* path) {
+    return find_mem_file(path) != NULL;
+}
+
 // Registers a read-only text fixture using the binary backing store.
 void test_register_file(const char* path, const char* content) {
     test_register_binary_file(path, content, strlen(content), false);
@@ -48,7 +53,7 @@ void test_register_binary_file(const char* path, const void* data, size_t size,
     // Check fixture identity before allocating its metadata and content.
     assert(path[0] == '/');
     vet_path_length(strlen(path));
-    assert(find_mem_file(path) == NULL);
+    assert(!test_file_registered(path));
 
     mem_file_t* file = malloc(sizeof(mem_file_t));
     strncpy(file->path, path, sizeof(file->path) - 1);

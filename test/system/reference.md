@@ -1,5 +1,92 @@
 # Host test authoring reference
 
+## Host firmware through production SPI
+
+[`FirmwareSession`](firmware.h) binds one board to the real
+host-compiled drive logic in [`ieee_drive.c`](../../fw/src/ieee/ieee_drive.c).
+It does not mock the drive or bypass FPGA register decoding. The
+[`SPI adapter`](ieee/ieee_drive_spi_adapter.cpp) replaces RP2040 transport
+calls with physical mode-0 SPI on the production-top simulator. It mirrors
+[`driver.c`](../../fw/src/driver.c)'s command encodings, pipeline return values,
+CS boundaries, stall handling, and fill chunking. It does not execute
+`driver.c` or model the RP2040 SSP peripheral. This layer proves transport and
+session contracts, not complete Commodore DOS compatibility or ROM-specific
+initialization.
+
+```cpp
+#include "firmware.h"
+#include "ieee/controller.h"
+
+System board;
+FirmwareSession firmware(board);  // Destroy before the borrowed board.
+IeeeController controller(board);
+firmware.mount(disk_fixture::D64::empty());
+auto rx = firmware.trace_rx();
+controller.command(ieee_test::Listen(ieee_test::Device{8}));
+
+// Service the real C firmware under the configured elapsed-cycle deadline.
+board.execution().within(10000)
+    .every(1, RunConfiguration::MissedService::Coalesce, firmware.service_adapter())
+    .until([&](const System&) { return rx.records().size() == 1; })
+    .run("firmware RX");
+rx.capture().require_count(1, "firmware consumed LISTEN");
+firmware.close();
+```
+
+Use `RunConfiguration::MissedService::Coalesce` when a service pass may
+overrun its nominal period (or include [`scheduler.h`](scheduler.h) for
+`Scheduler`). `service_adapter()` checks board identity and retains only a
+weak session-lifetime token. Invoking it after close or destruction throws
+before clocking, even if another session now owns that same board.
+Direct `service()` executes one production cooperative pass. Both forms use
+the board's active deadline, including every SPI clock, and reject unusable
+boards even when no disk is mounted.
+
+The session cannot be copied or moved. Construct it after the board and keep
+the board alive until the session is destroyed. There is one process-global
+drive implementation, so concurrent, threaded, and nested sessions are not
+supported. Explicit `close()` is idempotent and propagates teardown failure.
+After cleanup has begun, it releases its binding and freezes all RX recorders
+even if SPI fails. It closes production drive handles before unregistering
+only its own writable backing stores. Unrelated registered fixtures survive.
+Observation, input-edit, selected-SPI, and scheduled-stimulus contexts reject
+mutating session operations before touching C drive state. A rejected close
+precondition retains ownership for a later valid close.
+
+`mount()` copies bytes from a vector or checked D64 into drive slot zero using
+the production `/disks/` path helper and mount implementation. Names must be
+nonempty, fit `SD_PATH_MAX`, and not already be registered. The shared registry
+is checked before the session records ownership, so collisions with another
+fixture report a recoverable mount error without replacing or deleting that
+fixture. Within a live
+session each name is unique, even when a different image replaces slot zero.
+An unsupported image reports a mount error and releases its newly registered
+file so that name can be retried. If a mount is interrupted after the drive
+opens its file, the session retains cleanup ownership until close.
+[`FirmwareTest`](framework/firmware_test.h) adds an independent session to a
+fresh board and reports teardown errors through GoogleTest.
+`FirmwareTestSession` provides the same destructor reporter for local owners.
+Without a reporter, an unhandled destructor cleanup error terminates the
+process instead of being silently discarded.
+
+`trace_rx()` supports multiple simultaneous scoped recorders and retained
+captures after close. It records only adjacent successful absolute
+production status/RX reads with `RxReady`, with no intervening board cycles.
+Other physical SPI operations or clock advancement discard pending status
+evidence. Generic pipelined and bulk reads do not create
+semantic RX records. Reads are side-effect-free, so repeated complete
+status/RX pairs can record the same head until firmware explicitly pops it.
+These records contain byte and ATN, with `Eoi::Unobserved`. Use
+[`WireTrace`](ieee/trace.h) for independent physical EOI evidence. Compare
+FIFO evidence using `fifo_records`, not wire records with known EOI.
+
+[`firmware_test.cpp`](firmware_test.cpp) independently checks literal MOSI bytes
+and CS boundaries, read/write pipelines, bank crossing, buffer-sized fills,
+empty operations, full-range rejection, elapsed deadlines, real FIFO
+consumption, scoped lifetimes, callback guards, and exceptional cleanup.
+Firmware C frames are compiled with exception-unwind support so C++ SPI
+failures propagate through the real drive implementation.
+
 ## IEEE controller and protocol evidence
 
 The board-only IEEE layer requires neither firmware integration nor ROM media.
@@ -125,8 +212,10 @@ The shared D64 fixtures, checked framework value types, external PIA/VIA models,
 and their C++ tests run
 without Verilator, a simulated board, ROM media, or firmware transport.
 Standalone configuration defaults to `BUILD_BOARD_TESTS=OFF`. Root presets
-enable the production-top board tests as well, requiring Verilator but no ROM
-media or firmware transport.
+enable production-top board simulation and host firmware integration together,
+requiring Verilator and firmware headers but no ROM media. The board and
+firmware tests remain separate executables, keeping firmware globals and
+`fopen` wrapping out of board-only tests.
 
 Standalone builds require CMake 3.20 or later.
 Initialize the pinned peripheral model dependency before configuring:
@@ -145,8 +234,18 @@ ctest --test-dir build/host-fixtures --output-on-failure
 ```
 
 To include board simulation in a standalone build, configure with
-`-DBUILD_BOARD_TESTS=ON`. Its SID lookup table is copied into the generated
-board-test runtime directory, so tests do not rely on the source working directory.
+`-DBUILD_BOARD_TESTS=ON`. This also includes host firmware integration. Initialize
+its firmware header dependency before configuring a board-enabled build:
+
+```sh
+git submodule update --init fw/external/libyaml
+```
+
+The SID lookup table is copied into the generated board-test runtime directory,
+so tests do not rely on the source working directory. No Pico SDK, Check
+library, or ROM media is needed by the firmware target. Firmware and fixture sources
+stay in Debug and do not inherit the optimized model's flags. Firmware tests
+have the `firmware.` CTest prefix and the `firmware` label.
 
 The firmware Check tests also use the shared C builder. Build and run those
 with `cmake --build --preset fw-test` and `ctest --preset fw`.

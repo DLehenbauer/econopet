@@ -31,7 +31,7 @@ option(BUILD_ROM "Build the 6502 ROM subproject" ON)
 option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
 option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
 option(BUILD_TESTS "Build the firmware unit tests" ON)
-option(BUILD_SYSTEM_TESTS "Build the host system and hardware contract tests" ON)
+option(BUILD_SYSTEM_TESTS "Build host, board, firmware integration and hardware contract tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
 option(BUILD_PRGS "Build the test programs" ON)
 
@@ -124,7 +124,7 @@ if(BUILD_TESTS)
 endif()
 
 # ============================================================================
-# System Tests Subproject (host fixtures, hardware contract and production board)
+# System Tests Subproject (host fixtures, hardware contract, board and firmware)
 # ============================================================================
 if(BUILD_SYSTEM_TESTS)
     ExternalProject_Add(system_test_project
