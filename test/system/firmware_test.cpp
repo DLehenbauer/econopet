@@ -18,7 +18,7 @@ extern "C" {
 }
 
 namespace {
-struct UnwindSentinel {};
+struct UnwindSentinel { int value = 0; };
 static_assert(!std::is_copy_constructible_v<FirmwareSession>);
 static_assert(!std::is_move_constructible_v<FirmwareSession>);
 static_assert(!std::is_constructible_v<FirmwareSession, System&&>);
@@ -354,6 +354,160 @@ TEST_F(SystemTest, FirmwareTestSessionReportsTeardownFailureAndReleasesBinding) 
     EXPECT_TRUE(system.spi().peek_failed());
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
+}
+
+// A live non-standard observer exception must reach the reporter, not terminate the runner.
+TEST_F(SystemTest, FirmwareTestSessionReportsNonStandardDestructorFailure) {
+    System::ObserverSubscription observation;
+    EXPECT_NONFATAL_FAILURE({
+        FirmwareTestSession session(system);
+        session.mount(disk_fixture::D64::empty());
+        observation = system.observe([](const System&) { throw UnwindSentinel{}; });
+    }, "firmware teardown failed: non-standard exception");
+    observation.reset();
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    System other;
+    EXPECT_NO_THROW({
+        FirmwareTestSession next(other);
+        next.mount(disk_fixture::D64::empty());
+    });
+}
+
+// Fixture teardown must report the same exception domain as local session destruction.
+TEST_F(FirmwareTest, FirmwareFixtureReportsNonStandardExplicitTeardownFailure) {
+    firmware.mount(disk_fixture::D64::empty());
+    auto observation = system.observe([](const System&) { throw UnwindSentinel{}; });
+    EXPECT_NONFATAL_FAILURE(TearDown(), "firmware teardown failed: non-standard exception");
+    observation.reset();
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_NO_THROW(firmware.close());
+    System other;
+    EXPECT_NO_THROW(FirmwareTestSession next(other));
+}
+
+// Standard fixture teardown keeps the original diagnostic through the shared reporter.
+TEST_F(FirmwareTest, FirmwareFixtureReportsOriginalStandardTeardownDiagnostic) {
+    firmware.mount(disk_fixture::D64::empty());
+    auto observation = system.observe([](const System&) {
+        throw std::runtime_error("explicit teardown observer failure");
+    });
+    EXPECT_NONFATAL_FAILURE(TearDown(), "firmware teardown failed: explicit teardown observer failure");
+    observation.reset();
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_NO_THROW(firmware.close());
+    System other;
+    EXPECT_NO_THROW(FirmwareTestSession next(other));
+}
+
+// A custom reporter retains the exact dynamic type and payload after destruction.
+TEST_F(SystemTest, FirmwareTeardownReporterRetainsOriginalExceptionAndFrozenTrace) {
+    static std::exception_ptr reported;
+    for (const bool standard : {false, true}) {
+        System board;
+        System::ObserverSubscription observation;
+        std::optional<FirmwareRxTrace> rx;
+        reported = {};
+        {
+            FirmwareSession session(board, [](std::exception_ptr error) { reported = error; });
+            session.mount(disk_fixture::D64::empty());
+            rx.emplace(session.trace_rx());
+            observation = board.observe([standard](const System&) {
+                if (standard) throw std::runtime_error("original teardown diagnostic");
+                throw UnwindSentinel{42};
+            });
+        }
+        observation.reset();
+        ASSERT_TRUE(reported);
+        try {
+            std::rethrow_exception(reported);
+            FAIL() << "reporter lost teardown failure";
+        } catch (const std::runtime_error& error) {
+            EXPECT_TRUE(standard);
+            EXPECT_STREQ(error.what(), "original teardown diagnostic");
+        } catch (const UnwindSentinel& error) {
+            EXPECT_FALSE(standard);
+            EXPECT_EQ(error.value, 42);
+        }
+        EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+        const auto frozen_end = rx->capture().window().completed();
+        FirmwareSession replacement(system);
+        replacement.mount(disk_fixture::D64::empty());
+        replacement.service();
+        EXPECT_EQ(rx->capture().window().completed(), frozen_end);
+        EXPECT_NO_THROW(replacement.close());
+        reported = {};
+    }
+}
+
+// Failed explicit close preserves a non-standard cause and still releases all session owners.
+TEST_F(SystemTest, FirmwareExplicitCloseRethrowsNonStandardFailureAfterCleanup) {
+    FirmwareSession session(system);
+    session.mount(disk_fixture::D64::empty());
+    auto borrowed = session.service_adapter();
+    auto rx = session.trace_rx();
+    auto observation = system.observe([](const System&) { throw UnwindSentinel{17}; });
+    try {
+        session.close();
+        FAIL() << "expected non-standard teardown failure";
+    } catch (const UnwindSentinel& error) {
+        EXPECT_EQ(error.value, 17);
+    }
+    observation.reset();
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    const auto at = system.time();
+    EXPECT_NO_THROW(session.close());
+    EXPECT_THROW(borrowed(system, 1), std::logic_error);
+    EXPECT_EQ(system.time(), at);
+    const auto frozen_end = rx.capture().window().completed();
+    System other;
+    FirmwareSession replacement(other);
+    replacement.mount(disk_fixture::D64::empty());
+    replacement.service();
+    EXPECT_EQ(rx.capture().window().completed(), frozen_end);
+}
+
+// Teardown reporting during unwind must not replace the original active exception.
+TEST_F(SystemTest, FirmwareNonStandardTeardownDuringUnwindPreservesOuterFailure) {
+    System::ObserverSubscription observation;
+    bool caught_outer = false;
+    EXPECT_NONFATAL_FAILURE({
+        try {
+            FirmwareTestSession session(system);
+            session.mount(disk_fixture::D64::empty());
+            observation = system.observe([](const System&) { throw UnwindSentinel{}; });
+            throw std::runtime_error("outer scenario failure");
+        } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(error.what(), "outer scenario failure");
+            caught_outer = true;
+        }
+    }, "firmware teardown failed: non-standard exception");
+    observation.reset();
+    EXPECT_TRUE(caught_outer);
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    System other;
+    EXPECT_NO_THROW(FirmwareTestSession next(other));
+}
+
+// Without a reporter, both exception domains retain the documented fail-fast policy.
+TEST_F(SystemTest, FirmwareUnhandledDestructorFailuresEmitDiagnosticsAndTerminate) {
+    for (const bool standard : {false, true}) {
+        EXPECT_DEATH({
+            System::ObserverSubscription observation;
+            FirmwareSession session(system);
+            session.mount(disk_fixture::D64::empty());
+            observation = system.observe([standard](const System&) {
+                if (standard) throw std::runtime_error("unhandled standard failure");
+                throw UnwindSentinel{};
+            });
+        }, standard ? "firmware teardown failed: unhandled standard failure"
+                    : "firmware teardown failed: non-standard exception");
+    }
+    // Each death-test child has independent bindings, leaving the parent usable.
+    EXPECT_NO_THROW(FirmwareSession next(system));
 }
 
 // Expired callbacks cannot service a replacement owner's process-global drive.

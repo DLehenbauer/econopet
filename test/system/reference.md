@@ -66,8 +66,14 @@ opens its file, the session retains cleanup ownership until close.
 [`FirmwareTest`](framework/firmware_test.h) adds an independent session to a
 fresh board and reports teardown errors through GoogleTest.
 `FirmwareTestSession` provides the same destructor reporter for local owners.
-Without a reporter, an unhandled destructor cleanup error terminates the
-process instead of being silently discarded.
+Both fixture teardown and local session destruction report standard and
+non-standard C++ exceptions. Standard exceptions retain their `what()` message,
+while other types report `non-standard exception`. A custom
+`FirmwareSession::TeardownErrorHandler` receives the original `std::exception_ptr`
+and must return without throwing. Explicit `close()` still rethrows the original
+exception after releasing ownership. Without a reporter, any destructor cleanup
+error prints a diagnostic and terminates the process instead of being silently
+discarded.
 
 `trace_rx()` supports multiple simultaneous scoped recorders and retained
 captures after close. It records only adjacent successful absolute

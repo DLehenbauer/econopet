@@ -25,7 +25,8 @@ class FirmwareRxTrace;
 // Mutating operations require an idle bus, outside observation/input-edit/stimulus callbacks.
 class FirmwareSession {
 public:
-    using TeardownErrorHandler = void (*)(const std::exception&);
+    // Receive the original teardown exception of any type and return without throwing.
+    using TeardownErrorHandler = void (*)(std::exception_ptr);
 
     // Bind physical SPI and initialize fresh production drive state.
     explicit FirmwareSession(System& system, TeardownErrorHandler teardown_error = nullptr);

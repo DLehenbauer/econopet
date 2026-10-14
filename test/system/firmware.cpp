@@ -77,11 +77,17 @@ FirmwareSession::FirmwareSession(System& system, TeardownErrorHandler teardown_e
 FirmwareSession::~FirmwareSession() {
     try {
         close();
-    } catch (const std::exception& error) {
+    } catch (...) {
         if (teardown_error_) {
-            teardown_error_(error);
+            teardown_error_(std::current_exception());
         } else {
-            std::fprintf(stderr, "firmware teardown failed: %s\n", error.what());
+            try {
+                throw;
+            } catch (const std::exception& error) {
+                std::fprintf(stderr, "firmware teardown failed: %s\n", error.what());
+            } catch (...) {
+                std::fprintf(stderr, "firmware teardown failed: non-standard exception\n");
+            }
             std::terminate();
         }
     }

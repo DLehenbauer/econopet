@@ -12,9 +12,16 @@ public:
     explicit FirmwareTestSession(System& system) : FirmwareSession(system, report_teardown_error) {}
 
 private:
+    friend class FirmwareTest;
     // Preserve cleanup errors as test failures without terminating the runner.
-    static void report_teardown_error(const std::exception& error) {
-        ADD_FAILURE() << "firmware teardown failed: " << error.what();
+    static void report_teardown_error(std::exception_ptr error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (const std::exception& detail) {
+            ADD_FAILURE() << "firmware teardown failed: " << detail.what();
+        } catch (...) {
+            ADD_FAILURE() << "firmware teardown failed: non-standard exception";
+        }
     }
 };
 
@@ -25,8 +32,8 @@ protected:
     void TearDown() override {
         try {
             firmware.close();
-        } catch (const std::exception& error) {
-            ADD_FAILURE() << "firmware teardown failed: " << error.what();
+        } catch (...) {
+            FirmwareTestSession::report_teardown_error(std::current_exception());
         }
         SystemTest::TearDown();
     }
