@@ -3779,7 +3779,7 @@
 	)
 	(hierarchical_label "BJIFFY"
 		(shape output)
-		(at 234.95 54.61 0)
+		(at 234.95 52.07 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4043,7 +4043,7 @@
 	)
 	(hierarchical_label "BPHI2_PIA1"
 		(shape output)
-		(at 234.95 52.07 0)
+		(at 234.95 54.61 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
