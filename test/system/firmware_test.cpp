@@ -510,6 +510,88 @@ TEST_F(SystemTest, FirmwareUnhandledDestructorFailuresEmitDiagnosticsAndTerminat
     EXPECT_NO_THROW(FirmwareSession next(system));
 }
 
+// Reporting cannot let a rejected destructor return with dangling global ownership.
+TEST_F(SystemTest, FirmwareRejectedDestructorReportsThenTerminatesInEveryGuardedContext) {
+    enum class Context { Observation, PinEdit, PeripheralEdit, ScheduledStimulus, ScopedSpi, RawSpi };
+    for (const auto context : {Context::Observation, Context::PinEdit, Context::PeripheralEdit,
+                              Context::ScheduledStimulus, Context::ScopedSpi, Context::RawSpi}) {
+        EXPECT_DEATH({
+            auto session = std::make_unique<FirmwareSession>(system, [](std::exception_ptr error) {
+                try {
+                    std::rethrow_exception(error);
+                } catch (const std::logic_error&) {
+                    std::fputs("reported rejected teardown: ", stderr);
+                }
+            });
+            session->mount(disk_fixture::D64::empty());
+            switch (context) {
+            case Context::Observation: {
+                auto observation = system.observe([&](const System&) { session.reset(); });
+                system.tick(1);
+                break;
+            }
+            case Context::PinEdit:
+                system.raw_stimulus([&](auto&) { session.reset(); });
+                break;
+            case Context::PeripheralEdit:
+                system.io().pia1().inputs([&](auto&) { session.reset(); });
+                break;
+            case Context::ScheduledStimulus:
+                system.execution().within(10)
+                    .after(1, [&](System&) { session.reset(); })
+                    .run("rejected session destruction");
+                break;
+            case Context::ScopedSpi:
+                system.spi().transaction([&](auto&) { session.reset(); });
+                break;
+            case Context::RawSpi:
+                system.drive_spi(false, false, false);
+                session.reset();
+                break;
+            }
+        }, "reported rejected teardown: firmware teardown cannot abandon an active session");
+    }
+    // The rejecting child processes must never corrupt the parent registry.
+    EXPECT_NO_THROW(FirmwareSession next(system));
+}
+
+// A rejected fixture close retains a live owner, unlike a rejected destructor.
+TEST_F(FirmwareTest, FirmwareRejectedFixtureTeardownRetainsOwnershipUntilRetry) {
+    firmware.mount(disk_fixture::D64::empty());
+    auto rx = firmware.trace_rx();
+    auto observation = system.observe([&](const System&) { TearDown(); });
+    EXPECT_NONFATAL_FAILURE(system.tick(1), "callback cannot mutate or advance the board");
+    observation.reset();
+    EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(system.spi().peek_failed());
+    EXPECT_NO_THROW(firmware.service());
+    EXPECT_NO_THROW(firmware.close());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    const auto frozen_end = rx.capture().window().completed();
+    System other;
+    EXPECT_NO_THROW(FirmwareTestSession next(other));
+    EXPECT_EQ(rx.capture().window().completed(), frozen_end);
+}
+
+// Explicit selected-bus rejection must keep files and bindings available for a later close.
+TEST_F(FirmwareTest, FirmwareSelectedBusCloseRetainsOwnershipUntilRetry) {
+    firmware.mount(disk_fixture::D64::empty());
+    system.spi().transaction([&](auto&) {
+        EXPECT_THROW(firmware.close(), std::logic_error);
+        EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+    });
+    system.drive_spi(false, false, false);
+    EXPECT_THROW(firmware.close(), std::logic_error);
+    EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+    system.drive_spi(true, false, false);
+    system.tick(1);
+    EXPECT_NO_THROW(firmware.service());
+    EXPECT_NO_THROW(firmware.close());
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    System other;
+    EXPECT_NO_THROW(FirmwareTestSession next(other));
+}
+
 // Expired callbacks cannot service a replacement owner's process-global drive.
 TEST_F(SystemTest, FirmwareServiceAdapterRejectsDestroyedSessionWithoutClocks) {
     RunConfiguration::Service borrowed;

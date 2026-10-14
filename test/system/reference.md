@@ -51,7 +51,11 @@ even if SPI fails. It closes production drive handles before unregistering
 only its own writable backing stores. Unrelated registered fixtures survive.
 Observation, input-edit, selected-SPI, and scheduled-stimulus contexts reject
 mutating session operations before touching C drive state. A rejected close
-precondition retains ownership for a later valid close.
+precondition retains ownership for a later valid explicit close. Destruction
+cannot retain ownership for a retry: if cleanup was rejected and the session
+is still active after reporting, it prints a diagnostic and terminates.
+This prevents dangling process-global bindings without forcing unsafe drive
+cleanup inside observation, input-edit, stimulus, or selected-SPI callbacks.
 
 `mount()` copies bytes from a vector or checked D64 into drive slot zero using
 the production `/disks/` path helper and mount implementation. Names must be

@@ -30,7 +30,7 @@ public:
 
     // Bind physical SPI and initialize fresh production drive state.
     explicit FirmwareSession(System& system, TeardownErrorHandler teardown_error = nullptr);
-    // Close the session. An unhandled teardown failure is fatal, never ignored.
+    // Close the session. Unreported errors or ownership still active after reporting are fatal.
     ~FirmwareSession();
     FirmwareSession(const FirmwareSession&) = delete;
     FirmwareSession& operator=(const FirmwareSession&) = delete;

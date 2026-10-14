@@ -80,6 +80,11 @@ FirmwareSession::~FirmwareSession() {
     } catch (...) {
         if (teardown_error_) {
             teardown_error_(std::current_exception());
+            // A rejected close may be retried only while its owner still exists.
+            if (*active_) {
+                std::fprintf(stderr, "firmware teardown cannot abandon an active session\n");
+                std::terminate();
+            }
         } else {
             try {
                 throw;
