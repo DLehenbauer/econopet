@@ -10,6 +10,10 @@
 #include "hardware_contract.h"
 #include "system_state.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void driver_init();
 
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest);
@@ -78,3 +82,7 @@ void bp_clear_halt();
 
 void read_pet_model(system_state_t* const system_state);
 void write_pet_model(const system_state_t* const system_state);
+
+#ifdef __cplusplus
+}
+#endif

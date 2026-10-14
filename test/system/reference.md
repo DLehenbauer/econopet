@@ -1,5 +1,192 @@
 # Host test authoring reference
 
+## Host firmware through production SPI
+
+[`FirmwareSession`](firmware.h) binds one board to the real
+host-compiled drive logic in [`ieee_drive.c`](../../fw/src/ieee/ieee_drive.c).
+It does not mock the drive or bypass FPGA register decoding. The
+[`SPI adapter`](ieee/ieee_drive_spi_adapter.cpp) replaces RP2040 transport
+calls with physical mode-0 SPI on the production-top simulator. It mirrors
+[`driver.c`](../../fw/src/driver.c)'s command encodings, pipeline return values,
+CS boundaries, stall handling, and fill chunking. It does not execute
+`driver.c` or model the RP2040 SSP peripheral. This layer proves transport and
+session contracts, not complete Commodore DOS compatibility or ROM-specific
+initialization.
+
+```cpp
+#include "firmware.h"
+#include "ieee/controller.h"
+
+System board;
+FirmwareSession firmware(board);  // Destroy before the borrowed board.
+IeeeController controller(board);
+firmware.mount(disk_fixture::D64::empty());
+auto rx = firmware.trace_rx();
+controller.command(ieee_test::Listen(ieee_test::Device{8}));
+
+// Service the real C firmware under the configured elapsed-cycle deadline.
+board.execution().within(10000)
+    .every(1, RunConfiguration::MissedService::Coalesce, firmware.service_adapter())
+    .until([&](const System&) { return rx.records().size() == 1; })
+    .run("firmware RX");
+rx.capture().require_count(1, "firmware consumed LISTEN");
+firmware.close();
+```
+
+Use `RunConfiguration::MissedService::Coalesce` when a service pass may
+overrun its nominal period (or include [`scheduler.h`](scheduler.h) for
+`Scheduler`). `service_adapter()` checks board identity and retains only a
+weak session-lifetime token. Invoking it after close or destruction throws
+before clocking, even if another session now owns that same board.
+Direct `service()` executes one production cooperative pass. Both forms use
+the board's active deadline, including every SPI clock, and reject unusable
+boards even when no disk is mounted.
+
+The session cannot be copied or moved. Construct it after the board and keep
+the board alive until the session is destroyed. There is one process-global
+drive implementation, so concurrent, threaded, and nested sessions are not
+supported. Explicit `close()` is idempotent and propagates teardown failure.
+After cleanup has begun, it releases its binding and freezes all RX recorders
+even if SPI fails. It closes production drive handles before unregistering
+only its own writable backing stores. Unrelated registered fixtures survive.
+Observation, input-edit, selected-SPI, and scheduled-stimulus contexts reject
+mutating session operations before touching C drive state. A rejected close
+precondition retains ownership for a later valid explicit close. Destruction
+cannot retain ownership for a retry: if cleanup was rejected and the session
+is still active after reporting, it prints a diagnostic and terminates.
+This prevents dangling process-global bindings without forcing unsafe drive
+cleanup inside observation, input-edit, stimulus, or selected-SPI callbacks.
+
+`mount()` copies bytes from a vector or checked D64 into drive slot zero using
+the production `/disks/` path helper and mount implementation. Names must be
+nonempty, fit `SD_PATH_MAX`, and not already be registered. The shared registry
+is checked before the session records ownership, so collisions with another
+fixture report a recoverable mount error without replacing or deleting that
+fixture. Within a live
+session each name is unique, even when a different image replaces slot zero.
+An unsupported image reports a mount error and releases its newly registered
+file so that name can be retried. If a mount is interrupted after the drive
+opens its file, the session retains cleanup ownership until close.
+[`FirmwareTest`](framework/firmware_test.h) adds an independent session to a
+fresh board and reports teardown errors through GoogleTest.
+`FirmwareTestSession` provides the same destructor reporter for local owners.
+Both fixture teardown and local session destruction report standard and
+non-standard C++ exceptions. Standard exceptions retain their `what()` message,
+while other types report `non-standard exception`. A custom
+`FirmwareSession::TeardownErrorHandler` receives the original `std::exception_ptr`
+and must return without throwing. Explicit `close()` still rethrows the original
+exception after releasing ownership. Without a reporter, any destructor cleanup
+error prints a diagnostic and terminates the process instead of being silently
+discarded.
+
+`trace_rx()` supports multiple simultaneous scoped recorders and retained
+captures after close. It records only adjacent successful absolute
+production status/RX reads with `RxReady`, with no intervening board cycles.
+Other physical SPI operations or clock advancement discard pending status
+evidence. Generic pipelined and bulk reads do not create
+semantic RX records. Reads are side-effect-free, so repeated complete
+status/RX pairs can record the same head until firmware explicitly pops it.
+These records contain byte and ATN, with `Eoi::Unobserved`. Use
+[`WireTrace`](ieee/trace.h) for independent physical EOI evidence. Compare
+FIFO evidence using `fifo_records`, not wire records with known EOI.
+
+[`firmware_test.cpp`](firmware_test.cpp) independently checks literal MOSI bytes
+and CS boundaries, read/write pipelines, bank crossing, buffer-sized fills,
+empty operations, full-range rejection, elapsed deadlines, real FIFO
+consumption, scoped lifetimes, callback guards, and exceptional cleanup.
+Firmware C frames are compiled with exception-unwind support so C++ SPI
+failures propagate through the real drive implementation.
+
+## IEEE controller and protocol evidence
+
+The board-only IEEE layer requires neither firmware integration nor ROM media.
+[`IeeeController`](ieee/controller.h) installs a small RAM mailbox loop and
+executes every peripheral access on the production soft 6502. The assembler
+owns its mailbox, code, stack, and vectors. Construct it on a fresh board before
+enabling the virtual drive, and keep that board alive for its borrowed lifetime.
+Startup releases DAV, NDAC and EOI, preloads released DIO/ATN/NRFD latches, and
+then enables PIA2 PB0-7 and VIA PB1/PB2 outputs through the CPU mailbox.
+PIA2 PA0-7, PIA1 PA6 and VIA PB0/PB6/PB7 remain inputs. The synthetic harness
+does not configure unrelated keyboard/cassette pins as the full PET ROM does.
+The controller cannot be copied or moved. An interrupted mailbox transfer or
+handshake permanently marks it failed, rejecting further active work before
+patching or clocking. Do not resume it merely because the old command later
+acknowledges. Start with a fresh board and controller instead.
+Sending waits for both NRFD released (VIA PB6) and NDAC asserted (VIA PB0)
+before asserting DAV, then waits for acceptance and rearming.
+Receiving asserts NDAC and releases ATN with NRFD asserted before separately
+releasing NRFD, following the blocked `TKATN` role transition. After DAV asserts, it
+asserts NRFD before sampling EOI and data, acknowledges through NDAC release,
+waits for DAV release, and reasserts NDAC. Both acceptor lines remain asserted
+between calls, and consecutive bytes do not toggle ATN. This follows PET
+KERNAL 2.0's `ACPTR`, including its per-byte rearm rather than restarting TALK.
+
+[`transactions.h`](ieee/transactions.h) separates device addresses, secondary
+addresses, and Commodore channels, validating their domains before encoding.
+Only the typed factories construct commands, using shared production protocol
+constants after validation. Construction-access tests ensure there is no public arbitrary category/byte
+factory (including helpers in `detail`). Fixed termination helpers accept no
+caller-selected encoding. Unusual wire commands use `raw_record`/`raw_send`
+rather than forging a typed `Command`.
+Pure transaction, register-domain, record-matcher,
+and diagnostic tests in [`transactions_test.cpp`](ieee/transactions_test.cpp)
+run in the host-only target without Verilator. Board integration cases live in
+[`controller_test.cpp`](ieee/controller_test.cpp).
+Named commands and payloads create exact byte/ATN/EOI records. `raw_send` is the
+explicit escape for malformed command bytes, but still requires known EOI.
+Sequence comparisons check every field and length without board side effects.
+
+[`fifo.h`](ieee/fifo.h) actively samples and acknowledges RX through physical
+SPI. **RX stores byte and ATN only. Status bit 7 means talker starvation, not
+received EOI.** FIFO records therefore carry `Eoi::Unobserved`, and expected
+FIFO sequences must explicitly discard EOI with `fifo_record`/`fifo_records`.
+Do not infer final-byte EOI from FIFO status.
+
+[`WireTrace`](ieee/trace.h), obtained through `board.trace_ieee()`, passively
+records DAV assertion edges at completed-cycle boundaries. It observes
+the active-low bus resolved from fabric device signals, fitted PIA/VIA outputs, and
+external DAV (VIA PB7), DIO (PIA2 PA), EOI (PIA1 PA6), and ATN (PIA2 CA1)
+inputs, independent of RX consumption. GPIO output latches contribute only
+where DDR enables output. Initial attachment uses the same resolved DAV as
+capture, so an already-active physical transfer is not invented. Overlapping
+drivers cannot create a new DAV edge until every driver releases the bus.
+Controller ATN, DIO and DAV come only from the fitted peripherals. The fabric's
+raw CPU snoops are not additional drivers (they ignore DDR or can retain stale
+controller levels). Device-only DAV/DIO exports preserve the virtual talker's
+contribution without reintroducing those unqualified controller latches.
+The `Snapshot::ieee_bus_*` fields remain fabric-only observations, not the
+complete fitted-bus levels. Resolution is observational only (it neither drives
+peripheral inputs nor changes the fabric's CPU-data injection).
+Its scoped recorder retains source identity, timestamps, and coverage checks.
+
+`rx_empty_now` is one active status sample, not evidence of future silence.
+`require_rx_remains_empty` observes both interval endpoints and every completed
+cycle without consuming RX. Drains share one inherited deadline across nested
+SPI work and enforce explicit record limits. A failed sequence check may
+consume the first mismatch while leaving later records pending.
+
+### Compatibility evidence
+
+The controller is a synthetic test harness, not a replacement PET KERNAL.
+Its command bytes and three-wire handshake derive from the primary routines
+below. Tests use independent literal encodings and the real production bus.
+Simulation wrapper outputs expose existing signals without changing production
+RTL or physical timing constraints.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+| --- | --- | --- | --- | --- | --- |
+| Primary addressing and termination | PET KERNAL 2.0 and CBM 4040 | [KERNAL `TALK`, `LIST1`, `UNTLK`, `UNLSN`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `DCDE`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | LISTEN `$20+n`, TALK `$40+n`, UNLISTEN `$3F`, UNTALK `$5F` with ATN asserted | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent bus arbitration description](https://www.pagetable.com/?p=1031) |
+| Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
+| Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
+| Talk-to-data transition and per-byte acceptor rearm | PET KERNAL 2.0 | [KERNAL `TKATN`, `ER001`, `SCATN`, `ACPTR`, `ACP01`, `ACP03`, `ACP05`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) | Release ATN with NRFD asserted before advertising readiness. Assert NRFD before sampling EOI/DIO, release NDAC to accept, wait for DAV release, then reassert NDAC with NRFD still asserted. No intervening ATN edge between consecutive bytes | [controller](ieee/controller.h), [FPGA and independently timed source regressions](ieee/controller_test.cpp) | [Independent receiver handshake and rearm description](https://www.pagetable.com/?p=1023) and [NI handshake-line definitions (manual mirror)](https://documentation.help/NI-488.2/gpib0cs3.html) |
+| Passive physical-source evidence | PET KERNAL 2.0 and PET PIA/VIA wiring | [KERNAL `ACPTR`, `ACP01`, `ACP03`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) samples DAV, EOI and inverted DIO through the fitted input registers | Capture separately driven physical bytes through the PET input-pin map. Compose open-collector levels, honor GPIO direction and never invent an in-flight byte at attachment or driver handoff | [wire sampler](ieee/trace.h), [physical-source, GPIO and overlapping-driver regressions](ieee/controller_test.cpp) | [PET pin map](../../docs/dev/PET/ieee.md) and [independent open-collector bus description](https://www.pagetable.com/?p=1023) |
+| Physical GPIO initialization and direction | PET KERNAL 4.0 I/O initialization, PET KERNAL 2.0 handshake and PET wiring | [KERNAL 4.0 `CINT`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/oa1src) initializes VIA DDRB and PIA2 DDRB before selecting port access, with [register addresses](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/ossrc). [KERNAL 2.0 `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) drive DIO/ATN/NRFD and read the separate input pins | Enable the harness's DIO and ATN/NRFD outputs with released latches. Partial/input DDR releases disabled outputs despite retained CPU snoops. Preserve external and device contributions | [controller startup](ieee/controller.h), [physical-pin send/receive, CPU DDR, stale-DAV and virtual-source regressions](ieee/controller_test.cpp) | [PET pin map and I/O initialization disassembly](../../docs/dev/PET/ieee.md) |
+
+FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
+hardware/test contracts, not Commodore ROM compatibility claims. The existing
+[fabric RX and status definitions](../../gw/EconoPET/src/ieee.sv) establish the
+byte/ATN layout and separate talk-starved flag.
+
 ## Building fixture tests
 
 Build production with `RelWithDebInfo`. Build tests, simulator integration,
@@ -35,8 +222,10 @@ The shared D64 fixtures, checked framework value types, external PIA/VIA models,
 and their C++ tests run
 without Verilator, a simulated board, ROM media, or firmware transport.
 Standalone configuration defaults to `BUILD_BOARD_TESTS=OFF`. Root presets
-enable the production-top board tests as well, requiring Verilator but no ROM
-media or firmware transport.
+enable production-top board simulation and host firmware integration together,
+requiring Verilator and firmware headers but no ROM media. The board and
+firmware tests remain separate executables, keeping firmware globals and
+`fopen` wrapping out of board-only tests.
 
 Standalone builds require CMake 3.20 or later.
 Initialize the pinned peripheral model dependency before configuring:
@@ -55,8 +244,18 @@ ctest --test-dir build/host-fixtures --output-on-failure
 ```
 
 To include board simulation in a standalone build, configure with
-`-DBUILD_BOARD_TESTS=ON`. Its SID lookup table is copied into the generated
-board-test runtime directory, so tests do not rely on the source working directory.
+`-DBUILD_BOARD_TESTS=ON`. This also includes host firmware integration. Initialize
+its firmware header dependency before configuring a board-enabled build:
+
+```sh
+git submodule update --init fw/external/libyaml
+```
+
+The SID lookup table is copied into the generated board-test runtime directory,
+so tests do not rely on the source working directory. No Pico SDK, Check
+library, or ROM media is needed by the firmware target. Firmware and fixture sources
+stay in Debug and do not inherit the optimized model's flags. Firmware tests
+have the `firmware.` CTest prefix and the `firmware` label.
 
 The firmware Check tests also use the shared C builder. Build and run those
 with `cmake --build --preset fw-test` and `ctest --preset fw`.
@@ -667,9 +866,10 @@ phase and IEEE tests are excluded until their consuming layers land.
 
 ## Checked layouts and owned memory
 
-[`framework/asm.h`](framework/asm.h) currently publishes only layout primitives:
-`test_asm::Scenario`, `Region` and `RegionKind`. Instruction encoding, labels,
-program builders and execution remain later layers.
+[`framework/asm.h`](framework/asm.h) publishes layout primitives
+(`test_asm::Scenario`, `Region` and `RegionKind`) and the explicit CPU-specific
+assembly APIs described below. Complete program builders and execution remain
+later layers.
 [`framework/memory.h`](framework/memory.h) supplies lower-bank views, named
 byte/word/buffer handles and detached captures.
 
@@ -733,15 +933,339 @@ outside the captured view and foreign operands reject. Captures and operands
 can outlive both layout and board, and subsequent backing changes do not modify
 captured data. Lvalue `raw_bytes()` borrows immutable storage. Mutable temporary
 access transfers bytes, immutable temporary access copies them. Moving or
-draining a capture invalidates its source for subsequent reads. Captures are
-always nonempty, so no `empty()` state query is provided.
-Named automatic allocation and selective program-result capture are
-deferred until complete program builders exist.
+draining a capture invalidates its source for subsequent reads. View captures
+are always nonempty, so MemoryCapture has no `empty()` state query.
+Complete program builders also support named allocation and selective capture
+(see the checked execution section below).
 
 Pure contract tests are in [`layout_test.cpp`](layout_test.cpp), included even
 with `BUILD_BOARD_TESTS=OFF`. Board backing, diagnostic and observation-guard
-checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Mixed program
-and phase memory cases remain deferred with their consuming layers.
+checks are in [`layout_board_test.cpp`](layout_board_test.cpp). Program
+memory cases are in [`memory_test.cpp`](memory_test.cpp). Phase memory cases
+are in [`phase_integration_test.cpp`](phase_integration_test.cpp).
+
+## CPU-specific assembly and fluent instructions
+
+Explicit `test_asm::mos6502::Program` and `test_asm::mc6809::Program` assemble
+into a previously reserved Code region. They borrow a persistent `Scenario`,
+which in turn borrows its backing memory. Both must outlive the program.
+Assembly and `install()` do not automatically reset or select a CPU, initialize
+its stack or execute code. Checked execution is a separate terminal operation.
+Cooperative pause/resume is available through the builder's restricted facade,
+not through an explicit standalone assembler.
+
+```cpp
+test_asm::Scenario layout(system);
+const auto code = layout.reserve("code", test_asm::RegionKind::Code,
+                                 econopet::CpuAddress{0x300}, 32);
+test_asm::mos6502::Program program(layout, code);
+const auto subroutine = program.label("subroutine");
+const auto stopped = program.label("stopped");
+program.sei().ldx(test_asm::imm(0xff)).txs().jsr(subroutine).jmp(stopped);
+program.bind(subroutine);
+program.lda(test_asm::imm(0x42)).sta(econopet::CpuAddress{0x200}).rts();
+program.bind(stopped);
+program.jmp(stopped);
+program.install();
+```
+
+This example demonstrates assembly and installation only. `install()` does not
+start the CPU. Authors may use the existing explicit CPU lifecycle themselves,
+or use the complete checked startup/completion API below.
+
+Fluent operands distinguish byte immediates (`imm()`), word immediates
+(`imm16()`), CPU addresses, 6502 zero-page (`zp()`) and 6809 direct-page offsets
+(`dp()`). Checked constructors reject negative values, narrowing and high
+address bits. Ordinary CPU addresses always select absolute/extended encoding,
+even below `$100`. Direct-page offsets do not set the live 6809 DP register.
+Instructions and labels retain their CPU tag, so cross-ISA emission and calls
+are compile-time errors. Low-level encoder functions return fixed byte arrays
+tagged with their CPU, and accept their declared byte/word scalar types.
+Use the checked immediate helpers before narrowing caller-supplied integers.
+
+6502 fluency includes loads/stores, X initialization, stack-pointer transfer,
+interrupt control/return, subroutine return/calls, jumps and equality branches.
+6809 fluency includes A/B/D/X/S loads, condition-code flags, A/B extended stores,
+direct-page X stores, calls/returns, relative branches and indexed clears.
+6502 address relocations are little-endian, 6809 address relocations big-endian.
+Literal 6809 branch displacements accept exactly `-128..127`, and X-offset
+clears accept exactly `-16..15`. `clr_x()` emits `,X`, not an arbitrary postbyte.
+`raw_clr_indexed_postbyte()` is deliberately unchecked and may require trailing
+bytes supplied by the author.
+
+`label()` creates a named forward reference. Names must be nonempty and unique
+per program. `bind()` assigns its current cursor once, and `mark()` creates a
+label already bound at that cursor. Foreign and moved-from label handles reject.
+The subroutine returns to the jump over its body and then enters the explicit
+stopping loop, rather than falling through into a second return.
+Labels may outlive their handle's original scope but do not extend layout or
+backing lifetime. All created labels (even unused ones) must be bound before
+installation. Relative displacement is calculated from the address following
+the branch instruction using modular 16-bit PC arithmetic, including branches
+across `$FFFF/$0000`, with signed-range checking before any SRAM mutation.
+Invalid or wrong-CPU relocation kinds reject before instruction emission.
+
+Programs own their emitted code. Each instruction and compound word/buffer
+store checks the entire requested capacity before appending. Full regions,
+including the last CPU byte at `$FFFF`, install successfully, but no cursor or
+label may refer to the one-past endpoint. `size()` remains valid at capacity.
+`raw_bytes()` deliberately bypasses opcode validation, not reservation bounds.
+`install()` resolves all references into detached bytes before writing only the
+emitted prefix through the layout's lower-bank `poke` operations. Repeated
+installation is allowed. Board mutation guards remain active, and invalid
+assembly leaves backing memory and simulation time unchanged.
+
+The common `Program<Cpu, Memory>` directly inherits its CPU-specific fluent
+surface. Namespace aliases preserve the author-facing names, and shared append
+logic delegates to the checked emitter. Mixin ownership/diagnostic helpers are
+private implementation plumbing.
+
+Programs cannot copy. Moving a program transfers code and label ownership, and
+all source authoring/installation operations reject. Moving the borrowed
+layout invalidates the existing program's layout reference rather than silently
+rebinding it. Create a new program against the destination layout if needed.
+
+Owned byte loads/stores check layout identity. `store(word, imm16(value))` and
+pointer stores emit two real loads/stores using the word's declared byte order,
+clobbering A and load-related flags. `store(buffer, bytes)` requires exact input
+length. `store_zp()` explicitly selects 6502 zero-page stores and checks both
+addresses before emitting anything. These methods emit CPU operations into code
+(they do not initialize host data).
+
+[`assembly_test.cpp`](assembly_test.cpp) checks exact encodings, typed surfaces,
+labels, signed limits, moves, code bounds, store validation and installation
+without a simulator. [`assembly_board_test.cpp`](assembly_board_test.cpp) checks
+clock-free lower-bank installation, backing preservation, board evidence and
+observation guards. Layout and assembly suites share the simulator-independent
+[`host_memory.h`](host_memory.h) test backing.
+
+## Complete checked program execution
+
+Use lvalue-only `system.program6502()` or `system.program6809()` to create a
+single-use `ProgramBuilder<Cpu>` backed by `System`. The underlying layout and
+assembler remain generic for simulator-independent memory tests.
+Direct builder construction enforces the same active-access guard as the
+factories, including heap allocation from observation predicates or callbacks.
+Construction, reservations and allocation
+are clock-free. The board must outlive the builder and its callbacks.
+
+```cpp
+auto test = system.program6502();
+const auto answer = test.byte("answer");
+const auto pointer = test.word("pointer");
+const auto input = test.data("input", econopet::CpuAddress{0x400}, 2,
+                             test_asm::Capture::Yes);
+// Initialize explicit host backing before execution (not a simulated CPU write).
+test.lower_bank("input").initialize(input.word(0, test_asm::ByteOrder::LittleEndian),
+                                    0x1234);
+// Assembly receives a restricted CPU-specific fluent surface.
+const auto result = test.within(20000).run([&](auto& p) {
+    p.lda(test_asm::imm(0x42)).sta(answer).store(pointer, input.address());
+});
+EXPECT_EQ(result[answer], 0x42);
+EXPECT_EQ(result[pointer], input.address().value());
+EXPECT_EQ(result[input], (std::vector<uint8_t>{0x34, 0x12}));
+```
+
+`byte()`, `word()` and `buffer()` allocate uniquely named owned operands in the
+Results arena, captured by default. `word()` selects the CPU's native byte order.
+`data()` reserves external ordinary data, uncaptured by default. Both allocation
+surfaces accept `Capture::Yes` or `Capture::No`. `capture()` opts an existing byte,
+word or sub-buffer into the result without creating another reservation.
+Adjacent, overlapping and duplicate selections are unioned, so a word or buffer
+is readable if its complete extent was selected. Holes and foreign owners
+reject. Captures sample each selected address once without additional clocks.
+
+`Layout::Pet` defaults to a stack at `$0100` (256 bytes), Results at `$0200`
+(255 bytes), a dedicated private completion byte at `$02FF`, Code at `$0300`
+(256 bytes), and Vectors at `$FFF0` (16 bytes). `LayoutOverrides` replaces these
+extents and adds named Workspace reservations. Every extent is nonempty,
+nonwrapping and disjoint. Vectors must contain the selected native reset vector.
+The 6502 hardware stack must be exactly `$0100-$01FF`. The 6809 stack uses a
+representable one-past descending-stack pointer. `lower_bank(name)` admits only
+ordinary Data, Results or Workspace, never the private completion mailbox.
+
+`run()` consumes the builder before invoking assembly. The assembly callback
+cannot install, run, finish or allocate data through its receiver. Recursive
+runs and subsequent builder mutation reject, including after callback failure.
+Assembly may explicitly borrow an ordinary workspace for operands. All labels,
+relocations, ownership, terminal capacity and vector ownership validate before
+the runner changes memory or clocks. Explicit host writes made by user callbacks
+are still user-controlled mutation, not rollback transactions.
+
+The runner masks interrupts and initializes the stack (6502 SEI/LDX/TXS,
+6809 ORCC/LDS), appends a private completion store and terminal park, then enters
+one elapsed deadline covering reset, CPU selection, installation, vector setup,
+release and completion polling. It establishes reset quiescence before writing
+code, freshly zeros Results, preserves Data initialization and resets the marker
+to pending on every start. The native vector is written through the checked CPU
+lifecycle, and release is reported exactly once. Zero budget does not clock or
+install anything. Completion at the final allowed observation boundary succeeds.
+Timeouts, callback errors and model/transport failures propagate without returning
+a success-shaped result. Existing board/SPI reset recovery rules still apply.
+
+`after()`, `every()` and `until()` share the standalone configured-run vocabulary,
+including RunEntry and CpuRelease anchors and after-slice active work. Startup
+counts against RunEntry schedules, whereas CpuRelease schedules and slices start
+only after release. `until()` is an additional condition, never a replacement for
+mandatory fresh completion. An independent `system.execution()` configuration
+can be passed to `run(assemble, configuration)`, but cannot replace a builder's
+authored schedule. `run(assemble, service)` adapts polling work through the same
+`RunConfiguration::service()` and terminal execution path, with no separate
+budget owner. Per-pass service may share stimulus and `until()` conditions, but
+cannot be mixed with periodic or after-slice active work. Invalid service
+configuration rejects before assembly. Inherited caller deadlines always win.
+
+Both builders and explicit Scenario execution return `ExecutionResult`, which
+owns detached selected bytes, `started()`, `completed()` and a
+source-bound `window()` covering the complete run. Operands and captured results
+can outlive both board and builder. Missing or foreign operands throw, and
+`empty()` identifies a valid run with no selected data. Moving invalidates source
+data access. Use `trace.capture(result.window())` to assert CPU I/O during the run.
+All captures use one sorted, disjoint, adjacency-merged span representation.
+`MemoryCapture::raw_bytes()` deliberately preserves contiguous view capture
+behavior (borrow from lvalues, transfer from mutable temporaries, copy from const
+temporaries). It also accepts a contiguous execution capture or an empty result,
+but rejects disjoint selected spans instead of flattening away address gaps.
+The CPU remains released in a terminal park loop after successful completion.
+
+Explicit layouts may issue a one-byte Mailbox `completion()` marker, call
+`program.finish(marker)`, and execute with `scenario.run(program, [results,]
+budget, reason[, service])` or a `RunConfiguration`. Results may be a Results or
+Data reservation, or omitted entirely. Explicit authors supply their own
+stack/interrupt prologue if needed. `finish()` checks its whole terminal sequence
+before appending, and further instruction emission rejects. `install()` alone
+remains clock-free and does not execute even a finished program.
+
+[`execution_core_test.cpp`](execution_core_test.cpp) verifies marker ownership,
+terminal encoding, exact capacity, moves and post-finish rejection without
+Verilator. [`program_test.cpp`](program_test.cpp), [`memory_test.cpp`](memory_test.cpp)
+and [`program_run_test.cpp`](program_run_test.cpp) cover both CPUs, private startup,
+captured data, deadlines, configured anchors, actual repeated I/O and failures.
+ROM-specific runners remain deferred.
+
+## Cooperative pause/resume
+
+Use `builder.pause(assemble)` instead of `run(assemble)` to preassemble a
+cooperative program. The same fluent callback may call `p.pause("name")` between
+instructions. Every inline pause, its continuation and the terminal `"complete"`
+pause is assembled and validated before clocks or runner memory mutation.
+Names must be nonempty, unique and different from `"complete"`. Each boundary
+uses one unique nonzero byte token, so at most 254 inline pauses plus the terminal
+pause are supported.
+
+```cpp
+auto test = system.program6809(test_asm::ProgramMode::Phased);
+const auto answer = test.word("answer");
+// Assemble both continuations before starting the CPU.
+auto first = test.within(20000).pause([&](auto& p) {
+    p.store(answer, test_asm::imm16(0x1234)).pause("ready");
+    p.store(answer, test_asm::imm16(0x5678));
+});
+const auto initial = test.capture(first);
+EXPECT_EQ(initial[answer], 0x1234);
+// Service or observe the board while the CPU polls its closed private gate.
+system.tick(500);
+auto last = test.resume(first, 20000);
+EXPECT_TRUE(last.complete());
+EXPECT_EQ(test.capture(last)[answer], 0x5678);
+EXPECT_EQ(initial[answer], 0x1234);
+```
+
+`pause()` uses the complete runner's reset/selection, result initialization,
+code/vector installation and native stack prologue. Its one RunConfiguration
+owns the full startup-through-acknowledgment budget. The phase emitter saves A
+and flags on the native stack, stores its token in the private acknowledgment
+mailbox, then repeatedly loads and compares the private release byte. Opening
+the gate restores A and flags before the preassembled continuation. Other
+registers are untouched and the stack pointer is restored. A stack must have
+space for both saved bytes.
+
+Select `ProgramMode::Phased` at construction, before allocating or binding data.
+Default phased Results contain 254 bytes (`$0200-$02FD`), with a separate private
+release Mailbox at `$02FE` and acknowledgment Mailbox at `$02FF`.
+`LayoutOverrides::results` always denotes ordinary data only. Use
+`LayoutOverrides::release` to relocate the separate one-byte release mailbox.
+Reservations reject overlapping overrides, workspace aliases and data aliases.
+Neither host nor assembly `lower_bank()` views expose either mailbox, and data
+allocation/capture need no special gate exclusions. Complete builders retain
+255 default Results bytes and reject `pause()` without consuming the builder.
+The framework resets Results and both mailboxes before release, and never clears
+user data between phases. The terminal handshake itself is the permanent park
+(no unreachable ordinary completion sequence is appended).
+
+Acknowledgment requires a fresh real selected-CPU SRAM write of the current
+token, followed by a real lower-bank read of the still-closed release gate.
+That read must follow a fresh opcode fetch of this phase's preassembled gate-load
+after the token write, not arbitrary user-code mailbox traffic or a data read of
+the handshake's code. The 6502 uses its opcode history. A simulation-only witness
+qualifies the pinned 6809 core's first-byte fetch state. Both are exposed through
+`CpuView::peek_opcode_fetched_at(address, checkpoint)`, using the existing
+monotonic `peek_fetch_checkpoint()`. The existing `peek_fetched_at()` retains
+native 6809 SYNC history (SYNC is an instruction wait, not an opcode-fetch marker).
+A mailbox value, opcode-fetch guess or SPI read alone cannot issue a capability.
+Skipped phase tokens, stale RAM and host-spoofed acknowledgments cannot replace
+the expected bus sequence. After successful acknowledgment, the CPU remains
+released and polls its gate while the host may advance clocks.
+
+`PhaseHandle` is move-only and bound to the issuing builder and current phase.
+`resume(handle, budget)` opens only that phase, consumes its capability and waits
+for the next verified closed gate. It does not reset/select the CPU, patch code,
+replace vectors or reinitialize ordinary data. The automatically appended terminal
+phase cannot be resumed. Zero resume budget does not open the gate or clock.
+Exact final-boundary acknowledgment succeeds, and inherited deadlines always win.
+Timeout or escaping callback/transport/model failure invalidates the phase run,
+so it cannot subsequently yield successful capture or resume.
+Shared phase invariants retain the first reset, selection, transport, clock or
+mailbox failure cause. Capture and resume report that cause even if the external
+state is subsequently restored.
+Escaping clock and SPI exceptions sample board faults before falling back to a
+generic execution failure, even during startup before CPU monitoring begins.
+The original exception still escapes unchanged. Subsequent capture/resume
+reports the retained failure rather than masking it with a consumed-handle error.
+Data and acknowledgment timestamps freeze on the observer cycle that verifies
+the closed gate, not when `pause()` or `resume()` returns. A multi-cycle service
+may finish later, and `until()` may deliberately wait longer. Neither extends
+the result/phase windows or resamples data modified after acknowledgment.
+
+`pause(assemble, configuration)` and `resume(handle, configuration)` accept fresh
+board-owned RunConfigurations. Startup RunEntry anchors precede reset work,
+whereas startup CpuRelease anchors begin at checked CPU release. On resume,
+RunEntry is resume entry and CpuRelease is the gate opening (not a new CPU reset).
+`until()` is an extra observation condition, never a replacement for verified
+park. Periodic, after-slice and per-pass services retain their configured-run
+semantics. `pause(assemble, service)` and `resume(handle, budget, service)` adapt
+polling work through the same configuration path. Invalid foreign, missing-budget
+or conflicting configurations reject before releasing a valid capability.
+Owned/nonidle SPI transport also rejects before gate opening.
+
+Reset or CPU-selection changes invalidate the monitored lifecycle, even if later
+restored. Unclocked external reset changes, failed clocks/transport, altered
+acknowledgments and externally opened gates also reject. Detected lifecycle/gate
+failure is sticky. Resume and builder construction remain active operations
+forbidden from observation callbacks, while frozen phase capture is read-only.
+Destroying the builder unsubscribes its monitor without opening the gate.
+As with complete execution, builders borrow a persistent board.
+
+`capture(handle)` copies the selected `ExecutionResult` sampled exactly at the
+verified acknowledgment (no clocks or later resampling). The result's timestamps
+and window cover original startup through that boundary, while the handle's
+`window()` covers only the current startup/resume interval, excluding host dwell.
+Use `trace.capture(handle)` for per-phase I/O assertions, or
+`trace.capture(test.capture(handle))` for cumulative execution evidence.
+Detached captures and copied windows outlive the builder and board. Consumed
+handles retain their diagnostic names/windows but cannot authorize capture or
+another resume.
+
+[`phase_core_test.cpp`](phase_core_test.cpp) checks exact handshake encoding,
+native-endian gate addresses and atomic capacity without Verilator.
+[`phase_test.cpp`](phase_test.cpp) executes both CPU handshakes and exercises
+register/stack preservation, tokens, stale/spoofed acknowledgment rejection,
+capability lifetimes, reset invalidation and exact deadlines.
+[`phase_integration_test.cpp`](phase_integration_test.cpp) covers owned capture,
+configured startup/resume, actual peripheral traces, closed-gate host intervals
+and cross-layer failure contracts. ROM fixtures and ROM-specific phases remain
+deferred to their consuming layers.
 
 ## Shared hardware contract
 

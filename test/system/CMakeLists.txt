@@ -11,7 +11,7 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(FATAL_ERROR "Host system tests require CMAKE_BUILD_TYPE=Debug")
 endif()
 include(CTest)
-option(BUILD_BOARD_TESTS "Build production-top board simulation tests with Verilator" OFF)
+option(BUILD_BOARD_TESTS "Build production-top board and host firmware tests with Verilator" OFF)
 
 # Compile transport-independent fixtures without a board or firmware runtime.
 get_filename_component(ECONOPET_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
@@ -49,10 +49,10 @@ FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 # Discover fixture, catalog, value-type and peripheral invariants without a simulated board.
-add_executable(econopet_system_tests disk_fixture_test.cpp io_test.cpp types_test.cpp registers_test.cpp rom_catalog_test.cpp trace_core_test.cpp layout_test.cpp)
+add_executable(econopet_system_tests disk_fixture_test.cpp io_test.cpp types_test.cpp registers_test.cpp rom_catalog_test.cpp trace_core_test.cpp layout_test.cpp assembly_test.cpp execution_core_test.cpp phase_core_test.cpp ieee/transactions_test.cpp)
 target_compile_features(econopet_system_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_system_tests PRIVATE
-    econopet_disk_fixtures econopet_external_io GTest::gtest_main)
+    econopet_disk_fixtures econopet_external_io GTest::gtest_main GTest::gmock)
 set(SYSTEM_DISCOVERY_TIMEOUT_SECONDS 60)
 set(SYSTEM_TEST_TIMEOUT_SECONDS 300)
 # Preserve the label list through GoogleTest's generated CTest property list.
@@ -65,4 +65,5 @@ include(hardware_contract.cmake)
 
 if(BUILD_BOARD_TESTS)
     include(board.cmake)
+    include(firmware.cmake)
 endif()

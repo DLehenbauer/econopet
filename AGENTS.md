@@ -21,6 +21,23 @@ Key interfaces:
 - [gw/EconoPET/src/spi.sv](gw/EconoPET/src/spi.sv) - SPI protocol (gateware side)
 - [fw/src/hw.h](fw/src/hw.h) - GPIO and hardware pin definitions
 
+## Domain Guidance
+
+Use [IEEE compatibility guidance](.github/instructions/ieee.instructions.md)
+for drive, disk, and handshake conclusions. Require the selected ROM and
+hardware evidence, not just passing local tests.
+
+Use the [timing-analysis skill](.github/skills/timing-analysis/SKILL.md)
+for timing constraints and STA conclusions.
+
+## Code Review
+
+Before starting any code review, you MUST load the
+[code-review skill](.github/skills/code-review/SKILL.md) and follow its workflow.
+If skill activation is unavailable, read the linked SKILL.md in full and follow
+it directly. Do not substitute a generic review or rely on remembered guidance.
+If neither method succeeds, report the blocker and stop the review.
+
 ## Build
 
 Build production with CMake `RelWithDebInfo`. Build tests, simulator integration, frameworks,

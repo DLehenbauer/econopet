@@ -13,28 +13,12 @@
 #include <gtest/gtest.h>
 
 #include "framework/asm.h"
+#include "host_memory.h"
 
 namespace {
 using namespace test_asm;
 using econopet::CpuAddress;
 using econopet::SramAddress;
-
-// Exercise checked layouts without constructing a Verilated board.
-class HostMemory {
-public:
-    // Read a physical byte with the same domain boundary as System.
-    uint8_t peek(SramAddress address) const { ++reads; return bytes.at(address.value()); }
-    // Record direct fixture writes independently of a CPU bus or clock.
-    void poke(SramAddress address, uint8_t value) { bytes.at(address.value()) = value; ++writes; }
-    // Preserve operation-specific failures for simulator-independent contract tests.
-    template<class Exception>
-    Exception failure(const std::string& operation, const std::string& detail) const {
-        return Exception(operation + ": " + detail);
-    }
-    std::vector<uint8_t> bytes = std::vector<uint8_t>(econopet::SramCapacity);
-    size_t writes = 0;
-    mutable size_t reads = 0;
-};
 
 static_assert(!std::is_copy_constructible_v<Scenario<HostMemory>>);
 static_assert(!std::is_constructible_v<Scenario<HostMemory>, HostMemory&&>);

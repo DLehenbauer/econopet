@@ -11,6 +11,28 @@
 #include "sd/sd.h"
 #include "test_support.h"
 
+// Membership queries follow shared text/binary registrations and both removal paths.
+START_TEST(test_file_registry_membership) {
+    const char* const path = "/registry.txt";
+    const char* const other = "/registry.bin";
+    const uint8_t byte = 0x42;
+    ck_assert(!test_file_registered(path));
+    ck_assert(!test_file_registered(other));
+    test_register_file(path, "owned");
+    ck_assert(test_file_registered(path));
+    ck_assert(!test_file_registered(other));
+    test_unregister_file(path);
+    ck_assert(!test_file_registered(path));
+    test_register_binary_file(path, &byte, sizeof(byte), true);
+    test_register_binary_file(other, &byte, sizeof(byte), false);
+    ck_assert(test_file_registered(path));
+    ck_assert(test_file_registered(other));
+    test_clear_files();
+    ck_assert(!test_file_registered(path));
+    ck_assert(!test_file_registered(other));
+}
+END_TEST
+
 // Rejects a fixture path outside the absolute-path namespace.
 START_TEST(test_register_relative_path) {
     test_register_file("relative.txt", "");
@@ -40,6 +62,7 @@ END_TEST
 Suite* test_support_suite(void) {
     Suite* const suite = suite_create("TestSupport");
     TCase* const fixtures = tcase_create("fixtures");
+    tcase_add_test(fixtures, test_file_registry_membership);
     tcase_add_test_raise_signal(fixtures, test_register_relative_path, SIGABRT);
     tcase_add_test_raise_signal(fixtures, test_register_duplicate_path, SIGABRT);
     tcase_add_test_raise_signal(fixtures, test_open_relative_path, SIGABRT);

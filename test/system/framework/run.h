@@ -55,6 +55,7 @@ public:
     RunConfiguration& every(econopet::Cycles period, MissedService policy, Service work,
                             RunAnchor anchor = RunAnchor::RunEntry) {
         require_open();
+        require_scheduled_service();
         require_anchor(anchor);
         require_period(period, work);
         if (slice_) throw board_.failure<std::logic_error>("run every", "cannot mix phase-anchored and after-slice work");
@@ -68,12 +69,22 @@ public:
     // reaches the deadline without calling work.
     RunConfiguration& every(econopet::Cycles slice, ServiceTiming timing, Service work) {
         require_open();
+        require_scheduled_service();
         require_period(slice, work);
         if (timing != ServiceTiming::AfterSlice)
             throw board_.failure<std::invalid_argument>("run every", "unsupported service timing");
         if (slice_ || !periodic_.empty())
             throw board_.failure<std::logic_error>("run every", "after-slice work requires one exclusive service");
         slice_.emplace(Slice{slice, std::move(work)});
+        return *this;
+    }
+    // Invoke active work on each polling pass, preserving exact stimulus and predicate checks.
+    RunConfiguration& service(Service work) {
+        require_open();
+        if (!work) throw board_.failure<std::invalid_argument>("run service", "service is empty");
+        if (service_ || slice_ || !periodic_.empty())
+            throw board_.failure<std::logic_error>("run service", "polling service requires exclusive active work");
+        service_ = std::move(work);
         return *this;
     }
     // Observation only. CPU runs require both program completion and this condition.
@@ -134,7 +145,15 @@ public:
                 schedule.require_health();
                 if (&observed != &board_)
                     throw board_.failure<std::invalid_argument>("configured service", "configuration belongs to another board");
-                if (slice_) {
+                if (service_) {
+                    schedule.require_registration();
+                    if (board_.spi_active_)
+                        throw board_.failure<std::logic_error>("configured service", "polling service requires an unowned SPI bus");
+                    if (has_release && !released)
+                        throw board_.failure<std::logic_error>("configured service", "polling service requires CPU release");
+                    schedule.apply_stimulus();
+                    service_(observed, remaining);
+                } else if (slice_) {
                     schedule.require_registration();
                     if (board_.spi_active_)
                         throw board_.failure<std::logic_error>("configured service", "after-slice service requires an unowned SPI bus");
@@ -177,6 +196,18 @@ public:
     }
 
 private:
+    template<class> friend class test_asm::ProgramBuilder;
+    // An independent configuration may replace a budget, but never discard authored work.
+    void require_replaceable() const {
+        require_open();
+        if (!events_.empty() || !periodic_.empty() || slice_ || service_ || done_)
+            throw board_.failure<std::logic_error>("program configuration", "cannot replace authored work");
+    }
+    // Polling and periodic/sliced callbacks have distinct cadence and cannot share ownership.
+    void require_scheduled_service() const {
+        if (service_)
+            throw board_.failure<std::logic_error>("run every", "polling service requires exclusive active work");
+    }
     struct Event { econopet::Cycles delay; RunAnchor anchor; Stimulus work; };
     struct Periodic {
         econopet::Cycles period;
@@ -212,6 +243,7 @@ private:
     std::vector<Periodic> periodic_;
     std::optional<Slice> slice_;
     Predicate done_;
+    Service service_;
     bool consumed_ = false;
 };
 
@@ -232,3 +264,5 @@ inline RunConfiguration System::execution() & {
     require_mutable_access();
     return RunConfiguration(*this);
 }
+
+#include "framework/program.h"
