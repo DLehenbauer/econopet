@@ -51,6 +51,8 @@ class System {
     friend class SystemTest;
     friend class DeterministicScheduler;
     friend class RunConfiguration;
+    friend class FirmwareSession;
+    friend System& firmware_system();
     struct ObserverEntry {
         std::function<void(const System&)> callback;
     };
