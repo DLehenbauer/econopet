@@ -5041,17 +5041,6 @@
 		)
 		(uuid "99fe431e-b065-4e83-b82c-3541ed737d97")
 	)
-	(label "MCU_I2C0_SCL"
-		(at 182.88 130.81 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "9ac4a20a-4fb0-4787-a4ce-34d4b16e56c0")
-	)
 	(label "GP27"
 		(at 21.59 179.07 0)
 		(fields_autoplaced yes)
@@ -5095,17 +5084,6 @@
 			(justify left bottom)
 		)
 		(uuid "df1385ec-f75f-452e-85dc-1d9aba3fe56e")
-	)
-	(label "MCU_I2C0_SDA"
-		(at 182.88 128.27 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "e0500662-640b-4161-9fb8-d4b6a39dd8ef")
 	)
 	(label "SD_~{CS}"
 		(at 224.79 77.47 0)
