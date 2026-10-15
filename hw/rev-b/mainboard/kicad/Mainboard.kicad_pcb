@@ -105584,18 +105584,6 @@
 			)
 		)
 	)
-	(gr_text "SHORT\nLEAD"
-		(at 117.6 112.111388 0)
-		(layer "F.SilkS")
-		(uuid "077f5956-9734-43f6-8687-b194ba23f132")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
-		)
-	)
 	(gr_text "AUDIO_R"
 		(at 313.84 134.055 0)
 		(layer "F.SilkS")
@@ -106734,18 +106722,6 @@
 			)
 		)
 	)
-	(gr_text "SHORT\nLEAD"
-		(at 117.6 135.070355 0)
-		(layer "F.SilkS")
-		(uuid "65371adf-6bd2-4078-b4d5-82ebb9ff9fd3")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
-		)
-	)
 	(gr_text "K2"
 		(at 190.840001 176.26 90)
 		(layer "F.SilkS")
@@ -107082,18 +107058,6 @@
 				(size 0.8 0.8)
 				(thickness 0.2)
 			)
-		)
-	)
-	(gr_text "LONG\nLEAD"
-		(at 119.86 116.52182 0)
-		(layer "F.SilkS")
-		(uuid "8461b6f5-9495-4f3c-af7f-47cc7af3109f")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
 		)
 	)
 	(gr_text "PA7"
@@ -107533,18 +107497,6 @@
 			)
 		)
 	)
-	(gr_text "SHORT\nLEAD"
-		(at 112.84 157.769848 0)
-		(layer "F.SilkS")
-		(uuid "a1d7706e-e7f2-44c6-b339-ed90065325a4")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
-		)
-	)
 	(gr_text "$E810"
 		(at 199.168971 161.783 0)
 		(layer "F.SilkS")
@@ -107698,18 +107650,6 @@
 				(size 1.5 1.5)
 				(thickness 0.3)
 			)
-		)
-	)
-	(gr_text "LONG\nLEAD"
-		(at 119.86 139.480787 0)
-		(layer "F.SilkS")
-		(uuid "adb3e617-c787-4f19-ba68-703682086cfa")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
 		)
 	)
 	(gr_text "50"
@@ -108301,18 +108241,6 @@
 				(size 0.8 0.8)
 				(thickness 0.15)
 			)
-		)
-	)
-	(gr_text "LONG\nLEAD"
-		(at 118.31 152.703382 0)
-		(layer "F.SilkS")
-		(uuid "e217422c-1add-464a-9371-d0dc6f6a01c0")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify bottom)
 		)
 	)
 	(gr_text "A5"
@@ -196330,14 +196258,12 @@
 		(uuid "770f63c1-6f3e-4e4e-8ac8-746375096ae3")
 		(members "01bdcd36-d931-4f3f-83c0-7a92a1af98e7" "456c5365-45d4-412b-a35b-670e4415b827"
 			"4ad6d3a9-1ce1-4ca5-a8fe-78212b0b2e05" "4c7cd7b8-9cb9-4f38-815b-20346d410ec4"
-			"65371adf-6bd2-4078-b4d5-82ebb9ff9fd3" "684c5c3a-f01c-4599-b569-3427df9ba54f"
-			"74b87872-1869-41b3-b08e-5e387f47317f" "adb3e617-c787-4f19-ba68-703682086cfa"
+			"684c5c3a-f01c-4599-b569-3427df9ba54f" "74b87872-1869-41b3-b08e-5e387f47317f"
 		)
 	)
 	(group ""
 		(uuid "a1c3ae0d-c67a-4ea1-be52-4b3ae28638a9")
-		(members "077f5956-9734-43f6-8687-b194ba23f132" "248baf31-2c2c-4821-8160-991426e324e6"
-			"6ea0642e-8444-47f8-b0e4-b587111e1a0b" "8461b6f5-9495-4f3c-af7f-47cc7af3109f"
+		(members "248baf31-2c2c-4821-8160-991426e324e6" "6ea0642e-8444-47f8-b0e4-b587111e1a0b"
 			"9753bdeb-d7b6-4d26-aa9b-a6e6df073a6e" "dececdf1-a66c-4423-be42-f73a01ac4d21"
 			"e97a47db-62ae-46be-8c49-75d50b9cd125" "ea7257d0-3c50-4e26-b272-e5a3b1a21613"
 		)
