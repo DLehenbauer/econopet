@@ -97,6 +97,47 @@ consumption, scoped lifetimes, callback guards, and exceptional cleanup.
 Firmware C frames are compiled with exception-unwind support so C++ SPI
 failures propagate through the real drive implementation.
 
+### First end-to-end acceptance tests
+
+[`econopet_top_smoke.cpp`](econopet_top_smoke.cpp) round-trips CPU selection,
+executes a checked soft-6502 RAM program, captures its result and mounts a D64
+through production firmware. [`ieee/drive_test.cpp`](ieee/drive_test.cpp) extends
+that path to physical IEEE handshakes, OPEN, load-channel streaming and channel
+15 status. Both sources belong to the existing isolated firmware executable.
+They need no external ROM media and do not execute a Commodore drive ROM.
+
+PRG cases use 1, 4, 254 and 255 stored bytes (no implicit load address).
+They cover the final-sector boundary and the first byte of a second sector.
+The CPU receiver and passive wire trace independently match every byte, ATN and
+EOI position, and the data FIFO must be empty after the last valid byte.
+Status expectations include the leading space in `"00, OK,00,00\r"` and EOI
+on its final CR. Simultaneous firmware RX traces check the consumed OPEN
+transaction, with EOI explicitly unobserved. Both paths share an OPEN sender
+whose passive wire trace requires EOI on the final filename byte before
+UNLISTEN. Native filename collection needs that EOI to queue parsing.
+Configured polling `.service(firmware.service_adapter())` drains RX without
+introducing a periodic cadence and bounds all SPI clocks with the shared
+elapsed-cycle deadline.
+
+The VIA smoke case checks CPU-written output latches and released IEEE inputs.
+It masks unrelated pins, including the running vertical-retrace input on PB5.
+Board-only enable readback and ATN/FIFO consumption already have coverage in
+[`firmware_test.cpp`](firmware_test.cpp) and
+[`ieee/controller_test.cpp`](ieee/controller_test.cpp).
+
+The selected peripheral is the 4040/D64 source model at
+[`mist64/cbmsrc` revision `01bd60f`](https://github.com/mist64/cbmsrc/tree/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040).
+These narrowly scoped source-derived expectations do not establish complete
+DOS compatibility, D80/8050 behavior, repeated EOF reads or native PET ROM I/O.
+The existing controller evidence below supplies the PET-side handshake
+contract.
+
+| Behavior | Target ROM/model and hardware | Primary evidence | Required result | Code/test | Corroboration |
+|---|---|---|---|---|---|
+| OPEN filename termination | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/tst2` (`PUT`, `L50`, `L45`) sets `CMDWAT` only on filename EOI, then `idle` (`IDLE`) dispatches `parsex` (`PARSXQ`) | Final filename byte carries EOI before UNLISTEN, verified independently on the wire | Shared `open_basic`, PRG and DOS status acceptance cases | PET `OPENI` sends via buffered `CIOUT`, and `UNLSN` flushes the final pending byte with EOI (see the controller evidence below) |
+| PRG OPEN and final-sector streaming | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/master`, `open` (`OP40`), `opchnl` (`OPNRCH`, `GETBYT`, `RDBYT`, `RD4`), `tst4` (`GET`, `SEQGET`), `i_odef` (`EOIOUT`, `RDYTLK`) and `ieee` (`TALK1`, `TLK10`) | Exact stored bytes, EOI only on the last valid byte, no sector padding queued | `DrivePrgTest.StreamsCheckedPrgFixtureOverProductionTop` | [VICE virtual-drive reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c) corroborates sector-link lengths and final-byte EOF, not physical IEEE timing |
+| Successful OPEN status | 4040/D64, status channel 15 | Pinned `DOS_4040/parsex` (`PARSXQ`), `erproc` (`ERRTAB`, `OKERR`, `ERRMSG`, `ERMSG2`) and [`tst4` (`GETERC`)](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4#L81), which produces CR with `EOIOUT` | Exact `00, OK,00,00` plus CR, with final-byte EOI | `FirmwareTest.StreamsDosStatusOverProductionTop` | [VICE status formatting](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error text](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) retain the leading space and CR |
+
 ## IEEE controller and protocol evidence
 
 The board-only IEEE layer requires neither firmware integration nor ROM media.
