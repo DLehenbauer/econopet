@@ -149,6 +149,8 @@ public:
                 "vectors must contain the selected CPU reset vector");
         for (const auto& [name, region] : overrides.workspace)
             scenario_.reserve(name, RegionKind::Workspace, region.start, region.size);
+        for (const auto& [name, region] : overrides.data)
+            scenario_.reserve(name, RegionKind::Data, region.start, region.size);
     }
     ProgramBuilder(const ProgramBuilder&) = delete;
     ProgramBuilder(System&&, Layout, const LayoutOverrides& = {}, ProgramMode = ProgramMode::Complete) = delete;

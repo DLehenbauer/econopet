@@ -223,7 +223,8 @@ and their C++ tests run
 without Verilator, a simulated board, ROM media, or firmware transport.
 Standalone configuration defaults to `BUILD_BOARD_TESTS=OFF`. Root presets
 enable production-top board simulation and host firmware integration together,
-requiring Verilator and firmware headers but no ROM media. The board and
+requiring Verilator and firmware headers. Revision-bound ROM fixture tests
+also require local media at runtime. The board and
 firmware tests remain separate executables, keeping firmware globals and
 `fopen` wrapping out of board-only tests.
 
@@ -648,7 +649,8 @@ Synthetic loader tests require no ROM media. Pure manifest and complete
 routine-entry checks in [`rom_catalog_test.cpp`](rom_catalog_test.cpp) run in
 the host target with `BUILD_BOARD_TESTS=OFF`, without Verilator. Both supported
 Commodore revisions provide CIOUT, so only the revision-specific TRANS1 entry
-is optional. Actual ROM execution belongs to later layers.
+is optional. Revision-bound fixture tests execute initialization from installed
+local ROMs. Full drive transactions belong to later layers.
 
 `selected_rom()` describes the declared base revision, not a content hash.
 Complete-set metadata commits atomically with its bytes. A failed installation
@@ -657,6 +659,102 @@ this base identity. Generic installation outside the selected set also
 preserves it, while replacement touching any selected-set byte invalidates it.
 The const-lvalue accessor borrows optional storage from its board. The rvalue
 accessor returns owned optional storage. Revision entries have static lifetime.
+
+## Revision-bound ROM programs
+
+[`ieee/fixture.h`](ieee/fixture.h) supplies concrete `KernalFixture` and
+`WaterlooFixture` board fixtures, plus generic `KernalScenario<Memory>` and
+`WaterlooScenario<Memory>` for explicit checked layouts. The runnable fixtures
+and `RomProgramBuilder<Cpu>` borrow `System`, just like the underlying
+`ProgramBuilder<Cpu>`. A builder does not borrow its fixture and can outlive it,
+but never its board.
+
+The KERNAL fixture accepts only `Set::Upgrade` or `Set::Rom4`. Waterloo uses
+revision 12. An absent selection loads the requested complete set. An existing
+matching selection is adopted without reloading or discarding patches. A
+foreign selection is rejected without clocks or replacement.
+
+```cpp
+ieee_test::KernalFixture rom(system, test_rom::Set::Upgrade);
+auto program = rom.program(test_asm::ProgramMode::Phased);
+const auto answer = program.byte("answer");
+auto ready = program.within(ieee_test::KernalBudget).pause([&](auto& p) {
+    rom.init_ieee(p);
+    p.pause("IEEE initialized");
+    p.lda(test_asm::imm(0x42)).sta(answer);
+});
+auto complete = program.resume(ready, ieee_test::ByteBudget);
+EXPECT_EQ(program.capture(complete)[answer], 0x42);
+```
+
+`program()` defaults to complete execution. Select phased execution before
+allocation. Both modes have the same two ordinary result bytes at `$0201-$0202`.
+Completion uses `$0200` and phased execution separately reserves `$0203` as
+private release storage. Ordinary views and allocations cannot expose it.
+KERNAL workspace reservations exclude this byte in phased mode. Each ROM family
+has one canonical layout consumed by both the explicit scenario and convenience
+builder. Code, stack, vectors, data and workspace are all explicit, not inherited
+from unrelated builder defaults. The default ROM code region is `$1000-$17FF`,
+separate from editor high RAM at `$03FC`. The Waterloo parameter block
+and filename occupy `$0100-$017F`, below its native stack at `$0180-$01FF`.
+Waterloo's hook flags and pointers at `$0580-$05FF` are also reserved. Ordinary
+data allocations cannot overlap them.
+These prepared-state harnesses reuse the PET input buffer at `$0200`. They are
+not full BASIC/keyboard-input or arbitrary whole-ROM execution layouts.
+
+Code storage is configurable on the fixture constructor and is then shared
+by both execution paths:
+
+```cpp
+const test_asm::MemoryRegion code{econopet::CpuAddress{0x2000}, 0x0800};
+ieee_test::WaterlooFixture rom(system, code);
+auto program = rom.program();
+```
+
+Routine selection, allocation, assembly, execution, resume and capture check
+the selected base revision. Execution also checks identity through a scoped
+board observer, including during configured work. A replaced or invalidated
+selection rejects stale fixtures and builders. Identity is a declared
+revision, not an installation generation or a hash of patched bytes. Existing
+CPU lifecycle guards additionally protect phase handles while the host dwells.
+Configured runs, polling services and phase resumes use the underlying single
+budget/scheduling owner, not a separate ROM execution engine.
+
+There is no implicit ROM initialization. `init_ieee()` explicitly emits the
+selected PET editor's CINT call and the harness's IEEE/status preconditions.
+For Waterloo it calls the native hook-clear routine `$E77A`, then IEEEInit
+`$C188`. The hook dispatcher `$E76B` must see disabled flags, or transport calls
+can escape through uninitialized user pointers. `init_ieee_lines()` retains
+the focused single IEEEInit call for intentional custom-hook tests. Neither
+setup is implicit on construction or resume. `device()` and `file()` emit CPU
+instructions, not host memory writes. PET filenames are counted bytes with a
+little-endian pointer. Waterloo supplies a big-endian parameter-block pointer
+and filename cursor. Its helper copies 1..64 caller-supplied bytes, without
+adding a terminator or implementing OPEN. Supply the delimiter and prepared
+state required by the chosen ROM routine. Filename lengths are checked before
+emission. The default code region supports the full PET 255-byte and Waterloo
+64-byte maxima, including explicit native initialization and phase handshakes.
+The existing immediate-store encoders remain unchanged. Custom smaller code
+regions can still exhaust capacity and receive the standard bounds exception.
+These helpers do not validate arbitrary device/channel bytes as disk commands.
+Use `WaterlooBudget` for native setup (one million system cycles). The ROM's
+128-byte hook-clear loop alone exceeds the former 100000-cycle fixture budget.
+
+Set `ECONOPET_MEDIA_DIR` to a local directory containing the catalog's exact
+`roms/` files before running ROM fixture tests. Media is never read during
+GoogleTest discovery. Host tests and firmware-session tests need no ROM media.
+The fixture tests execute both supported PET editors, Waterloo's hook clear and
+IEEEInit, and native Waterloo UNTALK. The latter verifies native hook dispatch
+and exact wire/FIFO command `$5F` with ATN asserted and EOI released. These checks
+do not establish full disk-drive compatibility.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|----------|-----------------------|----------------------------|----------------------------|------------------------|---------------|
+| Callable revision binding | PET KERNAL `901465-03` and `901465-22`, Waterloo revision 12 | [Exact routine ledger](../../.github/instructions/ieee.instructions.md) and pinned installed binaries | CIOUT is available in both PET revisions, TRANS1 only in ROM 4. Wrong revisions are rejected, byte patches preserve declared identity | [`routine`](ieee/fixture.h), [`ResolvesEntriesAndRejectsUnsupportedRoutines`](ieee/fixture_test.cpp) | [PET symbol map](../../docs/dev/PET/memorymap-gen.csv), archived Waterloo labels cited by the ledger |
+| Explicit PET initialization and file workspace | PET editor `901447-24` or `901447-29`, corresponding KERNAL | [CINT source](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_1979-10-23/oa1src), pinned editor bytes and KERNAL FNLEN/FA/SA/FNADR accesses | CINT executes only on request. Harness then sets VIA ORB `$06`, DIO `$FF`, ST zero and literal file parameters with a little-endian pointer | [`init_ieee` and `file`](ieee/fixture.h), [`ExplicitSetupEmitsRealFileAndDeviceInstructions`](ieee/fixture_test.cpp) | [PET symbol map](../../docs/dev/PET/memorymap-gen.csv) identifies `$03FC` as BOB (IEEE timeout defeat), not an IRQ flag |
+| Explicit focused initialization | Waterloo `970019-12`, IEEEInit `$C188-$C1C7` | [Binary-derived navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm), checked against pinned ROM bytes | `init_ieee_lines` emits one JSR `$C188`, preserves hooks and is never implicit on construction or resume | [`init_ieee_lines`](ieee/fixture.h), [`WaterlooFixtureFocusedSetupHasOneExplicitInitializerCall`](ieee/fixture_test.cpp), [`WaterlooFixtureFocusedInitializerPreservesHooks`](ieee/fixture_test.cpp) | [Waterloo investigation guide](https://github.com/prachwal/personal-004/blob/main/docs/pet/waterloo-investigation.md), IEEE ledger's `sysioini` call site |
+| Native I/O hook dispatch and UNTALK | Waterloo revision 12, `970034-12` and `970019-12` | Pinned `$E76B` dispatcher and `$E77A-$E791` clear loop, `$C13C` UNTALK. [E-ROM navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-e000-ffff.asm) checked against MD5 `c03098d26dbb1a23737d3286f264bc97` | Clear exactly `$0580-$05FF` before IEEEInit. Native dispatch returns instead of following `$EAEA`, and UNTALK sends `$5F` under ATN without EOI | [`init_ieee` and `waterloo_layout`](ieee/fixture.h), [`WaterlooFixtureNativeHooksPermitRealUntalkTransport`](ieee/fixture_test.cpp) | [Repository ROM ledger](../../.github/instructions/ieee.instructions.md), Waterloo `sysioini` hook-clear call and investigation guide |
+| Prepared Waterloo transport fields | Waterloo revision 12, LISTEN `$C072`, OPEN `$BCD0`, REL OPEN `$BD51`, CLOSE `$BD11` | Pinned binaries and [A-ROM](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-a000-bfff.asm)/[C-ROM](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) navigation | Active parameter pointer at `$02`, cursor at `$68`, device/channel at block+9/+10. Block+5 is a record-size word, block+12 uses disk mask `$40` (not record length) | [`WaterlooWorkspace` and `file`](ieee/fixture.h), [`WaterlooFixtureProgramOwnsCpuStackAndExplicitFileSetup`](ieee/fixture_test.cpp) | Ledger's parameter-block versus FCB calling contract and Waterloo investigation guide |
 
 ## Owned traces
 
@@ -1079,7 +1177,10 @@ reject. Captures sample each selected address once without additional clocks.
 `Layout::Pet` defaults to a stack at `$0100` (256 bytes), Results at `$0200`
 (255 bytes), a dedicated private completion byte at `$02FF`, Code at `$0300`
 (256 bytes), and Vectors at `$FFF0` (16 bytes). `LayoutOverrides` replaces these
-extents and adds named Workspace reservations. Every extent is nonempty,
+extents and adds named Workspace or ordinary Data reservations through
+`workspace` and `data`. Predeclared Data is accessed with `lower_bank(name)`,
+preserves explicit initialization, and is captured only when selected.
+Every extent is nonempty,
 nonwrapping and disjoint. Vectors must contain the selected native reset vector.
 The 6502 hardware stack must be exactly `$0100-$01FF`. The 6809 stack uses a
 representable one-past descending-stack pointer. `lower_bank(name)` admits only
