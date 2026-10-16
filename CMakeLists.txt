@@ -243,6 +243,8 @@ endif()
 
 # Run the standalone suite so its host and contract test registration remains authoritative.
 if(BUILD_SYSTEM_TESTS)
+    # Budget the complete child suite separately from its five-minute per-test limits.
+    set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 1800)
     add_test(
         NAME system_tests
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system
@@ -250,7 +252,7 @@ if(BUILD_SYSTEM_TESTS)
     )
     set_tests_properties(system_tests PROPERTIES
         LABELS "sys;system;host;contract"
-        TIMEOUT 300
+        TIMEOUT ${SYSTEM_TEST_SUITE_TIMEOUT_SECONDS}
         ENVIRONMENT "${ECONOPET_TEST_ENV}"
     )
 endif()

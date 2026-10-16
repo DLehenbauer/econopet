@@ -369,6 +369,11 @@ ctest --preset sys
 Both `all` presets include this suite, so it runs in CI. Root builds place its
 generated files in `build/system`. The standalone commands below use
 `build/host-fixtures` instead.
+The root `system_tests` wrapper has a 30-minute aggregate timeout for the
+complete nested suite. Individual host, board and firmware cases retain their
+five-minute timeouts, while hardware-contract checks retain their shorter
+limits. A stalled case still fails independently rather than consuming the
+whole suite budget.
 
 The shared D64 fixtures, checked framework value types, external PIA/VIA models,
 and their C++ tests run
