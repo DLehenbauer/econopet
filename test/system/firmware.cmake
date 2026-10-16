@@ -28,7 +28,8 @@ target_link_libraries(econopet_firmware_transport PUBLIC
 target_link_options(econopet_firmware_transport INTERFACE -Wl,--wrap=fopen)
 
 # Isolate firmware globals and fopen wrapping from board-only and host-only tests.
-add_executable(econopet_firmware_tests firmware_test.cpp framework/scheduler.cpp)
+add_executable(econopet_firmware_tests
+    econopet_top_smoke.cpp firmware_test.cpp ieee/drive_test.cpp framework/scheduler.cpp)
 target_compile_features(econopet_firmware_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_firmware_tests PRIVATE
     econopet_firmware_transport GTest::gtest_main GTest::gmock)

@@ -606,6 +606,8 @@ static void push_status(unsigned int unit) {
 // Fill the TX FIFO from the open stream until the fabric reports no room
 // for another chunk.
 static void service_tx(void) {
+    _Static_assert(ECONOPET_IEEE_TX_BURST_CHUNK >= DISKIMAGE_SECTOR_LINK_SIZE + 2,
+        "native one-byte EOF response must fit a TX burst");
     // An underrun mid-record times out the kernel's counted read.
     uint8_t buf[ECONOPET_IEEE_TX_BURST_CHUNK];
 
@@ -632,7 +634,21 @@ static void service_tx(void) {
                 streaming = false;
                 return;
             }
-            if (is_last) { last = true; last_byte = byte; break; }
+            if (is_last) {
+                // REL reads share byte accounting, not this stream's cursor.
+                if (stream.sectors == 1 && stream.pos == DISKIMAGE_SECTOR_LINK_SIZE + 1
+                    && (stream.img->type == diskimage_type_d64
+                        || stream.img->type == diskimage_type_d80)) {
+                    // Native OR30 loses the sole byte's initial EOF. The wrapped
+                    // buffer pointer leaks both link bytes before repeating it.
+                    buf[n++] = byte;
+                    for (size_t i = 0; i < DISKIMAGE_SECTOR_LINK_SIZE; ++i)
+                        buf[n++] = stream.buf[i];
+                }
+                last = true;
+                last_byte = byte;
+                break;
+            }
             buf[n++] = byte;
         }
 

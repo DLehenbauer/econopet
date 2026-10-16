@@ -97,6 +97,64 @@ consumption, scoped lifetimes, callback guards, and exceptional cleanup.
 Firmware C frames are compiled with exception-unwind support so C++ SPI
 failures propagate through the real drive implementation.
 
+### First end-to-end acceptance tests
+
+[`econopet_top_smoke.cpp`](econopet_top_smoke.cpp) round-trips CPU selection,
+executes a checked soft-6502 RAM program, captures its result and mounts a D64
+through production firmware. [`ieee/drive_test.cpp`](ieee/drive_test.cpp) extends
+that path to physical IEEE handshakes, OPEN, load-channel streaming and channel
+15 status. Both sources belong to the existing isolated firmware executable.
+They need no external ROM media and do not execute a Commodore drive ROM.
+
+PRG cases use 2, 4, 254 and 255 stored bytes (no implicit load address).
+They cover the final-sector boundary and the first byte of a second sector.
+The CPU receiver and passive wire trace independently match every byte, ATN and
+EOI position, and the data FIFO must be empty after the last valid byte.
+Status expectations include the leading space in `"00, OK,00,00\r"` and EOI
+on its final CR. Simultaneous firmware RX traces check the consumed OPEN
+transaction, with EOI explicitly unobserved. Both paths share an OPEN sender
+whose passive wire trace requires EOI on the final filename byte before
+UNLISTEN. Native filename collection needs that EOI to queue parsing.
+Configured polling `.service(firmware.service_adapter())` drains RX without
+introducing a periodic cadence and bounds all SPI clocks with the shared
+elapsed-cycle deadline.
+
+Separate one-byte SEQ cases preserve the native initial-EOF bug. For a sole
+stored byte `X`, the CPU and passive wire trace must observe `X, 0, 2, X`,
+with EOI only on the fourth byte and no queued tail. The receiver reads until
+EOI with a four-byte cap and the existing per-byte deadline. Payloads include
+zero, CR, `A` and `$FF`. `OR30` overwrites the prefetched EOF with `RDYTLK`,
+so the wrapped buffer pointer exposes the sector-link bytes before the
+repeated payload reaches EOF normally. The two-byte and 255-byte PRG cases
+check the threshold and a final sector containing only one byte.
+An operator's BASIC capture corroborated `65, 0, 2, 65` with EOF only on the
+last byte, and normal EOF for a two-byte file. Its drive/ROM configuration
+was not recorded, so it is not independent identification of a native 4040.
+
+The VIA smoke case checks CPU-written output latches and released IEEE inputs.
+It masks unrelated pins, including the running vertical-retrace input on PB5.
+Board-only enable readback and ATN/FIFO consumption already have coverage in
+[`firmware_test.cpp`](firmware_test.cpp) and
+[`ieee/controller_test.cpp`](ieee/controller_test.cpp).
+
+The selected peripheral is the 4040/D64 source model at
+[`mist64/cbmsrc` revision `01bd60f`](https://github.com/mist64/cbmsrc/tree/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040).
+These narrowly scoped source-derived expectations do not establish complete
+DOS compatibility, D80/8050 wire behavior, repeated reads after an observed EOF
+or native PET ROM I/O. Firmware unit tests separately preserve the same
+one-byte bug and normal two-byte threshold for D64/4040 and D80/single-sided
+8050 DOS 2.7, across SEQ, PRG and USR files. Raw image readers and REL records
+(including `.hdd`) retain their existing stored-byte/record semantics.
+The existing controller evidence below supplies the PET-side handshake
+contract.
+
+| Behavior | Target ROM/model and hardware | Primary evidence | Required result | Code/test | Corroboration |
+|---|---|---|---|---|---|
+| OPEN filename termination | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/tst2` (`PUT`, `L50`, `L45`) sets `CMDWAT` only on filename EOI, then `idle` (`IDLE`) dispatches `parsex` (`PARSXQ`) | Final filename byte carries EOI before UNLISTEN, verified independently on the wire | Shared `open_basic`, PRG and DOS status acceptance cases | PET `OPENI` sends via buffered `CIOUT`, and `UNLSN` flushes the final pending byte with EOI (see the controller evidence below) |
+| PRG OPEN and final-sector streaming (at least two stored bytes) | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/master`, `open` (`OP40`), `opchnl` (`OPNRCH`, `OR30`, `GETBYT`, `RDBYT`, `RD4`), `tst4` (`GET`, `SEQGET`), `i_odef` (`EOIOUT`, `RDYTLK`) and `ieee` (`TALK1`, `TLK10`) | Exact stored bytes, EOI only on the last valid byte, no sector padding queued | `DrivePrgTest.StreamsCheckedPrgFixtureOverProductionTop` | [VICE virtual-drive reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c) corroborates sector-link lengths, not the native one-byte EOF bug or physical IEEE timing |
+| Native one-byte initial-EOF overwrite | 4040/D64 wire acceptance, plus single-sided 8050/D80 DOS 2.7 firmware unit tests | Pinned `DOS_4040/opchnl` and `DOS_8250/opchnl` (`OR30`, `GETBYT`), `DOS_4040/opchnl` and `DOS_8250/tst2` (`RDBYT`, `RD0`), ordinary TALK readiness consumption in both `ieee` sources | Sole byte `X` produces `X, 0, 2, X`, EOI only on byte four. Two-byte files terminate normally | `DriveOneByteTest.PreservesNativeEofBugOverProductionTop`, native one-/two-byte firmware tests | Operator BASIC capture confirms the sequence and two-byte threshold, but its model/revision was not identified. VICE high-level virtual-drive EOF is not an oracle for this ROM bug |
+| Successful OPEN status | 4040/D64, status channel 15 | Pinned `DOS_4040/parsex` (`PARSXQ`), `erproc` (`ERRTAB`, `OKERR`, `ERRMSG`, `ERMSG2`) and [`tst4` (`GETERC`)](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4#L81), which produces CR with `EOIOUT` | Exact `00, OK,00,00` plus CR, with final-byte EOI | `FirmwareTest.StreamsDosStatusOverProductionTop` | [VICE status formatting](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error text](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) retain the leading space and CR |
+
 ## IEEE controller and protocol evidence
 
 The board-only IEEE layer requires neither firmware integration nor ROM media.
