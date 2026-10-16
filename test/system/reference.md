@@ -155,6 +155,90 @@ contract.
 | Native one-byte initial-EOF overwrite | 4040/D64 wire acceptance, plus single-sided 8050/D80 DOS 2.7 firmware unit tests | Pinned `DOS_4040/opchnl` and `DOS_8250/opchnl` (`OR30`, `GETBYT`), `DOS_4040/opchnl` and `DOS_8250/tst2` (`RDBYT`, `RD0`), ordinary TALK readiness consumption in both `ieee` sources | Sole byte `X` produces `X, 0, 2, X`, EOI only on byte four. Two-byte files terminate normally | `DriveOneByteTest.PreservesNativeEofBugOverProductionTop`, native one-/two-byte firmware tests | Operator BASIC capture confirms the sequence and two-byte threshold, but its model/revision was not identified. VICE high-level virtual-drive EOF is not an oracle for this ROM bug |
 | Successful OPEN status | 4040/D64, status channel 15 | Pinned `DOS_4040/parsex` (`PARSXQ`), `erproc` (`ERRTAB`, `OKERR`, `ERRMSG`, `ERMSG2`) and [`tst4` (`GETERC`)](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4#L81), which produces CR with `EOIOUT` | Exact `00, OK,00,00` plus CR, with final-byte EOI | `FirmwareTest.StreamsDosStatusOverProductionTop` | [VICE status formatting](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error text](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) retain the leading space and CR |
 
+## Commodore ROM integration coverage
+
+[`ieee/commodore_rom_test.cpp`](ieee/commodore_rom_test.cpp) executes installed
+PET controller ROM code on the production soft 6502, with the external PIA/VIA
+models and production FPGA IEEE fabric. It belongs to the isolated firmware
+executable. The session mounts an empty D64 to enable the FPGA peripheral, but
+does not service C drive logic while the ROM sender runs. Active physical-SPI
+FIFO drains check byte/ATN records independently of passive DAV-edge wire
+traces, which additionally check EOI. Neither observation substitutes for
+executing a Commodore drive ROM.
+
+Set `ECONOPET_MEDIA_DIR` to a media directory containing `roms/`. The complete
+`Upgrade` and `Rom4` manifests in [`roms.h`](roms.h) select the corrected
+`901465-03` KERNAL and `901465-22` KERNAL, with editors `901447-24` and
+`901447-29`. ROM 4 command transport also uses `901465-21`. The
+[PET ROM ledger](../../.github/instructions/ieee.instructions.md) records the
+binary identities, entry bytes, reconstructed source and calling prerequisites.
+The tests load media only during fixture setup or test bodies, so discovery
+requires no ROMs. Execution without required media fails explicitly rather
+than skipping or substituting synthetic bytes.
+The suites reuse `FirmwareTest` ownership and teardown, including `SystemTest`'s
+actual simulation-seed reporting and bounded failure diagnostics. Common setup
+mounts the D64 once per test and installs the parameterized revision.
+
+The normal suite has 30 enabled cases (14 shared contracts for each revision
+and two reset-vector fetch cases):
+
+| Enabled contract | Primary evidence and prepared state | Required observation |
+|---|---|---|
+| `ER001`, `SCATN`, `TKATN` | Selected KERNAL IEEE entry bytes and `ob1src` transport paths, explicit CINT and VIA preconditions | Native NRFD/NDAC receive setup and ATN polarity |
+| `ACPTR_timeout` | Native receive-timeout recovery, with an explicit stuck external VIA timer-1 interrupt flag | `SATUS=$02` and accumulator CR |
+| `TALK`, `LISTN`, `LIST1`, `UNLSN` | Native addressing/termination paths, with device 8 in `FA` | Exact command bytes, ATN and wire EOI |
+| `LISTN_SECND`, `TALK_UNTLK`, `TALK_TKSA` | Dependent native calls in one CPU session | Complete ordered primary/secondary or termination transactions |
+| `CLSE1`, `CLOS5` | Native CLOSE sender and logical-file lookup/removal, with secondary/file tables prepared after CINT | Exact LISTEN/CLOSE/UNLISTEN framing, plus file-count removal for `CLOS5` |
+| `CLALL` | Public vector, one open file and local keyboard/screen defaults prepared after CINT | File count cleared without IEEE traffic |
+| Reset-vector fetch | Installed selected ROM's little-endian `$FFFC-$FFFD` vector | A new soft-6502 fetch at that target, not completion of full-machine boot |
+
+Both revisions retain disabled `ISOUR`, buffered `CIOUT`, `CLRCHN`, `CHKIN`,
+`CHKOUT` and `OPENI` contracts. ROM 4 also retains eight disabled prepared
+`TRANS1` payload cases: CONCAT, RECORD, HEADER, COLECT, BACKUP, COPY, RENAME
+and SCRTCH. These test command transport, not the BASIC parsers or drive-side
+command execution. The binary RECORD payload includes an embedded zero.
+ROM 4's verified CIOUT entry now has a matching disabled case rather than an
+obsolete unavailability expectation. There are 20 disabled cases in total.
+Their presence is not passing compatibility coverage, and successful opt-in
+probes do not change the historical enabled/disabled policy.
+
+Two parked fixture assumptions are corrected from primary evidence rather
+than accepted as emulator failures. The native OPEN path in pinned
+[`ob2src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_2.0_REC/ob2src)
+stores `$60 OR channel` in SAT. Prepared `CLOS5`, `CHKIN` and `CHKOUT` file
+tables now contain that encoded value rather than raw channel 2.
+[`ob4src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_2.0_REC/ob4src)
+sends it directly through TKSA/SECND. ROM 4
+[`dos.write`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/dos.write)
+explicitly sends `$6F` in `TRANS1` and jumps to OPENIB, bypassing OPENI's
+`$F0` conversion. Its eight command cases therefore expect secondary `$6F`,
+not OPEN `$FF`. The same source's CONCAT template includes the existing
+destination among the sources (`C0:DEST=0:DEST,0:SRC`), unlike COPY
+(`C0:DEST=0:SRC`). Each case checks its full payload and final-byte EOI.
+
+All ROM calls use revision-bound checked programs. ISOUR and CIOUT explicitly
+select phased mode before allocation and retain one CPU/IEEE session across
+host FIFO drains. CIOUT pauses after its first call and requires an empty FIFO
+and unchanged wire trace before allowing the second call. It then checks the
+first byte sent on the second call and UNLISTEN's final-byte EOI flush. The
+original budgets remain five million startup/run cycles, 100000 cycles per buffered phase,
+500000 cycles per FIFO drain/ISOUR resume, and 20000 cycles for reset fetch.
+The old manual completion marker, hard-coded harness start and fixed
+post-return ticking are replaced by layout-owned completion and bounded
+checked execution. File-table/default-device setup now executes after CINT,
+so initialization cannot silently invalidate a test's stated preconditions.
+
+```sh
+export ECONOPET_MEDIA_DIR=/local/media
+cmake --preset default
+cmake --build --preset sys-test --parallel 2
+ctest --test-dir build/system --parallel 2 --no-tests=error \
+  -R '^firmware\.(Pet/CommodoreRomIeee|Pet/KernalReset)'
+```
+
+This layer does not establish full BASIC initialization, LOAD/SAVE, successful
+ACPTR data reception, full DOS compatibility or Waterloo behavior.
+
 ## IEEE controller and protocol evidence
 
 The board-only IEEE layer requires neither firmware integration nor ROM media.
