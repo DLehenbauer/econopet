@@ -33,7 +33,8 @@ enum ieee_drive {
 
 enum ieee_channel {
     IEEE_CHANNEL_LOAD = 0,
-    IEEE_CHANNEL_REL = 2,
+    IEEE_CHANNEL_DATA = 2,
+    IEEE_CHANNEL_REL = IEEE_CHANNEL_DATA,
     IEEE_CHANNEL_COMMAND = IEEE_CMD_CHANNEL_MASK,
     IEEE_CHANNEL_LOAD_ALIAS = IEEE_CMD_CHANNEL_MASK + 1,
 };
@@ -259,6 +260,87 @@ START_TEST(test_d64_mount_open_status_and_stream) {
         // The final sector contributes 10 bytes and EOI belongs to its tail.
         ck_assert_uint_eq(mock_ieee_data_byte(254 + index), 0xe2 + index);
         ck_assert_int_eq(mock_ieee_data_eoi(254 + index), index == 9);
+    }
+}
+END_TEST
+
+static const diskimage_type_t native_image_types[] = {
+    diskimage_type_d64, diskimage_type_d80
+};
+static const uint8_t native_file_types[] = {
+    DISKIMAGE_FTYPE_SEQ, DISKIMAGE_FTYPE_PRG, DISKIMAGE_FTYPE_USR
+};
+
+// Replaces BASIC's first sector with a short ordinary file for each native model.
+static void mount_short_native_file(size_t case_index, const uint8_t* payload, size_t length) {
+    ck_assert_uint_lt(case_index, count_of(native_image_types) * count_of(native_file_types));
+    ck_assert_uint_ge(length, 1);
+    ck_assert_uint_le(length, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    const diskimage_type_t type = native_image_types[case_index / count_of(native_file_types)];
+    const bool d80 = type == diskimage_type_d80;
+    uint8_t* const image = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64();
+    uint32_t directory_offset;
+    uint32_t data_offset;
+    ck_assert(diskimage_sector_offset(type, d80 ? 39 : 18, 1, &directory_offset));
+    ck_assert(diskimage_sector_offset(type, d80 ? 38 : 17, 0, &data_offset));
+
+    // Retain the closed-file flag, but vary SEQ/PRG/USR independently of channel 2.
+    const uint8_t closed_file_flag = 0x80;
+    image[directory_offset + 2] =
+        closed_file_flag | native_file_types[case_index % count_of(native_file_types)];
+    image[data_offset] = 0;
+    image[data_offset + 1] = (uint8_t) (DISKIMAGE_SECTOR_LINK_SIZE + length - 1);
+    memcpy(image + data_offset + DISKIMAGE_SECTOR_LINK_SIZE, payload, length);
+    mount_image(IEEE_FIRST_DEVICE, IEEE_DRIVE_FIRST, d80 ? "short.d80" : "short.d64",
+        image, d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, true);
+}
+
+// Preserves OR30's lost initial EOF, including buffer-header leakage and later EOF.
+START_TEST(test_native_one_byte_file_reaches_eof_after_four_bytes) {
+    const uint8_t payload[] = {0x41};
+    const uint8_t expected[] = {0x41, 0x00, 0x02, 0x41};
+    const uint8_t data_channel = IEEE_CHANNEL_DATA;
+    mount_short_native_file(_i, payload, sizeof(payload));
+
+    // Every OPEN must repeat the native behavior, even after a completed stream.
+    for (size_t attempt = 0; attempt < 2; ++attempt) {
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE),
+            IEEE_CMD_OPEN(data_channel));
+        enqueue_name("BASIC");
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
+            IEEE_CMD_SECONDARY(data_channel));
+        ieee_drive_task();
+
+        // Compare literal native bytes and EOI rather than the image reader's EOF.
+        ck_assert_uint_eq(mock_ieee_data_count(), sizeof(expected));
+        for (size_t i = 0; i < sizeof(expected); ++i) {
+            ck_assert_uint_eq(mock_ieee_data_byte(i), expected[i]);
+            ck_assert_int_eq(mock_ieee_data_eoi(i), i + 1 == sizeof(expected));
+        }
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), sizeof(expected));
+    }
+}
+END_TEST
+
+// Verifies two stored bytes avoid the initial-EOF overwrite for every native type.
+START_TEST(test_native_two_byte_file_keeps_normal_eof) {
+    const uint8_t payload[] = {0x41, 0x42};
+    const uint8_t data_channel = IEEE_CHANNEL_DATA;
+    mount_short_native_file(_i, payload, sizeof(payload));
+
+    // OPEN an ordinary read channel, then let production firmware fill its FIFO.
+    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(data_channel));
+    enqueue_name("BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
+        IEEE_CMD_SECONDARY(data_channel));
+    ieee_drive_task();
+
+    // The second byte ends the file with neither header leakage nor duplication.
+    ck_assert_uint_eq(mock_ieee_data_count(), sizeof(payload));
+    for (size_t i = 0; i < sizeof(payload); ++i) {
+        ck_assert_uint_eq(mock_ieee_data_byte(i), payload[i]);
+        ck_assert_int_eq(mock_ieee_data_eoi(i), i + 1 == sizeof(payload));
     }
 }
 END_TEST
@@ -1179,6 +1261,10 @@ Suite* ieee_drive_suite(void) {
     // Cover sequential transfers, status, addressing, and unit isolation.
     tcase_add_loop_test(test_case, test_d64_mount_open_status_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_native_one_byte_file_reaches_eof_after_four_bytes,
+                        0, count_of(native_image_types) * count_of(native_file_types));
+    tcase_add_loop_test(test_case, test_native_two_byte_file_keeps_normal_eof,
+                        0, count_of(native_image_types) * count_of(native_file_types));
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_read_past_eof_returns_eoied_carriage_return,

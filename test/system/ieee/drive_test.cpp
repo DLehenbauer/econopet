@@ -16,6 +16,7 @@ namespace {
 using namespace ieee_test;
 using disk_fixture::D64;
 constexpr uint8_t ViaIeeeIdle = pet::Ndac | pet::NrfdInput | pet::Dav | ViaIdle;
+constexpr uint8_t DataChannel = 2;
 
 // Bound production cooperative service, including all physical SPI clocks.
 void service_rx(System& system, FirmwareSession& firmware, const char* context) {
@@ -26,10 +27,10 @@ void service_rx(System& system, FirmwareSession& firmware, const char* context) 
 }
 
 // Send and independently verify a native OPEN for the shared BASIC fixture.
-void open_basic(System& system, IeeeController& controller) {
+void open_basic(System& system, IeeeController& controller, Channel channel = Channel{LoadChannel}) {
     auto wire = system.trace_ieee();
     controller.command(Listen(Device{DeviceAddress}));
-    controller.command(Open(Channel{LoadChannel}));
+    controller.command(Open(channel));
 
     // Native filename collection sets CMDWAT only after receiving EOI.
     constexpr std::string_view Filename = "BASIC";
@@ -40,13 +41,16 @@ void open_basic(System& system, IeeeController& controller) {
     controller.command(Unlisten);
 
     require_sequence(wire.records(), {
-        command(Listen(Device{DeviceAddress})), command(Open(Channel{LoadChannel})),
+        command(Listen(Device{DeviceAddress})), command(Open(channel)),
         data('B'), data('A'), data('S'), data('I'), data('C', Eoi::Last), command(Unlisten)
     }, "native OPEN wire sequence");
 }
 
 // Give each file length a fresh board and independent firmware session.
 class DrivePrgTest : public FirmwareTest, public testing::WithParamInterface<size_t> {};
+
+// Exercise the native one-byte EOF bug with ordinary, zero and high-bit data.
+class DriveOneByteTest : public FirmwareTest, public testing::WithParamInterface<uint8_t> {};
 
 } // namespace
 
@@ -80,8 +84,63 @@ TEST_P(DrivePrgTest, StreamsCheckedPrgFixtureOverProductionTop) {
 }
 
 // Cover a short file, the original smoke payload and both sides of a sector link.
-INSTANTIATE_TEST_SUITE_P(FileLengths, DrivePrgTest, testing::Values(size_t{1}, size_t{4},
+INSTANTIATE_TEST_SUITE_P(FileLengths, DrivePrgTest, testing::Values(size_t{2}, size_t{4},
     size_t{254}, size_t{255}));
+
+// Preserve the native ordinary-file OPEN bug in 4040 and shared 8050/8250 DOS 2.7.
+// OR30 prefetches the first byte through RDBYT, then unconditionally replaces
+// its channel readiness with RDYTLK. If the whole file contains just one byte X,
+// that prefetch already set EOIOUT, but OR30 discards it. X is sent without EOI.
+//
+// GETBYT also wrapped the buffer pointer to offset zero when it fetched X.
+// Because the lost EOI permits further reads, the drive then transmits the
+// final sector's two link bytes: 0 (no next track), then 2 (last occupied byte
+// offset). The pointer now reaches the payload again, so X is transmitted a
+// second time. This RDBYT sets EOIOUT without another OR30 overwrite.
+// Thus the wire sequence is X, 0, 2, X, with EOI only on the fourth byte.
+// An EOF-driven reader consumes three extra bytes but eventually stops
+// normally (BASIC ST has bit 64 set on the fourth read, not the first).
+//
+// The threshold is exactly one stored byte in the entire SEQ/PRG/USR file.
+// Two or more bytes, including a multi-sector file with a one-byte final
+// sector, retain normal final-byte EOI. A one-byte SEQ is legitimate, although
+// a one-byte PRG lacks the usual complete two-byte load address. REL records
+// and the non-native .hdd extension are outside this ordinary-stream quirk.
+// This is unrelated to the required EOI on the final OPEN filename byte.
+//
+// Source: mist64/cbmsrc revision 01bd60f162ef92212ef0cb67546ae8f42be34168,
+// DOS_4040/opchnl and DOS_8250/opchnl (OR30), DOS_4040/opchnl and
+// DOS_8250/tst2 (GETBYT/RDBYT), and their ordinary ieee TALK paths.
+TEST_P(DriveOneByteTest, PreservesNativeEofBugOverProductionTop) {
+    const uint8_t byte = GetParam();
+    const std::vector<Record> expected = {
+        data(byte), data(0x00), data(0x02), data(byte, Eoi::Last)
+    };
+    const Channel channel{DataChannel};
+
+    // A legitimate one-byte SEQ file uses an ordinary channel, not PRG LOAD.
+    IeeeController controller(system);
+    firmware.mount(D64{}.seq("BASIC", {byte}));
+    open_basic(system, controller, channel);
+    service_rx(system, firmware, "service one-byte SEQ OPEN transaction");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(channel));
+    service_rx(system, firmware, "service one-byte SEQ TALK transaction");
+    auto wire = system.trace_ieee();
+    std::vector<Record> received;
+
+    // Bound the read independently of the firmware so lost EOF cannot hang it.
+    constexpr size_t MaximumWireBytes = 4;
+    do {
+        received.push_back(controller.receive());
+    } while (received.back().eoi != Eoi::Last && received.size() < MaximumWireBytes);
+    require_sequence(received, expected, "native one-byte SEQ CPU payload through EOF");
+    require_sequence(wire.records(), expected, "native one-byte SEQ wire payload through EOF");
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+}
+
+INSTANTIATE_TEST_SUITE_P(StoredBytes, DriveOneByteTest,
+    testing::Values(uint8_t{0x00}, uint8_t{0x0d}, uint8_t{0x41}, uint8_t{0xff}));
 
 // Reads DOS status with final-byte EOI after opening the fixture file.
 TEST_F(FirmwareTest, StreamsDosStatusOverProductionTop) {

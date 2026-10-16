@@ -73,6 +73,36 @@ Channel-15 `I` and `V` commands use an explicit drive 0/1 when present and
 otherwise retain the previous drive, matching the ROM's `SIMPRS`/`SETANY`
 selection.
 
+### Native one-byte file EOF bug
+
+EconoPET deliberately preserves the native ordinary-file read bug for D64
+(4040) and D80 (single-sided 8050, shared DOS 2.7 source) images. A whole file
+containing exactly one stored byte `X` is transmitted as `X, 0, 2, X`, with
+EOI only on the fourth byte. An EOF-driven reader therefore consumes three
+extra bytes before stopping. Two or more stored bytes use normal final-byte
+EOI, including a multi-sector file with just one byte in its final sector.
+SEQ, PRG and USR streams share this behavior. A one-byte PRG is truncated
+relative to the usual two-byte load address, but a one-byte SEQ is legitimate.
+
+The primary evidence is the pinned
+[`mist64/cbmsrc` revision `01bd60f`](https://github.com/mist64/cbmsrc/tree/01bd60f162ef92212ef0cb67546ae8f42be34168).
+In `DOS_4040/opchnl` and `DOS_8250/opchnl`, `OR30` prefetches the first byte
+through `RDBYT` and then unconditionally replaces `EOIOUT` with `RDYTLK`.
+`GETBYT` has already wrapped the buffer pointer to zero. Subsequent reads
+expose the final sector's `0, 2` link bytes and reread the payload. This time
+the final-byte EOI survives because no OPEN initialization overwrites it.
+The ordinary TALK paths consume that readiness state.
+
+The compatibility adjustment belongs to the drive's transmit path, not raw
+image extraction. REL record reads, including the non-native flat `.hdd`
+extension, do not reproduce this ordinary-stream bug.
+[`ieee_drive_test.c`](../../../fw/test/ieee_drive_test.c) checks both native
+image types and all three ordinary file types, including reopening and the
+two-byte threshold.
+[`drive_test.cpp`](../../../test/system/ieee/drive_test.cpp) checks eventual
+EOF independently through CPU reads and passive production-FPGA wire traces.
+These are source-derived regressions, not execution of a native drive ROM.
+
 ## ROM
 
 PIA Addressing
