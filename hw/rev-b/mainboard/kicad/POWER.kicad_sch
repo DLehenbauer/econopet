@@ -10438,7 +10438,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "EconoPET:CP_Radial_D12.5mm_P5.00mm_P7.50mm"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D12.5mm_P5.00mm"
 			(at 68.58 36.83 0)
 			(effects
 				(font
@@ -10630,7 +10630,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "EconoPET:CP_Radial_D12.5mm_P5.00mm_P7.50mm"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D12.5mm_P5.00mm"
 			(at 81.28 36.83 0)
 			(effects
 				(font
