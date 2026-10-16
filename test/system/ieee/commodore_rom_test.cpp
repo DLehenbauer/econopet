@@ -44,7 +44,6 @@ constexpr uint8_t RecoveryAccumulator = 0x0d;
 constexpr uint8_t LogicalFile = 1;
 constexpr uint8_t OneOpenFile = 1;
 constexpr uint8_t FileSecondary = IEEE_CMD_SECONDARY(FileChannel);
-constexpr size_t RecordCommandLength = 5;
 constexpr size_t CommandPayloadCapacity = 0xff;
 constexpr econopet::Cycles BufferedByteBudget = 100000;
 constexpr econopet::Cycles ResetFetchBudget = 20000;
@@ -503,9 +502,15 @@ TEST_F(CommodoreRomRevision, DISABLED_Rom4_CONCAT_command_transport) {
     run_rom4_trans1_case(system, "C0:DEST=0:DEST,0:SRC", "CONCAT");
 }
 
-// Retains RECORD's binary position command, including its embedded zero.
+// Retains BOBREC's encoded secondary and valid position, with an embedded record-number zero.
 TEST_F(CommodoreRomRevision, DISABLED_Rom4_RECORD_command_transport) {
-    run_rom4_trans1_case(system, std::string("P\x02\x34\x12\x00", RecordCommandLength), "RECORD");
+    constexpr uint16_t RecordNumber = 0x0034;
+    constexpr uint8_t RecordPosition = 1;
+    const std::string command{
+        'P', FileSecondary, static_cast<char>(RecordNumber),
+        static_cast<char>(RecordNumber >> 8), RecordPosition
+    };
+    run_rom4_trans1_case(system, command, "RECORD");
 }
 
 // Retains HEADER's format-command transport and EOI expectation.

@@ -196,7 +196,17 @@ Both revisions retain disabled `ISOUR`, buffered `CIOUT`, `CLRCHN`, `CHKIN`,
 `CHKOUT` and `OPENI` contracts. ROM 4 also retains eight disabled prepared
 `TRANS1` payload cases: CONCAT, RECORD, HEADER, COLECT, BACKUP, COPY, RENAME
 and SCRTCH. These test command transport, not the BASIC parsers or drive-side
-command execution. The binary RECORD payload includes an embedded zero.
+command execution. RECORD uses the native five-byte payload
+`50 62 34 00 01` for channel 2, record 52, position 1. In pinned ROM 4
+[`ob2src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob2src),
+OPEN's `OP100` stores `$60 OR channel` in SAT.
+[`ob1src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob1src)'s
+`JZ100` restores it to SA, which
+[`dos.write`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/dos.write)'s
+`BOBREC` copies unchanged before the record-number low/high bytes and position.
+[`dos.syntax`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/dos.syntax)
+defaults position to 1 and rejects 0 and 255. The embedded zero is in the
+record-number high byte, not an invalid zero position.
 ROM 4's verified CIOUT entry now has a matching disabled case rather than an
 obsolete unavailability expectation. There are 20 disabled cases in total.
 Their presence is not passing compatibility coverage, and successful opt-in
