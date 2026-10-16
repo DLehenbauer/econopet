@@ -345,6 +345,54 @@ START_TEST(test_native_two_byte_file_keeps_normal_eof) {
 }
 END_TEST
 
+// Keeps the native initial-EOF bug independent of REL reads on any device.
+START_TEST(test_native_one_byte_eof_survives_interleaved_relative_read) {
+    const unsigned int native_case_count =
+        count_of(native_image_types) * count_of(native_file_types);
+    const unsigned int rel_device = loop_device_only(_i / native_case_count);
+    const uint8_t ordinary_channel = IEEE_CHANNEL_DATA + 1;
+    const uint8_t payload[] = {0x41};
+    const uint8_t expected[] = {0x41, 0x00, 0x02, 0x41};
+    const size_t record_length = 129;
+
+    // Give the ordinary stream and REL record separate files and channels.
+    mount_short_native_file(_i % native_case_count, payload, sizeof(payload));
+    mount_d64(rel_device, IEEE_DRIVE_SECOND, "relative.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(rel_device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(IEEE_DRIVE_SECOND, "DATA");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    // Leave the ordinary file open but unread while servicing the REL channel.
+    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(ordinary_channel));
+    enqueue_name("BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    enqueue_command(IEEE_CMD_TALK(rel_device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+    ieee_drive_task();
+
+    // Verify a real record was served, then model the controller draining it.
+    ck_assert_uint_eq(mock_ieee_data_count(), record_length);
+    for (size_t i = 0; i < record_length; ++i) {
+        ck_assert_uint_eq(mock_ieee_data_byte(i), 0xa0);
+        ck_assert_int_eq(mock_ieee_data_eoi(i), i + 1 == record_length);
+    }
+    mock_ieee_clear_data();
+
+    // The unrelated read must not suppress the ordinary file's four-byte EOF.
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(IEEE_FIRST_DEVICE),
+        IEEE_CMD_SECONDARY(ordinary_channel));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), sizeof(expected));
+    for (size_t i = 0; i < sizeof(expected); ++i) {
+        ck_assert_uint_eq(mock_ieee_data_byte(i), expected[i]);
+        ck_assert_int_eq(mock_ieee_data_eoi(i), i + 1 == sizeof(expected));
+    }
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), sizeof(expected));
+}
+END_TEST
+
 // Verifies replacing an existing mount in one slot serves the new image.
 START_TEST(test_replacing_mount_uses_new_image) {
     const unsigned int device = loop_device(_i);
@@ -1265,6 +1313,9 @@ Suite* ieee_drive_suite(void) {
                         0, count_of(native_image_types) * count_of(native_file_types));
     tcase_add_loop_test(test_case, test_native_two_byte_file_keeps_normal_eof,
                         0, count_of(native_image_types) * count_of(native_file_types));
+    tcase_add_loop_test(test_case, test_native_one_byte_eof_survives_interleaved_relative_read,
+                        0, count_of(native_image_types) * count_of(native_file_types)
+                            * IEEE_DEVICE_COUNT);
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_read_past_eof_returns_eoied_carriage_return,

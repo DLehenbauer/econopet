@@ -635,7 +635,8 @@ static void service_tx(void) {
                 return;
             }
             if (is_last) {
-                if (streamed_bytes == 0 && n == 0
+                // REL reads share byte accounting, not this stream's cursor.
+                if (stream.sectors == 1 && stream.pos == DISKIMAGE_SECTOR_LINK_SIZE + 1
                     && (stream.img->type == diskimage_type_d64
                         || stream.img->type == diskimage_type_d80)) {
                     // Native OR30 loses the sole byte's initial EOF. The wrapped

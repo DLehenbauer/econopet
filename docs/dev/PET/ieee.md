@@ -94,11 +94,13 @@ the final-byte EOI survives because no OPEN initialization overwrites it.
 The ordinary TALK paths consume that readiness state.
 
 The compatibility adjustment belongs to the drive's transmit path, not raw
-image extraction. REL record reads, including the non-native flat `.hdd`
+image extraction. Detection uses the ordinary stream's own sector count and
+cursor, so interleaved REL reads cannot suppress its initial-EOF behavior.
+REL record reads, including the non-native flat `.hdd`
 extension, do not reproduce this ordinary-stream bug.
 [`ieee_drive_test.c`](../../../fw/test/ieee_drive_test.c) checks both native
-image types and all three ordinary file types, including reopening and the
-two-byte threshold.
+image types and all three ordinary file types, including reopening, the
+two-byte threshold and interleaved REL reads on the same or another device.
 [`drive_test.cpp`](../../../test/system/ieee/drive_test.cpp) checks eventual
 EOF independently through CPU reads and passive production-FPGA wire traces.
 These are source-derived regressions, not execution of a native drive ROM.
