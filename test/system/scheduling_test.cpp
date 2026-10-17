@@ -1,17 +1,37 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include <array>
 #include <optional>
 #include <stdexcept>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "framework/asm.h"
+#include "framework/observations.h"
 #include "framework/system_test.h"
+#include "ieee/controller.h"
 #include "scheduler.h"
 
 using econopet::Cycles;
 using econopet::CycleTime;
+
+namespace {
+constexpr Cycles ProgramBudget{20000};
+constexpr Cycles ProgramStimulusDelay{8000};
+constexpr Cycles PeripheralBudget{1000};
+constexpr Cycles AvDuration{10000};
+constexpr econopet::CpuAddress CodeStart{0x300};
+constexpr econopet::CpuAddress ResultStart{0x200};
+constexpr econopet::CpuAddress CompletionAddress{0x201};
+constexpr econopet::CpuAddress StackStart{0x100};
+constexpr econopet::CpuAddress VectorsStart{0xfffa};
+constexpr size_t CodeCapacity = 0x100;
+constexpr size_t StackCapacity = 0x100;
+constexpr size_t VectorCapacity = 6;
+constexpr uint8_t Answer = 0x42;
+}
 
 TEST_F(SystemTest, SchedulerOrdersStimulusBeforeCompletedCycleObservers) {
     Scheduler scheduler(system);
@@ -307,4 +327,155 @@ TEST_F(SystemTest, SchedulerPreservesSuspendedHardwarePhaseAndRequiresResetRecov
     scheduler.at(system.time(), [&](System&) { ++applied; });
     system.tick(1);
     EXPECT_EQ(applied, 2u);
+}
+
+// A checked 6502 program must consume scheduled GPIO before signaling completion.
+TEST_F(SystemTest, SchedulerInterleavesCpuExecutionAndPeripheralStimulus) {
+    // Reserve and assemble a real peripheral polling loop with a CPU-written terminal.
+    test_asm::Scenario scenario(system);
+    const auto code = scenario.reserve("code", test_asm::RegionKind::Code, CodeStart, CodeCapacity);
+    const auto result = scenario.reserve("result", test_asm::RegionKind::Results, ResultStart, 1);
+    const auto marker = scenario.completion(
+        scenario.reserve("marker", test_asm::RegionKind::Mailbox, CompletionAddress, 1));
+    scenario.reserve("vectors", test_asm::RegionKind::Vectors, VectorsStart, VectorCapacity);
+    test_asm::mos6502::Program program(scenario, code);
+    program.emit(test_asm::mos6502::lda_imm(econopet::io::PiaPortAccess.bits()));
+    program.emit(test_asm::mos6502::sta_abs(pet::Pia1ControlA));
+    const auto poll = program.mark("poll");
+    program.emit(test_asm::mos6502::lda_abs(pet::Pia1PortA));
+    program.emit(test_asm::mos6502::beq(poll));
+    program.emit(test_asm::mos6502::sta_abs(result.start()));
+    program.finish(marker);
+
+    // Diagnostic sense owns PA7, so hold it low while waiting for a zero input byte.
+    system.raw_stimulus([](auto& inputs) { inputs.diag_i = false; });
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a = 0; });
+    Scheduler scheduler(system);
+    const auto at = system.time() + ProgramStimulusDelay;
+    std::optional<CycleTime> applied;
+    scheduler.at(at, [&](System& board) {
+        applied = board.time();
+        board.io().pia1().inputs([](auto& inputs) { inputs.port_a = Answer; });
+    });
+
+    // Execute through the existing clock owner and capture only checked completion.
+    const auto execution = scenario.run(program, result, ProgramBudget, "scheduled GPIO",
+        [&](System& board, Cycles remaining) { scheduler.step(board, remaining); });
+    ASSERT_TRUE(applied);
+    EXPECT_EQ(*applied, at);
+    EXPECT_EQ(execution[scenario.lower_bank(result).byte("answer")], Answer);
+    EXPECT_GT(execution.completed(), at);
+}
+
+// Scheduled CA1 edges must clock through the fitted PIA into the shared IRQ net.
+TEST_F(SystemTest, SchedulerPeripheralInterruptUsesModeledEdgeDetection) {
+    // Configure the PIA through actual CPU writes and prime its initial high input.
+    IeeeController controller(system);
+    controller.write(pet::Pia2ControlA,
+        (econopet::io::PiaPortAccess | econopet::io::PiaControlBit::C1IrqEnable).bits());
+    const auto clocks = system.io().clock_count();
+    system.run_until([&](const System& board) { return board.io().clock_count() > clocks; },
+        PeripheralBudget, "prime peripheral inputs");
+    ASSERT_FALSE(system.io().pia2().irq());
+
+    // Drive the external edge without injecting interrupt flags or host completion.
+    Scheduler scheduler(system);
+    const auto at = system.time() + Cycles{3};
+    std::optional<CycleTime> applied;
+    scheduler.at(at, [&](System& board) {
+        applied = board.time();
+        board.io().pia2().inputs([](auto& inputs) { inputs.ca1 = false; });
+    });
+    scheduler.run_until([](const System& board) { return board.io().pia2().irq(); },
+        PeripheralBudget, "scheduled PIA IRQ");
+    ASSERT_TRUE(applied);
+    EXPECT_EQ(*applied, at);
+    EXPECT_GT(system.time(), at);
+    EXPECT_TRUE(system.io().pia2().irq());
+    EXPECT_FALSE(system.snapshot().io_irq_ni);
+}
+
+// A timed external IRQ must execute the production 6502's reserved RAM handler.
+TEST_F(SystemTest, SchedulerExternalInterruptExecutesSoft6502Handler) {
+    // Keep the CPU quiescent while installing the handler's native interrupt vector.
+    system.cpu().assert_reset();
+    test_asm::Scenario scenario(system);
+    const auto code = scenario.reserve("code", test_asm::RegionKind::Code, CodeStart, CodeCapacity);
+    const auto result = scenario.reserve("result", test_asm::RegionKind::Results, ResultStart, 1);
+    const auto marker = scenario.completion(
+        scenario.reserve("marker", test_asm::RegionKind::Mailbox, CompletionAddress, 1));
+    scenario.reserve("stack", test_asm::RegionKind::Stack, StackStart, StackCapacity);
+    const auto vectors = scenario.reserve("vectors", test_asm::RegionKind::Vectors,
+        VectorsStart, VectorCapacity);
+    test_asm::mos6502::Program program(scenario, code);
+    program.emit(test_asm::mos6502::cli());
+    const auto park = program.mark("wait for IRQ");
+    program.emit(test_asm::mos6502::jmp_abs(park));
+    const auto handler = program.mark("IRQ handler");
+    program.emit(test_asm::mos6502::lda_imm(Answer));
+    program.emit(test_asm::mos6502::sta_abs(result.start()));
+    program.finish(marker);
+    const auto entry = program.address(handler).value();
+    const std::array<uint8_t, 2> irq_vector{
+        static_cast<uint8_t>(entry), static_cast<uint8_t>(entry >> 8)};
+    scenario.write(vectors, pet::Irq6502.value() - vectors.start().value(), irq_vector);
+
+    // Assert only the external IRQ pin and let the CPU produce the captured result.
+    Scheduler scheduler(system);
+    const auto at = system.time() + ProgramStimulusDelay;
+    std::optional<CycleTime> applied;
+    scheduler.at(at, [&](System& board) {
+        applied = board.time();
+        board.set_external_interrupts(true, false);
+    });
+    const auto execution = scenario.run(program, result, ProgramBudget, "scheduled 6502 IRQ",
+        [&](System& board, Cycles remaining) { scheduler.step(board, remaining); });
+    ASSERT_TRUE(applied);
+    EXPECT_EQ(*applied, at);
+    EXPECT_EQ(execution[scenario.lower_bank(result).byte("answer")], Answer);
+    EXPECT_GT(execution.completed(), at);
+}
+
+// Scheduled input and composed recorders must share completed-cycle A/V observations.
+TEST_F(SystemTest, SchedulerAvCaptureUsesOneObservationPhase) {
+    // Register recorders before the observer that independently checks their latest sample.
+    Scheduler scheduler(system);
+    system.set_display(pet_video_type_fixed);
+    auto all = system.trace_av(test_observation::AvSampling::EveryCycle);
+    auto changes = system.trace_av(test_observation::AvSampling::ChangesOnly);
+    const auto start = system.time();
+    const auto at = start + Cycles{2};
+    std::optional<CycleTime> applied;
+    scheduler.at(at, [&](System& board) {
+        applied = board.time();
+        board.raw_stimulus([](auto& inputs) { inputs.audio_det_i = true; });
+    });
+    size_t observed = 0;
+    auto subscription = system.observe([&](const System& board) {
+        ++observed;
+        const auto pins = board.snapshot();
+        EXPECT_EQ(all.records().back().at, board.time());
+        EXPECT_EQ(all.records().back().levels.audio_left, pins.audio_l_o);
+        EXPECT_EQ(all.records().back().levels.audio_right, pins.audio_r_o);
+        EXPECT_EQ(all.records().back().levels.video, pins.video_o);
+    });
+
+    // Compare both sampling policies over the same complete interval and actual changes.
+    system.tick(AvDuration);
+    ASSERT_TRUE(applied);
+    EXPECT_EQ(*applied, at);
+    EXPECT_EQ(observed, AvDuration.value());
+    ASSERT_EQ(all.records().size(), AvDuration.value() + 1);
+    EXPECT_EQ(all.records().front().at, start);
+    EXPECT_EQ(all.records().back().at, start + AvDuration);
+    std::vector<test_observation::AvTrace::Record> expected{all.records().front()};
+    for (size_t index = 1; index < all.records().size(); ++index)
+        if (!(all.records()[index].levels == expected.back().levels))
+            expected.push_back(all.records()[index]);
+    ASSERT_EQ(changes.records().size(), expected.size());
+    EXPECT_GT(changes.records().size(), 1u);
+    for (size_t index = 0; index < expected.size(); ++index) {
+        EXPECT_EQ(changes.records()[index].at, expected[index].at);
+        EXPECT_EQ(changes.records()[index].levels, expected[index].levels);
+    }
 }

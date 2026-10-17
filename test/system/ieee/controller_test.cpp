@@ -23,6 +23,82 @@ static_assert(!std::is_move_constructible_v<IeeeController>);
 
 struct InterruptedTransfer {};
 
+// Signal traces observe physical input drivers even when no IEEE byte is transferred.
+TEST_F(SystemTest, IeeeSignalTracesResolvePhysicalLevelsWithoutInitialEdges) {
+    using test_observation::Signal;
+    IeeeController controller(system);
+    const auto start = system.time();
+    auto dav = system.trace_signal(Signal::IeeeDav);
+    auto atn = system.trace_signal(Signal::IeeeAtn);
+    auto eoi = system.trace_signal(Signal::IeeeEoi);
+    EXPECT_EQ(system.time(), start);
+    EXPECT_TRUE(dav.records().empty());
+    EXPECT_TRUE(atn.records().empty());
+    EXPECT_TRUE(eoi.records().empty());
+
+    // Independently assert the fitted input pins, not the fabric's CPU output snoops.
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
+    system.tick(1);
+    system.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    system.tick(1);
+    system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = false; });
+    system.tick(1);
+    system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = true; });
+    system.tick(1);
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a &= static_cast<uint8_t>(~pet::EoiInput); });
+    system.tick(1);
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a |= pet::EoiInput; });
+    system.tick(1);
+    unsigned first_cycle = 1;
+    for (const auto* trace : {&dav, &atn, &eoi}) {
+        ASSERT_EQ(trace->records().size(), 2u);
+        EXPECT_EQ(trace->records()[0].at, start + Cycles{first_cycle});
+        EXPECT_TRUE(trace->records()[0].before);
+        EXPECT_FALSE(trace->records()[0].after);
+        EXPECT_EQ(trace->records()[1].at, start + Cycles{first_cycle + 1});
+        EXPECT_FALSE(trace->records()[1].before);
+        EXPECT_TRUE(trace->records()[1].after);
+        first_cycle += 2;
+    }
+}
+
+// RX readiness is FIFO evidence, separate from active-low physical wire transitions.
+TEST_F(SystemTest, IeeeSignalTraceRxReadyTracksEnqueueAndDrain) {
+    using test_observation::Signal;
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    auto ready = system.trace_signal(Signal::IeeeRxReady);
+    EXPECT_TRUE(ready.records().empty());
+    controller.command(Unlisten);
+    ASSERT_EQ(ready.records().size(), 1u);
+    EXPECT_FALSE(ready.records().front().before);
+    EXPECT_TRUE(ready.records().front().after);
+    const auto sequence = drain_rx(system, 1, ByteBudget, "RX-ready transition");
+    ASSERT_EQ(sequence.size(), 1u);
+    EXPECT_EQ(sequence.front(), fifo_record(command(Unlisten)));
+    ASSERT_EQ(ready.records().size(), 2u);
+    EXPECT_TRUE(ready.records().back().before);
+    EXPECT_FALSE(ready.records().back().after);
+    EXPECT_LT(ready.records().front().at, ready.records().back().at);
+}
+
+// Quiet wire coverage remains source-bound, movable and detached after stopping.
+TEST_F(SystemTest, IeeeWireFactoryRetainsQuietCoverageAcrossMoveAndStop) {
+    auto wire = system.trace_ieee();
+    auto moved = std::move(wire);
+    EXPECT_THROW(wire.capture(), std::logic_error);
+    const auto first = system.time();
+    system.tick(2);
+    const auto last = system.time();
+    moved.stop();
+    system.tick(1);
+    const auto capture = moved.capture(system.trace_window(first, last));
+    EXPECT_TRUE(capture.records().empty());
+    EXPECT_TRUE(capture.complete());
+    EXPECT_THROW(moved.capture(system.trace_window(first, system.time())), std::out_of_range);
+    EXPECT_EQ(capture.window().completed(), last);
+}
+
 // Mailbox startup must release the bus before enabling its physical GPIO outputs.
 TEST_F(SystemTest, IeeeControllerInitializesPhysicalDirectionsWithoutBusGlitches) {
     bool drove_low = false;

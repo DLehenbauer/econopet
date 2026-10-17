@@ -390,7 +390,7 @@ RTL or physical timing constraints.
 | Secondary and OPEN/CLOSE encoding | PET KERNAL 2.0 and CBM 4040 | [KERNAL `OPENI`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob2src), [KERNAL `CLSE1`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob3src), and [4040 `DCDE70`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Secondary `$60+n`, OPEN `$F0+n`, CLOSE `$E0+n` with category-specific address limits | [transactions](ieee/transactions.h), `CheckedCommandDomainsAndEncodings` | [Independent named-channel description](https://www.pagetable.com/?p=1031) |
 | Byte handshake and EOI | PET KERNAL 2.0 and CBM 4040 | [KERNAL `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) and [4040 `ATN30`, `LISTEN`](https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ieee) | Assert DAV with stable inverted DIO, accept through NDAC, release DAV before the next byte. EOI is separate wire evidence | [controller](ieee/controller.h), send/receive transaction tests | [Independent three-wire handshake description](https://www.pagetable.com/?p=1023) and [PET pin map](../../docs/dev/PET/ieee.md) |
 | Talk-to-data transition and per-byte acceptor rearm | PET KERNAL 2.0 | [KERNAL `TKATN`, `ER001`, `SCATN`, `ACPTR`, `ACP01`, `ACP03`, `ACP05`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) | Release ATN with NRFD asserted before advertising readiness. Assert NRFD before sampling EOI/DIO, release NDAC to accept, wait for DAV release, then reassert NDAC with NRFD still asserted. No intervening ATN edge between consecutive bytes | [controller](ieee/controller.h), [FPGA and independently timed source regressions](ieee/controller_test.cpp) | [Independent receiver handshake and rearm description](https://www.pagetable.com/?p=1023) and [NI handshake-line definitions (manual mirror)](https://documentation.help/NI-488.2/gpib0cs3.html) |
-| Passive physical-source evidence | PET KERNAL 2.0 and PET PIA/VIA wiring | [KERNAL `ACPTR`, `ACP01`, `ACP03`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) samples DAV, EOI and inverted DIO through the fitted input registers | Capture separately driven physical bytes through the PET input-pin map. Compose open-collector levels, honor GPIO direction and never invent an in-flight byte at attachment or driver handoff | [wire sampler](ieee/trace.h), [physical-source, GPIO and overlapping-driver regressions](ieee/controller_test.cpp) | [PET pin map](../../docs/dev/PET/ieee.md) and [independent open-collector bus description](https://www.pagetable.com/?p=1023) |
+| Passive physical-source evidence | PET KERNAL 2.0 and PET PIA/VIA wiring | [KERNAL `LIST4`, `SCATN`, `ACPTR`, `ACP01`, `ACP03`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) drives ATN and samples DAV, EOI and inverted DIO through the fitted registers | Capture separately driven physical bytes and active-low DAV/ATN/EOI transitions through the PET pin map. Compose open-collector levels, honor GPIO direction and never invent an edge or in-flight byte at attachment or driver handoff | [shared signal sampler](framework/observations.h), [wire recorder](ieee/trace.h), [physical-source, signal-transition, GPIO and overlapping-driver regressions](ieee/controller_test.cpp) | [PET pin map](../../docs/dev/PET/ieee.md) and [independent open-collector bus description](https://www.pagetable.com/?p=1023) |
 | Physical GPIO initialization and direction | PET KERNAL 4.0 I/O initialization, PET KERNAL 2.0 handshake and PET wiring | [KERNAL 4.0 `CINT`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/oa1src) initializes VIA DDRB and PIA2 DDRB before selecting port access, with [register addresses](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_4.0_REC/ossrc). [KERNAL 2.0 `ISOUR`, `ACPTR`](https://github.com/mist64/cbmsrc/blob/master/KERNAL_PET_2.0_REC/ob1src) drive DIO/ATN/NRFD and read the separate input pins | Enable the harness's DIO and ATN/NRFD outputs with released latches. Partial/input DDR releases disabled outputs despite retained CPU snoops. Preserve external and device contributions | [controller startup](ieee/controller.h), [physical-pin send/receive, CPU DDR, stale-DAV and virtual-source regressions](ieee/controller_test.cpp) | [PET pin map and I/O initialization disassembly](../../docs/dev/PET/ieee.md) |
 
 FIFO layout, bounded draining, and quiet-interval assertions are EconoPET
@@ -707,8 +707,12 @@ ctest --test-dir build/system \
 ```
 
 Owned write publication and real-CPU peripheral-write capture are described
-under [Owned traces](#owned-traces). Full CPU/peripheral IRQ integration suites
-remain later incremental layers.
+under [Owned traces](#owned-traces). Scheduled GPIO and native CPU/peripheral
+IRQ integration are covered by [`scheduling_test.cpp`](scheduling_test.cpp).
+[`program_run_test.cpp`](program_run_test.cpp) additionally checks native
+write timestamps, GPIO direction/readback, physical PHI2 timer expiry,
+CPU-read acknowledgment and timer-driven 6502 IRQ-handler execution without
+a synthetic interrupt flag.
 
 ## Checked SPI and CPU lifecycle
 
@@ -866,7 +870,8 @@ routine-entry checks in [`rom_catalog_test.cpp`](rom_catalog_test.cpp) run in
 the host target with `BUILD_BOARD_TESTS=OFF`, without Verilator. Both supported
 Commodore revisions provide CIOUT, so only the revision-specific TRANS1 entry
 is optional. Revision-bound fixture tests execute initialization from installed
-local ROMs. Full drive transactions belong to later layers.
+local ROMs. Full drive transactions are covered by
+[`ieee/drive_test.cpp`](ieee/drive_test.cpp).
 
 `selected_rom()` describes the declared base revision, not a content hash.
 Complete-set metadata commits atomically with its bytes. A failed installation
@@ -1033,10 +1038,17 @@ Available board sources are:
   evidence. Direct model writes are not physical CPU-bus events. Supply the
   board's current time for timestamp-explicit setup writes.
 - `trace_signal(Signal)` for transitions of reset, IRQ, NMI, READY, video,
-  horizontal/vertical drive, jiffy, left/right audio and fitted-device IRQs.
+  horizontal/vertical drive, jiffy, left/right audio, fitted-device IRQs,
+  IEEE DAV/ATN/EOI and IEEE RX readiness.
   The initial level establishes a baseline, not an invented transition.
   CPU reset is active-high assertion state. CPU IRQ/NMI retain their FPGA
   output pin polarity, and fitted-device IRQs are active-high assertions.
+  `IeeeDav`, `IeeeAtn` and `IeeeEoi` retain active-low electrical polarity
+  (true means released). They resolve the same fitted GPIO, external input
+  and device drivers as [`trace_ieee()`](ieee/trace.h), rather than relying
+  on CPU output snoops. ATN and EOI transitions are observable even without
+  a DAV assertion. `IeeeRxReady` is the active-high FPGA FIFO-ready output,
+  not a physical bus line or an acknowledgment.
 - `trace_av()` for digital video, horizontal/vertical drive, jiffy and stereo
   audio levels. `ChangesOnly` records an initial sample and changes to any
   bundled level. `EveryCycle` additionally samples each completed cycle.
@@ -1055,9 +1067,11 @@ They do not observe pulses between cycle boundaries.
 
 Pure trace storage and model-publication tests run without Verilator in
 [`trace_core_test.cpp`](trace_core_test.cpp). Board sampling and lifetime tests
-are in [`trace_board_test.cpp`](trace_board_test.cpp). Phase-bound windows,
-firmware sources and IEEE wire captures remain later
-incremental layers. Configured board runs are described below.
+are in [`trace_board_test.cpp`](trace_board_test.cpp). Phase-bound windows
+are covered by [`phase_integration_test.cpp`](phase_integration_test.cpp),
+and IEEE signal and wire sources by
+[`ieee/controller_test.cpp`](ieee/controller_test.cpp). Configured board runs
+are described below.
 
 ## Deterministic scheduling and configured runs
 
@@ -1175,15 +1189,18 @@ board or invoking pending stimulus/work.
 
 The board-only regression suites are
 [`scheduling_test.cpp`](scheduling_test.cpp) and
-[`configured_run_test.cpp`](configured_run_test.cpp). Mixed parked program,
-phase and IEEE tests are excluded until their consuming layers land.
+[`configured_run_test.cpp`](configured_run_test.cpp). Program, phase and IEEE
+composition are covered by [`program_run_test.cpp`](program_run_test.cpp),
+[`phase_integration_test.cpp`](phase_integration_test.cpp) and the
+[`IEEE suites`](ieee/README.md).
 
 ## Checked layouts and owned memory
 
 [`framework/asm.h`](framework/asm.h) publishes layout primitives
 (`test_asm::Scenario`, `Region` and `RegionKind`) and the explicit CPU-specific
-assembly APIs described below. Complete program builders and execution remain
-later layers.
+assembly APIs described below. Complete program builders and execution use
+[`framework/program.h`](framework/program.h) and
+[`framework/execution.h`](framework/execution.h).
 [`framework/memory.h`](framework/memory.h) supplies lower-bank views, named
 byte/word/buffer handles and detached captures.
 
@@ -1683,8 +1700,8 @@ displacement. Invalid construction or offsets throw `std::out_of_range` with
 the domain name, address, and (for offsets) operand.
 
 The Wishbone domain is the FPGA's byte-addressed bus space, accessed over SPI,
-not a separate SPI address space. SPI and peripheral register mappings belong
-to later framework layers.
+not a separate SPI address space. [`registers.h`](registers.h) defines checked
+SPI and peripheral register mappings.
 
 Fixture code can explicitly choose lower-bank SRAM backing with
 `SramAddress{cpu_address.value()}`. This copies the CPU address bits, not a

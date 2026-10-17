@@ -1,16 +1,114 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include <cstdint>
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include "framework/observations.h"
 #include "framework/system_test.h"
+#include "ieee/controller.h"
 
 using econopet::Cycles;
 using test_asm::imm;
 
 namespace {
 constexpr Cycles Budget{20000};
+constexpr unsigned CompletionDelayInstructions = 40;
+
+// Own explicit completion storage independently of the convenience builder's private marker.
+struct CompletionScenario : test_asm::Scenario<System> {
+    // Reserve disjoint code, results, stack, mailbox and native reset vectors.
+    explicit CompletionScenario(System& board) : Scenario(board),
+        code(reserve("code", test_asm::RegionKind::Code, econopet::CpuAddress{0x0300}, 0x100)),
+        results(reserve("results", test_asm::RegionKind::Results, econopet::CpuAddress{0x0200}, 2)),
+        marker(completion(reserve("completion", test_asm::RegionKind::Mailbox,
+            results.start() + results.size(), 1))) {
+        reserve("stack", test_asm::RegionKind::Stack, econopet::CpuAddress{0x0100}, 0x100);
+        reserve("vectors", test_asm::RegionKind::Vectors, econopet::CpuAddress{0xfff0}, 16);
+    }
+    test_asm::Region code, results;
+    test_asm::CompletionMarker marker;
+};
+}
+
+// A correct result is not completion until the CPU executes its later terminal store.
+TEST_F(SystemTest, ExplicitCompletionWaitsPastResultsAndAcceptsTheFinalCycle) {
+    const auto assemble = [](auto& program, auto& scenario) {
+        program.lda(imm(0x42)).sta(scenario.results.start());
+        for (unsigned index = 0; index < CompletionDelayInstructions; ++index) program.lda(imm(0));
+        program.finish(scenario.marker);
+    };
+    CompletionScenario scenario(system);
+    test_asm::mos6502::Program program(scenario, scenario.code);
+    assemble(program, scenario);
+    std::optional<econopet::CycleTime> result_at, marker_at;
+    auto subscription = system.observe([&](const System& board) {
+        if (!result_at && board.peek(econopet::SramAddress{scenario.results.start().value()}) == 0x42)
+            result_at = board.time();
+        if (!marker_at && board.peek(econopet::SramAddress{scenario.marker.address().value()})
+            == scenario.marker.completed())
+            marker_at = board.time();
+    });
+    const auto result = scenario.run(program, scenario.results, Budget, "delayed completion");
+    ASSERT_TRUE(result_at);
+    ASSERT_TRUE(marker_at);
+    EXPECT_GT(*marker_at, *result_at);
+    EXPECT_EQ(result.completed(), *marker_at);
+    subscription.reset();
+
+    // Repeat the same CPU instructions on identically seeded hardware at the exact endpoint.
+    System other(system.seed());
+    CompletionScenario exact_scenario(other);
+    test_asm::mos6502::Program exact_program(exact_scenario, exact_scenario.code);
+    assemble(exact_program, exact_scenario);
+    const auto duration = result.completed() - result.started();
+    const auto exact = exact_scenario.run(exact_program, exact_scenario.results, duration,
+        "final completion cycle");
+    EXPECT_EQ(exact.completed() - exact.started(), duration);
+    EXPECT_EQ(exact.raw_bytes(), result.raw_bytes());
+}
+
+// Explicit nonzero pending values are installed under reset and survive failed service.
+TEST_F(SystemTest, ExplicitCompletionInitializesNonzeroPendingAndRetainsServiceFailure) {
+    constexpr uint8_t Pending = 0xc3, Completed = 0x7e;
+    CompletionScenario scenario(system);
+    const auto marker = scenario.completion(scenario.reserve("nonzero completion",
+        test_asm::RegionKind::Mailbox, scenario.marker.address() + 1, 1), Pending, Completed);
+    test_asm::mos6502::Program program(scenario, scenario.code);
+    for (unsigned index = 0; index < CompletionDelayInstructions; ++index) program.lda(imm(0));
+    program.finish(marker);
+    bool initialized_under_reset = false;
+    auto subscription = system.observe([&](const System& board) {
+        if (board.cpu().peek_reset()
+            && board.peek(econopet::SramAddress{marker.address().value()}) == marker.pending())
+            initialized_under_reset = true;
+    });
+    unsigned passes = 0;
+    const auto start = system.time();
+    const auto result = scenario.run(program, scenario.results, Budget, "nonzero completion",
+        [&](System& board, Cycles remaining) {
+            EXPECT_EQ(remaining, Budget - (board.time() - start));
+            ++passes;
+        });
+    EXPECT_TRUE(initialized_under_reset);
+    EXPECT_GT(passes, 0u);
+    EXPECT_EQ(result.raw_bytes(), (std::vector<uint8_t>{0, 0}));
+    EXPECT_EQ(system.peek(econopet::SramAddress{marker.address().value()}), marker.completed());
+
+    // A later run resets the marker before invoking work that fails without progress.
+    const auto failed_at = system.time();
+    bool serviced = false;
+    EXPECT_THROW(scenario.run(program, scenario.results, Budget, "completion service failure",
+        [&](System&, Cycles) {
+            serviced = true;
+            throw std::runtime_error("injected completion service failure");
+        }), std::runtime_error);
+    EXPECT_TRUE(serviced);
+    EXPECT_LE(system.time() - failed_at, Budget);
+    EXPECT_EQ(system.peek(econopet::SramAddress{marker.address().value()}), marker.pending());
+    EXPECT_FALSE(system.spi().peek_failed());
 }
 
 // Both CPUs retain mandatory completion while anchoring work at checked release.
@@ -156,25 +254,167 @@ TEST_F(SystemTest, ConfiguredProgramsInheritEarliestDeadline) {
 
 // Owned completion windows contain real repeated I/O writes, not fixture initialization.
 TEST_F(SystemTest, ConfiguredProgramsCaptureRepeatedPeripheralWritesAndThenPark) {
+    using namespace econopet::io;
+    constexpr uint8_t Outputs = 0xf0, PiaValue = 0xa5, ViaValue = 0x55, ResetRegister = 0;
+    constexpr Cycles ParkedInterval{2000};
     auto model = system.trace_pia2_writes();
     auto bus = system.trace_peripheral_writes();
     const auto execute = [&](auto& test) {
-        const auto result = test.within(Budget).run([](auto& p) {
-            p.lda(imm(0x42)).sta(pet::Pia2PortA).sta(pet::Pia2PortA);
+        const auto result = test.within(Budget).run([&](auto& p) {
+            p.lda(imm(PiaDdrAccess.bits())).sta(pet::Pia2ControlA)
+                .lda(imm(Outputs)).sta(pet::Pia2PortA)
+                .lda(imm(PiaPortAccess.bits())).sta(pet::Pia2ControlA)
+                .lda(imm(PiaValue)).sta(pet::Pia2PortA).sta(pet::Pia2PortA)
+                .lda(imm(Outputs)).sta(pet::ViaDdrB)
+                .lda(imm(ViaValue)).sta(pet::ViaPortB).sta(pet::ViaPortB);
         });
-        model.capture(result.window()).require_count(2, "CPU repeated PIA2 writes");
+        model.capture(result.window()).require_count(5, "CPU PIA2 direction/control/data writes");
         const auto captured = bus.capture(result.window());
-        captured.require_count(2, "physical repeated PIA2 writes");
-        EXPECT_EQ(captured.records()[0].address, pet::Pia2PortA);
-        EXPECT_EQ(captured.records()[1].address, pet::Pia2PortA);
+        using Write = std::pair<econopet::CpuAddress, uint8_t>;
+        captured.require_order(std::vector<Write>{
+            {pet::Pia2ControlA, PiaDdrAccess.bits()}, {pet::Pia2PortA, Outputs},
+            {pet::Pia2ControlA, PiaPortAccess.bits()}, {pet::Pia2PortA, PiaValue},
+            {pet::Pia2PortA, PiaValue}, {pet::ViaDdrB, Outputs},
+            {pet::ViaPortB, ViaValue}, {pet::ViaPortB, ViaValue}},
+            [](const auto& write) { return Write{write.address, write.data}; }, "physical write order");
+        EXPECT_EQ(system.io().pia2().writes().count(), 5u);
+        EXPECT_EQ(system.io().via().writes().count(), 3u);
+        EXPECT_EQ(system.io().pia2().state().pa.ddr, Outputs);
+        EXPECT_EQ(system.io().pia2().state().pa.outr, PiaValue);
+        EXPECT_EQ(system.io().pia2().peek(PiaRegister::PortA), 0xaf);
+        EXPECT_EQ(system.io().via().state().pb.ddr, Outputs);
+        EXPECT_EQ(system.io().via().state().pb.outr, ViaValue);
+        EXPECT_EQ(system.io().via().peek(ViaRegister::PortB), 0x5f);
         const auto parked = system.time();
-        system.tick(2000);
+        system.tick(ParkedInterval);
         bus.capture(system.trace_window(parked, system.time())).require_absent("terminal park has no writes");
+        system.cpu().assert_reset();
+        EXPECT_EQ(system.io().pia2().state().pa.ddr, ResetRegister);
+        EXPECT_EQ(system.io().via().state().pb.ddr, ResetRegister);
+        EXPECT_EQ(system.io().via().state().pb.outr, ResetRegister);
+        EXPECT_EQ(system.io().pia2().writes().count(), 5u);
+        EXPECT_EQ(system.io().via().writes().count(), 3u);
+        system.io().clear_observations();
     };
     auto mos = system.program6502();
     execute(mos);
     auto mc = system.program6809();
     execute(mc);
+}
+
+// Both native cores publish zero-valued writes at the same completed boundary as observers.
+TEST_F(SystemTest, NativePeripheralZeroWritesOwnOptionalTimestampedEvidence) {
+    const auto execute = [&](auto& test) {
+        EXPECT_FALSE(system.io().pia1().writes().last());
+        EXPECT_FALSE(system.io().pia2().writes().last());
+        EXPECT_FALSE(system.io().via().writes().last());
+        unsigned observed_writes = 0;
+        auto observer = system.observe([&](const System& board) {
+            for (const auto& last : {board.io().pia1().writes().last(), board.io().pia2().writes().last()})
+                if (last && last->at == board.time()) ++observed_writes;
+            const auto& last = board.io().via().writes().last();
+            if (last && last->at == board.time()) ++observed_writes;
+        });
+        test.within(Budget).run([](auto& p) {
+            p.lda(imm(0)).sta(pet::Pia1PortA).sta(pet::Pia2PortA).sta(pet::ViaPortB);
+        });
+        EXPECT_EQ(observed_writes, 3u);
+        const auto pia1 = system.io().pia1().writes().last();
+        const auto pia2 = system.io().pia2().writes().last();
+        const auto via = system.io().via().writes().last();
+        ASSERT_TRUE(pia1);
+        ASSERT_TRUE(pia2);
+        ASSERT_TRUE(via);
+        EXPECT_EQ(pia1->reg, econopet::io::PiaRegister::PortA);
+        EXPECT_EQ(pia2->reg, econopet::io::PiaRegister::PortA);
+        EXPECT_EQ(via->reg, econopet::io::ViaRegister::PortB);
+        EXPECT_EQ(pia1->data, 0);
+        EXPECT_EQ(pia2->data, 0);
+        EXPECT_EQ(via->data, 0);
+        EXPECT_LT(pia1->at, pia2->at);
+        EXPECT_LT(pia2->at, via->at);
+        system.cpu().assert_reset();
+        EXPECT_EQ(system.io().pia1().writes().last()->at, pia1->at);
+        EXPECT_EQ(system.io().pia2().writes().last()->at, pia2->at);
+        EXPECT_EQ(system.io().via().writes().last()->at, via->at);
+        system.io().clear_observations();
+    };
+    auto mos = system.program6502();
+    execute(mos);
+    auto mc = system.program6809();
+    execute(mc);
+}
+
+// A fitted VIA counts actual PHI2 clocks and a native CPU read acknowledges its timer IRQ.
+TEST_F(SystemTest, NativeViaTimerCountsPhysicalPhi2AndAcknowledgesThroughCpuRead) {
+    using namespace econopet::io;
+    constexpr unsigned TimerLoad = 256, PipelineClocks = 2, ByteBits = 8;
+    const auto source = std::to_underlying(ViaInterruptBit::Timer1);
+    const auto irq = (ViaInterruptBit::Summary | ViaInterruptBit::Timer1).bits();
+    IeeeController controller(system);
+    controller.write(pet::ViaIer, irq);
+    controller.write(pet::ViaTimer1Low, TimerLoad & PortAllHigh);
+    std::optional<uint64_t> loaded_at, expired_at;
+    auto observer = system.observe([&](const System& board) {
+        const auto& devices = board.io();
+        const auto& last = devices.via().writes().last();
+        if (!loaded_at && last && last->reg == ViaRegister::Timer1High) {
+            loaded_at = devices.clock_count();
+            EXPECT_EQ(devices.via().state().t1.counter, TimerLoad);
+        }
+        if (!loaded_at || expired_at) return;
+        const auto elapsed = devices.clock_count() - *loaded_at;
+        if (devices.via().peek(ViaRegister::Ifr) & source) {
+            expired_at = devices.clock_count();
+            EXPECT_EQ(elapsed, TimerLoad + PipelineClocks);
+        } else {
+            EXPECT_LT(elapsed, TimerLoad + PipelineClocks);
+        }
+    });
+    controller.write(pet::ViaTimer1High, TimerLoad >> ByteBits);
+    system.run_until([&](const System&) { return expired_at.has_value(); }, Budget, "physical VIA timer");
+    observer.reset();
+    ASSERT_TRUE(loaded_at);
+    EXPECT_EQ(system.io().via().timer1_fault(), Via6522::Timer1Fault::None);
+    EXPECT_EQ(controller.read(pet::ViaIfr) & irq, irq);
+    EXPECT_FALSE(system.snapshot().io_irq_ni);
+    controller.read(pet::ViaTimer1Low);
+    EXPECT_EQ(controller.read(pet::ViaIfr) & source, 0);
+    EXPECT_TRUE(system.snapshot().io_irq_ni);
+}
+
+// A real fitted timer, rather than an injected IRQ, vectors the native 6502 into its handler.
+TEST_F(SystemTest, NativeViaTimerInterruptExecutesSoft6502Handler) {
+    using namespace econopet::io;
+    constexpr uint8_t TimerLoad = 32;
+    constexpr econopet::CpuAddress Handler{0x0400};
+    constexpr unsigned ByteBits = 8;
+    const auto source = std::to_underlying(ViaInterruptBit::Timer1);
+    CompletionScenario scenario(system);
+    test_asm::mos6502::Program main(scenario, scenario.code);
+    main.sei().lda(imm((ViaInterruptBit::Summary | ViaInterruptBit::Timer1).bits())).sta(pet::ViaIer)
+        .lda(imm(TimerLoad)).sta(pet::ViaTimer1Low).lda(imm(0)).sta(pet::ViaTimer1High).cli();
+    main.jmp(main.mark("wait for IRQ"));
+    main.finish(scenario.marker);
+    test_asm::mos6502::Program handler(scenario,
+        scenario.reserve("IRQ handler", test_asm::RegionKind::Code, Handler, 0x100));
+    handler.lda(imm(source)).sta(pet::ViaIfr).lda(imm(0x42)).sta(scenario.results.start())
+        .lda(imm(scenario.marker.completed())).sta(scenario.marker.address()).rti();
+    handler.install();
+    system.poke(econopet::SramAddress{pet::Irq6502.value()}, Handler.value() & PortAllHigh);
+    system.poke(econopet::SramAddress{(pet::Irq6502 + 1).value()}, Handler.value() >> ByteBits);
+    const auto checkpoint = system.cpu().peek_fetch_checkpoint();
+    bool saw_timer_irq = false;
+    auto observer = system.observe([&](const System& board) {
+        saw_timer_irq |= (board.io().via().peek(ViaRegister::Ifr) & source) != 0
+            && !board.snapshot().io_irq_ni;
+    });
+    const auto result = scenario.run(main, scenario.results, Budget, "native VIA IRQ handler");
+    EXPECT_TRUE(saw_timer_irq);
+    EXPECT_EQ(result.raw_bytes(), (std::vector<uint8_t>{0x42, 0}));
+    EXPECT_TRUE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Handler, checkpoint));
+    EXPECT_EQ(system.io().via().peek(ViaRegister::Ifr) & source, 0);
+    EXPECT_EQ(system.io().via().timer1_fault(), Via6522::Timer1Fault::None);
 }
 
 // Peripheral model rejection must stop checked execution, not produce a result.

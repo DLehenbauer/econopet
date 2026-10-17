@@ -353,4 +353,30 @@ TEST_F(SystemTest, TraceStabilityChecksIncludeInitialStateAndEndpoint) {
     EXPECT_THROW(require_stable(system, [end](const System& board) { return board.time() < end; },
         Cycles{2}, "endpoint failure"), std::runtime_error);
     EXPECT_EQ(system.time(), end);
+
+    // A condition that recovers before the endpoint must still fail at its transient boundary.
+    const auto transient_start = system.time();
+    bool condition = true;
+    auto observer = system.observe([&](const System& board) {
+        condition = board.time() != transient_start + Cycles{2};
+    });
+    EXPECT_THROW(require_stable(system, [&](const System&) { return condition; }, Cycles{5},
+        "transient condition"), std::runtime_error);
+    EXPECT_EQ(system.time(), transient_start + Cycles{2});
+    observer.reset();
+
+    // Absence checks include their endpoint and stable checks sample every boundary.
+    const auto event_at = system.time() + Cycles{3};
+    EXPECT_THROW(require_absent(system, [&](const System& board) { return board.time() == event_at; },
+        Cycles{3}, "endpoint event"), std::runtime_error);
+    EXPECT_EQ(system.time(), event_at);
+    unsigned samples = 0;
+    require_stable(system, [&](const System&) { ++samples; return true; }, Cycles{3}, "every boundary");
+    EXPECT_EQ(samples, 4u);
+    const auto guarded = system.time();
+    EXPECT_THROW(require_stable(system, [&](const System&) {
+        system.tick(1);
+        return true;
+    }, Cycles{3}, "captured clock"), std::logic_error);
+    EXPECT_EQ(system.time(), guarded);
 }
