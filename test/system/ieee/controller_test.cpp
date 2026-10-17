@@ -23,6 +23,122 @@ static_assert(!std::is_move_constructible_v<IeeeController>);
 
 struct InterruptedTransfer {};
 
+enum class AbortPhase { BeforeNrfd, AfterNrfd };
+
+// Separate native NRFD-triggered prefetch from the private CPU read and NDAC handshake.
+void check_talk_abort(System& system, AbortPhase phase, bool sample_data, bool status_fifo) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{status_fifo ? CommandChannel : LoadChannel}));
+    system.spi().write(status_fifo ? fpga::Register::IeeeTxStatus : fpga::Register::IeeeTx, 'X');
+    system.spi().write(status_fifo ? fpga::Register::IeeeTxStatusLast : fpga::Register::IeeeTxLast, 'Y');
+    auto wire = system.trace_ieee();
+
+    // Release ATN while blocked, then present X with NRFD released and NDAC asserted.
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "in-flight talker byte");
+    const uint8_t via_levels = phase == AbortPhase::AfterNrfd
+        ? static_cast<uint8_t>(BusReleased & ~pet::Nrfd) : BusReleased;
+    if (phase == AbortPhase::AfterNrfd) controller.write(pet::ViaPortB, via_levels);
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    if (sample_data)
+        ASSERT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), 'X');
+
+    // Hold the chosen readiness state before ATN, without ever releasing NDAC.
+    constexpr Cycles AbortDwell{20000};
+    system.tick(AbortDwell);
+    ASSERT_EQ(system.ieee().peek_nrfd_released(), phase == AbortPhase::BeforeNrfd);
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(via_levels & ~pet::Atn));
+    ASSERT_TRUE(system.snapshot().ieee_bus_dav_no);
+    std::vector<Record> expected_wire{data('X')};
+    if (!status_fifo) {
+        controller.command(Untalk);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{LoadChannel}));
+        expected_wire.insert(expected_wire.end(), {
+            command(Untalk), command(Talk(Device{DeviceAddress})),
+            command(Secondary(Channel{LoadChannel}))
+        });
+    }
+    // Release command-free ATN for status: a fresh secondary deliberately flushes TXS.
+    std::vector<Record> received;
+    for (size_t i = 0; i < 2; ++i) {
+        received.push_back(controller.receive());
+        if (received.back().eoi == Eoi::Last) break;
+    }
+    // TLK20 enters GET on asserted NRFD. TLK35 waits for NDAC only after that prefetch.
+    const std::vector<Record> expected = phase == AbortPhase::BeforeNrfd
+        ? std::vector<Record>{data('X'), data('Y', Eoi::Last)}
+        : std::vector<Record>{data('Y', Eoi::Last)};
+    require_sequence(received, expected, "resume at native prefetch boundary");
+    expected_wire.insert(expected_wire.end(), expected.begin(), expected.end());
+    require_sequence(wire.records(), expected_wire, "aborted and resumed wire transfers");
+}
+
+// Run each native prefetch boundary against the independent data and status FIFOs.
+class IeeeAbortTest : public SystemTest, public testing::WithParamInterface<bool> {};
+
+// With NRFD still released, TLK20 has not called GET when ATN interrupts.
+TEST_P(IeeeAbortTest, IeeeAbortBeforeNrfdPreservesUnreadByte) {
+    check_talk_abort(system, AbortPhase::BeforeNrfd, false, GetParam());
+}
+
+// A private PET read cannot advance the native drive while NRFD remains released.
+TEST_P(IeeeAbortTest, DISABLED_IeeeAbortBeforeNrfdPreservesSampledByte) {
+    check_talk_abort(system, AbortPhase::BeforeNrfd, true, GetParam());
+}
+
+// TLK30 prefetches the next byte on asserted NRFD even without a private PET read.
+TEST_P(IeeeAbortTest, DISABLED_IeeeAbortAfterNrfdPrefetchesUnreadByte) {
+    check_talk_abort(system, AbortPhase::AfterNrfd, false, GetParam());
+}
+
+// After NRFD-triggered prefetch, ATN resumes at Y whether or not the PET sampled X.
+TEST_P(IeeeAbortTest, IeeeAbortAfterNrfdPrefetchesSampledByte) {
+    check_talk_abort(system, AbortPhase::AfterNrfd, true, GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(DataAndStatus, IeeeAbortTest, testing::Bool());
+
+// Reproduce Waterloo revision-12 $C14F-$C16D ordering without reading the next byte.
+TEST_F(SystemTest, IeeeWaterlooCountedTerminationPreservesUnreadByte) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{LoadChannel}));
+    system.spi().write(fpga::Register::IeeeTx, 'X');
+    system.spi().write(fpga::Register::IeeeTx, 'Y');
+    system.spi().write(fpga::Register::IeeeTxLast, 'Z');
+    auto wire = system.trace_ieee();
+    ASSERT_EQ(controller.receive(), data('X'));
+
+    // The fast source presents Y when Waterloo releases NRFD, before NDAC.
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "Waterloo unread next byte");
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    controller.write(pet::Pia2ControlA, PiaC2High.bits());
+    system.run_until([](const System& board) { return board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "Waterloo DAV release before ATN");
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Atn));
+
+    // UNTALK and a fresh TALK must return Y, not skip it or repeat accepted X.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{LoadChannel}));
+    EXPECT_EQ(controller.receive(), data('Y'));
+    EXPECT_EQ(controller.receive(), data('Z', Eoi::Last));
+    require_sequence(wire.records(), {
+        data('X'), data('Y'), command(Untalk), command(Talk(Device{DeviceAddress})),
+        command(Secondary(Channel{LoadChannel})), data('Y'), data('Z', Eoi::Last)
+    }, "Waterloo counted-read continuation");
+}
+
 // Signal traces observe physical input drivers even when no IEEE byte is transferred.
 TEST_F(SystemTest, IeeeSignalTracesResolvePhysicalLevelsWithoutInitialEdges) {
     using test_observation::Signal;

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -26,24 +27,69 @@ void service_rx(System& system, FirmwareSession& firmware, const char* context) 
         .run(context);
 }
 
-// Send and independently verify a native OPEN for the shared BASIC fixture.
-void open_basic(System& system, IeeeController& controller, Channel channel = Channel{LoadChannel}) {
+// Send and independently verify a native OPEN for a selected device and filename.
+void open_file(System& system, IeeeController& controller, Channel channel = Channel{LoadChannel},
+               std::string_view filename = "BASIC", Device device = Device{DeviceAddress}) {
     auto wire = system.trace_ieee();
-    controller.command(Listen(Device{DeviceAddress}));
+    controller.command(Listen(device));
     controller.command(Open(channel));
 
     // Native filename collection sets CMDWAT only after receiving EOI.
-    constexpr std::string_view Filename = "BASIC";
-    for (size_t i = 0; i < Filename.size(); ++i) {
-        controller.data(static_cast<uint8_t>(Filename[i]),
-            i + 1 == Filename.size() ? Eoi::Last : Eoi::More);
+    std::vector<Record> expected{command(Listen(device)), command(Open(channel))};
+    for (size_t i = 0; i < filename.size(); ++i) {
+        const auto byte = static_cast<uint8_t>(filename[i]);
+        const auto eoi = i + 1 == filename.size() ? Eoi::Last : Eoi::More;
+        controller.data(byte, eoi);
+        expected.push_back(data(byte, eoi));
     }
     controller.command(Unlisten);
+    expected.push_back(command(Unlisten));
+    require_sequence(wire.records(), expected, "native OPEN wire sequence");
+}
 
-    require_sequence(wire.records(), {
-        command(Listen(Device{DeviceAddress})), command(Open(channel)),
-        data('B'), data('A'), data('S'), data('I'), data('C', Eoi::Last), command(Unlisten)
-    }, "native OPEN wire sequence");
+// Bound EOF-driven reads independently of the source and compare CPU and wire evidence.
+void receive_payload(System& system, IeeeController& controller, const std::vector<Record>& expected) {
+    auto wire = system.trace_ieee();
+    std::vector<Record> received;
+    for (size_t i = 0; i < expected.size(); ++i) {
+        received.push_back(controller.receive());
+        if (received.back().eoi == Eoi::Last) break;
+    }
+    require_sequence(received, expected, "CPU payload");
+    require_sequence(wire.records(), expected, "wire payload");
+}
+
+// An exhausted source must remain empty while an armed listener advertises readiness.
+void expect_no_payload(System& system, FirmwareSession& firmware, IeeeController& controller) {
+    constexpr econopet::Cycles QuietBudget = 20000;
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+    controller.write(pet::ViaPortB, BusReleased);
+    firmware.service();
+    system.tick(QuietBudget);
+    firmware.service();
+    const auto capture = wire.capture();
+    EXPECT_TRUE(capture.complete());
+    EXPECT_GE(capture.window().completed() - capture.window().started(), QuietBudget);
+    EXPECT_THAT(capture.records(), testing::IsEmpty());
+    EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
+}
+
+// Read a complete status response, checking exact punctuation and final-byte EOI.
+void receive_status(System& system, FirmwareSession& firmware, IeeeController& controller,
+                    Device device, std::string_view expected) {
+    controller.command(Talk(device));
+    controller.command(Secondary(Channel{CommandChannel}));
+    service_rx(system, firmware, "service status request");
+    std::vector<Record> records;
+    for (size_t i = 0; i < expected.size(); ++i)
+        records.push_back(data(static_cast<uint8_t>(expected[i]),
+            i + 1 == expected.size() ? Eoi::Last : Eoi::More));
+    receive_payload(system, controller, records);
+    controller.command(Untalk);
+    service_rx(system, firmware, "service status UNTALK");
 }
 
 // Give each file length a fresh board and independent firmware session.
@@ -51,6 +97,10 @@ class DrivePrgTest : public FirmwareTest, public testing::WithParamInterface<siz
 
 // Exercise the native one-byte EOF bug with ordinary, zero and high-bit data.
 class DriveOneByteTest : public FirmwareTest, public testing::WithParamInterface<uint8_t> {};
+
+// Select model, unit and drive independently rather than assuming all DOS status formats agree.
+class DriveStatusTest : public FirmwareTest,
+                        public testing::WithParamInterface<std::tuple<bool, uint8_t, uint8_t>> {};
 
 } // namespace
 
@@ -66,7 +116,7 @@ TEST_P(DrivePrgTest, StreamsCheckedPrgFixtureOverProductionTop) {
     // OPEN the stored bytes through real CPU I/O and production firmware SPI.
     IeeeController controller(system);
     firmware.mount(D64{}.prg("BASIC", payload));
-    open_basic(system, controller);
+    open_file(system, controller);
     service_rx(system, firmware, "service PRG OPEN transaction");
 
     // Select the load channel and fill the data FIFO within the service deadline.
@@ -121,7 +171,7 @@ TEST_P(DriveOneByteTest, PreservesNativeEofBugOverProductionTop) {
     // A legitimate one-byte SEQ file uses an ordinary channel, not PRG LOAD.
     IeeeController controller(system);
     firmware.mount(D64{}.seq("BASIC", {byte}));
-    open_basic(system, controller, channel);
+    open_file(system, controller, channel);
     service_rx(system, firmware, "service one-byte SEQ OPEN transaction");
     controller.command(Talk(Device{DeviceAddress}));
     controller.command(Secondary(channel));
@@ -150,7 +200,7 @@ TEST_F(FirmwareTest, StreamsDosStatusOverProductionTop) {
     auto fifo_trace = firmware.trace_rx();
     auto duplicate = firmware.trace_rx();
     // Open the fixture, then select the drive's status channel as talker.
-    open_basic(system, controller);
+    open_file(system, controller);
     service_rx(system, firmware, "service OPEN transaction");
     EXPECT_EQ(duplicate.records(), fifo_trace.records());
     EXPECT_THAT(fifo_trace.records(), testing::ElementsAreArray(fifo_records({
@@ -173,6 +223,132 @@ TEST_F(FirmwareTest, StreamsDosStatusOverProductionTop) {
     }
     EXPECT_THAT(wire.records(), testing::ElementsAreArray(status));
 }
+
+// PR #53: an accepted sequential EOF leaves GET0's channel NOTRDY, not CR+EOI.
+TEST_F(FirmwareTest, DISABLED_SequentialRetalkAfterEofDoesNotInventData) {
+    IeeeController controller(system);
+    firmware.mount(D64{}.seq("BASIC", {0x42, 0x43}));
+    open_file(system, controller, Channel{DataChannel});
+    service_rx(system, firmware, "service SEQ OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service first SEQ TALK");
+    receive_payload(system, controller, {data(0x42), data(0x43, Eoi::Last)});
+
+    // Request the exhausted channel again without reopening or flushing its data.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service exhausted SEQ TALK");
+    expect_no_payload(system, firmware, controller);
+    controller.command(Untalk);
+    service_rx(system, firmware, "service exhausted SEQ UNTALK");
+    receive_status(system, firmware, controller, Device{DeviceAddress}, "00, OK,00,00\r");
+}
+
+// PR #53: a failed successor cannot manufacture a successful CR+EOI response.
+TEST_F(FirmwareTest, DISABLED_SequentialReadErrorDoesNotInventEof) {
+    std::vector<uint8_t> payload(DISKIMAGE_SECTOR_PAYLOAD_SIZE + 1);
+    for (size_t i = 0; i < payload.size(); ++i) payload[i] = static_cast<uint8_t>(i + 2);
+    auto image = D64{}.seq("BASIC", payload);
+    constexpr size_t Directory = 18;
+    constexpr size_t FirstDirectorySector = 1;
+    constexpr size_t StartTrackOffset = 3;
+    constexpr size_t StartSectorOffset = 4;
+    const auto entry = D64::offset(Directory, FirstDirectorySector);
+    const auto first_sector = D64::offset(image.bytes()[entry + StartTrackOffset],
+        image.bytes()[entry + StartSectorOffset]);
+    image.corrupt(first_sector, {DISKIMAGE_D64_TRACK_COUNT + 1, 0});
+
+    // Consume only the valid first-sector prefix through the real CPU acceptor.
+    IeeeController controller(system);
+    firmware.mount(image);
+    open_file(system, controller, Channel{DataChannel});
+    service_rx(system, firmware, "service corrupt SEQ OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service corrupt SEQ TALK");
+    std::vector<Record> expected;
+    for (size_t i = 0; i < DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++i)
+        expected.push_back(data(payload[i]));
+    receive_payload(system, controller, expected);
+    expect_no_payload(system, firmware, controller);
+
+    // The emulator reports its backing-chain failure as status 23, not clean EOF.
+    controller.command(Untalk);
+    service_rx(system, firmware, "service corrupt SEQ UNTALK");
+    receive_status(system, firmware, controller, Device{DeviceAddress}, "23,READ ERROR,00,00\r");
+}
+
+// PR #54: SETLST retains the first NUL of an empty record and RDREL marks it EOI.
+TEST_F(FirmwareTest, DISABLED_EmptyRelativeRecordReturnsNulThenAdvances) {
+    constexpr uint8_t RecordLength = 129;
+    constexpr size_t DirectoryTrack = 18;
+    constexpr size_t DirectorySector = 1;
+    constexpr size_t FileTypeOffset = 2;
+    constexpr uint8_t ClosedRelativeFile = 0x80 | DISKIMAGE_FTYPE_REL;
+    std::vector<uint8_t> payload(2 * RecordLength);
+    for (size_t i = RecordLength; i < payload.size(); ++i)
+        payload[i] = static_cast<uint8_t>(0xa0 + i / DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    auto image = D64{}.seq("BASIC", payload);
+    const auto entry = D64::offset(DirectoryTrack, DirectorySector);
+    // Like the unit fixture, this probes the data-chain engine, not side-sector validation.
+    image.corrupt(entry + FileTypeOffset, {ClosedRelativeFile})
+         .corrupt(entry + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET, {RecordLength});
+
+    IeeeController controller(system);
+    firmware.mount(image);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service REL OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service empty REL TALK");
+    receive_payload(system, controller, {data(0x00, Eoi::Last)});
+
+    // The next TALK returns record two, including its physical sector crossing.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service following REL TALK");
+    std::vector<Record> expected;
+    for (size_t i = RecordLength; i < payload.size(); ++i)
+        expected.push_back(data(payload[i], i + 1 == payload.size() ? Eoi::Last : Eoi::More));
+    receive_payload(system, controller, expected);
+}
+
+// PR #55's drive suffix belongs to 8050 DOS 2.7, not 4040 DOS 2.
+TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {
+    const auto [d80, address, drive] = GetParam();
+    const Device device{address};
+    const Device peer{static_cast<uint8_t>(address == DeviceAddress ? address + 1 : DeviceAddress)};
+    constexpr unsigned DrivesPerUnit = 2;
+    const unsigned slot = (address - DeviceAddress) * DrivesPerUnit + drive;
+    const unsigned peer_drive = drive ^ 1u;
+    const unsigned peer_slot = (peer.value() - DeviceAddress) * DrivesPerUnit + peer_drive;
+    const char* const name = d80 ? "status.d80" : "status.d64";
+    IeeeController controller(system);
+    // Empty D80 lookup needs only the zero-terminated directory, not BAM allocation.
+    firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(), name);
+    ASSERT_TRUE(ieee_drive_mount(slot, name));
+    ASSERT_TRUE(ieee_drive_mount(peer_slot, name));
+
+    // Leave independent pending errors on two units, with opposite local drive numbers.
+    open_file(system, controller, Channel{DataChannel},
+        std::to_string(drive) + ":MISSING", device);
+    service_rx(system, firmware, "service selected-unit missing file");
+    open_file(system, controller, Channel{DataChannel},
+        std::to_string(peer_drive) + ":MISSING", peer);
+    service_rx(system, firmware, "service peer-unit missing file");
+    const std::string suffix = d80 ? "," + std::to_string(drive) : "";
+    const std::string peer_suffix = d80 ? "," + std::to_string(peer_drive) : "";
+    receive_status(system, firmware, controller, device, "62,FILE NOT FOUND,00,00" + suffix + "\r");
+    receive_status(system, firmware, controller, peer, "62,FILE NOT FOUND,00,00" + peer_suffix + "\r");
+    receive_status(system, firmware, controller, device, "00, OK,00,00" + suffix + "\r");
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsUnitsDrives, DriveStatusTest,
+    testing::Combine(testing::Bool(), testing::Values(uint8_t{8}, uint8_t{9}, uint8_t{10}, uint8_t{11}),
+        testing::Values(uint8_t{0}, uint8_t{1})));
 
 // Checks CPU-written VIA state and the FPGA's injected external line inputs.
 TEST_F(FirmwareTest, CpuViaWriteAndInjectedRead) {
