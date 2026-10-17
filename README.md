@@ -36,6 +36,7 @@ cmake --preset default              # Do this first
 cmake --build --preset all          # Build everything
 cmake --build --preset fw           # Build firmware only
 cmake --build --preset fw-test      # Build firmware tests only
+cmake --build --preset sys-test     # Build system integration tests
 cmake --build --preset gw           # Build gateware only
 cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
@@ -43,6 +44,7 @@ cmake --build --preset sdcard       # Build SD card package
 # Test
 ctest --preset all --parallel       # Run all tests
 ctest --preset fw --parallel        # Run firmware tests only
+ctest --preset sys                  # Run system integration suite only
 ctest --preset gw --parallel        # Run gateware unit tests only
 ctest --preset gw-boot --parallel   # Run full-boot benches (Verilator, minutes)
 ```
@@ -53,6 +55,11 @@ two-state and settles differently, so it catches races Icarus tolerates. Each
 suite takes under a minute. `ECONOPET_MEDIA_DIR` must point at the directory
 containing `roms/` and `disks/`; `top_tb` and the boot bench load real ROMs
 from its `roms/` subdirectory.
+
+The [integration-test author guide](test/system/README.md) covers host, board
+and firmware fixtures, checked CPU programs, ROM calls, and cooperative phases.
+Use its nested CTest commands to filter individual integration cases or set
+inner parallelism. The root `sys` preset selects the aggregate wrapper.
 
 `gw-boot` is separate because it simulates seconds of PET time: it boots the
 stock BASIC-4 ROMs on the soft 6502 and passes only once the banner, the RAM

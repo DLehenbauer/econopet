@@ -1,5 +1,9 @@
 # Host test authoring reference
 
+Start with the [author guide](README.md) for build commands and complete examples.
+The [IEEE guide](ieee/README.md) separates wire/FIFO evidence and summarizes ROM
+entry coverage. This reference records detailed API contracts and evidence limits.
+
 ## Host firmware through production SPI
 
 [`FirmwareSession`](firmware.h) binds one board to the real
@@ -248,6 +252,61 @@ ctest --test-dir build/system --parallel 2 --no-tests=error \
 
 This layer does not establish full BASIC initialization, LOAD/SAVE, successful
 ACPTR data reception, full DOS compatibility or Waterloo behavior.
+
+## Waterloo ROM integration coverage
+
+[`ieee/waterloo_rom_test.cpp`](ieee/waterloo_rom_test.cpp) adds four enabled
+firmware integration cases for the native SuperPET revision-12 IEEE leaves.
+The suite derives from `FirmwareTest`, retaining per-test seed reporting,
+bounded failure diagnostics and session teardown. Each case mounts an empty D64
+and constructs `WaterlooFixture` on its fresh board. ROM loading occurs during
+execution, not GoogleTest discovery, and missing media fails explicitly.
+
+The complete selected set contains `970018-12` at `$A000-$BFFF`, `970019-12`
+at `$C000-$DFFF` and `970034-12` at `$E000-$FFFF`. The respective MD5 identities
+are `84cb402449c6107b7d2b636cb28f0042`, `0f9bd7123d99892ce80f1e7e438c2194`
+and `c03098d26dbb1a23737d3286f264bc97`.
+The production decoder preserves physical I/O at `$E800-$EFFF`.
+The [revision-12 evidence ledger](../../.github/instructions/ieee.instructions.md#superpet-waterloo-6809-controller-behavior)
+links the pinned binaries and reachable entry paths. Generated disassemblies
+are navigation aids, not original source or independent revision authorities.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|----------|-----------------------|----------------------------|----------------------------|------------------------|---------------|
+| Native IEEE initialization | Waterloo `970019-12` | [Pinned C-ROM binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin), IEEEInit `$C188` | Return with VIA ORB equal to the fixture's idle mask `$06` | [`WaterlooFixture`](ieee/fixture.h), [`waterloo_ieee_init_case`](ieee/waterloo_rom_test.cpp) | [Binary-derived C-ROM navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) |
+| ATN assertion and release | Waterloo `970019-12`, PIA2 and VIA | Same pinned binary, ATNDown `$C14F` and ATNUp `$C16E` | ATNDown returns with masked VIA ORB `$02` and PIA2 CA2 mode set. ATNUp releases ATN after the explicit `$02` ORB precondition | [`waterloo_atn_down_case` and `waterloo_atn_up_case`](ieee/waterloo_rom_test.cpp) | Reachable callers and archived labels in the [entry ledger](../../.github/instructions/ieee.instructions.md#revision-12-ieee-routine-map) |
+| EOI assertion and release | Waterloo `970019-12`, PIA1 CA2 | Same pinned binary, EOIDown `$C176` clears CRA bit 3 and EOIUp `$C17E` sets it | EOIDown returns with C2 mode cleared. The paired calls preserve the intermediate RAM marker and return with C2 mode set | [`waterloo_eoi_cases`](ieee/waterloo_rom_test.cpp) | [Binary-derived C-ROM navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) and the PIA model's control-bit definitions |
+
+The ATN tests observe final register state, not temporal NRFD/NDAC-before-ATN
+ordering. The EOI tests inspect PIA control state and return markers, not an
+EOI-marked data transfer. Ordinary setup explicitly clears user I/O hooks at
+`$E77A` before IEEEInit. The initializer test calls only IEEEInit itself.
+See [revision-bound ROM programs](#revision-bound-rom-programs) for hook
+preconditions and the separate active native UNTALK wire/FIFO regression.
+
+Sixteen historical cases remain disabled: UNLISTEN, UNTALK, listener/talker
+selection, absent-device output, EOI/final-byte output, byte/status input, OPEN,
+CLOSE, REL OPEN, SCRATCH, RENAME, initialize and REL position. Their presence
+does not establish successful disk commands. The termination probes retain
+explicit stack and completion instructions, device setup, and
+`every(1000, ServiceTiming::AfterSlice, firmware.service_adapter())`, with CPU
+and SPI work sharing the one-million-cycle `WaterlooBudget`. Other historical
+probes retain raw installation, literal completion bytes, fixed ticking and
+the deliberate reserved control-bit write. Their old failure notes are not
+current diagnoses. Do not enable or rewrite them merely to obtain green runs.
+
+```sh
+# Build before selecting the nested cases (the root preset selects only its wrapper).
+cmake --preset default
+cmake --build --preset sys-test --parallel 2
+ctest --test-dir build/system --parallel 2 --output-on-failure --no-tests=error \
+  -R '^firmware\.WaterlooRomIeee\.'
+```
+
+These checks establish focused native leaf behavior in the production-top
+digital simulator, not analog bus fidelity, full Waterloo application startup,
+successful OPEN/read/write, or complete Commodore DOS compatibility. Existing
+`gw-boot` benches separately exercise stock 6502 and SuperPET Waterloo boot.
 
 ## IEEE controller and protocol evidence
 
