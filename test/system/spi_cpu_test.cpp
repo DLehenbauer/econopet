@@ -59,6 +59,8 @@ template<class Owner>
 concept HasSpiView = requires(Owner&& owner) { std::forward<Owner>(owner).spi(); };
 template<class Owner>
 concept HasCpuView = requires(Owner&& owner) { std::forward<Owner>(owner).cpu(); };
+template<class Owner>
+concept HasIeeeView = requires(Owner&& owner) { std::forward<Owner>(owner).ieee(); };
 template<class View>
 concept HasRead = requires(View& view) { view.read(fpga::Register::Status); };
 template<class View>
@@ -75,25 +77,132 @@ struct CallbackResult {
 };
 template<class Result>
 concept CanReturnSpiResult = requires(System::SpiView<System>& view) { view.transaction(CallbackResult<Result>{}); };
+template<class View>
+concept HasCheckedTransaction = requires(View& view) { view.transaction(CallbackResult<void>{}); };
+template<class Owner>
+concept RejectsTemporaryViews =
+    !requires(Owner&& owner) { std::forward<Owner>(owner).spi(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).cpu(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).ieee(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).io(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).execution(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).program6502(); }
+    && !requires(Owner&& owner) { std::forward<Owner>(owner).program6809(); };
+template<template<class> class View>
+constexpr bool BorrowsPersistentBoard =
+    std::is_constructible_v<View<System>, System&>
+    && std::is_constructible_v<View<const System>, System&>
+    && std::is_constructible_v<View<const System>, const System&>
+    && !std::is_constructible_v<View<System>, System&&>
+    && !std::is_constructible_v<View<const System>, System&&>
+    && !std::is_constructible_v<View<const System>, const System&&>;
 static_assert(HasSpiView<System&> && HasSpiView<const System&>);
 static_assert(!HasSpiView<System> && !HasSpiView<const System>);
 static_assert(HasCpuView<System&> && HasCpuView<const System&>);
 static_assert(!HasCpuView<System> && !HasCpuView<const System>);
+static_assert(HasIeeeView<System&> && HasIeeeView<const System&>);
+static_assert(!HasIeeeView<System> && !HasIeeeView<const System>);
+static_assert(HasControlRead<System::IeeeView<System>> && !HasControlRead<System::IeeeView<const System>>);
+static_assert(!std::is_reference_v<decltype(std::declval<const System&&>().observation_source())>);
 static_assert(HasRead<System::SpiView<System>> && !HasRead<System::SpiView<const System>>);
 static_assert(HasControlRead<System::CpuView<System>> && !HasControlRead<System::CpuView<const System>>);
 static_assert(HasStart<System::CpuView<System>> && !HasStart<System::CpuView<const System>>);
 static_assert(!HasByte<System::SpiCommands> && !HasFinish<System::SpiCommands>);
 static_assert(!HasByte<System::SpiView<System>>);
+static_assert(HasCheckedTransaction<System::SpiView<System>>
+    && !HasCheckedTransaction<System::SpiView<const System>>);
 static_assert(!std::is_copy_constructible_v<System::SpiTransaction> && !std::is_move_constructible_v<System::SpiTransaction>);
 static_assert(std::is_nothrow_destructible_v<System::SpiTransaction>);
 static_assert(CanReturnSpiResult<void> && CanReturnSpiResult<std::unique_ptr<int>>);
 static_assert(!CanReturnSpiResult<int&> && !CanReturnSpiResult<const int&>);
 static_assert(!CanReturnSpiResult<int*> && !CanReturnSpiResult<std::reference_wrapper<int>>);
 static_assert(!CanReturnSpiResult<const std::reference_wrapper<int>>);
-static_assert(!std::is_constructible_v<System::SpiView<const System>, System&&>);
-static_assert(!std::is_constructible_v<System::SpiView<const System>, const System&&>);
-static_assert(!std::is_constructible_v<System::CpuView<const System>, System&&>);
-static_assert(!std::is_constructible_v<System::CpuView<const System>, const System&&>);
+static_assert(RejectsTemporaryViews<System> && RejectsTemporaryViews<const System>);
+static_assert(BorrowsPersistentBoard<System::SpiView>);
+static_assert(BorrowsPersistentBoard<System::CpuView>);
+static_assert(BorrowsPersistentBoard<System::IeeeView>);
+static_assert(std::is_same_v<decltype(std::declval<econopet::io::Pia6520&>().peek_inputs()),
+    econopet::io::Inputs>);
+static_assert(std::is_same_v<decltype(std::declval<econopet::io::Via6522&>().peek_inputs()),
+    econopet::io::Inputs>);
+}
+
+// Temporary boards return owned identity and metadata rather than dangling views.
+TEST(SystemOwnership, TemporaryBoardAccessOwnsIdentityAndMetadata) {
+    const auto& source = System{}.observation_source();
+    EXPECT_NE(source, nullptr);
+    const auto& metadata = System{}.selected_rom();
+    EXPECT_FALSE(metadata.has_value());
+}
+
+// Passive API families share completed observations without starting SPI transactions.
+TEST_F(SystemTest, PassiveFamiliesRemainClockFreeDuringObservationAndAfterSpiFailure) {
+    system.cpu(CPU_SOFT_6502).prepare();
+    const auto inspect = [&](const System& board) {
+        const auto at = board.time();
+        const auto pins = board.snapshot();
+        EXPECT_EQ(std::to_underlying(board.cpu().peek_selection()), pins.cpu_selection_o);
+        EXPECT_EQ(board.cpu().peek_reset(), pins.cpu_reset_active_o);
+        EXPECT_EQ(board.cpu(CPU_SOFT_6502).peek_address(), pins.soft6502_addr_o);
+        EXPECT_EQ(board.cpu(CPU_SOFT_6809).peek_address(), pins.soft6809_addr_o);
+        EXPECT_EQ(board.ieee().peek_via_orb(), pins.ieee_via_orb_o);
+        EXPECT_EQ(board.ieee().peek_pia2_pb(), pins.ieee_pia2_pb_out_o);
+        EXPECT_EQ(board.ieee().peek_nrfd_released(), pins.ieee_cpu_nrfd_no);
+        EXPECT_EQ(board.ieee().peek_ndac_released(), pins.ieee_cpu_ndac_no);
+        EXPECT_EQ(board.ieee().peek_listening(), pins.ieee_listening_o);
+        EXPECT_EQ(board.ieee().peek_talking(), pins.ieee_talking_o);
+        board.cpu().peek_fetch_checkpoint();
+        EXPECT_EQ(board.time(), at);
+    };
+    const auto start = system.time();
+    inspect(system);
+    unsigned samples = 0;
+    auto subscription = system.observe([&](const System& board) {
+        inspect(board);
+        EXPECT_FALSE(board.spi().peek_failed());
+        ++samples;
+    });
+    system.tick(3);
+    EXPECT_EQ(samples, 3u);
+    EXPECT_EQ(system.time(), start + Cycles{3});
+    subscription.reset();
+
+    // An unfinished raw byte fails closed without disabling passive diagnostics.
+    {
+        auto transaction = system.spi().raw_transaction();
+        transaction.bit(true);
+    }
+    const auto stopped = system.time();
+    inspect(system);
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_THROW(system.cpu().read_selection(), std::logic_error);
+    EXPECT_EQ(system.time(), stopped);
+}
+
+// Getter-like active reads retain physical SPI routing and elapsed-time semantics.
+TEST_F(SystemTest, ActiveFamilyReadsAdvanceTimeAndMatchPassiveEvidence) {
+    auto cpu = system.cpu(CPU_SOFT_6809);
+    cpu.prepare();
+    auto before = system.time();
+    EXPECT_EQ(cpu.read_selection(), cpu.peek_selection());
+    EXPECT_GT(system.time(), before);
+    before = system.time();
+    EXPECT_TRUE(cpu.read_control().contains(CpuControlBit::Reset));
+    EXPECT_GT(system.time(), before);
+    system.poke(RamProbe, Marker);
+    before = system.time();
+    EXPECT_EQ(system.spi().read(fpga::address(RamProbe)), system.peek(RamProbe));
+    EXPECT_GT(system.time(), before);
+    system.ieee().write_control(fpga::IeeeControlBit::Enabled | fpga::IeeeControlBit::Flush);
+    before = system.time();
+    EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
+    EXPECT_GT(system.time(), before);
+    EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::TxRoom));
+    before = system.time();
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+    EXPECT_GT(system.time(), before);
+    system.ieee().write_control({});
+    EXPECT_FALSE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
 }
 
 TEST_F(SystemTest, SpiCommandsValidateBeforeMutation) {
@@ -452,6 +561,7 @@ TEST_F(SystemTest, CaughtSpiFailureCannotBeReportedAsSuccessfulCompletion) {
 TEST_F(SystemTest, SpiAndCpuViewsRejectCapturedMutationFromObservationAndEdits) {
     auto spi = system.spi();
     auto cpu = system.cpu(CPU_SOFT_6502);
+    auto ieee = system.ieee();
     const auto verify = [&] {
         const auto start = system.time();
         EXPECT_THROW(spi.read(fpga::Register::Status), std::logic_error);
@@ -466,6 +576,9 @@ TEST_F(SystemTest, SpiAndCpuViewsRejectCapturedMutationFromObservationAndEdits) 
         EXPECT_THROW(cpu.release_reset(), std::logic_error);
         EXPECT_THROW(cpu.write_vector(Entry6502), std::logic_error);
         EXPECT_THROW(cpu.write_control_raw(0), std::logic_error);
+        EXPECT_THROW(ieee.read_status(), std::logic_error);
+        EXPECT_THROW(ieee.read_control(), std::logic_error);
+        EXPECT_THROW(ieee.write_control({}), std::logic_error);
         EXPECT_EQ(system.time(), start);
         EXPECT_FALSE(spi.peek_failed());
     };
@@ -590,6 +703,38 @@ TEST_F(SystemTest, Halted6502SyncDoesNotAdvanceFetchCheckpoint) {
     system.run_until([&](const System& board) {
         return board.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint);
     }, ExecutionBudget, "6502 resumed fetch");
+}
+
+// Operand/data reads, inactive cores and physical SYNC cannot invent a soft-core fetch.
+TEST_F(SystemTest, CpuFetchAttributionRejectsDataAndPhysicalSync) {
+    test_asm::Scenario scenario(system);
+    test_asm::mos6502::Program program(scenario,
+        scenario.reserve("code", test_asm::RegionKind::Code, Entry6502, 32));
+    program.lda(Result).sta(Result + 1).jmp(program.mark("park"));
+    program.install();
+    system.poke(SramAddress{Result.value()}, Marker);
+    system.cpu(CPU_SOFT_6502).start(Entry6502);
+    system.tick(ExecutionSlice);
+    ASSERT_EQ(system.peek(SramAddress{(Result + 1).value()}), Marker);
+    ASSERT_TRUE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, 0));
+    for (const auto address : {Entry6502 + 1, Entry6502 + 2, Result, Result + 1}) {
+        EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(address, 0));
+        EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_fetched_at(address, 0));
+    }
+    system.cpu().assert_reset();
+    const auto checkpoint = system.cpu().peek_fetch_checkpoint();
+    for (const auto selection : {CPU_SOFT_6502, CPU_SOFT_6809, CPU_PHYS_6502}) {
+        system.cpu(selection).select();
+        system.drive_physical_cpu({Entry6502, std::nullopt, true});
+        system.spi().read(fpga::address(SramAddress{Entry6502.value()}));
+        system.tick(ExecutionSlice);
+        EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
+    }
+    system.cpu().release_reset();
+    system.tick(ExecutionSlice);
+    EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
+    EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint));
+    EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_fetched_at(Entry6502, checkpoint));
 }
 
 TEST_F(SystemTest, CpuSelectionReadsAndResetReleaseAcceptSuperpetIoMode) {

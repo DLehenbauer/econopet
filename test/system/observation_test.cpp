@@ -52,6 +52,49 @@ TEST_F(SystemTest, BoundedWaitReportsTimeoutAndDoesNotOvershoot) {
     EXPECT_EQ(system.time() - start, DeadlineCycles);
 }
 
+// Ordered observers see committed SRAM, native fetches and fitted clocks at one boundary.
+TEST_F(SystemTest, ObserverSamplingIncludesCommittedRamAndFetchEvidence) {
+    constexpr CpuAddress Entry{0x0300};
+    constexpr Cycles ExecutionSlice{2000};
+    test_asm::Scenario layout(system);
+    test_asm::mos6502::Program program(layout,
+        layout.reserve("code", test_asm::RegionKind::Code, Entry, 0x100));
+    program.lda(test_asm::imm(Marker)).sta(CpuAddress{ProbeAddress.value()}).jmp(Entry);
+    program.install();
+    system.poke(ProbeAddress, 0);
+    const auto start = system.time();
+    auto sampled_time = start;
+    uint64_t samples = 0, sampled_fetch = 0, sampled_io_clocks = 0;
+    uint8_t sampled_result = 0;
+    bool saw_commit = false;
+    auto trace = system.observe([&](const System& board) {
+        ++samples;
+        sampled_time = board.time();
+        sampled_fetch = board.cpu().peek_fetch_checkpoint();
+        sampled_io_clocks = board.io().clock_count();
+        const auto result = board.peek(ProbeAddress);
+        if (result != sampled_result) {
+            EXPECT_EQ(result, Marker);
+            EXPECT_TRUE(board.snapshot().ram_we_n_o);
+            EXPECT_TRUE(board.cpu(CPU_SOFT_6502).peek_fetched_at(Entry, 0));
+            saw_commit = true;
+        }
+        sampled_result = result;
+    });
+    auto checks = system.observe([&](const System& board) {
+        EXPECT_TRUE(board.snapshot().sys_clock_i);
+        EXPECT_EQ(board.time(), start + Cycles{samples});
+        EXPECT_EQ(board.time(), sampled_time);
+        EXPECT_EQ(board.cpu().peek_fetch_checkpoint(), sampled_fetch);
+        EXPECT_EQ(board.io().clock_count(), sampled_io_clocks);
+        EXPECT_EQ(board.peek(ProbeAddress), sampled_result);
+    });
+    system.cpu(CPU_SOFT_6502).start(Entry);
+    system.tick(ExecutionSlice);
+    EXPECT_TRUE(saw_commit);
+    EXPECT_EQ(system.peek(ProbeAddress), Marker);
+}
+
 TEST_F(SystemTest, CompletionPredicatesRejectActiveWorkBeforeMutation) {
     const auto start = system.time();
     const auto marker = system.peek(ProbeAddress);
