@@ -77,19 +77,28 @@ void expect_no_payload(System& system, FirmwareSession& firmware, IeeeController
     EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
 }
 
-// Read a complete status response, checking exact punctuation and final-byte EOI.
-void receive_status(System& system, FirmwareSession& firmware, IeeeController& controller,
-                    Device device, std::string_view expected) {
+// Bound status input and independently check its wire bytes and final CR/EOI.
+std::string receive_status(System& system, FirmwareSession& firmware, IeeeController& controller,
+                           Device device) {
+    constexpr size_t StatusByteLimit = IEEE_STATUS_TEXT_MAX + 1;
     controller.command(Talk(device));
     controller.command(Secondary(Channel{CommandChannel}));
     service_rx(system, firmware, "service status request");
+    auto wire = system.trace_ieee();
     std::vector<Record> records;
-    for (size_t i = 0; i < expected.size(); ++i)
-        records.push_back(data(static_cast<uint8_t>(expected[i]),
-            i + 1 == expected.size() ? Eoi::Last : Eoi::More));
-    receive_payload(system, controller, records);
+    std::string text;
+    for (size_t i = 0; i < StatusByteLimit; ++i) {
+        records.push_back(controller.receive());
+        require_sequence({records.back()}, {data(records.back().data, records.back().eoi)},
+            "status data flags");
+        text.push_back(static_cast<char>(records.back().data));
+        if (records.back().eoi == Eoi::Last) break;
+    }
+    require_sequence(wire.records(), records, "status CPU and wire payload");
+    require_sequence({records.back()}, {data('\r', Eoi::Last)}, "status final CR/EOI");
     controller.command(Untalk);
     service_rx(system, firmware, "service status UNTALK");
+    return text;
 }
 
 // Give each file length a fresh board and independent firmware session.
@@ -101,6 +110,9 @@ class DriveOneByteTest : public FirmwareTest, public testing::WithParamInterface
 // Select model, unit and drive independently rather than assuming all DOS status formats agree.
 class DriveStatusTest : public FirmwareTest,
                         public testing::WithParamInterface<std::tuple<bool, uint8_t, uint8_t>> {};
+
+// Check native token expansion independently of model-specific numeric fields.
+class DriveStatusTextTest : public FirmwareTest, public testing::WithParamInterface<bool> {};
 
 } // namespace
 
@@ -243,7 +255,8 @@ TEST_F(FirmwareTest, DISABLED_SequentialRetalkAfterEofDoesNotInventData) {
     expect_no_payload(system, firmware, controller);
     controller.command(Untalk);
     service_rx(system, firmware, "service exhausted SEQ UNTALK");
-    receive_status(system, firmware, controller, Device{DeviceAddress}, "00, OK,00,00\r");
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+        "00, OK,00,00\r");
 }
 
 // PR #53: a failed successor cannot manufacture a successful CR+EOI response.
@@ -277,7 +290,8 @@ TEST_F(FirmwareTest, DISABLED_SequentialReadErrorDoesNotInventEof) {
     // The emulator reports its backing-chain failure as status 23, not clean EOF.
     controller.command(Untalk);
     service_rx(system, firmware, "service corrupt SEQ UNTALK");
-    receive_status(system, firmware, controller, Device{DeviceAddress}, "23,READ ERROR,00,00\r");
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+        "23,READ ERROR,00,00\r");
 }
 
 // PR #54: SETLST retains the first NUL of an empty record and RDREL marks it EOI.
@@ -341,14 +355,32 @@ TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {
     service_rx(system, firmware, "service peer-unit missing file");
     const std::string suffix = d80 ? "," + std::to_string(drive) : "";
     const std::string peer_suffix = d80 ? "," + std::to_string(peer_drive) : "";
-    receive_status(system, firmware, controller, device, "62,FILE NOT FOUND,00,00" + suffix + "\r");
-    receive_status(system, firmware, controller, peer, "62,FILE NOT FOUND,00,00" + peer_suffix + "\r");
-    receive_status(system, firmware, controller, device, "00, OK,00,00" + suffix + "\r");
+    EXPECT_THAT(receive_status(system, firmware, controller, device),
+        testing::MatchesRegex("62,[^,\r]+,00,00" + suffix + "\r"));
+    EXPECT_THAT(receive_status(system, firmware, controller, peer),
+        testing::MatchesRegex("62,[^,\r]+,00,00" + peer_suffix + "\r"));
+    EXPECT_THAT(receive_status(system, firmware, controller, device),
+        testing::MatchesRegex("00,[^,\r]+,00,00" + suffix + "\r"));
 }
 
 INSTANTIATE_TEST_SUITE_P(ModelsUnitsDrives, DriveStatusTest,
     testing::Combine(testing::Bool(), testing::Values(uint8_t{8}, uint8_t{9}, uint8_t{10}, uint8_t{11}),
         testing::Values(uint8_t{0}, uint8_t{1})));
+
+// Both native token expanders insert a space before the initial FILE token.
+TEST_P(DriveStatusTextTest, DISABLED_PreservesNativeFileNotFoundText) {
+    const bool d80 = GetParam();
+    IeeeController controller(system);
+    firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(),
+        d80 ? "status.d80" : "status.d64");
+    open_file(system, controller, Channel{DataChannel}, "MISSING");
+    service_rx(system, firmware, "service missing file for native status text");
+    const std::string expected = d80
+        ? "62, FILE NOT FOUND,00,00,0\r" : "62, FILE NOT FOUND,00,00\r";
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(Models, DriveStatusTextTest, testing::Bool());
 
 // Checks CPU-written VIA state and the FPGA's injected external line inputs.
 TEST_F(FirmwareTest, CpuViaWriteAndInjectedRead) {

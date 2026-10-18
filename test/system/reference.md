@@ -172,7 +172,7 @@ The audit of open PRs [#52](https://github.com/DLehenbauer/econopet/pull/52),
 accesses, production FPGA handshakes and, for drive cases, production firmware
 through physical SPI. No production fixes are included.
 
-Seven new cases remain explicitly disabled because their contract assertions
+Nine new cases remain explicitly disabled because their contract assertions
 fail on current production code:
 
 - `IeeeAbortBeforeNrfdPreservesSampledByte`: X is sampled through `$E820`,
@@ -193,6 +193,10 @@ fail on current production code:
   skips the empty record. This deliberately edits REL directory metadata over
   a checked data chain, as the unit fixture does. It does not validate native
   side-sector construction.
+- `DriveStatusTextTest.PreservesNativeFileNotFoundText`: both models must
+  return `62, FILE NOT FOUND,...`. The native FILE token inserts a leading
+  space, which current firmware omits. These two cases isolate message-text
+  compatibility from the enabled numeric-field and identity checks.
 
 The enabled abort controls cover the other two combinations: released NRFD
 without a private sample preserves X, and asserted NRFD with a sample resumes
@@ -221,6 +225,10 @@ proposal, the 4040 response has no drive suffix and the 8050 response has one.
 The model-specific implementation is already present from
 [#64](https://github.com/DLehenbauer/econopet/pull/64).
 These tests cover status only, not general D80 file streaming.
+Their message field is deliberately text-agnostic, so correcting native token
+spacing cannot break the enabled model/unit/drive checks. CPU and wire bytes
+must agree, all transfers must have ATN released, and the final CR must carry
+EOI. The two opt-in text cases separately require the exact native message.
 
 All Commodore source links below select `mist64/cbmsrc` revision
 `01bd60f162ef92212ef0cb67546ae8f42be34168`.
@@ -234,6 +242,7 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | Failed SEQ successor (#53) | 4040 DOS 2 error recovery, with EconoPET backing-read fault stimulus | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERROR`, `CMDER3`, `TLKERR`, `TLERR` | Error recovery releases DAV and the ordinary channel, not an invented final data byte | `SequentialReadErrorDoesNotInventEof` | Same VICE reader exits normal reading on sector-read failure. Its returned error byte/status is not an IEEE wire-EOI oracle |
 | Empty REL record (#54) | 4040 DOS 2, D64 record engine | [4040 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1): `NXTREC`; [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4): `SETLST`, `FNDLST`; [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3): `RD25`, `RD30`, `RD40` | All-zero trimming falls back to the first-byte pointer. That NUL carries EOI before advancing the record | `EmptyRelativeRecordReturnsNulThenAdvances` | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the NUL before moving the record pointer |
 | Status drive field (#55) | 4040 DOS 2 versus single-sided 8050/shared DOS 2.7 | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERMSG2` ends after sector; [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `ERMSG2` appends `DRVNUM AND 1`; `tst4`: `GETERC` supplies final CR/EOI | Exact four-field 4040 or five-field 8050 status, including final-byte EOI and correct local drive | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity` | [MAME ROM-backed 8050/8250 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp). VICE's generic four-field formatter is not used to override the 8050 source |
+| Native error-62 token spacing | Same 4040 and single-sided 8050 targets | Same `erproc` sources: `ERRTAB` starts error 62 with FILE token `$83`; 4040 `MER7` and 8250 `E60` insert `$20` before expanding each token; `ERRMSG`/`JERRMS` place the message after `62,` | `62, FILE NOT FOUND,00,00` on 4040, or `62, FILE NOT FOUND,00,00,0` on 8050 drive 0, followed by CR/EOI | `DriveStatusTextTest.DISABLED_PreservesNativeFileNotFoundText`, one case per model | [MAME ROM-backed 4040 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) executes drive ROMs rather than substituting status text. [VICE's high-level formatter](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error table](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) omit this space and do not override the selected ROMs |
 
 Run the new red cases explicitly (expected to fail until their production
 bugs are fixed):
@@ -242,11 +251,11 @@ bugs are fixed):
 (cd build/system/board && ./econopet_board_tests --gtest_also_run_disabled_tests \
   --gtest_filter='DataAndStatus/IeeeAbortTest.DISABLED_*')
 (cd build/system/board && ./econopet_firmware_tests --gtest_also_run_disabled_tests \
-  --gtest_filter='FirmwareTest.DISABLED_Sequential*:FirmwareTest.DISABLED_EmptyRelativeRecord*')
+  --gtest_filter='FirmwareTest.DISABLED_Sequential*:FirmwareTest.DISABLED_EmptyRelativeRecord*:Models/DriveStatusTextTest.DISABLED_*')
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run keeps these seven cases disabled.
+CTest run keeps these nine cases disabled.
 
 The three firmware red cases failed at their payload/absence assertions at
 simulation seeds 1 and 17 and passed against isolated #53-54 fix probes,
@@ -260,6 +269,13 @@ it to 4040 status fails all eight D64 combinations.
 After correcting the abort matrix, the complete controller-test translation
 unit passed 30 enabled cases at both seeds. Its four opt-in matrix cases
 failed at the intended resumed-payload assertions, not setup or timeouts.
+
+After separating native message text from numeric fields, all 98 enabled
+firmware integration cases pass at seeds 1 and 17. The sixteen status-field
+cases remain green, while both opt-in native-text cases fail specifically on
+the missing leading space. Adding only that space in an isolated production
+fix probe makes all eighteen status cases pass without changing their
+numeric-field or handshake expectations.
 
 ## Commodore ROM integration coverage
 
