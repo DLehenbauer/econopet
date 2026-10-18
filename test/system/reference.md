@@ -228,11 +228,10 @@ proposal, the 4040 response has no drive suffix and the 8050 response has one.
 The model-specific implementation is already present from
 [#64](https://github.com/DLehenbauer/econopet/pull/64).
 These tests cover status only, not general D80 file streaming.
-Their message field is deliberately text-agnostic, so correcting native token
-spacing cannot break the enabled model/unit/drive checks. CPU and wire bytes
+Each combination requires exact native `62, FILE NOT FOUND,...` responses
+from both units and `00, OK,...` after status clearing. CPU and wire bytes
 must agree, all transfers must have ATN released, and the final CR must carry
-EOI. Two enabled `DriveStatusTextTest.PreservesNativeFileNotFoundText` cases
-separately require the exact native message. Firmware unit tests also check
+EOI. Firmware unit tests also check
 that text on both local drives, all four units, and both mixed-model orders.
 
 All Commodore source links below select `mist64/cbmsrc` revision
@@ -247,7 +246,7 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | Failed SEQ successor (#53) | 4040 DOS 2 error recovery, with EconoPET backing-read fault stimulus | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERROR`, `CMDER3`, `TLKERR`, `TLERR` | Error recovery releases DAV and the ordinary channel, not an invented final data byte | `SequentialReadErrorDoesNotInventEof` | Same VICE reader exits normal reading on sector-read failure. Its returned error byte/status is not an IEEE wire-EOI oracle |
 | Empty REL record (#54) | 4040 DOS 2, D64 record engine | [4040 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1): `NXTREC`; [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4): `SETLST`, `FNDLST`; [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3): `RD25`, `RD30`, `RD40` | All-zero trimming falls back to the first-byte pointer. That NUL carries EOI before advancing the record | `EmptyRelativeRecordReturnsNulThenAdvances` | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the NUL before moving the record pointer |
 | Status drive field (#55) | 4040 DOS 2 versus single-sided 8050/shared DOS 2.7 | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERMSG2` ends after sector; [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `ERMSG2` appends `DRVNUM AND 1`; `tst4`: `GETERC` supplies final CR/EOI | Exact four-field 4040 or five-field 8050 status, including final-byte EOI and correct local drive | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity` | [MAME ROM-backed 8050/8250 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp). VICE's generic four-field formatter is not used to override the 8050 source |
-| Native error-62 token spacing | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | Same `erproc` sources: `ERRTAB` starts error 62 with FILE token `$83`; 4040 `MER7` and 8250 `E60` insert `$20` before expanding each token; `ERRMSG`/`JERRMS` place the message after `62,` | `62, FILE NOT FOUND,00,00` on 4040, or `62, FILE NOT FOUND,00,00,d` on 8050/8250 local drive `d`, followed by CR/EOI | `DriveStatusTextTest.PreservesNativeFileNotFoundText`, one case per emulated model, and firmware status unit tests | [MAME ROM-backed 4040 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) executes drive ROMs rather than substituting status text. [VICE's high-level formatter](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error table](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) omit this space and do not override the selected ROMs |
+| Native error-62 token spacing | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | Same `erproc` sources: `ERRTAB` starts error 62 with FILE token `$83`; 4040 `MER7` and 8250 `E60` insert `$20` before expanding each token; `ERRMSG`/`JERRMS` place the message after `62,` | `62, FILE NOT FOUND,00,00` on 4040, or `62, FILE NOT FOUND,00,00,d` on 8050/8250 local drive `d`, followed by CR/EOI | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity`, all sixteen model/unit/drive combinations, and firmware status unit tests | [MAME ROM-backed 4040 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) executes drive ROMs rather than substituting status text. [VICE's high-level formatter](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error table](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) omit this space and do not override the selected ROMs |
 
 The error-62 correction changes only its message literal. Both native tables
 expand tokens 3 (FILE), 6 (NOT), and 7 (FOUND). Each token expansion emits
@@ -297,10 +296,11 @@ on the missing leading space. Adding only that space in an isolated production
 fix probe made all eighteen status cases pass without changing their
 numeric-field or handshake expectations.
 
-With that correction applied to production, both native-text cases now run
-by default. All eighteen status integration cases pass at seeds 1 and 17,
-checking exact native text separately from model/unit/drive fields, status
-clearing, CPU/wire agreement, ATN, and final CR/EOI. The full firmware unit
+With that correction applied to production, native-text coverage is folded
+into the sixteen status-matrix cases rather than a separate two-case suite.
+All sixteen cases pass at seeds 1 and 17, checking exact native text,
+model/unit/drive fields, status clearing, CPU/wire agreement, ATN, and final
+CR/EOI. The full firmware unit
 suite passes all 427 checks with its D64, D80, and mixed-model error-62
 expectations corrected. Production firmware builds with `RelWithDebInfo`.
 Firmware unit and integration tests use `Debug`, with assertion-enabled

@@ -111,9 +111,6 @@ class DriveOneByteTest : public FirmwareTest, public testing::WithParamInterface
 class DriveStatusTest : public FirmwareTest,
                         public testing::WithParamInterface<std::tuple<bool, uint8_t, uint8_t>> {};
 
-// Check native token expansion independently of model-specific numeric fields.
-class DriveStatusTextTest : public FirmwareTest, public testing::WithParamInterface<bool> {};
-
 } // namespace
 
 // A temporary checked fixture is copied at mount and survives until file EOF.
@@ -330,7 +327,7 @@ TEST_F(FirmwareTest, DISABLED_EmptyRelativeRecordReturnsNulThenAdvances) {
     receive_payload(system, controller, expected);
 }
 
-// PR #55's drive suffix belongs to 8050 DOS 2.7, not 4040 DOS 2.
+// Check exact native status text, with a drive suffix only for 8050 DOS 2.7.
 TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {
     const auto [d80, address, drive] = GetParam();
     const Device device{address};
@@ -355,32 +352,17 @@ TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {
     service_rx(system, firmware, "service peer-unit missing file");
     const std::string suffix = d80 ? "," + std::to_string(drive) : "";
     const std::string peer_suffix = d80 ? "," + std::to_string(peer_drive) : "";
-    EXPECT_THAT(receive_status(system, firmware, controller, device),
-        testing::MatchesRegex("62,[^,\r]+,00,00" + suffix + "\r"));
-    EXPECT_THAT(receive_status(system, firmware, controller, peer),
-        testing::MatchesRegex("62,[^,\r]+,00,00" + peer_suffix + "\r"));
-    EXPECT_THAT(receive_status(system, firmware, controller, device),
-        testing::MatchesRegex("00,[^,\r]+,00,00" + suffix + "\r"));
+    EXPECT_EQ(receive_status(system, firmware, controller, device),
+        "62, FILE NOT FOUND,00,00" + suffix + "\r");
+    EXPECT_EQ(receive_status(system, firmware, controller, peer),
+        "62, FILE NOT FOUND,00,00" + peer_suffix + "\r");
+    EXPECT_EQ(receive_status(system, firmware, controller, device),
+        "00, OK,00,00" + suffix + "\r");
 }
 
 INSTANTIATE_TEST_SUITE_P(ModelsUnitsDrives, DriveStatusTest,
     testing::Combine(testing::Bool(), testing::Values(uint8_t{8}, uint8_t{9}, uint8_t{10}, uint8_t{11}),
         testing::Values(uint8_t{0}, uint8_t{1})));
-
-// Both native token expanders insert a space before the initial FILE token.
-TEST_P(DriveStatusTextTest, PreservesNativeFileNotFoundText) {
-    const bool d80 = GetParam();
-    IeeeController controller(system);
-    firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(),
-        d80 ? "status.d80" : "status.d64");
-    open_file(system, controller, Channel{DataChannel}, "MISSING");
-    service_rx(system, firmware, "service missing file for native status text");
-    const std::string expected = d80
-        ? "62, FILE NOT FOUND,00,00,0\r" : "62, FILE NOT FOUND,00,00\r";
-    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), expected);
-}
-
-INSTANTIATE_TEST_SUITE_P(Models, DriveStatusTextTest, testing::Bool());
 
 // Checks CPU-written VIA state and the FPGA's injected external line inputs.
 TEST_F(FirmwareTest, CpuViaWriteAndInjectedRead) {
