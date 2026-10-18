@@ -170,18 +170,25 @@ The audit of open PRs [#52](https://github.com/DLehenbauer/econopet/pull/52),
 [`controller_test.cpp`](ieee/controller_test.cpp) and
 [`drive_test.cpp`](ieee/drive_test.cpp). These execute CPU-backed PIA/VIA
 accesses, production FPGA handshakes and, for drive cases, production firmware
-through physical SPI. No production fixes are included.
+through physical SPI.
 
-Seven new cases remain explicitly disabled because their contract assertions
-fail on current production code:
+The four abort regressions now run by default. The FPGA advances the selected
+TX FIFO once when NRFD is asserted after DAV, independently of private `$E820`
+reads. DIO and EOI remain latched until NDAC or ATN releases DAV. ATN never
+advances the FIFO again. `T_PREFETCH` advances once on NRFD, then enters the
+NDAC-wait state `T_ACK`. Both states can finish on NDAC, preserving unread
+termination and same-clock NRFD/NDAC handling without a separate prefetch flag:
 
 - `IeeeAbortBeforeNrfdPreservesSampledByte`: X is sampled through `$E820`,
-  but NRFD remains released until ATN aborts. The resumed stream incorrectly
-  starts at Y. Both data and status FIFOs are exercised.
+  but NRFD remains released until ATN aborts. The resumed stream must start at
+  X. Both data and status FIFOs are exercised.
 - `IeeeAbortAfterNrfdPrefetchesUnreadByte`: NRFD is asserted after DAV, but
   the PET does not sample X. Native `TLK20` enters `TLK30` and `GET` on
-  asserted NRFD, prefetching Y before `TLK35` waits for NDAC. The FPGA instead
-  retains X. Both FIFOs are exercised.
+  asserted NRFD, prefetching Y before `TLK35` waits for NDAC. The FPGA must
+  resume at Y. Both FIFOs are exercised.
+
+Three firmware cases remain explicitly disabled because their contract
+assertions fail on current production code:
 - `SequentialRetalkAfterEofDoesNotInventData`: a completed two-byte SEQ is
   addressed again without reopening. Firmware incorrectly queues CR+EOI.
 - `SequentialReadErrorDoesNotInventEof`: a malformed successor follows 254
@@ -194,7 +201,7 @@ fail on current production code:
   a checked data chain, as the unit fixture does. It does not validate native
   side-sector construction.
 
-The enabled abort controls cover the other two combinations: released NRFD
+The other abort controls cover the remaining two combinations: released NRFD
 without a private sample preserves X, and asserted NRFD with a sample resumes
 at Y. All abort cases keep NDAC asserted. ATN preserves the selected NRFD level
 rather than changing both lines together. Status resumes after command-free
@@ -239,27 +246,29 @@ Run the new red cases explicitly (expected to fail until their production
 bugs are fixed):
 
 ```sh
-(cd build/system/board && ./econopet_board_tests --gtest_also_run_disabled_tests \
-  --gtest_filter='DataAndStatus/IeeeAbortTest.DISABLED_*')
+(cd build/system/board && ./econopet_board_tests \
+  --gtest_filter='DataAndStatus/IeeeAbortTest.*')
 (cd build/system/board && ./econopet_firmware_tests --gtest_also_run_disabled_tests \
   --gtest_filter='FirmwareTest.DISABLED_Sequential*:FirmwareTest.DISABLED_EmptyRelativeRecord*')
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run keeps these seven cases disabled.
+CTest run keeps the three firmware cases disabled.
 
 The three firmware red cases failed at their payload/absence assertions at
 simulation seeds 1 and 17 and passed against isolated #53-54 fix probes,
 including REL advancement into the following record. Earlier #52 abort
 expectations incorrectly treated NDAC as the sole advancement boundary.
 Their fix-probe results are superseded by the NRFD/private-read matrix above.
-The earlier full board/firmware runs passed 446 enabled cases at both seeds,
-but preceded that matrix correction. Status mutations independently confirmed
-that omitting the 8050 suffix fails all eight D80 combinations and appending
-it to 4040 status fails all eight D64 combinations.
-After correcting the abort matrix, the complete controller-test translation
-unit passed 30 enabled cases at both seeds. Its four opt-in matrix cases
-failed at the intended resumed-payload assertions, not setup or timeouts.
+After the NRFD-triggered FIFO advancement fix, all 452 enabled board/firmware
+integration cases pass at both seeds, including all eight abort matrix cases
+and the Waterloo counted-termination control. The three opt-in firmware
+regressions remain red. Both IEEE RTL benches pass under Icarus and Verilator,
+and the production FPGA bitstream builds successfully. These results use an
+isolated tree that excludes unrelated local gateware edits.
+Status mutations independently confirmed that omitting the 8050 suffix fails
+all eight D80 combinations and appending it to 4040 status fails all eight
+D64 combinations.
 
 ## Commodore ROM integration coverage
 

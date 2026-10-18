@@ -89,12 +89,12 @@ TEST_P(IeeeAbortTest, IeeeAbortBeforeNrfdPreservesUnreadByte) {
 }
 
 // A private PET read cannot advance the native drive while NRFD remains released.
-TEST_P(IeeeAbortTest, DISABLED_IeeeAbortBeforeNrfdPreservesSampledByte) {
+TEST_P(IeeeAbortTest, IeeeAbortBeforeNrfdPreservesSampledByte) {
     check_talk_abort(system, AbortPhase::BeforeNrfd, true, GetParam());
 }
 
 // TLK30 prefetches the next byte on asserted NRFD even without a private PET read.
-TEST_P(IeeeAbortTest, DISABLED_IeeeAbortAfterNrfdPrefetchesUnreadByte) {
+TEST_P(IeeeAbortTest, IeeeAbortAfterNrfdPrefetchesUnreadByte) {
     check_talk_abort(system, AbortPhase::AfterNrfd, false, GetParam());
 }
 
