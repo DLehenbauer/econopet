@@ -588,7 +588,7 @@ START_TEST(test_missing_file_reports_status_62) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
     // The failed directory lookup must become DOS error 62 on channel 15.
-    assert_status("62,FILE NOT FOUND,00,00\r");
+    assert_status("62, FILE NOT FOUND,00,00\r");
 }
 END_TEST
 
@@ -614,7 +614,7 @@ START_TEST(test_d80_pair_status_reports_selected_drive) {
         // Vet the exact DOS 2.7 status shape, including the originating drive
         // number in the fifth field.
         char expected[IEEE_STATUS_LINE_CAPACITY];
-        snprintf(expected, sizeof(expected), "62,FILE NOT FOUND,00,00,%u\r", drive);
+        snprintf(expected, sizeof(expected), "62, FILE NOT FOUND,00,00,%u\r", drive);
         assert_status(expected);
 
         // Consume the response and leave TALK mode so the other drive begins
@@ -659,13 +659,13 @@ START_TEST(test_mixed_models_follow_selected_drive) {
             // The D80 side must use DOS 2.7's five-field status and report its
             // local drive number.
             char expected[IEEE_STATUS_LINE_CAPACITY];
-            snprintf(expected, sizeof(expected), "62,FILE NOT FOUND,00,00,%u\r",
+            snprintf(expected, sizeof(expected), "62, FILE NOT FOUND,00,00,%u\r",
                      drive);
             assert_status(expected);
         } else {
             // The D64 side must use the 4040 four-field status even though its
             // sibling drive in the same unit contains D80 media.
-            assert_status("62,FILE NOT FOUND,00,00\r");
+            assert_status("62, FILE NOT FOUND,00,00\r");
         }
 
         // Discard this response so the next drive's assertion cannot pass on

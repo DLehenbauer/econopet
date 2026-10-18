@@ -368,7 +368,7 @@ INSTANTIATE_TEST_SUITE_P(ModelsUnitsDrives, DriveStatusTest,
         testing::Values(uint8_t{0}, uint8_t{1})));
 
 // Both native token expanders insert a space before the initial FILE token.
-TEST_P(DriveStatusTextTest, DISABLED_PreservesNativeFileNotFoundText) {
+TEST_P(DriveStatusTextTest, PreservesNativeFileNotFoundText) {
     const bool d80 = GetParam();
     IeeeController controller(system);
     firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(),
