@@ -577,7 +577,7 @@ static void push_status(unsigned int unit) {
         case st_code_write_protect:   text = "WRITE PROTECT ON"; break;
         case st_code_record_missing:  text = "RECORD NOT PRESENT"; break;
         case st_code_record_overflow: text = "OVERFLOW IN RECORD"; break;
-        case st_code_file_not_found:  text = "FILE NOT FOUND"; break;
+        case st_code_file_not_found:  text = " FILE NOT FOUND"; break;
         case st_code_power_on:
             text = model == drive_model_8050
                 ? "CBM DOS V2.7"
