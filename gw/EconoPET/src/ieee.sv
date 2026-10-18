@@ -225,16 +225,9 @@ module ieee (
     logic prev_bus_dav_n = 1'b1;
     logic prev_atn_n     = 1'b1;
 
-    // Talker sub-state
-    typedef enum logic [1:0] { T_IDLE, T_DAV, T_ACK, T_REARM } talk_state_t;
+    // Native TLK20/TLK30 prefetches on NRFD before TLK35 waits for NDAC.
+    typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM } talk_state_t;
     talk_state_t talk_st = T_IDLE;
-
-    // Set once the CPU has read the in-flight byte at $E820. The kernel
-    // re-arms NDAC after every accepted byte, including the last of a
-    // counted read, so a terminate is line-identical to an accept. Pop only
-    // consumed bytes: the phantom accept then leaves the byte queued for
-    // the next TALK.
-    logic byte_consumed = 1'b0;
 
     // RX push request from the acceptor
     logic rx_push = 1'b0;          // init: else a phantom push under rand reset
@@ -264,7 +257,6 @@ module ieee (
             talking        <= 1'b0;
             sa             <= 8'h00;
             talk_st        <= T_IDLE;
-            byte_consumed  <= 1'b0;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
             dev_dav_n      <= 1'b1;
@@ -278,7 +270,6 @@ module ieee (
             talking        <= 1'b0;
             sa             <= 8'h00;
             talk_st        <= T_IDLE;
-            byte_consumed  <= 1'b0;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
             dev_dav_n      <= 1'b1;
@@ -288,15 +279,9 @@ module ieee (
             prev_atn_n     <= 1'b1;
         end else begin
             if (atn_active || listening) begin
-                // Acceptor role. Abort any in-flight talker handshake. If
-                // the CPU already READ the in-flight byte ($E820) but ATN
-                // arrived before its NDAC release, the byte was delivered --
-                // pop it now or the next TALK re-serves a duplicate.
+                // ATN releases the in-flight lines without advancing again.
+                // The FIFO already reflects any NRFD-triggered prefetch.
                 if (talk_st != T_IDLE) begin
-                    if (talk_st == T_ACK && byte_consumed) begin
-                        if (serving_status) txs_pop <= 1'b1;
-                        else                tx_pop  <= 1'b1;
-                    end
                     talk_st   <= T_IDLE;
                     dev_dav_n <= 1'b1;
                     dev_dio   <= 8'hFF;
@@ -375,19 +360,17 @@ module ieee (
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
                         dev_eoi_n <= serving_status ? ~txs_mem[txs_rd][8]   : ~tx_mem[tx_rd][8];
                         dev_dav_n <= 1'b0;
-                        byte_consumed <= 1'b0;
-                        talk_st   <= T_ACK;
+                        talk_st   <= T_PREFETCH;
                     end
-                    T_ACK: begin
-                        if (cpu_data_strobe_i && !snap_we && snap_pia2
-                            && pia_rs == 2'd0) begin
-                            byte_consumed <= 1'b1;   // CPU read $E820
+                    T_PREFETCH, T_ACK: begin
+                        if (talk_st == T_PREFETCH && !bus_nrfd_n) begin
+                            if (serving_status) txs_pop <= 1'b1;
+                            else                tx_pop  <= 1'b1;
+                            talk_st <= T_ACK;
                         end
-                        if (cpu_ndac_n) begin        // NDAC released: accept or terminate
-                            if (byte_consumed) begin
-                                if (serving_status) txs_pop <= 1'b1;
-                                else                tx_pop  <= 1'b1;
-                            end
+                        // Both phases can finish on NDAC, including unread
+                        // termination or NRFD and NDAC observed together.
+                        if (cpu_ndac_n) begin
                             dev_dav_n <= 1'b1;
                             dev_dio   <= 8'hFF;
                             dev_eoi_n <= 1'b1;

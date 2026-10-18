@@ -28,8 +28,8 @@ module ieee_tb;
     // Inter-bus-cycle gap (sys-clocks appended after each CPU bus op). The
     // real arbiter keeps the intra-cycle addr->data timing fixed; only the
     // gap between bus cycles varies. Lower g_tail packs consecutive
-    // $E820-read / NDAC-re-arm ops denser -- the worst case for the talker's
-    // consumption-gated pop. Default 2 keeps the existing tests bit-identical.
+    // NRFD / NDAC-re-arm ops denser, exercising prefetch and termination
+    // at the tightest cadence. Default 2 preserves the ordinary spacing.
     int g_tail = 2;
 
     // CPU bus (controller side)
@@ -208,11 +208,11 @@ module ieee_tb;
         ctl_ndac(1);
         ctl_nrfd(0);
         ctl_wait(8'h80, 8'h00);        // DAV asserted: data valid
+        ctl_nrfd(1);                   // native input asserts busy before sampling
         cpu_read(0, 1, 0, 4'd0, b);    // $E820 DIO in (active low)
         b = ~b;
         cpu_read(1, 0, 0, 4'd0, pa);   // $E810: EOI on bit 6
         eoi = !pa[6];
-        ctl_nrfd(1);
         ctl_ndac(0);
         ctl_wait(8'h80, 8'h80);        // DAV released
         ctl_ndac(1);
@@ -238,6 +238,66 @@ module ieee_tb;
             rx_bytes.push_back(d);
             mcu_read(IEEE_REG_STATUS, st);
         end
+    endtask
+
+    // Check native prefetch independently of private reads for either TX FIFO.
+    task automatic check_talk_abort(input bit status_fifo, input bit prefetch,
+                                    input bit sample_data);
+        localparam int PREFETCH_DWELL_CYCLES = 20;
+        logic [7:0] d;
+        logic eoi;
+
+        mcu_drain_rx;
+        mcu_write(IEEE_REG_CTRL, 8'h03);
+        ctl_atn(1);
+        ctl_send(8'h48);
+        ctl_send(status_fifo ? 8'h6F : 8'h61);
+        ctl_nrfd(1);
+        ctl_ndac(1);
+        ctl_atn(0);
+        mcu_write(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, "X");
+        mcu_write(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, "Y");
+        mcu_write(status_fifo ? IEEE_REG_TXS_LAST : IEEE_REG_TX_LAST, "Z");
+
+        // Hold DAV with NDAC asserted, optionally triggering the native GET.
+        ctl_nrfd(0);
+        ctl_wait(8'h80, 8'h00);
+        if (prefetch) ctl_nrfd(1);
+        if (sample_data) begin
+            cpu_read(0, 1, 0, 4'd0, d);
+            `assert_equal(~d, 8'h58);
+        end
+        repeat (PREFETCH_DWELL_CYCLES) @(posedge sys_clock);
+        `assert_equal(dut.dev_dav_n, 1'b0);
+        `assert_equal(dut.dev_dio, ~8'h58);
+        `assert_equal(dut.dev_eoi_n, 1'b1);
+        `assert_equal(dut.cpu_ndac_n, 1'b0);
+
+        // Readdress data only: a new status secondary would deliberately flush TXS.
+        ctl_atn(1);
+        if (!status_fifo) begin
+            ctl_send(8'h5F);
+            ctl_send(8'h48);
+            ctl_send(8'h61);
+        end
+        ctl_nrfd(1);
+        ctl_ndac(1);
+        ctl_atn(0);
+        if (!prefetch) begin
+            ctl_recv(d, eoi);
+            `assert_equal(d, "X");
+            `assert_equal(eoi, 1'b0);
+        end
+        ctl_recv(d, eoi);
+        `assert_equal(d, "Y");
+        `assert_equal(eoi, 1'b0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, "Z");
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
     endtask
 
     task static run;
@@ -411,10 +471,9 @@ module ieee_tb;
         // ...then terminate exactly like the Waterloo kernel (C150): the
         // per-byte loop has already re-armed NDAC, so this fast talker has
         // byte 10's DAV asserted. The kernel now releases NRFD and NDAC
-        // without reading DIO -- line-identical to an accept -- waits for
-        // DAV to clear, and only then asserts ATN. The DUT must NOT pop
-        // byte 10 (pop-on-consumption); the resume loop below starts at 10
-        // and is off-by-one if the phantom accept is not suppressed.
+        // without asserting NRFD or reading DIO, waits for DAV to clear,
+        // and only then asserts ATN. Native TLK20 has not entered GET for
+        // byte 10, so the resume loop below must still start at 10.
         ctl_ndac(0);                       // release without a data read
         ctl_wait(8'h80, 8'h80);            // talker backs off (DAV released)
         ctl_atn(1);
@@ -479,41 +538,22 @@ module ieee_tb;
         mcu_drain_rx;
         $display("[%t]   RX-full backpressure verified", $time);
 
-        // --- ATN abort after consumption must pop (no duplicate byte) ---
-        for (int i = 0; i < 4; i++) mcu_write(IEEE_REG_TX, 8'h60 + i[7:0]);
-        mcu_write(IEEE_REG_TX_LAST, 8'h64);
-        ctl_atn(1);
-        ctl_send(8'h48);                   // TALK 8
-        ctl_send(8'h61);                   // secondary 1
-        ctl_atn(0);
-        ctl_ndac(1);
-        ctl_nrfd(0);
-        ctl_wait(8'h80, 8'h00);            // DAV asserted: byte 0 in flight
-        cpu_read(0, 1, 0, 4'd0, d);        // CPU reads $E820 (consumes)...
-        `assert_equal(~d, 8'h60);
-        ctl_atn(1);                        // ...but asserts ATN before NDAC release
-        ctl_send(8'h5F);                   // UNTALK
-        ctl_send(8'h48);
-        ctl_send(8'h61);                   // TALK again
-        ctl_atn(0);
-        for (int i = 1; i < 5; i++) begin  // stream must resume at byte 1
-            ctl_recv(d, eoi);
-            `assert_equal(d, 8'h60 + i[7:0]);
+        // Cover both prefetch phases, with/without private reads, on each FIFO.
+        begin
+            localparam int ABORT_SCENARIOS = 8;
+            for (int scenario = 0; scenario < ABORT_SCENARIOS; scenario++) begin
+                check_talk_abort(scenario[2], scenario[1], scenario[0]);
+            end
         end
-        `assert_equal(eoi, 1'b1);
-        ctl_atn(1);
-        ctl_send(8'h5F);
-        ctl_atn(0);
-        mcu_drain_rx;
-        $display("[%t]   ATN-after-consume pop verified", $time);
+        $display("[%t]   NRFD/private-read abort matrix verified", $time);
 
         // --- dense counted-read + terminate + resume (the Super-OS/9 REL
         // per-record pattern) at a tight 1MHz cadence ---
         // The kernel reads a counted number of bytes then terminates mid-stream
-        // (release NDAC without reading the next byte's DIO -- the phantom
-        // accept), UNTALKs, and re-TALKs to continue. At the packed cadence the
-        // fast talker already has the next byte's DAV up during terminate; the
-        // byte_consumed guard must NOT pop it, or the resume is off-by-one.
+        // (release NDAC with NRFD still released and no next-byte DIO read),
+        // UNTALKs, and re-TALKs to continue. At the packed cadence the fast
+        // talker already has the next byte's DAV up during terminate. Without
+        // NRFD assertion it must NOT prefetch, or the resume is off-by-one.
         // Several records: the race is timing-dependent.
         begin
             int saved_tail;
@@ -645,7 +685,7 @@ module ieee_tb;
         `assert_equal(dut.listening, 1'b0);
         `assert_equal(dut.talking, 1'b0);
         `assert_equal(dut.sa, 8'h00);
-        `assert_equal(dut.talk_st, 2'd0);  // T_IDLE
+        `assert_equal(dut.talk_st, dut.T_IDLE);
         `assert_equal(dut.dev_nrfd_n, 1'b1);
         `assert_equal(dut.dev_ndac_n, 1'b1);
         `assert_equal(dut.dev_dav_n, 1'b1);
