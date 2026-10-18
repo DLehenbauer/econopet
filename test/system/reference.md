@@ -161,7 +161,7 @@ contract.
 | Native one-byte initial-EOF overwrite | 4040/D64 wire acceptance, plus single-sided 8050/D80 DOS 2.7 firmware unit tests | Pinned `DOS_4040/opchnl` and `DOS_8250/opchnl` (`OR30`, `GETBYT`), `DOS_4040/opchnl` and `DOS_8250/tst2` (`RDBYT`, `RD0`), ordinary TALK readiness consumption in both `ieee` sources | Sole byte `X` produces `X, 0, 2, X`, EOI only on byte four. Two-byte files terminate normally | `DriveOneByteTest.PreservesNativeEofBugOverProductionTop`, native one-/two-byte firmware tests | Operator BASIC capture confirms the sequence and two-byte threshold, but its model/revision was not identified. VICE high-level virtual-drive EOF is not an oracle for this ROM bug |
 | Successful OPEN status | 4040/D64, status channel 15 | Pinned `DOS_4040/parsex` (`PARSXQ`), `erproc` (`ERRTAB`, `OKERR`, `ERRMSG`, `ERMSG2`) and [`tst4` (`GETERC`)](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4#L81), which produces CR with `EOIOUT` | Exact `00, OK,00,00` plus CR, with final-byte EOI | `FirmwareTest.StreamsDosStatusOverProductionTop` | [VICE status formatting](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error text](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) retain the leading space and CR |
 
-### Historical IEEE regression coverage
+### IEEE regression coverage
 
 The audit of open PRs [#52](https://github.com/DLehenbauer/econopet/pull/52),
 [#53](https://github.com/DLehenbauer/econopet/pull/53),
@@ -187,14 +187,23 @@ termination and same-clock NRFD/NDAC handling without a separate prefetch flag:
   asserted NRFD, prefetching Y before `TLK35` waits for NDAC. The FPGA must
   resume at Y. Both FIFOs are exercised.
 
-Three firmware cases remain explicitly disabled because their contract
-assertions fail on current production code:
+The sequential terminal-state regressions run by default on both D64/4040 and
+D80/single-sided 8050 DOS 2.7:
 - `SequentialRetalkAfterEofDoesNotInventData`: a completed two-byte SEQ is
-  addressed again without reopening. Firmware incorrectly queues CR+EOI.
+  addressed again without reopening. The channel remains not ready without
+  inventing CR+EOI. Reopening restores its original payload and final EOI.
 - `SequentialReadErrorDoesNotInventEof`: a malformed successor follows 254
-  valid bytes. Firmware incorrectly adds CR+EOI. The test also checks the
-  emulator's existing status-23 mapping. It does not claim that an illegal
-  track is native checksum-error 23 or reproduce a drive controller's retries.
+  valid bytes. The prefix has no EOI and no CR filler follows. The failed
+  channel is released, so retalking after status acknowledgement neither
+  creates data nor regenerates the error. Repairing the mounted backing file
+  in place still leaves that channel closed. A subsequent IEEE OPEN restores
+  the complete stream, including its repaired successor and genuine final EOI.
+  The test retains the emulator's
+  existing status-23 mapping. It does not claim that an illegal track is
+  native checksum-error 23 or reproduce a drive controller's retries.
+
+One firmware case remains explicitly disabled because its contract
+assertions fail on current production code:
 - `EmptyRelativeRecordReturnsNulThenAdvances`: an all-zero first record must
   return one NUL+EOI, followed by record two on the next TALK. Firmware instead
   skips the empty record. This deliberately edits REL directory metadata over
@@ -210,10 +219,26 @@ source-derived settled-prefetch expectations, not execution of a drive ROM
 or proof of its instruction-level interrupt timing. The #52 proposal to always
 preserve a byte until NDAC is released does not implement this native matrix.
 
-The existing disabled ROM entry probes do not assert these data/state
-transitions. Firmware unit tests currently encode the incorrect CR fillers
-and transparent empty REL record, so passing them does not close these gaps.
-The new enabled Waterloo-order control releases NRFD, then NDAC without a DIO
+Twelve `DriveRomTerminalTest.NativeReceiveTimesOutOnTerminalChannel` cases
+execute the installed corrected PET KERNAL 2.0, PET KERNAL 4.0, and Waterloo
+revision-12 receive routines against production firmware through physical SPI.
+Each revision reads both D64 and D80, at ordinary EOF and after a failed
+successor. The native routine first receives every valid byte (two at EOF or
+254 before failure), UNTALKs and retalks that channel, then attempts one more
+receive. Independent wire records
+must contain exactly the valid payload, with EOI only at genuine EOF.
+
+PET cases clear the prior `SATUS` immediately before the extra `ACPTR`. The
+normal VIA timer must expire, execution must reach `ERRP1`, and the routine
+must return `SATUS=$02` and accumulator CR. That CR is the controller's local
+recovery value, not a byte received from the drive. Waterloo cases set the
+FCB wait word to one, allowing its native 3200-iteration DAV wait to expire.
+Execution must reach `$BF7C`, with FCB status and global error both three.
+The error path does not initialize its returned byte, so that value is not
+treated as received data. Neither path injects timer faults or fabricates DAV.
+These execute controller ROMs, not 4040/8050/8250 drive ROMs.
+
+The separate Waterloo-order control releases NRFD, then NDAC without a DIO
 read, waits for DAV release, and only then asserts ATN. It checks the unread
 byte on resumed TALK. This reproduces revision-12 register ordering through
 the synthetic 6502 controller, not execution of Waterloo ROM or analog timing.
@@ -227,7 +252,7 @@ status clears its code but retains its drive identity. Unlike #55's blanket
 proposal, the 4040 response has no drive suffix and the 8050 response has one.
 The model-specific implementation is already present from
 [#64](https://github.com/DLehenbauer/econopet/pull/64).
-These tests cover status only, not general D80 file streaming.
+The status matrix is separate from the D64/D80 sequential terminal coverage.
 Each combination requires exact native `62, FILE NOT FOUND,...` responses
 from both units and `00, OK,...` after status clearing. CPU and wire bytes
 must agree, all transfers must have ATN released, and the final CR must carry
@@ -242,11 +267,39 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | ATN before NRFD-triggered prefetch (#52) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 IEEE handshake | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee), [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): `ATNIRQ`, `TALK1`, `TLK20` | With NRFD released and NDAC asserted, `TLK20` has not entered `GET`. ATN preserves X, regardless of a private PET read | `ieee.sv`, `IeeeAbortBeforeNrfdPreservesSampledByte` and its unread control | [IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/master/1%20IEEE-488.md) distinguishes NRFD from NDAC. [MAME RIOT input wiring](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) exposes NRFD on bit 7 and NDAC on bit 6, not PET reads |
 | ATN after NRFD-triggered prefetch | Same drive ROMs, ordinary nonfinal byte with settled prefetch | Same `ieee` sources: `TLK20` (`BIT PBD2; BPL TLK30`), `TLK30` (`JSR GET`), `TLK35` (NDAC wait) | Asserted NRFD reaches `GET` before NDAC release. After prefetch, ATN resumes at Y, with or without a private PET read | `IeeeAbortAfterNrfdPrefetchesUnreadByte` and its sampled control | Same MAME NRFD/NDAC wiring corroborates the input bits. IEEE bus acceptance alone does not define the ROM's internal prefetch point |
 | Counted-read termination control | SuperPET Waterloo `970019-12`, fast FPGA talker | [Revision-12 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin), `$C14F-$C16D` | NRFD release precedes NDAC release, DAV release precedes ATN. Unread next byte remains queued | `IeeeWaterlooCountedTerminationPreservesUnreadByte` | [Binary-derived navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) and the same independent IEEE handshake description |
-| Exhausted SEQ (#53) | 4040 DOS 2, D64 | [4040 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4): `GET00`, `GET0`; `ieee`: `TALK1`, `NOTLK` | An accepted final EOI sets the ordinary channel NOTRDY. Retalking must not fabricate CR+EOI | `ieee_drive.c`, `SequentialRetalkAfterEofDoesNotInventData` | [VICE sequential reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c): EOF leaves read mode, rather than generating a successful CR response |
-| Failed SEQ successor (#53) | 4040 DOS 2 error recovery, with EconoPET backing-read fault stimulus | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERROR`, `CMDER3`, `TLKERR`, `TLERR` | Error recovery releases DAV and the ordinary channel, not an invented final data byte | `SequentialReadErrorDoesNotInventEof` | Same VICE reader exits normal reading on sector-read failure. Its returned error byte/status is not an IEEE wire-EOI oracle |
+| Exhausted SEQ (#53) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | [4040 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4) and [8250 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4): `GET00`, `GET0`; respective `ieee`: `TALK1`, `NOTLK` | Final EOI leaves an ordinary channel NOTRDY. Retalking must not fabricate CR+EOI. Reopening restores readiness | `ieee_drive.c`, `SequentialRetalkAfterEofDoesNotInventData`, D64/D80 unit cases | [VICE sequential reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c): EOF leaves read mode, rather than generating a successful CR response |
+| Failed SEQ successor (#53) | 4040 DOS 2 and shared 8050/8250 DOS 2.7, with EconoPET backing-read fault stimulus | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `CMDER3`, `TLKERR`, `TLERR`; respective `tst3`: `FRECHN`; `opchnl`: `OPNRCH` | Error recovery releases DAV and the ordinary channel, not an invented final data byte. Status acknowledgement and media repair do not reopen it. OPEN recreates a readable stream | `SequentialReadErrorDoesNotInventEof` on D64/D80, D64/D80 unit cases | Same VICE reader exits normal reading on sector-read failure. Its returned error byte/status is not an IEEE wire-EOI oracle |
+| Native PET terminal receive | Corrected `901465-03` and `901465-22` KERNALs, normal external VIA timer | [KERNAL 2.0 `ob1src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_2.0_REC/ob1src) and [KERNAL 4.0 `ob1src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob1src): `ACPTR`, `ACP01`, `ERRP1`, `ER001`; selected binaries reach `$F141` or `$F15B` | Valid bytes are received first. With no further DAV, the timer expires, status becomes `$02`, and local CR recovery does not appear on the wire | `DriveRomTerminalTest.NativeReceiveTimesOutOnTerminalChannel`, eight PET cases | Execution of both installed controller ROM revisions plus independent wire and opcode-fetch evidence |
+| Native Waterloo terminal receive | SuperPET revision 12, `970018-12` and `970019-12` | [Pinned A000 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin): `$BEFB`, finite wait `$BF1A-$BF49`, timeout `$BF7C-$BF83`, global error `$B650`; [C000 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin): TALK `$C0DD` | Wait word one expires after 3200 DAV polls, FCB status and global error become three, no extra wire byte | Same native terminal suite, four Waterloo cases | Binary-checked [A000 navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-a000-bfff.asm) and actual revision-12 execution with independent wire/opcode observations |
 | Empty REL record (#54) | 4040 DOS 2, D64 record engine | [4040 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1): `NXTREC`; [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4): `SETLST`, `FNDLST`; [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3): `RD25`, `RD30`, `RD40` | All-zero trimming falls back to the first-byte pointer. That NUL carries EOI before advancing the record | `EmptyRelativeRecordReturnsNulThenAdvances` | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the NUL before moving the record pointer |
 | Status drive field (#55) | 4040 DOS 2 versus single-sided 8050/shared DOS 2.7 | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERMSG2` ends after sector; [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `ERMSG2` appends `DRVNUM AND 1`; `tst4`: `GETERC` supplies final CR/EOI | Exact four-field 4040 or five-field 8050 status, including final-byte EOI and correct local drive | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity` | [MAME ROM-backed 8050/8250 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp). VICE's generic four-field formatter is not used to override the 8050 source |
 | Native error-62 token spacing | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | Same `erproc` sources: `ERRTAB` starts error 62 with FILE token `$83`; 4040 `MER7` and 8250 `E60` insert `$20` before expanding each token; `ERRMSG`/`JERRMS` place the message after `62,` | `62, FILE NOT FOUND,00,00` on 4040, or `62, FILE NOT FOUND,00,00,d` on 8050/8250 local drive `d`, followed by CR/EOI | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity`, all sixteen model/unit/drive combinations, and firmware status unit tests | [MAME ROM-backed 4040 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) executes drive ROMs rather than substituting status text. [VICE's high-level formatter](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error table](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) omit this space and do not override the selected ROMs |
+
+The sequential correction removes both fabricated CR/EOI paths, without
+changing genuine final bytes. In both native `tst4` implementations, `GET00`
+routes channel 15 to `GETERC` before testing ordinary-channel EOF. That
+status-channel routine supplies CR. For an exhausted ordinary channel,
+`GET0` instead writes `NOTRDY`. The respective
+[4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee)
+and [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee)
+`TALK1` then return through `NOTLK` without offering another byte.
+On a sequential talker error, `TLKERR` releases DAV and `TLERR` calls
+`FRECHN`. Both [4040 `tst3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3)
+and [8250 `tst3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3)
+clear the ordinary channel's `LINTAB` entry. Firmware therefore invalidates
+the failed open channel instead of retrying it on a later TALK. These
+shared DOS 2.7 control paths do not branch on single/double-sided media.
+The tests measure the no-invented-data and terminal-readiness contracts,
+not cycle-exact ROM error-interrupt timing. The 254-byte prefix and status
+23 describe EconoPET's backing-chain fault stimulus, not a claim that a
+native illegal-track fault is checksum error 23.
+
+The sequential channel has one lifecycle enum: closed, readable, or exhausted.
+Read failure releases it to closed, while queuing the genuine final byte marks
+it exhausted. `streaming` remains separate because UNTALK pauses top-up without
+changing that lifecycle. Backpressured firmware unit controls exercise this
+readable-but-paused state on all devices 8-11 and both local drives. Readdressing
+must resume at the saved cursor with the exact remaining bytes and final EOI.
 
 The error-62 correction changes only its message literal. Both native tables
 expand tokens 3 (FILE), 6 (NOT), and 7 (FOUND). Each token expansion emits
@@ -261,50 +314,36 @@ The integration cases exercise D64/4040 and D80/single-sided 8050 through
 production firmware and FPGA I/O. The 8250 conclusion is primary-source
 evidence for the shared formatter, not execution of an 8250 ROM or D82 media.
 
-Run the new red cases explicitly (expected to fail until their production
-bugs are fixed):
+Run the abort controls and remaining red case explicitly (the REL case is
+expected to fail until its production bug is fixed):
 
 ```sh
 (cd build/system/board && ./econopet_board_tests \
   --gtest_filter='DataAndStatus/IeeeAbortTest.*')
+(cd build/system/board && ./econopet_firmware_tests \
+  --gtest_filter='Models/DriveTerminalTest.*:ModelsFailuresRevisions/DriveRomTerminalTest.*')
 (cd build/system/board && ./econopet_firmware_tests --gtest_also_run_disabled_tests \
-  --gtest_filter='FirmwareTest.DISABLED_Sequential*:FirmwareTest.DISABLED_EmptyRelativeRecord*')
+  --gtest_filter='FirmwareTest.DISABLED_EmptyRelativeRecord*')
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run keeps the three firmware cases disabled.
+CTest run keeps the empty-REL case disabled.
 
-The three firmware red cases failed at their payload/absence assertions at
-simulation seeds 1 and 17 and passed against isolated #53-54 fix probes,
-including REL advancement into the following record. Earlier #52 abort
-expectations incorrectly treated NDAC as the sole advancement boundary.
-Their fix-probe results are superseded by the NRFD/private-read matrix above.
-After the NRFD-triggered FIFO advancement fix, all 452 enabled board/firmware
-integration cases pass at both seeds, including all eight abort matrix cases
-and the Waterloo counted-termination control. At that stage, five opt-in
-firmware regressions remained red. Both IEEE RTL benches pass under Icarus and Verilator,
-and the production FPGA bitstream builds successfully. These results use an
-isolated tree that excludes unrelated local gateware edits.
-Status mutations independently confirmed that omitting the 8050 suffix fails
-all eight D80 combinations and appending it to 4040 status fails all eight
-D64 combinations.
+### Current IEEE validation
 
-Before the error-62 production correction, all 98 enabled
-firmware integration cases passed at seeds 1 and 17. The sixteen status-field
-cases remained green, while both opt-in native-text cases failed specifically
-on the missing leading space. Adding only that space in an isolated production
-fix probe made all eighteen status cases pass without changing their
-numeric-field or handshake expectations.
+| Validation | Current result |
+|---|---|
+| Complete affected firmware integration suite | 114 enabled cases pass at simulation seeds 1 and 17. The 37 disabled cases remain explicitly disabled, including the known empty-REL regression |
+| Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
+| Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
+| Complete firmware unit suite | 451 checks pass, including sixteen model/unit/drive combinations per terminal scenario and eight backpressured UNTALK/resume controls |
+| Production firmware | `RelWithDebInfo` build passes |
 
-With that correction applied to production, native-text coverage is folded
-into the sixteen status-matrix cases rather than a separate two-case suite.
-All sixteen cases pass at seeds 1 and 17, checking exact native text,
-model/unit/drive fields, status clearing, CPU/wire agreement, ATN, and final
-CR/EOI. The full firmware unit
-suite passes all 427 checks with its D64, D80, and mixed-model error-62
-expectations corrected. Production firmware builds with `RelWithDebInfo`.
 Firmware unit and integration tests use `Debug`, with assertion-enabled
 optimized model/runtime code kept separate.
+Production firmware uses `RelWithDebInfo`. The isolated integration build
+excludes unrelated local gateware edits. Its selected production RTL retains
+the NRFD-triggered prefetch states and assertions.
 
 ## Commodore ROM integration coverage
 

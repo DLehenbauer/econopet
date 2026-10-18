@@ -221,11 +221,16 @@ static unsigned int open_name_len = 0;
 static uint8_t open_chan = 0;
 
 // One data channel at a time (all the Waterloo loader needs).
-static bool file_open_ok = false;
+typedef enum {
+    file_channel_closed,
+    file_channel_readable,
+    file_channel_exhausted,
+} file_channel_state_t;
+
+static file_channel_state_t file_state = file_channel_closed;
 static uint8_t file_chan = 0;
 static diskstream_t stream;
-static bool streaming = false;      // TX top-up in progress
-static bool stream_finished = false; // final byte (EOI) already queued
+static bool streaming = false; // addressed TX top-up, independent of channel lifetime
 static uint32_t streamed_bytes = 0;
 
 // ---------------------------------------------------------------------------
@@ -289,11 +294,10 @@ static void reset_protocol_state(void) {
     collecting_name = false;
     open_name_len = 0;
     open_chan = 0;
-    file_open_ok = false;
+    file_state = file_channel_closed;
     file_chan = 0;
     stream = (diskstream_t) { 0 };
     streaming = false;
-    stream_finished = false;
     streamed_bytes = 0;
     memset(rel_chans, 0, sizeof(rel_chans));
     memset(ch15_cmd, 0, sizeof(ch15_cmd));
@@ -485,9 +489,8 @@ static void resolve_open(void) {
         slot ^= 1u;
     }
 
-    file_open_ok = false;
+    file_state = file_channel_closed;
     streaming = false;
-    stream_finished = false;
     // New file: discard any stale queued data from a previous channel.
     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
 
@@ -554,9 +557,8 @@ static void resolve_open(void) {
         return;
     }
 
-    file_open_ok = true;
+    file_state = file_channel_readable;
     stream_slot = (uint8_t) slot;
-    stream_finished = false;
     file_chan = open_chan;
     file_unit = open_unit;
     set_status(slot, st_code_ok, 0, 0);
@@ -623,14 +625,13 @@ static void service_tx(void) {
             uint8_t byte;
             bool is_last;
             if (!diskstream_next(&stream, &byte, &is_last)) {
-                // Natural EOF exits via 'is_last'; reaching here mid-file means
-                // an SD read error. Flush what we gathered, then close with an
-                // EOI'd filler so the kernel sees a clean (if short) end.
+                // Preserve the valid prefix, but release the failed channel
+                // without inventing an EOF byte, as native TLKERR/FRECHN do.
                 if (n > 0) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n);
                 streamed_bytes += n;
                 log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
                 set_status(stream_slot, st_code_read_error, 0, 0);
-                spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
+                file_state = file_channel_closed;
                 streaming = false;
                 return;
             }
@@ -661,7 +662,7 @@ static void service_tx(void) {
             streamed_bytes++;
             log_info("ieee: stream complete, %lu bytes", (unsigned long) streamed_bytes);
             streaming = false;
-            stream_finished = true;
+            file_state = file_channel_exhausted;
             return;
         }
     }
@@ -717,14 +718,9 @@ static void handle_command(uint8_t cmd) {
                     push_status(talk_unit);
                 } else if ((rc = rel_find(talk_unit, chan)) != NULL) {
                     rel_serve(rc);
-                } else if (file_open_ok && talk_unit == file_unit && chan == file_chan) {
-                    if (stream_finished) {
-                        // Read past EOF: real CBM DOS answers a lone EOI'd
-                        // CR with clean status, not a read error.
-                        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
-                    } else {
-                        streaming = true;
-                    }
+                } else if (file_state == file_channel_readable
+                    && talk_unit == file_unit && chan == file_chan) {
+                    streaming = true;
                 }
             }
             break;
@@ -744,9 +740,8 @@ static void handle_command(uint8_t cmd) {
                         rc->in_use = false;
                         ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                     } else if (listen_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
-                        file_open_ok = false;
+                        file_state = file_channel_closed;
                         streaming = false;
-                        stream_finished = false;
                         ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                     }
                 }
