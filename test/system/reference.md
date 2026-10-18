@@ -144,8 +144,10 @@ Board-only enable readback and ATN/FIFO consumption already have coverage in
 The selected peripheral is the 4040/D64 source model at
 [`mist64/cbmsrc` revision `01bd60f`](https://github.com/mist64/cbmsrc/tree/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040).
 These narrowly scoped source-derived expectations do not establish complete
-DOS compatibility, D80/8050 wire behavior, repeated reads after an observed EOF
-or native PET ROM I/O. Firmware unit tests separately preserve the same
+DOS compatibility, D80/8050 file streaming, or native PET ROM I/O. The separate
+historical-regression checks below cover model-specific status and preserve
+the outstanding repeated-EOF defect as an opt-in red test.
+Firmware unit tests separately preserve the same
 one-byte bug and normal two-byte threshold for D64/4040 and D80/single-sided
 8050 DOS 2.7, across SEQ, PRG and USR files. Raw image readers and REL records
 (including `.hdd`) retain their existing stored-byte/record semantics.
@@ -154,10 +156,126 @@ contract.
 
 | Behavior | Target ROM/model and hardware | Primary evidence | Required result | Code/test | Corroboration |
 |---|---|---|---|---|---|
-| OPEN filename termination | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/tst2` (`PUT`, `L50`, `L45`) sets `CMDWAT` only on filename EOI, then `idle` (`IDLE`) dispatches `parsex` (`PARSXQ`) | Final filename byte carries EOI before UNLISTEN, verified independently on the wire | Shared `open_basic`, PRG and DOS status acceptance cases | PET `OPENI` sends via buffered `CIOUT`, and `UNLSN` flushes the final pending byte with EOI (see the controller evidence below) |
+| OPEN filename termination | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/tst2` (`PUT`, `L50`, `L45`) sets `CMDWAT` only on filename EOI, then `idle` (`IDLE`) dispatches `parsex` (`PARSXQ`) | Final filename byte carries EOI before UNLISTEN, verified independently on the wire | Shared `open_file`, PRG and DOS status acceptance cases | PET `OPENI` sends via buffered `CIOUT`, and `UNLSN` flushes the final pending byte with EOI (see the controller evidence below) |
 | PRG OPEN and final-sector streaming (at least two stored bytes) | 4040/D64, production FPGA IEEE fabric | Pinned `DOS_4040/master`, `open` (`OP40`), `opchnl` (`OPNRCH`, `OR30`, `GETBYT`, `RDBYT`, `RD4`), `tst4` (`GET`, `SEQGET`), `i_odef` (`EOIOUT`, `RDYTLK`) and `ieee` (`TALK1`, `TLK10`) | Exact stored bytes, EOI only on the last valid byte, no sector padding queued | `DrivePrgTest.StreamsCheckedPrgFixtureOverProductionTop` | [VICE virtual-drive reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c) corroborates sector-link lengths, not the native one-byte EOF bug or physical IEEE timing |
 | Native one-byte initial-EOF overwrite | 4040/D64 wire acceptance, plus single-sided 8050/D80 DOS 2.7 firmware unit tests | Pinned `DOS_4040/opchnl` and `DOS_8250/opchnl` (`OR30`, `GETBYT`), `DOS_4040/opchnl` and `DOS_8250/tst2` (`RDBYT`, `RD0`), ordinary TALK readiness consumption in both `ieee` sources | Sole byte `X` produces `X, 0, 2, X`, EOI only on byte four. Two-byte files terminate normally | `DriveOneByteTest.PreservesNativeEofBugOverProductionTop`, native one-/two-byte firmware tests | Operator BASIC capture confirms the sequence and two-byte threshold, but its model/revision was not identified. VICE high-level virtual-drive EOF is not an oracle for this ROM bug |
 | Successful OPEN status | 4040/D64, status channel 15 | Pinned `DOS_4040/parsex` (`PARSXQ`), `erproc` (`ERRTAB`, `OKERR`, `ERRMSG`, `ERMSG2`) and [`tst4` (`GETERC`)](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4#L81), which produces CR with `EOIOUT` | Exact `00, OK,00,00` plus CR, with final-byte EOI | `FirmwareTest.StreamsDosStatusOverProductionTop` | [VICE status formatting](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error text](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) retain the leading space and CR |
+
+### Historical IEEE regression coverage
+
+The audit of open PRs [#52](https://github.com/DLehenbauer/econopet/pull/52),
+[#53](https://github.com/DLehenbauer/econopet/pull/53),
+[#54](https://github.com/DLehenbauer/econopet/pull/54) and
+[#55](https://github.com/DLehenbauer/econopet/pull/55) adds focused tests in
+[`controller_test.cpp`](ieee/controller_test.cpp) and
+[`drive_test.cpp`](ieee/drive_test.cpp). These execute CPU-backed PIA/VIA
+accesses, production FPGA handshakes and, for drive cases, production firmware
+through physical SPI. No production fixes are included.
+
+Nine new cases remain explicitly disabled because their contract assertions
+fail on current production code:
+
+- `IeeeAbortBeforeNrfdPreservesSampledByte`: X is sampled through `$E820`,
+  but NRFD remains released until ATN aborts. The resumed stream incorrectly
+  starts at Y. Both data and status FIFOs are exercised.
+- `IeeeAbortAfterNrfdPrefetchesUnreadByte`: NRFD is asserted after DAV, but
+  the PET does not sample X. Native `TLK20` enters `TLK30` and `GET` on
+  asserted NRFD, prefetching Y before `TLK35` waits for NDAC. The FPGA instead
+  retains X. Both FIFOs are exercised.
+- `SequentialRetalkAfterEofDoesNotInventData`: a completed two-byte SEQ is
+  addressed again without reopening. Firmware incorrectly queues CR+EOI.
+- `SequentialReadErrorDoesNotInventEof`: a malformed successor follows 254
+  valid bytes. Firmware incorrectly adds CR+EOI. The test also checks the
+  emulator's existing status-23 mapping. It does not claim that an illegal
+  track is native checksum-error 23 or reproduce a drive controller's retries.
+- `EmptyRelativeRecordReturnsNulThenAdvances`: an all-zero first record must
+  return one NUL+EOI, followed by record two on the next TALK. Firmware instead
+  skips the empty record. This deliberately edits REL directory metadata over
+  a checked data chain, as the unit fixture does. It does not validate native
+  side-sector construction.
+- `DriveStatusTextTest.PreservesNativeFileNotFoundText`: both models must
+  return `62, FILE NOT FOUND,...`. The native FILE token inserts a leading
+  space, which current firmware omits. These two cases isolate message-text
+  compatibility from the enabled numeric-field and identity checks.
+
+The enabled abort controls cover the other two combinations: released NRFD
+without a private sample preserves X, and asserted NRFD with a sample resumes
+at Y. All abort cases keep NDAC asserted. ATN preserves the selected NRFD level
+rather than changing both lines together. Status resumes after command-free
+ATN because a fresh status secondary intentionally flushes TXS. These are
+source-derived settled-prefetch expectations, not execution of a drive ROM
+or proof of its instruction-level interrupt timing. The #52 proposal to always
+preserve a byte until NDAC is released does not implement this native matrix.
+
+The existing disabled ROM entry probes do not assert these data/state
+transitions. Firmware unit tests currently encode the incorrect CR fillers
+and transparent empty REL record, so passing them does not close these gaps.
+The new enabled Waterloo-order control releases NRFD, then NDAC without a DIO
+read, waits for DAV release, and only then asserts ATN. It checks the unread
+byte on resumed TALK. This reproduces revision-12 register ordering through
+the synthetic 6502 controller, not execution of Waterloo ROM or analog timing.
+For the unread next byte, NRFD remains released through termination, so the
+native `TLK20` NRFD-triggered prefetch has not occurred.
+
+Sixteen enabled model/unit/drive combinations check status on devices 8-11,
+drives 0/1, and both D64/4040 and D80/single-sided 8050 DOS 2.7. Independent
+errors on two units must survive reading the other unit's status. Reading
+status clears its code but retains its drive identity. Unlike #55's blanket
+proposal, the 4040 response has no drive suffix and the 8050 response has one.
+The model-specific implementation is already present from
+[#64](https://github.com/DLehenbauer/econopet/pull/64).
+These tests cover status only, not general D80 file streaming.
+Their message field is deliberately text-agnostic, so correcting native token
+spacing cannot break the enabled model/unit/drive checks. CPU and wire bytes
+must agree, all transfers must have ATN released, and the final CR must carry
+EOI. The two opt-in text cases separately require the exact native message.
+
+All Commodore source links below select `mist64/cbmsrc` revision
+`01bd60f162ef92212ef0cb67546ae8f42be34168`.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| ATN before NRFD-triggered prefetch (#52) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 IEEE handshake | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee), [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): `ATNIRQ`, `TALK1`, `TLK20` | With NRFD released and NDAC asserted, `TLK20` has not entered `GET`. ATN preserves X, regardless of a private PET read | `ieee.sv`, `IeeeAbortBeforeNrfdPreservesSampledByte` and its unread control | [IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/master/1%20IEEE-488.md) distinguishes NRFD from NDAC. [MAME RIOT input wiring](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) exposes NRFD on bit 7 and NDAC on bit 6, not PET reads |
+| ATN after NRFD-triggered prefetch | Same drive ROMs, ordinary nonfinal byte with settled prefetch | Same `ieee` sources: `TLK20` (`BIT PBD2; BPL TLK30`), `TLK30` (`JSR GET`), `TLK35` (NDAC wait) | Asserted NRFD reaches `GET` before NDAC release. After prefetch, ATN resumes at Y, with or without a private PET read | `IeeeAbortAfterNrfdPrefetchesUnreadByte` and its sampled control | Same MAME NRFD/NDAC wiring corroborates the input bits. IEEE bus acceptance alone does not define the ROM's internal prefetch point |
+| Counted-read termination control | SuperPET Waterloo `970019-12`, fast FPGA talker | [Revision-12 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin), `$C14F-$C16D` | NRFD release precedes NDAC release, DAV release precedes ATN. Unread next byte remains queued | `IeeeWaterlooCountedTerminationPreservesUnreadByte` | [Binary-derived navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) and the same independent IEEE handshake description |
+| Exhausted SEQ (#53) | 4040 DOS 2, D64 | [4040 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4): `GET00`, `GET0`; `ieee`: `TALK1`, `NOTLK` | An accepted final EOI sets the ordinary channel NOTRDY. Retalking must not fabricate CR+EOI | `ieee_drive.c`, `SequentialRetalkAfterEofDoesNotInventData` | [VICE sequential reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-iec.c): EOF leaves read mode, rather than generating a successful CR response |
+| Failed SEQ successor (#53) | 4040 DOS 2 error recovery, with EconoPET backing-read fault stimulus | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERROR`, `CMDER3`, `TLKERR`, `TLERR` | Error recovery releases DAV and the ordinary channel, not an invented final data byte | `SequentialReadErrorDoesNotInventEof` | Same VICE reader exits normal reading on sector-read failure. Its returned error byte/status is not an IEEE wire-EOI oracle |
+| Empty REL record (#54) | 4040 DOS 2, D64 record engine | [4040 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1): `NXTREC`; [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4): `SETLST`, `FNDLST`; [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3): `RD25`, `RD30`, `RD40` | All-zero trimming falls back to the first-byte pointer. That NUL carries EOI before advancing the record | `EmptyRelativeRecordReturnsNulThenAdvances` | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the NUL before moving the record pointer |
+| Status drive field (#55) | 4040 DOS 2 versus single-sided 8050/shared DOS 2.7 | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERMSG2` ends after sector; [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `ERMSG2` appends `DRVNUM AND 1`; `tst4`: `GETERC` supplies final CR/EOI | Exact four-field 4040 or five-field 8050 status, including final-byte EOI and correct local drive | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity` | [MAME ROM-backed 8050/8250 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp). VICE's generic four-field formatter is not used to override the 8050 source |
+| Native error-62 token spacing | Same 4040 and single-sided 8050 targets | Same `erproc` sources: `ERRTAB` starts error 62 with FILE token `$83`; 4040 `MER7` and 8250 `E60` insert `$20` before expanding each token; `ERRMSG`/`JERRMS` place the message after `62,` | `62, FILE NOT FOUND,00,00` on 4040, or `62, FILE NOT FOUND,00,00,0` on 8050 drive 0, followed by CR/EOI | `DriveStatusTextTest.DISABLED_PreservesNativeFileNotFoundText`, one case per model | [MAME ROM-backed 4040 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) executes drive ROMs rather than substituting status text. [VICE's high-level formatter](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-command.c) and [error table](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/cbmdos.c) omit this space and do not override the selected ROMs |
+
+Run the new red cases explicitly (expected to fail until their production
+bugs are fixed):
+
+```sh
+(cd build/system/board && ./econopet_board_tests --gtest_also_run_disabled_tests \
+  --gtest_filter='DataAndStatus/IeeeAbortTest.DISABLED_*')
+(cd build/system/board && ./econopet_firmware_tests --gtest_also_run_disabled_tests \
+  --gtest_filter='FirmwareTest.DISABLED_Sequential*:FirmwareTest.DISABLED_EmptyRelativeRecord*:Models/DriveStatusTextTest.DISABLED_*')
+```
+
+The working directory supplies the SID model's lookup resources. The ordinary
+CTest run keeps these nine cases disabled.
+
+The three firmware red cases failed at their payload/absence assertions at
+simulation seeds 1 and 17 and passed against isolated #53-54 fix probes,
+including REL advancement into the following record. Earlier #52 abort
+expectations incorrectly treated NDAC as the sole advancement boundary.
+Their fix-probe results are superseded by the NRFD/private-read matrix above.
+The earlier full board/firmware runs passed 446 enabled cases at both seeds,
+but preceded that matrix correction. Status mutations independently confirmed
+that omitting the 8050 suffix fails all eight D80 combinations and appending
+it to 4040 status fails all eight D64 combinations.
+After correcting the abort matrix, the complete controller-test translation
+unit passed 30 enabled cases at both seeds. Its four opt-in matrix cases
+failed at the intended resumed-payload assertions, not setup or timeouts.
+
+After separating native message text from numeric fields, all 98 enabled
+firmware integration cases pass at seeds 1 and 17. The sixteen status-field
+cases remain green, while both opt-in native-text cases fail specifically on
+the missing leading space. Adding only that space in an isolated production
+fix probe makes all eighteen status cases pass without changing their
+numeric-field or handshake expectations.
 
 ## Commodore ROM integration coverage
 
