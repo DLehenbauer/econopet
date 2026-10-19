@@ -418,20 +418,25 @@ START_TEST(test_replacing_mount_uses_new_image) {
 }
 END_TEST
 
-// Verifies the post-EOF continuation response expected by the current drive.
-START_TEST(test_read_past_eof_returns_eoied_carriage_return) {
-    const unsigned int device = loop_device(_i);
-    const unsigned int drive = loop_drive(_i);
+// Verifies native ordinary channels remain not ready after their final EOI.
+START_TEST(test_read_past_eof_keeps_channel_not_ready) {
+    const unsigned int device = loop_device(_i / count_of(native_image_types));
+    const unsigned int drive = loop_drive(_i / count_of(native_image_types));
+    const bool d80 = native_image_types[_i % count_of(native_image_types)]
+        == diskimage_type_d80;
 
     // Mount the source image and issue the initial complete file read.
-    mount_d64(device, drive, "drive.d64", true);
+    if (d80) mount_d80(device, drive, "drive.d80", true);
+    else mount_d64(device, drive, "drive.d64", true);
 
     enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
     enqueue_filename_for_drive(drive, "BASIC");
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
     ieee_drive_task();
-    // The initial stream must contain the complete two-sector fixture.
-    ck_assert_uint_eq(mock_ieee_data_count(), 264);
+    // The initial stream ends with the fixture's real final byte and EOI.
+    const size_t length = d80 ? 4 : 264;
+    ck_assert_uint_eq(mock_ieee_data_count(), length);
+    ck_assert(mock_ieee_data_eoi(length - 1));
 
     // Model the controller consuming the first EOF-terminated response.
     mock_ieee_clear_data();
@@ -439,10 +444,15 @@ START_TEST(test_read_past_eof_returns_eoied_carriage_return) {
     // Resume the same channel after EOF and inspect the continuation reply.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
     ieee_drive_task();
-    // A post-EOF TALK returns only a carriage return marked EOI.
-    ck_assert_uint_eq(mock_ieee_data_count(), 1);
-    ck_assert_uint_eq(mock_ieee_data_byte(0), '\r');
-    ck_assert(mock_ieee_data_eoi(0));
+    // A post-EOF TALK cannot create data or change clean status.
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device),
+        IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+    ieee_drive_task();
+    char expected[IEEE_STATUS_LINE_CAPACITY];
+    const char* const suffix = d80 ? (drive == IEEE_DRIVE_FIRST ? ",0" : ",1") : "";
+    snprintf(expected, sizeof(expected), "00, OK,00,00%s\r", suffix);
+    assert_status(expected);
 }
 END_TEST
 
@@ -722,6 +732,56 @@ START_TEST(test_drive_prefix_selects_second_drive_in_unit) {
 }
 END_TEST
 
+// Verifies UNTALK pauses top-up without exhausting or closing a readable channel.
+START_TEST(test_untalk_pauses_readable_sequential_channel) {
+    const unsigned int device = loop_device(_i);
+    const unsigned int drive = loop_drive(_i);
+
+    // Open without TALK so backpressure can be established before streaming.
+    mount_d64(device, drive, "paused.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
+    enqueue_filename_for_drive(drive, "BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    // Leave one burst free, keeping the stream readable after its first top-up.
+    const size_t blocked = MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK;
+    for (size_t index = 0; index < blocked; ++index)
+        spi_write_at(ECONOPET_WB_IEEE_TX_ADDR, 0);
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), MOCK_IEEE_TX_CAPACITY);
+    for (size_t index = 0; index < ECONOPET_IEEE_TX_BURST_CHUNK; ++index) {
+        ck_assert_uint_eq(mock_ieee_data_byte(blocked + index), index + 2);
+        ck_assert(!mock_ieee_data_eoi(blocked + index));
+    }
+
+    // Drain the mock FIFO, then prove UNTALK prevents unsolicited top-up.
+    mock_ieee_clear_data();
+    enqueue_command(IEEE_CMD_UNTALK);
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+
+    // Readdressing resumes at the saved cursor, not at the beginning or EOF.
+    enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
+    ieee_drive_task();
+    const size_t remaining_first_sector = DISKIMAGE_SECTOR_PAYLOAD_SIZE - ECONOPET_IEEE_TX_BURST_CHUNK;
+    const size_t final_sector_bytes = 10;
+    ck_assert_uint_eq(mock_ieee_data_count(), remaining_first_sector + final_sector_bytes);
+    for (size_t index = 0; index < remaining_first_sector; ++index) {
+        ck_assert_uint_eq(mock_ieee_data_byte(index), index + ECONOPET_IEEE_TX_BURST_CHUNK + 2);
+        ck_assert(!mock_ieee_data_eoi(index));
+    }
+    for (size_t index = 0; index < final_sector_bytes; ++index) {
+        ck_assert_uint_eq(mock_ieee_data_byte(remaining_first_sector + index), 0xe2 + index);
+        ck_assert_int_eq(mock_ieee_data_eoi(remaining_first_sector + index),
+            index + 1 == final_sector_bytes);
+    }
+}
+END_TEST
+
 // Verifies CLOSE stops a sequential stream and allows the channel to be reopened.
 START_TEST(test_close_then_reopen_streams_file) {
     const unsigned int device = loop_device(_i);
@@ -864,14 +924,22 @@ END_TEST
 
 // Verifies an unreadable successor in a sequential chain reports status 23.
 START_TEST(test_corrupt_sequential_chain_reports_read_error) {
-    const unsigned int device = loop_device(_i);
-    const unsigned int drive = loop_drive(_i);
+    const unsigned int device = loop_device(_i / count_of(native_image_types));
+    const unsigned int drive = loop_drive(_i / count_of(native_image_types));
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const bool d80 = type == diskimage_type_d80;
     // Corrupt BASIC's successor link after a valid first sector.
-    uint8_t* image = diskimage_test_make_d64();
-    uint8_t* sector = image + diskimage_test_d64_offset(17, 0);
-    sector[0] = 36;
+    uint8_t* image = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64();
+    uint32_t first_sector;
+    const unsigned int first_track = d80 ? 38 : 17;
+    ck_assert(diskimage_sector_offset(type, first_track, 0, &first_sector));
+    uint8_t* sector = image + first_sector;
+    sector[0] = (d80 ? DISKIMAGE_D80_TRACK_COUNT : DISKIMAGE_D64_TRACK_COUNT) + 1;
     sector[1] = 0;
-    mount_image(device, drive, "corrupt.d64", image, DISKIMAGE_D64_SIZE, true);
+    for (size_t index = 0; index < DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++index)
+        sector[DISKIMAGE_SECTOR_LINK_SIZE + index] = (uint8_t) (index + 2);
+    mount_image(device, drive, d80 ? "corrupt.d80" : "corrupt.d64", image,
+        d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, true);
 
     // Request the corrupted file through its normal sequential channel.
     enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
@@ -879,20 +947,34 @@ START_TEST(test_corrupt_sequential_chain_reports_read_error) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
     ieee_drive_task();
 
-    // Valid prefix bytes are sent, followed by an EOI'd carriage-return fallback.
-    ck_assert_uint_eq(mock_ieee_data_count(), 255);
-    for (size_t index = 0; index < 254; index++) {
+    // Valid prefix bytes survive without a fabricated byte or EOI on failure.
+    ck_assert_uint_eq(mock_ieee_data_count(), DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    for (size_t index = 0; index < DISKIMAGE_SECTOR_PAYLOAD_SIZE; index++) {
         ck_assert_uint_eq(mock_ieee_data_byte(index), index + 2);
         ck_assert(!mock_ieee_data_eoi(index));
     }
-    ck_assert_uint_eq(mock_ieee_data_byte(254), '\r');
-    ck_assert(mock_ieee_data_eoi(254));
+    mock_ieee_clear_data();
 
     // Read command-channel status after the partial data response.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
     // The incomplete chain records DOS read error 23 on channel 15.
-    assert_status("23,READ ERROR,00,00\r");
+    char expected[IEEE_STATUS_LINE_CAPACITY];
+    const char* const suffix = d80 ? (drive == IEEE_DRIVE_FIRST ? ",0" : ",1") : "";
+    snprintf(expected, sizeof(expected), "23,READ ERROR,00,00%s\r", suffix);
+    assert_status(expected);
+
+    // Readdressing a released channel must not retry or regenerate its error.
+    mock_ieee_clear_status();
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device),
+        IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device),
+        IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+    ieee_drive_task();
+    snprintf(expected, sizeof(expected), "00, OK,00,00%s\r", suffix);
+    assert_status(expected);
 }
 END_TEST
 
@@ -1297,6 +1379,8 @@ Suite* ieee_drive_suite(void) {
     const int FOR_EACH_DEVICE = IEEE_DEVICE_COUNT;
     const int FOR_EACH_DEVICE_AND_MODEL_ORDER =
         IEEE_DEVICE_COUNT * IEEE_DRIVES_PER_DEVICE;
+    const int FOR_EACH_DEVICE_DRIVE_AND_MODEL =
+        FOR_EACH_DEVICE_AND_DRIVE * count_of(native_image_types);
 
     // Share isolated mount/register fixtures across all protocol cases.
     Suite* suite = suite_create("ieee_drive");
@@ -1318,8 +1402,8 @@ Suite* ieee_drive_suite(void) {
                             * IEEE_DEVICE_COUNT);
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
-    tcase_add_loop_test(test_case, test_read_past_eof_returns_eoied_carriage_return,
-                        0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_read_past_eof_keeps_channel_not_ready,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_power_on_status_is_served_before_any_operation,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_reset_preserves_mount_and_restores_power_on_status,
@@ -1336,6 +1420,8 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE);
     tcase_add_loop_test(test_case, test_drive_prefix_selects_second_drive_in_unit,
                         0, FOR_EACH_DEVICE);
+    tcase_add_loop_test(test_case, test_untalk_pauses_readable_sequential_channel,
+                        0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_close_then_reopen_streams_file,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_test(test_case, test_unmount_clears_open_sequential_channel);
@@ -1343,7 +1429,7 @@ Suite* ieee_drive_suite(void) {
     tcase_add_test(test_case, test_non_target_addresses_are_ignored);
     tcase_add_test(test_case, test_secondary_address_alias_selects_data_channel);
     tcase_add_loop_test(test_case, test_corrupt_sequential_chain_reports_read_error,
-                        0, FOR_EACH_DEVICE_AND_DRIVE);
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_initialize_command_clears_error_status,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_validate_command_clears_error_status,
