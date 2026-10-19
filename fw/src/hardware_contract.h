@@ -109,6 +109,7 @@
 // IEEE control-read masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
+#define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u

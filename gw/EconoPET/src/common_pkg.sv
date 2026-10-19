@@ -196,8 +196,10 @@ package common_pkg;
     // IEEE control-read bit indices and masks (asymmetric with writes).
     localparam int unsigned IEEE_CTRL_RD_ENABLE_BIT = 0;  // Drive is enabled.
     localparam int unsigned IEEE_CTRL_RD_TX_ROOM_BIT = 1; // Data TX FIFO has room for IEEE_TX_BURST_CHUNK bytes.
+    localparam int unsigned IEEE_CTRL_RD_DATA_ACTIVE_BIT = 2; // Data DAV remains asserted until listener acknowledgement.
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_ENABLE_MASK = (1 << IEEE_CTRL_RD_ENABLE_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_TX_ROOM_MASK = (1 << IEEE_CTRL_RD_TX_ROOM_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_DATA_ACTIVE_MASK = (1 << IEEE_CTRL_RD_DATA_ACTIVE_BIT);
 
     // IEEE status bits (bit 7 is talk starvation, not RX EOI).
     localparam int unsigned IEEE_ST_RX_AVAIL_BIT = 0; // RX FIFO has a byte available to peek or pop.

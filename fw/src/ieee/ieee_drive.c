@@ -293,13 +293,20 @@ static void data_tx_sync(void) {
     }
 }
 
-// Save the unread tail before firmware or fabric reuses the shared data FIFO.
-static void data_tx_park(void) {
+// Stop new data presentations without withdrawing a byte awaiting NDAC.
+static void data_tx_pause(void) {
     // Pause even without a tracked REL batch: full flush leaves TX unbound,
     // and hardware may already be serving a later queued channel selection.
-    // Channel 15 uses TXS, so it blocks every data owner while GETs settle.
+    // Channel 15 uses TXS, so it blocks every new data presentation.
     spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
         ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
+}
+
+// Save the unread tail before firmware or fabric reuses the shared data FIFO.
+// Ordinary RX service has already waited for the active presentation to finish.
+// Explicit reset/remount instead deliberately invalidates the old transfer.
+static void data_tx_park(void) {
+    data_tx_pause();
     data_tx_sync();
     data_tx_channel = NULL;
 }
@@ -464,7 +471,10 @@ static void rel_serve(rel_channel_t* rc) {
     _Static_assert(DISKIMAGE_REL_MAX_RECORD_LENGTH < UINT8_MAX,
         "REL batch must be smaller than the prefetch counter modulus");
     data_tx_sync();
-    if (data_tx_channel == rc && rc->pending_pos < rc->pending_size) return;
+    if (data_tx_channel == rc && rc->pending_pos < rc->pending_size) {
+        data_tx_bind(rc->slot / DRIVES_PER_UNIT, rc->chan);
+        return;
+    }
 
     data_tx_park();
     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
@@ -959,6 +969,16 @@ void ieee_drive_task(void) {
         uint8_t st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
         if (!(st & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) break;
 
+        // Hardware may already be serving a newer selection than this RX head.
+        // Pause first, then yield until NDAC releases the latched byte. Never
+        // block the MCU or flush/rebind its FIFO while a listener is sampling.
+        data_tx_pause();
+        if (spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR)
+            & ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK) return;
+
+        // Sample the head's ATN flag immediately before its paired RX read,
+        // after the pause transactions (also preserving semantic RX tracing).
+        st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
         bool is_atn = (st & ECONOPET_IEEE_ST_RX_ATN_MASK) != 0;
         uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
         spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)

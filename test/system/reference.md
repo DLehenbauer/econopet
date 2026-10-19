@@ -296,6 +296,7 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | Empty REL record (#54) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4) and [8250 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4): `SETLST`, `FNDLST`; respective `rel1`: `NXTREC`, and `rel3`: `RD25`, `RD30`, `RD40` | Scan the whole record. If every byte is zero, retain the valid selected byte as the last character. That NUL carries EOI before advancement | Both `DriveRelativeTest` cases on D64/D80, native unit matrix and flat-extension controls | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the selected byte before comparing length and moving the record pointer |
 | Interrupted REL continuation | Same selected 4040 and shared 8050/8250 sources | Respective `ieee`: `TALK1` sends saved `CHNDAT`, `TLK20`/`TLK30` call `GET` on asserted NRFD before `TLK35` waits for NDAC. Respective `tst4`: `GET` dispatches to `rel3` `RDREL` | Before NRFD, readdressing resumes the same byte, even after a private PET sample. After NRFD, it resumes the prefetched byte. Queueing and FIFO discard never advance a record | `DriveRelativeContinuationTest`, firmware continuation matrix, `ieee_tb` owner/progress controls | Native channel-indexed `CHNDAT`/`CHNRDY` storage, independent CPU and wire observations, and MAME RIOT NRFD/NDAC wiring cited above |
 | Queued REL owner selections | Same selected drive sources | Respective `ieee`: `TALK1` selects the addressed channel's saved `CHNDAT` through `LINDX` | Processing an earlier queued selection must never present that channel's data to the currently selected peer | `QueuedSelectionsPauseInitiallyUnboundData` checks exact CPU and wire bytes on D64/D80, starting with no queued REL batch | Same native channel-local data and MAME IEEE unit/handshake wiring cited above |
+| Parking an active REL presentation | Same selected 4040 and shared 8050/8250 DOS 2.7 drive sources, PET KERNAL 4.0 | Respective `ieee`: `TLK20` waits for NRFD, `TLK30` calls `GET`, `TLK35` waits for NDAC, and only `TLKRTN` releases DIO/DAV/EOI. [PET `ob1src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob1src): `ACPTR` asserts NRFD before sampling EOI and DIO, then releases NDAC | Parking stops new presentations, but preserves the active byte and EOI through NDAC. Firmware must yield without consuming queued commands or reusing the FIFO while that presentation remains active | `DriveRelativeParkingTest.KeepsPresentationThroughNdacWhileDeferringReuse`: eight D64/D80 A-B-A cases before/after NRFD and on nonfinal/final bytes. `ieee_tb` separately checks stable pins, exactly one GET, and active readback | Independent IEEE handshake description and MAME NRFD/NDAC hardware wiring cited above distinguish prefetch from listener acknowledgement |
 | REL preparation after EOI | Same selected drive sources | [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3) and [8250 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3): `RD40` calls `NXTREC`, then `RD25`/`RD30` save the next byte and readiness/EOI in `CHNDAT`/`CHNRDY` | GET of an EOI byte prepares the next record before NDAC. A peer write afterward must not replace that prepared data or EOI | `test_relative_eoi_retains_prepared_next_record`, plus the after-NRFD peer-write integration phase on D64/D80 | [VICE REL reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) retains per-channel sector buffers and advances `bufptr`/`record_next` at the record boundary. It is not an IEEE prefetch-phase oracle |
 | REL writes after physical pointer wrap | Same selected drive sources | [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2): `WR40` calls `CLREC`, then `RD40`/`NXTREC`, retaining the physical buffer position | After the 129-byte-record P(1,129) wrapped read, consecutive writes start at payload offsets 383 and 512, not logical offset 258. Earlier data remains intact | `test_relative_wrapped_read_write_continuation` compares the entire backing payload for all sixteen model/unit/drive combinations | Same VICE implementation's `vdrive_rel_listen` advances the buffered `record_next` pointer rather than reconstructing a logical P position |
 | P offset overflow | Same selected drive sources | [4040 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/record) and [8250 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record): `R30`/`R40`, `R60`; respective `parsex`: `ENDCMD`; `rel3`: `RD05` | Encoded offsets 0/1 both select the start. Offset greater than RS records 51, resets the offset to zero, and still positions the requested record. Missing-record error 50 takes precedence | `PositionSuffixAndOverflowFollowNativePointers` and sixteen model/unit/drive boundary cases | [VICE REL positioning](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) corroborates record-overflow handling, not the primary error-precedence oracle |
@@ -381,9 +382,18 @@ Writes of `SA` bind the data FIFO to `{valid, reserved, unit[1:0], channel[3:0]}
 The MCU uses valid bindings for production data. A mismatched unit/channel
 cannot present data, including before firmware processes the selection.
 Status uses its separate FIFO and is unaffected. Zero retains unbound raw
-FIFO access for hardware fixtures. Binding data to channel 15 pauses data
-presentation, allowing firmware to read settled prefetch progress before
-parking a channel or discarding its queue.
+FIFO access for hardware fixtures. Binding data to channel 15 pauses new data
+presentations without withdrawing an active byte. That byte's DAV, DIO, and
+EOI remain stable until NDAC releases, even if its NRFD-triggered GET has
+already occurred. ATN still cancels the presentation through the native abort
+path.
+CTRL read bit 2 (`DATA_ACTIVE`, mask `$04`) reports an active data DAV, not
+status-channel traffic. Before consuming each queued RX command or listener
+byte, firmware pauses new presentations and checks that bit. If it is set,
+the task returns cooperatively, leaving RX queued and the active byte intact.
+After acknowledgement, a later task call can reconcile settled GET progress
+and reuse the queue. This never blocks the MCU or a SPI/Wishbone transaction
+waiting for the listener, including when the controller CPU is halted.
 Firmware also pauses presentation when no REL batch is tracked, because full
 flush leaves TX unbound and the fabric may already have processed a later
 selection than the firmware command currently being serviced. Only after the
@@ -433,22 +443,22 @@ Run the focused abort, sequential terminal and native REL controls:
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run includes all 38 REL data, continuation, positioning, and native
+CTest run includes all 46 REL data, continuation, positioning, parking, and native
 controller cases.
 
 ### Current IEEE validation
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | 152 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Complete affected firmware integration suite | 160 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
-| Native REL integration, included above | All 38 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, and six actual PET/Waterloo receive cases) |
+| Native REL integration, included above | All 46 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, eight in-flight parking cases, and six actual PET/Waterloo receive cases) |
 | Complete firmware unit suite | 547 checks pass, including sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
-| Board IEEE and shared hardware contract | All 42 selected board IEEE and contract cases pass on the final RTL |
-| Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including owner pause, modulo-counter wrap, and simultaneous GET/discard coverage |
+| Board IEEE, shared hardware contract, and host encoding | All 43 selected cases pass on the final RTL, including the exact `$04` active-data mask |
+| Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including stable active DAV/DIO/EOI through owner pause and NDAC, active-data readback, modulo-counter wrap, and simultaneous GET/discard coverage |
 | Production firmware | `RelWithDebInfo` build passes |
-| FPGA bitstream | Efinity compile, place-and-route, and bitstream export pass after both simulator variants |
+| FPGA bitstream | Isolated Efinity compile, place-and-route, and bitstream export pass after both simulator variants. Export alone is not evidence of timing closure |
 
 Firmware unit and integration tests use `Debug`, with assertion-enabled
 optimized model/runtime code kept separate.

@@ -271,6 +271,9 @@ module ieee_tb;
         `assert_equal(dut.dev_dav_n, 1'b0);
         `assert_equal(dut.dev_dio, ~8'h58);
         `assert_equal(dut.dev_eoi_n, 1'b1);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK),
+            (status_fifo ? 8'd0 : IEEE_CTRL_RD_DATA_ACTIVE_MASK));
         `assert_equal(dut.cpu_ndac_n, 1'b0);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, (!status_fifo && prefetch) ? 8'd1 : 8'd0);
@@ -360,7 +363,7 @@ module ieee_tb;
         mcu_drain_rx;
     endtask
 
-    // Pausing an in-flight owner settles GET without discarding or advancing data.
+    // Parking holds the live byte through NRFD and NDAC, without an extra GET.
     task automatic check_owner_pause(input bit prefetch);
         logic [7:0] d;
         logic eoi;
@@ -379,16 +382,27 @@ module ieee_tb;
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, prefetch ? 8'd1 : 8'd0);
-        `assert_equal(dut.dev_dav_n, 1'b1);
+        `assert_equal(dut.dev_dav_n, 1'b0);
+        `assert_equal(dut.dev_dio, ~8'("X"));
+        `assert_equal(dut.dev_eoi_n, 1'b1);
         `assert_equal(dut.tx_count, prefetch ? 1 : 2);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK), IEEE_CTRL_RD_DATA_ACTIVE_MASK);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, prefetch ? 8'd1 : 8'd0);
-        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h01);
         if (!prefetch) begin
-            ctl_recv(d, eoi);
-            `assert_equal(d, "X");
-            `assert_equal(eoi, 1'b0);
+            ctl_nrfd(1);
+            mcu_read(IEEE_REG_TX, d);
+            `assert_equal(d, 8'd1);
+            `assert_equal(dut.dev_dav_n, 1'b0);
+            `assert_equal(dut.dev_dio, ~8'("X"));
         end
+        ctl_ndac(0);
+        ctl_wait(8'h80, 8'h80);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK), 8'd0);
+        ctl_ndac(1);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h01);
         ctl_recv(d, eoi);
         `assert_equal(d, "Y");
         `assert_equal(eoi, 1'b1);

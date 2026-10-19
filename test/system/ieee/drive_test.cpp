@@ -227,6 +227,10 @@ class DriveRelativeTest : public FirmwareTest, public testing::WithParamInterfac
 class DriveRelativeContinuationTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, int, int>> {};
 
+// Cross media, NRFD phase, and final-byte state while parking a live response.
+class DriveRelativeParkingTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
+
 // Execute each selected native controller against both media models.
 class DriveRelativeRomTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
@@ -796,6 +800,72 @@ TEST_P(DriveRelativeContinuationTest, ResumesAtNativePrefetchBoundary) {
 
 INSTANTIATE_TEST_SUITE_P(ModelsPhasesOwners, DriveRelativeContinuationTest,
     testing::Combine(testing::Bool(), testing::Values(0, 1, 2, 3), testing::Values(0, 1, 2)));
+
+// A stale B selection must not withdraw A's byte before the PET samples it.
+TEST_P(DriveRelativeParkingTest, KeepsPresentationThroughNdacWhileDeferringReuse) {
+    const auto [d80, prefetched, final_byte] = GetParam();
+    constexpr uint8_t RecordLength = 3;
+    constexpr Channel Original{DataChannel}, Peer{DataChannel + 1};
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0xa7, 0x51, 0x52, 0x53};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength),
+        d80 ? "parking.d80" : "parking.d64");
+    open_file(system, controller, Original, "BASIC,L");
+    service_rx(system, firmware, "service parking original OPEN");
+    open_file(system, controller, Peer, "BASIC,L");
+    service_rx(system, firmware, "service parking peer OPEN");
+    position_relative(system, firmware, controller, 2, 1, Peer);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    service_rx(system, firmware, "service parking initial TALK");
+    const size_t selected = final_byte ? RecordLength - 1 : 0;
+    for (size_t i = 0; i < selected; ++i)
+        ASSERT_EQ(controller.receive(), data(payload[i]));
+
+    // Hardware resumes A while B/A selections remain queued for the MCU.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Peer));
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "parking original byte DAV");
+    if (prefetched)
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+
+    // A cooperative pass must return without draining commands or dropping DAV.
+    firmware.service();
+    EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
+    EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+    if (!prefetched) {
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+        firmware.service();
+        EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
+        EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+    }
+
+    // KERNAL ACPTR samples EOI/DIO only after asserting NRFD.
+    EXPECT_EQ((controller.read(pet::Pia1PortA) & EoiInput) == 0, final_byte);
+    EXPECT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), payload[selected]);
+    controller.write(pet::Pia2ControlA, PiaC2High.bits());
+    system.run_until([](const System& board) { return board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "parking original byte NDAC acknowledgement");
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    service_rx(system, firmware, "service deferred B/A selections");
+
+    // Exactly one GET advances A, including the EOI-to-next-record boundary.
+    const size_t end = final_byte ? payload.size() : RecordLength;
+    std::vector<Record> expected;
+    for (size_t i = selected + 1; i < end; ++i)
+        expected.push_back(data(payload[i], i + 1 == end ? Eoi::Last : Eoi::More));
+    receive_payload(system, controller, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsPrefetchFinal, DriveRelativeParkingTest,
+    testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
 
 // Execute native PET/Waterloo input for consecutive empty records, then nonempty data.
 TEST_P(DriveRelativeRomTest, NativeReceivePreservesEmptyRecordsAndEoi) {

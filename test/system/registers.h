@@ -49,7 +49,8 @@ using IeeeControl = econopet::Flags<IeeeControlBit>;
 enum class IeeeControlStatusBit : uint8_t {
     Enabled = ECONOPET_IEEE_CTRL_RD_ENABLE_MASK,
     TxRoom = ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK,
-    All = Enabled | TxRoom,
+    DataActive = ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK,
+    All = Enabled | TxRoom | DataActive,
 };
 using IeeeControlStatus = econopet::Flags<IeeeControlStatusBit>;
 

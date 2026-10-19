@@ -356,15 +356,6 @@ module ieee (
                     dev_ndac_n <= 1'b0;
                     dev_nrfd_n <= 1'b1;
                 end
-            end else if (talking && !serving_status && !data_owner_matches) begin
-                // Firmware can pause an owner before observing GET progress.
-                // Abort the presentation, not the unread FIFO head.
-                talk_st <= T_IDLE;
-                dev_nrfd_n <= 1'b1;
-                dev_ndac_n <= 1'b1;
-                dev_dav_n <= 1'b1;
-                dev_eoi_n <= 1'b1;
-                dev_dio <= 8'hFF;
             end else if (talking) begin
                 // Talker role (source handshake). Bytes come from the TX FIFO;
                 // if it runs dry mid-file the handshake simply pauses (the
@@ -388,6 +379,8 @@ module ieee (
                         talk_st   <= T_PREFETCH;
                     end
                     T_PREFETCH, T_ACK: begin
+                        // Owner changes stop new presentations, not this one.
+                        // Native TLK35 holds DAV/DIO/EOI until NDAC releases.
                         if (talk_st == T_PREFETCH && !bus_nrfd_n) begin
                             if (serving_status) txs_pop <= 1'b1;
                             else begin
@@ -483,9 +476,11 @@ module ieee (
             unique case (reg_addr)
                 IEEE_REG_CTRL: begin
                     // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
-                    // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
+                    // CTRL reads: bit0 = enabled, bit1 = burst room, bit2 = data DAV active.
                     wbp_data_o <= (tx_room ? IEEE_CTRL_RD_TX_ROOM_MASK : DATA_WIDTH'(0))
-                                | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0));
+                                | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0))
+                                | (!serving_status && !dev_dav_n
+                                    ? IEEE_CTRL_RD_DATA_ACTIVE_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
                         enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
