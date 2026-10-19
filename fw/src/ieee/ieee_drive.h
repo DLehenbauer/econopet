@@ -30,6 +30,12 @@ void ieee_drive_init(void);
 
 // Resets DOS and channel state and flushes the fabric FIFOs for a
 // firmware-initiated PET reset. Mounted images remain attached.
+//
+// NOTE: PET/fabric resets *must* go through the MCU by calling `pet_reset()`,
+//       which will include a call to `ieee_drive_reset()`.
+//
+//       Pulling the CPU /RESB pin low independently is unsupported, as
+//       firmware does not detect or recover from an independent fabric reset.
 void ieee_drive_reset(void);
 
 // Removes all mounted disk images.

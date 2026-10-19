@@ -651,6 +651,47 @@ TEST_P(DriveRelativeTest, PositionSuffixAndOverflowFollowNativePointers) {
     receive_payload(system, controller, {data(Marker, Eoi::Last)});
 }
 
+// Queued A/B selections must never expose A's bytes while the fabric serves B.
+TEST_P(DriveRelativeTest, QueuedSelectionsPauseInitiallyUnboundData) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 3;
+    constexpr Channel Original{DataChannel}, Peer{DataChannel + 1};
+    const std::vector<uint8_t> payload{0x11, 0x12, 0x13, 0x21, 0x22, 0x23};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength),
+        d80 ? "queued-selections.d80" : "queued-selections.d64");
+    open_file(system, controller, Original, "BASIC,L");
+    service_rx(system, firmware, "service original queued-selection OPEN");
+    open_file(system, controller, Peer, "BASIC,L");
+    service_rx(system, firmware, "service peer queued-selection OPEN");
+    position_relative(system, firmware, controller, 2, 1, Peer);
+
+    // Let hardware reach B before firmware handles A's earlier selection.
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Peer));
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, BusReleased);
+    service_rx(system, firmware, "service accumulated A-to-B selections");
+    const std::vector<Record> expected{
+        data(payload[3]), data(payload[4]), data(payload[5], Eoi::Last)};
+    std::vector<Record> received;
+    for (size_t i = 0; i < expected.size(); ++i) received.push_back(controller.receive());
+    require_sequence(received, expected, "queued selection B CPU payload");
+    require_sequence(wire.records(), expected, "queued selection B wire isolation");
+
+    // A's untouched prepared response must still start at its first byte.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    service_rx(system, firmware, "service original queued-selection continuation");
+    receive_payload(system, controller,
+        {data(payload[0]), data(payload[1]), data(payload[2], Eoi::Last)});
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, DriveRelativeTest, testing::Bool());
 
 // Native TLK20/TLK30 advancement survives interruption and reuse of the shared FIFO.
@@ -714,7 +755,7 @@ TEST_P(DriveRelativeContinuationTest, ResumesAtNativePrefetchBoundary) {
         service_rx(system, firmware, "service peer REL TALK");
         EXPECT_EQ(controller.receive(), data(payload[0],
             phase == PartialRecord ? Eoi::More : Eoi::Last));
-        if (phase == PartialRecord && owner == 1) {
+        if ((phase == PartialRecord || phase == AfterNrfd) && owner == 1) {
             // A write through the other channel changes the shared backing file,
             // not the original channel's already-prefetched pending response.
             controller.command(Untalk);

@@ -259,6 +259,8 @@ module ieee (
 
         if (ifc_i) begin
             tx_prefetched <= '0;
+            // Supported PET/fabric resets are MCU-coordinated with ieee_drive_reset().
+            // Independently pulling the physical CPU reset pin low is unsupported.
             listening      <= 1'b0;
             talking        <= 1'b0;
             sa             <= 8'h00;

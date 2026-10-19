@@ -269,8 +269,11 @@ static rel_channel_t rel_chans[MAX_REL_CHANNELS];
 static rel_channel_t* data_tx_channel;
 static uint8_t data_tx_prefetched;
 static void rel_next_record(rel_channel_t* rc);
+static void rel_prepare(rel_channel_t* rc);
 
 // Reconcile the sole bounded REL batch with actual native GETs, not queue writes.
+// Fabric resets must be MCU-coordinated through ieee_drive_reset(), which
+// invalidates this batch. Independent physical CPU/fabric resets are unsupported.
 static void data_tx_sync(void) {
     if (data_tx_channel == NULL) return;
     rel_channel_t* const rc = data_tx_channel;
@@ -286,17 +289,17 @@ static void data_tx_sync(void) {
         // Detach the drained batch before positioning can invalidate a queue.
         data_tx_channel = NULL;
         rel_next_record(rc);
+        if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
     }
 }
 
 // Save the unread tail before firmware or fabric reuses the shared data FIFO.
 static void data_tx_park(void) {
-    if (data_tx_channel != NULL) {
-        // Channel 15 uses TXS, so binding data TX to it pauses every data owner.
-        // The following SPI read observes all GETs settled before that pause.
-        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
-            ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
-    }
+    // Pause even without a tracked REL batch: full flush leaves TX unbound,
+    // and hardware may already be serving a later queued channel selection.
+    // Channel 15 uses TXS, so it blocks every data owner while GETs settle.
+    spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
+        ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
     data_tx_sync();
     data_tx_channel = NULL;
 }
@@ -431,9 +434,32 @@ static void rel_next_record(rel_channel_t* rc) {
     rel_position_at(rc, rc->cur_record + 1, base, 0);
 }
 
-// Serve the current (trimmed) record into the fabric TX FIFO, EOI on its
-// last byte. A consumed native record advances on the next request, while
-// empty flat-extension records retain their existing transparent behavior.
+// Save prepared record data independently of shared FIFO ownership (native RD25).
+static void rel_prepare(rel_channel_t* rc) {
+    if (rc->pending_pos < rc->pending_size) return;
+    while (!rc->missing && (int32_t) rc->bufptr > rc->length)
+        rel_next_record(rc);
+    rc->pending_pos = 0;
+    rc->pending_record = false;
+    if (rc->missing) {
+        set_status(rc->slot, st_code_record_missing, 0, 0);
+        rc->pending[0] = 0x0D;
+        rc->pending_size = 1;
+    } else {
+        rc->pending_size = (uint16_t) (rc->length - rc->bufptr + 1);
+        vet(rc->pending_size > 0 && rc->pending_size <= sizeof(rc->pending),
+            "IEEE REL response exceeds its bounded pending buffer");
+        if (!diskchain_read(&rc->chain, rc->bufptr, rc->pending, rc->pending_size)) {
+            set_status(rc->slot, st_code_read_error, 0, 0);
+            rc->pending[0] = 0x0D;
+            rc->pending_size = 1;
+        } else {
+            rc->pending_record = true;
+        }
+    }
+}
+
+// Restore the immutable unread response, with EOI on its last byte.
 static void rel_serve(rel_channel_t* rc) {
     _Static_assert(DISKIMAGE_REL_MAX_RECORD_LENGTH < UINT8_MAX,
         "REL batch must be smaller than the prefetch counter modulus");
@@ -442,33 +468,12 @@ static void rel_serve(rel_channel_t* rc) {
 
     data_tx_park();
     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-
-    if (rc->pending_pos == rc->pending_size) {
-        while (!rc->missing && (int32_t) rc->bufptr > rc->length)
-            rel_next_record(rc);
-        rc->pending_pos = 0;
-        if (rc->missing) {
-            set_status(rc->slot, st_code_record_missing, 0, 0);
-            rc->pending[0] = 0x0D;
-            rc->pending_size = 1;
-        } else {
-            rc->pending_size = (uint16_t) (rc->length - rc->bufptr + 1);
-            vet(rc->pending_size > 0 && rc->pending_size <= sizeof(rc->pending),
-                "IEEE REL response exceeds its bounded pending buffer");
-            if (!diskchain_read(&rc->chain, rc->bufptr, rc->pending, rc->pending_size)) {
-                set_status(rc->slot, st_code_read_error, 0, 0);
-                rc->pending[0] = 0x0D;
-                rc->pending_size = 1;
-            } else {
-                rc->pending_record = true;
-            }
-        }
-    }
+    rel_prepare(rc);
 
     const uint16_t n = rc->pending_size - rc->pending_pos;
     data_tx_prefetched = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
     data_tx_channel = rc;
-    // Keep the old binding until the immutable unread suffix is fully restored.
+    // Keep presentation paused until the immutable unread suffix is restored.
     if (n > 1)
         spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, rc->pending + rc->pending_pos, n - 1u);
     spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, rc->pending[rc->pending_size - 1]);
@@ -528,7 +533,9 @@ static void rel_write_commit(rel_channel_t* rc) {
                  (unsigned long) rc->cur_record);
         return;
     }
-    rel_position(rc, rc->cur_record + 1, 0);     // advance like a real drive
+    // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
+    rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
+    if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
 }
 
 // Execute a completed channel-15 command. Only 'P' (position) acts;

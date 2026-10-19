@@ -295,6 +295,9 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | Native Waterloo terminal receive | SuperPET revision 12, `970018-12` and `970019-12` | [Pinned A000 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin): `$BEFB`, finite wait `$BF1A-$BF49`, timeout `$BF7C-$BF83`, global error `$B650`; [C000 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin): TALK `$C0DD` | Wait word one expires after 3200 DAV polls, FCB status and global error become three, no extra wire byte | Same native terminal suite, four Waterloo cases | Binary-checked [A000 navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-a000-bfff.asm) and actual revision-12 execution with independent wire/opcode observations |
 | Empty REL record (#54) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4) and [8250 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4): `SETLST`, `FNDLST`; respective `rel1`: `NXTREC`, and `rel3`: `RD25`, `RD30`, `RD40` | Scan the whole record. If every byte is zero, retain the valid selected byte as the last character. That NUL carries EOI before advancement | Both `DriveRelativeTest` cases on D64/D80, native unit matrix and flat-extension controls | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the selected byte before comparing length and moving the record pointer |
 | Interrupted REL continuation | Same selected 4040 and shared 8050/8250 sources | Respective `ieee`: `TALK1` sends saved `CHNDAT`, `TLK20`/`TLK30` call `GET` on asserted NRFD before `TLK35` waits for NDAC. Respective `tst4`: `GET` dispatches to `rel3` `RDREL` | Before NRFD, readdressing resumes the same byte, even after a private PET sample. After NRFD, it resumes the prefetched byte. Queueing and FIFO discard never advance a record | `DriveRelativeContinuationTest`, firmware continuation matrix, `ieee_tb` owner/progress controls | Native channel-indexed `CHNDAT`/`CHNRDY` storage, independent CPU and wire observations, and MAME RIOT NRFD/NDAC wiring cited above |
+| Queued REL owner selections | Same selected drive sources | Respective `ieee`: `TALK1` selects the addressed channel's saved `CHNDAT` through `LINDX` | Processing an earlier queued selection must never present that channel's data to the currently selected peer | `QueuedSelectionsPauseInitiallyUnboundData` checks exact CPU and wire bytes on D64/D80, starting with no queued REL batch | Same native channel-local data and MAME IEEE unit/handshake wiring cited above |
+| REL preparation after EOI | Same selected drive sources | [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3) and [8250 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3): `RD40` calls `NXTREC`, then `RD25`/`RD30` save the next byte and readiness/EOI in `CHNDAT`/`CHNRDY` | GET of an EOI byte prepares the next record before NDAC. A peer write afterward must not replace that prepared data or EOI | `test_relative_eoi_retains_prepared_next_record`, plus the after-NRFD peer-write integration phase on D64/D80 | [VICE REL reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) retains per-channel sector buffers and advances `bufptr`/`record_next` at the record boundary. It is not an IEEE prefetch-phase oracle |
+| REL writes after physical pointer wrap | Same selected drive sources | [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2): `WR40` calls `CLREC`, then `RD40`/`NXTREC`, retaining the physical buffer position | After the 129-byte-record P(1,129) wrapped read, consecutive writes start at payload offsets 383 and 512, not logical offset 258. Earlier data remains intact | `test_relative_wrapped_read_write_continuation` compares the entire backing payload for all sixteen model/unit/drive combinations | Same VICE implementation's `vdrive_rel_listen` advances the buffered `record_next` pointer rather than reconstructing a logical P position |
 | P offset overflow | Same selected drive sources | [4040 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/record) and [8250 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record): `R30`/`R40`, `R60`; respective `parsex`: `ENDCMD`; `rel3`: `RD05` | Encoded offsets 0/1 both select the start. Offset greater than RS records 51, resets the offset to zero, and still positions the requested record. Missing-record error 50 takes precedence | `PositionSuffixAndOverflowFollowNativePointers` and sixteen model/unit/drive boundary cases | [VICE REL positioning](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) corroborates record-overflow handling, not the primary error-precedence oracle |
 | P into a nonempty zero suffix | Same selected drive sources | Respective `record`: `POSITN`/`POSBUF`; byte-identical `rel4`: `SETLST`/`FNDLST`; `rel3`: `RD15`/`RD25`/`RD30`; `rel1`: `NRBUF`/`NXTREC` | For a 129-byte first record whose only nonzero byte is its first, P offset 129 returns payload offsets 128..254 (127 bytes), EOI only on offset 254. Selecting an empty suffix already in the successor buffer instead falls back to the selected NUL/EOI | Same system P test and sixteen model/unit/drive physical-pointer cases | VICE's `vdrive_rel_position` documents overflow into subsequent records and the crossed-buffer one-byte exception. Its 1541-derived comments do not override the selected IEEE ROMs |
 | Status drive field (#55) | 4040 DOS 2 versus single-sided 8050/shared DOS 2.7 | [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc): `ERMSG2` ends after sector; [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc): `ERMSG2` appends `DRVNUM AND 1`; `tst4`: `GETERC` supplies final CR/EOI | Exact four-field 4040 or five-field 8050 status, including final-byte EOI and correct local drive | `DriveStatusTest.PreservesModelSpecificStatusAndUnitDriveIdentity` | [MAME ROM-backed 8050/8250 model](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp). VICE's generic four-field formatter is not used to override the 8050 source |
@@ -364,6 +367,10 @@ now return an unsigned modulo-256 count of NRFD-triggered data prefetches.
 Reads have no side effects, including adjacent SPI prefetch. Status-channel
 prefetches do not increment this count. Data-only flush and automatic
 OPEN/CLOSE discard preserve it. IFC and full control flush reset it.
+All supported PET/fabric resets go through the MCU and include
+`ieee_drive_reset()`, invalidating DOS channels before fabric progress is
+reset. Independently pulling the physical CPU reset pin low is unsupported.
+There is deliberately no independent fabric-reset detection or recovery.
 The counter records GET in the source-handshake state, independently of the
 delayed FIFO pointer update. The collision bench proves that a simultaneous
 data discard cannot erase the presented byte's NRFD-triggered progress.
@@ -377,6 +384,10 @@ Status uses its separate FIFO and is unaffected. Zero retains unbound raw
 FIFO access for hardware fixtures. Binding data to channel 15 pauses data
 presentation, allowing firmware to read settled prefetch progress before
 parking a channel or discarding its queue.
+Firmware also pauses presentation when no REL batch is tracked, because full
+flush leaves TX unbound and the fabric may already have processed a later
+selection than the firmware command currently being serviced. Only after the
+new response is fully restored does firmware bind and release it.
 
 Each REL channel retains one immutable pending response (at most 254 bytes)
 and its consumed offset. The firmware checks progress against that bound,
@@ -385,6 +396,11 @@ has advanced the counter many times. Retalking the same pending owner leaves
 the FIFO intact. Reusing it for another owner parks the unread tail and
 restores it without rereading the backing image. GET of the final EOI byte
 advances the channel's read/write position even if NDAC has not completed.
+For a valid following native record, that reconciliation also saves its
+prepared response and EOI state before another channel can overwrite the
+backing data. Successful native writes similarly prepare the following
+record and advance from the current physical base, not a reconstructed
+logical P offset.
 P and writes intentionally replace their channel's pending response. CLOSE,
 reset, and replacement of its mounted image invalidate the affected channel.
 Queue replacement explicitly parks the current REL owner before issuing the
@@ -417,18 +433,18 @@ Run the focused abort, sequential terminal and native REL controls:
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run includes all 36 REL data, continuation, positioning, and native
+CTest run includes all 38 REL data, continuation, positioning, and native
 controller cases.
 
 ### Current IEEE validation
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | 150 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Complete affected firmware integration suite | 152 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
-| Native REL integration, included above | All 36 D64/D80 cases pass at both seeds (six data/positioning cases, 24 interruption/ownership cases, and six actual PET/Waterloo receive cases) |
-| Complete firmware unit suite | 515 checks pass, including sixteen model/unit/drive combinations per native continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and read-to-write controls, and eight flat-extension empty-record controls |
+| Native REL integration, included above | All 38 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, and six actual PET/Waterloo receive cases) |
+| Complete firmware unit suite | 547 checks pass, including sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
 | Board IEEE and shared hardware contract | All 42 selected board IEEE and contract cases pass on the final RTL |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including owner pause, modulo-counter wrap, and simultaneous GET/discard coverage |
 | Production firmware | `RelWithDebInfo` build passes |
