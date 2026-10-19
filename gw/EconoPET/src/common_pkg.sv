@@ -153,15 +153,17 @@ package common_pkg;
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.
-    // STATUS and SA ignore writes. TX/TXS registers read as zero and ignore writes
+    // STATUS ignores writes. TX reads the modulo-256 data prefetch count.
+    // SA writes bind data TX to {valid, reserved, unit[1:0], channel[3:0]}.
+    // Other TX/TXS registers read as zero and ignore writes
     // when their FIFO is full. RX pops and TX/TXS pushes are suppressed during IFC.
     localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_CTRL = 0;     // Asymmetric control writes and read-back flags below.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_STATUS = 1;   // Read-only FIFO and bus status.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_RX = 2;       // Read peeks at the head byte, any write pops if nonempty.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;       // Write enqueues a data-channel byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;       // Read prefetch count, write data byte.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX_LAST = 4;  // Write enqueues a data-channel byte with EOI.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read-only last secondary-address byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read secondary, write data TX owner.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;      // Write enqueues a status-channel (15) byte.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS_LAST = 7; // Write enqueues a status-channel byte with EOI.
     localparam int unsigned IEEE_REG_COUNT = (IEEE_REG_TXS_LAST + 1);
@@ -220,6 +222,8 @@ package common_pkg;
     // This guarantee and TX_FULL/TX_EMPTY concern data TX, not the status FIFO.
     // TALK_STARVED instead follows the active FIFO (status TX when SA selects 15).
     localparam int unsigned IEEE_TX_BURST_CHUNK = 64;
+    localparam logic [DATA_WIDTH-1:0] IEEE_TX_OWNER_VALID_MASK = 8'h80;
+    localparam int unsigned IEEE_TX_OWNER_UNIT_SHIFT = 4;
 
     // END SHARED HARDWARE CONTRACT
     // ========================================================================

@@ -185,6 +185,8 @@ module ieee (
     logic [$clog2(TX_DEPTH):0]   tx_count = '0;
     wire tx_empty = tx_count == 0;
     wire tx_full  = tx_count == ($clog2(TX_DEPTH)+1)'(TX_DEPTH);
+    logic [7:0] tx_prefetched = '0;
+    logic [7:0] tx_owner = '0;
 
     // Burst-fill flow control: the MCU fills the FIFO with batched WRITE_SAME
     // bursts (one held-low CS transaction per chunk) to keep up with the 1MHz
@@ -209,16 +211,19 @@ module ieee (
     // Device protocol state
     // ------------------------------------------------------------------
     // The emulation answers four unit addresses, DEV_ADDR through DEV_ADDR+3
-    // (devices 8 through 11), each a dual-drive unit. The fabric doesn't care WHICH unit is
-    // addressed: handshake state, sa, and the FIFOs are shared (only one
-    // talker/listener is ever active at a time), and the MCU learns the unit
-    // from the raw LISTEN/TALK command bytes forwarded through the RX FIFO.
+    // (devices 8 through 11), each a dual-drive unit. Handshake state, sa,
+    // and FIFOs are shared, but data TX ownership includes the selected unit.
+    // The MCU also learns the unit from commands forwarded through RX.
     // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
 
     logic listening = 1'b0;
     logic talking   = 1'b0;
     logic [7:0] sa = 8'h00;
+    logic [1:0] talk_unit = '0;
+    wire data_owner_matches = !(|(tx_owner & IEEE_TX_OWNER_VALID_MASK))
+        || (tx_owner[IEEE_TX_OWNER_UNIT_SHIFT +: 2] == talk_unit
+            && tx_owner[3:0] == sa[3:0]);
 
     wire atn_active = enable && !cpu_atn_n;
 
@@ -253,9 +258,11 @@ module ieee (
         txs_flush <= 1'b0;
 
         if (ifc_i) begin
+            tx_prefetched <= '0;
             listening      <= 1'b0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            talk_unit      <= '0;
             talk_st        <= T_IDLE;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
@@ -266,9 +273,11 @@ module ieee (
             prev_atn_n     <= 1'b1;
             rx_push_data   <= '0;
         end else if (flush || !enable) begin
+            if (flush) tx_prefetched <= '0;
             listening      <= 1'b0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            talk_unit      <= '0;
             talk_st        <= T_IDLE;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
@@ -303,7 +312,10 @@ module ieee (
                             8'h3F:   listening <= 1'b0;                       // UNLISTEN
                             8'h5F:   talking <= 1'b0;                         // UNTALK (channel data persists)
                             8'b001?_????: listening <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
-                            8'b010?_????: talking   <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
+                            8'b010?_????: begin
+                                talking <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00};
+                                talk_unit <= ~pia2_pb_out[1:0];
+                            end
                             8'b011?_????: if (listening || talking) begin
                                 sa <= ~pia2_pb_out;                           // secondary (data)
                                 // Fresh status per request: the kernel re-reads
@@ -342,6 +354,15 @@ module ieee (
                     dev_ndac_n <= 1'b0;
                     dev_nrfd_n <= 1'b1;
                 end
+            end else if (talking && !serving_status && !data_owner_matches) begin
+                // Firmware can pause an owner before observing GET progress.
+                // Abort the presentation, not the unread FIFO head.
+                talk_st <= T_IDLE;
+                dev_nrfd_n <= 1'b1;
+                dev_ndac_n <= 1'b1;
+                dev_dav_n <= 1'b1;
+                dev_eoi_n <= 1'b1;
+                dev_dio <= 8'hFF;
             end else if (talking) begin
                 // Talker role (source handshake). Bytes come from the TX FIFO;
                 // if it runs dry mid-file the handshake simply pauses (the
@@ -350,13 +371,15 @@ module ieee (
                     T_IDLE: begin
                         dev_ndac_n <= 1'b1;
                         dev_nrfd_n <= 1'b1;
-                        if (serving_status ? !txs_empty : !tx_empty) talk_st <= T_DAV;
+                        if (serving_status ? !txs_empty : (!tx_empty && data_owner_matches))
+                            talk_st <= T_DAV;
                     end
                     // Source handshake may only begin once an acceptor is
                     // present (NDAC asserted) and ready (NRFD released) --
                     // starting on NRFD alone loses the first byte if the
                     // acceptor hasn't configured NDAC yet.
-                    T_DAV: if (bus_nrfd_n && !bus_ndac_n) begin
+                    T_DAV: if (bus_nrfd_n && !bus_ndac_n
+                               && (serving_status ? !txs_empty : (!tx_empty && data_owner_matches))) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
                         dev_eoi_n <= serving_status ? ~txs_mem[txs_rd][8]   : ~tx_mem[tx_rd][8];
                         dev_dav_n <= 1'b0;
@@ -365,7 +388,12 @@ module ieee (
                     T_PREFETCH, T_ACK: begin
                         if (talk_st == T_PREFETCH && !bus_nrfd_n) begin
                             if (serving_status) txs_pop <= 1'b1;
-                            else                tx_pop  <= 1'b1;
+                            else begin
+                                tx_pop <= 1'b1;
+                                // Count GET itself, even if a simultaneous
+                                // queue discard wins the FIFO pointer update.
+                                tx_prefetched <= tx_prefetched + 1'b1;
+                            end
                             talk_st <= T_ACK;
                         end
                         // Both phases can finish on NDAC, including unread
@@ -441,6 +469,9 @@ module ieee (
         if (ifc_i) begin
             tx_push_data <= '0;
             txs_push_data <= '0;
+            tx_owner <= '0;
+        end else if (flush) begin
+            tx_owner <= '0;
         end
 
         // IFC resets the emulated drive, but the MCU control plane remains
@@ -469,7 +500,7 @@ module ieee (
                     if (wbp_we_i && !ifc_i && !rx_empty) rx_pop_req <= 1'b1;
                 end
                 IEEE_REG_TX: begin
-                    wbp_data_o <= 8'h00;   // write-only (data TX FIFO push)
+                    wbp_data_o <= tx_prefetched;
                     if (wbp_we_i && !ifc_i && !tx_full) begin
                         tx_push_req  <= 1'b1;
                         tx_push_data <= {1'b0, wbp_data_i};
@@ -482,7 +513,10 @@ module ieee (
                         tx_push_data <= {1'b1, wbp_data_i};
                     end
                 end
-                IEEE_REG_SA: wbp_data_o <= sa;
+                IEEE_REG_SA: begin
+                    wbp_data_o <= sa;
+                    if (wbp_we_i && !ifc_i && !flush) tx_owner <= wbp_data_i;
+                end
                 IEEE_REG_TXS: begin
                     wbp_data_o <= 8'h00;   // write-only (status TX FIFO push)
                     if (wbp_we_i && !ifc_i && !txs_full) begin

@@ -122,3 +122,8 @@
 
 // IEEE data FIFO capacity guaranteed by TX room (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_TX_BURST_CHUNK 64u
+
+// TX reads report modulo-256 NRFD prefetch progress, unaffected by data flush.
+// SA writes bind data TX to a unit/channel. Zero retains unbound bench access.
+#define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
+#define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u
