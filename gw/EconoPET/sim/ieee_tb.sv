@@ -271,7 +271,14 @@ module ieee_tb;
         `assert_equal(dut.dev_dav_n, 1'b0);
         `assert_equal(dut.dev_dio, ~8'h58);
         `assert_equal(dut.dev_eoi_n, 1'b1);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK),
+            (status_fifo ? 8'd0 : IEEE_CTRL_RD_DATA_ACTIVE_MASK));
         `assert_equal(dut.cpu_ndac_n, 1'b0);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, (!status_fifo && prefetch) ? 8'd1 : 8'd0);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, (!status_fifo && prefetch) ? 8'd1 : 8'd0);
 
         // Readdress data only: a new status secondary would deliberately flush TXS.
         ctl_atn(1);
@@ -294,6 +301,176 @@ module ieee_tb;
         ctl_recv(d, eoi);
         `assert_equal(d, "Z");
         `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
+    // Owner mismatches block data before firmware service, but never block status.
+    task automatic check_data_owner(input bit other_unit);
+        logic [7:0] d;
+        logic eoi;
+        localparam logic [7:0] OWNER_CHANNEL_ONE = IEEE_TX_OWNER_VALID_MASK | 8'h01;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_SA, OWNER_CHANNEL_ONE);
+        mcu_write(IEEE_REG_TX, "X");
+        mcu_write(IEEE_REG_TX_LAST, "Y");
+        ctl_atn(1);
+        ctl_send(other_unit ? 8'h49 : 8'h48);
+        ctl_send(other_unit ? 8'h61 : 8'h62);
+        ctl_ndac(1);
+        ctl_nrfd(0);
+        ctl_atn(0);
+        repeat (20) @(posedge sys_clock);
+        `assert_equal(dut.dev_dav_n, 1'b1);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd0);
+
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_send(8'h48);
+        ctl_send(8'h61);
+        ctl_atn(0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, "X");
+        `assert_equal(eoi, 1'b0);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd1);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd1);
+
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_send(8'h29);
+        ctl_send(8'hF2);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd1);
+        ctl_send(8'h3F);
+        ctl_send(8'h49);
+        ctl_send(8'h6F);
+        mcu_write(IEEE_REG_TXS_LAST, "S");
+        ctl_atn(0);
+        ctl_recv(d, eoi);
+        `assert_equal(d, "S");
+        `assert_equal(eoi, 1'b1);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd1);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
+    // Parking holds the live byte through NRFD and NDAC, without an extra GET.
+    task automatic check_owner_pause(input bit prefetch);
+        logic [7:0] d;
+        logic eoi;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h01);
+        mcu_write(IEEE_REG_TX, "X");
+        mcu_write(IEEE_REG_TX_LAST, "Y");
+        ctl_atn(1);
+        ctl_send(8'h48);
+        ctl_send(8'h61);
+        ctl_ndac(1);
+        ctl_nrfd(0);
+        ctl_atn(0);
+        ctl_wait(8'h80, 8'h00);
+        if (prefetch) ctl_nrfd(1);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, prefetch ? 8'd1 : 8'd0);
+        `assert_equal(dut.dev_dav_n, 1'b0);
+        `assert_equal(dut.dev_dio, ~8'("X"));
+        `assert_equal(dut.dev_eoi_n, 1'b1);
+        `assert_equal(dut.tx_count, prefetch ? 1 : 2);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK), IEEE_CTRL_RD_DATA_ACTIVE_MASK);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, prefetch ? 8'd1 : 8'd0);
+        if (!prefetch) begin
+            ctl_nrfd(1);
+            mcu_read(IEEE_REG_TX, d);
+            `assert_equal(d, 8'd1);
+            `assert_equal(dut.dev_dav_n, 1'b0);
+            `assert_equal(dut.dev_dio, ~8'("X"));
+        end
+        ctl_ndac(0);
+        ctl_wait(8'h80, 8'h80);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_DATA_ACTIVE_MASK), 8'd0);
+        ctl_ndac(1);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h01);
+        ctl_recv(d, eoi);
+        `assert_equal(d, "Y");
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
+    // Coincident discard cannot erase GET progress for the already-presented byte.
+    task automatic check_prefetch_flush_collision;
+        logic [7:0] d;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_TX, "X");
+        mcu_write(IEEE_REG_TX_LAST, "Y");
+        ctl_atn(1);
+        ctl_send(8'h48);
+        ctl_send(8'h61);
+        ctl_ndac(1);
+        ctl_nrfd(0);
+        ctl_atn(0);
+        ctl_wait(8'h80, 8'h00);
+        fork
+            ctl_nrfd(1);
+            begin
+                // Schedule the external Wishbone discard with the CPU's NRFD write.
+                wait (cpu_data_strobe && dut.snap_via && dut.snap_we
+                    && dut.snap_rs == 0 && !cpu_data[1]);
+                @(negedge sys_clock);
+                wb_addr = common_pkg::wb_ieee_addr(IEEE_REG_CTRL);
+                wb_dout = IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_DATA_FLUSH_MASK;
+                wb_we = 1;
+                wb_cycle = 1;
+                wb_strobe = 1;
+                @(negedge sys_clock);
+                wb_we = 0;
+                wb_cycle = 0;
+                wb_strobe = 0;
+            end
+        join
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd1);
+        `assert_equal(dut.tx_count, 0);
+        `assert_equal(dut.dev_dav_n, 1'b0);
+        `assert_equal(dut.dev_dio, ~8'h58);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
+    // Counter wrap remains observable without resetting FIFO pointers or ownership.
+    task automatic check_prefetch_wrap;
+        logic [7:0] d;
+        logic eoi;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        ctl_atn(1);
+        ctl_send(8'h48);
+        ctl_send(8'h60);
+        ctl_atn(0);
+        for (int i = 0; i < 257; ++i) begin
+            mcu_write(IEEE_REG_TX_LAST, 8'(i));
+            ctl_recv(d, eoi);
+            `assert_equal(d, 8'(i));
+            `assert_equal(eoi, 1'b1);
+            mcu_read(IEEE_REG_TX, d);
+            `assert_equal(d, 8'(i + 1));
+        end
         ctl_atn(1);
         ctl_send(8'h5F);
         ctl_atn(0);
@@ -658,6 +835,15 @@ module ieee_tb;
         ctl_atn(0);
         mcu_drain_rx;
         $display("[%t]   unit 11 listen/talk verified", $time);
+        check_data_owner(1'b0);
+        check_data_owner(1'b1);
+        check_owner_pause(1'b0);
+        check_owner_pause(1'b1);
+        check_prefetch_flush_collision;
+        check_prefetch_wrap;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd0);
 
         // IFC must clear a live protocol exchange. IFC deassertion must
         // neither restore stale outputs nor create an RX entry.
@@ -685,6 +871,9 @@ module ieee_tb;
         `assert_equal(dut.listening, 1'b0);
         `assert_equal(dut.talking, 1'b0);
         `assert_equal(dut.sa, 8'h00);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd0);
+        `assert_equal(dut.tx_owner, 8'd0);
         `assert_equal(dut.talk_st, dut.T_IDLE);
         `assert_equal(dut.dev_nrfd_n, 1'b1);
         `assert_equal(dut.dev_ndac_n, 1'b1);

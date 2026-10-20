@@ -28,6 +28,7 @@
 #define DRIVES_PER_UNIT 2
 #define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
 
+// Write fabric control without changing firmware channel state.
 static void ieee_ctrl_write(uint8_t value) {
     spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, value);
 }
@@ -245,12 +246,17 @@ typedef struct {
     uint8_t slot;           // global mount slot backing this channel
     uint8_t reclen;
     // Absolute byte offsets into the record stream (vdrive-rel.c semantics).
-    // length = offset of the last non-zero byte; CBM DOS trims trailing
-    // nulls and Super-OS/9 depends on that.
+    // Native trimming retains the selected byte when the whole record is NUL.
+    // The flat extension keeps its existing transparent-empty-record behavior.
     uint32_t cur_record;    // 1-based, per CBM convention
+    uint32_t record_base;   // physical payload offset, including native pointer wrap
     uint32_t bufptr;
     int32_t  length;
     bool     missing;       // positioned past the last record
+    uint16_t pending_size;
+    uint16_t pending_pos;
+    bool pending_record;
+    uint8_t pending[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     // Record-write staging (LISTEN data, committed at UNLISTEN):
     bool     wr_active;
     uint16_t wr_pos;        // start position within the record (from P)
@@ -260,6 +266,65 @@ typedef struct {
 } rel_channel_t;
 
 static rel_channel_t rel_chans[MAX_REL_CHANNELS];
+static rel_channel_t* data_tx_channel;
+static uint8_t data_tx_prefetched;
+static uint8_t data_tx_owner; // Retained queue binding, not the transient hardware pause.
+static void rel_next_record(rel_channel_t* rc);
+static void rel_prepare(rel_channel_t* rc);
+
+// Reconcile the sole bounded REL batch with actual native GETs, not queue writes.
+// Fabric resets must be MCU-coordinated through ieee_drive_reset(), which
+// invalidates this batch. Independent physical CPU/fabric resets are unsupported.
+static void data_tx_sync(void) {
+    if (data_tx_channel == NULL) return;
+    rel_channel_t* const rc = data_tx_channel;
+    const uint8_t prefetched = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
+    const uint8_t advanced = (uint8_t) (prefetched - data_tx_prefetched);
+    vet(advanced <= rc->pending_size - rc->pending_pos,
+        "IEEE REL prefetch exceeds its pending batch");
+    rc->pending_pos += advanced;
+    rc->bufptr += advanced;
+    data_tx_prefetched = prefetched;
+    if (advanced != 0 && rc->pending_record && rc->pending_pos == rc->pending_size) {
+        // GET of the EOI byte prepares the following record before NDAC.
+        // Detach the drained batch before positioning can invalidate a queue.
+        data_tx_channel = NULL;
+        rel_next_record(rc);
+        if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
+    }
+}
+
+// Stop new data presentations without withdrawing a byte awaiting NDAC.
+static void data_tx_pause(void) {
+    // Pause even without a tracked REL batch: full flush leaves TX unbound,
+    // and hardware may already be serving a later queued channel selection.
+    // Channel 15 uses TXS, so it blocks every new data presentation.
+    spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
+        ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
+}
+
+// Restore a retained queue owner after a temporary RX-service pause.
+static void data_tx_resume(void) {
+    if (data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK)
+        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, data_tx_owner);
+}
+
+// Save the unread tail before firmware or fabric reuses the shared data FIFO.
+// Ordinary RX service has already waited for the active presentation to finish.
+// Explicit reset/remount instead deliberately invalidates the old transfer.
+static void data_tx_park(void) {
+    data_tx_pause();
+    data_tx_sync();
+    data_tx_channel = NULL;
+    data_tx_owner = 0;
+}
+
+// Bind queued data before releasing it to the selected hardware unit/channel.
+static void data_tx_bind(uint8_t unit, uint8_t chan) {
+    data_tx_owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
+        | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan;
+    data_tx_resume();
+}
 
 // Channels are keyed by (unit, chan): the d8d9 descriptor table reuses
 // secondary addresses 2/3 on BOTH units, so the channel number alone is
@@ -299,6 +364,8 @@ static void reset_protocol_state(void) {
     stream = (diskstream_t) { 0 };
     streaming = false;
     streamed_bytes = 0;
+    data_tx_channel = NULL;
+    data_tx_owner = 0;
     memset(rel_chans, 0, sizeof(rel_chans));
     memset(ch15_cmd, 0, sizeof(ch15_cmd));
     ch15_cmd_len = 0;
@@ -322,62 +389,128 @@ static drive_model_t get_drive_model(unsigned int slot) {
 
 // Position the engine at record 'rec', byte 'pos' within it, and compute
 // the trimmed length (last non-zero byte), like vdrive_rel_position.
-static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
+static void rel_position_at(rel_channel_t* rc, uint32_t rec, uint32_t base, uint8_t pos) {
     uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
+    if (data_tx_channel == rc) {
+        data_tx_park();
+        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    }
+    rc->pending_size = 0;
+    rc->pending_pos = 0;
+    rc->pending_record = false;
     rc->cur_record = rec;
+    rc->record_base = base;
     rc->missing = (rec == 0)
-        || rec > diskchain_size(&rc->chain) / rc->reclen;
+        || base + rc->reclen > diskchain_size(&rc->chain);
     if (rc->missing) return;
 
-    uint32_t base = (rec - 1) * (uint32_t) rc->reclen;
     rc->bufptr = base + pos;
     rc->length = (int32_t) (base + rc->reclen - 1);
     if (!diskchain_read(&rc->chain, base, buf, rc->reclen)) {
         rc->missing = true;
         return;
     }
-    while (rc->length >= (int32_t) rc->bufptr
+    // Native FNDLST scans the whole record, independently of the P byte offset.
+    const int32_t trim_start = (int32_t) (rc->chain.flat ? rc->bufptr : base);
+    while (rc->length >= trim_start
            && buf[rc->length - base] == 0) {
         rc->length--;
     }
+    // SETLST falls back to GETPNT only if the entire native record is empty.
+    if (!rc->chain.flat && pos < rc->reclen && rc->length < (int32_t) base)
+        rc->length = (int32_t) rc->bufptr;
+    if (!rc->chain.flat && rc->length < (int32_t) rc->bufptr) {
+        const uint32_t block = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+        const uint32_t last_block = (uint32_t) rc->length / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+        if (block != last_block) {
+            // SETLST cannot search the previous buffer after P selected its successor.
+            rc->length = (int32_t) rc->bufptr;
+        } else {
+            // RDREL compares physical byte pointers, not logical record offsets.
+            // A last-character pointer behind P is reached in the next buffer.
+            rc->length += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+        }
+    }
 }
 
-// Serve the current (trimmed) record into the fabric TX FIFO, EOI on its
-// last byte. Empty records are transparent: reads flow into the next
-// record, exactly like vdrive_rel_read.
-static void rel_serve(rel_channel_t* rc) {
-    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
+// Explicit P selects a logical record, independently of the current buffer.
+static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
+    rel_position_at(rc, rec, rec == 0 ? 0 : (rec - 1) * (uint32_t) rc->reclen, pos);
+}
 
-    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-
-    while (!rc->missing && (int32_t) rc->bufptr > rc->length) {
-        rel_position(rc, rc->cur_record + 1, 0);
+// NXTREC retains the active physical buffer when NR is ahead of its pointer.
+static void rel_next_record(rel_channel_t* rc) {
+    uint32_t base = rc->record_base + rc->reclen;
+    if (!rc->chain.flat) {
+        base = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE * DISKIMAGE_SECTOR_PAYLOAD_SIZE
+            + base % DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+        // bufptr is one past the prefetched record's final character.
+        if (base < rc->bufptr) base += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
     }
+    rel_position_at(rc, rc->cur_record + 1, base, 0);
+}
+
+// Save prepared record data independently of shared FIFO ownership (native RD25).
+static void rel_prepare(rel_channel_t* rc) {
+    if (rc->pending_pos < rc->pending_size) return;
+    while (!rc->missing && (int32_t) rc->bufptr > rc->length)
+        rel_next_record(rc);
+    rc->pending_pos = 0;
+    rc->pending_record = false;
     if (rc->missing) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
-        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
+        rc->pending[0] = 0x0D;
+        rc->pending_size = 1;
+    } else {
+        rc->pending_size = (uint16_t) (rc->length - rc->bufptr + 1);
+        vet(rc->pending_size > 0 && rc->pending_size <= sizeof(rc->pending),
+            "IEEE REL response exceeds its bounded pending buffer");
+        if (!diskchain_read(&rc->chain, rc->bufptr, rc->pending, rc->pending_size)) {
+            set_status(rc->slot, st_code_read_error, 0, 0);
+            rc->pending[0] = 0x0D;
+            rc->pending_size = 1;
+        } else {
+            rc->pending_record = true;
+        }
+    }
+}
+
+// Restore the immutable unread response, with EOI on its last byte.
+static void rel_serve(rel_channel_t* rc) {
+    _Static_assert(DISKIMAGE_REL_MAX_RECORD_LENGTH < UINT8_MAX,
+        "REL batch must be smaller than the prefetch counter modulus");
+    data_tx_sync();
+    if (data_tx_channel == rc && rc->pending_pos < rc->pending_size) {
+        data_tx_bind(rc->slot / DRIVES_PER_UNIT, rc->chan);
         return;
     }
 
-    uint16_t n = (uint16_t) (rc->length - rc->bufptr + 1);
-    if (!diskchain_read(&rc->chain, rc->bufptr, buf, n)) {
-        set_status(rc->slot, st_code_read_error, 0, 0);
-        spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, 0x0D);
-        return;
-    }
-    // Burst, not per-byte: per-byte SPI can't outrun the CPU's drain. The
-    // FIFO was just flushed and a record is <= 254 bytes, so it can't
-    // overflow.
-    if (n > 1) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n - 1u);
-    spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, buf[n - 1]);
-    rc->bufptr += n;
+    data_tx_park();
+    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    rel_prepare(rc);
+
+    const uint16_t n = rc->pending_size - rc->pending_pos;
+    data_tx_prefetched = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
+    data_tx_channel = rc;
+    // Keep presentation paused until the immutable unread suffix is restored.
+    if (n > 1)
+        spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, rc->pending + rc->pending_pos, n - 1u);
+    spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, rc->pending[rc->pending_size - 1]);
+    data_tx_bind(rc->slot / DRIVES_PER_UNIT, rc->chan);
     streamed_bytes += n;   // REL read, attributed to this channel's slot
 }
 
 // Begin collecting a record write on this channel (kernel did LISTEN +
 // secondary): bytes land at the position set by the last P command.
 static void rel_write_begin(rel_channel_t* rc) {
-    uint32_t base = (rc->cur_record - 1) * (uint32_t) rc->reclen;
+    data_tx_sync();
+    if (data_tx_channel == rc) {
+        data_tx_park();
+        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    }
+    rc->pending_size = 0;
+    rc->pending_pos = 0;
+    uint32_t base = rc->record_base;
     rc->wr_active = true;
     rc->wr_count = 0;
     if (rc->missing || rc->bufptr < base || rc->bufptr >= base + rc->reclen) {
@@ -405,7 +538,7 @@ static void rel_write_commit(rel_channel_t* rc) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
         return;
     }
-    uint32_t base = (rc->cur_record - 1) * (uint32_t) rc->reclen;
+    uint32_t base = rc->record_base;
     if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
         set_status(rc->slot, st_code_read_error, 0, 0);
         return;
@@ -419,7 +552,9 @@ static void rel_write_commit(rel_channel_t* rc) {
                  (unsigned long) rc->cur_record);
         return;
     }
-    rel_position(rc, rc->cur_record + 1, 0);     // advance like a real drive
+    // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
+    rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
+    if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
 }
 
 // Execute a completed channel-15 command. Only 'P' (position) acts;
@@ -437,9 +572,12 @@ static void ch15_execute(void) {
                        + drive_status[ch15_unit].drive,
                        st_code_file_not_found, 0, 0);
         } else {
+            const bool overflow = pos >= rc->reclen;
+            if (overflow) pos = 0;
             rel_position(rc, rec, pos);
             set_status(rc->slot,
-                       rc->missing ? st_code_record_missing : st_code_ok, 0, 0);
+                       rc->missing ? st_code_record_missing
+                           : overflow ? st_code_record_overflow : st_code_ok, 0, 0);
         }
     } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
         uint8_t drive = drive_status[ch15_unit].drive;
@@ -470,6 +608,8 @@ static void resolve_open(void) {
         log_info("ieee: DOS command '%s' (ignored)", open_name);
         return;
     }
+    rel_channel_t* const previous = rel_find(open_unit, open_chan & 0x0F);
+    if (previous != NULL) previous->in_use = false;
 
     // Slot = the addressed unit's pair, plus the drive number from the
     // "0:"/"1:" (or "0."/"1.") prefix; default drive 0 of that unit.
@@ -492,6 +632,7 @@ static void resolve_open(void) {
     file_state = file_channel_closed;
     streaming = false;
     // New file: discard any stale queued data from a previous channel.
+    data_tx_park();
     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
 
     if (!drives[slot].present) {
@@ -538,6 +679,7 @@ static void resolve_open(void) {
             return;
         }
         rc->in_use = true;
+        rc->wr_active = false;
         rc->slot = (uint8_t) slot;
         rc->chan = open_chan & 0x0F;
         rc->reclen = entry.record_len >= DISKIMAGE_REL_MIN_RECORD_LENGTH
@@ -687,6 +829,7 @@ static void handle_command(uint8_t cmd) {
             break;
 
         case IEEE_CMD_TALK_BASE:  // TALK / UNTALK
+            streaming = false;
             if (cmd == IEEE_CMD_UNTALK) {
                 mcu_talking = false;
                 // Channel data persists across UNTALK (continuation) -- just
@@ -712,20 +855,30 @@ static void handle_command(uint8_t cmd) {
                 }
             }
             if (mcu_talking) {
+                streaming = false;
                 uint8_t chan = IEEE_CMD_CHANNEL(cmd);
                 rel_channel_t* rc;
                 if (chan == 15) {
                     push_status(talk_unit);
                 } else if ((rc = rel_find(talk_unit, chan)) != NULL) {
                     rel_serve(rc);
-                } else if (file_state == file_channel_readable
+                } else if ((file_state == file_channel_readable
+                            || file_state == file_channel_exhausted)
                     && talk_unit == file_unit && chan == file_chan) {
-                    streaming = true;
+                    if (data_tx_channel != NULL) {
+                        data_tx_park();
+                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+                    }
+                    data_tx_bind(file_unit, file_chan);
+                    streaming = file_state == file_channel_readable;
                 }
             }
             break;
 
         case IEEE_CMD_CLOSE_BASE:  // CLOSE ($Ex) / OPEN ($Fx)
+            // Fabric has already flushed ordinary OPEN/CLOSE, but its GET
+            // counter still records genuine progress before that discard.
+            if (mcu_listening && IEEE_CMD_CHANNEL(cmd) != 15) data_tx_park();
             if (IEEE_CMD_IS_OPEN(cmd)) {
                 if (mcu_listening) {
                     open_chan = IEEE_CMD_CHANNEL(cmd);
@@ -757,6 +910,7 @@ static void handle_command(uint8_t cmd) {
 // Public API
 // ----------------------------------------------------------------------------
 
+// Apply mounted-media enablement after callers have parked or reset DOS state.
 static void sync_emulation_enabled(void) {
     bool has_mounted_drive = false;
     for (unsigned int slot = 0; slot < NUM_DRIVES; slot++) {
@@ -802,18 +956,38 @@ bool ieee_drive_mount(unsigned int slot, const char* filename) {
 
     bool mounted = mount_image(slot, filename);
     if (!mounted) log_info("ieee: could not mount disk image: /disks/%s", filename);
-    if (mounted) sync_emulation_enabled();
+    if (mounted) {
+        data_tx_park();
+        for (unsigned int index = 0; index < MAX_REL_CHANNELS; ++index)
+            if (rel_chans[index].slot == slot) rel_chans[index].in_use = false;
+        if (stream_slot == slot) {
+            file_state = file_channel_closed;
+            streaming = false;
+        }
+        sync_emulation_enabled();
+    }
     return mounted;
 }
 
 void ieee_drive_task(void) {
     if (!emulation_enabled) return;
+    data_tx_sync();
 
     // Drain the RX FIFO (commands and listener data).
     for (unsigned int i = 0; i < 64; i++) {
         uint8_t st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
         if (!(st & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) break;
 
+        // Hardware may already be serving a newer selection than this RX head.
+        // Pause first, then yield until NDAC releases the latched byte. Never
+        // block the MCU or flush/rebind its FIFO while a listener is sampling.
+        data_tx_pause();
+        if (spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR)
+            & ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK) return;
+
+        // Sample the head's ATN flag immediately before its paired RX read,
+        // after the pause transactions (also preserving semantic RX tracing).
+        st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
         bool is_atn = (st & ECONOPET_IEEE_ST_RX_ATN_MASK) != 0;
         uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
         spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
@@ -834,5 +1008,8 @@ void ieee_drive_task(void) {
         }
     }
 
+    // Native UNLISTEN/foreign LISTEN preserve TLKACT and its queued response.
+    // Only resume a retained binding, never one invalidated by queue parking.
+    data_tx_resume();
     if (streaming) service_tx();
 }

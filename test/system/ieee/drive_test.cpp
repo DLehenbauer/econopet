@@ -32,6 +32,7 @@ constexpr size_t D80SectorsPerTrack = 29;
 constexpr size_t D80DirectoryTrack = 39;
 constexpr uint8_t D80DataTrack = 38;
 constexpr size_t TerminalPayloadLimit = DISKIMAGE_SECTOR_PAYLOAD_SIZE + 1;
+constexpr size_t SequentialFixtureLimit = 2 * DISKIMAGE_SECTOR_PAYLOAD_SIZE;
 constexpr econopet::Cycles RomServicePeriod = 1000;
 // Allow the full native timer/software wait, successful prefix and readdressing.
 constexpr econopet::Cycles TerminalRomBudget = 12'000'000;
@@ -58,8 +59,8 @@ size_t sequential_first_sector(const std::vector<uint8_t>& image, bool d80) {
 
 // Build a bounded SEQ chain for both native models without using the drive parser.
 std::vector<uint8_t> sequential_image(bool d80, const std::vector<uint8_t>& payload) {
-    if (payload.size() < 2 || payload.size() > TerminalPayloadLimit)
-        throw std::invalid_argument("terminal SEQ fixture requires 2..255 payload bytes");
+    if (payload.size() < 2 || payload.size() > SequentialFixtureLimit)
+        throw std::invalid_argument("SEQ fixture requires 2..508 payload bytes");
     if (!d80) return D64{}.seq("BASIC", payload).bytes();
     std::vector<uint8_t> image(DISKIMAGE_D80_SIZE);
     const auto directory = sequential_directory(true);
@@ -89,6 +90,15 @@ std::vector<uint8_t> sequential_image(bool d80, const std::vector<uint8_t>& payl
     return image;
 }
 
+// Decorate a bounded data chain for REL engine tests, without inventing side sectors.
+std::vector<uint8_t> relative_image(bool d80, const std::vector<uint8_t>& payload, uint8_t reclen) {
+    auto image = sequential_image(d80, payload);
+    constexpr size_t FileTypeOffset = 2;
+    image[sequential_directory(d80) + FileTypeOffset] = 0x80 | DISKIMAGE_FTYPE_REL;
+    image[sequential_directory(d80) + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = reclen;
+    return image;
+}
+
 // Repair the mounted backing file in place, without resetting the drive session.
 void repair_sequential_image(const char* name, const std::vector<uint8_t>& image) {
     char path[SD_PATH_MAX];
@@ -108,6 +118,19 @@ void service_rx(System& system, FirmwareSession& firmware, const char* context) 
         .service(firmware.service_adapter())
         .until([](const System& board) { return !board.snapshot().ieee_rx_ready_o; })
         .run(context);
+}
+
+// Send a binary native P command through the production RX/SPI path.
+void position_relative(System& system, FirmwareSession& firmware, IeeeController& controller,
+        uint16_t record, uint8_t offset, Channel channel = Channel{DataChannel}) {
+    controller.command(Listen(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{CommandChannel}));
+    const std::vector<uint8_t> bytes{'P', static_cast<uint8_t>(IEEE_CMD_SECONDARY(channel.value())),
+        static_cast<uint8_t>(record), static_cast<uint8_t>(record >> 8), offset};
+    for (size_t i = 0; i < bytes.size(); ++i)
+        controller.data(bytes[i], i + 1 == bytes.size() ? Eoi::Last : Eoi::More);
+    controller.command(Unlisten);
+    service_rx(system, firmware, "service native REL P");
 }
 
 // Send and independently verify a native OPEN for a selected device and filename.
@@ -196,6 +219,25 @@ class DriveStatusTest : public FirmwareTest,
 
 // Exercise ordinary terminal state and in-place recovery on D64 and D80 media.
 class DriveTerminalTest : public FirmwareTest, public testing::WithParamInterface<bool> {};
+
+// Share record-engine contracts between D64/4040 and D80/single-sided 8050.
+class DriveRelativeTest : public FirmwareTest, public testing::WithParamInterface<bool> {};
+
+// Cross native models, interruption phases, and same/status/channel/unit ownership.
+class DriveRelativeContinuationTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, int, int>> {};
+
+// Cross media, NRFD phase, and final-byte state while parking a live response.
+class DriveRelativeParkingTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
+
+// Cross media, SEQ/REL formats, and commands that preserve the selected talker.
+class DrivePreservedTalkTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
+
+// Execute each selected native controller against both media models.
+class DriveRelativeRomTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
 
 // Cross native controller revisions with media model and EOF versus read failure.
 class DriveRomTerminalTest : public FirmwareTest,
@@ -520,23 +562,22 @@ INSTANTIATE_TEST_SUITE_P(ModelsFailuresRevisions, DriveRomTerminalTest,
         testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4, test_rom::Set::Waterloo)));
 
 // PR #54: SETLST retains the first NUL of an empty record and RDREL marks it EOI.
-TEST_F(FirmwareTest, DISABLED_EmptyRelativeRecordReturnsNulThenAdvances) {
+TEST_P(DriveRelativeTest, EmptyRelativeRecordReturnsNulThenAdvances) {
+    const bool d80 = GetParam();
     constexpr uint8_t RecordLength = 129;
-    constexpr size_t DirectoryTrack = 18;
-    constexpr size_t DirectorySector = 1;
     constexpr size_t FileTypeOffset = 2;
     constexpr uint8_t ClosedRelativeFile = 0x80 | DISKIMAGE_FTYPE_REL;
     std::vector<uint8_t> payload(2 * RecordLength);
     for (size_t i = RecordLength; i < payload.size(); ++i)
         payload[i] = static_cast<uint8_t>(0xa0 + i / DISKIMAGE_SECTOR_PAYLOAD_SIZE);
-    auto image = D64{}.seq("BASIC", payload);
-    const auto entry = D64::offset(DirectoryTrack, DirectorySector);
+    auto image = sequential_image(d80, payload);
+    const auto entry = sequential_directory(d80);
     // Like the unit fixture, this probes the data-chain engine, not side-sector validation.
-    image.corrupt(entry + FileTypeOffset, {ClosedRelativeFile})
-         .corrupt(entry + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET, {RecordLength});
+    image[entry + FileTypeOffset] = ClosedRelativeFile;
+    image[entry + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = RecordLength;
 
     IeeeController controller(system);
-    firmware.mount(image);
+    firmware.mount(image, d80 ? "relative.d80" : "relative.d64");
     open_file(system, controller, Channel{DataChannel}, "BASIC,L");
     service_rx(system, firmware, "service REL OPEN");
     controller.command(Talk(Device{DeviceAddress}));
@@ -554,6 +595,386 @@ TEST_F(FirmwareTest, DISABLED_EmptyRelativeRecordReturnsNulThenAdvances) {
         expected.push_back(data(payload[i], i + 1 == payload.size() ? Eoi::Last : Eoi::More));
     receive_payload(system, controller, expected);
 }
+
+// Each empty record is a distinct NUL/EOI response, even across a sector link.
+TEST_P(DriveRelativeTest, ConsecutiveEmptyRelativeRecordsRemainSeparate) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 129;
+    constexpr size_t RecordCount = 3, FileTypeOffset = 2;
+    constexpr uint8_t ClosedRelativeFile = 0x80 | DISKIMAGE_FTYPE_REL;
+    std::vector<uint8_t> payload(RecordCount * RecordLength);
+    constexpr uint8_t Marker = 0xa5;
+    payload[2 * RecordLength] = Marker;
+    auto image = sequential_image(d80, payload);
+    const auto entry = sequential_directory(d80);
+    image[entry + FileTypeOffset] = ClosedRelativeFile;
+    image[entry + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = RecordLength;
+
+    IeeeController controller(system);
+    firmware.mount(image, d80 ? "empty-records.d80" : "empty-records.d64");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service consecutive empty REL OPEN");
+
+    // Readdress twice without position commands: neither empty record is skipped.
+    for (size_t record = 0; record < RecordCount; ++record) {
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service consecutive empty REL TALK");
+        receive_payload(system, controller, {data(record < 2 ? 0 : Marker, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "service consecutive empty REL UNTALK");
+    }
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+        d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+}
+
+// Check zero-suffix pointer wrap and invalid-P replacement through actual IEEE traffic.
+TEST_P(DriveRelativeTest, PositionSuffixAndOverflowFollowNativePointers) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 129, Marker = 0xa5, Successor = 0x7b;
+    std::vector<uint8_t> payload(3 * RecordLength);
+    payload[0] = Marker;
+    payload[DISKIMAGE_SECTOR_PAYLOAD_SIZE] = Successor;
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength), d80 ? "position.d80" : "position.d64");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service P fixture OPEN");
+    position_relative(system, firmware, controller, 1, RecordLength);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service zero-suffix REL TALK");
+    std::vector<Record> expected;
+    for (size_t i = RecordLength - 1; i <= DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++i)
+        expected.push_back(data(payload[i],
+            i == DISKIMAGE_SECTOR_PAYLOAD_SIZE ? Eoi::Last : Eoi::More));
+    receive_payload(system, controller, expected);
+    controller.command(Untalk);
+    position_relative(system, firmware, controller, 1, RecordLength + 1);
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+        d80 ? "51,OVERFLOW IN RECORD,00,00,0\r" : "51,OVERFLOW IN RECORD,00,00\r");
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service overflow-recovered REL TALK");
+    receive_payload(system, controller, {data(Marker, Eoi::Last)});
+}
+
+// Queued A/B selections must never expose A's bytes while the fabric serves B.
+TEST_P(DriveRelativeTest, QueuedSelectionsPauseInitiallyUnboundData) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 3;
+    constexpr Channel Original{DataChannel}, Peer{DataChannel + 1};
+    const std::vector<uint8_t> payload{0x11, 0x12, 0x13, 0x21, 0x22, 0x23};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength),
+        d80 ? "queued-selections.d80" : "queued-selections.d64");
+    open_file(system, controller, Original, "BASIC,L");
+    service_rx(system, firmware, "service original queued-selection OPEN");
+    open_file(system, controller, Peer, "BASIC,L");
+    service_rx(system, firmware, "service peer queued-selection OPEN");
+    position_relative(system, firmware, controller, 2, 1, Peer);
+
+    // Let hardware reach B before firmware handles A's earlier selection.
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Peer));
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, BusReleased);
+    service_rx(system, firmware, "service accumulated A-to-B selections");
+    const std::vector<Record> expected{
+        data(payload[3]), data(payload[4]), data(payload[5], Eoi::Last)};
+    std::vector<Record> received;
+    for (size_t i = 0; i < expected.size(); ++i) received.push_back(controller.receive());
+    require_sequence(received, expected, "queued selection B CPU payload");
+    require_sequence(wire.records(), expected, "queued selection B wire isolation");
+
+    // A's untouched prepared response must still start at its first byte.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    service_rx(system, firmware, "service original queued-selection continuation");
+    receive_payload(system, controller,
+        {data(payload[0]), data(payload[1]), data(payload[2], Eoi::Last)});
+}
+
+INSTANTIATE_TEST_SUITE_P(Models, DriveRelativeTest, testing::Bool());
+
+// Native TLK20/TLK30 advancement survives interruption and reuse of the shared FIFO.
+TEST_P(DriveRelativeContinuationTest, ResumesAtNativePrefetchBoundary) {
+    const auto [d80, phase, owner] = GetParam();
+    constexpr uint8_t RecordLength = 129;
+    constexpr int BeforeDav = 0, BeforeNrfd = 1, AfterNrfd = 2, PartialRecord = 3;
+    constexpr size_t ConsumedPrefix = 5;
+    std::vector<uint8_t> payload(3 * RecordLength);
+    for (size_t i = phase == PartialRecord ? 0 : RecordLength; i < payload.size(); ++i)
+        payload[i] = static_cast<uint8_t>(i | 1);
+    const auto image = relative_image(d80, payload, RecordLength);
+    const char* const name = d80 ? "continuation.d80" : "continuation.d64";
+    IeeeController controller(system);
+    firmware.mount(image, name);
+    const Device peer{static_cast<uint8_t>(owner == 2 ? DeviceAddress + 1 : DeviceAddress)};
+    const Channel peer_channel{static_cast<uint8_t>(owner == 1 ? DataChannel + 1 : DataChannel)};
+    if (owner == 2) ASSERT_TRUE(ieee_drive_mount(2, name));
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service interrupted REL OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service interrupted REL TALK");
+
+    // Hold native advancement independently of a private PET data-register read.
+    if (phase == PartialRecord) {
+        for (size_t i = 0; i < ConsumedPrefix; ++i)
+            ASSERT_EQ(controller.receive(), data(payload[i]));
+    } else {
+        controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+        if (phase != BeforeDav) {
+            controller.write(pet::ViaPortB, BusReleased);
+            system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+                ByteBudget, "empty REL DAV before interruption");
+            if (phase == BeforeNrfd)
+                ASSERT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), 0);
+            if (phase == AfterNrfd)
+                controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+        }
+    }
+    const uint8_t lines = phase == BeforeNrfd ? BusReleased
+        : static_cast<uint8_t>(BusReleased & ~pet::Nrfd);
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(lines & ~pet::Atn));
+    controller.command(Untalk);
+    service_rx(system, firmware, "service interrupted REL UNTALK");
+
+    // A status switch preserves FIFO contents, while OPEN forces a hardware discard.
+    if (owner == 0) {
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+            d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+    } else {
+        open_file(system, controller, peer_channel, "BASIC,L", peer);
+        service_rx(system, firmware, "service peer REL OPEN");
+        controller.command(Talk(peer));
+        controller.command(Secondary(peer_channel));
+        controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+        controller.write(pet::ViaPortB, BusReleased);
+        system.tick(1000);
+        EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
+        service_rx(system, firmware, "service peer REL TALK");
+        EXPECT_EQ(controller.receive(), data(payload[0],
+            phase == PartialRecord ? Eoi::More : Eoi::Last));
+        if ((phase == PartialRecord || phase == AfterNrfd) && owner == 1) {
+            // A write through the other channel changes the shared backing file,
+            // not the original channel's already-prefetched pending response.
+            controller.command(Untalk);
+            controller.command(Listen(peer));
+            controller.command(Secondary(peer_channel));
+            controller.data('Z', Eoi::Last);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "service peer write while REL response parked");
+        }
+    }
+
+    // Returning without firmware service must not expose the peer's unread bytes.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    auto resumed_wire = system.trace_ieee();
+    if (owner != 0) {
+        controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+        controller.write(pet::ViaPortB, BusReleased);
+        system.tick(1000);
+        EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
+    }
+    service_rx(system, firmware, "service resumed REL TALK");
+    std::vector<Record> expected;
+    if (phase == BeforeDav || phase == BeforeNrfd) {
+        expected.push_back(data(0, Eoi::Last));
+    } else {
+        const size_t first = phase == PartialRecord ? ConsumedPrefix : RecordLength;
+        const size_t end = phase == PartialRecord ? RecordLength : 2 * RecordLength;
+        for (size_t i = first; i < end; ++i)
+            expected.push_back(data(payload[i], i + 1 == end ? Eoi::Last : Eoi::More));
+    }
+    std::vector<Record> received;
+    for (size_t i = 0; i < expected.size(); ++i) received.push_back(controller.receive());
+    require_sequence(received, expected, "resumed REL CPU payload");
+    require_sequence(resumed_wire.records(), expected, "resumed REL wire payload");
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsPhasesOwners, DriveRelativeContinuationTest,
+    testing::Combine(testing::Bool(), testing::Values(0, 1, 2, 3), testing::Values(0, 1, 2)));
+
+// A stale B selection must not withdraw A's byte before the PET samples it.
+TEST_P(DriveRelativeParkingTest, KeepsPresentationThroughNdacWhileDeferringReuse) {
+    const auto [d80, prefetched, final_byte] = GetParam();
+    constexpr uint8_t RecordLength = 3;
+    constexpr Channel Original{DataChannel}, Peer{DataChannel + 1};
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0xa7, 0x51, 0x52, 0x53};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength),
+        d80 ? "parking.d80" : "parking.d64");
+    open_file(system, controller, Original, "BASIC,L");
+    service_rx(system, firmware, "service parking original OPEN");
+    open_file(system, controller, Peer, "BASIC,L");
+    service_rx(system, firmware, "service parking peer OPEN");
+    position_relative(system, firmware, controller, 2, 1, Peer);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    service_rx(system, firmware, "service parking initial TALK");
+    const size_t selected = final_byte ? RecordLength - 1 : 0;
+    for (size_t i = 0; i < selected; ++i)
+        ASSERT_EQ(controller.receive(), data(payload[i]));
+
+    // Hardware resumes A while B/A selections remain queued for the MCU.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Peer));
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Original));
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "parking original byte DAV");
+    if (prefetched)
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+
+    // A cooperative pass must return without draining commands or dropping DAV.
+    firmware.service();
+    EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
+    EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+    if (!prefetched) {
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+        firmware.service();
+        EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
+        EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+    }
+
+    // KERNAL ACPTR samples EOI/DIO only after asserting NRFD.
+    EXPECT_EQ((controller.read(pet::Pia1PortA) & EoiInput) == 0, final_byte);
+    EXPECT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), payload[selected]);
+    controller.write(pet::Pia2ControlA, PiaC2High.bits());
+    system.run_until([](const System& board) { return board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "parking original byte NDAC acknowledgement");
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    service_rx(system, firmware, "service deferred B/A selections");
+
+    // Exactly one GET advances A, including the EOI-to-next-record boundary.
+    const size_t end = final_byte ? payload.size() : RecordLength;
+    std::vector<Record> expected;
+    for (size_t i = selected + 1; i < end; ++i)
+        expected.push_back(data(payload[i], i + 1 == end ? Eoi::Last : Eoi::More));
+    receive_payload(system, controller, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsPrefetchFinal, DriveRelativeParkingTest,
+    testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
+
+// UNLISTEN and foreign LISTEN must resume queued data without TALK/secondary.
+TEST_P(DrivePreservedTalkTest, ContinuesWithoutReaddressingAfterUnlisten) {
+    const auto [d80, relative, foreign_listen] = GetParam();
+    constexpr uint8_t RecordLength = 4;
+    constexpr Device ForeignDevice{DeviceAddress - 1};
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0x51, 0x52};
+    IeeeController controller(system);
+    firmware.mount(relative
+            ? relative_image(d80, payload, RecordLength)
+            : sequential_image(d80, payload),
+        d80 ? "preserved-talker.d80" : "preserved-talker.d64");
+    open_file(system, controller, Channel{DataChannel}, relative ? "BASIC,L" : "BASIC");
+    service_rx(system, firmware, "service preserved-talker OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service preserved-talker TALK");
+    ASSERT_EQ(controller.receive(), data(payload.front()));
+
+    // Repeated interruptions retain the channel, exact unread tail, and final EOI.
+    for (size_t i = 1; i < payload.size(); ++i) {
+        if (foreign_listen) controller.command(Listen(ForeignDevice));
+        controller.command(Unlisten);
+        service_rx(system, firmware, "service talk-preserving commands");
+        firmware.service();
+        receive_payload(system, controller,
+            {data(payload[i], i + 1 == payload.size() ? Eoi::Last : Eoi::More)});
+    }
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsFormatsCommands, DrivePreservedTalkTest,
+    testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
+
+// Execute native PET/Waterloo input for consecutive empty records, then nonempty data.
+TEST_P(DriveRelativeRomTest, NativeReceivePreservesEmptyRecordsAndEoi) {
+    const auto [d80, revision] = GetParam();
+    constexpr uint8_t RecordLength = 129, Marker = 0xa5;
+    std::vector<uint8_t> payload(3 * RecordLength);
+    payload[2 * RecordLength] = Marker;
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength), d80 ? "native-rel.d80" : "native-rel.d64");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service native empty REL OPEN");
+    controller.write(pet::ViaPortB, BusReleased);
+    system.cpu().assert_reset();
+    auto wire = system.trace_ieee();
+    if (revision != test_rom::Set::Waterloo) {
+        KernalFixture rom(system, revision);
+        auto test = rom.program();
+        const auto received = test.data("REL payload", NativePayload, 3, test_asm::Capture::Yes);
+        const auto flags = test.data("REL status", NativeLastStatus, 3, test_asm::Capture::Yes);
+        const auto result = test.within(TerminalRomBudget)
+            .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+            .run([&](auto& p) {
+                rom.init_ieee(p);
+                rom.device(p);
+                for (size_t record = 0; record < 3; ++record) {
+                    p.lda(test_asm::imm(0)).sta(test_asm::zp(KernalWorkspace::Status))
+                     .lda(test_asm::imm(DeviceAddress)).jsr(rom.entry(KernalRoutine::Talk))
+                     .lda(test_asm::imm(IEEE_CMD_SECONDARY(DataChannel))).jsr(rom.entry(KernalRoutine::Tksa))
+                     .jsr(rom.entry(KernalRoutine::Acptr)).sta(received.byte(record))
+                     .lda(test_asm::zp(KernalWorkspace::Status)).sta(flags.byte(record))
+                     .jsr(rom.entry(KernalRoutine::Untalk));
+                }
+            });
+        EXPECT_EQ(result[received], (std::vector<uint8_t>{0, 0, Marker}));
+        EXPECT_EQ(result[flags], (std::vector<uint8_t>{0x40, 0x40, 0x40}));
+    } else {
+        WaterlooFixture rom(system);
+        auto test = rom.program();
+        const auto received = test.data("REL payload", NativePayload, 3, test_asm::Capture::Yes);
+        const auto flags = test.data("REL flags", NativeLastStatus, 3, test_asm::Capture::Yes);
+        const auto result = test.within(TerminalRomBudget)
+            .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+            .run([&](auto& p) {
+                rom.init_ieee(p);
+                rom.device(p, DeviceAddress, DataChannel);
+                p.lda(test_asm::imm(0)).sta(WaterlooActiveRole).sta(WaterlooGlobalStatus)
+                 .lda(test_asm::imm(1)).sta(WaterlooWorkspace::WaitParameterLow);
+                for (size_t record = 0; record < 3; ++record) {
+                    p.lda(test_asm::imm(0)).sta(WaterlooWorkspace::DiskFlags)
+                     .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Talk))
+                     .jsr(rom.entry(WaterlooRoutine::Input)).stb(received.byte(record).address())
+                     .lda(WaterlooWorkspace::DiskFlags).sta(flags.byte(record))
+                     .jsr(rom.entry(WaterlooRoutine::Untalk));
+                }
+            });
+        EXPECT_EQ(result[received], (std::vector<uint8_t>{0, 0, Marker}));
+        for (size_t record = 0; record < 3; ++record)
+            EXPECT_EQ(result[flags.byte(record)] & 1, 1);
+    }
+    std::vector<Record> expected;
+    for (const uint8_t value : {uint8_t{0}, uint8_t{0}, Marker}) {
+        expected.push_back(command(Talk(Device{DeviceAddress})));
+        expected.push_back(command(Secondary(Channel{DataChannel})));
+        expected.push_back(data(value, Eoi::Last));
+        expected.push_back(command(Untalk));
+    }
+    require_sequence(wire.records(), expected, "native empty REL wire bytes");
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsRevisions, DriveRelativeRomTest,
+    testing::Combine(testing::Bool(),
+        testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4, test_rom::Set::Waterloo)));
 
 // Check exact native status text, with a drive suffix only for 8050 DOS 2.7.
 TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {

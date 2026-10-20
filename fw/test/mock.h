@@ -32,7 +32,9 @@ size_t mock_ieee_data_count(void);
 uint8_t mock_ieee_data_byte(size_t index);
 // Returns a captured file-channel byte's EOI marker.
 bool mock_ieee_data_eoi(size_t index);
-// Discards captured file-channel bytes without changing other FIFOs.
+// Models NRFD-triggered advancement through a prefix of captured data.
+void mock_ieee_consume_data(size_t count);
+// Models NRFD-triggered advancement through all captured file-channel bytes.
 void mock_ieee_clear_data(void);
 // Returns the number of captured command-channel bytes.
 size_t mock_ieee_status_count(void);

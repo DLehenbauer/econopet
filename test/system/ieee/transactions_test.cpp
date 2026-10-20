@@ -40,10 +40,14 @@ TEST(IeeeTransactions, RegisterFlagsPreserveTheirHardwareDomains) {
     EXPECT_EQ(pet::EoiInput, 0x40);
     EXPECT_EQ((fpga::IeeeControlBit::Enabled | fpga::IeeeControlBit::Flush).bits(), 0x03);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::TxRoom}.bits(), 0x02);
+    EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::DataActive}.bits(), 0x04);
+    EXPECT_TRUE(fpga::IeeeControlStatus::from_bits(0x04).contains(fpga::IeeeControlStatusBit::DataActive));
+    EXPECT_EQ(fpga::IeeeControlStatus::from_bits(0x07).bits(), 0x07);
     EXPECT_TRUE(fpga::IeeeStatus::from_bits(0x80).contains(fpga::IeeeStatusBit::TalkStarved));
     EXPECT_FALSE(fpga::IeeeStatus::from_bits(0x80).contains(fpga::IeeeStatusBit::RxReady));
     EXPECT_THROW(fpga::IeeeControl::from_bits(0x08), std::invalid_argument);
-    EXPECT_THROW(fpga::IeeeControlStatus::from_bits(0x04), std::invalid_argument);
+    EXPECT_THROW(fpga::IeeeControlStatus::from_bits(0x08), std::invalid_argument);
+    EXPECT_THROW(fpga::IeeeControlStatus::from_bits(0x0c), std::invalid_argument);
 }
 
 // Check encodings against literal protocol bytes rather than production macros.

@@ -23,6 +23,7 @@ typedef struct {
 
 static struct {
     uint8_t ctrl;
+    uint8_t prefetched;
     struct {
         uint8_t byte;
         bool atn;
@@ -44,6 +45,7 @@ static bool mock_ieee_addr(uint32_t addr) {
 static void mock_ieee_flush(bool data_only) {
     mock_ieee.data_count = 0;
     if (!data_only) {
+        mock_ieee.prefetched = 0;
         mock_ieee.rx_head = 0;
         mock_ieee.rx_count = 0;
         mock_ieee.status_count = 0;
@@ -78,7 +80,16 @@ bool mock_ieee_data_eoi(size_t index) {
 
 // Models the controller consuming all captured file-channel bytes.
 void mock_ieee_clear_data(void) {
-    mock_ieee.data_count = 0;
+    mock_ieee_consume_data(mock_ieee.data_count);
+}
+
+// Advances only native GET progress, preserving the unread FIFO suffix.
+void mock_ieee_consume_data(size_t count) {
+    ck_assert_uint_le(count, mock_ieee.data_count);
+    mock_ieee.prefetched = (uint8_t) (mock_ieee.prefetched + count);
+    mock_ieee.data_count -= count;
+    memmove(mock_ieee.data, mock_ieee.data + count,
+        mock_ieee.data_count * sizeof(mock_ieee.data[0]));
 }
 
 // Returns the captured command-channel byte count.
@@ -107,6 +118,7 @@ void mock_ieee_clear_status(void) {
 uint8_t spi_read_at(uint32_t addr) {
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
+        if (addr == ECONOPET_WB_IEEE_TX_ADDR) return mock_ieee.prefetched;
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
             uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_ENABLE_MASK)
                 ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;

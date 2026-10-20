@@ -109,6 +109,7 @@
 // IEEE control-read masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
+#define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u
@@ -122,3 +123,8 @@
 
 // IEEE data FIFO capacity guaranteed by TX room (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_TX_BURST_CHUNK 64u
+
+// TX reads report modulo-256 NRFD prefetch progress, unaffected by data flush.
+// SA writes bind data TX to a unit/channel. Zero retains unbound bench access.
+#define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
+#define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u
