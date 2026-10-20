@@ -455,6 +455,7 @@ controller cases.
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | All 46 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, eight in-flight parking cases, and six actual PET/Waterloo receive cases) |
 | Complete firmware unit suite | 547 checks pass, including sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
+| Complete host unit and contract suite | All 124 cases pass, including acceptance of CTRL readback bit `$04` as `DataActive` and rejection of reserved `$08`, alone or combined with the valid flag |
 | Board IEEE, shared hardware contract, and host encoding | All 43 selected cases pass on the final RTL, including the exact `$04` active-data mask |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including stable active DAV/DIO/EOI through owner pause and NDAC, active-data readback, modulo-counter wrap, and simultaneous GET/discard coverage |
 | Production firmware | `RelWithDebInfo` build passes |
