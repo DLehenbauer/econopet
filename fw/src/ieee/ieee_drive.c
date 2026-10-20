@@ -268,6 +268,7 @@ typedef struct {
 static rel_channel_t rel_chans[MAX_REL_CHANNELS];
 static rel_channel_t* data_tx_channel;
 static uint8_t data_tx_prefetched;
+static uint8_t data_tx_owner; // Retained queue binding, not the transient hardware pause.
 static void rel_next_record(rel_channel_t* rc);
 static void rel_prepare(rel_channel_t* rc);
 
@@ -302,6 +303,12 @@ static void data_tx_pause(void) {
         ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
 }
 
+// Restore a retained queue owner after a temporary RX-service pause.
+static void data_tx_resume(void) {
+    if (data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK)
+        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, data_tx_owner);
+}
+
 // Save the unread tail before firmware or fabric reuses the shared data FIFO.
 // Ordinary RX service has already waited for the active presentation to finish.
 // Explicit reset/remount instead deliberately invalidates the old transfer.
@@ -309,13 +316,14 @@ static void data_tx_park(void) {
     data_tx_pause();
     data_tx_sync();
     data_tx_channel = NULL;
+    data_tx_owner = 0;
 }
 
 // Bind queued data before releasing it to the selected hardware unit/channel.
 static void data_tx_bind(uint8_t unit, uint8_t chan) {
-    spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
-        ECONOPET_IEEE_TX_OWNER_VALID_MASK
-        | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan);
+    data_tx_owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
+        | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan;
+    data_tx_resume();
 }
 
 // Channels are keyed by (unit, chan): the d8d9 descriptor table reuses
@@ -357,6 +365,7 @@ static void reset_protocol_state(void) {
     streaming = false;
     streamed_bytes = 0;
     data_tx_channel = NULL;
+    data_tx_owner = 0;
     memset(rel_chans, 0, sizeof(rel_chans));
     memset(ch15_cmd, 0, sizeof(ch15_cmd));
     ch15_cmd_len = 0;
@@ -999,5 +1008,8 @@ void ieee_drive_task(void) {
         }
     }
 
+    // Native UNLISTEN/foreign LISTEN preserve TLKACT and its queued response.
+    // Only resume a retained binding, never one invalidated by queue parking.
+    data_tx_resume();
     if (streaming) service_tx();
 }

@@ -296,6 +296,7 @@ All Commodore source links below select `mist64/cbmsrc` revision
 | Empty REL record (#54) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 | [4040 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4) and [8250 `rel4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4): `SETLST`, `FNDLST`; respective `rel1`: `NXTREC`, and `rel3`: `RD25`, `RD30`, `RD40` | Scan the whole record. If every byte is zero, retain the valid selected byte as the last character. That NUL carries EOI before advancement | Both `DriveRelativeTest` cases on D64/D80, native unit matrix and flat-extension controls | [VICE `vdrive_rel_read`](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) reads the selected byte before comparing length and moving the record pointer |
 | Interrupted REL continuation | Same selected 4040 and shared 8050/8250 sources | Respective `ieee`: `TALK1` sends saved `CHNDAT`, `TLK20`/`TLK30` call `GET` on asserted NRFD before `TLK35` waits for NDAC. Respective `tst4`: `GET` dispatches to `rel3` `RDREL` | Before NRFD, readdressing resumes the same byte, even after a private PET sample. After NRFD, it resumes the prefetched byte. Queueing and FIFO discard never advance a record | `DriveRelativeContinuationTest`, firmware continuation matrix, `ieee_tb` owner/progress controls | Native channel-indexed `CHNDAT`/`CHNRDY` storage, independent CPU and wire observations, and MAME RIOT NRFD/NDAC wiring cited above |
 | Queued REL owner selections | Same selected drive sources | Respective `ieee`: `TALK1` selects the addressed channel's saved `CHNDAT` through `LINDX` | Processing an earlier queued selection must never present that channel's data to the currently selected peer | `QueuedSelectionsPauseInitiallyUnboundData` checks exact CPU and wire bytes on D64/D80, starting with no queued REL batch | Same native channel-local data and MAME IEEE unit/handshake wiring cited above |
+| Selected talker after UNLISTEN or foreign LISTEN | 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee) and [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): `DCDE20`/`DCDE30` clear listener/addressed state without clearing `TLKACT`, then `ATN60` calls `TALK` using the retained channel | UNLISTEN `$3F`, alone or following foreign LISTEN `$27`, must preserve the selected talker's unread SEQ/REL bytes and final EOI without another TALK or secondary command | `DrivePreservedTalkTest.ContinuesWithoutReaddressingAfterUnlisten`: eight D64/D80, SEQ/REL, and command variants with repeated interruptions, an idle service pass, and exact CPU/wire payload checks | [Independent TALK/LISTEN description](https://www.pagetable.com/173) distinguishes UNLISTEN from UNTALK and specifies foreign LISTEN as ignored |
 | Parking an active REL presentation | Same selected 4040 and shared 8050/8250 DOS 2.7 drive sources, PET KERNAL 4.0 | Respective `ieee`: `TLK20` waits for NRFD, `TLK30` calls `GET`, `TLK35` waits for NDAC, and only `TLKRTN` releases DIO/DAV/EOI. [PET `ob1src`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob1src): `ACPTR` asserts NRFD before sampling EOI and DIO, then releases NDAC | Parking stops new presentations, but preserves the active byte and EOI through NDAC. Firmware must yield without consuming queued commands or reusing the FIFO while that presentation remains active | `DriveRelativeParkingTest.KeepsPresentationThroughNdacWhileDeferringReuse`: eight D64/D80 A-B-A cases before/after NRFD and on nonfinal/final bytes. `ieee_tb` separately checks stable pins, exactly one GET, and active readback | Independent IEEE handshake description and MAME NRFD/NDAC hardware wiring cited above distinguish prefetch from listener acknowledgement |
 | REL preparation after EOI | Same selected drive sources | [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3) and [8250 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3): `RD40` calls `NXTREC`, then `RD25`/`RD30` save the next byte and readiness/EOI in `CHNDAT`/`CHNRDY` | GET of an EOI byte prepares the next record before NDAC. A peer write afterward must not replace that prepared data or EOI | `test_relative_eoi_retains_prepared_next_record`, plus the after-NRFD peer-write integration phase on D64/D80 | [VICE REL reader](https://github.com/VICE-Team/svn-mirror/blob/main/vice/src/vdrive/vdrive-rel.c) retains per-channel sector buffers and advances `bufptr`/`record_next` at the record boundary. It is not an IEEE prefetch-phase oracle |
 | REL writes after physical pointer wrap | Same selected drive sources | [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2): `WR40` calls `CLREC`, then `RD40`/`NXTREC`, retaining the physical buffer position | After the 129-byte-record P(1,129) wrapped read, consecutive writes start at payload offsets 383 and 512, not logical offset 258. Earlier data remains intact | `test_relative_wrapped_read_write_continuation` compares the entire backing payload for all sixteen model/unit/drive combinations | Same VICE implementation's `vdrive_rel_listen` advances the buffered `record_next` pointer rather than reconstructing a logical P position |
@@ -398,6 +399,13 @@ Firmware also pauses presentation when no REL batch is tracked, because full
 flush leaves TX unbound and the fabric may already have processed a later
 selection than the firmware command currently being serviced. Only after the
 new response is fully restored does firmware bind and release it.
+The logical queue binding survives a temporary RX pause independently of the
+REL progress pointer and SEQ streaming state. After an RX-service pass,
+firmware restores that retained binding, allowing UNLISTEN or foreign LISTEN
+to resume the same talker without readdressing. Queue parking and DOS reset
+invalidate the retained binding, so resuming cannot resurrect discarded
+ownership. The fabric still checks the bound unit/channel against its current
+selection, protecting against earlier queued selections.
 
 Each REL channel retains one immutable pending response (at most 254 bytes)
 and its consumed offset. The firmware checks progress against that bound,
@@ -439,21 +447,22 @@ Run the focused abort, sequential terminal and native REL controls:
 (cd build/system/board && ./econopet_firmware_tests \
   --gtest_filter='Models/DriveTerminalTest.*:ModelsFailuresRevisions/DriveRomTerminalTest.*')
 (cd build/system/board && ./econopet_firmware_tests \
-  --gtest_filter='*DriveRelative*')
+  --gtest_filter='*DriveRelative*:*DrivePreservedTalkTest.*')
 ```
 
 The working directory supplies the SID model's lookup resources. The ordinary
-CTest run includes all 46 REL data, continuation, positioning, parking, and native
+CTest run includes all 50 REL data, continuation, positioning, parking, and native
 controller cases.
 
 ### Current IEEE validation
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | 160 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Complete affected firmware integration suite | 168 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Preserved-talker integration, included above | Eight D64/D80 SEQ/REL cases pass at both seeds, retaining exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN without readdressing |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
-| Native REL integration, included above | All 46 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, eight in-flight parking cases, and six actual PET/Waterloo receive cases) |
+| Native REL integration, included above | All 50 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, eight in-flight parking cases, four preserved-talker cases, and six actual PET/Waterloo receive cases) |
 | Complete firmware unit suite | 547 checks pass, including sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
 | Complete host unit and contract suite | All 124 cases pass, including acceptance of CTRL readback bit `$04` as `DataActive` and rejection of reserved `$08`, alone or combined with the valid flag |
 | Board IEEE, shared hardware contract, and host encoding | All 43 selected cases pass on the final RTL, including the exact `$04` active-data mask |

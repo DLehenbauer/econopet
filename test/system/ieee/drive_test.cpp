@@ -231,6 +231,10 @@ class DriveRelativeContinuationTest : public FirmwareTest,
 class DriveRelativeParkingTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
 
+// Cross media, SEQ/REL formats, and commands that preserve the selected talker.
+class DrivePreservedTalkTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
+
 // Execute each selected native controller against both media models.
 class DriveRelativeRomTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
@@ -865,6 +869,39 @@ TEST_P(DriveRelativeParkingTest, KeepsPresentationThroughNdacWhileDeferringReuse
 }
 
 INSTANTIATE_TEST_SUITE_P(ModelsPrefetchFinal, DriveRelativeParkingTest,
+    testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
+
+// UNLISTEN and foreign LISTEN must resume queued data without TALK/secondary.
+TEST_P(DrivePreservedTalkTest, ContinuesWithoutReaddressingAfterUnlisten) {
+    const auto [d80, relative, foreign_listen] = GetParam();
+    constexpr uint8_t RecordLength = 4;
+    constexpr Device ForeignDevice{DeviceAddress - 1};
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0x51, 0x52};
+    IeeeController controller(system);
+    firmware.mount(relative
+            ? relative_image(d80, payload, RecordLength)
+            : sequential_image(d80, payload),
+        d80 ? "preserved-talker.d80" : "preserved-talker.d64");
+    open_file(system, controller, Channel{DataChannel}, relative ? "BASIC,L" : "BASIC");
+    service_rx(system, firmware, "service preserved-talker OPEN");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "service preserved-talker TALK");
+    ASSERT_EQ(controller.receive(), data(payload.front()));
+
+    // Repeated interruptions retain the channel, exact unread tail, and final EOI.
+    for (size_t i = 1; i < payload.size(); ++i) {
+        if (foreign_listen) controller.command(Listen(ForeignDevice));
+        controller.command(Unlisten);
+        service_rx(system, firmware, "service talk-preserving commands");
+        firmware.service();
+        receive_payload(system, controller,
+            {data(payload[i], i + 1 == payload.size() ? Eoi::Last : Eoi::More)});
+    }
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsFormatsCommands, DrivePreservedTalkTest,
     testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
 
 // Execute native PET/Waterloo input for consecutive empty records, then nonempty data.
