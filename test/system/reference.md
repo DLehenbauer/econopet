@@ -288,6 +288,7 @@ All Commodore source links below select `mist64/cbmsrc` revision
 |---|---|---|---|---|---|
 | Single-character filename wildcard | 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `lookup`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup) and [8250 `lookup`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup): `COMPAR`, `CP30` through `CP40`. Respective `open`: `OP20` calls `FFST`, and `OP90` through `OPREAD` use the matched file | `?` consumes exactly one non-`$A0` filename byte. Pattern completion requires name completion or the end of the 16-byte field. `*` immediately accepts the remainder, ignoring subsequent pattern bytes | [`diskimage_find`](../../fw/src/ieee/diskimage.c), [`test_native_single_character_wildcards`](../../fw/test/diskimage_test.c), and [`DriveWildcardRomTest.NativeOpenAndReadResolveSingleCharacterWildcards`](ieee/drive_test.cpp) | [Pinned VICE `cbmdos_parse_wildcard_compare`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/cbmdos.c) independently rejects `?` against `$A0`, advances one byte otherwise, and immediately accepts `*` |
 | Raw native filename bytes | 4040 DOS 2 and shared DOS 2.7, single-sided 8050 media mode | Same pinned `lookup` sources: `CP30` uses direct `CMP (DIRBUF)Y`, accepts `?` only when the directory byte is not `$A0`, and `CP34` tests `$A0` or the 16-byte boundary | `BAS?C` rejects `BaSIC`. `A?B` accepts `$41,$00,$42,$A0...`, but `A` rejects it. A zero in the first or sixteenth name byte remains consumable by `?` | [`diskimage_find`](../../fw/src/ieee/diskimage.c), [`test_native_single_character_wildcards`](../../fw/test/diskimage_test.c), [`test_native_open_matches_raw_filename_bytes`](../../fw/test/ieee_drive_test.c) | Same pinned VICE comparator compares literals without folding case and treats only `$A0`, not `$00`, as filename padding |
+| Native pattern length limit | 4040 DOS 2 and shared DOS 2.7, single-sided 8050 media mode | [4040 `trnsfr`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr) and [8250 `trnsfr`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr): `FNDLMT` increments `STRSIZ` and exits when `15 < STRSIZ`, leaving `LIMIT` immediately after byte 16. Respective `lookup`: `CP33` branches to `CP34`, which accepts `Y >= 19` | Seventeen question marks and `ABCDEFGHIJKLMNOPX` both select `ABCDEFGHIJKLMNOP`. A mismatch within the first 16 bytes or padding before byte 16 still rejects the name | [`test_native_single_character_wildcards`](../../fw/test/diskimage_test.c) and [`test_native_open_matches_raw_filename_bytes`](../../fw/test/ieee_drive_test.c), on D64/D80 | Same pinned VICE `cbmdos_dir_slot_create` limits the pattern to `CBMDOS_SLOT_NAME_LENGTH`, then `cbmdos_parse_wildcard_compare` compares those 16 bytes |
 | Flat HDD fallback isolation | EconoPET extension, not a native Commodore container | Not applicable (extension policy implemented in [`resolve_open`](../../fw/src/ieee/ieee_drive.c)) | An empty requested drive never aliases a peer HDD, regardless of filename spelling or wildcards. A rejected OPEN exposes no REL bytes or writes. Explicitly selecting the mounted HDD still works | [`test_hdd_aliases_preserve_drive_isolation`](../../fw/test/ieee_drive_test.c) and [`test_empty_drive_falls_back_to_native_peer`](../../fw/test/ieee_drive_test.c) | Negative read/write and backing-image checks across all eight device/drive coordinates, positive same-alias controls, and separate D64/D80 fallback controls (extension evidence only) |
 | ATN before NRFD-triggered prefetch (#52) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 IEEE handshake | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee), [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): `ATNIRQ`, `TALK1`, `TLK20` | With NRFD released and NDAC asserted, `TLK20` has not entered `GET`. ATN preserves X, regardless of a private PET read | `ieee.sv`, `IeeeAbortBeforeNrfdPreservesSampledByte` and its unread control | [IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/master/1%20IEEE-488.md) distinguishes NRFD from NDAC. [MAME RIOT input wiring](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) exposes NRFD on bit 7 and NDAC on bit 6, not PET reads |
 | ATN after NRFD-triggered prefetch | Same drive ROMs, ordinary nonfinal byte with settled prefetch | Same `ieee` sources: `TLK20` (`BIT PBD2; BPL TLK30`), `TLK30` (`JSR GET`), `TLK35` (NDAC wait) | Asserted NRFD reaches `GET` before NDAC release. After prefetch, ATN resumes at Y, with or without a private PET read | `IeeeAbortAfterNrfdPrefetchesUnreadByte` and its sampled control | Same MAME NRFD/NDAC wiring corroborates the input bits. IEEE bus acceptance alone does not define the ROM's internal prefetch point |
@@ -465,13 +466,17 @@ Native literal comparison is case-sensitive, and `?` consumes `$00` just like
 any other non-`$A0` byte. The public entry's display name still ends at its first
 `$A0` or NUL, but that lossy view no longer controls file selection.
 This intentionally removes the old case-insensitive native lookup behavior.
+Native `FNDLMT` also limits the pattern to 16 bytes before comparison. Once
+those bytes match, later literal or wildcard bytes are ignored, including a
+seventeenth `?`. A mismatch within the first 16 bytes or `$A0` padding reached
+by `?` still fails. The flat HDD extension does not acquire native truncation.
 
-The 78 D64/D80 table cases cover leading, middle, trailing, and repeated `?`,
-exact length, padding rejection, the last filename byte, embedded zeros,
+The 88 D64/D80 table cases cover leading, middle, trailing, and repeated `?`,
+exact length, native pattern truncation, padding rejection, the last filename byte, embedded zeros,
 case-sensitive literals, PETSCII bytes, existing prefix handling, and `*`
 combinations. Two multi-entry cases check near-match rejection, first-match
 selection, and returned metadata. Failed lookups preserve every output field.
-Firmware-level raw-name tests exercise four cases across all sixteen
+Firmware-level raw-name tests exercise eight cases across all sixteen
 model/device/drive combinations, asserting exact data, EOI, and DOS status.
 
 The flat HDD container remains an extension. It retains case-insensitive
@@ -485,7 +490,7 @@ preserve an existing EconoPET policy, not a general native-ROM claim.
 
 Before these corrections, the new checks reproduced both raw-byte
 counterexamples on D64/D80 and peer-HDD aliasing at all eight device/drive
-coordinates. After correction, the complete firmware suite passes 667 checks.
+coordinates. After correction, the complete firmware suite passes 677 checks.
 All fifteen disk-fixture tests and six native wildcard controller tests also
 pass. These host runs do not constitute real-drive hardware captures.
 

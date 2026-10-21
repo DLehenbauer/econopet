@@ -181,15 +181,15 @@ static const char* strip_drive_prefix(const char* name) {
     return name;
 }
 
-// Native CP30 compares raw bytes, with case folding isolated to the HDD extension.
-static bool name_matches(const char* want, const uint8_t* have, bool fold_case) {
+// Native FNDLMT caps raw comparison at 16 bytes. HDD matching remains case-folded.
+static bool name_matches(const char* want, const uint8_t* have, diskimage_type_t type) {
     size_t index = 0;
     while (*want && *want != '*') {
-        if (index == DISKIMAGE_FILENAME_SIZE) return false;
+        if (index == DISKIMAGE_FILENAME_SIZE) return type != diskimage_type_hdd;
         const uint8_t requested = (uint8_t) *want;
         if (requested == '?') {
             if (have[index] == DISKIMAGE_FILENAME_PADDING) return false;
-        } else if (fold_case
+        } else if (type == diskimage_type_hdd
             ? toupper(requested) != toupper(have[index])
             : requested != have[index]) {
             return false;
@@ -210,7 +210,7 @@ bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t*
     uint8_t raw_name[DISKIMAGE_FILENAME_SIZE];
     for (unsigned int i = 0;; i++) {
         if (!read_directory_entry(img, i, &candidate, raw_name)) return false;
-        if (name_matches(name, raw_name, img->type == diskimage_type_hdd)) {
+        if (name_matches(name, raw_name, img->type)) {
             *out = candidate;
             return true;
         }

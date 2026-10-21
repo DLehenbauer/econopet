@@ -102,6 +102,7 @@ bool diskimage_open_hdd(diskimage_t* img, diskimage_read_fn read, void* ctx, uin
 // Looks up a PETSCII 'name' (ASCII is not transcoded). Native D64/D80 literal
 // bytes are case-sensitive. Matching uses all 16 raw directory-name bytes,
 // including embedded zeros, independently of the decoded output name.
+// Native patterns are limited to their first 16 bytes after the drive prefix.
 // '?' matches one filename byte, never $A0 padding. '*' matches the remainder,
 // ignoring subsequent pattern bytes. The flat HDD extension retains
 // case-insensitive literal matching for its synthetic filename.

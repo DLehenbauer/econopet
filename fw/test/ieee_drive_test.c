@@ -292,6 +292,10 @@ START_TEST(test_native_open_matches_raw_filename_bytes) {
         {"BaSIC", 5, "B?SIC", true},
         {"A\0B", 3, "A?B", true},
         {"A\0B", 3, "A", false},
+        {"ABCDEFGHIJKLMNOP", 16, "?????????????????", true},
+        {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNOPX", true},
+        {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNOX?", false},
+        {"ABCDEFGHIJKLMNO", 15, "?????????????????", false},
     };
     const uint8_t payload[] = {0xa5, 0x5a};
     const size_t filename_offset = 5, filename_capacity = 16;
