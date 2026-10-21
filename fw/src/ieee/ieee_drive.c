@@ -622,9 +622,8 @@ static void resolve_open(void) {
     // Fall back to the unit's other drive only for ordinary files: OS-9's
     // per-drive REL containers are drive-specific, and aliasing them can
     // corrupt the mounted system disk.
-    bool is_os9_vol = (strstr(open_name, "OS9 DRIVE") != NULL)
-                   || (strstr(open_name, "os9 drive") != NULL);
-    if (!drives[slot].present && drives[slot ^ 1u].present && !is_os9_vol) {
+    if (!drives[slot].present && drives[slot ^ 1u].present
+        && drives[slot ^ 1u].image.type != diskimage_type_hdd) {
         log_info("ieee: drive %u empty, using drive %u", slot, slot ^ 1u);
         slot ^= 1u;
     }

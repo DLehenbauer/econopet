@@ -66,6 +66,8 @@ typedef struct {
 #define DISKIMAGE_DIRECTORY_ENTRY_SIZE 32u
 #define DISKIMAGE_DIRECTORY_ENTRIES_PER_SECTOR 8u
 #define DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET 23u
+#define DISKIMAGE_FILENAME_SIZE 16u
+#define DISKIMAGE_FILENAME_PADDING 0xa0u
 
 // CBM directory entry file types (low 3 bits of the type byte).
 #define DISKIMAGE_FTYPE_DEL 0
@@ -75,7 +77,7 @@ typedef struct {
 #define DISKIMAGE_FTYPE_REL 4
 
 typedef struct {
-    char name[17];      // NUL-terminated, $A0 padding stripped
+    char name[DISKIMAGE_FILENAME_SIZE + 1]; // Display name ends at the first $A0 or NUL.
     uint8_t file_type;  // DISKIMAGE_FTYPE_*
     uint8_t start_track;
     uint8_t start_sector;
@@ -97,10 +99,15 @@ bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_
 // be a whole number of 258-byte sector-record pairs.
 bool diskimage_open_hdd(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);
 
-// Looks up a PETSCII 'name' (ASCII is not transcoded), case-insensitively.
-// Directory entry names also retain their PETSCII bytes. Supports '*' suffix
-// wildcards and strips optional drive prefixes like "0:", "1:", or "1.".
+// Looks up a PETSCII 'name' (ASCII is not transcoded). Native D64/D80 literal
+// bytes are case-sensitive. Matching uses all 16 raw directory-name bytes,
+// including embedded zeros, independently of the decoded output name.
+// '?' matches one filename byte, never $A0 padding. '*' matches the remainder,
+// ignoring subsequent pattern bytes. The flat HDD extension retains
+// case-insensitive literal matching for its synthetic filename.
+// Strips optional drive prefixes like "0:", "1:", or "1.".
 // Returns true and fills 'out' when found.
+// Leaves every field of 'out' unchanged on a miss.
 bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t* out);
 
 // Iterates directory entries: 'index' counts valid (non-DEL) entries from 0.

@@ -138,6 +138,166 @@ START_TEST(test_open_rejects_bad_size) {
 }
 END_TEST
 
+static const struct {
+    const char* filename;
+    size_t filename_length;
+    const char* pattern;
+    bool matches;
+} native_wildcard_cases[] = {
+    {"BASIC", 5, "?ASIC", true},
+    {"BASIC", 5, "BASI?", true},
+    {"BASIC", 5, "BA?IC", true},
+    {"BASIC", 5, "B?S?C", true},
+    {"BASIC", 5, "?????", true},
+    {"BASIC", 5, "?*", true},
+    {"BASIC", 5, "B?S*", true},
+    {"BASIC", 5, "?????*", true},
+    {"BASIC", 5, "0:BASI?", true},
+    {"BASIC", 5, "1.?ASIC", true},
+    {"BASIC", 5, "BASIC*?", true},
+    {"BASIC", 5, "BASIC", true},
+    {"BASIC", 5, "BAS*", true},
+    {"BASIC", 5, "BASIC?", false},
+    {"BASIC", 5, "BASI??", false},
+    {"BASIC", 5, "BA?IX", false},
+    {"BASIC", 5, "B?SI", false},
+    {"BASIC", 5, "BASIC?*", false},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNO?", true},
+    {"ABCDEFGHIJKLMNOP", 16, "????????????????", true},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMN?", false},
+    {"A\xa4" "B", 3, "A?B", true},
+    {"A", 1, "?", true},
+    {"A", 1, "??", false},
+    {"BASIC", 5, "?", false},
+    {"BASIC", 5, "*", true},
+    {"BASIC", 5, "B*X", true},
+    {"BASIC", 5, "X*", false},
+    {"BASIC", 5, "", false},
+    {"ABCDEFGHIJKLMNOP", 16, "?????????????????", false},
+    {"BaSIC", 5, "BAS?C", false},
+    {"BaSIC", 5, "BaS?C", true},
+    {"BaSIC", 5, "B?SIC", true},
+    {"BASIC", 5, "bAS?C", false},
+    {"A\0B", 3, "A?B", true},
+    {"A\0B", 3, "A", false},
+    {"A\0B", 3, "A?", false},
+    {"\0AB", 3, "?AB", true},
+    {"ABCDEFGHIJKLMNO\0", 16, "????????????????", true},
+};
+
+// Compares every directory-entry field without inspecting structure padding.
+static void assert_diskimage_entry_eq(const diskimage_entry_t* actual,
+    const diskimage_entry_t* expected) {
+    ck_assert_str_eq(actual->name, expected->name);
+    ck_assert_uint_eq(actual->file_type, expected->file_type);
+    ck_assert_uint_eq(actual->start_track, expected->start_track);
+    ck_assert_uint_eq(actual->start_sector, expected->start_sector);
+    ck_assert_uint_eq(actual->record_len, expected->record_len);
+}
+
+// Native CP30 matches one non-padding byte, including PETSCII and byte 16.
+START_TEST(test_native_single_character_wildcards) {
+    const bool d80 = (size_t) _i >= count_of(native_wildcard_cases);
+    const size_t index = (size_t) _i % count_of(native_wildcard_cases);
+    mem_image_t mem = {
+        .data = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64(),
+        .size = d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE,
+    };
+    diskimage_t img;
+    ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
+
+    // Isolate one directory entry so a short pattern cannot select another file.
+    uint32_t directory;
+    ck_assert(diskimage_sector_offset(img.type, d80 ? 39 : 18, 1, &directory));
+    mem.data[directory] = 0;
+    memset(mem.data + directory + DISKIMAGE_DIRECTORY_ENTRY_SIZE, 0,
+        DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    const size_t filename_offset = 5, filename_capacity = 16;
+    const char* const filename = native_wildcard_cases[index].filename;
+    memset(mem.data + directory + filename_offset, 0xa0, filename_capacity);
+    ck_assert_uint_le(native_wildcard_cases[index].filename_length, filename_capacity);
+    memcpy(mem.data + directory + filename_offset, filename,
+        native_wildcard_cases[index].filename_length);
+
+    // Check exact selection and preserve the caller's output on a miss.
+    const diskimage_entry_t unchanged = {
+        .name = "UNCHANGED",
+        .file_type = DISKIMAGE_FTYPE_SEQ,
+        .start_track = 1,
+        .start_sector = 2,
+        .record_len = 64,
+    };
+    diskimage_entry_t entry = unchanged;
+    const bool found = diskimage_find(&img, native_wildcard_cases[index].pattern, &entry);
+    ck_assert_msg(found == native_wildcard_cases[index].matches,
+        "%s pattern '%s' for '%s': expected %s",
+        d80 ? "D80" : "D64", native_wildcard_cases[index].pattern, filename,
+        native_wildcard_cases[index].matches ? "match" : "miss");
+    if (found) {
+        ck_assert_str_eq(entry.name, filename);
+    } else {
+        assert_diskimage_entry_eq(&entry, &unchanged);
+        ck_assert_mem_eq(entry.name, unchanged.name, sizeof(entry.name));
+    }
+    free(mem.data);
+}
+END_TEST
+
+// Wildcard lookup skips near-matches and returns the first match with its metadata.
+START_TEST(test_native_wildcards_select_directory_entry) {
+    const bool d80 = _i != 0;
+    mem_image_t mem = {
+        .data = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64(),
+        .size = d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE,
+    };
+    diskimage_t img;
+    ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
+    static const diskimage_entry_t entries[] = {
+        {
+            .name = "BASIX",
+            .file_type = DISKIMAGE_FTYPE_SEQ,
+            .start_track = 17,
+            .start_sector = 3,
+            .record_len = 0,
+        },
+        {
+            .name = "BASIC",
+            .file_type = DISKIMAGE_FTYPE_REL,
+            .start_track = 16,
+            .start_sector = 5,
+            .record_len = 129,
+        },
+    };
+
+    // Encode two closed entries with distinct metadata, without needing file chains.
+    uint32_t directory;
+    ck_assert(diskimage_sector_offset(img.type, d80 ? 39 : 18, 1, &directory));
+    memset(mem.data + directory, 0, DISKIMAGE_SECTOR_SIZE);
+    const size_t type_offset = 2, track_offset = 3, sector_offset = 4;
+    const size_t filename_offset = 5, filename_capacity = 16;
+    const uint8_t closed_file_mask = 0x80;
+    for (size_t i = 0; i < count_of(entries); ++i) {
+        uint8_t* const slot = mem.data + directory + i * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        slot[type_offset] = closed_file_mask | entries[i].file_type;
+        slot[track_offset] = entries[i].start_track;
+        slot[sector_offset] = entries[i].start_sector;
+        slot[DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = entries[i].record_len;
+        memset(slot + filename_offset, 0xa0, filename_capacity);
+        memcpy(slot + filename_offset, entries[i].name, strlen(entries[i].name));
+    }
+
+    // Reject BASIX's literal suffix mismatch and return BASIC's complete metadata.
+    diskimage_entry_t entry;
+    ck_assert(diskimage_find(&img, "B?SIC", &entry));
+    assert_diskimage_entry_eq(&entry, &entries[1]);
+
+    // Both entries now match, so directory order must select BASIX rather than BASIC.
+    ck_assert(diskimage_find(&img, "BASI?", &entry));
+    assert_diskimage_entry_eq(&entry, &entries[0]);
+    free(mem.data);
+}
+END_TEST
+
 // Verify every sector against independently specified ROM zones and byte offsets.
 START_TEST(test_disk_geometry_matches_rom_zones) {
     static const struct {
@@ -302,9 +462,10 @@ START_TEST(test_find_and_stream_synthetic_d64) {
     ck_assert_str_eq(e.name, "BASIC");
     ck_assert_int_eq(e.file_type, DISKIMAGE_FTYPE_PRG);
 
-    // Check the supported case-insensitive, drive-prefix, and wildcard forms.
-    ck_assert(diskimage_find(&img, "basic", &e));
-    ck_assert(diskimage_find(&img, "1:basic", &e));
+    // Native literal bytes are case-sensitive, including after a drive prefix.
+    ck_assert(!diskimage_find(&img, "basic", &e));
+    ck_assert(!diskimage_find(&img, "1:basic", &e));
+    ck_assert(diskimage_find(&img, "1:BASIC", &e));
     ck_assert(diskimage_find(&img, "1.BASIC", &e));
     ck_assert(diskimage_find(&img, "BAS*", &e));
     ck_assert(!diskimage_find(&img, "FORTRAN", &e));
@@ -411,13 +572,14 @@ START_TEST(test_find_handles_16_byte_names_and_skips_deleted_entries) {
     uint8_t* directory = mem.data + diskimage_test_d64_offset(18, 1);
     static const char name[] = "SIXTEENCHARACTER";
 
-    // Confirm case-insensitive lookup returns the untruncated directory name.
+    // Confirm exact lookup returns the untruncated directory name.
     ck_assert_uint_eq(sizeof(name) - 1, 16);
     ck_assert(diskimage_open(&img, mem_read, &mem, mem.size));
     memset(&directory[5], 0xA0, 16);
     memcpy(&directory[5], name, sizeof(name) - 1);
-    ck_assert(diskimage_find(&img, "sixteencharacter", &entry));
-    // Lookup preserves all 16 bytes after its case-insensitive comparison.
+    ck_assert(!diskimage_find(&img, "sixteencharacter", &entry));
+    ck_assert(diskimage_find(&img, name, &entry));
+    // Lookup preserves all 16 bytes after its byte-exact comparison.
     ck_assert_str_eq(entry.name, name);
 
     // Mark that entry deleted and ensure lookup no longer exposes it.
@@ -632,6 +794,13 @@ START_TEST(test_hdd_flat_container) {
     ck_assert(!diskimage_entry(&img, 1, &e));
     ck_assert(diskimage_find(&img, "0:OS9 DRIVE A", &e));
     ck_assert(!diskimage_find(&img, "OS9 DRIVE B", &e));
+    // Apply the same wildcard and end-of-name rules to the synthetic filename.
+    ck_assert(diskimage_find(&img, "OS? DRIVE A", &e));
+    ck_assert(diskimage_find(&img, "OS9 DRIVE ?", &e));
+    ck_assert(diskimage_find(&img, "OS? DRIVE *", &e));
+    ck_assert(!diskimage_find(&img, "OS9 DRIVE A?", &e));
+    ck_assert(diskimage_find(&img, "OS9 DRIVE *", &e));
+    ck_assert_str_eq(e.name, "OS9 DRIVE A");
 
     // Build the identity-mapped REL chain and check its boundaries and writes.
     static diskchain_t ch;
@@ -715,6 +884,9 @@ Suite* diskimage_suite(void) {
     tcase_add_test(tc, test_disk_geometry_rejects_invalid_inputs);
     tcase_add_test(tc, test_shared_d64_builder_round_trips_files);
     tcase_add_test(tc, test_fixture_punctuation_uses_petscii_lookup);
+    tcase_add_loop_test(tc, test_native_single_character_wildcards,
+        0, 2 * count_of(native_wildcard_cases));
+    tcase_add_loop_test(tc, test_native_wildcards_select_directory_entry, 0, 2);
     tcase_add_test(tc, test_find_and_stream_synthetic_d64);
     tcase_add_loop_test(tc, test_directory_walks_full_sector_and_successor, 0, 2);
     tcase_add_test(tc, test_stream_stops_on_read_failure);

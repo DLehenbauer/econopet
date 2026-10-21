@@ -110,12 +110,18 @@ static void dir_start(const diskimage_t* img, uint8_t* track, uint8_t* sector) {
     }
 }
 
-bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry_t* out) {
+// Reads entry metadata and optionally retains the raw name for native comparison.
+static bool read_directory_entry(const diskimage_t* img, unsigned int index,
+    diskimage_entry_t* out, uint8_t* raw_name) {
     // One synthetic entry: the REL file the Super-OS/9 d8d9 descriptors
     // OPEN ("0:OS9 DRIVE A,L").
     if (img->type == diskimage_type_hdd) {
         if (index != 0) return false;
         strcpy(out->name, "OS9 DRIVE A");
+        if (raw_name != NULL) {
+            memset(raw_name, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+            memcpy(raw_name, out->name, strlen(out->name));
+        }
         out->file_type = DISKIMAGE_FTYPE_REL;
         out->start_track = 0;
         out->start_sector = 0;
@@ -140,10 +146,11 @@ bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry
             if ((ftype & 0x80) == 0 || (ftype & 0x07) == DISKIMAGE_FTYPE_DEL) continue;
 
             if (seen++ == index) {
+                if (raw_name != NULL) memcpy(raw_name, e + 5, DISKIMAGE_FILENAME_SIZE);
                 unsigned int n = 0;
-                for (unsigned int j = 0; j < 16; j++) {
+                for (unsigned int j = 0; j < DISKIMAGE_FILENAME_SIZE; j++) {
                     uint8_t c = e[5 + j];
-                    if (c == 0xA0 || c == 0x00) break;
+                    if (c == DISKIMAGE_FILENAME_PADDING || c == 0x00) break;
                     out->name[n++] = (char) c;
                 }
                 out->name[n] = '\0';
@@ -161,6 +168,10 @@ bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry
     return false;
 }
 
+bool diskimage_entry(const diskimage_t* img, unsigned int index, diskimage_entry_t* out) {
+    return read_directory_entry(img, index, out, NULL);
+}
+
 // Strips an optional drive prefix ("0:", "1:", "0.", "1.") and returns the
 // bare name.
 static const char* strip_drive_prefix(const char* name) {
@@ -170,14 +181,24 @@ static const char* strip_drive_prefix(const char* name) {
     return name;
 }
 
-static bool name_matches(const char* want, const char* have) {
+// Native CP30 compares raw bytes, with case folding isolated to the HDD extension.
+static bool name_matches(const char* want, const uint8_t* have, bool fold_case) {
+    size_t index = 0;
     while (*want && *want != '*') {
-        if (toupper((unsigned char) *want) != toupper((unsigned char) *have)) return false;
+        if (index == DISKIMAGE_FILENAME_SIZE) return false;
+        const uint8_t requested = (uint8_t) *want;
+        if (requested == '?') {
+            if (have[index] == DISKIMAGE_FILENAME_PADDING) return false;
+        } else if (fold_case
+            ? toupper(requested) != toupper(have[index])
+            : requested != have[index]) {
+            return false;
+        }
         want++;
-        have++;
+        index++;
     }
-    if (*want == '*') return true;
-    return *have == '\0';
+    return *want == '*' || index == DISKIMAGE_FILENAME_SIZE
+        || have[index] == DISKIMAGE_FILENAME_PADDING;
 }
 
 bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t* out) {
@@ -186,9 +207,10 @@ bool diskimage_find(const diskimage_t* img, const char* name, diskimage_entry_t*
     // Scan into a local: leaving a half-matched entry in *out on a miss would
     // hand the caller some other file's start track/sector.
     diskimage_entry_t candidate;
+    uint8_t raw_name[DISKIMAGE_FILENAME_SIZE];
     for (unsigned int i = 0;; i++) {
-        if (!diskimage_entry(img, i, &candidate)) return false;
-        if (name_matches(name, candidate.name)) {
+        if (!read_directory_entry(img, i, &candidate, raw_name)) return false;
+        if (name_matches(name, raw_name, img->type == diskimage_type_hdd)) {
             *out = candidate;
             return true;
         }

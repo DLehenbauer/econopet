@@ -239,6 +239,10 @@ class DrivePreservedTalkTest : public FirmwareTest,
 class DriveRelativeRomTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
 
+// Execute wildcard OPEN and reads through each native controller and media model.
+class DriveWildcardRomTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
+
 // Cross native controller revisions with media model and EOF versus read failure.
 class DriveRomTerminalTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, bool, test_rom::Set>> {};
@@ -971,6 +975,79 @@ TEST_P(DriveRelativeRomTest, NativeReceivePreservesEmptyRecordsAndEoi) {
     }
     require_sequence(wire.records(), expected, "native empty REL wire bytes");
 }
+
+// Both selected drive comparators resolve B?S?C to BASIC before ordinary reads.
+TEST_P(DriveWildcardRomTest, NativeOpenAndReadResolveSingleCharacterWildcards) {
+    const auto [d80, revision] = GetParam();
+    const std::vector<uint8_t> payload{0xa5, 0};
+    constexpr uint8_t Filename[] = {'B', '?', 'S', '?', 'C'};
+    firmware.mount(sequential_image(d80, payload), d80 ? "wildcard.d80" : "wildcard.d64");
+    auto wire = system.trace_ieee();
+
+    if (revision != test_rom::Set::Waterloo) {
+        KernalFixture rom(system, revision);
+        auto test = rom.program();
+        const auto received = test.data("wildcard payload", NativePayload, payload.size(), test_asm::Capture::Yes);
+        const auto flags = test.data("wildcard status", NativeLastStatus, payload.size(), test_asm::Capture::Yes);
+        const auto result = test.within(TerminalRomBudget)
+            .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+            .run([&](auto& p) {
+                rom.init_ieee(p);
+                rom.device(p);
+                rom.file(p, Filename, DataChannel);
+                p.jsr(rom.entry(KernalRoutine::Openi))
+                 .lda(test_asm::imm(DeviceAddress)).jsr(rom.entry(KernalRoutine::Talk))
+                 .lda(test_asm::imm(IEEE_CMD_SECONDARY(DataChannel))).jsr(rom.entry(KernalRoutine::Tksa));
+                for (size_t i = 0; i < payload.size(); ++i)
+                    p.jsr(rom.entry(KernalRoutine::Acptr)).sta(received.byte(i))
+                     .lda(test_asm::zp(KernalWorkspace::Status)).sta(flags.byte(i));
+                p.jsr(rom.entry(KernalRoutine::Untalk));
+            });
+        EXPECT_EQ(result[received], payload);
+        EXPECT_EQ(result[flags], (std::vector<uint8_t>{0, 0x40}));
+    } else {
+        WaterlooFixture rom(system);
+        auto test = rom.program();
+        const auto received = test.data("wildcard payload", NativePayload, payload.size(), test_asm::Capture::Yes);
+        const auto flags = test.data("wildcard flags", NativeLastStatus, payload.size(), test_asm::Capture::Yes);
+        const auto result = test.within(TerminalRomBudget)
+            .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+            .run([&](auto& p) {
+                rom.init_ieee(p);
+                rom.device(p, DeviceAddress, DataChannel);
+                const uint8_t terminated[] = {'B', '?', 'S', '?', 'C', 0};
+                rom.file(p, terminated);
+                p.lda(test_asm::imm(0)).sta(WaterlooActiveRole).sta(WaterlooGlobalStatus)
+                 .lda(test_asm::imm(1)).sta(WaterlooWorkspace::WaitParameterLow)
+                 .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Open))
+                 .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Talk));
+                for (size_t i = 0; i < payload.size(); ++i)
+                    p.jsr(rom.entry(WaterlooRoutine::Input)).stb(received.byte(i).address())
+                     .lda(WaterlooWorkspace::DiskFlags).sta(flags.byte(i));
+                p.jsr(rom.entry(WaterlooRoutine::Untalk));
+            });
+        EXPECT_EQ(result[received], payload);
+        for (size_t i = 0; i < payload.size(); ++i)
+            EXPECT_EQ(result[flags.byte(i)] & 1, i + 1 == payload.size() ? 1 : 0);
+        EXPECT_EQ(system.peek(econopet::SramAddress{WaterlooWorkspace::Block.value()}), 0);
+    }
+
+    // Observe literal pattern transmission and exact data/EOI independently of ROM results.
+    std::vector<Record> expected{command(Listen(Device{DeviceAddress})), command(Open(Channel{DataChannel}))};
+    for (size_t i = 0; i < sizeof(Filename); ++i)
+        expected.push_back(data(Filename[i], i + 1 == sizeof(Filename) ? Eoi::Last : Eoi::More));
+    expected.push_back(command(Unlisten));
+    expected.push_back(command(Talk(Device{DeviceAddress})));
+    expected.push_back(command(Secondary(Channel{DataChannel})));
+    for (size_t i = 0; i < payload.size(); ++i)
+        expected.push_back(data(payload[i], i + 1 == payload.size() ? Eoi::Last : Eoi::More));
+    expected.push_back(command(Untalk));
+    require_sequence(wire.records(), expected, "native wildcard OPEN/read wire bytes");
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsRevisions, DriveWildcardRomTest,
+    testing::Combine(testing::Bool(),
+        testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4, test_rom::Set::Waterloo)));
 
 INSTANTIATE_TEST_SUITE_P(ModelsRevisions, DriveRelativeRomTest,
     testing::Combine(testing::Bool(),

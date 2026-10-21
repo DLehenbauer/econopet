@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "diag/log/log.h"
 #include "driver.h"
 #include "diskimage_test.h"
 #include "fatal.h"
@@ -142,9 +143,10 @@ static void enqueue_filename_for_drive(unsigned int drive, const char* filename)
     enqueue_name(filename);
 }
 
-// Resets the register/filesystem mock and initializes the IEEE drive under test.
+// Initializes logging and the mock/drive state without relying on earlier suites.
 static void setup(void) {
     mock_reset();
+    log_init();
     ieee_drive_init();
 }
 
@@ -272,6 +274,103 @@ static const diskimage_type_t native_image_types[] = {
 static const uint8_t native_file_types[] = {
     DISKIMAGE_FTYPE_SEQ, DISKIMAGE_FTYPE_PRG, DISKIMAGE_FTYPE_USR
 };
+
+// Native OPEN compares raw filename bytes before decoding names for display.
+START_TEST(test_native_open_matches_raw_filename_bytes) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const bool d80 = type == diskimage_type_d80;
+    static const struct {
+        const char* name;
+        size_t length;
+        const char* pattern;
+        bool matches;
+    } cases[] = {
+        {"BaSIC", 5, "BAS?C", false},
+        {"BaSIC", 5, "B?SIC", true},
+        {"A\0B", 3, "A?B", true},
+        {"A\0B", 3, "A", false},
+    };
+    const uint8_t payload[] = {0xa5, 0x5a};
+    const size_t filename_offset = 5, filename_capacity = 16;
+    for (size_t variant = 0; variant < count_of(cases); ++variant) {
+        // Store names with counted bytes so an embedded zero survives the fixture.
+        uint8_t* const image = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64();
+        uint32_t directory, data;
+        ck_assert(diskimage_sector_offset(type, d80 ? 39 : 18, 1, &directory));
+        ck_assert(diskimage_sector_offset(type, d80 ? 38 : 17, 0, &data));
+        memset(image + directory + filename_offset, 0xa0, filename_capacity);
+        memcpy(image + directory + filename_offset, cases[variant].name, cases[variant].length);
+        image[data] = 0;
+        image[data + 1] = DISKIMAGE_SECTOR_LINK_SIZE + sizeof(payload) - 1;
+        memcpy(image + data + DISKIMAGE_SECTOR_LINK_SIZE, payload, sizeof(payload));
+        char filename[32];
+        snprintf(filename, sizeof(filename), "raw-name-%zu.%s", variant, d80 ? "d80" : "d64");
+        mount_image(device, drive, filename, image,
+            d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, true);
+
+        // Exercise OPEN and TALK through firmware, not just the image-level matcher.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_DATA));
+        enqueue_filename_for_drive(drive, cases[variant].pattern);
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_DATA));
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), cases[variant].matches ? sizeof(payload) : 0);
+        if (cases[variant].matches) {
+            for (size_t index = 0; index < sizeof(payload); ++index) {
+                ck_assert_uint_eq(mock_ieee_data_byte(index), payload[index]);
+                ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == sizeof(payload));
+            }
+        }
+        mock_ieee_clear_data();
+
+        // A literal mismatch must report the selected model's exact not-found status.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_TALK(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+        ieee_drive_task();
+        char expected[IEEE_STATUS_LINE_CAPACITY];
+        snprintf(expected, sizeof(expected), "%s,00,00%s\r",
+            cases[variant].matches ? "00, OK" : "62, FILE NOT FOUND",
+            d80 ? (drive == IEEE_DRIVE_FIRST ? ",0" : ",1") : "");
+        assert_status(expected);
+        mock_ieee_clear_status();
+    }
+}
+END_TEST
+
+// Empty-drive fallback remains available for ordinary native images.
+START_TEST(test_empty_drive_falls_back_to_native_peer) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const bool d80 = native_image_types[_i % count_of(native_image_types)] == diskimage_type_d80;
+    if (d80) {
+        mount_d80(device, drive ^ 1u, "peer.d80", true);
+    } else {
+        mount_d64(device, drive ^ 1u, "peer.d64", true);
+    }
+
+    // Explicitly request the empty drive and verify the native peer's complete file.
+    char filename[32];
+    snprintf(filename, sizeof(filename), "%u:B?SIC", drive);
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
+    enqueue_name(filename);
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+        IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
+    ieee_drive_task();
+    const size_t length = d80 ? 4 : 264;
+    ck_assert_uint_eq(mock_ieee_data_count(), length);
+    for (size_t index = 0; index < length; ++index) {
+        const uint8_t expected = d80 ? (uint8_t) (0x80 + index)
+            : index < DISKIMAGE_SECTOR_PAYLOAD_SIZE ? (uint8_t) (index + 2)
+            : (uint8_t) (0xe2 + index - DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+        ck_assert_uint_eq(mock_ieee_data_byte(index), expected);
+        ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == length);
+    }
+}
+END_TEST
 
 // Replaces BASIC's first sector with a short ordinary file for each native model.
 static void mount_short_native_file(size_t case_index, const uint8_t* payload, size_t length) {
@@ -1696,6 +1795,71 @@ START_TEST(test_relative_write_past_record_reports_51) {
 }
 END_TEST
 
+// HDD aliases must never open or modify the peer of an empty requested drive.
+START_TEST(test_hdd_aliases_preserve_drive_isolation) {
+    const unsigned int device = loop_device(_i);
+    const unsigned int drive = loop_drive(_i);
+    const size_t record_length = 129, image_size = 2 * record_length;
+    const uint8_t marker = 0x5a, write_marker = 0xe7;
+    uint8_t* const image = malloc(image_size);
+    ck_assert_ptr_nonnull(image);
+    memset(image, marker, image_size);
+    mount_image(device, drive ^ 1u, "peer.hdd", image, image_size, true);
+    static const char* const aliases[] = {
+        "OS9 DRIVE A,L", "OS? DRIVE A,L", "OS9 DRI?E A,L",
+        "*,L", "?*,L", "os? drive a,L",
+    };
+    for (size_t variant = 0; variant < count_of(aliases); ++variant) {
+        // A failed OPEN must also discard a previous REL channel on this secondary.
+        char filename[32];
+        snprintf(filename, sizeof(filename), "%u:%s", drive, aliases[variant]);
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+        enqueue_name(filename);
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), 0);
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        char expected[IEEE_STATUS_LINE_CAPACITY];
+        snprintf(expected, sizeof(expected), "62, FILE NOT FOUND,00,00,%u\r", drive);
+        assert_status(expected);
+        mock_ieee_clear_status();
+
+        // LISTEN after the rejected OPEN must not gain write access to the peer.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, write_marker);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+
+        // The same alias still works when the mounted drive is explicitly selected.
+        snprintf(filename, sizeof(filename), "%u:%s", drive ^ 1u, aliases[variant]);
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+        enqueue_name(filename);
+        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), record_length);
+        for (size_t index = 0; index < record_length; ++index) {
+            ck_assert_uint_eq(mock_ieee_data_byte(index), marker);
+            ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == record_length);
+        }
+        mock_ieee_clear_data();
+    }
+
+    // Inspect the complete backing image, including records not read by the control.
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, "peer.hdd");
+    FILE* const file = fopen(path, "rb");
+    ck_assert_ptr_nonnull(file);
+    uint8_t actual[258];
+    ck_assert_uint_eq(fread(actual, 1, sizeof(actual), file), image_size);
+    for (size_t index = 0; index < sizeof(actual); ++index)
+        ck_assert_uint_eq(actual[index], marker);
+    ck_assert_int_eq(fclose(file), 0);
+}
+END_TEST
+
 // Verifies a flat OS-9 .hdd mount exposes its synthetic REL file over IEEE.
 START_TEST(test_hdd_mount_position_and_read) {
     const unsigned int device = loop_device(_i);
@@ -1816,6 +1980,10 @@ Suite* ieee_drive_suite(void) {
     // Cover sequential transfers, status, addressing, and unit isolation.
     tcase_add_loop_test(test_case, test_d64_mount_open_status_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_native_open_matches_raw_filename_bytes,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_empty_drive_falls_back_to_native_peer,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_native_one_byte_file_reaches_eof_after_four_bytes,
                         0, count_of(native_image_types) * count_of(native_file_types));
     tcase_add_loop_test(test_case, test_native_two_byte_file_keeps_normal_eof,
@@ -1891,6 +2059,8 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_relative_write_past_record_reports_51,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_hdd_mount_position_and_read,
+                        0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_hdd_aliases_preserve_drive_isolation,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_d80_mount_open_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);

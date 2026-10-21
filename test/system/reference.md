@@ -286,6 +286,9 @@ All Commodore source links below select `mist64/cbmsrc` revision
 
 | Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
 |---|---|---|---|---|---|
+| Single-character filename wildcard | 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `lookup`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup) and [8250 `lookup`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup): `COMPAR`, `CP30` through `CP40`. Respective `open`: `OP20` calls `FFST`, and `OP90` through `OPREAD` use the matched file | `?` consumes exactly one non-`$A0` filename byte. Pattern completion requires name completion or the end of the 16-byte field. `*` immediately accepts the remainder, ignoring subsequent pattern bytes | [`diskimage_find`](../../fw/src/ieee/diskimage.c), [`test_native_single_character_wildcards`](../../fw/test/diskimage_test.c), and [`DriveWildcardRomTest.NativeOpenAndReadResolveSingleCharacterWildcards`](ieee/drive_test.cpp) | [Pinned VICE `cbmdos_parse_wildcard_compare`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/cbmdos.c) independently rejects `?` against `$A0`, advances one byte otherwise, and immediately accepts `*` |
+| Raw native filename bytes | 4040 DOS 2 and shared DOS 2.7, single-sided 8050 media mode | Same pinned `lookup` sources: `CP30` uses direct `CMP (DIRBUF)Y`, accepts `?` only when the directory byte is not `$A0`, and `CP34` tests `$A0` or the 16-byte boundary | `BAS?C` rejects `BaSIC`. `A?B` accepts `$41,$00,$42,$A0...`, but `A` rejects it. A zero in the first or sixteenth name byte remains consumable by `?` | [`diskimage_find`](../../fw/src/ieee/diskimage.c), [`test_native_single_character_wildcards`](../../fw/test/diskimage_test.c), [`test_native_open_matches_raw_filename_bytes`](../../fw/test/ieee_drive_test.c) | Same pinned VICE comparator compares literals without folding case and treats only `$A0`, not `$00`, as filename padding |
+| Flat HDD fallback isolation | EconoPET extension, not a native Commodore container | Not applicable (extension policy implemented in [`resolve_open`](../../fw/src/ieee/ieee_drive.c)) | An empty requested drive never aliases a peer HDD, regardless of filename spelling or wildcards. A rejected OPEN exposes no REL bytes or writes. Explicitly selecting the mounted HDD still works | [`test_hdd_aliases_preserve_drive_isolation`](../../fw/test/ieee_drive_test.c) and [`test_empty_drive_falls_back_to_native_peer`](../../fw/test/ieee_drive_test.c) | Negative read/write and backing-image checks across all eight device/drive coordinates, positive same-alias controls, and separate D64/D80 fallback controls (extension evidence only) |
 | ATN before NRFD-triggered prefetch (#52) | 4040 DOS 2 and shared 8050/8250 DOS 2.7 IEEE handshake | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee), [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): `ATNIRQ`, `TALK1`, `TLK20` | With NRFD released and NDAC asserted, `TLK20` has not entered `GET`. ATN preserves X, regardless of a private PET read | `ieee.sv`, `IeeeAbortBeforeNrfdPreservesSampledByte` and its unread control | [IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/master/1%20IEEE-488.md) distinguishes NRFD from NDAC. [MAME RIOT input wiring](https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c2040.cpp) exposes NRFD on bit 7 and NDAC on bit 6, not PET reads |
 | ATN after NRFD-triggered prefetch | Same drive ROMs, ordinary nonfinal byte with settled prefetch | Same `ieee` sources: `TLK20` (`BIT PBD2; BPL TLK30`), `TLK30` (`JSR GET`), `TLK35` (NDAC wait) | Asserted NRFD reaches `GET` before NDAC release. After prefetch, ATN resumes at Y, with or without a private PET read | `IeeeAbortAfterNrfdPrefetchesUnreadByte` and its sampled control | Same MAME NRFD/NDAC wiring corroborates the input bits. IEEE bus acceptance alone does not define the ROM's internal prefetch point |
 | Counted-read termination control | SuperPET Waterloo `970019-12`, fast FPGA talker | [Revision-12 binary](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin), `$C14F-$C16D` | NRFD release precedes NDAC release, DAV release precedes ATN. Unread next byte remains queued | `IeeeWaterlooCountedTerminationPreservesUnreadByte` | [Binary-derived navigation](https://github.com/prachwal/personal-004/blob/main/docs/pet/disassembly/waterloo-c000-dfff.asm) and the same independent IEEE handshake description |
@@ -454,16 +457,64 @@ The working directory supplies the SID model's lookup resources. The ordinary
 CTest run includes all 50 REL data, continuation, positioning, parking, and native
 controller cases.
 
+### Native filename wildcard lookup
+
+Both selected drive comparators operate on `$A0`-padded 16-byte directory names.
+Matching now retains those raw bytes separately from the display-name decoder.
+Native literal comparison is case-sensitive, and `?` consumes `$00` just like
+any other non-`$A0` byte. The public entry's display name still ends at its first
+`$A0` or NUL, but that lossy view no longer controls file selection.
+This intentionally removes the old case-insensitive native lookup behavior.
+
+The 78 D64/D80 table cases cover leading, middle, trailing, and repeated `?`,
+exact length, padding rejection, the last filename byte, embedded zeros,
+case-sensitive literals, PETSCII bytes, existing prefix handling, and `*`
+combinations. Two multi-entry cases check near-match rejection, first-match
+selection, and returned metadata. Failed lookups preserve every output field.
+Firmware-level raw-name tests exercise four cases across all sixteen
+model/device/drive combinations, asserting exact data, EOI, and DOS status.
+
+The flat HDD container remains an extension. It retains case-insensitive
+literal matching for its synthetic `OS9 DRIVE A` filename. Empty-drive fallback
+is decided by the peer container's type, never the requested name: an HDD peer
+cannot supply a REL channel for an empty requested drive. Eight firmware cases
+each exercise six literal/wildcard aliases, rejection status, attempted writes,
+unchanged backing bytes, and positive explicit-drive opens. Sixteen D64/D80
+controls retain ordinary native-image fallback. These fallback controls
+preserve an existing EconoPET policy, not a general native-ROM claim.
+
+Before these corrections, the new checks reproduced both raw-byte
+counterexamples on D64/D80 and peer-HDD aliasing at all eight device/drive
+coordinates. After correction, the complete firmware suite passes 667 checks.
+All fifteen disk-fixture tests and six native wildcard controller tests also
+pass. These host runs do not constitute real-drive hardware captures.
+
+The six native controller cases execute corrected PET KERNAL 2.0, PET KERNAL 4.0,
+or Waterloo revision-12 OPEN and input routines against each media model.
+Independent wire observations require the literal `B?S?C` OPEN, its filename
+EOI and UNLISTEN, followed by exactly `$A5,$00` with EOI only on the second
+data byte. CPU results additionally require PET status `$00,$40` or Waterloo
+EOI flags clear/set with no FCB error. Before the correction, 26 lookup cases
+and all six native OPEN/read cases failed. None of the 36 historical disabled
+probes was promoted or attributed to this defect.
+
+This evidence establishes the changed wildcard comparison rule, not general
+filename-parser compatibility or execution of an original drive ROM. D80
+execution exercises single-sided 8050 media. The shared DOS 2.7 comparator
+also establishes the selected full-size 8250 rule, but no D82, earlier DOS 2.5,
+or 8250LP execution is claimed.
+
 ### Current IEEE validation
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | 168 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Complete affected firmware integration suite | 174 enabled cases pass at simulation seeds 1 and 17. The remaining 36 disabled probes are unchanged |
+| Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at both seeds, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight D64/D80 SEQ/REL cases pass at both seeds, retaining exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN without readdressing |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at both seeds, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | All 50 D64/D80 cases pass at both seeds (eight data/positioning/queued-selection cases, 24 interruption/ownership cases including after-EOI peer writes, eight in-flight parking cases, four preserved-talker cases, and six actual PET/Waterloo receive cases) |
-| Complete firmware unit suite | 547 checks pass, including sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
+| Complete firmware unit suite | 591 checks pass, including 44 D64/D80 wildcard lookup cases and flat-extension alias controls, sixteen model/unit/drive combinations per native continuation, EOI-prepared peer write, wrapped-write continuation, position-boundary, physical-suffix, and empty-record scenario, counter-wrap and supported MCU-reset controls, and eight flat-extension empty-record controls |
 | Complete host unit and contract suite | All 124 cases pass, including acceptance of CTRL readback bit `$04` as `DataActive` and rejection of reserved `$08`, alone or combined with the valid flag |
 | Board IEEE, shared hardware contract, and host encoding | All 43 selected cases pass on the final RTL, including the exact `$04` active-data mask |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including stable active DAV/DIO/EOI through owner pause and NDAC, active-data readback, modulo-counter wrap, and simultaneous GET/discard coverage |
