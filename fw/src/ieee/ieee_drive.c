@@ -190,6 +190,8 @@ typedef struct {
     uint8_t drive;
     unsigned int read_pos;
     uint32_t generation;
+    bool formatted;
+    drive_model_t model;
 } drive_status_t;
 
 // Per-unit DOS status: each IEEE unit has its own channel-15 command channel,
@@ -204,6 +206,7 @@ static uint8_t status_tx_unit = NUM_UNITS;
 static uint8_t status_tx_prefetched;
 static unsigned int status_tx_remaining;
 static uint32_t status_tx_generation;
+static bool status_tx_pending;
 
 static void set_status(unsigned int slot, status_code_t code, uint8_t track,
                        uint8_t sector) {
@@ -339,26 +342,30 @@ static void data_tx_sync(void) {
     }
 }
 
-// Stop new data presentations without withdrawing a byte awaiting NDAC.
-static void data_tx_pause(void) {
+// Stop either source without withdrawing a byte awaiting NDAC.
+static void tx_pause(void) {
     // Pause even without a tracked REL batch: full flush leaves TX unbound,
     // and hardware may already be serving a later queued channel selection.
-    // Channel 15 uses TXS, so it blocks every new data presentation.
     spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
-        ECONOPET_IEEE_TX_OWNER_VALID_MASK | IEEE_COMMAND_CHANNEL);
+        ECONOPET_IEEE_TX_OWNER_VALID_MASK | ECONOPET_IEEE_TX_OWNER_PAUSE_MASK);
 }
 
 // Restore a retained queue owner after a temporary RX-service pause.
-static void data_tx_resume(void) {
-    if (data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK)
+static void tx_resume(void) {
+    if (mcu_talking
+        && IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary) == IEEE_COMMAND_CHANNEL) {
+        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, ECONOPET_IEEE_TX_OWNER_VALID_MASK
+            | (talk_unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | IEEE_COMMAND_CHANNEL);
+    } else if (data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK) {
         spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, data_tx_owner);
+    }
 }
 
 // Save the unread tail before firmware or fabric reuses the shared data FIFO.
 // Ordinary RX service has already waited for the active presentation to finish.
 // Explicit reset/remount instead deliberately invalidates the old transfer.
 static void data_tx_park(void) {
-    data_tx_pause();
+    tx_pause();
     data_tx_sync();
     data_tx_channel = NULL;
     data_tx_owner = 0;
@@ -401,6 +408,7 @@ static void reset_protocol_state(void) {
     data_tx_owner = 0;
     status_tx_unit = NUM_UNITS;
     status_tx_remaining = 0;
+    status_tx_pending = false;
     memset(rel_chans, 0, sizeof(rel_chans));
 }
 
@@ -759,14 +767,16 @@ static void dispatch_pending(void) {
             if (input->bytes[length - 1] == '\r') --length;
             else if (input->bytes[length - 2] == '\r') length -= 2;
         }
-        input->length = length;
         if (length > COMMAND_BUFFER_CAPACITY) {
             input->length = 0;
             set_status(unit * DRIVES_PER_UNIT + drive_status[unit].drive, st_code_long_line, 0, 0);
         } else if (IEEE_CMD_IS_OPEN(input->secondary)
             && IEEE_CMD_CHANNEL(input->secondary) != IEEE_COMMAND_CHANNEL) {
+            input->length = length;
             resolve_open(unit);
         } else {
+            // RECORD reads raw binary fields outside CMDSIZ. Text commands do not.
+            if (input->bytes[0] != 'P') input->length = length;
             ch15_execute(unit);
         }
     }
@@ -775,11 +785,16 @@ static void dispatch_pending(void) {
 // Queue only the unread status suffix, retaining DOS lifetime until its CR GET.
 static void push_status(unsigned int unit) {
     status_tx_sync();
+    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK);
+    drive_status_t* const retained = &drive_status[unit];
+    if (!retained->formatted) {
+        retained->model = get_drive_model(unit * DRIVES_PER_UNIT + retained->drive);
+        retained->formatted = true;
+    }
     const char* text;
     char line[IEEE_STATUS_LINE_CAPACITY];
     const drive_status_t status = drive_status[unit];
-    const drive_model_t model =
-        get_drive_model(unit * DRIVES_PER_UNIT + status.drive);
+    const drive_model_t model = status.model;
 
     switch (status.code) {
         case st_code_ok:              text = " OK"; break;
@@ -950,7 +965,7 @@ static void handle_command(uint8_t cmd) {
                 uint8_t chan = IEEE_CMD_CHANNEL(cmd);
                 rel_channel_t* rc;
                 if (chan == 15) {
-                    push_status(talk_unit);
+                    status_tx_pending = true;
                 } else if ((rc = rel_find(talk_unit, chan)) != NULL) {
                     rel_serve(rc);
                 } else if ((file_state == file_channel_readable
@@ -1051,6 +1066,7 @@ bool ieee_drive_mount(unsigned int slot, const char* filename) {
     if (mounted) {
         status_tx_sync();
         status_tx_unit = NUM_UNITS;
+        status_tx_pending = false;
         data_tx_park();
         for (unsigned int index = 0; index < MAX_REL_CHANNELS; ++index)
             if (rel_chans[index].slot == slot) rel_chans[index].in_use = false;
@@ -1076,10 +1092,11 @@ void ieee_drive_task(void) {
         // Hardware may already be serving a newer selection than this RX head.
         // Pause first, then yield until NDAC releases the latched byte. Never
         // block the MCU or flush/rebind its FIFO while a listener is sampling.
-        data_tx_pause();
+        tx_pause();
         status_tx_sync();
         const uint8_t ctrl = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
-        if (ctrl & ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK) return;
+        if (ctrl & (ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK
+            | ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK)) return;
 
         // Sample the head's ATN flag immediately before its paired RX read,
         // after the pause transactions (also preserving semantic RX tracing).
@@ -1114,6 +1131,13 @@ void ieee_drive_task(void) {
 
     // Native UNLISTEN/foreign LISTEN preserve TLKACT and its queued response.
     // Only resume a retained binding, never one invalidated by queue parking.
-    data_tx_resume();
+    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) return;
+    if (status_tx_pending) {
+        if (mcu_talking
+            && IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary) == IEEE_COMMAND_CHANNEL)
+            push_status(talk_unit);
+        status_tx_pending = false;
+    }
+    tx_resume();
     if (streaming) service_tx();
 }

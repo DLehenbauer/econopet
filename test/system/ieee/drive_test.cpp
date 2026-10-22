@@ -1062,6 +1062,106 @@ TEST_P(DriveRelativeTest, PartialStatusSurvivesReselectionAndPeerStatus) {
     EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), ok);
 }
 
+// CMDSET parsing-size adjustment must not change RECORD's raw binary operands.
+TEST_P(DriveRelativeTest, BinaryPositionRetainsCrValuedFields) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 13;
+    std::vector<uint8_t> payload(3 * RecordLength);
+    for (size_t index = 0; index < payload.size(); ++index)
+        payload[index] = static_cast<uint8_t>(index + 1);
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength), d80 ? "binary-cr.d80" : "binary-cr.d64");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open CR-valued binary operand fixture");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const uint8_t high : {uint8_t{0}, uint8_t{'\r'}}) {
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            for (const auto byte : {uint8_t{'P'}, uint8_t{IEEE_CMD_SECONDARY(DataChannel)},
+                    uint8_t{2}, high})
+                controller.data(byte);
+            controller.data('\r', Eoi::Last);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "dispatch CR-valued binary fields");
+            const std::string expected = std::string(high == 0
+                ? "00, OK,00,00" : "50,RECORD NOT PRESENT,00,00") + (d80 ? ",0\r" : "\r");
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), expected);
+            if (high == 0) {
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "serve position thirteen");
+                receive_payload(system, controller, {data(payload[2 * RecordLength - 1], Eoi::Last)});
+                controller.command(Untalk);
+                service_rx(system, firmware, "park position thirteen");
+            }
+        }
+    }
+}
+
+// A response retains its format until CR, even when the mounted model changes.
+TEST_P(DriveRelativeTest, PartialStatusRetainsFormatAcrossModelChange) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "before.d80" : "before.d64");
+    position_relative(system, firmware, controller, 1, 1);
+    const std::string error = d80 ? "70,NO CHANNEL,00,00,0\r" : "70,NO CHANNEL,00,00\r";
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{CommandChannel}));
+    service_rx(system, firmware, "queue status before model replacement");
+    for (size_t index = 0; index + 1 < error.size(); ++index)
+        ASSERT_EQ(controller.receive(), data(static_cast<uint8_t>(error[index])));
+    firmware.mount(relative_image(!d80, payload, 2), d80 ? "after.d64" : "after.d80");
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), "\r");
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+        d80 ? "00, OK,00,00\r" : "00, OK,00,00,0\r");
+}
+
+// Historical status selections cannot publish bytes under the final unit's tracker.
+TEST_P(DriveRelativeTest, QueuedStatusSelectionsRetainResponseOwnership) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2};
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "queued-status.d80" : "queued-status.d64");
+    const Device original{DeviceAddress}, peer{DeviceAddress + 1};
+    const std::string original_error = d80 ? "70,NO CHANNEL,00,00,0\r" : "70,NO CHANNEL,00,00\r";
+    const std::string peer_error = "62, FILE NOT FOUND,00,00\r";
+    for (const size_t prefix : {size_t{0}, size_t{3}}) {
+        position_relative(system, firmware, controller, 1, 1);
+        open_file(system, controller, Channel{DataChannel}, "MISSING", peer);
+        service_rx(system, firmware, "prepare peer error before queued status");
+        if (prefix != 0) {
+            controller.command(Talk(original));
+            controller.command(Secondary(Channel{CommandChannel}));
+            service_rx(system, firmware, "queue initial partial status");
+            for (size_t index = 0; index < prefix; ++index)
+                ASSERT_EQ(controller.receive(), data(static_cast<uint8_t>(original_error[index])));
+            controller.command(Untalk);
+            service_rx(system, firmware, "park partial original status");
+        }
+        controller.command(Talk(original));
+        controller.command(Secondary(Channel{CommandChannel}));
+        controller.command(Untalk);
+        controller.command(Talk(peer));
+        controller.command(Secondary(Channel{CommandChannel}));
+        if (prefix != 0) {
+            controller.command(Untalk);
+            controller.command(Talk(peer));
+            controller.command(Secondary(Channel{CommandChannel}));
+            controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+            controller.write(pet::ViaPortB, BusReleased);
+        }
+        service_rx(system, firmware, "service queued cross-unit status selections");
+        for (size_t index = 0; index < peer_error.size(); ++index)
+            ASSERT_EQ(controller.receive(), data(static_cast<uint8_t>(peer_error[index]),
+                index + 1 == peer_error.size() ? Eoi::Last : Eoi::More));
+        controller.command(Untalk);
+        service_rx(system, firmware, "acknowledge only peer status");
+        EXPECT_EQ(receive_status(system, firmware, controller, original), original_error.substr(prefix));
+        EXPECT_EQ(receive_status(system, firmware, controller, peer), "00, OK,00,00\r");
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, DriveRelativeTest, testing::Bool());
 
 // Native TLK20/TLK30 advancement survives interruption and reuse of the shared FIFO.

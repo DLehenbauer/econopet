@@ -199,6 +199,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
             mock_ieee.ctrl = data;
             if (data & ECONOPET_IEEE_CTRL_FLUSH_MASK) mock_ieee_flush(false);
             if (data & ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK) mock_ieee_flush(true);
+            if (data & ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK) mock_ieee_discard_status();
         } else if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             if (mock_ieee.rx_count != 0) {
                 mock_ieee.rx_head = (mock_ieee.rx_head + 1) % MOCK_IEEE_RX_CAPACITY;

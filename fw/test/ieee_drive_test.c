@@ -676,6 +676,23 @@ START_TEST(test_initialize_and_validate_commands_select_status_drive) {
     assert_status("00, OK,00,00,1\r");
     mock_ieee_clear_status();
 
+    // Text commands use CMDSIZ, ignoring a digit beyond a penultimate CR.
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        const char* commands[] = {"I\r0", "V\r0"};
+        for (size_t command = 0; command < count_of(commands); ++command) {
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            enqueue_name(commands[command]);
+            enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+                IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+            ieee_drive_task();
+            assert_status("00, OK,00,00,1\r");
+            mock_ieee_clear_status();
+        }
+    }
+
     // Switch explicitly to drive 0 and check the new retained default.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     enqueue_name("I0");
@@ -1897,6 +1914,91 @@ START_TEST(test_command_length_boundaries_and_recovery) {
 }
 END_TEST
 
+// CR-valued binary fields remain readable after CMDSET adjusts the parsing size.
+START_TEST(test_binary_position_retains_cr_fields) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t record_length = 13;
+    uint8_t payload[3 * 13];
+    for (size_t index = 0; index < sizeof(payload); ++index) payload[index] = (uint8_t) (index + 1);
+    mount_native_relative_records(device, drive, type, "binary-cr.img",
+        record_length, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        const uint8_t commands[][5] = {
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, 0, '\r'},
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, '\r', 1},
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, '\r', '\r'},
+        };
+        for (size_t command = 0; command < count_of(commands); ++command) {
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            for (size_t index = 0; index < sizeof(commands[command]); ++index)
+                mock_ieee_enqueue_rx_eoi(false, commands[command][index],
+                    index + 1 == sizeof(commands[command]));
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            char expected[IEEE_STATUS_LINE_CAPACITY];
+            snprintf(expected, sizeof(expected), "%s%s\r",
+                command == 0 ? "00, OK,00,00" : "50,RECORD NOT PRESENT,00,00",
+                type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+            assert_status(expected);
+            mock_ieee_clear_status();
+            if (command == 0) {
+                relative_talk(device, IEEE_CHANNEL_REL);
+                ck_assert_uint_eq(mock_ieee_data_count(), 1);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2 * record_length - 1]);
+                ck_assert(mock_ieee_data_eoi(0));
+                mock_ieee_clear_data();
+            }
+        }
+    }
+}
+END_TEST
+
+// A media-model replacement cannot change the shape of an already-read response.
+START_TEST(test_partial_status_retains_format_across_model_change) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "old-model.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char error[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(error, sizeof(error), "70,NO CHANNEL,00,00%s\r",
+        type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+    assert_status(error);
+    const size_t prefix = strlen(error) - 1;
+    mock_ieee_consume_status(prefix);
+    const bool next_d80 = type == diskimage_type_d64;
+    mount_image(device, drive, "new-model.img",
+        next_d80 ? diskimage_test_make_d80() : diskimage_test_make_d64(),
+        next_d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, true);
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    assert_status("\r");
+    mock_ieee_clear_status();
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char ok[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(ok, sizeof(ok), "00, OK,00,00%s\r", next_d80 ? (drive ? ",1" : ",0") : "");
+    assert_status(ok);
+}
+END_TEST
+
 // Status selection/transport discard cannot acknowledge the terminal CR.
 START_TEST(test_status_progress_survives_reselection) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
@@ -2597,6 +2699,10 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_status_progress_survives_reselection,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_binary_position_retains_cr_fields,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_partial_status_retains_format_across_model_change,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_relative_position_within_record,
                         0, FOR_EACH_DEVICE_AND_DRIVE);

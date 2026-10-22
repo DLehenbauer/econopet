@@ -236,9 +236,10 @@ module ieee (
     logic [1:0] addressed_unit = '0;
     logic [1:0] talk_unit = '0;
     wire [7:0] talk_sa = unit_sa[talk_unit];
-    wire data_owner_matches = !(|(tx_owner & IEEE_TX_OWNER_VALID_MASK))
-        || (tx_owner[IEEE_TX_OWNER_UNIT_SHIFT +: 2] == talk_unit
-            && tx_owner[3:0] == talk_sa[3:0]);
+    wire owner_matches = !(|(tx_owner & IEEE_TX_OWNER_PAUSE_MASK))
+        && (!(|(tx_owner & IEEE_TX_OWNER_VALID_MASK))
+            || (tx_owner[IEEE_TX_OWNER_UNIT_SHIFT +: 2] == talk_unit
+                && tx_owner[3:0] == talk_sa[3:0]));
 
     wire atn_active = enable && !cpu_atn_n;
 
@@ -424,7 +425,7 @@ module ieee (
                     T_IDLE: begin
                         dev_ndac_n <= 1'b1;
                         dev_nrfd_n <= 1'b1;
-                        if (serving_status ? !txs_empty : (!tx_empty && data_owner_matches))
+                        if (owner_matches && (serving_status ? !txs_empty : !tx_empty))
                             talk_st <= T_DAV;
                     end
                     // Source handshake may only begin once an acceptor is
@@ -432,7 +433,7 @@ module ieee (
                     // starting on NRFD alone loses the first byte if the
                     // acceptor hasn't configured NDAC yet.
                     T_DAV: if (bus_nrfd_n && !bus_ndac_n
-                               && (serving_status ? !txs_empty : (!tx_empty && data_owner_matches))) begin
+                               && owner_matches && (serving_status ? !txs_empty : !tx_empty)) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
                         dev_eoi_n <= serving_status ? ~txs_mem[txs_rd][8]   : ~tx_mem[tx_rd][8];
                         dev_dav_n <= 1'b0;
@@ -513,7 +514,7 @@ module ieee (
     assign status[IEEE_ST_RX_AVAIL_BIT] = !rx_empty;
 
     logic rx_pop_req = 1'b0, tx_push_req = 1'b0, txs_push_req = 1'b0;
-    logic mcu_tx_flush;
+    logic mcu_tx_flush, mcu_txs_flush;
     logic [8:0] tx_push_data = '0;
     logic [8:0] txs_push_data = '0;
 
@@ -521,6 +522,7 @@ module ieee (
         wbp_ack_o <= 1'b0;
         flush <= 1'b0;
         mcu_tx_flush <= 1'b0;
+        mcu_txs_flush <= 1'b0;
         rx_pop_req <= 1'b0;
         tx_push_req <= 1'b0;
         txs_push_req <= 1'b0;
@@ -539,8 +541,7 @@ module ieee (
             wbp_ack_o <= 1'b1;
             unique case (reg_addr)
                 IEEE_REG_CTRL: begin
-                    // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
-                    // CTRL reads: enable, burst room, data DAV active, RX-head EOI.
+                    // FIFO-only flushes preserve GET counters and protocol roles.
                     wbp_data_o <= (tx_room ? IEEE_CTRL_RD_TX_ROOM_MASK : DATA_WIDTH'(0))
                                 | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0))
                                 | (!serving_status && !dev_dav_n
@@ -548,11 +549,14 @@ module ieee (
                                 | (!rx_empty && rx_mem[rx_rd][9]
                                     ? IEEE_CTRL_RD_RX_EOI_MASK : DATA_WIDTH'(0))
                                 | (!rx_empty && rx_mem[rx_rd][10]
-                                    ? IEEE_CTRL_RD_RX_ATN_END_MASK : DATA_WIDTH'(0));
+                                    ? IEEE_CTRL_RD_RX_ATN_END_MASK : DATA_WIDTH'(0))
+                                | (serving_status && !dev_dav_n
+                                    ? IEEE_CTRL_RD_STATUS_ACTIVE_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
                         enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
                         mcu_tx_flush <= wbp_data_i[IEEE_CTRL_DATA_FLUSH_BIT];
+                        mcu_txs_flush <= wbp_data_i[IEEE_CTRL_STATUS_FLUSH_BIT];
                     end
                 end
                 IEEE_REG_STATUS: wbp_data_o <= status;
@@ -623,7 +627,7 @@ module ieee (
                 endcase
             end
 
-            if (txs_flush) begin
+            if (txs_flush || mcu_txs_flush) begin
                 txs_wr <= '0; txs_rd <= '0; txs_count <= '0;
             end else begin
                 if (txs_push_req && !txs_full) begin

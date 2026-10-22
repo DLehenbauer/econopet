@@ -105,6 +105,7 @@
 #define ECONOPET_IEEE_CTRL_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_FLUSH_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK 0x08u
 
 // IEEE control-read masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
@@ -112,6 +113,7 @@
 #define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
 #define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u  // RX-head EOI, valid with RX_AVAIL.
 #define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // RX-head ATN-release event (no bus byte).
+#define ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK 0x20u // Status DAV awaits acknowledgement.
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u
@@ -128,6 +130,8 @@
 
 // TX/TXS reads report modulo-256 NRFD GET progress for data/status respectively.
 // FIFO replacement preserves counts. IFC and global flush reset them.
-// SA writes bind data TX to a unit/channel. Zero retains unbound bench access.
+// SA writes bind either source to a unit/channel. PAUSE holds new presentations.
+// Zero retains unbound bench access. Pausing preserves active DAV until NDAC.
 #define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
+#define ECONOPET_IEEE_TX_OWNER_PAUSE_MASK 0x40u
 #define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u
