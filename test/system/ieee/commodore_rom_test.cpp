@@ -75,7 +75,7 @@ private:
     std::optional<KernalFixture> rom_;
 };
 
-// Retain fixed-revision opt-in cases with the same firmware lifecycle.
+// Run fixed-revision transport cases with the same firmware lifecycle.
 class CommodoreRomRevision : public CommodoreRomTest {};
 
 // Give both parameterized suites stable names for their two selected revisions.
@@ -102,7 +102,7 @@ uint8_t run_kernal_leaf(KernalFixture& rom, KernalRoutine routine,
 // Drain byte/ATN evidence, then independently check captured wire flags including EOI.
 void require_transaction(System& system, const WireTrace& wire,
                          const std::vector<Record>& expected, const std::string& reason) {
-    require_drained_sequence(system, fifo_records(expected), ByteBudget, reason);
+    require_drained_sequence(system, expected, ByteBudget, reason);
     if (const auto mismatch = sequence_mismatch(wire.records(), expected))
         throw system.failure<std::runtime_error>("IEEE wire sequence", reason + ": " + *mismatch);
 }
@@ -216,7 +216,7 @@ void run_isour_transmit_case(System& system, KernalFixture& scenario) {
     if (!transmitted.complete()) {
         throw system.failure<std::runtime_error>(name, "did not complete the IEEE output handshake");
     }
-    require_drained_sequence(system, fifo_records({data(0x55)}), ByteBudget, name);
+    require_drained_sequence(system, {data(0x55)}, ByteBudget, name);
     auto expected = addressing;
     expected.push_back(data(0x55));
     require_sequence(wire.records(), expected, name);
@@ -254,39 +254,17 @@ void run_ciout_case(System& system, KernalFixture& rom) {
 
     auto transmitted = test.resume(buffered, BufferedByteBudget);
     ASSERT_EQ(transmitted.name(), "first byte sent");
-    require_drained_sequence(system, fifo_records({data(0x41)}), ByteBudget, name);
+    require_drained_sequence(system, {data(0x41)}, ByteBudget, name);
     expected.push_back(data(0x41));
     EXPECT_THAT(wire.records(), testing::ElementsAreArray(expected));
     // UNLSN must flush the pending byte with EOI before sending UNLISTEN.
     const auto flushed = test.resume(transmitted, BufferedByteBudget);
     ASSERT_TRUE(flushed.complete());
-    require_drained_sequence(system, fifo_records({data(0x42, Eoi::Last), command(Unlisten)}),
+    require_drained_sequence(system, {data(0x42, Eoi::Last), command(Unlisten)},
         ByteBudget, name);
     expected.push_back(data(0x42, Eoi::Last));
     expected.push_back(command(Unlisten));
     EXPECT_THAT(wire.records(), testing::ElementsAreArray(expected));
-}
-
-// Executes OPENI with ROM-specific file-parameter locations and checks its full IEEE transaction.
-TEST_P(CommodoreRomIeee, DISABLED_OPENI) {
-    auto& scenario = selected_rom();
-    const auto diagnostic = scenario.name(KernalRoutine::Openi);
-    const auto name = diagnostic.c_str();
-    auto wire = system.trace_ieee();
-    // Populate file parameters after CINT, then require OPENI's checked return.
-    const uint8_t filename[] = { 'T', 'E', 'S', 'T' };
-    auto test = scenario.program();
-    test.within(KernalBudget).run([&](auto& program) {
-        scenario.init_ieee(program);
-        scenario.device(program);
-        scenario.file(program, filename);
-        program.jsr(scenario.entry(KernalRoutine::Openi));
-    });
-    // Require addressing, filename EOI and termination with no extra record.
-    require_transaction(system, wire, {
-        command(Listen(Device{DeviceAddress})), command(Open(Channel{FileChannel})),
-        data('T'), data('E'), data('S'), data('T', Eoi::Last), command(Unlisten)
-    }, name);
 }
 
 // Executes ROM 4 TRANS1 with a prepared command-channel payload.
@@ -377,7 +355,7 @@ void run_channel_select_case(System& system, KernalFixture& scenario, KernalRout
 }
 
 // Executes CLRCHN with device 8 selected as default output and checks UNLISTEN.
-TEST_P(CommodoreRomIeee, DISABLED_CLRCHN_output) {
+TEST_P(CommodoreRomIeee, CLRCHN_output) {
     auto& rom = selected_rom();
     const auto diagnostic = rom.name(KernalRoutine::Clrchn);
     const auto name = diagnostic.c_str();
@@ -444,10 +422,8 @@ TEST_P(CommodoreRomIeee, UNLSN) {
     run_command_case(system, selected_rom(), KernalRoutine::Unlisten, 0, Unlisten);
 }
 
-// Historical disabled status is retained during the incremental migration,
-// even when an explicit checked-program probe passes.
-// Retains ROM 2's addressed single-byte output expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom2_ISOUR_transmit) {
+// Verify ROM 2's addressed single-byte output independently of buffered output.
+TEST_F(CommodoreRomRevision, Rom2_ISOUR_transmit) {
     KernalFixture rom(system, System::RomSet::Upgrade);
     run_isour_transmit_case(system, rom);
 }
@@ -455,13 +431,13 @@ TEST_F(CommodoreRomRevision, DISABLED_Rom2_ISOUR_transmit) {
 
 // Native file tables contain the encoded secondary ($60 OR channel).
 // These prepared-vector cases do not execute the BASIC OPEN parser.
-// Retains both revisions' input-channel TALK/secondary expectation.
-TEST_P(CommodoreRomIeee, DISABLED_CHKIN) {
+// Verify both revisions' input-channel TALK/secondary expectation.
+TEST_P(CommodoreRomIeee, CHKIN) {
     run_channel_select_case(system, selected_rom(), KernalRoutine::Chkin, Talk(Device{DeviceAddress}));
 }
 
-// Retains both revisions' output-channel LISTEN/secondary expectation.
-TEST_P(CommodoreRomIeee, DISABLED_CHKOUT) {
+// Verify both revisions' output-channel LISTEN/secondary expectation.
+TEST_P(CommodoreRomIeee, CHKOUT) {
     run_channel_select_case(system, selected_rom(), KernalRoutine::Chkout, Listen(Device{DeviceAddress}));
 }
 
@@ -471,39 +447,30 @@ INSTANTIATE_TEST_SUITE_P(Pet, CommodoreRomIeee,
     rom_revision_name);
 
 
-// Historically disabled. Opt-in checked-phase runs pass with FIFO byte/ATN
-// and independent wire EOI evidence. Enabling remains a separate decision.
-// Retains ROM 2's first-byte buffering and last-byte EOI flush expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom2_CIOUT_buffered_EOI) {
+// Verify ROM 2's first-byte buffering and last-byte EOI flush.
+TEST_F(CommodoreRomRevision, Rom2_CIOUT_buffered_EOI) {
     KernalFixture rom(system, System::RomSet::Upgrade);
     run_ciout_case(system, rom);
 }
 
-// ROM 4 also has a verified CIOUT entry. Preserve the same disabled policy.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_CIOUT_buffered_EOI) {
+// Verify the selected ROM 4 CIOUT entry with the same phase-by-phase observations.
+TEST_F(CommodoreRomRevision, Rom4_CIOUT_buffered_EOI) {
     KernalFixture rom(system, System::RomSet::Rom4);
     run_ciout_case(system, rom);
 }
 
 
-// Keep ROM 4's independent native output path under the same opt-in policy.
-// Retains ROM 4's addressed single-byte output expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_ISOUR_transmit) {
+// Verify ROM 4's addressed single-byte output independently of buffered output.
+TEST_F(CommodoreRomRevision, Rom4_ISOUR_transmit) {
     KernalFixture rom(system, System::RomSet::Rom4);
     run_isour_transmit_case(system, rom);
 }
 
-// These are the exact command-channel payloads emitted by the corresponding
-// ROM 4 disk statements after their BASIC parser has prepared FNADR/FNLEN.
-// TRANS1 sends through secondary $6F, not an OPEN $FF. Parser/drive execution
-// and a decision to enable these historical cases remain separate work.
-// CONCAT includes the existing destination as its first source, unlike COPY.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_CONCAT_command_transport) {
-    run_rom4_trans1_case(system, "C0:DEST=0:DEST,0:SRC", "CONCAT");
-}
-
-// Retains BOBREC's encoded secondary and valid position, with an embedded record-number zero.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_RECORD_command_transport) {
+// BOBREC feeds TRANS1 binary P data, including an embedded record-number zero.
+// Unlike OPEN-15 integration, this independently requires secondary $6F.
+// Text-only variants did not call their named BASIC parsers and duplicated
+// this transport. OPENI framing is covered by native OPEN/read integration.
+TEST_F(CommodoreRomRevision, Rom4_RECORD_command_transport) {
     constexpr uint16_t RecordNumber = 0x0034;
     constexpr uint8_t RecordPosition = 1;
     const std::string command{
@@ -511,36 +478,6 @@ TEST_F(CommodoreRomRevision, DISABLED_Rom4_RECORD_command_transport) {
         static_cast<char>(RecordNumber >> 8), RecordPosition
     };
     run_rom4_trans1_case(system, command, "RECORD");
-}
-
-// Retains HEADER's format-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_HEADER_command_transport) {
-    run_rom4_trans1_case(system, "N0:DISK,ID", "HEADER");
-}
-
-// Retains COLECT's validate-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_COLECT_command_transport) {
-    run_rom4_trans1_case(system, "V0", "COLECT");
-}
-
-// Retains BACKUP's duplicate-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_BACKUP_command_transport) {
-    run_rom4_trans1_case(system, "D1=0", "BACKUP");
-}
-
-// Retains COPY's copy-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_COPY_command_transport) {
-    run_rom4_trans1_case(system, "C0:DEST=0:SRC", "COPY");
-}
-
-// Retains RENAME's rename-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_RENAME_command_transport) {
-    run_rom4_trans1_case(system, "R0:NEW=0:OLD", "RENAME");
-}
-
-// Retains SCRTCH's scratch-command transport and EOI expectation.
-TEST_F(CommodoreRomRevision, DISABLED_Rom4_SCRTCH_command_transport) {
-    run_rom4_trans1_case(system, "S0:OLD", "SCRTCH");
 }
 
 // Retains both reset-vector fetch assertions from the retired board harness.

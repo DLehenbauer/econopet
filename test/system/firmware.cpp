@@ -16,7 +16,7 @@ namespace {
 System* active_top_system;
 
 test_observation::TraceSource<IeeeRxRecord>* firmware_rx_source;
-fpga::IeeeStatus firmware_rx_status;
+FirmwareRxSample firmware_rx_status;
 econopet::CycleTime firmware_rx_sampled_at{0};
 
 } // namespace
@@ -30,23 +30,29 @@ System& firmware_system() {
 }
 
 // Clear semantic pairing before issuing another physical SPI operation.
-fpga::IeeeStatus firmware_take_read_status() {
+FirmwareRxSample firmware_take_read_status() {
     const auto& board = firmware_system();
     const auto pending = std::exchange(firmware_rx_status, {});
-    return board.time() == firmware_rx_sampled_at ? pending : fpga::IeeeStatus{};
+    return board.time() == firmware_rx_sampled_at ? pending : FirmwareRxSample{};
 }
 
-// Record only the absolute status/RX pair used by production drive servicing.
-void firmware_record_read(uint32_t address, uint8_t value, fpga::IeeeStatus previous_status) {
-    // Pair the FIFO head byte with the status sampled immediately before it.
-    if (firmware_rx_source != nullptr && address == fpga::address(fpga::Register::IeeeStatus).value()) {
-        firmware_rx_status = fpga::IeeeStatus::from_bits(value);
+// Record only an adjacent CTRL/STATUS/RX triple used by production servicing.
+void firmware_record_read(uint32_t address, uint8_t value, FirmwareRxSample previous) {
+    if (firmware_rx_source != nullptr && address == fpga::address(fpga::Register::IeeeControl).value()) {
+        firmware_rx_status = {{}, fpga::IeeeControlStatus::from_bits(value)};
+        firmware_rx_sampled_at = firmware_system().time();
+    } else if (firmware_rx_source != nullptr && address == fpga::address(fpga::Register::IeeeStatus).value()) {
+        firmware_rx_status = {fpga::IeeeStatus::from_bits(value),
+            previous.status ? std::nullopt : previous.control};
         firmware_rx_sampled_at = firmware_system().time();
     } else if (firmware_rx_source != nullptr && address == fpga::address(fpga::Register::IeeeRx).value()
-               && previous_status.contains(fpga::IeeeStatusBit::RxReady)) {
-        firmware_rx_source->emit(firmware_system().time(),
-            { value, previous_status.contains(fpga::IeeeStatusBit::RxAtn),
-              ieee_test::Eoi::Unobserved });
+               && previous.status && previous.status->contains(fpga::IeeeStatusBit::RxReady)
+               && previous.control) {
+        if (!previous.control->contains(fpga::IeeeControlStatusBit::RxAtnEnd))
+            firmware_rx_source->emit(firmware_system().time(),
+                { value, previous.status->contains(fpga::IeeeStatusBit::RxAtn),
+                  previous.control->contains(fpga::IeeeControlStatusBit::RxEoi)
+                      ? ieee_test::Eoi::Last : ieee_test::Eoi::More });
         firmware_rx_status = {};
     } else {
         firmware_rx_status = {};

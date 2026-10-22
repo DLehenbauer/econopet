@@ -110,6 +110,8 @@
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u  // RX-head EOI, valid with RX_AVAIL.
+#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // RX-head ATN-release event (no bus byte).
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u
@@ -124,7 +126,8 @@
 // IEEE data FIFO capacity guaranteed by TX room (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_TX_BURST_CHUNK 64u
 
-// TX reads report modulo-256 NRFD prefetch progress, unaffected by data flush.
+// TX/TXS reads report modulo-256 NRFD GET progress for data/status respectively.
+// FIFO replacement preserves counts. IFC and global flush reset them.
 // SA writes bind data TX to a unit/channel. Zero retains unbound bench access.
 #define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
 #define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u

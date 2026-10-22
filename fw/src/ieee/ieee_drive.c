@@ -27,6 +27,9 @@
 #define NUM_UNITS       4
 #define DRIVES_PER_UNIT 2
 #define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
+#define COMMAND_BUFFER_CAPACITY 40
+#define COMMAND_RECEIVE_CAPACITY (COMMAND_BUFFER_CAPACITY + 1)
+#define DEFAULT_CHANNEL 0
 
 // Write fabric control without changing firmware channel state.
 static void ieee_ctrl_write(uint8_t value) {
@@ -171,9 +174,12 @@ typedef enum {
     st_code_ok = 0,
     st_code_read_error = 23,
     st_code_write_protect = 26,
+    st_code_long_line = 32,
     st_code_record_missing = 50,
     st_code_record_overflow = 51,
     st_code_file_not_found = 62,
+    st_code_file_type_mismatch = 64,
+    st_code_no_channel = 70,
     st_code_power_on = 73,
 } status_code_t;
 
@@ -182,6 +188,8 @@ typedef struct {
     uint8_t track;
     uint8_t sector;
     uint8_t drive;
+    unsigned int read_pos;
+    uint32_t generation;
 } drive_status_t;
 
 // Per-unit DOS status: each IEEE unit has its own channel-15 command channel,
@@ -192,34 +200,74 @@ static drive_status_t drive_status[NUM_UNITS] = {
     { .code = st_code_power_on },
     { .code = st_code_power_on },
 };
+static uint8_t status_tx_unit = NUM_UNITS;
+static uint8_t status_tx_prefetched;
+static unsigned int status_tx_remaining;
+static uint32_t status_tx_generation;
 
 static void set_status(unsigned int slot, status_code_t code, uint8_t track,
                        uint8_t sector) {
-    drive_status[slot / DRIVES_PER_UNIT] = (drive_status_t) {
+    drive_status_t* const status = &drive_status[slot / DRIVES_PER_UNIT];
+    const uint32_t generation = status->generation + 1;
+    *status = (drive_status_t) {
         .code = code,
         .track = track,
         .sector = sector,
         .drive = (uint8_t) (slot % DRIVES_PER_UNIT),
+        .generation = generation,
     };
 }
 
-static bool mcu_listening = false;  // mirrors the FPGA's addressed state
+// Reconcile native GET progress, which survives FIFO replacement and wraps modulo 256.
+static uint8_t tx_progress(uint32_t address, uint8_t* previous, unsigned int remaining) {
+    const uint8_t current = spi_read_at(address);
+    const uint8_t advanced = (uint8_t) (current - *previous);
+    vet(advanced <= remaining, "IEEE prefetch exceeds its pending batch");
+    *previous = current;
+    return advanced;
+}
+
+// Advance the status owner only on GET, acknowledging the error at terminal CR.
+static void status_tx_sync(void) {
+    if (status_tx_unit == NUM_UNITS) return;
+    drive_status_t* const status = &drive_status[status_tx_unit];
+    const uint8_t advanced = tx_progress(ECONOPET_WB_IEEE_TXS_ADDR,
+        &status_tx_prefetched, status_tx_remaining);
+    status_tx_remaining -= advanced;
+    if (status->generation == status_tx_generation) {
+        status->read_pos += advanced;
+        if (status_tx_remaining == 0)
+            set_status(status_tx_unit * DRIVES_PER_UNIT + status->drive, st_code_ok, 0, 0);
+    }
+    if (status_tx_remaining == 0) status_tx_unit = NUM_UNITS;
+}
+
 static bool mcu_talking = false;
 
-// Which unit (0 = device 8 through 3 = device 11) the current LISTEN/TALK addressed.
-// The secondary address that follows binds channels/status to that unit.
-static uint8_t listen_unit = 0;
+// Only the most recently primary-addressed unit accepts a secondary address.
+static uint8_t addressed_unit = NUM_UNITS;
 static uint8_t talk_unit = 0;
-static uint8_t ch15_unit = 0;    // unit whose ch15 command is being collected
-static uint8_t open_unit = 0;    // unit of the OPEN name being collected
 static uint8_t file_unit = 0;    // unit of the open sequential file
 
 static uint8_t stream_slot = 0;
 
-static bool collecting_name = false;
-static char open_name[48];
-static unsigned int open_name_len = 0;
-static uint8_t open_chan = 0;
+typedef enum {
+    receive_idle,
+    receive_name,
+    receive_command,
+} receive_mode_t;
+
+// Native OPEN names and commands share one counted input buffer per peripheral.
+typedef struct {
+    bool listening;
+    receive_mode_t mode;
+    uint8_t channel;
+    uint8_t secondary;
+    uint8_t pending;
+    unsigned int length;
+    uint8_t bytes[COMMAND_RECEIVE_CAPACITY + 1]; // Spare byte for filename termination.
+} receive_state_t;
+static receive_state_t receive_states[NUM_UNITS];
 
 // One data channel at a time (all the Waterloo loader needs).
 typedef enum {
@@ -278,13 +326,10 @@ static void rel_prepare(rel_channel_t* rc);
 static void data_tx_sync(void) {
     if (data_tx_channel == NULL) return;
     rel_channel_t* const rc = data_tx_channel;
-    const uint8_t prefetched = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
-    const uint8_t advanced = (uint8_t) (prefetched - data_tx_prefetched);
-    vet(advanced <= rc->pending_size - rc->pending_pos,
-        "IEEE REL prefetch exceeds its pending batch");
+    const uint8_t advanced = tx_progress(ECONOPET_WB_IEEE_TX_ADDR,
+        &data_tx_prefetched, rc->pending_size - rc->pending_pos);
     rc->pending_pos += advanced;
     rc->bufptr += advanced;
-    data_tx_prefetched = prefetched;
     if (advanced != 0 && rc->pending_record && rc->pending_pos == rc->pending_size) {
         // GET of the EOI byte prepares the following record before NDAC.
         // Detach the drained batch before positioning can invalidate a queue.
@@ -319,11 +364,10 @@ static void data_tx_park(void) {
     data_tx_owner = 0;
 }
 
-// Bind queued data before releasing it to the selected hardware unit/channel.
+// Retain the queued owner, releasing it only after ordered RX processing finishes.
 static void data_tx_bind(uint8_t unit, uint8_t chan) {
     data_tx_owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
         | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan;
-    data_tx_resume();
 }
 
 // Channels are keyed by (unit, chan): the d8d9 descriptor table reuses
@@ -336,29 +380,18 @@ static rel_channel_t* rel_find(uint8_t unit, uint8_t chan) {
     return NULL;
 }
 
-// Channel-15 DOS command collection (LISTEN + secondary $6F, data, UNLISTEN)
-static uint8_t ch15_cmd[40];
-static unsigned int ch15_cmd_len = 0;
-static bool collecting_ch15 = false;
-static uint8_t listen_chan = 0xFF;  // active LISTEN data channel, $FF = none
-
 // Resets DOS and protocol state that must not outlive initialization.
 static void reset_protocol_state(void) {
     for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
         set_status(unit * DRIVES_PER_UNIT, st_code_power_on, 0, 0);
     }
 
-    mcu_listening = false;
     mcu_talking = false;
-    listen_unit = 0;
+    addressed_unit = NUM_UNITS;
     talk_unit = 0;
-    ch15_unit = 0;
-    open_unit = 0;
     file_unit = 0;
     stream_slot = 0;
-    collecting_name = false;
-    open_name_len = 0;
-    open_chan = 0;
+    memset(receive_states, 0, sizeof(receive_states));
     file_state = file_channel_closed;
     file_chan = 0;
     stream = (diskstream_t) { 0 };
@@ -366,11 +399,9 @@ static void reset_protocol_state(void) {
     streamed_bytes = 0;
     data_tx_channel = NULL;
     data_tx_owner = 0;
+    status_tx_unit = NUM_UNITS;
+    status_tx_remaining = 0;
     memset(rel_chans, 0, sizeof(rel_chans));
-    memset(ch15_cmd, 0, sizeof(ch15_cmd));
-    ch15_cmd_len = 0;
-    collecting_ch15 = false;
-    listen_chan = 0xFF;
 }
 
 static drive_model_t get_drive_model(unsigned int slot) {
@@ -557,9 +588,18 @@ static void rel_write_commit(rel_channel_t* rc) {
     if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
 }
 
-// Execute a completed channel-15 command. Only 'P' (position) acts;
-// 'I'/'V' succeed silently like a real drive.
-static void ch15_execute(void) {
+// Starts counted command collection for both OPEN 15 and secondary address 15.
+static void ch15_begin(uint8_t unit) {
+    receive_states[unit].mode = receive_command;
+    receive_states[unit].channel = IEEE_COMMAND_CHANNEL;
+}
+
+// Execute the collected command after native IDLE dispatch, not on receipt of EOI.
+static void ch15_execute(uint8_t ch15_unit) {
+    receive_state_t* const command = &receive_states[ch15_unit];
+    const uint8_t* const ch15_cmd = command->bytes;
+    const unsigned int ch15_cmd_len = command->length;
+    command->length = 0;
     if (ch15_cmd_len == 0) return;
 
     if (ch15_cmd[0] == 'P' && ch15_cmd_len >= 4) {
@@ -568,9 +608,13 @@ static void ch15_execute(void) {
         uint32_t rec = ch15_cmd[2] | ((uint32_t) ch15_cmd[3] << 8);
         uint8_t pos = (ch15_cmd_len >= 5 && ch15_cmd[4] >= 1) ? (uint8_t) (ch15_cmd[4] - 1) : 0;
         if (rc == NULL) {
+            const uint8_t channel = ch15_cmd[1] & IEEE_CMD_CHANNEL_MASK;
+            const bool sequential = channel == IEEE_CMD_CHANNEL_MASK
+                || (file_state != file_channel_closed
+                    && file_unit == ch15_unit && file_chan == channel);
             set_status(ch15_unit * DRIVES_PER_UNIT
                        + drive_status[ch15_unit].drive,
-                       st_code_file_not_found, 0, 0);
+                       sequential ? st_code_file_type_mismatch : st_code_no_channel, 0, 0);
         } else {
             const bool overflow = pos >= rc->reclen;
             if (overflow) pos = 0;
@@ -591,23 +635,20 @@ static void ch15_execute(void) {
     } else {
         log_info("ieee: ch15 command %02x len %u (ignored)", ch15_cmd[0], ch15_cmd_len);
     }
-    ch15_cmd_len = 0;
 }
 
-static void resolve_open(void) {
-    collecting_name = false;
-    open_name[open_name_len] = '\0';
+// Consume a pending OPEN from the shared buffer when the peripheral reaches IDLE.
+static void resolve_open(uint8_t open_unit) {
+    receive_state_t* const input = &receive_states[open_unit];
+    char* const open_name = (char*) input->bytes;
+    const uint8_t open_chan = input->channel;
+    open_name[input->length] = '\0';
+    input->length = 0;
 
     // Split off the ",PRG"/",SEQ" type suffix.
     char* comma = strchr(open_name, ',');
     if (comma != NULL) *comma = '\0';
 
-    // Channel 15 is the command channel: its "filename" is a DOS command
-    // string, never a file open. Don't disturb the active data stream.
-    if ((open_chan & 0x0F) == 0x0F) {
-        log_info("ieee: DOS command '%s' (ignored)", open_name);
-        return;
-    }
     rel_channel_t* const previous = rel_find(open_unit, open_chan & 0x0F);
     if (previous != NULL) previous->in_use = false;
 
@@ -707,7 +748,33 @@ static void resolve_open(void) {
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
 
+// Dispatch CMDWAT only after ATN processing returns this peripheral to IDLE/VIDLE.
+static void dispatch_pending(void) {
+    for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
+        receive_state_t* const input = &receive_states[unit];
+        if (!input->pending || input->listening || (mcu_talking && talk_unit == unit)) continue;
+        input->pending = 0;
+        unsigned int length = input->length;
+        if (length > 1) {
+            if (input->bytes[length - 1] == '\r') --length;
+            else if (input->bytes[length - 2] == '\r') length -= 2;
+        }
+        input->length = length;
+        if (length > COMMAND_BUFFER_CAPACITY) {
+            input->length = 0;
+            set_status(unit * DRIVES_PER_UNIT + drive_status[unit].drive, st_code_long_line, 0, 0);
+        } else if (IEEE_CMD_IS_OPEN(input->secondary)
+            && IEEE_CMD_CHANNEL(input->secondary) != IEEE_COMMAND_CHANNEL) {
+            resolve_open(unit);
+        } else {
+            ch15_execute(unit);
+        }
+    }
+}
+
+// Queue only the unread status suffix, retaining DOS lifetime until its CR GET.
 static void push_status(unsigned int unit) {
+    status_tx_sync();
     const char* text;
     char line[IEEE_STATUS_LINE_CAPACITY];
     const drive_status_t status = drive_status[unit];
@@ -718,9 +785,12 @@ static void push_status(unsigned int unit) {
         case st_code_ok:              text = " OK"; break;
         case st_code_read_error:      text = "READ ERROR"; break;
         case st_code_write_protect:   text = "WRITE PROTECT ON"; break;
+        case st_code_long_line:       text = "SYNTAX ERROR"; break;
         case st_code_record_missing:  text = "RECORD NOT PRESENT"; break;
         case st_code_record_overflow: text = "OVERFLOW IN RECORD"; break;
         case st_code_file_not_found:  text = " FILE NOT FOUND"; break;
+        case st_code_file_type_mismatch: text = " FILE TYPE MISMATCH"; break;
+        case st_code_no_channel:      text = "NO CHANNEL"; break;
         case st_code_power_on:
             text = model == drive_model_8050
                 ? "CBM DOS V2.7"
@@ -737,13 +807,14 @@ static void push_status(unsigned int unit) {
 
     vet(n >= 0 && (size_t) n <= IEEE_STATUS_TEXT_MAX,
         "IEEE status text exceeds its %u-byte capacity", IEEE_STATUS_TEXT_MAX);
-    for (int i = 0; i < n; i++) spi_write_at(ECONOPET_WB_IEEE_TXS_ADDR, (uint8_t) line[i]);
+    vet(status.read_pos <= (unsigned int) n, "IEEE status progress exceeds its text");
+    status_tx_unit = (uint8_t) unit;
+    status_tx_generation = status.generation;
+    status_tx_remaining = (unsigned int) n + 1 - status.read_pos;
+    status_tx_prefetched = spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR);
+    for (unsigned int i = status.read_pos; i < (unsigned int) n; i++)
+        spi_write_at(ECONOPET_WB_IEEE_TXS_ADDR, (uint8_t) line[i]);
     spi_write_at(ECONOPET_WB_IEEE_TXS_LAST_ADDR, 0x0D);
-
-    // Reading the status channel resets it, like a real drive.
-    drive_status[unit].code = st_code_ok;
-    drive_status[unit].track = 0;
-    drive_status[unit].sector = 0;
 }
 
 // Fill the TX FIFO from the open stream until the fabric reports no room
@@ -812,22 +883,33 @@ static void service_tx(void) {
 static void handle_command(uint8_t cmd) {
     switch (IEEE_CMD_CLASS(cmd)) {
         case IEEE_CMD_LISTEN_BASE:  // LISTEN / UNLISTEN
+            addressed_unit = NUM_UNITS;
             if (cmd == IEEE_CMD_UNLISTEN) {
-                if (collecting_name) resolve_open();
-                if (collecting_ch15) { collecting_ch15 = false; ch15_execute(); }
+                for (unsigned int unit = 0; unit < NUM_UNITS; ++unit) {
+                    receive_states[unit].listening = false;
+                    receive_states[unit].mode = receive_idle;
+                }
                 for (int i = 0; i < MAX_REL_CHANNELS; i++)
                     if (rel_chans[i].in_use && rel_chans[i].wr_active)
                         rel_write_commit(&rel_chans[i]);
-                mcu_listening = false;
-                listen_chan = 0xFF;
             } else {
-                uint8_t a = IEEE_CMD_ADDRESS(cmd);
-                mcu_listening = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
-                if (mcu_listening) listen_unit = (uint8_t) (a - DEV_ADDR);
+                const uint8_t a = IEEE_CMD_ADDRESS(cmd);
+                if (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS) {
+                    addressed_unit = (uint8_t) (a - DEV_ADDR);
+                    receive_states[addressed_unit].listening = true;
+                    receive_states[addressed_unit].mode = receive_idle;
+                    receive_states[addressed_unit].channel = DEFAULT_CHANNEL;
+                    receive_states[addressed_unit].secondary = IEEE_CMD_LISTEN_BASE;
+                    if (mcu_talking && talk_unit == addressed_unit) {
+                        mcu_talking = false;
+                        streaming = false;
+                    }
+                }
             }
             break;
 
         case IEEE_CMD_TALK_BASE:  // TALK / UNTALK
+            addressed_unit = NUM_UNITS;
             streaming = false;
             if (cmd == IEEE_CMD_UNTALK) {
                 mcu_talking = false;
@@ -837,23 +919,33 @@ static void handle_command(uint8_t cmd) {
             } else {
                 uint8_t a = IEEE_CMD_ADDRESS(cmd);
                 mcu_talking = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
-                if (mcu_talking) talk_unit = (uint8_t) (a - DEV_ADDR);
+                if (mcu_talking) {
+                    talk_unit = (uint8_t) (a - DEV_ADDR);
+                    addressed_unit = talk_unit;
+                    receive_states[talk_unit].listening = false;
+                    receive_states[talk_unit].mode = receive_idle;
+                    receive_states[talk_unit].channel = DEFAULT_CHANNEL;
+                    receive_states[talk_unit].secondary = IEEE_CMD_LISTEN_BASE;
+                }
             }
             break;
 
         case IEEE_CMD_SECONDARY_BASE:  // secondary address (data channel)
-            if (mcu_listening) {
+            if (addressed_unit == NUM_UNITS) break;
+            receive_states[addressed_unit].secondary = cmd;
+            if (receive_states[addressed_unit].listening) {
                 rel_channel_t* wrc;
-                listen_chan = IEEE_CMD_CHANNEL(cmd);
+                const uint8_t listen_unit = addressed_unit;
+                const uint8_t listen_chan = IEEE_CMD_CHANNEL(cmd);
+                receive_states[listen_unit].channel = listen_chan;
+                receive_states[listen_unit].mode = receive_idle;
                 if (listen_chan == 15) {
-                    collecting_ch15 = true;
-                    ch15_unit = listen_unit;
-                    ch15_cmd_len = 0;
+                    ch15_begin(listen_unit);
                 } else if ((wrc = rel_find(listen_unit, listen_chan)) != NULL) {
                     rel_write_begin(wrc);
                 }
             }
-            if (mcu_talking) {
+            if (mcu_talking && talk_unit == addressed_unit) {
                 streaming = false;
                 uint8_t chan = IEEE_CMD_CHANNEL(cmd);
                 rel_channel_t* rc;
@@ -875,27 +967,28 @@ static void handle_command(uint8_t cmd) {
             break;
 
         case IEEE_CMD_CLOSE_BASE:  // CLOSE ($Ex) / OPEN ($Fx)
+            if (addressed_unit == NUM_UNITS
+                || !receive_states[addressed_unit].listening) break;
+            receive_states[addressed_unit].secondary = cmd;
             // Fabric has already flushed ordinary OPEN/CLOSE, but its GET
             // counter still records genuine progress before that discard.
-            if (mcu_listening && IEEE_CMD_CHANNEL(cmd) != 15) data_tx_park();
+            if (IEEE_CMD_CHANNEL(cmd) != 15) data_tx_park();
             if (IEEE_CMD_IS_OPEN(cmd)) {
-                if (mcu_listening) {
-                    open_chan = IEEE_CMD_CHANNEL(cmd);
-                    open_unit = listen_unit;
-                    collecting_name = true;
-                    open_name_len = 0;
+                receive_states[addressed_unit].channel = IEEE_CMD_CHANNEL(cmd);
+                if (IEEE_CMD_CHANNEL(cmd) == 15) {
+                    ch15_begin(addressed_unit);
+                } else {
+                    receive_states[addressed_unit].mode = receive_name;
                 }
             } else {
-                if (mcu_listening) {
-                    rel_channel_t* rc = rel_find(listen_unit, IEEE_CMD_CHANNEL(cmd));
-                    if (rc != NULL) {
-                        rc->in_use = false;
-                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                    } else if (listen_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
-                        file_state = file_channel_closed;
-                        streaming = false;
-                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                    }
+                rel_channel_t* rc = rel_find(addressed_unit, IEEE_CMD_CHANNEL(cmd));
+                if (rc != NULL) {
+                rc->in_use = false;
+                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+                } else if (addressed_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
+                file_state = file_channel_closed;
+                streaming = false;
+                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                 }
             }
             break;
@@ -956,6 +1049,8 @@ bool ieee_drive_mount(unsigned int slot, const char* filename) {
     bool mounted = mount_image(slot, filename);
     if (!mounted) log_info("ieee: could not mount disk image: /disks/%s", filename);
     if (mounted) {
+        status_tx_sync();
+        status_tx_unit = NUM_UNITS;
         data_tx_park();
         for (unsigned int index = 0; index < MAX_REL_CHANNELS; ++index)
             if (rel_chans[index].slot == slot) rel_chans[index].in_use = false;
@@ -971,6 +1066,7 @@ bool ieee_drive_mount(unsigned int slot, const char* filename) {
 void ieee_drive_task(void) {
     if (!emulation_enabled) return;
     data_tx_sync();
+    status_tx_sync();
 
     // Drain the RX FIFO (commands and listener data).
     for (unsigned int i = 0; i < 64; i++) {
@@ -981,8 +1077,9 @@ void ieee_drive_task(void) {
         // Pause first, then yield until NDAC releases the latched byte. Never
         // block the MCU or flush/rebind its FIFO while a listener is sampling.
         data_tx_pause();
-        if (spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR)
-            & ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK) return;
+        status_tx_sync();
+        const uint8_t ctrl = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
+        if (ctrl & ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK) return;
 
         // Sample the head's ATN flag immediately before its paired RX read,
         // after the pause transactions (also preserving semantic RX tracing).
@@ -991,17 +1088,25 @@ void ieee_drive_task(void) {
         uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
         spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
 
+        if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK) {
+            dispatch_pending();
+            continue;
+        }
         if (is_atn) {
             handle_command(byte);
         } else {
-            if (collecting_name && open_name_len < sizeof(open_name) - 1) {
-                open_name[open_name_len++] = (char) byte;
-            } else if (collecting_ch15 && ch15_cmd_len < sizeof(ch15_cmd)) {
-                ch15_cmd[ch15_cmd_len++] = byte;
-            } else if (listen_chan != 0xFF) {
-                rel_channel_t* wrc = rel_find(listen_unit, listen_chan);
-                if (wrc != NULL && wrc->wr_active) {
-                    rel_write_byte(wrc, byte);   // REL write on this channel's slot
+            for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
+                receive_state_t* const input = &receive_states[unit];
+                if (!input->listening) continue;
+                if (input->mode != receive_idle) {
+                    if (input->length < COMMAND_RECEIVE_CAPACITY)
+                        input->bytes[input->length++] = byte;
+                    if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK) {
+                        ++input->pending;
+                    }
+                } else {
+                    rel_channel_t* wrc = rel_find(unit, input->channel);
+                    if (wrc != NULL && wrc->wr_active) rel_write_byte(wrc, byte);
                 }
             }
         }

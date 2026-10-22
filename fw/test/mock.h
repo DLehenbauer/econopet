@@ -26,6 +26,10 @@ bool mock_breakpoint_halt_was_cleared(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
+// Queues a receive byte with explicit ATN and EOI metadata.
+void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi);
+// Queues an ordered ATN-release event without inventing a received byte.
+void mock_ieee_enqueue_atn_end(void);
 // Returns the number of captured file-channel bytes.
 size_t mock_ieee_data_count(void);
 // Returns a captured file-channel byte, asserting the index is valid.
@@ -42,5 +46,9 @@ size_t mock_ieee_status_count(void);
 uint8_t mock_ieee_status_byte(size_t index);
 // Returns a captured command-channel byte's EOI marker.
 bool mock_ieee_status_eoi(size_t index);
-// Discards captured command-channel bytes without changing other FIFOs.
+// Models NRFD-triggered advancement through a prefix of captured status.
+void mock_ieee_consume_status(size_t count);
+// Discards status transport storage without fetching any response bytes.
+void mock_ieee_discard_status(void);
+// Models fetching every captured command-channel byte.
 void mock_ieee_clear_status(void);

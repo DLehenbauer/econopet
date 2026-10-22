@@ -303,7 +303,7 @@ TEST_F(SystemTest, WaterlooFixtureNativeHooksPermitRealUntalkTransport) {
     EXPECT_TRUE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(econopet::CpuAddress{0xe76b}, checkpoint));
     EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(econopet::CpuAddress{0xeaea}, checkpoint));
     require_sequence(wire.records(), {{0x5f, true, Eoi::More}}, "native Waterloo UNTALK");
-    require_drained_sequence(system, {{0x5f, true, Eoi::Unobserved}}, ByteBudget, "native Waterloo UNTALK");
+    require_drained_sequence(system, {{0x5f, true, Eoi::More}}, ByteBudget, "native Waterloo UNTALK");
 }
 
 TEST_F(SystemTest, WaterlooFixtureFocusedInitializerPreservesHooks) {

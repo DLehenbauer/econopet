@@ -12,14 +12,29 @@ inline bool rx_empty_now(System& board) {
     return !board.ieee().read_status().contains(fpga::IeeeStatusBit::RxReady);
 }
 
-// Actively read and acknowledge one head. An empty sample returns no record.
-// RX stores no EOI. Status bit 7 means talker-starved, not received EOI.
+// Discard transport-only boundaries, then peek at the next bus byte without popping it.
+inline std::optional<Record> peek_rx(System& board) {
+    constexpr size_t BoundaryLimit = 32;
+    for (size_t skipped = 0; skipped <= BoundaryLimit; ++skipped) {
+        const auto status = board.ieee().read_status();
+        if (!status.contains(fpga::IeeeStatusBit::RxReady)) return std::nullopt;
+        const auto control = board.ieee().read_control();
+        if (control.contains(fpga::IeeeControlStatusBit::RxAtnEnd)) {
+            board.spi().write(fpga::Register::IeeeRx, 0);
+            continue;
+        }
+        const auto byte = board.spi().read(fpga::Register::IeeeRx);
+        return Record{byte, status.contains(fpga::IeeeStatusBit::RxAtn),
+            control.contains(fpga::IeeeControlStatusBit::RxEoi) ? Eoi::Last : Eoi::More};
+    }
+    throw board.failure<std::runtime_error>("IEEE RX", "ATN boundaries exceed one FIFO capacity");
+}
+
+// Actively read and acknowledge one bus byte, excluding transport-only boundaries.
 inline std::optional<Record> take_rx(System& board) {
-    const auto status = board.ieee().read_status();
-    if (!status.contains(fpga::IeeeStatusBit::RxReady)) return std::nullopt;
-    const auto byte = board.spi().read(fpga::Register::IeeeRx);
-    board.spi().write(fpga::Register::IeeeRx, 0);
-    return Record{byte, status.contains(fpga::IeeeStatusBit::RxAtn), Eoi::Unobserved};
+    const auto record = peek_rx(board);
+    if (record) board.spi().write(fpga::Register::IeeeRx, 0);
+    return record;
 }
 
 // Drain through physical SPI until an empty status sample, under one deadline.
@@ -33,7 +48,7 @@ inline std::vector<Record> drain_rx(System& board, size_t limit, econopet::Cycle
     board.service_until([&](const System&) { return empty; },
         [&](System& active, econopet::Cycles) {
             if (records.size() == limit) {
-                if (!rx_empty_now(active))
+                if (peek_rx(active))
                     throw active.failure<std::runtime_error>("IEEE drain",
                         reason + ": record limit at index=" + std::to_string(limit));
                 empty = true;

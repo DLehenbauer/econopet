@@ -76,7 +76,9 @@ module ieee (
     logic [7:0] pia2_crb    = 8'h00;
     logic [7:0] via_orb     = 8'hFF;
     logic [3:0] pia1_pa_out = 4'h0;    // keyboard column select (for $E810 compose)
+    logic [7:0] pia1_cra = 8'h00;
 
+    wire cpu_eoi_n  = (pia1_cra[5:4] == 2'b11) ? pia1_cra[3] : 1'b1;
     wire cpu_ndac_n = (pia2_cra[5:4] == 2'b11) ? pia2_cra[3] : 1'b1;
     wire cpu_dav_n  = (pia2_crb[5:4] == 2'b11) ? pia2_crb[3] : 1'b1;
     wire cpu_atn_n  = via_orb[2];
@@ -134,6 +136,7 @@ module ieee (
             pia2_crb    <= 8'h00;
             via_orb     <= 8'hFF;
             pia1_pa_out <= 4'h0;
+            pia1_cra    <= 8'h00;
         end else if (cpu_wr) begin
             if (snap_pia2) begin
                 unique case (pia_rs)
@@ -145,6 +148,7 @@ module ieee (
             end
             if (snap_via && snap_rs == 4'd0) via_orb <= cpu_data_i;
             if (snap_pia1 && pia_rs == 2'd0) pia1_pa_out <= cpu_data_i[3:0];
+            if (snap_pia1 && pia_rs == 2'd1) pia1_cra <= cpu_data_i;
         end
     end
 
@@ -164,7 +168,7 @@ module ieee (
 
     // ------------------------------------------------------------------
     // FIFOs
-    //   RX: CPU -> MCU, 9-bit entries {atn, data} (commands tagged)
+    //   RX: CPU -> MCU, {atn_end, eoi, atn, data}. ATN end has no bus byte.
     //   TX: MCU -> CPU, 9-bit entries {eoi, data}
     // ------------------------------------------------------------------
     localparam RX_DEPTH = 32;
@@ -174,11 +178,13 @@ module ieee (
     // to LUT-RAM, so depth is LUT-bounded.
     localparam TX_DEPTH = 1024;
 
-    logic [8:0] rx_mem [RX_DEPTH-1:0];
+    logic [10:0] rx_mem [RX_DEPTH-1:0];
     logic [$clog2(RX_DEPTH)-1:0] rx_wr = '0, rx_rd = '0;
     logic [$clog2(RX_DEPTH):0]   rx_count = '0;
     wire rx_empty = rx_count == 0;
     wire rx_full  = rx_count == ($clog2(RX_DEPTH)+1)'(RX_DEPTH);
+    wire rx_room = !rx_full
+        && !(rx_push && rx_count == ($clog2(RX_DEPTH)+1)'(RX_DEPTH - 1));
 
     logic [8:0] tx_mem [TX_DEPTH-1:0];
     logic [$clog2(TX_DEPTH)-1:0] tx_wr = '0, tx_rd = '0;
@@ -186,6 +192,7 @@ module ieee (
     wire tx_empty = tx_count == 0;
     wire tx_full  = tx_count == ($clog2(TX_DEPTH)+1)'(TX_DEPTH);
     logic [7:0] tx_prefetched = '0;
+    logic [7:0] txs_prefetched = '0;
     logic [7:0] tx_owner = '0;
 
     // Burst-fill flow control: the MCU fills the FIFO with batched WRITE_SAME
@@ -205,30 +212,40 @@ module ieee (
     wire txs_full  = txs_count == ($clog2(TXS_DEPTH)+1)'(TXS_DEPTH);
 
     // Talker source: status FIFO on channel 15, data FIFO otherwise.
-    wire serving_status = sa[3:0] == 4'hF;
+    wire serving_status = talk_sa[3:0] == 4'hF;
 
     // ------------------------------------------------------------------
     // Device protocol state
     // ------------------------------------------------------------------
     // The emulation answers four unit addresses, DEV_ADDR through DEV_ADDR+3
-    // (devices 8 through 11), each a dual-drive unit. Handshake state, sa,
-    // and FIFOs are shared, but data TX ownership includes the selected unit.
+    // (devices 8 through 11), each a dual-drive unit. Handshake and FIFOs
+    // are shared, but roles and secondary selections belong to each unit.
     // The MCU also learns the unit from commands forwarded through RX.
     // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
+    localparam int UNIT_COUNT = 4;
+    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00};
+    wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
-    logic listening = 1'b0;
+    logic [UNIT_COUNT-1:0] listen_units = '0;
+    wire listening = |listen_units;
     logic talking   = 1'b0;
     logic [7:0] sa = 8'h00;
+    logic [UNIT_COUNT-1:0][7:0] unit_sa = '0;
+    logic addressed = 1'b0;
+    logic [1:0] addressed_unit = '0;
     logic [1:0] talk_unit = '0;
+    wire [7:0] talk_sa = unit_sa[talk_unit];
     wire data_owner_matches = !(|(tx_owner & IEEE_TX_OWNER_VALID_MASK))
         || (tx_owner[IEEE_TX_OWNER_UNIT_SHIFT +: 2] == talk_unit
-            && tx_owner[3:0] == sa[3:0]);
+            && tx_owner[3:0] == talk_sa[3:0]);
 
     wire atn_active = enable && !cpu_atn_n;
 
     logic prev_bus_dav_n = 1'b1;
     logic prev_atn_n     = 1'b1;
+    logic atn_end_pending = 1'b0;
+    wire atn_end_due = atn_end_pending || (!prev_atn_n && cpu_atn_n);
 
     // Native TLK20/TLK30 prefetches on NRFD before TLK35 waits for NDAC.
     typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM } talk_state_t;
@@ -236,7 +253,7 @@ module ieee (
 
     // RX push request from the acceptor
     logic rx_push = 1'b0;          // init: else a phantom push under rand reset
-    logic [8:0] rx_push_data = '0;
+    logic [10:0] rx_push_data = '0;
 
 
     // Data-FIFO flush, requested by the MCU (on OPEN/CLOSE) via CTRL bit 2.
@@ -259,11 +276,16 @@ module ieee (
 
         if (ifc_i) begin
             tx_prefetched <= '0;
+            txs_prefetched <= '0;
+            atn_end_pending <= 1'b0;
             // Supported PET/fabric resets are MCU-coordinated with ieee_drive_reset().
             // Independently pulling the physical CPU reset pin low is unsupported.
-            listening      <= 1'b0;
+            listen_units   <= '0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            unit_sa        <= '0;
+            addressed      <= 1'b0;
+            addressed_unit <= '0;
             talk_unit      <= '0;
             talk_st        <= T_IDLE;
             dev_nrfd_n     <= 1'b1;
@@ -276,9 +298,14 @@ module ieee (
             rx_push_data   <= '0;
         end else if (flush || !enable) begin
             if (flush) tx_prefetched <= '0;
-            listening      <= 1'b0;
+            if (flush) txs_prefetched <= '0;
+            atn_end_pending <= 1'b0;
+            listen_units   <= '0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            unit_sa        <= '0;
+            addressed      <= 1'b0;
+            addressed_unit <= '0;
             talk_unit      <= '0;
             talk_st        <= T_IDLE;
             dev_nrfd_n     <= 1'b1;
@@ -289,6 +316,15 @@ module ieee (
             prev_bus_dav_n <= 1'b1;
             prev_atn_n     <= 1'b1;
         end else begin
+            // Preserve the native ATN50 -> IDLE/TALK/LISTEN boundary in FIFO order.
+            if (atn_end_due) begin
+                atn_end_pending <= 1'b1;
+                if (rx_room) begin
+                    rx_push <= 1'b1;
+                    rx_push_data <= {1'b1, 10'b0};
+                    atn_end_pending <= 1'b0;
+                end
+            end
             if (atn_active || listening) begin
                 // ATN releases the in-flight lines without advancing again.
                 // The FIFO already reflects any NRFD-triggered prefetch.
@@ -303,7 +339,7 @@ module ieee (
                     dev_ndac_n <= 1'b0;    // join the handshake on ATN assert
                 end
 
-                if (prev_bus_dav_n && !bus_dav_n && !rx_full) begin
+                if (prev_bus_dav_n && !bus_dav_n && rx_room && !atn_end_due) begin
                     // Byte valid and room to store it: capture and accept.
                     // (While RX is full, hold NDAC asserted and wait -- IEEE
                     // flow control backpressures the CPU until the MCU drains
@@ -311,23 +347,46 @@ module ieee (
                     if (atn_active) begin
                         // Command byte: update protocol state and forward to MCU.
                         priority casez (~pia2_pb_out)
-                            8'h3F:   listening <= 1'b0;                       // UNLISTEN
-                            8'h5F:   talking <= 1'b0;                         // UNTALK (channel data persists)
-                            8'b001?_????: listening <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
-                            8'b010?_????: begin
-                                talking <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00};
-                                talk_unit <= ~pia2_pb_out[1:0];
+                            8'h3F: begin                                     // UNLISTEN
+                                listen_units <= '0;
+                                addressed <= 1'b0;
                             end
-                            8'b011?_????: if (listening || talking) begin
+                            8'h5F: begin                                     // UNTALK (channel data persists)
+                                talking <= 1'b0;
+                                addressed <= 1'b0;
+                            end
+                            8'b001?_????: begin
+                                addressed <= own_address;
+                                if (own_address) begin
+                                    addressed_unit <= primary_unit;
+                                    listen_units[primary_unit] <= 1'b1;
+                                    unit_sa[primary_unit] <= 8'h20;
+                                    if (talk_unit == primary_unit) talking <= 1'b0;
+                                end
+                            end
+                            8'b010?_????: begin
+                                addressed <= own_address;
+                                talking <= own_address;
+                                if (own_address) begin
+                                    addressed_unit <= primary_unit;
+                                    listen_units[primary_unit] <= 1'b0;
+                                    unit_sa[primary_unit] <= 8'h20;
+                                    talk_unit <= primary_unit;
+                                end
+                            end
+                            8'b011?_????: if (addressed) begin
                                 sa <= ~pia2_pb_out;                           // secondary (data)
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Fresh status per request: the kernel re-reads
                                 // channel 15 often; stale unread status bytes
                                 // must not misalign the next read.
-                                if (talking && (~pia2_pb_out & 8'h0F) == 8'h0F)
+                                if (talking && talk_unit == addressed_unit
+                                    && (~pia2_pb_out & 8'h0F) == 8'h0F)
                                     txs_flush <= 1'b1;
                             end
-                            8'b1110_????: if (listening) begin
+                            8'b1110_????: if (addressed && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // CLOSE
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Discard queued file data in fabric, before
                                 // the MCU even sees the command -- but only
                                 // for real data channels: ch15 CLOSE/OPEN is
@@ -336,18 +395,19 @@ module ieee (
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
-                            8'b1111_????: if (listening) begin
+                            8'b1111_????: if (addressed && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // OPEN
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             default: ;
                         endcase
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b1, ~pia2_pb_out};
+                        rx_push_data <= {1'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
                     end else begin
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b0, ~pia2_pb_out};
+                        rx_push_data <= {1'b0, !cpu_eoi_n, 1'b0, ~pia2_pb_out};
                     end
                     dev_nrfd_n <= 1'b0;
                     dev_ndac_n <= 1'b1;    // accepted
@@ -382,7 +442,10 @@ module ieee (
                         // Owner changes stop new presentations, not this one.
                         // Native TLK35 holds DAV/DIO/EOI until NDAC releases.
                         if (talk_st == T_PREFETCH && !bus_nrfd_n) begin
-                            if (serving_status) txs_pop <= 1'b1;
+                            if (serving_status) begin
+                                txs_pop <= 1'b1;
+                                txs_prefetched <= txs_prefetched + 1'b1;
+                            end
                             else begin
                                 tx_pop <= 1'b1;
                                 // Count GET itself, even if a simultaneous
@@ -417,7 +480,8 @@ module ieee (
             // FIFO was full, the capture above was suppressed -- keep
             // prev_bus_dav_n high so the edge re-fires once the MCU drains
             // a slot, instead of being lost forever (bus deadlock).
-            if (!(prev_bus_dav_n && !bus_dav_n && rx_full && (atn_active || listening)))
+            if (!(prev_bus_dav_n && !bus_dav_n
+                && (!rx_room || atn_end_due) && (atn_active || listening)))
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
         end
@@ -476,11 +540,15 @@ module ieee (
             unique case (reg_addr)
                 IEEE_REG_CTRL: begin
                     // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
-                    // CTRL reads: bit0 = enabled, bit1 = burst room, bit2 = data DAV active.
+                    // CTRL reads: enable, burst room, data DAV active, RX-head EOI.
                     wbp_data_o <= (tx_room ? IEEE_CTRL_RD_TX_ROOM_MASK : DATA_WIDTH'(0))
                                 | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0))
                                 | (!serving_status && !dev_dav_n
-                                    ? IEEE_CTRL_RD_DATA_ACTIVE_MASK : DATA_WIDTH'(0));
+                                    ? IEEE_CTRL_RD_DATA_ACTIVE_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][9]
+                                    ? IEEE_CTRL_RD_RX_EOI_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][10]
+                                    ? IEEE_CTRL_RD_RX_ATN_END_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
                         enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
@@ -515,7 +583,7 @@ module ieee (
                     if (wbp_we_i && !ifc_i && !flush) tx_owner <= wbp_data_i;
                 end
                 IEEE_REG_TXS: begin
-                    wbp_data_o <= 8'h00;   // write-only (status TX FIFO push)
+                    wbp_data_o <= txs_prefetched;
                     if (wbp_we_i && !ifc_i && !txs_full) begin
                         txs_push_req  <= 1'b1;
                         txs_push_data <= {1'b0, wbp_data_i};

@@ -163,6 +163,11 @@ module ieee_tb;
         cpu_write(0, 1, 0, 4'd3, asserted ? 8'h34 : 8'h3C);  // CRB: CB2 level
     endtask
 
+    // Set the PET's PIA1 CA2 output independently of ATN and DAV.
+    task automatic ctl_eoi(input logic asserted);
+        cpu_write(1, 0, 0, 4'd1, asserted ? 8'h34 : 8'h3C);
+    endtask
+
     task automatic ctl_ndac(input logic asserted);
         cpu_write(0, 1, 0, 4'd1, asserted ? 8'h34 : 8'h3C);  // CRA: CA2 level
     endtask
@@ -227,15 +232,26 @@ module ieee_tb;
     // Drain the RX FIFO, printing tagged bytes; returns them in a buffer.
     byte rx_bytes [$];
     bit  rx_isatn [$];
+    bit  rx_iseoi [$];
+    int rx_boundary_count = 0;
 
     task automatic mcu_drain_rx;
-        logic [7:0] st, d;
+        logic [7:0] st, d, ctrl, repeated_ctrl;
         mcu_read(IEEE_REG_STATUS, st);
         while (st[0]) begin
-            rx_isatn.push_back(st[1]);
+            mcu_read(IEEE_REG_CTRL, ctrl);
+            mcu_read(IEEE_REG_CTRL, repeated_ctrl);
+            `assert_equal((ctrl & IEEE_CTRL_RD_RX_EOI_MASK),
+                (repeated_ctrl & IEEE_CTRL_RD_RX_EOI_MASK));
             mcu_read(IEEE_REG_RX, d);
             mcu_write(IEEE_REG_RX, 8'h00);   // explicit pop
-            rx_bytes.push_back(d);
+            if (ctrl & IEEE_CTRL_RD_RX_ATN_END_MASK) begin
+                rx_boundary_count++;
+            end else begin
+                rx_isatn.push_back(st[1]);
+                rx_iseoi.push_back((ctrl & IEEE_CTRL_RD_RX_EOI_MASK) != 0);
+                rx_bytes.push_back(d);
+            end
             mcu_read(IEEE_REG_STATUS, st);
         end
     endtask
@@ -277,6 +293,10 @@ module ieee_tb;
         `assert_equal(dut.cpu_ndac_n, 1'b0);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, (!status_fifo && prefetch) ? 8'd1 : 8'd0);
+        mcu_read(IEEE_REG_TXS, d);
+        `assert_equal(d, (status_fifo && prefetch) ? 8'd1 : 8'd0);
+        mcu_read(IEEE_REG_TXS, d);
+        `assert_equal(d, (status_fifo && prefetch) ? 8'd1 : 8'd0);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, (!status_fifo && prefetch) ? 8'd1 : 8'd0);
 
@@ -455,20 +475,20 @@ module ieee_tb;
     endtask
 
     // Counter wrap remains observable without resetting FIFO pointers or ownership.
-    task automatic check_prefetch_wrap;
+    task automatic check_prefetch_wrap(input bit status_fifo);
         logic [7:0] d;
         logic eoi;
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
         ctl_send(8'h48);
-        ctl_send(8'h60);
+        ctl_send(status_fifo ? 8'h6F : 8'h60);
         ctl_atn(0);
         for (int i = 0; i < 257; ++i) begin
-            mcu_write(IEEE_REG_TX_LAST, 8'(i));
+            mcu_write(status_fifo ? IEEE_REG_TXS_LAST : IEEE_REG_TX_LAST, 8'(i));
             ctl_recv(d, eoi);
             `assert_equal(d, 8'(i));
             `assert_equal(eoi, 1'b1);
-            mcu_read(IEEE_REG_TX, d);
+            mcu_read(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, d);
             `assert_equal(d, 8'(i + 1));
         end
         ctl_atn(1);
@@ -534,6 +554,31 @@ module ieee_tb;
         cpu_write(0, 1, 0, 4'd3, 8'h3C);   // PIA2 CRB: CB2 high (DAV released)
         cpu_write(0, 1, 0, 4'd2, 8'hFF);   // DIO released
         cpu_write(0, 0, 1, 4'd0, 8'hFF);   // VIA ORB: ATN/NRFD released
+        ctl_eoi(0);
+
+        // RX metadata belongs to each captured DAV edge, not the live EOI line.
+        ctl_atn(1);
+        ctl_send(8'h28);
+        ctl_send(8'hFF);
+        ctl_atn(0);
+        ctl_send(8'h41);
+        ctl_eoi(1);
+        ctl_send(8'h00);
+        ctl_eoi(0);
+        ctl_send(8'h42);
+        ctl_atn(1);
+        ctl_send(8'h3F);
+        ctl_atn(0);
+        mcu_drain_rx;
+        `assert_equal(rx_bytes.size(), 6);
+        for (int i = 0; i < 6; i++) begin
+            `assert_equal(rx_iseoi[i], (i == 3));
+            `assert_equal(rx_isatn[i], (i < 2 || i == 5));
+        end
+        `assert_equal(rx_bytes[3], 8'h00);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_RX_EOI_MASK), 8'd0);
+        rx_bytes.delete(); rx_isatn.delete(); rx_iseoi.delete();
 
         // Status and file data use separate FIFOs. A status transaction must
         // not consume the queued file bytes, and each LAST register applies
@@ -689,15 +734,17 @@ module ieee_tb;
         `assert_equal(d, 8'hE0);
 
         // --- RX-full backpressure: the DAV edge must survive a full FIFO ---
-        // Fill RX to the brim (2 command bytes + 30 data = 32), then send one
+        // Fill RX (2 command bytes + ATN end + 29 data), then send one
         // more data byte with no room; the device must hold NDAC (not ACK,
         // not drop) until the MCU drains, then complete the handshake.
         rx_bytes.delete(); rx_isatn.delete();
+        rx_iseoi.delete();
         ctl_atn(1);
         ctl_send(8'h28);                   // LISTEN 8
         ctl_send(8'hF1);                   // OPEN ch1
         ctl_atn(0);
-        for (int i = 0; i < 30; i++) ctl_send(8'h20 + i[7:0]);
+        for (int i = 0; i < 29; i++) ctl_send(8'h20 + i[7:0]);
+        ctl_eoi(1);
         fork
             ctl_send(8'hA5);               // stalls at the full FIFO...
             begin
@@ -705,15 +752,33 @@ module ieee_tb;
                 mcu_drain_rx;
             end
         join
+        ctl_eoi(0);
         mcu_drain_rx;                      // collect the A5 pushed after drain
-        `assert_equal(rx_bytes.size(), 33);
-        `assert_equal(rx_bytes[32], 8'hA5);
-        `assert_equal(rx_bytes[31], 8'h3D); // 0x20+29
+        `assert_equal(rx_bytes.size(), 32);
+        `assert_equal(rx_bytes[31], 8'hA5);
+        `assert_equal(rx_bytes[30], 8'h3C); // 0x20+28
+        `assert_equal(rx_iseoi[30], 1'b0);
+        `assert_equal(rx_iseoi[31], 1'b1);
         ctl_atn(1);
         ctl_send(8'h3F);                   // UNLISTEN
         ctl_atn(0);
         mcu_drain_rx;
         $display("[%t]   RX-full backpressure verified", $time);
+
+        // ATN release itself must survive a full FIFO and retain stream order.
+        begin
+            int previous_boundaries, previous_bytes;
+            previous_boundaries = rx_boundary_count;
+            previous_bytes = rx_bytes.size();
+            ctl_atn(1);
+            for (int i = 0; i < dut.RX_DEPTH; i++) ctl_send(8'h3F);
+            ctl_atn(0);
+            `assert_equal(dut.atn_end_pending, 1'b1);
+            mcu_drain_rx;
+            `assert_equal(rx_boundary_count, previous_boundaries + 1);
+            `assert_equal(rx_bytes.size(), previous_bytes + dut.RX_DEPTH);
+            `assert_equal(dut.atn_end_pending, 1'b0);
+        end
 
         // Cover both prefetch phases, with/without private reads, on each FIFO.
         begin
@@ -764,6 +829,63 @@ module ieee_tb;
             end
             $display("[%t]   dense counted-read terminate/resume verified", $time);
         end
+
+        // A virtual peer's secondary belongs to that peer, not the active talker.
+        for (int unit = 0; unit < 4; unit++) begin
+            for (int peer = 0; peer < 4; peer++) begin
+                if (peer != unit) begin
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+                    mcu_push("", 1);
+                    mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK
+                        | (unit << IEEE_TX_OWNER_UNIT_SHIFT) | 8'h02);
+                    mcu_write(IEEE_REG_TX, 8'hA5);
+                    mcu_write(IEEE_REG_TX_LAST, 8'h5A);
+                    ctl_atn(1);
+                    ctl_send(8'h48 + unit[7:0]);
+                    ctl_send(8'h62);
+                    ctl_send(8'h28 + peer[7:0]);
+                    ctl_send(8'h6F);
+                    ctl_send(8'h3F);
+                    `assert_equal(dut.talking, 1'b1);
+                    `assert_equal(dut.txs_count, 1);
+                    ctl_atn(0);
+                    ctl_recv(d, eoi);
+                    `assert_equal(d, 8'hA5);
+                    `assert_equal(eoi, 1'b0);
+                    ctl_recv(d, eoi);
+                    `assert_equal(d, 8'h5A);
+                    `assert_equal(eoi, 1'b1);
+                    ctl_atn(1); ctl_send(8'h5F); ctl_atn(0);
+                    mcu_drain_rx;
+                end
+            end
+        end
+        // Peripherals retain independent listener roles and primary selection.
+        for (int unit = 0; unit < 4; unit++) begin
+            int peer;
+            peer = (unit + 1) % 4;
+            ctl_atn(1);
+            ctl_send(8'h28 + unit[7:0]);
+            ctl_send(8'h6F);
+            ctl_send(8'h28 + peer[7:0]);
+            ctl_send(8'h62);
+            ctl_send(8'h48 + peer[7:0]);
+            `assert_equal(dut.listen_units[unit], 1'b1);
+            `assert_equal(dut.listen_units[peer], 1'b0);
+            ctl_send(8'h28 + peer[7:0]);
+            `assert_equal(dut.talking, 1'b0);
+            ctl_send(8'h27);
+            ctl_send(8'h61);
+            `assert_equal(dut.unit_sa[unit], 8'h6F);
+            `assert_equal(dut.unit_sa[peer], 8'h20);
+            ctl_send(8'h5F);
+            `assert_equal(dut.listening, 1'b1);
+            ctl_send(8'h3F);
+            `assert_equal(dut.listening, 1'b0);
+            ctl_atn(0);
+            mcu_drain_rx;
+        end
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
 
         // --- Unit 9: the fabric answers DEV_ADDR+1 with the same machinery
         // (Super-OS/9 d8d9 = dual units 8 and 9). LISTEN 9 must capture data
@@ -840,7 +962,8 @@ module ieee_tb;
         check_owner_pause(1'b0);
         check_owner_pause(1'b1);
         check_prefetch_flush_collision;
-        check_prefetch_wrap;
+        check_prefetch_wrap(0);
+        check_prefetch_wrap(1);
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'd0);

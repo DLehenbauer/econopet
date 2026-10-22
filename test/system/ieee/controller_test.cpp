@@ -191,7 +191,7 @@ TEST_F(SystemTest, IeeeSignalTraceRxReadyTracksEnqueueAndDrain) {
     EXPECT_TRUE(ready.records().front().after);
     const auto sequence = drain_rx(system, 1, ByteBudget, "RX-ready transition");
     ASSERT_EQ(sequence.size(), 1u);
-    EXPECT_EQ(sequence.front(), fifo_record(command(Unlisten)));
+    EXPECT_EQ(sequence.front(), command(Unlisten));
     ASSERT_EQ(ready.records().size(), 2u);
     EXPECT_TRUE(ready.records().back().before);
     EXPECT_FALSE(ready.records().back().after);
@@ -346,10 +346,9 @@ TEST_F(SystemTest, IeeeTransactionsSeparateWireCaptureFromFifoConsumption) {
     EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
     const auto head = take_rx(system);
     ASSERT_TRUE(head);
-    EXPECT_EQ(*head, fifo_record(command(Listen(Device{8}))));
+    EXPECT_EQ(*head, command(Listen(Device{8})));
     const auto rest = drain_rx(system, 3, ByteBudget, "remaining");
-    EXPECT_THAT(rest, ElementsAre(fifo_record(data('A')), fifo_record(data('B', Eoi::Last)),
-        fifo_record(command(Unlisten))));
+    EXPECT_THAT(rest, ElementsAre(data('A'), data('B', Eoi::Last), command(Unlisten)));
     EXPECT_FALSE(take_rx(system));
     EXPECT_TRUE(rx_empty_now(system));
     ASSERT_EQ(wire.times().size(), expected.size());
@@ -363,7 +362,7 @@ TEST_F(SystemTest, IeeeTransactionsRawStimulusRejectsUnknownEoiBeforeClocking) {
     IeeeController controller(system);
     system.ieee().write_control(fpga::IeeeControlBit::Enabled);
     const auto before = system.time();
-    EXPECT_THROW(controller.raw_send(fifo_record(data('A'))), std::invalid_argument);
+    EXPECT_THROW(controller.raw_send(Record{'A', false, Eoi::Unobserved}), std::invalid_argument);
     EXPECT_EQ(system.time(), before);
     auto wire = system.trace_ieee();
     controller.raw_send(raw_record(0x19, true, Eoi::Last));
@@ -414,14 +413,14 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     EXPECT_THAT(attention_edges, ElementsAre(true));
     controller.command(Untalk);
     EXPECT_FALSE(system.ieee().peek_talking());
-    EXPECT_THAT(attention_edges, ElementsAre(true, false));
+    EXPECT_THAT(attention_edges, ElementsAre(true, false, true));
 
     // Passive wire capture includes received data, while RX stores commands only.
     require_sequence(wire.records(), {command(Talk(Device{8})),
         command(Secondary(Channel{0})), data('X'), data('Y', Eoi::Last),
         command(Untalk)}, "received wire bytes");
-    require_drained_sequence(system, fifo_records({command(Talk(Device{8})),
-        command(Secondary(Channel{0})), command(Untalk)}), ByteBudget, "received commands");
+    require_drained_sequence(system, {command(Talk(Device{8})),
+        command(Secondary(Channel{0})), command(Untalk)}, ByteBudget, "received commands");
 }
 
 // A separately timed physical source checks acceptance without the FPGA talker.
@@ -521,15 +520,15 @@ TEST_F(SystemTest, IeeeTransactionsDrainingAssertionsAreExactAndBounded) {
     IeeeController controller(system);
     system.ieee().write_control(fpga::IeeeControlBit::Enabled);
     EXPECT_THROW(drain_rx(system, 0, ByteBudget, "bad limit"), std::invalid_argument);
-    EXPECT_THROW(require_drained_sequence(system, fifo_records({command(Unlisten)}),
+    EXPECT_THROW(require_drained_sequence(system, {command(Unlisten)},
         ByteBudget, "missing"), std::runtime_error);
     controller.command(Listen(Device{8}));
     controller.data('A');
     EXPECT_THROW(drain_rx(system, 1, ByteBudget, "bounded"), std::runtime_error);
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(data('A'))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{data('A')});
     controller.command(Unlisten);
     EXPECT_THROW(require_drained_sequence(system, {}, ByteBudget, "trailing"), std::runtime_error);
-    EXPECT_TRUE(rx_empty_now(system));
+    EXPECT_FALSE(take_rx(system));
     controller.command(Unlisten);
     controller.command(Untalk);
     try {
@@ -537,9 +536,9 @@ TEST_F(SystemTest, IeeeTransactionsDrainingAssertionsAreExactAndBounded) {
         FAIL() << "accepted surplus FIFO records";
     } catch (const std::runtime_error& error) {
         EXPECT_THAT(error.what(), HasSubstr("index=0"));
-        EXPECT_THAT(error.what(), HasSubstr("byte=0x3f ATN=1 EOI=unobserved"));
+        EXPECT_THAT(error.what(), HasSubstr("byte=0x3f ATN=1 EOI=0"));
     }
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(command(Untalk))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{command(Untalk)});
 }
 
 // A drain's nested status/data/acknowledgment clocks share the entire operation budget.
@@ -565,7 +564,7 @@ TEST_F(SystemTest, IeeeTransactionsEmptyNowIsNotAQuietInterval) {
     controller.command(Unlisten);
     EXPECT_THROW(require_rx_remains_empty(system, Cycles{0}, "nonempty endpoint"), std::runtime_error);
     EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(command(Unlisten))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{command(Unlisten)});
 }
 
 // A future CPU DAV edge invalidates a quiet interval even after an empty SPI sample.

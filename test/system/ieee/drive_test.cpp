@@ -243,6 +243,10 @@ class DriveRelativeRomTest : public FirmwareTest,
 class DriveWildcardRomTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
 
+// Exercise counted binary OPEN 15 through the actual PET 2 and PET 4 KERNALs.
+class DriveCommandRomTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, test_rom::Set>> {};
+
 // Cross native controller revisions with media model and EOF versus read failure.
 class DriveRomTerminalTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, bool, test_rom::Set>> {};
@@ -348,10 +352,10 @@ TEST_F(FirmwareTest, StreamsDosStatusOverProductionTop) {
     open_file(system, controller);
     service_rx(system, firmware, "service OPEN transaction");
     EXPECT_EQ(duplicate.records(), fifo_trace.records());
-    EXPECT_THAT(fifo_trace.records(), testing::ElementsAreArray(fifo_records({
+    EXPECT_THAT(fifo_trace.records(), testing::ElementsAreArray(std::vector<Record>{
         command(Listen(Device{DeviceAddress})), command(Open(Channel{LoadChannel})),
         data('B'), data('A'), data('S'), data('I'), data('C', Eoi::Last), command(Unlisten)
-    })));
+    }));
     // Select the status channel after production firmware has resolved the OPEN.
     controller.command(Talk(Device{DeviceAddress}));
     controller.command(Secondary(Channel{CommandChannel}));
@@ -704,6 +708,360 @@ TEST_P(DriveRelativeTest, QueuedSelectionsPauseInitiallyUnboundData) {
         {data(payload[0]), data(payload[1]), data(payload[2], Eoi::Last)});
 }
 
+// OPEN on the command channel dispatches binary P rather than treating it as a filename.
+TEST_P(DriveRelativeTest, CommandChannelOpenExecutesBinaryPosition) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 2;
+    constexpr size_t RecordCount = 45;
+    std::vector<uint8_t> payload(RecordCount * RecordLength);
+    for (size_t index = 0; index < payload.size(); ++index)
+        payload[index] = static_cast<uint8_t>(index + 1);
+    IeeeController controller(system);
+    firmware.mount(relative_image(d80, payload, RecordLength),
+        d80 ? "command-open.d80" : "command-open.d64");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service command-OPEN REL file");
+
+    // Record-number bytes may contain CR or comma, and the high byte is zero.
+    for (const uint8_t record : {uint8_t{2}, uint8_t{'\r'}, uint8_t{','}}) {
+        const std::string payload_command{
+            'P', static_cast<char>(IEEE_CMD_SECONDARY(DataChannel)),
+            static_cast<char>(record), '\0', '\1',
+        };
+        auto rx = firmware.trace_rx();
+        open_file(system, controller, Channel{CommandChannel}, payload_command);
+        service_rx(system, firmware, "service binary P through command OPEN");
+        std::vector<Record> expected{
+            command(Listen(Device{DeviceAddress})), command(Open(Channel{CommandChannel})),
+        };
+        for (size_t index = 0; index < payload_command.size(); ++index)
+            expected.push_back(data(static_cast<uint8_t>(payload_command[index]),
+                index + 1 == payload_command.size() ? Eoi::Last : Eoi::More));
+        expected.push_back(command(Unlisten));
+        EXPECT_THAT(rx.capture().records(), testing::ElementsAreArray(expected));
+
+        // Independent CPU/wire status and payload checks observe RECORD's actual effect.
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+            d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service positioned REL TALK after command OPEN");
+        const size_t offset = (record - 1) * RecordLength;
+        receive_payload(system, controller,
+            {data(payload[offset], Eoi::More), data(payload[offset + 1], Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "service command-OPEN data UNTALK");
+    }
+}
+
+// RECORD reports missing and non-REL channels distinctly, without poisoning recovery.
+TEST_P(DriveRelativeTest, CommandChannelErrorsAndRecovery) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 2;
+    constexpr Channel Sequential{DataChannel + 1}, Missing{DataChannel + 2};
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
+    auto image = relative_image(d80, payload, RecordLength);
+    const auto directory = sequential_directory(d80);
+    const auto sequential = directory + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+    constexpr size_t FileTypeOffset = 2, FilenameOffset = 5;
+    std::copy_n(image.begin() + directory, DISKIMAGE_DIRECTORY_ENTRY_SIZE,
+        image.begin() + sequential);
+    image[sequential + FileTypeOffset] = 0x80 | DISKIMAGE_FTYPE_SEQ;
+    std::fill_n(image.begin() + sequential + FilenameOffset, DISKIMAGE_FILENAME_SIZE,
+        DISKIMAGE_FILENAME_PADDING);
+    const std::string name = "PLAIN";
+    std::copy(name.begin(), name.end(), image.begin() + sequential + FilenameOffset);
+    firmware.mount(image, d80 ? "command-errors.d80" : "command-errors.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service REL error-control OPEN");
+    open_file(system, controller, Sequential, name);
+    service_rx(system, firmware, "service sequential error-control OPEN");
+
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const auto channel : {Missing, Sequential, Channel{CommandChannel}}) {
+            position_relative(system, firmware, controller, 1, 1);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            for (const auto byte : {'P', static_cast<char>(IEEE_CMD_SECONDARY(channel.value())),
+                    '\3', '\0'})
+                controller.data(static_cast<uint8_t>(byte));
+            controller.data(1, Eoi::Last);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "service invalid-channel P");
+            const std::string error = channel.value() == Missing.value()
+                ? "70,NO CHANNEL,00,00" : "64, FILE TYPE MISMATCH,00,00";
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                error + (d80 ? ",0\r" : "\r"));
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service unchanged REL after invalid P");
+            receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+            controller.command(Untalk);
+
+            // Recover through the same entry, retaining exact binary zero bytes.
+            const std::string command_bytes{'P', static_cast<char>(IEEE_CMD_SECONDARY(DataChannel)),
+                '\3', '\0', '\1'};
+            if (entry.category() == CommandCategory::Open) {
+                open_file(system, controller, Channel{CommandChannel}, command_bytes);
+                service_rx(system, firmware, "service recovery command OPEN");
+            } else {
+                position_relative(system, firmware, controller, 3, 1);
+            }
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service recovered REL");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
+        }
+    }
+}
+
+// Crossing from an unfinished command to ordinary OPEN consumes the same input.
+TEST_P(DriveRelativeTest, OrdinaryOpenConsumesPartialCommand) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "shared-input.d80" : "shared-input.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service shared-input REL OPEN");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(entry);
+        for (const auto byte : {'P', static_cast<char>(IEEE_CMD_SECONDARY(DataChannel)), '\3', '\0', '\1'})
+            controller.data(static_cast<uint8_t>(byte));
+        controller.command(Unlisten);
+        service_rx(system, firmware, "service partial P before ordinary OPEN");
+        open_file(system, controller, Channel{DataChannel + 1}, "MISSING");
+        service_rx(system, firmware, "service ordinary OPEN over retained command");
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(entry);
+        for (const auto byte : {'P', static_cast<char>(IEEE_CMD_SECONDARY(DataChannel)), '\2', '\0'})
+            controller.data(static_cast<uint8_t>(byte));
+        controller.data(1, Eoi::Last);
+        controller.command(Unlisten);
+        service_rx(system, firmware, "service fresh P after ordinary OPEN");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service shared-input positioned REL");
+        receive_payload(system, controller, {data(3), data(4, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "service shared-input UNTALK");
+    }
+}
+
+// EOI, not UNLISTEN, completes a retained binary command exactly once.
+TEST_P(DriveRelativeTest, CommandCompletionRequiresReceivedEoi) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6, 7, 8};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "command-eoi.d80" : "command-eoi.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service EOI-control REL OPEN");
+
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        position_relative(system, firmware, controller, 1, 1);
+        {
+            auto wire = system.trace_ieee();
+            auto rx = firmware.trace_rx();
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            for (const auto byte : {'P', static_cast<char>(IEEE_CMD_SECONDARY(DataChannel)), '\3'})
+                controller.data(static_cast<uint8_t>(byte));
+            service_rx(system, firmware, "service unfinished P prefix");
+            controller.data(0);
+            controller.data(1);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "service P without EOI");
+            const std::vector<Record> expected{
+                command(Listen(Device{DeviceAddress})), command(entry),
+                data('P'), data(0x62), data(3), data(0), data(1), command(Unlisten)};
+            require_sequence(wire.records(), expected, "missing-EOI command wire");
+            EXPECT_EQ(rx.records(), expected);
+        }
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service unpositioned REL");
+        receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+        controller.command(Untalk);
+
+        // Readdress and finish with CR/EOI, then TALK without any UNLISTEN.
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(entry);
+        controller.data('\r', Eoi::Last);
+        service_rx(system, firmware, "service EOI-completed P before UNLISTEN");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service immediate TALK before idle dispatch");
+        receive_payload(system, controller, {data(3), data(4, Eoi::Last)});
+        controller.command(Untalk);
+        controller.command(Unlisten);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service REL after late UNLISTEN");
+        receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+        controller.command(Untalk);
+        controller.command(Unlisten);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "service REL after one-time pending dispatch");
+        receive_payload(system, controller, {data(7), data(8, Eoi::Last)});
+        controller.command(Untalk);
+    }
+}
+
+// All EOI payloads in one LISTEN remain one native CMDWAT buffer until IDLE.
+TEST_P(DriveRelativeTest, PendingCommandsDispatchOnlyAtIdle) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "pending.d80" : "pending.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service pending-command OPEN");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const bool immediate_talk : {false, true}) {
+            position_relative(system, firmware, controller, 1, 1);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            for (const uint8_t record : {uint8_t{2}, uint8_t{3}}) {
+                for (const auto byte : {uint8_t{'P'}, uint8_t{IEEE_CMD_SECONDARY(DataChannel)},
+                        record, uint8_t{0}})
+                    controller.data(byte);
+                controller.data(1, Eoi::Last);
+                service_rx(system, firmware, "service EOI without idle dispatch");
+            }
+            if (immediate_talk) {
+                // Keep UNLISTEN/TALK/SECONDARY in one ATN phase, as the ROM decoder does.
+                controller.raw_send(command(Unlisten));
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                controller.release_atn();
+                service_rx(system, firmware, "service continuous-ATN immediate TALK");
+                receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+                controller.command(Untalk);
+            } else {
+                controller.command(Unlisten);
+            }
+            service_rx(system, firmware, "service IDLE pending-command dispatch");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service first P record");
+            receive_payload(system, controller, {data(3), data(4, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "service pending-command UNTALK");
+        }
+    }
+}
+
+// Native CMDSET rejects an untrimmed 41st byte before changing the REL position.
+TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "limits.d80" : "limits.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service length-control OPEN");
+    constexpr size_t NativeLimit = 40, ServiceChunk = 8;
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (size_t length = NativeLimit; length <= NativeLimit + 2; ++length) {
+            for (size_t trailing = 0; trailing <= 2; ++trailing) {
+                position_relative(system, firmware, controller, 1, 1);
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(entry);
+                constexpr uint8_t Position[] = {'P', IEEE_CMD_SECONDARY(DataChannel), 2, 0, 1};
+                for (size_t index = 0; index < length; ++index) {
+                    const uint8_t byte = trailing != 0 && index == length - trailing
+                        ? '\r' : index < sizeof(Position) ? Position[index] : 'X';
+                    controller.data(byte, index + 1 == length ? Eoi::Last : Eoi::More);
+                    if ((index + 1) % ServiceChunk == 0)
+                        service_rx(system, firmware, "service bounded command chunk");
+                }
+                controller.command(Unlisten);
+                service_rx(system, firmware, "service CMDSET length check");
+                const bool overlong = length > NativeLimit
+                    && !(trailing != 0 && length - trailing < NativeLimit + 1);
+                EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                    std::string(overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00")
+                        + (d80 ? ",0\r" : "\r"));
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "service length-control position");
+                receive_payload(system, controller, overlong
+                    ? std::vector<Record>{data(1), data(2, Eoi::Last)}
+                    : std::vector<Record>{data(3), data(4, Eoi::Last)});
+                controller.command(Untalk);
+                position_relative(system, firmware, controller, 3, 1);
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "service recovery after length check");
+                receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+                controller.command(Untalk);
+            }
+        }
+    }
+}
+
+// Status is acknowledged on terminal-CR GET, never on queueing or TXS flush.
+TEST_P(DriveRelativeTest, PartialStatusSurvivesReselectionAndPeerStatus) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "status-tail.d80" : "status-tail.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "service status-progress OPEN");
+    const std::string error = std::string("70,NO CHANNEL,00,00") + (d80 ? ",0\r" : "\r");
+    const std::string ok = std::string("00, OK,00,00") + (d80 ? ",0\r" : "\r");
+    for (const size_t prefix : {size_t{0}, size_t{3}, error.size() - 1}) {
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{CommandChannel}));
+        for (const auto byte : {uint8_t{'P'}, uint8_t{IEEE_CMD_SECONDARY(DataChannel + 1)},
+                uint8_t{1}, uint8_t{0}})
+            controller.data(byte);
+        controller.data(1, Eoi::Last);
+        controller.command(Unlisten);
+        service_rx(system, firmware, "service status-progress error");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{CommandChannel}));
+        service_rx(system, firmware, "queue unread error status");
+        for (size_t index = 0; index < prefix; ++index)
+            ASSERT_EQ(controller.receive(), data(static_cast<uint8_t>(error[index])));
+        controller.command(Untalk);
+        service_rx(system, firmware, "retain partially fetched error status");
+        const Device peer{DeviceAddress + 1};
+        const std::string peer_status = receive_status(system, firmware, controller, peer);
+        EXPECT_EQ(peer_status, prefix == 0 ? "73,CBM DOS V2,00,00\r" : "00, OK,00,00\r");
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+            error.substr(prefix));
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), ok);
+    }
+
+    // Native GETERC acknowledges CR on prefetch, before the controller's NDAC.
+    controller.command(Listen(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{CommandChannel}));
+    for (const auto byte : {uint8_t{'P'}, uint8_t{IEEE_CMD_SECONDARY(DataChannel + 1)},
+            uint8_t{1}, uint8_t{0}})
+        controller.data(byte);
+    controller.data(1, Eoi::Last);
+    controller.command(Unlisten);
+    service_rx(system, firmware, "service terminal-GET error");
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{CommandChannel}));
+    service_rx(system, firmware, "queue terminal-GET status");
+    for (size_t index = 0; index + 1 < error.size(); ++index)
+        ASSERT_EQ(controller.receive(), data(static_cast<uint8_t>(error[index])));
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+        ByteBudget, "status CR before NDAC");
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+    ASSERT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), '\r');
+    ASSERT_EQ(controller.read(pet::Pia1PortA) & EoiInput, 0);
+    controller.command(Untalk);
+    service_rx(system, firmware, "acknowledge CR GET without NDAC");
+    EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), ok);
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, DriveRelativeTest, testing::Bool());
 
 // Native TLK20/TLK30 advancement survives interruption and reuse of the shared FIFO.
@@ -905,6 +1263,40 @@ TEST_P(DrivePreservedTalkTest, ContinuesWithoutReaddressingAfterUnlisten) {
     EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
 }
 
+// Another emulated peripheral must not steal the selected talker's role or SA.
+TEST_P(DrivePreservedTalkTest, VirtualPeerListenPreservesTalkerAndChannel) {
+    const auto [d80, relative, status_secondary] = GetParam();
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0x51, 0x52};
+    const char* const name = d80 ? "virtual-peer.d80" : "virtual-peer.d64";
+    firmware.mount(relative ? relative_image(d80, payload, payload.size())
+                            : sequential_image(d80, payload), name);
+    constexpr uint8_t UnitCount = 4, DrivesPerUnit = 2;
+    for (uint8_t unit = 1; unit < UnitCount; ++unit)
+        ASSERT_TRUE(ieee_drive_mount(unit * DrivesPerUnit, name));
+    IeeeController controller(system);
+    for (uint8_t unit = 0; unit < UnitCount; ++unit) {
+        const Device talker{static_cast<uint8_t>(DeviceAddress + unit)};
+        for (uint8_t other = 0; other < UnitCount; ++other) {
+            if (other == unit) continue;
+            const Device peer{static_cast<uint8_t>(DeviceAddress + other)};
+            open_file(system, controller, Channel{DataChannel}, relative ? "BASIC,L" : "BASIC", talker);
+            service_rx(system, firmware, "service virtual-peer talker OPEN");
+            controller.command(Talk(talker));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service virtual-peer talker selection");
+            ASSERT_EQ(controller.receive(), data(payload.front()));
+            controller.command(Listen(peer));
+            controller.command(Secondary(Channel{status_secondary ? CommandChannel : DataChannel + 1}));
+            controller.command(Unlisten);
+            service_rx(system, firmware, "service virtual-peer listener and secondary");
+            receive_payload(system, controller,
+                {data(payload[1]), data(payload[2]), data(payload[3], Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "service virtual-peer UNTALK");
+        }
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(ModelsFormatsCommands, DrivePreservedTalkTest,
     testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
 
@@ -1044,6 +1436,58 @@ TEST_P(DriveWildcardRomTest, NativeOpenAndReadResolveSingleCharacterWildcards) {
     expected.push_back(command(Untalk));
     require_sequence(wire.records(), expected, "native wildcard OPEN/read wire bytes");
 }
+
+// A real PET KERNAL OPENI must transmit the embedded-zero P command intact.
+TEST_P(DriveCommandRomTest, NativeOpen15ExecutesBinaryPosition) {
+    const auto [d80, revision] = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
+    constexpr uint8_t Filename[] = {'B', 'A', 'S', 'I', 'C', ',', 'L'};
+    constexpr uint8_t Position[] = {'P', 0x62, 3, 0, 1};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "rom-command.d80" : "rom-command.d64");
+    KernalFixture rom(system, revision);
+    auto test = rom.program();
+    const auto received = test.data("positioned payload", NativePayload, 2, test_asm::Capture::Yes);
+    const auto flags = test.data("positioned flags", NativeLastStatus, 2, test_asm::Capture::Yes);
+    auto wire = system.trace_ieee();
+    const auto result = test.within(TerminalRomBudget)
+        .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .run([&](auto& p) {
+            rom.init_ieee(p);
+            rom.device(p);
+            rom.file(p, Filename, DataChannel);
+            p.jsr(rom.entry(KernalRoutine::Openi));
+
+            rom.file(p, Position, CommandChannel);
+            p.jsr(rom.entry(KernalRoutine::Openi))
+             .lda(test_asm::imm(DeviceAddress)).jsr(rom.entry(KernalRoutine::Talk))
+             .lda(test_asm::imm(IEEE_CMD_SECONDARY(DataChannel))).jsr(rom.entry(KernalRoutine::Tksa));
+            for (size_t i = 0; i < 2; ++i)
+                p.jsr(rom.entry(KernalRoutine::Acptr)).sta(received.byte(i))
+                 .lda(test_asm::zp(KernalWorkspace::Status)).sta(flags.byte(i));
+            p.jsr(rom.entry(KernalRoutine::Untalk));
+        });
+    EXPECT_EQ(result[received], (std::vector<uint8_t>{5, 6}));
+    EXPECT_EQ(result[flags], (std::vector<uint8_t>{0, 0x40}));
+    std::vector<Record> expected;
+    const auto append_open = [&](Channel channel, econopet::ByteView bytes) {
+        expected.push_back(command(Listen(Device{DeviceAddress})));
+        expected.push_back(command(Open(channel)));
+        for (size_t i = 0; i < bytes.size(); ++i)
+            expected.push_back(data(bytes[i], i + 1 == bytes.size() ? Eoi::Last : Eoi::More));
+        expected.push_back(command(Unlisten));
+    };
+    append_open(Channel{DataChannel}, Filename);
+    append_open(Channel{CommandChannel}, Position);
+    expected.push_back(command(Talk(Device{DeviceAddress})));
+    expected.push_back(command(Secondary(Channel{DataChannel})));
+    expected.push_back(data(5));
+    expected.push_back(data(6, Eoi::Last));
+    expected.push_back(command(Untalk));
+    require_sequence(wire.records(), expected, "PET ROM OPEN-15 binary positioning");
+}
+
+INSTANTIATE_TEST_SUITE_P(ModelsRevisions, DriveCommandRomTest,
+    testing::Combine(testing::Bool(), testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4)));
 
 INSTANTIATE_TEST_SUITE_P(ModelsRevisions, DriveWildcardRomTest,
     testing::Combine(testing::Bool(),

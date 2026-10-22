@@ -24,9 +24,12 @@ typedef struct {
 static struct {
     uint8_t ctrl;
     uint8_t prefetched;
+    uint8_t status_prefetched;
     struct {
         uint8_t byte;
         bool atn;
+        bool eoi;
+        bool atn_end;
     } rx[MOCK_IEEE_RX_CAPACITY];
     size_t rx_head;
     size_t rx_count;
@@ -46,6 +49,7 @@ static void mock_ieee_flush(bool data_only) {
     mock_ieee.data_count = 0;
     if (!data_only) {
         mock_ieee.prefetched = 0;
+        mock_ieee.status_prefetched = 0;
         mock_ieee.rx_head = 0;
         mock_ieee.rx_count = 0;
         mock_ieee.status_count = 0;
@@ -54,11 +58,25 @@ static void mock_ieee_flush(bool data_only) {
 
 // Appends one PET byte and ATN tag to the bounded receive FIFO.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte) {
+    mock_ieee_enqueue_rx_eoi(atn, byte, false);
+}
+
+// Appends explicit DAV-sampled metadata without inferring EOI from later commands.
+void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi) {
     ck_assert_uint_lt(mock_ieee.rx_count, MOCK_IEEE_RX_CAPACITY);
     size_t index = (mock_ieee.rx_head + mock_ieee.rx_count) % MOCK_IEEE_RX_CAPACITY;
     mock_ieee.rx[index].atn = atn;
     mock_ieee.rx[index].byte = byte;
+    mock_ieee.rx[index].eoi = eoi;
+    mock_ieee.rx[index].atn_end = false;
     mock_ieee.rx_count++;
+}
+
+// Queue the native ATN50 boundary independently of command and payload bytes.
+void mock_ieee_enqueue_atn_end(void) {
+    mock_ieee_enqueue_rx(false, 0);
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].atn_end = true;
 }
 
 // Returns the captured file-channel byte count.
@@ -109,9 +127,23 @@ bool mock_ieee_status_eoi(size_t index) {
     return mock_ieee.status[index].eoi;
 }
 
-// Models the controller consuming all captured command-channel bytes.
-void mock_ieee_clear_status(void) {
+// Discards transport storage independently of status GET progress.
+void mock_ieee_discard_status(void) {
     mock_ieee.status_count = 0;
+}
+
+// Models a prefix of status GETs, retaining its unread transport suffix.
+void mock_ieee_consume_status(size_t count) {
+    ck_assert_uint_le(count, mock_ieee.status_count);
+    mock_ieee.status_prefetched = (uint8_t) (mock_ieee.status_prefetched + count);
+    mock_ieee.status_count -= count;
+    memmove(mock_ieee.status, mock_ieee.status + count,
+        mock_ieee.status_count * sizeof(mock_ieee.status[0]));
+}
+
+// Models fetching the complete queued response.
+void mock_ieee_clear_status(void) {
+    mock_ieee_consume_status(mock_ieee.status_count);
 }
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
@@ -119,12 +151,18 @@ uint8_t spi_read_at(uint32_t addr) {
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
         if (addr == ECONOPET_WB_IEEE_TX_ADDR) return mock_ieee.prefetched;
+        if (addr == ECONOPET_WB_IEEE_TXS_ADDR) return mock_ieee.status_prefetched;
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
             uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_ENABLE_MASK)
                 ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;
             if (mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK) {
                 ctrl |= ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
             }
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].eoi) {
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK;
+            }
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].atn_end)
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK;
             return ctrl;
         }
         if (addr == ECONOPET_WB_IEEE_STATUS_ADDR) {
