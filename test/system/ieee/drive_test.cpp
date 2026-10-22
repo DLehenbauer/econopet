@@ -960,6 +960,53 @@ TEST_P(DriveRelativeTest, PendingCommandsDispatchOnlyAtIdle) {
     }
 }
 
+// Unopened TALK returns via NOTLK to IDLE while retaining TALK ownership.
+TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterUnopenedTalk) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6, 7, 8};
+    firmware.mount(relative_image(d80, payload, 2), d80 ? "notlk.d80" : "notlk.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open NOTLK REL target");
+    enum Selection { UnopenedChannel, ClosedChannel, DefaultChannel };
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const auto selection : {UnopenedChannel, ClosedChannel, DefaultChannel}) {
+            if (selection == ClosedChannel) {
+                open_file(system, controller, Channel{DataChannel + 1}, "BASIC,L");
+                service_rx(system, firmware, "open NOTLK close control");
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Close(Channel{DataChannel + 1}));
+                controller.command(Unlisten);
+                service_rx(system, firmware, "close NOTLK secondary");
+            }
+            position_relative(system, firmware, controller, 1, 1);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            const std::vector<uint8_t> position{'P', IEEE_CMD_SECONDARY(DataChannel), 3, 0, 1};
+            for (size_t index = 0; index < position.size(); ++index)
+                controller.data(position[index], index + 1 == position.size() ? Eoi::Last : Eoi::More);
+            service_rx(system, firmware, "retain EOI-completed P while listening");
+            controller.raw_send(command(Unlisten));
+            controller.command(Talk(Device{DeviceAddress}));
+            if (selection != DefaultChannel)
+                controller.command(Secondary(Channel{DataChannel + 1}));
+            controller.release_atn();
+            service_rx(system, firmware, "return unopened TALK to IDLE");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "reselect REL without UNTALK");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "verify completed P cannot repeat");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "read following record after NOTLK dispatch");
+            receive_payload(system, controller, {data(7), data(8, Eoi::Last)});
+            controller.command(Untalk);
+        }
+    }
+}
+
 // Model-specific receive saturation precedes the shared 58-byte CMDSET check.
 TEST_P(DriveCommandLengthTest, CommandLengthBoundariesPreservePositionAndRecover) {
     const auto [d80, length] = GetParam();

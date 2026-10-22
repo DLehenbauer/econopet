@@ -1861,6 +1861,70 @@ START_TEST(test_command_dispatch_waits_for_idle) {
 }
 END_TEST
 
+// NOTLK returns to IDLE without clearing the peripheral's TALK role.
+START_TEST(test_pending_command_dispatch_after_unopened_talk) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    mount_native_relative_records(device, drive, type, "notlk.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    enum { unopened_channel, closed_channel, default_channel };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (unsigned int selection = unopened_channel; selection <= default_channel; ++selection) {
+            if (selection == closed_channel) {
+                enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+                enqueue_filename_for_drive(drive, "BASIC,L");
+                enqueue_command(IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+                enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_CLOSE(IEEE_CHANNEL_REL + 1),
+                    IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+            }
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            ieee_drive_task();
+            // Only the final ATN release may dispatch. Do not use the UNLISTEN helper.
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            if (selection != default_channel)
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL + 1));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            // Reselect without UNTALK, which would otherwise hide the missing dispatch.
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[6]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[7]);
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
 // Native receive saturation and CMDSET's 58-byte limit are distinct contracts.
 START_TEST(test_command_length_boundaries_and_recovery) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
@@ -2746,6 +2810,8 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_virtual_units_retain_independent_listeners,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_command_dispatch_waits_for_idle,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_unopened_talk,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);

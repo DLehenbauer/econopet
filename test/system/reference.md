@@ -503,7 +503,11 @@ C-string termination or interpreted as filename/type delimiters.
 An explicit receive mode distinguishes filename, command, and ordinary data
 collection. EOI increments a per-unit pending-command indication (`CMDWAT`),
 without executing or resetting the input pointer. Dispatch occurs when ATN
-processing returns that unit to IDLE/VIDLE, neither listening nor talking.
+processing returns that unit to IDLE/VIDLE. This includes native TALK returning
+through `NOTLK` for an unopened selected channel while TALK ownership remains
+set. Allocated REL, readable/exhausted SEQ, and status sources still defer
+pending dispatch. Logical channel state determines that distinction, not FIFO
+occupancy, and no extra cached response/routine lifetime is introduced.
 Two EOI-terminated P payloads within one continuous LISTEN therefore remain
 one counted buffer, and RECORD uses the first P's fields. Incomplete command
 bytes remain counted per unit across UNLISTEN and readdressing. A dispatch
@@ -531,6 +535,7 @@ All source links below select `mist64/cbmsrc` revision
 
 | Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
 |---|---|---|---|---|---|
+| Unopened TALK returns to IDLE | Selected 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2) and [8250 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2): FNDRCH returns carry set for an unallocated LINTAB entry. Respective `ieee`: TALK branches to NOTLK/RTS, then ATN70 jumps to IDLE/VIDLE without clearing TLKACT. Respective `idle` clears CMDWAT and calls PARSXQ | Pending P3/EOI followed by continuous-ATN UNLISTEN/TALK/unopened SA3 must dispatch on ATN release. TALK/SA2 without UNTALK returns `$05,$06`, not `$01,$02`. Closed SA3 and implicit default SA0 behave the same. The following record is `$07,$08`, proving no repeated dispatch. Ready-source immediate TALK still defers P | `talk_source_ready` separates logical source availability from TALK ownership. `test_pending_command_dispatch_after_unopened_talk` covers sixteen model/unit/drive coordinates, both command entries and all three selections. `PendingCommandDispatchesAfterUnopenedTalk` checks exact CPU/wire bytes and EOI on D64/D80 beside the existing ready-source control | [Pinned VICE `vdrive_iec_read`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c#L1002) independently checks the selected per-unit buffer's allocation before reading. Its EOF/error return is not a native dispatch-timing oracle. Pinned MAME's separate DOS CPU/RAM and RIOT wiring preserve the ROM's distinct role and routine lifetimes |
 | Completed command-channel OPEN | 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7, either hardware side mode | [4040 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2) and [8250 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2): `PUT`, `L42`, `L50`, `L45` collect command bytes and queue parsing at EOI. Respective [4040 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex) and [8250 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex): `PARSXQ` sends an OPEN with low nibble `$F` through `PS05`, not `OPEN` | LISTEN, OPEN `$FF`, binary P payload with final-byte EOI, UNLISTEN must position the existing REL channel just as secondary `$6F` does. It must not reopen the REL file or discard its command | [`ch15_begin`](../../fw/src/ieee/ieee_drive.c), [`test_command_open_positions_relative_records`](../../fw/test/ieee_drive_test.c), [`DriveRelativeTest.CommandChannelOpenExecutesBinaryPosition`](ieee/drive_test.cpp) | [Pinned VICE `vdrive_iec_open`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c) writes command-channel OPEN's counted name bytes through `vdrive_iec_write`. `vdrive_iec_flush` executes the collected count |
 | Binary P fields and selected record | Same ROMs, valid open REL channel with two-byte records | Respective `romtbl`: `CMDTBL`/`CJUMPL`/`CJUMPH` map P directly to `RECORD`, without filename parsing. [4040 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/record) and [8250 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record): `R30` copies bytes 2/3 to `RECL`/`RECH`, position 1 becomes offset 0, and `R40`/`R50`/`R60` position the channel and complete the command | `50 62 02 00 01`, `50 62 0D 00 01`, and `50 62 2C 00 01` select records 2, 13, and 44. In the fixture these return `$03,$04`, `$19,$1A`, and `$57,$58`, with EOI only on the second byte. Status is `00, OK,00,00` plus CR for 4040 or `00, OK,00,00,drive` plus CR for DOS 2.7 | Same unit and integration cases compare literal data, status, and EOI. Unit cases also compare the existing secondary-15 route and split collection across service calls | VICE's counted command OPEN/write/flush path corroborates that embedded zero and interior CR/comma bytes are not C-string or filename boundaries. Existing native REL positioning controls remain enabled |
 | Missing versus non-REL P target | Same selected drive ROMs | Respective `record`: `FNDRCH` failure invokes `CMDERR` with `NOCHNL`, while `TYPFIL` mismatch invokes it with `MISTYP`. [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) define `$70` and `$64`, respectively. `ERMOVE` adds an implied space before the FILE token | Missing channel returns `70,NO CHANNEL,00,00` plus CR. An open sequential channel or channel 15 returns `64, FILE TYPE MISMATCH,00,00` plus CR. DOS 2.7 appends the last selected drive before CR. The valid REL channel is unchanged, and a subsequent valid P succeeds | `test_command_channel_errors_and_recovery`, `CommandChannelErrorsAndRecovery` exercise both entry routes, unchanged data, recovery, and status CR/EOI. Firmware cases cover all sixteen model/unit/drive combinations | Native `FNDRCH` in both `tst2` sources maps SA 15 to the existing error channel before type checking, independently of ordinary file channels |
@@ -611,6 +616,12 @@ The subsequent capacity review reproduced a 33rd DAV assertion against full RX
 on both production-top media models and active DAV at full RX in both RTL
 simulators. The new 40-byte cases require a clean capacity stall, recovery under
 cooperative firmware service, exact final EOI and destination-record readback.
+The unopened-TALK review reproduced `$01` instead of `$05` in all sixteen
+firmware coordinates and both production-top models before the repair.
+Both command entries now pass unopened-SA3, closed-SA3 and implicit-SA0 cases
+without an intervening UNTALK. Reading the following record checks that pending
+work is consumed once. The existing ready-REL immediate-TALK control still
+returns `$01,$02` before pending dispatch. Both controls pass at seeds 1 and 17.
 
 This is a source-derived command-entry correction, not a claim that every
 DOS command is implemented. Tests establish the observable IDLE dispatch
@@ -688,23 +699,23 @@ or 8250LP execution is claimed.
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | All 237 enabled cases pass at seed 1. No historical disabled probes remain. Four focused concurrent-role and delayed-service backpressure cases also pass at seed 17 |
+| Complete affected firmware integration suite | All 239 enabled cases pass at seed 1. No historical disabled probes remain. Four ready/unopened TALK cases pass at seed 17 in this follow-up. Four focused concurrent-role and delayed-service backpressure cases passed at seed 17 in the preceding gateware repair |
 | Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at seed 1, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight original D64/D80 SEQ/REL cases retain exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN. Eight additional cases check every ordered virtual-unit pair with peer status/data secondary selection, without readdressing the talker |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at seed 1, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | Existing data, continuation, interruption, parking, and native receive cases pass alongside channel errors, pending EOI/IDLE dispatch, model-specific command receive/validation boundaries, status continuation, and PET-ROM commands. All 26 queued-selection/prefetch-boundary cases pass. Four concurrent source/peer-listener cases check exact wire data and destination-record readback, including delayed-service 40-byte transfers that fill RX |
-| Complete firmware unit suite | 870 checks pass (823 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new pending-dispatch, command-length, binary-CR, model-swap, publication-interruption and status-lifetime family covers sixteen model/unit/drive combinations |
+| Complete firmware unit suite | 886 checks pass (839 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new pending-dispatch, command-length, binary-CR, model-swap, publication-interruption and status-lifetime family covers sixteen model/unit/drive combinations |
 | Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ATN-release entry, and `$20` is active status DAV. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
-| Board IEEE, shared hardware contract, and host encoding | All 401 selected seed-1 cases pass across partitioned runs (124 host/contract, 237 firmware integration and 40 board IEEE), including independent literal ABI masks, semantic trace filtering, and exact drain limits that exclude transport-only entries |
+| Board IEEE, shared hardware contract, and host encoding | All 403 selected seed-1 cases pass (124 host/contract, 239 firmware integration and 40 board IEEE), including independent literal ABI masks, semantic trace filtering, and exact drain limits that exclude transport-only entries |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
 | Complete gateware suite | Not rerun in this follow-up. The prior full run identified two `top_tb` configuration failures from pre-existing temporary CRT/keyboard inversions in `top.sv`, which this change does not edit. All four affected IEEE variants pass |
 | Production firmware and FPGA bitstream | Production firmware builds successfully with the `RelWithDebInfo` preset. The FPGA bitstream was not rebuilt because the complete gateware suite remains blocked by those unrelated configuration failures. No new bitstream, timing-closure, or hardware-execution claim is made |
 
 Firmware unit and integration tests use `Debug`, with assertion-enabled
 optimized model/runtime code kept separate.
-The seed-1 total combines 387 passing cases from the complete affected selection
-and fourteen model/length command-boundary cases. The earlier two model-wide
+The seed-1 total includes all fourteen model/length command-boundary cases.
+The earlier two model-wide
 boundary cases exceeded CTest's 300-second wall-clock timeout in the full run.
 The same command entries, CR variants, position and recovery assertions now run
 as fourteen individually enabled cases, all passing under the unchanged default
@@ -712,9 +723,14 @@ timeout. No assertions were removed to obtain the passing result.
 The unit publication-interruption matrix injects RX during TXS writes. The
 production-top status cases cover queued selections, not that exact fill-window
 injection. No physical-SPI concurrency capture is claimed for the latter.
-Production firmware uses `RelWithDebInfo`. The isolated integration build
-excludes unrelated local gateware edits. Its selected production RTL retains
-the NRFD-triggered prefetch states and assertions.
+Production firmware uses `RelWithDebInfo`. This firmware-only follow-up does not
+edit gateware. Its integration build retains the unrelated local top-level
+configuration inversions. An overbroad status filter also selected
+`TypedConfigurationReachesProductionStatusBits`, which fails on the existing
+CRT/keyboard polarity discrepancy. That test is outside the exact IEEE
+selection above. The preceding isolated gateware validation excluded those
+local edits. Selected production RTL retains NRFD-triggered prefetch states
+and assertions. The four IEEE RTL variants were not rerun for this C-only fix.
 
 ## Commodore ROM integration coverage
 

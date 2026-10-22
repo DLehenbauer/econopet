@@ -757,11 +757,21 @@ static void resolve_open(uint8_t open_unit) {
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
 
-// Dispatch CMDWAT only after ATN processing returns this peripheral to IDLE/VIDLE.
+// Native TALK returns through NOTLK when its selected channel is unallocated.
+static bool talk_source_ready(void) {
+    if (!mcu_talking) return false;
+    const uint8_t channel = IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary);
+    return channel == IEEE_COMMAND_CHANNEL || rel_find(talk_unit, channel) != NULL
+        || ((file_state == file_channel_readable || file_state == file_channel_exhausted)
+            && file_unit == talk_unit && file_chan == channel);
+}
+
+// Dispatch CMDWAT at IDLE/VIDLE, including NOTLK with TALK ownership retained.
 static void dispatch_pending(void) {
     for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
         receive_state_t* const input = &receive_states[unit];
-        if (!input->pending || input->listening || (mcu_talking && talk_unit == unit)) continue;
+        if (!input->pending || input->listening
+            || (talk_unit == unit && talk_source_ready())) continue;
         input->pending = 0;
         unsigned int length = input->length;
         if (length > 1) {
