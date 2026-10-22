@@ -8,6 +8,7 @@
 
 #include "driver.h"
 #include "hardware_contract.h"
+#include "ieee/ieee_protocol.h"
 #include "system_state.h"
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,8 @@ static struct {
     size_t data_count;
     mock_ieee_tx_byte_t status[MOCK_IEEE_TXS_CAPACITY];
     size_t status_count;
+    size_t status_repeat_after;
+    uint8_t tx_owner;
 } mock_ieee;
 
 // Identifies addresses belonging to the emulated FPGA IEEE register block.
@@ -53,6 +56,7 @@ static void mock_ieee_flush(bool data_only) {
         mock_ieee.rx_head = 0;
         mock_ieee.rx_count = 0;
         mock_ieee.status_count = 0;
+        mock_ieee.tx_owner = 0;
     }
 }
 
@@ -132,6 +136,17 @@ void mock_ieee_discard_status(void) {
     mock_ieee.status_count = 0;
 }
 
+// Injects one ordered hardware selection in the middle of firmware publication.
+void mock_ieee_repeat_status_after(size_t writes) {
+    ck_assert_uint_gt(writes, 0);
+    mock_ieee.status_repeat_after = writes;
+}
+
+// Observes the firmware's source gate without treating SA readback as the owner.
+bool mock_ieee_tx_paused(void) {
+    return (mock_ieee.tx_owner & ECONOPET_IEEE_TX_OWNER_PAUSE_MASK) != 0;
+}
+
 // Models a prefix of status GETs, retaining its unread transport suffix.
 void mock_ieee_consume_status(size_t count) {
     ck_assert_uint_le(count, mock_ieee.status_count);
@@ -200,6 +215,8 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
             if (data & ECONOPET_IEEE_CTRL_FLUSH_MASK) mock_ieee_flush(false);
             if (data & ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK) mock_ieee_flush(true);
             if (data & ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK) mock_ieee_discard_status();
+        } else if (addr == ECONOPET_WB_IEEE_SA_ADDR) {
+            mock_ieee.tx_owner = data;
         } else if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             if (mock_ieee.rx_count != 0) {
                 mock_ieee.rx_head = (mock_ieee.rx_head + 1) % MOCK_IEEE_RX_CAPACITY;
@@ -217,6 +234,11 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
                 .byte = data,
                 .eoi = addr == ECONOPET_WB_IEEE_TXS_LAST_ADDR,
             };
+            if (mock_ieee.status_repeat_after != 0 && --mock_ieee.status_repeat_after == 0) {
+                mock_ieee_discard_status();
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL));
+                mock_ieee_enqueue_atn_end();
+            }
         }
         return 0;
     }

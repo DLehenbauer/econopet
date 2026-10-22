@@ -327,7 +327,62 @@ module ieee_tb;
         mcu_drain_rx;
     endtask
 
-    // Owner mismatches block data before firmware service, but never block status.
+    // A peer acceptor must receive the selected source's bytes without UNLISTEN.
+    task automatic check_peer_transfer(input bit cpu_receiver);
+        logic [7:0] d;
+        logic eoi;
+        int first_data;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        ctl_atn(1);
+        ctl_send(8'h29);
+        ctl_send(8'h62);
+        ctl_send(8'h27);
+        ctl_send(8'h48);
+        ctl_send(8'h62);
+        ctl_nrfd(1);
+        ctl_ndac(cpu_receiver);
+        ctl_atn(0);
+        mcu_drain_rx;
+        first_data = rx_bytes.size();
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
+        mcu_write(IEEE_REG_TX, 8'hA5);
+        mcu_write(IEEE_REG_TX, 8'h00);
+        mcu_write(IEEE_REG_TX_LAST, 8'h5A);
+        if (cpu_receiver) begin
+            ctl_recv(d, eoi);
+            `assert_equal(d, 8'hA5);
+            `assert_equal(eoi, 1'b0);
+            ctl_recv(d, eoi);
+            `assert_equal(d, 8'h00);
+            `assert_equal(eoi, 1'b0);
+            ctl_recv(d, eoi);
+            `assert_equal(d, 8'h5A);
+            `assert_equal(eoi, 1'b1);
+        end else begin
+            ctl_nrfd(0);
+            repeat (100) @(posedge sys_clock);
+        end
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'd3);
+        mcu_drain_rx;
+        `assert_equal(rx_bytes.size(), first_data + 3);
+        `assert_equal(rx_bytes[first_data], 8'hA5);
+        `assert_equal(rx_bytes[first_data + 1], 8'h00);
+        `assert_equal(rx_bytes[first_data + 2], 8'h5A);
+        for (int i = 0; i < 3; ++i) begin
+            `assert_equal(rx_isatn[first_data + i], 1'b0);
+            `assert_equal(rx_iseoi[first_data + i], (i == 2));
+        end
+        `assert_equal(dut.listen_units, 4'b0010);
+        ctl_atn(1);
+        ctl_send(8'h3F);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
+    // Owner mismatches block either source before firmware service.
     task automatic check_data_owner(input bit other_unit);
         logic [7:0] d;
         logic eoi;
@@ -1007,6 +1062,8 @@ module ieee_tb;
         mcu_drain_rx;
         $display("[%t]   unit 11 listen/talk verified", $time);
         check_data_owner(1'b0);
+        check_peer_transfer(1'b0);
+        check_peer_transfer(1'b1);
         check_data_owner(1'b1);
         check_owner_pause(1'b0, 1'b0);
         check_owner_pause(1'b1, 1'b0);

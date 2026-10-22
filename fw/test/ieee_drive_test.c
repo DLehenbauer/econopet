@@ -1861,7 +1861,7 @@ START_TEST(test_command_dispatch_waits_for_idle) {
 }
 END_TEST
 
-// CMDSET detects a retained 41st byte, with its exact last/penultimate CR rules.
+// Native receive saturation and CMDSET's 58-byte limit are distinct contracts.
 START_TEST(test_command_length_boundaries_and_recovery) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
     const unsigned int device = loop_device((int) coordinates);
@@ -1877,10 +1877,13 @@ START_TEST(test_command_length_boundaries_and_recovery) {
     const uint8_t entries[] = {
         IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
     };
-    const size_t native_limit = 40;
+    const size_t native_limit = 58;
+    const size_t receive_capacity = type == diskimage_type_d80 ? 59 : 41;
+    const size_t lengths[] = {40, 41, 42, 57, 58, 59, 60};
     for (size_t entry = 0; entry < count_of(entries); ++entry) {
-        for (size_t length = native_limit; length <= native_limit + 2; ++length) {
-            for (size_t trailing = 0; trailing <= 2; ++trailing) {
+        for (size_t test = 0; test < count_of(lengths); ++test) {
+            const size_t length = lengths[test];
+            for (size_t trailing = 0; trailing <= 3; ++trailing) {
                 relative_position(device, IEEE_CHANNEL_REL, 1, 1);
                 enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
                 for (size_t index = 0; index < length; ++index) {
@@ -1893,8 +1896,10 @@ START_TEST(test_command_length_boundaries_and_recovery) {
                 enqueue_command(IEEE_CMD_UNLISTEN);
                 ieee_drive_task();
                 relative_talk(device, IEEE_CHANNEL_COMMAND);
-                const bool overlong = length > native_limit
-                    && !(trailing != 0 && length - trailing < native_limit + 1);
+                size_t retained = length < receive_capacity ? length : receive_capacity;
+                if (trailing != 0 && length - trailing == retained - 1) --retained;
+                else if (trailing != 0 && length - trailing == retained - 2) retained -= 2;
+                const bool overlong = retained > native_limit;
                 char expected[IEEE_STATUS_LINE_CAPACITY];
                 snprintf(expected, sizeof(expected), "%s%s\r",
                     overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00",
@@ -1902,7 +1907,11 @@ START_TEST(test_command_length_boundaries_and_recovery) {
                 assert_status(expected);
                 mock_ieee_clear_status();
                 relative_talk(device, IEEE_CHANNEL_REL);
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
                 ck_assert_uint_eq(mock_ieee_data_byte(0), payload[overlong ? 0 : 2]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[overlong ? 1 : 3]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
                 mock_ieee_clear_data();
                 relative_position(device, IEEE_CHANNEL_REL, 3, 1);
                 relative_talk(device, IEEE_CHANNEL_REL);
@@ -1996,6 +2005,48 @@ START_TEST(test_partial_status_retains_format_across_model_change) {
     char ok[IEEE_STATUS_LINE_CAPACITY];
     snprintf(ok, sizeof(ok), "00, OK,00,00%s\r", next_d80 ? (drive ? ",1" : ",0") : "");
     assert_status(ok);
+}
+END_TEST
+
+// A selection accepted during TXS filling must keep its truncated suffix paused.
+START_TEST(test_status_selection_interrupts_publication) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "status-publication.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    char error[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(error, sizeof(error), "70,NO CHANNEL,00,00%s\r",
+        type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+    const size_t prefixes[] = {0, 3};
+    for (size_t test = 0; test < count_of(prefixes); ++test) {
+        const size_t prefix = prefixes[test];
+        for (size_t discarded = 1; discarded <= strlen(error) - prefix; ++discarded) {
+            relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+            if (prefix != 0) {
+                relative_talk(device, IEEE_CHANNEL_COMMAND);
+                mock_ieee_consume_status(prefix);
+            }
+            mock_ieee_repeat_status_after(discarded);
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            ck_assert_uint_eq(mock_ieee_status_count(), strlen(error) - prefix - discarded);
+            ck_assert(mock_ieee_tx_paused());
+            ieee_drive_task();
+            assert_status(error + prefix);
+            mock_ieee_clear_status();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            assert_status(type == diskimage_type_d80
+                ? (drive ? "00, OK,00,00,1\r" : "00, OK,00,00,0\r")
+                : "00, OK,00,00\r");
+            mock_ieee_clear_status();
+        }
+    }
 }
 END_TEST
 
@@ -2699,6 +2750,8 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_status_progress_survives_reselection,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_status_selection_interrupts_publication,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_binary_position_retains_cr_fields,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);

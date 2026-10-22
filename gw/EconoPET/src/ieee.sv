@@ -164,6 +164,7 @@ module ieee (
     wire bus_dav_n  = cpu_dav_n  & dev_dav_n;
     wire bus_ndac_n = cpu_ndac_n & dev_ndac_n;
     wire bus_nrfd_n = cpu_nrfd_n & dev_nrfd_n;
+    wire bus_eoi_n = cpu_eoi_n & dev_eoi_n;
     wire [7:0] bus_dio = pia2_pb_out & dev_dio;
 
     // ------------------------------------------------------------------
@@ -327,15 +328,6 @@ module ieee (
                 end
             end
             if (atn_active || listening) begin
-                // ATN releases the in-flight lines without advancing again.
-                // The FIFO already reflects any NRFD-triggered prefetch.
-                if (talk_st != T_IDLE) begin
-                    talk_st   <= T_IDLE;
-                    dev_dav_n <= 1'b1;
-                    dev_dio   <= 8'hFF;
-                    dev_eoi_n <= 1'b1;
-                end
-
                 if (prev_atn_n && !cpu_atn_n) begin
                     dev_ndac_n <= 1'b0;    // join the handshake on ATN assert
                 end
@@ -408,7 +400,7 @@ module ieee (
                         rx_push_data <= {1'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
                     end else begin
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b0, !cpu_eoi_n, 1'b0, ~pia2_pb_out};
+                        rx_push_data <= {1'b0, !bus_eoi_n, 1'b0, ~bus_dio};
                     end
                     dev_nrfd_n <= 1'b0;
                     dev_ndac_n <= 1'b1;    // accepted
@@ -417,14 +409,24 @@ module ieee (
                     dev_ndac_n <= 1'b0;
                     dev_nrfd_n <= 1'b1;
                 end
+            end else begin
+                dev_ndac_n <= 1'b1;
+                dev_nrfd_n <= 1'b1;
+            end
+
+            // A peer virtual unit can accept while the selected source talks.
+            if (atn_active) begin
+                // ATN aborts presentation without repeating an earlier GET.
+                talk_st   <= T_IDLE;
+                dev_dav_n <= 1'b1;
+                dev_dio   <= 8'hFF;
+                dev_eoi_n <= 1'b1;
             end else if (talking) begin
                 // Talker role (source handshake). Bytes come from the TX FIFO;
                 // if it runs dry mid-file the handshake simply pauses (the
                 // CPU waits on DAV) until the MCU refills it.
                 unique case (talk_st)
                     T_IDLE: begin
-                        dev_ndac_n <= 1'b1;
-                        dev_nrfd_n <= 1'b1;
                         if (owner_matches && (serving_status ? !txs_empty : !tx_empty))
                             talk_st <= T_DAV;
                     end
@@ -457,20 +459,18 @@ module ieee (
                         end
                         // Both phases can finish on NDAC, including unread
                         // termination or NRFD and NDAC observed together.
-                        if (cpu_ndac_n) begin
+                        if (bus_ndac_n) begin
                             dev_dav_n <= 1'b1;
                             dev_dio   <= 8'hFF;
                             dev_eoi_n <= 1'b1;
                             talk_st   <= T_REARM;
                         end
                     end
-                    T_REARM: if (!cpu_ndac_n) begin     // acceptor re-armed
+                    T_REARM: if (!bus_ndac_n) begin     // all acceptors re-armed
                         talk_st <= T_IDLE;
                     end
                 endcase
             end else begin
-                dev_nrfd_n <= 1'b1;
-                dev_ndac_n <= 1'b1;
                 dev_dav_n  <= 1'b1;
                 dev_eoi_n  <= 1'b1;
                 dev_dio    <= 8'hFF;

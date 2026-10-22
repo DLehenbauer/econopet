@@ -27,8 +27,9 @@
 #define NUM_UNITS       4
 #define DRIVES_PER_UNIT 2
 #define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
-#define COMMAND_BUFFER_CAPACITY 40
-#define COMMAND_RECEIVE_CAPACITY (COMMAND_BUFFER_CAPACITY + 1)
+#define COMMAND_VALIDATION_LIMIT 58
+#define COMMAND_4040_RECEIVE_CAPACITY 41
+#define COMMAND_RECEIVE_CAPACITY (COMMAND_VALIDATION_LIMIT + 1)
 #define DEFAULT_CHANNEL 0
 
 // Write fabric control without changing firmware channel state.
@@ -767,7 +768,7 @@ static void dispatch_pending(void) {
             if (input->bytes[length - 1] == '\r') --length;
             else if (input->bytes[length - 2] == '\r') length -= 2;
         }
-        if (length > COMMAND_BUFFER_CAPACITY) {
+        if (length > COMMAND_VALIDATION_LIMIT) {
             input->length = 0;
             set_status(unit * DRIVES_PER_UNIT + drive_status[unit].drive, st_code_long_line, 0, 0);
         } else if (IEEE_CMD_IS_OPEN(input->secondary)
@@ -1116,7 +1117,11 @@ void ieee_drive_task(void) {
                 receive_state_t* const input = &receive_states[unit];
                 if (!input->listening) continue;
                 if (input->mode != receive_idle) {
-                    if (input->length < COMMAND_RECEIVE_CAPACITY)
+                    const unsigned int capacity =
+                        get_drive_model(unit * DRIVES_PER_UNIT + drive_status[unit].drive)
+                            == drive_model_4040
+                        ? COMMAND_4040_RECEIVE_CAPACITY : COMMAND_RECEIVE_CAPACITY;
+                    if (input->length < capacity)
                         input->bytes[input->length++] = byte;
                     if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK) {
                         ++input->pending;
@@ -1138,6 +1143,9 @@ void ieee_drive_task(void) {
             push_status(talk_unit);
         status_tx_pending = false;
     }
+    // A secondary accepted during TXS filling may have discarded its prefix.
+    // Keep sources paused until ordered RX processing rebuilds the response.
+    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) return;
     tx_resume();
     if (streaming) service_tx();
 }

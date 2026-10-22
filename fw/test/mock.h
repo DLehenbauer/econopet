@@ -50,5 +50,9 @@ bool mock_ieee_status_eoi(size_t index);
 void mock_ieee_consume_status(size_t count);
 // Discards status transport storage without fetching any response bytes.
 void mock_ieee_discard_status(void);
+// Accepts a repeated status secondary after this many TXS writes, flushing storage.
+void mock_ieee_repeat_status_after(size_t writes);
+// Reports whether firmware has paused new data/status presentations.
+bool mock_ieee_tx_paused(void);
 // Models fetching every captured command-channel byte.
 void mock_ieee_clear_status(void);

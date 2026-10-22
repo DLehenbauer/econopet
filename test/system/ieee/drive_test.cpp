@@ -122,8 +122,9 @@ void service_rx(System& system, FirmwareSession& firmware, const char* context) 
 
 // Send a binary native P command through the production RX/SPI path.
 void position_relative(System& system, FirmwareSession& firmware, IeeeController& controller,
-        uint16_t record, uint8_t offset, Channel channel = Channel{DataChannel}) {
-    controller.command(Listen(Device{DeviceAddress}));
+        uint16_t record, uint8_t offset, Channel channel = Channel{DataChannel},
+        Device device = Device{DeviceAddress}) {
+    controller.command(Listen(device));
     controller.command(Secondary(Channel{CommandChannel}));
     const std::vector<uint8_t> bytes{'P', static_cast<uint8_t>(IEEE_CMD_SECONDARY(channel.value())),
         static_cast<uint8_t>(record), static_cast<uint8_t>(record >> 8), offset};
@@ -955,7 +956,7 @@ TEST_P(DriveRelativeTest, PendingCommandsDispatchOnlyAtIdle) {
     }
 }
 
-// Native CMDSET rejects an untrimmed 41st byte before changing the REL position.
+// Model-specific receive saturation precedes the shared 58-byte CMDSET check.
 TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
     const bool d80 = GetParam();
     const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
@@ -963,10 +964,11 @@ TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
     IeeeController controller(system);
     open_file(system, controller, Channel{DataChannel}, "BASIC,L");
     service_rx(system, firmware, "service length-control OPEN");
-    constexpr size_t NativeLimit = 40, ServiceChunk = 8;
+    constexpr size_t NativeLimit = 58, ServiceChunk = 8;
+    const size_t receive_capacity = d80 ? 59 : 41;
     for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
-        for (size_t length = NativeLimit; length <= NativeLimit + 2; ++length) {
-            for (size_t trailing = 0; trailing <= 2; ++trailing) {
+        for (const size_t length : {40, 41, 42, 57, 58, 59, 60}) {
+            for (size_t trailing = 0; trailing <= 3; ++trailing) {
                 position_relative(system, firmware, controller, 1, 1);
                 controller.command(Listen(Device{DeviceAddress}));
                 controller.command(entry);
@@ -980,8 +982,10 @@ TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
                 }
                 controller.command(Unlisten);
                 service_rx(system, firmware, "service CMDSET length check");
-                const bool overlong = length > NativeLimit
-                    && !(trailing != 0 && length - trailing < NativeLimit + 1);
+                size_t retained = std::min(length, receive_capacity);
+                if (trailing != 0 && length - trailing == retained - 1) --retained;
+                else if (trailing != 0 && length - trailing == retained - 2) retained -= 2;
+                const bool overlong = retained > NativeLimit;
                 EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
                     std::string(overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00")
                         + (d80 ? ",0\r" : "\r"));
@@ -1115,6 +1119,42 @@ TEST_P(DriveRelativeTest, PartialStatusRetainsFormatAcrossModelChange) {
     EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}), "\r");
     EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
         d80 ? "00, OK,00,00\r" : "00, OK,00,00,0\r");
+}
+
+// A retained peer LISTEN accepts the selected source without a global UNLISTEN.
+TEST_P(DriveRelativeTest, RetainedPeerListenerReceivesSelectedTalker) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> source{0xa5, 0xa6, 0x51, 0x52};
+    const std::vector<uint8_t> destination{0x11, 0x12, 0x13, 0x14};
+    const char* const peer_name = d80 ? "peer-write.d80" : "peer-write.d64";
+    firmware.mount(relative_image(d80, destination, destination.size()), peer_name);
+    ASSERT_TRUE(ieee_drive_mount(2, peer_name));
+    firmware.mount(relative_image(d80, source, source.size()),
+        d80 ? "peer-source.d80" : "peer-source.d64");
+    IeeeController controller(system);
+    const Device talker{DeviceAddress}, peer{DeviceAddress + 1}, foreign{DeviceAddress - 1};
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L", peer);
+    service_rx(system, firmware, "open peer REL writer");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L", talker);
+    service_rx(system, firmware, "open peer REL source");
+    controller.command(Listen(peer));
+    controller.command(Secondary(Channel{DataChannel}));
+    controller.command(Listen(foreign));
+    controller.command(Talk(talker));
+    controller.command(Secondary(Channel{DataChannel}));
+    controller.release_atn();
+    service_rx(system, firmware, "select concurrent virtual source and acceptor");
+    receive_payload(system, controller,
+        {data(source[0]), data(source[1]), data(source[2]), data(source[3], Eoi::Last)});
+    controller.command(Unlisten);
+    controller.command(Untalk);
+    service_rx(system, firmware, "commit peer's received REL record");
+    position_relative(system, firmware, controller, 1, 1, Channel{DataChannel}, peer);
+    controller.command(Talk(peer));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "read back peer's written REL record");
+    receive_payload(system, controller,
+        {data(source[0]), data(source[1]), data(source[2]), data(source[3], Eoi::Last)});
 }
 
 // Historical status selections cannot publish bytes under the final unit's tracker.
