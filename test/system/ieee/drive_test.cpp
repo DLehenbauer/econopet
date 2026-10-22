@@ -224,6 +224,10 @@ class DriveTerminalTest : public FirmwareTest, public testing::WithParamInterfac
 // Share record-engine contracts between D64/4040 and D80/single-sided 8050.
 class DriveRelativeTest : public FirmwareTest, public testing::WithParamInterface<bool> {};
 
+// Keep each model/length matrix inside the ordinary integration-test timeout.
+class DriveCommandLengthTest : public FirmwareTest,
+    public testing::WithParamInterface<std::tuple<bool, size_t>> {};
+
 // Cross native models, interruption phases, and same/status/channel/unit ownership.
 class DriveRelativeContinuationTest : public FirmwareTest,
     public testing::WithParamInterface<std::tuple<bool, int, int>> {};
@@ -957,8 +961,8 @@ TEST_P(DriveRelativeTest, PendingCommandsDispatchOnlyAtIdle) {
 }
 
 // Model-specific receive saturation precedes the shared 58-byte CMDSET check.
-TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
-    const bool d80 = GetParam();
+TEST_P(DriveCommandLengthTest, CommandLengthBoundariesPreservePositionAndRecover) {
+    const auto [d80, length] = GetParam();
     const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
     firmware.mount(relative_image(d80, payload, 2), d80 ? "limits.d80" : "limits.d64");
     IeeeController controller(system);
@@ -967,45 +971,46 @@ TEST_P(DriveRelativeTest, CommandLengthBoundariesPreservePositionAndRecover) {
     constexpr size_t NativeLimit = 58, ServiceChunk = 8;
     const size_t receive_capacity = d80 ? 59 : 41;
     for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
-        for (const size_t length : {40, 41, 42, 57, 58, 59, 60}) {
-            for (size_t trailing = 0; trailing <= 3; ++trailing) {
-                position_relative(system, firmware, controller, 1, 1);
-                controller.command(Listen(Device{DeviceAddress}));
-                controller.command(entry);
-                constexpr uint8_t Position[] = {'P', IEEE_CMD_SECONDARY(DataChannel), 2, 0, 1};
-                for (size_t index = 0; index < length; ++index) {
-                    const uint8_t byte = trailing != 0 && index == length - trailing
-                        ? '\r' : index < sizeof(Position) ? Position[index] : 'X';
-                    controller.data(byte, index + 1 == length ? Eoi::Last : Eoi::More);
-                    if ((index + 1) % ServiceChunk == 0)
-                        service_rx(system, firmware, "service bounded command chunk");
-                }
-                controller.command(Unlisten);
-                service_rx(system, firmware, "service CMDSET length check");
-                size_t retained = std::min(length, receive_capacity);
-                if (trailing != 0 && length - trailing == retained - 1) --retained;
-                else if (trailing != 0 && length - trailing == retained - 2) retained -= 2;
-                const bool overlong = retained > NativeLimit;
-                EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
-                    std::string(overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00")
-                        + (d80 ? ",0\r" : "\r"));
-                controller.command(Talk(Device{DeviceAddress}));
-                controller.command(Secondary(Channel{DataChannel}));
-                service_rx(system, firmware, "service length-control position");
-                receive_payload(system, controller, overlong
-                    ? std::vector<Record>{data(1), data(2, Eoi::Last)}
-                    : std::vector<Record>{data(3), data(4, Eoi::Last)});
-                controller.command(Untalk);
-                position_relative(system, firmware, controller, 3, 1);
-                controller.command(Talk(Device{DeviceAddress}));
-                controller.command(Secondary(Channel{DataChannel}));
-                service_rx(system, firmware, "service recovery after length check");
-                receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
-                controller.command(Untalk);
+        for (size_t trailing = 0; trailing <= 3; ++trailing) {
+            position_relative(system, firmware, controller, 1, 1);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            constexpr uint8_t Position[] = {'P', IEEE_CMD_SECONDARY(DataChannel), 2, 0, 1};
+            for (size_t index = 0; index < length; ++index) {
+                const uint8_t byte = trailing != 0 && index == length - trailing
+                    ? '\r' : index < sizeof(Position) ? Position[index] : 'X';
+                controller.data(byte, index + 1 == length ? Eoi::Last : Eoi::More);
+                if ((index + 1) % ServiceChunk == 0)
+                    service_rx(system, firmware, "service bounded command chunk");
             }
+            controller.command(Unlisten);
+            service_rx(system, firmware, "service CMDSET length check");
+            size_t retained = std::min(length, receive_capacity);
+            if (trailing != 0 && length - trailing == retained - 1) --retained;
+            else if (trailing != 0 && length - trailing == retained - 2) retained -= 2;
+            const bool overlong = retained > NativeLimit;
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                std::string(overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00")
+                    + (d80 ? ",0\r" : "\r"));
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service length-control position");
+            receive_payload(system, controller, overlong
+                ? std::vector<Record>{data(1), data(2, Eoi::Last)}
+                : std::vector<Record>{data(3), data(4, Eoi::Last)});
+            controller.command(Untalk);
+            position_relative(system, firmware, controller, 3, 1);
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "service recovery after length check");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
         }
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(ModelsLengths, DriveCommandLengthTest,
+    testing::Combine(testing::Bool(), testing::Values<size_t>(40, 41, 42, 57, 58, 59, 60)));
 
 // Status is acknowledged on terminal-CR GET, never on queueing or TXS flush.
 TEST_P(DriveRelativeTest, PartialStatusSurvivesReselectionAndPeerStatus) {
@@ -1155,6 +1160,60 @@ TEST_P(DriveRelativeTest, RetainedPeerListenerReceivesSelectedTalker) {
     service_rx(system, firmware, "read back peer's written REL record");
     receive_payload(system, controller,
         {data(source[0]), data(source[1]), data(source[2]), data(source[3], Eoi::Last)});
+}
+
+// A peer-only transfer must leave DAV idle when delayed service fills RX.
+TEST_P(DriveRelativeTest, PeerTransferBackpressuresBeforeRxCapacity) {
+    const bool d80 = GetParam();
+    constexpr size_t RecordLength = 40, RxCapacity = 32;
+    constexpr econopet::Cycles DelayedService = 20000;
+    std::vector<uint8_t> source(RecordLength);
+    std::vector<Record> expected;
+    for (size_t index = 0; index < source.size(); ++index) {
+        source[index] = static_cast<uint8_t>(index + 1);
+        expected.push_back(data(source[index], index + 1 == source.size() ? Eoi::Last : Eoi::More));
+    }
+    const char* const peer_name = d80 ? "backpressure-write.d80" : "backpressure-write.d64";
+    firmware.mount(relative_image(d80, std::vector<uint8_t>(RecordLength, 0x55), RecordLength), peer_name);
+    ASSERT_TRUE(ieee_drive_mount(2, peer_name));
+    firmware.mount(relative_image(d80, source, RecordLength),
+        d80 ? "backpressure-source.d80" : "backpressure-source.d64");
+    IeeeController controller(system);
+    const Device talker{DeviceAddress}, peer{DeviceAddress + 1}, foreign{DeviceAddress - 1};
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L", peer);
+    service_rx(system, firmware, "open backpressured peer REL writer");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L", talker);
+    service_rx(system, firmware, "open backpressured REL source");
+    controller.command(Listen(peer));
+    controller.command(Secondary(Channel{DataChannel}));
+    controller.command(Listen(foreign));
+    controller.command(Talk(talker));
+    controller.command(Secondary(Channel{DataChannel}));
+    controller.release_atn();
+    service_rx(system, firmware, "select peer-only transfer while controller is busy");
+    auto wire = system.trace_ieee();
+    controller.write(pet::Pia2ControlA, PiaC2High.bits());
+    controller.write(pet::ViaPortB, BusReleased);
+    system.tick(DelayedService);
+    ASSERT_EQ(wire.records().size(), RxCapacity);
+    ASSERT_TRUE(system.snapshot().ieee_rx_ready_o);
+    ASSERT_TRUE(system.snapshot().ieee_device_dav_no);
+    require_sequence(wire.records(), std::vector<Record>(expected.begin(), expected.begin() + RxCapacity),
+        "peer transfer paused before RX overflow");
+    system.execution().within(ByteBudget).service(firmware.service_adapter())
+        .until([&](const System& board) {
+            return wire.records().size() == RecordLength && !board.snapshot().ieee_rx_ready_o
+                && board.snapshot().ieee_device_dav_no;
+        }).run("resume peer transfer after delayed firmware service");
+    require_sequence(wire.records(), expected, "complete peer-only wire transfer");
+    controller.command(Unlisten);
+    controller.command(Untalk);
+    service_rx(system, firmware, "commit backpressured peer REL write");
+    position_relative(system, firmware, controller, 1, 1, Channel{DataChannel}, peer);
+    controller.command(Talk(peer));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "read back full backpressured peer record");
+    receive_payload(system, controller, expected);
 }
 
 // Historical status selections cannot publish bytes under the final unit's tracker.

@@ -382,6 +382,73 @@ module ieee_tb;
         mcu_drain_rx;
     endtask
 
+    // Delayed MCU service must stop before a peer's full RX queue holds active DAV.
+    task automatic check_peer_backpressure(input bit pending_boundary);
+        localparam int RECORD_LENGTH = 40;
+        localparam int SELECTION_BYTES = 5;
+        localparam int STALL_CYCLES = 400;
+        logic [7:0] d;
+        int first_data;
+        int previous_boundaries;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        ctl_atn(1);
+        ctl_send(8'h29);
+        ctl_send(8'h62);
+        ctl_send(8'h27);
+        ctl_send(8'h48);
+        ctl_send(8'h62);
+        if (pending_boundary)
+            for (int i = SELECTION_BYTES; i < dut.RX_DEPTH - 1; ++i) ctl_send(8'h62);
+        for (int i = 0; i < RECORD_LENGTH; ++i)
+            mcu_write(i == RECORD_LENGTH - 1 ? IEEE_REG_TX_LAST : IEEE_REG_TX, 8'(i + 1));
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
+        ctl_ndac(0);
+        ctl_nrfd(!pending_boundary);
+        ctl_atn(0);
+        if (pending_boundary) begin
+            repeat (STALL_CYCLES) @(posedge sys_clock);
+            `assert_equal(dut.rx_count, dut.RX_DEPTH);
+            `assert_equal(dut.dev_dav_n, 1'b1);
+            mcu_read(IEEE_REG_TX, d);
+            `assert_equal(d, 8'd0);
+            mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | IEEE_TX_OWNER_PAUSE_MASK | 8'h02);
+        end
+        // Drain selection metadata before allowing the bounded data burst.
+        previous_boundaries = rx_boundary_count;
+        mcu_drain_rx;
+        `assert_equal(rx_boundary_count, previous_boundaries + 1);
+        first_data = rx_bytes.size();
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
+        ctl_nrfd(0);
+        repeat (STALL_CYCLES) @(posedge sys_clock);
+        `assert_equal(dut.rx_count, dut.RX_DEPTH);
+        `assert_equal(dut.dev_dav_n, 1'b1);
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'(dut.RX_DEPTH));
+        // A real firmware pause must not get trapped behind an unaccepted byte.
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | IEEE_TX_OWNER_PAUSE_MASK | 8'h02);
+        repeat (STALL_CYCLES) @(posedge sys_clock);
+        `assert_equal(dut.dev_dav_n, 1'b1);
+        mcu_drain_rx;
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
+        repeat (STALL_CYCLES) @(posedge sys_clock);
+        mcu_drain_rx;
+        mcu_read(IEEE_REG_TX, d);
+        `assert_equal(d, 8'(RECORD_LENGTH));
+        `assert_equal(rx_bytes.size(), first_data + RECORD_LENGTH);
+        for (int i = 0; i < RECORD_LENGTH; ++i) begin
+            `assert_equal(rx_bytes[first_data + i], 8'(i + 1));
+            `assert_equal(rx_isatn[first_data + i], 1'b0);
+            `assert_equal(rx_iseoi[first_data + i], (i == RECORD_LENGTH - 1));
+        end
+        ctl_atn(1);
+        ctl_send(8'h3F);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
+    endtask
+
     // Owner mismatches block either source before firmware service.
     task automatic check_data_owner(input bit other_unit);
         logic [7:0] d;
@@ -1064,6 +1131,8 @@ module ieee_tb;
         check_data_owner(1'b0);
         check_peer_transfer(1'b0);
         check_peer_transfer(1'b1);
+        check_peer_backpressure(1'b0);
+        check_peer_backpressure(1'b1);
         check_data_owner(1'b1);
         check_owner_pause(1'b0, 1'b0);
         check_owner_pause(1'b1, 1'b0);

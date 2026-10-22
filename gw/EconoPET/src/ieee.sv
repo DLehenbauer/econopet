@@ -433,8 +433,11 @@ module ieee (
                     // Source handshake may only begin once an acceptor is
                     // present (NDAC asserted) and ready (NRFD released) --
                     // starting on NRFD alone loses the first byte if the
-                    // acceptor hasn't configured NDAC yet.
+                    // acceptor hasn't configured NDAC yet. A virtual peer
+                    // also needs RX space before DAV, or active-byte protection
+                    // prevents firmware from draining the queue it must accept into.
                     T_DAV: if (bus_nrfd_n && !bus_ndac_n
+                               && (!listening || (rx_room && !atn_end_due))
                                && owner_matches && (serving_status ? !txs_empty : !tx_empty)) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
                         dev_eoi_n <= serving_status ? ~txs_mem[txs_rd][8]   : ~tx_mem[tx_rd][8];
