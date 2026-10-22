@@ -99,6 +99,22 @@ std::vector<uint8_t> relative_image(bool d80, const std::vector<uint8_t>& payloa
     return image;
 }
 
+// Add a SEQ alias of the REL payload for mixed-channel readiness controls.
+std::vector<uint8_t> relative_sequential_image(bool d80, const std::vector<uint8_t>& payload) {
+    auto image = relative_image(d80, payload, 2);
+    const auto directory = sequential_directory(d80);
+    const auto sequential = directory + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+    constexpr size_t FileTypeOffset = 2, FilenameOffset = 5;
+    std::copy_n(image.begin() + directory, DISKIMAGE_DIRECTORY_ENTRY_SIZE,
+        image.begin() + sequential);
+    image[sequential + FileTypeOffset] = 0x80 | DISKIMAGE_FTYPE_SEQ;
+    std::fill_n(image.begin() + sequential + FilenameOffset, DISKIMAGE_FILENAME_SIZE,
+        DISKIMAGE_FILENAME_PADDING);
+    const std::string name = "PLAIN";
+    std::copy(name.begin(), name.end(), image.begin() + sequential + FilenameOffset);
+    return image;
+}
+
 // Repair the mounted backing file in place, without resetting the drive session.
 void repair_sequential_image(const char* name, const std::vector<uint8_t>& image) {
     char path[SD_PATH_MAX];
@@ -762,25 +778,14 @@ TEST_P(DriveRelativeTest, CommandChannelOpenExecutesBinaryPosition) {
 // RECORD reports missing and non-REL channels distinctly, without poisoning recovery.
 TEST_P(DriveRelativeTest, CommandChannelErrorsAndRecovery) {
     const bool d80 = GetParam();
-    constexpr uint8_t RecordLength = 2;
     constexpr Channel Sequential{DataChannel + 1}, Missing{DataChannel + 2};
     const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6};
-    auto image = relative_image(d80, payload, RecordLength);
-    const auto directory = sequential_directory(d80);
-    const auto sequential = directory + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
-    constexpr size_t FileTypeOffset = 2, FilenameOffset = 5;
-    std::copy_n(image.begin() + directory, DISKIMAGE_DIRECTORY_ENTRY_SIZE,
-        image.begin() + sequential);
-    image[sequential + FileTypeOffset] = 0x80 | DISKIMAGE_FTYPE_SEQ;
-    std::fill_n(image.begin() + sequential + FilenameOffset, DISKIMAGE_FILENAME_SIZE,
-        DISKIMAGE_FILENAME_PADDING);
-    const std::string name = "PLAIN";
-    std::copy(name.begin(), name.end(), image.begin() + sequential + FilenameOffset);
+    auto image = relative_sequential_image(d80, payload);
     firmware.mount(image, d80 ? "command-errors.d80" : "command-errors.d64");
     IeeeController controller(system);
     open_file(system, controller, Channel{DataChannel}, "BASIC,L");
     service_rx(system, firmware, "service REL error-control OPEN");
-    open_file(system, controller, Sequential, name);
+    open_file(system, controller, Sequential, "PLAIN");
     service_rx(system, firmware, "service sequential error-control OPEN");
 
     for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
@@ -1003,6 +1008,93 @@ TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterUnopenedTalk) {
             service_rx(system, firmware, "read following record after NOTLK dispatch");
             receive_payload(system, controller, {data(7), data(8, Eoi::Last)});
             controller.command(Untalk);
+        }
+    }
+}
+
+// EOF queued in transport remains ready, but its final GET makes SEQ NOTRDY.
+TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterSequentialEof) {
+    const bool d80 = GetParam();
+    constexpr Channel Sequential{DataChannel + 1};
+    const std::vector<uint8_t> payload{1, 2, 3, 4, 5, 6, 7, 8};
+    firmware.mount(relative_sequential_image(d80, payload), d80 ? "eof-idle.d80" : "eof-idle.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open REL EOF-dispatch target");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const bool consumed : {true, false}) {
+            position_relative(system, firmware, controller, 1, 1);
+            open_file(system, controller, Sequential, "PLAIN");
+            service_rx(system, firmware, "open SEQ EOF control");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Sequential));
+            service_rx(system, firmware, "queue complete SEQ including EOF");
+            const std::vector<Record> expected{
+                data(1), data(2), data(3), data(4), data(5), data(6), data(7), data(8, Eoi::Last),
+            };
+            if (consumed) receive_payload(system, controller, expected);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            const std::vector<uint8_t> position{'P', IEEE_CMD_SECONDARY(DataChannel), 3, 0, 1};
+            for (size_t index = 0; index < position.size(); ++index)
+                controller.data(position[index], index + 1 == position.size() ? Eoi::Last : Eoi::More);
+            service_rx(system, firmware, "retain P before SEQ TALK");
+            controller.raw_send(command(Unlisten));
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Sequential));
+            controller.release_atn();
+            service_rx(system, firmware, "select queued or consumed SEQ EOF");
+            if (!consumed) {
+                // Early P dispatch would discard this unread FIFO, not just change timing.
+                receive_payload(system, controller, expected);
+                service_rx(system, firmware, "return completed SEQ TALK to IDLE");
+            }
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "reselect REL without UNTALK after SEQ EOF");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish EOF dispatch control");
+        }
+    }
+}
+
+// Native TLK20 returns directly to IDLE when NDAC releases without an NRFD GET.
+TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterTalkWithoutGet) {
+    const bool d80 = GetParam();
+    firmware.mount(relative_image(d80, {1, 2, 3, 4, 5, 6}, 2),
+        d80 ? "no-get.d80" : "no-get.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open REL no-GET target");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        for (const Channel source : {Channel{DataChannel}, Channel{CommandChannel}}) {
+            position_relative(system, firmware, controller, 1, 1);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(entry);
+            const std::vector<uint8_t> position{'P', IEEE_CMD_SECONDARY(DataChannel), 3, 0, 1};
+            for (size_t index = 0; index < position.size(); ++index)
+                controller.data(position[index], index + 1 == position.size() ? Eoi::Last : Eoi::More);
+            controller.raw_send(command(Unlisten));
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(source));
+            controller.release_atn();
+            service_rx(system, firmware, "defer P during ready TALK");
+            controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+            controller.write(pet::ViaPortB, BusReleased);
+            system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; },
+                ByteBudget, "wait for no-GET DAV");
+            controller.write(pet::Pia2ControlA, PiaC2High.bits());
+            system.run_until([](const System& board) { return board.snapshot().ieee_bus_dav_no; },
+                ByteBudget, "NDAC-only termination releases DAV");
+            controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+            service_rx(system, firmware, "dispatch at native unread TALK return");
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "reselect without UNTALK after no GET");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish no-GET dispatch control");
         }
     }
 }

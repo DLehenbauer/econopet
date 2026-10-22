@@ -53,8 +53,9 @@ enum class IeeeControlStatusBit : uint8_t {
     DataActive = ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK,
     RxEoi = ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK,
     RxAtnEnd = ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK,
+    RxTalkEvent = ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK,
     StatusActive = ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK,
-    All = Enabled | TxRoom | DataActive | RxEoi | RxAtnEnd | StatusActive,
+    All = Enabled | TxRoom | DataActive | RxEoi | RxAtnEnd | StatusActive | RxTalkEvent,
 };
 using IeeeControlStatus = econopet::Flags<IeeeControlStatusBit>;
 

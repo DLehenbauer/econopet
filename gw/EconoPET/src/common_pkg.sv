@@ -208,6 +208,9 @@ package common_pkg;
     localparam int unsigned IEEE_CTRL_RD_STATUS_ACTIVE_BIT = 5;
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_ATN_END_MASK = (1 << IEEE_CTRL_RD_RX_ATN_END_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_STATUS_ACTIVE_MASK = (1 << IEEE_CTRL_RD_STATUS_ACTIVE_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_TALK_EVENT_MASK = 8'h40;
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_EOI_GET_MASK = 8'h80;
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_RECHECK_MASK = 8'h40;
 
     // IEEE status bits (bit 7 is talk starvation, not RX EOI).
     localparam int unsigned IEEE_ST_RX_AVAIL_BIT = 0; // RX FIFO has a byte available to peek or pop.

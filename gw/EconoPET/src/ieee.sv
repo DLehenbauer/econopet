@@ -169,7 +169,7 @@ module ieee (
 
     // ------------------------------------------------------------------
     // FIFOs
-    //   RX: CPU -> MCU, {atn_end, eoi, atn, data}. ATN end has no bus byte.
+    //   RX: CPU -> MCU, {talk_event, atn_end, eoi, atn, data}.
     //   TX: MCU -> CPU, 9-bit entries {eoi, data}
     // ------------------------------------------------------------------
     localparam RX_DEPTH = 32;
@@ -179,7 +179,7 @@ module ieee (
     // to LUT-RAM, so depth is LUT-bounded.
     localparam TX_DEPTH = 1024;
 
-    logic [10:0] rx_mem [RX_DEPTH-1:0];
+    logic [11:0] rx_mem [RX_DEPTH-1:0];
     logic [$clog2(RX_DEPTH)-1:0] rx_wr = '0, rx_rd = '0;
     logic [$clog2(RX_DEPTH):0]   rx_count = '0;
     wire rx_empty = rx_count == 0;
@@ -250,12 +250,16 @@ module ieee (
     wire atn_end_due = atn_end_pending || (!prev_atn_n && cpu_atn_n);
 
     // Native TLK20/TLK30 prefetches on NRFD before TLK35 waits for NDAC.
-    typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM } talk_state_t;
+    typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM, T_DONE } talk_state_t;
     talk_state_t talk_st = T_IDLE;
+    logic talk_eoi_fetched = 1'b0;
+    logic talk_event_pending = 1'b0;
+    logic [7:0] talk_event_data = '0;
+    wire talk_event_due = talk_event_pending || (atn_active && talk_eoi_fetched);
 
     // RX push request from the acceptor
     logic rx_push = 1'b0;          // init: else a phantom push under rand reset
-    logic [10:0] rx_push_data = '0;
+    logic [11:0] rx_push_data = '0;
 
 
     // Data-FIFO flush, requested by the MCU (on OPEN/CLOSE) via CTRL bit 2.
@@ -280,6 +284,9 @@ module ieee (
             tx_prefetched <= '0;
             txs_prefetched <= '0;
             atn_end_pending <= 1'b0;
+            talk_event_pending <= 1'b0;
+            talk_eoi_fetched <= 1'b0;
+            talk_event_data <= '0;
             // Supported PET/fabric resets are MCU-coordinated with ieee_drive_reset().
             // Independently pulling the physical CPU reset pin low is unsupported.
             listen_units   <= '0;
@@ -302,6 +309,9 @@ module ieee (
             if (flush) tx_prefetched <= '0;
             if (flush) txs_prefetched <= '0;
             atn_end_pending <= 1'b0;
+            talk_event_pending <= 1'b0;
+            talk_eoi_fetched <= 1'b0;
+            talk_event_data <= '0;
             listen_units   <= '0;
             talking        <= 1'b0;
             sa             <= 8'h00;
@@ -318,21 +328,26 @@ module ieee (
             prev_bus_dav_n <= 1'b1;
             prev_atn_n     <= 1'b1;
         end else begin
-            // Preserve the native ATN50 -> IDLE/TALK/LISTEN boundary in FIFO order.
-            if (atn_end_due) begin
-                atn_end_pending <= 1'b1;
+            // Retain source progress before later ATN bytes and release boundaries.
+            if (atn_end_due) atn_end_pending <= 1'b1;
+            if (talk_event_pending) begin
                 if (rx_room) begin
                     rx_push <= 1'b1;
-                    rx_push_data <= {1'b1, 10'b0};
-                    atn_end_pending <= 1'b0;
+                    rx_push_data <= {1'b1, 3'b0, talk_event_data};
+                    talk_event_pending <= 1'b0;
                 end
+            end else if (atn_end_due && !talk_event_due && rx_room) begin
+                rx_push <= 1'b1;
+                rx_push_data <= {2'b01, 10'b0};
+                atn_end_pending <= 1'b0;
             end
             if (atn_active || listening) begin
                 if (prev_atn_n && !cpu_atn_n) begin
                     dev_ndac_n <= 1'b0;    // join the handshake on ATN assert
                 end
 
-                if (prev_bus_dav_n && !bus_dav_n && rx_room && !atn_end_due) begin
+                if (prev_bus_dav_n && !bus_dav_n && rx_room
+                    && !atn_end_due && !talk_event_due) begin
                     // Byte valid and room to store it: capture and accept.
                     // (While RX is full, hold NDAC asserted and wait -- IEEE
                     // flow control backpressures the CPU until the MCU drains
@@ -397,10 +412,10 @@ module ieee (
                             default: ;
                         endcase
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
+                        rx_push_data <= {2'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
                     end else begin
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b0, !bus_eoi_n, 1'b0, ~bus_dio};
+                        rx_push_data <= {2'b0, !bus_eoi_n, 1'b0, ~bus_dio};
                     end
                     dev_nrfd_n <= 1'b0;
                     dev_ndac_n <= 1'b1;    // accepted
@@ -417,6 +432,12 @@ module ieee (
             // A peer virtual unit can accept while the selected source talks.
             if (atn_active) begin
                 // ATN aborts presentation without repeating an earlier GET.
+                if (talk_eoi_fetched) begin
+                    talk_event_pending <= 1'b1;
+                    talk_event_data <= IEEE_RX_TALK_EOI_GET_MASK
+                        | {2'b0, talk_unit, talk_sa[3:0]};
+                    talk_eoi_fetched <= 1'b0;
+                end
                 talk_st   <= T_IDLE;
                 dev_dav_n <= 1'b1;
                 dev_dio   <= 8'hFF;
@@ -427,7 +448,8 @@ module ieee (
                 // CPU waits on DAV) until the MCU refills it.
                 unique case (talk_st)
                     T_IDLE: begin
-                        if (owner_matches && (serving_status ? !txs_empty : !tx_empty))
+                        if (!talk_event_due && owner_matches
+                            && (serving_status ? !txs_empty : !tx_empty))
                             talk_st <= T_DAV;
                     end
                     // Source handshake may only begin once an acceptor is
@@ -437,6 +459,7 @@ module ieee (
                     // also needs RX space before DAV, or active-byte protection
                     // prevents firmware from draining the queue it must accept into.
                     T_DAV: if (bus_nrfd_n && !bus_ndac_n
+                               && !talk_event_due && !atn_end_due
                                && (!listening || (rx_room && !atn_end_due))
                                && owner_matches && (serving_status ? !txs_empty : !tx_empty)) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
@@ -457,6 +480,7 @@ module ieee (
                                 // Count GET itself, even if a simultaneous
                                 // queue discard wins the FIFO pointer update.
                                 tx_prefetched <= tx_prefetched + 1'b1;
+                                if (!dev_eoi_n) talk_eoi_fetched <= 1'b1;
                             end
                             talk_st <= T_ACK;
                         end
@@ -466,12 +490,25 @@ module ieee (
                             dev_dav_n <= 1'b1;
                             dev_dio   <= 8'hFF;
                             dev_eoi_n <= 1'b1;
-                            talk_st   <= T_REARM;
+                            if (talk_st == T_PREFETCH && bus_nrfd_n) begin
+                                talk_event_pending <= 1'b1;
+                                talk_event_data <= {2'b00, talk_unit, talk_sa[3:0]};
+                                talk_st <= T_DONE;
+                            end else begin
+                                talk_st <= T_REARM;
+                            end
                         end
                     end
                     T_REARM: if (!bus_ndac_n) begin     // all acceptors re-armed
+                        if (talk_eoi_fetched) begin
+                            talk_event_pending <= 1'b1;
+                            talk_event_data <= IEEE_RX_TALK_EOI_GET_MASK | IEEE_RX_TALK_RECHECK_MASK
+                                | {2'b0, talk_unit, talk_sa[3:0]};
+                            talk_eoi_fetched <= 1'b0;
+                        end
                         talk_st <= T_IDLE;
                     end
+                    T_DONE: ;
                 endcase
             end else begin
                 dev_dav_n  <= 1'b1;
@@ -485,7 +522,7 @@ module ieee (
             // prev_bus_dav_n high so the edge re-fires once the MCU drains
             // a slot, instead of being lost forever (bus deadlock).
             if (!(prev_bus_dav_n && !bus_dav_n
-                && (!rx_room || atn_end_due) && (atn_active || listening)))
+                && (!rx_room || atn_end_due || talk_event_due) && (atn_active || listening)))
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
         end
@@ -554,7 +591,9 @@ module ieee (
                                 | (!rx_empty && rx_mem[rx_rd][10]
                                     ? IEEE_CTRL_RD_RX_ATN_END_MASK : DATA_WIDTH'(0))
                                 | (serving_status && !dev_dav_n
-                                    ? IEEE_CTRL_RD_STATUS_ACTIVE_MASK : DATA_WIDTH'(0));
+                                    ? IEEE_CTRL_RD_STATUS_ACTIVE_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][11]
+                                    ? IEEE_CTRL_RD_RX_TALK_EVENT_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
                         enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];

@@ -278,6 +278,7 @@ typedef enum {
     file_channel_closed,
     file_channel_readable,
     file_channel_exhausted,
+    file_channel_consumed,
 } file_channel_state_t;
 
 static file_channel_state_t file_state = file_channel_closed;
@@ -757,7 +758,7 @@ static void resolve_open(uint8_t open_unit) {
     log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
 }
 
-// Native TALK returns through NOTLK when its selected channel is unallocated.
+// Native TALK/TALK1 returns through NOTLK for unallocated or consumed SEQ data.
 static bool talk_source_ready(void) {
     if (!mcu_talking) return false;
     const uint8_t channel = IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary);
@@ -766,12 +767,12 @@ static bool talk_source_ready(void) {
             && file_unit == talk_unit && file_chan == channel);
 }
 
-// Dispatch CMDWAT at IDLE/VIDLE, including NOTLK with TALK ownership retained.
-static void dispatch_pending(void) {
+// Dispatch at IDLE/VIDLE. An explicit TLK20 idle unit bypasses source readiness.
+static void dispatch_pending(uint8_t idle_unit) {
     for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
         receive_state_t* const input = &receive_states[unit];
         if (!input->pending || input->listening
-            || (talk_unit == unit && talk_source_ready())) continue;
+            || (talk_unit == unit && unit != idle_unit && talk_source_ready())) continue;
         input->pending = 0;
         unsigned int length = input->length;
         if (length > 1) {
@@ -1117,7 +1118,20 @@ void ieee_drive_task(void) {
         spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
 
         if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK) {
-            dispatch_pending();
+            dispatch_pending(NUM_UNITS);
+            continue;
+        }
+        if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK) {
+            const uint8_t unit = (byte >> ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) & (NUM_UNITS - 1);
+            const uint8_t channel = IEEE_CMD_CHANNEL(byte);
+            const bool eoi_get = (byte & ECONOPET_IEEE_RX_TALK_EOI_GET_MASK) != 0;
+            if (eoi_get && file_state == file_channel_exhausted
+                && file_unit == unit && file_chan == channel)
+                file_state = file_channel_consumed;
+            // ATN-interrupted EOF records progress only. TALK1 rechecks readiness,
+            // while unread TLK20 termination returns to IDLE even for a ready source.
+            if (!eoi_get || (byte & ECONOPET_IEEE_RX_TALK_RECHECK_MASK))
+                dispatch_pending(eoi_get ? NUM_UNITS : unit);
             continue;
         }
         if (is_atn) {

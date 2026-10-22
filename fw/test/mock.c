@@ -31,6 +31,7 @@ static struct {
         bool atn;
         bool eoi;
         bool atn_end;
+        bool talk_event;
     } rx[MOCK_IEEE_RX_CAPACITY];
     size_t rx_head;
     size_t rx_count;
@@ -73,6 +74,7 @@ void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi) {
     mock_ieee.rx[index].byte = byte;
     mock_ieee.rx[index].eoi = eoi;
     mock_ieee.rx[index].atn_end = false;
+    mock_ieee.rx[index].talk_event = false;
     mock_ieee.rx_count++;
 }
 
@@ -81,6 +83,14 @@ void mock_ieee_enqueue_atn_end(void) {
     mock_ieee_enqueue_rx(false, 0);
     const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
     mock_ieee.rx[index].atn_end = true;
+}
+
+// Retain native source progress separately from controller-sent bytes.
+void mock_ieee_enqueue_talk_event(uint8_t owner, uint8_t flags) {
+    mock_ieee_enqueue_rx(false,
+        (owner & ~(ECONOPET_IEEE_TX_OWNER_VALID_MASK | ECONOPET_IEEE_TX_OWNER_PAUSE_MASK)) | flags);
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].talk_event = true;
 }
 
 // Returns the captured file-channel byte count.
@@ -108,6 +118,10 @@ void mock_ieee_clear_data(void) {
 // Advances only native GET progress, preserving the unread FIFO suffix.
 void mock_ieee_consume_data(size_t count) {
     ck_assert_uint_le(count, mock_ieee.data_count);
+    for (size_t index = 0; index < count; ++index)
+        if (mock_ieee.data[index].eoi)
+            mock_ieee_enqueue_talk_event(mock_ieee.tx_owner,
+                ECONOPET_IEEE_RX_TALK_EOI_GET_MASK | ECONOPET_IEEE_RX_TALK_RECHECK_MASK);
     mock_ieee.prefetched = (uint8_t) (mock_ieee.prefetched + count);
     mock_ieee.data_count -= count;
     memmove(mock_ieee.data, mock_ieee.data + count,
@@ -178,6 +192,8 @@ uint8_t spi_read_at(uint32_t addr) {
             }
             if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].atn_end)
                 ctrl |= ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK;
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].talk_event)
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK;
             return ctrl;
         }
         if (addr == ECONOPET_WB_IEEE_STATUS_ADDR) {

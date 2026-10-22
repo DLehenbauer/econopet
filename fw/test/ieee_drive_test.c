@@ -1925,6 +1925,114 @@ START_TEST(test_pending_command_dispatch_after_unopened_talk) {
 }
 END_TEST
 
+// A consumed SEQ EOF is NOTRDY, unlike an EOF still queued for its final GET.
+START_TEST(test_pending_command_dispatch_after_sequential_eof) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    const unsigned int sequential = IEEE_CHANNEL_REL + 1;
+    mount_native_relative_records(device, drive, type, "eof-idle.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    if (type == diskimage_type_d80) mount_d80(device, drive ^ 1u, "plain.d80", true);
+    else mount_d64(device, drive ^ 1u, "plain.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (unsigned int consumed = 0; consumed <= 1; ++consumed) {
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(sequential));
+            enqueue_filename_for_drive(drive ^ 1u, "BASIC");
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, sequential);
+            const size_t length = mock_ieee_data_count();
+            ck_assert_uint_gt(length, 0);
+            ck_assert(mock_ieee_data_eoi(length - 1));
+            if (consumed) mock_ieee_clear_data();
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(sequential));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            if (!consumed) {
+                ck_assert_uint_eq(mock_ieee_data_count(), length);
+                mock_ieee_clear_data();
+                ieee_drive_task();
+            }
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// Native unread termination dispatches without advancing either source GET count.
+START_TEST(test_pending_command_dispatch_after_talk_without_get) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    mount_native_relative_records(device, drive, type, "no-get.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const uint8_t sources[] = {IEEE_CHANNEL_REL, IEEE_CHANNEL_COMMAND};
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t source = 0; source < count_of(sources); ++source) {
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(sources[source]));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            const uint8_t data_get = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
+            const uint8_t status_get = spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR);
+            mock_ieee_enqueue_talk_event(
+                ((device - IEEE_FIRST_DEVICE) << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT)
+                    | sources[source], 0);
+            ieee_drive_task();
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_TX_ADDR), data_get);
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR), status_get);
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
 // Native receive saturation and CMDSET's 58-byte limit are distinct contracts.
 START_TEST(test_command_length_boundaries_and_recovery) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
@@ -2812,6 +2920,10 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_command_dispatch_waits_for_idle,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_pending_command_dispatch_after_unopened_talk,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_sequential_eof,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_talk_without_get,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);

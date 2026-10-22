@@ -505,9 +505,11 @@ collection. EOI increments a per-unit pending-command indication (`CMDWAT`),
 without executing or resetting the input pointer. Dispatch occurs when ATN
 processing returns that unit to IDLE/VIDLE. This includes native TALK returning
 through `NOTLK` for an unopened selected channel while TALK ownership remains
-set. Allocated REL, readable/exhausted SEQ, and status sources still defer
-pending dispatch. Logical channel state determines that distinction, not FIFO
-occupancy, and no extra cached response/routine lifetime is introduced.
+set. Ready REL, SEQ with unread queued EOF, and status sources still defer
+pending dispatch. Ordinary SEQ becomes NOTRDY only after its final EOI GET,
+not when EOF is queued. Native TLK20 can also return to IDLE without GET,
+independently of channel allocation. Logical channel state and ordered source
+checkpoints determine these distinctions, never FIFO emptiness.
 Two EOI-terminated P payloads within one continuous LISTEN therefore remain
 one counted buffer, and RECORD uses the first P's fields. Incomplete command
 bytes remain counted per unit across UNLISTEN and readdressing. A dispatch
@@ -520,12 +522,23 @@ read bit 4 (`RX_ATN_END`, mask `$10`). It carries no bus byte and is filtered
 from semantic RX byte traces. It consumes one RX slot and is retained under
 full-FIFO backpressure. This avoids inferring past dispatch boundaries from
 current bus pins or an empty queue when firmware service is delayed.
+CTRL read bit 6 (`RX_TALK_EVENT`, mask `$40`) identifies ordered source metadata.
+The RX payload retains owner-layout unit/channel bits 5:0. Bit 7 (`$80`)
+records a data EOI GET. Bit 6 (`$40`) additionally marks normal NDAC rearm and
+TALK1 readiness recheck. Without bit 7, the event records TLK20's no-GET return
+to IDLE. EOF interrupted by ATN carries only the GET indication and cannot
+dispatch before the following ordered ATN boundary. Status EOI remains
+governed by its existing GET counter, not the ordinary SEQ EOF rule.
+These entries are excluded from semantic bus-byte traces. Pending events
+survive full RX and precede later ATN commands/release markers. The source
+waits while an event needs storage, and no-GET termination stops further
+presentation until ATN without clearing TALK ownership or advancing GET.
 Existing addresses and STATUS bit 7 (talker starvation) are unchanged.
 Firmware reads CTRL, STATUS, and RX before explicitly popping that same head.
 The register mock and physical-SPI observation helpers preserve this metadata
 rather than inferring EOI from UNLISTEN or from the live bus after reception.
 Deploy the updated firmware and FPGA image together, because older gateware
-does not expose the RX-head EOI/ATN-release flags or status GET counter.
+does not expose the RX-head EOI/ATN-release/source-event flags or status GET counter.
 The response-ownership repair also requires CTRL read `$20` (status DAV
 active), CTRL write `$08` (status-only transport flush), and owner-register
 `$40` (pause new data/status presentations without withdrawing active DAV).
@@ -535,6 +548,8 @@ All source links below select `mist64/cbmsrc` revision
 
 | Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
 |---|---|---|---|---|---|
+| Consumed ordinary EOF returns to IDLE | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | [4040 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4) and [8250 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4): GET0 writes NOTRDY after the final ordinary byte's GET. Respective `ieee`: TLK35/TLK40 finishes NDAC, then TALK1 returns through NOTLK/ATN70 to IDLE/VIDLE, whose CMDWAT path calls PARSXQ | Pending P3 followed by continuous-ATN UNLISTEN/TALK/consumed SEQ SA3 dispatches without UNTALK. REL SA2 then returns `$05,$06` with final-byte EOI. Queued but unread EOF must remain ready and return all eight SEQ bytes before P dispatch at the completed TALK1 boundary | `file_channel_consumed` differs from transport exhaustion. `test_pending_command_dispatch_after_sequential_eof` covers sixteen coordinates and both command entries. `PendingCommandDispatchesAfterSequentialEof` uses actual SEQ directory bytes and exact CPU/wire payloads on D64/D80. RTL checks normal rearm, ATN-interrupted EOF, full-RX event retention and ordering | Pinned MAME maps NDAC/NRFD independently in both RIOT callbacks cited below. [Pinned independent IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/cb021f3454b499c579c265859ce67ba99e85652b/1%20IEEE-488.md) corroborates separate readiness, acceptance and rearm. Native GET0, not generic EOF prose, establishes NOTRDY |
+| Allocated TALK ends without GET | Same selected drive ROMs | Respective `ieee`: TLK20 branches to TLK30/GET only when PBD2 bit 7 is low. With bit 7 high and bit 6 high, it releases DAV/EOI and jumps directly to IDLE. This does not clear TLKACT or consume CHNDAT | Pending P3 must execute after an NDAC-only termination of ready REL or status TALK, without an intervening UNTALK. REL reselect returns `$05,$06`, not `$01,$02`. Neither data nor status GET count advances for the terminated byte | `ieee.sv` retains an ordered no-GET event and stops in T_DONE until ATN. `dispatch_pending` accepts that explicit idle unit independently of allocation. `test_pending_command_dispatch_after_talk_without_get` covers sixteen coordinates, both command entries and both sources. `PendingCommandDispatchesAfterTalkWithoutGet` uses CPU-driven NDAC-only termination on D64/D80 | [Pinned 4040 RIOT PB read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c2040.cpp#L365) and [8050 RIOT PB read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c8050.cpp#L450) map NDAC to bit 6 and NRFD to bit 7. The independent handshake description above corroborates their distinct roles, not the ROM-specific abort rule |
 | Unopened TALK returns to IDLE | Selected 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2) and [8250 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2): FNDRCH returns carry set for an unallocated LINTAB entry. Respective `ieee`: TALK branches to NOTLK/RTS, then ATN70 jumps to IDLE/VIDLE without clearing TLKACT. Respective `idle` clears CMDWAT and calls PARSXQ | Pending P3/EOI followed by continuous-ATN UNLISTEN/TALK/unopened SA3 must dispatch on ATN release. TALK/SA2 without UNTALK returns `$05,$06`, not `$01,$02`. Closed SA3 and implicit default SA0 behave the same. The following record is `$07,$08`, proving no repeated dispatch. Ready-source immediate TALK still defers P | `talk_source_ready` separates logical source availability from TALK ownership. `test_pending_command_dispatch_after_unopened_talk` covers sixteen model/unit/drive coordinates, both command entries and all three selections. `PendingCommandDispatchesAfterUnopenedTalk` checks exact CPU/wire bytes and EOI on D64/D80 beside the existing ready-source control | [Pinned VICE `vdrive_iec_read`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c#L1002) independently checks the selected per-unit buffer's allocation before reading. Its EOF/error return is not a native dispatch-timing oracle. Pinned MAME's separate DOS CPU/RAM and RIOT wiring preserve the ROM's distinct role and routine lifetimes |
 | Completed command-channel OPEN | 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7, either hardware side mode | [4040 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2) and [8250 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2): `PUT`, `L42`, `L50`, `L45` collect command bytes and queue parsing at EOI. Respective [4040 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex) and [8250 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex): `PARSXQ` sends an OPEN with low nibble `$F` through `PS05`, not `OPEN` | LISTEN, OPEN `$FF`, binary P payload with final-byte EOI, UNLISTEN must position the existing REL channel just as secondary `$6F` does. It must not reopen the REL file or discard its command | [`ch15_begin`](../../fw/src/ieee/ieee_drive.c), [`test_command_open_positions_relative_records`](../../fw/test/ieee_drive_test.c), [`DriveRelativeTest.CommandChannelOpenExecutesBinaryPosition`](ieee/drive_test.cpp) | [Pinned VICE `vdrive_iec_open`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c) writes command-channel OPEN's counted name bytes through `vdrive_iec_write`. `vdrive_iec_flush` executes the collected count |
 | Binary P fields and selected record | Same ROMs, valid open REL channel with two-byte records | Respective `romtbl`: `CMDTBL`/`CJUMPL`/`CJUMPH` map P directly to `RECORD`, without filename parsing. [4040 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/record) and [8250 `record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record): `R30` copies bytes 2/3 to `RECL`/`RECH`, position 1 becomes offset 0, and `R40`/`R50`/`R60` position the channel and complete the command | `50 62 02 00 01`, `50 62 0D 00 01`, and `50 62 2C 00 01` select records 2, 13, and 44. In the fixture these return `$03,$04`, `$19,$1A`, and `$57,$58`, with EOI only on the second byte. Status is `00, OK,00,00` plus CR for 4040 or `00, OK,00,00,drive` plus CR for DOS 2.7 | Same unit and integration cases compare literal data, status, and EOI. Unit cases also compare the existing secondary-15 route and split collection across service calls | VICE's counted command OPEN/write/flush path corroborates that embedded zero and interior CR/comma bytes are not C-string or filename boundaries. Existing native REL positioning controls remain enabled |
@@ -622,6 +637,13 @@ Both command entries now pass unopened-SA3, closed-SA3 and implicit-SA0 cases
 without an intervening UNTALK. Reading the following record checks that pending
 work is consumed once. The existing ready-REL immediate-TALK control still
 returns `$01,$02` before pending dispatch. Both controls pass at seeds 1 and 17.
+The next review reproduced stale-record reads in both production-top models
+for fully consumed SEQ data and NDAC-only termination. Each fix has sixteen
+firmware coordinate cases. The SEQ family distinguishes queued EOF from final
+GET and checks automatic IDLE dispatch after consuming the deferred source.
+The no-GET family covers REL and status sources, with unchanged GET counters.
+RTL additionally retains source metadata at full RX ahead of a later ATN
+release and records an ATN-interrupted EOF without premature dispatch.
 
 This is a source-derived command-entry correction, not a claim that every
 DOS command is implemented. Tests establish the observable IDLE dispatch
@@ -699,15 +721,16 @@ or 8250LP execution is claimed.
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | All 239 enabled cases pass at seed 1. No historical disabled probes remain. Four ready/unopened TALK cases pass at seed 17 in this follow-up. Four focused concurrent-role and delayed-service backpressure cases passed at seed 17 in the preceding gateware repair |
+| Complete affected firmware integration suite | All 243 enabled cases pass at seed 1. No historical disabled probes remain. Ten pending-dispatch/EOI cases and four peer-transfer/backpressure cases pass at seed 17 |
 | Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at seed 1, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight original D64/D80 SEQ/REL cases retain exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN. Eight additional cases check every ordered virtual-unit pair with peer status/data secondary selection, without readdressing the talker |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at seed 1, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | Existing data, continuation, interruption, parking, and native receive cases pass alongside channel errors, pending EOI/IDLE dispatch, model-specific command receive/validation boundaries, status continuation, and PET-ROM commands. All 26 queued-selection/prefetch-boundary cases pass. Four concurrent source/peer-listener cases check exact wire data and destination-record readback, including delayed-service 40-byte transfers that fill RX |
-| Complete firmware unit suite | 886 checks pass (839 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new pending-dispatch, command-length, binary-CR, model-swap, publication-interruption and status-lifetime family covers sixteen model/unit/drive combinations |
-| Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ATN-release entry, and `$20` is active status DAV. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
-| Board IEEE, shared hardware contract, and host encoding | All 403 selected seed-1 cases pass (124 host/contract, 239 firmware integration and 40 board IEEE), including independent literal ABI masks, semantic trace filtering, and exact drain limits that exclude transport-only entries |
+| Complete firmware unit suite | 918 checks pass (871 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new pending-dispatch, command-length, binary-CR, model-swap, publication-interruption and status-lifetime family covers sixteen model/unit/drive combinations |
+| Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ATN-release entry, `$20` is active status DAV, and `$40` is ordered source metadata. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
+| Board IEEE, shared hardware contract, and host encoding | All 407 selected seed-1 cases pass (124 host/contract, 243 firmware integration and 40 board IEEE), included in the complete wrapper run below. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
+| CI system wrapper | The failed head exhausted the outer 1800-second timeout with a serial child suite. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. The exact local wrapper finishes all 721 cases in 1098 seconds: 720 pass, with only the pre-existing local configuration-bit failure described below |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
 | Complete gateware suite | Not rerun in this follow-up. The prior full run identified two `top_tb` configuration failures from pre-existing temporary CRT/keyboard inversions in `top.sv`, which this change does not edit. All four affected IEEE variants pass |
 | Production firmware and FPGA bitstream | Production firmware builds successfully with the `RelWithDebInfo` preset. The FPGA bitstream was not rebuilt because the complete gateware suite remains blocked by those unrelated configuration failures. No new bitstream, timing-closure, or hardware-execution claim is made |
@@ -723,14 +746,17 @@ timeout. No assertions were removed to obtain the passing result.
 The unit publication-interruption matrix injects RX during TXS writes. The
 production-top status cases cover queued selections, not that exact fill-window
 injection. No physical-SPI concurrency capture is claimed for the latter.
-Production firmware uses `RelWithDebInfo`. This firmware-only follow-up does not
-edit gateware. Its integration build retains the unrelated local top-level
-configuration inversions. An overbroad status filter also selected
-`TypedConfigurationReachesProductionStatusBits`, which fails on the existing
-CRT/keyboard polarity discrepancy. That test is outside the exact IEEE
-selection above. The preceding isolated gateware validation excluded those
-local edits. Selected production RTL retains NRFD-triggered prefetch states
-and assertions. The four IEEE RTL variants were not rerun for this C-only fix.
+Production firmware uses `RelWithDebInfo`. This follow-up changes IEEE gateware
+and firmware together. Its integration build retains unrelated local top-level
+configuration inversions. The complete local wrapper's sole failure is
+`TypedConfigurationReachesProductionStatusBits`, against the existing
+CRT/keyboard polarity discrepancy. That test is outside the exact IEEE selection
+above. The preceding isolated gateware validation excluded those local edits.
+All four affected IEEE RTL variants pass, including EOF checkpoints, no-GET
+termination, full-RX event retention, metadata ordering, and unchanged GET
+accounting. The counter-wrap fixture services the new bounded EOF metadata
+while retaining all 257 exact counter checks. No new FPGA bitstream or
+real-hardware capture is claimed.
 
 ## Commodore ROM integration coverage
 

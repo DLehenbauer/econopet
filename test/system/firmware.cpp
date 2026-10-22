@@ -48,7 +48,8 @@ void firmware_record_read(uint32_t address, uint8_t value, FirmwareRxSample prev
     } else if (firmware_rx_source != nullptr && address == fpga::address(fpga::Register::IeeeRx).value()
                && previous.status && previous.status->contains(fpga::IeeeStatusBit::RxReady)
                && previous.control) {
-        if (!previous.control->contains(fpga::IeeeControlStatusBit::RxAtnEnd))
+        if (!previous.control->contains(fpga::IeeeControlStatusBit::RxAtnEnd)
+            && !previous.control->contains(fpga::IeeeControlStatusBit::RxTalkEvent))
             firmware_rx_source->emit(firmware_system().time(),
                 { value, previous.status->contains(fpga::IeeeStatusBit::RxAtn),
                   previous.control->contains(fpga::IeeeControlStatusBit::RxEoi)

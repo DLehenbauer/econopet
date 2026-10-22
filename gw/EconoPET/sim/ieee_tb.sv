@@ -189,7 +189,10 @@ module ieee_tb;
         ctl_read_status(pb);
         while ((pb & mask) != want) begin
             guard++;
-            if (guard > 200) $fatal(1, "ctl_wait timeout (mask=%02x want=%02x last=%02x)", mask, want, pb);
+            if (guard > 200)
+                $fatal(1, "ctl_wait timeout (mask=%02x want=%02x last=%02x talk=%0d sa=%02x rx=%0d atn_end=%b event=%b)",
+                    mask, want, pb, dut.talk_st, dut.talk_sa, dut.rx_count,
+                    dut.atn_end_pending, dut.talk_event_pending);
             ctl_read_status(pb);
         end
     endtask
@@ -233,6 +236,8 @@ module ieee_tb;
     byte rx_bytes [$];
     bit  rx_isatn [$];
     bit  rx_iseoi [$];
+    byte rx_talk_events [$];
+    byte rx_metadata_tags [$];
     int rx_boundary_count = 0;
 
     task automatic mcu_drain_rx;
@@ -241,12 +246,18 @@ module ieee_tb;
         while (st[0]) begin
             mcu_read(IEEE_REG_CTRL, ctrl);
             mcu_read(IEEE_REG_CTRL, repeated_ctrl);
-            `assert_equal((ctrl & IEEE_CTRL_RD_RX_EOI_MASK),
-                (repeated_ctrl & IEEE_CTRL_RD_RX_EOI_MASK));
+            `assert_equal((ctrl & (IEEE_CTRL_RD_RX_EOI_MASK | IEEE_CTRL_RD_RX_ATN_END_MASK
+                    | IEEE_CTRL_RD_RX_TALK_EVENT_MASK)),
+                (repeated_ctrl & (IEEE_CTRL_RD_RX_EOI_MASK | IEEE_CTRL_RD_RX_ATN_END_MASK
+                    | IEEE_CTRL_RD_RX_TALK_EVENT_MASK)));
             mcu_read(IEEE_REG_RX, d);
             mcu_write(IEEE_REG_RX, 8'h00);   // explicit pop
             if (ctrl & IEEE_CTRL_RD_RX_ATN_END_MASK) begin
                 rx_boundary_count++;
+                rx_metadata_tags.push_back(IEEE_CTRL_RD_RX_ATN_END_MASK);
+            end else if (ctrl & IEEE_CTRL_RD_RX_TALK_EVENT_MASK) begin
+                rx_talk_events.push_back(d);
+                rx_metadata_tags.push_back(IEEE_CTRL_RD_RX_TALK_EVENT_MASK);
             end else begin
                 rx_isatn.push_back(st[1]);
                 rx_iseoi.push_back((ctrl & IEEE_CTRL_RD_RX_EOI_MASK) != 0);
@@ -254,6 +265,54 @@ module ieee_tb;
             end
             mcu_read(IEEE_REG_STATUS, st);
         end
+    endtask
+
+    // Source completion is ordered metadata, never an invented GET or bus byte.
+    task automatic check_talk_event(input bit status_fifo, input bit fetched, input bit interrupted);
+        logic [7:0] d;
+        int first_event;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        ctl_atn(1);
+        ctl_send(8'h4B);
+        ctl_send(status_fifo ? 8'h6F : 8'h63);
+        ctl_nrfd(1);
+        ctl_ndac(1);
+        ctl_atn(0);
+        mcu_write(status_fifo ? IEEE_REG_TXS_LAST : IEEE_REG_TX_LAST, "X");
+        mcu_write(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, "Y");
+        mcu_drain_rx;
+        first_event = rx_talk_events.size();
+        ctl_nrfd(0);
+        ctl_wait(8'h80, 8'h00);
+        if (fetched) ctl_nrfd(1);
+        if (interrupted) begin
+            // ATN can interrupt TLK35 after EOF GET but before NDAC releases.
+            ctl_atn(1);
+            ctl_send(8'h5F);
+            ctl_atn(0);
+        end else begin
+            ctl_ndac(0);
+            ctl_wait(8'h80, 8'h80);
+            ctl_ndac(1);
+            repeat (20) @(posedge sys_clock);
+            `assert_equal(dut.dev_dav_n, 1'b1);
+            if (!fetched) `assert_equal(dut.talk_st, dut.T_DONE);
+        end
+        mcu_drain_rx;
+        if (status_fifo && fetched) begin
+            `assert_equal(rx_talk_events.size(), first_event);
+        end else begin
+            `assert_equal(rx_talk_events.size(), first_event + 1);
+            `assert_equal(rx_talk_events[first_event],
+                (status_fifo ? 8'h3F : 8'h33)
+                    | (fetched ? (interrupted ? 8'h80 : 8'hC0) : 8'h00));
+        end
+        mcu_read(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, d);
+        `assert_equal(d, fetched ? 8'd1 : 8'd0);
+        ctl_atn(1);
+        ctl_send(8'h5F);
+        ctl_atn(0);
+        mcu_drain_rx;
     endtask
 
     // Check native prefetch independently of private reads for either TX FIFO.
@@ -383,13 +442,18 @@ module ieee_tb;
     endtask
 
     // Delayed MCU service must stop before a peer's full RX queue holds active DAV.
-    task automatic check_peer_backpressure(input bit pending_boundary);
+    task automatic check_peer_backpressure(input bit pending_boundary, input bit eof_at_capacity);
         localparam int RECORD_LENGTH = 40;
+        int record_length;
         localparam int SELECTION_BYTES = 5;
         localparam int STALL_CYCLES = 400;
         logic [7:0] d;
         int first_data;
         int previous_boundaries;
+        int previous_events;
+        record_length = eof_at_capacity ? dut.RX_DEPTH : RECORD_LENGTH;
+        $display("[%t]   peer backpressure boundary=%b eof_at_capacity=%b",
+            $time, pending_boundary, eof_at_capacity);
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_drain_rx;
         ctl_atn(1);
@@ -400,8 +464,8 @@ module ieee_tb;
         ctl_send(8'h62);
         if (pending_boundary)
             for (int i = SELECTION_BYTES; i < dut.RX_DEPTH - 1; ++i) ctl_send(8'h62);
-        for (int i = 0; i < RECORD_LENGTH; ++i)
-            mcu_write(i == RECORD_LENGTH - 1 ? IEEE_REG_TX_LAST : IEEE_REG_TX, 8'(i + 1));
+        for (int i = 0; i < record_length; ++i)
+            mcu_write(i == record_length - 1 ? IEEE_REG_TX_LAST : IEEE_REG_TX, 8'(i + 1));
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
         ctl_ndac(0);
         ctl_nrfd(!pending_boundary);
@@ -419,6 +483,7 @@ module ieee_tb;
         mcu_drain_rx;
         `assert_equal(rx_boundary_count, previous_boundaries + 1);
         first_data = rx_bytes.size();
+        previous_events = rx_talk_events.size();
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h02);
         ctl_nrfd(0);
         repeat (STALL_CYCLES) @(posedge sys_clock);
@@ -426,6 +491,13 @@ module ieee_tb;
         `assert_equal(dut.dev_dav_n, 1'b1);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'(dut.RX_DEPTH));
+        if (eof_at_capacity) begin
+            `assert_equal(dut.talk_event_pending, 1'b1);
+            ctl_atn(1);
+            ctl_atn(0);
+            `assert_equal(dut.talk_event_pending, 1'b1);
+            `assert_equal(dut.atn_end_pending, 1'b1);
+        end
         // A real firmware pause must not get trapped behind an unaccepted byte.
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | IEEE_TX_OWNER_PAUSE_MASK | 8'h02);
         repeat (STALL_CYCLES) @(posedge sys_clock);
@@ -435,12 +507,18 @@ module ieee_tb;
         repeat (STALL_CYCLES) @(posedge sys_clock);
         mcu_drain_rx;
         mcu_read(IEEE_REG_TX, d);
-        `assert_equal(d, 8'(RECORD_LENGTH));
-        `assert_equal(rx_bytes.size(), first_data + RECORD_LENGTH);
-        for (int i = 0; i < RECORD_LENGTH; ++i) begin
+        `assert_equal(d, 8'(record_length));
+        `assert_equal(rx_bytes.size(), first_data + record_length);
+        `assert_equal(rx_talk_events.size(), previous_events + 1);
+        `assert_equal(rx_talk_events[previous_events], 8'hC2);
+        if (eof_at_capacity) begin
+            `assert_equal(rx_metadata_tags[rx_metadata_tags.size() - 2], 8'h40);
+            `assert_equal(rx_metadata_tags[rx_metadata_tags.size() - 1], 8'h10);
+        end
+        for (int i = 0; i < record_length; ++i) begin
             `assert_equal(rx_bytes[first_data + i], 8'(i + 1));
             `assert_equal(rx_isatn[first_data + i], 1'b0);
-            `assert_equal(rx_iseoi[first_data + i], (i == RECORD_LENGTH - 1));
+            `assert_equal(rx_iseoi[first_data + i], (i == record_length - 1));
         end
         ctl_atn(1);
         ctl_send(8'h3F);
@@ -454,6 +532,7 @@ module ieee_tb;
         logic [7:0] d;
         logic eoi;
         localparam logic [7:0] OWNER_CHANNEL_ONE = IEEE_TX_OWNER_VALID_MASK | 8'h01;
+        $display("[%t]   data owner other_unit=%b", $time, other_unit);
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_SA, OWNER_CHANNEL_ONE);
         mcu_write(IEEE_REG_TX, "X");
@@ -661,6 +740,7 @@ module ieee_tb;
             `assert_equal(eoi, 1'b1);
             mcu_read(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, d);
             `assert_equal(d, 8'(i + 1));
+            mcu_drain_rx;
         end
         ctl_atn(1);
         ctl_send(8'h5F);
@@ -952,6 +1032,11 @@ module ieee_tb;
         end
 
         // Cover both prefetch phases, with/without private reads, on each FIFO.
+        check_talk_event(1'b0, 1'b0, 1'b0);
+        check_talk_event(1'b1, 1'b0, 1'b0);
+        check_talk_event(1'b0, 1'b1, 1'b0);
+        check_talk_event(1'b0, 1'b1, 1'b1);
+        check_talk_event(1'b1, 1'b1, 1'b0);
         begin
             localparam int ABORT_SCENARIOS = 8;
             for (int scenario = 0; scenario < ABORT_SCENARIOS; scenario++) begin
@@ -1131,8 +1216,9 @@ module ieee_tb;
         check_data_owner(1'b0);
         check_peer_transfer(1'b0);
         check_peer_transfer(1'b1);
-        check_peer_backpressure(1'b0);
-        check_peer_backpressure(1'b1);
+        check_peer_backpressure(1'b0, 1'b0);
+        check_peer_backpressure(1'b1, 1'b0);
+        check_peer_backpressure(1'b0, 1'b1);
         check_data_owner(1'b1);
         check_owner_pause(1'b0, 1'b0);
         check_owner_pause(1'b1, 1'b0);

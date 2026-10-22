@@ -19,7 +19,8 @@ inline std::optional<Record> peek_rx(System& board) {
         const auto status = board.ieee().read_status();
         if (!status.contains(fpga::IeeeStatusBit::RxReady)) return std::nullopt;
         const auto control = board.ieee().read_control();
-        if (control.contains(fpga::IeeeControlStatusBit::RxAtnEnd)) {
+        if (control.contains(fpga::IeeeControlStatusBit::RxAtnEnd)
+            || control.contains(fpga::IeeeControlStatusBit::RxTalkEvent)) {
             board.spi().write(fpga::Register::IeeeRx, 0);
             continue;
         }
@@ -27,7 +28,7 @@ inline std::optional<Record> peek_rx(System& board) {
         return Record{byte, status.contains(fpga::IeeeStatusBit::RxAtn),
             control.contains(fpga::IeeeControlStatusBit::RxEoi) ? Eoi::Last : Eoi::More};
     }
-    throw board.failure<std::runtime_error>("IEEE RX", "ATN boundaries exceed one FIFO capacity");
+    throw board.failure<std::runtime_error>("IEEE RX", "transport metadata exceeds one FIFO capacity");
 }
 
 // Actively read and acknowledge one bus byte, excluding transport-only boundaries.
