@@ -1180,6 +1180,86 @@ TEST_P(DriveRelativeTest, Close15ReleasesChannelsAndPreservesPeerTalk) {
     }
 }
 
+// Native CLSALL drive selection follows descending SAs and persistent written flags.
+TEST_P(DriveRelativeTest, Close15SelectsMixedDriveByWrittenChannel) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{0xa0, 0xa1, 0xa5, 0, 0xcc, 0xdd};
+    firmware.mount(relative_sequential_image(d80, payload), "close-drive0.img");
+    firmware.mount(relative_sequential_image(d80, payload), "close-drive1.img");
+    ASSERT_TRUE(ieee_drive_mount(1, "close-drive1.img"));
+    ASSERT_TRUE(ieee_drive_mount(0, "close-drive0.img"));
+    IeeeController controller(system);
+    enum class Pattern { NoWrites, LowerWritten, UpperWritten, BothWritten, Reopened, Armed };
+    constexpr Channel Lower{DataChannel}, Upper{DataChannel + 1}, Sequential{0};
+    const auto status = [d80](unsigned int drive) {
+        return std::string("00, OK,00,00") + (d80 ? "," + std::to_string(drive) : "") + "\r";
+    };
+    for (const unsigned int lower_drive : {0u, 1u}) {
+        for (const auto pattern : {Pattern::NoWrites, Pattern::LowerWritten, Pattern::UpperWritten,
+                Pattern::BothWritten, Pattern::Reopened, Pattern::Armed}) {
+            SCOPED_TRACE(::testing::Message() << "lower drive " << lower_drive
+                << ", pattern " << static_cast<int>(pattern));
+            const unsigned int upper_drive = lower_drive ^ 1u;
+            const bool lower_written = pattern == Pattern::LowerWritten
+                || pattern == Pattern::BothWritten || pattern == Pattern::Reopened;
+            const bool upper_written = pattern == Pattern::UpperWritten
+                || pattern == Pattern::BothWritten || pattern == Pattern::Reopened
+                || pattern == Pattern::Armed;
+
+            // Both allocations start clean, then completed writes set channel-local DYFILE.
+            for (const Channel channel : {Lower, Upper}) {
+                const auto drive = channel.value() == Lower.value() ? lower_drive : upper_drive;
+                open_file(system, controller, channel, std::to_string(drive) + ":BASIC,L");
+                service_rx(system, firmware, "open mixed-drive CLOSE target");
+            }
+            for (const Channel channel : {Lower, Upper}) {
+                if (!(channel.value() == Lower.value() ? lower_written : upper_written)) continue;
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Secondary(channel));
+                controller.data(0x5a, Eoi::Last);
+                controller.command(Unlisten);
+                service_rx(system, firmware, "complete mixed-drive REL write");
+            }
+            for (const Channel channel : {Lower, Upper})
+                position_relative(system, firmware, controller, 2, 1, channel);
+            if (pattern == Pattern::Reopened) {
+                // CLOSE/reopen resets the written flag even when the allocation is reused.
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Close(Lower));
+                controller.command(Unlisten);
+                service_rx(system, firmware, "release written lower-SA allocation");
+                EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                    status(lower_drive));
+                open_file(system, controller, Lower, std::to_string(lower_drive) + ":BASIC,L");
+                service_rx(system, firmware, "reopen lower-SA allocation unwritten");
+            } else if (pattern == Pattern::Armed) {
+                // LISTEN without PUT must not mark a clean channel as written.
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Secondary(Lower));
+                controller.command(Unlisten);
+                service_rx(system, firmware, "arm lower-SA channel without writing");
+            }
+            const auto selected_drive = !d80 || (lower_written && pattern != Pattern::Reopened)
+                ? lower_drive : upper_drive;
+            const auto prior_drive = pattern == Pattern::NoWrites
+                ? selected_drive : selected_drive ^ 1u;
+            // A lower-SA SEQ reader selects prior DRVNUM but does not update it during close.
+            open_file(system, controller, Sequential, std::to_string(prior_drive) + ":PLAIN");
+            service_rx(system, firmware, "select conflicting status drive with SEQ reader");
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                status(prior_drive));
+            for (unsigned int repetition = 0; repetition < 2; ++repetition) {
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Close(Channel{CommandChannel}));
+                controller.command(Unlisten);
+                service_rx(system, firmware, "close mixed-drive unit in native SA order");
+                EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                    status(selected_drive));
+            }
+        }
+    }
+}
+
 // Revision-12 fputrec writes two records under one LISTEN, then native input reads them.
 TEST_P(DriveRelativeTest, WaterlooRecordWritePersistsAndReadsBack) {
     const bool d80 = GetParam();

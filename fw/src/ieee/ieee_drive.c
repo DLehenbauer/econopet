@@ -311,6 +311,7 @@ typedef struct {
     bool pending_record;
     uint8_t pending[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     // Record-write staging (EOI completes a record without ending LISTEN):
+    bool     written;      // Native DYFILE survives record completion and P.
     bool     wr_active;
     bool     wr_overflow;
     uint16_t wr_pos;        // start position within the record (from P)
@@ -573,6 +574,7 @@ static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
         set_status(rc->slot, st_code_record_overflow, 0, 0);
         return;
     }
+    rc->written = true;
     rc->wr_buf[rc->wr_count++] = byte;
 }
 
@@ -604,8 +606,9 @@ static bool rel_write_commit(rel_channel_t* rc) {
     return true;
 }
 
-// Release one unit's data channel without discarding a peer's selected source.
-static void close_channel(uint8_t unit, uint8_t channel) {
+// Release a unit's channel, retaining the drive selected by native CLSDIR.
+static unsigned int close_channel(uint8_t unit, uint8_t channel,
+        unsigned int completion_slot) {
     const uint8_t owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
         | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | channel;
     if (data_tx_owner == owner) {
@@ -614,6 +617,8 @@ static void close_channel(uint8_t unit, uint8_t channel) {
     }
     rel_channel_t* const rc = rel_find(unit, channel);
     if (rc != NULL) {
+        if (get_drive_model(rc->slot) == drive_model_4040 || rc->written)
+            completion_slot = rc->slot;
         rc->in_use = false;
         rc->wr_active = false;
     }
@@ -621,6 +626,7 @@ static void close_channel(uint8_t unit, uint8_t channel) {
         file_state = file_channel_closed;
         streaming = false;
     }
+    return completion_slot;
 }
 
 // Starts counted command collection for both OPEN 15 and secondary address 15.
@@ -754,6 +760,7 @@ static void resolve_open(uint8_t open_unit) {
             return;
         }
         rc->in_use = true;
+        rc->written = false;
         rc->wr_active = false;
         rc->slot = (uint8_t) slot;
         rc->chan = open_chan & 0x0F;
@@ -1036,15 +1043,18 @@ static void handle_command(uint8_t cmd) {
                 }
             } else {
                 const uint8_t channel = IEEE_CMD_CHANNEL(cmd);
+                unsigned int completion_slot = addressed_unit * DRIVES_PER_UNIT
+                    + drive_status[addressed_unit].drive;
                 if (channel == IEEE_COMMAND_CHANNEL) {
                     for (int index = IEEE_COMMAND_CHANNEL - 1; index >= 0; --index)
-                        close_channel(addressed_unit, (uint8_t) index);
-                    set_status(addressed_unit * DRIVES_PER_UNIT
-                        + drive_status[addressed_unit].drive, st_code_ok, 0, 0);
+                        completion_slot = close_channel(addressed_unit,
+                            (uint8_t) index, completion_slot);
                 } else {
-                    close_channel(addressed_unit, channel);
+                    completion_slot = close_channel(addressed_unit, channel, completion_slot);
                     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                 }
+                if (channel > IEEE_SAVE_CHANNEL)
+                    set_status(completion_slot, st_code_ok, 0, 0);
             }
             break;
 

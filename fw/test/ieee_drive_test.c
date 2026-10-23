@@ -46,6 +46,15 @@ enum ieee_channel {
 #define TEST_COMMAND_RECORD_COUNT 45u
 #define TEST_COMMAND_RECORD_LENGTH 2u
 static const uint8_t relative_eoi_lengths[] = {2, 129, DISKIMAGE_REL_MAX_RECORD_LENGTH};
+enum close_write_pattern {
+    close_no_writes,
+    close_lower_written,
+    close_upper_written,
+    close_both_written,
+    close_lower_reopened,
+    close_lower_rearmed,
+    close_write_pattern_count,
+};
 
 // ---------------------------------------------------------------------------
 // IEEE command-stream helpers
@@ -2778,6 +2787,91 @@ START_TEST(test_close_command_channel_releases_unit_channels) {
 }
 END_TEST
 
+// CLSALL selects the last directory-updating REL drive, not the old status drive.
+START_TEST(test_close_command_channel_selects_mixed_drive) {
+    const unsigned int pattern = (unsigned int) _i % close_write_pattern_count;
+    const unsigned int model_coordinates = (unsigned int) _i / close_write_pattern_count;
+    const unsigned int coordinates = model_coordinates / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int lower_drive = loop_drive((int) coordinates);
+    const unsigned int upper_drive = lower_drive ^ 1u;
+    const diskimage_type_t type = native_image_types[model_coordinates % count_of(native_image_types)];
+    const unsigned int lower = IEEE_CHANNEL_REL, upper = lower + 1;
+    const uint8_t payload[] = {0xa0, 0xa1, 0xa5, 0, 0xcc, 0xdd};
+    const bool lower_written = pattern == close_lower_written
+        || pattern == close_both_written || pattern == close_lower_reopened;
+    const bool upper_written = pattern == close_upper_written || pattern == close_both_written
+        || pattern == close_lower_reopened || pattern == close_lower_rearmed;
+    mount_native_relative_records(device, lower_drive, type, "close-lower.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    mount_native_relative_records(device, upper_drive, type, "close-upper.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+
+    // A lower SA closes last, regardless of drive number, OPEN order or write order.
+    for (unsigned int channel = lower; channel <= upper; ++channel) {
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(channel));
+        enqueue_filename_for_drive(channel == lower ? lower_drive : upper_drive, "BASIC,L");
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+    }
+    for (unsigned int channel = lower; channel <= upper; ++channel) {
+        if (!(channel == lower ? lower_written : upper_written)) continue;
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(channel));
+        mock_ieee_enqueue_rx_eoi(false, (uint8_t) channel, true);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+    }
+    for (unsigned int channel = lower; channel <= upper; ++channel)
+        relative_position(device, channel, 2, 1);
+    if (pattern == close_lower_reopened) {
+        // Reusing a written allocation must clear its previous native DYFILE state.
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_CLOSE(lower), IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        char closed_status[IEEE_STATUS_LINE_CAPACITY];
+        snprintf(closed_status, sizeof(closed_status), "00, OK,00,00%s\r",
+            type == diskimage_type_d80 ? (lower_drive == 0 ? ",0" : ",1") : "");
+        assert_status(closed_status);
+        mock_ieee_clear_status();
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(lower));
+        enqueue_filename_for_drive(lower_drive, "BASIC,L");
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+    } else if (pattern == close_lower_rearmed) {
+        // Merely arming an unwritten channel is not a native RELPUT/SDIRTY.
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(lower), IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+    }
+    const unsigned int selected_drive = type == diskimage_type_d64
+        || (lower_written && pattern != close_lower_reopened) ? lower_drive : upper_drive;
+    const unsigned int prior_drive = pattern == close_no_writes ? selected_drive : selected_drive ^ 1u;
+
+    // Select a conflicting status drive without allocating another data channel.
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(upper + 1));
+    enqueue_filename_for_drive(prior_drive, "MISSING,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char expected[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(expected, sizeof(expected), "62, FILE NOT FOUND,00,00%s\r",
+        type == diskimage_type_d80 ? (prior_drive == 0 ? ",0" : ",1") : "");
+    assert_status(expected);
+    mock_ieee_clear_status();
+
+    // An unwritten DOS 2.7 close retains DRVNUM, including an already empty unit.
+    for (unsigned int repetition = 0; repetition < 2; ++repetition) {
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device),
+            IEEE_CMD_CLOSE(IEEE_CHANNEL_COMMAND), IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        snprintf(expected, sizeof(expected), "00, OK,00,00%s\r",
+            type == diskimage_type_d80 ? (selected_drive == 0 ? ",0" : ",1") : "");
+        assert_status(expected);
+        mock_ieee_clear_status();
+    }
+}
+END_TEST
+
 // Wrapped native reads retain their physical cursor through consecutive writes.
 START_TEST(test_relative_wrapped_read_write_continuation) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
@@ -3339,6 +3433,8 @@ Suite* ieee_drive_suite(void) {
                         0, 2 * FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_close_command_channel_releases_unit_channels,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_close_command_channel_selects_mixed_drive,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL * close_write_pattern_count);
     tcase_add_loop_test(test_case, test_relative_wrapped_read_write_continuation,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_relative_position_native_boundaries,
