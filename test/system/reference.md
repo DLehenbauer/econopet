@@ -463,6 +463,9 @@ record and advance from the current physical base, not a reconstructed
 logical P offset.
 P and writes intentionally replace their channel's pending response. CLOSE,
 reset, and replacement of its mounted image invalidate the affected channel.
+Entering LISTEN and arming the next record are separate operations. Only
+LISTEN entry discards the old read response. Rearming after write EOI retains
+the successor response just prepared by RD40/RD25.
 Queue replacement explicitly parks the current REL owner before issuing the
 fabric discard. The low-level control-register writer does not synchronize or
 advance firmware channels. Reset/unmount instead discard their DOS state
@@ -495,6 +498,212 @@ Run the focused abort, sequential terminal and native REL controls:
 The working directory supplies the SID model's lookup resources. The ordinary
 CTest run includes REL data, continuation, positioning, parking, and native
 controller cases.
+
+### REL write completion on EOI
+
+REL data EOI completes the current record, not the LISTEN selection. Previously,
+firmware staged every received byte until UNLISTEN, ignoring the RX head's EOI
+flag. A second EOI-terminated record in the same LISTEN therefore overflowed
+the first record instead of writing its successor.
+
+The selected sources below are pinned to `mist64/cbmsrc` revision
+`01bd60f162ef92212ef0cb67546ae8f42be34168`. The target is 4040 DOS 2 and the
+shared full-size 8050/8250 DOS 2.7 source, with D80 execution in single-sided
+8050 mode.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| EOI completes and pads the current REL record | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2): WRTREL/WR10 puts the byte, WR20 branches to WR40 when EOIFLG is zero, and CLREC repeatedly puts zero until OVRFLO marks the record boundary | Preserve bytes before the positioned offset, store the EOI byte and zero-fill only the remainder of that record. A preceding byte without EOI does not complete the record | [`rel_write_commit` and RX handling](../../fw/src/ieee/ieee_drive.c), [`test_relative_eoi_completes_each_record`](../../fw/test/ieee_drive_test.c) and [`RelativeEoiCompletesEachRecordWithoutUnlisten`](ieee/drive_test.cpp) | Pinned MAME [c2040](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c2040.cpp) and [c8050](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c8050.cpp) map physical EOI to RIOT PA5 independently of DAV and ATN. The [independent bus description](https://github.com/mist64/cbmbus_doc/blob/cb021f3454b499c579c265859ce67ba99e85652b/1%20IEEE-488.md) identifies EOI as the final data byte's marker, distinct from ATN command framing. The REL padding rule comes from the ROM, not these bus descriptions |
+| Completion advances to the next record while retaining LISTEN | Same selected ROMs | WR40 calls RD40 in [4040 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3) and [8250 `rel3`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3). RD40 calls NXTREC in [4040 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1) and [8250 `rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1). Both [`ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee) [implementations](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee) return from PUT through LSTRTN to LISTEN | Position record 1 at byte 2, send `$A5` with EOI, then `$B5` without EOI and `$B6` with EOI under one unchanged listener selection. Records become `$A0,$A5,0...` and `$B5,$B6,0...`. Final UNLISTEN must leave record 3 untouched | Successful EOI commits and rearms the same REL channel. UNLISTEN skips an empty newly armed record. Tests independently inspect backing bytes and read back `$A0,$A5` and `$B5,$B6`, with EOI only on each second byte | The two independent bus-level sources above distinguish EOI from addressing changes. They do not establish native record advancement, which follows RD40/NXTREC |
+| Successful completion has model-specific status behavior | 4040 DOS 2 versus full-size 8050/8250 DOS 2.7 | 4040 WR40 with ERWORD zero reaches WR51/RTS, without OKERR. DOS 2.7 reaches WR45/JMP OKERR. Both WR30 paths retain RECOVF through CMDERR when an extra byte overflows the record | After an unopened-channel P establishes `70,NO CHANNEL`, successful EOI writes preserve `70,NO CHANNEL,00,00` on 4040 but yield `00, OK,00,00,0` on the tested 8050 drive 0. Overflow remains `51,OVERFLOW IN RECORD`, not OK | All 48 unit coordinates include a prior error, and both production-top cases check exact status. Sixteen model/unit/drive overflow cases check status before UNLISTEN, alongside sixteen write-protect cases | MAME and the independent bus source above corroborate the separately sampled EOI input, not DOS error strings or clearing. The explicitly different WR45/WR51 source branches determine this rule |
+| Read and write EOI retain the prepared successor byte | Same selected drive ROMs | Both `rel3` RD40 paths call NXTREC, then RD25 stores DATA in per-channel CHNDAT and marks readiness. Both `rel2` WR40 paths call RD40. Neither requires another LISTEN entry to complete a write | Channel A prepares `$A5` for its next record. Channel B overwrites that record with `$5A,$59`. TALK A without P must return the saved `$A5` with EOI. P A to that record must instead return `$5A,$59` with final EOI | [`rel_write_arm`](../../fw/src/ieee/ieee_drive.c) initializes staging only. `rel_write_begin` handles LISTEN's read-response invalidation. The shared unit test parameterizes read versus write EOI over 32 coordinates. `EoiRetainsPreparedSuccessorAcrossPeerWrite` repeats both paths through production firmware/FPGA for D64/D80 | MAME's independently executed original-drive CPU models retain ROM-managed RIOT/RAM state. The independent bus source above distinguishes EOI from a subsequent addressing change. The CHNDAT lifetime is established by RD25, not by transport FIFO contents |
+| CLOSE 15 releases this unit's data channels | Same selected drive ROMs | [4040 `close`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close) and [8250 `close`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close): CLS10 enters CLSALL, CLS20 calls CLSCHN for SA 14 down through 0, then ENDCMD in both `parsex` files publishes OK when ERWORD is clear | Release both REL channels and the ordinary channel, invalidate their responses, preserve a peer unit's selected REL or SEQ unread tail, report exact OK, and allow channel reuse with completed writes intact | `close_channel` invalidates only the addressed unit/channel and flushes its retained TX binding when necessary. Sixteen unit coordinates cover two REL channels and SEQ across both drives, a completed write, retained peer TALK, exact status, closed-channel probes and reopen. `Close15ReleasesChannelsAndPreservesPeerTalk` additionally covers selected peer REL and SEQ sources | MAME models each drive's CPU and channel RAM independently. Pinned [VICE virtual-drive code](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c) deliberately disables command-channel close-all as a REL workaround. That shortcut and generic DOS descriptions of CLOSE 15 as a no-op do not override the selected CLSALL loops |
+| Recover after a bounded REL write error | Same selected drive ROMs | Both `rel2` WR30/WR40 paths complete the bounded record and enter CMDERR for RECOVF. Both [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) clear ERWORD and preserve REL allocation in LSNERR/TLERR before IDLE | After status 51, P can read the completed prefix and the same channel accepts a valid successor write without reset/reopen. After EconoPET's read-only rejection, P reads unchanged data and reusing the logical channel on writable peer media allows a successful write | Existing sixteen-coordinate overflow and write-protect unit families now check readback and successful write recovery, not status alone | The independent bus and MAME mappings above corroborate transport/error inputs only. The native channel-retention rule follows CMDER3/TLERR. The host read-only fixture does not reproduce original disk-job timing |
+| Waterloo application record write reaches EOI and native readback | SuperPET revision 12 driving selected D64/D80 targets | MD5-checked [970018-12 A-ROM](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin): fputrec `$B367` calls sysskip `$C7F7`, syswrite `$C52C` and sysnl `$C6C6`. The [970019-12 C-ROM](https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin) dispatches text record end through `$D3DE`, sending CR via EoiByte `$BE5F`. Its LISTEN helper `$C072` retains the same addressed listener for the second record | Two real fputrec calls send `$A5,$5A,CR+EOI` and `$B5,$B6,CR+EOI` during one LISTEN. Native P/input subsequently return exactly those bytes and EOI flags. No third-record change | `WaterlooRecordWritePersistsAndReadsBack` initializes a private text FCB and transport block, services firmware while executing unmodified revision-12 code, checks fputrec/syswrite/sysnl opcode fetches, compares the entire persisted image at each EOI, and observes the complete wire sequence and native input result | The drive-side WR40/RD25 evidence establishes receiver semantics. Pinned MAME physical-line mappings and the independent EOI framing description above corroborate the bus. This is an executed application record-write routine with a prepared FCB, not full Waterloo filesystem startup |
+
+The enabled suite was green when this investigation started. The historical
+six RED Waterloo probes had already been retired because their helper did not
+service firmware, so they are not a valid current ranking of production bugs.
+This defect instead produced 48 newly RED firmware cases (two models, four
+units, two drives and record lengths 2, 129 and 254) and both newly added
+production-top cases before the fix. No claim is made that it blocks the
+largest possible set of undiscovered failures.
+
+Successful CLOSE 15 reaches ENDCMD in [4040 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex)
+and [8250 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex).
+Both publish OK when ERWORD is clear. The teardown tests establish an earlier
+NO CHANNEL status to distinguish this publication from retaining an old OK.
+For error recovery, 4040 TLERR uses carry from TYPFIL's `CMP #RELTYP`, while
+DOS 2.7 compares RELTYP explicitly. Both retain the REL channel.
+
+The executed Waterloo A/C binaries were checked against MD5
+`84cb402449c6107b7d2b636cb28f0042` and
+`0f9bd7123d99892ce80f1e7e438c2194`. The record-write test prepares a text FCB
+whose parameter-block pointer is at FCB+4. It does not substitute a transport
+block for an FCB or replace syswrite/sysnl with host-generated bus operations.
+Phased execution services firmware at the actual OPEN/P idle boundaries and
+at both record EOIs. Full-wire assertions distinguish the two record writes
+under one LISTEN from the later UNLISTEN required to select command channel 15.
+
+Initial EOI-only validation passed 1014 firmware checks and 415 affected
+host/contract, firmware integration and board IEEE cases, but missed the
+prepared-successor regression because readback used P. Parameterizing the
+existing prepared-response family reproduced all sixteen write-EOI failures
+(`$5A` instead of `$A5`), while all sixteen read-EOI controls passed. The
+separate write-arming helper repairs that introduced response-lifetime defect.
+Current complete validation results are recorded in the table below.
+
+The fixtures cover existing bounded data chains, not REL file creation, growth
+or side-sector allocation. Unit assertions independently map persisted bytes
+to physical sector offsets. Production-top assertions compare the entire
+backing image after each EOI and final UNLISTEN, check retained LISTEN and
+verify exact wire readback and final-byte EOI. The 129- and 254-byte records
+exercise record/physical-sector boundaries. Error cases ensure successful EOI
+handling does not overwrite overflow or write-protect status with OK.
+
+Immediate backing-file persistence is an EconoPET implementation invariant,
+not a claim that the original drive starts or finishes a physical disk job on
+every EOI. Native RELPUT dirties buffers, and NRBUF/SCRUB write them when
+required. The existing EconoPET fallback that commits a nonempty unfinished
+record on UNLISTEN remains outside this repair. No exact native equivalence
+is claimed for that path, other partial-write interruptions, REL growth,
+disk-job timing or all error recovery. CLOSE coverage additionally establishes
+accepted-prefix persistence without padding and allocation retention after a
+host write rejection, as detailed below. It does not establish native REL
+side-sector/BAM accounting or physical disk-job recovery.
+No D82, earlier DOS 2.5, 8250LP, original drive-CPU execution or
+real-hardware validation is claimed.
+
+### CLOSE completion drive selection
+
+Successful CLOSE 15 must publish the drive selected during descending channel
+teardown, not reuse the drive in an earlier status. With written SA 2 on drive
+0 and written SA 3 on drive 1, CLSALL closes SA 3 first and SA 2 last. DOS 2.7
+therefore reports `00, OK,00,00,0` followed by CR with EOI, even when the previous
+status named drive 1. Mirroring the drive assignments must mirror this result.
+
+The sources below use the same pinned `mist64/cbmsrc` revision and selected
+4040 DOS 2 / full-size 8050/8250 DOS 2.7 targets as the EOI evidence above.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| Written state belongs to the channel allocation | Selected DOS 2.7 | [`rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2) RELPUT calls SDIRTY, which sets DYFILE in FILTYP via [`tstflg`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstflg) SETFLG. [`record`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record) R20 clears only LRF/OVRFLO. [`opchnl`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl) OPNRCH initializes FILTYP from type and drive | EOI rearming and P retain written state. LISTEN without PUT does not set it. A fresh OPEN after CLOSE clears it | [`rel_write_byte`, REL OPEN and `close_channel`](../../fw/src/ieee/ieee_drive.c) track allocation-lifetime `written`, separately from current-record staging | Pinned MAME's original-drive models execute ROM against retained channel RAM. Pinned VICE's close-all workaround differs from the selected ROM and is not the oracle for DYFILE |
+| Descending close selects only the relevant REL directory drive | Selected 4040 DOS 2 versus DOS 2.7 | Both [`4040 close`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close) and [`8250 close`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close) iterate SA 14 down to 0. 4040 CLSREL unconditionally calls CLSDIR. DOS 2.7 CLSRE1 calls it only with DYFILE set. CLSDIR copies FILTYP bit 0 to DRVNUM. A SEQ reader takes FNDWCH carry-set directly to FRECHN | The lowest-SA eligible REL channel determines completion drive. A lower-SA unwritten DOS 2.7 REL or SEQ reader must not replace that selection. If no channel selects a drive, retain the prior drive | `close_channel` updates live per-unit drive selection without publishing intermediate statuses. Both native models and both drive assignments are exercised | Pinned MAME distinguishes 8050 DOS 2.5/2.7 BIOS variants. Pinned VICE deliberately disables command-channel close-all for REL access, so generic no-op behavior must not override these CLSALL branches |
+| Publish final selection through the common completion path | Same selected ROMs | Both `close` CLS20 and ordinary SA 2-14 CLOSE reach [`parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex) ENDCMD. DOS 2.7 [`erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) ERMSG2 appends DRVNUM bit 0 as the fifth field. 4040 status has no fifth field | Exact OK with selected drive, final-CR EOI, and the same result when CLOSE 15 is repeated on the empty unit. Ordinary written REL CLOSE also publishes its selected drive | [`test_close_command_channel_selects_mixed_drive`](../../fw/test/ieee_drive_test.c) adds 96 coordinates. [`Close15SelectsMixedDriveByWrittenChannel`](ieee/drive_test.cpp) checks production FPGA/firmware status with an additional lower-SA SEQ reader | MAME and VICE corroborate model/channel context, not the exact status suffix. The formatter and ENDCMD primary sources determine the bytes |
+
+The independent secondary references are pinned MAME
+[`c2040`](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c2040.cpp)
+and [`c8050`](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c8050.cpp),
+and the explicitly differing
+[VICE virtual-drive CLOSE implementation](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c).
+
+Before the repair, forty new D80 firmware coordinates failed on the drive
+digit, and the D80 production-top case failed while its D64 no-suffix control
+passed. The cases include no writes, each single written channel, both written
+channels, CLOSE/reopen of a written allocation, and LISTEN without data. P after
+the writes checks that positioning does not erase the channel's written state.
+Unit tests establish a conflicting FILE NOT FOUND status before CLOSE.
+Production-top tests instead select the conflicting drive with an ordinary
+SA 0 reader, which closes after both REL channels without changing DRVNUM.
+
+The unwritten-drive-retention rule here covers small files whose final side
+sector is already resident. [`tsutil`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil)
+SCRUB, [`getact`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/getact)
+GAFLGS/GETACT, DBLBUF, and successful job waits do not independently select a
+different drive on this path. [`ssend`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssend)
+can require an additional IBRD or group read for larger files, and
+[`ssutil`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssutil)
+IBOP also selects DRVNUM. Large-file side-sector/group traversal, general
+unfinished-write handling, physical failed-CLOSE recovery and real
+drive-CPU/hardware execution remain unproven.
+
+Initial mixed-drive follow-up validation passed all 1142 firmware checks,
+all 423 affected seed-1 system cases, fourteen focused seed-17 cases, and the production
+`RelWithDebInfo` firmware build. This repair changes no RTL behavior or
+firmware/FPGA protocol and claims no new bitstream or timing validation.
+
+### CLOSE SCRUB, command cleanup and EOI drive state
+
+The next review identified partial-write loss on CLOSE, and its overview
+contained two previously missed findings: retained incomplete command input
+and incorrect DOS 2.7 EOI status drive. All three reproduced before the repair.
+The selected ROM revisions and independent MAME/VICE references remain those
+pinned above. Their hardware and channel models corroborate context, not the
+exact buffer-pointer or status rules, which follow the primary sources.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| CLOSE persists accepted partial bytes without EOI completion | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | Both pinned `close` CLSREL paths call SCRUB before freeing the allocation. [`4040 tsutil`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil) and [`8250 tsutil`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil) SCRUB writes dirty buffers and waits. Unlike `rel2` WR40, this path does not call CLREC/RD40 | CLOSE 15 or ordinary REL CLOSE persists the accepted prefix, preserves the unwritten nonzero tail and adjacent records, and reports OK only after success | [`rel_write_store`](../../fw/src/ieee/ieee_drive.c) separates byte storage from record completion. `test_close_flushes_partial_relative_record` covers 96 coordinates. `ClosePersistsPartialRecordWithoutEoiPadding` compares complete images and native EOI readback for lengths 2, 129 and 254 | The pinned original-drive MAME models retain ROM-managed dirty buffers. VICE's explicitly disabled close-all remains a disagreement, not the rule |
+| Failed SCRUB aborts release and later CLOSE traversal | Same selected ROMs | SCRUB reaches WRTOUT/WATJOB. Both [`4040 erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [`8250 erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) CMDER3 clear command state and unwind the stack. A CLOSE-15 error does not return to CLS20/ENDCMD. REL error recovery does not free the allocation | Report the write rejection, not OK. Retain the failing REL channel and lower-SA channels that have not yet been visited. An ensuing UNLISTEN must not convert the failed close into padded record completion | `close_channel` returns failure before release. The caller stops the descending loop. Thirty-two model/unit/drive/close-form checks retain both failed SA 3 and untouched SA 2 and prove stale command input is cleared on the error path | MAME corroborates independent ROM/channel RAM. The read-only host fixture is an EconoPET rejection guard, not an original disk-job execution |
+| Completion clears only the addressed unit's incomplete input | Same selected ROMs | Both [`4040 parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex) and [`8250 parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex) ENDCMD/SCREND reset CB, call CLRCB and return through FREICH. Error CMDER3 additionally resets BUFTAB+CBPTR | After incomplete `P`, UNLISTEN, CLOSE and OPEN `BASIC,L`, lookup must use BASIC rather than PBASIC. A peer's incomplete P must remain completable and select record 3 | `handle_command` clears the addressed input length on native completion/error paths. Sixty-four unit coordinates cover OPEN 15/SA 15 and CLOSE 2/CLOSE 15. `CloseClearsLocalInputAndPreservesPeerCommand` verifies exact local record-1 and peer record-3 bytes with final EOI | MAME's separate drive CPUs/RAM corroborate unit-local command ownership. VICE's virtual close-all shortcut is not substituted for native cleanup |
+| EOI status observes live DRVNUM, not the written channel's slot | DOS 2.7, with 4040 no-OKERR controls | [`8250 rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2) WR45 calls OKERR, whose ERMSG2 formats DRVNUM. RELPUT and CLREC can reach NRBUF. [`8250 rel1`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1) NXTREC calls NRBUF when switching buffers, and NRBUF starts with SETDRN. Resident NXTREC/SETLST does not select another drive | A failed peer-drive OPEN followed by resident record EOI retains the peer drive digit. Padding across a sector or preparing a successor at the next-sector boundary selects the channel's drive. A P offset already in the second sector remains resident | `selected_drive` is separate from `drive_status`. `rel_set_buffer` tracks supported REL buffer transitions on accepted writes, padding, GET and successor preparation. Sixty-four unit coordinates and `EoiStatusUsesRetainedOrBufferSelectedDrive` cover four boundary paths and mirrored drives | Pinned MAME selects distinct DOS 2.5/2.7 ROMs. Neither MAME nor the differing VICE shortcut is used as a substitute for the WR45/NRBUF trace |
+| Write-protect status retains its native leading space | Both selected ROMs | ERRTAB starts status 26 text with token `$8A`. 4040 MOVERR/MER7 and DOS 2.7 ERMOVE/E60 prepend the token's implied space before expanding WRITE | Status text is `26, WRITE PROTECT ON`, not `26,WRITE PROTECT ON` | The failed-CLOSE checks exposed this coupled formatting mismatch. `push_status` and the existing write-protect family now require the ROM-derived punctuation | Exact punctuation follows the two ROM formatters. The host rejection's existing zero track/sector fields are not evidence for native physical-job coordinates |
+| Synthetic error replies do not select another data buffer | Same selected ROMs | Both pinned `rel3` RDREL paths branch directly to RD05 for LRF. RD05 prepares CR and enters CMDERR, without advancing through NRBUF | GET of a missing-record CR must not turn a stale data pointer's sector boundary into a drive-selection event | Eight additional D80 unit coordinates leave the stale pointer at payload offset 253, consume the missing reply, and require a resident write on another channel to retain the peer drive | Exact control flow follows RDREL/RD05. MAME corroborates ROM-managed state, not the firmware's synthetic pending-buffer representation |
+
+Before production changes, 208 firmware checks failed: 96 dropped partial
+writes, 32 missing write-error reports, 64 stale-input cases and sixteen D80
+resident-buffer status cases. The repaired firmware suite passes all 1406
+checks. Ten focused production-top cases also pass at seed 1, including the
+new cases and adjacent prepared-response/mixed-CLOSE controls.
+
+An additional traversal of the new buffer-tracking logic reproduced eight
+synthetic-reply GET failures before its guard was corrected. Only genuine
+record responses now advance the tracked native buffer. Validation was
+restarted against that final code rather than reusing the earlier system run.
+
+The staged write destination is captured independently of later positioning.
+Successful storage clears the staged byte count. Failed CLOSE retains it but
+ends active collection, preventing UNLISTEN's older completion fallback from
+padding or advancing it. New OPEN resets staging, so channel reuse cannot
+flush an earlier allocation's bytes.
+
+Coverage remains bounded to existing data chains. It does not establish native
+side-sector/BAM updates, file creation/growth, arbitrary partial-write
+interruptions, full multi-channel dirty-sector cache interactions, dirty-buffer
+readback after physical disk errors, all ordinary SEQ buffer-selection timing,
+or native disk-job failure coordinates/timing.
+The flat HDD extension retains its previous written-slot EOI status behavior.
+No new gateware/protocol, bitstream, original drive-CPU or real-hardware
+validation is claimed.
+
+### REL EOI error cleanup
+
+The next review found another CMDER3 entry missing the command-input cleanup:
+REL EOI completion with overflow or a storage rejection. An unfinished `P`
+on channel 15 survived the error and prefixed the next ordinary filename,
+turning `BASIC,L` into `PBASIC,L`. The two earlier overview-only findings
+(CLOSE input cleanup and live EOI drive selection) remain fixed and are
+included in the follow-up validation.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| Failed REL EOI completion clears addressed command input | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | Pinned [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2) WR50/WR30 defer overflow completion until EOI, then WR40 calls CMDERR for ERWORD. Controller errors enter error processing directly. Both [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) CMDER3 call CLRCB and reset BUFTAB+CBPTR | After retained `P`, a record-overflow EOI reports exact status 51 and permits a fresh BASIC OPEN. Host write rejection reports exact status 26 and also permits fresh OPEN. The peer's retained P still selects record 3 | `ieee_drive_task` clears only the current receive state's length when EOI completion fails or overflows. `test_relative_eoi_error_clears_only_addressed_command_input` covers 96 model/unit/drive/entry/outcome coordinates. `EoiErrorClearsLocalInputAndPreservesPeerCommand` checks both models through the production SPI/FPGA path, complete persisted images, exact bytes and final EOI | The MAME original-drive CPU/private-RAM models cited above corroborate unit independence, not the cleanup decision. That decision follows CMDER3. Read-only rejection remains a host guard rather than physical-job timing evidence |
+| Successful EOI retains incomplete input, independently of the peer | Same selected ROMs | 4040 WR40/WR51 returns without CMDER3. DOS 2.7 WR40/WR45 calls OKERR, which formats status without CLRCB or resetting CBPTR | Completing the retained local P without resending its initial byte must select record 3 after successful EOI. The same peer continuation must work after success and failure | Both new test families include successful-EOI controls alongside error cases, through OPEN 15 and secondary 15, and require exact `$05,$06` with EOI only on `$06` | Independent drive RAM corroborates isolation. The distinct WR51/WR45/OKERR paths, not FIFO state or an unconditional EOI cleanup, determine retention |
+
+Before the fix, 64 new firmware coordinates failed to reopen the local file,
+while all 32 successful-EOI controls passed. Both production-top model cases
+logged failed lookup of PBASIC and timed out when reading the unopened channel.
+The error entry is explicit in [4040 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex)
+CMDERR. DOS 2.7 [romtbl](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/romtbl)
+maps CMDERR to [parsex](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex)
+JCMDER and CMDER2 to JCDER2, which falls through to CMDER3.
+On success, OKERR's ERROFF helper only updates the error LED in
+[4040 `frets`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/frets)
+and [8250 `frets`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets),
+without clearing command input.
+The repair adds only the error branch's local input reset. It does not clear
+the peer, rearm an errored writer, change stored bytes or alter successful EOI.
+It does not establish native physical-job failure timing or change the legacy
+unfinished-record completion on UNLISTEN.
+
+Final validation passes all 1502 firmware checks (1455 ordinary and 47 fatal),
+all 431 affected seed-1 system cases and 22 focused seed-17 controls, including
+both previously missed findings. Production firmware builds with
+`RelWithDebInfo`. The preceding `c843b97` GitHub run failed because its complete
+system-test wrapper reached the outer 1800-second limit after reporting
+passing child cases, rather than an assertion failure. That full-wrapper
+failure is separate from the affected local selection and is not claimed fixed
+by this firmware change.
 
 ### Command-channel OPEN dispatch
 
@@ -765,16 +974,22 @@ or 8250LP execution is claimed.
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | All 249 enabled cases pass at seed 1. No historical disabled probes remain. Twenty pending-dispatch, interrupted-listener, EOI, deferred-peer-OPEN and peer-transfer/backpressure cases pass at seed 17 |
+| Complete affected firmware integration suite | All 267 enabled cases pass at seed 1. No historical disabled probes remain. Twenty-two EOI, prepared-successor, CLOSE, command-cleanup, native-drive-state, Waterloo record-write and peer-transfer/backpressure cases pass at seed 17 |
 | Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at seed 1, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight original D64/D80 SEQ/REL cases retain exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN. Eight additional cases check every ordered virtual-unit pair with peer status/data secondary selection, without readdressing the talker |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at seed 1, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | Existing data, continuation, interruption, parking, and native receive cases pass alongside channel errors, pending EOI/IDLE dispatch, model-specific command receive/validation boundaries, status continuation, and PET-ROM commands. All 26 queued-selection/prefetch-boundary cases pass. Four concurrent source/peer-listener cases check exact wire data and destination-record readback, including delayed-service 40-byte transfers that fill RX |
-| Complete firmware unit suite | 950 checks pass (903 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new listener-IDLE and deferred-peer-OPEN family covers sixteen model/unit/drive combinations |
+| Native REL write EOI integration, included above | Both D64/D80 cases pass at seeds 1 and 17, each exercising record lengths 2, 129 and 254 under continuous LISTEN. Exact backing-image, readback/EOI, untouched-successor and DOS-version-specific prior-status assertions pass |
+| Native REL lifetime and application-write follow-up, included above | Six D64/D80 cases pass at seeds 1 and 17. Both read/write EOI controls retain prepared data across a peer write, CLOSE 15 preserves selected peer REL/SEQ responses while freeing this unit's allocations, and executed Waterloo fputrec/syswrite/sysnl writes persist exact records for native readback |
+| Native CLOSE completion drive selection, included above | Both D64/D80 cases pass at seeds 1 and 17, each checking six written-state scenarios with both drive assignments, ordinary written REL CLOSE, repeated CLOSE 15 and a lower-SA SEQ reader. D80 requires the exact selected-drive suffix and final-CR EOI. D64 checks the no-suffix status control |
+| Native CLOSE SCRUB and command cleanup, included above | Four D64/D80 cases pass at seeds 1 and 17. Partial CLOSE preserves accepted prefixes without EOI padding, with complete backing-image comparison and tail readback. CLOSE clears local incomplete input while preserving the peer's command through both command entry routes |
+| Native EOI drive state, included above | Both D64/D80 cases pass at seeds 1 and 17, covering resident buffers, padding and successor boundary transitions, already-crossed P offsets and mirrored drive assignments. D80 requires exact native drive suffixes, while D64 retains its prior status |
+| Native REL EOI error-input cleanup, included above | Both D64/D80 cases pass at seeds 1 and 17 through OPEN 15 and secondary 15. Overflow clears only local input, successful EOI retains it, and the peer's retained P remains completable. Persisted images, reopened bytes and final EOI are exact |
+| Complete firmware unit suite | 1502 checks pass (1455 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. EOI completion covers 48 model/unit/drive/length coordinates. Prepared-successor retention covers 32 read/write EOI coordinates. CLOSE-15 teardown and both strengthened error-recovery families each cover sixteen model/unit/drive coordinates. Mixed-drive CLOSE adds 96 written-state/model/unit/drive coordinates. The SCRUB/cleanup/drive-state follow-up adds 264 checks: 96 partial-CLOSE, 32 failed-CLOSE, 64 unit-local input, 64 EOI-drive and eight synthetic-reply GET coordinates. EOI error cleanup adds 96 outcome/entry/model/unit/drive checks, including read-only rejection and successful-input retention |
 | Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ordered boundary (zero payload for ATN release, nonzero low-four-bit listener mask for DAV release), `$20` is active status DAV, and `$40` is ordered source metadata. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
-| Board IEEE, shared hardware contract, and host encoding | All 413 selected seed-1 cases pass (124 host/contract, 249 firmware integration and 40 board IEEE) in 1053 seconds. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
-| CI system wrapper | The failed serial-child run exhausted the outer 1800-second timeout. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. Clean full-wrapper CI results are recorded on [PR #107](https://github.com/DLehenbauer/econopet/pull/107), separately from the affected local selection above |
+| Board IEEE, shared hardware contract, and host encoding | All 431 selected seed-1 cases pass (124 host/contract, 267 firmware integration and 40 board IEEE) in 1348 seconds. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
+| CI system wrapper | The failed serial-child run exhausted the outer 1800-second timeout. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. Clean full-wrapper CI results are recorded on [PR #107](https://github.com/DLehenbauer/econopet/pull/107) and [PR #108](https://github.com/DLehenbauer/econopet/pull/108), separately from the affected local selection above |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
 | Complete gateware suite | All 33 selected Icarus/setup cases pass in an isolated checkout of the committed configuration, excluding the unrelated local CRT/keyboard inversions. All four affected IEEE variants also pass under Icarus and Verilator. The complete Verilator suite was not rerun locally |
 | Production firmware and FPGA bitstream | Production firmware builds with `RelWithDebInfo`. The isolated production FPGA preset completes synthesis, interface generation, P&R, bitstream generation and export. The exact CI timing gate passes with worst setup +1.178 ns and hold +0.119 ns using seed 0 and TIMING_3 P&R. No clocks or timing exceptions were relaxed |
@@ -790,8 +1005,10 @@ timeout. No assertions were removed to obtain the passing result.
 The unit publication-interruption matrix injects RX during TXS writes. The
 production-top status cases cover queued selections, not that exact fill-window
 injection. No physical-SPI concurrency capture is claimed for the latter.
-Production firmware uses `RelWithDebInfo`. This follow-up changes IEEE gateware
-and firmware together. Its integration build retains unrelated local top-level
+Production firmware uses `RelWithDebInfo`. Earlier protocol follow-ups changed
+IEEE gateware and firmware together. The REL EOI completion repair changes
+firmware only and does not rerun FPGA implementation or timing analysis.
+The integration build retains unrelated local top-level
 configuration inversions. A prior complete local wrapper's sole failure was
 `TypedConfigurationReachesProductionStatusBits`, against the existing
 CRT/keyboard polarity discrepancy. That test is outside the exact IEEE selection
