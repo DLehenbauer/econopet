@@ -55,6 +55,12 @@ enum close_write_pattern {
     close_lower_rearmed,
     close_write_pattern_count,
 };
+enum relative_eoi_result {
+    relative_eoi_success,
+    relative_eoi_overflow,
+    relative_eoi_write_rejected,
+    relative_eoi_result_count,
+};
 
 // ---------------------------------------------------------------------------
 // IEEE command-stream helpers
@@ -3036,6 +3042,101 @@ START_TEST(test_close_clears_only_addressed_command_input) {
 }
 END_TEST
 
+// CMDER3 clears local input on failure, but successful EOI and peer input retain it.
+START_TEST(test_relative_eoi_error_clears_only_addressed_command_input) {
+    const unsigned int model_coordinates = (unsigned int) _i / (2 * relative_eoi_result_count);
+    const unsigned int coordinates = model_coordinates / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates), drive = loop_drive((int) coordinates);
+    const unsigned int peer = IEEE_FIRST_DEVICE
+        + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+    const diskimage_type_t type = native_image_types[model_coordinates % count_of(native_image_types)];
+    const bool d80 = type == diskimage_type_d80;
+    const enum relative_eoi_result result = _i % relative_eoi_result_count;
+    const uint8_t entry = _i / relative_eoi_result_count % 2
+        ? IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND) : IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND);
+    const uint8_t original[] = {1, 2, 3, 4, 5, 6};
+
+    // Use independent backing images so local persistence cannot alter the peer control.
+    mount_native_relative_records(peer, drive, type, "eoi-input-peer.img",
+        TEST_COMMAND_RECORD_LENGTH, original, sizeof(original));
+    uint8_t* const image = d80 ? diskimage_test_make_d80() : diskimage_test_make_d64();
+    uint32_t directory, sector;
+    ck_assert(diskimage_sector_offset(type, d80 ? 39 : 18, 1, &directory));
+    image[directory + 2] = 0x80 | DISKIMAGE_FTYPE_REL;
+    image[directory + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = TEST_COMMAND_RECORD_LENGTH;
+    ck_assert(diskimage_sector_offset(type, image[directory + 3], image[directory + 4], &sector));
+    image[sector] = 0;
+    image[sector + 1] = sizeof(original) + 1;
+    memcpy(image + sector + DISKIMAGE_SECTOR_LINK_SIZE, original, sizeof(original));
+    mount_image(device, drive, "eoi-input-local.img", image,
+        d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, result != relative_eoi_write_rejected);
+    for (unsigned int index = 0; index < 2; ++index) {
+        const unsigned int addressed = index == 0 ? peer : device;
+        enqueue_command(IEEE_CMD_LISTEN(addressed), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+        enqueue_filename_for_drive(drive, "BASIC,L");
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        enqueue_command(IEEE_CMD_LISTEN(addressed), entry);
+        mock_ieee_enqueue_rx(false, 'P');
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+    }
+
+    // Complete a resident write, or exceed its record length on the EOI byte.
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+    mock_ieee_enqueue_rx_eoi(false, 0x5a, result != relative_eoi_overflow);
+    if (result == relative_eoi_overflow) {
+        mock_ieee_enqueue_rx(false, 0x59);
+        mock_ieee_enqueue_rx_eoi(false, 0x58, true);
+    }
+    ieee_drive_task();
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char expected[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(expected, sizeof(expected), "%s,00,00%s\r",
+        result == relative_eoi_overflow ? "51,OVERFLOW IN RECORD"
+            : result == relative_eoi_write_rejected ? "26, WRITE PROTECT ON" : "00, OK",
+        d80 ? (drive ? ",1" : ",0") : "");
+    assert_status(expected);
+    mock_ieee_clear_status();
+
+    // Successful EOI must retain local P. Every outcome must retain the peer's P.
+    for (unsigned int index = result == relative_eoi_success ? 0 : 1; index < 2; ++index) {
+        const unsigned int addressed = index == 0 ? device : peer;
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(addressed), entry);
+        mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, 3);
+        mock_ieee_enqueue_rx(false, 0);
+        mock_ieee_enqueue_rx_eoi(false, 1, true);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_talk(addressed, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), 5);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), 6);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+    }
+
+    // A fresh filename after an error must not append to the stale local P.
+    enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device),
+        IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_talk(device, IEEE_CHANNEL_REL + 1);
+    const size_t count = result == relative_eoi_success ? 1 : TEST_COMMAND_RECORD_LENGTH;
+    ck_assert_uint_eq(mock_ieee_data_count(), count);
+    ck_assert_uint_eq(mock_ieee_data_byte(0), result == relative_eoi_write_rejected ? 1 : 0x5a);
+    if (count == TEST_COMMAND_RECORD_LENGTH)
+        ck_assert_uint_eq(mock_ieee_data_byte(1), result == relative_eoi_write_rejected ? 2 : 0x59);
+    for (size_t index = 0; index < count; ++index)
+        ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == count);
+}
+END_TEST
+
 // Resident WR45 retains DRVNUM, while a padding or successor NRBUF selects this drive.
 START_TEST(test_relative_eoi_uses_native_selected_drive) {
     static const struct {
@@ -3685,6 +3786,8 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL * 2);
     tcase_add_loop_test(test_case, test_close_clears_only_addressed_command_input,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL * 4);
+    tcase_add_loop_test(test_case, test_relative_eoi_error_clears_only_addressed_command_input,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL * 2 * relative_eoi_result_count);
     tcase_add_loop_test(test_case, test_relative_eoi_uses_native_selected_drive,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL * 4);
     tcase_add_loop_test(test_case, test_missing_relative_reply_preserves_selected_drive,

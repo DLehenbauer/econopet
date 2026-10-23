@@ -1360,6 +1360,82 @@ TEST_P(DriveRelativeTest, CloseClearsLocalInputAndPreservesPeerCommand) {
     }
 }
 
+// WR40 errors reach CMDER3 cleanup, unlike successful WR45/WR51 completion.
+TEST_P(DriveRelativeTest, EoiErrorClearsLocalInputAndPreservesPeerCommand) {
+    const bool d80 = GetParam();
+    constexpr Device Local{DeviceAddress}, Peer{DeviceAddress + 1};
+    const std::vector<uint8_t> original{1, 2, 3, 4, 5, 6};
+    IeeeController controller(system);
+    for (const bool open_command : {false, true}) {
+        for (const bool overflow : {false, true}) {
+            SCOPED_TRACE(::testing::Message() << "OPEN 15 " << open_command
+                << ", overflow " << overflow);
+            const auto tag = std::to_string(open_command) + "-" + std::to_string(overflow);
+            const auto peer_name = "eoi-input-peer-" + tag + ".img";
+            const auto local_name = "eoi-input-local-" + tag + ".img";
+            firmware.mount(relative_image(d80, original, 2), peer_name.c_str());
+            ASSERT_TRUE(ieee_drive_mount(2, peer_name.c_str()));
+            firmware.mount(relative_image(d80, original, 2), local_name.c_str());
+            for (const Device device : {Peer, Local}) {
+                open_file(system, controller, Channel{DataChannel}, "BASIC,L", device);
+                service_rx(system, firmware, "open EOI input-retention target");
+                controller.command(Listen(device));
+                controller.command(open_command ? Open(Channel{CommandChannel})
+                    : Secondary(Channel{CommandChannel}));
+                controller.data('P', Eoi::More);
+                controller.command(Unlisten);
+                service_rx(system, firmware, "retain incomplete P before EOI");
+            }
+            controller.command(Listen(Local));
+            controller.command(Secondary(Channel{DataChannel}));
+            controller.data(0x5a, overflow ? Eoi::More : Eoi::Last);
+            if (overflow) {
+                controller.data(0x59);
+                controller.data(0x58, Eoi::Last);
+            }
+            service_rx(system, firmware, "complete write before UNLISTEN");
+            auto written = original;
+            written[0] = 0x5a;
+            written[1] = overflow ? 0x59 : 0;
+            expect_persisted_image(local_name.c_str(), relative_image(d80, written, 2));
+            controller.command(Unlisten);
+            service_rx(system, firmware, "finish completed REL write");
+            EXPECT_EQ(receive_status(system, firmware, controller, Local),
+                std::string(overflow ? "51,OVERFLOW IN RECORD,00,00" : "00, OK,00,00")
+                    + (d80 ? ",0\r" : "\r"));
+
+            // Success retains local P, while an error must still preserve peer input.
+            for (const Device device : {Local, Peer}) {
+                if (overflow && device.value() == Local.value()) continue;
+                controller.command(Listen(device));
+                controller.command(open_command ? Open(Channel{CommandChannel})
+                    : Secondary(Channel{CommandChannel}));
+                controller.data(IEEE_CMD_SECONDARY(DataChannel));
+                controller.data(3);
+                controller.data(0);
+                controller.data(1, Eoi::Last);
+                controller.command(Unlisten);
+                service_rx(system, firmware, "finish retained command without initial P");
+                controller.command(Talk(device));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "read preserved record-three selection");
+                receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+                controller.command(Untalk);
+                service_rx(system, firmware, "finish command-retention control");
+            }
+            open_file(system, controller, Channel{DataChannel + 1}, "BASIC,L");
+            service_rx(system, firmware, "OPEN must not append to failed command input");
+            controller.command(Talk(Local));
+            controller.command(Secondary(Channel{DataChannel + 1}));
+            service_rx(system, firmware, "read recovered OPEN");
+            if (overflow) receive_payload(system, controller, {data(0x5a), data(0x59, Eoi::Last)});
+            else receive_payload(system, controller, {data(0x5a, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish recovered OPEN");
+        }
+    }
+}
+
 // WR45 preserves resident-buffer DRVNUM and observes NRBUF on either completion path.
 TEST_P(DriveRelativeTest, EoiStatusUsesRetainedOrBufferSelectedDrive) {
     const bool d80 = GetParam();

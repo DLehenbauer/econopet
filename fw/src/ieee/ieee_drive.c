@@ -1267,6 +1267,9 @@ void ieee_drive_task(void) {
                                     set_status(wrc->chain.flat ? wrc->slot : selected_slot(unit),
                                         st_code_ok, 0, 0);
                                 rel_write_arm(wrc);
+                            } else {
+                                // CMDER3 clears local input, unlike successful EOI.
+                                input->length = 0;
                             }
                         }
                     }

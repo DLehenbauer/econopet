@@ -666,6 +666,45 @@ The flat HDD extension retains its previous written-slot EOI status behavior.
 No new gateware/protocol, bitstream, original drive-CPU or real-hardware
 validation is claimed.
 
+### REL EOI error cleanup
+
+The next review found another CMDER3 entry missing the command-input cleanup:
+REL EOI completion with overflow or a storage rejection. An unfinished `P`
+on channel 15 survived the error and prefixed the next ordinary filename,
+turning `BASIC,L` into `PBASIC,L`. The two earlier overview-only findings
+(CLOSE input cleanup and live EOI drive selection) remain fixed and are
+included in the follow-up validation.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| Failed REL EOI completion clears addressed command input | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | Pinned [4040 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2) and [8250 `rel2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2) WR50/WR30 defer overflow completion until EOI, then WR40 calls CMDERR for ERWORD. Controller errors enter error processing directly. Both [4040 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) and [8250 `erproc`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc) CMDER3 call CLRCB and reset BUFTAB+CBPTR | After retained `P`, a record-overflow EOI reports exact status 51 and permits a fresh BASIC OPEN. Host write rejection reports exact status 26 and also permits fresh OPEN. The peer's retained P still selects record 3 | `ieee_drive_task` clears only the current receive state's length when EOI completion fails or overflows. `test_relative_eoi_error_clears_only_addressed_command_input` covers 96 model/unit/drive/entry/outcome coordinates. `EoiErrorClearsLocalInputAndPreservesPeerCommand` checks both models through the production SPI/FPGA path, complete persisted images, exact bytes and final EOI | The MAME original-drive CPU/private-RAM models cited above corroborate unit independence, not the cleanup decision. That decision follows CMDER3. Read-only rejection remains a host guard rather than physical-job timing evidence |
+| Successful EOI retains incomplete input, independently of the peer | Same selected ROMs | 4040 WR40/WR51 returns without CMDER3. DOS 2.7 WR40/WR45 calls OKERR, which formats status without CLRCB or resetting CBPTR | Completing the retained local P without resending its initial byte must select record 3 after successful EOI. The same peer continuation must work after success and failure | Both new test families include successful-EOI controls alongside error cases, through OPEN 15 and secondary 15, and require exact `$05,$06` with EOI only on `$06` | Independent drive RAM corroborates isolation. The distinct WR51/WR45/OKERR paths, not FIFO state or an unconditional EOI cleanup, determine retention |
+
+Before the fix, 64 new firmware coordinates failed to reopen the local file,
+while all 32 successful-EOI controls passed. Both production-top model cases
+logged failed lookup of PBASIC and timed out when reading the unopened channel.
+The error entry is explicit in [4040 `parsex`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex)
+CMDERR. DOS 2.7 [romtbl](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/romtbl)
+maps CMDERR to [parsex](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex)
+JCMDER and CMDER2 to JCDER2, which falls through to CMDER3.
+On success, OKERR's ERROFF helper only updates the error LED in
+[4040 `frets`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/frets)
+and [8250 `frets`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets),
+without clearing command input.
+The repair adds only the error branch's local input reset. It does not clear
+the peer, rearm an errored writer, change stored bytes or alter successful EOI.
+It does not establish native physical-job failure timing or change the legacy
+unfinished-record completion on UNLISTEN.
+
+Final validation passes all 1502 firmware checks (1455 ordinary and 47 fatal),
+all 431 affected seed-1 system cases and 22 focused seed-17 controls, including
+both previously missed findings. Production firmware builds with
+`RelWithDebInfo`. The preceding `c843b97` GitHub run failed because its complete
+system-test wrapper reached the outer 1800-second limit after reporting
+passing child cases, rather than an assertion failure. That full-wrapper
+failure is separate from the affected local selection and is not claimed fixed
+by this firmware change.
+
 ### Command-channel OPEN dispatch
 
 `OPEN` on secondary 15 supplies a DOS command, not a filename. Previously,
@@ -935,7 +974,7 @@ or 8250LP execution is claimed.
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | All 265 enabled cases pass at seed 1. No historical disabled probes remain. Twenty EOI, prepared-successor, CLOSE, command-cleanup, native-drive-state, Waterloo record-write and peer-transfer/backpressure cases pass at seed 17 |
+| Complete affected firmware integration suite | All 267 enabled cases pass at seed 1. No historical disabled probes remain. Twenty-two EOI, prepared-successor, CLOSE, command-cleanup, native-drive-state, Waterloo record-write and peer-transfer/backpressure cases pass at seed 17 |
 | Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at seed 1, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight original D64/D80 SEQ/REL cases retain exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN. Eight additional cases check every ordered virtual-unit pair with peer status/data secondary selection, without readdressing the talker |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
@@ -946,9 +985,10 @@ or 8250LP execution is claimed.
 | Native CLOSE completion drive selection, included above | Both D64/D80 cases pass at seeds 1 and 17, each checking six written-state scenarios with both drive assignments, ordinary written REL CLOSE, repeated CLOSE 15 and a lower-SA SEQ reader. D80 requires the exact selected-drive suffix and final-CR EOI. D64 checks the no-suffix status control |
 | Native CLOSE SCRUB and command cleanup, included above | Four D64/D80 cases pass at seeds 1 and 17. Partial CLOSE preserves accepted prefixes without EOI padding, with complete backing-image comparison and tail readback. CLOSE clears local incomplete input while preserving the peer's command through both command entry routes |
 | Native EOI drive state, included above | Both D64/D80 cases pass at seeds 1 and 17, covering resident buffers, padding and successor boundary transitions, already-crossed P offsets and mirrored drive assignments. D80 requires exact native drive suffixes, while D64 retains its prior status |
-| Complete firmware unit suite | 1406 checks pass (1359 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. EOI completion covers 48 model/unit/drive/length coordinates. Prepared-successor retention covers 32 read/write EOI coordinates. CLOSE-15 teardown and both strengthened error-recovery families each cover sixteen model/unit/drive coordinates. Mixed-drive CLOSE adds 96 written-state/model/unit/drive coordinates. The SCRUB/cleanup/drive-state follow-up adds 264 checks: 96 partial-CLOSE, 32 failed-CLOSE, 64 unit-local input, 64 EOI-drive and eight synthetic-reply GET coordinates |
+| Native REL EOI error-input cleanup, included above | Both D64/D80 cases pass at seeds 1 and 17 through OPEN 15 and secondary 15. Overflow clears only local input, successful EOI retains it, and the peer's retained P remains completable. Persisted images, reopened bytes and final EOI are exact |
+| Complete firmware unit suite | 1502 checks pass (1455 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. EOI completion covers 48 model/unit/drive/length coordinates. Prepared-successor retention covers 32 read/write EOI coordinates. CLOSE-15 teardown and both strengthened error-recovery families each cover sixteen model/unit/drive coordinates. Mixed-drive CLOSE adds 96 written-state/model/unit/drive coordinates. The SCRUB/cleanup/drive-state follow-up adds 264 checks: 96 partial-CLOSE, 32 failed-CLOSE, 64 unit-local input, 64 EOI-drive and eight synthetic-reply GET coordinates. EOI error cleanup adds 96 outcome/entry/model/unit/drive checks, including read-only rejection and successful-input retention |
 | Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ordered boundary (zero payload for ATN release, nonzero low-four-bit listener mask for DAV release), `$20` is active status DAV, and `$40` is ordered source metadata. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
-| Board IEEE, shared hardware contract, and host encoding | All 429 selected seed-1 cases pass (124 host/contract, 265 firmware integration and 40 board IEEE) in 1315 seconds. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
+| Board IEEE, shared hardware contract, and host encoding | All 431 selected seed-1 cases pass (124 host/contract, 267 firmware integration and 40 board IEEE) in 1348 seconds. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
 | CI system wrapper | The failed serial-child run exhausted the outer 1800-second timeout. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. Clean full-wrapper CI results are recorded on [PR #107](https://github.com/DLehenbauer/econopet/pull/107) and [PR #108](https://github.com/DLehenbauer/econopet/pull/108), separately from the affected local selection above |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
 | Complete gateware suite | All 33 selected Icarus/setup cases pass in an isolated checkout of the committed configuration, excluding the unrelated local CRT/keyboard inversions. All four affected IEEE variants also pass under Icarus and Verilator. The complete Verilator suite was not rerun locally |
