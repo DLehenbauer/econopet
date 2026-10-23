@@ -1260,6 +1260,141 @@ TEST_P(DriveRelativeTest, Close15SelectsMixedDriveByWrittenChannel) {
     }
 }
 
+// Native SCRUB saves accepted partial data without EOI padding or successor writes.
+TEST_P(DriveRelativeTest, ClosePersistsPartialRecordWithoutEoiPadding) {
+    const bool d80 = GetParam();
+    IeeeController controller(system);
+    for (const uint8_t length : {uint8_t{2}, uint8_t{129}, uint8_t{254}}) {
+        for (const Channel close_channel : {Channel{DataChannel}, Channel{CommandChannel}}) {
+            SCOPED_TRACE(::testing::Message() << "length " << unsigned(length)
+                << ", CLOSE " << unsigned(close_channel.value()));
+            std::vector<uint8_t> payload(3 * size_t{length}, 0xa0);
+            const auto filename = "partial-close-" + std::to_string(length) + "-"
+                + std::to_string(close_channel.value()) + ".img";
+            firmware.mount(relative_image(d80, payload, length), filename.c_str());
+            open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+            service_rx(system, firmware, "open partial CLOSE target");
+            const uint8_t position = length == 129 ? 125 : length - 1;
+            const size_t count = length == 129 ? 2 : 1;
+            position_relative(system, firmware, controller, 2, position);
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            for (size_t index = 0; index < count; ++index) {
+                controller.data(0x5a, Eoi::More);
+                payload[length + position - 1 + index] = 0x5a;
+            }
+            service_rx(system, firmware, "retain partial write without EOI");
+            controller.command(Close(close_channel));
+            controller.command(Unlisten);
+            service_rx(system, firmware, "SCRUB before channel release");
+            expect_persisted_image(filename.c_str(), relative_image(d80, payload, length));
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+
+            // Reopen and read the retained tail with native final-byte EOI.
+            open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+            service_rx(system, firmware, "reopen partially written record");
+            position_relative(system, firmware, controller, 2, length);
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "read unpadded tail");
+            receive_payload(system, controller, {data(0xa0, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish partial-close readback");
+        }
+    }
+}
+
+// Both ENDCMD close entries discard local incomplete input but retain a peer's P.
+TEST_P(DriveRelativeTest, CloseClearsLocalInputAndPreservesPeerCommand) {
+    const bool d80 = GetParam();
+    firmware.mount(relative_image(d80, {1, 2, 3, 4, 5, 6}, 2), "close-input.img");
+    ASSERT_TRUE(ieee_drive_mount(2, "close-input.img"));
+    constexpr Device Local{DeviceAddress}, Peer{DeviceAddress + 1};
+    IeeeController controller(system);
+    for (const bool open_command : {false, true}) {
+        for (const Channel close_channel : {Channel{DataChannel}, Channel{CommandChannel}}) {
+            SCOPED_TRACE(::testing::Message() << "OPEN 15 " << open_command
+                << ", CLOSE " << unsigned(close_channel.value()));
+            for (const Device device : {Peer, Local}) {
+                open_file(system, controller, Channel{DataChannel}, "BASIC,L", device);
+                service_rx(system, firmware, "open command-retention target");
+                controller.command(Listen(device));
+                controller.command(open_command ? Open(Channel{CommandChannel})
+                    : Secondary(Channel{CommandChannel}));
+                controller.data('P', Eoi::More);
+                controller.command(Unlisten);
+                service_rx(system, firmware, "retain unfinished P command");
+            }
+            controller.command(Listen(Local));
+            controller.command(Close(close_channel));
+            controller.command(Unlisten);
+            service_rx(system, firmware, "clear only addressed command input");
+            open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+            service_rx(system, firmware, "filename must not append to stale P");
+            EXPECT_EQ(receive_status(system, firmware, controller, Local),
+                d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+            controller.command(Talk(Local));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "read reopened local record");
+            receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish local read");
+
+            // Complete the peer command without resending its retained initial P.
+            controller.command(Listen(Peer));
+            controller.command(Secondary(Channel{CommandChannel}));
+            controller.data(IEEE_CMD_SECONDARY(DataChannel));
+            controller.data(3);
+            controller.data(0);
+            controller.data(1, Eoi::Last);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "execute preserved peer P");
+            controller.command(Talk(Peer));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "read peer record three");
+            receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "finish peer command control");
+        }
+    }
+}
+
+// WR45 preserves resident-buffer DRVNUM and observes NRBUF on either completion path.
+TEST_P(DriveRelativeTest, EoiStatusUsesRetainedOrBufferSelectedDrive) {
+    const bool d80 = GetParam();
+    constexpr struct { uint8_t length, record, position; bool selects_drive; } Cases[] = {
+        {2, 1, 1, false}, {129, 2, 1, true}, {254, 1, 1, true}, {129, 2, 128, false},
+    };
+    IeeeController controller(system);
+    for (const unsigned int drive : {0u, 1u}) {
+        for (const auto& test : Cases) {
+            SCOPED_TRACE(::testing::Message() << "drive " << drive << ", length "
+                << unsigned(test.length) << ", position " << unsigned(test.position));
+            const auto filename = "eoi-drive-" + std::to_string(drive) + "-"
+                + std::to_string(test.length) + "-" + std::to_string(test.position) + ".img";
+            firmware.mount(relative_image(d80, std::vector<uint8_t>(3 * size_t{test.length}, 0xa0),
+                test.length), filename.c_str());
+            ASSERT_TRUE(ieee_drive_mount(1, filename.c_str()));
+            open_file(system, controller, Channel{DataChannel}, std::to_string(drive) + ":BASIC,L");
+            service_rx(system, firmware, "open mixed-drive EOI target");
+            position_relative(system, firmware, controller, test.record, test.position);
+            open_file(system, controller, Channel{DataChannel + 1},
+                std::to_string(drive ^ 1u) + ":MISSING,L");
+            service_rx(system, firmware, "select peer DRVNUM with failed OPEN");
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            controller.data(0xa5, Eoi::Last);
+            controller.command(Unlisten);
+            service_rx(system, firmware, "complete record and prepare successor");
+            const auto selected = test.selects_drive ? drive : drive ^ 1u;
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                d80 ? "00, OK,00,00," + std::to_string(selected) + "\r"
+                    : "62, FILE NOT FOUND,00,00\r");
+        }
+    }
+}
+
 // Revision-12 fputrec writes two records under one LISTEN, then native input reads them.
 TEST_P(DriveRelativeTest, WaterlooRecordWritePersistsAndReadsBack) {
     const bool d80 = GetParam();

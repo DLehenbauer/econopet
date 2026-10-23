@@ -203,11 +203,22 @@ static drive_status_t drive_status[NUM_UNITS] = {
     { .code = st_code_power_on },
     { .code = st_code_power_on },
 };
+static uint8_t selected_drive[NUM_UNITS];
 static uint8_t status_tx_unit = NUM_UNITS;
 static uint8_t status_tx_prefetched;
 static unsigned int status_tx_remaining;
 static uint32_t status_tx_generation;
 static bool status_tx_pending;
+
+// Resolve live native DRVNUM independently of an already published status.
+static unsigned int selected_slot(unsigned int unit) {
+    return unit * DRIVES_PER_UNIT + selected_drive[unit];
+}
+
+// Record a native drive-selection side effect without rewriting the status.
+static void select_drive(unsigned int slot) {
+    selected_drive[slot / DRIVES_PER_UNIT] = (uint8_t) (slot % DRIVES_PER_UNIT);
+}
 
 static void set_status(unsigned int slot, status_code_t code, uint8_t track,
                        uint8_t sector) {
@@ -241,7 +252,7 @@ static void status_tx_sync(void) {
     if (status->generation == status_tx_generation) {
         status->read_pos += advanced;
         if (status_tx_remaining == 0)
-            set_status(status_tx_unit * DRIVES_PER_UNIT + status->drive, st_code_ok, 0, 0);
+            set_status(selected_slot(status_tx_unit), st_code_ok, 0, 0);
     }
     if (status_tx_remaining == 0) status_tx_unit = NUM_UNITS;
 }
@@ -304,6 +315,7 @@ typedef struct {
     uint32_t cur_record;    // 1-based, per CBM convention
     uint32_t record_base;   // physical payload offset, including native pointer wrap
     uint32_t bufptr;
+    uint32_t buffer_block;  // Native active buffer, in 254-byte payload blocks.
     int32_t  length;
     bool     missing;       // positioned past the last record
     uint16_t pending_size;
@@ -314,6 +326,8 @@ typedef struct {
     bool     written;      // Native DYFILE survives record completion and P.
     bool     wr_active;
     bool     wr_overflow;
+    bool     wr_missing;
+    uint32_t wr_base;       // Staged bytes retain their destination across recovery.
     uint16_t wr_pos;        // start position within the record (from P)
     uint16_t wr_count;
     uint8_t  wr_buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
@@ -326,6 +340,7 @@ static uint8_t data_tx_prefetched;
 static uint8_t data_tx_owner; // Retained queue binding, not the transient hardware pause.
 static void rel_next_record(rel_channel_t* rc);
 static void rel_prepare(rel_channel_t* rc);
+static void rel_set_buffer(rel_channel_t* rc, uint32_t position);
 
 // Reconcile the sole bounded REL batch with actual native GETs, not queue writes.
 // Fabric resets must be MCU-coordinated through ieee_drive_reset(), which
@@ -337,6 +352,8 @@ static void data_tx_sync(void) {
         &data_tx_prefetched, rc->pending_size - rc->pending_pos);
     rc->pending_pos += advanced;
     rc->bufptr += advanced;
+    if (advanced != 0 && rc->pending_record)
+        rel_set_buffer(rc, rc->bufptr - (rc->pending_pos == rc->pending_size ? 1u : 0u));
     if (advanced != 0 && rc->pending_record && rc->pending_pos == rc->pending_size) {
         // GET of the EOI byte prepares the following record before NDAC.
         // Detach the drained batch before positioning can invalidate a queue.
@@ -393,6 +410,7 @@ static rel_channel_t* rel_find(uint8_t unit, uint8_t chan) {
 
 // Resets DOS and protocol state that must not outlive initialization.
 static void reset_protocol_state(void) {
+    memset(selected_drive, 0, sizeof(selected_drive));
     for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
         set_status(unit * DRIVES_PER_UNIT, st_code_power_on, 0, 0);
     }
@@ -430,6 +448,14 @@ static drive_model_t get_drive_model(unsigned int slot) {
         : drive_model_4040;
 }
 
+// Native NRBUF selects the channel's drive when its active data buffer changes.
+static void rel_set_buffer(rel_channel_t* rc, uint32_t position) {
+    if (rc->chain.flat) return;
+    const uint32_t block = position / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+    if (rc->buffer_block != block) select_drive(rc->slot);
+    rc->buffer_block = block;
+}
+
 // Position the engine at record 'rec', byte 'pos' within it, and compute
 // the trimmed length (last non-zero byte), like vdrive_rel_position.
 static void rel_position_at(rel_channel_t* rc, uint32_t rec, uint32_t base, uint8_t pos) {
@@ -448,6 +474,7 @@ static void rel_position_at(rel_channel_t* rc, uint32_t rec, uint32_t base, uint
     if (rc->missing) return;
 
     rc->bufptr = base + pos;
+    rel_set_buffer(rc, rc->bufptr);
     rc->length = (int32_t) (base + rc->reclen - 1);
     if (!diskchain_read(&rc->chain, base, buf, rc->reclen)) {
         rc->missing = true;
@@ -549,6 +576,8 @@ static void rel_write_arm(rel_channel_t* rc) {
     rc->wr_active = true;
     rc->wr_overflow = false;
     rc->wr_count = 0;
+    rc->wr_base = base;
+    rc->wr_missing = rc->missing;
     if (rc->missing || rc->bufptr < base || rc->bufptr >= base + rc->reclen) {
         rc->wr_pos = 0;         // fresh record start
     } else {
@@ -576,39 +605,58 @@ static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
     }
     rc->written = true;
     rc->wr_buf[rc->wr_count++] = byte;
+    if (rc->wr_pos + rc->wr_count < rc->reclen)
+        rel_set_buffer(rc, rc->wr_base + rc->wr_pos + rc->wr_count);
 }
 
-// Complete a staged record, zero-fill its tail and prepare its successor.
-static bool rel_write_commit(rel_channel_t* rc) {
+// Persist staged bytes. Only EOI/legacy record completion pads the unwritten tail.
+static bool rel_write_store(rel_channel_t* rc, bool complete) {
     uint8_t rec[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->wr_active = false;
-    if (rc->missing) {
+    if (!complete && rc->wr_count == 0) return true;
+    if (rc->wr_missing) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
         return false;
     }
-    uint32_t base = rc->record_base;
-    if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
-        set_status(rc->slot, st_code_read_error, 0, 0);
-        return false;
+    const uint32_t base = rc->wr_base;
+    const uint8_t* bytes = rc->wr_buf;
+    uint32_t offset = base + rc->wr_pos;
+    uint16_t count = rc->wr_count;
+    if (complete) {
+        rel_set_buffer(rc, base + rc->reclen - 1u);
+        if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
+            set_status(rc->slot, st_code_read_error, 0, 0);
+            return false;
+        }
+        memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
+        memset(rec + rc->wr_pos + rc->wr_count, 0,
+               rc->reclen - rc->wr_pos - rc->wr_count);
+        bytes = rec;
+        offset = base;
+        count = rc->reclen;
     }
-    memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
-    memset(rec + rc->wr_pos + rc->wr_count, 0,
-           rc->reclen - rc->wr_pos - rc->wr_count);
-    if (!diskchain_write(&rc->chain, base, rec, rc->reclen)) {
+    if (!diskchain_write(&rc->chain, offset, bytes, count)) {
         set_status(rc->slot, st_code_write_protect, 0, 0);
         log_info("ieee: REL write failed (read-only?) rec %lu",
                  (unsigned long) rc->cur_record);
         return false;
     }
+    rc->wr_count = 0;
+    return true;
+}
+
+// Complete a staged record, zero-fill its tail and prepare its successor.
+static bool rel_write_commit(rel_channel_t* rc) {
+    const uint32_t base = rc->wr_base;
+    if (!rel_write_store(rc, true)) return false;
     // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
     rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
     if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
     return true;
 }
 
-// Release a unit's channel, retaining the drive selected by native CLSDIR.
-static unsigned int close_channel(uint8_t unit, uint8_t channel,
-        unsigned int completion_slot) {
+// SCRUB before release, retaining failed allocations and native CLSDIR selection.
+static bool close_channel(uint8_t unit, uint8_t channel, bool scrub) {
     const uint8_t owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
         | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | channel;
     if (data_tx_owner == owner) {
@@ -617,8 +665,11 @@ static unsigned int close_channel(uint8_t unit, uint8_t channel,
     }
     rel_channel_t* const rc = rel_find(unit, channel);
     if (rc != NULL) {
-        if (get_drive_model(rc->slot) == drive_model_4040 || rc->written)
-            completion_slot = rc->slot;
+        if (scrub) {
+            if (!rel_write_store(rc, false)) return false;
+            if (get_drive_model(rc->slot) == drive_model_4040 || rc->written)
+                select_drive(rc->slot);
+        }
         rc->in_use = false;
         rc->wr_active = false;
     }
@@ -626,7 +677,7 @@ static unsigned int close_channel(uint8_t unit, uint8_t channel,
         file_state = file_channel_closed;
         streaming = false;
     }
-    return completion_slot;
+    return true;
 }
 
 // Starts counted command collection for both OPEN 15 and secondary address 15.
@@ -653,26 +704,28 @@ static void ch15_execute(uint8_t ch15_unit) {
             const bool sequential = channel == IEEE_CMD_CHANNEL_MASK
                 || (file_state != file_channel_closed
                     && file_unit == ch15_unit && file_chan == channel);
-            set_status(ch15_unit * DRIVES_PER_UNIT
-                       + drive_status[ch15_unit].drive,
+            set_status(selected_slot(ch15_unit),
                        sequential ? st_code_file_type_mismatch : st_code_no_channel, 0, 0);
         } else {
             const bool overflow = pos >= rc->reclen;
             if (overflow) pos = 0;
+            select_drive(rc->slot);
             rel_position(rc, rec, pos);
             set_status(rc->slot,
                        rc->missing ? st_code_record_missing
                            : overflow ? st_code_record_overflow : st_code_ok, 0, 0);
         }
     } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
-        uint8_t drive = drive_status[ch15_unit].drive;
+        uint8_t drive = selected_drive[ch15_unit];
         for (unsigned int index = 1; index < ch15_cmd_len; index++) {
             if (ch15_cmd[index] == '0' || ch15_cmd[index] == '1') {
                 drive = (uint8_t) (ch15_cmd[index] - '0');
                 break;
             }
         }
-        set_status(ch15_unit * DRIVES_PER_UNIT + drive, st_code_ok, 0, 0);
+        const unsigned int slot = ch15_unit * DRIVES_PER_UNIT + drive;
+        select_drive(slot);
+        set_status(slot, st_code_ok, 0, 0);
     } else {
         log_info("ieee: ch15 command %02x len %u (ignored)", ch15_cmd[0], ch15_cmd_len);
     }
@@ -709,6 +762,7 @@ static void resolve_open(uint8_t open_unit) {
         log_info("ieee: drive %u empty, using drive %u", slot, slot ^ 1u);
         slot ^= 1u;
     }
+    select_drive(slot);
 
     file_state = file_channel_closed;
     streaming = false;
@@ -762,6 +816,7 @@ static void resolve_open(uint8_t open_unit) {
         rc->in_use = true;
         rc->written = false;
         rc->wr_active = false;
+        rc->wr_count = 0;
         rc->slot = (uint8_t) slot;
         rc->chan = open_chan & 0x0F;
         rc->reclen = entry.record_len >= DISKIMAGE_REL_MIN_RECORD_LENGTH
@@ -813,7 +868,7 @@ static void dispatch_pending(uint8_t idle_unit) {
         }
         if (length > COMMAND_VALIDATION_LIMIT) {
             input->length = 0;
-            set_status(unit * DRIVES_PER_UNIT + drive_status[unit].drive, st_code_long_line, 0, 0);
+            set_status(selected_slot(unit), st_code_long_line, 0, 0);
         } else if (IEEE_CMD_IS_OPEN(input->secondary)
             && IEEE_CMD_CHANNEL(input->secondary) != IEEE_COMMAND_CHANNEL) {
             input->length = length;
@@ -843,7 +898,7 @@ static void push_status(unsigned int unit) {
     switch (status.code) {
         case st_code_ok:              text = " OK"; break;
         case st_code_read_error:      text = "READ ERROR"; break;
-        case st_code_write_protect:   text = "WRITE PROTECT ON"; break;
+        case st_code_write_protect:   text = " WRITE PROTECT ON"; break;
         case st_code_long_line:       text = "SYNTAX ERROR"; break;
         case st_code_record_missing:  text = "RECORD NOT PRESENT"; break;
         case st_code_record_overflow: text = "OVERFLOW IN RECORD"; break;
@@ -1043,18 +1098,18 @@ static void handle_command(uint8_t cmd) {
                 }
             } else {
                 const uint8_t channel = IEEE_CMD_CHANNEL(cmd);
-                unsigned int completion_slot = addressed_unit * DRIVES_PER_UNIT
-                    + drive_status[addressed_unit].drive;
+                bool closed = true;
                 if (channel == IEEE_COMMAND_CHANNEL) {
-                    for (int index = IEEE_COMMAND_CHANNEL - 1; index >= 0; --index)
-                        completion_slot = close_channel(addressed_unit,
-                            (uint8_t) index, completion_slot);
+                    for (int index = IEEE_COMMAND_CHANNEL - 1; index >= 0 && closed; --index)
+                        closed = close_channel(addressed_unit, (uint8_t) index, true);
                 } else {
-                    completion_slot = close_channel(addressed_unit, channel, completion_slot);
+                    closed = close_channel(addressed_unit, channel, channel != DEFAULT_CHANNEL);
                     ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                 }
-                if (channel > IEEE_SAVE_CHANNEL)
-                    set_status(completion_slot, st_code_ok, 0, 0);
+                if (channel > IEEE_SAVE_CHANNEL || !closed) {
+                    receive_states[addressed_unit].length = 0;
+                    if (closed) set_status(selected_slot(addressed_unit), st_code_ok, 0, 0);
+                }
             }
             break;
 
@@ -1192,7 +1247,7 @@ void ieee_drive_task(void) {
                 if (!input->listening) continue;
                 if (input->mode != receive_idle) {
                     const unsigned int capacity =
-                        get_drive_model(unit * DRIVES_PER_UNIT + drive_status[unit].drive)
+                        get_drive_model(selected_slot(unit))
                             == drive_model_4040
                         ? COMMAND_4040_RECEIVE_CAPACITY : COMMAND_RECEIVE_CAPACITY;
                     if (input->length < capacity)
@@ -1209,7 +1264,8 @@ void ieee_drive_task(void) {
                             if (rel_write_commit(wrc) && !overflow) {
                                 // DOS 2.7 WR45 clears status. DOS 2 WR51 does not.
                                 if (get_drive_model(wrc->slot) == drive_model_8050)
-                                    set_status(wrc->slot, st_code_ok, 0, 0);
+                                    set_status(wrc->chain.flat ? wrc->slot : selected_slot(unit),
+                                        st_code_ok, 0, 0);
                                 rel_write_arm(wrc);
                             }
                         }
