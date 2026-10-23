@@ -732,8 +732,8 @@ or 8250LP execution is claimed.
 | Board IEEE, shared hardware contract, and host encoding | All 407 selected seed-1 cases pass (124 host/contract, 243 firmware integration and 40 board IEEE), included in the complete wrapper run below. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
 | CI system wrapper | The failed head exhausted the outer 1800-second timeout with a serial child suite. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. The exact local wrapper finishes all 721 cases in 1098 seconds: 720 pass, with only the pre-existing local configuration-bit failure described below |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
-| Complete gateware suite | Not rerun in this follow-up. The prior full run identified two `top_tb` configuration failures from pre-existing temporary CRT/keyboard inversions in `top.sv`, which this change does not edit. All four affected IEEE variants pass |
-| Production firmware and FPGA bitstream | Production firmware builds successfully with the `RelWithDebInfo` preset. The FPGA bitstream was not rebuilt because the complete gateware suite remains blocked by those unrelated configuration failures. No new bitstream, timing-closure, or hardware-execution claim is made |
+| Complete gateware suite | All 33 selected Icarus/setup cases pass in an isolated checkout of the committed configuration, excluding the unrelated local CRT/keyboard inversions. All four affected IEEE variants also pass under Icarus and Verilator. The complete Verilator suite was not rerun locally |
+| Production firmware and FPGA bitstream | Production firmware builds with `RelWithDebInfo`. The isolated production FPGA preset completes synthesis, interface generation, P&R, bitstream generation and export. The exact CI timing gate passes with worst setup +0.361 ns and hold +0.116 ns using seed 0 and TIMING_3 P&R. No clocks or timing exceptions were relaxed |
 
 Firmware unit and integration tests use `Debug`, with assertion-enabled
 optimized model/runtime code kept separate.
@@ -756,7 +756,18 @@ All four affected IEEE RTL variants pass, including EOF checkpoints, no-GET
 termination, full-RX event retention, metadata ordering, and unchanged GET
 accounting. The counter-wrap fixture services the new bounded EOF metadata
 while retaining all 257 exact counter checks. No new FPGA bitstream or
-real-hardware capture is claimed.
+real-hardware capture was used for the functional assertions above.
+
+Clean CI subsequently exposed a -0.052 ns setup violation on the SID envelope's
+fall-to-rise half-cycle path, not an IEEE path. An isolated seed-0 build
+reproduced it exactly. Five alternative P&R seeds also failed setup.
+Timing-directed `TIMING_3` P&R closes the unchanged RTL and SDC at the original
+64 MHz, with the margins recorded above. A full production rebuild reproduces
+those margins, and a repeated build performs no FPGA work. Post-rebuild
+`check_timing -verbose` coverage is identical to baseline, including inherited
+unconstrained 6809 pins, eight CPU-data inputs and the PIA1-clock output.
+This establishes timing closure under the existing constraints, not complete
+constraint coverage or real-hardware execution.
 
 ## Commodore ROM integration coverage
 
