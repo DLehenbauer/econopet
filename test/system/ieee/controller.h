@@ -58,7 +58,13 @@ public:
     // Synchronously executes one CPU read, including production I/O injection.
     uint8_t read(econopet::CpuAddress address) { return transfer(address, 0, Access::Read); }
     // Send a checked IEEE command with ATN asserted and EOI released.
-    void command(ieee_test::Command value) { raw_send(ieee_test::command(value)); }
+    void command(ieee_test::Command value) {
+        raw_send(ieee_test::command(value));
+        if (value.category() == ieee_test::CommandCategory::Unlisten
+            || value.category() == ieee_test::CommandCategory::Untalk) release_atn();
+    }
+    // End an ATN phase without advertising readiness for another data byte.
+    void release_atn() { write(pet::ViaPortB, AcceptorBusy); }
     // Send payload with ATN released and an explicit final-byte EOI policy.
     void data(uint8_t value, ieee_test::Eoi eoi = ieee_test::Eoi::More) {
         raw_send(ieee_test::data(value, eoi));

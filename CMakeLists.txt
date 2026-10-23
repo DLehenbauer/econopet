@@ -243,16 +243,17 @@ endif()
 
 # Run the standalone suite so its host and contract test registration remains authoritative.
 if(BUILD_SYSTEM_TESTS)
-    # Budget the complete child suite separately from its five-minute per-test limits.
+    # Reserve the child suite's bounded parallelism in the parent scheduler too.
     set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 1800)
     add_test(
         NAME system_tests
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system
-            --output-on-failure --no-tests=error
+            --parallel 2 --output-on-failure --no-tests=error
     )
     set_tests_properties(system_tests PROPERTIES
         LABELS "sys;system;host;contract"
         TIMEOUT ${SYSTEM_TEST_SUITE_TIMEOUT_SECONDS}
+        PROCESSORS 2
         ENVIRONMENT "${ECONOPET_TEST_ENV}"
     )
 endif()

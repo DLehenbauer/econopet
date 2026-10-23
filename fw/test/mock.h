@@ -26,6 +26,14 @@ bool mock_breakpoint_halt_was_cleared(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
+// Queues a receive byte with explicit ATN and EOI metadata.
+void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi);
+// Queues an ordered ATN-release event without inventing a received byte.
+void mock_ieee_enqueue_atn_end(void);
+// Queues the first data DAV-release checkpoint for the specified listener units.
+void mock_ieee_enqueue_listen_end(uint8_t units);
+// Queue ordered source progress using the hardware owner unit/channel layout.
+void mock_ieee_enqueue_talk_event(uint8_t owner, uint8_t flags);
 // Returns the number of captured file-channel bytes.
 size_t mock_ieee_data_count(void);
 // Returns a captured file-channel byte, asserting the index is valid.
@@ -42,5 +50,13 @@ size_t mock_ieee_status_count(void);
 uint8_t mock_ieee_status_byte(size_t index);
 // Returns a captured command-channel byte's EOI marker.
 bool mock_ieee_status_eoi(size_t index);
-// Discards captured command-channel bytes without changing other FIFOs.
+// Models NRFD-triggered advancement through a prefix of captured status.
+void mock_ieee_consume_status(size_t count);
+// Discards status transport storage without fetching any response bytes.
+void mock_ieee_discard_status(void);
+// Accepts a repeated status secondary after this many TXS writes, flushing storage.
+void mock_ieee_repeat_status_after(size_t writes);
+// Reports whether firmware has paused new data/status presentations.
+bool mock_ieee_tx_paused(void);
+// Models fetching every captured command-channel byte.
 void mock_ieee_clear_status(void);

@@ -105,11 +105,24 @@
 #define ECONOPET_IEEE_CTRL_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_FLUSH_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK 0x08u
 
 // IEEE control-read masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u  // RX-head EOI, valid with RX_AVAIL.
+#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // Ordered boundary: zero = ATN release, else listener mask.
+#define ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK 0x20u // Status DAV awaits acknowledgement.
+#define ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK 0x40u // Ordered source progress/IDLE metadata.
+
+// TALK-event payload uses the owner unit/channel layout in bits 5:0.
+// No EOI_GET means native TLK20 returned to IDLE without GET.
+// EOI_GET records consumed data EOF. RECHECK marks the subsequent TALK1 boundary.
+#define ECONOPET_IEEE_RX_TALK_EOI_GET_MASK 0x80u
+#define ECONOPET_IEEE_RX_TALK_RECHECK_MASK 0x40u
+// Boundary payload: listeners whose first data DAV has released in this ATN phase.
+#define ECONOPET_IEEE_RX_LISTEN_UNITS_MASK 0x0fu
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u
@@ -124,7 +137,10 @@
 // IEEE data FIFO capacity guaranteed by TX room (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_TX_BURST_CHUNK 64u
 
-// TX reads report modulo-256 NRFD prefetch progress, unaffected by data flush.
-// SA writes bind data TX to a unit/channel. Zero retains unbound bench access.
+// TX/TXS reads report modulo-256 NRFD GET progress for data/status respectively.
+// FIFO replacement preserves counts. IFC and global flush reset them.
+// SA writes bind either source to a unit/channel. PAUSE holds new presentations.
+// Zero retains unbound bench access. Pausing preserves active DAV until NDAC.
 #define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
+#define ECONOPET_IEEE_TX_OWNER_PAUSE_MASK 0x40u
 #define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u

@@ -43,16 +43,22 @@ enum ieee_channel {
 #define TEST_RX_DATA_BATCH_SIZE (MOCK_IEEE_RX_CAPACITY - 1)
 #define TEST_REL_RECORD_COUNT 3u
 #define TEST_REL_WRAPPED_RECORD_COUNT 5u
+#define TEST_COMMAND_RECORD_COUNT 45u
+#define TEST_COMMAND_RECORD_LENGTH 2u
 
 // ---------------------------------------------------------------------------
 // IEEE command-stream helpers
 // ---------------------------------------------------------------------------
 
-// Queues ATN-tagged IEEE command bytes in their caller-supplied order.
+// Queue command phases, releasing ATN after UNLISTEN/UNTALK as KERNAL does.
 static void enqueue_commands(const uint8_t* commands, size_t count) {
     for (size_t index = 0; index < count; index++) {
         mock_ieee_enqueue_rx(true, commands[index]);
+        if (commands[index] == IEEE_CMD_UNLISTEN || commands[index] == IEEE_CMD_UNTALK)
+            mock_ieee_enqueue_atn_end();
     }
+    if (count != 0 && commands[count - 1] != IEEE_CMD_UNLISTEN
+        && commands[count - 1] != IEEE_CMD_UNTALK) mock_ieee_enqueue_atn_end();
 }
 
 // Enqueues one or more ATN-tagged command bytes. Listener data (filenames,
@@ -62,9 +68,10 @@ static void enqueue_commands(const uint8_t* commands, size_t count) {
     enqueue_commands(commands, count_of(commands)); \
 } while (0)
 
-// Queues an untagged PETSCII filename or command payload.
+// Queues a PETSCII filename or command with EOI only on its final byte.
 static void enqueue_name(const char* name) {
-    for (const char* c = name; *c != '\0'; c++) mock_ieee_enqueue_rx(false, (uint8_t) *c);
+    for (const char* c = name; *c != '\0'; c++)
+        mock_ieee_enqueue_rx_eoi(false, (uint8_t) *c, c[1] == '\0');
 }
 
 // Asserts the status FIFO holds exactly one expected DOS line with EOI on CR.
@@ -184,6 +191,24 @@ START_TEST(test_mock_ctrl_readback) {
     ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), 0);
     mock_ieee_clear_data();
     ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK);
+}
+END_TEST
+
+// RX-head EOI is retained until pop and never inferred from a following UNLISTEN.
+START_TEST(test_mock_rx_eoi_readback) {
+    const uint8_t room = ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
+    mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR),
+        room | ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_RX_ADDR), 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR),
+        room | ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK);
+    spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), room);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_RX_ADDR), IEEE_CMD_UNLISTEN);
+    spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR), room);
 }
 END_TEST
 
@@ -600,6 +625,7 @@ START_TEST(test_reset_preserves_mount_and_restores_power_on_status) {
     enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
     ck_assert_uint_gt(mock_ieee_status_count(), 0);
+    mock_ieee_consume_status(3);
 
     // Reset both DOS state and captured fabric responses while retaining media.
     ieee_drive_reset();
@@ -649,6 +675,23 @@ START_TEST(test_initialize_and_validate_commands_select_status_drive) {
     ieee_drive_task();
     assert_status("00, OK,00,00,1\r");
     mock_ieee_clear_status();
+
+    // Text commands use CMDSIZ, ignoring a digit beyond a penultimate CR.
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        const char* commands[] = {"I\r0", "V\r0"};
+        for (size_t command = 0; command < count_of(commands); ++command) {
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            enqueue_name(commands[command]);
+            enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
+                IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+            ieee_drive_task();
+            assert_status("00, OK,00,00,1\r");
+            mock_ieee_clear_status();
+        }
+    }
 
     // Switch explicitly to drive 0 and check the new retained default.
     enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
@@ -1019,7 +1062,7 @@ START_TEST(test_initialize_command_clears_error_status) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
 
     // Send I to the command channel, then read the cleared status.
-    mock_ieee_enqueue_rx(false, 'I');
+    mock_ieee_enqueue_rx_eoi(false, 'I', true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
     // I clears the pending file-not-found error to DOS status 00.
@@ -1096,7 +1139,7 @@ START_TEST(test_validate_command_clears_error_status) {
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
 
     // Validate the drive and read the resulting cleared status.
-    mock_ieee_enqueue_rx(false, 'V');
+    mock_ieee_enqueue_rx_eoi(false, 'V', true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
     // V clears the pending file-not-found error to DOS status 00.
@@ -1126,7 +1169,7 @@ START_TEST(test_relative_file_position_and_read) {
     mock_ieee_enqueue_rx(false, 'P');
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     mock_ieee_enqueue_rx(false, 2);
-    mock_ieee_enqueue_rx(false, 0);
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     ieee_drive_task();
 
@@ -1160,7 +1203,7 @@ START_TEST(test_relative_position_within_record) {
     mock_ieee_enqueue_rx(false, 2);
     mock_ieee_enqueue_rx(false, 0);
     // P selects record 2 at one-based offset 125, one byte before its boundary.
-    mock_ieee_enqueue_rx(false, 125);
+    mock_ieee_enqueue_rx_eoi(false, 125, true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     ieee_drive_task();
 
@@ -1190,7 +1233,7 @@ START_TEST(test_relative_position_past_end_reports_50) {
     mock_ieee_enqueue_rx(false, 'P');
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     mock_ieee_enqueue_rx(false, 7);
-    mock_ieee_enqueue_rx(false, 0);
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     ieee_drive_task();
 
@@ -1242,7 +1285,7 @@ START_TEST(test_relative_write_updates_existing_record) {
     mock_ieee_enqueue_rx(false, 'P');
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     mock_ieee_enqueue_rx(false, 1);
-    mock_ieee_enqueue_rx(false, 0);
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     ieee_drive_task();
 
@@ -1377,7 +1420,7 @@ START_TEST(test_native_empty_relative_records_are_not_skipped) {
         mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
         mock_ieee_enqueue_rx(false, 2);
         mock_ieee_enqueue_rx(false, 0);
-        mock_ieee_enqueue_rx(false, length);
+        mock_ieee_enqueue_rx_eoi(false, length, true);
         enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
             IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
         ieee_drive_task();
@@ -1404,10 +1447,943 @@ static void relative_position(unsigned int device, unsigned int channel,
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(channel));
     mock_ieee_enqueue_rx(false, (uint8_t) record);
     mock_ieee_enqueue_rx(false, (uint8_t) (record >> 8));
-    mock_ieee_enqueue_rx(false, offset);
+    mock_ieee_enqueue_rx_eoi(false, offset, true);
     enqueue_command(IEEE_CMD_UNLISTEN);
     ieee_drive_task();
 }
+
+// OPEN 15 and secondary 15 must execute the same counted binary P command.
+START_TEST(test_command_open_positions_relative_records) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t record_length = TEST_COMMAND_RECORD_LENGTH;
+    const uint8_t records[] = {2, '\r', ','};
+    uint8_t payload[TEST_COMMAND_RECORD_COUNT * TEST_COMMAND_RECORD_LENGTH];
+    for (size_t index = 0; index < sizeof(payload); ++index)
+        payload[index] = (uint8_t) (index + 1);
+    mount_native_relative_records(device, drive, type, "command-open.img",
+        record_length, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    // Include zero, CR and comma as binary record bytes, not string delimiters.
+    const uint8_t command_entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(command_entries); ++entry) {
+        for (size_t variant = 0; variant < count_of(records); ++variant) {
+            // Split service across the payload so collection must survive task calls.
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), command_entries[entry]);
+            mock_ieee_enqueue_rx(false, 'P');
+            mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            mock_ieee_enqueue_rx(false, records[variant]);
+            ieee_drive_task();
+            mock_ieee_enqueue_rx(false, 0);
+            mock_ieee_enqueue_rx_eoi(false, 1, true);
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+
+            // RECORD selects this file's drive and completes with native OK status.
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            char expected[IEEE_STATUS_LINE_CAPACITY];
+            snprintf(expected, sizeof(expected), "00, OK,00,00%s\r",
+                type == diskimage_type_d80 ? (drive == 0 ? ",0" : ",1") : "");
+            assert_status(expected);
+            mock_ieee_clear_status();
+
+            // The selected record must be read, not the previous/default record.
+            relative_talk(device, IEEE_CHANNEL_REL);
+            ck_assert_uint_eq(mock_ieee_data_count(), record_length);
+            const size_t offset = (records[variant] - 1) * record_length;
+            for (size_t index = 0; index < record_length; ++index) {
+                ck_assert_uint_eq(mock_ieee_data_byte(index), payload[offset + index]);
+                ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == record_length);
+            }
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// Missing and sequential channels have distinct RECORD errors and permit recovery.
+START_TEST(test_command_channel_errors_and_recovery) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    const unsigned int sequential_channel = IEEE_CHANNEL_REL + 1;
+    const unsigned int missing_channel = sequential_channel + 1;
+    mount_native_relative_records(device, drive, type, "command-errors.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    if (type == diskimage_type_d80)
+        mount_d80(device, drive ^ 1u, "sequential.d80", true);
+    else
+        mount_d64(device, drive ^ 1u, "sequential.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(sequential_channel));
+    enqueue_filename_for_drive(drive ^ 1u, "BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const unsigned int channels[] = {missing_channel, sequential_channel, IEEE_CHANNEL_COMMAND};
+    const char* const errors[] = {"70,NO CHANNEL", "64, FILE TYPE MISMATCH", "64, FILE TYPE MISMATCH"};
+    const char* const suffix = type == diskimage_type_d80 ? (drive == 0 ? ",0" : ",1") : "";
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t variant = 0; variant < count_of(channels); ++variant) {
+            // Establish the last selected drive without reading or advancing REL data.
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            mock_ieee_enqueue_rx(false, 'P');
+            mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(channels[variant]));
+            mock_ieee_enqueue_rx(false, 2);
+            mock_ieee_enqueue_rx(false, 0);
+            mock_ieee_enqueue_rx_eoi(false, 1, true);
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            char expected[IEEE_STATUS_LINE_CAPACITY];
+            snprintf(expected, sizeof(expected), "%s,00,00%s\r", errors[variant], suffix);
+            assert_status(expected);
+            mock_ieee_clear_status();
+
+            // A rejected P must leave the valid REL channel at its original record.
+            relative_talk(device, IEEE_CHANNEL_REL);
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[0]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[1]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+
+            // Recover through the same entry path, not just a fresh drive reset.
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            mock_ieee_enqueue_rx(false, 'P');
+            mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            mock_ieee_enqueue_rx(false, 2);
+            mock_ieee_enqueue_rx(false, 0);
+            mock_ieee_enqueue_rx_eoi(false, 1, true);
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            snprintf(expected, sizeof(expected), "00, OK,00,00%s\r", suffix);
+            assert_status(expected);
+            mock_ieee_clear_status();
+            relative_talk(device, IEEE_CHANNEL_REL);
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[3]);
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// UNLISTEN cannot complete P, whereas EOI completes it without an UNLISTEN.
+START_TEST(test_command_completion_requires_eoi) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    mount_native_relative_records(device, drive, type, "command-eoi.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+        enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+        mock_ieee_enqueue_rx(false, 'P');
+        mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, 3);
+        ieee_drive_task();
+        mock_ieee_enqueue_rx(false, 0);
+        mock_ieee_enqueue_rx(false, 1);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+
+        // These exact P bytes lack final EOI and must not change the record.
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[0]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[1]);
+        mock_ieee_clear_data();
+
+        // Another unit's completed command must not consume this unit's prefix.
+        const unsigned int peer = IEEE_FIRST_DEVICE
+            + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(peer), entries[entry]);
+        mock_ieee_enqueue_rx(false, 'P');
+        mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, 1);
+        mock_ieee_enqueue_rx_eoi(false, 0, true);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+
+        // EOI only marks pending work. Immediate TALK serves existing CHNDAT first.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+        mock_ieee_enqueue_rx_eoi(false, '\r', true);
+        ieee_drive_task();
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[3]);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+
+        // UNTALK reaches IDLE and dispatches the retained P selecting record three.
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[6]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[7]);
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+    }
+}
+END_TEST
+
+// Ordinary OPEN consumes its unit's shared input, but not a peer's partial command.
+START_TEST(test_open_consumes_shared_command_input) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const unsigned int peer = IEEE_FIRST_DEVICE
+        + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    mount_native_relative_records(device, drive, type, "shared-input.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (unsigned int same_unit = 0; same_unit < 2; ++same_unit) {
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            mock_ieee_enqueue_rx(false, 'P');
+            mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            mock_ieee_enqueue_rx(false, 3);
+            mock_ieee_enqueue_rx(false, 0);
+            mock_ieee_enqueue_rx(false, 1);
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+
+            // Even a failed ordinary OPEN consumes only its own collected input.
+            enqueue_command(IEEE_CMD_LISTEN(same_unit ? device : peer),
+                IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+            enqueue_name("MISSING");
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            if (same_unit) {
+                mock_ieee_enqueue_rx(false, 'P');
+                mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+                mock_ieee_enqueue_rx(false, 2);
+                mock_ieee_enqueue_rx(false, 0);
+                mock_ieee_enqueue_rx_eoi(false, 1, true);
+            } else {
+                mock_ieee_enqueue_rx_eoi(false, '\r', true);
+            }
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, IEEE_CHANNEL_REL);
+            const size_t offset = same_unit ? 2 : 4;
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[offset]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[offset + 1]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// Incomplete ordinary OPEN input survives UNLISTEN and completes only on EOI.
+START_TEST(test_open_input_requires_eoi) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4};
+    mount_native_relative_records(device, drive, type, "open-eoi.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    mock_ieee_enqueue_rx(false, (uint8_t) ('0' + drive));
+    mock_ieee_enqueue_rx(false, ':');
+    mock_ieee_enqueue_rx(false, 'B');
+    mock_ieee_enqueue_rx(false, 'A');
+    mock_ieee_enqueue_rx(false, 'S');
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_name("IC,L");
+    ieee_drive_task();
+
+    // The filename is pending until UNLISTEN returns this peripheral to IDLE.
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_talk(device, IEEE_CHANNEL_REL);
+    ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+    ck_assert_uint_eq(mock_ieee_data_byte(0), payload[0]);
+    ck_assert_uint_eq(mock_ieee_data_byte(1), payload[1]);
+    ck_assert(!mock_ieee_data_eoi(0));
+    ck_assert(mock_ieee_data_eoi(1));
+}
+END_TEST
+
+// LISTEN is cumulative across peripherals, while TALK clears only its own listener.
+START_TEST(test_virtual_units_retain_independent_listeners) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const unsigned int peer = IEEE_FIRST_DEVICE
+        + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "listener-roles.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    for (unsigned int talk_same_unit = 0; talk_same_unit < 2; ++talk_same_unit) {
+        relative_position(device, IEEE_CHANNEL_COMMAND, 1, 1);
+        relative_position(peer, IEEE_CHANNEL_COMMAND, 1, 1);
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND), IEEE_CMD_LISTEN(peer),
+            IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
+        if (talk_same_unit) enqueue_command(IEEE_CMD_TALK(device));
+        mock_ieee_enqueue_rx(false, 'P');
+        mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, 1);
+        mock_ieee_enqueue_rx(false, 0);
+        mock_ieee_enqueue_rx_eoi(false, 1, true);
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        char expected[IEEE_STATUS_LINE_CAPACITY];
+        snprintf(expected, sizeof(expected), "%s%s",
+            talk_same_unit ? "64, FILE TYPE MISMATCH,00,00" : "70,NO CHANNEL,00,00",
+            type == diskimage_type_d80 ? ",0\r" : "\r");
+        assert_status(expected);
+        mock_ieee_clear_status();
+        relative_talk(peer, IEEE_CHANNEL_COMMAND);
+        assert_status("70,NO CHANNEL,00,00\r");
+        mock_ieee_clear_status();
+    }
+
+    // A peer LISTEN retains the writer, but its own LISTEN restores default SA 0.
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    for (unsigned int same_unit = 0; same_unit < 2; ++same_unit) {
+        relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_rx(false, 'X');
+        enqueue_command(IEEE_CMD_LISTEN(same_unit ? device : peer));
+        mock_ieee_enqueue_rx(false, 'Y');
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+        relative_talk(device, IEEE_CHANNEL_REL);
+        const size_t length = same_unit ? 1 : TEST_COMMAND_RECORD_LENGTH;
+        ck_assert_uint_eq(mock_ieee_data_count(), length);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), 'X');
+        if (!same_unit) ck_assert_uint_eq(mock_ieee_data_byte(1), 'Y');
+        ck_assert(mock_ieee_data_eoi(length - 1));
+        mock_ieee_clear_data();
+    }
+}
+END_TEST
+
+// EOI marks pending work but does not split one continuous LISTEN into commands.
+START_TEST(test_command_dispatch_waits_for_idle) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    mount_native_relative_records(device, drive, type, "pending-command.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+        for (uint8_t record = 2; record <= 3; ++record) {
+            mock_ieee_enqueue_rx(false, 'P');
+            mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            mock_ieee_enqueue_rx(false, record);
+            mock_ieee_enqueue_rx(false, 0);
+            mock_ieee_enqueue_rx_eoi(false, 1, true);
+            ieee_drive_task();
+        }
+        enqueue_command(IEEE_CMD_UNLISTEN);
+        ieee_drive_task();
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[3]);
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+    }
+}
+END_TEST
+
+// NOTLK returns to IDLE without clearing the peripheral's TALK role.
+START_TEST(test_pending_command_dispatch_after_unopened_talk) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    mount_native_relative_records(device, drive, type, "notlk.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    enum { unopened_channel, closed_channel, default_channel };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (unsigned int selection = unopened_channel; selection <= default_channel; ++selection) {
+            if (selection == closed_channel) {
+                enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+                enqueue_filename_for_drive(drive, "BASIC,L");
+                enqueue_command(IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+                enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_CLOSE(IEEE_CHANNEL_REL + 1),
+                    IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+            }
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            ieee_drive_task();
+            // Only the final ATN release may dispatch. Do not use the UNLISTEN helper.
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            if (selection != default_channel)
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL + 1));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            // Reselect without UNTALK, which would otherwise hide the missing dispatch.
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[6]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[7]);
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// A consumed SEQ EOF is NOTRDY, unlike an EOF still queued for its final GET.
+START_TEST(test_pending_command_dispatch_after_sequential_eof) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    const unsigned int sequential = IEEE_CHANNEL_REL + 1;
+    mount_native_relative_records(device, drive, type, "eof-idle.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    if (type == diskimage_type_d80) mount_d80(device, drive ^ 1u, "plain.d80", true);
+    else mount_d64(device, drive ^ 1u, "plain.d64", true);
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (unsigned int consumed = 0; consumed <= 1; ++consumed) {
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(sequential));
+            enqueue_filename_for_drive(drive ^ 1u, "BASIC");
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, sequential);
+            const size_t length = mock_ieee_data_count();
+            ck_assert_uint_gt(length, 0);
+            ck_assert(mock_ieee_data_eoi(length - 1));
+            if (consumed) mock_ieee_clear_data();
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(sequential));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            if (!consumed) {
+                ck_assert_uint_eq(mock_ieee_data_count(), length);
+                mock_ieee_clear_data();
+                ieee_drive_task();
+            }
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// Native unread termination dispatches without advancing either source GET count.
+START_TEST(test_pending_command_dispatch_after_talk_without_get) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    mount_native_relative_records(device, drive, type, "no-get.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const uint8_t sources[] = {IEEE_CHANNEL_REL, IEEE_CHANNEL_COMMAND};
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t source = 0; source < count_of(sources); ++source) {
+            relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+            enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+            const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+            for (size_t index = 0; index < sizeof(command); ++index)
+                mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+            mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+            mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(sources[source]));
+            mock_ieee_enqueue_atn_end();
+            ieee_drive_task();
+            const uint8_t data_get = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
+            const uint8_t status_get = spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR);
+            mock_ieee_enqueue_talk_event(
+                ((device - IEEE_FIRST_DEVICE) << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT)
+                    | sources[source], 0);
+            ieee_drive_task();
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_TX_ADDR), data_get);
+            ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR), status_get);
+            enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+            ieee_drive_task();
+            ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+            ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+            ck_assert_uint_eq(mock_ieee_data_byte(1), payload[5]);
+            ck_assert(!mock_ieee_data_eoi(0));
+            ck_assert(mock_ieee_data_eoi(1));
+            mock_ieee_clear_data();
+        }
+    }
+}
+END_TEST
+
+// LSN21 returns only after DAV releases. LSN25 on SA1 remains an active listener.
+START_TEST(test_pending_command_dispatch_after_unopened_listen) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    mount_native_relative_records(device, drive, type, "listener-idle.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const uint8_t listeners[] = {IEEE_CHANNEL_REL + 1, IEEE_SAVE_CHANNEL};
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t listener = 0; listener < count_of(listeners); ++listener) {
+            for (unsigned int released = 0; released <= 1; ++released) {
+                relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+                enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+                const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+                for (size_t index = 0; index < sizeof(command); ++index)
+                    mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+                mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+                mock_ieee_enqueue_rx(true, IEEE_CMD_LISTEN(device));
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(listeners[listener]));
+                mock_ieee_enqueue_atn_end();
+                // Draining a data byte alone must not imply that DAV has released.
+                mock_ieee_enqueue_rx(false, 0x55);
+                ieee_drive_task();
+                if (released) {
+                    mock_ieee_enqueue_listen_end((uint8_t) (1u << (device - IEEE_FIRST_DEVICE)));
+                    ieee_drive_task();
+                }
+                enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+                ieee_drive_task();
+                const bool dispatched = released && listeners[listener] != IEEE_SAVE_CHANNEL;
+                const size_t offset = dispatched ? 4 : 0;
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[offset]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[offset + 1]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
+                mock_ieee_clear_data();
+                enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+                relative_talk(device, IEEE_CHANNEL_REL);
+                const size_t next = dispatched ? 6 : 4;
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[next]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[next + 1]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
+                mock_ieee_clear_data();
+            }
+        }
+    }
+}
+END_TEST
+
+// Deferred peer lookup may reuse TX after the selected source has already bound it.
+START_TEST(test_deferred_peer_open_preserves_selected_relative_response) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int peer = IEEE_FIRST_DEVICE
+        + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4};
+    const uint8_t peer_payload[] = {0xa1, 0xa2, 0xa3, 0xa4};
+    mount_native_relative_records(device, drive, type, "deferred-source.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    mount_native_relative_records(peer, drive, type, "deferred-peer.img",
+        TEST_COMMAND_RECORD_LENGTH, peer_payload, sizeof(peer_payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const char* const filenames[] = {"MISSING", "BASIC,L"};
+    for (size_t filename = 0; filename < count_of(filenames); ++filename) {
+        relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+        enqueue_command(IEEE_CMD_LISTEN(peer), IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+        enqueue_filename_for_drive(drive, filenames[filename]);
+        mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+        mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+        mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_atn_end();
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[0]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[1]);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[3]);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+    }
+}
+END_TEST
+
+// Native receive saturation and CMDSET's 58-byte limit are distinct contracts.
+START_TEST(test_command_length_boundaries_and_recovery) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6};
+    mount_native_relative_records(device, drive, type, "command-limits.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const size_t native_limit = 58;
+    const size_t receive_capacity = type == diskimage_type_d80 ? 59 : 41;
+    const size_t lengths[] = {40, 41, 42, 57, 58, 59, 60};
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t test = 0; test < count_of(lengths); ++test) {
+            const size_t length = lengths[test];
+            for (size_t trailing = 0; trailing <= 3; ++trailing) {
+                relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+                enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+                for (size_t index = 0; index < length; ++index) {
+                    const uint8_t position[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, 0, 1};
+                    const uint8_t byte = trailing != 0 && index == length - trailing
+                        ? '\r' : index < sizeof(position) ? position[index] : 'X';
+                    mock_ieee_enqueue_rx_eoi(false, byte, index + 1 == length);
+                    if (index % TEST_COMMAND_RECORD_LENGTH == 0) ieee_drive_task();
+                }
+                enqueue_command(IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+                relative_talk(device, IEEE_CHANNEL_COMMAND);
+                size_t retained = length < receive_capacity ? length : receive_capacity;
+                if (trailing != 0 && length - trailing == retained - 1) --retained;
+                else if (trailing != 0 && length - trailing == retained - 2) retained -= 2;
+                const bool overlong = retained > native_limit;
+                char expected[IEEE_STATUS_LINE_CAPACITY];
+                snprintf(expected, sizeof(expected), "%s%s\r",
+                    overlong ? "32,SYNTAX ERROR,00,00" : "00, OK,00,00",
+                    type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+                assert_status(expected);
+                mock_ieee_clear_status();
+                relative_talk(device, IEEE_CHANNEL_REL);
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[overlong ? 0 : 2]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[overlong ? 1 : 3]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
+                mock_ieee_clear_data();
+                relative_position(device, IEEE_CHANNEL_REL, 3, 1);
+                relative_talk(device, IEEE_CHANNEL_REL);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[4]);
+                mock_ieee_clear_data();
+            }
+        }
+    }
+}
+END_TEST
+
+// CR-valued binary fields remain readable after CMDSET adjusts the parsing size.
+START_TEST(test_binary_position_retains_cr_fields) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t record_length = 13;
+    uint8_t payload[3 * 13];
+    for (size_t index = 0; index < sizeof(payload); ++index) payload[index] = (uint8_t) (index + 1);
+    mount_native_relative_records(device, drive, type, "binary-cr.img",
+        record_length, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        const uint8_t commands[][5] = {
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, 0, '\r'},
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, '\r', 1},
+            {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 2, '\r', '\r'},
+        };
+        for (size_t command = 0; command < count_of(commands); ++command) {
+            enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), entries[entry]);
+            for (size_t index = 0; index < sizeof(commands[command]); ++index)
+                mock_ieee_enqueue_rx_eoi(false, commands[command][index],
+                    index + 1 == sizeof(commands[command]));
+            enqueue_command(IEEE_CMD_UNLISTEN);
+            ieee_drive_task();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            char expected[IEEE_STATUS_LINE_CAPACITY];
+            snprintf(expected, sizeof(expected), "%s%s\r",
+                command == 0 ? "00, OK,00,00" : "50,RECORD NOT PRESENT,00,00",
+                type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+            assert_status(expected);
+            mock_ieee_clear_status();
+            if (command == 0) {
+                relative_talk(device, IEEE_CHANNEL_REL);
+                ck_assert_uint_eq(mock_ieee_data_count(), 1);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2 * record_length - 1]);
+                ck_assert(mock_ieee_data_eoi(0));
+                mock_ieee_clear_data();
+            }
+        }
+    }
+}
+END_TEST
+
+// A media-model replacement cannot change the shape of an already-read response.
+START_TEST(test_partial_status_retains_format_across_model_change) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "old-model.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char error[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(error, sizeof(error), "70,NO CHANNEL,00,00%s\r",
+        type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+    assert_status(error);
+    const size_t prefix = strlen(error) - 1;
+    mock_ieee_consume_status(prefix);
+    const bool next_d80 = type == diskimage_type_d64;
+    mount_image(device, drive, "new-model.img",
+        next_d80 ? diskimage_test_make_d80() : diskimage_test_make_d64(),
+        next_d80 ? DISKIMAGE_D80_SIZE : DISKIMAGE_D64_SIZE, true);
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    assert_status("\r");
+    mock_ieee_clear_status();
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char ok[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(ok, sizeof(ok), "00, OK,00,00%s\r", next_d80 ? (drive ? ",1" : ",0") : "");
+    assert_status(ok);
+}
+END_TEST
+
+// A selection accepted during TXS filling must keep its truncated suffix paused.
+START_TEST(test_status_selection_interrupts_publication) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "status-publication.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    char error[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(error, sizeof(error), "70,NO CHANNEL,00,00%s\r",
+        type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "");
+    const size_t prefixes[] = {0, 3};
+    for (size_t test = 0; test < count_of(prefixes); ++test) {
+        const size_t prefix = prefixes[test];
+        for (size_t discarded = 1; discarded <= strlen(error) - prefix; ++discarded) {
+            relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+            if (prefix != 0) {
+                relative_talk(device, IEEE_CHANNEL_COMMAND);
+                mock_ieee_consume_status(prefix);
+            }
+            mock_ieee_repeat_status_after(discarded);
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            ck_assert_uint_eq(mock_ieee_status_count(), strlen(error) - prefix - discarded);
+            ck_assert(mock_ieee_tx_paused());
+            ieee_drive_task();
+            assert_status(error + prefix);
+            mock_ieee_clear_status();
+            relative_talk(device, IEEE_CHANNEL_COMMAND);
+            assert_status(type == diskimage_type_d80
+                ? (drive ? "00, OK,00,00,1\r" : "00, OK,00,00,0\r")
+                : "00, OK,00,00\r");
+            mock_ieee_clear_status();
+        }
+    }
+}
+END_TEST
+
+// Status selection/transport discard cannot acknowledge the terminal CR.
+START_TEST(test_status_progress_survives_reselection) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2};
+    mount_native_relative_records(device, drive, type, "status-progress.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    char error[IEEE_STATUS_LINE_CAPACITY], ok[IEEE_STATUS_LINE_CAPACITY];
+    const char* const suffix = type == diskimage_type_d80 ? (drive ? ",1" : ",0") : "";
+    snprintf(error, sizeof(error), "70,NO CHANNEL,00,00%s\r", suffix);
+    snprintf(ok, sizeof(ok), "00, OK,00,00%s\r", suffix);
+    const size_t prefixes[] = {0, 3, strlen(error) - 1};
+    // Repetition also crosses the modulo-256 status GET counter boundary.
+    const size_t repetitions = 12;
+    for (size_t iteration = 0; iteration < repetitions; ++iteration) {
+        const size_t prefix = iteration % count_of(prefixes);
+        relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        assert_status(error);
+        mock_ieee_consume_status(prefixes[prefix]);
+        mock_ieee_discard_status();
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        assert_status(error + prefixes[prefix]);
+        mock_ieee_clear_status();
+        relative_talk(device, IEEE_CHANNEL_COMMAND);
+        assert_status(ok);
+        mock_ieee_clear_status();
+    }
+
+    // Finishing an older response must not acknowledge a newer error generation.
+    relative_position(device, IEEE_CHANNEL_REL + 1, 1, 1);
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    assert_status(error);
+    mock_ieee_consume_status(3);
+    relative_position(device, IEEE_CHANNEL_REL, 99, 1);
+    mock_ieee_clear_status();
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    char missing[IEEE_STATUS_LINE_CAPACITY];
+    snprintf(missing, sizeof(missing), "50,RECORD NOT PRESENT,00,00%s\r", suffix);
+    assert_status(missing);
+
+    // Remount discards transport, not the already fetched status prefix.
+    mock_ieee_consume_status(3);
+    ck_assert(ieee_drive_mount(device_slot(device, drive), "status-progress.img"));
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    assert_status(missing + 3);
+    mock_ieee_clear_status();
+}
+END_TEST
 
 // Retains unconsumed bytes across retalk, status, another channel, and FIFO discard.
 START_TEST(test_relative_continuation_tracks_prefetch_not_queueing) {
@@ -1754,12 +2730,13 @@ START_TEST(test_relative_channels_are_isolated_between_units) {
     enqueue_command(IEEE_CMD_LISTEN(source_device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
     enqueue_name("DATA,L");
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_LISTEN(target_device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    ieee_drive_task();
     enqueue_name("DATA,L");
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_LISTEN(source_device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
     mock_ieee_enqueue_rx(false, 'P');
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     mock_ieee_enqueue_rx(false, 2);
-    mock_ieee_enqueue_rx(false, 0);
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
     // TALK the untouched target unit, which must remain at record 1.
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(target_device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     ieee_drive_task();
@@ -1881,7 +2858,7 @@ START_TEST(test_hdd_mount_position_and_read) {
     mock_ieee_enqueue_rx(false, 'P');
     mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     mock_ieee_enqueue_rx(false, 2);
-    mock_ieee_enqueue_rx(false, 0);
+    mock_ieee_enqueue_rx_eoi(false, 0, true);
     enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
     ieee_drive_task();
 
@@ -1978,6 +2955,7 @@ Suite* ieee_drive_suite(void) {
     TCase* test_case = tcase_create("d64");
     tcase_add_checked_fixture(test_case, setup, teardown);
     tcase_add_test(test_case, test_mock_ctrl_readback);
+    tcase_add_test(test_case, test_mock_rx_eoi_readback);
     tcase_add_test(test_case, test_mock_ctrl_flush_readback);
     tcase_add_test(test_case, test_shared_format_constants);
     tcase_add_test(test_case, test_mount_path_boundary);
@@ -2034,6 +3012,40 @@ Suite* ieee_drive_suite(void) {
     // Cover REL records, mutable/read-only media, and the HDD extension.
     tcase_add_loop_test(test_case, test_relative_file_position_and_read,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_loop_test(test_case, test_command_open_positions_relative_records,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_command_channel_errors_and_recovery,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_command_completion_requires_eoi,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_open_consumes_shared_command_input,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_open_input_requires_eoi,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_virtual_units_retain_independent_listeners,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_command_dispatch_waits_for_idle,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_unopened_talk,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_sequential_eof,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_talk_without_get,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_unopened_listen,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_deferred_peer_open_preserves_selected_relative_response,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_status_progress_survives_reselection,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_status_selection_interrupts_publication,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_binary_position_retains_cr_fields,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_partial_status_retains_format_across_model_change,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_relative_position_within_record,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_relative_position_past_end_reports_50,

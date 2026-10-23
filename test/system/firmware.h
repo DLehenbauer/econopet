@@ -16,7 +16,7 @@ extern "C" {
 #include "test_support.h"
 }
 
-// RX observations share the wire record shape, with EOI explicitly unobserved.
+// RX observations retain the DAV-sampled byte, ATN and EOI.
 using IeeeRxRecord = ieee_test::Record;
 class FirmwareRxTrace;
 
@@ -46,7 +46,7 @@ public:
     void service();
     // Service this board while the session lives, rejecting closed or expired owners.
     RunConfiguration::Service service_adapter();
-    // Own RX storage and registration, recording absolute production status/RX reads.
+    // Own RX storage and registration for absolute production CTRL/STATUS/RX reads.
     FirmwareRxTrace trace_rx();
 
 private:
@@ -57,9 +57,9 @@ private:
     test_observation::TraceSource<IeeeRxRecord> rx_source_;
 };
 
-// Records adjacent absolute status/RX reads, with no intervening board cycles.
+// Records adjacent absolute CTRL/STATUS/RX reads, with no intervening board cycles.
 // This semantic trace does not decode arbitrary pipelined or burst traffic.
-// RX contains byte/ATN only. Use ieee_test::WireTrace for EOI evidence.
+// Use ieee_test::WireTrace for independent physical EOI evidence.
 class FirmwareRxTrace : public test_observation::ScopedRecorder<IeeeRxRecord> {
 public:
     FirmwareRxTrace(const FirmwareRxTrace&) = delete;

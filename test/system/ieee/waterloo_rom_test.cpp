@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include <cstddef>
 #include <cstdint>
-#include <stdexcept>
-#include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 
@@ -22,13 +22,14 @@ using Program = test_asm::mc6809::Program<System>;
 using test_asm::imm;
 using namespace ieee_test;
 
-constexpr auto ControlBlock = WaterlooWorkspace::Block;
-enum class FcbKind { Ieee, Disk };
 constexpr uint8_t AbsentDeviceStatus = 0x03;
 constexpr econopet::Cycles ServiceSliceCycles = 1000;
 constexpr uint8_t ViaExternalIdle = pet::Ndac | pet::NrfdInput | pet::Dav;
-// The RED fixture historically writes bit 3, reserved by the current control register.
-constexpr uint8_t LegacyControlBit3 = 0x08;
+constexpr econopet::CpuAddress GlobalStatus{0x006a}, ActiveRole{0x0077};
+constexpr econopet::CpuAddress ReceivedBytes{0x0800}, ReceivedFlags{0x0900};
+constexpr uint8_t EoiReceived = 0x01;
+// Revision-12 BF98 takes its second word argument at 2,S (after JSR).
+constexpr test_asm::mc6809::Instruction<2> PushD{{0x34, 0x06}}, DropWord{{0x32, 0x62}};
 
 // Share firmware ownership, seed reporting and failure diagnostics across ROM cases.
 class WaterlooRomIeee : public FirmwareTest {
@@ -121,152 +122,137 @@ void run_waterloo_termination_case(System& system, FirmwareTestSession& firmware
         .every(ServiceSliceCycles, ServiceTiming::AfterSlice, firmware.service_adapter());
     const auto result = rom.run(program, rom.results, execution, rom.name(routine) + " firmware service");
     EXPECT_THAT(rx_trace.capture(result).records(),
-        testing::ElementsAre(fifo_record(command(expected))));
+        testing::ElementsAre(command(expected)));
     EXPECT_THAT(wire.records(), testing::ElementsAre(command(expected)));
 }
 
-// Runs a Waterloo ROM entry with the shared IEEE file-control-block setup.
-// Preserve historical prepared-state probes without treating them as passing compatibility coverage.
-void run_waterloo_red_case(System& system, WaterlooRoutine routine,
-                           FcbKind fcb_kind = FcbKind::Ieee) {
-    WaterlooFixture scenario(system);
-    const auto diagnostic = scenario.name(routine);
-    const auto name = diagnostic.c_str();
-    // Preserve the legacy control-block bytes, adding disk fields only on request.
+// Check ByteOut_'s absent-device branch without addressing a listener.
+TEST_F(WaterlooRomIeee, Waterloo_BE6F_absent_device) {
+    constexpr econopet::CpuAddress AbsentDeviceBranch{0xbe90}, OutputTimeoutBranch{0xbee1};
+    WaterlooFixture rom(system);
     system.io().via().inputs([](auto& inputs) { inputs.port_b = ViaExternalIdle; });
-    // Pass the same control-block address in X and D at the original entry.
-    Program program(scenario, scenario.code);
-    program.emit(test_asm::mc6809::lds_imm(scenario.stack_top()));
-    scenario.device(program);
-    if (fcb_kind == FcbKind::Disk) {
-        const uint8_t filename[] = {'T', 'E', 'S', 'T'};
-        scenario.file(program, filename);
-    }
-    scenario.init_ieee(program);
-    program.emit(test_asm::mc6809::ldd_imm(static_cast<uint16_t>(ControlBlock.value())));
-    program.jsr(scenario.entry(routine));
-    program.emit(test_asm::mc6809::ldaa_imm(0x5a));
-    program.emit(test_asm::mc6809::sta_abs(CompletionAddress));
-    program.emit(test_asm::mc6809::bra(program.mark("park")));
-    program.install();
-    // Retain the original control write and bounded return-marker expectation.
-    system.spi().write(fpga::Register::IeeeControl,
-        fpga::IeeeControl{fpga::IeeeControlBit::Enabled}.bits() | LegacyControlBit3);
-    system.cpu(CPU_SOFT_6809).start(program.entry());
-    system.tick(WaterlooBudget);
-    if (system.peek(econopet::SramAddress{CompletionAddress.value()}) != 0x5a) {
-        throw std::runtime_error(std::string("Waterloo ") + name
-                                 + " did not return to its RAM harness");
-    }
-}
-
-// TODO: The C++ external-PIA harness does not yet reproduce the legacy
-// bench's no-device handshake through $BE6F. Keep the ROM contract visible.
-// Retains ByteOut_'s absent-device status and empty-FIFO expectations.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BE6F_absent_device) {
-    WaterlooFixture scenario(system);
-    system.io().via().inputs([](auto& inputs) { inputs.port_b = ViaExternalIdle; });
-    // Initialize the active block and send LISTEN through the byte-output entry.
-    Program program(scenario, scenario.code);
-    program.emit(test_asm::mc6809::lds_imm(scenario.stack_top()));
-    scenario.device(program);
-    scenario.init_ieee(program);
-    program.emit(test_asm::mc6809::ldd_imm(IEEE_CMD_LISTEN(DeviceAddress)));
-    program.jsr(scenario.entry(WaterlooRoutine::ByteOut));
-    program.jsr(scenario.entry(WaterlooRoutine::AtnUp));
-    program.emit(test_asm::mc6809::ldaa_imm(0x5a));
-    program.emit(test_asm::mc6809::sta_abs(CompletionAddress));
-    program.emit(test_asm::mc6809::bra(program.mark("park")));
-    program.install();
-    // Require an absent-device result without admitting a receive record.
-    system.spi().write(fpga::Register::IeeeControl,
-        fpga::IeeeControl{fpga::IeeeControlBit::Enabled}.bits());
-    system.cpu(CPU_SOFT_6809).start(program.entry());
-    system.tick(WaterlooBudget);
+    auto test = rom.program();
+    const auto status = test.byte("absent-device status");
+    auto wire = system.trace_ieee();
+    const auto checkpoint = system.cpu(CPU_SOFT_6809).peek_fetch_checkpoint();
+    // Keep ATN released, so enabled firmware cannot create a listener handshake.
+    const auto result = test.within(WaterlooBudget)
+        .every(ServiceSliceCycles, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .run([&](auto& p) {
+            rom.init_ieee(p);
+            rom.device(p);
+            p.lda(imm(0)).sta(GlobalStatus)
+             .ldd(test_asm::imm16(IEEE_CMD_LISTEN(DeviceAddress)))
+             .jsr(rom.entry(WaterlooRoutine::ByteOut))
+             .lda(WaterlooWorkspace::Block).sta(status);
+        });
+    // $BE90 calls B653 for global status, then BRA at $BE96 reaches $BEE4
+    // to store status 3 in the active block, bypassing the timeout call at $BEE1.
+    EXPECT_EQ(result[status], AbsentDeviceStatus);
+    EXPECT_EQ(system.peek(econopet::SramAddress{GlobalStatus.value()}), AbsentDeviceStatus);
+    EXPECT_TRUE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(AbsentDeviceBranch, checkpoint));
+    EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(OutputTimeoutBranch, checkpoint));
     require_drained_sequence(system, {}, ByteBudget, "Waterloo absent device");
-    if (system.peek(econopet::SramAddress{CompletionAddress.value()}) != 0x5a || system.peek(econopet::SramAddress{ControlBlock.value()}) != AbsentDeviceStatus) {
-        throw std::runtime_error("Waterloo BE6F did not report an absent IEEE device");
-    }
+    EXPECT_THAT(wire.records(), testing::IsEmpty());
 }
 
-// Historical probes waited at $EE33 despite real SPI service every 1,000 cycles.
-// Preserve their explicit setup, after-slice servicing and disabled policy.
-// Retains UNListen's single ATN-tagged command expectation.
-TEST_F(WaterlooRomIeee, DISABLED_UNListen) {
+// Verify UNListen's single ATN-tagged command through both RX and wire evidence.
+TEST_F(WaterlooRomIeee, UNListen) {
     run_waterloo_termination_case(system, firmware, WaterlooRoutine::Unlisten, Unlisten);
 }
 
-// Retains UNTalk's single ATN-tagged command expectation.
-TEST_F(WaterlooRomIeee, DISABLED_UNTalk) {
+// Verify UNTalk's single ATN-tagged command through both RX and wire evidence.
+TEST_F(WaterlooRomIeee, UNTalk) {
     run_waterloo_termination_case(system, firmware, WaterlooRoutine::Untalk, Untalk);
 }
 
-// These are direct counterparts of the RED Waterloo cases in ieee_sys_tb.
-// They retain the ROM entry points and file-control-block fixtures while the
-// drive-side exchanges are completed under test-driven development.
-// Retains the prepared LISTEN-addressing entry and its control-block fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_C072_LISTEN) {
-    run_waterloo_red_case(system, WaterlooRoutine::Listen);
-}
+// Execute revision-12 BF98's binary P command, then read the positioned record.
+// The retired RED probes checked only return, not their named disk operations.
+TEST_F(WaterlooRomIeee, Waterloo_BF98_REL_position) {
+    constexpr uint8_t RecordLength = 2;
+    constexpr uint16_t RecordNumber = 3;
+    constexpr size_t DirectoryFileType = 2;
+    constexpr uint8_t Filename[] = {'R', 'E', 'C', ',', 'L', 0};
+    auto image = disk_fixture::D64{}.seq("REC", {1, 2, 3, 4, 5, 6}).bytes();
+    // Decorate the bounded data chain for positioning, not side-sector validation.
+    const auto directory = disk_fixture::D64::offset(18, 1);
+    image[directory + DirectoryFileType] = 0x80 | DISKIMAGE_FTYPE_REL;
+    image[directory + DISKIMAGE_DIRECTORY_REL_LENGTH_OFFSET] = RecordLength;
+    firmware.mount(image, "position.d64");
 
-// Retains the prepared TALK-addressing entry and its control-block fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_C0DD_TALK) {
-    run_waterloo_red_case(system, WaterlooRoutine::Talk);
-}
-
-// Retains the EOI-byte entry and its original return expectation.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BE5F_EOI_byte) {
-    run_waterloo_red_case(system, WaterlooRoutine::EoiByte);
-}
-
-// Retains the final-byte/UNLISTEN entry and its original return expectation.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BE53_final_byte) {
-    run_waterloo_red_case(system, WaterlooRoutine::FinalByte);
-}
-
-// Retains the generic OPEN entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BCD0_OPEN) {
-    run_waterloo_red_case(system, WaterlooRoutine::Open, FcbKind::Disk);
-}
-
-// Retains the CLOSE entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BD11_CLOSE) {
-    run_waterloo_red_case(system, WaterlooRoutine::Close, FcbKind::Disk);
-}
-
-// Retains the REL OPEN entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BD51_REL_OPEN) {
-    run_waterloo_red_case(system, WaterlooRoutine::RelOpen, FcbKind::Disk);
-}
-
-// Retains the SCRATCH entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BD96_SCRATCH) {
-    run_waterloo_red_case(system, WaterlooRoutine::Scratch, FcbKind::Disk);
-}
-
-// Retains the RENAME entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BDC6_RENAME) {
-    run_waterloo_red_case(system, WaterlooRoutine::Rename, FcbKind::Disk);
-}
-
-// Retains the drive-initialize entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BE23_initialize) {
-    run_waterloo_red_case(system, WaterlooRoutine::Initialize, FcbKind::Disk);
-}
-
-// Retains the byte-input entry and its original return expectation.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BEFB_input) {
-    run_waterloo_red_case(system, WaterlooRoutine::Input);
-}
-
-// Retains the REL-position entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BF98_REL_position) {
-    run_waterloo_red_case(system, WaterlooRoutine::RelPosition, FcbKind::Disk);
-}
-
-// Retains the status-reader entry with the legacy disk fixture.
-TEST_F(WaterlooRomIeee, DISABLED_Waterloo_BFEF_status) {
-    run_waterloo_red_case(system, WaterlooRoutine::Status, FcbKind::Disk);
+    WaterlooFixture rom(system);
+    auto test = rom.program(test_asm::ProgramMode::Phased);
+    const auto received = test.data("positioned record", ReceivedBytes, RecordLength,
+        test_asm::Capture::Yes);
+    const auto flags = test.data("positioned EOI flags", ReceivedFlags, RecordLength,
+        test_asm::Capture::Yes);
+    const auto status = test.byte("positioned input status");
+    auto wire = system.trace_ieee();
+    auto rx = firmware.trace_rx();
+    auto opened = test.within(WaterlooBudget)
+        .every(ServiceSliceCycles, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .pause([&](auto& p) {
+            rom.init_ieee(p);
+            rom.device(p, DeviceAddress, FileChannel);
+            rom.file(p, Filename);
+            p.lda(imm(0)).sta(ActiveRole).sta(GlobalStatus)
+             .lda(imm(1)).sta(WaterlooWorkspace::WaitParameterLow)
+             .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Open));
+            p.pause("REL OPEN unlistened");
+            // BF98 reads the record argument above the return address on S.
+            p.ldd(test_asm::imm16(RecordNumber));
+            p.emit(PushD);
+            p.ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::RelPosition));
+            p.emit(DropWord);
+            p.pause("REL position unlistened");
+            // OPEN and P complete at idle after UNLISTEN, before TALK is serviced.
+            p.ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Talk))
+             .lda(imm(0)).sta(WaterlooWorkspace::DiskFlags);
+            for (size_t i = 0; i < RecordLength; ++i)
+                p.jsr(rom.entry(WaterlooRoutine::Input)).stb(received.byte(i).address())
+                 .lda(WaterlooWorkspace::DiskFlags).sta(flags.byte(i));
+            p.lda(WaterlooWorkspace::Block).sta(status)
+             .jsr(rom.entry(WaterlooRoutine::Untalk));
+        });
+    // Park the CPU at each idle boundary so dispatch cannot depend on EOI alone.
+    const auto service_idle = [&] {
+        system.execution().within(ByteBudget).service(firmware.service_adapter())
+            .until([](const System& board) { return !board.snapshot().ieee_rx_ready_o; })
+            .run("Waterloo idle command dispatch");
+        firmware.service();
+    };
+    ASSERT_EQ(opened.name(), "REL OPEN unlistened");
+    service_idle();
+    // Each resume owns a fresh execution configuration, including SPI service.
+    auto position_execution = system.execution();
+    position_execution.within(WaterlooBudget)
+        .every(ServiceSliceCycles, ServiceTiming::AfterSlice, firmware.service_adapter());
+    auto positioned = test.resume(opened, position_execution);
+    ASSERT_EQ(positioned.name(), "REL position unlistened");
+    service_idle();
+    auto read_execution = system.execution();
+    read_execution.within(WaterlooBudget)
+        .every(ServiceSliceCycles, ServiceTiming::AfterSlice, firmware.service_adapter());
+    const auto complete = test.resume(positioned, read_execution);
+    ASSERT_TRUE(complete.complete());
+    const auto result = test.capture(complete);
+    EXPECT_EQ(result[received], (std::vector<uint8_t>{5, 6}));
+    EXPECT_EQ(result[flags.byte(0)] & EoiReceived, 0);
+    EXPECT_EQ(result[flags.byte(1)] & EoiReceived, EoiReceived);
+    EXPECT_EQ(result[status], 0);
+    EXPECT_EQ(system.peek(econopet::SramAddress{GlobalStatus.value()}), 0);
+    // BF98 sends raw channel 2, little-endian record 3, and position zero.
+    const std::vector<Record> sent{
+        command(Listen(Device{DeviceAddress})), command(Open(Channel{FileChannel})),
+        data('R'), data('E'), data('C'), data(','), data('L', Eoi::Last), command(Unlisten),
+        command(Listen(Device{DeviceAddress})), command(Secondary(Channel{CommandChannel})),
+        data('P'), data(FileChannel), data(3), data(0), data(0, Eoi::Last), command(Unlisten),
+        command(Talk(Device{DeviceAddress})), command(Secondary(Channel{FileChannel})),
+        command(Untalk)};
+    EXPECT_THAT(rx.records(), testing::ElementsAreArray(sent));
+    auto expected = sent;
+    expected.insert(expected.end() - 1, {data(5), data(6, Eoi::Last)});
+    require_sequence(wire.records(), expected, "Waterloo BF98 positioned record and final EOI");
 }
 
 } // namespace

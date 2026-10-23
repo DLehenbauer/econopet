@@ -42,7 +42,8 @@ enum class IeeeControlBit : uint8_t {
     Enabled = ECONOPET_IEEE_CTRL_ENABLE_MASK,
     Flush = ECONOPET_IEEE_CTRL_FLUSH_MASK,
     DataFlush = ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK,
-    All = Enabled | Flush | DataFlush,
+    StatusFlush = ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK,
+    All = Enabled | Flush | DataFlush | StatusFlush,
 };
 using IeeeControl = econopet::Flags<IeeeControlBit>;
 
@@ -50,7 +51,11 @@ enum class IeeeControlStatusBit : uint8_t {
     Enabled = ECONOPET_IEEE_CTRL_RD_ENABLE_MASK,
     TxRoom = ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK,
     DataActive = ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK,
-    All = Enabled | TxRoom | DataActive,
+    RxEoi = ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK,
+    RxAtnEnd = ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK,
+    RxTalkEvent = ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK,
+    StatusActive = ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK,
+    All = Enabled | TxRoom | DataActive | RxEoi | RxAtnEnd | StatusActive | RxTalkEvent,
 };
 using IeeeControlStatus = econopet::Flags<IeeeControlStatusBit>;
 

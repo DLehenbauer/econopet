@@ -153,18 +153,18 @@ package common_pkg;
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.
-    // STATUS ignores writes. TX reads the modulo-256 data prefetch count.
-    // SA writes bind data TX to {valid, reserved, unit[1:0], channel[3:0]}.
-    // Other TX/TXS registers read as zero and ignore writes
-    // when their FIFO is full. RX pops and TX/TXS pushes are suppressed during IFC.
+    // STATUS ignores writes. TX/TXS read their modulo-256 GET prefetch counts.
+    // SA writes bind either source to {valid, pause, unit[1:0], channel[3:0]}.
+    // TX_LAST/TXS_LAST read as zero. FIFO writes are ignored when full.
+    // RX pops and TX/TXS pushes are suppressed during IFC.
     localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_CTRL = 0;     // Asymmetric control writes and read-back flags below.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_STATUS = 1;   // Read-only FIFO and bus status.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_RX = 2;       // Read peeks at the head byte, any write pops if nonempty.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;       // Read prefetch count, write data byte.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX_LAST = 4;  // Write enqueues a data-channel byte with EOI.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read secondary, write data TX owner.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;      // Write enqueues a status-channel (15) byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read secondary, write TX source owner.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;      // Read prefetch count, write status-channel (15) byte.
     localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS_LAST = 7; // Write enqueues a status-channel byte with EOI.
     localparam int unsigned IEEE_REG_COUNT = (IEEE_REG_TXS_LAST + 1);
 
@@ -185,21 +185,34 @@ package common_pkg;
 
     // IEEE control-write bit indices and masks.
     // ENABLE is replaced on every CTRL write, so include it when flushing to stay
-    // enabled. FLUSH and DATA_FLUSH are one-shot requests, not read-back flags.
+    // enabled. FIFO flushes are one-shot requests, not read-back flags.
     localparam int unsigned IEEE_CTRL_ENABLE_BIT = 0;     // Enable the emulated drive.
     localparam int unsigned IEEE_CTRL_FLUSH_BIT = 1;      // Flush FIFOs and protocol state.
     localparam int unsigned IEEE_CTRL_DATA_FLUSH_BIT = 2; // Flush only the data TX FIFO.
+    localparam int unsigned IEEE_CTRL_STATUS_FLUSH_BIT = 3; // Replace status storage without acknowledging GET.
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_ENABLE_MASK = (1 << IEEE_CTRL_ENABLE_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_FLUSH_MASK = (1 << IEEE_CTRL_FLUSH_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_DATA_FLUSH_MASK = (1 << IEEE_CTRL_DATA_FLUSH_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_STATUS_FLUSH_MASK = (1 << IEEE_CTRL_STATUS_FLUSH_BIT);
 
     // IEEE control-read bit indices and masks (asymmetric with writes).
     localparam int unsigned IEEE_CTRL_RD_ENABLE_BIT = 0;  // Drive is enabled.
     localparam int unsigned IEEE_CTRL_RD_TX_ROOM_BIT = 1; // Data TX FIFO has room for IEEE_TX_BURST_CHUNK bytes.
     localparam int unsigned IEEE_CTRL_RD_DATA_ACTIVE_BIT = 2; // Data DAV remains asserted until listener acknowledgement.
+    localparam int unsigned IEEE_CTRL_RD_RX_EOI_BIT = 3; // DAV-sampled EOI of the RX head, valid while RX_AVAIL is set.
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_ENABLE_MASK = (1 << IEEE_CTRL_RD_ENABLE_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_TX_ROOM_MASK = (1 << IEEE_CTRL_RD_TX_ROOM_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_DATA_ACTIVE_MASK = (1 << IEEE_CTRL_RD_DATA_ACTIVE_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_EOI_MASK = (1 << IEEE_CTRL_RD_RX_EOI_BIT);
+    localparam int unsigned IEEE_CTRL_RD_RX_ATN_END_BIT = 4;
+    localparam int unsigned IEEE_CTRL_RD_STATUS_ACTIVE_BIT = 5;
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_ATN_END_MASK = (1 << IEEE_CTRL_RD_RX_ATN_END_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_STATUS_ACTIVE_MASK = (1 << IEEE_CTRL_RD_STATUS_ACTIVE_BIT);
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_TALK_EVENT_MASK = 8'h40;
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_EOI_GET_MASK = 8'h80;
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_RECHECK_MASK = 8'h40;
+    // ATN_END payload: zero is ATN release, otherwise a first-data DAV-release unit mask.
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_LISTEN_UNITS_MASK = 8'h0F;
 
     // IEEE status bits (bit 7 is talk starvation, not RX EOI).
     localparam int unsigned IEEE_ST_RX_AVAIL_BIT = 0; // RX FIFO has a byte available to peek or pop.
@@ -225,6 +238,7 @@ package common_pkg;
     // TALK_STARVED instead follows the active FIFO (status TX when SA selects 15).
     localparam int unsigned IEEE_TX_BURST_CHUNK = 64;
     localparam logic [DATA_WIDTH-1:0] IEEE_TX_OWNER_VALID_MASK = 8'h80;
+    localparam logic [DATA_WIDTH-1:0] IEEE_TX_OWNER_PAUSE_MASK = 8'h40;
     localparam int unsigned IEEE_TX_OWNER_UNIT_SHIFT = 4;
 
     // END SHARED HARDWARE CONTRACT

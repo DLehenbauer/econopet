@@ -713,7 +713,7 @@ TEST_F(FirmwareTest, FirmwareOperationsRejectScheduledStimulusReentry) {
     EXPECT_NO_THROW(firmware.service());
 }
 
-// Real C servicing observes every FIFO byte and ATN, without inventing received EOI.
+// Real C servicing observes the complete DAV-sampled FIFO byte, ATN and EOI.
 TEST_F(FirmwareTest, FirmwareRxTraceRecordsConsumedProductionFifoHeads) {
     using namespace ieee_test;
     IeeeController controller(system);
@@ -728,7 +728,7 @@ TEST_F(FirmwareTest, FirmwareRxTraceRecordsConsumedProductionFifoHeads) {
     const std::vector<Record> sent{command(listen), command(secondary), data(0x41, Eoi::Last)};
     EXPECT_EQ(wire.records(), sent);
     firmware.service();
-    EXPECT_EQ(rx.records(), fifo_records(sent));
+    EXPECT_EQ(rx.records(), sent);
     rx.capture().require_count(3, "firmware consumed RX heads");
     EXPECT_FALSE(system.ieee().read_status().contains(fpga::IeeeStatusBit::RxReady));
 }
@@ -744,31 +744,52 @@ TEST_F(FirmwareTest, FirmwareRxTraceRejectsStaleStatusAndGenericReads) {
     controller.command(secondary);
     auto rx = firmware.trace_rx();
     const auto status = fpga::address(fpga::Register::IeeeStatus).value();
+    const auto control = fpga::address(fpga::Register::IeeeControl).value();
     const auto head = fpga::address(fpga::Register::IeeeRx).value();
-    spi_read_at(status);
+    // Sample both metadata registers, requiring adjacency to the actual RX read.
+    const auto sample_status = [&] {
+        spi_read_at(control);
+        spi_read_at(status);
+    };
+    sample_status();
     const auto sampled = system.time();
     EXPECT_THROW(spi_read_at(econopet::WishboneAddressCapacity), std::out_of_range);
     EXPECT_EQ(system.time(), sampled);
     EXPECT_EQ(spi_read_at(head), 0x28);
     EXPECT_EQ(spi_read_at(head), 0x28);
-    spi_read_at(status);
+    sample_status();
     spi_write_at(kSpiRamProbe.value(), 0);
     spi_read_at(head);
-    spi_read_at(status);
+    sample_status();
     system.tick(1);
     spi_read_at(head);
-    spi_read_at(status);
+    sample_status();
     system.spi().write(fpga::Register::IeeeRx, 0);
     EXPECT_EQ(spi_read_at(head), 0x62);
-    spi_read_at(status);
+    sample_status();
     uint8_t byte{};
     spi_read(head, 1, &byte);
     EXPECT_EQ(byte, 0x62);
-    ASSERT_EQ(rx.records().size(), 1);
     spi_read_at(status);
     spi_read_at(head);
-    EXPECT_EQ(rx.records(), fifo_records({command(listen), command(secondary)}));
+    sample_status();
+    spi_read_at(status);
+    spi_read_at(head);
+    ASSERT_EQ(rx.records().size(), 1);
+    sample_status();
+    spi_read_at(head);
+    EXPECT_EQ(rx.records(), (std::vector<Record>{command(listen), command(secondary)}));
     rx.capture().require_count(2, "only adjacent absolute RX observations");
+
+    // An ordered ATN-release entry is metadata, never an invented bus byte.
+    controller.release_atn();
+    spi_write_at(head, 0);
+    EXPECT_EQ(spi_read_at(control) & 0x10u, 0x10u);
+    EXPECT_NE(spi_read_at(status) & 0x01u, 0);
+    spi_read_at(head);
+    rx.capture().require_count(2, "ATN-release entries are not RX byte observations");
+    spi_write_at(head, 0);
+    EXPECT_EQ(spi_read_at(status) & 0x01u, 0);
 }
 
 // A fault after opening a C-backed image still closes its handle before unregistering bytes.
