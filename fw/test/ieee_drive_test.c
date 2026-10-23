@@ -2033,6 +2033,113 @@ START_TEST(test_pending_command_dispatch_after_talk_without_get) {
 }
 END_TEST
 
+// LSN21 returns only after DAV releases. LSN25 on SA1 remains an active listener.
+START_TEST(test_pending_command_dispatch_after_unopened_listen) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    mount_native_relative_records(device, drive, type, "listener-idle.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const uint8_t entries[] = {
+        IEEE_CMD_OPEN(IEEE_CHANNEL_COMMAND), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND),
+    };
+    const uint8_t listeners[] = {IEEE_CHANNEL_REL + 1, IEEE_SAVE_CHANNEL};
+    for (size_t entry = 0; entry < count_of(entries); ++entry) {
+        for (size_t listener = 0; listener < count_of(listeners); ++listener) {
+            for (unsigned int released = 0; released <= 1; ++released) {
+                relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+                enqueue_command(IEEE_CMD_LISTEN(device), entries[entry]);
+                const uint8_t command[] = {'P', IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL), 3, 0, 1};
+                for (size_t index = 0; index < sizeof(command); ++index)
+                    mock_ieee_enqueue_rx_eoi(false, command[index], index + 1 == sizeof(command));
+                mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+                mock_ieee_enqueue_rx(true, IEEE_CMD_LISTEN(device));
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(listeners[listener]));
+                mock_ieee_enqueue_atn_end();
+                // Draining a data byte alone must not imply that DAV has released.
+                mock_ieee_enqueue_rx(false, 0x55);
+                ieee_drive_task();
+                if (released) {
+                    mock_ieee_enqueue_listen_end((uint8_t) (1u << (device - IEEE_FIRST_DEVICE)));
+                    ieee_drive_task();
+                }
+                enqueue_command(IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+                ieee_drive_task();
+                const bool dispatched = released && listeners[listener] != IEEE_SAVE_CHANNEL;
+                const size_t offset = dispatched ? 4 : 0;
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[offset]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[offset + 1]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
+                mock_ieee_clear_data();
+                enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+                ieee_drive_task();
+                relative_talk(device, IEEE_CHANNEL_REL);
+                const size_t next = dispatched ? 6 : 4;
+                ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+                ck_assert_uint_eq(mock_ieee_data_byte(0), payload[next]);
+                ck_assert_uint_eq(mock_ieee_data_byte(1), payload[next + 1]);
+                ck_assert(!mock_ieee_data_eoi(0));
+                ck_assert(mock_ieee_data_eoi(1));
+                mock_ieee_clear_data();
+            }
+        }
+    }
+}
+END_TEST
+
+// Deferred peer lookup may reuse TX after the selected source has already bound it.
+START_TEST(test_deferred_peer_open_preserves_selected_relative_response) {
+    const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
+    const unsigned int device = loop_device((int) coordinates);
+    const unsigned int peer = IEEE_FIRST_DEVICE
+        + (device - IEEE_FIRST_DEVICE + 1) % IEEE_DEVICE_COUNT;
+    const unsigned int drive = loop_drive((int) coordinates);
+    const diskimage_type_t type = native_image_types[_i % count_of(native_image_types)];
+    const uint8_t payload[] = {1, 2, 3, 4};
+    const uint8_t peer_payload[] = {0xa1, 0xa2, 0xa3, 0xa4};
+    mount_native_relative_records(device, drive, type, "deferred-source.img",
+        TEST_COMMAND_RECORD_LENGTH, payload, sizeof(payload));
+    mount_native_relative_records(peer, drive, type, "deferred-peer.img",
+        TEST_COMMAND_RECORD_LENGTH, peer_payload, sizeof(peer_payload));
+    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "BASIC,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const char* const filenames[] = {"MISSING", "BASIC,L"};
+    for (size_t filename = 0; filename < count_of(filenames); ++filename) {
+        relative_position(device, IEEE_CHANNEL_REL, 1, 1);
+        enqueue_command(IEEE_CMD_LISTEN(peer), IEEE_CMD_OPEN(IEEE_CHANNEL_REL + 1));
+        enqueue_filename_for_drive(drive, filenames[filename]);
+        mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+        mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(device));
+        mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+        mock_ieee_enqueue_atn_end();
+        ieee_drive_task();
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[0]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[1]);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+        relative_talk(device, IEEE_CHANNEL_REL);
+        ck_assert_uint_eq(mock_ieee_data_count(), TEST_COMMAND_RECORD_LENGTH);
+        ck_assert_uint_eq(mock_ieee_data_byte(0), payload[2]);
+        ck_assert_uint_eq(mock_ieee_data_byte(1), payload[3]);
+        ck_assert(!mock_ieee_data_eoi(0));
+        ck_assert(mock_ieee_data_eoi(1));
+        mock_ieee_clear_data();
+    }
+}
+END_TEST
+
 // Native receive saturation and CMDSET's 58-byte limit are distinct contracts.
 START_TEST(test_command_length_boundaries_and_recovery) {
     const unsigned int coordinates = (unsigned int) _i / count_of(native_image_types);
@@ -2924,6 +3031,10 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_pending_command_dispatch_after_sequential_eof,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_pending_command_dispatch_after_talk_without_get,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_pending_command_dispatch_after_unopened_listen,
+                        0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
+    tcase_add_loop_test(test_case, test_deferred_peer_open_preserves_selected_relative_response,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_command_length_boundaries_and_recovery,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);

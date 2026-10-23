@@ -211,6 +211,8 @@ package common_pkg;
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_RD_RX_TALK_EVENT_MASK = 8'h40;
     localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_EOI_GET_MASK = 8'h80;
     localparam logic [DATA_WIDTH-1:0] IEEE_RX_TALK_RECHECK_MASK = 8'h40;
+    // ATN_END payload: zero is ATN release, otherwise a first-data DAV-release unit mask.
+    localparam logic [DATA_WIDTH-1:0] IEEE_RX_LISTEN_UNITS_MASK = 8'h0F;
 
     // IEEE status bits (bit 7 is talk starvation, not RX EOI).
     localparam int unsigned IEEE_ST_RX_AVAIL_BIT = 0; // RX FIFO has a byte available to peek or pop.

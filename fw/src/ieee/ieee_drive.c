@@ -767,11 +767,11 @@ static bool talk_source_ready(void) {
             && file_unit == talk_unit && file_chan == channel);
 }
 
-// Dispatch at IDLE/VIDLE. An explicit TLK20 idle unit bypasses source readiness.
+// Dispatch at IDLE/VIDLE. An explicit routine exit bypasses retained role ownership.
 static void dispatch_pending(uint8_t idle_unit) {
     for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
         receive_state_t* const input = &receive_states[unit];
-        if (!input->pending || input->listening
+        if (!input->pending || (input->listening && unit != idle_unit)
             || (talk_unit == unit && unit != idle_unit && talk_source_ready())) continue;
         input->pending = 0;
         unsigned int length = input->length;
@@ -1118,7 +1118,19 @@ void ieee_drive_task(void) {
         spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
 
         if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK) {
-            dispatch_pending(NUM_UNITS);
+            if (byte == 0) {
+                dispatch_pending(NUM_UNITS);
+            } else {
+                for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
+                    const receive_state_t* const input = &receive_states[unit];
+                    // LSN25 keeps accepting SA1. OPEN/commands and writable REL
+                    // stay in LSN30/PUT, even after this transport checkpoint.
+                    if ((byte & (1u << unit)) && input->listening
+                        && input->mode == receive_idle && input->channel != IEEE_SAVE_CHANNEL
+                        && rel_find(unit, input->channel) == NULL)
+                        dispatch_pending(unit);
+                }
+            }
             continue;
         }
         if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK) {
@@ -1161,6 +1173,13 @@ void ieee_drive_task(void) {
     // Native UNLISTEN/foreign LISTEN preserve TLKACT and its queued response.
     // Only resume a retained binding, never one invalidated by queue parking.
     if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) return;
+    // Deferred peer OPEN/CLOSE may reuse TX after the final TALK selection.
+    // Restore its immutable unread REL suffix before releasing the paused source.
+    if (mcu_talking && !(data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK)) {
+        rel_channel_t* const rc =
+            rel_find(talk_unit, IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary));
+        if (rc != NULL) rel_serve(rc);
+    }
     if (status_tx_pending) {
         if (mcu_talking
             && IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary) == IEEE_COMMAND_CHANNEL)

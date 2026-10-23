@@ -85,6 +85,15 @@ void mock_ieee_enqueue_atn_end(void) {
     mock_ieee.rx[index].atn_end = true;
 }
 
+// Use the existing ordered-boundary tag without inventing a command or GET.
+void mock_ieee_enqueue_listen_end(uint8_t units) {
+    ck_assert_uint_gt(units, 0);
+    ck_assert_uint_eq(units & ~ECONOPET_IEEE_RX_LISTEN_UNITS_MASK, 0);
+    mock_ieee_enqueue_atn_end();
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].byte = units;
+}
+
 // Retain native source progress separately from controller-sent bytes.
 void mock_ieee_enqueue_talk_event(uint8_t owner, uint8_t flags) {
     mock_ieee_enqueue_rx(false,

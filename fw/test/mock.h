@@ -30,6 +30,8 @@ void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
 void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi);
 // Queues an ordered ATN-release event without inventing a received byte.
 void mock_ieee_enqueue_atn_end(void);
+// Queues the first data DAV-release checkpoint for the specified listener units.
+void mock_ieee_enqueue_listen_end(uint8_t units);
 // Queue ordered source progress using the hardware owner unit/channel layout.
 void mock_ieee_enqueue_talk_event(uint8_t owner, uint8_t flags);
 // Returns the number of captured file-channel bytes.

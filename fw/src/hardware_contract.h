@@ -112,7 +112,7 @@
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
 #define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u  // RX-head EOI, valid with RX_AVAIL.
-#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // RX-head ATN-release event (no bus byte).
+#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // Ordered boundary: zero = ATN release, else listener mask.
 #define ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK 0x20u // Status DAV awaits acknowledgement.
 #define ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK 0x40u // Ordered source progress/IDLE metadata.
 
@@ -121,6 +121,8 @@
 // EOI_GET records consumed data EOF. RECHECK marks the subsequent TALK1 boundary.
 #define ECONOPET_IEEE_RX_TALK_EOI_GET_MASK 0x80u
 #define ECONOPET_IEEE_RX_TALK_RECHECK_MASK 0x40u
+// Boundary payload: listeners whose first data DAV has released in this ATN phase.
+#define ECONOPET_IEEE_RX_LISTEN_UNITS_MASK 0x0fu
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u

@@ -439,12 +439,15 @@ peripheral-to-peripheral transfer, with or without the PET also receiving,
 without a global UNLISTEN between role selection and data.
 Before asserting a new source DAV with any virtual listener active, the fabric
 also requires RX room. The existing room calculation reserves a pending push,
-and an ordered ATN-release entry must be scheduled first. Otherwise byte 33
-could assert DAV against a full 32-entry RX queue, while firmware's active-byte
+and ordered ATN/listener boundary entries must be scheduled first. Otherwise
+the next byte could assert DAV against a full 32-entry RX queue, while firmware's active-byte
 protection prevents it from draining that queue. The capacity gate leaves DAV
 released and GET progress unchanged, so firmware can pause, drain, and resume
 without dropping or repeating the pending source byte. This is an EconoPET
 transport-capacity rule, not a claim that native drive buffers are 32 bytes.
+The first-data listener checkpoint also survives a sender releasing DAV while
+RX was already full and the data byte could not be accepted. Native LSN21
+observes DAV directly, so its return cannot depend on successful FIFO capture.
 
 Each REL channel retains one immutable pending response (at most 254 bytes)
 and its consumed offset. The firmware checks progress against that bound,
@@ -518,10 +521,18 @@ consumes the pending count and buffer, so later UNLISTEN cannot repeat it.
 The FPGA retains `{eoi, atn, data}` at the accepted DAV edge. CTRL read bit 3
 (`RX_EOI`, mask `$08`) exposes the current head's EOI while RX_AVAIL is set.
 An additional FIFO entry records ATN release in order, exposed through CTRL
-read bit 4 (`RX_ATN_END`, mask `$10`). It carries no bus byte and is filtered
-from semantic RX byte traces. It consumes one RX slot and is retained under
-full-FIFO backpressure. This avoids inferring past dispatch boundaries from
-current bus pins or an empty queue when firmware service is delayed.
+read bit 4 (`RX_ATN_END`, mask `$10`). A zero payload means ATN release.
+A nonzero low-four-bit payload identifies the listener units present at the
+first data DAV assertion whose DAV has now released. This checkpoint is emitted
+once per data phase, not for every byte. Firmware distinguishes native LSN21
+return-to-IDLE from active OPEN/command collection, writable REL reception and
+SA1's LSN25 discard loop. It preserves LISTEN ownership and never dispatches
+merely because the data byte was queued while DAV remained asserted.
+Both boundary forms carry no bus byte and are filtered from semantic RX traces.
+Each consumes one RX slot and survives full-FIFO backpressure ahead of later
+ATN entries. The first-data checkpoint therefore leaves 31 payload slots in a
+32-entry queue. This avoids inferring past dispatch boundaries from current
+bus pins or an empty queue when firmware service is delayed.
 CTRL read bit 6 (`RX_TALK_EVENT`, mask `$40`) identifies ordered source metadata.
 The RX payload retains owner-layout unit/channel bits 5:0. Bit 7 (`$80`)
 records a data EOI GET. Bit 6 (`$40`) additionally marks normal NDAC rearm and
@@ -538,16 +549,36 @@ Firmware reads CTRL, STATUS, and RX before explicitly popping that same head.
 The register mock and physical-SPI observation helpers preserve this metadata
 rather than inferring EOI from UNLISTEN or from the live bus after reception.
 Deploy the updated firmware and FPGA image together, because older gateware
-does not expose the RX-head EOI/ATN-release/source-event flags or status GET counter.
+does not expose the RX-head EOI/boundary/source-event flags, listener checkpoint
+payload or status GET counter.
 The response-ownership repair also requires CTRL read `$20` (status DAV
 active), CTRL write `$08` (status-only transport flush), and owner-register
 `$40` (pause new data/status presentations without withdrawing active DAV).
+After ordered pending work, firmware also restores the selected REL channel's
+immutable unread suffix if deferred peer OPEN/CLOSE parked the shared TX queue.
+It accounts for actual GETs before rebuilding and rechecks RX before resuming,
+so a missing peer filename cannot discard or permanently pause the selected
+unit's response. Successful peer REL and SEQ OPENs still take effect.
+
+Both follow-up counterexamples failed on D64 and D80 before repair: the
+listener case returned `$01` instead of `$05`, and deferred missing peer OPEN
+left the selected source waiting forever for DAV. The new production-top
+listener cases cover both command entries, no-DAV and asserted-DAV controls,
+retained LISTEN ownership, SA1's non-IDLE exception and one-time dispatch.
+The peer cases check the selected source before any reselection, continuation,
+exact peer status, and successful peer REL/SEQ payloads. Firmware families
+cover sixteen model/unit/drive coordinates each.
+These listener tests deliberately assert and release DAV. They establish the
+dispatch boundary, not native refusal/timeout timing for an unopened receiver.
+Final human sign-off remains required for this coordinated firmware/FPGA change.
 
 All source links below select `mist64/cbmsrc` revision
 `01bd60f162ef92212ef0cb67546ae8f42be34168`.
 
 | Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
 |---|---|---|---|---|---|
+| Unopened listener returns to IDLE after DAV release | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 (D80 execution in single-sided 8050 mode) | Pinned [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee) and [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): FNDWCH failure branches through LSN15/LSN20 to LSN21, which waits for DAV high before RTS. ATN50 then enters IDLE/VIDLE without clearing LSNACT. SA1 instead enters LSN25 and keeps accepting | Pending P3/EOI through either command entry, followed by continuous-ATN UNLISTEN/LISTEN/SA3 and a discarded byte, executes only after DAV release. REL SA2 returns `$05,$06` with final EOI. No byte, asserted DAV, and SA1 must not cause early dispatch | `dispatch_pending` accepts an explicit idle unit while retaining the listening guard elsewhere. Ordered boundary payload records a listener mask. `test_pending_command_dispatch_after_unopened_listen` and `PendingCommandDispatchesAfterUnopenedListen` assert exact data/EOI and recovery. RTL checks multiple listeners, full RX, boundary order and no checkpoint during active DAV | Pinned MAME [4040 RIOT PA read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c2040.cpp#L299) and [8050 RIOT PA read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c8050.cpp#L384) map DAV to bit 6. The pinned independent bus description below distinguishes sender DAV release and receiver acknowledgement |
+| Deferred peer OPEN preserves selected REL data | Same selected drive ROMs | Respective pinned `ieee`: DCDE60 selects TALK only on the addressed peripheral. ATN50/ATN70 enter each peripheral's LISTEN/TALK/IDLE paths independently. A peer's PARSXQ/OPEN operates on its own channel buffers, not the selected unit's unread CHNDAT | EOI-completed peer OPEN3 followed by continuous-ATN UNLISTEN/TALK8/SA2 must return `$01,$02` with final EOI without reselection, then `$03,$04` on continuation. Missing peer lookup reports 62 without dropping the response. Successful peer REL/SEQ OPENs remain usable | The final RX-drain step restores a parked selected REL suffix before `tx_resume`. `test_deferred_peer_open_preserves_selected_relative_response` and `DeferredPeerOpenPreservesSelectedRelativeResponse` cover missing and successful lookups, independent CPU/wire bytes, final EOI and peer effects | Pinned MAME's separate DOS CPU/RAM per peripheral and composed open-collector bus corroborate independent storage/roles. The pinned independent bus description below establishes one selected sender with independently addressed receivers |
 | Consumed ordinary EOF returns to IDLE | Selected 4040 DOS 2 and full-size 8050/8250 DOS 2.7 | [4040 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4) and [8250 `tst4`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4): GET0 writes NOTRDY after the final ordinary byte's GET. Respective `ieee`: TLK35/TLK40 finishes NDAC, then TALK1 returns through NOTLK/ATN70 to IDLE/VIDLE, whose CMDWAT path calls PARSXQ | Pending P3 followed by continuous-ATN UNLISTEN/TALK/consumed SEQ SA3 dispatches without UNTALK. REL SA2 then returns `$05,$06` with final-byte EOI. Queued but unread EOF must remain ready and return all eight SEQ bytes before P dispatch at the completed TALK1 boundary | `file_channel_consumed` differs from transport exhaustion. `test_pending_command_dispatch_after_sequential_eof` covers sixteen coordinates and both command entries. `PendingCommandDispatchesAfterSequentialEof` uses actual SEQ directory bytes and exact CPU/wire payloads on D64/D80. RTL checks normal rearm, ATN-interrupted EOF, full-RX event retention and ordering | Pinned MAME maps NDAC/NRFD independently in both RIOT callbacks cited below. [Pinned independent IEEE handshake description](https://github.com/mist64/cbmbus_doc/blob/cb021f3454b499c579c265859ce67ba99e85652b/1%20IEEE-488.md) corroborates separate readiness, acceptance and rearm. Native GET0, not generic EOF prose, establishes NOTRDY |
 | Allocated TALK ends without GET | Same selected drive ROMs | Respective `ieee`: TLK20 branches to TLK30/GET only when PBD2 bit 7 is low. With bit 7 high and bit 6 high, it releases DAV/EOI and jumps directly to IDLE. This does not clear TLKACT or consume CHNDAT | Pending P3 must execute after an NDAC-only termination of ready REL or status TALK, without an intervening UNTALK. REL reselect returns `$05,$06`, not `$01,$02`. Neither data nor status GET count advances for the terminated byte | `ieee.sv` retains an ordered no-GET event and stops in T_DONE until ATN. `dispatch_pending` accepts that explicit idle unit independently of allocation. `test_pending_command_dispatch_after_talk_without_get` covers sixteen coordinates, both command entries and both sources. `PendingCommandDispatchesAfterTalkWithoutGet` uses CPU-driven NDAC-only termination on D64/D80 | [Pinned 4040 RIOT PB read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c2040.cpp#L365) and [8050 RIOT PB read](https://github.com/mamedev/mame/blob/7e1ead4a1f40851666d3b428e6624121123f11af/src/devices/bus/ieee488/c8050.cpp#L450) map NDAC to bit 6 and NRFD to bit 7. The independent handshake description above corroborates their distinct roles, not the ROM-specific abort rule |
 | Unopened TALK returns to IDLE | Selected 4040 DOS 2 and shared full-size 8050/8250 DOS 2.7 | [4040 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2) and [8250 `tst2`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2): FNDRCH returns carry set for an unallocated LINTAB entry. Respective `ieee`: TALK branches to NOTLK/RTS, then ATN70 jumps to IDLE/VIDLE without clearing TLKACT. Respective `idle` clears CMDWAT and calls PARSXQ | Pending P3/EOI followed by continuous-ATN UNLISTEN/TALK/unopened SA3 must dispatch on ATN release. TALK/SA2 without UNTALK returns `$05,$06`, not `$01,$02`. Closed SA3 and implicit default SA0 behave the same. The following record is `$07,$08`, proving no repeated dispatch. Ready-source immediate TALK still defers P | `talk_source_ready` separates logical source availability from TALK ownership. `test_pending_command_dispatch_after_unopened_talk` covers sixteen model/unit/drive coordinates, both command entries and all three selections. `PendingCommandDispatchesAfterUnopenedTalk` checks exact CPU/wire bytes and EOI on D64/D80 beside the existing ready-source control | [Pinned VICE `vdrive_iec_read`](https://github.com/VICE-Team/svn-mirror/blob/3723f8a012ec9a24073ee6010e0a2d3342fb63b6/vice/src/vdrive/vdrive-iec.c#L1002) independently checks the selected per-unit buffer's allocation before reading. Its EOF/error return is not a native dispatch-timing oracle. Pinned MAME's separate DOS CPU/RAM and RIOT wiring preserve the ROM's distinct role and routine lifetimes |
@@ -561,7 +592,7 @@ All source links below select `mist64/cbmsrc` revision
 | Status generation format and queued ownership | Same selected drive ROMs, with media-model replacement explicitly an EconoPET extension | Respective `erproc` constructs ERRBUF and respective `tst4` GETERC reads that retained buffer. Native peripherals have independent error-channel RAM, not one concatenated response for multiple units | Already-formatted status retains its original model until CR across an EconoPET D80/D64 model swap. A queued TALK 8/status, UNTALK, TALK 9/status must serve only unit 9, preserving unit 8's unread error. A new status generation uses the newly mounted model | `drive_status` retains the format model per generation. `test_partial_status_retains_format_across_model_change` covers both swap directions and sixteen coordinates. `PartialStatusRetainsFormatAcrossModelChange`, `QueuedStatusSelectionsRetainResponseOwnership`, and RTL owner/pause tests check suffix/CR/EOI, peer errors, readiness and repeated selection | Pinned MAME's distinct 4040/8050 CPUs and RAM corroborate per-peripheral response ownership. Model hot-swap is not claimed as a native drive operation |
 | Status selection during publication | Same selected drive ROMs, mapped onto EconoPET's asynchronous SPI transport | Respective `tst4` GETERC advances the retained ERRBUF cursor only on GET and clears status on terminal CR. Discarding a transport prefix cannot advance that cursor | A repeated status secondary accepted between TXS writes must not expose a truncated suffix or clear the error. Reprocessing the selection returns the complete unread response with terminal CR/EOI, then OK only after its CR GET | `ieee_drive_task` rechecks RX after publication before releasing the source owner. `test_status_selection_interrupts_publication` injects the selection and hardware flush after every TXS write, including CR, for zero/three-byte already-read prefixes and sixteen model/unit/drive coordinates | Pinned MAME's independent error-channel storage and RIOT handshake wiring corroborate logical response ownership. The SPI fill window is specific to EconoPET, not a native drive timing claim |
 | Retained peer listener and selected talker | Same selected drive ROMs, separate addressed peripherals | Respective `ieee` DCDE30 preserves LSNACT for foreign LISTEN. DCDE60 clears LSNACT only for the peripheral matching TALK. ATN50 independently enters LISTEN or TALK in each peripheral. LISTEN/LSN30 samples bus DIO/EOI, while TALK observes shared handshake lines | LISTEN 9/secondary 2, LISTEN 7, TALK 8/secondary 2 must transfer data without UNLISTEN. Unit 9 receives the same bytes/EOI as the PET. A peer-only acceptor must also complete transfer | Independent source/acceptor handling in `ieee.sv`. `check_peer_transfer` checks exact `$A5,$00,$5A` and final EOI in RX, with and without PET reception. `RetainedPeerListenerReceivesSelectedTalker` checks CPU/wire bytes and reads back the peer's written REL record on D64/D80 | Pinned MAME RIOT input/output callbacks compose bus DAV/EOI and independent handshake outputs. Steil's TALK/LISTEN layers corroborate independent addressed listeners and a single selected source |
-| Bounded peer receive backpressure | Same selected drive ROMs, with EconoPET-specific RX capacity | [4040 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee) and [8250 `ieee`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee): TLK10 waits for readiness, TLK20/TLK30 performs GET on NRFD, and TLK35 retains the byte until NDAC. LSN30 samples DIO/EOI and releases NDAC only after reception | A delayed-service 40-byte peer-only REL transfer pauses before byte 33 with DAV released and 32 captured bytes. Firmware service resumes all 40 bytes exactly once, with EOI only on byte 40, and the peer's written record reads back identically. Pending RX writes and ordered ATN-release metadata cannot overcommit the queue | `ieee.sv` T_DAV uses existing `rx_room` and `atn_end_due` when listening. `check_peer_backpressure` checks pause/drain/resume and an ATN-release entry filling the last RX slot. `PeerTransferBackpressuresBeforeRxCapacity` checks delayed-service wire bytes, idle DAV, recovery and REL record contents on D64/D80 | MAME's independent RIOT bus inputs/handshake outputs and Steil's flow-controlled TALK/LISTEN account corroborate shared-bus backpressure. The 32-slot threshold belongs only to EconoPET's transport |
+| Bounded peer receive backpressure | Same selected drive ROMs, with EconoPET-specific RX capacity | Pinned 4040/8250 `ieee`: TLK10 waits for readiness, TLK20/TLK30 performs GET on NRFD, TLK35 retains DAV until NDAC, and LSN30 samples DIO/EOI before acknowledgement | A delayed-service 40-byte transfer fills exactly 32 RX entries (31 data plus one listener checkpoint) and pauses with DAV released. Service resumes all 40 bytes exactly once, with EOI only on byte 40, and written-record readback matches. Pending writes and boundary metadata cannot overcommit RX | `ieee.sv` gates T_DAV on reserved RX capacity and pending boundaries. `check_peer_backpressure` checks exact occupancy, EOF at capacity, metadata retention and resume. `PeerTransferBackpressuresBeforeRxCapacity` checks CPU/wire data and disk effects on D64/D80 | MAME RIOT wiring and the pinned independent bus description corroborate flow-controlled shared-bus transfer. The 32-entry capacity is EconoPET-specific |
 | Shared ordinary OPEN/command input lifetime | Same selected drive ROMs | Same pinned `tst2` sources: `PUT` masks `ORGSA` with `$8F`, so both ordinary OPEN and channel 15 use `L42`, `CMDCHN`, and the same `BUFTAB+CBPTR`. Respective `open`: `OPEN` calls `CMDSET`. Respective `parsex`: `CMDRST` resets that pointer, and `ENDCMD`/`CLRCB` clears the consumed bytes. `erproc` `CMDER3` also clears them and the pointer on failure | Partial P selecting record 3, UNLISTEN, completed ordinary OPEN on the same unit, fresh EOI-terminated P selecting record 2 returns `$03,$04`, not `$05,$06`. Ordinary OPEN on a different unit leaves the first unit's partial P intact. An unfinished filename also survives UNLISTEN and can complete on a later OPEN with EOI, then dispatch at IDLE | One counted buffer and EOI completion rule in [`receive_states`](../../fw/src/ieee/ieee_drive.c). [`test_open_consumes_shared_command_input`](../../fw/test/ieee_drive_test.c) and `test_open_input_requires_eoi` each cover sixteen model/unit/drive combinations. `DriveRelativeTest.OrdinaryOpenConsumesPartialCommand` covers D64/D80 through production RTL and firmware, with both command entry routes | Pinned MAME's separate controller CPU/RAM per 4040/8050 peripheral corroborates the per-unit storage boundary. Steil's [DOS interface description](https://www.pagetable.com/174) corroborates counted input and command OPEN as an alternate entry, but is not an oracle for retained prefixes or native EOI gating |
 | Binary OPEN 15 from an actual PET ROM | PET KERNAL 2.0/4.0 controller, same selected drive targets | [PET 2 `OPENI`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_2.0_REC/ob2src) and [PET 4 `OPENI`](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/KERNAL_PET_4.0_REC/ob2src) send the counted filename as OPEN payload, including embedded zero | ROM OPENI transmits `50 62 03 00 01` on OPEN 15 with final-byte EOI. Native ACPTR returns `$05,$06` with status `$00,$40` | `DriveCommandRomTest.NativeOpen15ExecutesBinaryPosition` runs both PET revisions against D64/D80. Independent wire capture checks both OPEN exchanges, command bytes, selected record, and final EOI | The original CPU-driven PIA/VIA cases remain enabled as an independent controller path |
 
@@ -721,19 +752,19 @@ or 8250LP execution is claimed.
 
 | Validation | Current result |
 |---|---|
-| Complete affected firmware integration suite | All 243 enabled cases pass at seed 1. No historical disabled probes remain. Ten pending-dispatch/EOI cases and four peer-transfer/backpressure cases pass at seed 17 |
+| Complete affected firmware integration suite | All 247 enabled cases pass at seed 1. No historical disabled probes remain. Eighteen pending-dispatch, EOI, deferred-peer-OPEN and peer-transfer/backpressure cases pass at seed 17 |
 | Native wildcard OPEN/read integration, included above | Six D64/D80 cases pass at seed 1, executing PET KERNAL 2.0/4.0 or Waterloo revision-12 OPEN and input routines with exact CPU bytes, status, and independent wire/EOI checks |
 | Preserved-talker integration, included above | Eight original D64/D80 SEQ/REL cases retain exact unread bytes and final EOI through repeated UNLISTEN or foreign LISTEN/UNLISTEN. Eight additional cases check every ordered virtual-unit pair with peer status/data secondary selection, without readdressing the talker |
 | Sequential terminal integration, included above | Four D64/D80 EOF and failed-successor cases pass, including status acknowledgement, in-place repair, and reopen recovery |
 | Native receive integration, included above | All twelve PET KERNAL 2.0/4.0 and Waterloo revision-12 cases pass at seed 1, including native readdressing, real timeout execution, and exact CPU/wire payload checks |
 | Native REL integration, included above | Existing data, continuation, interruption, parking, and native receive cases pass alongside channel errors, pending EOI/IDLE dispatch, model-specific command receive/validation boundaries, status continuation, and PET-ROM commands. All 26 queued-selection/prefetch-boundary cases pass. Four concurrent source/peer-listener cases check exact wire data and destination-record readback, including delayed-service 40-byte transfers that fill RX |
-| Complete firmware unit suite | 918 checks pass (871 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new pending-dispatch, command-length, binary-CR, model-swap, publication-interruption and status-lifetime family covers sixteen model/unit/drive combinations |
-| Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ATN-release entry, `$20` is active status DAV, and `$40` is ordered source metadata. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
-| Board IEEE, shared hardware contract, and host encoding | All 407 selected seed-1 cases pass (124 host/contract, 243 firmware integration and 40 board IEEE), included in the complete wrapper run below. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
-| CI system wrapper | The failed head exhausted the outer 1800-second timeout with a serial child suite. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. The exact local wrapper finishes all 721 cases in 1098 seconds: 720 pass, with only the pre-existing local configuration-bit failure described below |
+| Complete firmware unit suite | 950 checks pass (903 ordinary and 47 fatal-path), including wildcard, alias, channel lifecycle, and REL controls. Each new listener-IDLE and deferred-peer-OPEN family covers sixteen model/unit/drive combinations |
+| Complete host unit and contract suite | All 124 cases pass. CTRL readback `$08` is RX-head EOI, `$10` is an ordered boundary (zero payload for ATN release, nonzero low-four-bit listener mask for DAV release), `$20` is active status DAV, and `$40` is ordered source metadata. CTRL write `$08` flushes only TXS storage and `$10` remains reserved. Owner-register `$40` pauses both sources |
+| Board IEEE, shared hardware contract, and host encoding | All 411 selected seed-1 cases pass (124 host/contract, 247 firmware integration and 40 board IEEE) in 1027 seconds. Literal ABI masks, semantic trace filtering, and exact drain limits exclude transport-only entries |
+| CI system wrapper | The failed serial-child run exhausted the outer 1800-second timeout. The child now explicitly runs two jobs, reserved with parent PROCESSORS=2. Outer 1800-second and individual 300-second limits are unchanged. Clean full-wrapper CI results are recorded on [PR #107](https://github.com/DLehenbauer/econopet/pull/107), separately from the affected local selection above |
 | Gateware IEEE simulations | `ieee_tb` and `ieee_sys_tb` pass under both Icarus and Verilator, including all twelve ordered virtual-unit talker/peer pairs, simultaneous source/acceptor transfer with and without the PET receiving, full-RX peer pause/drain/resume, pending-push and ATN-release capacity reservation, listener/default-SA controls, RX-head EOI, ordered ATN-release retention under full-FIFO backpressure, independent data/status GET counters, modulo wrap, both-source ownership/pause, active-byte stability, selective TXS flush and prefetch/abort controls |
 | Complete gateware suite | All 33 selected Icarus/setup cases pass in an isolated checkout of the committed configuration, excluding the unrelated local CRT/keyboard inversions. All four affected IEEE variants also pass under Icarus and Verilator. The complete Verilator suite was not rerun locally |
-| Production firmware and FPGA bitstream | Production firmware builds with `RelWithDebInfo`. The isolated production FPGA preset completes synthesis, interface generation, P&R, bitstream generation and export. The exact CI timing gate passes with worst setup +0.361 ns and hold +0.116 ns using seed 0 and TIMING_3 P&R. No clocks or timing exceptions were relaxed |
+| Production firmware and FPGA bitstream | Production firmware builds with `RelWithDebInfo`. The isolated production FPGA preset completes synthesis, interface generation, P&R, bitstream generation and export. The exact CI timing gate passes with worst setup +0.561 ns and hold +0.119 ns using seed 0 and TIMING_3 P&R. No clocks or timing exceptions were relaxed |
 
 Firmware unit and integration tests use `Debug`, with assertion-enabled
 optimized model/runtime code kept separate.
@@ -748,22 +779,24 @@ production-top status cases cover queued selections, not that exact fill-window
 injection. No physical-SPI concurrency capture is claimed for the latter.
 Production firmware uses `RelWithDebInfo`. This follow-up changes IEEE gateware
 and firmware together. Its integration build retains unrelated local top-level
-configuration inversions. The complete local wrapper's sole failure is
+configuration inversions. A prior complete local wrapper's sole failure was
 `TypedConfigurationReachesProductionStatusBits`, against the existing
 CRT/keyboard polarity discrepancy. That test is outside the exact IEEE selection
 above. The preceding isolated gateware validation excluded those local edits.
-All four affected IEEE RTL variants pass, including EOF checkpoints, no-GET
-termination, full-RX event retention, metadata ordering, and unchanged GET
-accounting. The counter-wrap fixture services the new bounded EOF metadata
+All four affected IEEE RTL variants pass, including listener-IDLE checkpoints,
+EOF checkpoints, no-GET termination, full-RX event retention, metadata ordering,
+and unchanged GET accounting. Listener checkpoints cover both accepted data
+and sender timeout while RX is already full. The counter-wrap fixture services the bounded EOF metadata
 while retaining all 257 exact counter checks. No new FPGA bitstream or
 real-hardware capture was used for the functional assertions above.
 
 Clean CI subsequently exposed a -0.052 ns setup violation on the SID envelope's
 fall-to-rise half-cycle path, not an IEEE path. An isolated seed-0 build
 reproduced it exactly. Five alternative P&R seeds also failed setup.
-Timing-directed `TIMING_3` P&R closes the unchanged RTL and SDC at the original
-64 MHz, with the margins recorded above. A full production rebuild reproduces
-those margins, and a repeated build performs no FPGA work. Post-rebuild
+Timing-directed `TIMING_3` P&R closed that failure without changing RTL or SDC.
+The listener-IDLE follow-up retains that routing configuration, seed and
+original 64 MHz clock. Its full isolated production rebuild passes with the
+current margins recorded above. Post-rebuild
 `check_timing -verbose` coverage is identical to baseline, including inherited
 unconstrained 6809 pins, eight CPU-data inputs and the PIA1-clock output.
 This establishes timing closure under the existing constraints, not complete

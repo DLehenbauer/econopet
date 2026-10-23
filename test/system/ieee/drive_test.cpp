@@ -1099,6 +1099,109 @@ TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterTalkWithoutGet) {
     }
 }
 
+// An unallocated listener returns to IDLE after DAV, not merely after addressing.
+TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterUnopenedListen) {
+    const bool d80 = GetParam();
+    firmware.mount(relative_image(d80, {1, 2, 3, 4, 5, 6, 7, 8}, 2),
+        d80 ? "listener-idle.d80" : "listener-idle.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open listener-IDLE REL target");
+    constexpr Channel DiscardListener{IEEE_SAVE_CHANNEL};
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        // SA1 follows LSN25 and keeps accepting, unlike the unopened SA3 exit.
+        for (const Channel listener : {Channel{DataChannel + 1}, DiscardListener}) {
+            for (const bool send_byte : {false, true}) {
+                position_relative(system, firmware, controller, 1, 1);
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(entry);
+                const std::vector<uint8_t> position{'P', IEEE_CMD_SECONDARY(DataChannel), 3, 0, 1};
+                for (size_t index = 0; index < position.size(); ++index)
+                    controller.data(position[index], index + 1 == position.size() ? Eoi::Last : Eoi::More);
+                controller.raw_send(command(Unlisten));
+                controller.command(Listen(Device{DeviceAddress}));
+                controller.command(Secondary(listener));
+                controller.release_atn();
+                service_rx(system, firmware, "retain P while listener waits for DAV");
+                if (send_byte) {
+                    controller.write(pet::Pia2PortB, static_cast<uint8_t>(~uint8_t{0x55}));
+                    controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+                    service_rx(system, firmware, "service discarded data while DAV remains asserted");
+                    EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+                    controller.write(pet::Pia2ControlB, PiaC2High.bits());
+                    controller.write(pet::Pia2PortB, BusReleased);
+                    service_rx(system, firmware, "dispatch only after listener DAV releases");
+                }
+                EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Listening));
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "select REL after native listener checkpoint");
+                const bool dispatched = send_byte && listener.value() != DiscardListener.value();
+                receive_payload(system, controller, dispatched
+                    ? std::vector<Record>{data(5), data(6, Eoi::Last)}
+                    : std::vector<Record>{data(1), data(2, Eoi::Last)});
+                controller.command(Untalk);
+                controller.command(Unlisten);
+                service_rx(system, firmware, "finish listener dispatch control");
+                controller.command(Talk(Device{DeviceAddress}));
+                controller.command(Secondary(Channel{DataChannel}));
+                service_rx(system, firmware, "verify listener dispatch occurs exactly once");
+                receive_payload(system, controller, dispatched
+                    ? std::vector<Record>{data(7), data(8, Eoi::Last)}
+                    : std::vector<Record>{data(5), data(6, Eoi::Last)});
+                controller.command(Untalk);
+            }
+        }
+    }
+}
+
+// A peer's deferred OPEN must not discard the final selected REL response.
+TEST_P(DriveRelativeTest, DeferredPeerOpenPreservesSelectedRelativeResponse) {
+    const bool d80 = GetParam();
+    const char* const peer_name = d80 ? "deferred-peer.d80" : "deferred-peer.d64";
+    firmware.mount(relative_sequential_image(d80, {0xa1, 0xa2, 0xa3, 0xa4}), peer_name);
+    ASSERT_TRUE(ieee_drive_mount(2, peer_name));
+    firmware.mount(relative_image(d80, {1, 2, 3, 4}, 2),
+        d80 ? "deferred-source.d80" : "deferred-source.d64");
+    IeeeController controller(system);
+    const Device source{DeviceAddress}, peer{DeviceAddress + 1};
+    constexpr Channel PeerChannel{DataChannel + 1};
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L", source);
+    service_rx(system, firmware, "open deferred-OPEN source");
+    for (const std::string_view filename : {"MISSING", "BASIC,L", "PLAIN"}) {
+        position_relative(system, firmware, controller, 1, 1);
+        controller.command(Listen(peer));
+        controller.command(Open(PeerChannel));
+        for (size_t index = 0; index < filename.size(); ++index)
+            controller.data(static_cast<uint8_t>(filename[index]),
+                index + 1 == filename.size() ? Eoi::Last : Eoi::More);
+        controller.raw_send(command(Unlisten));
+        controller.command(Talk(source));
+        controller.command(Secondary(Channel{DataChannel}));
+        controller.release_atn();
+        service_rx(system, firmware, "resolve peer OPEN after source selection");
+        receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+        controller.command(Untalk);
+        controller.command(Talk(source));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "continue source after peer OPEN");
+        receive_payload(system, controller, {data(3), data(4, Eoi::Last)});
+        controller.command(Untalk);
+        const std::string expected_status = std::string(filename == "MISSING"
+            ? "62, FILE NOT FOUND,00,00" : "00, OK,00,00") + (d80 ? ",0\r" : "\r");
+        EXPECT_EQ(receive_status(system, firmware, controller, peer), expected_status);
+        if (filename != "MISSING") {
+            controller.command(Talk(peer));
+            controller.command(Secondary(PeerChannel));
+            service_rx(system, firmware, "verify deferred peer OPEN actually resolved");
+            receive_payload(system, controller, filename == "BASIC,L"
+                ? std::vector<Record>{data(0xa1), data(0xa2, Eoi::Last)}
+                : std::vector<Record>{data(0xa1), data(0xa2), data(0xa3), data(0xa4, Eoi::Last)});
+            controller.command(Untalk);
+        }
+    }
+}
+
 // Model-specific receive saturation precedes the shared 58-byte CMDSET check.
 TEST_P(DriveCommandLengthTest, CommandLengthBoundariesPreservePositionAndRecover) {
     const auto [d80, length] = GetParam();
@@ -1304,7 +1407,8 @@ TEST_P(DriveRelativeTest, RetainedPeerListenerReceivesSelectedTalker) {
 // A peer-only transfer must leave DAV idle when delayed service fills RX.
 TEST_P(DriveRelativeTest, PeerTransferBackpressuresBeforeRxCapacity) {
     const bool d80 = GetParam();
-    constexpr size_t RecordLength = 40, RxCapacity = 32;
+    constexpr size_t RecordLength = 40, RxCapacity = 32, ListenerCheckpoints = 1;
+    constexpr size_t PayloadCapacity = RxCapacity - ListenerCheckpoints;
     constexpr econopet::Cycles DelayedService = 20000;
     std::vector<uint8_t> source(RecordLength);
     std::vector<Record> expected;
@@ -1334,10 +1438,10 @@ TEST_P(DriveRelativeTest, PeerTransferBackpressuresBeforeRxCapacity) {
     controller.write(pet::Pia2ControlA, PiaC2High.bits());
     controller.write(pet::ViaPortB, BusReleased);
     system.tick(DelayedService);
-    ASSERT_EQ(wire.records().size(), RxCapacity);
+    ASSERT_EQ(wire.records().size(), PayloadCapacity);
     ASSERT_TRUE(system.snapshot().ieee_rx_ready_o);
     ASSERT_TRUE(system.snapshot().ieee_device_dav_no);
-    require_sequence(wire.records(), std::vector<Record>(expected.begin(), expected.begin() + RxCapacity),
+    require_sequence(wire.records(), std::vector<Record>(expected.begin(), expected.begin() + PayloadCapacity),
         "peer transfer paused before RX overflow");
     system.execution().within(ByteBudget).service(firmware.service_adapter())
         .until([&](const System& board) {

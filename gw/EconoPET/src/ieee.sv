@@ -248,6 +248,10 @@ module ieee (
     logic prev_atn_n     = 1'b1;
     logic atn_end_pending = 1'b0;
     wire atn_end_due = atn_end_pending || (!prev_atn_n && cpu_atn_n);
+    logic listen_checkpoint_armed = 1'b0;
+    logic [3:0] listen_byte_units = '0;
+    logic [3:0] listen_end_pending = '0;
+    wire listen_end_due = |listen_end_pending;
 
     // Native TLK20/TLK30 prefetches on NRFD before TLK35 waits for NDAC.
     typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM, T_DONE } talk_state_t;
@@ -284,6 +288,9 @@ module ieee (
             tx_prefetched <= '0;
             txs_prefetched <= '0;
             atn_end_pending <= 1'b0;
+            listen_checkpoint_armed <= 1'b0;
+            listen_byte_units <= '0;
+            listen_end_pending <= '0;
             talk_event_pending <= 1'b0;
             talk_eoi_fetched <= 1'b0;
             talk_event_data <= '0;
@@ -309,6 +316,9 @@ module ieee (
             if (flush) tx_prefetched <= '0;
             if (flush) txs_prefetched <= '0;
             atn_end_pending <= 1'b0;
+            listen_checkpoint_armed <= 1'b0;
+            listen_byte_units <= '0;
+            listen_end_pending <= '0;
             talk_event_pending <= 1'b0;
             talk_eoi_fetched <= 1'b0;
             talk_event_data <= '0;
@@ -330,12 +340,17 @@ module ieee (
         end else begin
             // Retain source progress before later ATN bytes and release boundaries.
             if (atn_end_due) atn_end_pending <= 1'b1;
+            if (atn_active) listen_checkpoint_armed <= 1'b1;
             if (talk_event_pending) begin
                 if (rx_room) begin
                     rx_push <= 1'b1;
                     rx_push_data <= {1'b1, 3'b0, talk_event_data};
                     talk_event_pending <= 1'b0;
                 end
+            end else if (listen_end_due && !talk_event_due && rx_room) begin
+                rx_push <= 1'b1;
+                rx_push_data <= {2'b01, 2'b0, 4'b0, listen_end_pending};
+                listen_end_pending <= '0;
             end else if (atn_end_due && !talk_event_due && rx_room) begin
                 rx_push <= 1'b1;
                 rx_push_data <= {2'b01, 10'b0};
@@ -347,7 +362,7 @@ module ieee (
                 end
 
                 if (prev_bus_dav_n && !bus_dav_n && rx_room
-                    && !atn_end_due && !talk_event_due) begin
+                    && !atn_end_due && !talk_event_due && !listen_end_due) begin
                     // Byte valid and room to store it: capture and accept.
                     // (While RX is full, hold NDAC asserted and wait -- IEEE
                     // flow control backpressures the CPU until the MCU drains
@@ -428,6 +443,16 @@ module ieee (
                 dev_ndac_n <= 1'b1;
                 dev_nrfd_n <= 1'b1;
             end
+            // LSN21 observes DAV even if transport is full and the sender times out.
+            if (!atn_active && listening && listen_checkpoint_armed && !bus_dav_n) begin
+                listen_byte_units <= listen_units;
+                listen_checkpoint_armed <= 1'b0;
+            end
+            // FNDWCH failure returns at LSN21 only after the first DAV releases.
+            if (|listen_byte_units && bus_dav_n) begin
+                listen_end_pending <= listen_byte_units;
+                listen_byte_units <= '0;
+            end
 
             // A peer virtual unit can accept while the selected source talks.
             if (atn_active) begin
@@ -448,7 +473,7 @@ module ieee (
                 // CPU waits on DAV) until the MCU refills it.
                 unique case (talk_st)
                     T_IDLE: begin
-                        if (!talk_event_due && owner_matches
+                        if (!talk_event_due && !listen_end_due && owner_matches
                             && (serving_status ? !txs_empty : !tx_empty))
                             talk_st <= T_DAV;
                     end
@@ -459,7 +484,7 @@ module ieee (
                     // also needs RX space before DAV, or active-byte protection
                     // prevents firmware from draining the queue it must accept into.
                     T_DAV: if (bus_nrfd_n && !bus_ndac_n
-                               && !talk_event_due && !atn_end_due
+                               && !talk_event_due && !atn_end_due && !listen_end_due
                                && (!listening || (rx_room && !atn_end_due))
                                && owner_matches && (serving_status ? !txs_empty : !tx_empty)) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
@@ -522,7 +547,8 @@ module ieee (
             // prev_bus_dav_n high so the edge re-fires once the MCU drains
             // a slot, instead of being lost forever (bus deadlock).
             if (!(prev_bus_dav_n && !bus_dav_n
-                && (!rx_room || atn_end_due || talk_event_due) && (atn_active || listening)))
+                && (!rx_room || atn_end_due || talk_event_due || listen_end_due)
+                && (atn_active || listening)))
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
         end

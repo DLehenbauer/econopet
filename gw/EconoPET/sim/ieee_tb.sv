@@ -237,7 +237,9 @@ module ieee_tb;
     bit  rx_isatn [$];
     bit  rx_iseoi [$];
     byte rx_talk_events [$];
+    byte rx_listen_events [$];
     byte rx_metadata_tags [$];
+    byte rx_boundary_payloads [$];
     int rx_boundary_count = 0;
 
     task automatic mcu_drain_rx;
@@ -253,7 +255,9 @@ module ieee_tb;
             mcu_read(IEEE_REG_RX, d);
             mcu_write(IEEE_REG_RX, 8'h00);   // explicit pop
             if (ctrl & IEEE_CTRL_RD_RX_ATN_END_MASK) begin
-                rx_boundary_count++;
+                rx_boundary_payloads.push_back(d);
+                if (d == 0) rx_boundary_count++;
+                else rx_listen_events.push_back(d);
                 rx_metadata_tags.push_back(IEEE_CTRL_RD_RX_ATN_END_MASK);
             end else if (ctrl & IEEE_CTRL_RD_RX_TALK_EVENT_MASK) begin
                 rx_talk_events.push_back(d);
@@ -265,6 +269,65 @@ module ieee_tb;
             end
             mcu_read(IEEE_REG_STATUS, st);
         end
+    endtask
+
+    // The first data DAV release carries every listener, without clearing its role.
+    task automatic check_listen_checkpoint(input bit full_rx, input bit discarded);
+        int first_event;
+        int previous_boundaries;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        ctl_atn(1);
+        ctl_send(8'h28);
+        ctl_send(8'h63);
+        ctl_send(8'h2B);
+        ctl_send(8'h63);
+        ctl_atn(0);
+        mcu_drain_rx;
+        first_event = rx_listen_events.size();
+        previous_boundaries = rx_boundary_count;
+        // Fill with command entries, retaining this same data-phase selection.
+        if (full_rx) begin
+            ctl_atn(1);
+            for (int i = 0; i < dut.RX_DEPTH - (discarded ? 1 : 2); ++i) ctl_send(8'h63);
+            ctl_atn(0);
+            repeat (10) @(posedge sys_clock);
+        end
+        ctl_dio(8'h55);
+        ctl_dav(1);
+        if (!discarded) ctl_wait(8'h01, 8'h01);
+        if (full_rx) begin
+            `assert_equal(dut.rx_count, dut.RX_DEPTH);
+        end else begin
+            mcu_drain_rx;
+            `assert_equal(rx_listen_events.size(), first_event);
+        end
+        `assert_equal(dut.listen_end_pending, 4'b0000);
+        ctl_dav(0);
+        if (full_rx) begin
+            `assert_equal(dut.listen_end_pending, 4'b1001);
+            // The retained exit must precede later ATN-release metadata.
+            ctl_atn(1);
+            ctl_atn(0);
+        end
+        mcu_drain_rx;
+        `assert_equal(rx_listen_events.size(), first_event + 1);
+        `assert_equal(rx_listen_events[first_event], 8'h09);
+        `assert_equal(dut.listen_units, 4'b1001);
+        `assert_equal(dut.listen_end_pending, 4'b0000);
+        if (full_rx) begin
+            `assert_equal(rx_boundary_count, previous_boundaries + 2);
+            `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 2], 8'h09);
+            `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 1], 8'h00);
+        end else begin
+            // Subsequent bytes in an active receive do not create extra checkpoints.
+            ctl_send(8'h56);
+            mcu_drain_rx;
+            `assert_equal(rx_listen_events.size(), first_event + 1);
+        end
+        ctl_atn(1);
+        ctl_send(8'h3F);
+        ctl_atn(0);
+        mcu_drain_rx;
     endtask
 
     // Source completion is ordered metadata, never an invented GET or bus byte.
@@ -447,11 +510,12 @@ module ieee_tb;
         int record_length;
         localparam int SELECTION_BYTES = 5;
         localparam int STALL_CYCLES = 400;
+        localparam int LISTENER_BOUNDARIES = 1;
         logic [7:0] d;
         int first_data;
         int previous_boundaries;
         int previous_events;
-        record_length = eof_at_capacity ? dut.RX_DEPTH : RECORD_LENGTH;
+        record_length = eof_at_capacity ? dut.RX_DEPTH - LISTENER_BOUNDARIES : RECORD_LENGTH;
         $display("[%t]   peer backpressure boundary=%b eof_at_capacity=%b",
             $time, pending_boundary, eof_at_capacity);
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
@@ -490,7 +554,7 @@ module ieee_tb;
         `assert_equal(dut.rx_count, dut.RX_DEPTH);
         `assert_equal(dut.dev_dav_n, 1'b1);
         mcu_read(IEEE_REG_TX, d);
-        `assert_equal(d, 8'(dut.RX_DEPTH));
+        `assert_equal(d, 8'(dut.RX_DEPTH - LISTENER_BOUNDARIES));
         if (eof_at_capacity) begin
             `assert_equal(dut.talk_event_pending, 1'b1);
             ctl_atn(1);
@@ -985,7 +1049,7 @@ module ieee_tb;
         `assert_equal(d, 8'hE0);
 
         // --- RX-full backpressure: the DAV edge must survive a full FIFO ---
-        // Fill RX (2 command bytes + ATN end + 29 data), then send one
+        // Fill RX (2 commands + ATN end + listener checkpoint + 28 data), then send one
         // more data byte with no room; the device must hold NDAC (not ACK,
         // not drop) until the MCU drains, then complete the handshake.
         rx_bytes.delete(); rx_isatn.delete();
@@ -994,7 +1058,8 @@ module ieee_tb;
         ctl_send(8'h28);                   // LISTEN 8
         ctl_send(8'hF1);                   // OPEN ch1
         ctl_atn(0);
-        for (int i = 0; i < 29; i++) ctl_send(8'h20 + i[7:0]);
+        for (int i = 0; i < 28; i++) ctl_send(8'h20 + i[7:0]);
+        `assert_equal(dut.rx_count, dut.RX_DEPTH);
         ctl_eoi(1);
         fork
             ctl_send(8'hA5);               // stalls at the full FIFO...
@@ -1005,11 +1070,11 @@ module ieee_tb;
         join
         ctl_eoi(0);
         mcu_drain_rx;                      // collect the A5 pushed after drain
-        `assert_equal(rx_bytes.size(), 32);
-        `assert_equal(rx_bytes[31], 8'hA5);
-        `assert_equal(rx_bytes[30], 8'h3C); // 0x20+28
-        `assert_equal(rx_iseoi[30], 1'b0);
-        `assert_equal(rx_iseoi[31], 1'b1);
+        `assert_equal(rx_bytes.size(), 31);
+        `assert_equal(rx_bytes[30], 8'hA5);
+        `assert_equal(rx_bytes[29], 8'h3B); // 0x20+27
+        `assert_equal(rx_iseoi[29], 1'b0);
+        `assert_equal(rx_iseoi[30], 1'b1);
         ctl_atn(1);
         ctl_send(8'h3F);                   // UNLISTEN
         ctl_atn(0);
@@ -1032,6 +1097,9 @@ module ieee_tb;
         end
 
         // Cover both prefetch phases, with/without private reads, on each FIFO.
+        check_listen_checkpoint(1'b0, 1'b0);
+        check_listen_checkpoint(1'b1, 1'b0);
+        check_listen_checkpoint(1'b1, 1'b1);
         check_talk_event(1'b0, 1'b0, 1'b0);
         check_talk_event(1'b1, 1'b0, 1'b0);
         check_talk_event(1'b0, 1'b1, 1'b0);
