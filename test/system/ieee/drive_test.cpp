@@ -32,7 +32,7 @@ constexpr size_t D80SectorsPerTrack = 29;
 constexpr size_t D80DirectoryTrack = 39;
 constexpr uint8_t D80DataTrack = 38;
 constexpr size_t TerminalPayloadLimit = DISKIMAGE_SECTOR_PAYLOAD_SIZE + 1;
-constexpr size_t SequentialFixtureLimit = 2 * DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+constexpr size_t SequentialFixtureLimit = 3 * DISKIMAGE_SECTOR_PAYLOAD_SIZE;
 constexpr econopet::Cycles RomServicePeriod = 1000;
 // Allow the full native timer/software wait, successful prefix and readdressing.
 constexpr econopet::Cycles TerminalRomBudget = 12'000'000;
@@ -60,7 +60,7 @@ size_t sequential_first_sector(const std::vector<uint8_t>& image, bool d80) {
 // Build a bounded SEQ chain for both native models without using the drive parser.
 std::vector<uint8_t> sequential_image(bool d80, const std::vector<uint8_t>& payload) {
     if (payload.size() < 2 || payload.size() > SequentialFixtureLimit)
-        throw std::invalid_argument("SEQ fixture requires 2..508 payload bytes");
+        throw std::invalid_argument("SEQ fixture requires 2..762 payload bytes");
     if (!d80) return D64{}.seq("BASIC", payload).bytes();
     std::vector<uint8_t> image(DISKIMAGE_D80_SIZE);
     const auto directory = sequential_directory(true);
@@ -73,7 +73,7 @@ std::vector<uint8_t> sequential_image(bool d80, const std::vector<uint8_t>& payl
     const std::string filename = "BASIC";
     std::copy(filename.begin(), filename.end(), image.begin() + directory + FilenameOffset);
 
-    // Keep both sectors on track 38, whose 29-sector geometry is ROM-defined.
+    // Keep the bounded chain on track 38, whose 29-sector geometry is ROM-defined.
     size_t used = 0;
     for (size_t sector = 0; used < payload.size(); ++sector) {
         const auto offset = ((D80DataTrack - 1) * D80SectorsPerTrack + sector)
@@ -113,6 +113,19 @@ std::vector<uint8_t> relative_sequential_image(bool d80, const std::vector<uint8
     const std::string name = "PLAIN";
     std::copy(name.begin(), name.end(), image.begin() + sequential + FilenameOffset);
     return image;
+}
+
+// Compare the full persisted fixture independently of channel read responses.
+void expect_persisted_image(const char* filename, const std::vector<uint8_t>& expected) {
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, filename);
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> file(std::fopen(path, "rb"), &std::fclose);
+    ASSERT_TRUE(file);
+    std::vector<uint8_t> actual(expected.size());
+    ASSERT_EQ(std::fread(actual.data(), 1, actual.size(), file.get()), actual.size());
+    EXPECT_EQ(std::fgetc(file.get()), EOF);
+    EXPECT_FALSE(std::ferror(file.get()));
+    EXPECT_EQ(actual, expected);
 }
 
 // Repair the mounted backing file in place, without resetting the drive session.
@@ -1010,6 +1023,274 @@ TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterUnopenedTalk) {
             controller.command(Untalk);
         }
     }
+}
+
+// Native WRTREL finishes on EOI and keeps LISTEN active for the next record.
+TEST_P(DriveRelativeTest, RelativeEoiCompletesEachRecordWithoutUnlisten) {
+    const bool d80 = GetParam();
+    for (const uint8_t length : {uint8_t{2}, uint8_t{129}, uint8_t{DISKIMAGE_REL_MAX_RECORD_LENGTH}}) {
+        SCOPED_TRACE(::testing::Message() << "record length " << unsigned{length});
+        const std::string filename = "relative-eoi-" + std::to_string(length)
+            + (d80 ? ".d80" : ".d64");
+        std::vector<uint8_t> payload(3 * size_t{length}, 0xa0);
+        firmware.mount(relative_image(d80, payload, length), filename.c_str());
+        IeeeController controller(system);
+        open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+        service_rx(system, firmware, "open EOI write target");
+        position_relative(system, firmware, controller, 1, 2);
+        position_relative(system, firmware, controller, 1, 1, Channel{DataChannel + 1});
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        for (unsigned int completed = 1; completed <= 3; ++completed) {
+            if (completed <= 2) {
+                if (completed == 2) {
+                    controller.data(0xb5, Eoi::More);
+                    service_rx(system, firmware, "retain partial second REL record");
+                }
+                controller.data(completed == 1 ? 0xa5 : 0xb6, Eoi::Last);
+                service_rx(system, firmware, "complete REL record without UNLISTEN");
+                const size_t start = (completed - 1) * size_t{length};
+                payload[start + 1] = completed == 1 ? 0xa5 : 0xb6;
+                if (completed == 2) payload[start] = 0xb5;
+                std::fill(payload.begin() + start + 2,
+                    payload.begin() + start + length, 0);
+                EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Listening));
+            } else {
+                controller.command(Unlisten);
+                service_rx(system, firmware, "UNLISTEN without an empty successor write");
+            }
+            // Compare the entire persisted image, not merely a prepared read response.
+            expect_persisted_image(filename.c_str(), relative_image(d80, payload, length));
+        }
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+            d80 ? "00, OK,00,00,0\r" : "70,NO CHANNEL,00,00\r");
+        position_relative(system, firmware, controller, 1, 1);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "read first EOI-written record");
+        receive_payload(system, controller, {data(0xa0), data(0xa5, Eoi::Last)});
+        controller.command(Untalk);
+        position_relative(system, firmware, controller, 2, 1);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "read second EOI-written record");
+        receive_payload(system, controller, {data(0xb5), data(0xb6, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "finish REL EOI write regression");
+    }
+}
+
+// Both kinds of REL EOI retain prepared CHNDAT when another channel writes.
+TEST_P(DriveRelativeTest, EoiRetainsPreparedSuccessorAcrossPeerWrite) {
+    const bool d80 = GetParam();
+    constexpr Channel PeerChannel{DataChannel + 1};
+    for (const bool write_eoi : {false, true}) {
+        SCOPED_TRACE(write_eoi ? "write EOI" : "read EOI");
+        const std::vector<uint8_t> payload{0, 0, 0xa5, 0, 0xcc, 0xdd};
+        const char* const filename = write_eoi ? "prepared-write.img" : "prepared-read.img";
+        firmware.mount(relative_image(d80, payload, 2), filename);
+        IeeeController controller(system);
+        open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+        service_rx(system, firmware, "open prepared-response channel");
+        open_file(system, controller, PeerChannel, "BASIC,L");
+        service_rx(system, firmware, "open prepared-response peer");
+        if (write_eoi) {
+            controller.command(Listen(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            controller.data(0x80, Eoi::Last);
+            service_rx(system, firmware, "prepare successor after write EOI");
+        } else {
+            controller.command(Talk(Device{DeviceAddress}));
+            controller.command(Secondary(Channel{DataChannel}));
+            service_rx(system, firmware, "read empty first record");
+            receive_payload(system, controller, {data(0, Eoi::Last)});
+            controller.command(Untalk);
+            service_rx(system, firmware, "prepare successor after read EOI");
+        }
+        position_relative(system, firmware, controller, 2, 1, PeerChannel);
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Secondary(PeerChannel));
+        controller.data('Z');
+        controller.data('Y', Eoi::Last);
+        controller.command(Unlisten);
+        service_rx(system, firmware, "overwrite prepared successor through peer");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "restore prepared response without P");
+        receive_payload(system, controller, {data(0xa5, Eoi::Last)});
+        controller.command(Untalk);
+        position_relative(system, firmware, controller, 2, 1);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "P replaces prepared response with backing data");
+        receive_payload(system, controller, {data('Z'), data('Y', Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "finish prepared-response control");
+    }
+}
+
+// Native CLSALL closes only the addressed unit, preserving a peer's live source.
+TEST_P(DriveRelativeTest, Close15ReleasesChannelsAndPreservesPeerTalk) {
+    const bool d80 = GetParam();
+    const std::vector<uint8_t> payload{0xa5, 0xa6, 0x5a, 0x5b};
+    const char* const filename = "close15.img";
+    firmware.mount(relative_sequential_image(d80, payload), filename);
+    constexpr Device Peer{DeviceAddress + 1};
+    constexpr Channel Second{DataChannel + 1}, Sequential{DataChannel + 2};
+    ASSERT_TRUE(ieee_drive_mount(2, filename));
+    IeeeController controller(system);
+    for (const bool peer_relative : {true, false}) {
+        SCOPED_TRACE(peer_relative ? "peer REL" : "peer SEQ");
+        open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+        service_rx(system, firmware, "open first CLOSE-15 target");
+        open_file(system, controller, Second, "BASIC,L");
+        service_rx(system, firmware, "open second CLOSE-15 target");
+        open_file(system, controller, Sequential, "PLAIN");
+        service_rx(system, firmware, "open ordinary CLOSE-15 target");
+        position_relative(system, firmware, controller, 1, 1, Channel{DataChannel + 3});
+        open_file(system, controller, Channel{DataChannel}, peer_relative ? "BASIC,L" : "PLAIN", Peer);
+        service_rx(system, firmware, "open CLOSE-15 peer control");
+        controller.command(Talk(Peer));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "select peer before unit-local CLOSE");
+        ASSERT_EQ(controller.receive(), data(0xa5));
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Close(Channel{CommandChannel}));
+        controller.command(Unlisten);
+        service_rx(system, firmware, "close all channels without dropping peer response");
+        receive_payload(system, controller, peer_relative
+            ? std::vector<Record>{data(0xa6, Eoi::Last)}
+            : std::vector<Record>{data(0xa6), data(0x5a), data(0x5b, Eoi::Last)});
+        controller.command(Untalk);
+        EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+            d80 ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+        for (const Channel channel : {Channel{DataChannel}, Second, Sequential}) {
+            position_relative(system, firmware, controller, 1, 1, channel);
+            EXPECT_EQ(receive_status(system, firmware, controller, Device{DeviceAddress}),
+                d80 ? "70,NO CHANNEL,00,00,0\r" : "70,NO CHANNEL,00,00\r");
+        }
+        open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+        service_rx(system, firmware, "reuse a channel after CLOSE 15");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "read reopened channel");
+        receive_payload(system, controller, {data(0xa5), data(0xa6, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "finish CLOSE-15 reuse");
+    }
+}
+
+// Revision-12 fputrec writes two records under one LISTEN, then native input reads them.
+TEST_P(DriveRelativeTest, WaterlooRecordWritePersistsAndReadsBack) {
+    const bool d80 = GetParam();
+    constexpr uint8_t RecordLength = 4, EoiFlag = 1, WriteAccess = 2;
+    constexpr econopet::CpuAddress Fputrec{0xb367}, Syswrite{0xc52c}, Sysnl{0xc6c6};
+    constexpr test_asm::mc6809::Instruction<2> PushD{{0x34, 0x06}}, DropWord{{0x32, 0x62}};
+    const uint8_t filename[] = {'B', 'A', 'S', 'I', 'C', ',', 'L', 0};
+    const uint8_t written[] = {0xa5, 0x5a, 0xb5, 0xb6};
+    std::vector<uint8_t> payload(3 * RecordLength, 0xa0);
+    const char* const backing = "waterloo-write.img";
+    firmware.mount(relative_image(d80, payload, RecordLength), backing);
+    WaterlooFixture rom(system);
+    auto test = rom.program(test_asm::ProgramMode::Phased);
+    const auto source = test.data("write records", NativePayload, sizeof(written));
+    const auto fcb = test.data("text FCB", econopet::CpuAddress{0x0a00}, 6);
+    const auto received = test.data("record readback", econopet::CpuAddress{0x0b00}, 6,
+        test_asm::Capture::Yes);
+    const auto flags = test.data("readback EOI", econopet::CpuAddress{0x0b10}, 6,
+        test_asm::Capture::Yes);
+    const auto status = test.byte("record write status");
+    const auto checkpoint = system.cpu(CPU_SOFT_6809).peek_fetch_checkpoint();
+    auto wire = system.trace_ieee();
+    auto execution = test.within(TerminalRomBudget)
+        .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .pause([&](auto& p) {
+            rom.init_ieee(p);
+            rom.device(p, DeviceAddress, DataChannel);
+            rom.file(p, filename);
+            p.lda(test_asm::imm(0)).sta(WaterlooActiveRole).sta(WaterlooGlobalStatus)
+             .lda(test_asm::imm(1)).sta(WaterlooWorkspace::WaitParameterLow)
+             .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Open));
+            p.pause("Waterloo write OPEN unlistened");
+            // fputrec takes an FCB, not the transport parameter block in D.
+            const uint8_t descriptor[] = {'t', 0, 0, 0, 1, 0};
+            p.store(fcb, descriptor).store(source, written)
+             .lda(test_asm::imm(WriteAccess)).sta(WaterlooWorkspace::Block + 1)
+             .lda(test_asm::imm(0)).sta(WaterlooWorkspace::Block + 3)
+             .lda(test_asm::imm(1)).sta(WaterlooWorkspace::Block + 4);
+            for (unsigned int record = 0; record < 2; ++record) {
+                // Stack arguments are buffer, count above JSR's return address.
+                p.ldd(test_asm::imm16(2)).emit(PushD)
+                 .ldd(test_asm::imm16(source.byte(2 * record).address())).emit(PushD)
+                 .ldd(test_asm::imm16(fcb.address())).jsr(Fputrec)
+                 .emit(DropWord).emit(DropWord)
+                 .lda(WaterlooWorkspace::Block).sta(status);
+                p.pause(record == 0 ? "first Waterloo record EOI" : "second Waterloo record EOI");
+            }
+            p.ldd(test_asm::imm16(1)).emit(PushD)
+             .ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::RelPosition))
+             .emit(DropWord);
+            p.pause("Waterloo readback P unlistened");
+            for (unsigned int record = 0; record < 2; ++record) {
+                p.ldd(test_asm::imm16(WaterlooWorkspace::Block)).jsr(rom.entry(WaterlooRoutine::Talk))
+                 .lda(test_asm::imm(0)).sta(WaterlooWorkspace::DiskFlags);
+                for (unsigned int index = 0; index < 3; ++index)
+                    p.jsr(rom.entry(WaterlooRoutine::Input))
+                     .stb(received.byte(3 * record + index).address())
+                     .lda(WaterlooWorkspace::DiskFlags).sta(flags.byte(3 * record + index));
+                p.jsr(rom.entry(WaterlooRoutine::Untalk));
+            }
+        });
+    ASSERT_EQ(execution.name(), "Waterloo write OPEN unlistened");
+    service_rx(system, firmware, "dispatch native Waterloo write OPEN");
+    for (unsigned int record = 0; record < 2; ++record) {
+        auto configuration = system.execution();
+        configuration.within(TerminalRomBudget)
+            .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter());
+        execution = test.resume(execution, configuration);
+        ASSERT_EQ(execution.name(), record == 0 ? "first Waterloo record EOI" : "second Waterloo record EOI");
+        service_rx(system, firmware, "persist native Waterloo record EOI");
+        const size_t start = record * RecordLength;
+        payload[start] = written[2 * record];
+        payload[start + 1] = written[2 * record + 1];
+        payload[start + 2] = '\r';
+        payload[start + 3] = 0;
+        expect_persisted_image(backing, relative_image(d80, payload, RecordLength));
+        EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Listening));
+    }
+    auto position_execution = system.execution();
+    position_execution.within(TerminalRomBudget)
+        .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter());
+    execution = test.resume(execution, position_execution);
+    ASSERT_EQ(execution.name(), "Waterloo readback P unlistened");
+    service_rx(system, firmware, "dispatch native Waterloo readback P");
+    auto read_execution = system.execution();
+    read_execution.within(TerminalRomBudget)
+        .every(RomServicePeriod, ServiceTiming::AfterSlice, firmware.service_adapter());
+    const auto complete = test.resume(execution, read_execution);
+    ASSERT_TRUE(complete.complete());
+    const auto result = test.capture(complete);
+    EXPECT_EQ(result[status], 0);
+    EXPECT_EQ(result[received], (std::vector<uint8_t>{0xa5, 0x5a, '\r', 0xb5, 0xb6, '\r'}));
+    for (unsigned int index = 0; index < received.size(); ++index)
+        EXPECT_EQ(result[flags.byte(index)] & EoiFlag, index % 3 == 2 ? EoiFlag : 0);
+    EXPECT_TRUE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(Fputrec, checkpoint));
+    EXPECT_TRUE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(Syswrite, checkpoint));
+    EXPECT_TRUE(system.cpu(CPU_SOFT_6809).peek_opcode_fetched_at(Sysnl, checkpoint));
+    const std::vector<Record> expected{
+        command(Listen(Device{DeviceAddress})), command(Open(Channel{DataChannel})),
+        data('B'), data('A'), data('S'), data('I'), data('C'), data(','), data('L', Eoi::Last),
+        command(Unlisten), command(Listen(Device{DeviceAddress})), command(Secondary(Channel{DataChannel})),
+        data(0xa5), data(0x5a), data('\r', Eoi::Last),
+        data(0xb5), data(0xb6), data('\r', Eoi::Last),
+        command(Unlisten), command(Listen(Device{DeviceAddress})), command(Secondary(Channel{CommandChannel})),
+        data('P'), data(DataChannel), data(1), data(0), data(0, Eoi::Last), command(Unlisten),
+        command(Talk(Device{DeviceAddress})), command(Secondary(Channel{DataChannel})),
+        data(0xa5), data(0x5a), data('\r', Eoi::Last), command(Untalk),
+        command(Talk(Device{DeviceAddress})), command(Secondary(Channel{DataChannel})),
+        data(0xb5), data(0xb6), data('\r', Eoi::Last), command(Untalk),
+    };
+    require_sequence(wire.records(), expected, "Waterloo fputrec persistence and native input");
 }
 
 // EOF queued in transport remains ready, but its final GET makes SEQ NOTRDY.

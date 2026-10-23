@@ -310,8 +310,9 @@ typedef struct {
     uint16_t pending_pos;
     bool pending_record;
     uint8_t pending[DISKIMAGE_REL_MAX_RECORD_LENGTH];
-    // Record-write staging (LISTEN data, committed at UNLISTEN):
+    // Record-write staging (EOI completes a record without ending LISTEN):
     bool     wr_active;
+    bool     wr_overflow;
     uint16_t wr_pos;        // start position within the record (from P)
     uint16_t wr_count;
     uint8_t  wr_buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
@@ -541,18 +542,11 @@ static void rel_serve(rel_channel_t* rc) {
     streamed_bytes += n;   // REL read, attributed to this channel's slot
 }
 
-// Begin collecting a record write on this channel (kernel did LISTEN +
-// secondary): bytes land at the position set by the last P command.
-static void rel_write_begin(rel_channel_t* rc) {
-    data_tx_sync();
-    if (data_tx_channel == rc) {
-        data_tx_park();
-        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-    }
-    rc->pending_size = 0;
-    rc->pending_pos = 0;
-    uint32_t base = rc->record_base;
+// Arm write staging without replacing the successor prepared by native RD40.
+static void rel_write_arm(rel_channel_t* rc) {
+    const uint32_t base = rc->record_base;
     rc->wr_active = true;
+    rc->wr_overflow = false;
     rc->wr_count = 0;
     if (rc->missing || rc->bufptr < base || rc->bufptr >= base + rc->reclen) {
         rc->wr_pos = 0;         // fresh record start
@@ -561,28 +555,39 @@ static void rel_write_begin(rel_channel_t* rc) {
     }
 }
 
+// Enter LISTEN on this channel, replacing its old read response.
+static void rel_write_begin(rel_channel_t* rc) {
+    data_tx_sync();
+    if (data_tx_channel == rc) {
+        data_tx_park();
+        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    }
+    rc->pending_size = 0;
+    rc->pending_pos = 0;
+    rel_write_arm(rc);
+}
+
 static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
     if (rc->wr_pos + rc->wr_count >= rc->reclen) {
+        rc->wr_overflow = true;
         set_status(rc->slot, st_code_record_overflow, 0, 0);
         return;
     }
     rc->wr_buf[rc->wr_count++] = byte;
 }
 
-// Commit at UNLISTEN, CBM-style: bytes land at the position, the record
-// tail is zero-filled (what the read side's null-trim recovers), and the
-// engine advances.
-static void rel_write_commit(rel_channel_t* rc) {
+// Complete a staged record, zero-fill its tail and prepare its successor.
+static bool rel_write_commit(rel_channel_t* rc) {
     uint8_t rec[DISKIMAGE_REL_MAX_RECORD_LENGTH];
     rc->wr_active = false;
     if (rc->missing) {
         set_status(rc->slot, st_code_record_missing, 0, 0);
-        return;
+        return false;
     }
     uint32_t base = rc->record_base;
     if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
         set_status(rc->slot, st_code_read_error, 0, 0);
-        return;
+        return false;
     }
     memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
     memset(rec + rc->wr_pos + rc->wr_count, 0,
@@ -591,11 +596,31 @@ static void rel_write_commit(rel_channel_t* rc) {
         set_status(rc->slot, st_code_write_protect, 0, 0);
         log_info("ieee: REL write failed (read-only?) rec %lu",
                  (unsigned long) rc->cur_record);
-        return;
+        return false;
     }
     // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
     rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
     if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
+    return true;
+}
+
+// Release one unit's data channel without discarding a peer's selected source.
+static void close_channel(uint8_t unit, uint8_t channel) {
+    const uint8_t owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
+        | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | channel;
+    if (data_tx_owner == owner) {
+        data_tx_park();
+        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    }
+    rel_channel_t* const rc = rel_find(unit, channel);
+    if (rc != NULL) {
+        rc->in_use = false;
+        rc->wr_active = false;
+    }
+    if (file_unit == unit && file_chan == channel) {
+        file_state = file_channel_closed;
+        streaming = false;
+    }
 }
 
 // Starts counted command collection for both OPEN 15 and secondary address 15.
@@ -917,8 +942,10 @@ static void handle_command(uint8_t cmd) {
                     receive_states[unit].mode = receive_idle;
                 }
                 for (int i = 0; i < MAX_REL_CHANNELS; i++)
-                    if (rel_chans[i].in_use && rel_chans[i].wr_active)
-                        rel_write_commit(&rel_chans[i]);
+                    if (rel_chans[i].in_use && rel_chans[i].wr_active) {
+                        if (rel_chans[i].wr_count != 0) rel_write_commit(&rel_chans[i]);
+                        else rel_chans[i].wr_active = false;
+                    }
             } else {
                 const uint8_t a = IEEE_CMD_ADDRESS(cmd);
                 if (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS) {
@@ -1008,14 +1035,15 @@ static void handle_command(uint8_t cmd) {
                     receive_states[addressed_unit].mode = receive_name;
                 }
             } else {
-                rel_channel_t* rc = rel_find(addressed_unit, IEEE_CMD_CHANNEL(cmd));
-                if (rc != NULL) {
-                rc->in_use = false;
-                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                } else if (addressed_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
-                file_state = file_channel_closed;
-                streaming = false;
-                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+                const uint8_t channel = IEEE_CMD_CHANNEL(cmd);
+                if (channel == IEEE_COMMAND_CHANNEL) {
+                    for (int index = IEEE_COMMAND_CHANNEL - 1; index >= 0; --index)
+                        close_channel(addressed_unit, (uint8_t) index);
+                    set_status(addressed_unit * DRIVES_PER_UNIT
+                        + drive_status[addressed_unit].drive, st_code_ok, 0, 0);
+                } else {
+                    close_channel(addressed_unit, channel);
+                    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
                 }
             }
             break;
@@ -1164,7 +1192,18 @@ void ieee_drive_task(void) {
                     }
                 } else {
                     rel_channel_t* wrc = rel_find(unit, input->channel);
-                    if (wrc != NULL && wrc->wr_active) rel_write_byte(wrc, byte);
+                    if (wrc != NULL && wrc->wr_active) {
+                        rel_write_byte(wrc, byte);
+                        if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK) {
+                            const bool overflow = wrc->wr_overflow;
+                            if (rel_write_commit(wrc) && !overflow) {
+                                // DOS 2.7 WR45 clears status. DOS 2 WR51 does not.
+                                if (get_drive_model(wrc->slot) == drive_model_8050)
+                                    set_status(wrc->slot, st_code_ok, 0, 0);
+                                rel_write_arm(wrc);
+                            }
+                        }
+                    }
                 }
             }
         }

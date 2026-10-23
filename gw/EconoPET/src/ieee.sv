@@ -412,9 +412,9 @@ module ieee (
                                 unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Discard queued file data in fabric, before
                                 // the MCU even sees the command -- but only
-                                // for real data channels: ch15 CLOSE/OPEN is
-                                // the DOS command channel and must not drop
-                                // an in-flight stream (firmware ignores it).
+                                // for real data channels. Firmware handles
+                                // ch15 OPEN/CLOSE lifetimes without discarding
+                                // an unrelated unit's selected response.
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
