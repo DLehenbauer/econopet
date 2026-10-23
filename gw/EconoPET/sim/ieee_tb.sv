@@ -272,7 +272,8 @@ module ieee_tb;
     endtask
 
     // The first data DAV release carries every listener, without clearing its role.
-    task automatic check_listen_checkpoint(input bit full_rx, input bit discarded);
+    task automatic check_listen_checkpoint(input bit full_rx, input bit discarded,
+                                          input bit interrupted);
         int first_event;
         int previous_boundaries;
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
@@ -302,23 +303,25 @@ module ieee_tb;
             `assert_equal(rx_listen_events.size(), first_event);
         end
         `assert_equal(dut.listen_end_pending, 4'b0000);
+        if (interrupted) ctl_atn(1);
         ctl_dav(0);
         if (full_rx) begin
-            `assert_equal(dut.listen_end_pending, 4'b1001);
+            `assert_equal(dut.listen_end_pending, interrupted ? 4'b0000 : 4'b1001);
             // The retained exit must precede later ATN-release metadata.
-            ctl_atn(1);
+            if (!interrupted) ctl_atn(1);
             ctl_atn(0);
-        end
+        end else if (interrupted) ctl_atn(0);
         mcu_drain_rx;
-        `assert_equal(rx_listen_events.size(), first_event + 1);
-        `assert_equal(rx_listen_events[first_event], 8'h09);
+        `assert_equal(rx_listen_events.size(), first_event + (interrupted ? 0 : 1));
+        if (!interrupted) `assert_equal(rx_listen_events[first_event], 8'h09);
         `assert_equal(dut.listen_units, 4'b1001);
         `assert_equal(dut.listen_end_pending, 4'b0000);
         if (full_rx) begin
             `assert_equal(rx_boundary_count, previous_boundaries + 2);
-            `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 2], 8'h09);
+            `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 2],
+                interrupted ? 8'h00 : 8'h09);
             `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 1], 8'h00);
-        end else begin
+        end else if (!interrupted) begin
             // Subsequent bytes in an active receive do not create extra checkpoints.
             ctl_send(8'h56);
             mcu_drain_rx;
@@ -1097,9 +1100,12 @@ module ieee_tb;
         end
 
         // Cover both prefetch phases, with/without private reads, on each FIFO.
-        check_listen_checkpoint(1'b0, 1'b0);
-        check_listen_checkpoint(1'b1, 1'b0);
-        check_listen_checkpoint(1'b1, 1'b1);
+        check_listen_checkpoint(1'b0, 1'b0, 1'b0);
+        check_listen_checkpoint(1'b1, 1'b0, 1'b0);
+        check_listen_checkpoint(1'b1, 1'b1, 1'b0);
+        check_listen_checkpoint(1'b0, 1'b0, 1'b1);
+        check_listen_checkpoint(1'b1, 1'b0, 1'b1);
+        check_listen_checkpoint(1'b1, 1'b1, 1'b1);
         check_talk_event(1'b0, 1'b0, 1'b0);
         check_talk_event(1'b1, 1'b0, 1'b0);
         check_talk_event(1'b0, 1'b1, 1'b0);

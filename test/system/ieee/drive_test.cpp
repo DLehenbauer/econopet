@@ -1155,6 +1155,59 @@ TEST_P(DriveRelativeTest, PendingCommandDispatchesAfterUnopenedListen) {
     }
 }
 
+// ATN abandons LSN21 before its DAV-release return can dispatch pending work.
+TEST_P(DriveRelativeTest, InterruptedListenerDavDefersPendingCommand) {
+    const bool d80 = GetParam();
+    firmware.mount(relative_image(d80, {1, 2, 3, 4, 5, 6, 7, 8}, 2),
+        d80 ? "listener-interrupted.d80" : "listener-interrupted.d64");
+    IeeeController controller(system);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,L");
+    service_rx(system, firmware, "open interrupted-listener REL target");
+    for (const auto entry : {Open(Channel{CommandChannel}), Secondary(Channel{CommandChannel})}) {
+        position_relative(system, firmware, controller, 1, 1);
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(entry);
+        const std::vector<uint8_t> position{'P', IEEE_CMD_SECONDARY(DataChannel), 3, 0, 1};
+        for (size_t index = 0; index < position.size(); ++index)
+            controller.data(position[index], index + 1 == position.size() ? Eoi::Last : Eoi::More);
+        controller.raw_send(command(Unlisten));
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel + 1}));
+        controller.release_atn();
+        service_rx(system, firmware, "retain P during unopened listener");
+
+        // Interrupt the native DAV wait before releasing DAV or selecting TALK.
+        controller.write(pet::Pia2PortB, static_cast<uint8_t>(~uint8_t{0x55}));
+        controller.write(pet::Pia2ControlB, PiaC2Low.bits());
+        EXPECT_FALSE(system.snapshot().ieee_bus_dav_no);
+        controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Atn));
+        controller.write(pet::Pia2ControlB, PiaC2High.bits());
+        controller.write(pet::Pia2PortB, BusReleased);
+        controller.raw_send(command(Unlisten));
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        controller.release_atn();
+        service_rx(system, firmware, "defer P across interrupted listener and ready TALK");
+        receive_payload(system, controller, {data(1), data(2, Eoi::Last)});
+
+        // A subsequent real IDLE must still execute the pending command once.
+        controller.command(Untalk);
+        service_rx(system, firmware, "dispatch retained P after TALK ends");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "read record selected at real IDLE");
+        receive_payload(system, controller, {data(5), data(6, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "finish interrupted-listener regression");
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        service_rx(system, firmware, "verify retained P executes once");
+        receive_payload(system, controller, {data(7), data(8, Eoi::Last)});
+        controller.command(Untalk);
+        service_rx(system, firmware, "finish interrupted-listener continuation");
+    }
+}
+
 // A peer's deferred OPEN must not discard the final selected REL response.
 TEST_P(DriveRelativeTest, DeferredPeerOpenPreservesSelectedRelativeResponse) {
     const bool d80 = GetParam();

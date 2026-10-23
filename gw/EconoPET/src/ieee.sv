@@ -448,8 +448,9 @@ module ieee (
                 listen_byte_units <= listen_units;
                 listen_checkpoint_armed <= 1'b0;
             end
-            // FNDWCH failure returns at LSN21 only after the first DAV releases.
-            if (|listen_byte_units && bus_dav_n) begin
+            // ATNIRQ abandons LSN21, but cannot retract an already completed exit.
+            if (atn_active) listen_byte_units <= '0;
+            else if (|listen_byte_units && bus_dav_n) begin
                 listen_end_pending <= listen_byte_units;
                 listen_byte_units <= '0;
             end
