@@ -17,6 +17,7 @@ static const char* const term_cursor_on = "\e[?25h";
 static const char* const term_enter_alternate = "\e[?1049h";
 static const char* const term_exit_alternate = "\e[?1049l";
 static const char* const term_clear_screen = "\e[2J\e[H";
+static const char* const term_clear_line = "\e[2K";
 static const char* const term_echo_off = "\e[12l";
 static const char* const term_echo_on = "\e[12h";
 static const char* const term_wrap_off = "\e[?7l";
@@ -50,12 +51,12 @@ void display_term_end(void) {
 // Position rows explicitly so full-width rows and the last row cannot scroll.
 static void display_term_render_buffer(const uint8_t* char_buffer,
                                       unsigned int cols, unsigned int rows) {
-    bool reverse = false;
-
-    fputs(term_reverse_off, stdout);
-
     for (unsigned int r = 0; r < rows; r++) {
         printf("\e[%u;1H", r + 1);
+        // Erase old columns in normal video when the display becomes narrower.
+        fputs(term_reverse_off, stdout);
+        fputs(term_clear_line, stdout);
+        bool reverse = false;
         for (unsigned int c = 0; c < cols; c++) {
             const char ch = *char_buffer++;
 
