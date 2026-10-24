@@ -128,13 +128,17 @@ uint8_t* diskimage_test_make_d80(void) {
 
 // Verifies unsupported container sizes do not select a disk-image type.
 START_TEST(test_open_rejects_bad_size) {
-    // Present a size that is neither a D64 nor a D80 container.
-    diskimage_t img;
-    mem_image_t mem = { .data = NULL, .size = 12345 };
-
-    // The format detector must reject the image before reading it.
-    // No supported fixed-size container matches 12,345 bytes.
-    ck_assert(!diskimage_open(&img, mem_read, &mem, mem.size));
+    static const uint32_t sizes[] = {
+        0, DISKIMAGE_SECTOR_SIZE, 1024, 12345,
+        DISKIMAGE_D64_SIZE - 1, DISKIMAGE_D64_SIZE + 1,
+        DISKIMAGE_D80_SIZE - 1, DISKIMAGE_D80_SIZE + 1,
+    };
+    // The format detector must reject unsupported sizes before reading data.
+    for (size_t index = 0; index < count_of(sizes); ++index) {
+        diskimage_t img;
+        ck_assert(!diskimage_open(&img, mem_read, NULL, sizes[index]));
+        ck_assert_int_eq(img.type, diskimage_type_none);
+    }
 }
 END_TEST
 
@@ -348,7 +352,7 @@ START_TEST(test_disk_geometry_rejects_invalid_inputs) {
         diskimage_type_t type;
         unsigned int track;
     } invalid[] = {
-        {diskimage_type_none, 1}, {diskimage_type_hdd, 1},
+        {diskimage_type_none, 1},
         {diskimage_type_d64, 0}, {diskimage_type_d64, 36}, {diskimage_type_d64, UINT_MAX},
         {diskimage_type_d80, 0}, {diskimage_type_d80, 78}, {diskimage_type_d80, UINT_MAX},
     };
@@ -769,72 +773,6 @@ START_TEST(test_rel_chain_rejects_out_of_range_start) {
 }
 END_TEST
 
-// Verifies the EconoPET flat .hdd extension's container and REL-chain behavior.
-START_TEST(test_hdd_flat_container) {
-    // 100-sector flat hard-disk REL container: record stream of 128-byte
-    // halves + $0D pads (the FORMAT.OS/9 layout, see diskimage_type_hdd).
-    const uint32_t size = 100u * 258u;
-    mem_image_t mem = { malloc(size), size };
-    for (uint32_t r = 0; r < 200; r++) {
-        memset(mem.data + r * 129, (int) (0x20 + r), 128);
-        mem.data[r * 129 + 128] = 0x0D;
-    }
-
-    // Reject invalid sizes, then open the aligned flat container for read/write.
-    diskimage_t img;
-    ck_assert(!diskimage_open_hdd(&img, mem_read, &mem, 100));   // not 258-aligned
-    ck_assert(!diskimage_open_hdd(&img, mem_read, &mem, 0));
-    // A positive 258-byte multiple selects the flat HDD container type.
-    ck_assert(diskimage_open_hdd(&img, mem_read, &mem, size));
-    ck_assert_int_eq(img.type, diskimage_type_hdd);
-    img.write = mem_write;
-
-    // Verify the synthetic directory and its drive-prefixed name lookup.
-    diskimage_entry_t e;
-    ck_assert(diskimage_entry(&img, 0, &e));
-    // The extension exposes exactly one synthetic REL directory entry.
-    ck_assert_str_eq(e.name, "OS9 DRIVE A");
-    ck_assert_int_eq(e.file_type, DISKIMAGE_FTYPE_REL);
-    ck_assert_int_eq(e.record_len, 129);
-    ck_assert(!diskimage_entry(&img, 1, &e));
-    ck_assert(diskimage_find(&img, "0:OS9 DRIVE A", &e));
-    ck_assert(!diskimage_find(&img, "OS9 DRIVE B", &e));
-    // Apply the same wildcard and end-of-name rules to the synthetic filename.
-    ck_assert(diskimage_find(&img, "OS? DRIVE A", &e));
-    ck_assert(diskimage_find(&img, "OS9 DRIVE ?", &e));
-    ck_assert(diskimage_find(&img, "OS? DRIVE *", &e));
-    ck_assert(!diskimage_find(&img, "OS9 DRIVE A?", &e));
-    ck_assert(diskimage_find(&img, "OS9 DRIVE *", &e));
-    ck_assert_str_eq(e.name, "OS9 DRIVE A");
-
-    // Build the identity-mapped REL chain and check its boundaries and writes.
-    static diskchain_t ch;
-    ck_assert(diskchain_build(&ch, &img, e.start_track, e.start_sector));
-    // Flat mode maps REL offsets directly to image offsets.
-    ck_assert(ch.flat);
-    ck_assert_uint_eq(diskchain_size(&ch), size);
-
-    uint8_t buf[129], back[129];
-    ck_assert(diskchain_read(&ch, 5u * 129u, buf, 129));
-    // Record 5 retains its fixture fill byte and trailing carriage return.
-    ck_assert_uint_eq(buf[0], 0x25);
-    ck_assert_uint_eq(buf[128], 0x0D);
-    ck_assert(diskchain_read(&ch, size - 1, buf, 1));
-    ck_assert(!diskchain_read(&ch, size - 1, buf, 2));
-
-    memset(buf, 0xAA, 128);
-    buf[128] = 0x0D;
-    ck_assert(diskchain_write(&ch, 42u * 129u, buf, 129));
-    ck_assert(diskchain_read(&ch, 42u * 129u, back, 129));
-    // A successful write round-trips, while an overrun write is rejected.
-    ck_assert_mem_eq(buf, back, 129);
-    ck_assert(!diskchain_write(&ch, size - 10, buf, 20));
-
-    // Release the generated container.
-    free(mem.data);
-}
-END_TEST
-
 // Optional: exercise a real Waterloo language image when provided via env.
 START_TEST(test_real_image_if_available) {
     // Skip this optional integration test when no external image is configured.
@@ -901,7 +839,6 @@ Suite* diskimage_suite(void) {
     tcase_add_test(tc, test_stream_stops_on_circular_and_out_of_range_links);
     tcase_add_test(tc, test_rel_chain_build_and_read);
     tcase_add_test(tc, test_rel_chain_rejects_out_of_range_start);
-    tcase_add_test(tc, test_hdd_flat_container);
     tcase_add_test(tc, test_real_image_if_available);
     suite_add_tcase(s, tc);
     return s;

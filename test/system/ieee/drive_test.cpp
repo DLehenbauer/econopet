@@ -338,7 +338,7 @@ INSTANTIATE_TEST_SUITE_P(FileLengths, DrivePrgTest, testing::Values(size_t{2}, s
 // Two or more bytes, including a multi-sector file with a one-byte final
 // sector, retain normal final-byte EOI. A one-byte SEQ is legitimate, although
 // a one-byte PRG lacks the usual complete two-byte load address. REL records
-// and the non-native .hdd extension are outside this ordinary-stream quirk.
+// are outside this ordinary-stream quirk.
 // This is unrelated to the required EOI on the final OPEN filename byte.
 //
 // Source: mist64/cbmsrc revision 01bd60f162ef92212ef0cb67546ae8f42be34168,

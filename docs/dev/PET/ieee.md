@@ -62,11 +62,11 @@ peripheral state is not guaranteed to be coordinated. Power-cycle the board or
 use a firmware-initiated reset for normal operation.
 
 Status formatting follows the drive that produced the status. D64 images use
-4040 behavior and report four fields, while D80 and `.hdd` images use 8050
+4040 behavior and report four fields, while D80 images use 8050
 behavior and report a fifth drive-number field. This also applies when a
 dual-drive unit contains mixed image types. Power-on status follows drive 0,
 or the sole mounted drive when drive 0 is empty. Therefore, D64 power-on status
-is `73,CBM DOS V2,00,00`, while D80 and `.hdd` power-on status is
+is `73,CBM DOS V2,00,00`, while D80 power-on status is
 `73,CBM DOS V2.7,00,00,0`.
 
 Channel-15 `I` and `V` commands use an explicit drive 0/1 when present and
@@ -96,8 +96,7 @@ The ordinary TALK paths consume that readiness state.
 The compatibility adjustment belongs to the drive's transmit path, not raw
 image extraction. Detection uses the ordinary stream's own sector count and
 cursor, so interleaved REL reads cannot suppress its initial-EOF behavior.
-REL record reads, including the non-native flat `.hdd`
-extension, do not reproduce this ordinary-stream bug.
+REL record reads do not reproduce this ordinary-stream bug.
 [`ieee_drive_test.c`](../../../fw/test/ieee_drive_test.c) checks both native
 image types and all three ordinary file types, including reopening, the
 two-byte threshold and interleaved REL reads on the same or another device.

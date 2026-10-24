@@ -141,14 +141,8 @@ static bool mount_image(unsigned int slot, const char* filename) {
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
 
-    // .hdd = flat hard-disk REL container (any 258-multiple size); everything
-    // else opens by the exact d64/d80 container sizes.
-    const char* dot = strrchr(filename, '.');
-    bool is_hdd = (dot != NULL && strcasecmp(dot, ".hdd") == 0);
-
     diskimage_t img;
-    bool opened = is_hdd ? diskimage_open_hdd(&img, file_read, f, (uint32_t) size)
-                         : diskimage_open(&img, file_read, f, (uint32_t) size);
+    bool opened = diskimage_open(&img, file_read, f, (uint32_t) size);
     if (!opened) {
         log_info("ieee: %s has unsupported size %ld, ignored", path, size);
         fclose(f);
@@ -311,7 +305,6 @@ typedef struct {
     uint8_t reclen;
     // Absolute byte offsets into the record stream (vdrive-rel.c semantics).
     // Native trimming retains the selected byte when the whole record is NUL.
-    // The flat extension keeps its existing transparent-empty-record behavior.
     uint32_t cur_record;    // 1-based, per CBM convention
     uint32_t record_base;   // physical payload offset, including native pointer wrap
     uint32_t bufptr;
@@ -359,7 +352,7 @@ static void data_tx_sync(void) {
         // Detach the drained batch before positioning can invalidate a queue.
         data_tx_channel = NULL;
         rel_next_record(rc);
-        if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
+        if (!rc->missing) rel_prepare(rc);
     }
 }
 
@@ -398,9 +391,7 @@ static void data_tx_bind(uint8_t unit, uint8_t chan) {
         | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan;
 }
 
-// Channels are keyed by (unit, chan): the d8d9 descriptor table reuses
-// secondary addresses 2/3 on BOTH units, so the channel number alone is
-// ambiguous.
+// Find a REL channel by unit and secondary address, which other units may reuse.
 static rel_channel_t* rel_find(uint8_t unit, uint8_t chan) {
     for (int i = 0; i < MAX_REL_CHANNELS; i++)
         if (rel_chans[i].in_use && rel_chans[i].chan == chan
@@ -443,14 +434,11 @@ static drive_model_t get_drive_model(unsigned int slot) {
 
     // Determine the drive model based on the type of the mounted disk image.
     const diskimage_type_t type = drives[slot].image.type;
-    return type == diskimage_type_d80 || type == diskimage_type_hdd
-        ? drive_model_8050
-        : drive_model_4040;
+    return type == diskimage_type_d80 ? drive_model_8050 : drive_model_4040;
 }
 
 // Native NRBUF selects the channel's drive when its active data buffer changes.
 static void rel_set_buffer(rel_channel_t* rc, uint32_t position) {
-    if (rc->chain.flat) return;
     const uint32_t block = position / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
     if (rc->buffer_block != block) select_drive(rc->slot);
     rc->buffer_block = block;
@@ -481,15 +469,15 @@ static void rel_position_at(rel_channel_t* rc, uint32_t rec, uint32_t base, uint
         return;
     }
     // Native FNDLST scans the whole record, independently of the P byte offset.
-    const int32_t trim_start = (int32_t) (rc->chain.flat ? rc->bufptr : base);
+    const int32_t trim_start = (int32_t) base;
     while (rc->length >= trim_start
            && buf[rc->length - base] == 0) {
         rc->length--;
     }
     // SETLST falls back to GETPNT only if the entire native record is empty.
-    if (!rc->chain.flat && pos < rc->reclen && rc->length < (int32_t) base)
+    if (pos < rc->reclen && rc->length < (int32_t) base)
         rc->length = (int32_t) rc->bufptr;
-    if (!rc->chain.flat && rc->length < (int32_t) rc->bufptr) {
+    if (rc->length < (int32_t) rc->bufptr) {
         const uint32_t block = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
         const uint32_t last_block = (uint32_t) rc->length / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
         if (block != last_block) {
@@ -510,13 +498,10 @@ static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
 
 // NXTREC retains the active physical buffer when NR is ahead of its pointer.
 static void rel_next_record(rel_channel_t* rc) {
-    uint32_t base = rc->record_base + rc->reclen;
-    if (!rc->chain.flat) {
-        base = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE * DISKIMAGE_SECTOR_PAYLOAD_SIZE
-            + base % DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-        // bufptr is one past the prefetched record's final character.
-        if (base < rc->bufptr) base += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-    }
+    uint32_t base = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE * DISKIMAGE_SECTOR_PAYLOAD_SIZE
+        + (rc->record_base + rc->reclen) % DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+    // bufptr is one past the prefetched record's final character.
+    if (base < rc->bufptr) base += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
     rel_position_at(rc, rc->cur_record + 1, base, 0);
 }
 
@@ -651,7 +636,7 @@ static bool rel_write_commit(rel_channel_t* rc) {
     if (!rel_write_store(rc, true)) return false;
     // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
     rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
-    if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
+    if (!rc->missing) rel_prepare(rc);
     return true;
 }
 
@@ -754,11 +739,8 @@ static void resolve_open(uint8_t open_unit) {
         slot = open_unit * DRIVES_PER_UNIT
              + (unsigned int) (open_name[0] - '0');
     }
-    // Fall back to the unit's other drive only for ordinary files: OS-9's
-    // per-drive REL containers are drive-specific, and aliasing them can
-    // corrupt the mounted system disk.
-    if (!drives[slot].present && drives[slot ^ 1u].present
-        && drives[slot ^ 1u].image.type != diskimage_type_hdd) {
+    // Preserve the existing native-image fallback to the unit's other drive.
+    if (!drives[slot].present && drives[slot ^ 1u].present) {
         log_info("ieee: drive %u empty, using drive %u", slot, slot ^ 1u);
         slot ^= 1u;
     }
@@ -1264,8 +1246,7 @@ void ieee_drive_task(void) {
                             if (rel_write_commit(wrc) && !overflow) {
                                 // DOS 2.7 WR45 clears status. DOS 2 WR51 does not.
                                 if (get_drive_model(wrc->slot) == drive_model_8050)
-                                    set_status(wrc->chain.flat ? wrc->slot : selected_slot(unit),
-                                        st_code_ok, 0, 0);
+                                    set_status(selected_slot(unit), st_code_ok, 0, 0);
                                 rel_write_arm(wrc);
                             }
                         }

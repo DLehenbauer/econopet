@@ -37,9 +37,8 @@ observable respect:
 Treat a difference as a compatibility defect unless primary evidence proves it
 belongs to the selected peripheral or ROM revision.
 
-Extensions without an original-hardware counterpart, such as EconoPET's flat
-`.hdd` container, must be explicitly labeled as extensions. Isolate them so
-native D64/D80 and IEEE behavior remains unchanged.
+Extensions without an original-hardware counterpart must be explicitly labeled
+as extensions. Isolate them so native D64/D80 and IEEE behavior remains unchanged.
 
 ## Source Priority
 

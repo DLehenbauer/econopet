@@ -3269,33 +3269,6 @@ START_TEST(test_relative_position_zero_suffix_uses_physical_last_character) {
 }
 END_TEST
 
-// Keeps transparent empty records isolated to the existing flat HDD extension.
-START_TEST(test_hdd_empty_relative_record_remains_transparent) {
-    const unsigned int device = loop_device(_i);
-    const unsigned int drive = loop_drive(_i);
-    const size_t record_length = 129;
-    const uint8_t marker = 0x7b;
-
-    // Keep the first flat record empty and make every byte in record two visible.
-    uint8_t* image = calloc(2, record_length);
-    ck_assert_ptr_nonnull(image);
-    memset(image + record_length, marker, record_length);
-    mount_image(device, drive, "empty.hdd", image, 2 * record_length, true);
-    enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
-    enqueue_filename_for_drive(drive, "OS9 DRIVE A,L");
-    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
-        IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-    ieee_drive_task();
-
-    // The extension's legacy skip behavior must not acquire native NUL responses.
-    ck_assert_uint_eq(mock_ieee_data_count(), record_length);
-    for (size_t index = 0; index < record_length; ++index) {
-        ck_assert_uint_eq(mock_ieee_data_byte(index), marker);
-        ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == record_length);
-    }
-}
-END_TEST
-
 // Verifies REL channels with the same secondary address remain isolated by unit.
 START_TEST(test_relative_channels_are_isolated_between_units) {
     const unsigned int source_device = loop_device_only(_i);
@@ -3387,97 +3360,43 @@ START_TEST(test_relative_write_past_record_reports_51) {
 }
 END_TEST
 
-// HDD aliases must never open or modify the peer of an empty requested drive.
-START_TEST(test_hdd_aliases_preserve_drive_isolation) {
+// Rejects unsupported images without replacing a mounted native REL channel.
+START_TEST(test_unsupported_mount_preserves_native_channel) {
     const unsigned int device = loop_device(_i);
     const unsigned int drive = loop_drive(_i);
-    const size_t record_length = 129, image_size = 2 * record_length;
-    const uint8_t marker = 0x5a, write_marker = 0xe7;
-    uint8_t* const image = malloc(image_size);
-    ck_assert_ptr_nonnull(image);
-    memset(image, marker, image_size);
-    mount_image(device, drive ^ 1u, "peer.hdd", image, image_size, true);
-    static const char* const aliases[] = {
-        "OS9 DRIVE A,L", "OS? DRIVE A,L", "OS9 DRI?E A,L",
-        "*,L", "?*,L", "os? drive a,L",
-    };
-    for (size_t variant = 0; variant < count_of(aliases); ++variant) {
-        // A failed OPEN must also discard a previous REL channel on this secondary.
-        char filename[32];
-        snprintf(filename, sizeof(filename), "%u:%s", drive, aliases[variant]);
-        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
-        enqueue_name(filename);
-        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
-            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-        ieee_drive_task();
-        ck_assert_uint_eq(mock_ieee_data_count(), 0);
-        relative_talk(device, IEEE_CHANNEL_COMMAND);
-        char expected[IEEE_STATUS_LINE_CAPACITY];
-        snprintf(expected, sizeof(expected), "62, FILE NOT FOUND,00,00,%u\r", drive);
-        assert_status(expected);
-        mock_ieee_clear_status();
-
-        // LISTEN after the rejected OPEN must not gain write access to the peer.
-        enqueue_command(IEEE_CMD_UNTALK, IEEE_CMD_LISTEN(device),
-            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-        mock_ieee_enqueue_rx(false, write_marker);
-        enqueue_command(IEEE_CMD_UNLISTEN);
-        ieee_drive_task();
-
-        // The same alias still works when the mounted drive is explicitly selected.
-        snprintf(filename, sizeof(filename), "%u:%s", drive ^ 1u, aliases[variant]);
-        enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
-        enqueue_name(filename);
-        enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device),
-            IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-        ieee_drive_task();
-        ck_assert_uint_eq(mock_ieee_data_count(), record_length);
-        for (size_t index = 0; index < record_length; ++index) {
-            ck_assert_uint_eq(mock_ieee_data_byte(index), marker);
-            ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == record_length);
-        }
-        mock_ieee_clear_data();
-    }
-
-    // Inspect the complete backing image, including records not read by the control.
-    char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, "peer.hdd");
-    FILE* const file = fopen(path, "rb");
-    ck_assert_ptr_nonnull(file);
-    uint8_t actual[258];
-    ck_assert_uint_eq(fread(actual, 1, sizeof(actual), file), image_size);
-    for (size_t index = 0; index < sizeof(actual); ++index)
-        ck_assert_uint_eq(actual[index], marker);
-    ck_assert_int_eq(fclose(file), 0);
-}
-END_TEST
-
-// Verifies a flat OS-9 .hdd mount exposes its synthetic REL file over IEEE.
-START_TEST(test_hdd_mount_position_and_read) {
-    const unsigned int device = loop_device(_i);
-    const unsigned int drive = loop_drive(_i);
-    // Create one flat 258-byte HDD record pair with an observable byte pattern.
-    uint8_t* image = calloc(1, 258);
-    ck_assert_ptr_nonnull(image);
-    for (size_t index = 0; index < 258; index++) image[index] = (uint8_t) index;
-    mount_image(device, drive, "drive.hdd", image, 258, true);
-
-    // Open the extension's synthetic REL entry and position it at record 2.
+    mount_d64(device, drive, "native.d64", true);
     enqueue_command(IEEE_CMD_LISTEN(device), IEEE_CMD_OPEN(IEEE_CHANNEL_REL));
-    enqueue_filename_for_drive(drive, "OS9 DRIVE A,L");
-    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_COMMAND));
-    mock_ieee_enqueue_rx(false, 'P');
-    mock_ieee_enqueue_rx(false, IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
-    mock_ieee_enqueue_rx(false, 2);
-    mock_ieee_enqueue_rx_eoi(false, 0, true);
-    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(device), IEEE_CMD_SECONDARY(IEEE_CHANNEL_REL));
+    enqueue_filename_for_drive(drive, "DATA,L");
+    enqueue_command(IEEE_CMD_UNLISTEN);
     ieee_drive_task();
 
-    // Record 2 maps directly to image bytes 129 through 257 with final EOI.
+    static const uint32_t sizes[] = {
+        DISKIMAGE_SECTOR_SIZE, 1024,
+        DISKIMAGE_D64_SIZE - 1, DISKIMAGE_D80_SIZE + 1,
+    };
+    for (size_t index = 0; index < count_of(sizes); ++index) {
+        uint8_t* const image = calloc(1, sizes[index]);
+        ck_assert_ptr_nonnull(image);
+        char filename[32];
+        snprintf(filename, sizeof(filename), "unsupported-%u.img", (unsigned int) index);
+        char path[SD_PATH_MAX];
+        sd_make_path(path, SD_DIR_DISKS, filename);
+        test_register_binary_file(path, image, sizes[index], true);
+        free(image);
+        ck_assert(!ieee_drive_mount(device_slot(device, drive), filename));
+    }
+
+    // The original channel, mount, and model remain usable after all rejections.
+    relative_talk(device, IEEE_CHANNEL_COMMAND);
+    assert_status("00, OK,00,00\r");
+    mock_ieee_clear_status();
+    relative_position(device, IEEE_CHANNEL_REL, 2, 1);
+    relative_talk(device, IEEE_CHANNEL_REL);
     ck_assert_uint_eq(mock_ieee_data_count(), 129);
-    for (size_t index = 0; index < 129; index++) {
-        ck_assert_uint_eq(mock_ieee_data_byte(index), (uint8_t) (129 + index));
-        ck_assert_int_eq(mock_ieee_data_eoi(index), index == 128);
+    for (size_t index = 0; index < 129; ++index) {
+        ck_assert_uint_eq(mock_ieee_data_byte(index),
+            index < DISKIMAGE_SECTOR_PAYLOAD_SIZE - 129 ? 0xa0 : 0xa1);
+        ck_assert_int_eq(mock_ieee_data_eoi(index), index + 1 == 129);
     }
 }
 END_TEST
@@ -3620,7 +3539,7 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_initialize_and_validate_commands_select_status_drive,
                         0, IEEE_DEVICE_COUNT);
-    // Cover REL records, mutable/read-only media, and the HDD extension.
+    // Cover native REL records and mutable/read-only media.
     tcase_add_loop_test(test_case, test_relative_file_position_and_read,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_command_open_positions_relative_records,
@@ -3695,15 +3614,11 @@ Suite* ieee_drive_suite(void) {
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_relative_position_zero_suffix_uses_physical_last_character,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
-    tcase_add_loop_test(test_case, test_hdd_empty_relative_record_remains_transparent,
-                        0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_relative_channels_are_isolated_between_units,
                         0, FOR_EACH_DEVICE);
     tcase_add_loop_test(test_case, test_relative_write_past_record_reports_51,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
-    tcase_add_loop_test(test_case, test_hdd_mount_position_and_read,
-                        0, FOR_EACH_DEVICE_AND_DRIVE);
-    tcase_add_loop_test(test_case, test_hdd_aliases_preserve_drive_isolation,
+    tcase_add_loop_test(test_case, test_unsupported_mount_preserves_native_channel,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
     tcase_add_loop_test(test_case, test_d80_mount_open_and_stream,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
