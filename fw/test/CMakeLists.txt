@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/cbm/petscii.c
     ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/display/char_encoding.c
+    ${SRC_DIR}/display/display.c
     ${SRC_DIR}/display/window.c
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/sd/path.c
@@ -47,6 +48,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
+    ${TEST_DIR}/display_test.c
     ${TEST_DIR}/global_test.c
     ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c
