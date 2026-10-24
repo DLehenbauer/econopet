@@ -24,6 +24,15 @@ typedef struct {
     bool reverse_mode;
 } terminal_t;
 
+// Match Pico's direct printf output so mixed buffered/unbuffered writes reorder.
+int __wrap_printf(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    const int result = vdprintf(STDOUT_FILENO, format, args);
+    va_end(args);
+    return result;
+}
+
 // Capture terminal output and preserve shared state for the non-forking runner.
 static void setup(void) {
     saved_state = system_state;

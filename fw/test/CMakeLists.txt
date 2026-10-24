@@ -76,6 +76,8 @@ target_link_libraries(${PROJECT_NAME}
 # Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen)
+# Model Pico SDK printf() bypassing the C library's buffered stdout stream.
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=printf)
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")

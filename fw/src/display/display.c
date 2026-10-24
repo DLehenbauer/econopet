@@ -52,7 +52,8 @@ void display_term_end(void) {
 static void display_term_render_buffer(const uint8_t* char_buffer,
                                       unsigned int cols, unsigned int rows) {
     for (unsigned int r = 0; r < rows; r++) {
-        printf("\e[%u;1H", r + 1);
+        // Pico printf bypasses stdout buffering, so keep cursor and text writes together.
+        fprintf(stdout, "\e[%u;1H", r + 1);
         // Erase old columns in normal video when the display becomes narrower.
         fputs(term_reverse_off, stdout);
         fputs(term_clear_line, stdout);
