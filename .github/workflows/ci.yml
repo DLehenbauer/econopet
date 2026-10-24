@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - ieee2
 
 permissions:
   contents: read
