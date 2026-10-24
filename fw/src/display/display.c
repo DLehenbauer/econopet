@@ -10,6 +10,7 @@
 #include "system_state.h"
 
 // Terminal escape sequences
+static const char* const term_home = "\e[H";
 static const char* const term_reverse_off = "\e[m";
 static const char* const term_reverse_on = "\e[7m";
 static const char* const term_cursor_off = "\e[?25l";
@@ -17,19 +18,22 @@ static const char* const term_cursor_on = "\e[?25h";
 static const char* const term_enter_alternate = "\e[?1049h";
 static const char* const term_exit_alternate = "\e[?1049l";
 static const char* const term_clear_screen = "\e[2J\e[H";
-static const char* const term_clear_line = "\e[2K";
 static const char* const term_echo_off = "\e[12l";
 static const char* const term_echo_on = "\e[12h";
 static const char* const term_wrap_off = "\e[?7l";
 static const char* const term_wrap_on = "\e[?7h";
 
 static const uint screen_height = 25;
+static unsigned int term_columns;
+static unsigned int term_rows;
 
 void display_init(void) {
     video_init();
 }
 
 void display_term_begin(void) {
+    term_columns = 0;
+    term_rows = 0;
     fputs(term_enter_alternate, stdout);
     fputs(term_echo_off, stdout);
     fputs(term_cursor_off, stdout);
@@ -48,16 +52,17 @@ void display_term_end(void) {
     fflush(stdout);
 }
 
-// Position rows explicitly so full-width rows and the last row cannot scroll.
+// Stream rows as in the original renderer, clearing only when the screen shrinks.
 static void display_term_render_buffer(const uint8_t* char_buffer,
                                       unsigned int cols, unsigned int rows) {
+    bool reverse = false;
+
+    fputs(term_reverse_off, stdout);
+    fputs(cols < term_columns || rows < term_rows ? term_clear_screen : term_home, stdout);
+    term_columns = cols;
+    term_rows = rows;
+
     for (unsigned int r = 0; r < rows; r++) {
-        // Pico printf bypasses stdout buffering, so keep cursor and text writes together.
-        fprintf(stdout, "\e[%u;1H", r + 1);
-        // Erase old columns in normal video when the display becomes narrower.
-        fputs(term_reverse_off, stdout);
-        fputs(term_clear_line, stdout);
-        bool reverse = false;
         for (unsigned int c = 0; c < cols; c++) {
             const char ch = *char_buffer++;
 
@@ -67,6 +72,10 @@ static void display_term_render_buffer(const uint8_t* char_buffer,
             }
 
             fputs(vrom_to_term(ch), stdout);
+        }
+        // Autowrap is disabled, and omitting the final newline prevents scrolling.
+        if (r + 1 < rows) {
+            fputs("\r\n", stdout);
         }
     }
 

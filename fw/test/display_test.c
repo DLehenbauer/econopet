@@ -42,6 +42,9 @@ static void setup(void) {
     output = tmpfile();
     ck_assert_ptr_nonnull(output);
     ck_assert_int_ge(dup2(fileno(output), STDOUT_FILENO), 0);
+    display_term_begin();
+    ck_assert_int_eq(ftruncate(fileno(output), 0), 0);
+    rewind(output);
 }
 
 // Restore stdout before the runner reports results.
@@ -62,36 +65,38 @@ static void read_output(char* buffer, size_t capacity) {
     buffer[length] = '\0';
 }
 
-// Apply the renderer's cursor, attribute, and erase commands to terminal cells.
+// Apply streamed rows, attributes, and screen clearing to terminal cells.
 static void replay_output(terminal_t* terminal, const char* cursor) {
     while (*cursor != '\0') {
         if (*cursor == '\e') {
-            unsigned int row, column;
-            int consumed = 0;
-            sscanf(cursor, "\e[%u;%uH%n", &row, &column, &consumed);
-            if (consumed > 0) {
-                ck_assert_uint_ge(row, 1);
-                ck_assert_uint_le(row, TEST_TERMINAL_ROWS);
-                ck_assert_uint_ge(column, 1);
-                ck_assert_uint_le(column, pet_display_columns_80);
-                terminal->row = row - 1;
-                terminal->column = column - 1;
-                cursor += consumed;
+            if (strncmp(cursor, "\e[H", 3) == 0) {
+                terminal->row = 0;
+                terminal->column = 0;
+                cursor += 3;
             } else if (strncmp(cursor, "\e[m", 3) == 0) {
                 terminal->reverse_mode = false;
                 cursor += 3;
             } else if (strncmp(cursor, "\e[7m", 4) == 0) {
                 terminal->reverse_mode = true;
                 cursor += 4;
-            } else if (strncmp(cursor, "\e[2K", 4) == 0) {
-                for (unsigned int col = 0; col < pet_display_columns_80; ++col) {
-                    terminal->cells[terminal->row][col] = ' ';
-                    terminal->reverse[terminal->row][col] = terminal->reverse_mode;
+            } else if (strncmp(cursor, "\e[2J", 4) == 0) {
+                for (unsigned int row = 0; row < TEST_TERMINAL_ROWS; ++row) {
+                    for (unsigned int col = 0; col < pet_display_columns_80; ++col) {
+                        terminal->cells[row][col] = ' ';
+                        terminal->reverse[row][col] = terminal->reverse_mode;
+                    }
                 }
                 cursor += 4;
             } else {
                 ck_abort_msg("Unsupported terminal sequence: %s", cursor);
             }
+        } else if (*cursor == '\r') {
+            terminal->column = 0;
+            ++cursor;
+        } else if (*cursor == '\n') {
+            ++terminal->row;
+            ck_assert_uint_lt(terminal->row, TEST_TERMINAL_ROWS);
+            ++cursor;
         } else {
             ck_assert_uint_lt(terminal->column, pet_display_columns_80);
             terminal->cells[terminal->row][terminal->column] = *cursor++;
@@ -101,7 +106,7 @@ static void replay_output(terminal_t* terminal, const char* cursor) {
     }
 }
 
-// Both PET widths must render every row once without wrapping or line feeds.
+// Both widths use the original compact row stream without a scrolling final LF.
 START_TEST(test_remote_geometry) {
     const pet_display_columns_t columns = _i == 0
         ? pet_display_columns_40 : pet_display_columns_80;
@@ -114,15 +119,16 @@ START_TEST(test_remote_geometry) {
     char buffer[4096];
     read_output(buffer, sizeof(buffer));
     const char* cursor = buffer;
+    const char* const prefix = "\e[m\e[H";
+    ck_assert_int_eq(strncmp(cursor, prefix, strlen(prefix)), 0);
+    cursor += strlen(prefix);
     for (unsigned int row = 0; row < screen_rows; ++row) {
-        char position[32];
-        const int length = snprintf(position, sizeof(position), "\e[%u;1H", row + 1);
-        ck_assert_int_eq(strncmp(cursor, position, length), 0);
-        cursor += length;
-        ck_assert_int_eq(strncmp(cursor, "\e[m\e[2K", 7), 0);
-        cursor += 7;
         for (unsigned int col = 0; col < (unsigned int)columns; ++col) {
             ck_assert_int_eq(*cursor++, 'A' + row);
+        }
+        if (row + 1 < screen_rows) {
+            ck_assert_int_eq(strncmp(cursor, "\r\n", 2), 0);
+            cursor += 2;
         }
     }
     ck_assert_int_eq(*cursor, '\0');
@@ -144,9 +150,13 @@ START_TEST(test_remote_shrink) {
         system_state.video_char_buffer[(row + 1) * pet_display_columns_40 - 1] = 'D' | 0x80;
     }
     display_term_refresh();
+    display_term_refresh();
 
     char buffer[8192];
     read_output(buffer, sizeof(buffer));
+    const char* const clear = strstr(buffer, "\e[2J");
+    ck_assert_ptr_nonnull(clear);
+    ck_assert_ptr_null(strstr(clear + strlen("\e[2J"), "\e[2J"));
     terminal_t terminal = { 0 };
     replay_output(&terminal, buffer);
     for (unsigned int row = 0; row < screen_rows; ++row) {
@@ -183,7 +193,7 @@ START_TEST(test_remote_wrap_mode) {
 }
 END_TEST
 
-// Window rendering shares row positioning and resets inherited reverse video.
+// Window rendering shares the row stream and resets inherited reverse video.
 START_TEST(test_window_render) {
     uint8_t characters[] = { 0xc1, 'B', 'C', 0xc4 };
     const window_t window = window_create(characters, 2, 2);
@@ -192,7 +202,7 @@ START_TEST(test_window_render) {
 
     char buffer[256];
     read_output(buffer, sizeof(buffer));
-    const char* const frame = "\e[1;1H\e[m\e[2K\e[7mA\e[mB\e[2;1H\e[m\e[2KC\e[7mD";
+    const char* const frame = "\e[m\e[H\e[7mA\e[mB\r\nC\e[7mD";
     ck_assert_uint_eq(strlen(buffer), 2 * strlen(frame));
     ck_assert_int_eq(strncmp(buffer, frame, strlen(frame)), 0);
     ck_assert_str_eq(buffer + strlen(frame), frame);
