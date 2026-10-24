@@ -20,18 +20,24 @@ static const char* const term_exit_alternate = "\e[?1049l";
 static const char* const term_clear_screen = "\e[2J\e[H";
 static const char* const term_echo_off = "\e[12l";
 static const char* const term_echo_on = "\e[12h";
+static const char* const term_wrap_off = "\e[?7l";
+static const char* const term_wrap_on = "\e[?7h";
 
-static const uint screen_width  = 40;
 static const uint screen_height = 25;
+static unsigned int term_columns;
+static unsigned int term_rows;
 
 void display_init(void) {
     video_init();
 }
 
 void display_term_begin(void) {
+    term_columns = 0;
+    term_rows = 0;
     fputs(term_enter_alternate, stdout);
     fputs(term_echo_off, stdout);
     fputs(term_cursor_off, stdout);
+    fputs(term_wrap_off, stdout);
     fputs(term_reverse_off, stdout);
     fputs(term_clear_screen, stdout);
     fflush(stdout);
@@ -41,19 +47,20 @@ void display_term_end(void) {
     fputs(term_reverse_off, stdout);
     fputs(term_cursor_on, stdout);
     fputs(term_echo_on, stdout);
+    fputs(term_wrap_on, stdout);
     fputs(term_exit_alternate, stdout);
     fflush(stdout);
 }
 
-// Render video buffer to terminal using ANSI escape sequences
-static void display_term_render(void) {
+// Stream rows as in the original renderer, clearing only when the screen shrinks.
+static void display_term_render_buffer(const uint8_t* char_buffer,
+                                      unsigned int cols, unsigned int rows) {
     bool reverse = false;
 
-    fputs(term_home, stdout);
-
-    const unsigned int cols = screen_width;
-    const unsigned int rows = screen_height;
-    uint8_t* char_buffer = system_state.video_char_buffer;
+    fputs(term_reverse_off, stdout);
+    fputs(cols < term_columns || rows < term_rows ? term_clear_screen : term_home, stdout);
+    term_columns = cols;
+    term_rows = rows;
 
     for (unsigned int r = 0; r < rows; r++) {
         for (unsigned int c = 0; c < cols; c++) {
@@ -66,14 +73,18 @@ static void display_term_render(void) {
 
             fputs(vrom_to_term(ch), stdout);
         }
-        fputs("\r\n", stdout);
+        // Autowrap is disabled, and omitting the final newline prevents scrolling.
+        if (r + 1 < rows) {
+            fputs("\r\n", stdout);
+        }
     }
 
     fflush(stdout);
 }
 
 void display_term_refresh(void) {
-    display_term_render();
+    display_term_render_buffer(system_state.video_char_buffer,
+                               system_state.pet_display_columns, screen_height);
 }
 
 void display_task(void) {
@@ -93,45 +104,18 @@ void display_task(void) {
     
     // Render to terminal if in video mode (not in CLI or log mode)
     if (system_state.term_mode == term_mode_video) {
-        display_term_render();
+        display_term_refresh();
     }
 }
 
 // Window-based terminal display for fatal/config error screens
 void display_window_begin(const window_t* window) {
-    fputs(term_enter_alternate, stdout);
-    fputs(term_echo_off, stdout);
-    fputs(term_cursor_off, stdout);
-    fputs(term_reverse_off, stdout);
-    fputs(term_clear_screen, stdout);
-    fflush(stdout);
+    display_term_begin();
 
     window_fill(window, CH_SPACE);
 }
 
 // Render a window to the terminal
 void display_window_show(const window_t* window) {
-    bool reverse = false;
-
-    fputs(term_home, stdout);
-
-    const unsigned int cols = window->width;
-    const unsigned int rows = window->height;
-    uint8_t* char_buffer = window->start;
-
-    for (unsigned int r = 0; r < rows; r++) {
-        for (unsigned int c = 0; c < cols; c++) {
-            const char ch = *char_buffer++;
-
-            if (reverse != ((ch & 0x80) != 0)) {
-                reverse = !reverse;
-                fputs(reverse ? term_reverse_on : term_reverse_off, stdout);
-            }
-
-            fputs(vrom_to_term(ch), stdout);
-        }
-        fputs("\r\n", stdout);
-    }
-
-    fflush(stdout);
+    display_term_render_buffer(window->start, window->width, window->height);
 }

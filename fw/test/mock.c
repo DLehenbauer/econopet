@@ -6,6 +6,7 @@
 
 #include <check.h>
 
+#include "display/dvi/dvi.h"
 #include "driver.h"
 #include "hardware_contract.h"
 #include "ieee/ieee_protocol.h"
@@ -355,22 +356,13 @@ bool mock_breakpoint_halt_was_cleared(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Display mocks
+// DVI mocks
 // ---------------------------------------------------------------------------
 
-// Accepts a display window without rendering it in host tests.
-void display_window_begin(const void* window) {
-    (void)window;
+// Rejects hardware-only DVI initialization in host tests.
+void video_init(void) {
+    ck_abort_msg("DVI initialization is unavailable in host tests");
 }
-
-// Flushes host output instead of presenting a hardware display window.
-void display_window_show(const void* window) {
-    (void)window;
-    fflush(stdout);
-}
-
-// Leaves display servicing inactive in host tests.
-void display_task(void) { }
 
 // ---------------------------------------------------------------------------
 // Input mocks
