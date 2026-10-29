@@ -342,6 +342,82 @@ START_TEST(test_disk_geometry_matches_rom_zones) {
 }
 END_TEST
 
+// Both 8250 sides cover exactly 4,166 sectors without geometry holes.
+START_TEST(test_d82_geometry_covers_two_exact_native_sides) {
+    uint32_t expected_offset = 0;
+    for (unsigned int track = 1; track <= DISKIMAGE_D82_TRACK_COUNT; ++track) {
+        const unsigned int side_track = (track - 1) % DISKIMAGE_D80_TRACK_COUNT + 1;
+        const unsigned int expected_sectors = side_track <= 39   ? 29
+                                              : side_track <= 53 ? 27
+                                              : side_track <= 64 ? 25
+                                                                 : 23;
+        unsigned int sectors;
+        ck_assert(diskimage_track_sectors(diskimage_type_d82, track, &sectors));
+        ck_assert_uint_eq(sectors, expected_sectors);
+        for (unsigned int sector = 0; sector < sectors; ++sector) {
+            uint32_t offset;
+            ck_assert(diskimage_sector_offset(diskimage_type_d82, track, sector, &offset));
+            ck_assert_uint_eq(offset, expected_offset);
+            expected_offset += DISKIMAGE_SECTOR_SIZE;
+        }
+        uint32_t unchanged = UINT32_MAX;
+        ck_assert(!diskimage_sector_offset(diskimage_type_d82, track, sectors, &unchanged));
+        ck_assert_uint_eq(unchanged, UINT32_MAX);
+        if (track == DISKIMAGE_D80_TRACK_COUNT)
+            ck_assert_uint_eq(expected_offset, DISKIMAGE_D80_SIZE);
+    }
+    ck_assert_uint_eq(expected_offset, DISKIMAGE_D82_SIZE);
+}
+END_TEST
+
+// Exact-size raw detection is independent of callbacks and legacy HDD opening.
+START_TEST(test_open_recognizes_exact_d82_size) {
+    diskimage_t image;
+    const uint32_t invalid_sizes[] = {
+        DISKIMAGE_D82_SIZE - 1,
+        DISKIMAGE_D82_SIZE + 1,
+        DISKIMAGE_D82_SIZE + DISKIMAGE_D82_SIZE / DISKIMAGE_SECTOR_SIZE,
+    };
+    for (size_t index = 0; index < count_of(invalid_sizes); ++index) {
+        ck_assert(!diskimage_open(&image, NULL, NULL, invalid_sizes[index]));
+        ck_assert_int_eq(image.type, diskimage_type_none);
+    }
+    ck_assert(diskimage_open(&image, NULL, NULL, DISKIMAGE_D82_SIZE));
+    ck_assert_int_eq(image.type, diskimage_type_d82);
+}
+END_TEST
+
+// New raw D82 descriptors retain DOS 2.7 directory placement and second-side I/O.
+START_TEST(test_d82_directory_and_second_side_stream) {
+    mem_image_t memory = {.data = calloc(1, DISKIMAGE_D82_SIZE), .size = DISKIMAGE_D82_SIZE};
+    ck_assert_ptr_nonnull(memory.data);
+    const uint32_t directory = ((39u - 1) * 29 + 1) * DISKIMAGE_SECTOR_SIZE;
+    const uint32_t last_sector = DISKIMAGE_D82_SIZE - DISKIMAGE_SECTOR_SIZE;
+    memory.data[directory + 2] = 0x82;
+    memory.data[directory + 3] = 154;
+    memory.data[directory + 4] = 22;
+    memset(memory.data + directory + 5, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+    memcpy(memory.data + directory + 5, "SIDE2", 5);
+    memory.data[last_sector + 1] = 2;
+    memory.data[last_sector + 2] = 0xa5;
+    diskimage_t image;
+    ck_assert(diskimage_open(&image, mem_read, &memory, memory.size));
+    diskimage_entry_t entry;
+    ck_assert(diskimage_find(&image, "SIDE2", &entry));
+    ck_assert_uint_eq(entry.start_track, 154);
+    ck_assert_uint_eq(entry.start_sector, 22);
+    diskstream_t stream;
+    ck_assert(diskstream_open(&stream, &image, entry.start_track, entry.start_sector));
+    uint8_t byte;
+    bool last;
+    ck_assert(diskstream_next(&stream, &byte, &last));
+    ck_assert_uint_eq(byte, 0xa5);
+    ck_assert(last);
+    ck_assert(!diskstream_next(&stream, &byte, &last));
+    free(memory.data);
+}
+END_TEST
+
 // Invalid types, coordinates, and output pointers reject without changing outputs.
 START_TEST(test_disk_geometry_rejects_invalid_inputs) {
     static const struct {
@@ -351,6 +427,7 @@ START_TEST(test_disk_geometry_rejects_invalid_inputs) {
         {diskimage_type_none, 1}, {diskimage_type_hdd, 1},
         {diskimage_type_d64, 0}, {diskimage_type_d64, 36}, {diskimage_type_d64, UINT_MAX},
         {diskimage_type_d80, 0}, {diskimage_type_d80, 78}, {diskimage_type_d80, UINT_MAX},
+        {diskimage_type_d82, 0}, {diskimage_type_d82, 155}, {diskimage_type_d82, UINT_MAX},
     };
     for (size_t i = 0; i < count_of(invalid); ++i) {
         unsigned int sectors = UINT_MAX;
@@ -886,6 +963,9 @@ Suite* diskimage_suite(void) {
     TCase* tc = tcase_create("core");
     tcase_add_test(tc, test_open_rejects_bad_size);
     tcase_add_test(tc, test_disk_geometry_matches_rom_zones);
+    tcase_add_test(tc, test_d82_geometry_covers_two_exact_native_sides);
+    tcase_add_test(tc, test_open_recognizes_exact_d82_size);
+    tcase_add_test(tc, test_d82_directory_and_second_side_stream);
     tcase_add_test(tc, test_disk_geometry_rejects_invalid_inputs);
     tcase_add_test(tc, test_shared_d64_builder_round_trips_files);
     tcase_add_test(tc, test_fixture_punctuation_uses_petscii_lookup);
