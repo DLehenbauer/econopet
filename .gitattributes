@@ -1,6 +1,8 @@
 # Avoid conflicting line endings when this project is simulteously edited by Windows and
 # a dev container via a shared folder.
 * text=auto eol=lf
+# Unified-diff context prefixes preserve upstream blank lines and tab indentation.
+tools/drive-ref/drive_reference_mame.patch whitespace=-blank-at-eol,-space-before-tab
 # Git LFS
 *.bin filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text

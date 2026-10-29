@@ -1,0 +1,96 @@
+diff --git a/src/devices/bus/ieee488/ieee488.cpp b/src/devices/bus/ieee488/ieee488.cpp
+index 686fc0ae..6b3369da 100644
+--- a/src/devices/bus/ieee488/ieee488.cpp
++++ b/src/devices/bus/ieee488/ieee488.cpp
+@@ -10,6 +10,38 @@
+ #include "emu.h"
+ #include "ieee488.h"
+ 
++#include <cstdio>
++#include <cstdlib>
++
++static constexpr unsigned long REFERENCE_EVENT_LIMIT = 2000000;
++static constexpr int REFERENCE_TIME_DIGITS = 18;
++
++// Observe composed nets before callbacks can recursively change another net.
++static void reference_trace(ieee488_device &bus, const char *event, device_t *source)
++{
++	static FILE *output = nullptr;
++	static unsigned long count = 0;
++	const char *path = std::getenv("ECONOPET_IEEE_TRACE");
++	if (!path || (!std::strcmp(event, "initial") && output))
++		return;
++	if (!output)
++	{
++		output = std::fopen(path, "w");
++		if (!output)
++			fatalerror("Cannot open IEEE reference trace");
++		std::fprintf(output, "sequence,seconds,event,source,atn,eoi,dav,nrfd,ndac,ifc,dio\n");
++	}
++	if (++count > REFERENCE_EVENT_LIMIT)
++		fatalerror("IEEE reference trace exceeded its bounded event limit");
++	if (std::fprintf(output, "%lu,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u\n",
++		count, bus.machine().time().as_string(REFERENCE_TIME_DIGITS), event, source->tag(),
++		bus.atn_r(), bus.eoi_r(), bus.dav_r(), bus.nrfd_r(), bus.ndac_r(),
++		bus.ifc_r(), unsigned(bus.dio_r())) < 0)
++		fatalerror("Cannot write IEEE reference trace");
++	if (!std::strcmp(event, "stop") && std::fflush(output))
++		fatalerror("Cannot finish IEEE reference trace");
++}
++
+ 
+ 
+ //**************************************************************************
+@@ -144,6 +176,7 @@ void ieee488_device::device_start()
+ 
+ void ieee488_device::device_stop()
+ {
++	reference_trace(*this, "stop", this);
+ 	m_device_list.reset();
+ }
+ 
+@@ -188,6 +221,7 @@ ieee488_device::daisy_entry::daisy_entry(device_t *device)
+ 
+ void ieee488_device::set_signal(device_t *device, int signal, int state)
+ {
++	reference_trace(*this, "initial", device);
+ 	bool changed = false;
+ 	int old_state = get_signal(signal);
+ 
+@@ -227,6 +261,7 @@ void ieee488_device::set_signal(device_t *device, int signal, int state)
+ 	state = get_signal(signal);
+ 
+ 	if (old_state != state) {
++		reference_trace(*this, "edge", device);
+ 		switch (signal)
+ 		{
+ 		case EOI:   m_write_eoi(state);  break;
+@@ -319,6 +354,7 @@ int ieee488_device::get_signal(int signal)
+ 
+ void ieee488_device::set_data(device_t *device, uint8_t data)
+ {
++	reference_trace(*this, "initial", device);
+ 	bool changed = false;
+ 	uint8_t old_state = get_data();
+ 
+@@ -356,6 +392,7 @@ void ieee488_device::set_data(device_t *device, uint8_t data)
+ 
+ 	uint8_t new_state = get_data();
+ 	if (old_state != new_state) {
++		reference_trace(*this, "edge", device);
+ 		m_write_dio(new_state);
+ 	}
+ }
+diff --git a/src/mame/commodore/pet.cpp b/src/mame/commodore/pet.cpp
+index 867037c7..3b75f615 100644
+--- a/src/mame/commodore/pet.cpp
++++ b/src/mame/commodore/pet.cpp
+@@ -1693,6 +1693,8 @@ void pet_state::pet(machine_config &config)
+ 	// basic machine hardware
+ 	M6502(config, m_maincpu, XTAL(8'000'000)/8);
+ 	m_maincpu->set_addrmap(AS_PROGRAM, &pet_state::pet2001_mem);
++	// Keep cross-CPU IEEE callbacks within one PET CPU cycle.
++	config.set_perfect_quantum(m_maincpu);
+ 
+ 	// video hardware
+ 	SCREEN(config, m_screen, SCREEN_TYPE_RASTER);
