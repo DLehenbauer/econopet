@@ -1049,6 +1049,253 @@ START_TEST(test_directory_bam_error_reports_channel_drive) {
 }
 END_TEST
 
+// FNDLMT ends the name at '=', but PARSE still finds later type/mode fields.
+START_TEST(test_open_name_ends_at_equals_before_parameters) {
+    static const char* const requests[] = {"0:FILE=IGNORED,S,R", "0:FILE=IGNORED,U,R", "FILE=IGNORED",
+                                           "0:FILE=IGNORED\x8d,W"};
+    const unsigned int format = (unsigned int)_i / count_of(requests);
+    const unsigned int scenario = (unsigned int)_i % count_of(requests);
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, 2, requests[scenario]);
+    if (scenario == 1) {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_TYPE_MISMATCH);
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        expect_bytes(&unit, &bank, channel, 22, 0x40);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// CKTM's D clears an earlier type, while a later P overrides D.
+START_TEST(test_open_d_resets_type_in_parameter_order) {
+    static const char* const requests[] = {"0:FILE,P,D", "0:FILE,D,P", "0:FILE,U,D"};
+    const unsigned int format = (unsigned int)_i / count_of(requests);
+    const unsigned int scenario = (unsigned int)_i % count_of(requests);
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, 2, requests[scenario]);
+    if (scenario == 1) {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_TYPE_MISMATCH);
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        expect_bytes(&unit, &bank, channel, 22, 0x40);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// FS1SET recognizes R for REL, while the OPEN-only L leaves listing types unrestricted.
+START_TEST(test_directory_relative_filter_uses_r_not_l) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool relative = (unsigned int)_i % 2u == 0;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "DATA", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&image, format, 1, "RECORDS", DISKIMAGE_FTYPE_REL, 0x60, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, relative ? "$0:*=R" : "$0:*=L");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    uint8_t bytes[128];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), relative ? 96 : 128);
+    if (!relative) {
+        ck_assert_mem_eq(bytes + 36, "   \"DATA\"             SEQ  ", 27);
+    }
+    ck_assert_mem_eq(bytes + (relative ? 36 : 68), "   \"RECORDS\"          REL  ", 27);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    free(image.bytes);
+}
+END_TEST
+
+// OP0415 starts at drive zero and FF30 skips non-PRG matches before peer fallback.
+START_TEST(test_initial_load_star_resets_drive_and_filters_programs) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int scenario = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "DATA", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    if (scenario != 2) {
+        fixture_file(&first, format, 1, "PROGRAM", DISKIMAGE_FTYPE_PRG, 0x60, 22);
+    }
+    fixture_file(&second, format, 0, "PEER", DISKIMAGE_FTYPE_PRG, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    if (scenario == 0) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, "1:PEER,P,R"), DOS_UNUSED);
+        ck_assert_uint_eq(unit.last_drive, 1);
+        ck_assert_uint_eq(unit.last_program_track, 0);
+    }
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.channels[channel].media.slot, scenario == 2 ? 1 : 0);
+    ck_assert_uint_eq(unit.last_drive, scenario == 2 ? 1 : 0);
+    expect_bytes(&unit, &bank, channel, 22, scenario == 2 ? 0x80 : 0x60);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OP0415 resets both drive variables even when PRSCLN rejects the request.
+START_TEST(test_failed_initial_load_star_resets_drive_before_parsing) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&second, format, 0, "OTHER", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "1:OTHER,S,R"), DOS_UNUSED);
+    ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*,0:INVALID"), DOS_UNUSED);
+    ck_assert_str_eq(unit.status, format == 0 ? "30,SYNTAX ERROR,00,00\r" : "30,SYNTAX ERROR,00,00,0\r");
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    const uint8_t channel = open_name(&unit, &bank, 3, "FILE,S,R");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    expect_bytes(&unit, &bank, channel, 22, 0x40);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OPEN's retained-program shortcut precedes filename and parameter parsing.
+START_TEST(test_retained_load_star_bypasses_ignored_parameters) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool relative = (unsigned int)_i % 2u == 0;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "PROGRAM", DISKIMAGE_FTYPE_PRG, 0x60, 22);
+    fixture_file(&second, format, 0, "OTHER", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    ck_assert_uint_ne(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "0:PROGRAM,P,R"), DOS_UNUSED);
+    ck_assert(dos_close(&unit, bank.units[0].model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "1:OTHER,S,R"), DOS_UNUSED);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, relative ? "*,L,10" : "*,0:INVALID");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.channels[channel].media.slot, 0);
+    expect_bytes(&unit, &bank, channel, 22, 0x60);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Bound cached self-links and multi-sector cycles, including cycles that emit rows.
+START_TEST(test_directory_cycles_publish_bounded_read_error) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int scenario = (unsigned int)_i % 4u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "OTHER", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    if (scenario == 1 || scenario == 3) {
+        fixture_file(&second, format, 0, scenario == 1 ? "OTHER" : "MATCH", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    }
+    const diskimage_type_t type = bank.units[0].slots[1].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&second, type, track, 1);
+    directory[0] = track;
+    directory[1] = scenario == 2 ? 2 : 1;
+    if (scenario == 2) {
+        uint8_t* const next = sector_bytes(&second, type, track, 2);
+        next[0] = track;
+        next[1] = 1;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$1:MATCH*");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:OTHER,S,R"), DOS_UNUSED);
+    const unsigned int limit = second.size / DISKIMAGE_SECTOR_SIZE;
+    for (unsigned int attempt = 0; unit.channels[channel].ready && attempt < 3u * (limit + 1u); ++attempt) {
+        uint8_t bytes[DOS_STAGE_CAPACITY];
+        bool eoi;
+        const unsigned int count = dos_stage(&unit, &bank, channel, bytes, sizeof(bytes), &eoi);
+        ck_assert(!eoi);
+        dos_get(&unit, &bank, channel, count);
+    }
+    ck_assert(!unit.channels[channel].ready);
+    const unsigned int sector = scenario == 2 && limit % 2u != 0 ? 2 : 1;
+    char expected[DOS_STATUS_LINE_CAPACITY];
+    snprintf(expected, sizeof(expected), format == 0 ? "23,READ ERROR,%02u,%02u\r" : "23,READ ERROR,%02u,%02u,1\r",
+             track, sector);
+    ck_assert_str_eq(unit.status, expected);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert(dos_close(&unit, bank.units[0].model, IEEE_COMMAND_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Empty previews cannot prepare rows, do I/O, or retire ordinary/raw readers.
+START_TEST(test_zero_capacity_preview_preserves_reader_and_directory_state) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int kind = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, kind == 2 ? IEEE_LOAD_CHANNEL : 2, kind == 0 ? "0:FILE" : "$0");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    dos_unit_t before;
+    memcpy(&before, &unit, sizeof(unit));
+    unsigned int reads = image.reads;
+    bool eoi = true;
+    uint8_t bytes[8], repeated[5];
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, bytes, 0, &eoi), 0);
+    ck_assert(!eoi);
+    ck_assert_mem_eq(&unit, &before, sizeof(unit));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, bytes, sizeof(bytes), &eoi), sizeof(bytes));
+    if (kind == 0) {
+        ck_assert_mem_eq(bytes, "\x40\x41\x42\x43\x44\x45\x46\x47", sizeof(bytes));
+    } else if (kind == 1) {
+        const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+        ck_assert_mem_eq(bytes, sector_bytes(&image, type, format == 0 ? 18 : 39, 0) + 2, sizeof(bytes));
+    } else {
+        ck_assert_mem_eq(bytes, "\x01\x04\x01\x01\x00\x00\x12\"", sizeof(bytes));
+    }
+    dos_get(&unit, &bank, channel, 3);
+    memcpy(&before, &unit, sizeof(unit));
+    reads = image.reads;
+    eoi = true;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, repeated, 0, &eoi), 0);
+    ck_assert(!eoi);
+    ck_assert_mem_eq(&unit, &before, sizeof(unit));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, repeated, sizeof(repeated), &eoi), sizeof(repeated));
+    ck_assert_mem_eq(repeated, bytes + 3, sizeof(repeated));
+    ck_assert(!eoi);
+    free(image.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1076,6 +1323,14 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_interleaved_read_failure_reports_channel_drive, 0, 6);
     tcase_add_loop_test(core, test_pending_open_reselects_drive_after_read_error, 0, 3);
     tcase_add_loop_test(core, test_directory_bam_error_reports_channel_drive, 0, 2);
+    tcase_add_loop_test(core, test_open_name_ends_at_equals_before_parameters, 0, 12);
+    tcase_add_loop_test(core, test_open_d_resets_type_in_parameter_order, 0, 9);
+    tcase_add_loop_test(core, test_directory_relative_filter_uses_r_not_l, 0, 6);
+    tcase_add_loop_test(core, test_initial_load_star_resets_drive_and_filters_programs, 0, 9);
+    tcase_add_loop_test(core, test_failed_initial_load_star_resets_drive_before_parsing, 0, 3);
+    tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 6);
+    tcase_add_loop_test(core, test_directory_cycles_publish_bounded_read_error, 0, 12);
+    tcase_add_loop_test(core, test_zero_capacity_preview_preserves_reader_and_directory_state, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }

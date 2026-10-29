@@ -119,6 +119,7 @@ typedef struct {
     bool record_parameter;
     bool replace;
     bool default_drive;
+    bool first_program;
     bool tried_other;
     bool pending;
 } dos_open_work_t;

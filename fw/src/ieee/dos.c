@@ -654,6 +654,8 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
     //
     // ROM open:OPEN/OP042/OP20 use PRSCLN and PARSE to separate drive, name,
     // and parameters. An omitted drive retains the two-drive search flag.
@@ -679,10 +681,11 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
 
     // ROM lookup:COMPAR compares up to 16 name bytes and accepts $A0 as the
     // directory terminator. Pad the C name with $A0 and copy exact input bytes,
-    // with no case folding or PETSCII conversion, up to the first comma.
+    // with no case folding or PETSCII conversion. trnsfr:FNDLMT ends the
+    // compared name at comma or equals, independently of parameter scanning.
     memset(work->name, DISKIMAGE_FILENAME_PADDING, sizeof(work->name));
     unsigned int used = 0;
-    while (cursor < length && input[cursor] != ',') {
+    while (cursor < length && input[cursor] != ',' && input[cursor] != '=') {
         const uint8_t byte = input[cursor++];
         if (byte == 0x8d) {
             return false;
@@ -694,12 +697,16 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     if (used == 0) {
         return false;
     }
+    // PARSE still finds comma-separated fields after an ignored equals suffix.
+    while (cursor < length && input[cursor] != ',' && input[cursor] != 0x8d) {
+        ++cursor;
+    }
 
     // PARSE counts empty fields too. OP60 reads the original byte even when
     // CMDSET trimmed a CR or the field begins in bounded stale command RAM.
     unsigned int parameter = 0;
     bool relative = false;
-    while (cursor < length && parameter < 2u) {
+    while (cursor < length && input[cursor] != 0x8d && parameter < 2u) {
         ++cursor;
         const unsigned int start = cursor;
         while (cursor < length && input[cursor] != ',' && input[cursor] != 0x8d) {
@@ -722,6 +729,9 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
             break;
         case 'M':
             work->access = DOS_ACCESS_MODIFY;
+            break;
+        case 'D':
+            work->type = 0;
             break;
         case 'P':
             work->type = DISKIMAGE_FTYPE_PRG;
@@ -802,6 +812,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     channel->directory_track = directory_track(model);
     channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;
     channel->position = 0;
+    channel->traversed = 0;
     // LOADIR/TC35/ALLDRS retain bounded comma-separated patterns and '=type'.
     uint8_t* const patterns = unit->buffers[extra].bytes;
     memset(patterns, DISKIMAGE_FILENAME_PADDING, DOS_FILENAME_COUNT * DOS_DIRECTORY_PATTERN_SIZE);
@@ -857,7 +868,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
             case 'U':
                 channel->file_type = DISKIMAGE_FTYPE_USR;
                 break;
-            case 'L':
+            case 'R':
                 channel->file_type = DISKIMAGE_FTYPE_REL;
                 break;
             default:
@@ -928,13 +939,22 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // default for LOAD/SAVE and infer other ordinary types from the match.
     // setdrv:ALLDRS seeds omitted and nonnumeric prefixes from LSTDRV,
     // which a failed explicit OPEN must not replace with its DRVNUM.
+    const bool load_star = secondary == IEEE_LOAD_CHANNEL && length != 0 && input[0] == '*';
+    const bool last_program = load_star && unit->last_program_track != 0;
+    const bool first_program = load_star && !last_program;
+    // OP0415 resets LSTDRV before parsing, even if the initial LOAD later fails.
+    if (first_program) {
+        unit->selected_drive = 0;
+        unit->last_drive = 0;
+    }
     uint8_t drive = unit->last_drive;
     dos_open_work_t parsed = {0};
     const bool directory = length != 0 && input[0] == '$';
     if (directory) {
         parsed.default_drive = length == 1 || (input[1] != '0' && input[1] != '1' && input[1] != ':');
     }
-    if (!directory && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
+    // OP02 reloads the retained link before PRSCLN/CKTM inspect any suffix.
+    if (!directory && !last_program && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
         command_error(unit, model, length == 0 ? DOS_STATUS_INVALID_NAME : DOS_STATUS_SYNTAX);
         return;
     }
@@ -953,8 +973,6 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     if (directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
         drive = input[1] - '0';
     }
-    const bool last_program =
-        secondary == IEEE_LOAD_CHANNEL && length != 0 && input[0] == '*' && unit->last_program_track != 0;
     if (last_program) {
         drive = unit->last_program_drive;
     }
@@ -1024,6 +1042,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     parsed.scratch_second = scratch_second;
     parsed.pending = true;
     parsed.creation_drive = drive;
+    parsed.first_program = first_program;
     unit->open = parsed;
 }
 
@@ -1076,7 +1095,11 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         // Retain closed and unclosed matches for OPEN's mode-specific checks.
         for (unsigned int entry = 0; entry < DISKIMAGE_SECTOR_SIZE; entry += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
             const uint8_t* const file = bytes + entry;
-            if (file[DOS_DIRECTORY_TYPE_OFFSET] != 0 && name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
+            // OP0415/FF30 filter initial LOAD '*' matches before OP110's type check.
+            if (file[DOS_DIRECTORY_TYPE_OFFSET] != 0 &&
+                (!work->first_program ||
+                 (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
+                name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
                 found_track = file[DOS_DIRECTORY_TRACK_OFFSET];
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
@@ -1290,11 +1313,18 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
     } else if (channel->directory == DOS_DIRECTORY_ENTRIES) {
         // Retain the directory sector while scanning its slots. Pattern
         // drive/type filtering corresponds to lookup's COMPAR/FNDFIL work.
+        // Count each sector visit once, including a cached self-link, not each row.
+        const unsigned int limit =
+            media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+        if (channel->directory_entry == 0 && channel->traversed++ >= limit) {
+            unit->selected_drive = channel->media.slot;
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, channel->directory_track, channel->directory_sector);
+            channel->ready = false;
+            return false;
+        }
         if (!source->resident || source->track != channel->directory_track ||
             source->sector != channel->directory_sector) {
-            if (channel->traversed++ > media->units[channel->media.unit].slots[channel->media.slot].io.image.size /
-                                           DISKIMAGE_SECTOR_SIZE ||
-                !storage_error(unit, media, channel->media,
+            if (!storage_error(unit, media, channel->media,
                                read_sector(unit, media, channel->media, channel->directory_track,
                                            channel->directory_sector, source->bytes),
                                false, channel->directory_track, channel->directory_sector)) {
@@ -1487,6 +1517,10 @@ unsigned int dos_stage(dos_unit_t* const unit, dos_media_bank_t* const media, co
     // interruption, so preview must not commit that suffix as ROM GET progress.
     // The burst limit also bounds preview's use of the two shared buffer caches.
     vet(channel < DOS_FILE_CHANNEL_COUNT && capacity <= DOS_STAGE_CAPACITY, "invalid native staging window");
+    *eoi = false;
+    if (capacity == 0) {
+        return 0;
+    }
     if (unit->channels[channel].directory != DOS_DIRECTORY_NONE) {
         return directory_stage(unit, media, &unit->channels[channel], output, capacity, eoi);
     }

@@ -16,12 +16,17 @@ slices.
   PETSCII names, wildcard matching, type/mode fields and peer-drive lookup.
   The 59-byte receive window is checked separately from the logical limit,
   which follows CMDSET's CR trimming. Omitted drives start from the last
-  successful command's drive. Parsing `L` does not enable REL operations.
+  successful command's drive. Equals ends the filename without hiding later
+  comma-separated parameters, and `D` resets an earlier type for inference.
+  Parsing `L` does not enable REL operations.
 - Ordinary readers with two owned pages, initial prefetch, sector links,
   terminal-byte EOI, the native initial-singleton EOF sequence and retained
-  last-program LOAD selection.
+  last-program LOAD selection. Initial `LOAD "*"` starts at drive zero and
+  filters for PRG entries before checking OPEN parameters. A retained-program
+  reload uses its saved drive/link without parsing the ignored name suffix.
 - BASIC directory headers, entries and free-block footers, bounded patterns,
-  type filters, dual-drive continuation and raw directory/header-chain reads.
+  type filters (`R` for REL, not OPEN's `L`), dual-drive continuation and raw
+  directory/header-chain reads.
 - Retained model-specific status. Preview does not consume output. GET commits
   only actual progress, and status clears only after its CR is consumed.
 - Resource release and reuse through CLOSE, with cooperative lookup yielding
@@ -71,6 +76,35 @@ repeated or partially consumed previews cannot silently retry a one-shot failure
 The error becomes visible after the valid prefix is consumed and identifies the
 channel's drive, even when other readers or pending OPEN work are interleaved.
 Corrupt-chain traversal bounds are host safeguards, not native mechanical timeouts.
+Directory bounds count sector visits independently of cache misses and emitted
+rows, so even a resident self-link eventually reports READ ERROR with the
+listing's drive and current coordinates. Zero-capacity previews return no bytes
+and no EOI without preparing a row, issuing I/O or changing DOS state.
+
+The read-path regression evidence distinguishes native rules from those host
+boundaries. All native rows below apply to the selected 4040 revision 2 and
+shared DOS 2.7 hardware modes:
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|---|---|---|---|---|---|
+| Filename delimiter | Selected native targets | Both `lookup:COMPAR` call `trnsfr:FNDLMT`, which stops at comma or equals. `parsex:PARSE` independently collects parameters. | `0:FILE=IGNORED,S,R` reads FILE. A later U still produces 64 for SEQ. | `dos_open_parse`, `test_open_name_ends_at_equals_before_parameters` | [Commodore DOS](https://www.pagetable.com/174), File Access API, excludes equals from filenames. |
+| Type reset | Selected native targets | Both `open:CKTM` search `romtbl:TPLST` (`DSPUL`), including index zero. | `FILE,P,D` infers the matched type, while `FILE,D,P` still requires PRG. | `dos_open_parse`, `test_open_d_resets_type_in_parameter_order` | Same article, Channels 0 and 1, distinguishes their PRG default from ordinary channels. It does not document the D reset. |
+| Directory REL filter | Selected native targets | Both `setdrv:FS1SET` search `romtbl:TYPLST` (`DSPUR`). | `=R` lists only REL. Unrecognized `=L` leaves the listing unrestricted. | `open_directory`, `test_directory_relative_filter_uses_r_not_l` | Same article, Directory Listing, explicitly distinguishes R from OPEN's L. |
+| Initial and retained LOAD | Selected native targets | Both `open:OP0415` reset DRVNUM/LSTDRV and set PRG TYPFLG. `lookup:FF30` filters matches. `open:OP02` precedes parsing for retained loads. | Initial `*` starts at zero and skips SEQ entries. A retained reload uses the saved link even with an otherwise invalid suffix. | `dos_open`/`dos_work`, `test_initial_load_star_resets_drive_and_filters_programs`, `test_failed_initial_load_star_resets_drive_before_parsing`, `test_retained_load_star_bypasses_ignored_parameters` | Same article, Channels 0 and 1, corroborates LOAD/read and PRG defaults, not the shortcut details. |
+| Corrupt directory bound | Host adaptation, not native behavior | Both `lookup:SEARCH` and `lstdir:GETDIR` traverse entries. Neither defines this host image-size bound. | Cached self-links, unmatched rows and multi-sector cycles terminate with retained status 23 and the listing's drive/coordinates. | `prepare_directory_line`, `test_directory_cycles_publish_bounded_read_error` | The documented host safeguard above, not an original-drive timeout claim. |
+| Empty preview | Host transport boundary, not a native API | Both `tst4:GET` advance after prepared data is transferred. There is no ROM capacity-zero preview operation. | Ordinary, raw and BASIC-directory previews with capacity zero change no state or I/O and return zero with EOI false. | `dos_stage`, `test_zero_capacity_preview_preserves_reader_and_directory_state` | Same article, Sequential Files, corroborates EOI on actual file completion, not a zero-size observation. |
+
+Routine names refer to the pinned source units linked above. Delimiter/type
+tables are in
+[4040 trnsfr](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr),
+[DOS 2.7 trnsfr](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr),
+[4040 setdrv](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv),
+[DOS 2.7 setdrv](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv),
+[4040 romtbl](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/romtbl)
+and [DOS 2.7 romtbl](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/romtbl).
+The corroborating article's generic default-drive/type descriptions do not
+define dual-drive LSTDRV behavior or ordinary-channel type inference. Those
+follow the selected ROM instructions above.
 
 Successful OPEN completion and command-level errors clear only the first 58
 command bytes, following SCREND/CMDER3 and CLRCB. The extra receive byte survives,
