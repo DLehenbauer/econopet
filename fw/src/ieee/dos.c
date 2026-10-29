@@ -834,8 +834,9 @@ static dos_directory_request_t parse_directory(const uint8_t* const input, const
         pattern[DOS_DIRECTORY_PATTERN_FLAGS] = 0;
         unsigned int used = 0;
         while (cursor < length && input[cursor] != ',' && input[cursor] != '=') {
-            // PARSE records wildcard presence even beyond COMPAR's 16-byte cap.
-            if (input[cursor] == '*' || input[cursor] == '?') {
+            // PARSE records wildcards beyond COMPAR's cap, but stops scanning
+            // after the fourth comma. The fifth pattern has no wildcard flag.
+            if (request.count < DOS_FILENAME_COUNT && (input[cursor] == '*' || input[cursor] == '?')) {
                 pattern[DOS_DIRECTORY_PATTERN_FLAGS] |= DOS_PATTERN_WILDCARD;
             }
             if (used < DISKIMAGE_FILENAME_SIZE) {
@@ -862,12 +863,17 @@ static dos_directory_request_t parse_directory(const uint8_t* const input, const
         request.drive = 1;
     }
     request.searches = defaults == 3 ? DOS_DIRECTORY_DEFAULT_BOTH_SEARCHES : defaults != 0 || drive_mask == 3;
-    if (cursor < length && input[cursor] == '=') {
+    if (request.count < DOS_FILENAME_COUNT && cursor < length && input[cursor] == '=') {
         ++cursor;
-        // FS1SET selects the final file-type field by its first character.
-        for (unsigned int offset = cursor; offset < length; ++offset) {
+        // TC35 stops at shifted CR or PARSE's shared field-table limit.
+        // FS1SET selects the final retained field by its first character.
+        unsigned int fields = request.count;
+        for (unsigned int offset = cursor; offset < length && input[offset] != 0x8d; ++offset) {
             if (input[offset] == ',') {
                 cursor = offset + 1u;
+                if (++fields >= DOS_FILENAME_COUNT - 1u) {
+                    break;
+                }
             }
         }
         if (cursor < length) {
@@ -890,6 +896,28 @@ static dos_directory_request_t parse_directory(const uint8_t* const input, const
         }
     }
     return request;
+}
+
+// SIMPRS/SETANY selects raw-directory drives independently of LOADIR patterns.
+static uint8_t raw_directory_drive(const uint8_t* const input, const unsigned int length, const uint8_t last_drive,
+                                   bool* const default_drive) {
+    // Both pinned parsex:SIMPRS paths retain the byte before the first colon.
+    // PARSE stops at the fourth comma. Without a colon, FILTBL remains zero.
+    unsigned int selected = 0, commas = 0;
+    for (unsigned int offset = 0; offset < length && commas < DOS_FILENAME_COUNT - 1u; ++offset) {
+        if (input[offset] == ':') {
+            selected = offset - 1u;
+            break;
+        }
+        commas += input[offset] == ',';
+    }
+    // setdrv:SETANY tries that byte, then the final byte, then LSTDRV.
+    uint8_t byte = input[selected];
+    if (byte != '0' && byte != '1' && selected + 1u < length) {
+        byte = input[length - 1u];
+    }
+    *default_drive = byte != '0' && byte != '1';
+    return *default_drive ? last_drive : byte - (unsigned int)'0';
 }
 
 // CMPCHK keeps wildcard requests live and skips completed exact-name requests.
@@ -1044,9 +1072,6 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     const bool directory = length != 0 && input[0] == '$';
     const bool formatted_directory = directory && secondary == IEEE_LOAD_CHANNEL;
     dos_directory_request_t listing = {0};
-    if (directory) {
-        parsed.default_drive = length == 1 || (input[1] != '0' && input[1] != '1' && input[1] != ':');
-    }
     if (formatted_directory) {
         listing = parse_directory(input, length, unit->last_drive);
         drive = listing.drive;
@@ -1055,6 +1080,8 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         if (model == DOS_MODEL_4040 && length == 2 && (input[1] == '0' || input[1] == '1')) {
             free_drive_channels(unit, drive);
         }
+    } else if (directory) {
+        drive = raw_directory_drive(input, length, unit->last_drive, &parsed.default_drive);
     }
     // OP02 reloads the retained link before PRSCLN/CKTM inspect any suffix.
     if (!directory && !last_program && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
@@ -1072,9 +1099,6 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
                        parsed.type == DISKIMAGE_FTYPE_REL)) {
         command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
-    }
-    if (directory && !formatted_directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
-        drive = input[1] - '0';
     }
     if (last_program) {
         drive = unit->last_program_drive;

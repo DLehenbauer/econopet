@@ -1751,6 +1751,96 @@ START_TEST(test_directory_completion_preserves_raw_track_state) {
 }
 END_TEST
 
+// TC35 stops suffix fields at shifted CR and the shared filename-table limit.
+START_TEST(test_directory_suffix_respects_parser_boundaries) {
+    static const struct {
+        const char* request;
+        unsigned int rows;
+        const char* first;
+    } cases[] = {
+        {"$0:*=S\x8d,U", 1, "SEQUENTIAL"},    {"$0:*=U,S\x8d,P", 1, "SEQUENTIAL"}, {"$0:*=S,\x8dU", 3, "FILE"},
+        {"$0:*=S\x8d", 1, "SEQUENTIAL"},      {"$0:*=S,U,P,S,U", 1, "SEQUENTIAL"}, {"$0:NO,NO,NO,*=S,U,P", 1, "FILE"},
+        {"$0:NO,NO,NO,NO,FILE=S", 1, "FILE"}, {"$0:NO,NO,NO,NO,*", 1, "FILE"},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases);
+    const unsigned int scenario = (unsigned int)_i % count_of(cases);
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "FILE", DISKIMAGE_FTYPE_USR, 0x40, 22);
+    fixture_file(&image, format, 1, "SEQUENTIAL", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    fixture_file(&image, format, 2, "PROGRAM", DISKIMAGE_FTYPE_PRG, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, cases[scenario].request);
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    uint8_t bytes[160];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), 64u + 32u * cases[scenario].rows);
+    ck_assert_mem_eq(bytes + 40, cases[scenario].first, strlen(cases[scenario].first));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    free(image.bytes);
+}
+END_TEST
+
+// SIMPRS/SETANY uses the pre-colon or final byte, not LOADIR's drive grammar.
+START_TEST(test_raw_directory_uses_simple_drive_selection) {
+    static const struct {
+        const char* request;
+        uint8_t last;
+        uint8_t drive;
+        bool default_drive;
+    } cases[] = {
+        {"$1*", 0, 0, true},     {"$0*", 1, 1, true},       {"$X1", 0, 1, false},      {"$X0", 1, 0, false},
+        {"$0:1", 1, 0, false},   {"$X:1", 0, 1, false},     {"$:0", 1, 0, false},      {"$X:Q", 1, 1, true},
+        {"$1*,0:", 1, 0, false}, {"$0,,,1:X", 0, 1, false}, {"$0,,,,0:X", 1, 1, true}, {"$", 1, 1, true},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases);
+    const unsigned int scenario = (unsigned int)_i % count_of(cases);
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    sector_bytes(&first, type, track, 0)[format == 0 ? 144 : 6] = '0';
+    sector_bytes(&second, type, track, 0)[format == 0 ? 144 : 6] = '1';
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    unit.last_drive = cases[scenario].last;
+    uint8_t channel = open_name(&unit, &bank, 2, cases[scenario].request);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.channels[channel].media.slot, cases[scenario].drive);
+    uint8_t bytes[6u * DISKIMAGE_SECTOR_PAYLOAD_SIZE];
+    const unsigned int size = (format == 0 ? 2u : format == 1 ? 4u : 6u) * DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), size);
+    ck_assert_mem_eq(
+        bytes, sector_bytes(cases[scenario].drive ? &second : &first, type, track, 0) + DISKIMAGE_SECTOR_LINK_SIZE,
+        DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    ck_assert(dos_close(&unit, bank.units[0].model, 2));
+
+    // Admission may fall back only when SETANY actually selected LSTDRV.
+    dos_reset(&unit, bank.units[0].model);
+    unit.last_drive = cases[scenario].last;
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, cases[scenario].drive, NULL), DOS_MEDIA_OK);
+    channel = open_name(&unit, &bank, 2, cases[scenario].request);
+    if (cases[scenario].default_drive) {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert_uint_eq(unit.channels[channel].media.slot, cases[scenario].drive ^ 1u);
+        ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), size);
+        ck_assert_mem_eq(
+            bytes, sector_bytes(cases[scenario].drive ? &first : &second, type, track, 0) + DISKIMAGE_SECTOR_LINK_SIZE,
+            DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    } else {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_READY);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1799,6 +1889,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_4040_directory_initialization_selects_active_page_job, 0, 2);
     tcase_add_loop_test(core, test_directory_both_default_preferences_retain_fallback_pass, 0, 6);
     tcase_add_loop_test(core, test_directory_completion_preserves_raw_track_state, 0, 9);
+    tcase_add_loop_test(core, test_directory_suffix_respects_parser_boundaries, 0, 24);
+    tcase_add_loop_test(core, test_raw_directory_uses_simple_drive_selection, 0, 36);
     suite_add_tcase(suite, core);
     return suite;
 }
