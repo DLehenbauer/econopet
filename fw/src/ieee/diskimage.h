@@ -14,10 +14,11 @@ extern "C" {
 // Commodore disk image container. Supports:
 //   .d64 (2031/4040, 35 tracks, 174848 bytes) -- directory at 18/1
 //   .d80 (8050, 77 tracks, 533248 bytes)      -- directory at 39/1
+//   .d82 (8250, 154 tracks, 1066496 bytes)    -- directory at 39/1
 //   .hdd (flat OS-9 record stream, 258-byte pairs) -- synthetic directory
 //
 // Access is through a caller-supplied read callback so images can stream
-// from the SD card (FatFs) without holding 533KB in RAM; tests supply a
+// from the SD card (FatFs) without holding an image in RAM. Tests supply a
 // memory-backed callback instead.
 
 typedef enum {
@@ -29,6 +30,7 @@ typedef enum {
     // + a $0D pad, the layout FORMAT.OS/9 produces inside a d80.
     // 32766-sector ceiling.
     diskimage_type_hdd,
+    diskimage_type_d82,
 } diskimage_type_t;
 
 // Read 'len' bytes at byte 'offset' of the image into 'buf'.
@@ -48,10 +50,12 @@ typedef struct {
 
 #define DISKIMAGE_D64_SIZE 174848u
 #define DISKIMAGE_D80_SIZE 533248u
+#define DISKIMAGE_D82_SIZE 1066496u
 #define DISKIMAGE_D64_TRACK_COUNT 35u
 #define DISKIMAGE_D80_TRACK_COUNT 77u
+#define DISKIMAGE_D82_TRACK_COUNT (2u * DISKIMAGE_D80_TRACK_COUNT)
 
-// D64 and D80 sectors have a fixed byte size, independent of their contents.
+// D64/D80/D82 sectors have a fixed byte size, independent of their contents.
 #define DISKIMAGE_SECTOR_SIZE 256u
 #define DISKIMAGE_SECTOR_LINK_SIZE 2u
 #define DISKIMAGE_SECTOR_PAYLOAD_SIZE (DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE)
@@ -84,12 +88,11 @@ typedef struct {
     uint8_t record_len; // REL files: record length (0 otherwise)
 } diskimage_entry_t;
 
-// Pure D64/D80 geometry shared by image I/O and fixture construction.
+// Pure D64/D80/D82 geometry shared by image I/O and fixture construction.
 // Return false for unsupported types, invalid coordinates, or missing outputs.
 // Outputs are unchanged on failure.
 bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned int* sectors);
-bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned int sector,
-    uint32_t* offset);
+bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned int sector, uint32_t* offset);
 
 // Detects the image type from 'size'. Returns false if the size matches no
 // supported container.

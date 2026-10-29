@@ -110,17 +110,42 @@ static const diskchain_t* chain_cache_find(unsigned int slot, uint8_t track,
     return NULL;
 }
 
+// Executes exact-size reads against a retained FILE owner.
 static bool file_read(void* ctx, uint32_t offset, void* buf, size_t len) {
-    FILE* f = (FILE*) ctx;
-    if (fseek(f, (long) offset, SEEK_SET) != 0) return false;
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
+    //
+    // RDAB/RDIN/RDSS submit native sector jobs. No direct ROM entry for this
+    // FILE callback: diskimage translates native coordinates to host byte
+    // offsets without emulating controller retries. The facade owns the FILE.
+
+    // Seek each request independently and require the full requested length.
+    // A short read may modify output before false is returned.
+    FILE* f = (FILE*)ctx;
+    if (fseek(f, (long)offset, SEEK_SET) != 0)
+        return false;
     return fread(buf, 1, len, f) == len;
 }
 
+// Completes and flushes an exact-size write without retrying a partial failure.
 static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) {
-    FILE* f = (FILE*) ctx;
-    if (fseek(f, (long) offset, SEEK_SET) != 0) return false;
-    if (fwrite(buf, 1, len, f) != len) return false;
-    return fflush(f) == 0;      // persist promptly: power-off safety
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
+    //
+    // WRTOUT/WRTAB/WRTSS submit native WRITE jobs. No direct ROM entry for
+    // this host callback. A failed fwrite can modify storage partially, so
+    // return failure without replaying it or closing the facade-owned FILE.
+
+    FILE* f = (FILE*)ctx;
+    if (fseek(f, (long)offset, SEEK_SET) != 0)
+        return false;
+    if (fwrite(buf, 1, len, f) != len)
+        return false;
+    // This legacy adapter flushes each complete write before reporting success.
+    // The host flush is not native CLOSE, a bus acknowledgement, or a power-loss guarantee.
+    return fflush(f) == 0;
 }
 
 // Mounts a path relative to /disks into a global drive slot.
@@ -149,7 +174,8 @@ static bool mount_image(unsigned int slot, const char* filename) {
     diskimage_t img;
     bool opened = is_hdd ? diskimage_open_hdd(&img, file_read, f, (uint32_t) size)
                          : diskimage_open(&img, file_read, f, (uint32_t) size);
-    if (!opened) {
+    // Raw D82 support prepares the new media layer, not the legacy DOS facade.
+    if (!opened || img.type == diskimage_type_d82) {
         log_info("ieee: %s has unsupported size %ld, ignored", path, size);
         fclose(f);
         return false;

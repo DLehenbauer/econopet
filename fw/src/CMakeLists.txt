@@ -54,6 +54,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/system_state.c
     ${FW_SRC_DIR}/tape.c
     ${FW_SRC_DIR}/ieee/diskimage.c
+    ${FW_SRC_DIR}/ieee/dos_media.c
     ${FW_SRC_DIR}/ieee/ieee_drive.c
     ${FW_SRC_DIR}/tape_dir.c
     ${FW_SRC_DIR}/term_inject.c

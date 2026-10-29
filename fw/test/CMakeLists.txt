@@ -39,6 +39,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
+    ${SRC_DIR}/ieee/dos_media.c
     ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
@@ -47,6 +48,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
+    ${TEST_DIR}/dos_media_test.c
     ${TEST_DIR}/global_test.c
     ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c

@@ -548,6 +548,27 @@ START_TEST(test_replacing_mount_uses_new_image) {
 }
 END_TEST
 
+// Raw D82 recognition must not enable an incomplete replacement through the facade.
+START_TEST(test_d82_mount_rejection_preserves_legacy_source) {
+    mount_d64(IEEE_FIRST_DEVICE, IEEE_DRIVE_FIRST, "first.d64", true);
+    uint8_t* const unsupported = calloc(1, DISKIMAGE_D82_SIZE);
+    ck_assert_ptr_nonnull(unsupported);
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, "unsupported.d82");
+    test_register_binary_file(path, unsupported, DISKIMAGE_D82_SIZE, true);
+    free(unsupported);
+    ck_assert(!ieee_drive_mount(0, "unsupported.d82"));
+
+    enqueue_command(IEEE_CMD_LISTEN(IEEE_FIRST_DEVICE), IEEE_CMD_OPEN(IEEE_CHANNEL_LOAD));
+    enqueue_name("BASIC");
+    enqueue_command(IEEE_CMD_UNLISTEN, IEEE_CMD_TALK(IEEE_FIRST_DEVICE), IEEE_CMD_SECONDARY(IEEE_CHANNEL_LOAD));
+    ieee_drive_task();
+    ck_assert_uint_eq(mock_ieee_data_count(), 264);
+    ck_assert_uint_eq(mock_ieee_data_byte(0), 2);
+    ck_assert(mock_ieee_data_eoi(263));
+}
+END_TEST
+
 // Verifies native ordinary channels remain not ready after their final EOI.
 START_TEST(test_read_past_eof_keeps_channel_not_ready) {
     const unsigned int device = loop_device(_i / count_of(native_image_types));
@@ -2975,6 +2996,7 @@ Suite* ieee_drive_suite(void) {
                             * IEEE_DEVICE_COUNT);
     tcase_add_loop_test(test_case, test_replacing_mount_uses_new_image,
                         0, FOR_EACH_DEVICE_AND_DRIVE);
+    tcase_add_test(test_case, test_d82_mount_rejection_preserves_legacy_source);
     tcase_add_loop_test(test_case, test_read_past_eof_keeps_channel_not_ready,
                         0, FOR_EACH_DEVICE_DRIVE_AND_MODEL);
     tcase_add_loop_test(test_case, test_power_on_status_is_served_before_any_operation,
