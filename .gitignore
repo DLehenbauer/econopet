@@ -96,10 +96,15 @@ prgs/**/*.o
 core
 
 #
-# AI agent scratch files
+# Temporary and cache files
 #
-.cache/ai/*
-!.cache/**/.gitkeep
+/.tmp/**
+!/.tmp/**/
+!/.tmp/**/.gitkeep
+
+/.cache/**
+!/.cache/**/
+!/.cache/**/.gitkeep
 
 #
 # VS Code Local History extension

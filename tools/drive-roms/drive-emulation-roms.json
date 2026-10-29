@@ -1,0 +1,352 @@
+{
+  "manifest_version": 1,
+  "approval": "operator explicitly accepted M0 contract/baseline and approved proceeding to M1 on 2026-10-24, no M1 acceptance or completed drive-execution parity claimed",
+  "source": {
+    "repository": "https://github.com/mist64/cbmsrc",
+    "commit": "01bd60f162ef92212ef0cb67546ae8f42be34168",
+    "binary_correspondence": "DOS_8250 emitted main-DOS bytes verified, explicit source overlays reconstruct approved 4040 revision 2 and MPI controller apart from declared checksum placeholders, 4040 controller and embedded payloads have classified byte-exact disassembly maps, no original-drive execution",
+    "adaptation_permission": "operator-confirmed permission for source adaptation and distribution of resulting C/firmware, no attribution required, no independent legal verification",
+    "binary_redistribution_permission": "not permitted, do not redistribute ROM binaries"
+  },
+  "corroboration": {
+    "repository": "https://github.com/mamedev/mame",
+    "commit": "9d8a6727a206fc822b8b69d67a51e6fd7dbf4d4b",
+    "files": [
+      "src/devices/bus/ieee488/c2040.cpp",
+      "src/devices/bus/ieee488/c8050.cpp"
+    ],
+    "result": "all seven drive binary SHA-1 values match ROM declarations, no drive execution performed"
+  },
+  "source_verification": {
+    "tool": "tools/drive-roms/drive_rom_verify.py",
+    "coverage_check": "ACME listings cross-checked against independently assembled zero/255 gap-fill images",
+    "DOS_8250": {
+      "source_digest": "74196f9cf41e53ddbc768d74427b3f461da13067165eaeca6ab1a66821ffc8c8",
+      "result": "emitted-bytes-match",
+      "emitted_bytes": 14028,
+      "compared_bytes": 14026,
+      "matching_bytes": 14026,
+      "checksum_placeholders": ["C412", "E000"],
+      "separately_mapped_embedded_controller_range": ["C000", "C411"],
+      "verified_padding_byte": 170,
+      "padding_ranges": [["DE9C", "DFFF"], ["FB68", "FEFF"], ["FF36", "FF4F"], ["FFDB", "FFE6"]],
+      "limits": "main-DOS verification only, controller and embedded payload mappings are separate, no drive execution"
+    },
+    "DOS_4040": {
+      "source_digest": "76ab28fb08aff92a809b5976800456d693b8c8cd29beb04aa47c3d4722684eab",
+      "result": "mismatch against approved revision 2",
+      "emitted_bytes": 11611,
+      "compared_bytes": 11608,
+      "matching_bytes": 3041,
+      "mismatch_count": 8567,
+      "checksum_placeholders": ["D2A0", "E7AE", "FFE9"],
+      "diagnostic": "all 11608 compared bytes match older 901468-11/-12/-13 chips, those chips are diagnostic inputs only and do not replace the approved target"
+    }
+  },
+  "source_mappings": {
+    "4040-revision2": {
+      "profile": "4040-dos20r2",
+      "master": "master",
+      "source_digest": "76ab28fb08aff92a809b5976800456d693b8c8cd29beb04aa47c3d4722684eab",
+      "start": 53248,
+      "parts": ["901468-14", "901468-15", "901468-16"],
+      "checksums": [
+        {"address": 53920, "unit": "romtbl", "line": 10, "source_value": 0},
+        {"address": 59303, "unit": "echksm", "line": 1, "source_value": 0},
+        {"address": 65513, "unit": "vector", "line": 8, "source_value": 0}
+      ],
+      "patches": [
+        {"unit": "dskint", "first": 319, "last": 325, "replacement": ["LDX #$C0", "STX $1003", "INX", "STX $1004", "STX ATNPE"]},
+        {"unit": "tstfnd", "first": 12, "last": 16, "replacement": ["NXTDS JSR SETBMP"]},
+        {"unit": "lstdir", "first": 115, "last": 115, "replacement": ["GD1 PHA", "JSR DIR1", "PLA", "RTS"]},
+        {"unit": "autoit", "first": 26, "last": 28, "replacement": ["JSR TOGDRV"]},
+        {"unit": "lookup", "first": 48, "last": 49, "replacement": ["JSR TOGDRV"]},
+        {"unit": "copyall", "first": 88, "last": 88, "replacement": ["STA REC", "STA DRVCNT"]},
+        {"unit": "block", "first": 337, "last": 337, "replacement": ["LDY LINDX", "JSR RNGET2"]},
+        {"unit": "tst2", "first": 87, "last": 87, "replacement": ["CMP #59"]},
+        {"unit": "tst3", "first": 123, "last": 123, "replacement": ["WAITR2 LDA JOBS,X", "BMI WAITR2", "LDA #0"]},
+        {"unit": "opchnl", "first": 185, "last": 185, "replacement": ["JSR MAPOUT", "JMP OROW"]},
+        {"unit": "record", "first": 124, "last": 124, "replacement": []},
+        {"unit": "record", "first": 125, "last": 125, "replacement": []},
+        {"unit": "record", "first": 126, "last": 126, "replacement": ["JMP DBLBUF"]},
+        {"unit": "record", "first": 135, "last": 135, "replacement": ["JSR DBLBUF", "JMP STRDBL"]},
+        {"unit": "record", "first": 149, "last": 149, "replacement": ["P20 RTS"]}
+      ]
+    },
+    "8050-8250-mpi-controller": {
+      "profile": "8050-dos27mpi",
+      "master": "lib",
+      "source_digest": "7915f255f59c5a0c82fa2925329e65ae1e590f7ccee395fb28204bcab4cf2238",
+      "start": 64512,
+      "parts": ["901869-01"],
+      "checksums": [
+        {"address": 65531, "unit": "vectors", "line": 6, "source_value": 37}
+      ],
+      "patches": [
+        {"unit": "main", "first": 17, "last": 17, "replacement": ["START5 DEY", "BPL START1", "START"]},
+        {"unit": "main", "first": 60, "last": 64, "replacement": ["BMI START5"]},
+        {"unit": "main", "first": 81, "last": 82, "replacement": ["NOP", "NOP", "NOP", "NOP"]},
+        {"unit": "main", "first": 195, "last": 195, "replacement": []},
+        {"unit": "r_w", "first": 31, "last": 31, "replacement": ["CSIDB LDA #5", "!byte SKIP2", "L104 LDA #4"]},
+        {"unit": "r_w", "first": 43, "last": 46, "replacement": ["BNE L104"]},
+        {"unit": "cmds", "first": 14, "last": 16, "replacement": ["BNE ERR"]},
+        {"unit": "cmds", "first": 203, "last": 203, "replacement": ["HEADRTS RTS", "L420 JSR SYNC", "CMP #$08", "BEQ HEADRTS"]},
+        {"unit": "cmds", "first": 225, "last": 225, "replacement": []},
+        {"unit": "cmds", "first": 238, "last": 241, "replacement": []},
+        {"unit": "cmds", "first": 262, "last": 262, "replacement": ["SYNC1 LDA VB", "AND #255-PLLBIT", "STA VB"]},
+        {"unit": "cmds", "first": 314, "last": 317, "replacement": []},
+        {"unit": "defst", "first": 171, "last": 171, "replacement": ["SYNCS = CNT"]},
+        {"unit": "irq", "first": 6, "last": 6, "replacement": ["LDA #5", "STA MITAT"]}
+      ]
+    }
+  },
+  "binary_mappings": {
+    "4040-controller": {
+      "profile": "4040-dos20r2",
+      "parts": ["901466-04"],
+      "start": 64512,
+      "offset": 0,
+      "size": 1024,
+      "runtime": 64512,
+      "payload_sha256": "9403129c2f33652b9e444e15d95f20efa762eb9871c93f208d584c7484eaaccf",
+      "data_ranges": [
+        [64512, 64515, "word"],
+        [64751, 64755, "byte"],
+        [65512, 65531, "byte"],
+        [65532, 65535, "word"]
+      ],
+      "entries": {
+        "RESET": 64521,
+        "IDLE": 64596,
+        "EXECUTE": 64800,
+        "BUMP": 64810,
+        "SCHEDULE_TRACK": 64831,
+        "READ": 64964,
+        "WRITE": 65021,
+        "VERIFY": 65111,
+        "HEADER": 65154,
+        "COMPLETE": 65288,
+        "SYNC": 65342,
+        "IRQ": 65410
+      }
+    },
+    "4040-formatter": {
+      "profile": "4040-dos20r2",
+      "parts": ["901468-14", "901468-15", "901468-16"],
+      "start": 53248,
+      "offset": 0,
+      "size": 672,
+      "runtime": 1280,
+      "payload_sha256": "8b7dd86b69fa0d0f7a95feffcd88acfabb62a8db4add9245822cb1b4094ff471",
+      "data_ranges": [[1946, 1951, "byte"]],
+      "entries": {
+        "FORMAT": 1280,
+        "FORMAT_TRACK": 1341,
+        "FORMAT_ERROR": 1666,
+        "FORMAT_SUCCESS": 1796,
+        "FORMAT_COMPLETE": 1798,
+        "SET_HEADER": 1893
+      }
+    },
+    "8050-8250-formatter": {
+      "profile": "8050-dos27mpi",
+      "parts": ["901887-01", "901888-01"],
+      "start": 49152,
+      "offset": 0,
+      "size": 880,
+      "runtime": 1280,
+      "payload_sha256": "ad205636a7ab5641fc8014eb379e8d7e98e2019776ab346aa714dbe7b11dc421",
+      "data_ranges": [[2148, 2159, "byte"]],
+      "entries": {
+        "FORMAT": 1280,
+        "BUILD_HEADER": 1436,
+        "POSITION_TRACK": 1910,
+        "SELECT_ZONE": 1983,
+        "FORMAT_ERROR": 2040,
+        "FORMAT_COMPLETE": 2084
+      }
+    },
+    "8050-8250-initialization": {
+      "profile": "8050-dos27mpi",
+      "parts": ["901887-01", "901888-01"],
+      "start": 49152,
+      "offset": 880,
+      "size": 162,
+      "runtime": 1280,
+      "payload_sha256": "34f6a74326ce0f0799b86018cf9857a09f7ba655877a1e17046d3acc78bcd6ae",
+      "data_ranges": [],
+      "entries": {
+        "INITIALIZE": 1280,
+        "RAM_FAILURE": 1346,
+        "INITIALIZE_IO": 1351,
+        "SET_SIDES": 1393,
+        "PUBLISH_READY": 1434
+      }
+    }
+  },
+  "drive_profiles": [
+    {
+      "id": "4040-dos20r2",
+      "model": "4040",
+      "image": "D64",
+      "mode": "dual single-sided drives, schematic 320806",
+      "source_directory": "DOS_4040",
+      "mame_device": "c4040",
+      "mame_bios": "dos20r2",
+      "roms": ["901468-14", "901468-15", "901468-16", "901466-04"]
+    },
+    {
+      "id": "8050-dos27mpi",
+      "model": "8050",
+      "image": "D80",
+      "mode": "full-size dual single-sided MPI, PCB 8050002-05, MIOT PB6 high",
+      "source_directory": "DOS_8250",
+      "mame_device": "c8050",
+      "mame_bios": "dos27mpi",
+      "roms": ["901887-01", "901888-01", "901869-01"]
+    },
+    {
+      "id": "8250-dos27mpi",
+      "model": "8250",
+      "image": "D82",
+      "mode": "full-size dual double-sided MPI, PCB 8050002-06, MIOT PB6 low",
+      "source_directory": "DOS_8250",
+      "mame_device": "c8250",
+      "mame_bios": "dos27mpi",
+      "roms": ["901887-01", "901888-01", "901869-01"]
+    }
+  ],
+  "drive_roms": [
+    {
+      "part": "901468-14",
+      "role": "main DOS, D000-DFFF",
+      "size": 4096,
+      "sha256": "dc895641ad7ee9747eeda7f7617ef99e12e3793f3903345ec9da713c54a82648",
+      "sha1": "ffb992b82ec913ddff7be964d7527aca3e21580c",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/4040/901468-14.bin"
+    },
+    {
+      "part": "901468-15",
+      "role": "main DOS, E000-EFFF",
+      "size": 4096,
+      "sha256": "87f89f9fc41c3d073281ceb8f4002f70a7d17e1e7dac93e35d28be3adf8ad04a",
+      "sha1": "f702d6917fe8a798740ba4d467b500944ae7b70a",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/4040/901468-15.bin"
+    },
+    {
+      "part": "901468-16",
+      "role": "main DOS, F000-FFFF",
+      "size": 4096,
+      "sha256": "acabbfc1b0d596e84cd0de9418864ac59e2e1e53393e6a31ae783fcbf80fd7a3",
+      "sha1": "04b918cf4adeee8015b43383d3cea7288a7d0aa8",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/4040/901468-16.bin"
+    },
+    {
+      "part": "901466-04",
+      "role": "disk controller, 6530-034 RIOT DOS 2, 1 KiB",
+      "size": 1024,
+      "sha256": "9403129c2f33652b9e444e15d95f20efa762eb9871c93f208d584c7484eaaccf",
+      "sha1": "6645fa40b81be1ff7d1384e9b52df06a26ab0bfb",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/4040/901466-04.bin"
+    },
+    {
+      "part": "901887-01",
+      "role": "main DOS, C000-DFFF",
+      "size": 8192,
+      "sha256": "8e5d73785b4b296cc21cf1ab084e74ef3fb1f458ca50d819e447b3c9ffeed95b",
+      "sha1": "b10603195f240118fe5fb6c6dfe5c5097463d890",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/8050/901887-01.bin"
+    },
+    {
+      "part": "901888-01",
+      "role": "main DOS, E000-FFFF",
+      "size": 8192,
+      "sha256": "0a540601b09d266160842f4655fe29c69af2ee0cdb9f37d19554591a1087c554",
+      "sha1": "2e6c2d7ca934e5c550ad14bd5e9e7749686b7af4",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/8050/901888-01.bin"
+    },
+    {
+      "part": "901869-01",
+      "role": "disk controller, 6530-048 RIOT DOS 2.7 MPI, 1 KiB",
+      "size": 1024,
+      "sha256": "f35184e9e0fd062acbb20b4c49b2777c06c19c4c0df6c2cdfb8ffb627ad2e907",
+      "sha1": "3a9a80f72ce76e5f5c72513f8ef7553212912ae3",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/old/8050/901869-01.bin"
+    }
+  ],
+  "controller_acquisition": {
+    "base_url": "https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/",
+    "waterloo_subdirectory": "SuperPET/",
+    "existing_md5_manifest": ".devcontainer/download.sh",
+    "configuration": "sdcard/config.yaml",
+    "configuration_sha256": "41422ccb6414f4130e6ea79c2e9dc2b92d687eae56d00fb8fdcddfa0c75c7d8a",
+    "note": "hashes describe original files, record editor patches and effective loaded memory separately"
+  },
+  "controller_profiles": [
+    {
+      "id": "pet-corrected-rom2",
+      "configuration": "pet-2001",
+      "roms": ["basic-2-c000.901465-01.bin", "basic-2-d000.901465-02.bin", "kernal-2.901465-03.bin", "characters-2.901447-10.bin"],
+      "editor_alternatives": ["edit-2-n.901447-24.bin", "edit-2-b.901474-01.bin"]
+    },
+    {
+      "id": "pet-rom4",
+      "configuration_alternatives": ["pet-40xx-60hz", "pet-80xx-60hz"],
+      "roms": ["basic-4-b000.901465-23.bin", "basic-4-c000.901465-20.bin", "basic-4-d000.901465-21.bin", "kernal-4.901465-22.bin", "characters-2.901447-10.bin"],
+      "editor_alternatives": ["edit-4-40-n-60Hz.901499-01.bin", "edit-4-80-b-60Hz.901474-03.bin"]
+    },
+    {
+      "id": "waterloo-revision12",
+      "configuration": "superpet",
+      "roms": ["waterloo-a000-bfff.970018-12.bin", "waterloo-c000-dfff.970019-12.bin", "waterloo-e000-ffff-970034-12.bin", "characters.901640-01.bin"]
+    }
+  ],
+  "controller_roms": [
+    {"file": "basic-2-c000.901465-01.bin", "size": 4096, "sha256": "2c72ad52b53f522b2c112768d5912ca74df426aa2aa89569f3a0a230908fbfe3"},
+    {"file": "basic-2-d000.901465-02.bin", "size": 4096, "sha256": "41a447ce5a6972acd3fcc950996f5b82383f835ad7a1f56728c6945853b7ab80"},
+    {"file": "kernal-2.901465-03.bin", "size": 4096, "sha256": "056d5e84a6e4f2b5b40a4109f49515c2496a4bf99139a9f59abe486ded5cd03d"},
+    {"file": "edit-2-n.901447-24.bin", "size": 2048, "sha256": "5338b1dffebd695f6110c9995e16f7536bb63a909c2a0062b4789de46904ade9"},
+    {"file": "edit-2-b.901474-01.bin", "size": 2048, "sha256": "448483549a95c5828ca509081d9f621a569fdcd3fcd9bbacdeef036ea18ea628"},
+    {"file": "basic-4-b000.901465-23.bin", "size": 4096, "sha256": "efa9918319000c614bbc56f9a825d260bafbc109938560ecdfd5640b841e87e4"},
+    {"file": "basic-4-c000.901465-20.bin", "size": 4096, "sha256": "7574ff95812cd8c3131061e1e2ea86ec47fdbe848fe274c5b4697b0309247585"},
+    {"file": "basic-4-d000.901465-21.bin", "size": 4096, "sha256": "e54e6ebc17e1a1120ca5b3cc9d80a42e8419c50895e88c41179afbfba0c35f9e"},
+    {"file": "kernal-4.901465-22.bin", "size": 4096, "sha256": "7cf8678b748bda1ffedee69ea54888feb3f5ec66dca8143375cbdf8c3de4d573"},
+    {"file": "edit-4-40-n-60Hz.901499-01.bin", "size": 2048, "sha256": "15e4c2759d2b7cbeb3c228358e188e084c862979df7cbdfbff3e447d257e1945"},
+    {"file": "edit-4-80-b-60Hz.901474-03.bin", "size": 2048, "sha256": "a7fb224049e12387349d7b1873a0cb421cbe3097838eccc414de5ffe39aef2a4"},
+    {"file": "characters-2.901447-10.bin", "size": 2048, "sha256": "da3374c21d6ea440cef5f338ce3f524e0a1e40dcb1ef64446c695f92c636f1fa"},
+    {"file": "waterloo-a000-bfff.970018-12.bin", "size": 8192, "sha256": "6f7b04853a73b7a457c50a589b5a5939d8c209cedae2243ad4f08cf7b4dbb2b1"},
+    {"file": "waterloo-c000-dfff.970019-12.bin", "size": 8192, "sha256": "79d09287d1dac1fcc2b5c34f6011e96e3f7caa13eef449c1f15eadb28d88b861"},
+    {"file": "waterloo-e000-ffff-970034-12.bin", "size": 8192, "sha256": "af2031212ee5c29a9ea6d030d531d700f8cc65c9c4ab23c21b81ac31535f2e2c"},
+    {"file": "characters.901640-01.bin", "size": 4096, "sha256": "e6a9d1b829ef498c3d69e5c892a06a947a9baf5d4e6f43f60ef814371038a311"}
+  ],
+  "baseline_media": [
+    {
+      "file": "Waterloo2-Language-1.d64",
+      "size": 174848,
+      "sha256": "e7f104f115618d0d700c8bc8dd59550b3e3b7d70dd4dec363136155d4278d029",
+      "url": "https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-1.d64.gz",
+      "acquisition": "decompress gzip, hash uncompressed bytes"
+    },
+    {
+      "file": "superpet/Waterloo2-Languages.d80",
+      "size": 533248,
+      "sha256": "09109913aedb380517c722c406b27582f4171c7de5db31b89103b11b29ed92a5",
+      "acquisition": ".devcontainer/download.sh merges the two Waterloo D64s and selected testram9000.d80 files with .devcontainer/merge-disks.py",
+      "generator_sha256": "4f286bc3fe36d076c49dddfc014d9404d64785140ab1a0e9713c441f19ec2864",
+      "generator_tool": "c1541 (VICE 3.9)",
+      "reproduction": "byte-identical reproduction confirmed from hash-verified upstream inputs",
+      "inputs": [
+        {"file": "Waterloo2-Language-1.d64", "sha256": "e7f104f115618d0d700c8bc8dd59550b3e3b7d70dd4dec363136155d4278d029", "selection": "*"},
+        {"file": "Waterloo2-Language-2.d64", "sha256": "7efb6d574d28a910268da79c327ccf61e5d94c3e7cfdb0e72f5ce1d70e88411d", "selection": "*"},
+        {"file": "testram9000.d80", "sha256": "7b8c54c16280ca6e674458cc1872fb19c9a62da5f70b0ebc287cd1ed26380935", "selection": ["test.main", "test.banks", "test.os9"]}
+      ]
+    },
+    {
+      "file": "superpet/os9/os9-systemdisk.d80",
+      "size": 533248,
+      "sha256": "f1d52909b4c830224886abb82e250ade402e3f6b317922561370758d37d688bb",
+      "url": "https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80",
+      "fallback_url": "https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80"
+    }
+  ]
+}
