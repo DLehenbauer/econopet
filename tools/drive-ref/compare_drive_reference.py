@@ -32,6 +32,33 @@ def compare_frames(expected, actual):
     return differences, timings
 
 
+def compare_received(actions, received):
+    """Check CPU observations and their provenance against selected receive actions."""
+    expected = [(index, action.split()) for index, action in enumerate(actions)
+                if action.split()[1] == "R"]
+    differences = []
+    if len(received) != len(expected):
+        differences.append({"case": "coverage", "field": "received record count",
+                            "reference": len(expected), "candidate": len(received)})
+    for (index, action), row in zip(expected, received):
+        fields = {
+            "action": index, "case": action[0],
+            "expected": int(action[2]), "actual": int(action[2]),
+            "expected_eoi": int(action[4]), "actual_eoi": int(action[4]),
+        }
+        for field, value in fields.items():
+            candidate = row.get(field)
+            if field != "case":
+                try:
+                    candidate = int(candidate)
+                except (TypeError, ValueError):
+                    pass
+            if candidate != value:
+                differences.append({"action": index, "case": action[0], "field": field,
+                                    "reference": value, "candidate": candidate})
+    return differences
+
+
 def ordinary_file_prefix(actions):
     """Keep the captured prefix through readback/UNTALK, excluding the later UJ command."""
     last = max(index for index, action in enumerate(actions)
@@ -104,7 +131,8 @@ def main():
     differences, timings = compare_frames(native_frames, observed["frames"])
     with (candidate / "received.csv").open(encoding="ascii") as stream:
         received = list(csv.DictReader(stream))
-    unexplained = list(differences)
+    received_differences = compare_received(selected_actions, received)
+    unexplained = [*differences, *received_differences]
     expected_completed_frames = sum(action.split()[1] in ("H", "R")
                                     for action in selected_actions[:completed])
     if (len(observed["frames"]) < expected_completed_frames
@@ -135,7 +163,7 @@ def main():
         "stimulus": {"requested_actions": len(selected_actions), "completed_actions": completed,
                      "excluded_suffix_actions": len(actions) - len(selected_actions),
                      "failure_case": failure_case, "coverage": coverage},
-        "received": received, "wire": observed,
+        "received": received, "received_differences": received_differences, "wire": observed,
         "differences": differences, "timings": timings,
         "unexplained_differences": unexplained,
         "not_compared_frames": len(all_native_frames) - len(observed["frames"]),

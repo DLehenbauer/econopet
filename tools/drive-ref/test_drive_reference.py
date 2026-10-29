@@ -2,11 +2,13 @@
 """Protect reference isolation, bounded captures and native regression observations."""
 
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import drive_reference as reference
+import build_drive_reference as builder
 
 
 def native_observations(model="4040"):
@@ -235,6 +237,105 @@ class IsolationTest(unittest.TestCase):
         self.assertTrue(program.startswith("5 poke52,0:poke53,64:clr\n"))
         self.assertLess(program.index(":clr"), program.index("open15"))
         self.assertEqual(program, program.lower())
+
+
+class BuilderTest(unittest.TestCase):
+    """Validate actual tracked Git changes while replacing only the expensive build."""
+
+    def setUp(self):
+        """Create a pinned fixture checkout and an eight-character-ID instrumentation patch."""
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.source = self.root / "source"
+        self.source.mkdir()
+        self.files = ("trace.cpp", "pet.cpp", "unrelated.cpp")
+        for name in self.files:
+            (self.source / name).write_text("original\n", encoding="ascii")
+        self.git("init", "--quiet")
+        self.git("add", ".")
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture")
+        self.commit = self.git("rev-parse", "HEAD").stdout.strip()
+        for name in self.files[:2]:
+            (self.source / name).write_text("instrumented\n", encoding="ascii")
+        patch_path = self.root / "drive_reference_mame.patch"
+        patch_path.write_text(self.git("diff", "--abbrev=8").stdout, encoding="ascii")
+        for name in self.files[:2]:
+            (self.source / name).write_text("original\n", encoding="ascii")
+        self.builds = 0
+
+    def git(self, *arguments):
+        """Run real Git operations against the disposable source fixture."""
+        return subprocess.run(
+            ["git", "-C", str(self.source), *arguments],
+            check=True, capture_output=True, text=True,
+        )
+
+    def build(self):
+        """Run the builder's Git checks and patch application without compiling MAME."""
+        real_run = subprocess.run
+        real_output = subprocess.check_output
+
+        def run(command, **kwargs):
+            """Produce a synthetic binary only after the builder reaches make."""
+            if command[0] == "make":
+                self.builds += 1
+                (self.source / "petd").write_bytes(b"synthetic MAME")
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, **kwargs)
+
+        def check_output(command, **kwargs):
+            """Retain actual Git diff behavior while supplying a compiler identity."""
+            if command == ["g++", "--version"]:
+                return "fixture compiler\n"
+            return real_output(command, **kwargs)
+
+        with patch.object(builder, "__file__", str(self.root / "build_drive_reference.py")), \
+                patch.object(builder, "MAME_COMMIT", self.commit), \
+                patch("sys.argv", ["build_drive_reference.py", "--source-dir", str(self.source)]), \
+                patch.object(builder.subprocess, "run", side_effect=run), \
+                patch.object(builder.subprocess, "check_output", side_effect=check_output):
+            builder.main()
+
+    def test_clean_build_and_staged_unstaged_patch_reruns(self):
+        """Accept exactly the approved patch regardless of how its changes are staged."""
+        self.build()
+        self.build()
+        self.git("add", self.files[0])
+        self.build()
+        self.git("add", self.files[1])
+        self.git("config", "core.abbrev", "40")
+        self.git("config", "diff.noprefix", "true")
+        self.git("config", "diff.context", "9")
+        self.build()
+        self.assertEqual(self.builds, 4)
+        identity = (self.source / "petd.json").read_text()
+        self.assertIn(self.commit, identity)
+
+    def test_unrelated_staged_change_rejected_before_patch_or_build(self):
+        """Do not mark an instrumented build approved when tracked staged edits are hidden."""
+        path = self.source / self.files[2]
+        path.write_text("unrelated change\n", encoding="ascii")
+        self.git("add", path.name)
+        with self.assertRaisesRegex(ValueError, "source changes differ"):
+            self.build()
+        self.assertEqual(self.builds, 0)
+        self.assertEqual((self.source / self.files[0]).read_text(), "original\n")
+        self.assertEqual(path.read_text(), "unrelated change\n")
+
+    def test_patched_checkout_rejects_extra_staged_or_unstaged_edits(self):
+        """A valid instrumentation patch must not hide additional source modifications."""
+        self.build()
+        path = self.source / self.files[2]
+        path.write_text("unrelated change\n", encoding="ascii")
+        for staged in (False, True):
+            with self.subTest(staged=staged):
+                if staged:
+                    self.git("add", path.name)
+                with self.assertRaisesRegex(ValueError, "source changes differ"):
+                    self.build()
+        self.assertEqual(self.builds, 1)
 
 
 if __name__ == "__main__":

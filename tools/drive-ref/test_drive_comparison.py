@@ -1,8 +1,15 @@
 # SPDX-License-Identifier: CC0-1.0
 """Keep byte/EOI mismatches separate from unadjusted protocol-phase diagnostics."""
 
+import csv
+import json
+from pathlib import Path
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
+import compare_drive_reference as comparison
 from compare_drive_reference import compare_frames, ordinary_file_prefix
 
 
@@ -63,6 +70,108 @@ class ComparisonTest(unittest.TestCase):
         """A missing native termination cannot be manufactured by the comparator."""
         with self.assertRaises(ValueError):
             ordinary_file_prefix(["readback R 13 0 1", "control H 40 1 0"])
+
+
+class ReceivedTest(unittest.TestCase):
+    """Reject CPU input corruption even when composed-wire frames match."""
+
+    def setUp(self):
+        """Interleave host, ATN-release and receive actions with independent observations."""
+        self.actions = ["setup H 72 1 0", "control A 0 0 0",
+                        "startup R 65 0 0", "startup R 13 0 1", "write H 63 1 0"]
+        self.rows = [
+            dict(action="2", case="startup", expected="65", actual="65",
+                 expected_eoi="0", actual_eoi="0"),
+            dict(action="3", case="startup", expected="13", actual="13",
+                 expected_eoi="1", actual_eoi="1"),
+        ]
+
+    def test_exact_receive_actions_and_selected_prefix(self):
+        """Use action indices, not wire-frame indices, and respect prefix selection."""
+        self.assertEqual(comparison.compare_received(self.actions, self.rows), [])
+        self.assertEqual(comparison.compare_received(self.actions[:3], self.rows[:1]), [])
+        self.assertEqual(comparison.compare_received(self.actions[:2], []), [])
+
+    def test_corruption_order_and_provenance(self):
+        """Do not trust recorded expectations or accept changed byte, EOI or action identity."""
+        changes = (
+            ("actual", "66"), ("actual_eoi", "1"), ("actual_eoi", "2"),
+            ("action", "0"), ("case", "other"), ("expected", "66"),
+            ("expected_eoi", "1"), ("actual", "invalid"), ("actual", None),
+        )
+        for field, value in changes:
+            with self.subTest(field=field, value=value):
+                rows = [dict(self.rows[0], **{field: value}), self.rows[1]]
+                differences = comparison.compare_received(self.actions, rows)
+                self.assertEqual([row["field"] for row in differences], [field])
+                self.assertEqual(differences[0]["action"], 2)
+        self.assertTrue(comparison.compare_received(self.actions, self.rows[::-1]))
+
+    def test_missing_and_extra_receive_records(self):
+        """Missing, duplicate and unexpected records cannot pass a zipped comparison."""
+        for rows in ([], self.rows[:1], [*self.rows, self.rows[1]]):
+            with self.subTest(count=len(rows)):
+                differences = comparison.compare_received(self.actions, rows)
+                self.assertEqual(differences[0]["field"], "received record count")
+
+    def test_receive_mismatch_fails_cli_despite_matching_wire(self):
+        """Retain receive differences in the report and return a failed comparison."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference = root / "reference"
+            reference.mkdir()
+            initial = reference / "initial.d64"
+            initial.write_bytes(bytes(256))
+            script = reference / "replay.txt"
+            script.write_text("ieee-replay-v1\n" + "\n".join(self.actions) + "\n",
+                              encoding="ascii")
+            wire = reference / "ieee-wire.csv"
+            wire.write_text("synthetic wire\n", encoding="ascii")
+            frames = [
+                dict(case=parts[0], byte=int(parts[2]), atn=bool(int(parts[3])),
+                     eoi=bool(int(parts[4])), direction="drive" if parts[1] == "R" else "host")
+                for parts in (action.split() for action in self.actions) if parts[1] != "A"
+            ]
+            original = {
+                "model": "4040", "wire": {"frames": frames},
+                "media": {"initial_sha256": comparison.sha256(initial),
+                          "final_sha256": comparison.sha256(initial)},
+                "artifacts": {path.name: comparison.sha256(path) for path in (wire, script)},
+            }
+            (reference / "result.json").write_text(json.dumps(original), encoding="ascii")
+            tool = root / "replay-tool"
+            tool.write_bytes(b"synthetic executable identity")
+            output = root / "comparison"
+
+            def replay(command, **kwargs):
+                """Write complete replay evidence with only the CPU input byte corrupted."""
+                candidate = Path(command[-1])
+                candidate.mkdir()
+                (candidate / "coverage.txt").write_text(
+                    f"completed={len(self.actions)}\n", encoding="ascii"
+                )
+                (candidate / "final.d64").write_bytes(initial.read_bytes())
+                with (candidate / "received.csv").open("w", encoding="ascii", newline="") as stream:
+                    writer = csv.DictWriter(stream, fieldnames=list(self.rows[0]))
+                    writer.writeheader()
+                    writer.writerows([dict(self.rows[0], actual="66"), self.rows[1]])
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch("sys.argv", [
+                "compare_drive_reference.py", "--reference-dir", str(reference),
+                "--output-dir", str(output), "--replay-tool", str(tool),
+            ]), patch.object(comparison.subprocess, "run", side_effect=replay), \
+                    patch.object(comparison.subprocess, "check_output", return_value="fixture"), \
+                    patch.object(comparison, "decode_wire", return_value={
+                        "frames": frames, "issues": [], "aborted": [],
+                    }), patch("builtins.print"):
+                with self.assertRaises(SystemExit) as failure:
+                    comparison.main()
+            self.assertEqual(failure.exception.code, 1)
+            report = json.loads((output / "comparison.json").read_text())
+            self.assertEqual(report["differences"], [])
+            self.assertEqual(report["received_differences"][0]["field"], "actual")
+            self.assertEqual(report["unexplained_differences"], report["received_differences"])
 
 
 if __name__ == "__main__":

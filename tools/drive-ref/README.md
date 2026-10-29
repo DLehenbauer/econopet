@@ -55,7 +55,8 @@ python3 tools/drive-ref/build_drive_reference.py \
 For an existing checkout, omit the clone. The builder checks the revision,
 applies or verifies the exact trace patch, and records the build identity in
 `build/drive-mame/petd.json` beside `petd`. It rejects unrelated tracked source
-changes.
+changes, whether staged or unstaged. The approved patch can be unstaged, staged,
+or partly staged when rerunning the builder.
 
 ## Capture an original-ROM baseline
 
@@ -108,7 +109,10 @@ or omit both flags for the full baseline. Each run needs a fresh output
 directory.
 
 The comparator retains wire observations, received bytes, replay coverage,
-final media, logs, and `comparison.json`. Mismatches, incomplete replay, and
+final media, logs, and `comparison.json`. CPU receive records must match the
+selected replay's receive count, action identity, byte, and EOI independently
+of composed-wire agreement. Receive mismatches are retained in
+`received_differences` and fail the comparison. Mismatches, incomplete replay, and
 invalid or aborted wire observations fail the comparison. A legacy firmware
 limitation is not treated as an equivalence exemption.
 

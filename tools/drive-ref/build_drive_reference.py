@@ -31,7 +31,11 @@ def main():
     if commit != MAME_COMMIT or not 1 <= args.jobs <= 8:
         raise ValueError("requires the pinned source and 1..8 bounded build jobs")
     expected = patch.read_bytes()
-    actual = subprocess.check_output(["git", "-C", str(source), "diff", "--binary"])
+    actual = subprocess.check_output([
+        "git", "-C", str(source), "diff", "--no-ext-diff", "--no-textconv",
+        "--no-color", "--no-renames", "--abbrev=8", "--src-prefix=a/",
+        "--dst-prefix=b/", "--unified=3", "HEAD", "--",
+    ])
     if not actual:
         subprocess.run(["git", "-C", str(source), "apply", str(patch)], check=True)
     elif actual != expected:
