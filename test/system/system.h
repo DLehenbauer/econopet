@@ -580,6 +580,7 @@ public:
         uint8_t ieee_via_orb_o, ieee_pia2_pb_out_o, ieee_bus_dio_o, ieee_device_dio_o;
         bool ieee_cpu_nrfd_no, ieee_cpu_ndac_no, ieee_listening_o, ieee_talking_o;
         bool ieee_rx_ready_o, ieee_bus_dav_no, ieee_bus_atn_no, ieee_device_dav_no, ieee_device_eoi_no;
+        bool ieee_bus_nrfd_no, ieee_bus_ndac_no, ieee_bus_eoi_no;
 
     private:
         friend class System;
@@ -627,7 +628,9 @@ public:
               ieee_cpu_ndac_no(p.ieee_cpu_ndac_no), ieee_listening_o(p.ieee_listening_o),
               ieee_talking_o(p.ieee_talking_o), ieee_rx_ready_o(p.ieee_rx_ready_o),
               ieee_bus_dav_no(p.ieee_bus_dav_no), ieee_bus_atn_no(p.ieee_bus_atn_no),
-              ieee_device_dav_no(p.ieee_device_dav_no), ieee_device_eoi_no(p.ieee_device_eoi_no) {}
+              ieee_device_dav_no(p.ieee_device_dav_no), ieee_device_eoi_no(p.ieee_device_eoi_no),
+              ieee_bus_nrfd_no(p.ieee_bus_nrfd_no), ieee_bus_ndac_no(p.ieee_bus_ndac_no),
+              ieee_bus_eoi_no(p.ieee_bus_eoi_no) {}
     };
 
     // Initialize inactive pins and SRAM before settling the production top.

@@ -78,6 +78,13 @@ for image identity, workspace, initialization and Waterloo hook requirements.
 Unusual raw-installation scenarios should retain their explicit lifecycle
 rather than being rewritten as ordinary recipes.
 
+## Capture and replay an original-drive reference
+
+Use the [drive reference toolkit](../../../tools/drive-ref/README.md) to build
+instrumented MAME, capture approved original-ROM transactions, and compare their
+replay through production SPI, firmware, and FPGA simulation. Its README covers
+prerequisites, commands, artifacts, tests, and evidence limits.
+
 ## Find the authoritative detail
 
 - [Controller, transaction values, FIFO operations and wire evidence](../reference.md#ieee-controller-and-protocol-evidence)

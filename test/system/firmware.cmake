@@ -27,6 +27,13 @@ target_link_libraries(econopet_firmware_transport PUBLIC
 # Firmware fopen reaches owned cookie-backed fixtures, not SPI mocks.
 target_link_options(econopet_firmware_transport INTERFACE -Wl,--wrap=fopen)
 
+# Replay external reference transactions without making private ROMs CTest inputs.
+add_executable(econopet_drive_reference ieee/reference_replay.cpp framework/scheduler.cpp)
+target_compile_features(econopet_drive_reference PRIVATE cxx_std_23)
+target_link_libraries(econopet_drive_reference PRIVATE econopet_firmware_transport)
+set_target_properties(econopet_drive_reference PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
+
 # Isolate firmware globals and fopen wrapping from board-only and host-only tests.
 add_executable(econopet_firmware_tests
     econopet_top_smoke.cpp firmware_test.cpp ieee/drive_test.cpp
