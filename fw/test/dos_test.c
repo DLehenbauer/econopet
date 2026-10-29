@@ -1841,6 +1841,84 @@ START_TEST(test_raw_directory_uses_simple_drive_selection) {
 }
 END_TEST
 
+// FFST returns a zero-track name match to OP90 without searching another link.
+START_TEST(test_open_zero_track_match_stops_search) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int scenario = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    const uint8_t type = scenario == 2 ? DISKIMAGE_FTYPE_PRG : DISKIMAGE_FTYPE_SEQ;
+    fixture_file(&first, format, 0, "FILE", type, 0x40, 22);
+    fixture_file(&second, format, 0, "FILE", type, 0x80, 22);
+    const diskimage_type_t image_type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&first, image_type, track, 1);
+    if (scenario == 1) {
+        memcpy(sector_bytes(&first, image_type, track, 2), directory, DISKIMAGE_SECTOR_SIZE);
+        directory[0] = track;
+        directory[1] = 2;
+    }
+    directory[3] = 0;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const unsigned int peer_reads = second.reads;
+    const uint8_t channel = open_name(&unit, &bank, scenario == 2 ? IEEE_LOAD_CHANNEL : 2,
+                                      scenario == 2   ? "*"
+                                      : scenario == 1 ? "0:FILE"
+                                                      : "FILE");
+    ck_assert_uint_eq(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(second.reads, peer_reads);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OP90/OP130 decode six track bits on 4040, but DOS 2.7 retains the whole byte.
+START_TEST(test_open_decodes_model_specific_track_bits) {
+    static const uint8_t tracks[] = {0x40, 0x41, 0x80, 0x81, 0xc1};
+    const unsigned int format = (unsigned int)_i / count_of(tracks);
+    const unsigned int scenario = (unsigned int)_i % count_of(tracks);
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "FILE", DISKIMAGE_FTYPE_PRG, 0x40, 22);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    sector_bytes(&image, type, format == 0 ? 18u : 39u, 1)[3] = tracks[scenario];
+    const bool missing = format == 0 && (scenario == 0 || scenario == 2);
+    const bool invalid = format != 0 && tracks[scenario] > (format == 1 ? 77u : 154u);
+    if (format != 0 && !invalid) {
+        uint8_t* const sector = sector_bytes(&image, type, tracks[scenario], 0);
+        sector[0] = 0;
+        sector[1] = 23;
+        for (unsigned int byte = 0; byte < 22; ++byte) {
+            sector[byte + DISKIMAGE_SECTOR_LINK_SIZE] = 0xa0u + byte;
+        }
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "0:FILE");
+    if (missing || invalid) {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, missing ? DOS_STATUS_NOT_FOUND : DOS_STATUS_READ_ERROR);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        expect_bytes(&unit, &bank, channel, 22, format == 0 ? 0x40 : 0xa0);
+        ck_assert(dos_close(&unit, bank.units[0].model, IEEE_LOAD_CHANNEL));
+        channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*");
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        expect_bytes(&unit, &bank, channel, 22, format == 0 ? 0x40 : 0xa0);
+    }
+    free(image.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1891,6 +1969,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_directory_completion_preserves_raw_track_state, 0, 9);
     tcase_add_loop_test(core, test_directory_suffix_respects_parser_boundaries, 0, 24);
     tcase_add_loop_test(core, test_raw_directory_uses_simple_drive_selection, 0, 36);
+    tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
+    tcase_add_loop_test(core, test_open_decodes_model_specific_track_bits, 0, 15);
     suite_add_tcase(suite, core);
     return suite;
 }

@@ -41,6 +41,7 @@ static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* co
 #define DOS_FILE_CLOSED_MASK 0x80u
 #define DOS_FILE_TYPE_MASK 7u
 #define DOS_FILE_LOCKED_MASK 0x40u
+#define DOS_FILE_TRACK_MASK_4040 0x3fu
 #define DOS_DIRECTORY_BLOCKS_LOW 30u
 #define DOS_DIRECTORY_BLOCKS_HIGH 31u
 #define DOS_BAM_TRACK_8050 38u
@@ -1215,6 +1216,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // Another channel can report a read error between cooperative work calls.
     unit->selected_drive = reference.slot;
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
+    bool matched = false;
     const uint8_t searched_track = work->track, searched_sector = work->sector;
 
     // Bound directory visits by image size as a corruption safeguard, not a
@@ -1236,9 +1238,13 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                  (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
                 name_matches(work->name, work->name_length, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
-                found_track = file[DOS_DIRECTORY_TRACK_OFFSET];
+                // 4040 OP90/OP130 discard FILTRK's two high bits. DOS 2.7
+                // keeps the full track byte for its larger geometry.
+                found_track =
+                    file[DOS_DIRECTORY_TRACK_OFFSET] & (model == DOS_MODEL_4040 ? DOS_FILE_TRACK_MASK_4040 : UINT8_MAX);
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
                 found_entry = (uint8_t)entry;
+                matched = true;
                 break;
             }
         }
@@ -1251,10 +1257,11 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM SR40/NXTBUF follow the directory link until its track is zero.
     // Yield at a live link, otherwise return the scratch buffer before any
     // GETRCH-style allocation so lookup does not permanently cost a buffer.
-    if (!failed && found_track == 0 && work->track != 0) {
+    // FFST returns a zero-track name match to OP90, not another search pass.
+    if (!failed && !matched && work->track != 0) {
         return;
     }
-    if (!failed && found_track == 0 && work->default_drive) {
+    if (!failed && !matched && work->default_drive) {
         unsigned int next_drive = reference.slot;
         bool retry = false;
         if (!work->tried_other) {
