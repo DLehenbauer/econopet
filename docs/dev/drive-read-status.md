@@ -18,19 +18,24 @@ slices.
   which follows CMDSET's CR trimming. Omitted drives start from the last
   successful command's drive. Equals ends the filename without hiding later
   comma-separated parameters, and `D` resets an earlier type for inference.
+  Explicit comparison lengths survive literal `$A0` in both OPEN and directory
+  patterns, without changing padding or wildcard rules.
   Parsing `L` does not enable REL operations.
 - Ordinary readers with two owned pages, initial prefetch, sector links,
   terminal-byte EOI, the native initial-singleton EOF sequence and retained
   last-program LOAD selection. Initial `LOAD "*"` starts at drive zero and
-  filters for PRG entries before checking OPEN parameters. A retained-program
-  reload uses its saved drive/link without parsing the ignored name suffix.
+  releases channels whose active page's last job selected drive zero, before
+  parsing or lookup. It filters for PRG entries before checking OPEN parameters.
+  A retained-program reload uses its saved drive/link without this teardown or
+  parsing the ignored name suffix.
 - BASIC directory headers, entries and free-block footers, bounded patterns,
   type filters (`R` for REL, not OPEN's `L`), dual-drive continuation and raw
   directory/header-chain reads.
 - Retained model-specific status. Preview does not consume output. GET commits
   only actual progress, and status clears only after its CR is consumed.
 - Resource release and reuse through CLOSE, with cooperative lookup yielding
-  between directory sectors.
+  between directory sectors. Failed OPEN also releases the failing secondary's
+  non-REL ordinary reader on DOS 2.7. The inactive-bus 4040 path retains it.
 
 Writes, append, explicit REL OPEN and direct-channel OPEN are rejected in this
 slice rather than being silently accepted. This temporary extraction boundary
@@ -91,6 +96,9 @@ shared DOS 2.7 hardware modes:
 | Type reset | Selected native targets | Both `open:CKTM` search `romtbl:TPLST` (`DSPUL`), including index zero. | `FILE,P,D` infers the matched type, while `FILE,D,P` still requires PRG. | `dos_open_parse`, `test_open_d_resets_type_in_parameter_order` | Same article, Channels 0 and 1, distinguishes their PRG default from ordinary channels. It does not document the D reset. |
 | Directory REL filter | Selected native targets | Both `setdrv:FS1SET` search `romtbl:TYPLST` (`DSPUR`). | `=R` lists only REL. Unrecognized `=L` leaves the listing unrestricted. | `open_directory`, `test_directory_relative_filter_uses_r_not_l` | Same article, Directory Listing, explicitly distinguishes R from OPEN's L. |
 | Initial and retained LOAD | Selected native targets | Both `open:OP0415` reset DRVNUM/LSTDRV and set PRG TYPFLG. `lookup:FF30` filters matches. `open:OP02` precedes parsing for retained loads. | Initial `*` starts at zero and skips SEQ entries. A retained reload uses the saved link even with an otherwise invalid suffix. | `dos_open`/`dos_work`, `test_initial_load_star_resets_drive_and_filters_programs`, `test_failed_initial_load_star_resets_drive_before_parsing`, `test_retained_load_star_bypasses_ignored_parameters` | Same article, Channels 0 and 1, corroborates LOAD/read and PRG defaults, not the shortcut details. |
+| Failed OPEN owner | DOS 2.7 versus 4040 revision 2, outside active bus roles | DOS 2.7 `erproc:CMDER3` restores ORGSA, finds its owner even without LSNACT/TLKACT, then `TLERR` calls `tst3:FRECHN` for types below REL. 4040 skips that idle-role teardown. | Missing name, type mismatch, overlength and lookup-I/O errors retire only the failing DOS 2.7 secondary. The peer, last successful drive and 4040 owner survive. Listing reservations are released even with a REL filter. Types at/above REL remain exempt. | `command_error`, `test_failed_reopen_releases_only_dos27_ordinary_owner`, `test_failed_reopen_releases_dos27_listing_reservations` | Both ROMs' `tst3:FRECHN/RELBUF` independently establish the channel/page release mechanism. The generic article does not specify this model distinction. |
+| Explicit pattern extent | Selected native targets | Both `lookup:COMPAR` compare bytes through `trnsfr:FNDLMT`'s LIMIT. Only `CP34`, after exhausting the supplied bytes, tests directory padding. | `A,$A0,X` does not match `A,$A0,Y`. Ordinary OPEN and every directory pattern preserve explicit lengths, suffix wildcards, question-mark padding rejection and the 16-byte cap. | `name_matches`/`dos_open_parse`/`open_directory`, `test_open_preserves_explicit_pattern_length`, `test_directory_preserves_explicit_pattern_lengths` | The separate legacy `diskimage.c` matcher already consumes every supplied byte. The article labels `$A0` illegal for creating filenames, which does not define raw lookup on an existing directory. |
+| Initial LOAD owner teardown | Selected native targets | Both `open:OP0415` call `tst2:INITDR`, beginning with `tst3:CLDCHN`. `getact:GETACT` selects the page whose LSTJOB drive bit determines ownership. | Before initial `*` parsing, release only active-page drive-zero owners (including on syntax/not-found failure). Media slot and inactive-page jobs must not substitute for that bit. Retained-program reload does not perform this teardown. | `dos_open`, `test_initial_load_star_releases_active_drive_owners` | Both ROMs' `getact:GETACT` independently corroborate the BUF0/BUF1 selector. This row covers channel ownership, not the remaining controller/media initialization. |
 | Corrupt directory bound | Host adaptation, not native behavior | Both `lookup:SEARCH` and `lstdir:GETDIR` traverse entries. Neither defines this host image-size bound. | Cached self-links, unmatched rows and multi-sector cycles terminate with retained status 23 and the listing's drive/coordinates. | `prepare_directory_line`, `test_directory_cycles_publish_bounded_read_error` | The documented host safeguard above, not an original-drive timeout claim. |
 | Empty preview | Host transport boundary, not a native API | Both `tst4:GET` advance after prepared data is transferred. There is no ROM capacity-zero preview operation. | Ordinary, raw and BASIC-directory previews with capacity zero change no state or I/O and return zero with EOI false. | `dos_stage`, `test_zero_capacity_preview_preserves_reader_and_directory_state` | Same article, Sequential Files, corroborates EOI on actual file completion, not a zero-size observation. |
 

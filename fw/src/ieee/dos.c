@@ -26,6 +26,8 @@ _Static_assert(DOS_FILE_CHANNEL_COUNT + 2 == DOS_CHANNEL_COUNT, "command and err
 static uint8_t allocate_channel(dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t secondary,
                                 const unsigned int buffers);
 
+static void free_channel(dos_unit_t* const unit, const uint8_t channel);
+
 static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                                     uint8_t* const output, const unsigned int capacity, bool* const eoi);
 
@@ -45,7 +47,9 @@ static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* co
 #define DOS_BAM_TRACKS_PER_PART 50u
 #define DOS_DIRECTORY_LINE_SIZE 32u
 #define DOS_DIRECTORY_NAME_SIZE 27u
-#define DOS_DIRECTORY_PATTERN_SIZE (DISKIMAGE_FILENAME_SIZE + 1u)
+#define DOS_DIRECTORY_PATTERN_DRIVE DISKIMAGE_FILENAME_SIZE
+#define DOS_DIRECTORY_PATTERN_LENGTH (DISKIMAGE_FILENAME_SIZE + 1u)
+#define DOS_DIRECTORY_PATTERN_SIZE (DISKIMAGE_FILENAME_SIZE + 2u)
 #define DOS_HEADER_NAME_4040 144u
 #define DOS_HEADER_NAME_8050 6u
 
@@ -174,7 +178,8 @@ static void command_end(dos_unit_t* const unit, const dos_model_t model) {
 }
 
 // Retire a failed command without changing its last-successful drive.
-static void command_error(dos_unit_t* const unit, const dos_model_t model, const dos_status_code_t code) {
+static void command_error(dos_unit_t* const unit, const dos_model_t model, const uint8_t secondary,
+                          const dos_status_code_t code) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
@@ -184,6 +189,17 @@ static void command_error(dos_unit_t* const unit, const dos_model_t model, const
     // reader can report an error while a different OPEN is pending.
     dos_status(unit, model, code, 0, 0);
     memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+
+    // DOS 2.7 CMDER3 -> TLERR frees this SA's non-REL owner even with no
+    // active bus role. 4040's idle-role path does not. A listing's file_type
+    // is its filter, not TYPFIL, and must not exempt a REL-filtered listing.
+    if ((model == DOS_MODEL_8050 || model == DOS_MODEL_8250) && secondary != IEEE_COMMAND_CHANNEL) {
+        const uint8_t channel = dos_find_channel(unit, secondary);
+        if (channel != DOS_UNUSED && (unit->channels[channel].directory != DOS_DIRECTORY_NONE ||
+                                      unit->channels[channel].file_type < DISKIMAGE_FTYPE_REL)) {
+            free_channel(unit, channel);
+        }
+    }
 }
 
 // Reset this unit's DOS resources and expose its power-on status.
@@ -531,14 +547,14 @@ static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media,
 }
 
 // COMPAR treats '*' as an immediate suffix match and '?' as one filename byte.
-static bool name_matches(const uint8_t* const pattern, const uint8_t* const name) {
+static bool name_matches(const uint8_t* const pattern, const uint8_t length, const uint8_t* const name) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
     //
     // COMPAR operates on fixed-width PETSCII names without case folding.
     // '*' accepts the remaining suffix, while '?' cannot extend past $A0.
-    for (unsigned int index = 0; index < DISKIMAGE_FILENAME_SIZE; ++index) {
+    for (unsigned int index = 0; index < length; ++index) {
         if (pattern[index] == '*') {
             return true;
         }
@@ -548,12 +564,9 @@ static bool name_matches(const uint8_t* const pattern, const uint8_t* const name
         if (pattern[index] != name[index]) {
             return false;
         }
-        // Equal padding terminates an exact match before the 16-byte limit.
-        if (name[index] == DISKIMAGE_FILENAME_PADDING) {
-            return true;
-        }
     }
-    return true;
+    // CP34 tests padding only after every explicitly supplied byte matched.
+    return length == DISKIMAGE_FILENAME_SIZE || name[length] == DISKIMAGE_FILENAME_PADDING;
 }
 
 // NUMFRE totals native data-track counts, excluding the directory track only.
@@ -679,9 +692,9 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
         }
     }
 
-    // ROM lookup:COMPAR compares up to 16 name bytes and accepts $A0 as the
-    // directory terminator. Pad the C name with $A0 and copy exact input bytes,
-    // with no case folding or PETSCII conversion. trnsfr:FNDLMT ends the
+    // ROM lookup:COMPAR compares up to 16 explicitly supplied bytes, including
+    // literal $A0. Preserve that length independently of the padded storage,
+    // without case folding or PETSCII conversion. trnsfr:FNDLMT ends the
     // compared name at comma or equals, independently of parameter scanning.
     memset(work->name, DISKIMAGE_FILENAME_PADDING, sizeof(work->name));
     unsigned int used = 0;
@@ -697,6 +710,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     if (used == 0) {
         return false;
     }
+    work->name_length = (uint8_t)used;
     // PARSE still finds comma-separated fields after an ignored equals suffix.
     while (cursor < length && input[cursor] != ',' && input[cursor] != 0x8d) {
         ++cursor;
@@ -777,7 +791,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     }
     const uint8_t index = allocate_channel(unit, reference, secondary, 2);
     if (index == DOS_UNUSED) {
-        command_error(unit, model, DOS_STATUS_NO_CHANNEL);
+        command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         return false;
     }
     dos_channel_t* const channel = &unit->channels[index];
@@ -785,7 +799,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
         // Raw directory reads start at the header, not directory sector 1.
         if (!load_buffer(unit, media, channel, directory_track(model), 0)) {
             free_channel(unit, index);
-            command_error(unit, model, DOS_STATUS_READ_ERROR);
+            command_error(unit, model, secondary, DOS_STATUS_READ_ERROR);
             return false;
         }
         return true;
@@ -803,7 +817,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
             unit->buffer_use &= (uint16_t)~(1u << extra);
         }
         free_channel(unit, index);
-        command_error(unit, model, DOS_STATUS_NO_CHANNEL);
+        command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         return false;
     }
     unit->directory_internal = internal + 1u;
@@ -819,7 +833,8 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     unsigned int cursor = 1, drive_mask = 0;
     if (length == 1 || (length == 2 && (input[1] == '0' || input[1] == '1'))) {
         patterns[0] = '*';
-        patterns[DISKIMAGE_FILENAME_SIZE] = length == 1 ? DOS_UNUSED : reference.slot;
+        patterns[DOS_DIRECTORY_PATTERN_DRIVE] = length == 1 ? DOS_UNUSED : reference.slot;
+        patterns[DOS_DIRECTORY_PATTERN_LENGTH] = 1;
         channel->pattern_count = 1;
         drive_mask = length == 1 ? 3u : 1u << reference.slot;
         cursor = length;
@@ -834,7 +849,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
             cursor += 2u;
         }
         uint8_t* const pattern = patterns + channel->pattern_count++ * DOS_DIRECTORY_PATTERN_SIZE;
-        pattern[DISKIMAGE_FILENAME_SIZE] = drive;
+        pattern[DOS_DIRECTORY_PATTERN_DRIVE] = drive;
         unsigned int used = 0;
         while (cursor < length && input[cursor] != ',' && input[cursor] != '=') {
             if (used < DISKIMAGE_FILENAME_SIZE) {
@@ -842,6 +857,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
             }
             ++cursor;
         }
+        pattern[DOS_DIRECTORY_PATTERN_LENGTH] = (uint8_t)used;
         drive_mask |= drive == DOS_UNUSED ? 3u : 1u << drive;
         if (cursor < length && input[cursor] == ',') {
             ++cursor;
@@ -897,6 +913,10 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/getact
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/getact
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
     //
     // ROM open:OPEN parses the collected command, FFST searches, OP90 checks
@@ -911,7 +931,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // receive capacity bounds the raw copy. CMDSET applies the logical
     // 58-byte limit only after removing a trailing CR or CR-plus-one.
     if (length > DOS_COMMAND_RECEIVE_CAPACITY) {
-        command_error(unit, model, DOS_STATUS_COMMAND_TOO_LONG);
+        command_error(unit, model, secondary, DOS_STATUS_COMMAND_TOO_LONG);
         return;
     }
     uint8_t command[DOS_COMMAND_RECEIVE_CAPACITY];
@@ -927,11 +947,11 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         }
     }
     if (length > DOS_COMMAND_LIMIT) {
-        command_error(unit, model, DOS_STATUS_COMMAND_TOO_LONG);
+        command_error(unit, model, secondary, DOS_STATUS_COMMAND_TOO_LONG);
         return;
     }
     if (length != 0 && input[0] == '#') {
-        command_error(unit, model, DOS_STATUS_SYNTAX);
+        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
     }
 
@@ -946,6 +966,18 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     if (first_program) {
         unit->selected_drive = 0;
         unit->last_drive = 0;
+        // INITDR -> CLDCHN selects drive owners by GETACT/LSTJOB, not
+        // their media reference or the inactive page's previous job.
+        for (uint8_t candidate = IEEE_COMMAND_CHANNEL; candidate-- > IEEE_LOAD_CHANNEL;) {
+            const uint8_t owner = dos_find_channel(unit, candidate);
+            if (owner != DOS_UNUSED) {
+                const dos_channel_t* const channel = &unit->channels[owner];
+                const uint16_t page = 1u << channel->buffers[channel->active];
+                if ((unit->buffer_drives & page) == 0) {
+                    free_channel(unit, owner);
+                }
+            }
+        }
     }
     uint8_t drive = unit->last_drive;
     dos_open_work_t parsed = {0};
@@ -955,7 +987,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     }
     // OP02 reloads the retained link before PRSCLN/CKTM inspect any suffix.
     if (!directory && !last_program && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
-        command_error(unit, model, length == 0 ? DOS_STATUS_INVALID_NAME : DOS_STATUS_SYNTAX);
+        command_error(unit, model, secondary, length == 0 ? DOS_STATUS_INVALID_NAME : DOS_STATUS_SYNTAX);
         return;
     }
     if (secondary < 2 && !directory) {
@@ -967,7 +999,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // Later slices add writers and REL. Reject them before claiming resources.
     if (!directory && (parsed.access == DOS_ACCESS_WRITE || parsed.access == DOS_ACCESS_APPEND ||
                        parsed.type == DISKIMAGE_FTYPE_REL)) {
-        command_error(unit, model, DOS_STATUS_SYNTAX);
+        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
     }
     if (directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
@@ -985,7 +1017,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     if (dos_media_reference(media, index, drive, &reference) != DOS_MEDIA_OK) {
         if (!parsed.default_drive || parsed.access == DOS_ACCESS_WRITE || last_program ||
             dos_media_reference(media, index, drive ^ 1u, &reference) != DOS_MEDIA_OK) {
-            command_error(unit, model, DOS_STATUS_NOT_READY);
+            command_error(unit, model, secondary, DOS_STATUS_NOT_READY);
             return;
         }
         drive ^= 1u;
@@ -1005,11 +1037,11 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         }
         const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
         if (channel == DOS_UNUSED) {
-            command_error(unit, model, DOS_STATUS_NO_CHANNEL);
+            command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         } else if (!load_buffer(unit, media, &unit->channels[channel], unit->last_program_track,
                                 unit->last_program_sector)) {
             free_channel(unit, channel);
-            command_error(unit, model, DOS_STATUS_READ_ERROR);
+            command_error(unit, model, secondary, DOS_STATUS_READ_ERROR);
         } else {
             const uint8_t* const bytes = unit->buffers[unit->channels[channel].buffers[0]].bytes;
             if (bytes[0] == 0 && bytes[1] == DISKIMAGE_SECTOR_LINK_SIZE) {
@@ -1028,12 +1060,12 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         if (scratch != DOS_UNUSED) {
             unit->buffer_use &= (uint16_t)~(1u << scratch);
         }
-        command_error(unit, model, DOS_STATUS_NO_CHANNEL);
+        command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         return;
     }
 
     // Retain name/type/SA and the starting link for dos_work. Keep scratch
-    // ownership across yields, leaving any old channel intact until a match.
+    // ownership across yields until a match or model-specific error cleanup.
     parsed.media = reference;
     parsed.track = directory_track(model);
     parsed.sector = DOS_DIRECTORY_FIRST_SECTOR;
@@ -1099,7 +1131,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             if (file[DOS_DIRECTORY_TYPE_OFFSET] != 0 &&
                 (!work->first_program ||
                  (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
-                name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
+                name_matches(work->name, work->name_length, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
                 found_track = file[DOS_DIRECTORY_TRACK_OFFSET];
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
@@ -1161,7 +1193,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     if (error != DOS_STATUS_OK) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-        command_error(unit, model, error);
+        command_error(unit, model, secondary, error);
         return;
     }
     // ROM tst3:GETRCH first calls FRECHN, then FNDLNX picks the lowest free
@@ -1175,7 +1207,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
     if (channel == DOS_UNUSED) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-        command_error(unit, model, DOS_STATUS_NO_CHANNEL);
+        command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         return;
     }
 
@@ -1192,7 +1224,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
     if (!load_buffer(unit, media, state, found_track, found_sector)) {
         free_channel(unit, channel);
-        command_error(unit, model, DOS_STATUS_READ_ERROR);
+        command_error(unit, model, secondary, DOS_STATUS_READ_ERROR);
         return;
     }
     const uint8_t* const first = unit->buffers[state->buffers[0]].bytes;
@@ -1347,9 +1379,10 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             for (unsigned int index = 0; index < channel->pattern_count; ++index) {
                 const uint8_t* const pattern =
                     unit->buffers[channel->buffers[2]].bytes + index * DOS_DIRECTORY_PATTERN_SIZE;
-                matches |= (pattern[DISKIMAGE_FILENAME_SIZE] == DOS_UNUSED ||
-                            pattern[DISKIMAGE_FILENAME_SIZE] == channel->media.slot) &&
-                           name_matches(pattern, entry + DOS_DIRECTORY_NAME_OFFSET);
+                matches |=
+                    (pattern[DOS_DIRECTORY_PATTERN_DRIVE] == DOS_UNUSED ||
+                     pattern[DOS_DIRECTORY_PATTERN_DRIVE] == channel->media.slot) &&
+                    name_matches(pattern, pattern[DOS_DIRECTORY_PATTERN_LENGTH], entry + DOS_DIRECTORY_NAME_OFFSET);
             }
             if (entry[DOS_DIRECTORY_TYPE_OFFSET] != 0 && (channel->file_type == 0 || type == channel->file_type) &&
                 matches) {

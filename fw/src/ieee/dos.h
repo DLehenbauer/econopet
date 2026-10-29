@@ -107,6 +107,7 @@ typedef struct {
     uint8_t track;
     uint8_t sector;
     uint8_t secondary;
+    uint8_t name_length;
     uint8_t type;
     uint8_t access;
     uint8_t scratch;

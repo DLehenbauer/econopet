@@ -1296,6 +1296,195 @@ START_TEST(test_zero_capacity_preview_preserves_reader_and_directory_state) {
 }
 END_TEST
 
+// DOS 2.7 CMDER3 retires the failing secondary, not another reader's owner.
+START_TEST(test_failed_reopen_releases_only_dos27_ordinary_owner) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int scenario = (unsigned int)_i % 5u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    const uint8_t reserved_type = DISKIMAGE_FTYPE_REL + 1u;
+    fixture_file(&first, format, 0, "FILE", scenario == 4 ? reserved_type : DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&second, format, 0, "PEER", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t owner = open_name(&unit, &bank, 2, "0:FILE");
+    const uint8_t peer = open_name(&unit, &bank, 3, "1:PEER");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const uint16_t owned_pages = (1u << unit.channels[owner].buffers[0]) | (1u << unit.channels[owner].buffers[1]);
+    const uint16_t before = unit.buffer_use;
+    char oversized[DOS_COMMAND_RECEIVE_CAPACITY + 1u];
+    memset(oversized, 'X', sizeof(oversized));
+    if (scenario == 2) {
+        dos_open(&unit, &bank, 0, 2, (const uint8_t*)oversized, sizeof(oversized));
+    } else {
+        if (scenario == 3) {
+            first.fail_read = first.reads + 1u;
+        }
+        open_name(&unit, &bank, 2, scenario == 1 ? "0:FILE,U,R" : "0:MISSING");
+    }
+    const dos_status_code_t expected = scenario == 1   ? DOS_STATUS_TYPE_MISMATCH
+                                       : scenario == 2 ? DOS_STATUS_COMMAND_TOO_LONG
+                                       : scenario == 3 ? DOS_STATUS_READ_ERROR
+                                                       : DOS_STATUS_NOT_FOUND;
+    ck_assert_uint_eq(unit.status_code, expected);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    const bool retained = format == 0 || scenario == 4;
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), retained ? owner : DOS_UNUSED);
+    ck_assert_uint_eq(unit.buffer_use, retained ? before : before & ~owned_pages);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), peer);
+    expect_bytes(&unit, &bank, peer, 22, 0x80);
+    if (retained) {
+        expect_bytes(&unit, &bank, owner, 22, 0x40);
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// A listing's REL selector is not a REL channel exempt from TLERR/FRECHN.
+START_TEST(test_failed_reopen_releases_dos27_listing_reservations) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "RELATIVE", DISKIMAGE_FTYPE_REL, 0x40, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0:*=R");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert_uint_ne(unit.directory_internal, 0);
+    open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "0:MISSING");
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    ck_assert_uint_eq(dos_find_channel(&unit, IEEE_LOAD_CHANNEL), format == 0 ? listing : DOS_UNUSED);
+    if (format == 0) {
+        uint8_t bytes[96];
+        ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), sizeof(bytes));
+        ck_assert_mem_eq(bytes + 40, "RELATIVE", 8);
+    } else {
+        ck_assert_uint_eq(unit.directory_internal, 0);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// COMPAR consumes literal $A0 until FNDLMT, then tests directory padding.
+START_TEST(test_open_preserves_explicit_pattern_length) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int scenario = (unsigned int)_i % 5u;
+    static const char* const requests[] = {
+        "0:A\xa0X", "0:A\xa0", "0:A\xa0*", "0:A?X", "0:ABCDEFGHIJKLMNOPQ",
+    };
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "A\xa0Y", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&image, format, 1, "A\xa0X", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    fixture_file(&image, format, 2, "A", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    fixture_file(&image, format, 3, "ABCDEFGHIJKLMNOP", DISKIMAGE_FTYPE_SEQ, 0xa0, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, 2, requests[scenario]);
+    if (scenario == 3) {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        const unsigned int first = scenario == 0 ? 0x60 : scenario == 1 ? 0x80 : scenario == 2 ? 0x40 : 0xa0;
+        expect_bytes(&unit, &bank, channel, 22, first);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Listing records retain independent lengths, including subsequent patterns.
+START_TEST(test_directory_preserves_explicit_pattern_lengths) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int scenario = (unsigned int)_i % 5u;
+    static const char* const requests[] = {
+        "$0:A\xa0X", "$0:A\xa0", "$0:A\xa0*", "$0:A?X", "$0:A\xa0X,0:ABCDEFGHIJKLMNOPQ",
+    };
+    static const unsigned int rows[] = {1, 1, 3, 0, 2};
+    static const uint8_t blocks[][3] = {{2}, {3}, {1, 2, 3}, {0}, {2, 4}};
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    static const char* const names[] = {"A\xa0Y", "A\xa0X", "A", "ABCDEFGHIJKLMNOP"};
+    for (unsigned int entry = 0; entry < count_of(names); ++entry) {
+        fixture_file(&image, format, entry, names[entry], DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+        // Distinguish matches whose formatted names all end at their first $A0.
+        sector_bytes(&image, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39,
+                     1)[entry * DISKIMAGE_DIRECTORY_ENTRY_SIZE + 30u] = entry + 1u;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, requests[scenario]);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    uint8_t bytes[160];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), 64u + rows[scenario] * 32u);
+    for (unsigned int row = 0; row < rows[scenario]; ++row) {
+        ck_assert_uint_eq(bytes[34u + row * 32u], blocks[scenario][row]);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Initial INITDR releases drive-zero GETACT/LSTJOB owners before parsing.
+START_TEST(test_initial_load_star_releases_active_drive_owners) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int scenario = (unsigned int)_i % 5u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "DATA", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&second, format, 0, "PEER", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    if (scenario == 0 || scenario == 4) {
+        fixture_file(&first, format, 1, "PROGRAM", DISKIMAGE_FTYPE_PRG, 0x60, 22);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    if (scenario == 4) {
+        ck_assert_uint_ne(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "0:PROGRAM,P,R"), DOS_UNUSED);
+        ck_assert(dos_close(&unit, bank.units[0].model, IEEE_LOAD_CHANNEL));
+    }
+    const uint8_t owner = open_name(&unit, &bank, 2, "0:DATA");
+    const uint8_t peer = open_name(&unit, &bank, 3, "1:PEER");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    if (scenario == 3) {
+        // Oppose active-page jobs to media slots and inactive-page jobs.
+        unit.buffer_drives |= (uint16_t)(1u << unit.channels[owner].buffers[unit.channels[owner].active]);
+        unit.buffer_drives &= (uint16_t)~(1u << unit.channels[peer].buffers[unit.channels[peer].active]);
+    }
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, scenario >= 2 ? "*,0:INVALID" : "*");
+    ck_assert_uint_eq(unit.status_code, scenario == 0 || scenario == 4 ? DOS_STATUS_OK
+                                        : scenario == 1                ? DOS_STATUS_NOT_FOUND
+                                                                       : DOS_STATUS_SYNTAX);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), scenario == 3 || scenario == 4 ? owner : DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), scenario == 3 ? DOS_UNUSED : peer);
+    if (scenario != 3) {
+        expect_bytes(&unit, &bank, peer, 22, 0x80);
+    }
+    if (scenario == 3 || scenario == 4) {
+        expect_bytes(&unit, &bank, owner, 22, 0x40);
+    }
+    if (scenario == 0 || scenario == 4) {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        expect_bytes(&unit, &bank, channel, 22, 0x60);
+    } else {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.buffer_use, (1u << unit.channels[scenario == 3 ? owner : peer].buffers[0]) |
+                                               (1u << unit.channels[scenario == 3 ? owner : peer].buffers[1]));
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1331,6 +1520,11 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 6);
     tcase_add_loop_test(core, test_directory_cycles_publish_bounded_read_error, 0, 12);
     tcase_add_loop_test(core, test_zero_capacity_preview_preserves_reader_and_directory_state, 0, 9);
+    tcase_add_loop_test(core, test_failed_reopen_releases_only_dos27_ordinary_owner, 0, 15);
+    tcase_add_loop_test(core, test_failed_reopen_releases_dos27_listing_reservations, 0, 3);
+    tcase_add_loop_test(core, test_open_preserves_explicit_pattern_length, 0, 15);
+    tcase_add_loop_test(core, test_directory_preserves_explicit_pattern_lengths, 0, 15);
+    tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 15);
     suite_add_tcase(suite, core);
     return suite;
 }
