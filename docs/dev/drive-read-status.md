@@ -14,7 +14,9 @@ slices.
   checks enforce the 4 KiB native-state budget plus those two BAM sectors.
 - OPEN parsing with the revision-2/DOS-2.7 58-byte limit, drive prefixes,
   PETSCII names, wildcard matching, type/mode fields and peer-drive lookup.
-  Parsing an `L` parameter does not enable REL operations.
+  The 59-byte receive window is checked separately from the logical limit,
+  which follows CMDSET's CR trimming. Omitted drives start from the last
+  successful command's drive. Parsing `L` does not enable REL operations.
 - Ordinary readers with two owned pages, initial prefetch, sector links,
   terminal-byte EOI, the native initial-singleton EOF sequence and retained
   last-program LOAD selection.
@@ -64,8 +66,16 @@ not the complete controller's retry/error translation. In particular, absent
 Cooperative lookup, immutable FIFO preview and consumed-prefix GET are host
 scheduling/transport boundaries. The 64-byte preview bound keeps the unconsumed
 suffix resident in the two owned data pages. Directory preview retains one row
-until GET retires it. Corrupt-chain traversal bounds are host safeguards, not
-native mechanical timeouts.
+until GET retires it. Failed data-page jobs retain their target and result, so
+repeated or partially consumed previews cannot silently retry a one-shot failure.
+The error becomes visible after the valid prefix is consumed and identifies the
+channel's drive, even when other readers or pending OPEN work are interleaved.
+Corrupt-chain traversal bounds are host safeguards, not native mechanical timeouts.
+
+Successful OPEN completion and command-level errors clear only the first 58
+command bytes, following SCREND/CMDER3 and CLRCB. The extra receive byte survives,
+and pending parsing retains its input until completion. This prevents a shorter
+OPEN with an empty parameter from reusing a preceding command's type or mode.
 
 Callers finish pending work before starting another OPEN or coordinating
 CLOSE/reset. Media rebinds must coordinate DOS/channel teardown before an
