@@ -1716,6 +1716,41 @@ START_TEST(test_directory_both_default_preferences_retain_fallback_pass) {
 }
 END_TEST
 
+// CMPCHK retains zero FILTRK, and 4040 retains a negative FILTRK as a wildcard.
+START_TEST(test_directory_completion_preserves_raw_track_state) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int scenario = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&second, format, 0, "FILE", DISKIMAGE_FTYPE_USR, 0x80, 22);
+    sector_bytes(&first, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39, 1)[3] = scenario == 0 ? 0 : 0x80;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, scenario == 2 ? "$0:A,FILE,1:B,OTHER" : "$FILE");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    uint8_t bytes[288];
+    const unsigned int expected = scenario == 2 ? (format == 0 ? 288 : 224) : scenario == 0 || format == 0 ? 192 : 96;
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), expected);
+    ck_assert_mem_eq(bytes + 40, "FILE", 4);
+    ck_assert_mem_eq(bytes + 58, "SEQ", 3);
+    if (scenario == 0 || format == 0) {
+        ck_assert_mem_eq(bytes + 136, "FILE", 4);
+        ck_assert_mem_eq(bytes + 154, "USR", 3);
+    }
+    if (scenario == 2 && format == 0) {
+        // The negative track remains wildcard state after the valid peer match.
+        ck_assert_mem_eq(bytes + 232, "FILE", 4);
+        ck_assert_mem_eq(bytes + 250, "SEQ", 3);
+    }
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1763,6 +1798,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_directory_missing_first_drive_falls_back_only_when_requested, 0, 6);
     tcase_add_loop_test(core, test_4040_directory_initialization_selects_active_page_job, 0, 2);
     tcase_add_loop_test(core, test_directory_both_default_preferences_retain_fallback_pass, 0, 6);
+    tcase_add_loop_test(core, test_directory_completion_preserves_raw_track_state, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }

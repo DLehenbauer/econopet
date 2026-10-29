@@ -55,6 +55,7 @@ static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* co
 #define DOS_PATTERN_COMPLETE 2u
 #define DOS_PATTERN_DEFAULT_DRIVE 0x80u
 #define DOS_PATTERN_DRIVE_MASK 1u
+#define DOS_PATTERN_TRACK_WILDCARD 0x80u
 #define DOS_DIRECTORY_DEFAULT_BOTH_SEARCHES 2u
 #define DOS_HEADER_NAME_4040 144u
 #define DOS_HEADER_NAME_8050 6u
@@ -1381,6 +1382,8 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lstdir
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lstdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
     //
     // NEWDIR, GETNAM, and MSGFRE supply header, file, and free-block text.
     // STDIR/DIR1/DIR3 wrap those fields as BASIC lines. C retains one row
@@ -1466,7 +1469,13 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
                     continue;
                 }
                 // CP40 records an exact match before FF30's type restriction.
-                if (!(pattern[DOS_DIRECTORY_PATTERN_FLAGS] & DOS_PATTERN_WILDCARD)) {
+                // Zero FILTRK stays pending. 4040 also retains its high bit
+                // as wildcard state across subsequent matches.
+                const uint8_t track = entry[DOS_DIRECTORY_TRACK_OFFSET];
+                if (model == DOS_MODEL_4040 && (track & DOS_PATTERN_TRACK_WILDCARD)) {
+                    pattern[DOS_DIRECTORY_PATTERN_FLAGS] |= DOS_PATTERN_WILDCARD;
+                }
+                if (!(pattern[DOS_DIRECTORY_PATTERN_FLAGS] & DOS_PATTERN_WILDCARD) && track != 0) {
                     pattern[DOS_DIRECTORY_PATTERN_FLAGS] |= DOS_PATTERN_COMPLETE;
                 }
                 pattern[DOS_DIRECTORY_PATTERN_DRIVE] = (drive & DOS_PATTERN_DEFAULT_DRIVE) | channel->media.slot;
