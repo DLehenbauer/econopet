@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define IEEE_COMMAND_CHANNEL 15u
+#define IEEE_LOAD_CHANNEL 0u
 #define IEEE_SAVE_CHANNEL 1u
 
 // Commodore's IEEE-488 layer-3 command encodings. LISTEN and TALK use a
