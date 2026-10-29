@@ -49,9 +49,23 @@ static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* co
 #define DOS_DIRECTORY_NAME_SIZE 27u
 #define DOS_DIRECTORY_PATTERN_DRIVE DISKIMAGE_FILENAME_SIZE
 #define DOS_DIRECTORY_PATTERN_LENGTH (DISKIMAGE_FILENAME_SIZE + 1u)
-#define DOS_DIRECTORY_PATTERN_SIZE (DISKIMAGE_FILENAME_SIZE + 2u)
+#define DOS_DIRECTORY_PATTERN_FLAGS (DISKIMAGE_FILENAME_SIZE + 2u)
+#define DOS_DIRECTORY_PATTERN_SIZE (DISKIMAGE_FILENAME_SIZE + 3u)
+#define DOS_PATTERN_WILDCARD 1u
+#define DOS_PATTERN_COMPLETE 2u
+#define DOS_PATTERN_DEFAULT_DRIVE 0x80u
+#define DOS_PATTERN_DRIVE_MASK 1u
+#define DOS_DIRECTORY_DEFAULT_BOTH_SEARCHES 2u
 #define DOS_HEADER_NAME_4040 144u
 #define DOS_HEADER_NAME_8050 6u
+
+typedef struct {
+    uint8_t patterns[DOS_FILENAME_COUNT][DOS_DIRECTORY_PATTERN_SIZE];
+    uint8_t count;
+    uint8_t type;
+    uint8_t drive;
+    uint8_t searches;
+} dos_directory_request_t;
 
 // Select expanded ROM status text for the codes implemented by this slice.
 static const char* status_text(const dos_status_code_t code, const dos_model_t model) {
@@ -277,6 +291,21 @@ static void free_channel(dos_unit_t* const unit, const uint8_t channel) {
         unit->directory_internal = 0;
     }
     *state = (dos_channel_t){0};
+}
+
+// INITDR/CLDCHN releases owners selected by their active page's last job drive.
+static void free_drive_channels(dos_unit_t* const unit, const uint8_t drive) {
+    // Both pinned ROMs: tst2:INITDR -> tst3:CLDCHN -> getact:GETACT.
+    for (uint8_t candidate = IEEE_COMMAND_CHANNEL; candidate-- > IEEE_LOAD_CHANNEL;) {
+        const uint8_t owner = dos_find_channel(unit, candidate);
+        if (owner != DOS_UNUSED) {
+            const dos_channel_t* const channel = &unit->channels[owner];
+            const uint16_t page = 1u << channel->buffers[channel->active];
+            if (((unit->buffer_drives & page) != 0) == (drive != 0)) {
+                free_channel(unit, owner);
+            }
+        }
+    }
 }
 
 // Select CLSALL's highest remaining data secondary, or one explicit owner.
@@ -771,9 +800,111 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     return true;
 }
 
-// Start a raw header chain or native BASIC directory without a filename lookup.
+// Parse every LOADIR pattern before OPTSCH chooses a drive for media admission.
+static dos_directory_request_t parse_directory(const uint8_t* const input, const unsigned int length,
+                                               const uint8_t last_drive) {
+    // Both pinned ROMs: open:LOADIR, parsex:TC35, setdrv:ALLDRS/SETDRV,
+    // lookup:OPTSCH/SCHTBL. A missing prefix retains the default-search bit.
+    dos_directory_request_t request = {0};
+    memset(request.patterns, DISKIMAGE_FILENAME_PADDING, sizeof(request.patterns));
+    unsigned int cursor = 1, drive_mask = 0;
+    uint8_t inherited_drive = last_drive;
+    if (length == 1 || (length == 2 && (input[1] == '0' || input[1] == '1'))) {
+        uint8_t* const pattern = request.patterns[request.count++];
+        pattern[0] = '*';
+        pattern[DOS_DIRECTORY_PATTERN_DRIVE] =
+            length == 1 ? last_drive | DOS_PATTERN_DEFAULT_DRIVE : input[1] - (unsigned int)'0';
+        pattern[DOS_DIRECTORY_PATTERN_LENGTH] = 1;
+        pattern[DOS_DIRECTORY_PATTERN_FLAGS] = DOS_PATTERN_WILDCARD;
+        cursor = length;
+    }
+    while (cursor < length && input[cursor] != '=' && request.count < DOS_FILENAME_COUNT) {
+        uint8_t drive = inherited_drive | DOS_PATTERN_DEFAULT_DRIVE;
+        if (input[cursor] == ':') {
+            drive = inherited_drive;
+            ++cursor;
+        } else if (cursor + 1u < length && input[cursor + 1u] == ':') {
+            drive = input[cursor] == '0' || input[cursor] == '1' ? input[cursor] - '0' : inherited_drive;
+            cursor += 2u;
+        }
+        inherited_drive = drive & DOS_PATTERN_DRIVE_MASK;
+        uint8_t* const pattern = request.patterns[request.count++];
+        pattern[DOS_DIRECTORY_PATTERN_DRIVE] = drive;
+        pattern[DOS_DIRECTORY_PATTERN_FLAGS] = 0;
+        unsigned int used = 0;
+        while (cursor < length && input[cursor] != ',' && input[cursor] != '=') {
+            // PARSE records wildcard presence even beyond COMPAR's 16-byte cap.
+            if (input[cursor] == '*' || input[cursor] == '?') {
+                pattern[DOS_DIRECTORY_PATTERN_FLAGS] |= DOS_PATTERN_WILDCARD;
+            }
+            if (used < DISKIMAGE_FILENAME_SIZE) {
+                pattern[used++] = input[cursor];
+            }
+            ++cursor;
+        }
+        pattern[DOS_DIRECTORY_PATTERN_LENGTH] = (uint8_t)used;
+        if (cursor < length && input[cursor] == ',') {
+            ++cursor;
+        }
+    }
+    for (unsigned int index = 0; index < request.count; ++index) {
+        const uint8_t drive = request.patterns[index][DOS_DIRECTORY_PATTERN_DRIVE];
+        drive_mask |= 1u << ((drive & DOS_PATTERN_DRIVE_MASK) + ((drive & DOS_PATTERN_DEFAULT_DRIVE) ? 2u : 0u));
+    }
+    // SCHTBL starts one default drive first, or preserves the first pattern
+    // when both explicit drives or both default preferences are represented.
+    const unsigned int defaults = drive_mask >> 2u;
+    request.drive = request.patterns[0][DOS_DIRECTORY_PATTERN_DRIVE] & DOS_PATTERN_DRIVE_MASK;
+    if (defaults == 1 || (defaults == 0 && drive_mask == 1)) {
+        request.drive = 0;
+    } else if (defaults == 2 || (defaults == 0 && drive_mask == 2)) {
+        request.drive = 1;
+    }
+    request.searches = defaults == 3 ? DOS_DIRECTORY_DEFAULT_BOTH_SEARCHES : defaults != 0 || drive_mask == 3;
+    if (cursor < length && input[cursor] == '=') {
+        ++cursor;
+        // FS1SET selects the final file-type field by its first character.
+        for (unsigned int offset = cursor; offset < length; ++offset) {
+            if (input[offset] == ',') {
+                cursor = offset + 1u;
+            }
+        }
+        if (cursor < length) {
+            switch (input[cursor]) {
+            case 'P':
+                request.type = DISKIMAGE_FTYPE_PRG;
+                break;
+            case 'S':
+                request.type = DISKIMAGE_FTYPE_SEQ;
+                break;
+            case 'U':
+                request.type = DISKIMAGE_FTYPE_USR;
+                break;
+            case 'R':
+                request.type = DISKIMAGE_FTYPE_REL;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return request;
+}
+
+// CMPCHK keeps wildcard requests live and skips completed exact-name requests.
+static bool directory_patterns_pending(const dos_unit_t* const unit, const dos_channel_t* const channel) {
+    for (unsigned int index = 0; index < channel->pattern_count; ++index) {
+        const uint8_t* const pattern = unit->buffers[channel->buffers[2]].bytes + index * DOS_DIRECTORY_PATTERN_SIZE;
+        if (!(pattern[DOS_DIRECTORY_PATTERN_FLAGS] & DOS_PATTERN_COMPLETE)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Start a raw header chain or a BASIC directory with already-admitted patterns.
 static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
-                           const uint8_t secondary, const uint8_t* const input, const unsigned int length) {
+                           const uint8_t secondary, const dos_directory_request_t* const request) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
@@ -827,71 +958,10 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;
     channel->position = 0;
     channel->traversed = 0;
-    // LOADIR/TC35/ALLDRS retain bounded comma-separated patterns and '=type'.
-    uint8_t* const patterns = unit->buffers[extra].bytes;
-    memset(patterns, DISKIMAGE_FILENAME_PADDING, DOS_FILENAME_COUNT * DOS_DIRECTORY_PATTERN_SIZE);
-    unsigned int cursor = 1, drive_mask = 0;
-    if (length == 1 || (length == 2 && (input[1] == '0' || input[1] == '1'))) {
-        patterns[0] = '*';
-        patterns[DOS_DIRECTORY_PATTERN_DRIVE] = length == 1 ? DOS_UNUSED : reference.slot;
-        patterns[DOS_DIRECTORY_PATTERN_LENGTH] = 1;
-        channel->pattern_count = 1;
-        drive_mask = length == 1 ? 3u : 1u << reference.slot;
-        cursor = length;
-    }
-    while (cursor < length && input[cursor] != '=' && channel->pattern_count < DOS_FILENAME_COUNT) {
-        uint8_t drive = DOS_UNUSED;
-        if (input[cursor] == ':') {
-            drive = reference.slot;
-            ++cursor;
-        } else if (cursor + 1u < length && input[cursor + 1u] == ':') {
-            drive = input[cursor] == '0' || input[cursor] == '1' ? input[cursor] - '0' : reference.slot;
-            cursor += 2u;
-        }
-        uint8_t* const pattern = patterns + channel->pattern_count++ * DOS_DIRECTORY_PATTERN_SIZE;
-        pattern[DOS_DIRECTORY_PATTERN_DRIVE] = drive;
-        unsigned int used = 0;
-        while (cursor < length && input[cursor] != ',' && input[cursor] != '=') {
-            if (used < DISKIMAGE_FILENAME_SIZE) {
-                pattern[used++] = input[cursor];
-            }
-            ++cursor;
-        }
-        pattern[DOS_DIRECTORY_PATTERN_LENGTH] = (uint8_t)used;
-        drive_mask |= drive == DOS_UNUSED ? 3u : 1u << drive;
-        if (cursor < length && input[cursor] == ',') {
-            ++cursor;
-        }
-    }
-    // An omitted drive permits the later footer to continue on the peer.
-    channel->both_drives = drive_mask == 3u;
-    if (cursor < length && input[cursor] == '=') {
-        ++cursor;
-        // FS1SET selects the final file-type field by its first character.
-        for (unsigned int offset = cursor; offset < length; ++offset) {
-            if (input[offset] == ',') {
-                cursor = offset + 1u;
-            }
-        }
-        if (cursor < length) {
-            switch (input[cursor]) {
-            case 'P':
-                channel->file_type = DISKIMAGE_FTYPE_PRG;
-                break;
-            case 'S':
-                channel->file_type = DISKIMAGE_FTYPE_SEQ;
-                break;
-            case 'U':
-                channel->file_type = DISKIMAGE_FTYPE_USR;
-                break;
-            case 'R':
-                channel->file_type = DISKIMAGE_FTYPE_REL;
-                break;
-            default:
-                break;
-            }
-        }
-    }
+    memcpy(unit->buffers[extra].bytes, request->patterns, sizeof(request->patterns));
+    channel->pattern_count = request->count;
+    channel->file_type = request->type;
+    channel->directory_searches = request->searches;
     return true;
 }
 
@@ -966,24 +1036,24 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     if (first_program) {
         unit->selected_drive = 0;
         unit->last_drive = 0;
-        // INITDR -> CLDCHN selects drive owners by GETACT/LSTJOB, not
-        // their media reference or the inactive page's previous job.
-        for (uint8_t candidate = IEEE_COMMAND_CHANNEL; candidate-- > IEEE_LOAD_CHANNEL;) {
-            const uint8_t owner = dos_find_channel(unit, candidate);
-            if (owner != DOS_UNUSED) {
-                const dos_channel_t* const channel = &unit->channels[owner];
-                const uint16_t page = 1u << channel->buffers[channel->active];
-                if ((unit->buffer_drives & page) == 0) {
-                    free_channel(unit, owner);
-                }
-            }
-        }
+        free_drive_channels(unit, 0);
     }
     uint8_t drive = unit->last_drive;
     dos_open_work_t parsed = {0};
     const bool directory = length != 0 && input[0] == '$';
+    const bool formatted_directory = directory && secondary == IEEE_LOAD_CHANNEL;
+    dos_directory_request_t listing = {0};
     if (directory) {
         parsed.default_drive = length == 1 || (input[1] != '0' && input[1] != '1' && input[1] != ':');
+    }
+    if (formatted_directory) {
+        listing = parse_directory(input, length, unit->last_drive);
+        drive = listing.drive;
+        parsed.default_drive = listing.searches != 0;
+        // Only 4040 LOADIR/LD02 initializes exact $0/$1 shorthand.
+        if (model == DOS_MODEL_4040 && length == 2 && (input[1] == '0' || input[1] == '1')) {
+            free_drive_channels(unit, drive);
+        }
     }
     // OP02 reloads the retained link before PRSCLN/CKTM inspect any suffix.
     if (!directory && !last_program && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
@@ -1002,7 +1072,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
     }
-    if (directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
+    if (directory && !formatted_directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
         drive = input[1] - '0';
     }
     if (last_program) {
@@ -1023,9 +1093,17 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         drive ^= 1u;
         unit->selected_drive = drive;
         parsed.default_drive = false;
+        listing.searches = 0;
     }
     if (directory) {
-        if (open_directory(unit, media, reference, secondary, input, length)) {
+        // DOS 2.7 OPTSCH/OS50 reduces DRVCNT when only this drive is active.
+        // No preferred-drive-only pass may hide a default pattern's fallback.
+        dos_media_ref_t other;
+        if (formatted_directory && listing.searches != 0 &&
+            dos_media_reference(media, index, drive ^ 1u, &other) != DOS_MEDIA_OK) {
+            listing.searches = 0;
+        }
+        if (open_directory(unit, media, reference, secondary, &listing)) {
             command_end(unit, model);
         }
         return;
@@ -1368,7 +1446,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             source->resident = true;
         }
         bool found = false;
-        while (channel->directory_entry != DOS_UNUSED) {
+        while (channel->directory_entry != DOS_UNUSED && directory_patterns_pending(unit, channel)) {
             const uint8_t* const entry = source->bytes + channel->directory_entry;
             channel->directory_entry =
                 channel->directory_entry == DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE
@@ -1376,19 +1454,33 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
                     : channel->directory_entry + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
             const uint8_t type = entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK;
             bool matches = false;
-            for (unsigned int index = 0; index < channel->pattern_count; ++index) {
-                const uint8_t* const pattern =
-                    unit->buffers[channel->buffers[2]].bytes + index * DOS_DIRECTORY_PATTERN_SIZE;
-                matches |=
-                    (pattern[DOS_DIRECTORY_PATTERN_DRIVE] == DOS_UNUSED ||
-                     pattern[DOS_DIRECTORY_PATTERN_DRIVE] == channel->media.slot) &&
-                    name_matches(pattern, pattern[DOS_DIRECTORY_PATTERN_LENGTH], entry + DOS_DIRECTORY_NAME_OFFSET);
+            for (unsigned int index = channel->pattern_count; index-- > 0;) {
+                uint8_t* const pattern = unit->buffers[channel->buffers[2]].bytes + index * DOS_DIRECTORY_PATTERN_SIZE;
+                const uint8_t drive = pattern[DOS_DIRECTORY_PATTERN_DRIVE];
+                if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0 ||
+                    (pattern[DOS_DIRECTORY_PATTERN_FLAGS] & DOS_PATTERN_COMPLETE) ||
+                    ((drive & DOS_PATTERN_DRIVE_MASK) != channel->media.slot &&
+                     (!(drive & DOS_PATTERN_DEFAULT_DRIVE) ||
+                      channel->directory_searches == DOS_DIRECTORY_DEFAULT_BOTH_SEARCHES)) ||
+                    !name_matches(pattern, pattern[DOS_DIRECTORY_PATTERN_LENGTH], entry + DOS_DIRECTORY_NAME_OFFSET)) {
+                    continue;
+                }
+                // CP40 records an exact match before FF30's type restriction.
+                if (!(pattern[DOS_DIRECTORY_PATTERN_FLAGS] & DOS_PATTERN_WILDCARD)) {
+                    pattern[DOS_DIRECTORY_PATTERN_FLAGS] |= DOS_PATTERN_COMPLETE;
+                }
+                pattern[DOS_DIRECTORY_PATTERN_DRIVE] = (drive & DOS_PATTERN_DEFAULT_DRIVE) | channel->media.slot;
+                matches = true;
+                break;
             }
             if (entry[DOS_DIRECTORY_TYPE_OFFSET] != 0 && (channel->file_type == 0 || type == channel->file_type) &&
                 matches) {
                 directory_name(entry, name);
                 number = entry[DOS_DIRECTORY_BLOCKS_LOW] | ((uint16_t)entry[DOS_DIRECTORY_BLOCKS_HIGH] << 8u);
                 found = true;
+                if (!directory_patterns_pending(unit, channel)) {
+                    channel->directory = DOS_DIRECTORY_FOOTER;
+                }
                 break;
             }
         }
@@ -1397,7 +1489,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             channel->directory_track = source->bytes[0];
             channel->directory_sector = source->bytes[1];
             channel->directory_entry = 0;
-            if (channel->directory_track == 0) {
+            if (channel->directory_track == 0 || !directory_patterns_pending(unit, channel)) {
                 channel->directory = DOS_DIRECTORY_FOOTER;
             }
             return false;
@@ -1410,13 +1502,13 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
         memset(name, ' ', sizeof(name));
         memcpy(name, "BLOCKS FREE.", sizeof("BLOCKS FREE.") - 1u);
         dos_media_ref_t other;
-        if (channel->both_drives &&
+        if (channel->directory_searches != 0 && directory_patterns_pending(unit, channel) &&
             dos_media_reference(media, channel->media.unit, channel->media.slot ^ 1u, &other) == DOS_MEDIA_OK) {
             // Continue with the peer's header after this drive's footer,
             // without repeating the load address or ending the stream.
             channel->media = other;
             unit->selected_drive = other.slot;
-            channel->both_drives = false;
+            --channel->directory_searches;
             channel->directory = DOS_DIRECTORY_HEADER;
             channel->directory_track = directory_track(model);
             channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;

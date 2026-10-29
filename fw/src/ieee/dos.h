@@ -88,10 +88,10 @@ typedef struct {
     uint8_t first_track;
     uint8_t first_sector;
     uint8_t pattern_count;
+    uint8_t directory_searches;
     uint8_t line_length;
     bool allocated;
     bool ready;
-    bool both_drives;
     bool line_eoi;
 } dos_channel_t;
 

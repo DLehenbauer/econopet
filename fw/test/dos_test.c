@@ -1485,6 +1485,237 @@ START_TEST(test_initial_load_star_releases_active_drive_owners) {
 }
 END_TEST
 
+// Only exact single-drive formatted LOAD initializes and releases 4040 owners.
+START_TEST(test_directory_load_initializes_only_4040_shorthand) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int scenario = (unsigned int)_i % 4u;
+    const unsigned int selected = scenario & 1u;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&second, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    for (unsigned int secondary = 2; secondary < 6; ++secondary) {
+        ck_assert_uint_ne(open_name(&unit, &bank, secondary, selected ? "1:FILE" : "0:FILE"), DOS_UNUSED);
+    }
+    const uint8_t peer = open_name(&unit, &bank, 6, selected ? "0:FILE" : "1:FILE");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const uint8_t channel = open_name(&unit, &bank, scenario == 3 ? 7 : IEEE_LOAD_CHANNEL,
+                                      scenario == 2 ? "$0:*"
+                                      : selected    ? "$1"
+                                                    : "$0");
+    if (format == 0 && scenario < 2) {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        for (unsigned int secondary = 2; secondary < 6; ++secondary) {
+            ck_assert_uint_eq(dos_find_channel(&unit, secondary), DOS_UNUSED);
+        }
+        uint8_t bytes[96];
+        ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), sizeof(bytes));
+        ck_assert_uint_eq(bytes[4], selected);
+    } else if (scenario != 3) {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_NO_CHANNEL);
+        for (unsigned int secondary = 2; secondary < 6; ++secondary) {
+            ck_assert_uint_ne(dos_find_channel(&unit, secondary), DOS_UNUSED);
+        }
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        for (unsigned int secondary = 2; secondary < 6; ++secondary) {
+            ck_assert_uint_ne(dos_find_channel(&unit, secondary), DOS_UNUSED);
+        }
+    }
+    ck_assert_uint_eq(dos_find_channel(&unit, 6), peer);
+    expect_bytes(&unit, &bank, peer, 22, selected ? 0x40 : 0x80);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Numeric-leading patterns do not address a drive unless followed by a colon.
+START_TEST(test_directory_numeric_wildcard_uses_available_drive) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool peer_only = (unsigned int)_i % 2u != 0;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, peer_only ? "0FILE" : "1FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    if (peer_only) {
+        const dos_media_io_t io = bank.units[0].slots[0].io;
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &io), DOS_MEDIA_OK);
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, NULL), DOS_MEDIA_OK);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, peer_only ? "$0*" : "$1*");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    uint8_t bytes[96];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), sizeof(bytes));
+    ck_assert_mem_eq(bytes + 40, peer_only ? "0FILE" : "1FILE", 5);
+    free(image.bytes);
+}
+END_TEST
+
+// Exact requests retire once, while unresolved and wildcard requests keep searching.
+START_TEST(test_directory_exact_patterns_complete_independently) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int scenario = (unsigned int)_i % 4u;
+    static const char* const requests[] = {"$FILE", "$FILE,OTHER", "$F?LE", "$FILE=U"};
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&first, format, 1, "FILE", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    fixture_file(&second, format, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    fixture_file(&second, format, 1, "OTHER", DISKIMAGE_FTYPE_USR, 0xa0, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, requests[scenario]);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    uint8_t bytes[256];
+    const unsigned int length = directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes));
+    ck_assert_uint_eq(length, scenario == 0 ? 96 : scenario == 1 ? 192 : scenario == 2 ? 224 : 64);
+    if (scenario != 3) {
+        ck_assert_mem_eq(bytes + 40, "FILE", 4);
+    }
+    if (scenario == 1) {
+        ck_assert_mem_eq(bytes + 136, "OTHER", 5);
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// ALLDRS retains SETDRV's previous selection for bare/nonnumeric prefixes.
+START_TEST(test_directory_mixed_prefixes_inherit_previous_drive) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int scenario = (unsigned int)_i % 3u;
+    static const char* const requests[] = {
+        "$0:ALPHA,1:BETA,:GAMMA",
+        "$0:ALPHA,1:BETA,X:GAMMA",
+        "$0:ALPHA,1:BETA,GAMMA",
+    };
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "ALPHA", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&first, format, 1, "GAMMA", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    fixture_file(&second, format, 0, "BETA", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    fixture_file(&second, format, 1, "GAMMA", DISKIMAGE_FTYPE_USR, 0xa0, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, requests[scenario]);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    uint8_t bytes[256];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), 224);
+    // SCHTBL prefers the default drive when only one default is represented.
+    ck_assert_mem_eq(bytes + (scenario == 2 ? 168 : 40), "ALPHA", 5);
+    ck_assert_mem_eq(bytes + (scenario == 2 ? 40 : 136), "BETA", 4);
+    ck_assert_mem_eq(bytes + (scenario == 2 ? 72 : 168), "GAMMA", 5);
+    ck_assert_mem_eq(bytes + (scenario == 2 ? 90 : 186), "USR", 3);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// DOS 2.7 OPTSCH admits the full drive set, not just the first prefix.
+START_TEST(test_directory_missing_first_drive_falls_back_only_when_requested) {
+    const unsigned int format = 1u + (unsigned int)_i / 3u;
+    const unsigned int scenario = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "B", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL,
+                                      scenario == 0   ? "$1:A,0:B"
+                                      : scenario == 1 ? "$1"
+                                                      : "$1:A");
+    if (scenario == 0) {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        uint8_t bytes[96];
+        ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), sizeof(bytes));
+        ck_assert_mem_eq(bytes + 40, "B", 1);
+    } else {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_READY);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// CLDCHN follows either active page even when job ownership differs from media.
+START_TEST(test_4040_directory_initialization_selects_active_page_job) {
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, 0);
+    mount_peer(&bank, &second, 0);
+    fixture_file(&first, 0, 0, "FILE", DISKIMAGE_FTYPE_SEQ, 0x40, 300);
+    fixture_file(&second, 0, 0, "PEER", DISKIMAGE_FTYPE_SEQ, 0x80, 300);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t owner = open_name(&unit, &bank, 2, "0:FILE");
+    const uint8_t peer = open_name(&unit, &bank, 3, "1:PEER");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    unit.channels[owner].active = unit.channels[peer].active = _i;
+    unit.buffer_drives |= (uint16_t)(1u << unit.channels[owner].buffers[_i]);
+    unit.buffer_drives &= (uint16_t)~(1u << unit.channels[peer].buffers[_i]);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), owner);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), DOS_UNUSED);
+    uint8_t byte;
+    bool eoi;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, owner, &byte, 1, &eoi), 1);
+    ck_assert_uint_eq(byte, (uint8_t)(0x40u + _i * DISKIMAGE_SECTOR_PAYLOAD_SIZE));
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// SCHTBL reserves a final fallback pass when both default preferences occur.
+START_TEST(test_directory_both_default_preferences_retain_fallback_pass) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool peer_absent = (unsigned int)_i % 2u != 0;
+    dos_media_bank_t bank = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_peer(&bank, &second, format);
+    fixture_file(&first, format, 0, "ALPHA", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&first, format, 1, "GAMMA", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    fixture_file(&first, format, 2, "DELTA", DISKIMAGE_FTYPE_SEQ, 0x80, 22);
+    fixture_file(&first, format, 3, "EPSILON", DISKIMAGE_FTYPE_SEQ, 0xa0, 22);
+    fixture_file(&second, format, 0, "BETA", DISKIMAGE_FTYPE_SEQ, 0xc0, 22);
+    if (peer_absent) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, NULL), DOS_MEDIA_OK);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0:ALPHA,1:BETA,GAMMA,0:DELTA,EPSILON");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    uint8_t bytes[352];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), peer_absent ? 192 : sizeof(bytes));
+    ck_assert_mem_eq(bytes + 40, "ALPHA", 5);
+    ck_assert_mem_eq(bytes + (peer_absent ? 104 : 72), "DELTA", 5);
+    ck_assert_mem_eq(bytes + (peer_absent ? 136 : 104), "EPSILON", 7);
+    ck_assert_mem_eq(bytes + (peer_absent ? 72 : 296), "GAMMA", 5);
+    if (!peer_absent) {
+        ck_assert_mem_eq(bytes + 200, "BETA", 4);
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // Register only the directly callable read/status foundation.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -1525,6 +1756,13 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_open_preserves_explicit_pattern_length, 0, 15);
     tcase_add_loop_test(core, test_directory_preserves_explicit_pattern_lengths, 0, 15);
     tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 15);
+    tcase_add_loop_test(core, test_directory_load_initializes_only_4040_shorthand, 0, 12);
+    tcase_add_loop_test(core, test_directory_numeric_wildcard_uses_available_drive, 0, 6);
+    tcase_add_loop_test(core, test_directory_exact_patterns_complete_independently, 0, 12);
+    tcase_add_loop_test(core, test_directory_mixed_prefixes_inherit_previous_drive, 0, 9);
+    tcase_add_loop_test(core, test_directory_missing_first_drive_falls_back_only_when_requested, 0, 6);
+    tcase_add_loop_test(core, test_4040_directory_initialization_selects_active_page_job, 0, 2);
+    tcase_add_loop_test(core, test_directory_both_default_preferences_retain_fallback_pass, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }
