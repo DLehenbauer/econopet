@@ -10,10 +10,10 @@
 #include "fatal.h"
 #include "ieee/ieee_protocol.h"
 
-// Read/status foundation of the replacement DOS. The production facade still
-// selects the legacy engine. Writes, commands, direct channels and REL are not
-// enabled here. Sector callbacks and cooperative OPEN/preview are host
-// adaptations, not emulated controller jobs or electrical IEEE handshakes.
+// Read/status and ordinary-write foundations of the replacement DOS. The
+// production facade still selects the legacy engine. Commands, direct channels
+// and REL are not enabled here. Sector callbacks and cooperative OPEN/preview
+// are host adaptations, not controller jobs or electrical IEEE handshakes.
 //
 // The selected ROMs are 4040 revision 2 and shared DOS 2.7 in 8050 MPI or 8250
 // MPI mode. Source links below are pinned to cbmsrc
@@ -31,6 +31,26 @@ static void free_channel(dos_unit_t* const unit, const uint8_t channel);
 static unsigned int directory_stage(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                                     uint8_t* const output, const unsigned int capacity, bool* const eoi);
 
+static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                          const uint8_t track);
+static bool free_blocks(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                        uint16_t* const blocks);
+static bool valid_bitmap(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                         const uint8_t track, const uint8_t* const entry);
+static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel);
+static bool finish_directory_growth(dos_unit_t* const unit, dos_media_bank_t* const media,
+                                    dos_channel_t* const channel);
+static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos_bam_t* const bam);
+
+#define DOS_BAM_VERSION_OFFSET 2u
+#define DOS_VERSION_4040 'A'
+#define DOS_VERSION_8050 'C'
+#define DOS_FILE_REPLACED_MASK 0x20u
+#define DOS_DIRECTORY_REPLACE_TRACK 28u
+#define DOS_DIRECTORY_REPLACE_SECTOR 29u
+#define DOS_DIRECTORY_INTERLEAVE 3u
+#define DOS_DATA_INTERLEAVE_4040 10u
+#define DOS_DATA_INTERLEAVE_8050 5u
 #define DOS_DIRECTORY_TRACK_4040 18u
 #define DOS_DIRECTORY_TRACK_8050 39u
 #define DOS_DIRECTORY_FIRST_SECTOR 1u
@@ -331,7 +351,8 @@ static uint8_t close_channel(const dos_unit_t* const unit, const uint8_t seconda
 }
 
 // Close one secondary or continue CLSALL in native descending-SA order.
-bool dos_close(dos_unit_t* const unit, const dos_model_t model, const uint8_t secondary) {
+bool dos_close(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_model_t model,
+               const uint8_t secondary) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
@@ -340,9 +361,14 @@ bool dos_close(dos_unit_t* const unit, const dos_model_t model, const uint8_t se
     // data secondaries for SA 15. Select the matching allocated C record or
     // all data records, then release their resources through free_channel.
     // Missing records need no release. Command/error storage is not released.
-    // This slice owns only readers, so no persistence work is needed.
+    // Ordinary writers persist synchronously. Host I/O failures retain their
+    // owners and the unclosed peers for a later retry.
     uint8_t channel;
     while ((channel = close_channel(unit, secondary)) != DOS_UNUSED) {
+        dos_channel_t* const state = &unit->channels[channel];
+        if (state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
+            return false;
+        }
         free_channel(unit, channel);
     }
 
@@ -542,13 +568,17 @@ static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media,
     for (unsigned int part = 0; part < 4; ++part) {
         if (!bam->buffer.resident || bam->media.identity != reference.identity || bam->buffer.track != bam_track ||
             bam->buffer.sector != bam_sector) {
+            if (!flush_bam(unit, media, bam)) {
+                return NULL;
+            }
             uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
             if (!storage_error(unit, media, reference,
                                read_sector(unit, media, reference, bam_track, bam_sector, bytes), false, bam_track,
                                bam_sector)) {
                 return NULL;
             }
-            // Preserve the old cache on failure, publishing only a full read.
+            // Preserve the old cache on failed reads, publishing only a full
+            // successful replacement after its dirty predecessor was flushed.
             memcpy(bam->buffer.bytes, bytes, sizeof(bytes));
             bam->buffer.track = bam_track;
             bam->buffer.sector = bam_sector;
@@ -685,6 +715,713 @@ static uint8_t allocate_channel(dos_unit_t* const unit, const dos_media_ref_t re
         }
     }
     return channel;
+}
+
+// Check the cached BAM's DOS version before allowing a sector write.
+// Return false with retained status for stale media, BAM failure, or a foreign version.
+static bool write_version(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                          const uint8_t track, const uint8_t sector) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/jobs
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/jobs
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // SETJOB/SJB2/SJB3 read the selected drive's BAM0/1+2 for WRITE jobs.
+    // Zero bypasses the version comparison, otherwise VERNUM must match.
+    // This helper extracts that gate, not SETJOB's geometry checks or job setup.
+    const dos_model_t model = media->units[reference.unit].model;
+    dos_bam_t* const bam = &unit->bam[reference.slot];
+    dos_media_ref_t current = {0};
+
+    // Media generations are a host lifetime guard. Reject a stale reference
+    // before consulting cached bytes from a removed or replacement image.
+    if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != reference.identity) {
+        return storage_error(unit, media, reference, DOS_MEDIA_STALE, true, track, sector);
+    }
+    if (bam->media.identity != reference.identity || !bam->buffer.resident) {
+        // Lazy loading is a host adaptation. 4040 INITDR leaves its single
+        // BAM resident. DOS 2.7 INITDR first reads the directory header, then
+        // NF05/NF10 use SETMAP through the final track, leaving the last BAM
+        // part cached. Select that part only when this image has no valid cache.
+        const uint8_t last_track = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                   : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                             : DISKIMAGE_D82_TRACK_COUNT;
+        if (bam_entry(unit, media, reference, last_track) == NULL) {
+            return false;
+        }
+    }
+
+    // Test the currently resident page, not a freshly read disk header.
+    // SJB3/SJB4 accept an unspecified zero version as well as the model's own.
+    const uint8_t version = bam->buffer.bytes[DOS_BAM_VERSION_OFFSET];
+    if (version != 0 && version != (model == DOS_MODEL_4040 ? DOS_VERSION_4040 : DOS_VERSION_8050)) {
+        // VNERR calls HED2TS before reporting 73, preserving the rejected
+        // job's coordinates. The text matches startup, but not its 00,00 fields.
+        dos_status(unit, model, DOS_STATUS_POWER_ON, track, sector);
+        return false;
+    }
+    return true;
+}
+
+// Write a native sector, retaining its caller-owned bytes after any failure.
+static bool write_sector(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                         const uint8_t track, const uint8_t sector, const uint8_t* const bytes) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
+    //
+    // WRTOUT/WRTAB submit controller writes. The C media callback completes
+    // synchronously and storage_error publishes a host-policy failure.
+    // This wrapper neither owns the source buffer nor releases it on failure.
+    const uint16_t bit = remember_buffer_drive(unit, reference, bytes);
+    if (!write_version(unit, media, reference, track, sector)) {
+        return false;
+    }
+    unit->buffer_writes |= bit;
+    return storage_error(unit, media, reference, dos_media_write(media, reference, track, sector, bytes), true, track,
+                         sector);
+}
+
+// SCRBAM/MAPOUT write a dirty BAM before replacing its sole per-drive cache.
+static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos_bam_t* const bam) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets
+    //
+    // 4040 MAPOUT checks every track. DOS 2.7 SETMAP scrubs a dirty BAM
+    // before loading another part, and MAPOUT validates its recorded range.
+    if (bam->dirty) {
+        const dos_model_t model = media->units[bam->media.unit].model;
+        const unsigned int low = model == DOS_MODEL_4040 ? 1u : bam->buffer.bytes[4];
+        const unsigned int high = model == DOS_MODEL_4040 ? DISKIMAGE_D64_TRACK_COUNT + 1u : bam->buffer.bytes[5];
+        if (low == 0 || high <= low || high - low > DOS_BAM_TRACKS_PER_PART) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, bam->buffer.track, bam->buffer.sector);
+            return false;
+        }
+        // Validate each count/bitmap pair before publishing allocation changes.
+        for (unsigned int track = low; track < high; ++track) {
+            const uint8_t* const entry =
+                bam->buffer.bytes + (model == DOS_MODEL_4040 ? track * 4u : 6u + (track - low) * 5u);
+            if (!valid_bitmap(unit, media, bam->media, (uint8_t)track, entry)) {
+                return false;
+            }
+        }
+        if (!write_sector(unit, media, bam->media, bam->buffer.track, bam->buffer.sector, bam->buffer.bytes)) {
+            return false;
+        }
+    }
+    // Retaining dirty until a successful write is a host retry policy.
+    bam->dirty = false;
+    return true;
+}
+
+// AVCK compares the recorded count with all bits, including padding bits.
+static bool valid_bitmap(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                         const uint8_t track, const uint8_t* const entry) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tstfnd
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstfnd
+    //
+    // AVCK counts every bit in the model's three or four bitmap bytes,
+    // rather than restricting the count to geometrically valid sectors.
+    const dos_model_t model = media->units[reference.unit].model;
+    const unsigned int width = model == DOS_MODEL_4040 ? 3u : 4u;
+    unsigned int count = 0;
+    for (unsigned int index = 1; index <= width; ++index) {
+        for (uint8_t bits = entry[index]; bits != 0; bits &= (uint8_t)(bits - 1u)) {
+            ++count;
+        }
+    }
+    // A mismatched recorded count is DIR ERROR, not an allocation hint.
+    if (count == entry[0]) {
+        return true;
+    }
+    dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, track, 0);
+    return false;
+}
+
+// FRETS/USEDTS update one native BAM bit and its free count together.
+static bool mark_sector(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                        const uint8_t track, const uint8_t sector, const bool available) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/frets
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // FRETS sets a free bit and USEDTS clears it. Their count changes occur
+    // only on an actual transition, making repeated release/claim idempotent.
+    uint8_t* const entry = bam_entry(unit, media, reference, track);
+    unsigned int sectors;
+    const diskimage_type_t type = media->units[reference.unit].slots[reference.slot].io.image.type;
+    if (entry == NULL || !diskimage_track_sectors(type, track, &sectors) || sector >= sectors) {
+        return false;
+    }
+    const uint8_t mask = (uint8_t)(1u << (sector & 7u));
+    uint8_t* const byte = entry + 1u + sector / 8u;
+    if (((*byte & mask) != 0) != available) {
+        *byte ^= mask;
+        entry[0] = (uint8_t)(available ? entry[0] + 1u : entry[0] - 1u);
+        unit->bam[reference.slot].dirty = true;
+        // Maintain the cached NUMFRE total only for data tracks. DOS 2.7
+        // also reports its low-free-block warning during allocation.
+        if (track != directory_track(media->units[reference.unit].model) && unit->free_blocks_valid[reference.slot]) {
+            uint16_t* const count = &unit->free_blocks[reference.slot];
+            *count = available ? *count + 1u : *count - 1u;
+            if (!available && media->units[reference.unit].model != DOS_MODEL_4040 && *count < 3u) {
+                dos_status(unit, media->units[reference.unit].model, DOS_STATUS_DISK_FULL, 0, 0);
+            }
+        }
+    }
+    return true;
+}
+
+// GETSEC/FNDNXT select a free sector from the requested rotational position.
+static bool allocate_on_track(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                              const uint8_t track, const unsigned int start, uint8_t* const sector) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tstfnd
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstfnd
+    //
+    // AVAIL/AVCK and GETSEC validate the bitmap before FNDNXT claims a bit.
+    // Scan from the interleave-selected position, wrapping once at track end.
+    uint8_t* const entry = bam_entry(unit, media, reference, track);
+    if (entry == NULL || !valid_bitmap(unit, media, reference, track, entry)) {
+        return false;
+    }
+    unsigned int sectors;
+    if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type, track, &sectors)) {
+        return false;
+    }
+    for (unsigned int index = 0; index < sectors; ++index) {
+        const unsigned int candidate = (start + index) % sectors;
+        if (entry[1u + candidate / 8u] & (1u << (candidate & 7u))) {
+            *sector = (uint8_t)candidate;
+            return mark_sector(unit, media, reference, track, *sector, false);
+        }
+    }
+    // Distinguish a full track from a count claiming nonexistent free bits.
+    dos_status(unit, media->units[reference.unit].model,
+               entry[0] == 0 ? DOS_STATUS_DISK_FULL : DOS_STATUS_DIRECTORY_ERROR, 0, 0);
+    return false;
+}
+
+// INTTS alternates outwards for a new file, NXTTS fills tracks away from DIRTRK.
+static bool allocate_sector(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
+                            uint8_t* const track, uint8_t* const sector, const bool initial) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tstfnd
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstfnd
+    //
+    // INTTS (JINTTS in DOS 2.7) searches below then above DIRTRK at each
+    // distance. NXTTS/JNXTTS instead keep filling tracks away from DIRTRK.
+    const dos_model_t model = media->units[reference.unit].model;
+    const unsigned int tracks = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                          : DISKIMAGE_D82_TRACK_COUNT;
+    const uint8_t directory = directory_track(model);
+    uint16_t count;
+    if (!free_blocks(unit, media, reference, &count)) {
+        return false;
+    }
+    unsigned int candidate = *track;
+    unsigned int previous_sector = *sector;
+    for (unsigned int step = 0; step < tracks * 2u; ++step) {
+        if (initial) {
+            // Never allocate file data on the directory track itself.
+            const unsigned int distance = step / 2u + 1u;
+            if ((step & 1u) == 0) {
+                if (distance >= directory) {
+                    continue;
+                }
+                candidate = directory - distance;
+            } else {
+                candidate = directory + distance;
+                if (candidate > tracks) {
+                    continue;
+                }
+            }
+        }
+        uint8_t* const entry = bam_entry(unit, media, reference, (uint8_t)candidate);
+        if (entry == NULL) {
+            return false;
+        }
+        if (entry[0] != 0) {
+            unsigned int start = 0;
+            if (!initial) {
+                // FNDNXT adds SECINC and applies its subtract/decrement wrap
+                // before searching for a free sector on this track.
+                unsigned int sectors;
+                if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type,
+                                             candidate, &sectors)) {
+                    return false;
+                }
+                start =
+                    previous_sector + (model == DOS_MODEL_4040 ? DOS_DATA_INTERLEAVE_4040 : DOS_DATA_INTERLEAVE_8050);
+                if (start > sectors) {
+                    start -= sectors;
+                    if (start != 0) {
+                        --start;
+                    }
+                }
+            }
+            *track = (uint8_t)candidate;
+            return allocate_on_track(unit, media, reference, *track, start, sector);
+        }
+        if (!initial) {
+            // Crossing a disk edge resumes on the other side of DIRTRK,
+            // resetting the previous sector used to calculate interleave.
+            if (candidate < directory) {
+                candidate = candidate == 1 ? directory + 1u : candidate - 1u;
+                if (candidate == directory + 1u) {
+                    previous_sector = 0;
+                }
+            } else {
+                ++candidate;
+                if (candidate > tracks) {
+                    candidate = directory - 1u;
+                    previous_sector = 0;
+                }
+            }
+        }
+    }
+    dos_status(unit, model, DOS_STATUS_DISK_FULL, 0, 0);
+    return false;
+}
+
+// Read-modify-write only this file's directory entry, never a saved peer sector.
+static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
+                             const bool closed) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addfil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addfil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // ADDFIL publishes an unclosed entry. CLSDIR rereads its sector before
+    // updating the closed flag, first link, and final block count.
+    if (channel->grow_pending && !finish_directory_growth(unit, media, channel)) {
+        return false;
+    }
+    // Reread rather than restoring an old sector that could erase peer edits.
+    uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
+    if (!storage_error(
+            unit, media, channel->media,
+            read_sector(unit, media, channel->media, channel->directory_track, channel->directory_sector, bytes), false,
+            channel->directory_track, channel->directory_sector)) {
+        return false;
+    }
+    uint8_t* const entry = bytes + channel->directory_entry;
+    if (channel->access == DOS_ACCESS_WRITE && !channel->replaced && !channel->directory_published) {
+        memset(entry + DOS_DIRECTORY_TYPE_OFFSET, 0, DISKIMAGE_DIRECTORY_ENTRY_SIZE - DOS_DIRECTORY_TYPE_OFFSET);
+        entry[DOS_DIRECTORY_TYPE_OFFSET] = channel->file_type;
+        entry[DOS_DIRECTORY_TRACK_OFFSET] = channel->first_track;
+        entry[DOS_DIRECTORY_SECTOR_OFFSET] = channel->first_sector;
+        memcpy(entry + DOS_DIRECTORY_NAME_OFFSET, channel->pattern, sizeof(channel->pattern));
+    } else if (channel->replaced) {
+        // Keep the original chain visible until CLOSE commits the alternate.
+        entry[DOS_DIRECTORY_TYPE_OFFSET] |= DOS_FILE_REPLACED_MASK;
+        entry[DOS_DIRECTORY_REPLACE_TRACK] = channel->first_track;
+        entry[DOS_DIRECTORY_REPLACE_SECTOR] = channel->first_sector;
+    } else if (channel->access != DOS_ACCESS_WRITE) {
+        entry[DOS_DIRECTORY_TYPE_OFFSET] &= DOS_FILE_LOCKED_MASK | DOS_FILE_TYPE_MASK;
+    }
+    if (closed) {
+        // Commit the new link/count and clear the temporary replacement link.
+        entry[DOS_DIRECTORY_TYPE_OFFSET] = channel->file_type | DOS_FILE_CLOSED_MASK;
+        entry[DOS_DIRECTORY_TRACK_OFFSET] = channel->first_track;
+        entry[DOS_DIRECTORY_SECTOR_OFFSET] = channel->first_sector;
+        entry[DOS_DIRECTORY_REPLACE_TRACK] = 0;
+        entry[DOS_DIRECTORY_REPLACE_SECTOR] = 0;
+        entry[DOS_DIRECTORY_BLOCKS_LOW] = (uint8_t)channel->blocks;
+        entry[DOS_DIRECTORY_BLOCKS_HIGH] = (uint8_t)(channel->blocks >> 8u);
+    }
+    if (!write_sector(unit, media, channel->media, channel->directory_track, channel->directory_sector, bytes)) {
+        return false;
+    }
+    channel->directory_dirty = false;
+    channel->directory_published = true;
+    return true;
+}
+
+// WRT0 allocates the following block before writing a full linked data sector.
+static bool advance_write(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // WRT0 calls NXTTS, writes the successor link, then WRTBUF/DBLBUF
+    // switches to the new block with its payload pointer set to 2.
+    dos_buffer_t* const buffer = &unit->buffers[channel->buffers[channel->active]];
+    if (channel->next_track == 0) {
+        // Retain the allocation across failed writes to avoid claiming a
+        // different successor when the same full buffer is retried.
+        uint8_t track = buffer->track, sector = buffer->sector;
+        if (!allocate_sector(unit, media, channel->media, &track, &sector, false)) {
+            return false;
+        }
+        channel->next_track = track;
+        channel->next_sector = sector;
+    }
+    buffer->bytes[0] = channel->next_track;
+    buffer->bytes[1] = channel->next_sector;
+    if (!write_sector(unit, media, channel->media, buffer->track, buffer->sector, buffer->bytes)) {
+        return false;
+    }
+    // Advance ownership/cursors only after the linked sector was persisted.
+    ++channel->blocks;
+    channel->active ^= 1u;
+    dos_buffer_t* const next = &unit->buffers[channel->buffers[channel->active]];
+    next->track = channel->next_track;
+    next->sector = channel->next_sector;
+    next->resident = true;
+    channel->next_track = 0;
+    channel->position = DISKIMAGE_SECTOR_LINK_SIZE;
+    return true;
+}
+
+// Store one ordinary-file byte, advancing a full sector through the shared writer.
+// Return false on allocation/I/O failure, possibly after the byte was already stored.
+static bool write_byte(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
+                       const uint8_t byte) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // WRTBYT calls PUTBYT, then enters WRT0 when the byte pointer wraps.
+    // WRT0 allocates/links a successor, writes the full page, switches buffers,
+    // and resets the payload pointer to 2. C represents the wrapped end as 256.
+
+    // A previous failed transition can leave the page full. Retry that
+    // transition before accepting another byte, without indexing past the page.
+    if (channel->position == DISKIMAGE_SECTOR_SIZE && !advance_write(unit, media, channel)) {
+        return false;
+    }
+
+    // PUTBYT stores before testing fullness. Keep that ordering so a byte
+    // filling the last payload offset survives a subsequent write failure.
+    unit->buffers[channel->buffers[channel->active]].bytes[channel->position++] = byte;
+
+    // Advance immediately at exact fullness, even if this is the final input
+    // byte. CLOSE, not this helper, supplies the terminal link and closed entry.
+    return channel->position != DISKIMAGE_SECTOR_SIZE || advance_write(unit, media, channel);
+}
+
+// CLSWRT/CLSDIR/MAPOUT finish data, replacement deletion, directory, then BAM.
+static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+    //
+    // CLSWRT terminates data, CLSDIR publishes metadata, and MAPOUT writes
+    // allocation changes. C records persistence phases so a host I/O failure
+    // can be retried without repeating block counts or losing owned buffers.
+    const dos_model_t model = media->units[channel->media.unit].model;
+    unit->selected_drive = channel->media.slot;
+    // No directory coordinates were published if growth allocation failed.
+    if (channel->closing == DOS_CLOSE_ABORT_OPEN) {
+        if (channel->first_track != 0) {
+            if (!mark_sector(unit, media, channel->media, channel->first_track, channel->first_sector, true)) {
+                return false;
+            }
+            channel->first_track = 0;
+        }
+        return flush_bam(unit, media, &unit->bam[channel->media.slot]) &&
+               storage_error(unit, media, channel->media, dos_media_flush_unit(media, channel->media.unit), true, 0, 0);
+    }
+    if (channel->grow_pending && !finish_directory_growth(unit, media, channel)) {
+        return false;
+    }
+    if (channel->closing == DOS_CLOSE_DATA) {
+        // Finish an interrupted full-block write before forming the tail.
+        if (channel->next_track != 0 && !advance_write(unit, media, channel)) {
+            return false;
+        }
+        dos_buffer_t* buffer = &unit->buffers[channel->buffers[channel->active]];
+        if (channel->position == DISKIMAGE_SECTOR_LINK_SIZE && channel->blocks != 0) {
+            // DOS 2.7 frees its speculative extra block, the selected 4040 does not.
+            if (model != DOS_MODEL_4040 &&
+                !mark_sector(unit, media, channel->media, buffer->track, buffer->sector, true)) {
+                return false;
+            }
+            channel->active ^= 1u;
+            buffer = &unit->buffers[channel->buffers[channel->active]];
+            channel->position = DISKIMAGE_SECTOR_SIZE;
+        } else {
+            if (channel->position == DISKIMAGE_SECTOR_LINK_SIZE) {
+                // CLSWRT gives a completely empty file one CR payload byte.
+                buffer->bytes[channel->position++] = '\r';
+            }
+            ++channel->blocks;
+        }
+        // The final link's second byte is the last occupied offset, not
+        // the number of payload bytes.
+        buffer->bytes[0] = 0;
+        buffer->bytes[1] = (uint8_t)(channel->position - 1u);
+        // Cursor changes above must not be repeated if this write needs a retry.
+        channel->closing = DOS_CLOSE_OLD_CHAIN;
+        channel->directory_dirty = true;
+    }
+    if (channel->closing == DOS_CLOSE_OLD_CHAIN) {
+        dos_buffer_t* const buffer = &unit->buffers[channel->buffers[channel->active]];
+        if (!write_sector(unit, media, channel->media, buffer->track, buffer->sector, buffer->bytes)) {
+            return false;
+        }
+        channel->closing = DOS_CLOSE_DIRECTORY;
+    }
+    if (channel->closing == DOS_CLOSE_DIRECTORY) {
+        // DELFIL follows and releases the old replacement chain before CLSDIR writes.
+        // Bound chain traversal as a corrupt-image safeguard, not a ROM retry.
+        unsigned int visited = 0;
+        while (channel->old_track != 0) {
+            uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
+            if (++visited >
+                media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE) {
+                dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, channel->old_track, channel->old_sector);
+                return false;
+            }
+            if (!storage_error(unit, media, channel->media,
+                               read_sector(unit, media, channel->media, channel->old_track, channel->old_sector, bytes),
+                               false, channel->old_track, channel->old_sector) ||
+                !mark_sector(unit, media, channel->media, channel->old_track, channel->old_sector, true)) {
+                return false;
+            }
+            channel->old_track = bytes[0];
+            channel->old_sector = bytes[1];
+        }
+        if (!update_directory(unit, media, channel, true)) {
+            return false;
+        }
+        channel->closing = DOS_CLOSE_BAM;
+    }
+    if (channel->closing == DOS_CLOSE_BAM) {
+        if (!flush_bam(unit, media, &unit->bam[channel->media.slot])) {
+            return false;
+        }
+        channel->closing = DOS_CLOSE_FLUSH;
+    }
+    // A backing-store flush is an additional host durability boundary.
+    // Channel release belongs to the caller, only after this succeeds.
+    return storage_error(unit, media, channel->media, dos_media_flush_unit(media, channel->media.unit), true, 0, 0);
+}
+
+// Finalize quiescent owners, retaining failed and not-yet-completed channels.
+bool dos_finalize(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: this host lifecycle operation retains ordinary
+    // descriptors until its caller replaces/resets the unit. A failure retains
+    // its owner and all unfinalized peers.
+    // An unfinished APPEND has not changed media and must not CLOSE its read cursor.
+    if (unit->open.pending && unit->open.append_channel != 0) {
+        free_channel(unit, unit->open.append_channel - 1u);
+        unit->open.pending = false;
+    }
+    // Stop on the first failed writer. Its phase and the remaining channels
+    // survive for retry rather than being cleared by a partial finalization.
+    for (uint8_t index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        dos_channel_t* const channel = &unit->channels[index];
+        if (channel->allocated && channel->access != DOS_ACCESS_READ && !finish_channel(unit, media, channel)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// NXDRBK links the old tail before initializing its new directory block.
+static bool finish_directory_growth(dos_unit_t* const unit, dos_media_bank_t* const media,
+                                    dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // NXDRBK writes the old tail's successor before clearing the new block
+    // and installing its terminal 0/$FF link. Allocation already happened.
+    uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
+    // Reread the old tail so unrelated entries survive a delayed retry.
+    if (!storage_error(
+            unit, media, channel->media,
+            read_sector(unit, media, channel->media, channel->directory_track, channel->grow_from_sector, bytes), false,
+            channel->directory_track, channel->grow_from_sector)) {
+        return false;
+    }
+    bytes[0] = channel->directory_track;
+    bytes[1] = channel->directory_sector;
+    if (!write_sector(unit, media, channel->media, channel->directory_track, channel->grow_from_sector, bytes)) {
+        return false;
+    }
+    // Do not publish the first entry until this empty successor is durable.
+    memset(bytes, 0, sizeof(bytes));
+    bytes[1] = DOS_UNUSED;
+    if (!write_sector(unit, media, channel->media, channel->directory_track, channel->directory_sector, bytes)) {
+        return false;
+    }
+    // Keep both coordinates pending on failure so either write can be retried.
+    channel->grow_pending = false;
+    return true;
+}
+
+// APPEND traverses through GCBYTE/RDLNK, yielding between synchronous host reads.
+static void append_work(dos_unit_t* const unit, dos_media_bank_t* const media, dos_open_work_t* const work,
+                        const bool report) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
+    //
+    // APPEND reads through GCBYTE until the last-record flag, then RDLNK
+    // positions after the final occupied byte (or WRT0 obtains a new block).
+    // C follows one sector link per call rather than blocking the scheduler.
+    const uint8_t index = work->append_channel - 1u;
+    dos_channel_t* const channel = &unit->channels[index];
+    const dos_model_t model = media->units[channel->media.unit].model;
+    dos_buffer_t* const buffer = &unit->buffers[channel->buffers[channel->active]];
+    if (buffer->bytes[0] != 0) {
+        // The image-size visit limit is a host corruption safeguard.
+        const unsigned int limit =
+            media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+        if (channel->traversed++ >= limit) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
+        } else {
+            const uint8_t track = buffer->bytes[0], sector = buffer->bytes[1];
+            channel->active ^= 1u;
+            if (load_buffer(unit, media, channel, track, sector)) {
+                ++channel->blocks;
+                return;
+            }
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
+        }
+        // Before reaching the tail this is still a read-only traversal.
+        free_channel(unit, index);
+        // Byte 1 holds the last occupied offset, so append starts one byte later.
+        work->pending = false;
+        return;
+    }
+    work->pending = false;
+    channel->position = buffer->bytes[1] + 1u;
+    if (channel->position < DISKIMAGE_SECTOR_LINK_SIZE) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
+        free_channel(unit, index);
+        return;
+    }
+    // Mark the entry unclosed before accepting PUT data. Storage failures
+    // here retain the channel, unlike failures during the read-only walk.
+    if ((report && !update_directory(unit, media, channel, false)) ||
+        (channel->position == DISKIMAGE_SECTOR_SIZE && !advance_write(unit, media, channel))) {
+        channel->failed = true;
+        if (unit->status_code == DOS_STATUS_DISK_FULL) {
+            free_channel(unit, index);
+        }
+        return;
+    }
+    if (report) {
+        command_end(unit, model);
+    }
+}
+
+// OPNWCH/ADDFIL construct a new chain, or reserve a replacement's alternate link.
+static bool open_write(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
+                       const dos_open_work_t* const work, const bool existing) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addfil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addfil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // OPNWCH/INTPNT allocate the initial data block and start its cursor
+    // past the link. ADDFIL uses a deleted entry or NXDRBK grows the directory.
+    // The C caller has already allocated the logical channel and buffers.
+    channel->access = DOS_ACCESS_WRITE;
+    // Until directory publication is possible, CLOSE must reclaim only the
+    // initial allocation rather than write to nonexistent entry coordinates.
+    channel->closing = DOS_CLOSE_ABORT_OPEN;
+    channel->file_type = work->type != 0 ? work->type : existing ? channel->file_type : DISKIMAGE_FTYPE_SEQ;
+    channel->replaced = existing;
+    memcpy(channel->pattern, work->name, sizeof(channel->pattern));
+    uint8_t track = 0, sector = 0;
+    channel->first_track = 0;
+    if (!allocate_sector(unit, media, channel->media, &track, &sector, true)) {
+        return false;
+    }
+    channel->first_track = track;
+    channel->first_sector = sector;
+    dos_buffer_t* const buffer = &unit->buffers[channel->buffers[0]];
+    buffer->track = track;
+    buffer->sector = sector;
+    buffer->resident = true;
+    channel->position = DISKIMAGE_SECTOR_LINK_SIZE;
+    channel->ready = false;
+    if (!existing) {
+        // Prefer the deleted slot retained by lookup. Replacement keeps its
+        // original entry and publishes the new chain through alternate links.
+        channel->directory_track = directory_track(media->units[channel->media.unit].model);
+        channel->directory_sector = work->empty_sector;
+        channel->directory_entry = work->empty_entry;
+        if (work->empty_track == 0) {
+            // NXDRBK temporarily uses directory interleave 3 instead of the
+            // model's data interleave. Retain both ends for retryable growth.
+            unsigned int sectors;
+            const diskimage_type_t type = media->units[channel->media.unit].slots[channel->media.slot].io.image.type;
+            if (!diskimage_track_sectors(type, channel->directory_track, &sectors)) {
+                return false;
+            }
+            unsigned int start = work->last_sector + DOS_DIRECTORY_INTERLEAVE;
+            if (start > sectors) {
+                start -= sectors;
+                if (start != 0) {
+                    --start;
+                }
+            }
+            if (!allocate_on_track(unit, media, channel->media, channel->directory_track, start,
+                                   &channel->directory_sector)) {
+                return false;
+            }
+            channel->directory_entry = 0;
+            channel->grow_from_sector = work->last_sector;
+            channel->grow_pending = true;
+        }
+    }
+    // Once coordinates are reserved, failed publication retains writable
+    // state for finalization instead of leaking the new block.
+    channel->closing = DOS_CLOSE_DATA;
+    channel->directory_dirty = true;
+    return update_directory(unit, media, channel, false);
+}
+
+// Route ordinary PUT bytes incrementally, leaving EOI distinct from CLOSE.
+void dos_put(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t secondary, const uint8_t byte) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // PUT distinguishes OPEN/command collection from ordinary channel data.
+    // This direct API accepts only decoded ordinary data, not collection.
+    // It has no EOI argument because a file needs CLOSE to publish its tail.
+    const uint8_t index = dos_find_channel(unit, secondary);
+    if (index == DOS_UNUSED) {
+        return;
+    }
+    dos_channel_t* const channel = &unit->channels[index];
+    // Accept ordinary data only for a writable channel still in its data
+    // phase. Failed channels retain their state for finalization or retry.
+    if (channel->access == DOS_ACCESS_READ || channel->access == DOS_ACCESS_MODIFY ||
+        channel->closing != DOS_CLOSE_DATA || channel->failed) {
+        return;
+    }
+    if (!write_byte(unit, media, channel, byte)) {
+        channel->failed = true;
+        // Native CMDERR releases an ordinary channel on DISK FULL, not host I/O faults.
+        if (unit->status_code == DOS_STATUS_DISK_FULL) {
+            free_channel(unit, index);
+        }
+    }
 }
 
 // Parse OPEN/CKTM parameters, retaining OP60's raw binary record-size byte.
@@ -947,7 +1684,11 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     const dos_model_t model = media->units[reference.unit].model;
     const uint8_t previous = dos_find_channel(unit, secondary);
     if (previous != DOS_UNUSED) {
-        // OPNRCH/GETRCH frees the old owner, not a separately completed CLOSE.
+        // Retire a writable host owner without publishing CLOSE's ENDCMD.
+        if (unit->channels[previous].access != DOS_ACCESS_READ &&
+            !finish_channel(unit, media, &unit->channels[previous])) {
+            return false;
+        }
         free_channel(unit, previous);
     }
     const uint8_t index = allocate_channel(unit, reference, secondary, 2);
@@ -1022,8 +1763,8 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // ROM open:OPEN parses the collected command, FFST searches, OP90 checks
     // read eligibility, and OPREAD calls OPNRCH. Splitting ordinary lookup
     // into dos_work is a firmware scheduling adaptation. That continuation
-    // handles multi-drive search. '$' and retained '*' requests can instead
-    // finish here, including their required I/O. '#' is not enabled yet.
+    // handles multi-drive search and ordinary construction. '$' and retained
+    // '*' requests can finish here, while '#' is rejected in this slice.
     vet(!dos_work_pending(unit), "native OPEN requires its preceding job to complete");
     const dos_model_t model = media->units[index].model;
     // ROM tst2:L42 collects bounded input. The approved 4040 revision-2 pointer
@@ -1095,9 +1836,8 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
             parsed.type = DISKIMAGE_FTYPE_PRG;
         }
     }
-    // Later slices add writers and REL. Reject them before claiming resources.
-    if (!directory && (parsed.access == DOS_ACCESS_WRITE || parsed.access == DOS_ACCESS_APPEND ||
-                       parsed.type == DISKIMAGE_FTYPE_REL)) {
+    // REL readers and writers belong to later slices.
+    if (!directory && parsed.type == DISKIMAGE_FTYPE_REL) {
         command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
     }
@@ -1136,7 +1876,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     }
     if (last_program) {
         const uint8_t previous = dos_find_channel(unit, secondary);
-        if (previous != DOS_UNUSED && !dos_close(unit, model, secondary)) {
+        if (previous != DOS_UNUSED && !dos_close(unit, media, model, secondary)) {
             return;
         }
         const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
@@ -1182,7 +1922,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     unit->open = parsed;
 }
 
-// Service one queued ordinary OPEN continuation.
+// Service a queued ordinary OPEN or APPEND continuation.
 // Directory lookup yields at an unmatched link, then constructs the matched
 // channel or reports failure. Initial data jobs may also run on a match.
 void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
@@ -1201,13 +1941,17 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
     //
     // No direct ROM entry for this cooperative dispatcher. Its OPEN path
-    // splits FFST/SRCHST/SEARCH and GETRCH/OPNRCH into retained work.
+    // splits FFST/SRCHST/SEARCH and GETRCH/OPNRCH/OPNWCH into retained work.
 
     // ROM lookup:FFST/SRCHST/SEARCH walk linked directory sectors and COMPAR
     // saves a match's type and first link. Resume that search from the saved
     // C job, doing no work when there is no pending OPEN.
     dos_open_work_t* const work = &unit->open;
     if (!work->pending) {
+        return;
+    }
+    if (work->append_channel != 0) {
+        append_work(unit, media, work, true);
         return;
     }
     const dos_model_t model = media->units[work->media.unit].model;
@@ -1217,6 +1961,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     unit->selected_drive = reference.slot;
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     bool matched = false;
+    uint16_t found_blocks = 0;
     const uint8_t searched_track = work->track, searched_sector = work->sector;
 
     // Bound directory visits by image size as a corruption safeguard, not a
@@ -1224,6 +1969,16 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
     bool failed = work->visited++ >= limit;
     uint8_t* const bytes = unit->buffers[work->scratch].bytes;
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const channel = &unit->channels[index];
+        if (channel->allocated && channel->grow_pending && channel->media.identity == reference.identity &&
+            channel->directory_track == searched_track && channel->directory_sector == searched_sector) {
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
+            work->pending = false;
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            return;
+        }
+    }
     if (!failed) {
         failed = read_sector(unit, media, reference, work->track, work->sector, bytes) != DOS_MEDIA_OK;
     }
@@ -1232,11 +1987,24 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         // Retain closed and unclosed matches for OPEN's mode-specific checks.
         for (unsigned int entry = 0; entry < DISKIMAGE_SECTOR_SIZE; entry += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
             const uint8_t* const file = bytes + entry;
-            // OP0415/FF30 filter initial LOAD '*' matches before OP110's type check.
-            if (file[DOS_DIRECTORY_TYPE_OFFSET] != 0 &&
-                (!work->first_program ||
-                 (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
-                name_matches(work->name, work->name_length, file + DOS_DIRECTORY_NAME_OFFSET)) {
+            if (file[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
+                bool reserved = false;
+                for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+                    const dos_channel_t* const channel = &unit->channels[index];
+                    reserved |= channel->allocated && channel->access != DOS_ACCESS_READ &&
+                                channel->media.identity == reference.identity &&
+                                channel->directory_sector == searched_sector &&
+                                (channel->grow_pending || channel->directory_entry == entry);
+                }
+                if (work->empty_track == 0 && !reserved) {
+                    work->empty_track = searched_track;
+                    work->empty_sector = searched_sector;
+                    work->empty_entry = (uint8_t)entry;
+                }
+                // OP0415/FF30 filter initial LOAD '*' before OP110's type check.
+            } else if ((!work->first_program ||
+                        (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
+                       name_matches(work->name, work->name_length, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
                 // 4040 OP90/OP130 discard FILTRK's two high bits. DOS 2.7
                 // keeps the full track byte for its larger geometry.
@@ -1245,6 +2013,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
                 found_entry = (uint8_t)entry;
                 matched = true;
+                found_blocks = file[DOS_DIRECTORY_BLOCKS_LOW] | ((uint16_t)file[DOS_DIRECTORY_BLOCKS_HIGH] << 8u);
                 break;
             }
         }
@@ -1268,6 +2037,10 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             next_drive ^= 1u;
             work->tried_other = true;
             retry = dos_media_reference(media, reference.unit, next_drive, &work->media) == DOS_MEDIA_OK;
+        } else if (work->access == DOS_ACCESS_WRITE && reference.slot != work->creation_drive) {
+            next_drive = work->creation_drive;
+            work->default_drive = false;
+            retry = dos_media_reference(media, reference.unit, next_drive, &work->media) == DOS_MEDIA_OK;
         }
         if (retry) {
             unit->selected_drive = (uint8_t)next_drive;
@@ -1284,27 +2057,66 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // become generic 23 with zero track/sector, not full controller recovery.
     if (failed) {
         error = DOS_STATUS_READ_ERROR;
-    } else if (found_track == 0) {
+    } else if (found_track == 0 && work->access != DOS_ACCESS_WRITE) {
         error = DOS_STATUS_NOT_FOUND;
     }
 
     // ROM open:OP110/OP115 compare the requested file type and report 64.
     // A zero C type means infer it from the match.
     const uint8_t file_type = found_type & DOS_FILE_TYPE_MASK;
+    bool wildcard = false;
+    for (unsigned int index = 0; index < sizeof(work->name); ++index) {
+        wildcard |= work->name[index] == '*' || work->name[index] == '?';
+    }
+    const bool unclosed_write =
+        found_track != 0 && !(found_type & DOS_FILE_CLOSED_MASK) && work->access == DOS_ACCESS_WRITE && !wildcard;
     if (found_track != 0) {
-        if (!(found_type & DOS_FILE_CLOSED_MASK) && work->access != DOS_ACCESS_MODIFY) {
+        if (work->access == DOS_ACCESS_WRITE && !work->replace && !unclosed_write) {
+            error = DOS_STATUS_FILE_EXISTS;
+        } else if (work->access == DOS_ACCESS_WRITE && work->replace && file_type == DISKIMAGE_FTYPE_REL &&
+                   !unclosed_write) {
+            error = DOS_STATUS_TYPE_MISMATCH;
+        } else if (!(found_type & DOS_FILE_CLOSED_MASK) && work->access != DOS_ACCESS_MODIFY &&
+                   work->access != DOS_ACCESS_WRITE) {
             error = DOS_STATUS_FILE_OPEN;
-        } else if (type != 0 && type != file_type) {
+        } else if (type != 0 && type != file_type && !unclosed_write) {
             error = DOS_STATUS_TYPE_MISMATCH;
         } else if (file_type == DISKIMAGE_FTYPE_REL) {
-            // REL lookup has no reader in this slice.
             error = DOS_STATUS_TYPE_MISMATCH;
         }
+    }
+    if (work->access == DOS_ACCESS_WRITE && wildcard) {
+        if (!work->replace) {
+            error = DOS_STATUS_INVALID_NAME;
+        } else if (found_track == 0) {
+            error = DOS_STATUS_TYPE_MISMATCH;
+        }
+    }
+    if (error == DOS_STATUS_OK && (work->access == DOS_ACCESS_WRITE || work->access == DOS_ACCESS_APPEND) &&
+        media->units[reference.unit].slots[reference.slot].io.image.write == NULL) {
+        error = DOS_STATUS_WRITE_PROTECT;
     }
     if (error != DOS_STATUS_OK) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
         command_error(unit, model, secondary, error);
         return;
+    }
+    if (unclosed_write) {
+        // OP77/DELDIR removes only the entry, deliberately not the abandoned chain.
+        bytes[found_entry + DOS_DIRECTORY_TYPE_OFFSET] = DISKIMAGE_FTYPE_DEL;
+        if (!write_sector(unit, media, reference, searched_track, searched_sector, bytes)) {
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            return;
+        }
+        if (work->empty_track == 0) {
+            work->empty_track = searched_track;
+            work->empty_sector = searched_sector;
+            work->empty_entry = found_entry;
+        }
+        if (work->type == 0) {
+            work->type = file_type;
+        }
+        found_track = 0;
     }
     // ROM tst3:GETRCH first calls FRECHN, then FNDLNX picks the lowest free
     // logical index and GETBUF claims the requested two buffers. Preserve
@@ -1312,6 +2124,11 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // on exhaustion. Only ordinary indices participate in this scan.
     const uint8_t previous = dos_find_channel(unit, secondary);
     if (previous != DOS_UNUSED) {
+        if (unit->channels[previous].access != DOS_ACCESS_READ &&
+            !finish_channel(unit, media, &unit->channels[previous])) {
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            return;
+        }
         free_channel(unit, previous);
     }
     const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
@@ -1323,6 +2140,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
 
     // ROM OPNRCH/INTPNT select BUF0, initialize both data pointers to 2, and
     // STRDBL reads the initial sector (and prefetches a successor if present).
+    // Retain the prefetched successor even if INITDR abandons this reader.
+    // A later writer can expose those bytes in its unused sector tail.
     // Failure of the first read releases this newly allocated channel.
     dos_channel_t* const state = &unit->channels[channel];
     state->directory_track = searched_track;
@@ -1331,7 +2150,27 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     state->file_type = file_type;
     state->first_track = found_track;
     state->first_sector = found_sector;
+    state->blocks = found_blocks;
     unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+    if (work->access == DOS_ACCESS_WRITE) {
+        state->old_track = found_track;
+        state->old_sector = found_sector;
+        state->blocks = 0;
+        if (!open_write(unit, media, state, work, found_track != 0)) {
+            state->failed = true;
+            if (state->first_track == 0 || unit->status_code == DOS_STATUS_DISK_FULL) {
+                free_channel(unit, channel);
+            }
+            return;
+        }
+        if (secondary < 2) {
+            unit->last_program_track = state->first_track;
+            unit->last_program_sector = state->first_sector;
+            unit->last_program_drive = reference.slot;
+        }
+        command_end(unit, model);
+        return;
+    }
     if (!load_buffer(unit, media, state, found_track, found_sector)) {
         free_channel(unit, channel);
         command_error(unit, model, secondary, DOS_STATUS_READ_ERROR);
@@ -1353,6 +2192,14 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // first sector (link 0/2), that loses the just-prepared EOI. Remember this
     // special initial state so next_byte reproduces it rather than "fixing"
     // the ROM. Other files use the ordinary payload cursor.
+    if (work->access == DOS_ACCESS_APPEND) {
+        state->access = DOS_ACCESS_APPEND;
+        state->ready = false;
+        state->blocks = 0;
+        work->append_channel = channel + 1u;
+        work->pending = true;
+        return;
+    }
     const uint8_t* const initial = unit->buffers[state->buffers[0]].bytes;
     if (state->access == DOS_ACCESS_READ && initial[0] == 0 && initial[1] == DISKIMAGE_SECTOR_LINK_SIZE) {
         state->singleton = 1;
