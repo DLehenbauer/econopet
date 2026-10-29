@@ -120,17 +120,15 @@ def assemble(directory, text, provenance):
     source.write_text(text, encoding="ascii")
     binary = directory / "source.prg"
     report = directory / "source.report"
-    subprocess.run(
+    verify.run_tool(
         ["acme", "--strict", "--format", "cbm", "--initmem", "0",
          "--outfile", str(binary), "--report", str(report),
-         "--symbollist", str(directory / "source.sym"), str(source)],
-        check=True, capture_output=True, text=True
+         "--symbollist", str(directory / "source.sym"), str(source)]
     )
     alternate = directory / "source-fill.prg"
-    subprocess.run(
+    verify.run_tool(
         ["acme", "--strict", "--format", "cbm", "--initmem", "255",
-         "--outfile", str(alternate), str(source)],
-        check=True, capture_output=True, text=True
+         "--outfile", str(alternate), str(source)]
     )
     data = binary.read_bytes()
     emitted = verify.emitted_addresses(report.read_text(encoding="ascii"), provenance)
@@ -258,20 +256,19 @@ def disassemble(directory, rom, recipe):
     configuration = directory / "source.info"
     configuration.write_text("\n".join(info) + "\n", encoding="ascii")
     source = directory / "source.asm"
-    subprocess.run(
+    verify.run_tool(
         ["da65", "--info", str(configuration), "--comments", "4",
-         "-o", str(source), str(payload)], check=True, capture_output=True, text=True
+         "-o", str(source), str(payload)]
     )
 
     # Exact reconstruction checks bytes, not reachability or behavioral correctness.
     obj = directory / "source.o"
     rebuilt = directory / "rebuilt.bin"
-    subprocess.run(
-        ["ca65", "-o", str(obj), str(source)], check=True, capture_output=True, text=True
+    verify.run_tool(
+        ["ca65", "-o", str(obj), str(source)]
     )
-    subprocess.run(
-        ["ld65", "-t", "none", "-S", str(origin), "-o", str(rebuilt), str(obj)],
-        check=True, capture_output=True, text=True
+    verify.run_tool(
+        ["ld65", "-t", "none", "-S", str(origin), "-o", str(rebuilt), str(obj)]
     )
     if rebuilt.read_bytes() != data:
         raise ValueError("disassembly reconstruction differs from selected payload")
@@ -307,9 +304,7 @@ def main():
             "recipe_digest": hashlib.sha256(
                 json.dumps(recipe, sort_keys=True).encode("ascii")
             ).hexdigest(),
-            "disassembler": subprocess.run(
-                ["da65", "--version"], check=True, capture_output=True, text=True
-            ).stderr.strip(),
+            "disassembler": verify.run_tool(["da65", "--version"]).stderr.strip(),
         })
         (args.output_dir / "mapping.json").write_text(
             json.dumps(result, indent=2) + "\n", encoding="ascii"
@@ -346,9 +341,7 @@ def main():
         ).hexdigest(),
         "patches": recipe["patches"],
         "source_map": source_map(original_coverage, mapped_coverage),
-        "assembler": subprocess.run(
-            ["acme", "--version"], check=True, capture_output=True, text=True
-        ).stdout.strip(),
+        "assembler": verify.run_tool(["acme", "--version"]).stdout.strip(),
         "limits": "explicit source adaptation, not unmodified-source equality or drive execution",
     })
     (args.output_dir / "mapping.json").write_text(

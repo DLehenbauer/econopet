@@ -33,6 +33,18 @@ FAMILIES = {
 }
 
 
+def run_tool(command):
+    """Capture successful tool output and forward failure diagnostics to case logs."""
+    try:
+        return subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        if error.stdout:
+            print(error.stdout, end="", file=sys.stdout, flush=True)
+        if error.stderr:
+            print(error.stderr, end="", file=sys.stderr, flush=True)
+        raise
+
+
 def source_units(directory):
     """Return the complete, ordered source graph used by the pinned master."""
     master = (directory / "master").read_text(encoding="ascii")
@@ -254,9 +266,7 @@ def main():
     result.update({
         "family": args.family, "source_commit": SOURCE_COMMIT, "source_digest": digest,
         "roms": identities,
-        "assembler": subprocess.run(
-            ["acme", "--version"], check=True, capture_output=True, text=True
-        ).stdout.strip(),
+        "assembler": run_tool(["acme", "--version"]).stdout.strip(),
     })
     (args.output_dir / "comparison.json").write_text(
         json.dumps(result, indent=2) + "\n", encoding="ascii"

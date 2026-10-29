@@ -5,10 +5,13 @@ Cover source composition and overlays, source-line provenance, input identity
 checks, checksum exclusions, emitted-byte coverage, and uncovered ranges.
 Also exercise the source-mapping CLI, preservation of existing outputs, and
 exact disassembly/reassembly round-trips, including rejection of corrupt output.
+Run failing tool processes through the batch runner to check that per-case logs
+retain stdout/stderr diagnostics from assembly, reconstruction, and version probes.
 
 Fixtures are created in temporary directories and removed after each test.
 No downloads or proprietary ROM inputs are required. Tests invoking ACME or
-the CC65 tools (da65, ca65, ld65) are skipped when those tools are unavailable.
+the CC65 tools (da65, ca65, ld65) are skipped when those tools are unavailable,
+except the failure-log suite, which requires all four and fails setup if missing.
 These are tooling regression tests, not drive behavior or hardware acceptance.
 
 Run this suite from the repository root:
@@ -18,13 +21,16 @@ Run this suite from the repository root:
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import drive_rom_map as mapping
+import verify as batch
 
 
 class TranslationTest(unittest.TestCase):
@@ -277,6 +283,100 @@ class DisassemblyTest(unittest.TestCase):
             with patch.object(mapping.subprocess, "run", side_effect=corrupt_link):
                 with self.assertRaisesRegex(ValueError, "reconstruction differs"):
                     mapping.disassemble(root / "corrupt", self.data, self.recipe)
+
+
+class FailureLogTest(unittest.TestCase):
+    """Keep actual child-tool diagnostics in the batch runner's retained logs."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Require the toolchain for subprocess failure-path integration checks."""
+        super().setUpClass()
+        missing = [tool for tool in batch.REQUIRED_TOOLS if shutil.which(tool) is None]
+        if missing:
+            raise RuntimeError("Missing required tools: " + ", ".join(missing))
+
+    def test_tool_failures_retain_both_diagnostic_streams(self):
+        """Fail each captured tool stage without losing diagnostics or accepting success."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input"
+            source.mkdir()
+            (source / "master").write_text(".LIB CODE\n.END\n", encoding="ascii")
+            (source / "code").write_text(
+                "*=$FFFC\nLDA #1\nRTS\n.BYTE 0\n.END\n", encoding="ascii"
+            )
+            rom = b"\xa9\x01\x60\x00"
+            (source / "chip.bin").write_bytes(rom)
+            manifest = {
+                "source": {"commit": mapping.verify.SOURCE_COMMIT},
+                "drive_profiles": [{"id": "fixture", "roms": ["chip"]}],
+                "drive_roms": [{"part": "chip", "size": len(rom),
+                               "sha256": hashlib.sha256(rom).hexdigest()}],
+                "source_mappings": {"fixture": {
+                    "profile": "fixture", "parts": ["chip"], "master": "master",
+                    "start": 0xFFFC, "checksums": [], "patches": [],
+                    "source_digest": mapping.verify.source_digest(source, ["master", "code"]),
+                }},
+                "binary_mappings": {"fixture": {
+                    "profile": "fixture", "parts": ["chip"], "start": 0xFFFC,
+                    "offset": 0, "size": len(rom), "runtime": 0xFFFC,
+                    "payload_sha256": hashlib.sha256(rom).hexdigest(),
+                    "data_ranges": [[0xFFFF, 0xFFFF, "byte"]],
+                    "entries": {"ENTRY": 0xFFFC},
+                }},
+            }
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="ascii")
+            failures = (
+                ("acme", "--initmem", "0"),
+                ("acme", "--initmem", "255"),
+                ("acme", "--version", None),
+                ("da65", "--info", None),
+                ("ca65", "-o", None),
+                ("ld65", "-t", None),
+                ("da65", "--version", None),
+            )
+            for index, (tool, flag, value) in enumerate(failures):
+                with self.subTest(tool=tool, flag=flag, value=value):
+                    executables = root / f"tools-{index}"
+                    executables.mkdir()
+                    executable = executables / tool
+                    real_tool = shutil.which(tool)
+                    executable.write_text(
+                        f"#!{sys.executable}\n"
+                        "# SPDX-License-Identifier: CC0-1.0\n"
+                        '"""Fail one tool stage while forwarding other invocations."""\n'
+                        "import os\nimport sys\n"
+                        f"flag, value = {flag!r}, {value!r}\n"
+                        "if flag in sys.argv and (value is None or "
+                        "sys.argv[sys.argv.index(flag) + 1] == value):\n"
+                        "    print('fixture stdout diagnostic', flush=True)\n"
+                        "    print('fixture stderr diagnostic', file=sys.stderr, flush=True)\n"
+                        "    raise SystemExit(7)\n"
+                        f"os.execv({real_tool!r}, [{real_tool!r}, *sys.argv[1:]])\n",
+                        encoding="ascii",
+                    )
+                    executable.chmod(0o755)
+                    name = f"failure-{index}"
+                    selection = (
+                        ["--mapping", "fixture", "--source-dir", str(source)]
+                        if tool == "acme" else ["--binary-map", "fixture"]
+                    )
+                    case = (name, "drive_rom_map.py", selection, "mapping.json", 0, {})
+                    with patch.dict(os.environ, {"PATH": str(executables) + os.pathsep
+                                                + os.environ.get("PATH", "")}):
+                        result = batch.run_case(root, [
+                            "--rom-dir", str(source), "--manifest", str(manifest_path),
+                        ], case)
+                    self.assertFalse(result["passed"])
+                    self.assertEqual(result["exit_code"], 2)
+                    log = (root / (name + ".log")).read_text()
+                    self.assertIn(f"['{tool}',", log)
+                    self.assertIn("fixture stdout diagnostic", log)
+                    self.assertIn("fixture stderr diagnostic", log)
+                    self.assertIn("returned non-zero exit status 7", log)
+                    executable.unlink()
 
 
 if __name__ == "__main__":
