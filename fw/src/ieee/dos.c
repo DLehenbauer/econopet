@@ -10,8 +10,8 @@
 #include "fatal.h"
 #include "ieee/ieee_protocol.h"
 
-// Read/write, metadata, direct/block and reset foundations of the replacement
-// DOS. The production facade still selects the legacy engine. COPY, FORMAT
+// Read/write, metadata, direct/block, reset and COPY foundations of the replacement
+// DOS. The production facade still selects the legacy engine. FORMAT
 // and REL are not enabled here. Sector callbacks and cooperative workers are
 // host adaptations, not controller jobs or electrical IEEE handshakes.
 //
@@ -64,6 +64,7 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_FILE_TYPE_MASK 7u
 #define DOS_FILE_LOCKED_MASK 0x40u
 #define DOS_FILE_TRACK_MASK_4040 0x3fu
+#define DOS_FILE_TRACK_PENDING_MASK_4040 0x80u
 #define DOS_DIRECTORY_BLOCKS_LOW 30u
 #define DOS_DIRECTORY_BLOCKS_HIGH 31u
 #define DOS_BAM_TRACK_8050 38u
@@ -93,6 +94,23 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_DIRECTORY_SIDE_SECTOR 22u
 #define DOS_INTERNAL_READ_SECONDARY 17u
 #define DOS_DECIMAL_PAIR_LIMIT 100u
+#define DOS_INTERNAL_WRITE_SECONDARY 18u
+#define DOS_COPY_DEFAULT_DRIVE 0x80u
+#define DOS_COPY_PATTERN_INDEX 2u
+#define DOS_COPY_PATTERN_FLAG 0x80u
+// CPYDTD moves source text to end at 40. TRFNME overwrites bytes 3..18.
+#define DOS_COPY_PATTERN_TEXT_LIMIT 21u
+
+typedef enum {
+    DOS_COPY_SEARCH,
+    DOS_COPY_MATCH_WAIT,
+    DOS_COPY_APPEND,
+    DOS_COPY_SOURCE,
+    DOS_COPY_BYTES,
+    DOS_COPY_CLOSE,
+    DOS_COPY_ALL_NEXT,
+} dos_copy_phase_t;
+
 typedef enum {
     DOS_SCRATCH_SEARCH,
     DOS_SCRATCH_CHAIN,
@@ -1069,6 +1087,31 @@ static bool directory_entry_busy(const dos_unit_t* const unit, const dos_media_r
     return false;
 }
 
+// Retire live COPY observations before a peer CLSDIR can release their chain.
+static void retire_copy_binding(dos_unit_t* const unit, const dos_channel_t* const channel) {
+    if (unit->command != DOS_COMMAND_COPY) {
+        return;
+    }
+    dos_copy_work_t* const work = &unit->copy;
+    if (work->invalidated_file != 0 || (work->writer != DOS_UNUSED && channel == &unit->channels[work->writer])) {
+        return;
+    }
+    for (unsigned int index = 0; index < work->count; ++index) {
+        if (!(work->found & (1u << index)) || (index != 0 && index < work->source) ||
+            (index == 0 && (work->writer == DOS_UNUSED || unit->channels[work->writer].access != DOS_ACCESS_APPEND))) {
+            continue;
+        }
+        const dos_copy_file_t* const file = &work->files[index];
+        const dos_media_ref_t reference = work->media[file->drive & 1u];
+        if (reference.identity == channel->media.identity && reference.unit == channel->media.unit &&
+            reference.slot == channel->media.slot && file->directory_track == channel->directory_track &&
+            file->directory_sector == channel->directory_sector && file->directory_entry == channel->directory_entry) {
+            work->invalidated_file = index + 1u;
+            return;
+        }
+    }
+}
+
 // Read-modify-write this entry, reclaiming only its current replacement chain.
 static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                              const bool closed) {
@@ -1113,6 +1156,9 @@ static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const med
         entry[DOS_DIRECTORY_TYPE_OFFSET] &= DOS_FILE_LOCKED_MASK | DOS_FILE_TYPE_MASK;
     }
     if (closed) {
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) {
+            retire_copy_binding(unit, channel);
+        }
         if (channel->closing == DOS_CLOSE_DIRECTORY) {
             // CLSDIR tests the reread entry, not links saved by an earlier OPEN.
             const bool replaced = (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) != 0;
@@ -1503,6 +1549,35 @@ static const dos_channel_t* unpublished_writer(const dos_unit_t* const unit, con
         }
     }
     return NULL;
+}
+
+// Reject directory reads while a retained writer owns either incomplete growth link.
+static bool directory_growth_pending(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                                     const uint8_t sector) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->grow_pending && owner->media.identity == reference.identity &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->directory_track == track &&
+            (owner->directory_sector == sector || owner->grow_from_sector == sector)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Keep deleted entries reserved until their retained writer publishes or retires.
+static bool directory_slot_reserved(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t sector,
+                                    const uint8_t entry) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->access != DOS_ACCESS_READ && owner->media.identity == reference.identity &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->directory_sector == sector && (owner->grow_pending || owner->directory_entry == entry)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // OPNWCH/ADDFIL construct a new chain, or reserve a replacement's alternate link.
@@ -1935,6 +2010,249 @@ static unsigned int command_name(const uint8_t* const bytes, const unsigned int 
         name[used++] = byte;
     } while (used < DISKIMAGE_FILENAME_SIZE && start < length);
     return used;
+}
+
+// Bind media and reserve COPY's internal reader for named or all-files work.
+// Require the caller's parsed descriptors, initial drive, and phase to be set.
+static void copy_queue(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                       dos_copy_work_t* const work) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+    //
+    // COPY uses LOOKUP before CY opens its internal channels. This host
+    // setup helper has no direct ROM entry: it captures image generations and
+    // reserves a GETRCH-style two-page reader for cooperative lookup/copy.
+    const dos_model_t model = media->units[index].model;
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        work->media[slot] = (dos_media_ref_t){.unit = index, .slot = slot};
+        dos_media_reference(media, index, slot, &work->media[slot]);
+    }
+    unit->selected_drive = work->drive;
+
+    // The target disk must exist. Whole-drive file copy also requires the
+    // fixed source disk, whereas named lookup can search an available peer.
+    if (work->media[work->files[0].drive].identity == 0 ||
+        (work->all_files && work->media[work->drive].identity == 0)) {
+        dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+        return;
+    }
+    // Host absent-image policy narrows the lookup cursor to the present disk.
+    if (work->media[work->drive].identity == 0) {
+        work->drive ^= 1u;
+        work->scans = 0;
+    }
+    // Retained host publication intent survives CLOSE during a yielded lookup.
+    if (!work->all_files) {
+        uint8_t name[DISKIMAGE_FILENAME_SIZE];
+        memcpy(name, work->files[0].name, sizeof(name));
+        if (work->empty_target) {
+            name[0] = '=';
+        }
+        work->name_conflict = unpublished_writer(unit, work->media[work->files[0].drive], name, DOS_UNUSED) != NULL;
+    }
+    // Allocate before publishing the job. allocate_channel rolls back partial
+    // page claims, so failure leaves no queued work or abandoned reader.
+    work->reader = allocate_channel(unit, work->media[work->drive], DOS_INTERNAL_READ_SECONDARY, 2);
+    if (work->reader == DOS_UNUSED) {
+        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        return;
+    }
+    // This internal reader is owned but not bus-ready. No source sector or
+    // destination file has been opened yet, and OK is only the working status.
+    unit->channels[work->reader].ready = false;
+    unit->copy = *work;
+    unit->command = DOS_COMMAND_COPY;
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+}
+
+// Parse named/concatenating COPY or directory-pattern file copy and queue it.
+// Capture names and drive-search state without copying data during dispatch.
+static void copy_start(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                       const unsigned int length) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/copysetup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/copysetup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/copyall
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/copyall
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    //
+    // DSKCPY uses PRSEQ/MOVLP2 without a colon, otherwise TAGCMD/ALLDRS
+    // selects named COPY or CPYDTD. C retains descriptors for cooperative lookup/copy
+    // rather than rewriting CMDBUF and using the ROM's stacked iterator.
+    const dos_model_t model = media->units[index].model;
+    const uint8_t* const bytes = unit->command_bytes;
+    unsigned int commas;
+    const unsigned int after_colon = command_delimiter(bytes, length, ':', &commas);
+    unsigned int equals = 0;
+    if (after_colon == 0) {
+        // PRSEQ restarts Y, but retains PARSE's comma-table index. Only the
+        // bytes immediately beside the first '=' select drives. Prefixes
+        // and suffixes are not filenames, and the source byte can be stale.
+        while (equals < length && bytes[equals] != '=') {
+            if (bytes[equals] == ',' && ++commas >= DOS_FILENAME_COUNT - 1u) {
+                equals = length;
+                break;
+            }
+            ++equals;
+        }
+        if (equals == 0 || equals == length || (bytes[equals - 1u] != '0' && bytes[equals - 1u] != '1') ||
+            (bytes[equals + 1u] != '0' && bytes[equals + 1u] != '1') || bytes[equals - 1u] == bytes[equals + 1u]) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        // PRSEQ requires distinct ASCII 0/1 selectors. MOVLP2 copies files
+        // by name in directory order, not a sector-for-sector disk image.
+        dos_copy_work_t work = {
+            .count = 2,
+            .drive = bytes[equals + 1u] - '0',
+            .reader = DOS_UNUSED,
+            .writer = DOS_UNUSED,
+            .phase = DOS_COPY_ALL_NEXT,
+            .pending = true,
+            .all_files = true,
+            .all_track = directory_track(model),
+            .all_sector = DOS_DIRECTORY_FIRST_SECTOR,
+        };
+        work.files[0].drive = bytes[equals - 1u] - '0';
+        work.files[1].drive = work.drive;
+        memset(work.files[DOS_COPY_PATTERN_INDEX].name, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+        work.files[DOS_COPY_PATTERN_INDEX].name[0] = '*';
+        work.files[DOS_COPY_PATTERN_INDEX].name_length = 1;
+        copy_queue(unit, media, index, &work);
+        return;
+    }
+    // TAGCMD permits one target before '=' and a bounded source group after
+    // it, but no comma before the required colon.
+    const unsigned int colon = after_colon - 1u;
+    if (commas != 0) {
+        dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
+        return;
+    }
+    equals = colon + 1u;
+    while (equals < length && bytes[equals] != '=') {
+        ++equals;
+    }
+    if (equals == length) {
+        dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        return;
+    }
+    // Match the parsed group boundary: shifted CR terminates the source
+    // list, and text past its table capacity is not checked as another name.
+    // CPYDTD accepts exactly one source when the destination begins '*'.
+    const bool pattern_copy = bytes[colon + 1u] == '*';
+    unsigned int sources = 1;
+    for (unsigned int position = 0; position < length; ++position) {
+        if (position > equals && bytes[position] == 0x8d) {
+            break;
+        }
+        if (position > equals && bytes[position] == ',') {
+            if (pattern_copy) {
+                dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+                return;
+            }
+            if (++sources == DOS_FILENAME_COUNT) {
+                break;
+            }
+        }
+        if ((!pattern_copy && (bytes[position] == '*' || bytes[position] == '?')) ||
+            (position < equals && bytes[position] == ',')) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+    }
+    dos_copy_work_t work = {
+        .count = 1,
+        .reader = DOS_UNUSED,
+        .writer = DOS_UNUSED,
+        .track = directory_track(model),
+        .sector = DOS_DIRECTORY_FIRST_SECTOR,
+        .pending = true,
+    };
+    // ALLDRS starts from LSTDRV. Descriptor zero is the target, followed by
+    // source descriptors with command_name's bounded, padded names.
+    const uint8_t selector = bytes[colon - 1u];
+    uint8_t drive = selector == '0' || selector == '1' ? selector - '0' : unit->last_drive;
+    work.files[0].drive = drive;
+    work.files[0].name_length = command_name(bytes, length, colon + 1u, work.files[0].name);
+    work.empty_target = work.files[0].name_length == 0;
+    unsigned int mask = 1u << drive;
+    unsigned int start = equals + 1u;
+    do {
+        dos_copy_file_t* const file = &work.files[work.count++];
+        bool omitted = false;
+        // SETDRV consumes ':' or a one-byte selector plus ':'. Invalid
+        // explicit selectors retain the inherited drive, whereas no prefix
+        // sets the native default-drive flag used by LOOKUP's fallback.
+        if (start + 1u < length && bytes[start + 1u] == ':') {
+            if (bytes[start] == '0' || bytes[start] == '1') {
+                drive = bytes[start] - '0';
+            }
+            start += 2u;
+        } else if (start < length && bytes[start] == ':') {
+            ++start;
+        } else {
+            omitted = true;
+        }
+        // Empty or overlapping CPYDTD relocation corrupts native command RAM.
+        // Reject these unaccepted cases instead of silently normalizing them.
+        if (pattern_copy && (start >= length || length - start > DOS_COPY_PATTERN_TEXT_LIMIT)) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        if (start >= DOS_COMMAND_RECEIVE_CAPACITY) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        file->drive = drive | (omitted ? DOS_COPY_DEFAULT_DRIVE : 0);
+        file->name_length = command_name(bytes, length, start, file->name);
+        mask |= 1u << (drive + (omitted ? 2u : 0u));
+        // PARSE collects commas through the source group. FNDLMT's '='
+        // terminates this filename, not the remaining filename table.
+        while (start < length && bytes[start] != ',' && bytes[start] != 0x8d) {
+            ++start;
+        }
+        if (start == length || bytes[start] != ',') {
+            break;
+        }
+        ++start;
+    } while (work.count < DOS_FILENAME_COUNT);
+    if (pattern_copy) {
+        // DOS 2.7 compares the complete ALLDRS bytes, including the default
+        // flag. The 4040 lacks that explicit same-drive rejection.
+        if (model != DOS_MODEL_4040 && work.files[0].drive == work.files[1].drive) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        memcpy(work.files[DOS_COPY_PATTERN_INDEX].name, work.files[1].name, DISKIMAGE_FILENAME_SIZE);
+        work.files[DOS_COPY_PATTERN_INDEX].name_length = work.files[1].name_length;
+        work.files[DOS_COPY_PATTERN_INDEX].type = DOS_COPY_PATTERN_FLAG;
+        work.files[1].drive &= 1u;
+        work.drive = work.files[1].drive;
+        work.phase = DOS_COPY_ALL_NEXT;
+        work.all_files = true;
+        work.all_track = directory_track(model);
+        work.all_sector = DOS_DIRECTORY_FIRST_SECTOR;
+        copy_queue(unit, media, index, &work);
+        return;
+    }
+    // OPTSCH/SCHTBL combine explicit drives in the low two mask bits and
+    // defaulted drives in the next two, choosing the start and remaining scans.
+    work.drive = mask < 4u    ? (mask == 3u ? work.files[0].drive : mask - 1u)
+                 : mask < 8u  ? 0
+                 : mask < 12u ? 1
+                              : work.files[0].drive;
+    work.scans = mask < 3u ? 0 : mask < 12u ? 1 : 2;
+    copy_queue(unit, media, index, &work);
 }
 
 // Validate RENAME's two unpatterned names and reserve its cooperative scan pages.
@@ -3069,7 +3387,604 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
     command_end(unit, model);
 }
 
-// Dispatch collected metadata, block and reset commands without taking over transport collection.
+// Release COPY's internal channels and retire its job without changing status.
+// Finalize successful output before calling: this cleanup never closes a writer.
+static void copy_finish(dos_unit_t* const unit) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // FREICH frees IRSA and IWSA through FRECHN, not CLSCHN. Mirror that
+    // resource release so error cleanup does not mark partial output closed.
+    // Pending/command fields are cooperative scheduling state, not ROM fields.
+    dos_copy_work_t* const work = &unit->copy;
+
+    // Release only allocated channels, including partially constructed jobs.
+    if (work->reader != DOS_UNUSED && unit->channels[work->reader].allocated) {
+        free_channel(unit, work->reader);
+    }
+    if (work->writer != DOS_UNUSED && unit->channels[work->writer].allocated) {
+        free_channel(unit, work->writer);
+    }
+    // Preserve the completion/error record already selected by the caller.
+    work->pending = false;
+    unit->command = DOS_COMMAND_IDLE;
+}
+
+// Reuse an internal reader for an ordinary COPY source.
+// Return false with status on failure, leaving channel cleanup to the caller.
+static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t index,
+                            const dos_copy_file_t* const file) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
+    //
+    // OPIRFL opens the source directory through OPNIRD, then OPREAD reuses
+    // that channel for file data. For ordinary files it resets SETPNT to 2,
+    // so GIBYTE starts at payload rather than IEEE's prepared-byte cursor.
+    dos_copy_work_t* const work = &unit->copy;
+    dos_channel_t* const channel = &unit->channels[index];
+    const dos_model_t model = media->units[work->media[0].unit].model;
+    const dos_media_ref_t reference = work->media[file->drive & 1u];
+    unit->selected_drive = reference.slot;
+    // A peer CLOSE may have reclaimed this entry after lookup yielded.
+    if (directory_entry_busy(unit, reference, file->directory_track, file->directory_sector, file->directory_entry,
+                             NULL)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        return false;
+    }
+    // OP130 masks the directory track only on 4040, after CHKIN's raw test.
+    const uint8_t track = file->track & (model == DOS_MODEL_4040 ? DOS_FILE_TRACK_MASK_4040 : UINT8_MAX);
+    if (channel->buffers[2] != DOS_UNUSED) {
+        unit->buffer_use &= (uint16_t)~(1u << channel->buffers[2]);
+        channel->buffers[2] = DOS_UNUSED;
+    }
+
+    // Bind the matched disk/entry and restart traversal without reallocating
+    // the two pages, preserving the ROM's allocation-visible page contents.
+    channel->media = reference;
+    channel->active = 0;
+    channel->traversed = 1;
+    channel->blocks = 0;
+    channel->file_type = file->type & DOS_FILE_TYPE_MASK;
+    channel->first_track = track;
+    channel->first_sector = file->sector;
+    channel->directory_track = file->directory_track;
+    channel->directory_sector = file->directory_sector;
+    channel->directory_entry = file->directory_entry;
+    memcpy(channel->pattern, file->name, sizeof(channel->pattern));
+    // The same raw coordinates on another disk must not hit the old buffer.
+    unit->buffers[channel->buffers[0]].resident = false;
+    unit->buffers[channel->buffers[1]].resident = false;
+    unit->selected_drive = channel->media.slot;
+    // OPIRFL first opens the directory on IRSA. STRDBL can prefetch its
+    // successor before OPREAD reuses those same two buffers for file data.
+    // Unused bytes survive this reuse and later COPY allocations expose them.
+    dos_buffer_t* const initial = &unit->buffers[channel->buffers[0]];
+    dos_buffer_t* const alternate = &unit->buffers[channel->buffers[1]];
+    if (!storage_error(
+            unit, media, channel->media,
+            read_sector(unit, media, channel->media, file->directory_track, file->directory_sector, initial->bytes),
+            false, file->directory_track, file->directory_sector)) {
+        return false;
+    }
+    // A successful peer replacement may already have released its retry owner
+    // and reassigned the captured chain. Reject the stale binding, not its new data.
+    const uint8_t* const entry = initial->bytes + file->directory_entry;
+    if (entry[DOS_DIRECTORY_TRACK_OFFSET] != file->track || entry[DOS_DIRECTORY_SECTOR_OFFSET] != file->sector ||
+        (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) != (file->type & DOS_FILE_TYPE_MASK) ||
+        !name_matches(file->name, file->name_length, entry + DOS_DIRECTORY_NAME_OFFSET)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        return false;
+    }
+    if (initial->bytes[0] != 0) {
+        // OPREAD's GETRCH/FRECHN and GETBUF discard this unused job result.
+        // Keep its partial buffer contents, but do not observe its error.
+        (void)read_sector(unit, media, channel->media, initial->bytes[0], initial->bytes[1], alternate->bytes);
+    }
+    // OPNRCH/STRDBL replace the first page with file data, then prefetch its
+    // successor when linked. A terminal first block leaves alternate residue.
+    if (!load_buffer(unit, media, channel, track, file->sector)) {
+        dos_status(unit, model, DOS_STATUS_READ_ERROR, track, file->sector);
+        return false;
+    }
+    if (initial->bytes[0] != 0) {
+        alternate->track = initial->bytes[0];
+        alternate->sector = initial->bytes[1];
+        const dos_media_result_t result =
+            read_sector(unit, media, channel->media, alternate->track, alternate->sector, alternate->bytes);
+        alternate->failed = result != DOS_MEDIA_OK;
+        // STRDBL submits without waiting. Preserve even a failed job until
+        // RDBYT/DBLBUF selects it, rather than aborting a speculative read.
+        alternate->resident = true;
+    }
+    return true;
+}
+
+// Resolve COPY lookup results into an append or new-output job.
+// Publish failures and release internal resources before returning.
+static void copy_lookup_finish(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    //
+    // CHKIN checks all source entries before CHKIO rejects existing output.
+    // COPY/COP05 instead rebinds the first source as IWSA for self-concat,
+    // while CY creates a new file whose type comes from the first source.
+    dos_copy_work_t* const work = &unit->copy;
+    const dos_copy_file_t* const target = &work->files[0];
+    const dos_copy_file_t* const first = &work->files[1];
+    const dos_model_t model = media->units[work->media[0].unit].model;
+    // DOS 2.7 CMPCHK keeps PATTYP's pattern flag after FIXIT replaces the
+    // target name. A matching existing target makes LK25/COMPAR repeat
+    // the same entry forever. 4040 tests FILTRK instead and reaches 63.
+    // Retain the pending command cooperatively rather than spinning the MCU.
+    if (model != DOS_MODEL_4040 && work->all_files &&
+        work->files[DOS_COPY_PATTERN_INDEX].type == DOS_COPY_PATTERN_FLAG && (work->found & 1u)) {
+        work->phase = DOS_COPY_MATCH_WAIT;
+        return;
+    }
+    // Preserve missing-source precedence even when the target already exists.
+    for (unsigned int index = work->count - 1u; index != 0; --index) {
+        if (!(work->found & (1u << index)) || work->files[index].track == 0) {
+            dos_status(unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
+            copy_finish(unit);
+            return;
+        }
+    }
+    // Match OPEN's retained-entry exclusion before creating any output or
+    // converting a source to a self-append writer.
+    for (unsigned int index = 0; index < work->count; ++index) {
+        const dos_copy_file_t* const file = &work->files[index];
+        if ((work->found & (1u << index)) &&
+            directory_entry_busy(unit, work->media[file->drive & 1u], file->directory_track, file->directory_sector,
+                                 file->directory_entry, NULL)) {
+            unit->selected_drive = file->drive & 1u;
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+            copy_finish(unit);
+            return;
+        }
+    }
+    for (unsigned int index = 1; index < work->count; ++index) {
+        if ((work->files[index].type & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_REL) {
+            // REL transfer belongs to a later dependency slice.
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            copy_finish(unit);
+            return;
+        }
+    }
+    const dos_media_ref_t reference = work->media[target->drive];
+    unit->selected_drive = target->drive;
+    uint8_t name[DISKIMAGE_FILENAME_SIZE];
+    memcpy(name, target->name, sizeof(name));
+    if (work->empty_target) {
+        name[0] = '=';
+    }
+    if (work->name_conflict || unpublished_writer(unit, reference, name, DOS_UNUSED) != NULL) {
+        // Preserve the same host namespace reservation enforced by OPEN/RENAME.
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+        copy_finish(unit);
+        return;
+    }
+    work->source = 1;
+    // Self-concat requires the same resolved entry and additional sources,
+    // not merely equal filename bytes. COPY rejects PRG/REL append types.
+    if ((work->found & 1u) && work->count >= 3u && target->drive == first->drive &&
+        target->directory_track == first->directory_track && target->directory_sector == first->directory_sector &&
+        target->directory_entry == first->directory_entry) {
+        const uint8_t type = first->type & DOS_FILE_TYPE_MASK;
+        if (type != DISKIMAGE_FTYPE_SEQ && type != DISKIMAGE_FTYPE_USR) {
+            dos_status(unit, model, DOS_STATUS_TYPE_MISMATCH, 0, 0);
+            copy_finish(unit);
+            return;
+        }
+        // Native COPY moves IRSA's existing channel to IWSA before APPEND.
+        work->writer = work->reader;
+        work->reader = DOS_UNUSED;
+        dos_channel_t* const writer = &unit->channels[work->writer];
+        writer->secondary = DOS_INTERNAL_WRITE_SECONDARY;
+        writer->access = DOS_ACCESS_APPEND;
+        if (!copy_read_start(unit, media, work->writer, first)) {
+            copy_finish(unit);
+            return;
+        }
+        // STRDBL/RDBUF count the initial read too. COPY keeps that count
+        // when converting the source channel to a writer, then CLSWRT adds
+        // its write count. Native self-concat can overstate the chain length.
+        writer->blocks = 1;
+        work->source = 2;
+        work->phase = DOS_COPY_APPEND;
+        return;
+    }
+    // Without the self-concat exception, an existing target is FILE EXISTS.
+    if (work->found & 1u) {
+        dos_status(unit, model, DOS_STATUS_FILE_EXISTS, 0, 0);
+        copy_finish(unit);
+        return;
+    }
+    // CY opens IWSA and ADDFIL publishes an unclosed entry before data copying.
+    work->writer = allocate_channel(unit, reference, DOS_INTERNAL_WRITE_SECONDARY, 2);
+    if (work->writer == DOS_UNUSED) {
+        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        copy_finish(unit);
+        return;
+    }
+    dos_open_work_t creation = {
+        .type = first->type & DOS_FILE_TYPE_MASK,
+        .empty_track = work->empty_track,
+        .empty_sector = work->empty_sector,
+        .empty_entry = work->empty_entry,
+        .last_sector = work->last_sector,
+        .last_track = directory_track(model),
+    };
+    memcpy(creation.name, target->name, sizeof(creation.name));
+    if (work->empty_target) {
+        // TRCMBF reads '=' once even for an empty target. ADDFIL then clears
+        // the reserved fields, unlike RENAME's extra padding-byte spill.
+        creation.name[0] = '=';
+    }
+    if (!open_write(unit, media, &unit->channels[work->writer], &creation, false)) {
+        copy_finish(unit);
+        return;
+    }
+    work->phase = DOS_COPY_SOURCE;
+}
+
+// Search one directory sector for COPY's unresolved source and target names.
+// Retain search/allocation hints across yields and finish lookup at exhaustion.
+static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    //
+    // LOOKUP/SRCHST/SEARCH collect entry descriptors and COMPAR applies
+    // OPTSCH's drive/default ordering. C retains that search in work instead
+    // of blocking across the directory chain. COPY's names are literal here.
+    dos_copy_work_t* const work = &unit->copy;
+    const dos_media_ref_t reference = work->media[work->drive];
+    const dos_model_t model = media->units[reference.unit].model;
+    uint8_t* const bytes = unit->buffers[unit->channels[work->reader].buffers[0]].bytes;
+    unit->selected_drive = work->drive;
+    auto_initialize(unit, work->drive);
+    // Bound chain visits by image size as a host corruption safeguard.
+    const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+    if (++work->visited > limit) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->track, work->sector);
+        copy_finish(unit);
+        return;
+    }
+    if (directory_growth_pending(unit, reference, work->track, work->sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->track, work->sector);
+        copy_finish(unit);
+        return;
+    }
+    if (!storage_error(unit, media, reference, read_sector(unit, media, reference, work->track, work->sector, bytes),
+                       false, work->track, work->sector)) {
+        copy_finish(unit);
+        return;
+    }
+    if (work->drive == work->files[0].drive) {
+        work->last_sector = work->sector;
+    }
+    for (unsigned int offset = 0; offset < DISKIMAGE_SECTOR_SIZE; offset += DOS_DIRECTORY_LINE_SIZE) {
+        const uint8_t* const entry = bytes + offset;
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
+            // Remember a deleted slot only on the destination disk for ADDFIL.
+            if (work->drive == work->files[0].drive && work->empty_track == 0 &&
+                !directory_slot_reserved(unit, reference, work->sector, offset)) {
+                work->empty_track = work->track;
+                work->empty_sector = work->sector;
+                work->empty_entry = offset;
+            }
+            continue;
+        }
+        for (unsigned int index = work->count; index-- != 0;) {
+            dos_copy_file_t* const file = &work->files[index];
+            if (work->found & (1u << index)) {
+                continue;
+            }
+            // An omitted drive becomes eligible on the alternate pass, while
+            // an explicit drive remains restricted to its selected disk.
+            if ((file->drive & 1u) != work->drive && (!(file->drive & DOS_COPY_DEFAULT_DRIVE) || work->scans == 2u)) {
+                continue;
+            }
+            if (!name_matches(file->name, file->name_length, entry + DOS_DIRECTORY_NAME_OFFSET)) {
+                continue;
+            }
+            // Save exact entry coordinates for source reads and self-concat.
+            file->drive = (file->drive & DOS_COPY_DEFAULT_DRIVE) | work->drive;
+            file->type = entry[DOS_DIRECTORY_TYPE_OFFSET];
+            file->track = entry[DOS_DIRECTORY_TRACK_OFFSET];
+            file->sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
+            file->directory_track = work->track;
+            file->directory_sector = work->sector;
+            file->directory_entry = offset;
+            // Both CMPCHK/CC15 routines leave zero FILTRK unresolved.
+            // 4040 also retains negative FILTRK. LK26 repeats this match.
+            if (file->track == 0 || (model == DOS_MODEL_4040 && (file->track & DOS_FILE_TRACK_PENDING_MASK_4040))) {
+                work->phase = DOS_COPY_MATCH_WAIT;
+                return;
+            }
+            work->found |= 1u << index;
+        }
+        if (work->found == (1u << work->count) - 1u) {
+            copy_lookup_finish(unit, media);
+            return;
+        }
+    }
+    // Follow this directory before toggling drives. Yield after each sector.
+    if (bytes[0] != 0) {
+        work->track = bytes[0];
+        work->sector = bytes[1];
+        return;
+    }
+    if (work->scans != 0 && work->media[work->drive ^ 1u].identity != 0) {
+        --work->scans;
+        work->drive ^= 1u;
+        work->track = directory_track(model);
+        work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+        work->visited = 0;
+        return;
+    }
+    copy_lookup_finish(unit, media);
+}
+
+// Select the next copy-all source and schedule its destination lookup.
+// Retain the source directory iterator across each per-file COPY operation.
+static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/copyall
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/copyall
+    //
+    // MOVLP2/EXLP1 enumerate through FFST/FFRE. FIXIT saves search state,
+    // TRFNME supplies the target name, and CY copies one entry before EXLP0
+    // restores iteration. C uses saved coordinates rather than the ROM stack.
+    dos_copy_work_t* const work = &unit->copy;
+    const dos_media_ref_t reference = work->media[work->files[1].drive];
+    const dos_model_t model = media->units[reference.unit].model;
+    unit->selected_drive = reference.slot;
+    auto_initialize(unit, reference.slot);
+    // Limit sector visits as a host corruption safeguard, not a ROM timeout.
+    const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+    if (work->all_entry == 0 && ++work->all_visited > limit) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->all_track, work->all_sector);
+        copy_finish(unit);
+        return;
+    }
+    if (directory_growth_pending(unit, reference, work->all_track, work->all_sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->all_track, work->all_sector);
+        copy_finish(unit);
+        return;
+    }
+    dos_channel_t* const reader = &unit->channels[work->reader];
+    if (reader->buffers[2] != DOS_UNUSED) {
+        unit->buffer_use &= (uint16_t)~(1u << reader->buffers[2]);
+        reader->buffers[2] = DOS_UNUSED;
+    }
+    reader->file_type = DISKIMAGE_FTYPE_SEQ;
+    dos_buffer_t* const buffer = &unit->buffers[reader->buffers[0]];
+    dos_buffer_t* const alternate = &unit->buffers[reader->buffers[1]];
+    reader->media = reference;
+    reader->active = 0;
+    // Per-file lookup/data reads reuse these pages, so reload the iterator's
+    // saved sector rather than trusting its previous residency.
+    buffer->resident = false;
+    if (!load_buffer(unit, media, reader, work->all_track, work->all_sector)) {
+        dos_status(unit, model, DOS_STATUS_READ_ERROR, work->all_track, work->all_sector);
+        copy_finish(unit);
+        return;
+    }
+    // OPNIRD/STRDBL prefetch without selecting the successor. A matching
+    // entry's CY discards this job, and SRRE reopens it after that file.
+    dos_media_result_t successor_result = DOS_MEDIA_OK;
+    if (buffer->bytes[0] != 0) {
+        successor_result = read_sector(unit, media, reference, buffer->bytes[0], buffer->bytes[1], alternate->bytes);
+    }
+    // Save the next slot before handing this entry to the per-file state machine.
+    while (work->all_entry < DISKIMAGE_SECTOR_SIZE / DOS_DIRECTORY_LINE_SIZE) {
+        const unsigned int offset = work->all_entry++ * DOS_DIRECTORY_LINE_SIZE;
+        const uint8_t* const entry = buffer->bytes + offset;
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0 ||
+            !name_matches(work->files[DOS_COPY_PATTERN_INDEX].name, work->files[DOS_COPY_PATTERN_INDEX].name_length,
+                          entry + DOS_DIRECTORY_NAME_OFFSET)) {
+            continue;
+        }
+        dos_copy_file_t* const source = &work->files[1];
+        source->type = entry[DOS_DIRECTORY_TYPE_OFFSET];
+        source->track = entry[DOS_DIRECTORY_TRACK_OFFSET];
+        source->sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
+        source->directory_track = work->all_track;
+        source->directory_sector = work->all_sector;
+        source->directory_entry = offset;
+        memcpy(source->name, entry + DOS_DIRECTORY_NAME_OFFSET, sizeof(source->name));
+        memcpy(work->files[0].name, source->name, sizeof(source->name));
+        // TRFNME supplies the complete directory field, not a parsed short name.
+        source->name_length = work->files[0].name_length = sizeof(source->name);
+        work->name_conflict =
+            unpublished_writer(unit, work->media[work->files[0].drive], source->name, DOS_UNUSED) != NULL;
+        // FIXIT's LOOKUP searches only the destination. Preserve the source
+        // descriptor obtained by FFST/FFRE and reset per-file creation state.
+        work->files[0].track = 0;
+        work->found = 1u << 1;
+        work->source = 1;
+        work->drive = work->files[0].drive;
+        work->scans = 0;
+        work->visited = 0;
+        work->track = directory_track(model);
+        work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+        work->empty_track = 0;
+        work->empty_sector = 0;
+        work->empty_entry = 0;
+        work->last_sector = 0;
+        work->phase = DOS_COPY_SEARCH;
+        return;
+    }
+    if (buffer->bytes[0] != 0) {
+        // Only SEARCH/NXTBUF observes the current job when this page is exhausted.
+        if (!storage_error(unit, media, reference, successor_result, false, buffer->bytes[0], buffer->bytes[1])) {
+            copy_finish(unit);
+            return;
+        }
+        work->all_track = buffer->bytes[0];
+        work->all_sector = buffer->bytes[1];
+        work->all_entry = 0;
+        return;
+    }
+    // ENDIT reports success only after enumeration reaches the terminal link.
+    command_end(unit, model);
+    copy_finish(unit);
+}
+
+// Advance ordered COPY, preserving native GIBYTE-before-CHNDAT semantics.
+static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // COPY/CY10/CY15/CY20 stream each source through GIBYTE/PIBYTE, then
+    // CLSCHN closes IWSA. C separates these operations into cooperative phases.
+    // Internal GET calls tst4:GBYTE before sampling CHNDAT. It must not use
+    // externally staged reads, whose singleton EOF behavior is different.
+    dos_copy_work_t* const work = &unit->copy;
+    const dos_model_t model = media->units[work->media[0].unit].model;
+    if (work->invalidated_file != 0) {
+        const dos_copy_file_t* const file = &work->files[work->invalidated_file - 1u];
+        unit->selected_drive = work->media[file->drive & 1u].slot;
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        copy_finish(unit);
+        return;
+    }
+    if (work->phase == DOS_COPY_MATCH_WAIT) {
+        return;
+    }
+    if (work->phase == DOS_COPY_ALL_NEXT) {
+        copy_all_next(unit, media);
+        return;
+    }
+    if (work->phase == DOS_COPY_SEARCH) {
+        copy_search(unit, media);
+        return;
+    }
+    if (work->phase == DOS_COPY_APPEND) {
+        // Continue finding the self-concat tail without publishing an OPEN
+        // completion status. Only a successful append proceeds to new sources.
+        unit->selected_drive = unit->channels[work->writer].media.slot;
+        dos_open_work_t append = {.append_channel = work->writer + 1u, .pending = true};
+        append_work(unit, media, &append, false);
+        if (append.pending) {
+            return;
+        }
+        if (!unit->channels[work->writer].allocated || unit->channels[work->writer].failed) {
+            copy_finish(unit);
+            return;
+        }
+        work->phase = DOS_COPY_SOURCE;
+        return;
+    }
+    if (work->phase == DOS_COPY_SOURCE) {
+        if (work->source == work->count) {
+            work->phase = DOS_COPY_CLOSE;
+            return;
+        }
+        const dos_copy_file_t* const file = &work->files[work->source];
+        // Self-concat moved the original reader to IWSA. Allocate a replacement
+        // IRSA only when needed, then reuse it for later sources.
+        if (work->reader == DOS_UNUSED) {
+            work->reader = allocate_channel(unit, work->media[file->drive & 1u], DOS_INTERNAL_READ_SECONDARY, 2);
+            if (work->reader == DOS_UNUSED) {
+                dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+                copy_finish(unit);
+                return;
+            }
+            unit->channels[work->reader].ready = false;
+        }
+        if (!copy_read_start(unit, media, work->reader, file)) {
+            copy_finish(unit);
+            return;
+        }
+        work->phase = DOS_COPY_BYTES;
+        return;
+    }
+    if (work->phase == DOS_COPY_CLOSE) {
+        // Persist data, directory metadata, and BAM before releasing output.
+        // A failure abandons internal channels without a second CLOSE attempt.
+        dos_channel_t* const writer = &unit->channels[work->writer];
+        if (writer->allocated && !finish_channel(unit, media, writer)) {
+            copy_finish(unit);
+            return;
+        }
+        // Copy-all retains its reader/iterator but releases each finished writer.
+        if (work->all_files) {
+            free_channel(unit, work->writer);
+            work->writer = DOS_UNUSED;
+            work->phase = DOS_COPY_ALL_NEXT;
+            return;
+        }
+        command_end(unit, model);
+        copy_finish(unit);
+        return;
+    }
+    dos_channel_t* const reader = &unit->channels[work->reader];
+    dos_buffer_t* const buffer = &unit->buffers[reader->buffers[reader->active]];
+    unit->selected_drive = reader->media.slot;
+    // A final link's second byte is the last occupied offset. Include that
+    // payload byte, but never copy the two-byte sector link as file data.
+    const unsigned int end = buffer->bytes[0] == 0 ? buffer->bytes[1] + 1u : DISKIMAGE_SECTOR_SIZE;
+    if (end < DISKIMAGE_SECTOR_LINK_SIZE) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
+        copy_finish(unit);
+        return;
+    }
+    // Reuse the burst bound for scheduler fairness, not IEEE preview/GET.
+    for (unsigned int copied = 0; copied < DOS_STAGE_CAPACITY && reader->position < end; ++copied) {
+        unit->selected_drive = reader->media.slot;
+        const uint8_t byte = buffer->bytes[reader->position++];
+        const bool switching = reader->position == DISKIMAGE_SECTOR_SIZE && buffer->bytes[0] != 0;
+        if (switching) {
+            // CY20's GIBYTE waits for DBLBUF before CY15's PIBYTE can persist
+            // this byte. Do not write an extra output block on read failure.
+            const unsigned int limit =
+                media->units[reader->media.unit].slots[reader->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+            if (reader->traversed++ >= limit) {
+                dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
+                copy_finish(unit);
+                return;
+            }
+            const uint8_t track = buffer->bytes[0], sector = buffer->bytes[1];
+            reader->active ^= 1u;
+            if (!load_buffer(unit, media, reader, track, sector)) {
+                dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
+                copy_finish(unit);
+                return;
+            }
+        }
+        unit->selected_drive = unit->channels[work->writer].media.slot;
+        if (!write_byte(unit, media, &unit->channels[work->writer], byte)) {
+            copy_finish(unit);
+            return;
+        }
+        if (switching) {
+            return;
+        }
+    }
+    if (reader->position != end) {
+        return;
+    }
+    // Concatenate the next source immediately after this terminal payload.
+    if (buffer->bytes[0] == 0) {
+        ++work->source;
+        work->phase = DOS_COPY_SOURCE;
+        return;
+    }
+}
+
+// Dispatch collected metadata, block, reset and COPY commands without taking over transport collection.
 // The caller completes preceding work before submitting another request.
 void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
                  const uint8_t* const request, unsigned int length) {
@@ -3124,6 +4039,8 @@ void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const un
             rename_start(unit, media, index, length);
         } else if (bytes[0] == 'S') {
             scratch_start(unit, media, index, length);
+        } else if (bytes[0] == 'C') {
+            copy_start(unit, media, index, length);
         } else if (bytes[0] == 'V') {
             // VALDAT uses SIMPRS but initializes only the selected disk.
             // Capture its identity before any deferred initialization I/O.
@@ -4135,6 +5052,9 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     case DOS_COMMAND_SCRATCH:
         scratch_work(unit, media);
         return;
+    case DOS_COMMAND_COPY:
+        copy_work(unit, media);
+        return;
     case DOS_COMMAND_VALIDATE:
         validate_work(unit, media);
         return;
@@ -4183,18 +5103,12 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
     bool failed = work->visited++ >= limit;
     uint8_t* const bytes = unit->buffers[work->scratch].bytes;
-    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-        const dos_channel_t* const channel = &unit->channels[index];
-        if (channel->allocated && channel->grow_pending && channel->media.identity == reference.identity &&
-            channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
-            channel->directory_track == searched_track &&
-            (channel->directory_sector == searched_sector || channel->grow_from_sector == searched_sector)) {
-            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
-            work->pending = false;
-            clear_command(unit);
-            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-            return;
-        }
+    if (directory_growth_pending(unit, reference, searched_track, searched_sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
+        work->pending = false;
+        clear_command(unit);
+        unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+        return;
     }
     if (!failed) {
         failed = read_sector(unit, media, reference, work->track, work->sector, bytes) != DOS_MEDIA_OK;
@@ -4205,16 +5119,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         for (unsigned int entry = 0; entry < DISKIMAGE_SECTOR_SIZE; entry += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
             const uint8_t* const file = bytes + entry;
             if (file[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
-                bool reserved = false;
-                for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-                    const dos_channel_t* const channel = &unit->channels[index];
-                    reserved |= channel->allocated && channel->access != DOS_ACCESS_READ &&
-                                channel->media.identity == reference.identity &&
-                                channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
-                                channel->directory_sector == searched_sector &&
-                                (channel->grow_pending || channel->directory_entry == entry);
-                }
-                if (work->empty_track == 0 && !reserved) {
+                if (work->empty_track == 0 && !directory_slot_reserved(unit, reference, searched_sector, entry)) {
                     work->empty_track = searched_track;
                     work->empty_sector = searched_sector;
                     work->empty_entry = (uint8_t)entry;
