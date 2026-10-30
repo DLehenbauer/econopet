@@ -3206,6 +3206,1188 @@ START_TEST(test_write_pattern_flags_across_parse_passes) {
 }
 END_TEST
 
+// Submit a complete metadata request through the direct command API.
+static void send_command(dos_unit_t* const unit, dos_media_bank_t* const bank, const char* const text) {
+    dos_command(unit, bank, 0, (const uint8_t*)text, (unsigned int)strlen(text));
+}
+
+// Create closed source/collision entries without borrowing rename implementation.
+static void rename_fixture(dos_unit_t* const unit, dos_media_bank_t* const bank) {
+    ck_assert_uint_ne(open_name(unit, bank, 2, "0:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(unit, bank, 2, 0x20, 4);
+    ck_assert(dos_close(unit, bank, bank->units[0].model, 2));
+    ck_assert_uint_ne(open_name(unit, bank, 2, "0:EXISTS,S,W"), DOS_UNUSED);
+    put_bytes(unit, bank, 2, 0x60, 2);
+    ck_assert(dos_close(unit, bank, bank->units[0].model, 2));
+}
+
+// CMDSET trims CR before its logical limit and retires only native CLRCB bytes.
+START_TEST(test_metadata_command_boundaries_and_retirement) {
+    const unsigned int format = (unsigned int)_i / 7u, variant = (unsigned int)_i % 7u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    uint8_t request[DOS_COMMAND_RECEIVE_CAPACITY + 1u];
+    memset(request, 'X', sizeof(request));
+    request[0] = 'V';
+    request[1] = '0';
+    unsigned int length = sizeof(request);
+    if (variant != 0) {
+        length = variant == 4 ? DOS_COMMAND_LIMIT : DOS_COMMAND_RECEIVE_CAPACITY;
+    }
+    if (variant == 2 || variant == 3) {
+        request[length - (variant == 2 ? 1u : 2u)] = '\r';
+    }
+    if (variant >= 5) {
+        request[0] = variant == 5 ? 'B' : 'Z';
+        length = 1;
+    }
+    const unsigned int reads = image.reads, writes = image.writes;
+    dos_command(&unit, &bank, 0, request, length);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    const uint8_t cleared[DOS_COMMAND_LIMIT] = {0};
+    ck_assert_mem_eq(unit.command_bytes, cleared, sizeof(cleared));
+    if (length == DOS_COMMAND_RECEIVE_CAPACITY) {
+        ck_assert_uint_eq(unit.command_bytes[DOS_COMMAND_LIMIT], request[DOS_COMMAND_LIMIT]);
+    }
+    ck_assert_int_eq(dos_work_pending(&unit), variant >= 2 && variant <= 4);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, variant < 2    ? DOS_STATUS_COMMAND_TOO_LONG
+                                        : variant == 5 ? DOS_STATUS_SYNTAX
+                                        : variant == 6 ? DOS_STATUS_INVALID_COMMAND
+                                                       : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// Metadata matching checks explicit bytes before testing the directory's padding.
+START_TEST(test_metadata_names_retain_explicit_padding_and_native_limits) {
+    static const char* const names[] = {"SOURCE", "SOURCE\xa0Y", "SOURCE\xa0X"};
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int operation = (unsigned int)_i / 3u % 2u, variant = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    uint8_t* const entry = sector_bytes(&image, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39, 1);
+    entry[5 + 7] = 'X';
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    char request[DOS_COMMAND_RECEIVE_CAPACITY];
+    snprintf(request, sizeof(request), "%s%s", operation == 0 ? "R0:NEW=" : "S0:", names[variant]);
+    send_command(&unit, &bank, request);
+    finish_open(&unit, &bank);
+    const bool matched = variant != 1;
+    ck_assert_uint_eq(unit.status_code, operation != 0 ? DOS_STATUS_FILES_SCRATCHED
+                                        : matched      ? DOS_STATUS_OK
+                                                       : DOS_STATUS_NOT_FOUND);
+    if (operation == 0 && matched) {
+        ck_assert_mem_eq(entry + 5, "NEW", 3);
+    } else {
+        ck_assert_uint_eq(entry[2] == 0, operation != 0 && matched);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// RENAME changes exactly the source name while retaining a paused reader.
+START_TEST(test_rename_changes_only_directory_name_and_preserves_reader) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    const unsigned int format = (unsigned int)_i;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:SOURCE,S,R");
+    ck_assert_uint_ne(reader, DOS_UNUSED);
+    dos_get(&unit, &bank, reader, 1);
+    const dos_channel_t before = unit.channels[reader];
+    const unsigned int reads = image.reads, writes = image.writes;
+    uint8_t* const expected = malloc(image.size);
+    ck_assert_ptr_nonnull(expected);
+    memcpy(expected, image.bytes, image.size);
+    const unsigned int directory = format == 0 ? 18u : 39u;
+    uint8_t* const name = sector_bytes(&image, bank.units[0].slots[0].io.image.type, directory, 1) + 5;
+    memset(expected + (name - image.bytes), 0xa0, 16);
+    memcpy(expected + (name - image.bytes), "NEW", 3);
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(image.reads, reads);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(image.writes, writes + 1);
+    ck_assert_mem_eq(image.bytes, expected, image.size);
+    ck_assert_mem_eq(&unit.channels[reader], &before, sizeof(before));
+    expect_bytes(&unit, &bank, reader, 3, 0x21);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:NEW,S,R"), DOS_UNUSED);
+    expect_bytes(&unit, &bank, dos_find_channel(&unit, 2), 4, 0x20);
+    free(expected);
+    free(image.bytes);
+}
+END_TEST
+
+// TAGCMD distinguishes missing colon, malformed structure and missing source.
+START_TEST(test_rename_native_parser_and_error_precedence) {
+    static const struct {
+        const char* command;
+        dos_status_code_t status;
+    } cases[] = {
+        {"R0:NEW=SOURCE", DOS_STATUS_OK},
+        {"RENAME0:NEW=SOURCE", DOS_STATUS_OK},
+        {"R0:EXISTS=ABSENT", DOS_STATUS_NOT_FOUND},
+        {"R0:EXISTS=SOURCE", DOS_STATUS_FILE_EXISTS},
+        {"R0:SOURCE=SOURCE", DOS_STATUS_FILE_EXISTS},
+        {"R0:X*=SOURCE", DOS_STATUS_SYNTAX},
+        {"R0:X=SO?RCE", DOS_STATUS_SYNTAX},
+        {"R0:X=SOURCE,EXISTS", DOS_STATUS_SYNTAX},
+        {"R,0:NEW=SOURCE", DOS_STATUS_NO_FILE},
+        {"RNEW=SOURCE", DOS_STATUS_NO_FILE},
+        {"R0:NEW", DOS_STATUS_SYNTAX},
+        {"R0:NEW=", DOS_STATUS_NOT_FOUND},
+        {"R0:=SOURCE", DOS_STATUS_OK},
+        {"R2:NEW=SOURCE", DOS_STATUS_OK},
+        {"R:NEW=SOURCE", DOS_STATUS_OK},
+        {"R0:NEW=SOURCE=IGNORED", DOS_STATUS_OK},
+        {"R0:12345678901234567=SOURCE", DOS_STATUS_OK},
+        {"R0:NEW=X:SOURCE", DOS_STATUS_OK},
+        {"R0:NEW=:SOURCE", DOS_STATUS_OK},
+        {"R0:NEW=SOURCE,", DOS_STATUS_SYNTAX},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases), which = (unsigned int)_i % count_of(cases);
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    const unsigned int writes = image.writes;
+    send_command(&unit, &bank, cases[which].command);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, cases[which].status);
+    ck_assert_uint_eq(image.writes, writes + (cases[which].status == DOS_STATUS_OK));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    if (which == 12) {
+        const uint8_t* const entry =
+            sector_bytes(&image, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39, 1);
+        ck_assert_uint_eq(entry[5], '=');
+        for (unsigned int offset = 6; offset <= 21; ++offset) {
+            ck_assert_uint_eq(entry[offset], 0xa0);
+        }
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// A differing destination drive checks both disks but never moves the source.
+START_TEST(test_rename_cross_drive_collision_and_source_selection) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool collision = (unsigned int)_i % 2u;
+    image_t first, second;
+    dos_media_bank_t bank = {0}, other = {0};
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "1:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x20, 4);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    if (collision) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:NEW,S,W"), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 0x60, 2);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    const unsigned int first_writes = first.writes, second_writes = second.writes;
+    send_command(&unit, &bank, "R0:NEW=1:SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, collision ? DOS_STATUS_FILE_EXISTS : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.selected_drive, collision ? 0 : 1);
+    ck_assert_uint_eq(first.writes, first_writes);
+    ck_assert_uint_eq(second.writes, second_writes + !collision);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Read-only, partial read/write and failed flush must not erase unrelated cursors.
+START_TEST(test_rename_storage_failures_release_only_internal_ownership) {
+    const unsigned int format = (unsigned int)_i / 5u, failure = (unsigned int)_i % 5u;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    if (failure == 4) {
+        dos_media_io_t readonly = bank.units[0].slots[0].io;
+        readonly.image.write = NULL;
+        readonly.flush = NULL;
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, &readonly), DOS_MEDIA_OK);
+    }
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:SOURCE,S,R");
+    ck_assert_uint_ne(reader, DOS_UNUSED);
+    dos_get(&unit, &bank, reader, 1);
+    const dos_channel_t before = unit.channels[reader];
+    const uint16_t buffers = unit.buffer_use;
+    image.fail_read = failure < 2 ? image.reads + failure + 1u : 0;
+    image.fail_write = failure == 2 ? image.writes + 1u : 0;
+    image.fail_flush = failure == 3;
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, failure < 2    ? DOS_STATUS_READ_ERROR
+                                        : failure == 4 ? DOS_STATUS_WRITE_PROTECT
+                                                       : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_mem_eq(&unit.channels[reader], &before, sizeof(before));
+    expect_bytes(&unit, &bank, reader, 3, 0x21);
+    if (failure == 3) {
+        ck_assert(bank.units[0].slots[0].dirty);
+        image.fail_flush = false;
+        ck_assert_int_eq(dos_media_flush_unit(&bank, 0), DOS_MEDIA_OK);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Linked-directory lookup yields, and commit rereads rather than overwriting peer edits.
+START_TEST(test_rename_yields_and_preserves_later_directory_edits) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    const unsigned int format = (unsigned int)_i;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18 : 39;
+    uint8_t* const first = sector_bytes(&image, type, track, 1);
+    uint8_t* const second = sector_bytes(&image, type, track, 2);
+    memcpy(second, first, DISKIMAGE_SECTOR_SIZE);
+    memset(first, 0, DISKIMAGE_SECTOR_SIZE);
+    first[0] = track;
+    first[1] = 2;
+    const unsigned int reads = image.reads;
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    dos_work(&unit, &bank);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert(!unit.rename.commit);
+    ck_assert_uint_eq(image.reads, reads + 1);
+    dos_work(&unit, &bank);
+    ck_assert(unit.rename.commit);
+    second[DISKIMAGE_DIRECTORY_ENTRY_SIZE + 25u] = 0x55;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(second[DISKIMAGE_DIRECTORY_ENTRY_SIZE + 25u], 0x55);
+    ck_assert_mem_eq(second + 5, "NEW", 3);
+    free(image.bytes);
+}
+END_TEST
+
+// A queued lookup or commit cannot follow a replacement media binding.
+START_TEST(test_rename_rejects_stale_media_at_lookup_and_commit) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool commit = (unsigned int)_i % 2u;
+    image_t old, replacement;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &old, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    if (commit) {
+        dos_work(&unit, &bank);
+        ck_assert(unit.rename.commit);
+    }
+    const unsigned int reads = old.reads, writes = old.writes;
+    mount_blank(&bank, &replacement, format);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(old.reads, reads);
+    ck_assert_uint_eq(old.writes, writes);
+    ck_assert_uint_eq(replacement.reads + replacement.writes, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(old.bytes);
+    free(replacement.bytes);
+}
+END_TEST
+
+// Native RENAME leaves an unfinished writer open, and CLOSE must retain its new name.
+START_TEST(test_rename_unclosed_writer_survives_close_without_restoring_old_name) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    const unsigned int format = (unsigned int)_i;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t writer = open_name(&unit, &bank, 2, "0:SOURCE,S,W");
+    ck_assert_uint_ne(writer, DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x20, 4);
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), writer);
+    put_bytes(&unit, &bank, 2, 0x24, 2);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:NEW,S,R");
+    ck_assert_uint_ne(reader, DOS_UNUSED);
+    expect_bytes(&unit, &bank, reader, 6, 0x20);
+    free(image.bytes);
+}
+END_TEST
+
+// Omitted drives use LSTDRV, but an explicitly absent source cannot redirect.
+START_TEST(test_rename_default_drive_and_absent_source) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool absent = (unsigned int)_i % 2u;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_media_io_t pair[2] = {{0}, bank.units[0].slots[0].io};
+    ck_assert_int_eq(dos_media_set_unit(&bank, 0, pair), DOS_MEDIA_OK);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "1:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x20, 4);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_eq(unit.last_drive, 1);
+    unit.selected_drive = 0;
+    dos_status(&unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
+    const unsigned int reads = image.reads;
+    send_command(&unit, &bank, absent ? "R0:NEW=SOURCE" : "R:NEW=SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, absent ? DOS_STATUS_NOT_READY : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_uint_eq(unit.selected_drive, absent ? 0 : 1);
+    if (absent) {
+        ck_assert_uint_eq(image.reads, reads);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Internal lookup uses the same last two buffers and returns partial claims on failure.
+START_TEST(test_rename_shared_resource_exhaustion_and_recovery) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, (unsigned int)_i);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    for (uint8_t secondary = 2; secondary < 7; ++secondary) {
+        ck_assert_uint_ne(open_name(&unit, &bank, secondary, "0:SOURCE,S,R"), DOS_UNUSED);
+    }
+    const uint16_t buffers = unit.buffer_use;
+    uint8_t extra = 0;
+    while (extra < DOS_BUFFER_COUNT && (buffers & (1u << extra))) {
+        ++extra;
+    }
+    ck_assert_uint_lt(extra, DOS_BUFFER_COUNT);
+    unit.buffer_use |= 1u << extra;
+    const uint16_t exhausted = unit.buffer_use;
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NO_CHANNEL);
+    ck_assert_uint_eq(unit.buffer_use, exhausted);
+    ck_assert(!dos_work_pending(&unit));
+    unit.buffer_use = buffers;
+    send_command(&unit, &bank, "R0:NEW=SOURCE");
+    ck_assert(dos_work_pending(&unit));
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    for (uint8_t secondary = 2; secondary < 7; ++secondary) {
+        ck_assert_uint_ne(dos_find_channel(&unit, secondary), DOS_UNUSED);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// SCRATCH changes only the type byte and allocation bits, preserving retained readers.
+START_TEST(test_scratch_releases_exact_chain_and_preserves_peer_reader) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    const unsigned int format = (unsigned int)_i;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x20, 300);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:EXISTS,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x60, 4);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:EXISTS,S,R");
+    dos_get(&unit, &bank, reader, 1);
+    const dos_channel_t before = unit.channels[reader];
+    const uint16_t buffers = unit.buffer_use;
+    image_t expected = image;
+    expected.bytes = malloc(image.size);
+    ck_assert_ptr_nonnull(expected.bytes);
+    memcpy(expected.bytes, image.bytes, image.size);
+    uint8_t* const entry = sector_bytes(&expected, type, format == 0 ? 18 : 39, 1);
+    entry[2] = 0;
+    uint8_t track = entry[3], sector = entry[4];
+    unsigned int blocks = 0;
+    while (track != 0) {
+        uint8_t* const bam = fixture_bam_entry(&expected, format, track);
+        ck_assert_uint_eq(bam[1u + sector / 8u] & (1u << (sector & 7u)), 0);
+        ++bam[0];
+        bam[1u + sector / 8u] |= 1u << (sector & 7u);
+        const uint8_t* const data = sector_bytes(&expected, type, track, sector);
+        track = data[0];
+        sector = data[1];
+        ck_assert_uint_lt(blocks++, 3);
+    }
+    ck_assert_uint_eq(blocks, 2);
+    const unsigned int reads = image.reads;
+    send_command(&unit, &bank, "S0:SOURCE");
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(image.reads, reads);
+    finish_open(&unit, &bank);
+    ck_assert_str_eq(unit.status, format == 0 ? "01, FILES SCRATCHED,01,00\r" : "01, FILES SCRATCHED,01,00,0\r");
+    ck_assert_mem_eq(image.bytes, expected.bytes, image.size);
+    ck_assert_mem_eq(&unit.channels[reader], &before, sizeof(before));
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    expect_bytes(&unit, &bank, reader, 3, 0x61);
+    free(expected.bytes);
+    free(image.bytes);
+}
+END_TEST
+
+// FS1SET uses equals-type syntax, while comma names are native grouped patterns.
+START_TEST(test_scratch_native_parser_patterns_and_counts) {
+    static const struct {
+        const char* command;
+        dos_status_code_t status;
+        unsigned int count;
+    } cases[] = {
+        {"S0:SOURCE", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"SCRATCH0:SOURCE", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOUR?E", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SO*", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOURCE,0:EXISTS", DOS_STATUS_FILES_SCRATCHED, 2},
+        {"S0:SOURCE,EXISTS", DOS_STATUS_FILES_SCRATCHED, 2},
+        {"S0:SOURCE=S", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOURCE=P", DOS_STATUS_FILES_SCRATCHED, 0},
+        {"S0:SOURCE=X", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOURCE=SEQ", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOURCE=", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S0:SOURCE=*", DOS_STATUS_SYNTAX, 0},
+        {"S0:SOURCE=P,S", DOS_STATUS_SYNTAX, 0},
+        {"S0:ABSENT", DOS_STATUS_FILES_SCRATCHED, 0},
+        {"S0:", DOS_STATUS_FILES_SCRATCHED, 0},
+        {"S0:SOURCE,", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"SSOURCE", DOS_STATUS_NO_FILE, 0},
+        {"S,0:SOURCE", DOS_STATUS_NO_FILE, 0},
+        {"S2:SOURCE", DOS_STATUS_FILES_SCRATCHED, 1},
+        {"S:SOURCE", DOS_STATUS_FILES_SCRATCHED, 1},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases), which = (unsigned int)_i % count_of(cases);
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    const unsigned int writes = image.writes;
+    send_command(&unit, &bank, cases[which].command);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, cases[which].status);
+    if (cases[which].status == DOS_STATUS_FILES_SCRATCHED) {
+        char expected[DOS_STATUS_LINE_CAPACITY];
+        snprintf(expected, sizeof(expected),
+                 format == 0 ? "01, FILES SCRATCHED,%02u,00\r" : "01, FILES SCRATCHED,%02u,00,0\r", cases[which].count);
+        ck_assert_str_eq(unit.status, expected);
+    }
+    if (cases[which].count == 0) {
+        ck_assert_uint_eq(image.writes, writes);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// TSTCHN and the lock bit skip files, while abandoned unclosed entries leak their old chains natively.
+START_TEST(test_scratch_active_locked_unclosed_and_rel_entries) {
+    const unsigned int format = (unsigned int)_i / 6u, mode = (unsigned int)_i % 6u;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    uint8_t* const entry = sector_bytes(&image, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39, 1);
+    uint8_t channel = DOS_UNUSED;
+    if (mode < 2) {
+        channel = open_name(&unit, &bank, 2, mode == 0 ? "0:SOURCE,S,R" : "0:SOURCE,S,A");
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+    } else if (mode == 2) {
+        entry[2] |= 0x40;
+    } else if (mode == 3) {
+        entry[2] &= 0x7f;
+    } else if (mode == 4) {
+        entry[2] = 0x84;
+    } else if (mode == 5) {
+        entry[3] = 0;
+    }
+    const dos_unit_t before = unit;
+    uint8_t* const expected = malloc(image.size);
+    ck_assert_ptr_nonnull(expected);
+    memcpy(expected, image.bytes, image.size);
+    if (mode == 3 || mode == 4 || mode == 5) {
+        expected[entry - image.bytes + 2u] = 0;
+    }
+    if (mode == 4) {
+        image_t oracle = image;
+        oracle.bytes = expected;
+        uint8_t* const bam = fixture_bam_entry(&oracle, format, entry[3]);
+        ++bam[0];
+        bam[1u + entry[4] / 8u] |= (uint8_t)(1u << (entry[4] & 7u));
+    }
+    send_command(&unit, &bank, "S0:SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, mode == 5 ? DOS_STATUS_READ_ERROR : DOS_STATUS_FILES_SCRATCHED);
+    ck_assert_mem_eq(image.bytes, expected, image.size);
+    ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
+    if (channel != DOS_UNUSED) {
+        ck_assert_mem_eq(&unit.channels[channel], &before.channels[channel], sizeof(dos_channel_t));
+    }
+    free(expected);
+    free(image.bytes);
+}
+END_TEST
+
+// Explicit drives restrict matches, while omitted group prefixes search both native disks.
+START_TEST(test_scratch_cross_drive_patterns_and_default_selection) {
+    const unsigned int format = (unsigned int)_i / 3u, mode = (unsigned int)_i % 3u;
+    image_t first, second;
+    dos_media_bank_t bank = {0}, other = {0};
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    for (unsigned int slot = 0; slot < 2; ++slot) {
+        for (const char* name = "AB"; *name != 0; ++name) {
+            if (mode == 2 && slot == 1 && *name == 'B') {
+                continue;
+            }
+            char request[16];
+            snprintf(request, sizeof(request), "%u:%c,S,W", slot, *name);
+            ck_assert_uint_ne(open_name(&unit, &bank, 2, request), DOS_UNUSED);
+            put_bytes(&unit, &bank, 2, 0x30, 4);
+            ck_assert(dos_close(&unit, &bank, model, 2));
+        }
+    }
+    send_command(&unit, &bank, mode == 0 ? "S1:A" : mode == 1 ? "S0:A,1:B" : "S1:A,B");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_FILES_SCRATCHED);
+    const unsigned int directory = format == 0 ? 18 : 39;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t* const zero = sector_bytes(&first, type, directory, 1);
+    const uint8_t* const one = sector_bytes(&second, type, directory, 1);
+    ck_assert_uint_eq(zero[2] == 0, mode == 1);
+    ck_assert_uint_eq(zero[34] == 0, mode == 2);
+    ck_assert_uint_eq(one[2] == 0, mode != 1);
+    ck_assert_uint_eq(one[34] == 0, mode != 0);
+    ck_assert_uint_eq(unit.selected_drive, mode == 1 ? 1 : mode == 2 ? 0 : 1);
+    ck_assert_uint_eq(unit.last_drive, unit.selected_drive);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Native parsing retains five patterns, and command/resource errors release only owned buffers.
+START_TEST(test_scratch_pattern_limit_and_resource_recovery) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, (unsigned int)_i);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (const char* name = "ABCDEF"; *name != 0; ++name) {
+        char request[16];
+        snprintf(request, sizeof(request), "0:%c,S,W", *name);
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, request), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 0x20, 4);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    for (uint8_t secondary = 2; secondary < 7; ++secondary) {
+        ck_assert_uint_ne(open_name(&unit, &bank, secondary, "0:F,S,R"), DOS_UNUSED);
+    }
+    const uint16_t buffers = unit.buffer_use;
+    uint8_t extra = 0;
+    while (extra < DOS_BUFFER_COUNT && (buffers & (1u << extra))) {
+        ++extra;
+    }
+    ck_assert_uint_lt(extra, DOS_BUFFER_COUNT);
+    unit.buffer_use |= 1u << extra;
+    const uint16_t exhausted = unit.buffer_use;
+    const unsigned int reads = image.reads;
+    send_command(&unit, &bank, "S0:A");
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NO_CHANNEL);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(unit.buffer_use, exhausted);
+    ck_assert(!dos_work_pending(&unit));
+    unit.buffer_use = buffers;
+    const uint16_t retained = unit.buffer_use;
+    send_command(&unit, &bank, "S0:A,0:B,0:C,0:D,0:E,0:F");
+    finish_open(&unit, &bank);
+    ck_assert_str_eq(unit.status, _i == 0 ? "01, FILES SCRATCHED,05,00\r" : "01, FILES SCRATCHED,05,00,0\r");
+    ck_assert_uint_eq(unit.buffer_use, retained);
+    expect_bytes(&unit, &bank, dos_find_channel(&unit, 2), 4, 0x20);
+    free(image.bytes);
+}
+END_TEST
+
+// SCHTBL's mixed defaults defer an opposite-drive fallback until the third search.
+START_TEST(test_scratch_mixed_defaults_require_third_drive_search) {
+    const unsigned int format = (unsigned int)_i;
+    image_t first, second;
+    dos_media_bank_t bank = {0}, other = {0};
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    for (const char* name = "ABCDE"; *name != 0; ++name) {
+        char request[16];
+        snprintf(request, sizeof(request), "%u:%c,S,W", *name == 'B' ? 1u : 0u, *name);
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, request), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 0x20, 4);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    send_command(&unit, &bank, "S0:A,1:B,C,0:D,E");
+    ck_assert_uint_eq(unit.scratch.scans, 2);
+    finish_open(&unit, &bank);
+    ck_assert_str_eq(unit.status, format == 0 ? "01, FILES SCRATCHED,05,00\r" : "01, FILES SCRATCHED,05,00,0\r");
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Lookup/chain/write/BAM/flush failures retain peers and never roll back already published deletion.
+START_TEST(test_scratch_storage_failures_and_stale_media) {
+    const unsigned int format = (unsigned int)_i / 9u, failure = (unsigned int)_i % 9u;
+    image_t image, replacement;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    if (failure == 4) {
+        dos_media_io_t readonly = bank.units[0].slots[0].io;
+        readonly.image.write = NULL;
+        readonly.flush = NULL;
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, &readonly), DOS_MEDIA_OK);
+    }
+    const uint8_t peer = open_name(&unit, &bank, 2, "0:EXISTS,S,R");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const dos_channel_t before = unit.channels[peer];
+    const uint16_t buffers = unit.buffer_use;
+    image.fail_read = failure < 2 ? image.reads + failure + 1u : 0;
+    image.fail_write = failure == 2 ? image.writes + 1u : failure == 7 ? image.writes + 2u : 0;
+    image.fail_flush = failure == 3;
+    send_command(&unit, &bank, "S0:SOURCE");
+    const bool stale = failure == 5 || failure == 6 || failure == 8;
+    if (stale) {
+        if (failure != 5) {
+            dos_work(&unit, &bank);
+            ck_assert_uint_ne(unit.scratch.chain_track, 0);
+        }
+        if (failure == 8) {
+            dos_work(&unit, &bank);
+            ck_assert_uint_eq(unit.scratch.chain_track, 0);
+        }
+        mount_blank(&bank, &replacement, format);
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, failure < 2 || failure == 5 || failure == 6 ? DOS_STATUS_READ_ERROR
+                                        : failure == 4                              ? DOS_STATUS_WRITE_PROTECT
+                                                                                    : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_mem_eq(&unit.channels[peer], &before, sizeof(before));
+    if (stale) {
+        ck_assert_uint_eq(replacement.reads + replacement.writes, 0);
+        free(replacement.bytes);
+    } else {
+        image.fail_read = 0;
+        expect_bytes(&unit, &bank, peer, 2, 0x60);
+        if (failure == 3) {
+            ck_assert(bank.units[0].slots[0].dirty);
+        }
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Cross-part DELFIL traversal persists each dirty DOS 2.7 BAM without losing prior frees.
+START_TEST(test_scratch_releases_chains_across_bam_parts) {
+    const unsigned int format = (unsigned int)_i;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t first_track = 50, last_track = format == 1 ? 51 : 101;
+    uint8_t* const entry = sector_bytes(&image, type, 39, 1);
+    entry[2] = 0x81;
+    entry[3] = first_track;
+    memset(entry + 5, 0xa0, 16);
+    memcpy(entry + 5, "PARTS", 5);
+    sector_bytes(&image, type, first_track, 0)[0] = last_track;
+    sector_bytes(&image, type, last_track, 0)[1] = 4;
+    for (unsigned int block = 0; block < 2; ++block) {
+        uint8_t* const bam = fixture_bam_entry(&image, format, block == 0 ? first_track : last_track);
+        --bam[0];
+        bam[1] &= 0xfe;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "S0:PARTS");
+    finish_open(&unit, &bank);
+    ck_assert_str_eq(unit.status, "01, FILES SCRATCHED,01,00,0\r");
+    ck_assert_uint_eq(entry[2], 0);
+    for (unsigned int block = 0; block < 2; ++block) {
+        const uint8_t track = block == 0 ? first_track : last_track;
+        const uint8_t* const bam = fixture_bam_entry(&image, format, track);
+        unsigned int sectors;
+        ck_assert(diskimage_track_sectors(type, track, &sectors));
+        ck_assert_uint_eq(bam[0], sectors);
+        ck_assert_uint_ne(bam[1] & 1u, 0);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// Directory re-entry retains later edits, and corrupt chains cannot own the scheduler forever.
+START_TEST(test_scratch_yields_reenters_and_bounds_corrupt_chains) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool corrupt = (unsigned int)_i % 2u;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18 : 39;
+    uint8_t* const first = sector_bytes(&image, type, track, 1);
+    uint8_t* const second = sector_bytes(&image, type, track, 2);
+    if (corrupt) {
+        uint8_t* const data = sector_bytes(&image, type, first[3], first[4]);
+        data[0] = first[3];
+        data[1] = first[4];
+    } else {
+        memcpy(second, first, DISKIMAGE_SECTOR_SIZE);
+        memset(first, 0, DISKIMAGE_SECTOR_SIZE);
+        first[0] = track;
+        first[1] = 2;
+    }
+    const unsigned int reads = image.reads;
+    send_command(&unit, &bank, "S0:S*");
+    dos_work(&unit, &bank);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(image.reads, reads + 1);
+    if (!corrupt) {
+        ck_assert_uint_eq(unit.scratch.sector, 2);
+        dos_work(&unit, &bank);
+        ck_assert_uint_ne(unit.scratch.chain_track, 0);
+        second[32 + 25] = 0x55;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, corrupt ? DOS_STATUS_DIRECTORY_ERROR : DOS_STATUS_FILES_SCRATCHED);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    if (!corrupt) {
+        ck_assert_uint_eq(second[2], 0);
+        ck_assert_uint_eq(second[32 + 25], 0x55);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Compare all persisted bytes against an independently edited allocation oracle.
+START_TEST(test_validate_repairs_maps_deletes_splats_and_preserves_counts) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    uint8_t* const directory = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    directory[2] |= 0x40;
+    directory[30] = 77;
+    directory[34] = 0x41;
+    const uint8_t track = directory[35], sector = directory[36];
+    uint8_t* const expected = malloc(image.size);
+    ck_assert_ptr_nonnull(expected);
+    memcpy(expected, image.bytes, image.size);
+    image_t oracle = image;
+    oracle.bytes = expected;
+    sector_bytes(&oracle, type, format == 0 ? 18 : 39, 1)[34] = 0;
+    uint8_t* const released = fixture_bam_entry(&oracle, format, track);
+    ++released[0];
+    released[1u + sector / 8u] |= (uint8_t)(1u << (sector % 8u));
+    uint8_t* const orphan = fixture_bam_entry(&image, format, 1);
+    --orphan[0];
+    orphan[1] &= (uint8_t)~1u;
+    if (format != 0) {
+        // NEWMPV clears reserved bytes, not merely the valid bitmap records.
+        sector_bytes(&image, type, 38, 0)[3] = 0x5a;
+        sector_bytes(&image, type, 38, (format == 1 ? 1 : 3) * 3)[255] = 0x5a;
+    }
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:SOURCE,S,R"), DOS_UNUSED);
+    send_command(&unit, &bank, "V0");
+    ck_assert(dos_work_pending(&unit));
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    ck_assert_mem_eq(image.bytes, expected, image.size);
+    unsigned int free_count = 0;
+    const unsigned int tracks = format == 0 ? 35 : format == 1 ? 77 : 154;
+    for (unsigned int current = 1; current <= tracks; ++current) {
+        if (current != (format == 0 ? 18u : 39u)) {
+            free_count += fixture_bam_entry(&oracle, format, current)[0];
+        }
+    }
+    ck_assert_uint_eq(unit.free_blocks[0], free_count);
+    send_command(&unit, &bank, "VALIDATE0:IGNORED");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_mem_eq(image.bytes, expected, image.size);
+    ck_assert_uint_ne(open_name(&unit, &bank, 3, "0:NEW,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 3, 0x20, 4);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    send_command(&unit, &bank, "R0:RENAMED=NEW");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "S0:RENAMED");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:SOURCE,S,R");
+    expect_bytes(&unit, &bank, reader, 4, 0x20);
+    free(expected);
+    free(image.bytes);
+}
+END_TEST
+
+// SIMPRS selects one disk even when INITIALIZE would select both.
+START_TEST(test_validate_drive_selection_and_peer_cursor) {
+    static const char* const commands[] = {"V", "VALIDATE", "V0", "V1", "V0:1", "VJUNK:0"};
+    static const uint8_t drives[] = {1, 1, 0, 1, 0, 0};
+    const unsigned int format = (unsigned int)_i / count_of(commands), which = (unsigned int)_i % count_of(commands);
+    const uint8_t drive = drives[which], peer = drive ^ 1u;
+    dos_media_bank_t bank = {0}, other = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (uint8_t slot = 0; slot < 2; ++slot) {
+        char name[] = "0:FILE,S,W";
+        name[0] += slot;
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, name), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 0x20, 4);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    char name[] = "0:FILE,S,R";
+    name[0] += peer;
+    const uint8_t reader = open_name(&unit, &bank, 2, name);
+    dos_get(&unit, &bank, reader, 1);
+    const dos_channel_t saved = unit.channels[reader];
+    char writer[] = "0:UNCLOSED,S,W";
+    writer[0] += drive;
+    ck_assert_uint_ne(open_name(&unit, &bank, 3, writer), DOS_UNUSED);
+    put_bytes(&unit, &bank, 3, 0x60, 12);
+    unit.last_drive = 1;
+    const unsigned int peer_writes = peer == 0 ? first.writes : second.writes;
+    send_command(&unit, &bank, commands[which]);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.selected_drive, drive);
+    ck_assert_uint_eq(unit.last_drive, drive);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), DOS_UNUSED);
+    ck_assert_mem_eq(&unit.channels[reader], &saved, sizeof(saved));
+    ck_assert_uint_eq(peer == 0 ? first.writes : second.writes, peer_writes);
+    expect_bytes(&unit, &bank, reader, 3, 0x21);
+    writer[sizeof(writer) - 2] = 'R';
+    ck_assert_uint_eq(open_name(&unit, &bank, 3, writer), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Original 4040 USEDTS tolerates shared blocks. DOS 2.7 VUSED returns 65.
+START_TEST(test_validate_crosslinks_are_model_specific) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    uint8_t* const directory = sector_bytes(&image, bank.units[0].slots[0].io.image.type, format == 0 ? 18 : 39, 1);
+    directory[35] = directory[3];
+    directory[36] = directory[4];
+    const unsigned int writes = image.writes;
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, format == 0 ? DOS_STATUS_OK : DOS_STATUS_NO_BLOCK);
+    if (format != 0) {
+        ck_assert_uint_eq(image.writes, writes);
+        char expected[DOS_STATUS_LINE_CAPACITY];
+        snprintf(expected, sizeof(expected), "65,NO BLOCK,%02u,%02u,0\r", directory[3], directory[4]);
+        ck_assert_str_eq(unit.status, expected);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// Fault recovery abandons owned work, never finalizes a splat or rolls back prior writes.
+START_TEST(test_validate_storage_errors_and_retry) {
+    const unsigned int format = (unsigned int)_i / 6u, failure = (unsigned int)_i % 6u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    rename_fixture(&unit, &bank);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:UNCLOSED,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x60, 12);
+    if (failure == 5) {
+        bank.units[0].slots[0].io.image.write = NULL;
+    }
+    send_command(&unit, &bank, "V0");
+    if (failure == 0) {
+        image.fail_read = image.reads + 1;
+    } else {
+        while (unit.initialize.pending) {
+            dos_work(&unit, &bank);
+        }
+        image.fail_read = failure == 1 ? image.reads + 2 : 0;
+        image.fail_write = failure == 2 ? image.writes + 1 : failure == 3 ? image.writes + 2 : 0;
+        image.fail_flush = failure == 4;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, failure < 2    ? DOS_STATUS_READ_ERROR
+                                        : failure == 5 ? DOS_STATUS_WRITE_PROTECT
+                                                       : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    ck_assert(!unit.bam[0].dirty);
+    image.fail_read = image.fail_write = 0;
+    image.fail_flush = false;
+    bank.units[0].slots[0].io.image.write = write_image;
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:SOURCE,S,R"), DOS_UNUSED);
+    free(image.bytes);
+}
+END_TEST
+
+// Cycles and out-of-range links are bounded failures, while closed REL is traversed.
+START_TEST(test_validate_corruption_and_side_links) {
+    const unsigned int format = (unsigned int)_i / 4u, variant = (unsigned int)_i % 4u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    const uint16_t free_blocks = unit.free_blocks[0];
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    uint8_t* const directory = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    uint8_t* const data = sector_bytes(&image, type, directory[3], directory[4]);
+    if (variant == 0) {
+        directory[3] = 255;
+    } else if (variant == 1) {
+        data[0] = directory[3];
+        data[1] = directory[4];
+    } else if (variant == 2) {
+        directory[2] = 0x84;
+    } else {
+        directory[21] = 2;
+        directory[22] = 0;
+        sector_bytes(&image, type, 2, 0)[1] = 0xff;
+    }
+    send_command(&unit, &bank, "V0");
+    unsigned int steps = 0;
+    while (dos_work_pending(&unit)) {
+        ck_assert_uint_lt(steps++, image.size / DISKIMAGE_SECTOR_SIZE + 128);
+        dos_work(&unit, &bank);
+    }
+    ck_assert_uint_eq(unit.status_code, variant >= 2                  ? DOS_STATUS_OK
+                                        : variant == 1 && format != 0 ? DOS_STATUS_NO_BLOCK
+                                                                      : DOS_STATUS_READ_ERROR);
+    if (variant == 3) {
+        ck_assert_uint_eq(fixture_bam_entry(&image, format, 2)[1] & 1u, 0);
+    } else if (variant == 2) {
+        ck_assert(!unit.bam[0].dirty);
+        ck_assert_uint_eq(unit.free_blocks[0], free_blocks);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// A fresh identity cannot receive the old job's maps, even between cooperative phases.
+START_TEST(test_validate_stale_media_never_reaches_replacement_io) {
+    const unsigned int format = (unsigned int)_i / 3u, stage = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0}, replacement = {0};
+    image_t image, next;
+    mount_blank(&bank, &image, format);
+    mount_blank(&replacement, &next, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    rename_fixture(&unit, &bank);
+    send_command(&unit, &bank, "V0");
+    if (stage != 0) {
+        while (unit.initialize.pending) {
+            dos_work(&unit, &bank);
+        }
+    }
+    if (stage == 2) {
+        while (!unit.validate.directory_chain) {
+            ck_assert(dos_work_pending(&unit));
+            dos_work(&unit, &bank);
+        }
+    }
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, &replacement.units[0].slots[0].io), DOS_MEDIA_OK);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(next.reads + next.writes, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+    free(next.bytes);
+}
+END_TEST
+
+// Near-capacity peer ownership must not be overwritten by fixed scratch pages.
+START_TEST(test_validate_resource_pressure_and_absent_slot) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0}, other = {0};
+    image_t first, second;
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (uint8_t secondary = 2; secondary < 7; ++secondary) {
+        char name[] = "1:PEER0,S,W";
+        name[6] += secondary;
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, name), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 0x20, 4);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    for (uint8_t secondary = 2; secondary < 7; ++secondary) {
+        char name[] = "1:PEER0,S,R";
+        name[6] += secondary;
+        ck_assert_uint_ne(open_name(&unit, &bank, secondary, name), DOS_UNUSED);
+    }
+    dos_channel_t saved[DOS_CHANNEL_COUNT];
+    memcpy(saved, unit.channels, sizeof(saved));
+    const uint16_t buffers = unit.buffer_use;
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, format == 0 ? DOS_STATUS_OK : DOS_STATUS_NO_CHANNEL);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_mem_eq(unit.channels, saved, sizeof(saved));
+    ck_assert(dos_close(&unit, &bank, model, 15));
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, NULL), DOS_MEDIA_OK);
+    send_command(&unit, &bank, "V1");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_READY);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// Rebuild every native BAM range and reserve an extended directory by its links.
+START_TEST(test_validate_marks_all_bam_parts_and_directory_extensions) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t directory_track = format == 0 ? 18 : 39;
+    const uint8_t tracks[] = {1, format == 0 ? 35 : 51, format == 2 ? 101 : 0, format == 2 ? 151 : 0};
+    uint8_t* const directory = sector_bytes(&image, type, directory_track, 1);
+    directory[0] = directory_track;
+    directory[1] = 2;
+    sector_bytes(&image, type, directory_track, 2)[1] = 0xff;
+    directory[2] = 0x81;
+    directory[3] = tracks[0];
+    memcpy(directory + 5, "CHAIN", 5);
+    for (unsigned int index = 0; index < count_of(tracks) && tracks[index] != 0; ++index) {
+        uint8_t* const bytes = sector_bytes(&image, type, tracks[index], 0);
+        bytes[0] = index + 1 < count_of(tracks) ? tracks[index + 1] : 0;
+        bytes[1] = bytes[0] == 0 ? 3 : 0;
+        bytes[2] = 0x20 + index;
+    }
+    image_t oracle = image;
+    oracle.bytes = malloc(image.size);
+    ck_assert_ptr_nonnull(oracle.bytes);
+    memcpy(oracle.bytes, image.bytes, image.size);
+    for (unsigned int index = 0; index < count_of(tracks) && tracks[index] != 0; ++index) {
+        uint8_t* const entry = fixture_bam_entry(&oracle, format, tracks[index]);
+        --entry[0];
+        entry[1] &= (uint8_t)~1u;
+    }
+    uint8_t* const directory_map = fixture_bam_entry(&oracle, format, directory_track);
+    --directory_map[0];
+    directory_map[1] &= (uint8_t)~4u;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    send_command(&unit, &bank, "V0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_mem_eq(image.bytes, oracle.bytes, image.size);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(oracle.bytes);
+    free(image.bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -3295,6 +4477,34 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_unpublished_writer_reserves_filename, 0, 12);
     tcase_add_loop_test(core, test_unpublished_writer_retires_before_same_secondary_open, 0, 3);
     tcase_add_loop_test(core, test_write_pattern_flags_across_parse_passes, 0, 30);
+    tcase_add_loop_test(core, test_metadata_command_boundaries_and_retirement, 0, 21);
+    tcase_add_loop_test(core, test_metadata_names_retain_explicit_padding_and_native_limits, 0, 18);
+    tcase_add_loop_test(core, test_rename_changes_only_directory_name_and_preserves_reader, 0, 3);
+    tcase_add_loop_test(core, test_rename_native_parser_and_error_precedence, 0, 63);
+    tcase_add_loop_test(core, test_rename_cross_drive_collision_and_source_selection, 0, 6);
+    tcase_add_loop_test(core, test_rename_storage_failures_release_only_internal_ownership, 0, 15);
+    tcase_add_loop_test(core, test_rename_yields_and_preserves_later_directory_edits, 0, 3);
+    tcase_add_loop_test(core, test_rename_rejects_stale_media_at_lookup_and_commit, 0, 6);
+    tcase_add_loop_test(core, test_rename_unclosed_writer_survives_close_without_restoring_old_name, 0, 3);
+    tcase_add_loop_test(core, test_rename_default_drive_and_absent_source, 0, 6);
+    tcase_add_loop_test(core, test_rename_shared_resource_exhaustion_and_recovery, 0, 3);
+    tcase_add_loop_test(core, test_scratch_releases_exact_chain_and_preserves_peer_reader, 0, 3);
+    tcase_add_loop_test(core, test_scratch_native_parser_patterns_and_counts, 0, 60);
+    tcase_add_loop_test(core, test_scratch_active_locked_unclosed_and_rel_entries, 0, 18);
+    tcase_add_loop_test(core, test_scratch_cross_drive_patterns_and_default_selection, 0, 9);
+    tcase_add_loop_test(core, test_scratch_pattern_limit_and_resource_recovery, 0, 3);
+    tcase_add_loop_test(core, test_scratch_mixed_defaults_require_third_drive_search, 0, 3);
+    tcase_add_loop_test(core, test_scratch_storage_failures_and_stale_media, 0, 27);
+    tcase_add_loop_test(core, test_scratch_releases_chains_across_bam_parts, 1, 3);
+    tcase_add_loop_test(core, test_scratch_yields_reenters_and_bounds_corrupt_chains, 0, 6);
+    tcase_add_loop_test(core, test_validate_repairs_maps_deletes_splats_and_preserves_counts, 0, 3);
+    tcase_add_loop_test(core, test_validate_drive_selection_and_peer_cursor, 0, 18);
+    tcase_add_loop_test(core, test_validate_crosslinks_are_model_specific, 0, 3);
+    tcase_add_loop_test(core, test_validate_storage_errors_and_retry, 0, 18);
+    tcase_add_loop_test(core, test_validate_corruption_and_side_links, 0, 12);
+    tcase_add_loop_test(core, test_validate_stale_media_never_reaches_replacement_io, 0, 9);
+    tcase_add_loop_test(core, test_validate_resource_pressure_and_absent_slot, 0, 3);
+    tcase_add_loop_test(core, test_validate_marks_all_bam_parts_and_directory_extensions, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }
