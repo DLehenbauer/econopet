@@ -10,10 +10,10 @@
 #include "fatal.h"
 #include "ieee/ieee_protocol.h"
 
-// Read/status and ordinary-write foundations of the replacement DOS. The
-// production facade still selects the legacy engine. Commands, direct channels
-// and REL are not enabled here. Sector callbacks and cooperative OPEN/preview
-// are host adaptations, not controller jobs or electrical IEEE handshakes.
+// Read/write, metadata, direct/block and reset foundations of the replacement
+// DOS. The production facade still selects the legacy engine. COPY, FORMAT
+// and REL are not enabled here. Sector callbacks and cooperative workers are
+// host adaptations, not controller jobs or electrical IEEE handshakes.
 //
 // The selected ROMs are 4040 revision 2 and shared DOS 2.7 in 8050 MPI or 8250
 // MPI mode. Source links below are pinned to cbmsrc
@@ -104,6 +104,18 @@ typedef enum {
     DOS_VALIDATE_WRITE,
     DOS_VALIDATE_RECOVER,
 } dos_validate_phase_t;
+
+#define DOS_BLOCK_PARAMETER_SKIP 29u
+#define DOS_BLOCK_FIRST_SECONDARY 2u
+#define DOS_BLOCK_PARAMETER_START 3u
+#define DOS_BLOCK_MIN_COUNT 1u
+#define DOS_USER_SELECTOR_MASK 0x0fu
+#define DOS_USER_WARM_RESET_INDEX 8u
+#define DOS_USER_RESET_INDEX 9u
+#define DOS_USER_INTERRUPT_INDEX 10u
+#define DOS_SINGLETON_LAST_PHASE 4u
+#define DOS_USER_BLOCK_READ_INDEX 0u
+#define DOS_USER_BLOCK_WRITE_INDEX 1u
 
 typedef struct {
     uint8_t patterns[DOS_FILENAME_COUNT][DOS_DIRECTORY_PATTERN_SIZE];
@@ -1217,6 +1229,24 @@ static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media
     // can be retried without repeating block counts or losing owned buffers.
     const dos_model_t model = media->units[channel->media.unit].model;
     unit->selected_drive = channel->media.slot;
+    if (channel->access == DOS_ACCESS_DIRECT) {
+        // CLSCHN skips file finalization but still reaches MAPOUT.
+        if (channel->closing == DOS_CLOSE_DATA) {
+            if (!unit->bam[channel->media.slot].dirty) {
+                return true;
+            }
+            if (!flush_bam(unit, media, &unit->bam[channel->media.slot])) {
+                return false;
+            }
+            channel->closing = DOS_CLOSE_FLUSH;
+        }
+        dos_media_ref_t current = {0};
+        if (dos_media_reference(media, channel->media.unit, channel->media.slot, &current) != DOS_MEDIA_OK ||
+            current.identity != channel->media.identity) {
+            return storage_error(unit, media, channel->media, DOS_MEDIA_STALE, true, 0, 0);
+        }
+        return storage_error(unit, media, channel->media, dos_media_flush_unit(media, channel->media.unit), true, 0, 0);
+    }
     // No directory coordinates were published if growth allocation failed.
     if (channel->closing == DOS_CLOSE_ABORT_OPEN) {
         if (channel->first_track != 0) {
@@ -1530,6 +1560,17 @@ void dos_put(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
         return;
     }
     dos_channel_t* const channel = &unit->channels[index];
+    if (channel->access == DOS_ACCESS_DIRECT) {
+        // tst2:L46/PUTBYT refresh CHNDAT at the incremented pointer.
+        uint8_t* const bytes = unit->buffers[channel->buffers[0]].bytes;
+        bytes[channel->position] = byte;
+        channel->position = (uint8_t)(channel->position + 1u);
+        channel->direct_byte = bytes[channel->position];
+        if (channel->position == channel->direct_last) {
+            channel->direct_eoi = true;
+        }
+        return;
+    }
     // Accept ordinary data only for a writable channel still in its data
     // phase. Failed channels retain their state for finalization or retry.
     if (channel->access == DOS_ACCESS_READ || channel->access == DOS_ACCESS_MODIFY ||
@@ -1544,6 +1585,259 @@ void dos_put(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
             free_channel(unit, index);
         }
     }
+}
+
+// Parse block parameters into retained low bytes, defaulting omitted values to zero.
+// Return false for table overflow or an unsupported scratch-dependent retained value.
+static bool block_parameters(const uint8_t* const input, const unsigned int length, unsigned int cursor,
+                             uint8_t* const values, const unsigned int retained) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    //
+    // BP05 skips separators, ASCHEX shifts three digit slots, and AH40 stores
+    // low/high results in FILSEC/FILTRK. Callers here consume only low bytes.
+    // Partial output on false is not usable, and callers report syntax status.
+    memset(values, 0, retained);
+    unsigned int parameters = 0;
+    uint8_t hundreds = 0;
+    bool numeric_seen = false;
+    while (cursor < length) {
+        if (input[cursor] == ' ' || input[cursor] == DOS_BLOCK_PARAMETER_SKIP || input[cursor] == ',') {
+            ++cursor;
+            continue;
+        }
+        // AH10 accepts $30..$3F, not just decimal ASCII. Retain the last
+        // three low nibbles, then weight them by DECTAB's 1/10/100.
+        uint8_t digits[3] = {0, 0, hundreds};
+        const unsigned int start = cursor;
+        while (cursor < length && input[cursor] >= '0' && input[cursor] < '@') {
+            digits[2] = digits[1];
+            digits[1] = digits[0];
+            digits[0] = input[cursor++] & 0x0fu;
+        }
+        if (parameters < retained) {
+            // A preceding numeric field determines retained TEMP+2. Before
+            // the first one, it still depends on unmodeled caller scratch RAM.
+            if (cursor == start && !numeric_seen) {
+                return false;
+            }
+            values[parameters] = (uint8_t)(digits[0] + 10u * digits[1] + 100u * digits[2]);
+        }
+        hundreds = digits[2];
+        numeric_seen |= cursor != start;
+        // Even ignored extra values count toward BP20's four-value limit.
+        if (++parameters == DOS_FILENAME_COUNT) {
+            return false;
+        }
+        // BP10 also consumes the character which stopped ASCHEX.
+        if (cursor < length) {
+            ++cursor;
+        }
+    }
+    return true;
+}
+
+// Return the position after a delimiter, or zero at EOF/the fourth preceding comma.
+// Also return the preceding comma count for callers retaining PARSE's table index.
+static unsigned int command_delimiter(const uint8_t* const bytes, const unsigned int length, const uint8_t delimiter,
+                                      unsigned int* const commas) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    //
+    // PR10 increments Y before returning a match. PR25 bounds the comma
+    // table at MXFILS-1, and PR30 returns Y=0 when no delimiter is reached.
+    // This helper extracts only that scan, not PARSE's pattern/table updates.
+    *commas = 0;
+    for (unsigned int cursor = 0; cursor < length; ++cursor) {
+        if (bytes[cursor] == delimiter) {
+            return cursor + 1u;
+        }
+        if (bytes[cursor] == ',' && ++*commas == DOS_FILENAME_COUNT - 1u) {
+            break;
+        }
+    }
+    return 0;
+}
+
+// Validate block commands, queue storage work, or position a direct page in RAM.
+// Use user_operation for U1/U2 aliases without parsing a B-* operation letter.
+static void block_start(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                        const unsigned int length, const uint8_t user_operation) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    //
+    // BLOCK selects a subcommand, BLKPAR parses parameters, and BUFTST/BLKTST
+    // select a channel and coordinates. BLKPTR completes in RAM, while C
+    // defers BLKRD/UBLKRD/BLKWT/UBLKWT and map operations to scheduled workers.
+    const dos_model_t model = media->units[index].model;
+    const uint8_t* const bytes = unit->command_bytes;
+    unsigned int commas;
+    uint8_t operation = user_operation;
+    if (user_operation == 0) {
+        // BLOCK accepts a longer prefix but uses the first '-' and rejects
+        // any preceding comma. Missing/unknown operations give BADCMD.
+        const unsigned int delimiter = command_delimiter(bytes, length, '-', &commas);
+        if (delimiter == 0) {
+            dos_status(unit, model, DOS_STATUS_INVALID_COMMAND, 0, 0);
+            return;
+        }
+        if (commas != 0) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        if (delimiter >= length) {
+            dos_status(unit, model, DOS_STATUS_INVALID_COMMAND, 0, 0);
+            return;
+        }
+        operation = bytes[delimiter];
+        if (operation != 'R' && operation != 'W' && operation != 'P' && operation != 'A' && operation != 'F') {
+            // Arbitrary code execution remains explicitly excluded.
+            const bool known = operation == 'E';
+            dos_status(unit, model, known ? DOS_STATUS_SYNTAX : DOS_STATUS_INVALID_COMMAND, 0, 0);
+            return;
+        }
+    }
+    // BLKPAR starts after the first colon, or at byte index 3 without one.
+    // A/F use drive,track,sector without a channel. P uses channel,offset.
+    // Read/write commands retain all four values, including their channel.
+    const unsigned int colon = command_delimiter(bytes, length, ':', &commas);
+    const bool mapping = operation == 'A' || operation == 'F';
+    uint8_t parameters[DOS_FILENAME_COUNT - 1u];
+    if (!block_parameters(bytes, length, colon != 0 ? colon : DOS_BLOCK_PARAMETER_START, parameters,
+                          mapping            ? 3u
+                          : operation != 'P' ? count_of(parameters)
+                                             : 2u)) {
+        dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        return;
+    }
+    dos_channel_t* state = NULL;
+    const uint8_t secondary = parameters[0];
+    const uint8_t channel = dos_find_channel(unit, secondary);
+    if (!mapping) {
+        // BUFTST uses the byte-sized (SA - 2) < BAMJOB test, excluding SA 14.
+        if ((uint8_t)(secondary - DOS_BLOCK_FIRST_SECONDARY) >= DOS_BUFFER_COUNT || channel == DOS_UNUSED ||
+            unit->channels[channel].access == DOS_ACCESS_WRITE || unit->channels[channel].access == DOS_ACCESS_APPEND) {
+            dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+            return;
+        }
+        state = &unit->channels[channel];
+        if (state->access != DOS_ACCESS_DIRECT && operation != 'P' && state->directory != DOS_DIRECTORY_NONE) {
+            // Formatted LOAD listings remain an explicit host-policy exclusion.
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+    }
+    if (operation != 'P') {
+        // BLKTST folds the drive to bit zero. Validate against model geometry
+        // before scheduling, without consulting the image or changing its BAM.
+        const unsigned int drive_index = mapping ? 0u : 1u;
+        const uint8_t drive = parameters[drive_index] & 1u, track = parameters[drive_index + 1u],
+                      sector = parameters[drive_index + 2u];
+        unit->selected_drive = drive;
+        const diskimage_type_t type = model == DOS_MODEL_4040   ? diskimage_type_d64
+                                      : model == DOS_MODEL_8050 ? diskimage_type_d80
+                                      : model == DOS_MODEL_8250 ? diskimage_type_d82
+                                                                : diskimage_type_none;
+        if (type == diskimage_type_none) {
+            dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+            return;
+        }
+        unsigned int sectors;
+        if (!diskimage_track_sectors(type, track, &sectors) || sector >= sectors) {
+            // 4040 erproc:HEXDEC retains two BCD digits. DOS 2.7 emits hundreds.
+            dos_status(unit, model, DOS_STATUS_ILLEGAL_TRACK_SECTOR, model == DOS_MODEL_4040 ? track % 100u : track,
+                       model == DOS_MODEL_4040 ? sector % 100u : sector);
+            return;
+        }
+        // Capture the host media generation for deferred work. OK here is
+        // the command's working status, not proof that its I/O has completed.
+        dos_media_ref_t reference = {.unit = index, .slot = drive};
+        dos_media_reference(media, index, drive, &reference);
+        if (mapping) {
+            unit->block_map = (dos_block_map_work_t){
+                .media = reference, .track = track, .sector = sector, .allocate = operation == 'A'};
+            unit->command = DOS_COMMAND_BLOCK_MAP;
+            dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+            return;
+        }
+        // Keep U1/U2 raw-page semantics distinct from B-R/B-W count-byte
+        // handling. No storage job is issued at this dispatch boundary.
+        unit->block = (dos_block_work_t){
+            .media = reference, .channel = channel, .track = track, .sector = sector, .raw = user_operation != 0};
+        unit->command = operation == 'W' ? DOS_COMMAND_BLOCK_WRITE : DOS_COMMAND_BLOCK_READ;
+        dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+        return;
+    }
+    if (state->access != DOS_ACCESS_DIRECT) {
+        // Ordinary readers need lazy-to-native active-page cursor conversion,
+        // which may require reading a successor before BLKPTR can be applied.
+        unit->block = (dos_block_work_t){.channel = channel, .offset = parameters[1]};
+        unit->command = DOS_COMMAND_READ_POINTER;
+        dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+        return;
+    }
+    // BLKPTR/GETPRE prepare the byte without incrementing. RNGET2 can set
+    // EOI at LSTCHR, but positioning elsewhere does not clear an existing EOI.
+    // B-P leaves drive selection unchanged and issues no sector I/O here.
+    state->position = parameters[1];
+    state->direct_byte = unit->buffers[state->buffers[state->active]].bytes[state->position];
+    if (state->position == state->direct_last) {
+        state->direct_eoi = true;
+    }
+    command_end(unit, model);
+}
+
+// Consume a deferred DOS 2.7 reload flag by invalidating host metadata caches.
+// Leave actual sector reads to the next lazy metadata consumer.
+static void auto_initialize(dos_unit_t* const unit, const uint8_t drive) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/romtbl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // CONFIG/CONF10 copies MSCCOM's WPSW flags. JAUTOI consumes the selected
+    // flag and calls INITDR after a successful trial, without MAPOUT.
+    // This host helper has no direct ROM entry: it implements only deferred
+    // cache invalidation, not the physical trial or INITDR's channel sweep.
+    if (unit->bam[drive].reinitialize) {
+        // Discard dirty cached allocation state without flushing it. Clearing
+        // the entire cache also consumes the flag, making this a one-shot step.
+        unit->bam[drive] = (dos_bam_t){0};
+        unit->free_blocks[drive] = 0;
+        unit->free_blocks_valid[drive] = false;
+    }
+}
+
+// NMI/DIAGOK reinitialize channel ownership without the cold-start RAM tests.
+static void warm_reset(dos_unit_t* const unit, const dos_model_t model) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/vector
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/dskint
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/vector
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+    // U9/UI enter NMI -> (VNMI) -> DIAGOK, not DSKINT's RAM clearing.
+    memset(unit->channels, 0, sizeof(unit->channels));
+    unit->open = (dos_open_work_t){0};
+    unit->buffer_use = 0;
+    unit->directory_internal = 0;
+    for (unsigned int buffer = 0; buffer < DOS_BUFFER_COUNT; ++buffer) {
+        unit->buffers[buffer].resident = false;
+        unit->buffers[buffer].failed = false;
+    }
+    // DOS 2.7 CONFIG/MSCCOM sets both WPSW flags. Only a later AUTOI path
+    // reloads metadata. Block commands alone can still use the retained BAM.
+    if (model != DOS_MODEL_4040) {
+        for (unsigned int drive = 0; drive < DOS_MEDIA_SLOTS_PER_UNIT; ++drive) {
+            unit->bam[drive].reinitialize = true;
+        }
+    }
+    // Data bytes, LSTJOB drive bits, last-drive/program state and the command
+    // buffer survive. 4040 also retains its BAMs. Nothing is flushed.
+    dos_status(unit, model, DOS_STATUS_POWER_ON, 0, 0);
 }
 
 // Select the starting drive for INITIALIZE/VALIDATE and report an omitted selector.
@@ -1930,6 +2224,7 @@ static void rename_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const uint8_t drive = work->source_drive ^ work->tried_peer;
     const dos_media_ref_t reference = work->media[drive];
     const dos_model_t model = media->units[reference.unit].model;
+    auto_initialize(unit, drive);
     uint8_t* const bytes = unit->buffers[work->scratch[0]].bytes;
     unit->selected_drive = drive;
     if (work->commit) {
@@ -2110,6 +2405,7 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
     const dos_model_t model = media->units[reference.unit].model;
     const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
     unit->selected_drive = work->drive;
+    auto_initialize(unit, work->drive);
     uint8_t* const bytes = unit->buffers[work->buffers[0]].bytes;
     if (work->phase == DOS_SCRATCH_CHAIN) {
         unsigned int sectors;
@@ -2740,7 +3036,7 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
     command_end(unit, model);
 }
 
-// Dispatch collected metadata commands without taking over transport collection.
+// Dispatch collected metadata, block and reset commands without taking over transport collection.
 // The caller completes preceding work before submitting another request.
 void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
                  const uint8_t* const request, unsigned int length) {
@@ -2751,8 +3047,8 @@ void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const un
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
     //
     // CMDSET trims either trailing CR position before LONGLN. PARSXQ dispatches
-    // by the first byte. This host API schedules only metadata workers, not the
-    // native input collector, other command families, or production facade.
+    // by the first byte. This host API schedules the supported workers, not the
+    // native input collector, excluded command families, or production facade.
     vet(!dos_work_pending(unit), "native command requires its preceding job to complete");
     const dos_model_t model = media->units[index].model;
     if (length > DOS_COMMAND_RECEIVE_CAPACITY) {
@@ -2771,6 +3067,26 @@ void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const un
         }
         if (length > DOS_COMMAND_LIMIT) {
             dos_status(unit, model, DOS_STATUS_COMMAND_TOO_LONG, 0, 0);
+        } else if (bytes[0] == 'B') {
+            block_start(unit, media, index, length, 0);
+        } else if (bytes[0] == 'I') {
+            // INTDRV/SIMPRS selects one disk or both, starting with LSTDRV.
+            // Capture identities now, before cooperative INITDR reloads them.
+            // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+            // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+            bool both;
+            const uint8_t drive = initialize_drive(bytes, length, unit->last_drive, &both);
+            unit->initialize = (dos_initialize_work_t){
+                .first_drive = drive,
+                .slots = both ? (1u << DOS_MEDIA_SLOTS_PER_UNIT) - 1u : 1u << drive,
+                .pending = true,
+            };
+            for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+                dos_media_ref_t* const reference = &unit->initialize.media[slot];
+                *reference = (dos_media_ref_t){.unit = index, .slot = slot};
+                dos_media_reference(media, index, slot, reference);
+            }
+            dos_status(unit, model, DOS_STATUS_OK, 0, 0);
         } else if (bytes[0] == 'R') {
             rename_start(unit, media, index, length);
         } else if (bytes[0] == 'S') {
@@ -2797,6 +3113,50 @@ void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const un
             unit->command = DOS_COMMAND_VALIDATE;
             dos_status(unit, model, DOS_STATUS_OK, 0, 0);
         } else {
+            if (bytes[0] == 'U') {
+                // USER/USREXC selects the factory UBLOCK vector by low nibble.
+                // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+                // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+                // USER reads CMDBUF+1 even for a short request. U0's earlier return
+                // can leave its selector there. All storage remains inside the array.
+                const uint8_t selector = bytes[1];
+                if (selector == '0') {
+                    // Custom vector mutation is excluded, so USRINT restores a table
+                    // that is already fixed. It neither closes channels nor ENDCMDs.
+                    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+                    return;
+                }
+                // USREXC folds (selector - 1) to a four-bit table index, so alphabetic
+                // and numeric aliases share vectors. U1/U2 select raw block transfers.
+                if (((selector - 1u) & DOS_USER_SELECTOR_MASK) == DOS_USER_BLOCK_READ_INDEX) {
+                    block_start(unit, media, index, length, 'R');
+                    clear_command(unit);
+                    return;
+                }
+                if (((selector - 1u) & DOS_USER_SELECTOR_MASK) == DOS_USER_BLOCK_WRITE_INDEX) {
+                    block_start(unit, media, index, length, 'W');
+                    clear_command(unit);
+                    return;
+                }
+                if (((selector - 1u) & DOS_USER_SELECTOR_MASK) == DOS_USER_WARM_RESET_INDEX) {
+                    // UBLOCK's U9/UI vector enters NMI, preserving command RAM.
+                    warm_reset(unit, model);
+                    return;
+                }
+                if (((selector - 1u) & DOS_USER_SELECTOR_MASK) == DOS_USER_RESET_INDEX) {
+                    // U:/UJ enters DSKINT, abandoning DOS state without host CLOSE.
+                    dos_reset(unit, model);
+                    clear_command(unit);
+                    return;
+                }
+                if (((selector - 1u) & DOS_USER_SELECTOR_MASK) == DOS_USER_INTERRUPT_INDEX) {
+                    // Default vector:UBLOCK enters ieee:ATNIRQ, not NMI/DSKINT.
+                    // The transport already handles ATN. PARSXQ's OK survives and
+                    // the stack reset bypasses ENDCMD/CLRCB without touching channels.
+                    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+                    return;
+                }
+            }
             // Recognized but excluded commands return explicit host policy 30,
             // not a claimed native result. Preserve each model's command table.
             const char* const commands = model == DOS_MODEL_4040 ? "IVDMBUPCRSN" : "VIDMBUP&CRSN";
@@ -3135,6 +3495,87 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     return true;
 }
 
+// Open a direct channel on one automatic or explicitly requested raw data page.
+// Preserve page contents and prepare its binary page number as the first byte.
+static void open_direct(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                        const uint8_t secondary, const uint8_t* const input, const unsigned int length) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+    //
+    // OPNBLK requests one GETRCH buffer for bare '#'. OB10 instead reserves
+    // an explicit page before calling GETRCH with zero buffers. OB30 makes
+    // the channel readable/writable without a filename lookup or ADDFIL.
+    const dos_model_t model = media->units[index].model;
+    if (model != DOS_MODEL_4040) {
+        // DOS 2.7 starts OPNBLK with LSTDRV/AUTOI. C invalidates metadata
+        // lazily rather than reproducing the ROM's immediate disk jobs.
+        unit->selected_drive = unit->last_drive;
+        auto_initialize(unit, unit->selected_drive);
+    }
+    const bool automatic = length == 1;
+    uint8_t buffer = DOS_UNUSED;
+    if (!automatic && !block_parameters(input, length, 1, &buffer, 1)) {
+        dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        return;
+    }
+    if (!automatic) {
+        // Test ownership before freeing this secondary's old channel, so an
+        // explicitly requested page already owned by that channel is rejected.
+        if (buffer >= DOS_BUFFER_COUNT || (unit->buffer_use & (1u << buffer))) {
+            dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+            return;
+        }
+        // Native explicit reservation precedes GETRCH's channel search.
+        unit->buffer_use |= (uint16_t)(1u << buffer);
+    }
+
+    // GETRCH/FRECHN abandon prior ownership without writable CLOSE semantics.
+    const uint8_t previous = dos_find_channel(unit, secondary);
+    if (previous != DOS_UNUSED) {
+        free_channel(unit, previous);
+    }
+    if (model != DOS_MODEL_4040) {
+        unit->selected_drive = unit->last_drive;
+    }
+    // Capture host media identity for subsequent sector operations. Merely
+    // opening the RAM page does not require successful media binding here.
+    dos_media_ref_t reference = {.unit = index, .slot = unit->selected_drive};
+    dos_media_reference(media, index, reference.slot, &reference);
+    const uint8_t channel = allocate_channel(unit, reference, secondary, automatic ? 1 : 0);
+    if (channel == DOS_UNUSED) {
+        // Match OB10's ordering: an explicit page reservation can survive
+        // logical-channel exhaustion even though no channel was published.
+        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        return;
+    }
+    dos_channel_t* const state = &unit->channels[channel];
+    if (automatic) {
+        // GETBUF chooses the page and initializes its last-job drive.
+        buffer = state->buffers[0];
+    } else {
+        state->buffers[0] = buffer;
+        if (model != DOS_MODEL_4040) {
+            const uint16_t bit = 1u << buffer;
+            unit->buffer_drives = (unit->buffer_drives & (uint16_t)~bit) | (reference.slot != 0 ? bit : 0);
+        }
+        // 4040 explicit buffers retain LSTJOB. DOS 2.7 refreshes it in OB10.
+        reference = (dos_media_ref_t){.unit = index, .slot = (unit->buffer_drives >> buffer) & 1u};
+        dos_media_reference(media, index, reference.slot, &reference);
+        state->media = reference;
+    }
+
+    // OB30 sets LSTCHR=$FF, BUFTAB=1, and CHNDAT to the binary page number
+    // (not bytes[0]). The initial response has no EOI and does not clear RAM.
+    state->access = DOS_ACCESS_DIRECT;
+    state->position = 1;
+    state->direct_last = DISKIMAGE_SECTOR_SIZE - 1u;
+    state->direct_byte = buffer;
+    command_end(unit, model);
+}
+
 // Accept OPEN, handling special names or retaining a directory-search job.
 // Finish preceding work first. Special names may perform synchronous disk I/O.
 // Reject invalid requests with status instead of starting another job.
@@ -3163,7 +3604,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // read eligibility, and OPREAD calls OPNRCH. Splitting ordinary lookup
     // into dos_work is a firmware scheduling adaptation. That continuation
     // handles multi-drive search and ordinary construction. '$' and retained
-    // '*' requests can finish here, while '#' is rejected in this slice.
+    // '*' requests can finish here. '#' opens a raw shared page.
     vet(!dos_work_pending(unit), "native OPEN requires its preceding job to complete");
     const dos_model_t model = media->units[index].model;
     // ROM tst2:L42 collects bounded input. The approved 4040 revision-2 pointer
@@ -3191,7 +3632,8 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         return;
     }
     if (length != 0 && input[0] == '#') {
-        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
+        open_direct(unit, media, index, secondary, input, length);
+        clear_command(unit);
         return;
     }
 
@@ -3325,6 +3767,305 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     unit->open = parsed;
 }
 
+// Load the linked successor page and commit a channel switch only on success.
+// Leave its prepared byte/EOI fields intact for the caller's pointer conversion.
+static bool pointer_next_buffer(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // RDBYT/RD1 switch through DBLBUF while retaining the old page's last
+    // prepared byte in DATA. This host helper has no direct ROM entry: it
+    // materializes that switch for the lazy C cursor before applying B-P.
+    const uint8_t* const bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    const uint8_t track = channel->pointer_mode ? channel->next_track : bytes[0];
+    const uint8_t sector = channel->pointer_mode ? channel->next_sector : bytes[1];
+    const unsigned int limit =
+        media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+    // A zero link has no successor. The visit bound is a host cycle safeguard.
+    if (track == 0 || channel->traversed >= limit) {
+        return false;
+    }
+    // Read through a tentative cursor so failure does not advance channel
+    // state, although load_buffer may still touch the shared page cache.
+    dos_channel_t next = *channel;
+    ++next.traversed;
+    next.active ^= 1u;
+    // A block read can replace the active page without changing the already
+    // prefetched alternate or its job drive. DBLBUF selects that old job.
+    const uint8_t buffer = next.buffers[next.active];
+    const uint8_t drive = (unit->buffer_drives >> buffer) & 1u;
+    if (drive != next.media.slot && dos_media_reference(media, next.media.unit, drive, &next.media) != DOS_MEDIA_OK) {
+        return false;
+    }
+    if (!load_buffer(unit, media, &next, track, sector)) {
+        return false;
+    }
+    if (next.pointer_mode) {
+        const uint8_t* const page = unit->buffers[buffer].bytes;
+        next.read_last = page[0] == 0 ? page[1] : 0;
+        next.next_track = page[0];
+        next.next_sector = page[1];
+    }
+    *channel = next;
+    return true;
+}
+
+// Materialize the native prepared byte, post-GET pointer and active page before edits.
+static bool materialize_reader(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // GETBYT/RDBYT advance BUFTAB before CHNDAT is transmitted. GETPNT
+    // observes that advanced pointer, including the singleton OPEN wrap.
+    // No direct ROM entry: convert the host's lazy transmit cursor to this
+    // prepared-byte representation before B-P or a descriptor-changing edit.
+    if (channel->pointer_mode) {
+        return true;
+    }
+    const uint8_t* bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    const uint8_t singleton = channel->singleton;
+    // Lazy position names the next transmitted byte. GETPNT instead observes
+    // BUFTAB after RDBYT has already prepared CHNDAT (and possibly wrapped).
+    if (channel->ready && channel->singleton == 0 && channel->position == DISKIMAGE_SECTOR_SIZE) {
+        if (!pointer_next_buffer(unit, media, channel)) {
+            return false;
+        }
+        bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    }
+    const uint8_t last = bytes[0] == 0 ? bytes[1] : 0;
+    if (singleton != 0) {
+        static const uint8_t offsets[] = {2, 0, 1, 2};
+        const uint8_t offset = offsets[singleton - 1u];
+        channel->read_byte = bytes[offset];
+        channel->position = offset == 2 ? 0 : offset + 1u;
+    } else if (channel->ready) {
+        channel->read_byte = bytes[channel->position];
+        channel->position = last != 0 && channel->position == last ? 0 : channel->position + 1u;
+    } else {
+        // GET0 retires readiness but leaves the final prepared byte in CHNDAT.
+        channel->read_byte = bytes[(uint8_t)(channel->position - 1u)];
+        channel->position = 0;
+    }
+    channel->read_eoi = channel->ready && (singleton == DOS_SINGLETON_LAST_PHASE ||
+                                           (singleton == 0 && last != 0 && channel->position == 0));
+    // Native RDBYT has already switched when the old page's byte 255 is prepared.
+    if (channel->ready && singleton == 0 && channel->position == DISKIMAGE_SECTOR_SIZE && bytes[0] != 0 &&
+        !pointer_next_buffer(unit, media, channel)) {
+        return false;
+    }
+    bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    channel->pointer_mode = true;
+    channel->read_last = bytes[0] == 0 ? bytes[1] : 0;
+    channel->next_track = bytes[0];
+    channel->next_sector = bytes[1];
+    return true;
+}
+
+// Apply B-P to an ordinary read channel, preserving prepared-byte boundary state.
+// Restore the channel cursor and report READ ERROR if successor loading fails.
+static void read_pointer_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // BLKPTR sets BUFTAB and calls RNGET2 to replace CHNDAT without a GET
+    // increment. RNGET2 sets EOI on LSTCHR equality but does not clear an
+    // older EOI on inequality. C first materializes the ordinary lazy cursor.
+    const dos_block_work_t work = unit->block;
+    dos_channel_t* const channel = &unit->channels[work.channel];
+    const dos_channel_t before = *channel;
+    unit->command = DOS_COMMAND_IDLE;
+    if (!materialize_reader(unit, media, channel)) {
+        goto read_error;
+    }
+    // B-P changes the shared pointer and prepared byte, not the underlying
+    // page contents. Only last-character equality forces readiness/EOI.
+    const uint8_t* const bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    channel->position = work.offset;
+    channel->read_byte = bytes[work.offset];
+    if (work.offset == channel->read_last) {
+        channel->read_eoi = true;
+        channel->ready = true;
+    }
+    command_end(unit, media->units[channel->media.unit].model);
+    return;
+
+read_error:
+    // Roll back channel metadata, not any shared cache I/O already attempted.
+    *channel = before;
+    dos_status(unit, media->units[channel->media.unit].model, DOS_STATUS_READ_ERROR, 0, 0);
+}
+
+// Read the native active page and prepare B-R/U1 without changing its file type.
+// Ordinary GET retains sequential readiness and its already prefetched alternate.
+static void block_read_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    //
+    // BLKRD2 reads the sector, then BLKRD3 clears old EOI and takes LSTCHR
+    // from byte 0. BLKRD/RNGET1 prepares byte 1, whereas UBLKRD prepares
+    // byte 0 and sets LSTCHR=$FF to expose a full raw page.
+    const dos_block_work_t work = unit->block;
+    const dos_model_t model = media->units[work.media.unit].model;
+    dos_channel_t* const channel = &unit->channels[work.channel];
+    unit->command = DOS_COMMAND_IDLE;
+    if (channel->access != DOS_ACCESS_DIRECT) {
+        const dos_channel_t before = *channel;
+        if (!materialize_reader(unit, media, channel)) {
+            *channel = before;
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, 0);
+            return;
+        }
+    }
+    dos_buffer_t* const buffer = &unit->buffers[channel->buffers[channel->active]];
+    channel->media = work.media;
+    unit->selected_drive = work.media.slot;
+    // Retire this scheduled operation before synchronous I/O. Failure leaves
+    // error reporting to storage_error without publishing successful residency.
+    if (!storage_error(unit, media, work.media,
+                       read_sector(unit, media, work.media, work.track, work.sector, buffer->bytes), false, work.track,
+                       work.sector)) {
+        return;
+    }
+    buffer->track = work.track;
+    buffer->sector = work.sector;
+    buffer->resident = true;
+    buffer->failed = false;
+    // Replace, rather than preserve, direct EOI state for the newly read page.
+    channel->direct_last = work.raw ? DISKIMAGE_SECTOR_SIZE - 1u : buffer->bytes[0];
+    channel->position = work.raw ? 0 : 1;
+    channel->direct_byte = buffer->bytes[channel->position];
+    channel->direct_eoi = !work.raw && channel->position == channel->direct_last;
+    channel->failed = false;
+    channel->ready = true;
+    command_end(unit, model);
+}
+
+// Write the native active page without changing direct/ordinary channel type.
+// Report completion only after version checks, storage write, and host flush succeed.
+static void block_write_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    //
+    // BLKWT/BW10 replace byte 0 with max(1, pointer-1), leaving the pointer
+    // at 1 before DRTWRT. BW20/RNGET2 then refresh CHNDAT. UBLKWT skips
+    // count/pointer changes and writes the page as-is. RNGET2 equality also
+    // restores ordinary readiness, without changing its sequential file type.
+    // Host flushes and media-generation rejection are policy, not ROM fields.
+    const dos_block_work_t work = unit->block;
+    const dos_model_t model = media->units[work.media.unit].model;
+    dos_channel_t* const channel = &unit->channels[work.channel];
+    unit->command = DOS_COMMAND_IDLE;
+    if (channel->access != DOS_ACCESS_DIRECT) {
+        const dos_channel_t before = *channel;
+        if (!materialize_reader(unit, media, channel)) {
+            *channel = before;
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, 0);
+            return;
+        }
+    }
+    dos_buffer_t* const buffer = &unit->buffers[channel->buffers[channel->active]];
+    unit->selected_drive = work.media.slot;
+    if (!work.raw) {
+        // These pre-write changes remain even if persistence fails.
+        buffer->bytes[0] = channel->position <= DOS_BLOCK_MIN_COUNT ? DOS_BLOCK_MIN_COUNT : channel->position - 1u;
+        channel->position = 1;
+    }
+    // DRTWRT enters SETJOB without WRTAB's earlier LSTJOB update. Reject its
+    // version before the common write helper rebinds the page or this channel.
+    if (!write_version(unit, media, work.media, work.track, work.sector)) {
+        return;
+    }
+    channel->media = work.media;
+    if (!write_sector(unit, media, work.media, work.track, work.sector, buffer->bytes)) {
+        return;
+    }
+    // Revalidate the captured media generation before the host durability
+    // boundary, so stale state cannot be acknowledged as completed output.
+    dos_media_ref_t current = {0};
+    if (dos_media_reference(media, work.media.unit, work.media.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != work.media.identity) {
+        storage_error(unit, media, work.media, DOS_MEDIA_STALE, true, work.track, work.sector);
+        return;
+    }
+    if (!storage_error(unit, media, work.media, dos_media_flush_unit(media, work.media.unit), true, work.track,
+                       work.sector)) {
+        return;
+    }
+    if (!work.raw) {
+        // RNGET2 sets EOI on equality without clearing previously sticky EOI.
+        channel->direct_byte = buffer->bytes[channel->position];
+        if (channel->position == channel->direct_last) {
+            channel->direct_eoi = true;
+            channel->ready = true;
+        }
+    }
+    command_end(unit, model);
+}
+
+// Free a requested BAM sector or advance a B-A allocation/suggestion search.
+// Claim only the exact requested free sector, never a suggested alternative.
+static void block_map_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
+    //
+    // BLKFRE calls FRETS and succeeds even for an already-free bit. BLKALC
+    // uses AVAIL/AV2 (4040) or GETSEC (DOS 2.7), claiming through USEDTS only
+    // if the request itself is free. Otherwise NO BLOCK carries a suggestion.
+    dos_block_map_work_t* const work = &unit->block_map;
+    const dos_model_t model = media->units[work->media.unit].model;
+    unit->selected_drive = work->media.slot;
+    uint8_t* const entry = bam_entry(unit, media, work->media, work->track);
+    if (entry == NULL) {
+        unit->command = DOS_COMMAND_IDLE;
+        return;
+    }
+    if (!work->allocate) {
+        // Modify the cached map only. This command does not flush it to disk.
+        if (mark_sector(unit, media, work->media, work->track, work->sector, true)) {
+            command_end(unit, model);
+        }
+        unit->command = DOS_COMMAND_IDLE;
+        return;
+    }
+    if (!valid_bitmap(unit, media, work->media, work->track, entry)) {
+        unit->command = DOS_COMMAND_IDLE;
+        return;
+    }
+    const diskimage_type_t type = media->units[work->media.unit].slots[work->media.slot].io.image.type;
+    unsigned int sectors;
+    vet(diskimage_track_sectors(type, work->track, &sectors), "invalid block allocation track: %u", work->track);
+    // Search forward on this track without wrapping to earlier sectors.
+    for (unsigned int sector = work->sector; sector < sectors; ++sector) {
+        if (entry[1u + sector / 8u] & (1u << (sector & 7u))) {
+            if (work->suggestion || sector != work->sector) {
+                dos_status(unit, model, DOS_STATUS_NO_BLOCK, work->track, sector);
+            } else if (mark_sector(unit, media, work->media, work->track, (uint8_t)sector, false)) {
+                command_end(unit, model);
+            }
+            unit->command = DOS_COMMAND_IDLE;
+            return;
+        }
+    }
+    // Yield between tracks as a host scheduling adaptation. Once searching
+    // alternatives, even a free sector is a suggestion, not an allocation.
+    ++work->track;
+    work->sector = 0;
+    work->suggestion = true;
+    if (!diskimage_track_sectors(type, work->track, &sectors)) {
+        // Exhaustion reports NO BLOCK with zero track/sector, not a claim.
+        dos_status(unit, model, DOS_STATUS_NO_BLOCK, 0, 0);
+        unit->command = DOS_COMMAND_IDLE;
+    }
+}
+
 // Service a queued metadata command, ordinary OPEN or APPEND continuation.
 // Directory lookup yields at an unmatched link, then constructs the matched
 // channel or reports failure. Initial data jobs may also run on a match.
@@ -3357,8 +4098,24 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     case DOS_COMMAND_VALIDATE:
         validate_work(unit, media);
         return;
+    case DOS_COMMAND_BLOCK_READ:
+        block_read_work(unit, media);
+        return;
+    case DOS_COMMAND_BLOCK_WRITE:
+        block_write_work(unit, media);
+        return;
+    case DOS_COMMAND_BLOCK_MAP:
+        block_map_work(unit, media);
+        return;
+    case DOS_COMMAND_READ_POINTER:
+        read_pointer_work(unit, media);
+        return;
     case DOS_COMMAND_IDLE:
         break;
+    }
+    if (unit->initialize.pending) {
+        initialize_work(unit, media);
+        return;
     }
     // ROM lookup:FFST/SRCHST/SEARCH save a match's type and first link.
     // Resume the retained search only when an ordinary OPEN is pending.
@@ -3375,6 +4132,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const dos_model_t model = media->units[work->media.unit].model;
     const uint8_t secondary = work->secondary, type = work->type;
     const dos_media_ref_t reference = work->media;
+    auto_initialize(unit, reference.slot);
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     bool matched = false;
     uint16_t found_blocks = 0;
@@ -3927,6 +4685,55 @@ static bool next_byte(dos_unit_t* const unit, dos_media_bank_t* const media, dos
         return false;
     }
     const uint8_t* bytes = unit->buffers[channel->buffers[channel->active]].bytes;
+    if (channel->access == DOS_ACCESS_DIRECT) {
+        // tst4:GET/RNDGET retain direct readiness after EOI and skip byte zero
+        // when the pointer reaches LSTCHR. PUT and GET share this cursor.
+        *byte = channel->direct_byte;
+        *eoi = channel->direct_eoi;
+        if (channel->secondary == IEEE_LOAD_CHANNEL && !*eoi) {
+            // GET1 dispatches SA 0 through SEQGET/RDBYT before testing type.
+            // GETBYT reads before incrementing, so the prepared byte repeats.
+            // After EOI, GET00 instead takes the ordinary direct RNDGET path.
+            channel->direct_byte = bytes[channel->position];
+            channel->direct_eoi = channel->position == channel->direct_last;
+            channel->position = channel->direct_eoi ? 0 : (uint8_t)(channel->position + 1u);
+            return true;
+        }
+        if (*eoi) {
+            channel->direct_eoi = false;
+        }
+        channel->position = channel->position == channel->direct_last ? 1 : (uint8_t)(channel->position + 1u);
+        channel->direct_byte = bytes[channel->position];
+        if (channel->position == channel->direct_last) {
+            channel->direct_eoi = true;
+        }
+        return true;
+    }
+    if (channel->pointer_mode) {
+        if (channel->failed) {
+            return false;
+        }
+        *byte = channel->read_byte;
+        *eoi = channel->read_eoi;
+        if (*eoi) {
+            channel->ready = false;
+            return true;
+        }
+        // SEQGET rereads the selected byte. GETBYT wraps at LSTCHR or 255,
+        // and RDBYT prepares EOI or switches pages before this byte is sent.
+        const uint8_t last = channel->read_last;
+        channel->read_byte = bytes[channel->position];
+        channel->position = last != 0 && channel->position == last ? 0 : (uint8_t)(channel->position + 1u);
+        if (channel->position == 0) {
+            if (last != 0) {
+                channel->read_eoi = true;
+            } else if (!pointer_next_buffer(unit, media, channel)) {
+                channel->failed = true;
+            }
+        }
+        return true;
+    }
+
     // ROM opchnl:OPNRCH/OR30 loses the initial one-byte EOF: RDBYT reads
     // offset 2 and wraps BUFTAB on equality with LSTCHR, but OR30 overwrites
     // its EOI state. Later reads expose offsets 0, 1, and 2, finally with EOI.
@@ -4106,5 +4913,5 @@ bool dos_work_pending(const dos_unit_t* const unit) {
     //
     // Host-only scheduler predicate for split directory searches and commands.
     // There is no separate ROM entry or controller-job emulation here.
-    return unit->open.pending || unit->command != DOS_COMMAND_IDLE;
+    return unit->open.pending || unit->initialize.pending || unit->command != DOS_COMMAND_IDLE;
 }
