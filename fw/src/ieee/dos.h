@@ -231,6 +231,48 @@ typedef struct {
     bool pending;
 } dos_scratch_work_t;
 
+// COPY saves the bounded LOOKUP table, not file data or whole-chain indexes.
+typedef struct {
+    uint8_t name[DISKIMAGE_FILENAME_SIZE];
+    uint8_t name_length;
+    uint8_t drive;
+    uint8_t type;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t directory_track;
+    uint8_t directory_sector;
+    uint8_t directory_entry;
+} dos_copy_file_t;
+
+// All-files COPY retains its source pattern and native target-pattern flag in descriptor 2.
+typedef struct {
+    dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
+    dos_copy_file_t files[DOS_FILENAME_COUNT];
+    uint16_t visited;
+    uint8_t count;
+    uint8_t found;
+    uint8_t drive;
+    uint8_t scans;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t reader;
+    uint8_t writer;
+    uint8_t source;
+    uint8_t phase;
+    uint8_t empty_track;
+    uint8_t empty_sector;
+    uint8_t empty_entry;
+    uint8_t last_sector;
+    bool empty_target;
+    bool name_conflict;
+    bool pending;
+    bool all_files;
+    uint8_t all_track;
+    uint8_t all_sector;
+    uint8_t all_entry;
+    uint16_t all_visited;
+} dos_copy_work_t;
+
 // VALIDATE borrows existing data buffers for DOS 2.7's rebuilt BAM pages.
 typedef struct {
     dos_media_ref_t media;
@@ -284,6 +326,7 @@ typedef enum {
     DOS_COMMAND_READ_POINTER,
     DOS_COMMAND_RENAME,
     DOS_COMMAND_SCRATCH,
+    DOS_COMMAND_COPY,
     DOS_COMMAND_VALIDATE,
 } dos_command_work_t;
 
@@ -300,6 +343,7 @@ typedef struct {
         dos_block_map_work_t block_map;
         dos_rename_work_t rename;
         dos_scratch_work_t scratch;
+        dos_copy_work_t copy;
         dos_validate_work_t validate;
     };
     uint16_t buffer_use;
