@@ -17,6 +17,7 @@ typedef struct {
     unsigned int flushes;
     unsigned int fail_write;
     unsigned int fail_read;
+    uint32_t fail_read_offset;
     bool fail_flush;
     bool fail_write_without_changes;
 } image_t;
@@ -120,7 +121,7 @@ static void mount_peer(dos_media_bank_t* const bank, image_t* const image, const
 static bool read_image(void* const context, const uint32_t offset, void* const output, const size_t length) {
     image_t* const image = context;
     ++image->reads;
-    if (image->reads == image->fail_read) {
+    if (image->reads == image->fail_read || (image->fail_read_offset != 0 && offset == image->fail_read_offset)) {
         memset(output, 0xaa, length / 2u);
         return false;
     }
@@ -8807,6 +8808,81 @@ START_TEST(test_copy_all_rejects_pending_source_directory_growth) {
 }
 END_TEST
 
+// OPREAD discards the directory successor job when it reopens IRSA for file data.
+START_TEST(test_copy_self_append_discards_unused_directory_error) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "A", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    fixture_file(&image, format, 1, "B", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&image, type, track, 1);
+    directory[0] = track;
+    directory[1] = 2;
+    ck_assert(diskimage_sector_offset(type, track, 2, &image.fail_read_offset));
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "C0:A=0:A,0:B");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    const uint8_t expected[] = {0x20, 0x21, 0x22, 0x23, 0x60, 0x61};
+    expect_copy_payload(&image, type, "A", expected, sizeof(expected), DISKIMAGE_FTYPE_SEQ);
+    free(image.bytes);
+}
+END_TEST
+
+// FFRE reopens the current directory page after CY, discarding the old speculative job.
+START_TEST(test_copy_all_defers_directory_error_and_reopens_jobs) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const bool persistent = (unsigned int)_i / 6u != 0;
+    dos_media_bank_t bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_peer(&bank, &source, format);
+    fixture_file(&source, format, 0, "A", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    fixture_file(&source, format, 1, "B", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    fixture_file(&source, format, 2, "C", DISKIMAGE_FTYPE_SEQ, 0x80, 3);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&source, type, track, 1);
+    memcpy(sector_bytes(&source, type, track, 2), directory + 64, DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    directory[66] = 0;
+    directory[0] = track;
+    directory[1] = 2;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, (unsigned int)_i % 6u < 3u ? "C0=1" : "C0:*=1:*");
+    if (persistent) {
+        ck_assert(diskimage_sector_offset(type, track, 2, &source.fail_read_offset));
+    } else {
+        // Only the first prefetch fails. A later FFRE owns a new, healthy job.
+        source.fail_read = source.reads + 2u;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, persistent ? DOS_STATUS_READ_ERROR : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    const uint8_t a[] = {0x20, 0x21, 0x22, 0x23}, b[] = {0x60, 0x61}, c[] = {0x80, 0x81, 0x82};
+    expect_copy_payload(&target, type, "A", a, sizeof(a), DISKIMAGE_FTYPE_SEQ);
+    expect_copy_payload(&target, type, "B", b, sizeof(b), DISKIMAGE_FTYPE_SEQ);
+    if (persistent) {
+        ck_assert_uint_eq(sector_bytes(&target, type, track, 1)[66], 0);
+    } else {
+        expect_copy_payload(&target, type, "C", c, sizeof(c), DISKIMAGE_FTYPE_SEQ);
+    }
+    ck_assert_uint_eq(source.writes + source.flushes, 0);
+    source.fail_read_offset = 0;
+    send_command(&unit, &bank, "C0:AFTER=1:A");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    expect_copy_payload(&target, type, "AFTER", a, sizeof(a), DISKIMAGE_FTYPE_SEQ);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
 // Named lookup stops at one required padding byte, while TRFNME transfers all 16 bytes.
 START_TEST(test_copy_padded_name_lookup_and_full_transferred_target) {
     const unsigned int format = (unsigned int)_i / 3u, variant = (unsigned int)_i % 3u;
@@ -9187,6 +9263,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_decodes_model_specific_source_track, 0, 3);
     tcase_add_loop_test(core, test_copy_preserves_unpublished_directory_coordinates, 0, 18);
     tcase_add_loop_test(core, test_copy_all_rejects_pending_source_directory_growth, 0, 6);
+    tcase_add_loop_test(core, test_copy_self_append_discards_unused_directory_error, 0, 3);
+    tcase_add_loop_test(core, test_copy_all_defers_directory_error_and_reopens_jobs, 0, 12);
     tcase_add_loop_test(core, test_copy_padded_name_lookup_and_full_transferred_target, 0, 9);
     tcase_add_loop_test(core, test_4040_copy_bit7_match_remains_pending, 0, 4);
     tcase_add_loop_test(core, test_copy_read_failure_preserves_native_partial_chain, 0, 6);

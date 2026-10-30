@@ -3434,11 +3434,10 @@ static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const medi
             false, file->directory_track, file->directory_sector)) {
         return false;
     }
-    if (initial->bytes[0] != 0 &&
-        !storage_error(unit, media, channel->media,
-                       read_sector(unit, media, channel->media, initial->bytes[0], initial->bytes[1], alternate->bytes),
-                       false, initial->bytes[0], initial->bytes[1])) {
-        return false;
+    if (initial->bytes[0] != 0) {
+        // OPREAD's GETRCH/FRECHN and GETBUF discard this unused job result.
+        // Keep its partial buffer contents, but do not observe its error.
+        (void)read_sector(unit, media, channel->media, initial->bytes[0], initial->bytes[1], alternate->bytes);
     }
     // OPNRCH/STRDBL replace the first page with file data, then prefetch its
     // successor when linked. A terminal first block leaves alternate residue.
@@ -3719,13 +3718,11 @@ static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media)
         copy_finish(unit);
         return;
     }
-    // OPNIRD/STRDBL prefetch the directory successor before CY reuses these pages.
-    if (buffer->bytes[0] != 0 &&
-        !storage_error(unit, media, reference,
-                       read_sector(unit, media, reference, buffer->bytes[0], buffer->bytes[1], alternate->bytes), false,
-                       buffer->bytes[0], buffer->bytes[1])) {
-        copy_finish(unit);
-        return;
+    // OPNIRD/STRDBL prefetch without selecting the successor. A matching
+    // entry's CY discards this job, and SRRE reopens it after that file.
+    dos_media_result_t successor_result = DOS_MEDIA_OK;
+    if (buffer->bytes[0] != 0) {
+        successor_result = read_sector(unit, media, reference, buffer->bytes[0], buffer->bytes[1], alternate->bytes);
     }
     // Save the next slot before handing this entry to the per-file state machine.
     while (work->all_entry < DISKIMAGE_SECTOR_SIZE / DOS_DIRECTORY_LINE_SIZE) {
@@ -3766,6 +3763,11 @@ static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media)
         return;
     }
     if (buffer->bytes[0] != 0) {
+        // Only SEARCH/NXTBUF observes the current job when this page is exhausted.
+        if (!storage_error(unit, media, reference, successor_result, false, buffer->bytes[0], buffer->bytes[1])) {
+            copy_finish(unit);
+            return;
+        }
         work->all_track = buffer->bytes[0];
         work->all_sector = buffer->bytes[1];
         work->all_entry = 0;
