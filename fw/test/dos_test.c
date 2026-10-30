@@ -8705,7 +8705,7 @@ START_TEST(test_copy_decodes_model_specific_source_track) {
     mount_peer(&bank, &source, format);
     fixture_file(&source, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
     const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
-    sector_bytes(&source, type, format == 0 ? 18 : 39, 1)[3] |= 0xc0u;
+    sector_bytes(&source, type, format == 0 ? 18 : 39, 1)[3] |= format == 0 ? 0x40u : 0xc0u;
     dos_unit_t unit;
     dos_reset(&unit, bank.units[0].model);
     send_command(&unit, &bank, "C0:NEW=1:SOURCE");
@@ -8725,6 +8725,248 @@ START_TEST(test_copy_decodes_model_specific_source_track) {
     ck_assert_uint_eq(source.writes + source.flushes, 0);
     free(source.bytes);
     free(target.bytes);
+}
+END_TEST
+
+// COPY must not reuse a different unpublished owner's deleted slot or growth links.
+START_TEST(test_copy_preserves_unpublished_directory_coordinates) {
+    const unsigned int format = (unsigned int)_i / 6u, variant = (unsigned int)_i % 6u;
+    const bool growth = variant >= 3;
+    dos_media_bank_t bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_peer(&bank, &source, format);
+    fixture_file(&source, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    if (growth) {
+        fill_directory(&target, format);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    target.fail_write = 1;
+    target.fail_write_without_changes = true;
+    const uint8_t held = open_name(&unit, &bank, 2, "0:HELD,S,W");
+    ck_assert_uint_ne(held, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    const dos_channel_t before = unit.channels[held];
+    static const char* const commands[] = {"C0:NEW=1:SOURCE", "C0=1", "C0:*=1:*"};
+    send_command(&unit, &bank, commands[variant % count_of(commands)]);
+    const unsigned int writes = target.writes;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, growth ? DOS_STATUS_WRITE_ERROR : DOS_STATUS_OK);
+    ck_assert_mem_eq(&unit.channels[held], &before, sizeof(before));
+    if (growth) {
+        ck_assert_uint_eq(target.writes, writes);
+    }
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, 2));
+    if (growth) {
+        send_command(&unit, &bank, commands[variant % count_of(commands)]);
+        finish_open(&unit, &bank);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    }
+    uint8_t expected[22];
+    for (unsigned int index = 0; index < sizeof(expected); ++index) {
+        expected[index] = 0x20u + index;
+    }
+    expect_copy_payload(&target, bank.units[0].slots[0].io.image.type, variant % 3u == 0 ? "NEW" : "SOURCE", expected,
+                        sizeof(expected), DISKIMAGE_FTYPE_SEQ);
+    const uint8_t reader = open_name(&unit, &bank, 3, "0:HELD");
+    expect_bytes(&unit, &bank, reader, 0, 0);
+    ck_assert_uint_eq(source.writes + source.flushes, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// The copy-all source iterator must honor the same incomplete-growth guard as lookup.
+START_TEST(test_copy_all_rejects_pending_source_directory_growth) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    dos_media_bank_t bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_peer(&bank, &source, format);
+    fill_directory(&source, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    source.fail_write = 1;
+    source.fail_write_without_changes = true;
+    const uint8_t owner = open_name(&unit, &bank, 2, "1:HELD,S,W");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert(unit.channels[owner].grow_pending);
+    const dos_channel_t before = unit.channels[owner];
+    const unsigned int writes = source.writes;
+    send_command(&unit, &bank, _i % 2 ? "C0:*=1:*" : "C0=1");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(target.writes + target.flushes, 0);
+    ck_assert_uint_eq(source.writes, writes);
+    ck_assert_mem_eq(&unit.channels[owner], &before, sizeof(before));
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, 2));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// Named lookup stops at one required padding byte, while TRFNME transfers all 16 bytes.
+START_TEST(test_copy_padded_name_lookup_and_full_transferred_target) {
+    const unsigned int format = (unsigned int)_i / 3u, variant = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_peer(&bank, &source, format);
+    fixture_file(&source, format, 0, "R\xa0X", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    if (variant != 0) {
+        fixture_file(&target, format, 0, variant == 1 ? "N\xa0X" : "R\xa0Y", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const unsigned int writes = target.writes;
+    send_command(&unit, &bank, variant == 0 ? "C0:NEW=1:R" : variant == 1 ? "C0:N=1:R" : "C0=1");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, variant == 1 ? DOS_STATUS_FILE_EXISTS : DOS_STATUS_OK);
+    uint8_t expected[22];
+    for (unsigned int index = 0; index < sizeof(expected); ++index) {
+        expected[index] = 0x20u + index;
+    }
+    if (variant == 1) {
+        ck_assert_uint_eq(target.writes, writes);
+    } else {
+        expect_copy_payload(&target, bank.units[0].slots[0].io.image.type, variant == 0 ? "NEW" : "R\xa0X", expected,
+                            sizeof(expected), DISKIMAGE_FTYPE_SEQ);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// A 4040 raw bit-7 match repeats LOOKUP without reaching OPREAD or creating output.
+START_TEST(test_4040_copy_bit7_match_remains_pending) {
+    const unsigned int variant = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, 0);
+    mount_peer(&bank, &source, 0);
+    fixture_file(&source, 0, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    if (variant >= 2) {
+        fixture_file(&target, 0, 0, "NEW", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    }
+    image_t* const matched = variant >= 2 ? &target : &source;
+    sector_bytes(matched, diskimage_type_d64, 18, 1)[3] |= variant % 2u == 0 ? 0x80u : 0xc0u;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "C0:NEW=1:SOURCE");
+    for (unsigned int step = 0; step < 20; ++step) {
+        ck_assert(dos_work_pending(&unit));
+        dos_work(&unit, &bank);
+    }
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(source.writes + source.flushes + target.writes + target.flushes, 0);
+    const unsigned int reads = source.reads + target.reads;
+    for (unsigned int step = 0; step < 20; ++step) {
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(source.reads + target.reads, reads);
+    dos_reset(&unit, bank.units[0].model);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// GIBYTE waits for a successor before PIBYTE can persist the current block's final byte.
+START_TEST(test_copy_read_failure_preserves_native_partial_chain) {
+    const unsigned int format = (unsigned int)_i / 2u, failed_block = (unsigned int)_i % 2u + 2u;
+    dos_media_bank_t bank = {0}, source_bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_blank(&source_bank, &source, format);
+    dos_unit_t producer;
+    dos_reset(&producer, source_bank.units[0].model);
+    ck_assert_uint_ne(open_name(&producer, &source_bank, 2, "0:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(&producer, &source_bank, 2, 0x20, 700);
+    ck_assert(dos_close(&producer, &source_bank, source_bank.units[0].model, 2));
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &source_bank.units[0].slots[0].io), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "C0:NEW=1:SOURCE");
+    for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 10);
+        ck_assert(dos_work_pending(&unit));
+        dos_work(&unit, &bank);
+    }
+    const unsigned int writes = target.writes;
+    source.fail_read = source.reads + failed_block + 1u;
+    dos_work(&unit, &bank);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(target.writes, writes + failed_block - 2u);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t* const entry = sector_bytes(&target, type, format == 0 ? 18 : 39, 1);
+    ck_assert_uint_eq(entry[2], DISKIMAGE_FTYPE_SEQ);
+    if (failed_block == 3) {
+        const uint8_t* const first = sector_bytes(&target, type, entry[3], entry[4]);
+        ck_assert_uint_ne(first[0], 0);
+        for (unsigned int index = 2; index < DISKIMAGE_SECTOR_SIZE; ++index) {
+            ck_assert_uint_eq(first[index], (uint8_t)(0x20u + index - 2u));
+        }
+        const uint8_t* const unwritten = sector_bytes(&target, type, first[0], first[1]);
+        const uint8_t zero[DISKIMAGE_SECTOR_SIZE] = {0};
+        ck_assert_mem_eq(unwritten, zero, sizeof(zero));
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// A peer's read status is not the completion result of COPY's healthy APPEND.
+START_TEST(test_copy_self_append_ignores_peer_read_error_status) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:SOURCE,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x20, 255);
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, 2));
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:OTHER,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x60, 2);
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, 2));
+    const uint8_t peer = open_name(&unit, &bank, 3, "0:SOURCE,S,R");
+    uint8_t prefix[DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE];
+    for (unsigned int index = 0; index < sizeof(prefix); ++index) {
+        prefix[index] = (uint8_t)(0x20u + index);
+    }
+    expect_direct(&unit, &bank, peer, prefix, sizeof(prefix), false);
+    send_command(&unit, &bank, "C0:SOURCE=0:SOURCE,0:OTHER");
+    for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 10);
+        dos_work(&unit, &bank);
+    }
+    dos_work(&unit, &bank);
+    unit.buffers[unit.channels[peer].buffers[1]].resident = false;
+    image.fail_read = image.reads + 1u;
+    uint8_t byte;
+    bool eoi;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, peer, &byte, 1, &eoi), 0);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    image.fail_read = 0;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    uint8_t expected[257];
+    memcpy(expected, prefix, sizeof(prefix));
+    expected[254] = (uint8_t)(0x20u + 254u);
+    expected[255] = 0x60;
+    expected[256] = 0x61;
+    expect_copy_payload(&image, bank.units[0].slots[0].io.image.type, "SOURCE", expected, sizeof(expected),
+                        DISKIMAGE_FTYPE_SEQ);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), peer);
+    free(image.bytes);
 }
 END_TEST
 
@@ -8943,6 +9185,12 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_rel_exclusion_precedes_output_creation, 0, 9);
     tcase_add_loop_test(core, test_copy_pattern_retains_literal_padding_byte, 0, 3);
     tcase_add_loop_test(core, test_copy_decodes_model_specific_source_track, 0, 3);
+    tcase_add_loop_test(core, test_copy_preserves_unpublished_directory_coordinates, 0, 18);
+    tcase_add_loop_test(core, test_copy_all_rejects_pending_source_directory_growth, 0, 6);
+    tcase_add_loop_test(core, test_copy_padded_name_lookup_and_full_transferred_target, 0, 9);
+    tcase_add_loop_test(core, test_4040_copy_bit7_match_remains_pending, 0, 4);
+    tcase_add_loop_test(core, test_copy_read_failure_preserves_native_partial_chain, 0, 6);
+    tcase_add_loop_test(core, test_copy_self_append_ignores_peer_read_error_status, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }

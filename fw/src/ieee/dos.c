@@ -64,6 +64,7 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_FILE_TYPE_MASK 7u
 #define DOS_FILE_LOCKED_MASK 0x40u
 #define DOS_FILE_TRACK_MASK_4040 0x3fu
+#define DOS_FILE_TRACK_PENDING_MASK_4040 0x80u
 #define DOS_DIRECTORY_BLOCKS_LOW 30u
 #define DOS_DIRECTORY_BLOCKS_HIGH 31u
 #define DOS_BAM_TRACK_8050 38u
@@ -1520,6 +1521,35 @@ static const dos_channel_t* unpublished_writer(const dos_unit_t* const unit, con
         }
     }
     return NULL;
+}
+
+// Reject directory reads while a retained writer owns either incomplete growth link.
+static bool directory_growth_pending(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                                     const uint8_t sector) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->grow_pending && owner->media.identity == reference.identity &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->directory_track == track &&
+            (owner->directory_sector == sector || owner->grow_from_sector == sector)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Keep deleted entries reserved until their retained writer publishes or retires.
+static bool directory_slot_reserved(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t sector,
+                                    const uint8_t entry) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->access != DOS_ACCESS_READ && owner->media.identity == reference.identity &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->directory_sector == sector && (owner->grow_pending || owner->directory_entry == entry)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // OPNWCH/ADDFIL construct a new chain, or reserve a replacement's alternate link.
@@ -3422,10 +3452,9 @@ static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const medi
         const dos_media_result_t result =
             read_sector(unit, media, channel->media, alternate->track, alternate->sector, alternate->bytes);
         alternate->failed = result != DOS_MEDIA_OK;
-        alternate->resident = !alternate->failed;
-        if (!storage_error(unit, media, channel->media, result, false, alternate->track, alternate->sector)) {
-            return false;
-        }
+        // STRDBL submits without waiting. Preserve even a failed job until
+        // RDBYT/DBLBUF selects it, rather than aborting a speculative read.
+        alternate->resident = true;
     }
     return true;
 }
@@ -3569,6 +3598,11 @@ static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
         copy_finish(unit);
         return;
     }
+    if (directory_growth_pending(unit, reference, work->track, work->sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->track, work->sector);
+        copy_finish(unit);
+        return;
+    }
     if (!storage_error(unit, media, reference, read_sector(unit, media, reference, work->track, work->sector, bytes),
                        false, work->track, work->sector)) {
         copy_finish(unit);
@@ -3581,7 +3615,8 @@ static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
         const uint8_t* const entry = bytes + offset;
         if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
             // Remember a deleted slot only on the destination disk for ADDFIL.
-            if (work->drive == work->files[0].drive && work->empty_track == 0) {
+            if (work->drive == work->files[0].drive && work->empty_track == 0 &&
+                !directory_slot_reserved(unit, reference, work->sector, offset)) {
                 work->empty_track = work->track;
                 work->empty_sector = work->sector;
                 work->empty_entry = offset;
@@ -3598,7 +3633,7 @@ static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
             if ((file->drive & 1u) != work->drive && (!(file->drive & DOS_COPY_DEFAULT_DRIVE) || work->scans == 2u)) {
                 continue;
             }
-            if (memcmp(file->name, entry + DOS_DIRECTORY_NAME_OFFSET, DISKIMAGE_FILENAME_SIZE) != 0) {
+            if (!name_matches(file->name, file->name_length, entry + DOS_DIRECTORY_NAME_OFFSET)) {
                 continue;
             }
             // Save exact entry coordinates for source reads and self-concat.
@@ -3609,6 +3644,12 @@ static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
             file->directory_track = work->track;
             file->directory_sector = work->sector;
             file->directory_entry = offset;
+            // 4040 CMPCHK/CC15 leaves a raw negative FILTRK unresolved, so
+            // LK26 repeats this same match instead of reaching OPREAD's mask.
+            if (model == DOS_MODEL_4040 && (file->track & DOS_FILE_TRACK_PENDING_MASK_4040)) {
+                work->phase = DOS_COPY_MATCH_WAIT;
+                return;
+            }
             work->found |= 1u << index;
         }
         if (work->found == (1u << work->count) - 1u) {
@@ -3652,6 +3693,11 @@ static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media)
     const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
     if (work->all_entry == 0 && ++work->all_visited > limit) {
         dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->all_track, work->all_sector);
+        copy_finish(unit);
+        return;
+    }
+    if (directory_growth_pending(unit, reference, work->all_track, work->all_sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->all_track, work->all_sector);
         copy_finish(unit);
         return;
     }
@@ -3699,6 +3745,8 @@ static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media)
         source->directory_entry = offset;
         memcpy(source->name, entry + DOS_DIRECTORY_NAME_OFFSET, sizeof(source->name));
         memcpy(work->files[0].name, source->name, sizeof(source->name));
+        // TRFNME supplies the complete directory field, not a parsed short name.
+        source->name_length = work->files[0].name_length = sizeof(source->name);
         work->name_conflict =
             unpublished_writer(unit, work->media[work->files[0].drive], source->name, DOS_UNUSED) != NULL;
         // FIXIT's LOOKUP searches only the destination. Preserve the source
@@ -3761,7 +3809,7 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (append.pending) {
             return;
         }
-        if (unit->status_code != DOS_STATUS_OK || !unit->channels[work->writer].allocated) {
+        if (!unit->channels[work->writer].allocated || unit->channels[work->writer].failed) {
             copy_finish(unit);
             return;
         }
@@ -3824,8 +3872,31 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     // Reuse the burst bound for scheduler fairness, not IEEE preview/GET.
     for (unsigned int copied = 0; copied < DOS_STAGE_CAPACITY && reader->position < end; ++copied) {
-        if (!write_byte(unit, media, &unit->channels[work->writer], buffer->bytes[reader->position++])) {
+        const uint8_t byte = buffer->bytes[reader->position++];
+        const bool switching = reader->position == DISKIMAGE_SECTOR_SIZE && buffer->bytes[0] != 0;
+        if (switching) {
+            // CY20's GIBYTE waits for DBLBUF before CY15's PIBYTE can persist
+            // this byte. Do not write an extra output block on read failure.
+            const unsigned int limit =
+                media->units[reader->media.unit].slots[reader->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+            if (reader->traversed++ >= limit) {
+                dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
+                copy_finish(unit);
+                return;
+            }
+            const uint8_t track = buffer->bytes[0], sector = buffer->bytes[1];
+            reader->active ^= 1u;
+            if (!load_buffer(unit, media, reader, track, sector)) {
+                dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
+                copy_finish(unit);
+                return;
+            }
+        }
+        if (!write_byte(unit, media, &unit->channels[work->writer], byte)) {
             copy_finish(unit);
+            return;
+        }
+        if (switching) {
             return;
         }
     }
@@ -3837,20 +3908,6 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         ++work->source;
         work->phase = DOS_COPY_SOURCE;
         return;
-    }
-    // Bound linked reads against corrupt cycles before switching owned pages.
-    const unsigned int limit =
-        media->units[reader->media.unit].slots[reader->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
-    if (reader->traversed++ >= limit) {
-        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
-        copy_finish(unit);
-        return;
-    }
-    const uint8_t track = buffer->bytes[0], sector = buffer->bytes[1];
-    reader->active ^= 1u;
-    if (!load_buffer(unit, media, reader, track, sector)) {
-        dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
-        copy_finish(unit);
     }
 }
 
@@ -4973,18 +5030,12 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
     bool failed = work->visited++ >= limit;
     uint8_t* const bytes = unit->buffers[work->scratch].bytes;
-    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-        const dos_channel_t* const channel = &unit->channels[index];
-        if (channel->allocated && channel->grow_pending && channel->media.identity == reference.identity &&
-            channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
-            channel->directory_track == searched_track &&
-            (channel->directory_sector == searched_sector || channel->grow_from_sector == searched_sector)) {
-            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
-            work->pending = false;
-            clear_command(unit);
-            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-            return;
-        }
+    if (directory_growth_pending(unit, reference, searched_track, searched_sector)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
+        work->pending = false;
+        clear_command(unit);
+        unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+        return;
     }
     if (!failed) {
         failed = read_sector(unit, media, reference, work->track, work->sector, bytes) != DOS_MEDIA_OK;
@@ -4995,16 +5046,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         for (unsigned int entry = 0; entry < DISKIMAGE_SECTOR_SIZE; entry += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
             const uint8_t* const file = bytes + entry;
             if (file[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
-                bool reserved = false;
-                for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-                    const dos_channel_t* const channel = &unit->channels[index];
-                    reserved |= channel->allocated && channel->access != DOS_ACCESS_READ &&
-                                channel->media.identity == reference.identity &&
-                                channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
-                                channel->directory_sector == searched_sector &&
-                                (channel->grow_pending || channel->directory_entry == entry);
-                }
-                if (work->empty_track == 0 && !reserved) {
+                if (work->empty_track == 0 && !directory_slot_reserved(unit, reference, searched_sector, entry)) {
                     work->empty_track = searched_track;
                     work->empty_sector = searched_sector;
                     work->empty_entry = (uint8_t)entry;
