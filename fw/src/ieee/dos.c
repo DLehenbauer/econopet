@@ -1825,6 +1825,12 @@ static void scratch_start(dos_unit_t* const unit, dos_media_bank_t* const media,
                 work.defaults |= 1u << pattern;
             }
         }
+        if (start >= sizeof(work.command)) {
+            // SETDRV can advance past a retained EOF colon. Native RAM
+            // beyond this saved region is not modeled as adjacent C state.
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
         work.starts[pattern] = start;
         work.drives[pattern] = drive;
         mask |= 1u << (drive + (omitted ? 2u : 0u));

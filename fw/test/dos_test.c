@@ -4868,6 +4868,58 @@ START_TEST(test_scratch_listing_cursors_do_not_protect_unopened_files) {
 }
 END_TEST
 
+// Retained EOF bytes may form names, but selectors cannot escape saved command RAM.
+START_TEST(test_scratch_cross_request_command_storage_boundary) {
+    const unsigned int format = (unsigned int)_i / 3u, scenario = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, scenario == 0 ? "\x03" : scenario == 1 ? "Z" : ":", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    uint8_t prior[DOS_COMMAND_RECEIVE_CAPACITY];
+    memset(prior, 'X', sizeof(prior));
+    prior[DOS_COMMAND_LIMIT] = scenario == 1 ? 'Z' : ':';
+    dos_command(&unit, &bank, 0, prior, sizeof(prior));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_COMMAND_TOO_LONG);
+    image_t expected = image;
+    expected.bytes = malloc(image.size);
+    ck_assert_ptr_nonnull(expected.bytes);
+    memcpy(expected.bytes, image.bytes, image.size);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    uint8_t* const entry = sector_bytes(&expected, type, format == 0 ? 18 : 39, 1);
+    if (scenario != 0) {
+        entry[2] = 0;
+        uint8_t* const bam = fixture_bam_entry(&expected, format, 1);
+        ++bam[0];
+        bam[1] |= 1u;
+    }
+    uint8_t request[DOS_COMMAND_LIMIT];
+    memset(request, 'A', sizeof(request));
+    memcpy(request, "S0:", 3);
+    request[sizeof(request) - 1u] = ',';
+    if (scenario == 2) {
+        request[sizeof(request) - 2u] = ',';
+        request[sizeof(request) - 1u] = ':';
+    }
+    const unsigned int reads = image.reads, writes = image.writes, flushes = image.flushes;
+    dos_command(&unit, &bank, 0, request, sizeof(request));
+    finish_open(&unit, &bank);
+    ck_assert_mem_eq(image.bytes, expected.bytes, image.size);
+    ck_assert_str_eq(unit.status,
+                     scenario == 0 ? (format == 0 ? "30,SYNTAX ERROR,00,00\r" : "30,SYNTAX ERROR,00,00,0\r")
+                                   : (format == 0 ? "01, FILES SCRATCHED,01,00\r" : "01, FILES SCRATCHED,01,00,0\r"));
+    if (scenario == 0) {
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(image.writes, writes);
+        ck_assert_uint_eq(image.flushes, flushes);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(expected.bytes);
+    free(image.bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -4994,6 +5046,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_scratch_native_count_digit_boundaries, 0, 18);
     tcase_add_loop_test(core, test_status_native_decimal_field_boundaries, 0, 9);
     tcase_add_loop_test(core, test_scratch_listing_cursors_do_not_protect_unopened_files, 0, 12);
+    tcase_add_loop_test(core, test_scratch_cross_request_command_storage_boundary, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }

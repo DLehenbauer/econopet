@@ -22,6 +22,11 @@ channels, block commands, COPY, FORMAT/DUPLICATE and REL OPEN/data APIs remain
 excluded. Recognized excluded commands return explicit host policy error 30,
 not a claim about their native result.
 
+Bounded retained bytes may supply a name starting at logical EOF. If SCRATCH
+selector consumption would move that start beyond the entire saved command
+region, host policy 30 rejects the request before media I/O or page allocation.
+Native RAM outside that region is not represented by adjacent C work fields.
+
 The command tag owns a shared transient union. RENAME and SCRATCH borrow two
 existing pool pages. VALIDATE borrows one internal reader and DOS 2.7's fixed
 map pages, protecting live peers with host policy 70. There is no new sector
@@ -96,6 +101,7 @@ The following source references use the pinned revision above. Tests cover
 | SCRATCH releases side chains before attempting invalid data starts | All three models | Both `scrtch:SC15/DELFIL/MAPOUT/SC17`. DOS 2.7 [frets:SETMAP](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets) and both `jobs:SETJOB` paths reject track zero with `BADTS/CMDER2`. | Persist side-chain allocation changes before rejecting a closed entry's invalid data start with 66. Unclosed entries skip data traversal. Side read/write failures retain precedence. | `scratch_work`, `data_pending`; `test_scratch_side_chain_precedes_invalid_data_start` | Exact whole-image comparisons cover closed and unclosed entries, missing side chains, side BAM write failure and side read failure. Bounded geometry checks avoid unsafe 4040 indexing while retaining its eventual native status. |
 | SCRATCH counts and shared status fields use model-specific decimal widths | All three models | Both [erproc:HEXDEC/BCDDEC](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc) / [erproc:HEXDEC/BCDDEC](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc). `scrtch:SC20/SC30` retains an eight-bit count. | 4040 formats the low two decimal digits. DOS 2.7 preserves the optional hundreds digit. After 256 deletions, both report count 00. Apply the same conversion to error track and sector fields. | `dos_status`; `test_scratch_native_count_digit_boundaries`, `test_status_native_decimal_field_boundaries` | Real OPEN/CLOSE/SCRATCH sequences remove 99, 100, 199, 200, 255 and 256 files across two mounted disks. Independent directory checks verify deletion. Exact status records cover both numeric fields. |
 | SCRATCH protects actual file bindings, not listing cursors | All three models | Both [4040 open:OPREAD](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open) / [DOS 2.7 open:OPREAD](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open), `tstflg:TSTCHN` | An unopened entry remains scratchable even when a BASIC listing cursor happens to point at it. A real retained reader still protects its bound file. Preserve listing ownership and peer-drive isolation. | `scratch_active`; `test_scratch_listing_cursors_do_not_protect_unopened_files` | Fresh and advanced listing cursors, a concurrent real file reader and a different-drive control verify count, persisted deletion, retained payload and cleanup. Other entry predicates already require writable or reclamation owners. |
+| Cross-request selector consumption cannot escape saved command storage | All three models, explicit bounded host policy | Both `setdrv:SETDRV/SD20/SD40` advance the name pointer. `trnsfr:FNDLMT/FL05` reads at logical EOF. Native RAM beyond saved storage is not modeled. | Reject an out-of-storage name start with host 30 before any media callback. Preserve legal retained EOF names and the nearest in-storage selector boundary. | `scratch_start`, `command_name` precondition; `test_scratch_cross_request_command_storage_boundary` | A public oversized request retains a colon in the final receive byte. A following maximum-length SCRATCH ending in a comma previously read `starts[0]` as a filename byte and deleted an unrelated control-character filename. Nine variants compare whole images, callbacks and exact statuses, with bounded EOF controls. |
 
 The related namespace fixes deliberately reject unsafe unpublished intent
 rather than introducing an alias journal or mutating a retained writer's
@@ -106,18 +112,18 @@ not claims about the ROM's buffer scheduling.
 
 ## Extraction validation
 
-The reviewed candidate passes 1368 direct DOS cases and 2351 total firmware
-Check cases (2304 ordinary plus 47 fatal/assert cases), with
+The reviewed candidate passes 1377 direct DOS cases and 2360 total firmware
+Check cases (2313 ordinary plus 47 fatal/assert cases), with
 tests and dependencies built in Debug. The RP2040 production build passes
 in RelWithDebInfo. Formatting and whitespace checks pass.
 
-The feedback adds 117 model/scenario variants and corrects existing
+The feedback adds 126 model/scenario variants and corrects existing
 invalid-track expectations. The same final fixtures linked against
 the original PR-head production implementation reproduce the defects.
-That baseline has 85 failures and zero errors, versus zero failures/errors
+That baseline has 88 failures and zero errors, versus zero failures/errors
 with the fixes. This is a paired host regression check, not an original-ROM
-replay. The third review cycle's final fixtures also reproduce 33 failures
-against the second fix commit, demonstrating the later fixes separately.
+replay. The fourth review cycle's final fixtures also reproduce three failures
+against the third fix commit, demonstrating the later fix separately.
 
 The metadata additions cover parser boundaries, explicit name lengths,
 status/error precedence, drive selection, retained peers, stale identities,
