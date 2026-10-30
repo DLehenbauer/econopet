@@ -61,6 +61,7 @@ typedef enum {
     DOS_ACCESS_WRITE,
     DOS_ACCESS_APPEND,
     DOS_ACCESS_MODIFY,
+    DOS_ACCESS_DIRECT,
 } dos_access_t;
 
 typedef enum {
@@ -88,7 +89,11 @@ typedef struct {
     uint8_t buffers[DOS_CHANNEL_BUFFER_COUNT];
     uint8_t active;
     uint8_t secondary;
-    uint8_t singleton;
+    union {
+        uint8_t singleton;
+        uint8_t direct_last;
+        uint8_t read_last;
+    };
     uint8_t access;
     uint8_t directory;
     uint8_t file_type;
@@ -107,21 +112,31 @@ typedef struct {
     uint16_t blocks;
     uint8_t pattern_count;
     uint8_t directory_searches;
-    uint8_t line_length;
+    union {
+        uint8_t line_length;
+        uint8_t direct_byte;
+        uint8_t read_byte;
+    };
     bool allocated;
     bool ready;
-    bool line_eoi;
+    union {
+        bool line_eoi;
+        bool direct_eoi;
+        bool read_eoi;
+    };
     bool replaced;
     bool failed;
     bool directory_dirty;
     bool directory_published;
     bool grow_pending;
+    bool pointer_mode;
 } dos_channel_t;
 
 typedef struct {
     dos_buffer_t buffer;
     dos_media_ref_t media;
     bool dirty;
+    bool reinitialize;
 } dos_bam_t;
 
 typedef struct {
@@ -240,8 +255,33 @@ typedef struct {
     bool data_pending;
 } dos_validate_work_t;
 
+// A block job retains its media identity while borrowing the channel's active page.
+typedef struct {
+    dos_media_ref_t media;
+    uint8_t channel;
+    uint8_t track;
+    union {
+        uint8_t sector;
+        uint8_t offset;
+    };
+    bool raw;
+} dos_block_work_t;
+
+// Map commands retain one requested sector and scan higher tracks cooperatively.
+typedef struct {
+    dos_media_ref_t media;
+    uint8_t track;
+    uint8_t sector;
+    bool allocate;
+    bool suggestion;
+} dos_block_map_work_t;
+
 typedef enum {
     DOS_COMMAND_IDLE,
+    DOS_COMMAND_BLOCK_READ,
+    DOS_COMMAND_BLOCK_WRITE,
+    DOS_COMMAND_BLOCK_MAP,
+    DOS_COMMAND_READ_POINTER,
     DOS_COMMAND_RENAME,
     DOS_COMMAND_SCRATCH,
     DOS_COMMAND_VALIDATE,
@@ -256,6 +296,8 @@ typedef struct {
     // The command tag owns the transient worker and its shared pages.
     dos_command_work_t command;
     union {
+        dos_block_work_t block;
+        dos_block_map_work_t block_map;
         dos_rename_work_t rename;
         dos_scratch_work_t scratch;
         dos_validate_work_t validate;
@@ -285,14 +327,14 @@ void dos_reset(dos_unit_t* unit, dos_model_t model);
 bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned int length, uint8_t* drive,
                     dos_open_work_t* work);
 
-// Start an ordinary file or directory, rejecting direct/REL operations.
+// Start an ordinary file, directory or direct page, rejecting REL operations.
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
               unsigned int length);
 
-// Advance one metadata phase or ordinary lookup/APPEND continuation.
+// Advance one command phase or ordinary lookup/APPEND continuation.
 void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
 
-// Dispatch an already-collected RENAME/SCRATCH/VALIDATE request.
+// Dispatch an already-collected metadata, block, INITIALIZE or user request.
 // Complete preceding work first. Command-channel transport collection is separate.
 void dos_command(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, const uint8_t* request,
                  unsigned int length);
@@ -301,7 +343,7 @@ void dos_command(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, 
 // Command secondary 15 closes all data channels in descending order.
 bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t secondary);
 
-// Apply a decoded ordinary PUT byte without treating EOI as file completion.
+// Apply a decoded ordinary or direct PUT byte without treating EOI as file completion.
 void dos_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t byte);
 
 // Persist writers, unit BAMs and backing stores without releasing successful owners.
@@ -327,5 +369,5 @@ unsigned int dos_status_stage(const dos_unit_t* unit, uint8_t* output, unsigned 
 // Acknowledge actual status progress, clearing status only when CR is consumed.
 void dos_status_get(dos_unit_t* unit, dos_model_t model, unsigned int count);
 
-// Report whether cooperative OPEN or metadata command work remains.
+// Report whether cooperative OPEN, initialization or command work remains.
 bool dos_work_pending(const dos_unit_t* unit);
