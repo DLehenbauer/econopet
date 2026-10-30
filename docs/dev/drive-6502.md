@@ -12,13 +12,26 @@ Preserve the experiment as an independently reproducible reference:
 
 - The tested POC is committed and pushed on `ieee-6502` at
   `8e49617c71f2f853f040aad24e3eb7e486fd63ce`.
-- `drive-6502-prod` starts at that exact commit. Implement the plan there,
-  rather than rewriting the experiment or restoring the old DOS adaptation.
-- The pre-POC baseline is `d5c1804`. Recover selected geometry, storage
-  lifecycle code and tests from that commit, not entire old subsystems.
-- [The POC report](ieee-6502.md) records its experiments and limitations.
+- `drive-6502-prod` starts from the fetched head of `main`,
+  `5ed74c4335047e27b950af5dd976fce0270ea2bc`, not from the POC. Its initial
+  change is this plan only. The existing production code and tests remain
+  intact until deliberately migrated or replaced.
+- Keep `ieee-6502` checked out in a separate reference worktree at
+  `.tmp/ai/ieee-6502-reference/`. It shares Git objects, not source edits or
+  build outputs, with the production worktree. Keep both worktrees' builds
+  separate and initialize required submodules independently.
+- The pre-POC baseline `d5c1804` explains the experiment's lineage.
+  Prefer the current `main` geometry, storage lifecycle code and tests,
+  including changes since that baseline.
+- [The pinned POC report](https://github.com/DLehenbauer/econopet/blob/8e49617c71f2f853f040aad24e3eb7e486fd63ce/docs/dev/ieee-6502.md)
+  records its experiments and limitations.
   Keep that evidence historical. Record new model-specific evidence here or
   in the production test reference as implementation proceeds.
+
+Do not merge or cherry-pick the wholesale POC replacement commit into
+production. Port selected mechanisms and tests from the reference worktree
+into the planned module boundaries. This avoids inheriting its experimental
+deletions, device-8 restrictions and incidental configuration changes.
 
 The POC checkpoint passes 181 firmware checks (including 12 ROM-free 4040
 regressions), 591 system tests, all eight configured independent-reference
@@ -180,15 +193,16 @@ Do not start from scratch, and do not restore the old files wholesale.
 | POC `fifo4040.*` | Handshake state machines and one-outstanding-byte contract | Rename, remove concrete `rom4040_t` coupling through the native-unit boundary, strengthen required invariants |
 | POC `controller4040.*` | Independently verified job/header/error semantics and raw callback approach | Complete payload recognition, explicit per-instance/media lifetime, bounded formatter progress and family separation |
 | POC `ieee_drive.*` | Application entry points, metrics, consumption-before-ATN ordering, ROM identity checks and exact stdio I/O | Replace singleton state, broad boot-on-mount behavior and embedded SPI scheduling with owned modules |
-| Baseline `diskimage.*` | Native zone tables, D82 side folding, exact raw sizes and geometry tests | No `diskimage_find`, directory entries, file streams, chain caches or HDD APIs |
-| Baseline `dos_media.*` | Pair validation, borrowed descriptors, unit-local generation invalidation, pre-write dirty marking, flush failure retention and their tests | Rename to `drive_media`, decouple from the old rich `diskimage_t`, remove DOS-specific naming and unused BAM convenience access |
-| Baseline `ieee_drive.c` | Slot mapping and transport-owner history as reference | No restored status formatter, command interpreter, channel/REL tables, allocation or read-ahead caches |
+| Current `main` `diskimage.*` | Native zone tables, D82 side folding, exact raw sizes and geometry tests | Retire `diskimage_find`, directory entries, file streams, chain caches and HDD APIs at replacement cutover |
+| Current `main` `dos_media.*` | Pair validation, borrowed descriptors, unit-local generation invalidation, pre-write dirty marking, flush failure retention and their tests | Rename to `drive_media`, decouple from the old rich `diskimage_t`, remove DOS-specific naming and unused BAM convenience access |
+| Current `main` `ieee_drive.c` | Slot mapping and transport-owner history as reference | Retire the C status formatter, command interpreter, channel/REL tables, allocation and read-ahead caches at replacement cutover |
 
 There is no current `drive_media.c` to copy. The reusable foundation is
-`dos_media.c` at `d5c1804`, documented historically in
-[drive-media.md](drive-media.md). Its generation and failure-retention
-contracts are valuable, but that document's claims about the old active
-production facade are historical.
+the production worktree's `dos_media.c`, documented in
+[drive-media.md](drive-media.md). Preserve its generation and failure-retention
+contracts while separating them from the DOS adaptation. The POC removed
+that foundation, but those deletions are not part of this branch's starting
+point. Update the foundation document when its implementation is migrated.
 
 Keep physical-image identity acquisition at the controller/model boundary.
 Raw containers encode an initial physical disk ID in model-specific header
@@ -306,8 +320,9 @@ per-unit secondary addresses, unit/channel TX ownership, ATN-end tokens,
 listener checkpoints and talk-progress events. The POC deliberately ignores
 much of that multi-unit surface.
 
-Restore address admission for 8-11, then audit the existing metadata rather
-than assuming the address comparison is the only required RTL change.
+Preserve `main`'s address admission for 8-11 when integrating the ROM-backed
+transport. Do not copy the POC's device-8-only comparator. Audit the existing
+metadata rather than assuming address admission alone proves composition.
 The current control register has a global enable, not a configured-unit
 enable mask. Add an explicit four-bit admission mask so unconfigured,
 booting or faulted native devices are not acknowledged by the fabric as
@@ -691,8 +706,9 @@ reset and remount at each pending phase.
 directory, format, block/memory operations and representative REL positioning
 for each model. Add a meaningful 8250 large-REL/super-side-sector boundary,
 not just a short 4040-style REL file. Inspect persisted media independently.
-Restore selected pre-POC Commodore/Waterloo composition tests against the
-new facade, updating expectations only with model/ROM evidence. In
+Retarget the existing production Commodore/Waterloo composition tests to the
+new facade, updating expectations only with model/ROM evidence. Preserve
+tests and fixes added to `main` after the POC branched. In
 particular, regain the supported D80 SuperPET workload without HDD shortcuts.
 
 **Lifecycle and idle:** reset while RX/TX/ATN/controller work is pending,
@@ -736,14 +752,20 @@ those mechanisms.
 
 ## Implementation sequence and gates
 
-Each phase should produce reviewable commits and preserve passing 4040
-behavior. Do not leave a second selectable legacy DOS implementation.
+Each phase should produce reviewable commits. Keep existing production tests
+and behavior until the replacement owns the corresponding surface, then
+retire the adaptation and its implementation-specific tests deliberately.
+Develop native modules independently before facade cutover, not as a second
+user-selectable DOS implementation. After cutover, preserve the POC's passing
+4040 observations and the supported production workloads.
 
 ### P0: preserve the evidence (complete)
 
-Publish the POC checkpoint and branch from it, as recorded above. Keep
-private ROMs/artifacts outside Git. Save commands and accepted observations,
-not just test counts.
+Publish the POC checkpoint, check it out in the separate reference worktree,
+and base production on the head of `main`, as recorded above. Keep only the
+plan on top initially. Keep private ROMs/artifacts outside Git. Save commands
+and accepted observations, not just test counts. Never use a POC merge as
+the production bootstrap.
 
 ### P1: lock profiles, protocol inventory and ROM delivery
 
@@ -756,20 +778,22 @@ Exit gate: all required inputs are obtainable and independently verified,
 the DOS 2.7 contract matrix names every interaction, and download failure/
 cache tests pass. No 8050/8250 compatibility claim yet.
 
-### P2: recover the raw storage foundation
+### P2: refine the existing raw storage foundation
 
-Restore only geometry and media-lifetime mechanisms, with new narrow
-descriptors and ownership boundaries. Add FILE fault injection and staged
-pair preparation. Keep the 4040 behavior unchanged.
+Refactor the geometry and media-lifetime mechanisms already present on
+`main`, with new narrow descriptors and ownership boundaries. Add FILE fault
+injection and staged pair preparation. Keep the active facade working until
+the replacement is ready, without importing POC deletions.
 
 Exit gate: exhaustive three-format geometry, pair validation, stale identity,
 write/flush/close and resource checks pass in ordinary firmware suites.
 
 ### P3: modularize the proven 4040 path
 
-Split machine/RIOT/controller/peer/transport/facade without changing native
-behavior. Introduce instance storage and shared immutable ROM borrowing.
-Keep one device enabled until the split is proven.
+Port the proven machine/RIOT/controller/peer mechanisms from the reference
+worktree into the planned production modules, not the experimental facade
+wholesale. Introduce instance storage and shared immutable ROM borrowing.
+Use isolated fixtures for one native device before production cutover.
 
 Exit gate: all POC observations and independent 4040 comparisons still pass
 through production modules, no alternate POC emulator is linked into tests,
@@ -785,9 +809,9 @@ Exit gate: real ROM diagnostics pass, independent startup/job/header/media
 agreement passes for both modes, formatter and large-REL boundary cases
 pass, and every discovered defect has ordinary firmware coverage.
 
-### P5: restore devices 8-11 and shared-endpoint ownership
+### P5: integrate devices 8-11 and shared-endpoint ownership
 
-Restore gateware admission and native straps, implement ordered event
+Preserve gateware admission and implement native address straps, ordered event
 fan-out and explicit TX ownership, then mixed-model operation across four
 homogeneous devices. P5 transport work may start after P3 independently of
 P4, but acceptance needs both.
@@ -858,11 +882,13 @@ older archived source alone.
 - [Pinned MAME `c8050.cpp`](https://github.com/mamedev/mame/blob/9d8a6727a206fc822b8b69d67a51e6fd7dbf4d4b/src/devices/bus/ieee488/c8050.cpp)
   corroborates the non-A15-mirrored DOS 2.7 map, address straps, shared main
   ROMs, RIOT IRQ wiring and controller-side PB6 distinction.
-- [POC firmware](../../fw/src/ieee/) and
-  [system contracts](../../test/system/ieee/) are implementation evidence,
-  not authorities overriding the native model.
-- Baseline `d5c1804:fw/src/ieee/dos_media.*` and geometry tests retain the
-  raw-storage failure/lifetime design worth recovering.
+- POC firmware and system contracts are in the separate reference worktree
+  at the pinned commit above. They are implementation evidence, not
+  authorities overriding the native model. Production paths with similar
+  names refer to `main`'s code until explicitly migrated.
+- Current `fw/src/ieee/dos_media.*` and geometry tests retain the raw-storage
+  failure/lifetime design worth reusing. `d5c1804` is a historical reference,
+  not a substitute for preserving newer production fixes and tests.
 
 Highest risks still requiring implementation evidence are DOS 2.7's
 non-mailbox controller interactions, complete payload recognition,
