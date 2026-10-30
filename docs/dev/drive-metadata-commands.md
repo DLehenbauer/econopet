@@ -78,12 +78,42 @@ for this isolated foundation or a complete dual-drive/fault/resource matrix.
 The pinned [MAME 8050/8250 model](https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c8050.cpp)
 also corroborates DOS 2.7's mirrored fixed map pages.
 
+## Review regression evidence
+
+The following source references use the pinned revision above. Tests cover
+4040, 8050 MPI and 8250 MPI unless a narrower target is stated.
+
+| Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
+|----------|-----------------------|----------------------------|----------------------------|-----------------------|---------------|
+| RENAME destination ownership, including a retained CLOSE during lookup | All three models, host publication policy | Both `rename:RENAME/CHKIO` establish source-before-collision ordering. Unpublished host intent has no ROM counterpart. | Preserve source error 62 and visible collision 63. Reject conflicting unpublished intent with host 25, even if CLOSE retires it after lookup passes its sector. | `unpublished_writer`, `rename_start`, `rename_work`; `test_rename_respects_unpublished_writer_namespace` | Same-disk, cross-drive, nonparticipating-peer and linked-directory interleavings observe persisted payloads. |
+| Failed source publication retains one canonical name | All three models, host publication policy | Both `rename:RENAME` rewrite the directory name. Host partial-write ownership is an adapter boundary. | Reject RENAME of a still-unpublished source with host 25, preserving its original intent and bytes. A separate destination remains safe, and normal RENAME works after successful CLOSE. | `rename_work`; `test_rename_preserves_failed_source_publication_intent` | Injected partial directory writes, exact entry comparisons and later independent CLOSE/readback. |
+| SCRATCH completion cannot act on replacement media | All three models, host generation policy | Both `scrtch:SCRTCH` establish command completion. Host pair identities and backing flushes have no ROM counterpart. | A stale completion returns host 25 without replacement read, write or flush callbacks, including no-match completion and peer-only rebinds. | `scratch_work`; `test_scratch_stale_completion_never_flushes_replacement` | Dirty replacement created through the media API remains dirty. Callback counters remain unchanged. |
+| Two-byte selector precedes single-colon syntax | All three models | Both [setdrv](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv) / [setdrv](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv), `SETDRV/SD40` | `::SOURCE` consumes both colons. `:::SOURCE` leaves a literal leading colon. Apply the same rule to later SCRATCH patterns. | `rename_start`, `scratch_start`; existing RENAME and SCRATCH syntax tables | Success and missing-name controls verify both parser branches on each model. |
+| Default SCRATCH patterns with an absent peer | 8050/8250 DOS 2.7 native behavior. 4040 missing host binding adaptation. | `DOS_8250/lookup:OPTSCH/OS50/COMPAR` reduces `DRVCNT` for an inactive peer. The 4040 source has no identical inactive-peer branch. | With the starting disk present and peer absent, include its defaulted patterns on the only scan rather than skipping them. | `scratch_start`; `test_scratch_multiple_patterns_and_drive_defaults` | Mixed explicit/default patterns run with peer present and absent. Do not infer native 4040 inactive-drive behavior from absent host bindings. |
+| VALIDATE owns its delegated initialization outcome | All three models, cooperative host scheduling | Both `tst2:INITDR` and `verdir:VALDAT`, plus error recovery through `INITDR` | A peer's status 23 cannot abort successful initialization or replace the saved recovery error 25. An actual recovery read failure retains its own 23 and coordinates. | `initialize_work`, `validate_work`; `test_validate_initialization_ignores_interleaved_peer_status` | Orphan-map repair, peer ownership, successful recovery and actual recovery failure are independently observed. |
+| Saved data starts remain pending after side-chain traversal | All three models | Both `verdir:VD15/VD17` unconditionally restore and process the saved data start | Reject an invalid saved data start before map publication, including track zero. Do not confuse zero with absence of pending work. | `validate_work`; `test_validate_invalid_data_start_after_side_chain` | Side-chain and no-side-chain controls verify exact status, unchanged image and zero writes. |
+| Invalid VALIDATE geometry uses the native DOS 2.7 command error | 8050/8250 DOS 2.7. 4040 retains bounded host error 23. | `DOS_8250/verdir:VMKBAM`, [jobs:TSCHK](https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/jobs), `BADTS/CMDER2` | DOS 2.7 returns 67 with the invalid track/sector, without controller-error initialization recovery. The 4040 unchecked `MRKBAM` is not emulated as unsafe host indexing. | `validate_used`, `validate_work`; invalid-start controls and `test_validate_corruption_and_side_links` | Zero track, excessive track and excessive sector cases distinguish geometry errors from backing-read failures. |
+
+The related namespace fixes deliberately reject unsafe unpublished intent
+rather than introducing an alias journal or mutating a retained writer's
+publication name. Successfully published, still-open writers remain eligible
+for RENAME. The delegated success flag similarly avoids using a mutable
+unit-wide status as a scheduler result. These are host ownership choices,
+not claims about the ROM's buffer scheduling.
+
 ## Extraction validation
 
-The isolated writer-based candidate passes 1251 direct DOS cases and 2234
-total firmware Check cases (2187 ordinary plus 47 fatal/assert cases), with
+The reviewed candidate passes 1314 direct DOS cases and 2297 total firmware
+Check cases (2250 ordinary plus 47 fatal/assert cases), with
 tests and dependencies built in Debug. The RP2040 production build passes
 in RelWithDebInfo. Formatting and whitespace checks pass.
+
+The feedback adds 63 model/scenario variants and tightens the existing
+DOS 2.7 invalid-track expectation. The same final fixtures linked against
+the original PR-head production implementation reproduce the defects.
+That baseline has 50 failures and zero errors, versus zero failures/errors
+with the fixes. This is a paired host regression check, not an original-ROM
+replay.
 
 The metadata additions cover parser boundaries, explicit name lengths,
 status/error precedence, drive selection, retained peers, stale identities,

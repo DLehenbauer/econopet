@@ -161,6 +161,7 @@ typedef struct {
     uint8_t slots;
     bool started;
     bool pending;
+    bool succeeded;
 } dos_initialize_work_t;
 
 // RENAME retains names and media identities while searching linked directories.
@@ -180,6 +181,7 @@ typedef struct {
     bool both_drives;
     bool tried_peer;
     bool empty_target;
+    bool name_conflict;
     bool commit;
     bool pending;
 } dos_rename_work_t;
@@ -234,6 +236,7 @@ typedef struct {
     uint8_t error_track;
     uint8_t error_sector;
     bool directory_chain;
+    bool data_pending;
 } dos_validate_work_t;
 
 typedef enum {

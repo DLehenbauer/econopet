@@ -1424,6 +1424,21 @@ static void append_work(dos_unit_t* const unit, dos_media_bank_t* const media, d
     }
 }
 
+// Find retained host publication intent independently of visible directory bytes.
+static const dos_channel_t* unpublished_writer(const dos_unit_t* const unit, const dos_media_ref_t reference,
+                                               const uint8_t name[DISKIMAGE_FILENAME_SIZE], const uint8_t secondary) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+            owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->media.identity == reference.identity && memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
+            return owner;
+        }
+    }
+    return NULL;
+}
+
 // OPNWCH/ADDFIL construct a new chain, or reserve a replacement's alternate link.
 static bool open_write(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                        const dos_open_work_t* const work, const bool existing) {
@@ -1647,13 +1662,13 @@ static void rename_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
     const uint8_t target = selector == '0' || selector == '1' ? selector - '0' : unit->last_drive;
     uint8_t source = target;
     unsigned int start = equals + 1u;
-    if (start < length && bytes[start] == ':') {
-        ++start;
-    } else if (start + 1u < length && bytes[start + 1u] == ':') {
+    if (start + 1u < length && bytes[start + 1u] == ':') {
         if (bytes[start] == '0' || bytes[start] == '1') {
             source = bytes[start] - '0';
         }
         start += 2u;
+    } else if (start < length && bytes[start] == ':') {
+        ++start;
     }
     // RENAME binds the source disk, with differing prefixes widening target
     // collision checks rather than moving the file to the destination disk.
@@ -1676,6 +1691,19 @@ static void rename_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
     }
     // A differing destination prefix checks both disks, but never moves the file.
     dos_media_reference(media, index, source ^ 1u, &work.media[source ^ 1u]);
+    // Capture intent before yielding: CLOSE can publish and release its owner
+    // after lookup has already passed that directory sector.
+    uint8_t name[DISKIMAGE_FILENAME_SIZE];
+    memcpy(name, work.names[DOS_RENAME_TARGET], sizeof(name));
+    if (work.empty_target) {
+        name[0] = '=';
+    }
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        if ((slot == source || work.both_drives) &&
+            unpublished_writer(unit, work.media[slot], name, DOS_UNUSED) != NULL) {
+            work.name_conflict = true;
+        }
+    }
 
     // Host resource policy probes an available logical index but publishes
     // no channel for this job. Only the two scratch pages are actually claimed.
@@ -1782,13 +1810,13 @@ static void scratch_start(dos_unit_t* const unit, dos_media_bank_t* const media,
         unsigned int start = work.starts[pattern];
         bool omitted = false;
         if (pattern != 0) {
-            if (bytes[start] == ':') {
-                ++start;
-            } else if (start + 1u < length && bytes[start + 1u] == ':') {
+            if (start + 1u < length && bytes[start + 1u] == ':') {
                 if (bytes[start] == '0' || bytes[start] == '1') {
                     drive = bytes[start] - '0';
                 }
                 start += 2u;
+            } else if (bytes[start] == ':') {
+                ++start;
             } else {
                 omitted = true;
                 work.defaults |= 1u << pattern;
@@ -1822,6 +1850,12 @@ static void scratch_start(dos_unit_t* const unit, dos_media_bank_t* const media,
             dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
             return;
         }
+    }
+
+    if (work.scans != 0 && work.media[work.drive ^ 1u].identity == 0) {
+        // DOS 2.7 OS50 reduces DRVCNT for an inactive peer. Missing 4040
+        // bindings use the same host policy as the absent starting drive.
+        work.scans = 0;
     }
 
     // As with RENAME, probe logical capacity without publishing a channel,
@@ -1892,6 +1926,20 @@ static void rename_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (work->commit) {
         const dos_media_ref_t source = work->media[work->source_drive];
         unit->selected_drive = work->source_drive;
+        // A failed retained publication must keep one canonical name. A
+        // partial rename cannot safely give that intent another visible alias.
+        for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+            const dos_channel_t* const owner = &unit->channels[index];
+            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->media.unit == source.unit &&
+                owner->media.slot == source.slot && owner->media.identity == source.identity &&
+                owner->directory_track == work->source_track && owner->directory_sector == work->source_sector &&
+                owner->directory_entry == work->source_entry) {
+                dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->source_track, work->source_sector);
+                rename_finish(unit);
+                return;
+            }
+        }
         // Reread at commit so unrelated directory edits cannot be rolled back.
         if (storage_error(unit, media, source,
                           read_sector(unit, media, source, work->source_track, work->source_sector, bytes), false,
@@ -1988,6 +2036,8 @@ static void rename_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         dos_status(unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
     } else if (work->found & DOS_RENAME_TARGET_FOUND) {
         dos_status(unit, model, DOS_STATUS_FILE_EXISTS, 0, 0);
+    } else if (work->name_conflict) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
     } else {
         work->commit = true;
         return;
@@ -2097,7 +2147,13 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
             work->visited = 0;
             return;
         }
-        if (storage_error(unit, media, reference, dos_media_flush_unit(media, reference.unit), true, 0, 0)) {
+        // Unit flush resolves current bindings, unlike sector I/O. Reject an
+        // old pair generation even when no further sector access is needed.
+        dos_media_ref_t current = {0};
+        if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+            current.identity != reference.identity) {
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+        } else if (storage_error(unit, media, reference, dos_media_flush_unit(media, reference.unit), true, 0, 0)) {
             dos_status(unit, model, DOS_STATUS_FILES_SCRATCHED, work->count, 0);
             unit->last_drive = unit->selected_drive;
         }
@@ -2267,6 +2323,7 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
     work->started = false;
     if (work->slots == 0) {
         work->pending = false;
+        work->succeeded = true;
         unit->selected_drive = work->first_drive;
         if (unit->command == DOS_COMMAND_IDLE) {
             // VALIDATE owns its eventual success/recovery status. An ordinary
@@ -2377,8 +2434,11 @@ static bool validate_used(dos_unit_t* const unit, const dos_media_bank_t* const 
     unsigned int sectors;
     if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type, track, &sectors) ||
         sector >= sectors) {
-        // Retain bounded raw-image corruption policy instead of indexing beyond RAM.
-        dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
+        // DOS 2.7 VMKBAM/TSCHK reports BADTS through CMDER2. Keep the
+        // bounded raw-image read-error policy for 4040's unchecked MRKBAM.
+        dos_status(unit, model,
+                   model == DOS_MODEL_4040 ? DOS_STATUS_READ_ERROR : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR, track,
+                   sector);
         return false;
     }
     // Inspect rebuilt state rather than mutating the persisted map's cache.
@@ -2445,7 +2505,7 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         if (unit->initialize.pending) {
             return;
         }
-        if (unit->status_code != DOS_STATUS_OK) {
+        if (!unit->initialize.succeeded) {
             validate_finish(unit);
             return;
         }
@@ -2581,7 +2641,8 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         }
         work->chain_track = entry[DOS_DIRECTORY_TRACK_OFFSET];
         work->chain_sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
-        if (entry[DOS_DIRECTORY_SIDE_TRACK] != 0) {
+        work->data_pending = entry[DOS_DIRECTORY_SIDE_TRACK] != 0;
+        if (work->data_pending) {
             // VD15 saves the data start and marks a nonzero side chain first.
             // This also applies to side-link bytes in otherwise ordinary files.
             work->next_track = work->chain_track;
@@ -2604,8 +2665,10 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         // MRKBAM/VMKBAM mark the current sector before reading its link.
         // validate_used preserves 4040 duplicate tolerance versus DOS 2.7 VUSED.
         if (!validate_used(unit, media, track, sector)) {
-            // NO BLOCK is a command error, not the controller-error INITDR path.
-            if (unit->status_code == DOS_STATUS_NO_BLOCK) {
+            // NO BLOCK and TSCHK's BADTS are direct command errors, not
+            // controller failures that enter the INITDR recovery path.
+            if (unit->status_code == DOS_STATUS_NO_BLOCK ||
+                unit->status_code == DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR) {
                 validate_finish(unit);
             } else {
                 validate_recover(unit, model, track, sector);
@@ -2622,10 +2685,11 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         if (work->chain_track == 0) {
             // A zero track terminates the chain. Resume saved data after a
             // side chain, otherwise scan more entries or publish the final maps.
-            if (work->next_track != 0) {
+            if (work->data_pending) {
                 work->chain_track = work->next_track;
                 work->chain_sector = work->next_sector;
                 work->next_track = 0;
+                work->data_pending = false;
                 work->chain_visited = 0;
             } else {
                 work->phase = work->directory_chain ? DOS_VALIDATE_WRITE : DOS_VALIDATE_SEARCH;
@@ -3453,19 +3517,13 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     if (work->access == DOS_ACCESS_WRITE || work->access == DOS_ACCESS_APPEND) {
         const uint8_t* const name = found_track != 0 ? bytes + found_entry + DOS_DIRECTORY_NAME_OFFSET : work->name;
-        for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-            const dos_channel_t* const owner = &unit->channels[index];
-            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
-                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
-                owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
-                owner->media.identity == reference.identity &&
-                memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
-                // A failed publication still owns its planned namespace entry.
-                unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-                dos_status(unit, model, DOS_STATUS_WRITE_ERROR, owner->directory_track, owner->directory_sector);
-                clear_command(unit);
-                return;
-            }
+        const dos_channel_t* const owner = unpublished_writer(unit, reference, name, secondary);
+        if (owner != NULL) {
+            // A failed publication still owns its planned namespace entry.
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, owner->directory_track, owner->directory_sector);
+            clear_command(unit);
+            return;
         }
     }
     const uint8_t previous = dos_find_channel(unit, secondary);
