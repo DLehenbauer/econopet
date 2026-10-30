@@ -84,6 +84,13 @@ adaptation, not behavior claimed for native controller hardware.
 | OPEN after peer-writer retirement | All three targets, retained host CLOSE phases | Both `open` and `tst2` sources above | Successful old-writer retirement must not redirect the replacement OPEN's status or last successful drive. A failed retirement retains its own error and owner. | `open_directory`, `dos_open`, `dos_work`, `test_reused_writer_secondary_restores_requested_drive`, terminal-failure cases | Same-secondary ordinary WRITE, raw directory and ordinary READ replacements tested across drives. |
 | APPEND block count | All three targets | Both `tst2: STRDBL/STRTIT` sources above | Count the initial read, subsequent traversed read jobs and final write. Appending one byte to lengths 22, 254 and 300 publishes counts 2, 3 and 3. | Initial APPEND `blocks`, `test_append_directory_count_includes_initial_read` | Independent directory-byte inspection plus complete payload readback. No physical reference capture. |
 | Cancelled APPEND retirement (related finding) | Host finalization, all three targets | No native cancellation equivalent. Logical buffer clearing follows both `parsex: CLRCB` sources above. | Cancelling unfinished APPEND releases only its read cursor and retires command bytes, with no clean-media write/flush. | `dos_finalize`, `test_finalize_cancels_unfinished_append_without_writes` | Existing cancellation cases strengthened with direct command-RAM checks. |
+| Concurrent replacement CLOSE | All three targets | Both `close: CLSDIR/CLSD4/CLSD5` sources above | Reread the entry. Reclaim its current original chain only while its replacement bit is set, and publish its current alternate (which may belong to a peer writer). A later CLOSE must not release blocks reassigned to another live file. | `update_directory`, `test_replacement_close_uses_current_entry` | Independent entry coordinates, forced original-block reuse and payload/BAM checks. No physical concurrent-replacement capture. |
+| Replacement reclamation retry | Host retry phases, all three targets | Native deletion/publication ordering is both `close: CLSDIR`. Retry ownership has no native equivalent. | Preserve one reclamation cursor and entry owner through read, BAM or directory-write failure. Competing CLOSE/OPEN on that entry reports host write failure rather than restarting deletion. Unrelated entries remain usable. Unacknowledged OPEN metadata retains its planned name and new chain through repeated publication failure. | `DOS_CLOSE_RECLAIM`, `directory_entry_busy`, `test_replacement_close_uses_current_entry`, `test_unpublished_writer_retries_closed_metadata` | Both no-change and partial directory-write faults, competing CLOSE/OPEN, intervening allocation of an already released block, and repeated initial-publication failure. |
+| Missing live replacement link (related finding) | All three targets | Both `close: CLSDIR` zero-alternate check before `CLSD4/DELFIL` | A zero alternate track reports 67 at track 0 and the alternate sector, before freeing the original chain. | `update_directory`, `test_replacement_close_rejects_missing_alternate` | Exact status strings and original allocation checked on all three targets. |
+| Pending directory-growth links | Host retry ownership, all three targets | Both `tst4: NXDRBK`, linked in the native evidence table | Reserve both predecessor and successor until growth completes, even if the predecessor write fails without changing any bytes. A peer lookup cannot grow from the same tail. | `dos_work` growth guard, `test_untouched_growth_failure_reserves_both_links` | No-change callback fault plus successful retry and reachable entries for both subsequent files. |
+| Lookup after same-secondary writer retirement | Host durability policy, all three targets | Native [4040 tst3: `GETR2/FRECHN`][40-channels] and [DOS 2.7 tst3: `GETR2/FRECHN`][27-channels] release old owners. Persisting them first is a host adaptation. | After host retirement, restart lookup before DELDIR or allocation. Do not retain freed old links or deleted-entry reservations from the earlier scan. A plain WRITE against the newly closed file reports 63. | `dos_work`, `test_reused_secondary_revalidates_directory` | Same-secondary repeated replacement with forced block reuse, and APPEND-to-WRITE with an earlier deleted entry. |
+| Lookup I/O failure with a live writer | Host storage-error policy, all three targets | Both `erproc: CMDER3` sources describe native teardown, not the retained host writer policy | Retire the failed command and scratch buffers, but preserve buffered writer bytes, close phase and ownership. Native logical-error/read-owner retirement remains unchanged. | `dos_work`, `test_lookup_failure_preserves_writer`, existing ordinary read-owner retirement cases | Six buffered-data/failed-CLOSE variants check retained channel bytes, then retry CLOSE and read back the file. |
+| Lazy BAM rebind and free total | Host cache identity, native free-count semantics on all three targets | [4040 lstdir: `NUMFRE`][40-free], [DOS 2.7 map: `NUMFRE`][27-free]. Generation invalidation is host-only. | Publishing a different media identity invalidates the old free-block total, including BAM loads triggered by short APPEND before any allocation or listing. | `bam_entry`, `test_append_rebind_invalidates_free_total` | Independent directory footer counts before/after rebind, with APPEND between them. |
 
 [40-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
 [27-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
@@ -98,6 +105,10 @@ adaptation, not behavior claimed for native controller hardware.
 [27-stream]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
 [40-open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
 [27-open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
+[40-channels]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+[27-channels]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+[40-free]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lstdir
+[27-free]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
 [dos-interface]: https://www.pagetable.com/174
 [mame-targets]: https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp
 
@@ -108,6 +119,15 @@ generation guards, bounded corrupt-chain traversal and cooperative APPEND
 scheduling are host adaptations, not reproduced controller jobs or mechanics.
 The cache identity and failed-refill guards from #113 remain intact.
 `dos_reset()` still clears state without implementing native reset/user commands.
+
+Ordinary same-secondary OPEN retains the existing host durability policy:
+finish a writable predecessor rather than silently discarding its buffers.
+Because this can change the directory, lookup restarts before any mutation.
+Under that policy, a formerly unclosed entry may now be a closed existing file,
+so a non-`@` WRITE reports 63 rather than resurrecting an earlier deleted entry.
+Normal overlapping replacements retain native current-entry semantics.
+Only an interrupted host reclamation reserves its exact entry until retry
+completes, since native CLSDIR does not yield midway to another OPEN or CLOSE.
 
 Direct Check tests exercise payload boundaries, create/append/replace,
 peer-directory isolation, directory growth, read-only media, near-full/full

@@ -586,6 +586,9 @@ static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media,
             }
             // Preserve the old cache on failed reads, publishing only a full
             // successful replacement after its dirty predecessor was flushed.
+            if (bam->media.identity != reference.identity) {
+                unit->free_blocks_valid[reference.slot] = false;
+            }
             memcpy(bam->buffer.bytes, bytes, sizeof(bytes));
             bam->buffer.track = bam_track;
             bam->buffer.sector = bam_sector;
@@ -1005,7 +1008,22 @@ static bool allocate_sector(dos_unit_t* const unit, dos_media_bank_t* const medi
     return false;
 }
 
-// Read-modify-write only this file's directory entry, never a saved peer sector.
+// Keep a failed CLSDIR's reclamation cursor exclusive until metadata commits.
+static bool directory_entry_busy(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                                 const uint8_t sector, const uint8_t entry, const dos_channel_t* const owner) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const channel = &unit->channels[index];
+        if (channel != owner && channel->allocated && channel->closing == DOS_CLOSE_RECLAIM &&
+            channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
+            channel->media.identity == reference.identity && channel->directory_track == track &&
+            channel->directory_sector == sector && channel->directory_entry == entry) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Read-modify-write this entry, reclaiming only its current replacement chain.
 static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                              const bool closed) {
     // ROM sources:
@@ -1016,6 +1034,12 @@ static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const med
     //
     // ADDFIL publishes an unclosed entry. CLSDIR rereads its sector before
     // updating the closed flag, first link, and final block count.
+    const dos_model_t model = media->units[channel->media.unit].model;
+    if (directory_entry_busy(unit, channel->media, channel->directory_track, channel->directory_sector,
+                             channel->directory_entry, channel)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, channel->directory_track, channel->directory_sector);
+        return false;
+    }
     if (channel->grow_pending && !finish_directory_growth(unit, media, channel)) {
         return false;
     }
@@ -1034,21 +1058,53 @@ static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const med
         entry[DOS_DIRECTORY_TRACK_OFFSET] = channel->first_track;
         entry[DOS_DIRECTORY_SECTOR_OFFSET] = channel->first_sector;
         memcpy(entry + DOS_DIRECTORY_NAME_OFFSET, channel->pattern, sizeof(channel->pattern));
-    } else if (channel->replaced) {
+    } else if (channel->replaced && (!closed || !channel->directory_published)) {
         // Keep the original chain visible until CLOSE commits the alternate.
         entry[DOS_DIRECTORY_TYPE_OFFSET] |= DOS_FILE_REPLACED_MASK;
         entry[DOS_DIRECTORY_REPLACE_TRACK] = channel->first_track;
         entry[DOS_DIRECTORY_REPLACE_SECTOR] = channel->first_sector;
-    } else if (channel->access != DOS_ACCESS_WRITE) {
+    } else if (!closed && channel->access != DOS_ACCESS_WRITE) {
         entry[DOS_DIRECTORY_TYPE_OFFSET] &= DOS_FILE_LOCKED_MASK | DOS_FILE_TYPE_MASK;
     }
     if (closed) {
-        // Commit the new link/count and clear the temporary replacement link.
-        entry[DOS_DIRECTORY_TYPE_OFFSET] = channel->file_type | DOS_FILE_CLOSED_MASK;
-        entry[DOS_DIRECTORY_TRACK_OFFSET] = channel->first_track;
-        entry[DOS_DIRECTORY_SECTOR_OFFSET] = channel->first_sector;
-        entry[DOS_DIRECTORY_REPLACE_TRACK] = 0;
-        entry[DOS_DIRECTORY_REPLACE_SECTOR] = 0;
+        if (channel->closing == DOS_CLOSE_DIRECTORY) {
+            // CLSDIR tests the reread entry, not links saved by an earlier OPEN.
+            const bool replaced = (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) != 0;
+            if (replaced && entry[DOS_DIRECTORY_REPLACE_TRACK] == 0) {
+                dos_status(unit, model, DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR, 0, entry[DOS_DIRECTORY_REPLACE_SECTOR]);
+                return false;
+            }
+            channel->old_track = replaced ? entry[DOS_DIRECTORY_TRACK_OFFSET] : 0;
+            channel->old_sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
+            channel->closing = DOS_CLOSE_RECLAIM;
+        }
+        // Retain progress and entry ownership even if deletion or publication fails.
+        unsigned int visited = 0;
+        while (channel->old_track != 0) {
+            uint8_t old[DISKIMAGE_SECTOR_SIZE];
+            if (++visited >
+                media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE) {
+                dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, channel->old_track, channel->old_sector);
+                return false;
+            }
+            if (!storage_error(unit, media, channel->media,
+                               read_sector(unit, media, channel->media, channel->old_track, channel->old_sector, old),
+                               false, channel->old_track, channel->old_sector) ||
+                !mark_sector(unit, media, channel->media, channel->old_track, channel->old_sector, true)) {
+                return false;
+            }
+            channel->old_track = old[0];
+            channel->old_sector = old[1];
+        }
+        // A peer replacement may own the current alternate, even at this CLOSE.
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) {
+            entry[DOS_DIRECTORY_TRACK_OFFSET] = entry[DOS_DIRECTORY_REPLACE_TRACK];
+            entry[DOS_DIRECTORY_SECTOR_OFFSET] = entry[DOS_DIRECTORY_REPLACE_SECTOR];
+            entry[DOS_DIRECTORY_REPLACE_TRACK] = 0;
+            entry[DOS_DIRECTORY_REPLACE_SECTOR] = 0;
+        }
+        entry[DOS_DIRECTORY_TYPE_OFFSET] =
+            (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) | DOS_FILE_CLOSED_MASK;
         entry[DOS_DIRECTORY_BLOCKS_LOW] = (uint8_t)channel->blocks;
         entry[DOS_DIRECTORY_BLOCKS_HIGH] = (uint8_t)(channel->blocks >> 8u);
     }
@@ -1186,26 +1242,7 @@ static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media
         }
         channel->closing = DOS_CLOSE_DIRECTORY;
     }
-    if (channel->closing == DOS_CLOSE_DIRECTORY) {
-        // DELFIL follows and releases the old replacement chain before CLSDIR writes.
-        // Bound chain traversal as a corrupt-image safeguard, not a ROM retry.
-        unsigned int visited = 0;
-        while (channel->old_track != 0) {
-            uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
-            if (++visited >
-                media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE) {
-                dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, channel->old_track, channel->old_sector);
-                return false;
-            }
-            if (!storage_error(unit, media, channel->media,
-                               read_sector(unit, media, channel->media, channel->old_track, channel->old_sector, bytes),
-                               false, channel->old_track, channel->old_sector) ||
-                !mark_sector(unit, media, channel->media, channel->old_track, channel->old_sector, true)) {
-                return false;
-            }
-            channel->old_track = bytes[0];
-            channel->old_sector = bytes[1];
-        }
+    if (channel->closing == DOS_CLOSE_DIRECTORY || channel->closing == DOS_CLOSE_RECLAIM) {
         if (!update_directory(unit, media, channel, true)) {
             return false;
         }
@@ -2021,7 +2058,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         const dos_channel_t* const channel = &unit->channels[index];
         if (channel->allocated && channel->grow_pending && channel->media.identity == reference.identity &&
             channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
-            channel->directory_track == searched_track && channel->directory_sector == searched_sector) {
+            channel->directory_track == searched_track &&
+            (channel->directory_sector == searched_sector || channel->grow_from_sector == searched_sector)) {
             dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
             work->pending = false;
             clear_command(unit);
@@ -2103,12 +2141,24 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
     }
     work->pending = false;
+    if (failed ||
+        (matched && directory_entry_busy(unit, reference, searched_track, searched_sector, found_entry, NULL))) {
+        unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+        const uint8_t owner = dos_find_channel(unit, secondary);
+        if (failed && (owner == DOS_UNUSED || unit->channels[owner].access == DOS_ACCESS_READ)) {
+            command_error(unit, model, secondary, DOS_STATUS_READ_ERROR);
+        } else {
+            // Host lookup/retry failures must not discard writable owner state.
+            dos_status(unit, model, failed ? DOS_STATUS_READ_ERROR : DOS_STATUS_WRITE_ERROR,
+                       failed ? 0 : searched_track, failed ? 0 : searched_sector);
+            clear_command(unit);
+        }
+        return;
+    }
     dos_status_code_t error = DOS_STATUS_OK;
     // ROM open:OP95 reports 62 for a missing file. M2 read failures instead
     // become generic 23 with zero track/sector, not full controller recovery.
-    if (failed) {
-        error = DOS_STATUS_READ_ERROR;
-    } else if (found_track == 0 && work->access != DOS_ACCESS_WRITE) {
+    if (found_track == 0 && work->access != DOS_ACCESS_WRITE) {
         error = DOS_STATUS_NOT_FOUND;
     }
 
@@ -2149,6 +2199,31 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         command_error(unit, model, secondary, error);
         return;
     }
+    const uint8_t previous = dos_find_channel(unit, secondary);
+    if (previous != DOS_UNUSED && unit->channels[previous].access != DOS_ACCESS_READ) {
+        if (!finish_channel(unit, media, &unit->channels[previous])) {
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            clear_command(unit);
+            return;
+        }
+        free_channel(unit, previous);
+        // Host retirement can publish entries and free chains. Discard all
+        // lookup observations before any DELDIR, reservation or allocation.
+        if (work->default_drive || work->tried_other) {
+            work->default_drive = true;
+            work->tried_other = false;
+            dos_media_ref_t preferred;
+            if (dos_media_reference(media, reference.unit, work->creation_drive, &preferred) == DOS_MEDIA_OK) {
+                work->media = preferred;
+            }
+        }
+        work->track = directory_track(model);
+        work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+        work->visited = 0;
+        work->empty_track = 0;
+        work->pending = true;
+        return;
+    }
     if (unclosed_write) {
         // OP77/DELDIR removes only the entry, deliberately not the abandoned chain.
         bytes[found_entry + DOS_DIRECTORY_TYPE_OFFSET] = DISKIMAGE_FTYPE_DEL;
@@ -2171,14 +2246,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // logical index and GETBUF claims the requested two buffers. Preserve
     // that order after successful lookup, rolling back partial buffer claims
     // on exhaustion. Only ordinary indices participate in this scan.
-    const uint8_t previous = dos_find_channel(unit, secondary);
     if (previous != DOS_UNUSED) {
-        if (unit->channels[previous].access != DOS_ACCESS_READ &&
-            !finish_channel(unit, media, &unit->channels[previous])) {
-            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-            clear_command(unit);
-            return;
-        }
         free_channel(unit, previous);
     }
     unit->selected_drive = reference.slot;
@@ -2204,8 +2272,6 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     state->blocks = found_blocks;
     unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
     if (work->access == DOS_ACCESS_WRITE) {
-        state->old_track = found_track;
-        state->old_sector = found_sector;
         state->blocks = 0;
         if (!open_write(unit, media, state, work, found_track != 0)) {
             state->failed = true;
