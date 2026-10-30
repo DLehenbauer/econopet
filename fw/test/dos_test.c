@@ -6648,6 +6648,107 @@ START_TEST(test_reader_block_zero_count_retains_prefetched_source_drive) {
 }
 END_TEST
 
+// RD1 interprets retained alternate RAM even when a terminal OPEN submitted no job.
+START_TEST(test_reader_zero_count_terminal_uses_retained_alternate_ram) {
+    const unsigned int format = (unsigned int)_i / 3u, variant = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_reader_pointer_image(&bank, &image, format);
+    uint8_t* const block = sector_bytes(&image, bank.units[0].slots[0].io.image.type, 1, 3);
+    memset(block, 0x5a, DISKIMAGE_SECTOR_SIZE);
+    block[0] = 0;
+    uint8_t* const successor = sector_bytes(&image, bank.units[0].slots[0].io.image.type, 1, 4);
+    successor[0] = 0;
+    successor[1] = 4;
+    memcpy(successor + 2, "END", 3);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+
+    // Seed a returned direct page before OPEN reclaims it as an unused alternate.
+    const uint8_t seed = open_name(&unit, &bank, 0, "#8");
+    const uint8_t buffer = unit.channels[seed].buffers[0];
+    uint8_t* const retained = unit.buffers[buffer].bytes;
+    memset(retained, 'R', DISKIMAGE_SECTOR_SIZE);
+    retained[0] = variant == 0 ? 0 : 1;
+    retained[1] = 4;
+    memcpy(retained + 2, "RAM", 3);
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, 0));
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:ONE,P,R");
+    ck_assert_uint_eq(unit.channels[reader].buffers[1], buffer);
+    send_command(&unit, &bank, "B-R:2,0,1,3");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "B-P:2,255");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    if (variant == 2) {
+        const dos_media_io_t io = bank.units[0].slots[0].io;
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, &io), DOS_MEDIA_OK);
+    }
+    const unsigned int reads = image.reads;
+    uint8_t expected[DISKIMAGE_SECTOR_SIZE + 3u] = {0x5a, 0x5a};
+    const unsigned int retained_count = variant == 0 ? 3u : DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE;
+    memcpy(expected + 2, retained + 2, retained_count);
+    if (variant != 2) {
+        if (variant == 1) {
+            memcpy(expected + 2u + retained_count, "END", 3);
+        }
+        expect_direct(&unit, &bank, reader, expected, 2u + retained_count + (variant == 1 ? 3u : 0u), true);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert_uint_eq(image.reads, reads + (variant == 1 ? 1u : 0u));
+    } else {
+        // Cached bytes remain observable, but their link cannot read rebound media.
+        expect_direct(&unit, &bank, reader, expected, 5, false);
+        for (unsigned int count = 0; count < DISKIMAGE_SECTOR_SIZE; ++count) {
+            uint8_t byte;
+            bool eoi;
+            if (dos_stage(&unit, &bank, reader, &byte, 1, &eoi) == 0) {
+                break;
+            }
+            ck_assert(!eoi);
+            dos_get(&unit, &bank, reader, 1);
+        }
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert_uint_eq(image.reads, reads);
+    }
+    ck_assert_uint_eq(image.writes + image.flushes, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// A terminal-page overwrite must switch to the prior page, not follow a null link.
+START_TEST(test_reader_zero_count_terminal_reuses_previous_page) {
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_reader_pointer_image(&bank, &image, (unsigned int)_i);
+    uint8_t* const block = sector_bytes(&image, bank.units[0].slots[0].io.image.type, 1, 3);
+    memset(block, 0x5a, DISKIMAGE_SECTOR_SIZE);
+    block[0] = 0;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:READ,P,R");
+    uint8_t prefix[DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE];
+    for (unsigned int index = 0; index < sizeof(prefix); ++index) {
+        prefix[index] = index;
+    }
+    expect_direct(&unit, &bank, reader, prefix, sizeof(prefix), false);
+    send_command(&unit, &bank, "B-R:2,0,1,3");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "B-P:2,255");
+    finish_open(&unit, &bank);
+    const unsigned int reads = image.reads;
+    uint8_t expected[DISKIMAGE_SECTOR_SIZE + 7u] = {0x5a, 0x5a};
+    memcpy(expected + 2, prefix, sizeof(prefix));
+    for (unsigned int index = 0; index < 7u; ++index) {
+        expected[2u + sizeof(prefix) + index] = (uint8_t)(254u + index);
+    }
+    expect_direct(&unit, &bank, reader, expected, sizeof(expected), true);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(image.reads, reads + 1u);
+    ck_assert_uint_eq(image.writes + image.flushes, 0);
+    free(image.bytes);
+}
+END_TEST
+
 // Switching a cached alternate page must not renew an old pair's generation.
 START_TEST(test_reader_alternate_switch_preserves_captured_generation) {
     const unsigned int format = (unsigned int)_i / 6u, variant = (unsigned int)_i % 3u;
@@ -7983,6 +8084,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_reader_block_counted_and_raw_boundaries, 0, 3 * 2 * 6);
     tcase_add_loop_test(core, test_reader_block_materializes_active_page, 0, 24);
     tcase_add_loop_test(core, test_reader_block_zero_count_retains_prefetched_source_drive, 0, 3);
+    tcase_add_loop_test(core, test_reader_zero_count_terminal_uses_retained_alternate_ram, 0, 9);
+    tcase_add_loop_test(core, test_reader_zero_count_terminal_reuses_previous_page, 0, 3);
     tcase_add_loop_test(core, test_reader_alternate_switch_preserves_captured_generation, 0, 18);
     tcase_add_loop_test(core, test_directory_peer_switch_preserves_captured_generation, 0, 6);
     tcase_add_loop_test(core, test_reader_block_modify_and_raw_directory_are_read_only, 0, 18);

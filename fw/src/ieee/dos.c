@@ -3805,7 +3805,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     unit->open = parsed;
 }
 
-// Load the linked successor page and commit a channel switch only on success.
+// Select the alternate page, completing a deferred read only when one was submitted.
 // Leave its prepared byte/EOI fields intact for the caller's pointer conversion.
 static bool pointer_next_buffer(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
     // ROM sources:
@@ -3820,8 +3820,8 @@ static bool pointer_next_buffer(dos_unit_t* const unit, dos_media_bank_t* const 
     const uint8_t sector = channel->pointer_mode ? channel->next_sector : bytes[1];
     const unsigned int limit =
         media->units[channel->media.unit].slots[channel->media.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
-    // A zero link has no successor. The visit bound is a host cycle safeguard.
-    if (track == 0 || channel->traversed >= limit) {
+    // The visit bound is a host cycle safeguard, including retained-RAM cycles.
+    if (channel->traversed >= limit) {
         return false;
     }
     // Read through a tentative cursor so failure does not advance channel
@@ -3835,9 +3835,12 @@ static bool pointer_next_buffer(dos_unit_t* const unit, dos_media_bank_t* const 
     const uint8_t drive = (unit->buffer_drives >> buffer) & 1u;
     // Both slots share the captured generation. Never renew an old file token.
     next.media.slot = drive;
-    if (!load_buffer(unit, media, &next, track, sector)) {
+    // A terminal link submitted no read, but DBLBUF still selects its retained
+    // RAM. RD1 interprets that page's header, not the overwritten active link.
+    if (track != 0 ? !load_buffer(unit, media, &next, track, sector) : unit->buffers[buffer].failed) {
         return false;
     }
+    next.position = DISKIMAGE_SECTOR_LINK_SIZE;
     if (next.pointer_mode) {
         const uint8_t* const page = unit->buffers[buffer].bytes;
         next.read_last = page[0] == 0 ? page[1] : 0;

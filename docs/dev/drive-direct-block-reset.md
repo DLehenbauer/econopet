@@ -40,6 +40,7 @@ overlays documented by the ROM provenance tooling.
 | Direct allocation and RAM cursor | All selected targets | Both [4040 block][4040-block]/[DOS 2.7 block][8250-block], `OPNBLK/OB10/OB30/BP05/ASCHEX`, respective `tst3:GETRCH/GETBUF/FNDLNX` and `tst4:GET/RNDGET` | Highest free page for bare #, explicit reservation before channel search, binary page number, pointer 1, sticky EOI and circular reads | `open_direct`, direct parser/ownership/wrap tests | [VICE IEC][vice-iec] confirms memory pages, initial pointer 1 and wrap to 1. Its explicit-page FIXME is not an allocation authority. [MAME 4040][mame-4040]/[8050][mame-8050] corroborate physical shared RAM and ROM selection |
 | Ordinary/direct B-P | All selected targets | Both block sources, `BLKPTR/BUFTST`, respective `tst2:GETPRE/GETBYT/RDBYT/DBLBUF` and `tst4:RNGET2` | SA 2..13, no increment during positioning, preserve pending EOI, revive ordinary readers only at LSTCHR equality | `block_start`, `materialize_reader`, `read_pointer_work`, offset/singleton/boundary tests | [VICE commands][vice-command] independently supplies B-P but is not authoritative for native ordinary-reader or sticky-EOI behavior. MAME confirms shared-page architecture |
 | Counted versus raw transfers | All selected targets | Both block sources, `BLKRD3/BLKRD/UBLKRD/BLKWT/UBLKWT/BW20`, respective `tst4:DRTRD/DRTWRT` | B-R uses byte 0 as count. U1 exposes raw bytes. B-W writes max(1,pointer-1) at byte 0 and sets pointer 1 before I/O. Raw writes preserve cursor/count | `block_read_work`, `block_write_work`, direct/ordinary boundary, drive, version, failure and retry tests | VICE command handlers independently corroborate counted/raw sector operations, not ordinary-channel eligibility or exact U2 cursor retention |
+| Zero-count B-R on a terminal reader | All selected targets | [4040 tst2][4040-tst2]/[DOS 2.7 tst2][8250-tst2], `STRDBL/GETBYT/RDBYT/RD1/RD4/DBLBUF`, both `opchnl:INTPNT/OR30`, `block:BLKRD3/BLKPTR` | After B-R count 0 and B-P offset 255, switch to the alternate page even when OPEN submitted no successor job. With block tail $5A and retained header/data 0,4,"RAM", emit $5A,$5A,"RAM", EOI on M, without another read. A nonzero retained header supplies later refill coordinates | `pointer_next_buffer`, terminal retained-RAM and previous-page regressions cover terminal/nonterminal headers, subsequent refill, EOI, preview/replay and stale-generation rejection | [MAME 4040][mame-4040] `c2040_main_mem/c2040_fdc_mem` corroborate persistent shared RAM. ROM, not MAME command behavior, establishes this byte sequence |
 | Map claims and suggestions | All selected targets | Both block sources, `BLKFRE/BLKALC/BLKTST`, respective `frets:FRETS/USEDTS`, DOS 2.7 `map:SETMAP` | B-F changes cached allocation only. B-A claims only the exact requested free bit, otherwise reports 65 with an unclaimed forward suggestion, or 00,00 on exhaustion | `block_map_work`, claim/free/persistence, search, geometry and failure tests | VICE B-A/B-F handlers corroborate image allocation operations. Selected ROMs control search order and delayed map persistence |
 | Direct CLOSE and initialization | All selected targets | Respective `close:CLSCHN/CLSC30/MAPOUT`, `tst2:INTDRV/INITDR`, `tst3:CLDCHN/FRECHN` | CLOSE enters MAPOUT without file finalization. INITIALIZE abandons only the selected active-job drive, reloads metadata and never CLOSEs unfinished writers | Direct `finish_channel`, existing `initialize_work/free_drive_channels`, selected-drive and retry cases | MAME confirms retained page/drive hardware. Host flush and stale-generation rejection are explicit firmware policies |
 | Model-specific direct MAPOUT | 4040 revision 2 versus selected DOS 2.7 modes | [4040 close][4040-close], `MAPOUT/MAPCHK`, `tstfnd:AVCK`, `jobs:SETJOB`, [DOS 2.7 map][8250-map], `MO10/JSCRBM`, both `parsex:ENDCMD` | 4040 validates and writes even a clean BAM, exposing 26 for write protection, 71 for count/bitmap inconsistency and 73 for wrong DOS version. It retains DRVNUM across successful direct MAPOUT. DOS 2.7 sets DRVNUM from LSTJOB and skips clean-map writes | `prepare_mapout_4040/finish_channel`, `test_direct_close_clean_map_native_errors_and_retry`, `test_direct_close_remembered_drive_is_model_specific` cover selected/all CLOSE, lazy/cached maps and failure/retry | MAME corroborates model selection. Host callbacks and statuses test logical behavior, not controller retries or physical media |
@@ -62,6 +63,8 @@ overlays documented by the ROM provenance tooling.
 [8250-erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
 [8250-trnsfr]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
 [8250-map]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+[4040-tst2]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+[8250-tst2]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
 [vice-iec]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-iec.c
 [vice-command]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-command.c
 [mame-4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp
@@ -82,6 +85,14 @@ and readable old-page prefix, but does not silently retry or erase the failed
 job when normal GET reaches it. DOS 2.7 CMDERR retires ordinary non-REL owners
 but exempts direct owners, including on overlong OPEN. The host's explicit
 numeric-syntax rejection uses the same model-aware retirement path.
+
+Ordinary pointer-mode buffer switches distinguish a deferred sector read
+from the absence of a job. A terminal file's zero link means no read was
+submitted, not that its alternate RAM page is unavailable. A zero-count B-R
+can clear LSTCHR and reach that page after B-P. The switch uses the retained
+bytes and interprets their own header, including any later refill link.
+Existing saved coordinates represent deferred reads without another page
+pool or channel field. Failed jobs and the host cycle bound remain enforced.
 
 Direct persistence never skips a dirty selected BAM or backing slot. A failed
 block-write flush therefore remains retryable with its owner intact, even
@@ -113,10 +124,10 @@ behavior, controller retries, physical head movement or service latency.
 
 ## Validation
 
-The feedback candidate adds 201 model/scenario variants and passes 2744
-focused DOS cases and 3727 total firmware Check cases (3680 ordinary plus 47
+The feedback candidate adds 213 model/scenario variants and passes 2756
+focused DOS cases and 3739 total firmware Check cases (3692 ordinary plus 47
 fatal/assert cases). The same final fixtures linked against the original
-PR implementation reproduce 129 failures (48 against the first feedback
+PR implementation reproduce 141 failures (12 against the second feedback
 commit). Firmware tests and their dependencies
 use Debug. The RP2040 production RelWithDebInfo build,
 clang-format dry run and whitespace checks pass.
