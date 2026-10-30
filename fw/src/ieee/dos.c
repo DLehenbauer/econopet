@@ -271,13 +271,14 @@ static void command_error(dos_unit_t* const unit, const dos_model_t model, const
     dos_status(unit, model, code, 0, 0);
     clear_command(unit);
 
-    // DOS 2.7 CMDER3 -> TLERR frees this SA's non-REL owner even with no
-    // active bus role. 4040's idle-role path does not. A listing's file_type
-    // is its filter, not TYPFIL, and must not exempt a REL-filtered listing.
+    // DOS 2.7 CMDER3 -> TLERR frees this SA's ordinary non-REL owner even
+    // with no active bus role. DIRTYP exempts direct pages. A listing's
+    // file_type is its filter, not TYPFIL, so a REL filter is not exempt.
     if ((model == DOS_MODEL_8050 || model == DOS_MODEL_8250) && secondary != IEEE_COMMAND_CHANNEL) {
         const uint8_t channel = dos_find_channel(unit, secondary);
-        if (channel != DOS_UNUSED && (unit->channels[channel].directory != DOS_DIRECTORY_NONE ||
-                                      unit->channels[channel].file_type < DISKIMAGE_FTYPE_REL)) {
+        if (channel != DOS_UNUSED && unit->channels[channel].access != DOS_ACCESS_DIRECT &&
+            (unit->channels[channel].directory != DOS_DIRECTORY_NONE ||
+             unit->channels[channel].file_type < DISKIMAGE_FTYPE_REL)) {
             free_channel(unit, channel);
         }
     }
@@ -411,7 +412,8 @@ bool dos_close(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_
     uint8_t channel;
     while ((channel = close_channel(unit, secondary)) != DOS_UNUSED) {
         dos_channel_t* const state = &unit->channels[channel];
-        if (state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
+        // Explicit CLOSE 0 enters FRECHN directly, unlike a CLSALL visit.
+        if (secondary != IEEE_LOAD_CHANNEL && state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
             return false;
         }
         free_channel(unit, channel);
@@ -1231,20 +1233,21 @@ static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media
     unit->selected_drive = channel->media.slot;
     if (channel->access == DOS_ACCESS_DIRECT) {
         // CLSCHN skips file finalization but still reaches MAPOUT.
-        if (channel->closing == DOS_CLOSE_DATA) {
-            if (!unit->bam[channel->media.slot].dirty) {
-                return true;
-            }
-            if (!flush_bam(unit, media, &unit->bam[channel->media.slot])) {
-                return false;
-            }
-            channel->closing = DOS_CLOSE_FLUSH;
+        if (channel->closing == DOS_CLOSE_DATA && !unit->bam[channel->media.slot].dirty &&
+            !media->units[channel->media.unit].slots[channel->media.slot].dirty) {
+            return true;
         }
+        // Validate the owner before MAPOUT can write a newer cache generation.
         dos_media_ref_t current = {0};
         if (dos_media_reference(media, channel->media.unit, channel->media.slot, &current) != DOS_MEDIA_OK ||
             current.identity != channel->media.identity) {
             return storage_error(unit, media, channel->media, DOS_MEDIA_STALE, true, 0, 0);
         }
+        // B-A/B-F can dirty the map again while a backing flush is pending.
+        if (!flush_bam(unit, media, &unit->bam[channel->media.slot])) {
+            return false;
+        }
+        channel->closing = DOS_CLOSE_FLUSH;
         return storage_error(unit, media, channel->media, dos_media_flush_unit(media, channel->media.unit), true, 0, 0);
     }
     // No directory coordinates were published if growth allocation failed.
@@ -3444,12 +3447,17 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     if (previous != DOS_UNUSED) {
         // Retire a writable host owner without publishing CLOSE's ENDCMD.
         if (unit->channels[previous].access != DOS_ACCESS_READ &&
+            unit->channels[previous].access != DOS_ACCESS_DIRECT &&
             !finish_channel(unit, media, &unit->channels[previous])) {
             return false;
         }
         free_channel(unit, previous);
     }
     unit->selected_drive = reference.slot;
+    if (secondary == IEEE_LOAD_CHANNEL) {
+        // DOS 2.7 LOADIR/NEWDIR enters AUTOI before its initial header.
+        auto_initialize(unit, reference.slot);
+    }
     const uint8_t index = allocate_channel(unit, reference, secondary, 2);
     if (index == DOS_UNUSED) {
         command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
@@ -3518,14 +3526,14 @@ static void open_direct(dos_unit_t* const unit, dos_media_bank_t* const media, c
     const bool automatic = length == 1;
     uint8_t buffer = DOS_UNUSED;
     if (!automatic && !block_parameters(input, length, 1, &buffer, 1)) {
-        dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
         return;
     }
     if (!automatic) {
         // Test ownership before freeing this secondary's old channel, so an
         // explicitly requested page already owned by that channel is rejected.
         if (buffer >= DOS_BUFFER_COUNT || (unit->buffer_use & (1u << buffer))) {
-            dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+            command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
             return;
         }
         // Native explicit reservation precedes GETRCH's channel search.
@@ -3548,7 +3556,7 @@ static void open_direct(dos_unit_t* const unit, dos_media_bank_t* const media, c
     if (channel == DOS_UNUSED) {
         // Match OB10's ordering: an explicit page reservation can survive
         // logical-channel exhaustion even though no channel was published.
-        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
         return;
     }
     dos_channel_t* const state = &unit->channels[channel];
@@ -4300,7 +4308,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
     }
     const uint8_t previous = dos_find_channel(unit, secondary);
-    if (previous != DOS_UNUSED && unit->channels[previous].access != DOS_ACCESS_READ) {
+    if (previous != DOS_UNUSED && unit->channels[previous].access != DOS_ACCESS_READ &&
+        unit->channels[previous].access != DOS_ACCESS_DIRECT) {
         if (!finish_channel(unit, media, &unit->channels[previous])) {
             unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
             clear_command(unit);
@@ -4613,6 +4622,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             // without repeating the load address or ending the stream.
             channel->media = other;
             unit->selected_drive = other.slot;
+            auto_initialize(unit, other.slot);
             --channel->directory_searches;
             channel->directory = DOS_DIRECTORY_HEADER;
             channel->directory_track = directory_track(model);

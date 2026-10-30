@@ -5412,7 +5412,7 @@ END_TEST
 
 // DOS 2.7 delays its warm metadata reload until a real AUTOI caller runs.
 START_TEST(test_warm_reset_auto_initialize_entry_points) {
-    const unsigned int format = (unsigned int)_i / 5u, operation = (unsigned int)_i % 5u;
+    const unsigned int format = (unsigned int)_i / 6u, operation = (unsigned int)_i % 6u;
     dos_media_bank_t bank = {0};
     image_t image;
     mount_blank(&bank, &image, format);
@@ -5427,6 +5427,11 @@ START_TEST(test_warm_reset_auto_initialize_entry_points) {
         ck_assert_uint_ne(open_name(&unit, &bank, 2, "#"), DOS_UNUSED);
     } else if (operation == 2) {
         ck_assert_uint_eq(open_name(&unit, &bank, 3, "0:ABSENT,S,R"), DOS_UNUSED);
+    } else if (operation == 5) {
+        const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+        ck_assert_uint_ne(listing, DOS_UNUSED);
+        uint8_t bytes[128];
+        ck_assert_uint_gt(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), 0);
     } else if (operation >= 3) {
         static const char* const commands[] = {"R0:NEW=ABSENT", "S0:ABSENT"};
         send_command(&unit, &bank, commands[operation - 3u]);
@@ -5437,6 +5442,60 @@ START_TEST(test_warm_reset_auto_initialize_entry_points) {
     ck_assert_uint_eq(unit.status_code, format != 0 && operation != 0 ? DOS_STATUS_OK : DOS_STATUS_NO_BLOCK);
     ck_assert_uint_eq(image.writes + image.flushes, 0);
     free(image.bytes);
+}
+END_TEST
+
+// Each formatted drive header consumes only that drive's deferred warm reload.
+START_TEST(test_warm_directory_reload_per_drive_and_raw_exemption) {
+    const unsigned int format = (unsigned int)_i / 3u, variant = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    uint8_t bytes[256];
+    const uint8_t initial = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0:*,1:*");
+    const unsigned int length = directory_bytes(&unit, &bank, initial, bytes, sizeof(bytes));
+    ck_assert_uint_eq(length, 128);
+    const unsigned int totals[2] = {bytes[34] | ((unsigned int)bytes[35] << 8u),
+                                    bytes[98] | ((unsigned int)bytes[99] << 8u)};
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    send_command(&unit, &bank, "B-A:0,1,0");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "B-A:1,1,0");
+    finish_open(&unit, &bank);
+    send_command(&unit, &bank, "UI");
+
+    // Raw directory OPEN does not enter NEWDIR/AUTOI.
+    if (variant == 2) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, "$0"), DOS_UNUSED);
+        ck_assert_int_eq(unit.bam[0].reinitialize, format != 0);
+        ck_assert_int_eq(unit.bam[1].reinitialize, format != 0);
+        ck_assert(unit.bam[0].dirty);
+        ck_assert(unit.bam[1].dirty);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+
+    // Admission initializes the first header even before the listing is read.
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, variant == 1 ? "$1:*,0:*" : "$0:*,1:*");
+    const unsigned int first = variant == 1 ? 1u : 0u;
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert(!unit.bam[first].reinitialize);
+    ck_assert_int_eq(unit.bam[first ^ 1u].reinitialize, format != 0);
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, bytes, sizeof(bytes)), length);
+    ck_assert_uint_eq(bytes[4], first);
+    ck_assert_uint_eq(bytes[66], first ^ 1u);
+    for (unsigned int row = 0; row < 2; ++row) {
+        const unsigned int offset = row * 64u + 34u, drive = first ^ row;
+        const unsigned int total = bytes[offset] | ((unsigned int)bytes[offset + 1u] << 8u);
+        ck_assert_uint_eq(total, totals[drive] - (format == 0 ? 1u : 0u));
+        ck_assert(!unit.bam[drive].reinitialize);
+    }
+    ck_assert_uint_eq(images[0].writes + images[1].writes + images[0].flushes + images[1].flushes, 0);
+    free(images[0].bytes);
+    free(images[1].bytes);
 }
 END_TEST
 
@@ -7224,7 +7283,7 @@ END_TEST
 START_TEST(test_direct_load_save_and_overlong_request) {
     dos_media_bank_t bank = {0};
     image_t image;
-    mount_image(&bank, &image, (unsigned int)_i);
+    mount_image(&bank, &image, (unsigned int)_i / 2u);
     dos_unit_t unit;
     dos_reset(&unit, bank.units[0].model);
     const uint8_t channel = open_name(&unit, &bank, 2, "#");
@@ -7236,19 +7295,269 @@ START_TEST(test_direct_load_save_and_overlong_request) {
         const uint8_t number = secondary == IEEE_LOAD_CHANNEL ? 10 : 9;
         expect_direct(&unit, &bank, direct, &number, 1, false);
     }
-    uint8_t overlong[DOS_COMMAND_RECEIVE_CAPACITY];
+    uint8_t overlong[DOS_COMMAND_RECEIVE_CAPACITY + 1u];
     memset(overlong, '0', sizeof(overlong));
     overlong[0] = '#';
-    dos_open(&unit, &bank, 0, 2, overlong, sizeof(overlong));
+    dos_open(&unit, &bank, 0, 2, overlong, DOS_COMMAND_RECEIVE_CAPACITY + (unsigned int)_i % 2u);
     ck_assert_uint_eq(unit.status_code, DOS_STATUS_COMMAND_TOO_LONG);
-    if (_i == 0) {
-        ck_assert_mem_eq(&unit.channels[channel], &saved, sizeof(saved));
-    } else {
-        // DOS 2.7 CMDERR retires this SA through the existing OPEN error path.
-        ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
-    }
+    ck_assert_mem_eq(&unit.channels[channel], &saved, sizeof(saved));
     ck_assert_uint_eq(image.reads + image.writes, 0);
     free(image.bytes);
+}
+END_TEST
+
+// Direct OPEN errors use CMDERR's ordinary-owner retirement and DIRTYP exemption.
+START_TEST(test_direct_open_errors_retire_only_model_eligible_owners) {
+    static const char* const failures[] = {"#12", "#11", "#X", "#0,1,2,3,4"};
+    const unsigned int variant = (unsigned int)_i % count_of(failures);
+    const unsigned int owner = ((unsigned int)_i / count_of(failures)) % 3u;
+    const unsigned int format = (unsigned int)_i / (3u * count_of(failures));
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "READER", DISKIMAGE_FTYPE_SEQ, 0x40, 4);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t channel = open_name(&unit, &bank, 2, owner == 0 ? "0:READER,S,R" : owner == 1 ? "0:WRITER,S,W" : "#");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    const dos_channel_t before = unit.channels[channel];
+    const uint8_t peer = open_name(&unit, &bank, 3, "#");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const dos_channel_t saved_peer = unit.channels[peer];
+    const uint16_t buffers = unit.buffer_use;
+    const unsigned int reads = image.reads, writes = image.writes, flushes = image.flushes;
+    open_name(&unit, &bank, 2, failures[variant]);
+    ck_assert_uint_eq(unit.status_code, variant < 2 ? DOS_STATUS_NO_CHANNEL : DOS_STATUS_SYNTAX);
+    ck_assert_mem_eq(&unit.channels[peer], &saved_peer, sizeof(saved_peer));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(image.flushes, flushes);
+    if (format != 0 && owner != 2) {
+        ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+        uint16_t released = 0;
+        for (unsigned int index = 0; index < count_of(before.buffers); ++index) {
+            if (before.buffers[index] != DOS_UNUSED) {
+                released |= (uint16_t)(1u << before.buffers[index]);
+            }
+        }
+        ck_assert_uint_eq(unit.buffer_use, buffers & (uint16_t)~released);
+    } else {
+        ck_assert_uint_eq(dos_find_channel(&unit, 2), channel);
+        ck_assert_mem_eq(&unit.channels[channel], &before, sizeof(before));
+        ck_assert_uint_eq(unit.buffer_use, buffers);
+        if (owner == 0) {
+            expect_bytes(&unit, &bank, channel, 4, 0x40);
+        } else if (owner == 2) {
+            expect_direct(&unit, &bank, channel, &before.direct_byte, 1, false);
+        } else {
+            put_bytes(&unit, &bank, 2, 0x60, 4);
+            ck_assert(dos_close(&unit, &bank, model, 2));
+            const uint8_t reader = open_name(&unit, &bank, 2, "0:WRITER,S,R");
+            ck_assert_uint_ne(reader, DOS_UNUSED);
+            expect_bytes(&unit, &bank, reader, 4, 0x60);
+        }
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// A clean BAM does not excuse a pending raw/count-write backing flush at CLOSE.
+START_TEST(test_direct_close_retries_block_write_without_dirty_bam) {
+    const unsigned int format = (unsigned int)_i / 6u, variant = (unsigned int)_i % 6u;
+    const unsigned int lifecycle = variant / 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t channel = open_name(&unit, &bank, 2, "#");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x40, DISKIMAGE_SECTOR_SIZE);
+    image.fail_flush = true;
+    send_command(&unit, &bank, variant % 2u == 0 ? "U2:2,0,2,0" : "B-W:2,0,2,0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert(!unit.bam[0].dirty);
+    ck_assert(bank.units[0].slots[0].dirty);
+    uint8_t expected[DISKIMAGE_SECTOR_SIZE];
+    memcpy(expected, unit.buffers[unit.channels[channel].buffers[0]].bytes, sizeof(expected));
+    ck_assert_mem_eq(sector_bytes(&image, bank.units[0].slots[0].io.image.type, 2, 0), expected, sizeof(expected));
+    const unsigned int writes = image.writes, flushes = image.flushes;
+    ck_assert(!(lifecycle == 2 ? dos_finalize(&unit, &bank)
+                               : dos_close(&unit, &bank, model, lifecycle == 0 ? 2 : IEEE_COMMAND_CHANNEL)));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), channel);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(image.flushes, flushes + 1u);
+    image.fail_flush = false;
+    ck_assert(lifecycle == 2 ? dos_finalize(&unit, &bank)
+                             : dos_close(&unit, &bank, model, lifecycle == 0 ? 2 : IEEE_COMMAND_CHANNEL));
+    ck_assert(!bank.units[0].slots[0].dirty);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(image.flushes, flushes + 2u);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), lifecycle == 2 ? channel : DOS_UNUSED);
+    ck_assert_mem_eq(sector_bytes(&image, bank.units[0].slots[0].io.image.type, 2, 0), expected, sizeof(expected));
+    free(image.bytes);
+}
+END_TEST
+
+// Retrying direct CLOSE must include allocation edits made after its failed flush.
+START_TEST(test_direct_close_retry_includes_intervening_map_changes) {
+    const unsigned int format = (unsigned int)_i / 3u, lifecycle = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t channel = open_name(&unit, &bank, 2, "#");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    send_command(&unit, &bank, "B-A:0,1,0");
+    finish_open(&unit, &bank);
+    image.fail_flush = true;
+    ck_assert(!(lifecycle == 2 ? dos_finalize(&unit, &bank)
+                               : dos_close(&unit, &bank, model, lifecycle == 0 ? 2 : IEEE_COMMAND_CHANNEL)));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert(!unit.bam[0].dirty);
+    const uint8_t persisted_count = fixture_bam_entry(&image, format, 1)[0];
+    send_command(&unit, &bank, "B-A:0,1,1");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert(unit.bam[0].dirty);
+    image.fail_flush = false;
+    ck_assert(lifecycle == 2 ? dos_finalize(&unit, &bank)
+                             : dos_close(&unit, &bank, model, lifecycle == 0 ? 2 : IEEE_COMMAND_CHANNEL));
+    ck_assert_uint_eq(image.writes, 2);
+    ck_assert_uint_eq(fixture_bam_entry(&image, format, 1)[0], persisted_count - 1u);
+    ck_assert_uint_eq(fixture_bam_entry(&image, format, 1)[1] & 3u, 0);
+    ck_assert(!unit.bam[0].dirty);
+    ck_assert(!bank.units[0].slots[0].dirty);
+    free(image.bytes);
+}
+END_TEST
+
+// Explicit CLOSE 0 frees its page without MAPOUT, unlike a CLOSE 15 visit to SA 0.
+START_TEST(test_direct_close_zero_bypasses_mapout_only_when_explicit) {
+    const unsigned int format = (unsigned int)_i / 4u, variant = (unsigned int)_i % 4u;
+    const bool readonly = variant % 2u != 0, close_all = variant >= 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "#");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    send_command(&unit, &bank, "B-A:0,1,0");
+    finish_open(&unit, &bank);
+    const uint8_t count = fixture_bam_entry(&image, format, 1)[0];
+    if (readonly) {
+        bank.units[0].slots[0].io.image.write = NULL;
+    }
+    ck_assert_int_eq(dos_close(&unit, &bank, model, close_all ? IEEE_COMMAND_CHANNEL : IEEE_LOAD_CHANNEL),
+                     !(close_all && readonly));
+    if (close_all && readonly) {
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_PROTECT);
+        ck_assert_uint_eq(dos_find_channel(&unit, IEEE_LOAD_CHANNEL), channel);
+    } else {
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert_uint_eq(dos_find_channel(&unit, IEEE_LOAD_CHANNEL), DOS_UNUSED);
+    }
+    ck_assert_uint_eq(image.writes, close_all && !readonly ? 1u : 0u);
+    ck_assert_uint_eq(image.flushes, close_all && !readonly ? 1u : 0u);
+    ck_assert_uint_eq(fixture_bam_entry(&image, format, 1)[0], count - (close_all && !readonly ? 1u : 0u));
+
+    // The skipped map remains available for a later ordinary direct CLOSE.
+    if (!close_all || readonly) {
+        bank.units[0].slots[0].io.image.write = write_image;
+        if (!close_all) {
+            ck_assert(unit.bam[0].dirty);
+            ck_assert_uint_ne(open_name(&unit, &bank, 2, "#"), DOS_UNUSED);
+        }
+        ck_assert(dos_close(&unit, &bank, model, IEEE_COMMAND_CHANNEL));
+        ck_assert_uint_eq(fixture_bam_entry(&image, format, 1)[0], count - 1u);
+        ck_assert_uint_eq(image.writes, 1);
+        ck_assert_uint_eq(image.flushes, 1);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// GETRCH replaces a direct owner without CLOSE/MAPOUT, even for read-only images.
+START_TEST(test_reopening_direct_owner_does_not_finalize_map) {
+    const unsigned int format = (unsigned int)_i / 8u, variant = (unsigned int)_i % 8u;
+    const unsigned int operation = variant / 2u;
+    const uint8_t secondary = operation == 0 || operation == 3 ? IEEE_LOAD_CHANNEL : 2;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "READER", DISKIMAGE_FTYPE_PRG, 0x40, 4);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    if (operation == 3) {
+        ck_assert_uint_ne(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "0:READER,P,R"), DOS_UNUSED);
+        ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    }
+    ck_assert_uint_ne(open_name(&unit, &bank, secondary, "#"), DOS_UNUSED);
+    send_command(&unit, &bank, "B-A:0,2,0");
+    finish_open(&unit, &bank);
+    const uint8_t count = fixture_bam_entry(&image, format, 2)[0];
+    if (variant % 2u != 0) {
+        bank.units[0].slots[0].io.image.write = NULL;
+    }
+    static const char* const names[] = {"$0:*", "$0", "0:READER,P,R", "*"};
+    const uint8_t replacement = open_name(&unit, &bank, secondary, names[operation]);
+    ck_assert_uint_ne(replacement, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.channels[replacement].access, DOS_ACCESS_READ);
+    if (operation >= 2) {
+        expect_bytes(&unit, &bank, replacement, 4, 0x40);
+    } else {
+        uint8_t byte;
+        bool eoi;
+        ck_assert_uint_eq(dos_stage(&unit, &bank, replacement, &byte, 1, &eoi), 1);
+    }
+    ck_assert(unit.bam[0].dirty);
+    ck_assert_uint_eq(fixture_bam_entry(&image, format, 2)[0], count);
+    ck_assert_uint_eq(image.writes + image.flushes, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// A stale RAM owner cannot MAPOUT a later generation's cached allocation state.
+START_TEST(test_stale_direct_close_cannot_flush_current_map) {
+    const unsigned int format = (unsigned int)_i / 3u, variant = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0}, other = {0};
+    image_t images[3];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    mount_blank(&other, &images[2], format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t direct = open_name(&unit, &bank, 2, "#");
+    const dos_channel_t owner = unit.channels[direct];
+    const dos_media_io_t unchanged = bank.units[0].slots[0].io;
+    ck_assert_int_eq(
+        dos_media_set_slot(&bank, 0, variant == 2 ? 1 : 0, variant == 0 ? &unchanged : &other.units[0].slots[0].io),
+        DOS_MEDIA_OK);
+    send_command(&unit, &bank, "B-A:0,2,0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert(unit.bam[0].dirty);
+    const dos_bam_t map = unit.bam[0];
+    ck_assert(!dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    for (unsigned int index = 0; index < count_of(images); ++index) {
+        ck_assert_uint_eq(images[index].writes + images[index].flushes, 0);
+        free(images[index].bytes);
+    }
+    ck_assert_mem_eq(&unit.channels[direct], &owner, sizeof(owner));
+    ck_assert_mem_eq(&unit.bam[0], &map, sizeof(map));
 }
 END_TEST
 
@@ -7465,7 +7774,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_user_interrupt_retains_channels_maps_and_command_bytes, 0, 18);
     tcase_add_loop_test(core, test_user_interrupt_overlong_and_trimmed_request, 0, 3);
     tcase_add_loop_test(core, test_warm_reset_retains_ram_and_model_specific_maps, 0, 18);
-    tcase_add_loop_test(core, test_warm_reset_auto_initialize_entry_points, 0, 15);
+    tcase_add_loop_test(core, test_warm_reset_auto_initialize_entry_points, 0, 18);
+    tcase_add_loop_test(core, test_warm_directory_reload_per_drive_and_raw_exemption, 0, 9);
     tcase_add_loop_test(core, test_warm_reset_overlong_request, 0, 3);
     tcase_add_loop_test(core, test_block_reads_counted_and_raw_boundaries, 0, 3 * 2 * 6);
     tcase_add_loop_test(core, test_block_read_parser_geometry_and_user_aliases, 0, 3 * count_of(block_read_commands));
@@ -7509,7 +7819,13 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_direct_reopen_abandons_writer_and_validate_releases_page, 0, 3);
     tcase_add_loop_test(core, test_direct_ram_survives_media_change_without_replacement_io, 0, 6);
     tcase_add_loop_test(core, test_direct_close_retries_dirty_bam_and_backing_flush, 0, 9);
-    tcase_add_loop_test(core, test_direct_load_save_and_overlong_request, 0, 3);
+    tcase_add_loop_test(core, test_direct_load_save_and_overlong_request, 0, 6);
+    tcase_add_loop_test(core, test_direct_open_errors_retire_only_model_eligible_owners, 0, 36);
+    tcase_add_loop_test(core, test_direct_close_retries_block_write_without_dirty_bam, 0, 18);
+    tcase_add_loop_test(core, test_direct_close_retry_includes_intervening_map_changes, 0, 9);
+    tcase_add_loop_test(core, test_direct_close_zero_bypasses_mapout_only_when_explicit, 0, 12);
+    tcase_add_loop_test(core, test_reopening_direct_owner_does_not_finalize_map, 0, 24);
+    tcase_add_loop_test(core, test_stale_direct_close_cannot_flush_current_map, 0, 9);
     tcase_add_loop_test(core, test_block_commands_reject_allocated_load_and_save, 0, 30);
     tcase_add_loop_test(core, test_user_table_reset_and_cold_vectors, 0, 9);
     suite_add_tcase(suite, core);

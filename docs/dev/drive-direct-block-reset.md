@@ -42,8 +42,11 @@ overlays documented by the ROM provenance tooling.
 | Counted versus raw transfers | All selected targets | Both block sources, `BLKRD3/BLKRD/UBLKRD/BLKWT/UBLKWT/BW20`, respective `tst4:DRTRD/DRTWRT` | B-R uses byte 0 as count. U1 exposes raw bytes. B-W writes max(1,pointer-1) at byte 0 and sets pointer 1 before I/O. Raw writes preserve cursor/count | `block_read_work`, `block_write_work`, direct/ordinary boundary, drive, version, failure and retry tests | VICE command handlers independently corroborate counted/raw sector operations, not ordinary-channel eligibility or exact U2 cursor retention |
 | Map claims and suggestions | All selected targets | Both block sources, `BLKFRE/BLKALC/BLKTST`, respective `frets:FRETS/USEDTS`, DOS 2.7 `map:SETMAP` | B-F changes cached allocation only. B-A claims only the exact requested free bit, otherwise reports 65 with an unclaimed forward suggestion, or 00,00 on exhaustion | `block_map_work`, claim/free/persistence, search, geometry and failure tests | VICE B-A/B-F handlers corroborate image allocation operations. Selected ROMs control search order and delayed map persistence |
 | Direct CLOSE and initialization | All selected targets | Respective `close:CLSCHN/CLSC30/MAPOUT`, `tst2:INTDRV/INITDR`, `tst3:CLDCHN/FRECHN` | CLOSE persists dirty maps without file finalization. INITIALIZE abandons only the selected active-job drive, reloads metadata and never CLOSEs unfinished writers | Direct `finish_channel`, existing `initialize_work/free_drive_channels`, selected-drive and retry cases | MAME confirms retained page/drive hardware. Host flush and stale-generation rejection are explicit firmware policies |
+| Explicit CLOSE 0 versus CLOSE 15 | All selected targets | [4040 close][4040-close]/[DOS 2.7 close][8250-close], `CLOSE/CLSALL/CLSCHN` | Explicit CLOSE 0 frees its direct owner without MAPOUT or ENDCMD. CLOSE 15 still visits SA 0 through CLSCHN and persists its dirty map | `dos_close`, `test_direct_close_zero_bypasses_mapout_only_when_explicit` covers writable/read-only backing and later persistence | MAME corroborates model selection. Host callbacks establish the absence of writes/flushes, not physical controller behavior |
+| Direct OPEN error retirement | 4040 versus selected DOS 2.7 modes | Both block sources, `OB05/OB30`, [4040 erproc][4040-erproc]/[DOS 2.7 erproc][8250-erproc], `CMDER3/TLERR`, both `equate:DIRTYP/RELTYP` | DOS 2.7 retires the selected ordinary non-REL owner on direct OPEN failure, including numeric-policy rejection. DIRTYP preserves direct owners, including both overlength paths. Idle-role 4040 retains either owner | `command_error/open_direct`, `test_direct_open_errors_retire_only_model_eligible_owners`, `test_direct_load_save_and_overlong_request` | MAME corroborates shared channels/RAM. Malformed scratch-dependent numeric status 30 remains an explicit host policy |
+| Replacing direct owners | All selected targets | Both `open:OP02/OP04/OPREAD/LOADIR`, `opchnl:OPNRCH`, `lstdir:STDIR`, `tst3:GETRCH/GETR2/FRECHN` | Reopen as ordinary data, raw directory, formatted listing or retained LOAD '*' releases the old direct page without entering CLOSE/MAPOUT | `open_directory/dos_work/dos_close`, `test_reopening_direct_owner_does_not_finalize_map` checks admission/header or data on writable/read-only backing | Native GETRCH distinguishes replacement from CLOSE. Later metadata paging can independently need MAPOUT, outside this admission check |
 | User/reset vector selection | All selected targets | Both block sources, `USER/USRINT/USREXC`, [4040 vector][4040-vector]/[DOS 2.7 vector][8250-vector], `UBLOCK`, respective `ieee:ATNIRQ` | U0 preserves command RAM and owners. Index 8 enters warm NMI, 9 cold DSKINT, 10 ATNIRQ. IRQ retains channels/maps and short U repeats the selector | `dos_command/warm_reset/dos_reset`, alias/state snapshots and cold-vector tests | MAME independently corroborates the exact ROM sets and CPU/RAM mapping. Historical full-engine original-ROM captures support warm/IRQ observations, not this isolated slice |
-| Deferred DOS 2.7 warm reload | 4040 versus selected DOS 2.7 modes | [4040 dskint][4040-dskint], `DIAGOK/INTTAB`, [DOS 2.7 begin][8250-begin], `BEGIN/CONFIG/CONF10`, `romtbl:MSCCOM`, `lookup:JAUTOI`, `tst2:INITDR` | Preserve RAM without flush. 4040 retains dirty maps. DOS 2.7 marks both maps for deferred discard at direct OPEN or lookup, not B-A/B-F | `auto_initialize`, warm-reset, per-drive and supported-entry-point matrices | MAME ROM/hardware identities and historical native warm captures corroborate model selection. Host tests establish only logical cache handling |
+| Deferred DOS 2.7 warm reload | 4040 versus selected DOS 2.7 modes | [4040 dskint][4040-dskint], `DIAGOK/INTTAB`, [DOS 2.7 begin][8250-begin], `BEGIN/CONFIG/CONF10`, `romtbl:MSCCOM`, `lookup:JAUTOI`, `tst2:INITDR`, [DOS 2.7 trnsfr][8250-trnsfr], `NEWDIR` | Preserve RAM without flush. 4040 retains dirty maps. DOS 2.7 marks both maps for deferred discard at direct OPEN, lookup or each formatted-directory header, not B-A/B-F or raw-directory OPEN | `auto_initialize/open_directory/prepare_directory_line`, warm entry-point and per-drive/raw-exemption matrices check both header orders and emitted free-block totals | MAME ROM/hardware identities and historical native warm captures corroborate model selection. Host tests establish only logical cache handling |
 
 [4040-block]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/block
 [8250-block]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/block
@@ -51,6 +54,11 @@ overlays documented by the ROM provenance tooling.
 [8250-vector]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/vector
 [4040-dskint]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/dskint
 [8250-begin]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+[4040-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+[8250-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+[4040-erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+[8250-erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
+[8250-trnsfr]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
 [vice-iec]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-iec.c
 [vice-command]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-command.c
 [mame-4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp
@@ -68,9 +76,19 @@ channel sweep.
 This extraction retains all merged read/write fixes. A failed successor read
 remains cached: a failed B-P/block normalization preserves the channel cursor
 and readable old-page prefix, but does not silently retry or erase the failed
-job when normal GET reaches it. DOS 2.7 overlong OPEN still retires its selected
-SA through the existing CMDERR path. Tests were adapted to these landed
-contracts rather than replacing their implementation with older future code.
+job when normal GET reaches it. DOS 2.7 CMDERR retires ordinary non-REL owners
+but exempts direct owners, including on overlong OPEN. The host's explicit
+numeric-syntax rejection uses the same model-aware retirement path.
+
+Direct CLOSE skips persistence only when both the selected BAM and backing
+slot are clean. A failed block-write flush therefore remains retryable with
+its owner intact, even though no allocation bit changed. The captured owner
+generation is checked before MAPOUT as well as before backing flush, so an
+old RAM page cannot persist a newer generation's cached map. A retry also
+includes B-A/B-F edits made after an earlier failed backing flush, rather than
+treating the previous MAPOUT phase as proof that the current map is clean.
+These durability
+and generation rules are host policies, not additional native status claims.
 
 COPY, FORMAT/DUPLICATE, REL, arbitrary memory/buffer execution, custom
 USRJMP/VNMI, and user indices outside the factory table remain excluded.
@@ -86,9 +104,11 @@ behavior, controller retries, physical head movement or service latency.
 
 ## Validation
 
-The isolated candidate passes 2543 focused DOS cases and 3526 total firmware
-Check cases (3479 ordinary plus 47 fatal/assert cases). Firmware tests and
-their dependencies use Debug. The RP2040 production RelWithDebInfo build,
+The feedback candidate adds 123 model/scenario variants and passes 2666
+focused DOS cases and 3649 total firmware Check cases (3602 ordinary plus 47
+fatal/assert cases). The same final fixtures linked against the original
+PR implementation reproduce 85 failures. Firmware tests and their dependencies
+use Debug. The RP2040 production RelWithDebInfo build,
 clang-format dry run and whitespace checks pass.
 
 All #115 test groups remain, with its exclusion-boundary case now using
