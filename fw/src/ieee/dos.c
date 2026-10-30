@@ -2072,15 +2072,19 @@ static bool scratch_active(const dos_unit_t* const unit, const dos_media_ref_t r
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tstflg
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstflg
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
     //
     // TSTCHN compares drive and packed DIRENT (4040), or DSEC/DIND (DOS 2.7),
     // returning carry clear for an active entry. C returns true for that case.
     // Track and host media generation additionally qualify the stored location.
+    // A listing's search cursor is not OPREAD's saved file-entry binding.
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const channel = &unit->channels[index];
-        if (channel->allocated && channel->media.identity == reference.identity &&
-            channel->media.slot == reference.slot && channel->directory_track == track &&
-            channel->directory_sector == sector && channel->directory_entry == entry) {
+        if (channel->allocated && channel->directory == DOS_DIRECTORY_NONE &&
+            channel->media.identity == reference.identity && channel->media.slot == reference.slot &&
+            channel->directory_track == track && channel->directory_sector == sector &&
+            channel->directory_entry == entry) {
             return true;
         }
     }
@@ -2109,11 +2113,9 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
         } else if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type,
                                             work->chain_track, &sectors) ||
                    work->chain_sector >= sectors) {
-            // DOS 2.7 FRETS/SETMAP and OPNIRD/TSCHK reject invalid geometry.
-            // Keep 4040's unchecked indexing bounded by the host error policy.
-            dos_status(unit, model,
-                       model == DOS_MODEL_4040 ? DOS_STATUS_READ_ERROR : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR,
-                       work->chain_track, work->chain_sector);
+            // Both SETJOB paths report BADTS ($66). Check before any
+            // unchecked native BAM indexing would touch host memory.
+            dos_status(unit, model, DOS_STATUS_ILLEGAL_TRACK_SECTOR, work->chain_track, work->chain_sector);
         } else if (mark_sector(unit, media, reference, work->chain_track, work->chain_sector, true)) {
             if (storage_error(unit, media, reference,
                               read_sector(unit, media, reference, work->chain_track, work->chain_sector, bytes), false,
@@ -2444,11 +2446,9 @@ static bool validate_used(dos_unit_t* const unit, const dos_media_bank_t* const 
     unsigned int sectors;
     if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type, track, &sectors) ||
         sector >= sectors) {
-        // DOS 2.7 VMKBAM/TSCHK reports BADTS through CMDER2. Keep the
-        // bounded raw-image read-error policy for 4040's unchecked MRKBAM.
-        dos_status(unit, model,
-                   model == DOS_MODEL_4040 ? DOS_STATUS_READ_ERROR : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR, track,
-                   sector);
+        // VMKBAM/TSCHK and 4040's later SETJOB report BADTS ($66).
+        // Reject geometry before unchecked native BAM indexing.
+        dos_status(unit, model, DOS_STATUS_ILLEGAL_TRACK_SECTOR, track, sector);
         return false;
     }
     // Inspect rebuilt state rather than mutating the persisted map's cache.
@@ -2677,8 +2677,7 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         if (!validate_used(unit, media, track, sector)) {
             // NO BLOCK and TSCHK's BADTS are direct command errors, not
             // controller failures that enter the INITDR recovery path.
-            if (unit->status_code == DOS_STATUS_NO_BLOCK ||
-                unit->status_code == DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR) {
+            if (unit->status_code == DOS_STATUS_NO_BLOCK || unit->status_code == DOS_STATUS_ILLEGAL_TRACK_SECTOR) {
                 validate_finish(unit);
             } else {
                 validate_recover(unit, model, track, sector);

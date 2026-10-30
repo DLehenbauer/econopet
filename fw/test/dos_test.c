@@ -3765,9 +3765,7 @@ START_TEST(test_scratch_active_locked_unclosed_and_rel_entries) {
     }
     send_command(&unit, &bank, "S0:SOURCE");
     finish_open(&unit, &bank);
-    ck_assert_uint_eq(unit.status_code, mode != 5     ? DOS_STATUS_FILES_SCRATCHED
-                                        : format == 0 ? DOS_STATUS_READ_ERROR
-                                                      : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR);
+    ck_assert_uint_eq(unit.status_code, mode != 5 ? DOS_STATUS_FILES_SCRATCHED : DOS_STATUS_ILLEGAL_TRACK_SECTOR);
     ck_assert_mem_eq(image.bytes, expected, image.size);
     ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
     if (channel != DOS_UNUSED) {
@@ -4268,9 +4266,9 @@ START_TEST(test_validate_corruption_and_side_links) {
         dos_work(&unit, &bank);
     }
     ck_assert_uint_eq(unit.status_code, variant >= 2   ? DOS_STATUS_OK
+                                        : variant == 0 ? DOS_STATUS_ILLEGAL_TRACK_SECTOR
                                         : format == 0  ? DOS_STATUS_READ_ERROR
-                                        : variant == 1 ? DOS_STATUS_NO_BLOCK
-                                                       : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR);
+                                                       : DOS_STATUS_NO_BLOCK);
     if (variant == 3) {
         ck_assert_uint_eq(fixture_bam_entry(&image, format, 2)[1] & 1u, 0);
     } else if (variant == 2) {
@@ -4654,8 +4652,8 @@ START_TEST(test_validate_invalid_data_start_after_side_chain) {
     finish_open(&unit, &bank);
     char expected[DOS_STATUS_LINE_CAPACITY];
     snprintf(expected, sizeof(expected),
-             format == 0 ? "23,READ ERROR,%02u,%02u\r" : "67,ILLEGAL TRACK OR SECTOR,%02u,%02u,0\r", entry[3],
-             entry[4]);
+             format == 0 ? "66,ILLEGAL TRACK OR SECTOR,%02u,%02u\r" : "66,ILLEGAL TRACK OR SECTOR,%02u,%02u,0\r",
+             entry[3], entry[4]);
     ck_assert_str_eq(unit.status, expected);
     ck_assert_uint_eq(image.writes, writes);
     ck_assert_uint_eq(unit.buffer_use, 0);
@@ -4712,7 +4710,7 @@ START_TEST(test_scratch_side_chain_precedes_invalid_data_start) {
     finish_open(&unit, &bank);
     char status[DOS_STATUS_LINE_CAPACITY];
     if (scenario < 2) {
-        strcpy(status, format == 0 ? "23,READ ERROR,00,07\r" : "67,ILLEGAL TRACK OR SECTOR,00,07,0\r");
+        strcpy(status, format == 0 ? "66,ILLEGAL TRACK OR SECTOR,00,07\r" : "66,ILLEGAL TRACK OR SECTOR,00,07,0\r");
     } else if (scenario == 2) {
         strcpy(status, format == 0 ? "01, FILES SCRATCHED,01,00\r" : "01, FILES SCRATCHED,01,00,0\r");
     } else if (scenario == 3) {
@@ -4802,6 +4800,71 @@ START_TEST(test_status_native_decimal_field_boundaries) {
     snprintf(status, sizeof(status), format == 0 ? "23,READ ERROR,%s\r" : "23,READ ERROR,%s,0\r",
              format == 0 ? cases[scenario].fields_4040 : cases[scenario].fields_27);
     ck_assert_str_eq(unit.status, status);
+}
+END_TEST
+
+// A BASIC listing cursor is not OPREAD's retained file-entry binding.
+START_TEST(test_scratch_listing_cursors_do_not_protect_unopened_files) {
+    const unsigned int format = (unsigned int)_i / 4u, scenario = (unsigned int)_i % 4u;
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    fixture_file(&images[0], format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    fixture_file(&images[0], format, 1, "EXISTS", DISKIMAGE_FTYPE_SEQ, 0x40, 22);
+    fixture_file(&images[1], format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    uint8_t reader = DOS_UNUSED;
+    const uint8_t listing = open_name(&unit, &bank, 0, "$0");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    if (scenario == 1 || scenario == 2) {
+        for (unsigned int row = 0; row < 2; ++row) {
+            uint8_t bytes[DOS_STAGE_CAPACITY];
+            bool eoi;
+            const unsigned int length = dos_stage(&unit, &bank, listing, bytes, sizeof(bytes), &eoi);
+            ck_assert_uint_eq(length, 32);
+            dos_get(&unit, &bank, listing, length);
+        }
+    }
+    if (scenario == 2) {
+        reader = open_name(&unit, &bank, 2, "0:SOURCE");
+        ck_assert_uint_ne(reader, DOS_UNUSED);
+        ck_assert_uint_eq(dos_find_channel(&unit, 0), listing);
+    }
+    const dos_channel_t saved = unit.channels[listing];
+    const uint16_t buffers = unit.buffer_use;
+    send_command(&unit, &bank,
+                 scenario == 0   ? "S0:SOURCE"
+                 : scenario == 1 ? "S0:EXISTS"
+                 : scenario == 2 ? "S0:SOURCE,EXISTS"
+                                 : "S1:SOURCE");
+    finish_open(&unit, &bank);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    if (format == 0) {
+        strcpy(status, "01, FILES SCRATCHED,01,00\r");
+    } else {
+        snprintf(status, sizeof(status), "01, FILES SCRATCHED,01,00,%u\r", scenario == 3);
+    }
+    ck_assert_str_eq(unit.status, status);
+    const unsigned int slot = scenario == 3, offset = scenario == 1 || scenario == 2 ? 32u : 0u;
+    const uint8_t* const entry =
+        sector_bytes(&images[slot], bank.units[0].slots[slot].io.image.type, format == 0 ? 18 : 39, 1);
+    ck_assert_uint_eq(entry[offset + 2], 0);
+    if (scenario == 2) {
+        ck_assert_uint_eq(entry[2], 0x80 | DISKIMAGE_FTYPE_SEQ);
+        expect_bytes(&unit, &bank, reader, 22, 0x20);
+    }
+    ck_assert_mem_eq(&unit.channels[listing], &saved, sizeof(saved));
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert(dos_close(&unit, &bank, model, 0));
+    if (reader != DOS_UNUSED) {
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(images[0].bytes);
+    free(images[1].bytes);
 }
 END_TEST
 
@@ -4930,6 +4993,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_scratch_side_chain_precedes_invalid_data_start, 0, 15);
     tcase_add_loop_test(core, test_scratch_native_count_digit_boundaries, 0, 18);
     tcase_add_loop_test(core, test_status_native_decimal_field_boundaries, 0, 9);
+    tcase_add_loop_test(core, test_scratch_listing_cursors_do_not_protect_unopened_files, 0, 12);
     suite_add_tcase(suite, core);
     return suite;
 }
