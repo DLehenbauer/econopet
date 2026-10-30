@@ -212,6 +212,7 @@ typedef struct {
     uint8_t buffers[2];
     uint8_t phase;
     uint8_t count;
+    bool data_pending;
     bool pending;
 } dos_scratch_work_t;
 

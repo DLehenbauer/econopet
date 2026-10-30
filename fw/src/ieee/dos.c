@@ -90,6 +90,7 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_DIRECTORY_SIDE_TRACK 21u
 #define DOS_DIRECTORY_SIDE_SECTOR 22u
 #define DOS_INTERNAL_READ_SECONDARY 17u
+#define DOS_DECIMAL_PAIR_LIMIT 100u
 typedef enum {
     DOS_SCRATCH_SEARCH,
     DOS_SCRATCH_CHAIN,
@@ -191,16 +192,18 @@ void dos_status(dos_unit_t* const unit, const dos_model_t model, const dos_statu
     //
     // ROM erproc:ERRMSG/ERMSG2 (4040) and JERRMS/ERMSG2 (DOS 2.7) write the
     // error number, expanded message, track, and sector with comma separators.
-    // BCDDEC/HEXDEC convert numbers. DOS 2.7 appends DRVNUM masked to one bit,
+    // BCDDEC/HEXDEC retain two decimal digits on 4040, while DOS 2.7 emits
+    // an optional hundreds digit. DOS 2.7 appends DRVNUM masked to one bit,
     // whereas 4040 ends after the sector. tst4:GETERC supplies CR and EOI.
     // Here snprintf combines formatting and that eventual CR in one record,
     // preserving the model-specific drive field and using expanded status_text.
-    // This handles M2's bounded fields, not all out-of-range conversion quirks.
+    const unsigned int status_track = model == DOS_MODEL_4040 ? track % DOS_DECIMAL_PAIR_LIMIT : track;
+    const unsigned int status_sector = model == DOS_MODEL_4040 ? sector % DOS_DECIMAL_PAIR_LIMIT : sector;
     const int length = model == DOS_MODEL_4040
                            ? snprintf(unit->status, sizeof(unit->status), "%02u,%s,%02u,%02u\r", code,
-                                      status_text(code, model), track, sector)
+                                      status_text(code, model), status_track, status_sector)
                            : snprintf(unit->status, sizeof(unit->status), "%02u,%s,%02u,%02u,%u\r", code,
-                                      status_text(code, model), track, sector, unit->selected_drive);
+                                      status_text(code, model), status_track, status_sector, unit->selected_drive);
     // Detect internal overflow rather than publishing a truncated status.
     vet(length > 0 && (size_t)length < sizeof(unit->status), "native status overflow");
 
@@ -2099,9 +2102,18 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
     unit->selected_drive = work->drive;
     uint8_t* const bytes = unit->buffers[work->buffers[0]].bytes;
     if (work->phase == DOS_SCRATCH_CHAIN) {
+        unsigned int sectors;
         // FRETS precedes the read, so a failed read may leave a dirty BAM.
         if (work->chain_visited++ >= limit) {
             dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->chain_track, work->chain_sector);
+        } else if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type,
+                                            work->chain_track, &sectors) ||
+                   work->chain_sector >= sectors) {
+            // DOS 2.7 FRETS/SETMAP and OPNIRD/TSCHK reject invalid geometry.
+            // Keep 4040's unchecked indexing bounded by the host error policy.
+            dos_status(unit, model,
+                       model == DOS_MODEL_4040 ? DOS_STATUS_READ_ERROR : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR,
+                       work->chain_track, work->chain_sector);
         } else if (mark_sector(unit, media, reference, work->chain_track, work->chain_sector, true)) {
             if (storage_error(unit, media, reference,
                               read_sector(unit, media, reference, work->chain_track, work->chain_sector, bytes), false,
@@ -2124,10 +2136,11 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
             scratch_finish(unit);
             return;
         }
-        if (work->next_chain_track != 0) {
+        if (work->data_pending) {
             work->chain_track = work->next_chain_track;
             work->chain_sector = work->next_chain_sector;
             work->next_chain_track = 0;
+            work->data_pending = false;
             work->chain_visited = 0;
             work->phase = DOS_SCRATCH_CHAIN;
         } else {
@@ -2208,22 +2221,19 @@ static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) 
         const uint8_t data_track = type & DOS_FILE_CLOSED_MASK
                                        ? entry[DOS_DIRECTORY_TRACK_OFFSET] & (model == DOS_MODEL_4040 ? 0x7fu : 0xffu)
                                        : 0;
-        if ((type & DOS_FILE_CLOSED_MASK) && data_track == 0) {
-            // Native DELFIL would reject this invalid first link. Keep the
-            // existing raw-image error mapping rather than report success.
-            dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, entry[DOS_DIRECTORY_SECTOR_OFFSET]);
-            scratch_finish(unit);
-            return;
-        }
+        // SC15 completes the side chain's DELFIL/MAPOUT before SC17 tries
+        // a closed entry's data start, including an invalid track zero.
+        work->data_pending = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 && (type & DOS_FILE_CLOSED_MASK) != 0;
         work->chain_track = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? entry[DOS_DIRECTORY_SIDE_TRACK] : data_track;
         work->chain_sector = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? entry[DOS_DIRECTORY_SIDE_SECTOR]
                                                                   : entry[DOS_DIRECTORY_SECTOR_OFFSET];
         work->next_chain_track = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? data_track : 0;
         work->next_chain_sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
         work->chain_visited = 0;
-        work->phase = work->chain_track != 0 ? DOS_SCRATCH_CHAIN : DOS_SCRATCH_SEARCH;
+        work->phase =
+            work->chain_track != 0 || (type & DOS_FILE_CLOSED_MASK) != 0 ? DOS_SCRATCH_CHAIN : DOS_SCRATCH_SEARCH;
         ++work->entry;
-        if (work->chain_track == 0) {
+        if (work->phase == DOS_SCRATCH_SEARCH) {
             ++work->count;
         }
         return;

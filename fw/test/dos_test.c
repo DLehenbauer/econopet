@@ -3765,7 +3765,9 @@ START_TEST(test_scratch_active_locked_unclosed_and_rel_entries) {
     }
     send_command(&unit, &bank, "S0:SOURCE");
     finish_open(&unit, &bank);
-    ck_assert_uint_eq(unit.status_code, mode == 5 ? DOS_STATUS_READ_ERROR : DOS_STATUS_FILES_SCRATCHED);
+    ck_assert_uint_eq(unit.status_code, mode != 5     ? DOS_STATUS_FILES_SCRATCHED
+                                        : format == 0 ? DOS_STATUS_READ_ERROR
+                                                      : DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR);
     ck_assert_mem_eq(image.bytes, expected, image.size);
     ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
     if (channel != DOS_UNUSED) {
@@ -4661,6 +4663,148 @@ START_TEST(test_validate_invalid_data_start_after_side_chain) {
 }
 END_TEST
 
+// SC15 persists side-chain release before SC17 attempts even an invalid data start.
+START_TEST(test_scratch_side_chain_precedes_invalid_data_start) {
+    const unsigned int format = (unsigned int)_i / 5u, scenario = (unsigned int)_i % 5u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    uint8_t* const entry = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    entry[3] = 0;
+    entry[4] = 7;
+    if (scenario != 1) {
+        entry[21] = 2;
+        uint8_t* const first = sector_bytes(&image, type, 2, 0);
+        first[0] = 2;
+        first[1] = 1;
+        sector_bytes(&image, type, 2, 1)[1] = 0xff;
+        uint8_t* const bam = fixture_bam_entry(&image, format, 2);
+        bam[0] -= 2;
+        bam[1] &= (uint8_t)~3u;
+    }
+    if (scenario == 2) {
+        entry[2] &= 0x7f;
+    }
+    image_t expected = image;
+    expected.bytes = malloc(image.size);
+    ck_assert_ptr_nonnull(expected.bytes);
+    memcpy(expected.bytes, image.bytes, image.size);
+    expected.bytes[entry - image.bytes + 2] = 0;
+    if (scenario == 0 || scenario == 2) {
+        uint8_t* const bam = fixture_bam_entry(&expected, format, 2);
+        bam[0] += 2;
+        bam[1] |= 3u;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    send_command(&unit, &bank, "S0:SOURCE");
+    dos_work(&unit, &bank);
+    if (scenario == 3) {
+        image.fail_write = image.writes + 1u;
+        image.fail_write_without_changes = true;
+    } else if (scenario == 4) {
+        dos_work(&unit, &bank);
+        image.fail_read = image.reads + 1u;
+    }
+    finish_open(&unit, &bank);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    if (scenario < 2) {
+        strcpy(status, format == 0 ? "23,READ ERROR,00,07\r" : "67,ILLEGAL TRACK OR SECTOR,00,07,0\r");
+    } else if (scenario == 2) {
+        strcpy(status, format == 0 ? "01, FILES SCRATCHED,01,00\r" : "01, FILES SCRATCHED,01,00,0\r");
+    } else if (scenario == 3) {
+        snprintf(status, sizeof(status), format == 0 ? "25, WRITE ERROR,%02u,00\r" : "25, WRITE ERROR,%02u,00,0\r",
+                 format == 0 ? 18u : 38u);
+    } else {
+        strcpy(status, format == 0 ? "23,READ ERROR,02,01\r" : "23,READ ERROR,02,01,0\r");
+    }
+    ck_assert_str_eq(unit.status, status);
+    ck_assert_mem_eq(image.bytes, expected.bytes, image.size);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(expected.bytes);
+    free(image.bytes);
+}
+END_TEST
+
+// HEXDEC keeps two digits on 4040 and an optional hundreds digit on DOS 2.7.
+START_TEST(test_scratch_native_count_digit_boundaries) {
+    static const struct {
+        unsigned int count;
+        const char* digits_4040;
+        const char* digits_27;
+    } cases[] = {
+        {99, "99", "99"},   {100, "00", "100"}, {199, "99", "199"},
+        {200, "00", "200"}, {255, "55", "255"}, {256, "00", "00"},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases), scenario = (unsigned int)_i % count_of(cases);
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    for (unsigned int index = 0; index < cases[scenario].count; ++index) {
+        char name[24];
+        snprintf(name, sizeof(name), "%u:F%03u,S,W", index / 128u, index);
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, name), DOS_UNUSED);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    }
+    send_command(&unit, &bank, "S0:F*,1:F*");
+    finish_open(&unit, &bank);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    snprintf(status, sizeof(status), format == 0 ? "01, FILES SCRATCHED,%s,00\r" : "01, FILES SCRATCHED,%s,00,1\r",
+             format == 0 ? cases[scenario].digits_4040 : cases[scenario].digits_27);
+    ck_assert_str_eq(unit.status, status);
+    for (unsigned int slot = 0; slot < count_of(images); ++slot) {
+        const diskimage_type_t type = bank.units[0].slots[slot].io.image.type;
+        uint8_t track = format == 0 ? 18 : 39, sector = 1;
+        unsigned int visited = 0, deleted = 0;
+        while (track != 0) {
+            ck_assert_uint_lt(visited++, 18);
+            const uint8_t* const bytes = sector_bytes(&images[slot], type, track, sector);
+            for (unsigned int offset = 0; offset < DISKIMAGE_SECTOR_SIZE; offset += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
+                ck_assert_uint_eq(bytes[offset + 2], 0);
+                deleted += bytes[offset + 5] == 'F';
+            }
+            track = bytes[0];
+            sector = bytes[1];
+        }
+        ck_assert_uint_eq(deleted, slot == 0 ? MIN(cases[scenario].count, 128u)
+                                             : cases[scenario].count - MIN(cases[scenario].count, 128u));
+        free(images[slot].bytes);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
+// The same ROM number conversion applies to error track and sector fields.
+START_TEST(test_status_native_decimal_field_boundaries) {
+    static const struct {
+        uint8_t track;
+        uint8_t sector;
+        const char* fields_4040;
+        const char* fields_27;
+    } cases[] = {
+        {99, 100, "99,00", "99,100"},
+        {100, 255, "00,55", "100,255"},
+        {255, 99, "55,99", "255,99"},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases), scenario = (unsigned int)_i % count_of(cases);
+    const dos_model_t model = format == 0 ? DOS_MODEL_4040 : format == 1 ? DOS_MODEL_8050 : DOS_MODEL_8250;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    dos_status(&unit, model, DOS_STATUS_READ_ERROR, cases[scenario].track, cases[scenario].sector);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    snprintf(status, sizeof(status), format == 0 ? "23,READ ERROR,%s\r" : "23,READ ERROR,%s,0\r",
+             format == 0 ? cases[scenario].fields_4040 : cases[scenario].fields_27);
+    ck_assert_str_eq(unit.status, status);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -4783,6 +4927,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_scratch_stale_completion_never_flushes_replacement, 0, 12);
     tcase_add_loop_test(core, test_validate_initialization_ignores_interleaved_peer_status, 0, 9);
     tcase_add_loop_test(core, test_validate_invalid_data_start_after_side_chain, 0, 12);
+    tcase_add_loop_test(core, test_scratch_side_chain_precedes_invalid_data_start, 0, 15);
+    tcase_add_loop_test(core, test_scratch_native_count_digit_boundaries, 0, 18);
+    tcase_add_loop_test(core, test_status_native_decimal_field_boundaries, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }
