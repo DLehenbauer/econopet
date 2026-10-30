@@ -88,6 +88,12 @@ the visible old entry must not be trusted after those sectors are reassigned.
 Check all resolved entries before creating output or starting self-append, then
 recheck each deferred source when opening it. Preserve the retry owner and
 return host policy 25 rather than reading or overwriting another file's data.
+A successful peer replacement CLOSE can instead release that owner while a
+deferred COPY descriptor still names the old chain. Before opening a source,
+compare its captured start link, type and name against the directory sector
+already read for OPIRFL. Reject a changed binding with host policy 25 rather
+than copying reassigned sectors or silently selecting a different source.
+This adds no page, state field or backing read.
 
 Self-append judges completion from its writer's allocation and failure state,
 not the unit's shared status. An unrelated reader may report an error while the
@@ -127,8 +133,8 @@ movement or service latency.
 
 ## Validation
 
-The isolated candidate passes 3132 focused DOS cases and 4115 total firmware
-Check cases (4068 ordinary plus 47 fatal/assert cases). Tests and their
+The isolated candidate passes 3144 focused DOS cases and 4127 total firmware
+Check cases (4080 ordinary plus 47 fatal/assert cases). Tests and their
 dependencies use Debug. The RP2040 production RelWithDebInfo build,
 clang-format dry run and whitespace checks pass.
 
@@ -147,4 +153,8 @@ Third-review regressions cover later sources after '=', failed replacement
 publication with original-sector reuse, a CLOSE between lookup and deferred
 source opening, and full cross-drive status strings for APPEND/read/allocation
 failures.
+Fourth-review regressions use successful replacement CLOSE followed by an
+already-open peer writer's PUT/CLOSE to reassign the original sector before
+first/later named, whole-drive or patterned source opening. They verify stale
+COPY rejection, untouched peer data and successful fresh-command recovery.
 No fresh original-ROM replay or board acceptance was performed.

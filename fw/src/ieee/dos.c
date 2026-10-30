@@ -3444,6 +3444,15 @@ static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const medi
             false, file->directory_track, file->directory_sector)) {
         return false;
     }
+    // A successful peer replacement may already have released its retry owner
+    // and reassigned the captured chain. Reject the stale binding, not its new data.
+    const uint8_t* const entry = initial->bytes + file->directory_entry;
+    if (entry[DOS_DIRECTORY_TRACK_OFFSET] != file->track || entry[DOS_DIRECTORY_SECTOR_OFFSET] != file->sector ||
+        (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) != (file->type & DOS_FILE_TYPE_MASK) ||
+        !name_matches(file->name, file->name_length, entry + DOS_DIRECTORY_NAME_OFFSET)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        return false;
+    }
     if (initial->bytes[0] != 0) {
         // OPREAD's GETRCH/FRECHN and GETBUF discard this unused job result.
         // Keep its partial buffer contents, but do not observe its error.

@@ -9187,6 +9187,65 @@ START_TEST(test_copy_cross_drive_read_and_allocation_status) {
 }
 END_TEST
 
+// A successful peer replacement can retire lookup's chain before its deferred OPEN.
+START_TEST(test_copy_revalidates_source_after_successful_peer_close) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t source, target;
+    mount_blank(&bank, &source, format);
+    mount_peer(&bank, &target, format);
+    fixture_file(&source, format, 0, "F", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    fixture_file(&source, format, 1, "FIRST", DISKIMAGE_FTYPE_SEQ, 0x60, 4);
+    limit_free_blocks(&source, format, 2);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "@0:F,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x40, 22);
+    const uint8_t reused = open_name(&unit, &bank, 4, "0:REUSED,S,W");
+    ck_assert_uint_ne(reused, DOS_UNUSED);
+    put_bytes(&unit, &bank, 4, 0x80, DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u);
+    static const char* const commands[] = {"C1:NEW=0:F", "C1:NEW=0:FIRST,0:F", "C1=0", "C1:*=0:*"};
+    send_command(&unit, &bank, commands[(unsigned int)_i / 3u]);
+    for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 10);
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    // Existing-channel PUT now allocates F's reclaimed original sector.
+    put_bytes(&unit, &bank, 4, 0x55, 1);
+    ck_assert_uint_eq(unit.buffers[unit.channels[reused].buffers[unit.channels[reused].active]].track, 1);
+    ck_assert_uint_eq(unit.buffers[unit.channels[reused].buffers[unit.channels[reused].active]].sector, 0);
+    put_bytes(&unit, &bank, 4, 0xc0, 22);
+    ck_assert(dos_close(&unit, &bank, model, 4));
+    const unsigned int writes = source.writes + target.writes;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(source.writes + target.writes, writes);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    uint8_t expected[DISKIMAGE_SECTOR_PAYLOAD_SIZE + 22u];
+    for (unsigned int index = 0; index < DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u; ++index) {
+        expected[index] = 0x80u + index;
+    }
+    expected[DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u] = 0x55;
+    for (unsigned int index = 0; index < 22; ++index) {
+        expected[DISKIMAGE_SECTOR_PAYLOAD_SIZE + index] = 0xc0u + index;
+    }
+    expect_copy_payload(&source, type, "REUSED", expected, sizeof(expected), DISKIMAGE_FTYPE_SEQ);
+    send_command(&unit, &bank, "C1:AFTER=0:F");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    uint8_t fresh[22];
+    for (unsigned int index = 0; index < sizeof(fresh); ++index) {
+        fresh[index] = 0x40u + index;
+    }
+    expect_copy_payload(&target, type, "AFTER", fresh, sizeof(fresh), DISKIMAGE_FTYPE_SEQ);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -9413,6 +9472,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_respects_retained_reclaim_entry, 0, 15);
     tcase_add_loop_test(core, test_copy_append_reselects_owner_after_peer_error, 0, 3);
     tcase_add_loop_test(core, test_copy_cross_drive_read_and_allocation_status, 0, 12);
+    tcase_add_loop_test(core, test_copy_revalidates_source_after_successful_peer_close, 0, 12);
     suite_add_tcase(suite, core);
     return suite;
 }
