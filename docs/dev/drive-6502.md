@@ -39,6 +39,43 @@ and integrity checks, both IEEE benches under Icarus and Verilator, native
 ROM/FIFO probes, and the production ARM build. Those counts describe that
 checkpoint, not a required future test inventory or complete compatibility.
 
+### Starting inventory on main
+
+The production worktree is a complete checkout of `main` plus this plan.
+Existing files are not experimental changes simply because they are present.
+The following inventory distinguishes code already available here from code
+that must be ported from the separate POC worktree.
+
+| Surface | Present on main | Planned action |
+| --- | --- | --- |
+| Raw media foundation | `fw/src/ieee/dos_media.c/.h` and `fw/test/dos_media_test.c/.h` | Refactor/rename to `drive_media`, preserving pair validation, generations and failure retention. This is existing code, not a new storage implementation |
+| Image geometry and filesystem helpers | `fw/src/ieee/diskimage.c/.h`, `fw/test/diskimage_test.c/.h` | Keep D64/D80/D82 raw geometry and its tests. Retire filesystem/HDD helpers only after their callers migrate |
+| C DOS foundation | `fw/src/ieee/dos.c/.h`, `fw/test/dos_test.c/.h` | Retire the adaptation at cutover. Re-express selected observable regressions through native ROM execution |
+| Active drive facade | `fw/src/ieee/ieee_drive.c/.h` | Replace its legacy DOS/REL/status machinery while preserving application integration and supported native workloads |
+| Multi-device configuration and fabric | Existing config/menu slot mapping and `gw/EconoPET/src/ieee.sv` admit devices 8-11 | Preserve these capabilities, add native backend ownership and configured-unit admission control |
+| Native machine/controller/peer | `rom4040.*`, `controller4040.*`, `fifo4040.*` exist only in the POC worktree | Port selected tested mechanisms into the planned production modules |
+| Native POC tests and independent peripheral/controller runners | `ieee4040_test.*`, `hardware4040_test.cpp`, `rom4040_test.cpp`, `riot_reference.*`, `controller_reference.*` and `test/ieee-6502/` exist only in the POC worktree | Port and register them against production modules. They are not already built or registered here |
+| Existing board integration | `test/system/ieee/drive_test.cpp`, `commodore_rom_test.cpp`, `waterloo_rom_test.cpp` and shared fixtures | Retain and retarget supported native scenarios, not restore files deleted by the POC |
+| Existing reference toolkit | `tools/drive-ref/`, `tools/drive-roms/` and `reference_replay.cpp` | Reuse existing identities, capture/replay and integrity infrastructure |
+| Sample media/configuration | D80 SuperPET mounts already present in `sdcard/config.yaml` | Preserve them as production workloads, rather than copying the POC's removal |
+
+`drive_media.c/.h` is the proposed production name for the existing
+`dos_media.c/.h` foundation. Rename it with its includes, build entries,
+tests and documentation in one coherent change. Until then, use the actual
+`dos_media` paths when locating current code.
+
+The active legacy facade and the newer complete-request C DOS foundation
+are separate migration surfaces. The latter is built/tested but is not the
+active facade. Neither should be confused with the native-ROM engine, which
+has not yet been ported into this worktree.
+
+The latest `main` change includes ordinary COPY foundation work beyond the
+POC's starting point. Preserve its ROM evidence and useful observable
+regressions (including persisted partial results and error ordering), not
+its C worker/state machine. Host-only reservation policies are not native
+compatibility requirements. Do not lose that distinction by bulk-importing
+the POC's older test deletions.
+
 ## Scope and compatibility target
 
 Support four independently stateful IEEE devices, 8 through 11. Each device
@@ -59,7 +96,7 @@ contribution. No new configuration syntax for an empty-but-powered drive
 model is required in this implementation.
 
 Keep the existing configuration concepts: `device`, `drive`, and a filename
-relative to `/disks`. Restore devices 8-11 and the public slot mapping
+relative to `/disks`. Preserve devices 8-11 and the existing public slot mapping
 `slot = (device - 8) * 2 + drive` where existing callers use slots. Validate
 that conversion once at the facade boundary. Internally distinguish a
 logical IEEE device, a native backend instance and a media position.
@@ -185,7 +222,9 @@ IRQ or NMI.
 
 ## Reuse decisions
 
-Do not start from scratch, and do not restore the old files wholesale.
+Refactor the reusable code already present on `main` and port selected
+mechanisms from the POC. Do not start from scratch or copy whole POC files
+over current production modules.
 
 | Source | Reuse | Remove or redesign |
 | --- | --- | --- |
@@ -197,8 +236,8 @@ Do not start from scratch, and do not restore the old files wholesale.
 | Current `main` `dos_media.*` | Pair validation, borrowed descriptors, unit-local generation invalidation, pre-write dirty marking, flush failure retention and their tests | Rename to `drive_media`, decouple from the old rich `diskimage_t`, remove DOS-specific naming and unused BAM convenience access |
 | Current `main` `ieee_drive.c` | Slot mapping and transport-owner history as reference | Retire the C status formatter, command interpreter, channel/REL tables, allocation and read-ahead caches at replacement cutover |
 
-There is no current `drive_media.c` to copy. The reusable foundation is
-the production worktree's `dos_media.c`, documented in
+The raw-media foundation is already present in the production worktree as
+`dos_media.c/.h`, documented in
 [drive-media.md](drive-media.md). Preserve its generation and failure-retention
 contracts while separating them from the DOS adaptation. The POC removed
 that foundation, but those deletions are not part of this branch's starting
@@ -519,7 +558,10 @@ Prepare for that by keeping:
 
 Do not implement media-mixing acceptance, prefix rewriting, dual backend
 allocation, command replay or most-recent tracking in this production phase.
-Homogeneous-pair rejection remains a tested public contract.
+Homogeneous-pair rejection already has coverage in the media foundation.
+Make it an enforced public mount contract when that foundation is wired
+into the native facade. Do not assume the active legacy facade currently
+enforces every foundation rule.
 
 The future routing project must specify channel lifetime after a disk is
 selected, status consumption, binary commands without textual disk prefixes,
@@ -582,8 +624,9 @@ Implementation work includes:
    repository checkout is not sufficient.
 6. Verify `sdcard/CMakeLists.txt` stages the files under SD `/roms`, dependency
    changes refresh staged media on an incremental build, and the resulting
-   package can boot each configured model. Restore relevant D80 sample
-   mounts in `sdcard/config.yaml` only when DOS 2.7 is actually enabled.
+   package can boot each configured model. Keep the existing D80 sample
+   mounts in `sdcard/config.yaml` working through the old facade until
+   cutover, then require those same workloads through native DOS 2.7.
 7. Test downloads using local synthetic fixtures and mocked network tools,
    not a network request on every unit-test run. Include first download,
    valid/invalid cache, fallback, extraction, checksum/size failures,
@@ -663,10 +706,10 @@ implementation. Move or parameterize fixtures only when the replacement
 tests retain the same observations and demonstrate they detect the same
 failures.
 
-| Layer | Reuse from POC / baseline | Production additions |
+| Layer | Reuse from main and the separate POC worktree | Production additions |
 | --- | --- | --- |
-| Ordinary firmware Check | All 12 `ieee4040` cases, selected baseline geometry and `dos_media` cases | Peripheral/module-focused suites, three geometries, four instances, staged mount/flush/close failures, idle work accounting |
-| Ordinary gateware | `ieee_tb` and `ieee_sys_tb`, both engines, GET/abort/private-read/pause/flush/wrap cases | Address 8-11 admission and configured-unit mask, explicit owners, multi-listener masks/checkpoints, data/status isolation and simultaneous event cases |
+| Ordinary firmware Check | Existing main geometry/`dos_media` suites, selected observable `dos`/facade cases, and all 12 POC `ieee4040` cases to port | Peripheral/module-focused suites, three geometries, four instances, staged mount/flush/close failures, idle work accounting |
+| Ordinary gateware | Existing main `ieee_tb`/`ieee_sys_tb` coverage under both engines, plus selected POC regression changes | Preserve 8-11 admission, add configured-unit mask and native-owner composition, extend collision/isolation histories |
 | CPU-bus hardware contracts | `hardware4040_test.cpp` and its safe instruction-fetch patch boundary | Separate decoder/startup profiles, all DOS 2.7 shared-control interactions, native address straps and persistent four-instance histories |
 | Native ROM/full board | `rom4040_test.cpp`, PET KERNAL 2/4, production top and physical SPI | Model x address, two media positions, mixed models across devices, broadcast LISTEN, peer transfers, resets and lifecycle |
 | Independent peripheral | RIOT MAME replay and corruption checks | Retain phase-correct comparisons and add any newly used semantic surface |
@@ -679,6 +722,14 @@ System tests should prove composition, not duplicate the whole DOS
 conformance space on the slowest board model. Expected geometry, media
 patterns and protocol histories must come from independent fixture models,
 not the production helper under test.
+
+Inventory each existing `diskimage`, `dos_media`, `dos`, `ieee_drive`,
+configuration and system case before changing its registration. Classify it
+as retained unchanged, migrated to a raw-module suite, re-expressed as a
+native-ROM observation, or retired with a reason (for example HDD-only or
+an obsolete C API). Move shared builders/helpers out of retired suites when
+they remain useful. Do not copy the POC's reduced `fw/test/main.c` or
+CMake source lists over current production registrations.
 
 ### Essential new test sets
 
@@ -709,7 +760,7 @@ not just a short 4040-style REL file. Inspect persisted media independently.
 Retarget the existing production Commodore/Waterloo composition tests to the
 new facade, updating expectations only with model/ROM evidence. Preserve
 tests and fixes added to `main` after the POC branched. In
-particular, regain the supported D80 SuperPET workload without HDD shortcuts.
+particular, preserve the supported D80 SuperPET workload without HDD shortcuts.
 
 **Lifecycle and idle:** reset while RX/TX/ATN/controller work is pending,
 replace/remove one device while another has open channels, failed replacement
@@ -748,7 +799,12 @@ not a claim to reproduce every analog GCR fault.
 Every production defect found by a system test, reference run or probe must
 also close its corresponding ordinary fw/gw coverage hole in the same fix.
 Simulator lifetime and scheduling-harness defects stay in the tests owning
-those mechanisms.
+those mechanisms. Check which POC harness fixes are absent from `main`
+before porting native tests, including owning-context selection during
+Verilator evaluation/destruction, safe synthetic-JMP updates at instruction
+fetch boundaries and bounded scheduled-gap actions. Port each missing fix
+with its system/harness regression, not as an unexplained bulk replacement
+of current fixtures.
 
 ## Implementation sequence and gates
 
@@ -776,7 +832,8 @@ packaging contracts, including the publication restriction.
 
 Exit gate: all required inputs are obtainable and independently verified,
 the DOS 2.7 contract matrix names every interaction, and download failure/
-cache tests pass. No 8050/8250 compatibility claim yet.
+cache tests pass. Capture the actual main-based test inventory separately
+from the POC's historical counts. No 8050/8250 compatibility claim yet.
 
 ### P2: refine the existing raw storage foundation
 
@@ -794,6 +851,15 @@ Port the proven machine/RIOT/controller/peer mechanisms from the reference
 worktree into the planned production modules, not the experimental facade
 wholesale. Introduce instance storage and shared immutable ROM borrowing.
 Use isolated fixtures for one native device before production cutover.
+
+Wire the CPU dependency and native sources into `fw/src/CMakeLists.txt`,
+`fw/test/CMakeLists.txt` and `test/system/firmware.cmake` deliberately.
+`test/external/chips` already supplies system-test peripheral models, but
+firmware and ordinary firmware tests still need the `m6502.h` include and
+missing-dependency checks. Add the POC reference executables, Python/Lua
+integrity cases and explicit MAME discovery here rather than assuming they
+survived the branch change. Add or adapt the bounded probe target/root
+preset and its license notice without replacing unrelated build settings.
 
 Exit gate: all POC observations and independent 4040 comparisons still pass
 through production modules, no alternate POC emulator is linked into tests,
@@ -825,6 +891,12 @@ Gateware edge/collision tests pass under both engines.
 Wire staged mounting/configuration, retirement errors, unit-local reset,
 resumable formatter work, certified idle parking, metrics and fault
 containment. Finalize menu/CLI/configuration behavior and user documentation.
+
+Cut over the active facade only after P4/P5 contracts pass. Remove both C
+DOS adaptation surfaces and HDD-only APIs/tests once no remaining caller
+depends on them. Keep main's native media/transport/configuration tests,
+with migrated observations, and update historical foundation documents to
+identify their replacements. There is no final selectable legacy backend.
 
 Exit gate: lifecycle failure matrices pass, all idle calls meet the
 zero-emulated-work contract, active work is bounded/fair, and worst-case
