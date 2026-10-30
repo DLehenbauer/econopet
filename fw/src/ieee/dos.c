@@ -2188,7 +2188,9 @@ static void copy_start(dos_unit_t* const unit, dos_media_bank_t* const media, co
         file->drive = drive | (omitted ? DOS_COPY_DEFAULT_DRIVE : 0);
         file->name_length = command_name(bytes, length, start, file->name);
         mask |= 1u << (drive + (omitted ? 2u : 0u));
-        while (start < length && bytes[start] != ',' && bytes[start] != '=' && bytes[start] != 0x8d) {
+        // PARSE collects commas through the source group. FNDLMT's '='
+        // terminates this filename, not the remaining filename table.
+        while (start < length && bytes[start] != ',' && bytes[start] != 0x8d) {
             ++start;
         }
         if (start == length || bytes[start] != ',') {
@@ -3399,6 +3401,14 @@ static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const medi
     dos_copy_work_t* const work = &unit->copy;
     dos_channel_t* const channel = &unit->channels[index];
     const dos_model_t model = media->units[work->media[0].unit].model;
+    const dos_media_ref_t reference = work->media[file->drive & 1u];
+    unit->selected_drive = reference.slot;
+    // A peer CLOSE may have reclaimed this entry after lookup yielded.
+    if (directory_entry_busy(unit, reference, file->directory_track, file->directory_sector, file->directory_entry,
+                             NULL)) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        return false;
+    }
     // OP130 masks the directory track only on 4040, after CHKIN's raw test.
     const uint8_t track = file->track & (model == DOS_MODEL_4040 ? DOS_FILE_TRACK_MASK_4040 : UINT8_MAX);
     if (channel->buffers[2] != DOS_UNUSED) {
@@ -3408,7 +3418,7 @@ static bool copy_read_start(dos_unit_t* const unit, dos_media_bank_t* const medi
 
     // Bind the matched disk/entry and restart traversal without reallocating
     // the two pages, preserving the ROM's allocation-visible page contents.
-    channel->media = work->media[file->drive & 1u];
+    channel->media = reference;
     channel->active = 0;
     channel->traversed = 1;
     channel->blocks = 0;
@@ -3485,6 +3495,19 @@ static void copy_lookup_finish(dos_unit_t* const unit, dos_media_bank_t* const m
     for (unsigned int index = work->count - 1u; index != 0; --index) {
         if (!(work->found & (1u << index)) || work->files[index].track == 0) {
             dos_status(unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
+            copy_finish(unit);
+            return;
+        }
+    }
+    // Match OPEN's retained-entry exclusion before creating any output or
+    // converting a source to a self-append writer.
+    for (unsigned int index = 0; index < work->count; ++index) {
+        const dos_copy_file_t* const file = &work->files[index];
+        if ((work->found & (1u << index)) &&
+            directory_entry_busy(unit, work->media[file->drive & 1u], file->directory_track, file->directory_sector,
+                                 file->directory_entry, NULL)) {
+            unit->selected_drive = file->drive & 1u;
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
             copy_finish(unit);
             return;
         }
@@ -3806,6 +3829,7 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (work->phase == DOS_COPY_APPEND) {
         // Continue finding the self-concat tail without publishing an OPEN
         // completion status. Only a successful append proceeds to new sources.
+        unit->selected_drive = unit->channels[work->writer].media.slot;
         dos_open_work_t append = {.append_channel = work->writer + 1u, .pending = true};
         append_work(unit, media, &append, false);
         if (append.pending) {
@@ -3874,6 +3898,7 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     // Reuse the burst bound for scheduler fairness, not IEEE preview/GET.
     for (unsigned int copied = 0; copied < DOS_STAGE_CAPACITY && reader->position < end; ++copied) {
+        unit->selected_drive = reader->media.slot;
         const uint8_t byte = buffer->bytes[reader->position++];
         const bool switching = reader->position == DISKIMAGE_SECTOR_SIZE && buffer->bytes[0] != 0;
         if (switching) {
@@ -3894,6 +3919,7 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                 return;
             }
         }
+        unit->selected_drive = unit->channels[work->writer].media.slot;
         if (!write_byte(unit, media, &unit->channels[work->writer], byte)) {
             copy_finish(unit);
             return;

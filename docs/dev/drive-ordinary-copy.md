@@ -39,6 +39,8 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Read-before-write boundary | All selected targets | Both rename sources, `CY20/GIBYTE/GCBYTE/CY15`, respective [4040 tst4][4040-tst4]/[DOS 2.7 tst4][8250-tst4], `GBYTE/GET/SEQGET`, and [4040 tst2][4040-tst2]/[DOS 2.7 tst2][8250-tst2], `STRDBL/RDBYT/DBLBUF` | Cache speculative file-data read failures until selection. Wait for the successor before sending the linked page's last byte to PIBYTE. A third-page failure leaves only one full output block persisted | `copy_read_start/copy_work`, second/third-page fault tests inspect persisted partial chains and untouched successor sectors | Synchronous backing I/O is a host adaptation, not controller scheduling or retry equivalence |
 | 4040 negative track match | 4040 DOS 2.0 revision 2 | 4040 lookup `CP40/CMPCHK/CC15/LK26` | A named source or destination match with raw track bit 7 set stays at the same unresolved entry. Bit 6 alone still reaches OPREAD's $3F mask | `copy_search`, $81/$C1 source/target pending, no-I/O and reset-cleanup tests | DOS 2.7 CC15 uses the pattern flag instead. Its raw track follows the separate full-byte read path |
 | Discarded and selected directory jobs | All selected targets | Both rename `OPIRFL`, open `OPREAD`, respective [4040 tst3][4040-tst3]/[DOS 2.7 tst3][8250-tst3], `GETRCH/FRECHN/GETBUF`, lookup `SRRE/SEARCH/SR40`, and copyall `FFST/FFRE/FIXIT/CY` | Reopening IRSA discards the old directory prefetch result. Complete current-page matches before observing a required successor failure. A new FFRE owns a new job, not an earlier discarded error | `copy_read_start/copy_all_next`, self-append unused-successor faults, persisted current-page prefix and transient-versus-persistent read-fault tests | 4040 GETBUF clears JOBS directly. DOS 2.7 waits for job completion then clears JOBS without interpreting its old error. No replay or controller-retry claim |
+| Source-group boundaries | All selected targets | Both copysetup `DSKCPY`, respective [4040 parsex][4040-parsex]/[DOS 2.7 parsex][8250-parsex], `TC50/PARSE`, and [4040 trnsfr][4040-trnsfr]/[DOS 2.7 trnsfr][8250-trnsfr], `FNDLMT` | A later '=' ends its filename, not the comma-separated source group. Later missing inputs still return 62 before output creation | `copy_start`, second '=' in first/later source plus following absent-source regressions | Filename truncation and group parsing have distinct native routines |
+| Operation-local drive selection | All selected targets | Both rename `CY20/GIBYTE/PIBYTE`, respective tst2 `WRT0/SETDRN`, and open `APPEND` | Reselect the writer during yielded APPEND and before output allocation. Reselect the reader before subsequent linked-read checks. DOS 2.7 status suffix identifies the failing operation's disk | `copy_work`, interleaved peer/read-error and bidirectional read-versus-allocation status regressions | Cooperative yielding is a host adaptation, not native processor or controller timing |
 
 [4040-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/master
 [8250-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/master
@@ -58,6 +60,10 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 [8250-tst2]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
 [4040-tst3]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
 [8250-tst3]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+[4040-parsex]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+[8250-parsex]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+[4040-trnsfr]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr
+[8250-trnsfr]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
 [vice]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-command.c#L815-L1010
 [mame-4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp
 [mame-8050]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c8050.cpp
@@ -76,6 +82,12 @@ ends of an incomplete directory-growth link. Ordinary OPEN and COPY share those
 guards. Whole-drive and patterned COPY also check the source directory iterator
 before reading an incompletely published growth sector. A later CLOSE may
 recover the original writer without overwriting COPY's persisted entry.
+COPY also shares OPEN's retained `DOS_CLOSE_RECLAIM` entry exclusion. A failed
+replacement CLOSE can free the old chain without publishing its new link, so
+the visible old entry must not be trusted after those sectors are reassigned.
+Check all resolved entries before creating output or starting self-append, then
+recheck each deferred source when opening it. Preserve the retry owner and
+return host policy 25 rather than reading or overwriting another file's data.
 
 Self-append judges completion from its writer's allocation and failure state,
 not the unit's shared status. An unrelated reader may report an error while the
@@ -115,8 +127,8 @@ movement or service latency.
 
 ## Validation
 
-The isolated candidate passes 3096 focused DOS cases and 4079 total firmware
-Check cases (4032 ordinary plus 47 fatal/assert cases). Tests and their
+The isolated candidate passes 3132 focused DOS cases and 4115 total firmware
+Check cases (4068 ordinary plus 47 fatal/assert cases). Tests and their
 dependencies use Debug. The RP2040 production RelWithDebInfo build,
 clang-format dry run and whitespace checks pass.
 
@@ -131,4 +143,8 @@ full fields, native linked-read failure ordering, cooperative negative-track
 waits, and peer read-error status during self-append.
 Second-review regressions cover unused directory errors during self-append and
 whole-drive/patterned iteration with persistent or discarded transient failures.
+Third-review regressions cover later sources after '=', failed replacement
+publication with original-sector reuse, a CLOSE between lookup and deferred
+source opening, and full cross-drive status strings for APPEND/read/allocation
+failures.
 No fresh original-ROM replay or board acceptance was performed.

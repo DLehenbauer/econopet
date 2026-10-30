@@ -8035,6 +8035,8 @@ START_TEST(test_copy_parser_precedence_and_command_union_reuse) {
         {"C2:NEW=SOURCE", DOS_STATUS_OK},
         {"C:NEW=:SOURCE", DOS_STATUS_OK},
         {"C0:NEW=0:SOURCE=IGNORED", DOS_STATUS_OK},
+        {"C0:NEW=0:SOURCE=X,0:ABSENT", DOS_STATUS_NOT_FOUND},
+        {"C0:NEW=SOURCE,EXISTS=X,ABSENT", DOS_STATUS_NOT_FOUND},
         {"C0:SOURCE=SOURCE,EXISTS", DOS_STATUS_FILE_EXISTS},
         {"C0:NEW=SOURCE,ABSENT", DOS_STATUS_NOT_FOUND},
         {"C0:NEW=SOURCE,SOURCE,SOURCE,SOURCE,*", DOS_STATUS_OK},
@@ -9046,6 +9048,145 @@ START_TEST(test_copy_self_append_ignores_peer_read_error_status) {
 }
 END_TEST
 
+// Retained CLSDIR ownership prevents COPY from following an already reclaimed chain.
+START_TEST(test_copy_respects_retained_reclaim_entry) {
+    const unsigned int format = (unsigned int)_i / 5u, variant = (unsigned int)_i % 5u;
+    dos_media_bank_t bank = {0};
+    image_t source, target;
+    mount_blank(&bank, &source, format);
+    mount_peer(&bank, &target, format);
+    fixture_file(&source, format, 0, "F", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    limit_free_blocks(&source, format, 2);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t owner = open_name(&unit, &bank, 2, "@0:F,S,W");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x40, 22);
+    ck_assert_uint_ne(open_name(&unit, &bank, 3, "0:PEER,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 3, 0x60, 22);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    if (variant == 4) {
+        send_command(&unit, &bank, "C1:NEW=0:PEER,0:F");
+        for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+            ck_assert_uint_lt(step, 10);
+            dos_work(&unit, &bank);
+        }
+    }
+    // Fail after reclaiming F's original sector but before publishing its new link.
+    source.fail_write = source.writes + 2u;
+    source.fail_write_without_changes = true;
+    ck_assert(!dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_eq(unit.channels[owner].closing, DOS_CLOSE_RECLAIM);
+    source.fail_write = 0;
+    if (variant != 4) {
+        const uint8_t reused = open_name(&unit, &bank, 4, "0:REUSED,S,W");
+        ck_assert_uint_ne(reused, DOS_UNUSED);
+        ck_assert_uint_eq(unit.channels[reused].first_track, 1);
+        ck_assert_uint_eq(unit.channels[reused].first_sector, 0);
+        put_bytes(&unit, &bank, 4, 0xc0, 22);
+        ck_assert(dos_close(&unit, &bank, model, 4));
+        static const char* const commands[] = {"C1:NEW=0:F", "C0:F=0:F,0:PEER", "C1=0", "C1:*=0:*"};
+        send_command(&unit, &bank, commands[variant]);
+    }
+    const dos_channel_t before = unit.channels[owner];
+    const unsigned int writes = source.writes + target.writes;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(source.writes + target.writes, writes);
+    ck_assert_mem_eq(&unit.channels[owner], &before, sizeof(before));
+    ck_assert_uint_eq(unit.buffer_use, (1u << before.buffers[0]) | (1u << before.buffers[1]));
+    if (variant != 4) {
+        uint8_t expected[22];
+        for (unsigned int index = 0; index < sizeof(expected); ++index) {
+            expected[index] = 0xc0u + index;
+        }
+        expect_copy_payload(&source, bank.units[0].slots[0].io.image.type, "REUSED", expected, sizeof(expected),
+                            DISKIMAGE_FTYPE_SEQ);
+    }
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// A peer error cannot select the status drive of a later COPY APPEND read failure.
+START_TEST(test_copy_append_reselects_owner_after_peer_error) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t peer_image, source;
+    mount_blank(&bank, &peer_image, format);
+    mount_peer(&bank, &source, format);
+    fixture_file(&peer_image, format, 0, "PEER", DISKIMAGE_FTYPE_SEQ, 0x80, 255);
+    fixture_file(&source, format, 0, "A", DISKIMAGE_FTYPE_SEQ, 0x20, 509);
+    fixture_file(&source, format, 2, "B", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t peer = open_name(&unit, &bank, 3, "0:PEER,S,R");
+    uint8_t prefix[DISKIMAGE_SECTOR_PAYLOAD_SIZE];
+    for (unsigned int index = 0; index < sizeof(prefix); ++index) {
+        prefix[index] = 0x80u + index;
+    }
+    expect_direct(&unit, &bank, peer, prefix, sizeof(prefix), false);
+    send_command(&unit, &bank, "C1:A=1:A,1:B");
+    for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 10);
+        dos_work(&unit, &bank);
+    }
+    dos_work(&unit, &bank);
+    unit.buffers[unit.channels[peer].buffers[1]].resident = false;
+    peer_image.fail_read = peer_image.reads + 1u;
+    uint8_t byte;
+    bool eoi;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, peer, &byte, 1, &eoi), 0);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    source.fail_read = source.reads + 1u;
+    finish_open(&unit, &bank);
+    ck_assert_str_eq(unit.status, format == 0 ? "23,READ ERROR,01,02\r" : "23,READ ERROR,01,02,1\r");
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), peer);
+    ck_assert_uint_eq(source.writes + source.flushes, 0);
+    free(source.bytes);
+    free(peer_image.bytes);
+}
+END_TEST
+
+// Alternating GIBYTE/PIBYTE boundaries must report the failing operation's drive.
+START_TEST(test_copy_cross_drive_read_and_allocation_status) {
+    const unsigned int format = (unsigned int)_i % 3u, drive = (unsigned int)_i / 3u % 2u;
+    const bool read_error = (unsigned int)_i / 6u != 0;
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    image_t* const target = &images[drive];
+    image_t* const source = &images[drive ^ 1u];
+    limit_free_blocks(target, format, read_error ? 3 : 1);
+    fixture_file(source, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 300);
+    if (read_error) {
+        ck_assert(diskimage_sector_offset(bank.units[0].slots[0].io.image.type, 1, 1, &source->fail_read_offset));
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    char command[32], expected[40];
+    snprintf(command, sizeof(command), "C%u:NEW=%u:SOURCE", drive, drive ^ 1u);
+    send_command(&unit, &bank, command);
+    finish_open(&unit, &bank);
+    const unsigned int failing = read_error ? drive ^ 1u : drive;
+    snprintf(expected, sizeof(expected), read_error ? "23,READ ERROR,01,01%s" : "72, DISK FULL,00,00%s",
+             format == 0 ? "\r"
+             : failing   ? ",1\r"
+                         : ",0\r");
+    ck_assert_str_eq(unit.status, expected);
+    ck_assert_uint_eq(unit.selected_drive, failing);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(source->writes + source->flushes, 0);
+    free(images[0].bytes);
+    free(images[1].bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -9242,7 +9383,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_block_commands_reject_allocated_load_and_save, 0, 30);
     tcase_add_loop_test(core, test_user_table_reset_and_cold_vectors, 0, 9);
     tcase_add_loop_test(core, test_copy_preserves_boundary_payloads_and_peer_cursor, 0, 21);
-    tcase_add_loop_test(core, test_copy_parser_precedence_and_command_union_reuse, 0, 51);
+    tcase_add_loop_test(core, test_copy_parser_precedence_and_command_union_reuse, 0, 57);
     tcase_add_loop_test(core, test_copy_concat_append_mixed_types_and_metadata, 0, 9);
     tcase_add_loop_test(core, test_copy_faults_abandon_only_owned_channels, 0, 12);
     tcase_add_loop_test(core, test_copy_resource_read_only_full_and_corrupt_recovery, 0, 15);
@@ -9269,6 +9410,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_4040_copy_bit7_match_remains_pending, 0, 4);
     tcase_add_loop_test(core, test_copy_read_failure_preserves_native_partial_chain, 0, 6);
     tcase_add_loop_test(core, test_copy_self_append_ignores_peer_read_error_status, 0, 3);
+    tcase_add_loop_test(core, test_copy_respects_retained_reclaim_entry, 0, 15);
+    tcase_add_loop_test(core, test_copy_append_reselects_owner_after_peer_error, 0, 3);
+    tcase_add_loop_test(core, test_copy_cross_drive_read_and_allocation_status, 0, 12);
     suite_add_tcase(suite, core);
     return suite;
 }
