@@ -2,6 +2,13 @@
 
 This project may incorporate material from the following third parties as noted here and in the source code:
 
+## chips m6502
+
+The experimental 4040 drive executes the MOS 6502 emulator by Andre Weissflog
+from the existing `test/external/chips` submodule. Its unmodified source retains
+the zlib/libpng license notice in `chips/m6502.h`. Original Commodore ROM
+binaries are external user inputs and are not redistributed.
+
 ## PicoDVI
 
 **source:** <https://github.com/Wren6991/PicoDVI>

@@ -306,20 +306,20 @@ module ieee_tb;
         if (interrupted) ctl_atn(1);
         ctl_dav(0);
         if (full_rx) begin
-            `assert_equal(dut.listen_end_pending, interrupted ? 4'b0000 : 4'b1001);
+            `assert_equal(dut.listen_end_pending, interrupted ? 4'b0000 : 4'b0001);
             // The retained exit must precede later ATN-release metadata.
             if (!interrupted) ctl_atn(1);
             ctl_atn(0);
         end else if (interrupted) ctl_atn(0);
         mcu_drain_rx;
         `assert_equal(rx_listen_events.size(), first_event + (interrupted ? 0 : 1));
-        if (!interrupted) `assert_equal(rx_listen_events[first_event], 8'h09);
-        `assert_equal(dut.listen_units, 4'b1001);
+        if (!interrupted) `assert_equal(rx_listen_events[first_event], 8'h01);
+        `assert_equal(dut.listen_units, 4'b0001);
         `assert_equal(dut.listen_end_pending, 4'b0000);
         if (full_rx) begin
             `assert_equal(rx_boundary_count, previous_boundaries + 2);
             `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 2],
-                interrupted ? 8'h00 : 8'h09);
+                interrupted ? 8'h00 : 8'h01);
             `assert_equal(rx_boundary_payloads[rx_boundary_payloads.size() - 1], 8'h00);
         end else if (!interrupted) begin
             // Subsequent bytes in an active receive do not create extra checkpoints.
@@ -339,7 +339,7 @@ module ieee_tb;
         int first_event;
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
-        ctl_send(8'h4B);
+        ctl_send(8'h48);
         ctl_send(status_fifo ? 8'h6F : 8'h63);
         ctl_nrfd(1);
         ctl_ndac(1);
@@ -370,7 +370,7 @@ module ieee_tb;
         end else begin
             `assert_equal(rx_talk_events.size(), first_event + 1);
             `assert_equal(rx_talk_events[first_event],
-                (status_fifo ? 8'h3F : 8'h33)
+                (status_fifo ? 8'h0F : 8'h03)
                     | (fetched ? (interrupted ? 8'h80 : 8'hC0) : 8'h00));
         end
         mcu_read(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, d);
@@ -636,9 +636,9 @@ module ieee_tb;
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'd1);
         ctl_send(8'h3F);
-        ctl_send(8'h49);
+        ctl_send(8'h48);
         ctl_send(8'h6F);
-        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h1F);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
         mcu_write(IEEE_REG_TXS_LAST, "S");
         ctl_atn(0);
         ctl_recv(d, eoi);
@@ -712,9 +712,9 @@ module ieee_tb;
         logic eoi;
         mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_TX_LAST, "D");
-        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h1F);
         ctl_atn(1);
-        ctl_send(8'h49);
+        ctl_send(8'h48);
         ctl_send(8'h6F);
         mcu_write(IEEE_REG_TXS_LAST, "S");
         ctl_ndac(1);
@@ -727,7 +727,7 @@ module ieee_tb;
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | IEEE_TX_OWNER_PAUSE_MASK);
         repeat (32) @(posedge sys_clock);
         `assert_equal(dut.dev_dav_n, 1'b1);
-        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h1F);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
         ctl_recv(d, eoi);
         `assert_equal(d, "S");
         `assert_equal(eoi, 1'b1);
@@ -739,7 +739,7 @@ module ieee_tb;
         `assert_equal(dut.txs_count, 0);
         `assert_equal(dut.tx_count, 1);
         mcu_write(IEEE_REG_TXS_LAST, "T");
-        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h1F);
+        mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
         ctl_recv(d, eoi);
         `assert_equal(d, "T");
         `assert_equal(eoi, 1'b1);
@@ -1161,7 +1161,7 @@ module ieee_tb;
         end
 
         // A virtual peer's secondary belongs to that peer, not the active talker.
-        for (int unit = 0; unit < 4; unit++) begin
+        for (int unit = 0; unit < 1; unit++) begin
             for (int peer = 0; peer < 4; peer++) begin
                 if (peer != unit) begin
                     mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
@@ -1190,109 +1190,21 @@ module ieee_tb;
                 end
             end
         end
-        // Peripherals retain independent listener roles and primary selection.
-        for (int unit = 0; unit < 4; unit++) begin
-            int peer;
-            peer = (unit + 1) % 4;
+        // Devices 9-11 are absent in the ROM experiment, for both roles.
+        for (int unit = 1; unit < 4; unit++) begin
+            mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
             ctl_atn(1);
             ctl_send(8'h28 + unit[7:0]);
-            ctl_send(8'h6F);
-            ctl_send(8'h28 + peer[7:0]);
             ctl_send(8'h62);
-            ctl_send(8'h48 + peer[7:0]);
-            `assert_equal(dut.listen_units[unit], 1'b1);
-            `assert_equal(dut.listen_units[peer], 1'b0);
-            ctl_send(8'h28 + peer[7:0]);
+            `assert_equal(dut.listen_units, 4'b0000);
+            ctl_send(8'h48 + unit[7:0]);
+            ctl_send(8'h62);
             `assert_equal(dut.talking, 1'b0);
-            ctl_send(8'h27);
-            ctl_send(8'h61);
-            `assert_equal(dut.unit_sa[unit], 8'h6F);
-            `assert_equal(dut.unit_sa[peer], 8'h20);
-            ctl_send(8'h5F);
-            `assert_equal(dut.listening, 1'b1);
-            ctl_send(8'h3F);
-            `assert_equal(dut.listening, 1'b0);
             ctl_atn(0);
+            `assert_equal(dut.dev_dav_n, 1'b1);
             mcu_drain_rx;
         end
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
-
-        // --- Unit 9: the fabric answers DEV_ADDR+1 with the same machinery
-        // (Super-OS/9 d8d9 = dual units 8 and 9). LISTEN 9 must capture data
-        // into RX (tagged commands show $29), TALK 9 must serve the TX FIFO. ---
-        ctl_atn(1);
-        ctl_send(8'h29);                   // LISTEN 9
-        ctl_send(8'h62);                   // secondary 2
-        ctl_atn(0);
-        ctl_send(8'h55);                   // one data byte
-        ctl_atn(1);
-        ctl_send(8'h3F);                   // UNLISTEN
-        ctl_atn(0);
-        begin
-            int base;
-            base = rx_bytes.size();
-            mcu_drain_rx;
-            `assert_equal(rx_bytes.size(), base + 4);
-            `assert_equal(rx_isatn[base + 0], 1); `assert_equal(rx_bytes[base + 0], 8'h29);
-            `assert_equal(rx_isatn[base + 1], 1); `assert_equal(rx_bytes[base + 1], 8'h62);
-            `assert_equal(rx_isatn[base + 2], 0); `assert_equal(rx_bytes[base + 2], 8'h55);
-            `assert_equal(rx_isatn[base + 3], 1); `assert_equal(rx_bytes[base + 3], 8'h3F);
-        end
-        for (int i = 0; i < 3; i++) mcu_write(IEEE_REG_TX, 8'h70 + i[7:0]);
-        mcu_write(IEEE_REG_TX_LAST, 8'h73);
-        ctl_atn(1);
-        ctl_send(8'h49);                   // TALK 9
-        ctl_send(8'h62);
-        ctl_atn(0);
-        for (int i = 0; i < 4; i++) begin
-            ctl_recv(d, eoi);
-            `assert_equal(d, 8'h70 + i[7:0]);
-        end
-        `assert_equal(eoi, 1'b1);
-        ctl_atn(1);
-        ctl_send(8'h5F);                   // UNTALK
-        ctl_atn(0);
-        mcu_drain_rx;
-        $display("[%t]   unit 9 (DEV_ADDR+1) listen/talk verified", $time);
-
-        // --- Unit 11: the four-address range also answers device 11. ---
-        ctl_atn(1);
-        ctl_send(8'h2B);                   // LISTEN 11
-        ctl_send(8'h60);                   // secondary 0
-        ctl_atn(0);
-        ctl_send(8'h5A);
-        ctl_atn(1);
-        ctl_send(8'h3F);                   // UNLISTEN
-        ctl_atn(0);
-        begin
-            int base;
-            base = rx_bytes.size();
-            mcu_drain_rx;
-            `assert_equal(rx_bytes.size(), base + 4);
-            `assert_equal(rx_isatn[base + 0], 1); `assert_equal(rx_bytes[base + 0], 8'h2B);
-            `assert_equal(rx_isatn[base + 1], 1); `assert_equal(rx_bytes[base + 1], 8'h60);
-            `assert_equal(rx_isatn[base + 2], 0); `assert_equal(rx_bytes[base + 2], 8'h5A);
-            `assert_equal(rx_isatn[base + 3], 1); `assert_equal(rx_bytes[base + 3], 8'h3F);
-        end
-        mcu_write(IEEE_REG_TX_LAST, 8'h7B);
-        ctl_atn(1);
-        ctl_send(8'h4B);                   // TALK 11
-        ctl_send(8'h60);                   // secondary 0
-        ctl_atn(0);
-        ctl_recv(d, eoi);
-        `assert_equal(d, 8'h7B);
-        `assert_equal(eoi, 1'b1);
-        ctl_atn(1);
-        ctl_send(8'h5F);                   // UNTALK
-        ctl_atn(0);
-        mcu_drain_rx;
-        $display("[%t]   unit 11 listen/talk verified", $time);
         check_data_owner(1'b0);
-        check_peer_transfer(1'b0);
-        check_peer_transfer(1'b1);
-        check_peer_backpressure(1'b0, 1'b0);
-        check_peer_backpressure(1'b1, 1'b0);
-        check_peer_backpressure(1'b0, 1'b1);
         check_data_owner(1'b1);
         check_owner_pause(1'b0, 1'b0);
         check_owner_pause(1'b1, 1'b0);

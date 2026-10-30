@@ -101,7 +101,39 @@ consumption, scoped lifetimes, callback guards, and exceptional cleanup.
 Firmware C frames are compiled with exception-unwind support so C++ SPI
 failures propagate through the real drive implementation.
 
-### First end-to-end acceptance tests
+### Current 4040 ROM experiment
+
+The device-8/D64-only experiment replaces the former C DOS/media implementation
+and its integration suites. Current drive evidence is in
+[`ieee/hardware4040_test.cpp`](ieee/hardware4040_test.cpp) and
+[`ieee/rom4040_test.cpp`](ieee/rom4040_test.cpp), linked into the existing
+isolated firmware executable.
+
+The hardware contracts drive the production 6502 bus decoder to test RIOT
+aliases, DDRs, handshake equations, independent PA7 edges, timer boundaries and
+shared job slots. Separate controller tests check raw D64 geometry, jobs,
+drive isolation, protection, failures and the stock formatter.
+Targeted full-board cases execute native DOS M-W/M-R jobs and status, check
+GET/ATN ordering, and run original PET KERNAL 2/4 OPEN/read calls through the
+soft CPU, fitted PIA/VIA models, production FPGA, physical SPI and drive ROM.
+Independent wire/EOI and backing-sector observations check the composed path.
+The [protocol matrix](../../docs/dev/ieee-6502.md#protocol-coverage-matrix)
+records exhaustive finite RIOT inputs, all job slots and values, both drives'
+sector/error cases, formatter failure positions, virtual handshake phases and
+the targeted full-board reset/native-ROM composition checks.
+
+These tests require external manifest-identified drive ROMs, and PET ROMs for
+the KERNAL cases. They do not execute RP2040 `driver.c`/SSP hardware, measure
+core-0 throughput, or establish complete DOS/peripheral compatibility.
+The [investigation](../../docs/dev/ieee-6502.md) records current scope and
+remaining gates. Manual RP2040/DVI performance verification comes last.
+
+### Historical C DOS acceptance tests
+
+The remainder of this section and the following IEEE regression history
+describe the replaced C DOS implementation. `ieee/drive_test.cpp` and its
+legacy firmware DOS/media tests were removed for the experiment. Historical
+case names and source links below are not current coverage claims.
 
 [`econopet_top_smoke.cpp`](econopet_top_smoke.cpp) round-trips CPU selection,
 executes a checked soft-6502 RAM program, captures its result and mounts a D64
@@ -817,6 +849,12 @@ constraint coverage or real-hardware execution.
 
 ## Commodore ROM integration coverage
 
+This section records the former `ieee/commodore_rom_test.cpp` suite, removed
+for the 4040 ROM experiment. Counts and commands below are historical.
+Current native KERNAL 2/4 OPEN/read composition tests are in
+[`ieee/rom4040_test.cpp`](ieee/rom4040_test.cpp). Revision-bound fixture/API
+contracts remain active in [`ieee/fixture_test.cpp`](ieee/fixture_test.cpp).
+
 [`ieee/commodore_rom_test.cpp`](ieee/commodore_rom_test.cpp) executes installed
 PET controller ROM code on the production soft 6502, with the external PIA/VIA
 models and production FPGA IEEE fabric. It belongs to the isolated firmware
@@ -910,6 +948,12 @@ This layer does not establish full BASIC initialization, LOAD/SAVE, successful
 ACPTR data reception, full DOS compatibility or Waterloo behavior.
 
 ## Waterloo ROM integration coverage
+
+This section records the former `ieee/waterloo_rom_test.cpp` suite, removed
+with the legacy C DOS integration tests. Counts and commands below are
+historical. Waterloo fixture, initialization and transport API contracts
+remain in [`ieee/fixture_test.cpp`](ieee/fixture_test.cpp), but they do not
+establish serviced Waterloo-to-4040 DOS compatibility for this experiment.
 
 [`ieee/waterloo_rom_test.cpp`](ieee/waterloo_rom_test.cpp) contains eight enabled
 firmware integration cases for the native SuperPET revision-12 IEEE leaves.

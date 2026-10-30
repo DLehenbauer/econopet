@@ -76,20 +76,21 @@ The `set` action can configure these firmware options:
 | `cpu` | `physical`, `6502`, `6809`, or `auto` | Selects which CPU drives the bus: the socketed 6502, the soft 6502, the soft 6809 (SuperPET), or auto-detect (physical if populated, else soft 6502). Defaults to `auto`. |
 
 Use the `mount` action to select the images inserted by a configuration.
-`device` is `8` through `11`, `drive` is `0` or `1`, and `file` is the image
-path relative to `/disks`. The path is opened directly; for example, use
-`example.d80` for `/disks/example.d80`:
+On the `ieee-6502` experimental branch, `device` must be `8`, `drive` is `0`
+or `1`, and `file` must be a 35-track D64 path relative to `/disks`.
+D80, D82, HDD containers and devices 9-11 are not supported. Supply the original
+4040 revision-2 chips `901468-14.bin`, `901468-15.bin`, and `901468-16.bin` in
+`/roms` (not redistributed). See the [investigation](../docs/dev/ieee-6502.md).
 
 ```yaml
       # If not specified, the default device is 8 and the default drive is 0.
       - action: "mount"
-        file: "example1.d80"
-      # Available devices are 8 through 11.  Each device is a dual-drive unit
-      # with two drives: drive 0 and drive 1.
+        file: "example1.d64"
+      # Device 8 is one dual-drive 4040 unit.
       - action: "mount"
         device: 8
         drive: 1
-        file: "example2.d80"
+        file: "example2.d64"
 ```
 
 Mounting an image enables the virtual IEEE-488 drives. Selecting another

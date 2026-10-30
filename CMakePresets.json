@@ -44,6 +44,12 @@
             "targets": ["test_project"]
         },
         {
+            "name": "ieee-6502",
+            "displayName": "4040 ROM Investigation",
+            "configurePreset": "default",
+            "targets": ["ieee_6502_project"]
+        },
+        {
             "name": "sys-test",
             "displayName": "System Tests",
             "description": "Build host fixtures, hardware contract, board and firmware integration tests",
@@ -109,6 +115,16 @@
             "filter": {
                 "include": {
                     "label": "fw"
+                }
+            }
+        },
+        {
+            "name": "ieee-6502",
+            "displayName": "4040 ROM Investigation",
+            "inherits": "test-base",
+            "filter": {
+                "include": {
+                    "label": "ieee-6502"
                 }
             }
         },

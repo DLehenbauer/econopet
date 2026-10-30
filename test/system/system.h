@@ -655,7 +655,12 @@ public:
     }
 
     // Finalize the model while its private context is still alive.
-    ~System() { dut_->final(); }
+    ~System() {
+        // Verilator scope teardown uses the thread's current context, not the model's.
+        Verilated::threadContextp(context_.get());
+        dut_->final();
+        dut_.reset();
+    }
     System(const System&) = delete;
     System& operator=(const System&) = delete;
     System(System&&) = delete;
@@ -959,6 +964,7 @@ public:
     // Advance complete system clocks, resolving external devices at both phases.
     void tick(econopet::Cycles cycles) {
         require_mutable_access();
+        Verilated::threadContextp(context_.get());
         if (dispatching_stimulus_)
             throw failure<std::logic_error>("tick", "scheduled stimulus cannot advance the clock");
         if (spi_failed_) throw failure<std::logic_error>("tick", "board is unusable after an unfinished SPI transaction");

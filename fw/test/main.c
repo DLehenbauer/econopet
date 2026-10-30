@@ -6,11 +6,8 @@
 #include "char_encoding_test.h"
 #include "config_parser_test.h"
 #include "crtc_test.h"
-#include "diskimage_test.h"
-#include "dos_media_test.h"
-#include "dos_test.h"
 #include "global_test.h"
-#include "ieee_drive_test.h"
+#include "ieee4040_test.h"
 #include "keyscan_test.h"
 #include "keystate_test.h"
 #include "log_test.h"
@@ -28,10 +25,7 @@ int run_suite() {
     srunner_add_suite(sr1, char_encoding_suite());
     srunner_add_suite(sr1, config_parser_suite());
     srunner_add_suite(sr1, crtc_suite());
-    srunner_add_suite(sr1, diskimage_suite());
-    srunner_add_suite(sr1, dos_media_suite());
-    srunner_add_suite(sr1, dos_suite());
-    srunner_add_suite(sr1, ieee_drive_suite());
+    srunner_add_suite(sr1, ieee4040_suite());
     srunner_add_suite(sr1, keyscan_suite());
     srunner_add_suite(sr1, keystate_suite());
     srunner_add_suite(sr1, log_suite());
@@ -46,7 +40,6 @@ int run_suite() {
     // These tests are run in a separate process as they intentionally abort.
     SRunner* sr2 = srunner_create(breakpoint_fatal_suite());
     srunner_add_suite(sr2, config_parser_fatal_suite());
-    srunner_add_suite(sr2, ieee_drive_fatal_suite());
     srunner_add_suite(sr2, global_suite());
     srunner_add_suite(sr2, log_fatal_suite());
     srunner_add_suite(sr2, test_support_suite());

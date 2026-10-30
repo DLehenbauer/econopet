@@ -36,11 +36,11 @@ public:
     FirmwareSession& operator=(const FirmwareSession&) = delete;
     // Unmount and release all owned globals, propagating any teardown error.
     void close();
-    // Install a writable fixture under an unregistered shared path in drive slot zero.
-    void mount(const std::vector<uint8_t>& image, const char* name = "test.d64");
+    // Install a writable fixture under an unregistered path in device 8's selected drive.
+    void mount(const std::vector<uint8_t>& image, const char* name = "test.d64", unsigned slot = 0);
     // Mount an owned checked fixture, copying bytes before the temporary expires.
-    void mount(const disk_fixture::D64& image, const char* name = "test.d64") {
-        mount(image.bytes(), name);
+    void mount(const disk_fixture::D64& image, const char* name = "test.d64", unsigned slot = 0) {
+        mount(image.bytes(), name, slot);
     }
     // Run one cooperative drive service pass through real FPGA SPI pins.
     void service();

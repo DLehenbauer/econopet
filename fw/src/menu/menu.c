@@ -193,7 +193,8 @@ void action_set_options(void* context, options_t* options) {
 void action_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
     (void)context;
 
-    unsigned int slot = (device - 8) * 2 + drive;
+    vet(device == 8 && drive < 2, "ieee-6502 supports device 8, drives 0/1 only");
+    unsigned int slot = drive;
     if (!ieee_drive_mount(slot, filename)) {
         fatal("IEEE device %lu drive %lu could not mount '%s'", device, drive, filename);
     }

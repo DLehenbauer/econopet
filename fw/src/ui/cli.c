@@ -8,6 +8,7 @@
 #include "console.h"
 #include "diag/log/log.h"
 #include "display/display.h"
+#include "ieee/ieee_drive.h"
 #include "reset.h"
 #include "system_state.h"
 #include "version.h"
@@ -23,6 +24,7 @@ static void cmd_help(const char* args);
 static void cmd_log(const char* args);
 static void cmd_remote(const char* args);
 static void cmd_reset(const char* args);
+static void cmd_drive(const char* args);
 
 // Command table
 typedef struct {
@@ -33,6 +35,7 @@ typedef struct {
 
 static const cli_command_t commands[] = {
     { "bp",     "List active breakpoints",                   cmd_bp },
+    { "drive",  "Show experimental core-0 drive measurements", cmd_drive },
     { "help",   "Show this help message",                    cmd_help },
     { "log",    "Show log [debug|info|warn]",                cmd_log },
     { "remote", "Remote control PET (Ctrl+C to exit)",       cmd_remote },
@@ -60,6 +63,19 @@ static void cmd_bp(const char* args) {
     for (int i = 0; i < count; i++) {
         printf("  $%04X\r\n", bp_get(i)->addr);
     }
+    fflush(stdout);
+}
+
+// Report measured service cost and scheduling gaps without stopping DVI/core 1.
+static void cmd_drive(const char* args) {
+    (void) args;
+    const ieee_drive_metrics_t m = ieee_drive_metrics();
+    fprintf(stdout, "cycles=%" PRIu64 " calls=%" PRIu64
+        " service_us=%" PRIu64 " elapsed_us=%" PRIu64 "\r\n",
+        m.cycles, m.calls, m.service_us, m.elapsed_us);
+    fprintf(stdout, "max_service_us=%" PRIu64 " max_gap_us=%" PRIu64
+        " presented=%" PRIu32 " consumed=%" PRIu32 "\r\n",
+        m.max_service_us, m.max_service_gap_us, m.presented, m.consumed);
     fflush(stdout);
 }
 

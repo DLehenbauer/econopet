@@ -3,7 +3,7 @@
 
 import common_pkg::*;
 
-// IEEE-488 disk-drive emulation (devices 8 through 11).
+// Experimental IEEE-488 disk-drive transport (device 8 only).
 //
 // Sits between the soft CPU and the physical PIA2/VIA the same way
 // keyboard.sv sits in front of PIA1: it SNOOPS the CPU's writes to the
@@ -218,14 +218,11 @@ module ieee (
     // ------------------------------------------------------------------
     // Device protocol state
     // ------------------------------------------------------------------
-    // The emulation answers four unit addresses, DEV_ADDR through DEV_ADDR+3
-    // (devices 8 through 11), each a dual-drive unit. Handshake and FIFOs
-    // are shared, but roles and secondary selections belong to each unit.
-    // The MCU also learns the unit from commands forwarded through RX.
-    // DEV_ADDR must be divisible by four so the group is a single mask match.
+    // Only device 8 is admitted in the 4040 ROM experiment. Retain the existing
+    // FIFO/event layout so the transport's consumption contract is unchanged.
     localparam logic [4:0] DEV_ADDR = 5'd8;
     localparam int UNIT_COUNT = 4;
-    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00};
+    wire own_address = (~pia2_pb_out & 8'h1F) == {3'b0, DEV_ADDR};
     wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
     logic [UNIT_COUNT-1:0] listen_units = '0;

@@ -27,6 +27,13 @@ The C++ replay executable remains in
 [`test/system/ieee/reference_replay.cpp`](../../test/system/ieee/reference_replay.cpp)
 because it links against the simulator and firmware.
 
+The experiment also has a separately identified
+[packaged-MAME controller reference](../../docs/dev/ieee-6502.md#independent-original-controller-agreement).
+It compares original-6504 mailbox results and media against production CPU-bus
+replay, without this toolkit's wire instrumentation. Its passing scenarios do
+not establish full-wire agreement or relax the pinned build requirements below.
+The RIOT reference is similarly a separate peripheral comparison.
+
 ## Prerequisites
 
 Run the commands below from the repository root. Supply:
@@ -91,6 +98,7 @@ observations from a supported stock build alone cannot generate replay stimulus.
 Configure production and build the Debug simulator using the root presets:
 
 ```sh
+export ECONOPET_MEDIA_DIR=/path/to/private/media
 cmake --preset default
 cmake --build --preset sys-test
 python3 tools/drive-ref/compare_drive_reference.py \
@@ -102,6 +110,12 @@ python3 tools/drive-ref/compare_drive_reference.py \
 The default replay executable is
 `build/system/board/econopet_drive_reference`. Use `--replay-tool` to select
 another build explicitly.
+
+On the `ieee-6502` experiment, replay supports only device 8 and D64/4040.
+The firmware session now boots the unmodified DOS ROM and requires the three
+approved `901468-14.bin`, `901468-15.bin` and `901468-16.bin` chips in
+`$ECONOPET_MEDIA_DIR/roms/`. Capture tooling can still produce original
+8050/8250 references, but the experimental firmware cannot replay them.
 
 `--read-only` selects the exact captured prefix before the first write.
 Use `--ordinary-files` instead to include write/CLOSE/readback without UJ,

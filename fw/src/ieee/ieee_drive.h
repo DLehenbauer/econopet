@@ -4,47 +4,32 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
-// IEEE-488 disk-drive emulation (devices 8 through 11, two drives each),
-// backed by Commodore disk images in /disks on the SD card. Slots 0-7 map to
-// (device - 8) * 2 + drive.
-//
-// The FPGA (ieee.sv) runs the bus handshake and exposes byte FIFOs over
-// SPI/Wishbone; this module implements the DOS layer: OPEN by filename,
-// the channel-15 status channel per unit, sequential streaming with EOI,
-// and CBM relative files (Super-OS/9).
-//
-
-// Capacity for ordinary formatted DOS status lines, not arbitrary channel-15
-// data such as memory-read replies. DOS_4040 and DOS_8250 ramvar place ERRBUF
-// in the final 36 bytes before $4400. Reserve that text, its transmitted CR,
-// and a host C terminating null (which is not transmitted).
-// Sources: https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ramvar
-//          https://github.com/mist64/cbmsrc/blob/master/DOS_8250/ramvar
+// Maximum native formatted status text (excludes the transmitted CR).
 #define IEEE_STATUS_TEXT_MAX 36u
-#define IEEE_STATUS_LINE_CAPACITY (IEEE_STATUS_TEXT_MAX + 1u + 1u)
+#define IEEE_STATUS_LINE_CAPACITY (IEEE_STATUS_TEXT_MAX + 2u)
 
-// Initializes IEEE-488 emulation with no mounted images and fresh DOS/channel
-// state. The fabric remains transparent until an image is mounted.
+// Experimental device-8 4040, two 35-track D64 drives. DOS is the original ROM.
+typedef struct {
+    uint64_t calls, cycles, service_us, elapsed_us, max_service_us, max_service_gap_us;
+    uint32_t presented, consumed;
+} ieee_drive_metrics_t;
+
+// Disable the virtual bus and detach all images.
 void ieee_drive_init(void);
 
-// Resets DOS and channel state and flushes the fabric FIFOs for a
-// firmware-initiated PET reset. Mounted images remain attached.
-//
-// NOTE: PET/fabric resets *must* go through the MCU by calling `pet_reset()`,
-//       which will include a call to `ieee_drive_reset()`.
-//
-//       Pulling the CPU /RESB pin low independently is unsupported, as
-//       firmware does not detect or recover from an independent fabric reset.
+// Cold-start the ROM and flush the fabric, retaining mounted images.
 void ieee_drive_reset(void);
 
-// Removes all mounted disk images.
+// Close all images and restore the physical IEEE bus.
 void ieee_drive_unmount_all(void);
 
-// Mounts a path relative to /disks into a slot (0-7). Returns false when the
-// file was not found or is not a supported disk image. A full /disks/ path
-// exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
-bool ieee_drive_mount(unsigned int slot, const char* filename);
+// Mount a D64 in device 8, drive 0 or 1. Failure is logged and preserves media.
+bool ieee_drive_mount(unsigned slot, const char* filename);
 
-// Services the fabric FIFOs; call every main-loop pass.
+// Cooperatively service the ROM/FIFOs on core 0, never core 1 (DVI).
 void ieee_drive_task(void);
+
+// Read scheduling measurements for debugger/host throughput investigation.
+ieee_drive_metrics_t ieee_drive_metrics(void);

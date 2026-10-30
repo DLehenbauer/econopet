@@ -544,10 +544,10 @@ static void parse_action_mount(parser_t* parser, void* context, size_t context_s
         { NULL, NULL, NULL, 0 }
     });
 
-    if (device < 8 || device > 11) {
+    if (device != 8) {
         fatal_parse_error(
             parser,
-            "Invalid IEEE device: %lu (must be 8-11)",
+            "Invalid IEEE device: %lu (must be 8 for ieee-6502)",
             (unsigned long) device
         );
     }

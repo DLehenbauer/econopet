@@ -262,7 +262,7 @@ START_TEST(test_parse_mount_action) {
         "  - name: Mount Test\n"
         "    setup:\n"
         "      - action: mount\n"
-        "        device: 11\n"
+        "        device: 8\n"
         "        drive: 1\n"
         "        file: some/disk.d64\n";
 
@@ -272,7 +272,7 @@ START_TEST(test_parse_mount_action) {
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
 
     ck_assert_int_eq(test_ctx.mount_count, 1);
-    ck_assert_int_eq(test_ctx.last_mount_device, 11);
+    ck_assert_int_eq(test_ctx.last_mount_device, 8);
     ck_assert_int_eq(test_ctx.last_mount_drive, 1);
     ck_assert_str_eq(test_ctx.last_mount_file, "some/disk.d64");
 }
@@ -286,7 +286,7 @@ START_TEST(test_parse_mount_action_defaults) {
         "  - name: Mount Defaults Test\n"
         "    setup:\n"
         "      - action: mount\n"
-        "        file: some/disk.d80\n";
+        "        file: some/disk.d64\n";
 
     test_register_file("/config.yaml", yaml_content);
 
@@ -296,7 +296,7 @@ START_TEST(test_parse_mount_action_defaults) {
     ck_assert_int_eq(test_ctx.mount_count, 1);
     ck_assert_int_eq(test_ctx.last_mount_device, 8);
     ck_assert_int_eq(test_ctx.last_mount_drive, 0);
-    ck_assert_str_eq(test_ctx.last_mount_file, "some/disk.d80");
+    ck_assert_str_eq(test_ctx.last_mount_file, "some/disk.d64");
 }
 END_TEST
 

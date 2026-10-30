@@ -52,11 +52,32 @@ for the projection and active-drain semantics.
 
 ## Receive data from firmware
 
-Follow [StreamsDosStatusOverProductionTop](drive_test.cpp) for a complete
-receive sequence: mount media, send and service OPEN, address TALK with its
-secondary, service firmware to supply outgoing bytes, then call
+Follow [NativeStatusAndRiotMemoryAliasesCrossPhysicalSpi](rom4040_test.cpp)
+for a complete receive sequence: mount media, address TALK with its secondary,
+service firmware to supply outgoing bytes, then call
 `controller.receive()` and check the returned bytes against the wire trace.
 Do not append `receive()` to the listener-only recipe above.
+
+The [4040 hardware contracts](hardware4040_test.cpp) independently test RIOT
+and raw controller behavior. The [native PET cases](rom4040_test.cpp) execute
+original KERNAL 2/4 OPEN/read calls through the production FPGA and SPI into
+the unmodified drive ROM. See the [experiment](../../../docs/dev/ieee-6502.md)
+for scope, ROM requirements and evidence limits.
+The [protocol matrix](../../../docs/dev/ieee-6502.md#protocol-coverage-matrix)
+maps each RIOT/controller interface to its enumerated system-test inputs.
+For dual-drive tests, `firmware.mount(image, "second.d64", 1)` installs a
+separate session-owned image in device 8's drive 1 (drive 0 is the default).
+The [independent RIOT comparison](../../../docs/dev/ieee-6502.md#independent-riot-agreement)
+executes MAME out of process and replays its observations through the production
+CPU bus. MAME is optional for building, not optional evidence for that claim.
+The [original-controller comparison](../../../docs/dev/ieee-6502.md#independent-original-controller-agreement)
+executes the unmodified 6504 and GCR electronics in five mailbox/media
+scenarios, comparing completions, full headers/buffers and final disk images.
+Its documented equal-disk-ID fixture limitation and narrow SEEK normalization
+must accompany agreement claims. This is separate from full-wire capture.
+The [seeded histories](../../../docs/dev/ieee-6502.md#protocol-invariants-and-adversarial-scheduling)
+exercise RX/TX service gaps, ATN/GET ownership and persistent controller jobs
+without imposing rotational delays.
 
 Use the [service recipe](../README.md#service-firmware-during-execution) for
 bounded cooperative work. The authoritative

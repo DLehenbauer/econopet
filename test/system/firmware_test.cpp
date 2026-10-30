@@ -24,6 +24,8 @@ static_assert(!std::is_move_constructible_v<FirmwareSession>);
 static_assert(!std::is_constructible_v<FirmwareSession, System&&>);
 constexpr econopet::SramAddress kSpiRamProbe{0x1234};
 constexpr econopet::CpuAddress kResult{0x0200};
+// Scheduler plumbing needs room for a full ROM service pass, not a PET timeout.
+constexpr econopet::Cycles kFirmwareServiceBudget{1000000};
 
 // Capture completed-CS transactions and MSB-first MOSI bytes at clock boundaries.
 class SpiCapture {
@@ -120,13 +122,13 @@ TEST_F(FirmwareTest, ConfiguredRunFirmwareServiceAdapterUsesRealSpiAndDeadline) 
     firmware.mount(disk_fixture::D64::empty());
     SpiCapture capture(system);
     const auto start = system.time();
-    system.execution().within(10000)
+    system.execution().within(kFirmwareServiceBudget)
         .after(2, [](System& board) { board.set_external_interrupts(false, true); })
         .every(1, Scheduler::MissedService::Coalesce, firmware.service_adapter())
         .until([&](const System&) { return !capture.transactions.empty(); })
         .run("direct firmware adapter");
     EXPECT_GT(system.time() - start, econopet::Cycles{2});
-    EXPECT_LE(system.time() - start, econopet::Cycles{10000});
+    EXPECT_LE(system.time() - start, kFirmwareServiceBudget);
     EXPECT_FALSE(system.peek_stimulus().cpu_nmi_n_i);
     EXPECT_FALSE(system.spi().peek_failed());
 }
@@ -162,7 +164,8 @@ TEST_F(FirmwareTest, SchedulerInterleavesFirmwareSpiAndExactStimulus) {
             firmware.service();
             complete = true;
         });
-    scheduler.run_until([&](const System&) { return complete; }, 10000, "scheduled firmware");
+    scheduler.run_until([&](const System&) { return complete; },
+        kFirmwareServiceBudget, "scheduled firmware");
     ASSERT_TRUE(applied);
     EXPECT_EQ(*applied, at);
     EXPECT_FALSE(system.peek_stimulus().cpu_nmi_n_i);
@@ -613,6 +616,9 @@ TEST_F(FirmwareTest, FirmwareMountValidationAndFailureRetainUsableSession) {
     const auto start = system.time();
     EXPECT_THROW(firmware.mount(image, nullptr), std::invalid_argument);
     EXPECT_THROW(firmware.mount(image, ""), std::invalid_argument);
+    constexpr unsigned UnsupportedDrive = 2;
+    EXPECT_THROW(firmware.mount(image, "second.d64", UnsupportedDrive), std::out_of_range);
+    EXPECT_THROW(firmware.mount(image, "second.d64", ~0u), std::out_of_range);
     const std::string long_name(SD_PATH_MAX, 'x');
     EXPECT_THROW(firmware.mount(image, long_name.c_str()), std::out_of_range);
     EXPECT_THROW(firmware.mount(std::vector<uint8_t>{}), std::invalid_argument);
@@ -624,6 +630,7 @@ TEST_F(FirmwareTest, FirmwareMountValidationAndFailureRetainUsableSession) {
     EXPECT_EQ(system.time(), mounted);
     EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
     EXPECT_NO_THROW(firmware.service());
+    EXPECT_NO_THROW(firmware.mount(image, "second.d64", 1));
 }
 
 // A shared-registry collision must not abort, advance the board or transfer file ownership.
@@ -695,7 +702,7 @@ TEST_F(FirmwareTest, FirmwareOperationsRejectObservationAndInputEditReentry) {
 TEST_F(FirmwareTest, FirmwareOperationsRejectScheduledStimulusReentry) {
     firmware.mount(disk_fixture::D64::empty());
     bool checked = false;
-    system.execution().within(10000)
+    system.execution().within(kFirmwareServiceBudget)
         .after(7, [&](System& board) {
             EXPECT_FALSE(board.snapshot().spi_cs_ni);
             const auto at = board.time();
@@ -721,13 +728,16 @@ TEST_F(FirmwareTest, FirmwareRxTraceRecordsConsumedProductionFifoHeads) {
     auto rx = firmware.trace_rx();
     auto wire = system.trace_ieee();
     const auto listen = Listen(Device{8});
-    const auto secondary = Secondary(Channel{2});
+    const auto secondary = Secondary(Channel{CommandChannel});
     controller.command(listen);
     controller.command(secondary);
-    controller.data(0x41, Eoi::Last);
-    const std::vector<Record> sent{command(listen), command(secondary), data(0x41, Eoi::Last)};
+    controller.data('I', Eoi::Last);
+    const std::vector<Record> sent{command(listen), command(secondary), data('I', Eoi::Last)};
     EXPECT_EQ(wire.records(), sent);
-    firmware.service();
+    system.execution().within(kFirmwareServiceBudget)
+        .service(firmware.service_adapter())
+        .until([](const System& board) { return !board.snapshot().ieee_rx_ready_o; })
+        .run("consume ROM listener handshake");
     EXPECT_EQ(rx.records(), sent);
     rx.capture().require_count(3, "firmware consumed RX heads");
     EXPECT_FALSE(system.ieee().read_status().contains(fpga::IeeeStatusBit::RxReady));

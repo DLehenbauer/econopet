@@ -101,6 +101,7 @@ core
 /.tmp/**
 !/.tmp/**/
 !/.tmp/**/.gitkeep
+/.tmp/ai/ieee-6502/
 
 /.cache/**
 !/.cache/**/

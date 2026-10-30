@@ -64,14 +64,17 @@ ctest --preset sys --output-on-failure --no-tests=error
 # Rebuild after edits, then select individual cases in the nested build.
 cmake --build --preset sys-test --parallel 2
 ctest --test-dir build/system --parallel 2 --output-on-failure --no-tests=error \
-  -R 'SpiRegistersCpuAndDriveMount|waterloo_atn_down_case'
+  -R 'SpiRegistersCpuAndDriveMount|NativeStatusAndRiotMemoryAliasesCrossPhysicalSpi'
 
 # List nested cases without executing them. CTest does not build.
 ctest --test-dir build/system -N
 ```
 
-Set `ECONOPET_MEDIA_DIR` before configuring. ROM cases require legally
-supplied images under its `roms/` directory. Historical `DISABLED_` cases stay
+Set `ECONOPET_MEDIA_DIR` before configuring. Firmware mounts now boot the
+unmodified 4040 ROM and require all three `901468-14/15/16.bin` chips under
+its `roms/` directory. PET/Waterloo ROM cases additionally require their
+selected complete computer ROM sets. All images are legally supplied external
+inputs. Historical `DISABLED_` cases stay
 excluded. The root preset selects the `system_tests` wrapper, not individual
 `firmware.*` or `board.*` names. Use `--test-dir build/system` for case filters
 or bounded inner parallelism. Each discovered case runs in an isolated process.
@@ -118,10 +121,15 @@ The representative cases retain their original subjects and expectations:
 | Example | Real case | Status |
 |---------|-----------|--------|
 | Smoke program | [SpiRegistersCpuAndDriveMount](econopet_top_smoke.cpp) | Enabled |
-| ROM leaf | [waterloo_atn_down_case](ieee/waterloo_rom_test.cpp) | Enabled |
-| Serviced transaction | [StreamsDosStatusOverProductionTop](ieee/drive_test.cpp) | Enabled |
+| ROM initialization | [WaterlooFixtureExplicitInitializerEstablishesRomRegisterState](ieee/fixture_test.cpp) | Enabled |
+| Serviced transaction | [NativeStatusAndRiotMemoryAliasesCrossPhysicalSpi](ieee/rom4040_test.cpp) | Enabled |
+| Native PET/drive ROM composition | [NativeOpenAndReadUseOriginalPetKernal](ieee/rom4040_test.cpp) | Enabled |
+| RIOT/controller hardware contracts | [Hardware4040Test and Controller4040Test](ieee/hardware4040_test.cpp) | Enabled |
 | Multi-phase program | [ProgramPhases6502/6809PreserveAccumulatorAndOrder](phase_test.cpp) | Enabled |
-| Multi-phase ROM transaction | [DISABLED_Rom2_CIOUT_buffered_EOI](ieee/commodore_rom_test.cpp) | Disabled |
+
+The device-8/D64 experiment replaces the legacy C DOS integration suites.
+See the [investigation](../../docs/dev/ieee-6502.md) for layered evidence and
+the remaining manual RP2040 performance gate.
 
 ## Peripheral write traces
 
@@ -134,23 +142,19 @@ when the evidence must come from CPU bus writes rather than direct model setup.
 ## Call a ROM routine
 
 A ROM fixture binds the revision, CPU, entries, and workspace. Initialization
-is explicit and emits real CPU instructions. This is the body of the active
-[Waterloo ATNDown case](ieee/waterloo_rom_test.cpp):
+is explicit and emits real CPU instructions. This follows the active
+[Waterloo initializer case](ieee/fixture_test.cpp):
 
 ```cpp
 using namespace ieee_test;
-firmware.mount(disk_fixture::D64::empty(), "kernal.d64");
 WaterlooFixture rom(system);
-constexpr uint8_t ViaExternalIdle = pet::Ndac | pet::NrfdInput | pet::Dav;
-system.io().via().inputs([](auto& inputs) { inputs.port_b = ViaExternalIdle; });
-
 auto test = rom.program();
-test.within(WaterlooBudget).run([&](auto& p) {
+EXPECT_TRUE(test.within(WaterlooBudget).run([&](auto& p) {
     rom.init_ieee(p);
-    p.jsr(rom.entry(WaterlooRoutine::AtnDown));
-});
-EXPECT_EQ(system.ieee().peek_via_orb() & ViaIdle, pet::Nrfd);
-EXPECT_NE(system.io().pia2().state().pa.cr & M6520_CR_C2_MODE, 0);
+}).empty());
+EXPECT_EQ(system.ieee().peek_via_orb(), 0x06);
+EXPECT_TRUE(system.ieee().peek_nrfd_released());
+EXPECT_TRUE(system.ieee().peek_ndac_released());
 ```
 
 Include [ieee/fixture.h](ieee/fixture.h). Commodore uses
@@ -163,7 +167,7 @@ without an extra `rom.init_ieee(p)`.
 
 Attach `firmware.service_adapter()` directly to the run configuration (or a
 CPU/ROM builder when servicing a program). The active
-[DOS-status transaction](ieee/drive_test.cpp) sends real IEEE commands, services
+[native status transaction](ieee/rom4040_test.cpp) sends real IEEE commands, services
 the drive through SPI, and checks every returned byte and its EOI:
 
 ```cpp
@@ -194,8 +198,8 @@ records the historical termination cases' preserved setup and after-slice policy
 
 ## Inspect a cooperative phase
 
-Preassemble dependent calls and put `p.pause(name)` between them. In the
-historical [ROM 2 CIOUT case](ieee/commodore_rom_test.cpp), LISTEN/secondary
+Preassemble dependent calls and put `p.pause(name)` between them. In this
+historical ROM 2 CIOUT recipe, LISTEN/secondary
 addressing, buffered writes, and final UNLISTEN remain in one CPU session:
 
 ```cpp
@@ -243,7 +247,9 @@ EXPECT_THAT(wire.records(), testing::ElementsAreArray(expected));
 This body assumes the mounted `FirmwareTest` setup used by the ROM suite.
 Include `<vector>`, `<gmock/gmock.h>`, [ieee/fixture.h](ieee/fixture.h),
 [ieee/fifo.h](ieee/fifo.h), and [ieee/trace.h](ieee/trace.h), and import
-`test_asm::imm`. The historical test remains disabled. A phase handle proves acknowledgment
+`test_asm::imm`. The legacy CIOUT test source was removed for the experiment,
+so this is an API recipe, not current executable coverage.
+A phase handle proves acknowledgment
 followed by a safe parked read, not just a mailbox write. `resume` releases
 the private gate without resetting CPU or IEEE state. Use
 `test.capture(phase)[handle]` for detached data at a verified boundary.

@@ -2,6 +2,10 @@
 
 Open hardware mainboard replacement for Commodore PET/CBM 2001/30xx/40xx/80xx machines. The EconoPET can also run standalone with HDMI display and USB keyboard.
 
+This experimental branch replaces virtual drives with original 4040 DOS ROM
+execution on RP2040 core 0 (device 8 and D64 only). See the
+[investigation, evidence and remaining performance gates](docs/dev/ieee-6502.md).
+
 ![EconoPET running Space Invaders](site/static/assets/EconoPET-Invaders.jpg)
 
 ## User Resources

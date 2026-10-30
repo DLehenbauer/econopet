@@ -53,9 +53,10 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
     ${FW_SRC_DIR}/tape.c
+    ${FW_SRC_DIR}/ieee/rom4040.c
     ${FW_SRC_DIR}/ieee/diskimage.c
-    ${FW_SRC_DIR}/ieee/dos_media.c
-    ieee/dos.c
+    ${FW_SRC_DIR}/ieee/controller4040.c
+    ${FW_SRC_DIR}/ieee/fifo4040.c
     ${FW_SRC_DIR}/ieee/ieee_drive.c
     ${FW_SRC_DIR}/tape_dir.c
     ${FW_SRC_DIR}/term_inject.c
@@ -97,6 +98,8 @@ target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16
 
 # Expose tusb_config.h to TinyUSB
 target_include_directories(${FW_EXECUTABLE_NAME} PUBLIC ${FW_SRC_DIR})
+target_include_directories(${FW_EXECUTABLE_NAME} SYSTEM PRIVATE
+    "${FW_DIR}/../test/external/chips/chips")
 
 target_precompile_headers(${FW_EXECUTABLE_NAME} PRIVATE ${FW_SRC_DIR}/pch.h)
 

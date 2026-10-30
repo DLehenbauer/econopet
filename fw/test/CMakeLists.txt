@@ -39,8 +39,9 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
-    ${SRC_DIR}/ieee/dos_media.c
-    ${SRC_DIR}/ieee/dos.c
+    ${SRC_DIR}/ieee/rom4040.c
+    ${SRC_DIR}/ieee/controller4040.c
+    ${SRC_DIR}/ieee/fifo4040.c
     ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keystate.c
@@ -48,11 +49,8 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/char_encoding_test.c
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/crtc_test.c
-    ${TEST_DIR}/diskimage_test.c
-    ${TEST_DIR}/dos_media_test.c
-    ${TEST_DIR}/dos_test.c
     ${TEST_DIR}/global_test.c
-    ${TEST_DIR}/ieee_drive_test.c
+    ${TEST_DIR}/ieee4040_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
@@ -81,6 +79,8 @@ target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen)
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+    "${FW_DIR}/../test/external/chips/chips")
 
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})

@@ -3,13 +3,17 @@
 #include "firmware.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
+#include <iterator>
 #include <utility>
 
 #include "firmware_transport.h"
 
 extern "C" {
+#include "ieee/controller4040.h"
 #include "sd/sd.h"
 }
 namespace {
@@ -130,11 +134,12 @@ void FirmwareSession::close() {
     if (error) std::rethrow_exception(error);
 }
 
-// Registers and mounts the fixture in the firmware's first drive slot.
-void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name) {
+// Register and mount a fixture while retaining session-owned file and ROM lifetimes.
+void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name, unsigned slot) {
     if (!*active_) throw board_.failure<std::logic_error>("firmware mount", "session is closed");
     board_.require_spi_idle();
-    constexpr unsigned kFixtureDriveSlot = 0;
+    if (slot >= CONTROLLER4040_DRIVES)
+        throw board_.failure<std::out_of_range>("firmware mount", "only drive slots zero and one are supported");
     if (!name || !*name)
         throw board_.failure<std::invalid_argument>("firmware mount", "fixture name is empty");
     const auto prefix_length = std::strlen(sd_dir_prefix(SD_DIR_DISKS));
@@ -142,6 +147,22 @@ void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name)
         throw board_.failure<std::out_of_range>("firmware mount", "fixture path exceeds SD_PATH_MAX");
     if (image.empty())
         throw board_.failure<std::invalid_argument>("firmware mount", "image is empty");
+    // Load external ROM inputs into session-owned SD fixtures. Production checks
+    // each chip's exact identity, without synthetic replacement DOS code.
+    const char* const media = std::getenv("ECONOPET_MEDIA_DIR");
+    if (!media || !*media)
+        throw board_.failure<std::runtime_error>("firmware mount", "ECONOPET_MEDIA_DIR is required for 4040 ROMs");
+    for (const char* chip : {"901468-14.bin", "901468-15.bin", "901468-16.bin"}) {
+        const std::string destination = std::string("/roms/") + chip;
+        if (test_file_registered(destination.c_str())) continue;
+        const std::string source = std::string(media) + destination;
+        std::ifstream input(source, std::ios::binary);
+        const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)), {});
+        if (bytes.size() != 4096)
+            throw board_.failure<std::runtime_error>("firmware mount", "missing or invalid 4040 ROM: " + source);
+        fixture_paths_.push_back(destination);
+        test_register_binary_file(destination.c_str(), bytes.data(), bytes.size(), false);
+    }
     // Expose a writable fixture at the same path production firmware will open.
     char path[SD_PATH_MAX];
     sd_make_path(path, SD_DIR_DISKS, name);
@@ -150,7 +171,7 @@ void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name)
     fixture_paths_.emplace_back(path);
     test_register_binary_file(path, image.data(), image.size(), true);
     // Surface mount failure instead of leaving a success-shaped fixture.
-    if (!ieee_drive_mount(kFixtureDriveSlot, name)) {
+    if (!ieee_drive_mount(slot, name)) {
         test_unregister_file(path);
         fixture_paths_.pop_back();
         throw board_.failure<std::runtime_error>("firmware mount", std::string("cannot mount ") + path);

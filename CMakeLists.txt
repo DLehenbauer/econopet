@@ -121,6 +121,14 @@ if(BUILD_TESTS)
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
     )
+    ExternalProject_Add(ieee_6502_project
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/test/ieee-6502
+        BINARY_DIR ${SUPER_BUILD_DIR}/ieee-6502
+        CMAKE_ARGS -G Ninja -DCMAKE_BUILD_TYPE=Debug
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
 endif()
 
 # ============================================================================
@@ -199,6 +207,7 @@ add_custom_target(all_projects
         $<$<BOOL:${BUILD_FPGA}>:fpga_project>
         $<$<BOOL:${BUILD_FIRMWARE}>:firmware_project>
         $<$<BOOL:${BUILD_TESTS}>:test_project>
+        $<$<BOOL:${BUILD_TESTS}>:ieee_6502_project>
         $<$<BOOL:${BUILD_SYSTEM_TESTS}>:system_test_project>
         $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
         $<$<BOOL:${BUILD_PRGS}>:prgs_project>
@@ -239,6 +248,13 @@ if(BUILD_TESTS)
         DEPENDS test_project
         ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard;${ECONOPET_TEST_ENV}"
     )
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME ieee_6502_probes
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/ieee-6502/run.py
+            --rom-dir ${ECONOPET_ROMS_DIR}
+            --build-dir ${SUPER_BUILD_DIR}/ieee-6502)
+    set_tests_properties(ieee_6502_probes PROPERTIES
+        LABELS "ieee-6502;rom" TIMEOUT 90)
 endif()
 
 # Run the standalone suite so its host and contract test registration remains authoritative.
