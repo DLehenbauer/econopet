@@ -153,11 +153,113 @@ typedef struct {
     bool pending;
 } dos_open_work_t;
 
+// INITIALIZE owns selected media identities while reloading header/BAM state.
+typedef struct {
+    dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
+    uint16_t next_track;
+    uint8_t first_drive;
+    uint8_t slots;
+    bool started;
+    bool pending;
+    bool succeeded;
+} dos_initialize_work_t;
+
+// RENAME retains names and media identities while searching linked directories.
+typedef struct {
+    dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
+    uint8_t names[2][DISKIMAGE_FILENAME_SIZE];
+    uint8_t name_lengths[2];
+    uint16_t visited;
+    uint8_t source_drive;
+    uint8_t source_track;
+    uint8_t source_sector;
+    uint8_t source_entry;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t scratch[2];
+    uint8_t found;
+    bool both_drives;
+    bool tried_peer;
+    bool empty_target;
+    bool name_conflict;
+    bool commit;
+    bool pending;
+} dos_rename_work_t;
+
+// SCRATCH retains bounded parser tables while releasing one linked sector at a time.
+typedef struct {
+    dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
+    uint8_t command[DOS_COMMAND_RECEIVE_CAPACITY];
+    uint8_t starts[DOS_FILENAME_COUNT];
+    uint8_t drives[DOS_FILENAME_COUNT];
+    uint16_t visited;
+    uint16_t chain_visited;
+    uint8_t length;
+    uint8_t names;
+    uint8_t type;
+    uint8_t patterns;
+    uint8_t defaults;
+    uint8_t matched;
+    uint8_t drive;
+    uint8_t scans;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t entry;
+    uint8_t chain_track;
+    uint8_t chain_sector;
+    uint8_t next_chain_track;
+    uint8_t next_chain_sector;
+    uint8_t buffers[2];
+    uint8_t phase;
+    uint8_t count;
+    bool data_pending;
+    bool pending;
+} dos_scratch_work_t;
+
+// VALIDATE borrows existing data buffers for DOS 2.7's rebuilt BAM pages.
+typedef struct {
+    dos_media_ref_t media;
+    uint16_t owned;
+    uint16_t visited;
+    uint16_t chain_visited;
+    uint8_t reader;
+    uint8_t parts;
+    uint8_t part;
+    uint8_t phase;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t entry;
+    uint8_t chain_track;
+    uint8_t chain_sector;
+    uint8_t next_track;
+    uint8_t next_sector;
+    uint8_t error;
+    uint8_t error_track;
+    uint8_t error_sector;
+    bool directory_chain;
+    bool data_pending;
+} dos_validate_work_t;
+
+typedef enum {
+    DOS_COMMAND_IDLE,
+    DOS_COMMAND_RENAME,
+    DOS_COMMAND_SCRATCH,
+    DOS_COMMAND_VALIDATE,
+} dos_command_work_t;
+
 typedef struct {
     dos_buffer_t buffers[DOS_BUFFER_COUNT];
     dos_channel_t channels[DOS_CHANNEL_COUNT];
     dos_bam_t bam[DOS_MEDIA_SLOTS_PER_UNIT];
     dos_open_work_t open;
+    dos_initialize_work_t initialize;
+    // The command tag owns the transient worker and its shared pages.
+    dos_command_work_t command;
+    union {
+        dos_rename_work_t rename;
+        dos_scratch_work_t scratch;
+        dos_validate_work_t validate;
+    };
     uint16_t buffer_use;
     uint16_t buffer_drives;
     uint16_t buffer_writes;
@@ -187,8 +289,13 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned 
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
               unsigned int length);
 
-// Resume a pending lookup, yielding between directory sectors.
+// Advance one metadata phase or ordinary lookup/APPEND continuation.
 void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
+
+// Dispatch an already-collected RENAME/SCRATCH/VALIDATE request.
+// Complete preceding work first. Command-channel transport collection is separate.
+void dos_command(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, const uint8_t* request,
+                 unsigned int length);
 
 // Persist then release a secondary, retaining failed writers for retry.
 // Command secondary 15 closes all data channels in descending order.
@@ -220,5 +327,5 @@ unsigned int dos_status_stage(const dos_unit_t* unit, uint8_t* output, unsigned 
 // Acknowledge actual status progress, clearing status only when CR is consumed.
 void dos_status_get(dos_unit_t* unit, dos_model_t model, unsigned int count);
 
-// Report whether the cooperative OPEN lookup has more work.
+// Report whether cooperative OPEN or metadata command work remains.
 bool dos_work_pending(const dos_unit_t* unit);

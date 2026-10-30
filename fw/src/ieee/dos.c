@@ -81,6 +81,30 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_HEADER_NAME_4040 144u
 #define DOS_HEADER_NAME_8050 6u
 
+#define DOS_BAM_PART_INTERLEAVE 3u
+#define DOS_RENAME_TARGET 0u
+#define DOS_RENAME_SOURCE 1u
+#define DOS_RENAME_TARGET_FOUND (1u << DOS_RENAME_TARGET)
+#define DOS_RENAME_SOURCE_FOUND (1u << DOS_RENAME_SOURCE)
+#define DOS_RENAME_ALL_FOUND (DOS_RENAME_TARGET_FOUND | DOS_RENAME_SOURCE_FOUND)
+#define DOS_DIRECTORY_SIDE_TRACK 21u
+#define DOS_DIRECTORY_SIDE_SECTOR 22u
+#define DOS_INTERNAL_READ_SECONDARY 17u
+#define DOS_DECIMAL_PAIR_LIMIT 100u
+typedef enum {
+    DOS_SCRATCH_SEARCH,
+    DOS_SCRATCH_CHAIN,
+    DOS_SCRATCH_BAM,
+} dos_scratch_phase_t;
+typedef enum {
+    DOS_VALIDATE_INITIALIZE,
+    DOS_VALIDATE_MAP,
+    DOS_VALIDATE_SEARCH,
+    DOS_VALIDATE_CHAIN,
+    DOS_VALIDATE_WRITE,
+    DOS_VALIDATE_RECOVER,
+} dos_validate_phase_t;
+
 typedef struct {
     uint8_t patterns[DOS_FILENAME_COUNT][DOS_DIRECTORY_PATTERN_SIZE];
     uint8_t count;
@@ -168,16 +192,18 @@ void dos_status(dos_unit_t* const unit, const dos_model_t model, const dos_statu
     //
     // ROM erproc:ERRMSG/ERMSG2 (4040) and JERRMS/ERMSG2 (DOS 2.7) write the
     // error number, expanded message, track, and sector with comma separators.
-    // BCDDEC/HEXDEC convert numbers. DOS 2.7 appends DRVNUM masked to one bit,
+    // BCDDEC/HEXDEC retain two decimal digits on 4040, while DOS 2.7 emits
+    // an optional hundreds digit. DOS 2.7 appends DRVNUM masked to one bit,
     // whereas 4040 ends after the sector. tst4:GETERC supplies CR and EOI.
     // Here snprintf combines formatting and that eventual CR in one record,
     // preserving the model-specific drive field and using expanded status_text.
-    // This handles M2's bounded fields, not all out-of-range conversion quirks.
+    const unsigned int status_track = model == DOS_MODEL_4040 ? track % DOS_DECIMAL_PAIR_LIMIT : track;
+    const unsigned int status_sector = model == DOS_MODEL_4040 ? sector % DOS_DECIMAL_PAIR_LIMIT : sector;
     const int length = model == DOS_MODEL_4040
                            ? snprintf(unit->status, sizeof(unit->status), "%02u,%s,%02u,%02u\r", code,
-                                      status_text(code, model), track, sector)
+                                      status_text(code, model), status_track, status_sector)
                            : snprintf(unit->status, sizeof(unit->status), "%02u,%s,%02u,%02u,%u\r", code,
-                                      status_text(code, model), track, sector, unit->selected_drive);
+                                      status_text(code, model), status_track, status_sector, unit->selected_drive);
     // Detect internal overflow rather than publishing a truncated status.
     vet(length > 0 && (size_t)length < sizeof(unit->status), "native status overflow");
 
@@ -1401,6 +1427,21 @@ static void append_work(dos_unit_t* const unit, dos_media_bank_t* const media, d
     }
 }
 
+// Find retained host publication intent independently of visible directory bytes.
+static const dos_channel_t* unpublished_writer(const dos_unit_t* const unit, const dos_media_ref_t reference,
+                                               const uint8_t name[DISKIMAGE_FILENAME_SIZE], const uint8_t secondary) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const owner = &unit->channels[index];
+        if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+            owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
+            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+            owner->media.identity == reference.identity && memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
+            return owner;
+        }
+    }
+    return NULL;
+}
+
 // OPNWCH/ADDFIL construct a new chain, or reserve a replacement's alternate link.
 static bool open_write(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                        const dos_open_work_t* const work, const bool existing) {
@@ -1503,6 +1544,1268 @@ void dos_put(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
             free_channel(unit, index);
         }
     }
+}
+
+// Select the starting drive for INITIALIZE/VALIDATE and report an omitted selector.
+// The caller supplies retained command storage with its command byte at offset 0.
+static uint8_t initialize_drive(const uint8_t* const bytes, const unsigned int length, const uint8_t last_drive,
+                                bool* const both) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv
+    //
+    // SIMPRS uses PARSE to find ':' and backs its returned pointer up to the
+    // preceding character. Without a colon, FILTBL stays at the command byte.
+    // SETANY/TST0V1 try that character, then the final command character.
+
+    // PARSE stops collecting separators at MXFILS-1, so a later colon must
+    // not override the default starting position after the filename limit.
+    unsigned int start = 0, commas = 0;
+    for (unsigned int position = 0; position < length; ++position) {
+        if (bytes[position] == ':') {
+            start = position - 1u;
+            break;
+        }
+        if (bytes[position] == ',' && ++commas == DOS_FILENAME_COUNT - 1u) {
+            break;
+        }
+    }
+    // Preserve the initial command-buffer read even for zero logical length.
+    // Explicit '0'/'1' at the first candidate takes precedence over the suffix.
+    const uint8_t first = bytes[start], last = length == 0 ? first : bytes[length - 1u];
+
+    // SETANY sets IMAGE to $FF and uses LSTDRV when neither candidate is a
+    // drive digit. C exposes that omission through both: INITIALIZE uses it
+    // to visit both drives, while VALIDATE uses only the returned starting drive.
+    *both = first != '0' && first != '1' && last != '0' && last != '1';
+    return first == '0' || first == '1' ? first - '0' : last == '0' || last == '1' ? last - '0' : last_drive;
+}
+
+// Copy a command name into a sixteen-byte, $A0-padded field and return its length.
+// The caller must provide readable retained storage at start, even at logical EOF.
+static unsigned int command_name(const uint8_t* const bytes, const unsigned int length, unsigned int start,
+                                 uint8_t name[DISKIMAGE_FILENAME_SIZE]) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
+    //
+    // FNDLMT/FL05 scan until comma, equals, sixteen bytes, or CMDSIZ.
+    // TRNAME/TRCMBF copy the bounded name and pad its remaining field with $A0.
+    // C combines scanning/copying and initializes padding before the scan.
+    memset(name, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+    unsigned int used = 0;
+
+    // FL05 reads before checking CMDSIZ. Keep the do/while ordering so a
+    // starting byte at logical EOF is still inspected, not silently skipped.
+    do {
+        const uint8_t byte = bytes[start++];
+        if (byte == ',' || byte == '=') {
+            // Delimiters end the name without entering the padded field.
+            break;
+        }
+        name[used++] = byte;
+    } while (used < DISKIMAGE_FILENAME_SIZE && start < length);
+    return used;
+}
+
+// Validate RENAME's two unpatterned names and reserve its cooperative scan pages.
+// Queue directory work only after parsing, media binding, and resource checks.
+static void rename_start(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                         const unsigned int length) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/romtbl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/romtbl
+    //
+    // TAGCMD checks STRUCT before RENAME calls ALLDRS/LOOKUP/CHKIO.
+    // C extracts that parsing and drive setup here, deferring lookup and
+    // in-place directory publication to rename_work without sector I/O now.
+    const dos_model_t model = media->units[index].model;
+    const uint8_t* const bytes = unit->command_bytes;
+
+    // TAGCMD requires a colon before any comma (NOFILE/34). Once that
+    // structure exists, a missing equals is a distinct BADSYN/30 failure.
+    unsigned int colon = 0;
+    while (colon < length && bytes[colon] != ':' && bytes[colon] != ',') {
+        ++colon;
+    }
+    if (colon == length || bytes[colon] != ':') {
+        dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
+        return;
+    }
+    unsigned int equals = colon + 1u;
+    while (equals < length && bytes[equals] != '=') {
+        ++equals;
+    }
+    if (equals == length) {
+        dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        return;
+    }
+    // PARSE's shifted CR terminates structural scanning of the second stream.
+    for (unsigned int position = 0; position < length; ++position) {
+        const uint8_t byte = bytes[position];
+        if (position > equals && byte == 0x8d) {
+            break;
+        }
+        if (byte == ',' || byte == '*' || byte == '?') {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+    }
+    // ALLDRS inherits LSTDRV for the target. SETDRV consumes ':' or a
+    // one-byte selector plus ':', retaining that drive for invalid selectors.
+    const uint8_t selector = bytes[colon - 1u];
+    const uint8_t target = selector == '0' || selector == '1' ? selector - '0' : unit->last_drive;
+    uint8_t source = target;
+    unsigned int start = equals + 1u;
+    if (start + 1u < length && bytes[start + 1u] == ':') {
+        if (bytes[start] == '0' || bytes[start] == '1') {
+            source = bytes[start] - '0';
+        }
+        start += 2u;
+    } else if (start < length && bytes[start] == ':') {
+        ++start;
+    }
+    // RENAME binds the source disk, with differing prefixes widening target
+    // collision checks rather than moving the file to the destination disk.
+    dos_rename_work_t work = {
+        .source_drive = source,
+        .track = directory_track(model),
+        .sector = DOS_DIRECTORY_FIRST_SECTOR,
+        .both_drives = target != source,
+        .pending = true,
+    };
+    // Retain the zero-length target marker so rename_work can reproduce
+    // TRNAME's native empty-target spill instead of sanitizing the request.
+    work.name_lengths[DOS_RENAME_TARGET] = command_name(bytes, length, colon + 1u, work.names[DOS_RENAME_TARGET]);
+    work.empty_target = work.name_lengths[DOS_RENAME_TARGET] == 0;
+    work.name_lengths[DOS_RENAME_SOURCE] = command_name(bytes, length, start, work.names[DOS_RENAME_SOURCE]);
+    unit->selected_drive = source;
+    if (dos_media_reference(media, index, source, &work.media[source]) != DOS_MEDIA_OK) {
+        dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+        return;
+    }
+    // A differing destination prefix checks both disks, but never moves the file.
+    dos_media_reference(media, index, source ^ 1u, &work.media[source ^ 1u]);
+    // Capture intent before yielding: CLOSE can publish and release its owner
+    // after lookup has already passed that directory sector.
+    uint8_t name[DISKIMAGE_FILENAME_SIZE];
+    memcpy(name, work.names[DOS_RENAME_TARGET], sizeof(name));
+    if (work.empty_target) {
+        name[0] = '=';
+    }
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        if ((slot == source || work.both_drives) &&
+            unpublished_writer(unit, work.media[slot], name, DOS_UNUSED) != NULL) {
+            work.name_conflict = true;
+        }
+    }
+
+    // Host resource policy probes an available logical index but publishes
+    // no channel for this job. Only the two scratch pages are actually claimed.
+    unsigned int internal = 0;
+    while (internal < DOS_FILE_CHANNEL_COUNT &&
+           (unit->channels[internal].allocated || unit->directory_internal == internal + 1u)) {
+        ++internal;
+    }
+    work.scratch[0] = get_buffer(unit);
+    work.scratch[1] = get_buffer(unit);
+    if (internal == DOS_FILE_CHANNEL_COUNT || work.scratch[0] == DOS_UNUSED || work.scratch[1] == DOS_UNUSED) {
+        // Roll back only successful claims, leaving peer owners untouched.
+        for (unsigned int buffer = 0; buffer < count_of(work.scratch); ++buffer) {
+            if (work.scratch[buffer] != DOS_UNUSED) {
+                unit->buffer_use &= (uint16_t)~(1u << work.scratch[buffer]);
+            }
+        }
+        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        return;
+    }
+    // Publish the fully reserved job. OK is its working status, not proof
+    // that either name exists or the rename has reached persistent storage.
+    unit->rename = work;
+    unit->command = DOS_COMMAND_RENAME;
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+}
+
+// Parse SCRATCH's pattern group/type filter and reserve its cooperative work.
+// Defer matching, active/locked checks, deletion, and allocation release.
+static void scratch_start(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                          const unsigned int length) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/setdrv
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/scrtch
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/scrtch
+    //
+    // TAGCMD supplies pattern groups. SCRTCH calls FS1SET, ALLDRS, and
+    // OPTSCH before iterating matches. C retains this setup in a bounded job
+    // rather than deleting entries synchronously inside command dispatch.
+    const dos_model_t model = media->units[index].model;
+    const uint8_t* const bytes = unit->command_bytes;
+    unsigned int colon = 0;
+    while (colon < length && bytes[colon] != ':' && bytes[colon] != ',') {
+        ++colon;
+    }
+    if (colon == length || bytes[colon] != ':') {
+        dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
+        return;
+    }
+    dos_scratch_work_t work = {
+        .length = length,
+        .names = 1,
+        .track = directory_track(model),
+        .sector = DOS_DIRECTORY_FIRST_SECTOR,
+        .pending = true,
+    };
+    // Keep private command storage: dispatch may clear the input buffer
+    // before scratch_work resumes matching names from these saved offsets.
+    memcpy(work.command, bytes, sizeof(work.command));
+    work.starts[0] = colon + 1u;
+    // PARSE's pattern flag includes the command prefix preceding the colon.
+    unsigned int name = 0;
+    for (unsigned int position = 0; position < length; ++position) {
+        const uint8_t byte = bytes[position];
+        if (byte == '*' || byte == '?') {
+            work.patterns |= 1u << name;
+        }
+        if (position <= colon) {
+            continue;
+        }
+        if (byte == '=') {
+            // FS1SET consumes only the first type character. Unknown types
+            // disable filtering, while TAGCMD rejects a patterned/grouped FS2.
+            for (unsigned int tail = position + 1u; tail < length && bytes[tail] != 0x8d; ++tail) {
+                if (bytes[tail] == ',' || bytes[tail] == '*' || bytes[tail] == '?') {
+                    dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+                    return;
+                }
+            }
+            const char* const types = "DSPUR";
+            const char* const type = bytes[position + 1u] == 0 ? NULL : strchr(types, bytes[position + 1u]);
+            work.type = type == NULL ? 0 : (uint8_t)(type - types);
+            break;
+        }
+        if (byte == ',') {
+            // PARSE's MXFILS bound retains five starts, then stops scanning.
+            work.starts[work.names++] = position + 1u;
+            if (++name == DOS_FILENAME_COUNT - 1u) {
+                break;
+            }
+        }
+    }
+    // ALLDRS carries each resolved drive into the next pattern. A missing
+    // group prefix keeps the default flag so LOOKUP can match on a peer.
+    const uint8_t selector = bytes[colon - 1u];
+    uint8_t drive = selector == '0' || selector == '1' ? selector - '0' : unit->last_drive;
+    unsigned int mask = 0;
+    for (unsigned int pattern = 0; pattern < work.names; ++pattern) {
+        unsigned int start = work.starts[pattern];
+        bool omitted = false;
+        if (pattern != 0) {
+            if (start + 1u < length && bytes[start + 1u] == ':') {
+                if (bytes[start] == '0' || bytes[start] == '1') {
+                    drive = bytes[start] - '0';
+                }
+                start += 2u;
+            } else if (bytes[start] == ':') {
+                ++start;
+            } else {
+                omitted = true;
+                work.defaults |= 1u << pattern;
+            }
+        }
+        if (start >= sizeof(work.command)) {
+            // SETDRV can advance past a retained EOF colon. Native RAM
+            // beyond this saved region is not modeled as adjacent C state.
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        work.starts[pattern] = start;
+        work.drives[pattern] = drive;
+        mask |= 1u << (drive + (omitted ? 2u : 0u));
+    }
+    // SCHTBL encodes the optimal start drive and zero, one, or two toggles.
+    work.drive = mask < 4u    ? (mask == 3u ? work.drives[0] : mask - 1u)
+                 : mask < 8u  ? 0
+                 : mask < 12u ? 1
+                              : work.drives[0];
+    work.scans = mask < 3u ? 0 : mask < 12u ? 1 : 2;
+    unit->selected_drive = work.drive;
+
+    // Host media identities bind deferred traversal to these image instances.
+    // No disk sectors are read while choosing the initial available drive.
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        work.media[slot] = (dos_media_ref_t){.unit = index, .slot = slot};
+        dos_media_reference(media, index, slot, &work.media[slot]);
+    }
+    if (work.media[work.drive].identity == 0) {
+        // DOS 2.7 OPTSCH omits an absent peer during a multi-drive search.
+        if (work.scans != 0 && work.media[work.drive ^ 1u].identity != 0) {
+            work.drive ^= 1u;
+            work.scans = 0;
+            unit->selected_drive = work.drive;
+        } else {
+            dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+            return;
+        }
+    }
+
+    if (work.scans != 0 && work.media[work.drive ^ 1u].identity == 0) {
+        // DOS 2.7 OS50 reduces DRVCNT for an inactive peer. Missing 4040
+        // bindings use the same host policy as the absent starting drive.
+        work.scans = 0;
+    }
+
+    // As with RENAME, probe logical capacity without publishing a channel,
+    // then reserve two shared pages for directory and chain traversal.
+    unsigned int internal = 0;
+    while (internal < DOS_FILE_CHANNEL_COUNT &&
+           (unit->channels[internal].allocated || unit->directory_internal == internal + 1u)) {
+        ++internal;
+    }
+    work.buffers[0] = get_buffer(unit);
+    work.buffers[1] = get_buffer(unit);
+    if (internal == DOS_FILE_CHANNEL_COUNT || work.buffers[0] == DOS_UNUSED || work.buffers[1] == DOS_UNUSED) {
+        // Undo partial reservations before reporting NO CHANNEL.
+        for (unsigned int buffer = 0; buffer < count_of(work.buffers); ++buffer) {
+            if (work.buffers[buffer] != DOS_UNUSED) {
+                unit->buffer_use &= (uint16_t)~(1u << work.buffers[buffer]);
+            }
+        }
+        dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        return;
+    }
+    // The worker, not this setup path, publishes the FILES SCRATCHED count.
+    unit->scratch = work;
+    unit->command = DOS_COMMAND_SCRATCH;
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+}
+
+// Retire a successfully reserved rename job without changing its final status.
+static void rename_finish(dos_unit_t* const unit) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // FREICH releases internal read/write channels through FRECHN. This host
+    // helper has no direct ROM entry: rename_start reserves scratch pages
+    // without publishing an internal channel, so release only those page bits.
+    dos_rename_work_t* const work = &unit->rename;
+    for (unsigned int buffer = 0; buffer < count_of(work->scratch); ++buffer) {
+        unit->buffer_use &= (uint16_t)~(1u << work->scratch[buffer]);
+    }
+
+    // Stop cooperative execution on success or error, retaining peer owners.
+    work->pending = false;
+    unit->command = DOS_COMMAND_IDLE;
+}
+
+// Search both rename names cooperatively, then update the source entry in place.
+// Preserve source-before-collision errors and leave file payloads untouched.
+static void rename_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
+    //
+    // RENAME performs LOOKUP for both names, then CHKIO calls CHKIN before
+    // testing destination existence. RDAB/TRNAME/WRTOUT rename the source
+    // directory entry, even when differing prefixes require collision checks
+    // on both disks. C retains scan/commit state between scheduler calls.
+    dos_rename_work_t* const work = &unit->rename;
+    const uint8_t drive = work->source_drive ^ work->tried_peer;
+    const dos_media_ref_t reference = work->media[drive];
+    const dos_model_t model = media->units[reference.unit].model;
+    uint8_t* const bytes = unit->buffers[work->scratch[0]].bytes;
+    unit->selected_drive = drive;
+    if (work->commit) {
+        const dos_media_ref_t source = work->media[work->source_drive];
+        unit->selected_drive = work->source_drive;
+        // A failed retained publication must keep one canonical name. A
+        // partial rename cannot safely give that intent another visible alias.
+        for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+            const dos_channel_t* const owner = &unit->channels[index];
+            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->media.unit == source.unit &&
+                owner->media.slot == source.slot && owner->media.identity == source.identity &&
+                owner->directory_track == work->source_track && owner->directory_sector == work->source_sector &&
+                owner->directory_entry == work->source_entry) {
+                dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->source_track, work->source_sector);
+                rename_finish(unit);
+                return;
+            }
+        }
+        // Reread at commit so unrelated directory edits cannot be rolled back.
+        if (storage_error(unit, media, source,
+                          read_sector(unit, media, source, work->source_track, work->source_sector, bytes), false,
+                          work->source_track, work->source_sector)) {
+            uint8_t* const name = bytes + work->source_entry + DOS_DIRECTORY_NAME_OFFSET;
+            // TRNAME replaces the bounded, padded name, preserving normal
+            // entry metadata regardless of its closed or locked state.
+            memcpy(name, work->names[DOS_RENAME_TARGET], DISKIMAGE_FILENAME_SIZE);
+            if (work->empty_target) {
+                // TRCMBF copies '=' even at a zero-length limit, then TRNAME
+                // pads sixteen bytes, spilling into the next entry field.
+                name[0] = '=';
+                name[DISKIMAGE_FILENAME_SIZE] = DISKIMAGE_FILENAME_PADDING;
+            }
+            if (write_sector(unit, media, source, work->source_track, work->source_sector, bytes)) {
+                for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+                    dos_channel_t* const channel = &unit->channels[index];
+                    if (channel->allocated && channel->access == DOS_ACCESS_WRITE &&
+                        channel->media.identity == source.identity && channel->media.slot == source.slot &&
+                        channel->directory_track == work->source_track &&
+                        channel->directory_sector == work->source_sector &&
+                        channel->directory_entry == work->source_entry) {
+                        // C writers retain a name for retryable publication.
+                        // Keep a later CLOSE from undoing a native rename.
+                        memcpy(channel->pattern, name, sizeof(channel->pattern));
+                    }
+                }
+                // Host flush is separate from native WRTOUT/WATJOB. A flush
+                // failure reports an error without undoing the directory write.
+                if (storage_error(unit, media, source, dos_media_flush_unit(media, source.unit), true, 0, 0)) {
+                    command_end(unit, model);
+                }
+            }
+        }
+        rename_finish(unit);
+        return;
+    }
+    // Host corruption bound: a directory cycle cannot keep the job alive
+    // indefinitely. Media reads also validate the captured image identity.
+    const unsigned int limit = media->units[reference.unit].slots[drive].io.image.size / DISKIMAGE_SECTOR_SIZE;
+    if (work->visited++ >= limit) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->track, work->sector);
+        rename_finish(unit);
+        return;
+    }
+    if (!storage_error(unit, media, reference, read_sector(unit, media, reference, work->track, work->sector, bytes),
+                       false, work->track, work->sector)) {
+        rename_finish(unit);
+        return;
+    }
+    // LOOKUP/COMPAR retain first matches. Only the source disk can supply the
+    // source entry, while a target collision may be found on either disk.
+    for (unsigned int offset = 0; offset < DISKIMAGE_SECTOR_SIZE; offset += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
+        const uint8_t* const entry = bytes + offset;
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0 ||
+            (entry[DOS_DIRECTORY_TRACK_OFFSET] & (model == DOS_MODEL_4040 ? 0x7fu : 0xffu)) == 0) {
+            continue;
+        }
+        if (drive == work->source_drive && !(work->found & DOS_RENAME_SOURCE_FOUND) &&
+            name_matches(work->names[DOS_RENAME_SOURCE], work->name_lengths[DOS_RENAME_SOURCE],
+                         entry + DOS_DIRECTORY_NAME_OFFSET)) {
+            work->found |= DOS_RENAME_SOURCE_FOUND;
+            work->source_track = work->track;
+            work->source_sector = work->sector;
+            work->source_entry = (uint8_t)offset;
+        }
+        if (!(work->found & DOS_RENAME_TARGET_FOUND) &&
+            name_matches(work->names[DOS_RENAME_TARGET], work->name_lengths[DOS_RENAME_TARGET],
+                         entry + DOS_DIRECTORY_NAME_OFFSET)) {
+            work->found |= DOS_RENAME_TARGET_FOUND;
+        }
+        if (work->found == DOS_RENAME_ALL_FOUND) {
+            break;
+        }
+    }
+    // Follow one directory-sector link per pass before considering the peer.
+    if (work->found != DOS_RENAME_ALL_FOUND && bytes[0] != 0) {
+        work->track = bytes[0];
+        work->sector = bytes[1];
+        return;
+    }
+    if (work->found != DOS_RENAME_ALL_FOUND && work->both_drives && !work->tried_peer &&
+        work->media[drive ^ 1u].identity != 0) {
+        // Preserve earlier matches across the optional second-disk scan.
+        work->tried_peer = true;
+        work->track = directory_track(model);
+        work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+        work->visited = 0;
+        return;
+    }
+    // CHKIN's missing source wins over CHKIO's collision, including when both
+    // conditions hold. Renaming a file to itself is an existing-target error.
+    if (!(work->found & DOS_RENAME_SOURCE_FOUND)) {
+        dos_status(unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
+    } else if (work->found & DOS_RENAME_TARGET_FOUND) {
+        dos_status(unit, model, DOS_STATUS_FILE_EXISTS, 0, 0);
+    } else if (work->name_conflict) {
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+    } else {
+        work->commit = true;
+        return;
+    }
+    rename_finish(unit);
+}
+
+// Retire SCRATCH's reserved pages and scheduled work without replacing status.
+static void scratch_finish(dos_unit_t* const unit) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst4
+    //
+    // FREICH releases native internal channels. This host helper has no
+    // direct ROM entry: the cooperative scratch job owns two page reservations
+    // rather than published internal channels, and must leave peer pages alone.
+    for (unsigned int buffer = 0; buffer < count_of(unit->scratch.buffers); ++buffer) {
+        unit->buffer_use &= (uint16_t)~(1u << unit->scratch.buffers[buffer]);
+    }
+
+    // Cleanup is shared by successful and failed jobs, without a new status.
+    unit->scratch.pending = false;
+    unit->command = DOS_COMMAND_IDLE;
+}
+
+// TSTCHN protects an entry by drive and directory coordinates, not its name.
+static bool scratch_active(const dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                           const uint8_t sector, const uint8_t entry) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tstflg
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tstflg
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
+    //
+    // TSTCHN compares drive and packed DIRENT (4040), or DSEC/DIND (DOS 2.7),
+    // returning carry clear for an active entry. C returns true for that case.
+    // Track and host media generation additionally qualify the stored location.
+    // A listing's search cursor is not OPREAD's saved file-entry binding.
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        const dos_channel_t* const channel = &unit->channels[index];
+        if (channel->allocated && channel->directory == DOS_DIRECTORY_NONE &&
+            channel->media.identity == reference.identity && channel->media.slot == reference.slot &&
+            channel->directory_track == track && channel->directory_sector == sector &&
+            channel->directory_entry == entry) {
+            return true;
+        }
+    }
+
+    // No allocated owner matches: the caller may continue its scratch checks.
+    return false;
+}
+
+// SCRTCH/FFRE remove one entry, then DELFIL/FRETS release its chains before resuming.
+static void scratch_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/scrtch
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/scrtch
+    // Lookup re-entry rereads the directory after DELFIL reuses its buffers.
+    dos_scratch_work_t* const work = &unit->scratch;
+    const dos_media_ref_t reference = work->media[work->drive];
+    const dos_model_t model = media->units[reference.unit].model;
+    const unsigned int limit = media->units[reference.unit].slots[reference.slot].io.image.size / DISKIMAGE_SECTOR_SIZE;
+    unit->selected_drive = work->drive;
+    uint8_t* const bytes = unit->buffers[work->buffers[0]].bytes;
+    if (work->phase == DOS_SCRATCH_CHAIN) {
+        unsigned int sectors;
+        // FRETS precedes the read, so a failed read may leave a dirty BAM.
+        if (work->chain_visited++ >= limit) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->chain_track, work->chain_sector);
+        } else if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type,
+                                            work->chain_track, &sectors) ||
+                   work->chain_sector >= sectors) {
+            // Both SETJOB paths report BADTS ($66). Check before any
+            // unchecked native BAM indexing would touch host memory.
+            dos_status(unit, model, DOS_STATUS_ILLEGAL_TRACK_SECTOR, work->chain_track, work->chain_sector);
+        } else if (mark_sector(unit, media, reference, work->chain_track, work->chain_sector, true)) {
+            if (storage_error(unit, media, reference,
+                              read_sector(unit, media, reference, work->chain_track, work->chain_sector, bytes), false,
+                              work->chain_track, work->chain_sector)) {
+                work->chain_track = bytes[0];
+                work->chain_sector = bytes[1];
+                if (work->chain_track == 0) {
+                    work->phase = DOS_SCRATCH_BAM;
+                }
+                return;
+            }
+        } else if (unit->status_code == DOS_STATUS_OK) {
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, work->chain_track, work->chain_sector);
+        }
+        scratch_finish(unit);
+        return;
+    }
+    if (work->phase == DOS_SCRATCH_BAM) {
+        if (!flush_bam(unit, media, &unit->bam[work->drive])) {
+            scratch_finish(unit);
+            return;
+        }
+        if (work->data_pending) {
+            work->chain_track = work->next_chain_track;
+            work->chain_sector = work->next_chain_sector;
+            work->next_chain_track = 0;
+            work->data_pending = false;
+            work->chain_visited = 0;
+            work->phase = DOS_SCRATCH_CHAIN;
+        } else {
+            ++work->count;
+            work->phase = DOS_SCRATCH_SEARCH;
+        }
+        return;
+    }
+    const bool all_found = work->patterns == 0 && work->matched == (1u << work->names) - 1u;
+    if (work->track == 0 || all_found) {
+        if (!all_found && work->scans != 0 && work->media[work->drive ^ 1u].identity != 0) {
+            --work->scans;
+            work->drive ^= 1u;
+            work->track = directory_track(model);
+            work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+            work->entry = 0;
+            work->visited = 0;
+            return;
+        }
+        // Unit flush resolves current bindings, unlike sector I/O. Reject an
+        // old pair generation even when no further sector access is needed.
+        dos_media_ref_t current = {0};
+        if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+            current.identity != reference.identity) {
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+        } else if (storage_error(unit, media, reference, dos_media_flush_unit(media, reference.unit), true, 0, 0)) {
+            dos_status(unit, model, DOS_STATUS_FILES_SCRATCHED, work->count, 0);
+            unit->last_drive = unit->selected_drive;
+        }
+        scratch_finish(unit);
+        return;
+    }
+    if (work->entry == 0 && work->visited++ >= limit) {
+        dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->track, work->sector);
+        scratch_finish(unit);
+        return;
+    }
+    if (!storage_error(unit, media, reference, read_sector(unit, media, reference, work->track, work->sector, bytes),
+                       false, work->track, work->sector)) {
+        scratch_finish(unit);
+        return;
+    }
+    for (; work->entry < DISKIMAGE_SECTOR_SIZE / DISKIMAGE_DIRECTORY_ENTRY_SIZE; ++work->entry) {
+        const unsigned int offset = work->entry * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        uint8_t* const entry = bytes + offset;
+        const uint8_t type = entry[DOS_DIRECTORY_TYPE_OFFSET];
+        if (type == 0) {
+            continue;
+        }
+        bool matched = false;
+        // COMPAR considers later patterns first and resolves exact names once,
+        // even when TSTCHN, the lock bit, or a type restriction then skips them.
+        for (unsigned int pattern = work->names; pattern-- != 0;) {
+            const uint8_t bit = 1u << pattern;
+            if ((work->matched & bit) && !(work->patterns & bit)) {
+                continue;
+            }
+            if (work->drives[pattern] != work->drive && (!(work->defaults & bit) || work->scans == 2)) {
+                continue;
+            }
+            uint8_t name[DISKIMAGE_FILENAME_SIZE];
+            const uint8_t name_length = command_name(work->command, work->length, work->starts[pattern], name);
+            if (name_matches(name, name_length, entry + DOS_DIRECTORY_NAME_OFFSET)) {
+                work->matched |= bit;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched || (work->type != 0 && work->type != (type & DOS_FILE_TYPE_MASK)) ||
+            (type & DOS_FILE_LOCKED_MASK) || scratch_active(unit, reference, work->track, work->sector, offset)) {
+            continue;
+        }
+        entry[DOS_DIRECTORY_TYPE_OFFSET] = 0;
+        if (!write_sector(unit, media, reference, work->track, work->sector, bytes)) {
+            scratch_finish(unit);
+            return;
+        }
+        const uint8_t data_track = type & DOS_FILE_CLOSED_MASK
+                                       ? entry[DOS_DIRECTORY_TRACK_OFFSET] & (model == DOS_MODEL_4040 ? 0x7fu : 0xffu)
+                                       : 0;
+        // SC15 completes the side chain's DELFIL/MAPOUT before SC17 tries
+        // a closed entry's data start, including an invalid track zero.
+        work->data_pending = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 && (type & DOS_FILE_CLOSED_MASK) != 0;
+        work->chain_track = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? entry[DOS_DIRECTORY_SIDE_TRACK] : data_track;
+        work->chain_sector = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? entry[DOS_DIRECTORY_SIDE_SECTOR]
+                                                                  : entry[DOS_DIRECTORY_SECTOR_OFFSET];
+        work->next_chain_track = entry[DOS_DIRECTORY_SIDE_TRACK] != 0 ? data_track : 0;
+        work->next_chain_sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
+        work->chain_visited = 0;
+        work->phase =
+            work->chain_track != 0 || (type & DOS_FILE_CLOSED_MASK) != 0 ? DOS_SCRATCH_CHAIN : DOS_SCRATCH_SEARCH;
+        ++work->entry;
+        if (work->phase == DOS_SCRATCH_SEARCH) {
+            ++work->count;
+        }
+        return;
+    }
+    work->track = bytes[0];
+    work->sector = bytes[1];
+    work->entry = 0;
+}
+
+// Advance scheduled initialization, abandoning each selected disk's channels
+// without CLOSE and reloading metadata through the captured media references.
+static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+    //
+    // INITDR calls CLDCHN/FRECHN, not writable CLOSE. 4040 then reads its
+    // single BAM, while DOS 2.7 reads the directory header and NF05/NF10
+    // sums free counts through SETMAP. C schedules these reads cooperatively,
+    // without emulating physical seek/trial jobs or controller disk-ID state.
+    dos_initialize_work_t* const work = &unit->initialize;
+
+    // The caller supplies the slot mask and first-drive order. Finish that
+    // disk before its peer, retaining progress across scheduler calls.
+    const uint8_t drive = (work->slots & (1u << work->first_drive)) ? work->first_drive : work->first_drive ^ 1u;
+    const dos_media_ref_t reference = work->media[drive];
+    const dos_model_t model = media->units[reference.unit].model;
+    dos_bam_t* const bam = &unit->bam[drive];
+    unit->selected_drive = drive;
+    if (!work->started) {
+        // CLDCHN selects the active page's LSTJOB drive, preserving peer owners.
+        // Abandoned writers get no final links, closed entry, or CLOSE BAM flush.
+        free_drive_channels(unit, drive);
+        // Discard dirty cached allocation state instead of persisting it.
+        // The free-block total stays invalid until every map range is counted.
+        *bam = (dos_bam_t){0};
+        unit->free_blocks[drive] = 0;
+        unit->free_blocks_valid[drive] = false;
+        work->started = true;
+        work->next_track = 0;
+    }
+    if (reference.identity == 0) {
+        // Retain the approved absent-image policy, not physical seek errors.
+        dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+        work->pending = false;
+        return;
+    }
+    if (work->next_track == 0) {
+        // Sector 0 is the BAM itself on 4040, but only the directory header on
+        // 8050/8250. Do not expose that header as a resident allocation-map part.
+        const uint8_t track = directory_track(model);
+        if (!storage_error(unit, media, reference, read_sector(unit, media, reference, track, 0, bam->buffer.bytes),
+                           false, track, 0)) {
+            work->pending = false;
+            return;
+        }
+        bam->media = reference;
+        bam->buffer.track = track;
+        bam->buffer.sector = 0;
+        bam->buffer.resident = model == DOS_MODEL_4040;
+        work->next_track = 1;
+        if (model != DOS_MODEL_4040) {
+            return;
+        }
+    }
+    const unsigned int tracks = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                          : DISKIMAGE_D82_TRACK_COUNT;
+    // Sum one BAM range per pass. Loading a later linked part is bounded by
+    // the model's four-part limit, never by an arbitrary directory chain.
+    const uint8_t* entry = bam_entry(unit, media, reference, (uint8_t)work->next_track);
+    if (entry == NULL) {
+        work->pending = false;
+        return;
+    }
+    const unsigned int high = model == DOS_MODEL_4040 ? tracks + 1u : bam->buffer.bytes[5];
+    const unsigned int stride = model == DOS_MODEL_4040 ? 4u : 5u;
+    // NF10 excludes the entire directory track. C also caches this sum for
+    // 4040, whose INITDR does not itself perform DOS 2.7's NF05 calculation.
+    while (work->next_track < high && work->next_track <= tracks) {
+        if (work->next_track != directory_track(model)) {
+            unit->free_blocks[drive] += entry[0];
+        }
+        ++work->next_track;
+        entry += stride;
+    }
+    if (work->next_track <= tracks) {
+        return;
+    }
+
+    // Commit this disk's total only on completion. DOS 2.7 leaves its last
+    // BAM part resident after the ascending SETMAP scan, as native NF10 does.
+    unit->free_blocks_valid[drive] = true;
+    work->slots &= (uint8_t)~(1u << drive);
+    work->started = false;
+    if (work->slots == 0) {
+        work->pending = false;
+        work->succeeded = true;
+        unit->selected_drive = work->first_drive;
+        if (unit->command == DOS_COMMAND_IDLE) {
+            // VALIDATE owns its eventual success/recovery status. An ordinary
+            // initialization publishes OK only after all requested disks finish.
+            command_end(unit, model);
+        }
+    }
+}
+
+// Release VALIDATE's reader and scratch reservations, then retire its scheduled work.
+// Preserve the current status and leave unrelated channel allocations intact.
+static void validate_finish(dos_unit_t* const unit) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
+    //
+    // MRKBAM/VMKBAM release their internal reader after a chain, and command
+    // termination/error cleanup frees internal channels. This host helper has
+    // no direct ROM entry: it retires the cooperative job's bounded resources
+    // on either outcome without publishing a new completion status.
+    dos_validate_work_t* const work = &unit->validate;
+
+    // Release the reader's owned buffers only if allocation actually succeeded.
+    if (work->reader != DOS_UNUSED && unit->channels[work->reader].allocated) {
+        free_channel(unit, work->reader);
+    }
+
+    // Return only scratch pages recorded by this job, not the whole pool.
+    unit->buffer_use &= (uint16_t)~work->owned;
+
+    // Stop any delegated initialization and return command scheduling to idle.
+    unit->initialize.pending = false;
+    unit->command = DOS_COMMAND_IDLE;
+}
+
+// Save VALIDATE's failure and schedule reinitialization of its selected disk.
+// validate_work restores the saved status only after successful recovery.
+static void validate_recover(dos_unit_t* const unit, const dos_model_t model, const uint8_t track,
+                             const uint8_t sector) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
+    //
+    // ERROR (4040) and JERROR/ERROR1 (DOS 2.7) special-case CMDNUM=VAL:
+    // format the controller error, call INITDR, then enter CMDER3 cleanup.
+    // C splits recovery across scheduler calls and also uses this path for
+    // host I/O/corruption failures.
+    dos_validate_work_t* const work = &unit->validate;
+
+    // Retain the original status and supplied coordinates across INITDR work.
+    work->error = unit->status_code;
+    work->error_track = track;
+    work->error_sector = sector;
+    work->phase = DOS_VALIDATE_RECOVER;
+
+    // Reinitialize just the failed disk using its captured media identity.
+    // Keep VALIDATE's resources until validate_work observes recovery completion.
+    unit->initialize = (dos_initialize_work_t){
+        .first_drive = work->media.slot,
+        .slots = 1u << work->media.slot,
+        .pending = true,
+    };
+    unit->initialize.media[work->media.slot] = work->media;
+
+    // OK is the cooperative initialization's working status, not successful
+    // VALIDATE completion. A recovery failure keeps its own error instead.
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+}
+
+// Return a track's count/bitmap record in VALIDATE's rebuilt allocation map.
+// Require a valid model track and initialized, reserved map storage.
+static uint8_t* validate_entry(dos_unit_t* const unit, const dos_model_t model, const uint8_t track) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets
+    //
+    // 4040 FREUSE indexes four-byte track records in the drive's BAM.
+    // DOS 2.7 VUSED selects a VBAMS page and MBAM computes its five-byte
+    // record offset. C derives the rebuilt page directly from the track.
+    if (model == DOS_MODEL_4040) {
+        // The single 4040 BAM is rebuilt in its normal per-drive cache.
+        return unit->bam[unit->validate.media.slot].buffer.bytes + track * 4u;
+    }
+
+    // DOS 2.7 reserves pages 0..3 for rebuilt parts, independent of the
+    // ordinary one-part cache. Skip the six-byte header within each page.
+    const unsigned int part = (track - 1u) / DOS_BAM_TRACKS_PER_PART;
+    return unit->buffers[part].bytes + 6u + ((track - 1u) % DOS_BAM_TRACKS_PER_PART) * 5u;
+}
+
+// Mark one sector used in VALIDATE's rebuilt map and adjust its free counts.
+// Accept duplicate marks on 4040, but report NO BLOCK for them on DOS 2.7.
+static bool validate_used(dos_unit_t* const unit, const dos_media_bank_t* const media, const uint8_t track,
+                          const uint8_t sector) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
+    //
+    // MRKBAM calls USEDTS, whose already-used branch makes no change.
+    // VMKBAM/VUSED instead enters USDERR with NOBLK for duplicate ownership.
+    // A successful first claim clears the bit and decrements its track count.
+    const dos_media_ref_t reference = unit->validate.media;
+    const dos_model_t model = media->units[reference.unit].model;
+    unsigned int sectors;
+    if (!diskimage_track_sectors(media->units[reference.unit].slots[reference.slot].io.image.type, track, &sectors) ||
+        sector >= sectors) {
+        // VMKBAM/TSCHK and 4040's later SETJOB report BADTS ($66).
+        // Reject geometry before unchecked native BAM indexing.
+        dos_status(unit, model, DOS_STATUS_ILLEGAL_TRACK_SECTOR, track, sector);
+        return false;
+    }
+    // Inspect rebuilt state rather than mutating the persisted map's cache.
+    uint8_t* const entry = validate_entry(unit, model, track);
+    const uint8_t mask = 1u << (sector % 8u);
+    if (!(entry[1u + sector / 8u] & mask)) {
+        if (model != DOS_MODEL_4040) {
+            dos_status(unit, model, DOS_STATUS_NO_BLOCK, track, sector);
+            return false;
+        }
+        return true;
+    }
+    // Change counts only for a newly claimed sector. Keep directory-track
+    // allocation out of the free-block total, as DOS 2.7 VUSED does.
+    // C also maintains that total for 4040 instead of resumming it for NUMFRE.
+    entry[1u + sector / 8u] &= (uint8_t)~mask;
+    --entry[0];
+    if (track != directory_track(model)) {
+        --unit->free_blocks[reference.slot];
+    }
+    return true;
+}
+
+// Run one cooperative VALIDATE step, rebuilding maps from closed file chains.
+// Directory deletions and completed map writes are not rolled back on failure.
+static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+    //
+    // VALDAT initializes, builds free maps, scans entries at VD25/VD15, then
+    // marks the directory chain at VD10 before MO10 (4040) or WTMAPS (DOS 2.7).
+    // C splits this synchronous command into bounded scheduler steps, retaining
+    // one reader across chains instead of opening/releasing it for each chain.
+    dos_validate_work_t* const work = &unit->validate;
+    const dos_media_ref_t reference = work->media;
+    const dos_model_t model = media->units[reference.unit].model;
+    const diskimage_t* const image = &media->units[reference.unit].slots[reference.slot].io.image;
+    const unsigned int tracks = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                          : DISKIMAGE_D82_TRACK_COUNT;
+    dos_bam_t* const bam = &unit->bam[reference.slot];
+    unit->selected_drive = reference.slot;
+
+    // Host identity guard: never continue an old traversal on replacement media.
+    // Initialization/recovery perform their own captured-reference checks.
+    dos_media_ref_t current = {0};
+    if (work->phase != DOS_VALIDATE_INITIALIZE && work->phase != DOS_VALIDATE_RECOVER &&
+        (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+         current.identity != reference.identity)) {
+        dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, 0);
+        if (bam->media.identity == reference.identity) {
+            *bam = (dos_bam_t){0};
+        }
+        unit->free_blocks_valid[reference.slot] = false;
+        validate_finish(unit);
+        return;
+    }
+    if (work->phase == DOS_VALIDATE_INITIALIZE || work->phase == DOS_VALIDATE_RECOVER) {
+        // Delegate INITDR until complete. A recovery failure keeps its new
+        // status, while successful recovery restores the saved VALIDATE error.
+        initialize_work(unit, media);
+        if (unit->initialize.pending) {
+            return;
+        }
+        if (!unit->initialize.succeeded) {
+            validate_finish(unit);
+            return;
+        }
+        if (work->phase == DOS_VALIDATE_RECOVER) {
+            dos_status(unit, model, (dos_status_code_t)work->error, work->error_track, work->error_sector);
+            validate_finish(unit);
+            return;
+        }
+        // 4040 NEWMAP reuses its BAM cache. DOS 2.7 VSETB/NEWMPV builds
+        // two (8050) or four (8250) scratch pages in the fixed VBAMS region.
+        work->parts = model == DOS_MODEL_4040 ? 1 : (tracks + DOS_BAM_TRACKS_PER_PART - 1u) / DOS_BAM_TRACKS_PER_PART;
+        if (model != DOS_MODEL_4040) {
+            for (unsigned int part = 0; part < work->parts; ++part) {
+                const uint16_t bit = 1u << part;
+                if (unit->buffer_use & bit) {
+                    // Native VBAMS uses fixed pages 0..3 without protecting peers.
+                    // Do not overwrite a live peer under the host's bounded resource policy.
+                    dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+                    validate_finish(unit);
+                    return;
+                }
+                unit->buffer_use |= bit;
+                work->owned |= bit;
+                unit->buffers[part].resident = false;
+            }
+        }
+        // Keep directory bytes separate from chain reads so yielding during
+        // MRKBAM/VMKBAM traversal does not lose the next entry's scan position.
+        work->reader = allocate_channel(unit, reference, DOS_INTERNAL_READ_SECONDARY, 2);
+        if (work->reader == DOS_UNUSED) {
+            dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+            validate_finish(unit);
+            return;
+        }
+        unit->channels[work->reader].ready = false;
+        unit->free_blocks[reference.slot] = 0;
+        unit->free_blocks_valid[reference.slot] = true;
+        work->phase = DOS_VALIDATE_MAP;
+        return;
+    }
+    if (work->phase == DOS_VALIDATE_MAP) {
+        // NEWMAP preserves the 4040 disk header, replacing its link and records.
+        // DOS 2.7 NEWMPV/BAMOUT builds cleared pages with next-map/directory
+        // links, version 'C', and a half-open track range in header bytes 4/5.
+        uint8_t* const bytes = model == DOS_MODEL_4040 ? bam->buffer.bytes : unit->buffers[work->part].bytes;
+        const unsigned int low = model == DOS_MODEL_4040 ? 1 : work->part * DOS_BAM_TRACKS_PER_PART + 1u;
+        const unsigned int high =
+            model == DOS_MODEL_4040 ? tracks + 1u : MIN(low + DOS_BAM_TRACKS_PER_PART, tracks + 1u);
+        if (model == DOS_MODEL_4040) {
+            bytes[0] = DOS_DIRECTORY_TRACK_4040;
+            bytes[1] = DOS_DIRECTORY_FIRST_SECTOR;
+            bam->dirty = true;
+        } else {
+            memset(bytes, 0, DISKIMAGE_SECTOR_SIZE);
+            bytes[0] = work->part + 1u < work->parts ? DOS_BAM_TRACK_8050 : DOS_DIRECTORY_TRACK_8050;
+            bytes[1] = work->part + 1u < work->parts ? (work->part + 1u) * DOS_BAM_PART_INTERLEAVE
+                                                     : DOS_DIRECTORY_FIRST_SECTOR;
+            bytes[2] = 'C';
+            bytes[4] = low;
+            bytes[5] = high;
+        }
+        // Start every legal sector free. Traversal clears ownership bits later.
+        // Count only non-directory tracks, as DOS 2.7's NDBL/NDBH accounting does.
+        for (unsigned int track = low; track < high; ++track) {
+            unsigned int sectors;
+            vet(diskimage_track_sectors(image->type, track, &sectors), "invalid validate track %u", track);
+            uint8_t* const entry = validate_entry(unit, model, track);
+            memset(entry, 0, model == DOS_MODEL_4040 ? 4u : 5u);
+            entry[0] = sectors;
+            for (unsigned int sector = 0; sector < sectors; ++sector) {
+                entry[1u + sector / 8u] |= (uint8_t)(1u << (sector % 8u));
+            }
+            if (track != directory_track(model)) {
+                unit->free_blocks[reference.slot] += sectors;
+            }
+        }
+        if (++work->part == work->parts) {
+            work->part = 0;
+            work->track = directory_track(model);
+            work->sector = DOS_DIRECTORY_FIRST_SECTOR;
+            work->phase = DOS_VALIDATE_SEARCH;
+        }
+        return;
+    }
+    dos_channel_t* const reader = &unit->channels[work->reader];
+    uint8_t* const bytes = unit->buffers[reader->buffers[work->phase == DOS_VALIDATE_CHAIN ? 1 : 0]].bytes;
+    if (work->phase == DOS_VALIDATE_SEARCH) {
+        if (work->track == 0) {
+            // VD10 starts at directory-track sector 0, following header/BAM
+            // links through the directory sectors, not just marking file data.
+            work->chain_track = directory_track(model);
+            work->chain_sector = 0;
+            work->chain_visited = 0;
+            work->directory_chain = true;
+            work->phase = DOS_VALIDATE_CHAIN;
+            return;
+        }
+        if (work->entry == 0) {
+            // Bound corrupt linked directories by image capacity (host policy),
+            // rather than allowing a cycle to monopolize the cooperative job.
+            if (++work->visited > image->size / DISKIMAGE_SECTOR_SIZE) {
+                dos_status(unit, model, DOS_STATUS_READ_ERROR, work->track, work->sector);
+                validate_recover(unit, model, work->track, work->sector);
+                return;
+            }
+            if (!storage_error(unit, media, reference,
+                               read_sector(unit, media, reference, work->track, work->sector, bytes), false,
+                               work->track, work->sector)) {
+                validate_recover(unit, model, work->track, work->sector);
+                return;
+            }
+        }
+        if (work->entry == DISKIMAGE_SECTOR_SIZE / DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
+            work->track = bytes[0];
+            work->sector = bytes[1];
+            work->entry = 0;
+            return;
+        }
+        // SRCHST/SRRE skip deleted entries. VD25 tests only the closed bit:
+        // locked closed files survive, and their directory counts stay intact.
+        uint8_t* const entry = bytes + work->entry++ * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] == 0) {
+            return;
+        }
+        if (!(entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_CLOSED_MASK)) {
+            // DELDIR removes a splat even when locked. Persist the type-byte
+            // deletion now without traversing or modifying its abandoned data.
+            entry[DOS_DIRECTORY_TYPE_OFFSET] = 0;
+            if (!write_sector(unit, media, reference, work->track, work->sector, bytes)) {
+                validate_recover(unit, model, work->track, work->sector);
+            }
+            return;
+        }
+        work->chain_track = entry[DOS_DIRECTORY_TRACK_OFFSET];
+        work->chain_sector = entry[DOS_DIRECTORY_SECTOR_OFFSET];
+        work->data_pending = entry[DOS_DIRECTORY_SIDE_TRACK] != 0;
+        if (work->data_pending) {
+            // VD15 saves the data start and marks a nonzero side chain first.
+            // This also applies to side-link bytes in otherwise ordinary files.
+            work->next_track = work->chain_track;
+            work->next_sector = work->chain_sector;
+            work->chain_track = entry[DOS_DIRECTORY_SIDE_TRACK];
+            work->chain_sector = entry[DOS_DIRECTORY_SIDE_SECTOR];
+        }
+        work->chain_visited = 0;
+        work->phase = DOS_VALIDATE_CHAIN;
+        return;
+    }
+    if (work->phase == DOS_VALIDATE_CHAIN) {
+        const uint8_t track = work->chain_track, sector = work->chain_sector;
+        // Apply the same host cycle bound to data, side, and directory chains.
+        if (++work->chain_visited > image->size / DISKIMAGE_SECTOR_SIZE) {
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, track, sector);
+            validate_recover(unit, model, track, sector);
+            return;
+        }
+        // MRKBAM/VMKBAM mark the current sector before reading its link.
+        // validate_used preserves 4040 duplicate tolerance versus DOS 2.7 VUSED.
+        if (!validate_used(unit, media, track, sector)) {
+            // NO BLOCK and TSCHK's BADTS are direct command errors, not
+            // controller failures that enter the INITDR recovery path.
+            if (unit->status_code == DOS_STATUS_NO_BLOCK || unit->status_code == DOS_STATUS_ILLEGAL_TRACK_SECTOR) {
+                validate_finish(unit);
+            } else {
+                validate_recover(unit, model, track, sector);
+            }
+            return;
+        }
+        if (!storage_error(unit, media, reference, read_sector(unit, media, reference, track, sector, bytes), false,
+                           track, sector)) {
+            validate_recover(unit, model, track, sector);
+            return;
+        }
+        work->chain_track = bytes[0];
+        work->chain_sector = bytes[1];
+        if (work->chain_track == 0) {
+            // A zero track terminates the chain. Resume saved data after a
+            // side chain, otherwise scan more entries or publish the final maps.
+            if (work->data_pending) {
+                work->chain_track = work->next_track;
+                work->chain_sector = work->next_sector;
+                work->next_track = 0;
+                work->data_pending = false;
+                work->chain_visited = 0;
+            } else {
+                work->phase = work->directory_chain ? DOS_VALIDATE_WRITE : DOS_VALIDATE_SEARCH;
+            }
+        }
+        return;
+    }
+    vet(work->phase == DOS_VALIDATE_WRITE, "invalid validate phase %u", work->phase);
+    // MO10/WTMAPS publish only after traversal succeeds. Write one part per
+    // step, without making this sequence atomic or refreshing DOS 2.7's cache.
+    if (work->part < work->parts) {
+        const uint8_t track = model == DOS_MODEL_4040 ? directory_track(model) : DOS_BAM_TRACK_8050;
+        const uint8_t sector = work->part * DOS_BAM_PART_INTERLEAVE;
+        const uint8_t* const map = model == DOS_MODEL_4040 ? bam->buffer.bytes : unit->buffers[work->part].bytes;
+        if (!write_sector(unit, media, reference, track, sector, map)) {
+            validate_recover(unit, model, track, sector);
+            return;
+        }
+        ++work->part;
+        if (model == DOS_MODEL_4040) {
+            bam->dirty = false;
+        }
+        return;
+    }
+    // Host flush is a separate failure boundary after all map writes. Recovery
+    // reloads persisted metadata, not an undo image of deletions or earlier parts.
+    if (!storage_error(unit, media, reference, dos_media_flush_unit(media, reference.unit), true, 0, 0)) {
+        validate_recover(unit, model, 0, 0);
+        return;
+    }
+    // Release cooperative resources before VALDAT's successful ENDCMD status.
+    validate_finish(unit);
+    command_end(unit, model);
+}
+
+// Dispatch collected metadata commands without taking over transport collection.
+// The caller completes preceding work before submitting another request.
+void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                 const uint8_t* const request, unsigned int length) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/verdir
+    //
+    // CMDSET trims either trailing CR position before LONGLN. PARSXQ dispatches
+    // by the first byte. This host API schedules only metadata workers, not the
+    // native input collector, other command families, or production facade.
+    vet(!dos_work_pending(unit), "native command requires its preceding job to complete");
+    const dos_model_t model = media->units[index].model;
+    if (length > DOS_COMMAND_RECEIVE_CAPACITY) {
+        dos_status(unit, model, DOS_STATUS_COMMAND_TOO_LONG, 0, 0);
+    } else {
+        // Keep unread tail bytes available to native parsers, including a name
+        // starting at logical EOF. The final receive byte lies beyond CLRCB.
+        memmove(unit->command_bytes, request, length);
+        const uint8_t* const bytes = unit->command_bytes;
+        if (length >= 2u) {
+            if (bytes[length - 1u] == '\r') {
+                --length;
+            } else if (bytes[length - 2u] == '\r') {
+                length -= 2u;
+            }
+        }
+        if (length > DOS_COMMAND_LIMIT) {
+            dos_status(unit, model, DOS_STATUS_COMMAND_TOO_LONG, 0, 0);
+        } else if (bytes[0] == 'R') {
+            rename_start(unit, media, index, length);
+        } else if (bytes[0] == 'S') {
+            scratch_start(unit, media, index, length);
+        } else if (bytes[0] == 'V') {
+            // VALDAT uses SIMPRS but initializes only the selected disk.
+            // Capture its identity before any deferred initialization I/O.
+            bool both;
+            const uint8_t drive = initialize_drive(bytes, length, unit->last_drive, &both);
+            dos_media_ref_t reference = {.unit = index, .slot = drive};
+            dos_media_reference(media, index, drive, &reference);
+            unit->validate = (dos_validate_work_t){
+                .media = reference,
+                .reader = DOS_UNUSED,
+                .phase = DOS_VALIDATE_INITIALIZE,
+            };
+            unit->initialize = (dos_initialize_work_t){
+                .first_drive = drive,
+                .slots = 1u << drive,
+                .pending = true,
+            };
+            unit->initialize.media[drive] = reference;
+            unit->selected_drive = drive;
+            unit->command = DOS_COMMAND_VALIDATE;
+            dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+        } else {
+            // Recognized but excluded commands return explicit host policy 30,
+            // not a claimed native result. Preserve each model's command table.
+            const char* const commands = model == DOS_MODEL_4040 ? "IVDMBUPCRSN" : "VIDMBUP&CRSN";
+            const bool known = bytes[0] != 0 && strchr(commands, bytes[0]) != NULL;
+            dos_status(unit, model, known ? DOS_STATUS_SYNTAX : DOS_STATUS_INVALID_COMMAND, 0, 0);
+        }
+    }
+    // Workers retain their own names/patterns before native CLRCB retirement.
+    clear_command(unit);
 }
 
 // Parse OPEN/CKTM parameters, retaining OP60's raw binary record-size byte.
@@ -2022,7 +3325,7 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     unit->open = parsed;
 }
 
-// Service a queued ordinary OPEN or APPEND continuation.
+// Service a queued metadata command, ordinary OPEN or APPEND continuation.
 // Directory lookup yields at an unmatched link, then constructs the matched
 // channel or reports failure. Initial data jobs may also run on a match.
 void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
@@ -2043,9 +3346,22 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // No direct ROM entry for this cooperative dispatcher. Its OPEN path
     // splits FFST/SRCHST/SEARCH and GETRCH/OPNRCH/OPNWCH into retained work.
 
-    // ROM lookup:FFST/SRCHST/SEARCH walk linked directory sectors and COMPAR
-    // saves a match's type and first link. Resume that search from the saved
-    // C job, doing no work when there is no pending OPEN.
+    // The tag owns transient command state, independent of OPEN's pending flag.
+    switch (unit->command) {
+    case DOS_COMMAND_RENAME:
+        rename_work(unit, media);
+        return;
+    case DOS_COMMAND_SCRATCH:
+        scratch_work(unit, media);
+        return;
+    case DOS_COMMAND_VALIDATE:
+        validate_work(unit, media);
+        return;
+    case DOS_COMMAND_IDLE:
+        break;
+    }
+    // ROM lookup:FFST/SRCHST/SEARCH save a match's type and first link.
+    // Resume the retained search only when an ordinary OPEN is pending.
     dos_open_work_t* const work = &unit->open;
     if (!work->pending) {
         return;
@@ -2216,19 +3532,13 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     if (work->access == DOS_ACCESS_WRITE || work->access == DOS_ACCESS_APPEND) {
         const uint8_t* const name = found_track != 0 ? bytes + found_entry + DOS_DIRECTORY_NAME_OFFSET : work->name;
-        for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
-            const dos_channel_t* const owner = &unit->channels[index];
-            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
-                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
-                owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
-                owner->media.identity == reference.identity &&
-                memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
-                // A failed publication still owns its planned namespace entry.
-                unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
-                dos_status(unit, model, DOS_STATUS_WRITE_ERROR, owner->directory_track, owner->directory_sector);
-                clear_command(unit);
-                return;
-            }
+        const dos_channel_t* const owner = unpublished_writer(unit, reference, name, secondary);
+        if (owner != NULL) {
+            // A failed publication still owns its planned namespace entry.
+            unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, owner->directory_track, owner->directory_sector);
+            clear_command(unit);
+            return;
         }
     }
     const uint8_t previous = dos_find_channel(unit, secondary);
@@ -2788,13 +4098,13 @@ void dos_status_get(dos_unit_t* const unit, const dos_model_t model, const unsig
     }
 }
 
-// Expose the retained lookup's scheduling state without advancing it.
+// Expose retained OPEN/metadata scheduling state without advancing any work.
 bool dos_work_pending(const dos_unit_t* const unit) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
     //
-    // Host-only scheduler predicate for the split FFST directory search.
+    // Host-only scheduler predicate for split directory searches and commands.
     // There is no separate ROM entry or controller-job emulation here.
-    return unit->open.pending;
+    return unit->open.pending || unit->command != DOS_COMMAND_IDLE;
 }
