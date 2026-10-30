@@ -188,6 +188,13 @@ void dos_status(dos_unit_t* const unit, const dos_model_t model, const dos_statu
     unit->status_code = code;
 }
 
+// CLRCB retires logical command RAM without changing status or channel ownership.
+static void clear_command(dos_unit_t* const unit) {
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+    memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+}
+
 // Remember the successful command's drive and publish a fresh OK status.
 // Call only after success, not for errors or nonzero completion statuses.
 static void command_end(dos_unit_t* const unit, const dos_model_t model) {
@@ -210,7 +217,7 @@ static void command_end(dos_unit_t* const unit, const dos_model_t model) {
     dos_status(unit, model, DOS_STATUS_OK, 0, 0);
 
     // CLRCB clears CMDLEN bytes, leaving the extra receive byte untouched.
-    memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+    clear_command(unit);
 }
 
 // Retire a failed command without changing its last-successful drive.
@@ -224,7 +231,7 @@ static void command_error(dos_unit_t* const unit, const dos_model_t model, const
     // Keep dos_status itself independent of command retirement: an older
     // reader can report an error while a different OPEN is pending.
     dos_status(unit, model, code, 0, 0);
-    memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+    clear_command(unit);
 
     // DOS 2.7 CMDER3 -> TLERR frees this SA's non-REL owner even with no
     // active bus role. 4040's idle-role path does not. A listing's file_type
@@ -941,6 +948,12 @@ static bool allocate_sector(dos_unit_t* const unit, dos_media_bank_t* const medi
             } else {
                 candidate = directory + distance;
                 if (candidate > tracks) {
+                    if (model != DOS_MODEL_4040) {
+                        // JINTTS/ITS2 reaches MAXTRK through CMDER2, retaining
+                        // the lookup sector instead of CMDERR's zero fields.
+                        dos_status(unit, model, DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR, (uint8_t)candidate, *sector);
+                        return false;
+                    }
                     continue;
                 }
             }
@@ -1222,6 +1235,7 @@ bool dos_finalize(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (unit->open.pending && unit->open.append_channel != 0) {
         free_channel(unit, unit->open.append_channel - 1u);
         unit->open.pending = false;
+        clear_command(unit);
     }
     // Stop on the first failed writer. Its phase and the remaining channels
     // survive for retry rather than being cleared by a partial finalization.
@@ -1229,6 +1243,30 @@ bool dos_finalize(dos_unit_t* const unit, dos_media_bank_t* const media) {
         dos_channel_t* const channel = &unit->channels[index];
         if (channel->allocated && channel->access != DOS_ACCESS_READ && !finish_channel(unit, media, channel)) {
             return false;
+        }
+    }
+    // Allocation work can outlive a DISK FULL-released writer.
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        dos_bam_t* const bam = &unit->bam[slot];
+        if (bam->media.identity != 0) {
+            unit->selected_drive = bam->media.slot;
+            if (!flush_bam(unit, media, bam)) {
+                return false;
+            }
+        }
+    }
+    // A clean or failed-refill cache can still have pending backing-store I/O.
+    for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
+        const dos_media_ref_t reference = unit->bam[slot].media;
+        if (reference.identity != 0) {
+            dos_media_ref_t current;
+            if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+                current.identity != reference.identity) {
+                return storage_error(unit, media, reference, DOS_MEDIA_STALE, true, 0, 0);
+            }
+            if (!storage_error(unit, media, reference, dos_media_flush_unit(media, reference.unit), true, 0, 0)) {
+                return false;
+            }
         }
     }
     return true;
@@ -1300,9 +1338,11 @@ static void append_work(dos_unit_t* const unit, dos_media_bank_t* const media, d
         free_channel(unit, index);
         // Byte 1 holds the last occupied offset, so append starts one byte later.
         work->pending = false;
+        clear_command(unit);
         return;
     }
     work->pending = false;
+    clear_command(unit);
     channel->position = buffer->bytes[1] + 1u;
     if (channel->position < DISKIMAGE_SECTOR_LINK_SIZE) {
         dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, buffer->track, buffer->sector);
@@ -1345,7 +1385,7 @@ static bool open_write(dos_unit_t* const unit, dos_media_bank_t* const media, do
     channel->file_type = work->type != 0 ? work->type : existing ? channel->file_type : DISKIMAGE_FTYPE_SEQ;
     channel->replaced = existing;
     memcpy(channel->pattern, work->name, sizeof(channel->pattern));
-    uint8_t track = 0, sector = 0;
+    uint8_t track = 0, sector = work->last_sector;
     channel->first_track = 0;
     if (!allocate_sector(unit, media, channel->media, &track, &sector, true)) {
         return false;
@@ -1415,6 +1455,7 @@ void dos_put(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
         channel->closing != DOS_CLOSE_DATA || channel->failed) {
         return;
     }
+    unit->selected_drive = channel->media.slot;
     if (!write_byte(unit, media, channel, byte)) {
         channel->failed = true;
         // Native CMDERR releases an ordinary channel on DISK FULL, not host I/O faults.
@@ -1443,6 +1484,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     vet(length <= DOS_COMMAND_LIMIT, "OPEN parser requires bounded command input");
     unsigned int cursor = 0;
     work->replace = length != 0 && input[0] == '@';
+    work->wildcard = false;
     work->default_drive = true;
     unsigned int commas = 0;
     for (unsigned int index = 0; index < length && commas < DOS_FILENAME_COUNT - 1u; ++index) {
@@ -1471,6 +1513,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
         if (byte == 0x8d) {
             return false;
         }
+        work->wildcard |= byte == '*' || byte == '?';
         if (used < DISKIMAGE_FILENAME_SIZE) {
             work->name[used++] = byte;
         }
@@ -1691,6 +1734,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
         }
         free_channel(unit, previous);
     }
+    unit->selected_drive = reference.slot;
     const uint8_t index = allocate_channel(unit, reference, secondary, 2);
     if (index == DOS_UNUSED) {
         command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
@@ -1871,14 +1915,18 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         }
         if (open_directory(unit, media, reference, secondary, &listing)) {
             command_end(unit, model);
+        } else {
+            clear_command(unit);
         }
         return;
     }
     if (last_program) {
         const uint8_t previous = dos_find_channel(unit, secondary);
         if (previous != DOS_UNUSED && !dos_close(unit, media, model, secondary)) {
+            clear_command(unit);
             return;
         }
+        unit->selected_drive = reference.slot;
         const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
         if (channel == DOS_UNUSED) {
             command_error(unit, model, secondary, DOS_STATUS_NO_CHANNEL);
@@ -1950,6 +1998,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (!work->pending) {
         return;
     }
+    // Another channel can report a read error between cooperative work calls.
+    unit->selected_drive = work->media.slot;
     if (work->append_channel != 0) {
         append_work(unit, media, work, true);
         return;
@@ -1957,8 +2007,6 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     const dos_model_t model = media->units[work->media.unit].model;
     const uint8_t secondary = work->secondary, type = work->type;
     const dos_media_ref_t reference = work->media;
-    // Another channel can report a read error between cooperative work calls.
-    unit->selected_drive = reference.slot;
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     bool matched = false;
     uint16_t found_blocks = 0;
@@ -1972,9 +2020,11 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const channel = &unit->channels[index];
         if (channel->allocated && channel->grow_pending && channel->media.identity == reference.identity &&
+            channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
             channel->directory_track == searched_track && channel->directory_sector == searched_sector) {
             dos_status(unit, model, DOS_STATUS_WRITE_ERROR, searched_track, searched_sector);
             work->pending = false;
+            clear_command(unit);
             unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
             return;
         }
@@ -1993,6 +2043,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                     const dos_channel_t* const channel = &unit->channels[index];
                     reserved |= channel->allocated && channel->access != DOS_ACCESS_READ &&
                                 channel->media.identity == reference.identity &&
+                                channel->media.unit == reference.unit && channel->media.slot == reference.slot &&
                                 channel->directory_sector == searched_sector &&
                                 (channel->grow_pending || channel->directory_entry == entry);
                 }
@@ -2064,10 +2115,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM open:OP110/OP115 compare the requested file type and report 64.
     // A zero C type means infer it from the match.
     const uint8_t file_type = found_type & DOS_FILE_TYPE_MASK;
-    bool wildcard = false;
-    for (unsigned int index = 0; index < sizeof(work->name); ++index) {
-        wildcard |= work->name[index] == '*' || work->name[index] == '?';
-    }
+    const bool wildcard = work->wildcard;
     const bool unclosed_write =
         found_track != 0 && !(found_type & DOS_FILE_CLOSED_MASK) && work->access == DOS_ACCESS_WRITE && !wildcard;
     if (found_track != 0) {
@@ -2106,6 +2154,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         bytes[found_entry + DOS_DIRECTORY_TYPE_OFFSET] = DISKIMAGE_FTYPE_DEL;
         if (!write_sector(unit, media, reference, searched_track, searched_sector, bytes)) {
             unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            clear_command(unit);
             return;
         }
         if (work->empty_track == 0) {
@@ -2127,10 +2176,12 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (unit->channels[previous].access != DOS_ACCESS_READ &&
             !finish_channel(unit, media, &unit->channels[previous])) {
             unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+            clear_command(unit);
             return;
         }
         free_channel(unit, previous);
     }
+    unit->selected_drive = reference.slot;
     const uint8_t channel = allocate_channel(unit, reference, secondary, 2);
     if (channel == DOS_UNUSED) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
@@ -2161,6 +2212,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             if (state->first_track == 0 || unit->status_code == DOS_STATUS_DISK_FULL) {
                 free_channel(unit, channel);
             }
+            clear_command(unit);
             return;
         }
         if (secondary < 2) {
@@ -2195,7 +2247,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (work->access == DOS_ACCESS_APPEND) {
         state->access = DOS_ACCESS_APPEND;
         state->ready = false;
-        state->blocks = 0;
+        state->blocks = 1;
         work->append_channel = channel + 1u;
         work->pending = true;
         return;

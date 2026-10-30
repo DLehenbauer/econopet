@@ -145,6 +145,7 @@ typedef struct {
     uint8_t record_size;
     bool record_parameter;
     bool replace;
+    bool wildcard;
     bool default_drive;
     bool first_program;
     bool tried_other;
@@ -195,7 +196,7 @@ bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uin
 // Apply a decoded ordinary PUT byte without treating EOI as file completion.
 void dos_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t byte);
 
-// Finish writable owners without detaching readers or releasing successful writers.
+// Persist writers, unit BAMs and backing stores without releasing successful owners.
 // The caller must quiesce transport and complete pending lookup first.
 bool dos_finalize(dos_unit_t* unit, dos_media_bank_t* media);
 
