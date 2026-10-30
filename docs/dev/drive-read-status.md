@@ -1,11 +1,11 @@
 # DOS read/status foundation
 
-This is the fourth slice of the native-drive replacement series. It builds on
+This records the fourth slice of the native-drive replacement series (#113). It builds on
 the [media/lifecycle foundation](drive-media.md), introduced in #112. It adds
 directly testable read/status code without selecting it in `ieee_drive.c`.
-The existing production engine and flat HDD support remain active. Writers,
-commands, direct channels, REL and the eventual facade cutover belong to later
-slices.
+The existing production engine and flat HDD support remain active. The next
+[ordinary-write foundation](drive-ordinary-writes.md) adds writers on top of
+this layer. Commands, direct channels, REL and facade cutover remain separate.
 
 ## Included behavior
 
@@ -50,10 +50,11 @@ slices.
   between directory sectors. Failed OPEN also releases the failing secondary's
   non-REL ordinary reader on DOS 2.7. The inactive-bus 4040 path retains it.
 
-Writes, append, explicit REL OPEN and direct-channel OPEN are rejected in this
-slice rather than being silently accepted. This temporary extraction boundary
-is not a native-ROM error-policy claim. The formatter includes status spellings
-that later slices can use, but their operations are not enabled.
+As published in #113, this slice rejected writes, append, explicit REL OPEN and
+direct-channel OPEN rather than silently accepting them. The ordinary-write
+foundation enables writes and append. Explicit REL and direct-channel OPEN
+remain rejected. These temporary extraction boundaries are not native-ROM
+error-policy claims.
 
 ## Native targets and evidence
 

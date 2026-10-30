@@ -71,6 +71,16 @@ typedef enum {
     DOS_DIRECTORY_END,
 } dos_directory_phase_t;
 
+typedef enum {
+    DOS_CLOSE_DATA,
+    DOS_CLOSE_DIRECTORY,
+    DOS_CLOSE_OLD_CHAIN,
+    DOS_CLOSE_RECLAIM,
+    DOS_CLOSE_BAM,
+    DOS_CLOSE_FLUSH,
+    DOS_CLOSE_ABORT_OPEN,
+} dos_close_phase_t;
+
 typedef struct {
     dos_media_ref_t media;
     uint16_t traversed;
@@ -87,17 +97,31 @@ typedef struct {
     uint8_t directory_entry;
     uint8_t first_track;
     uint8_t first_sector;
+    uint8_t old_track;
+    uint8_t old_sector;
+    uint8_t next_track;
+    uint8_t next_sector;
+    uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+    uint8_t grow_from_sector;
+    uint8_t closing;
+    uint16_t blocks;
     uint8_t pattern_count;
     uint8_t directory_searches;
     uint8_t line_length;
     bool allocated;
     bool ready;
     bool line_eoi;
+    bool replaced;
+    bool failed;
+    bool directory_dirty;
+    bool directory_published;
+    bool grow_pending;
 } dos_channel_t;
 
 typedef struct {
     dos_buffer_t buffer;
     dos_media_ref_t media;
+    bool dirty;
 } dos_bam_t;
 
 typedef struct {
@@ -115,10 +139,14 @@ typedef struct {
     uint8_t last_track;
     uint8_t last_sector;
     uint8_t empty_track;
+    uint8_t empty_sector;
+    uint8_t empty_entry;
+    uint8_t append_channel;
     uint8_t creation_drive;
     uint8_t record_size;
     bool record_parameter;
     bool replace;
+    bool wildcard;
     bool default_drive;
     bool first_program;
     bool tried_other;
@@ -155,15 +183,23 @@ void dos_reset(dos_unit_t* unit, dos_model_t model);
 bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned int length, uint8_t* drive,
                     dos_open_work_t* work);
 
-// Start an ordinary reader or directory, rejecting unsupported operations.
+// Start an ordinary file or directory, rejecting direct/REL operations.
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
               unsigned int length);
 
 // Resume a pending lookup, yielding between directory sectors.
 void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
 
-// Release one secondary, or all data channels for command secondary 15.
-bool dos_close(dos_unit_t* unit, dos_model_t model, uint8_t secondary);
+// Persist then release a secondary, retaining failed writers for retry.
+// Command secondary 15 closes all data channels in descending order.
+bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t secondary);
+
+// Apply a decoded ordinary PUT byte without treating EOI as file completion.
+void dos_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t byte);
+
+// Persist writers, unit BAMs and backing stores without releasing successful owners.
+// The caller must quiesce transport and complete pending lookup first.
+bool dos_finalize(dos_unit_t* unit, dos_media_bank_t* media);
 
 // Find an allocated secondary or return DOS_UNUSED.
 uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
