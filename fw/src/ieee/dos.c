@@ -1421,7 +1421,10 @@ static bool open_write(dos_unit_t* const unit, dos_media_bank_t* const media, do
     channel->closing = DOS_CLOSE_ABORT_OPEN;
     channel->file_type = work->type != 0 ? work->type : existing ? channel->file_type : DISKIMAGE_FTYPE_SEQ;
     channel->replaced = existing;
-    memcpy(channel->pattern, work->name, sizeof(channel->pattern));
+    memcpy(channel->pattern,
+           existing ? unit->buffers[work->scratch].bytes + channel->directory_entry + DOS_DIRECTORY_NAME_OFFSET
+                    : work->name,
+           sizeof(channel->pattern));
     uint8_t track = 0, sector = work->last_sector;
     channel->first_track = 0;
     if (!allocate_sector(unit, media, channel->media, &track, &sector, true)) {
@@ -1524,8 +1527,18 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     work->wildcard = false;
     work->default_drive = true;
     unsigned int commas = 0;
+    // PRSCLN leaves its low PATFLG count for OP20's second PARSE. A comma
+    // records that field's flag and clears the count, not the earlier flags.
+    bool first_wildcard = false, scanned_wildcard = false;
     for (unsigned int index = 0; index < length && commas < DOS_FILENAME_COUNT - 1u; ++index) {
-        commas += input[index] == ',';
+        scanned_wildcard |= input[index] == '*' || input[index] == '?';
+        if (input[index] == ',') {
+            if (commas == 0) {
+                first_wildcard = scanned_wildcard;
+            }
+            scanned_wildcard = false;
+            ++commas;
+        }
         if (input[index] == ':') {
             if (commas != 0) {
                 return false;
@@ -1538,6 +1551,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
             break;
         }
     }
+    work->wildcard = first_wildcard || scanned_wildcard;
 
     // ROM lookup:COMPAR compares up to 16 explicitly supplied bytes, including
     // literal $A0. Preserve that length independently of the padded storage,
@@ -1561,6 +1575,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], const uns
     work->name_length = (uint8_t)used;
     // PARSE still finds comma-separated fields after an ignored equals suffix.
     while (cursor < length && input[cursor] != ',' && input[cursor] != 0x8d) {
+        work->wildcard |= input[cursor] == '*' || input[cursor] == '?';
         ++cursor;
     }
 
@@ -2198,6 +2213,23 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
         command_error(unit, model, secondary, error);
         return;
+    }
+    if (work->access == DOS_ACCESS_WRITE || work->access == DOS_ACCESS_APPEND) {
+        const uint8_t* const name = found_track != 0 ? bytes + found_entry + DOS_DIRECTORY_NAME_OFFSET : work->name;
+        for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+            const dos_channel_t* const owner = &unit->channels[index];
+            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
+                owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
+                owner->media.identity == reference.identity &&
+                memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
+                // A failed publication still owns its planned namespace entry.
+                unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+                dos_status(unit, model, DOS_STATUS_WRITE_ERROR, owner->directory_track, owner->directory_sector);
+                clear_command(unit);
+                return;
+            }
+        }
     }
     const uint8_t previous = dos_find_channel(unit, secondary);
     if (previous != DOS_UNUSED && unit->channels[previous].access != DOS_ACCESS_READ) {

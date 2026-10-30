@@ -3099,6 +3099,113 @@ START_TEST(test_append_rebind_invalidates_free_total) {
 }
 END_TEST
 
+// Failed unpublished writers reserve their actual filename, not only a slot.
+START_TEST(test_unpublished_writer_reserves_filename) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const bool replace = (unsigned int)_i % 4u >= 2u, reverse = (unsigned int)_i % 2u != 0;
+    image_t image, peer_image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    if (replace) {
+        fixture_file(&image, format, 0, "F", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    } else if (!reverse) {
+        mount_peer(&bank, &peer_image, format);
+    }
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    image.fail_write = 1;
+    image.fail_write_without_changes = true;
+    const uint8_t owner = open_name(&unit, &bank, 2, replace ? "@0:F*,S,W" : "0:F,S,W");
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert(!unit.channels[owner].directory_published);
+    const dos_channel_t saved = unit.channels[owner];
+    const unsigned int writes = image.writes;
+    if (replace) {
+        const uint8_t reader = open_name(&unit, &bank, 5, "0:F");
+        expect_bytes(&unit, &bank, reader, 22, 0x20);
+        ck_assert(dos_close(&unit, &bank, model, 5));
+        ck_assert_uint_eq(open_name(&unit, &bank, 3, "0:F,A"), DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    }
+    ck_assert_uint_eq(open_name(&unit, &bank, 3, replace ? "@0:F,S,W" : "0:F,S,W"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_mem_eq(&unit.channels[owner], &saved, sizeof(saved));
+    if (!replace && !reverse) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 4, "1:F,S,W"), DOS_UNUSED);
+        put_bytes(&unit, &bank, 4, 0x60, 22);
+        ck_assert(dos_close(&unit, &bank, model, 4));
+    }
+    ck_assert(dos_close(&unit, &bank, model, reverse ? 2 : 3));
+    ck_assert(dos_close(&unit, &bank, model, reverse ? 3 : 2));
+    ck_assert_uint_ne(open_name(&unit, &bank, 3, "@0:F,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 3, 0x80, 22);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    const uint8_t reader = open_name(&unit, &bank, 2, "0:F");
+    expect_bytes(&unit, &bank, reader, 22, 0x80);
+    const uint8_t* const directory = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    unsigned int matches = 0;
+    for (unsigned int offset = 0; offset < DISKIMAGE_SECTOR_SIZE; offset += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
+        matches += directory[offset + 2] != 0 && directory[offset + 5] == 'F';
+    }
+    ck_assert_uint_eq(matches, 1);
+    free(image.bytes);
+    if (!replace && !reverse) {
+        free(peer_image.bytes);
+    }
+}
+END_TEST
+
+// A secondary's own unpublished name must not prevent its safe retirement.
+START_TEST(test_unpublished_writer_retires_before_same_secondary_open) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, (unsigned int)_i);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    image.fail_write = 1;
+    image.fail_write_without_changes = true;
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:F,S,W"), DOS_UNUSED);
+    ck_assert_uint_eq(open_name(&unit, &bank, 2, "0:F,S,W"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_FILE_EXISTS);
+    const uint8_t reader = open_name(&unit, &bank, 3, "0:F");
+    expect_bytes(&unit, &bank, reader, 0, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// PARSE retains prefix/final-prescan patterns as well as an equals suffix.
+START_TEST(test_write_pattern_flags_across_parse_passes) {
+    const unsigned int format = (unsigned int)_i / 10u, scenario = (unsigned int)_i % 10u;
+    static const char* const requests[] = {
+        "0:F=*,S,W", "0:F=?,S,W", "@0:F=*,S,W", "@0:F=?,S,W", "*:F,S,W",
+        "?:F,S,W",   "F,S,W*",    "F,S?,W",     "0:F,S,W*",   "0:F=TAIL,S,W",
+    };
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t writer = open_name(&unit, &bank, 2, requests[scenario]);
+    if (scenario < 7) {
+        ck_assert_uint_eq(writer, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code,
+                          scenario == 2 || scenario == 3 ? DOS_STATUS_TYPE_MISMATCH : DOS_STATUS_INVALID_NAME);
+        ck_assert_uint_eq(image.writes, 0);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    } else {
+        ck_assert_uint_ne(writer, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert(dos_close(&unit, &bank, bank.units[0].model, 2));
+    }
+    free(image.bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -3185,6 +3292,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_reused_secondary_revalidates_directory, 0, 6);
     tcase_add_loop_test(core, test_lookup_failure_preserves_writer, 0, 6);
     tcase_add_loop_test(core, test_append_rebind_invalidates_free_total, 0, 3);
+    tcase_add_loop_test(core, test_unpublished_writer_reserves_filename, 0, 12);
+    tcase_add_loop_test(core, test_unpublished_writer_retires_before_same_secondary_open, 0, 3);
+    tcase_add_loop_test(core, test_write_pattern_flags_across_parse_passes, 0, 30);
     suite_add_tcase(suite, core);
     return suite;
 }

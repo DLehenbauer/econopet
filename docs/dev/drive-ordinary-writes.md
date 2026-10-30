@@ -91,6 +91,8 @@ adaptation, not behavior claimed for native controller hardware.
 | Lookup after same-secondary writer retirement | Host durability policy, all three targets | Native [4040 tst3: `GETR2/FRECHN`][40-channels] and [DOS 2.7 tst3: `GETR2/FRECHN`][27-channels] release old owners. Persisting them first is a host adaptation. | After host retirement, restart lookup before DELDIR or allocation. Do not retain freed old links or deleted-entry reservations from the earlier scan. A plain WRITE against the newly closed file reports 63. | `dos_work`, `test_reused_secondary_revalidates_directory` | Same-secondary repeated replacement with forced block reuse, and APPEND-to-WRITE with an earlier deleted entry. |
 | Lookup I/O failure with a live writer | Host storage-error policy, all three targets | Both `erproc: CMDER3` sources describe native teardown, not the retained host writer policy | Retire the failed command and scratch buffers, but preserve buffered writer bytes, close phase and ownership. Native logical-error/read-owner retirement remains unchanged. | `dos_work`, `test_lookup_failure_preserves_writer`, existing ordinary read-owner retirement cases | Six buffered-data/failed-CLOSE variants check retained channel bytes, then retry CLOSE and read back the file. |
 | Lazy BAM rebind and free total | Host cache identity, native free-count semantics on all three targets | [4040 lstdir: `NUMFRE`][40-free], [DOS 2.7 map: `NUMFRE`][27-free]. Generation invalidation is host-only. | Publishing a different media identity invalidates the old free-block total, including BAM loads triggered by short APPEND before any allocation or listing. | `bam_entry`, `test_append_rebind_invalidates_free_total` | Independent directory footer counts before/after rebind, with APPEND between them. |
+| Unpublished filename ownership | Host failed-write retention, all three targets | [4040 addfil: `ADDFIL`][40-add], [DOS 2.7 addfil: `ADDFIL`][27-add] publish entries before accepting data. Retaining an unsuccessful publication is host policy. | An unpublished writer reserves its canonical filename and full media reference, not only its directory slot. Conflicting WRITE/APPEND reports host error 25 without changing either owner. A replacement's reserved name is the matched entry's name, not its request pattern. Same-secondary retirement and peer-drive names remain independent. | `open_write`, `dos_work`, `test_unpublished_writer_reserves_filename`, `test_unpublished_writer_retires_before_same_secondary_open` | No-change publication faults, both CLOSE orders, wildcard replacement, competing APPEND, old-file reads, peer-drive admission and final unique-name/payload checks. |
+| OPEN parser pattern propagation | All three targets | Both `open: OP042/OP20/OP75/OP815` and `parsex: PRSCLN/PARSE` sources above | `=` ends comparison, not first-field pattern detection. `F=*,S,W` and `F=?,S,W` reject with 33. Preserve prefix patterns and PRSCLN's final low pattern count into the second PARSE. Thus `F,S,W*` rejects, while `F,S?,W` and `0:F,S,W*` do not flag the first field. | `dos_open_parse`, `test_write_pattern_flags_across_parse_passes` | Exact statuses/no-write checks across all models, with non-leaking parameter and non-pattern suffix controls. The related prefix/prescan cases are ROM-derived, not generic wildcard parsing rules. |
 
 [40-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
 [27-close]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
@@ -109,6 +111,8 @@ adaptation, not behavior claimed for native controller hardware.
 [27-channels]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
 [40-free]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lstdir
 [27-free]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+[40-add]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addfil
+[27-add]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addfil
 [dos-interface]: https://www.pagetable.com/174
 [mame-targets]: https://github.com/mamedev/mame/blob/master/src/devices/bus/ieee488/c8050.cpp
 
@@ -128,6 +132,10 @@ so a non-`@` WRITE reports 63 rather than resurrecting an earlier deleted entry.
 Normal overlapping replacements retain native current-entry semantics.
 Only an interrupted host reclamation reserves its exact entry until retry
 completes, since native CLSDIR does not yield midway to another OPEN or CLOSE.
+An initial publication failure similarly retains the intended filename until
+the failed owner is closed/finalized, so another creator cannot publish a
+duplicate while retry remains possible. Readers still see only the actual
+directory, not a synthetic entry for the retained intent.
 
 Direct Check tests exercise payload boundaries, create/append/replace,
 peer-directory isolation, directory growth, read-only media, near-full/full
