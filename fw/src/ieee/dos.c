@@ -37,6 +37,8 @@ static bool free_blocks(dos_unit_t* const unit, dos_media_bank_t* const media, c
                         uint16_t* const blocks);
 static bool valid_bitmap(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
                          const uint8_t track, const uint8_t* const entry);
+static bool prepare_mapout_4040(dos_unit_t* const unit, dos_media_bank_t* const media,
+                                const dos_channel_t* const channel);
 static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel);
 static bool finish_directory_growth(dos_unit_t* const unit, dos_media_bank_t* const media,
                                     dos_channel_t* const channel);
@@ -413,6 +415,10 @@ bool dos_close(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_
     while ((channel = close_channel(unit, secondary)) != DOS_UNUSED) {
         dos_channel_t* const state = &unit->channels[channel];
         // Explicit CLOSE 0 enters FRECHN directly, unlike a CLSALL visit.
+        if (secondary != IEEE_LOAD_CHANNEL && state->access == DOS_ACCESS_DIRECT && model == DOS_MODEL_4040 &&
+            state->closing == DOS_CLOSE_DATA && !prepare_mapout_4040(unit, media, state)) {
+            return false;
+        }
         if (secondary != IEEE_LOAD_CHANNEL && state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
             return false;
         }
@@ -1219,6 +1225,27 @@ static bool write_byte(dos_unit_t* const unit, dos_media_bank_t* const media, do
     return channel->position != DISKIMAGE_SECTOR_SIZE || advance_write(unit, media, channel);
 }
 
+// Force native 4040 direct CLOSE to validate and write even an unchanged BAM.
+static bool prepare_mapout_4040(dos_unit_t* const unit, dos_media_bank_t* const media,
+                                const dos_channel_t* const channel) {
+    // ROM source:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // MAPOUT/MAPCHK always run AVCK and submit WRITE. The dirty-only cache
+    // helper must therefore include a clean native CLOSE, unlike DOS 2.7.
+    const dos_media_ref_t reference = channel->media;
+    dos_media_ref_t current = {0};
+    if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != reference.identity) {
+        return storage_error(unit, media, reference, DOS_MEDIA_STALE, true, 0, 0);
+    }
+    // Lazy host initialization may not have loaded this drive's fixed BAM yet.
+    if (bam_entry(unit, media, reference, 1) == NULL) {
+        return false;
+    }
+    unit->bam[reference.slot].dirty = true;
+    return true;
+}
+
 // CLSWRT/CLSDIR/MAPOUT finish data, replacement deletion, directory, then BAM.
 static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
     // ROM sources:
@@ -1230,7 +1257,10 @@ static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media
     // allocation changes. C records persistence phases so a host I/O failure
     // can be retried without repeating block counts or losing owned buffers.
     const dos_model_t model = media->units[channel->media.unit].model;
-    unit->selected_drive = channel->media.slot;
+    // 4040 MAPOUT uses LSTJOB without changing DRVNUM. DOS 2.7 MO10 sets it.
+    if (channel->access != DOS_ACCESS_DIRECT || model != DOS_MODEL_4040) {
+        unit->selected_drive = channel->media.slot;
+    }
     if (channel->access == DOS_ACCESS_DIRECT) {
         // CLSCHN skips file finalization but still reaches MAPOUT.
         if (channel->closing == DOS_CLOSE_DATA && !unit->bam[channel->media.slot].dirty &&
@@ -3803,9 +3833,8 @@ static bool pointer_next_buffer(dos_unit_t* const unit, dos_media_bank_t* const 
     // prefetched alternate or its job drive. DBLBUF selects that old job.
     const uint8_t buffer = next.buffers[next.active];
     const uint8_t drive = (unit->buffer_drives >> buffer) & 1u;
-    if (drive != next.media.slot && dos_media_reference(media, next.media.unit, drive, &next.media) != DOS_MEDIA_OK) {
-        return false;
-    }
+    // Both slots share the captured generation. Never renew an old file token.
+    next.media.slot = drive;
     if (!load_buffer(unit, media, &next, track, sector)) {
         return false;
     }
@@ -4620,6 +4649,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             dos_media_reference(media, channel->media.unit, channel->media.slot ^ 1u, &other) == DOS_MEDIA_OK) {
             // Continue with the peer's header after this drive's footer,
             // without repeating the load address or ending the stream.
+            other.identity = channel->media.identity;
             channel->media = other;
             unit->selected_drive = other.slot;
             auto_initialize(unit, other.slot);
