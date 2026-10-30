@@ -1087,6 +1087,31 @@ static bool directory_entry_busy(const dos_unit_t* const unit, const dos_media_r
     return false;
 }
 
+// Retire live COPY observations before a peer CLSDIR can release their chain.
+static void retire_copy_binding(dos_unit_t* const unit, const dos_channel_t* const channel) {
+    if (unit->command != DOS_COMMAND_COPY) {
+        return;
+    }
+    dos_copy_work_t* const work = &unit->copy;
+    if (work->invalidated_file != 0 || (work->writer != DOS_UNUSED && channel == &unit->channels[work->writer])) {
+        return;
+    }
+    for (unsigned int index = 0; index < work->count; ++index) {
+        if (!(work->found & (1u << index)) || (index != 0 && index < work->source) ||
+            (index == 0 && (work->writer == DOS_UNUSED || unit->channels[work->writer].access != DOS_ACCESS_APPEND))) {
+            continue;
+        }
+        const dos_copy_file_t* const file = &work->files[index];
+        const dos_media_ref_t reference = work->media[file->drive & 1u];
+        if (reference.identity == channel->media.identity && reference.unit == channel->media.unit &&
+            reference.slot == channel->media.slot && file->directory_track == channel->directory_track &&
+            file->directory_sector == channel->directory_sector && file->directory_entry == channel->directory_entry) {
+            work->invalidated_file = index + 1u;
+            return;
+        }
+    }
+}
+
 // Read-modify-write this entry, reclaiming only its current replacement chain.
 static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel,
                              const bool closed) {
@@ -1131,6 +1156,9 @@ static bool update_directory(dos_unit_t* const unit, dos_media_bank_t* const med
         entry[DOS_DIRECTORY_TYPE_OFFSET] &= DOS_FILE_LOCKED_MASK | DOS_FILE_TYPE_MASK;
     }
     if (closed) {
+        if (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) {
+            retire_copy_binding(unit, channel);
+        }
         if (channel->closing == DOS_CLOSE_DIRECTORY) {
             // CLSDIR tests the reread entry, not links saved by an earlier OPEN.
             const bool replaced = (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK) != 0;
@@ -3675,9 +3703,9 @@ static void copy_search(dos_unit_t* const unit, dos_media_bank_t* const media) {
             file->directory_track = work->track;
             file->directory_sector = work->sector;
             file->directory_entry = offset;
-            // 4040 CMPCHK/CC15 leaves a raw negative FILTRK unresolved, so
-            // LK26 repeats this same match instead of reaching OPREAD's mask.
-            if (model == DOS_MODEL_4040 && (file->track & DOS_FILE_TRACK_PENDING_MASK_4040)) {
+            // Both CMPCHK/CC15 routines leave zero FILTRK unresolved.
+            // 4040 also retains negative FILTRK. LK26 repeats this match.
+            if (file->track == 0 || (model == DOS_MODEL_4040 && (file->track & DOS_FILE_TRACK_PENDING_MASK_4040))) {
                 work->phase = DOS_COPY_MATCH_WAIT;
                 return;
             }
@@ -3782,6 +3810,7 @@ static void copy_all_next(dos_unit_t* const unit, dos_media_bank_t* const media)
         // descriptor obtained by FFST/FFRE and reset per-file creation state.
         work->files[0].track = 0;
         work->found = 1u << 1;
+        work->source = 1;
         work->drive = work->files[0].drive;
         work->scans = 0;
         work->visited = 0;
@@ -3824,6 +3853,13 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // externally staged reads, whose singleton EOF behavior is different.
     dos_copy_work_t* const work = &unit->copy;
     const dos_model_t model = media->units[work->media[0].unit].model;
+    if (work->invalidated_file != 0) {
+        const dos_copy_file_t* const file = &work->files[work->invalidated_file - 1u];
+        unit->selected_drive = work->media[file->drive & 1u].slot;
+        dos_status(unit, model, DOS_STATUS_WRITE_ERROR, file->directory_track, file->directory_sector);
+        copy_finish(unit);
+        return;
+    }
     if (work->phase == DOS_COPY_MATCH_WAIT) {
         return;
     }

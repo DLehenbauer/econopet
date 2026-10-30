@@ -258,6 +258,7 @@ typedef struct {
     uint8_t reader;
     uint8_t writer;
     uint8_t source;
+    uint8_t invalidated_file; // One-based descriptor retired by a peer replacement CLOSE.
     uint8_t phase;
     uint8_t empty_track;
     uint8_t empty_sector;

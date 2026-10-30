@@ -41,6 +41,7 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Discarded and selected directory jobs | All selected targets | Both rename `OPIRFL`, open `OPREAD`, respective [4040 tst3][4040-tst3]/[DOS 2.7 tst3][8250-tst3], `GETRCH/FRECHN/GETBUF`, lookup `SRRE/SEARCH/SR40`, and copyall `FFST/FFRE/FIXIT/CY` | Reopening IRSA discards the old directory prefetch result. Complete current-page matches before observing a required successor failure. A new FFRE owns a new job, not an earlier discarded error | `copy_read_start/copy_all_next`, self-append unused-successor faults, persisted current-page prefix and transient-versus-persistent read-fault tests | 4040 GETBUF clears JOBS directly. DOS 2.7 waits for job completion then clears JOBS without interpreting its old error. No replay or controller-retry claim |
 | Source-group boundaries | All selected targets | Both copysetup `DSKCPY`, respective [4040 parsex][4040-parsex]/[DOS 2.7 parsex][8250-parsex], `TC50/PARSE`, and [4040 trnsfr][4040-trnsfr]/[DOS 2.7 trnsfr][8250-trnsfr], `FNDLMT` | A later '=' ends its filename, not the comma-separated source group. Later missing inputs still return 62 before output creation | `copy_start`, second '=' in first/later source plus following absent-source regressions | Filename truncation and group parsing have distinct native routines |
 | Operation-local drive selection | All selected targets | Both rename `CY20/GIBYTE/PIBYTE`, respective tst2 `WRT0/SETDRN`, and open `APPEND` | Reselect the writer during yielded APPEND and before output allocation. Reselect the reader before subsequent linked-read checks. DOS 2.7 status suffix identifies the failing operation's disk | `copy_work`, interleaved peer/read-error and bidirectional read-versus-allocation status regressions | Cooperative yielding is a host adaptation, not native processor or controller timing |
+| Zero-track lookup match | All selected targets | Both lookup `CP40/CMPCHK/CC15/LK25/LK26` | A matched zero FILTRK stays unresolved and repeats the same entry, for source or destination. Do not convert it to missing-source or file-exists completion | `copy_search`, per-model zero-track source/target pending, no-I/O and reset-cleanup tests | This LOOKUP rule is not mechanically imposed on FFST's separately selected copy-all source |
 
 [4040-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/master
 [8250-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/master
@@ -93,7 +94,16 @@ deferred COPY descriptor still names the old chain. Before opening a source,
 compare its captured start link, type and name against the directory sector
 already read for OPIRFL. Reject a changed binding with host policy 25 rather
 than copying reassigned sectors or silently selecting a different source.
-This adds no page, state field or backing read.
+This opening check adds no page, state field or backing read.
+
+An already-open COPY reader or self-append writer must also stop if a peer
+replacement CLOSE retires its chain between worker calls. Before CLSDIR releases
+that chain, record the affected live descriptor in one byte of COPY state.
+The next continuation aborts with host policy 25 before any further read or
+write. Match media identity, unit, slot and exact entry coordinates. Exclude
+COPY's own writer, completed sources, and unrelated entries. The copy-all cursor
+becomes live when each new entry is selected, not only after destination lookup.
+This avoids repeated directory reads and does not block the peer's CLOSE.
 
 Self-append judges completion from its writer's allocation and failure state,
 not the unit's shared status. An unrelated reader may report an error while the
@@ -133,8 +143,8 @@ movement or service latency.
 
 ## Validation
 
-The isolated candidate passes 3144 focused DOS cases and 4127 total firmware
-Check cases (4080 ordinary plus 47 fatal/assert cases). Tests and their
+The isolated candidate passes 3162 focused DOS cases and 4145 total firmware
+Check cases (4098 ordinary plus 47 fatal/assert cases). Tests and their
 dependencies use Debug. The RP2040 production RelWithDebInfo build,
 clang-format dry run and whitespace checks pass.
 
@@ -157,4 +167,7 @@ Fourth-review regressions use successful replacement CLOSE followed by an
 already-open peer writer's PUT/CLOSE to reassign the original sector before
 first/later named, whole-drive or patterned source opening. They verify stale
 COPY rejection, untouched peer data and successful fresh-command recovery.
+Fifth-review regressions retire active reader/self-append bindings before all
+old sectors are reassigned, allow replacement CLOSE after a copy-all source
+already completed, and preserve both ROM families' zero-track lookup waits.
 No fresh original-ROM replay or board acceptance was performed.

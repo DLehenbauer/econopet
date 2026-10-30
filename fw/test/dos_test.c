@@ -9246,6 +9246,125 @@ START_TEST(test_copy_revalidates_source_after_successful_peer_close) {
 }
 END_TEST
 
+// Peer CLSDIR must retire already-open COPY readers and self-append writers before reuse.
+START_TEST(test_copy_retires_active_binding_before_sector_reuse) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const bool append = _i >= 3;
+    dos_media_bank_t bank = {0};
+    image_t source, target;
+    mount_blank(&bank, &source, format);
+    mount_peer(&bank, &target, format);
+    fixture_file(&source, format, 0, "F", DISKIMAGE_FTYPE_SEQ, 0x20, 600);
+    fixture_file(&source, format, 2, "TAIL", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    limit_free_blocks(&source, format, 2);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "@0:F,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x40, 22);
+    ck_assert_uint_ne(open_name(&unit, &bank, 4, "0:REUSED,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 4, 0x80, DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u);
+    send_command(&unit, &bank, append ? "C0:F=0:F,0:TAIL" : "C1:NEW=0:F");
+    for (unsigned int step = 0; unit.copy.writer == DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 10);
+        dos_work(&unit, &bank);
+    }
+    // Advance into APPEND traversal or a live source's first payload burst.
+    dos_work(&unit, &bank);
+    if (!append) {
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    put_bytes(&unit, &bank, 4, 0x55, 1);
+    put_bytes(&unit, &bank, 4, 0xc0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    put_bytes(&unit, &bank, 4, 0xa0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    put_bytes(&unit, &bank, 4, 0x60, 22);
+    ck_assert(dos_close(&unit, &bank, model, 4));
+    const unsigned int writes = source.writes + target.writes;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(source.writes + target.writes, writes);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    uint8_t expected[3u * DISKIMAGE_SECTOR_PAYLOAD_SIZE + 22u];
+    for (unsigned int index = 0; index < DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++index) {
+        expected[index] = 0x80u + index;
+        expected[DISKIMAGE_SECTOR_PAYLOAD_SIZE + index] = 0xc0u + index;
+        expected[2u * DISKIMAGE_SECTOR_PAYLOAD_SIZE + index] = 0xa0u + index;
+    }
+    expected[DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u] = 0x55;
+    for (unsigned int index = 0; index < 22; ++index) {
+        expected[3u * DISKIMAGE_SECTOR_PAYLOAD_SIZE + index] = 0x60u + index;
+    }
+    expect_copy_payload(&source, bank.units[0].slots[0].io.image.type, "REUSED", expected, sizeof(expected),
+                        DISKIMAGE_FTYPE_SEQ);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// A source that already completed no longer owns a live binding in copy-all.
+START_TEST(test_copy_all_allows_close_of_completed_source) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t source, target;
+    mount_blank(&bank, &source, format);
+    mount_peer(&bank, &target, format);
+    fixture_file(&source, format, 0, "F", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    fixture_file(&source, format, 1, "NEXT", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const dos_model_t model = bank.units[0].model;
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "@0:F,S,W"), DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 0x40, 4);
+    send_command(&unit, &bank, _i < 3 ? "C1=0" : "C1:*=0:*");
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t* const directory = sector_bytes(&target, type, format == 0 ? 18 : 39, 1);
+    for (unsigned int step = 0; !(directory[2] & 0x80u) || unit.copy.writer != DOS_UNUSED; ++step) {
+        ck_assert_uint_lt(step, 50);
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    const uint8_t f[] = {0x20, 0x21, 0x22, 0x23}, next[] = {0x60, 0x61};
+    expect_copy_payload(&target, type, "F", f, sizeof(f), DISKIMAGE_FTYPE_SEQ);
+    expect_copy_payload(&target, type, "NEXT", next, sizeof(next), DISKIMAGE_FTYPE_SEQ);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
+// CMPCHK leaves zero FILTRK unresolved and LK26 repeats the matching directory entry.
+START_TEST(test_copy_zero_track_match_remains_pending) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    fixture_file(&image, format, 1, "TARGET", DISKIMAGE_FTYPE_SEQ, 0x60, 2);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    sector_bytes(&image, type, format == 0 ? 18 : 39, 1)[(_i < 3 ? 0 : 32) + 3] = 0;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "C0:TARGET=0:SOURCE");
+    for (unsigned int step = 0; step < 10; ++step) {
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_work_pending(&unit));
+    const unsigned int reads = image.reads;
+    for (unsigned int step = 0; step < 10; ++step) {
+        dos_work(&unit, &bank);
+    }
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes + image.flushes, 0);
+    dos_reset(&unit, bank.units[0].model);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert(!dos_work_pending(&unit));
+    free(image.bytes);
+}
+END_TEST
+
 // Register the read/status regressions and ordinary-write contracts.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -9473,6 +9592,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_append_reselects_owner_after_peer_error, 0, 3);
     tcase_add_loop_test(core, test_copy_cross_drive_read_and_allocation_status, 0, 12);
     tcase_add_loop_test(core, test_copy_revalidates_source_after_successful_peer_close, 0, 12);
+    tcase_add_loop_test(core, test_copy_retires_active_binding_before_sector_reuse, 0, 6);
+    tcase_add_loop_test(core, test_copy_all_allows_close_of_completed_source, 0, 6);
+    tcase_add_loop_test(core, test_copy_zero_track_match_remains_pending, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }
