@@ -41,6 +41,7 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Late internal reader and metadata reads | Selected DOS 2.7 modes, not 4040 | DOS 2.7 `new:NEW3/N150/N160 -> frets:SETMAP/RDNBAM/USEDTS`, `tst4:OPNIRD/NXTBUF -> opchnl:OPNRCH -> tst3:GETRCH/FNDLNX/GETBUF`, `tst2:STRDBL/NF05/NF10` | After the metadata prefix, refill 38/0 and reserve the header before allocating OPNIRD's logical channel and two pooled pages. Follow the written header/BAM/directory links, then reserve the remaining metadata and count NF05 ranges. An earlier BAM read error precedes exhausted-channel status 70 | `format_work`, exhausted index/page cases with and without a combined BAM read fault, plus quick/full late metadata/NF05 failures and cached-first-map controls | Serial one-sector jobs preserve selected-page failure observation, not physical controller concurrency, retries or latency. No synthetic read success substitutes for backing I/O |
 | Surviving listing and formatter BAM ownership | Selected DOS 2.7 modes, host cooperative scheduling | DOS 2.7 `new:NEW/CLRCHN` retains SA0, `new:N160/NF05` owns the BAM count, and `lstdir:MSGFRE` emits the directory footer | Preparing a retained footer must not evict FORMAT's map or overwrite its partial count. Yield footer preparation while its drive is formatter-owned, preserving ready state and resuming after success or failure | `prepare_directory_line`, surviving-SA0 tests immediately before and after the first NF05 count, with successful and failed completion | A host scheduling safeguard, not a physical timing claim. Already staged rows remain readable and unrelated-drive footers are not blocked |
 | 4040 completion without reread | Selected 4040 revision 2 | [4040 new][4040-new], final `DRTWRT -> ENDCMD` | After the final metadata write, retain the generated BAM and calculate the host free count without another read. A newly armed read failure cannot turn completed NEW into status 23 | `format_work`, quick/full final-write read-fault controls and adjusted failed-format recovery/finalization controls | The selected listing has no final BAM reload. This does not claim controller retry or timing equivalence |
+| Quick NEW without an extra header read | All selected targets | Both `new:N108/N110` and `tst2:INITDR`, then `new:TRNHDR` on DOS 2.7 | After successful INITDR/version acceptance, begin metadata generation without rereading the header. Reuse initialization's retained ID | `initialize_work/format_work`, both-drive quick-NEW tests arming a read failure between INITDR and the first metadata write, checking zero extra reads and retained ID | Native DSKID comes from controller headers. Raw images retain the existing host convention of reading the ID from the directory header, now using the already-required initialization read |
 | DUPLICATE backing-store alias rejection | Host adaptation, no physical-drive counterpart | Native duplct's `DUP1/FORMAT` assumes distinct physical disks. Host descriptors may alias despite different selectors | Identical read callback/context is rejected with host policy 25 before INITDR or erase, in either direction, including a read-only source | `format_start`, alias/source-immutability regressions | Descriptor equality cannot prove that different contexts refer to distinct files. The facade must ensure distinct underlying backing stores |
 | Failed formatter persistence ownership | Host adaptation, no controller-flush counterpart | Host `dos_finalize`/`dos_media_flush_unit`, retaining the existing native destructive prefix | Discard scratch validity, not its captured media reference. Failed backing flush remains observable and retryable without another OPEN. Remounted media cannot acquire old finalization | `format_work`, direct finalization failure/retry and replacement-generation controls | No rollback, automatic command-time flush or mount-policy change is introduced |
 | Failed reinitialization after dirty NEW | All selected targets, host backing persistence policy | Both `tst2:INITDR` discard native map state. Shared host `initialize_work` must independently retain backing flush ownership | A completed, unflushed NEW followed by failed NEW/I/VALIDATE/DUPLICATE initialization still fails and retries finalization when backing flush fails | `initialize_work`, sequential dirty-format then first-refill failure tests for all shared callers | Discarding dirty cached allocations is not permission to forget already issued backing writes |
@@ -82,8 +83,8 @@ and reset behavior remains intact.
 
 Every formatter continuation reselects its operation's disk before publishing
 status or ENDCMD. The shared version-rejection path separately selects the
-initialized disk (DUPLICATE's source). Failed HEADER, generated-map and final
-reload phases discard borrowed BAM residency and its cached free-block total,
+initialized disk (DUPLICATE's source). Failed generated-map and required
+metadata-read phases discard borrowed BAM residency and its cached free-block total,
 while retaining the captured reference needed to finalize dirty backing writes.
 Full-format scratch rejection happens before this borrowing and retains the
 previous cache, including dirty allocations. No rollback or extra sector page
@@ -112,6 +113,12 @@ partial count without adding another cache or counter. Ready state and already
 staged rows remain intact. Success and failure both release this scheduling
 gate when the command becomes idle.
 
+Quick NEW captures the raw-image ID during INITDR's existing header read and
+reuses that result after successful version acceptance. It does not reread the
+header before beginning NEWMAP. The shared initializer retains only two ID bytes,
+not another sector. Full NEW keeps its explicit command ID, and DUPLICATE retains
+its existing independent source/target initialization.
+
 Shared INITDR also retains its captured media reference before the first
 refill. Failed initialization after an earlier dirty NEW cannot silently
 drop that disk's backing flush obligation, whether entered through another
@@ -128,8 +135,8 @@ media were changed, and no new latency or IEEE electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 3428 focused DOS cases and 4411 total firmware
-Check cases (4364 ordinary plus 47 fatal/assert cases). Tests and dependencies
+The isolated candidate passes 3434 focused DOS cases and 4417 total firmware
+Check cases (4370 ordinary plus 47 fatal/assert cases). Tests and dependencies
 use Debug. The RP2040 production RelWithDebInfo build, clang-format dry run
 and whitespace checks pass.
 
@@ -159,3 +166,8 @@ failure cleanup, BAM-read precedence over exhausted indexes/pages, and quick/ful
 4040 completion without a reread. Two earlier 4040 late-read fixtures now
 correctly expect success. Final fixtures reproduce 16 failures against the
 third feedback fix and 116 against initial PR production, with zero errors.
+The fifth round adds six variants for reusing the initialized ID on both disks
+of each model without a pre-metadata header reread. The three historical
+extra-header recovery cases now inject failure at the required initial header
+read instead. Final fixtures reproduce six failures against the fourth feedback
+fix and 119 against initial PR production, with zero errors.

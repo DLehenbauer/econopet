@@ -172,6 +172,7 @@ typedef struct {
 typedef struct {
     dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
     uint16_t next_track;
+    uint8_t id[2]; // Raw-image ID from the last successfully read directory header.
     uint8_t first_drive;
     uint8_t slots;
     bool started;

@@ -118,7 +118,6 @@ typedef enum {
 
 typedef enum {
     DOS_FORMAT_INITIALIZE,
-    DOS_FORMAT_HEADER,
     DOS_FORMAT_START,
     DOS_FORMAT_ERASE,
     DOS_FORMAT_MAP,
@@ -2974,6 +2973,8 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         bam->buffer.track = track;
         bam->buffer.sector = 0;
         bam->buffer.resident = model == DOS_MODEL_4040;
+        const unsigned int name = model == DOS_MODEL_4040 ? DOS_HEADER_NAME_4040 : DOS_HEADER_NAME_8050;
+        memcpy(work->id, bam->buffer.bytes + name + DOS_DISK_ID_OFFSET, sizeof(work->id));
         work->next_track = 1;
         if (model != DOS_MODEL_4040) {
             return;
@@ -4252,7 +4253,10 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             return;
         }
         unit->selected_drive = reference.slot;
-        work->phase = work->duplicate ? DOS_FORMAT_START : DOS_FORMAT_HEADER;
+        if (!work->duplicate) {
+            memcpy(work->id, unit->initialize.id, sizeof(work->id));
+        }
+        work->phase = DOS_FORMAT_START;
         return;
     }
     dos_media_ref_t current;
@@ -4268,17 +4272,6 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
          current.identity != work->source.identity)) {
         storage_error(unit, media, work->source, DOS_MEDIA_STALE, false, work->track, work->sector);
         goto failed;
-    }
-    if (work->phase == DOS_FORMAT_HEADER) {
-        if (!storage_error(unit, media, reference,
-                           read_sector(unit, media, reference, directory_track(model), 0, bytes), false,
-                           directory_track(model), 0)) {
-            goto failed;
-        }
-        const unsigned int name = model == DOS_MODEL_4040 ? DOS_HEADER_NAME_4040 : DOS_HEADER_NAME_8050;
-        memcpy(work->id, bytes + name + DOS_DISK_ID_OFFSET, sizeof(work->id));
-        work->phase = DOS_FORMAT_START;
-        return;
     }
     if (work->phase == DOS_FORMAT_START) {
         if (work->full) {
@@ -4524,9 +4517,9 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     return;
 
 failed:
-    // HEADER and generated formatter pages borrow BAM storage without keeping
-    // a valid map binding. Preserve the cache only before scratch was touched.
-    if (work->phase >= DOS_FORMAT_ERASE || (!work->full && work->phase >= DOS_FORMAT_HEADER)) {
+    // Generated formatter pages borrow BAM storage without keeping a valid map
+    // binding. Preserve the cache only before scratch was touched.
+    if (work->phase >= DOS_FORMAT_ERASE) {
         *bam = (dos_bam_t){.media = reference};
         unit->free_blocks_valid[reference.slot] = false;
     }

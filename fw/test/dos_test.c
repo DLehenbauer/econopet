@@ -9754,6 +9754,48 @@ START_TEST(test_format_ignores_suffix_after_native_comma_limit) {
 }
 END_TEST
 
+// Quick NEW reuses INITDR's ID without another header read before metadata writes.
+START_TEST(test_format_quick_reuses_initialized_header_id) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const unsigned int drive = (unsigned int)_i / 3u;
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    image_t* const image = &images[drive];
+    const diskimage_type_t type = bank.units[0].slots[drive].io.image.type;
+    const unsigned int track = format == 0 ? 18u : 39u;
+    const unsigned int name = format == 0 ? 144u : 6u;
+    memcpy(sector_bytes(image, type, track, 0) + name + 18u, "Q7", 2);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, drive == 0 ? "N0:NEW" : "N1:NEW");
+    for (unsigned int step = 0; unit.initialize.pending; ++step) {
+        ck_assert_uint_lt(step, 12);
+        dos_work(&unit, &bank);
+    }
+    ck_assert(unit.initialize.succeeded);
+    ck_assert_uint_eq(image->writes, 0);
+    const unsigned int reads = image->reads;
+    image->fail_read = reads + 1u;
+    for (unsigned int step = 0; image->writes == 0 && dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 12);
+        dos_work(&unit, &bank);
+    }
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(image->reads, reads);
+    ck_assert_uint_eq(image->writes, 1);
+    image->fail_read = 0;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_mem_eq(sector_bytes(image, type, track, 0) + name + 18u, "Q7", 2);
+    ck_assert_uint_eq(images[drive ^ 1u].reads + images[drive ^ 1u].writes, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(images[0].bytes);
+    free(images[1].bytes);
+}
+END_TEST
+
 // A retained SA0 footer must wait for NEW's shared BAM and count ownership to end.
 START_TEST(test_format_serializes_surviving_directory_footer) {
     const unsigned int format = (unsigned int)_i % 2u + 1u;
@@ -10140,10 +10182,6 @@ START_TEST(test_format_failure_reloads_bam_before_recovery) {
     dos_reset(&unit, bank.units[0].model);
     send_command(&unit, &bank, failure == 3 ? "N0:NEW,AB" : "N0:NEW");
     if (failure == 0) {
-        while (unit.initialize.pending) {
-            dos_work(&unit, &bank);
-        }
-        dos_work(&unit, &bank);
         image.fail_read = image.reads + 1u;
     } else if (failure == 2) {
         const unsigned int writes = format == 0 ? 2u : format == 1 ? 5u : 7u;
@@ -10474,6 +10512,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_format_propagates_late_metadata_chain_failures, 0, 24);
     tcase_add_loop_test(core, test_format_serializes_surviving_directory_footer, 0, 8);
     tcase_add_loop_test(core, test_format_4040_completes_without_final_bam_read, 0, 2);
+    tcase_add_loop_test(core, test_format_quick_reuses_initialized_header_id, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }
