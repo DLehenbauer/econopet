@@ -8,6 +8,7 @@
 #include "crtc_test.h"
 #include "diskimage_test.h"
 #include "dos_media_test.h"
+#include "dos_rel_test.h"
 #include "dos_test.h"
 #include "global_test.h"
 #include "ieee_drive_test.h"
@@ -30,6 +31,7 @@ int run_suite() {
     srunner_add_suite(sr1, crtc_suite());
     srunner_add_suite(sr1, diskimage_suite());
     srunner_add_suite(sr1, dos_media_suite());
+    srunner_add_suite(sr1, dos_rel_suite());
     srunner_add_suite(sr1, dos_suite());
     srunner_add_suite(sr1, ieee_drive_suite());
     srunner_add_suite(sr1, keyscan_suite());
