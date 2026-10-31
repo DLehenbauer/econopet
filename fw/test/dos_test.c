@@ -11742,6 +11742,53 @@ START_TEST(test_rename_cannot_claim_failed_rel_publication_name) {
 }
 END_TEST
 
+// TSTCHN protects a partially visible ADDFIL slot while its failed owner retains pages.
+START_TEST(test_scratch_cannot_free_partial_rel_publication) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t name[] = "0:REL,L,\x7f";
+    image.fail_write = image.writes + (format == 2 ? 5u : 4u);
+    dos_open(&unit, &bank, 0, 2, name, sizeof(name) - 1u);
+    finish_open(&unit, &bank);
+    const uint8_t owner = dos_find_channel(&unit, 2);
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert(unit.channels[owner].failed);
+    const dos_channel_t retained = unit.channels[owner];
+    const dos_open_work_t publication = unit.open;
+    const dos_bam_t map = unit.bam[0];
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    uint8_t directory[DISKIMAGE_SECTOR_SIZE];
+    memcpy(directory, sector_bytes(&image, type, format == 0 ? 18 : 39, 1), sizeof(directory));
+    ck_assert_mem_eq(directory + unit.open.empty_entry + 5, "REL", 3);
+    image.fail_write = 0;
+    const unsigned int writes = image.writes;
+    send_command(&unit, &bank, "S0:REL");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_FILES_SCRATCHED);
+    ck_assert_str_eq(unit.status,
+                     model == DOS_MODEL_4040 ? "01, FILES SCRATCHED,00,00\r" : "01, FILES SCRATCHED,00,00,0\r");
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_mem_eq(sector_bytes(&image, type, format == 0 ? 18 : 39, 1), directory, sizeof(directory));
+    ck_assert_mem_eq(&unit.bam[0], &map, sizeof(map));
+    ck_assert_mem_eq(&unit.channels[owner], &retained, sizeof(retained));
+    ck_assert_mem_eq(&unit.open, &publication, sizeof(publication));
+    dos_close(&unit, &bank, model, 2);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:REL"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    free(image.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -12022,6 +12069,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_input_new_collection_survives_pending_worker_retirement, 0, 24);
     tcase_add_loop_test(core, test_copy_rel_completion_uses_writer_outcome_not_public_status, 0, 6);
     tcase_add_loop_test(core, test_rename_cannot_claim_failed_rel_publication_name, 0, 6);
+    tcase_add_loop_test(core, test_scratch_cannot_free_partial_rel_publication, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }

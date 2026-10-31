@@ -66,6 +66,8 @@ Retained REL creation also reserves its padded filename in the shared namespace
 check. A failed ADDFIL cannot let RENAME claim that name before publication retry.
 If a partial WRITE makes the planned slot visible, RENAME also excludes that
 source slot until publication commits or the owner is explicitly released.
+SCRATCH's active-entry test likewise uses that planned slot during retained
+publication, so partial directory visibility cannot free still-owned REL chains.
 
 COPY retains reviewed stale-entry, namespace, ordinary prefetch and reclamation
 checks. The first source supplies output type. REL input uses GIBYTE semantics,
@@ -148,17 +150,18 @@ approved composition rather than inferring absence from the archive.
 
 All 138 published REL groups and 248 retained ordinary DOS groups have unchanged
 executable tokens. The sole retired DOS group enforced the superseded blanket
-REL COPY exclusion. Seven new REL groups and twenty-eight new DOS groups qualify the
+REL COPY exclusion. Seven new REL groups and twenty-nine new DOS groups qualify the
 joined behavior. The 29 REL leaf helpers and 139 other engine helpers are
 unchanged, including reviewed NRBUF, cold BAM preparation, SCRATCH/VALIDATE and
 native block admission. The COPY joins retain reviewed ordinary namespace,
 prefetch and stale-binding checks.
 
-Reconciled Debug firmware qualification passes 6,327 cases (6,280 ordinary and 47
-fatal/assert), including 1,691 REL cases and 3,653 DOS cases. The 114 additional
+Reconciled Debug firmware qualification passes 6,330 cases (6,283 ordinary and 47
+fatal/assert), including 1,691 REL cases and 3,656 DOS cases. The 117 additional
 feedback cases include 45 reproduced failures against the original publication
 and 51 against the first fix publication, plus twelve third-cycle reproductions
-(including a related partial-publication source-rename defect), with six
+(including a related partial-publication source-rename defect), and three
+partial-publication SCRATCH reproductions, with six
 entry-point and terminal-page controls. Production firmware
 builds with `RelWithDebInfo`, and the ROM build passes. Actual compiler layouts
 for record/channel/unit are 36/68/4588 bytes in Debug and 32/64/4552 bytes on ARM,

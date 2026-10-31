@@ -5323,10 +5323,14 @@ static bool scratch_active(const dos_unit_t* const unit, const dos_media_ref_t r
     // A listing's search cursor is not OPREAD's saved file-entry binding.
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const channel = &unit->channels[index];
-        if (channel->allocated && channel->directory == DOS_DIRECTORY_NONE &&
+        const bool publication =
+            channel->file_type == DISKIMAGE_FTYPE_REL && unit->open.rel_phase == DOS_OPEN_REL_PUBLISH &&
+            unit->open.access == DOS_ACCESS_WRITE && unit->open.append_channel == index + 1u &&
+            unit->open.empty_track == track && unit->open.empty_sector == sector && unit->open.empty_entry == entry;
+        if (channel->allocated && channel->directory == DOS_DIRECTORY_NONE && channel->media.unit == reference.unit &&
             channel->media.identity == reference.identity && channel->media.slot == reference.slot &&
-            channel->directory_track == track && channel->directory_sector == sector &&
-            channel->directory_entry == entry) {
+            (publication || (channel->directory_track == track && channel->directory_sector == sector &&
+                             channel->directory_entry == entry))) {
             return true;
         }
     }
