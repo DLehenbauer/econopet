@@ -326,11 +326,22 @@ void dos_rel_record_cancel(dos_rel_record_t* record);
 
 // Caller-owned pages contain the payload. This cursor retains only record
 // progress. no_record describes the last actual GET, not a missing preview.
+typedef enum {
+    DOS_REL_INPUT_IDLE,
+    DOS_REL_INPUT_PUT,
+    DOS_REL_INPUT_EOI,
+    DOS_REL_INPUT_FINISH,
+} dos_rel_input_phase_t;
+
 typedef struct {
     dos_rel_record_t record;
     uint16_t number;
-    bool get_active;
-    bool no_record;
+    bool get_active : 1;
+    bool no_record : 1;
+    uint8_t input_phase : 2;
+    bool input_eoi : 1;
+    bool input_overflow : 1;
+    uint8_t input;
 } dos_rel_reader_t;
 
 // Capture RECORD's raw 16-bit number (zero aliases one only for addressing).
