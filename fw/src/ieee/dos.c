@@ -832,6 +832,48 @@ uint8_t dos_rel_channel_claim(dos_unit_t* const unit, const dos_media_ref_t refe
     return channel;
 }
 
+// Start OPNRCH's initial data window without consulting the side-sector index.
+void dos_rel_channel_prepare_open(dos_unit_t* const unit, const uint8_t channel, const dos_model_t model,
+                                  const uint8_t root_track, const uint8_t root_sector, const uint8_t data_track,
+                                  const uint8_t data_sector, const uint8_t size) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // OPNRCH runs STRDBL before obtaining SS. OR21 captures the 8250 super
+    // coordinates without reading that index. OROW then enters RD40 from NR=2.
+    // No direct ROM entry for this host initializer: retain those jobs in the
+    // already-claimed channel, not in another page or the command-work union.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL OPEN preparation requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    vet(state->access == DOS_ACCESS_READ && state->rel.record.result == DOS_REL_RECORD_IDLE,
+        "REL OPEN preparation requires a fresh claim");
+    vet(size != 0, "REL OPEN record size must be nonzero");
+    state->ready = false;
+    state->failed = false;
+    state->rel_model = (uint8_t)model;
+    state->rel_root_track = root_track;
+    state->rel_root_sector = root_sector;
+    state->rel.record = (dos_rel_record_t){
+        .lookup =
+            {
+                .media = state->media,
+                .address = dos_rel_address(model, 1, size, 0),
+                .result = DOS_REL_LOOKUP_FOUND,
+                .track = data_track,
+                .sector = data_sector,
+                .super = model == DOS_MODEL_8250,
+            },
+        .result = DOS_REL_RECORD_PENDING,
+        .phase = DOS_REL_RECORD_OPEN_DATA,
+        .size = size,
+        .next = DISKIMAGE_SECTOR_LINK_SIZE,
+    };
+}
+
 // Begin a cold, clean positioned read after the owner has retired FIFO copies.
 void dos_rel_channel_prepare(dos_unit_t* const unit, const uint8_t channel, const dos_model_t model,
                              const uint8_t track, const uint8_t sector, const uint16_t number, const uint8_t size,
@@ -887,6 +929,56 @@ static void rel_read_state(dos_unit_t* const unit, dos_channel_t* const channel)
     }
 }
 
+// Prepare STRDBL's directory-linked pages, the small-file side root, then RD40.
+static void rel_open_work(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // OPNRCH uses STRDBL before the side READ. OR21 retains an 8250 super
+    // root without reading it, then OROW enters RD40. Host phases retain an
+    // unused alternate's failure rather than turning prefetch into an OPEN error.
+    dos_rel_record_t* const record = &channel->rel.record;
+    const bool data = record->phase == DOS_REL_RECORD_OPEN_DATA;
+    const bool following = record->phase == DOS_REL_RECORD_OPEN_FOLLOWING;
+    if (data || following || channel->rel_model != DOS_MODEL_8250) {
+        const dos_buffer_t* const first = &unit->buffers[channel->buffers[0]];
+        dos_buffer_t* const target = &unit->buffers[channel->buffers[data ? 0 : following ? 1 : 2]];
+        const uint8_t track = data ? record->lookup.track : following ? first->bytes[0] : channel->rel_root_track;
+        const uint8_t sector = data ? record->lookup.sector : following ? first->bytes[1] : channel->rel_root_sector;
+        const dos_media_result_t result = read_sector(unit, media, channel->media, track, sector, target->bytes);
+        target->track = track;
+        target->sector = sector;
+        target->resident = result == DOS_MEDIA_OK;
+        target->failed = !target->resident;
+        if (result != DOS_MEDIA_OK || !record->following_failed) {
+            record->lookup.media_result = result;
+        }
+        if (result != DOS_MEDIA_OK && !(following && (result == DOS_MEDIA_IO_ERROR || result == DOS_MEDIA_RANGE))) {
+            record->result = DOS_REL_RECORD_FAILED;
+            return;
+        }
+        if (data) {
+            record->phase = target->bytes[0] != 0 ? DOS_REL_RECORD_OPEN_FOLLOWING : DOS_REL_RECORD_OPEN_SIDE;
+            return;
+        }
+        if (following) {
+            record->following = target->resident;
+            record->following_failed = target->failed;
+            record->phase = DOS_REL_RECORD_OPEN_SIDE;
+            return;
+        }
+    }
+
+    // OROW starts at pointer zero, NR two and raw count zero. NXTREC chooses
+    // byte two and advances NR without replacing the directory's data link.
+    record->result = DOS_REL_RECORD_END;
+    record->phase = DOS_REL_RECORD_FOLLOWING;
+    channel->rel.number = 1;
+    dos_rel_record_next(record, media, unit->buffers[channel->buffers[0]].bytes,
+                        unit->buffers[channel->buffers[1]].bytes);
+}
+
 // Advance one clean REL owner without borrowing the unit command-work union.
 static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM sources:
@@ -906,6 +998,11 @@ static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             continue;
         }
         const dos_rel_record_t* const record = &channel->rel.record;
+        if (record->phase >= DOS_REL_RECORD_OPEN_DATA && record->phase <= DOS_REL_RECORD_OPEN_SIDE) {
+            rel_open_work(unit, media, channel);
+            rel_read_state(unit, channel);
+            return;
+        }
         dos_buffer_t* target;
         uint8_t track, sector;
         if (record->phase != DOS_REL_RECORD_INDEX) {
