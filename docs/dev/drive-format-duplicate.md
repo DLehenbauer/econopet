@@ -35,6 +35,9 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Channel scope and scratch | 4040 versus selected DOS 2.7 modes | Both new sources, `N108/NEW`, respective `tst3:CLRCHN/CLDCHN`, `tst2:INITDR`, `getact:GETACT`, and both duplct sources, `DUP1` | Quick INITDR abandons selected active-job-drive owners. Full 4040 NEW retains channels. DOS 2.7 full NEW releases SA14..1 across both disks but retains SA0. DUPLICATE initializes source then abandons target owners without CLOSE | `format_initialize/format_work`, channel-lifecycle and busy-scratch tests, shared landed `free_drive_channels` | MAME corroborates physical shared RAM and dual-drive models. Native listings control channel scope. Host scratch-conflict rejection is explicitly not native scratch corruption |
 | Raw-sector DUPLICATE | All selected targets with matching native geometry | Both duplct sources, `DUPLCT/DUP1/CPYD1/CPYTRK/SETRH/SETR3/READS/WRITES`, respective `copysetup:PRSEQ` | Adjacent distinct ASCII 0/1 selectors surround `=`. Initialize/version-check source, format target, copy every sector, then initialize target. Tracks ascend, eleven-page groups descend, sectors within each group ascend. Source remains unchanged | `format_copy_group/format_work`, both-direction whole-image/source-isolation and read/write failure tests | VICE's virtual-drive dispatcher leaves DUPLICATE unused, so it is not corroboration for the native algorithm. MAME confirms the two-drive ROM execution models, not a fresh successful formatter run |
 | Failure and retained initialization result | All selected targets, with explicit host persistence policy | Both new/duplct sources, `INITDR`, `VNERR`, `ERROR`, `ENDCMD` | Stop after failed initialization or media I/O, retain any destructive prefix, release only command-owned scratch. Consuming the status line cannot turn failed initialization into success | `format_work`, initial/final INITDR status-consumption, stale-generation, storage-failure and recovery tests | Selected ROMs establish failure exits. Captured generations, asynchronous status consumption and backing-file flush are firmware mechanisms, not electrical/controller equivalence |
+| Prefix pattern validation | All selected targets | Both `parsex:PRSCLN/PARSE/TAGCMD` and `romtbl:STRUCT` NEW mask | Retain prefix '*'/'?' for syntax 30 before any media access, in both quick/full mode. An '=' before ':' is not a second file group | `format_start`, prefix-pattern rejection and allowed-prefix-equals controls | The existing command parser is not native evidence. Both pinned PARSE routines retain PATFLG across the colon |
+| Operation-local drive selection | All selected targets | Both `new:N101/N108`, `duplct:DUPLCT/DUP1` and `parsex:ENDCMD/SCREND` | Successful NEW records its selected disk in LSTDRV and DOS 2.7's status drive. Version rejection identifies NEW's disk or DUPLICATE's source, regardless of a yielded peer read error | `format_work`, bidirectional peer-error, inherited-drive and NEW/DUPLICATE version-rejection regressions | Cooperative peer interleaving is host behavior. Explicit reselection preserves the ROM's DRVNUM ownership |
+| Borrowed BAM failure recovery | All selected targets, host cache policy | Both `new:N110` and DOS 2.7 `new:N160`, alongside landed BAM load/write contracts | Failed scratch read/write/reload must not expose partial or unbound bytes as a resident BAM. Subsequent B-W and B-A/MAPOUT reload real metadata. Rejection before scratch retains dirty allocation state | `format_work` failure exit, partial-read/untouched-write recovery and pre-scratch rejection controls | Cache invalidation is host lifetime policy, not a native rollback. Already written sectors remain changed |
 
 [4040-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/master
 [8250-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/master
@@ -71,6 +74,14 @@ status. NEW/DUPLICATE, not the INITDR prefix, owns ENDCMD. Existing landed
 read/write, metadata, direct-channel MAPOUT, alternate-page RAM, COPY namespace
 and reset behavior remains intact.
 
+Every formatter continuation reselects its operation's disk before publishing
+status or ENDCMD. The shared version-rejection path separately selects the
+initialized disk (DUPLICATE's source). Failed HEADER, generated-map and final
+reload phases discard borrowed BAM residency and its cached free-block total.
+Full-format scratch rejection happens before this borrowing and retains the
+previous cache, including dirty allocations. No rollback or extra sector page
+is introduced.
+
 Command completion is not a backing-file flush. Existing facade finalization
 or remount owns that persistence boundary. REL, arbitrary memory execution,
 transport collection and atomic production cutover remain excluded.
@@ -82,8 +93,8 @@ media were changed, and no new latency or IEEE electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 3273 focused DOS cases and 4256 total firmware
-Check cases (4209 ordinary plus 47 fatal/assert cases). Tests and dependencies
+The isolated candidate passes 3321 focused DOS cases and 4304 total firmware
+Check cases (4257 ordinary plus 47 fatal/assert cases). Tests and dependencies
 use Debug. The RP2040 production RelWithDebInfo build, clang-format dry run
 and whitespace checks pass.
 
@@ -93,3 +104,9 @@ now uses memory command `M` rather than newly supported `N`. New tests cover
 complete images, both DUPLICATE directions, destructive failures, stale
 generations, channel/scratch ownership, retained ID/empty-label boundaries,
 parser rejection and status consumption around failed INITDR.
+Feedback regressions add 48 model/scenario variants. Final fixtures linked
+against initial PR production reproduce 38 failures with zero errors. They
+cover prefix patterns and prefix-equals controls, peer errors before completion
+or version rejection, subsequent drive-less NEW, partial HEADER/final reload,
+first-write failures, native-write/allocation/finalization recovery, and
+preserved dirty cache on pre-scratch rejection.

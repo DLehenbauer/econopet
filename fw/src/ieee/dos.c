@@ -4056,8 +4056,8 @@ static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
             dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
             return;
         }
-        for (unsigned int position = after; position < length; ++position) {
-            if (bytes[position] == '*' || bytes[position] == '?' || bytes[position] == '=') {
+        for (unsigned int position = 0; position < length; ++position) {
+            if (bytes[position] == '*' || bytes[position] == '?' || (position >= after && bytes[position] == '=')) {
                 dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
                 return;
             }
@@ -4220,12 +4220,14 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (work->phase == DOS_FORMAT_COPY_FINISH) {
             unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);
             unit->command = DOS_COMMAND_IDLE;
+            unit->selected_drive = reference.slot;
             command_end(unit, model);
             return;
         }
         const dos_media_ref_t initialized = work->duplicate ? work->source : reference;
         const dos_bam_t* const initialized_bam = &unit->bam[initialized.slot];
         if (initialized_bam->buffer.bytes[DOS_BAM_VERSION_OFFSET] != version) {
+            unit->selected_drive = initialized.slot;
             dos_status(unit, model, DOS_STATUS_POWER_ON, initialized_bam->buffer.track, initialized_bam->buffer.sector);
             unit->command = DOS_COMMAND_IDLE;
             return;
@@ -4235,6 +4237,7 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         return;
     }
     dos_media_ref_t current;
+    unit->selected_drive = reference.slot;
     if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
         current.identity != reference.identity) {
         storage_error(unit, media, reference, reference.identity == 0 ? DOS_MEDIA_ABSENT : DOS_MEDIA_STALE, true,
@@ -4418,6 +4421,12 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     return;
 
 failed:
+    // HEADER and generated formatter pages borrow BAM storage without keeping
+    // a valid map binding. Preserve the cache only before scratch was touched.
+    if (work->phase >= DOS_FORMAT_ERASE || (!work->full && work->phase >= DOS_FORMAT_HEADER)) {
+        *bam = (dos_bam_t){0};
+        unit->free_blocks_valid[reference.slot] = false;
+    }
     if (work->duplicate && work->phase >= DOS_FORMAT_ERASE) {
         unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);
     }
