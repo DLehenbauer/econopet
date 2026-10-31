@@ -812,6 +812,26 @@ static uint8_t allocate_channel(dos_unit_t* const unit, const dos_media_ref_t re
     return channel;
 }
 
+// Reserve native REL data/data/side ownership before any record is published.
+uint8_t dos_rel_channel_claim(dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t secondary) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // OPNRCH obtains two GETRCH pages, then a third GETBUF page for SS.
+    // GBERR/RELBUF return partial claims on exhaustion. This host claim
+    // retains the existing no-publication-before-success allocation policy.
+    vet(dos_find_channel(unit, secondary) == DOS_UNUSED, "REL claim requires an unowned secondary");
+    const uint8_t channel = allocate_channel(unit, reference, secondary, DOS_CHANNEL_BUFFER_COUNT);
+    if (channel != DOS_UNUSED) {
+        dos_channel_t* const state = &unit->channels[channel];
+        state->file_type = DISKIMAGE_FTYPE_REL;
+        state->ready = false;
+        state->rel = (dos_rel_reader_t){0};
+    }
+    return channel;
+}
+
 // Check the cached BAM's DOS version before allowing a sector write.
 // Return false with retained status for stale media, BAM failure, or a foreign version.
 static bool write_version(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,

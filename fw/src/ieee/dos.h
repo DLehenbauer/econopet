@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ieee/dos_media.h"
+#include "ieee/dos_rel.h"
 
 // INTTAB reserves logical indices 6/7 and leaves twelve shared data pages.
 #define DOS_CHANNEL_COUNT 8u
@@ -84,16 +85,9 @@ typedef enum {
 
 typedef struct {
     dos_media_ref_t media;
-    uint16_t traversed;
-    uint16_t position;
     uint8_t buffers[DOS_CHANNEL_BUFFER_COUNT];
     uint8_t active;
     uint8_t secondary;
-    union {
-        uint8_t singleton;
-        uint8_t direct_last;
-        uint8_t read_last;
-    };
     uint8_t access;
     uint8_t directory;
     uint8_t file_type;
@@ -102,34 +96,48 @@ typedef struct {
     uint8_t directory_entry;
     uint8_t first_track;
     uint8_t first_sector;
-    uint8_t old_track;
-    uint8_t old_sector;
-    uint8_t next_track;
-    uint8_t next_sector;
-    uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
-    uint8_t grow_from_sector;
     uint8_t closing;
     uint16_t blocks;
-    uint8_t pattern_count;
-    uint8_t directory_searches;
-    union {
-        uint8_t line_length;
-        uint8_t direct_byte;
-        uint8_t read_byte;
-    };
     bool allocated;
     bool ready;
-    union {
-        bool line_eoi;
-        bool direct_eoi;
-        bool read_eoi;
-    };
-    bool replaced;
     bool failed;
-    bool directory_dirty;
-    bool directory_published;
-    bool grow_pending;
-    bool pointer_mode;
+    // file_type selects ordinary metadata or the REL reader. Routing,
+    // teardown and pool ownership remain outside this shared storage.
+    union {
+        struct {
+            uint16_t traversed;
+            uint16_t position;
+            union {
+                uint8_t singleton;
+                uint8_t direct_last;
+                uint8_t read_last;
+            };
+            uint8_t old_track;
+            uint8_t old_sector;
+            uint8_t next_track;
+            uint8_t next_sector;
+            uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+            uint8_t grow_from_sector;
+            uint8_t pattern_count;
+            uint8_t directory_searches;
+            union {
+                uint8_t line_length;
+                uint8_t direct_byte;
+                uint8_t read_byte;
+            };
+            union {
+                bool line_eoi;
+                bool direct_eoi;
+                bool read_eoi;
+            };
+            bool replaced;
+            bool directory_dirty;
+            bool directory_published;
+            bool grow_pending;
+            bool pointer_mode;
+        };
+        dos_rel_reader_t rel;
+    };
 } dos_channel_t;
 
 typedef struct {
@@ -419,6 +427,13 @@ bool dos_finalize(dos_unit_t* unit, dos_media_bank_t* media);
 
 // Find an allocated secondary or return DOS_UNUSED.
 uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
+
+// Internal reservation only: claim data/data/side pages for an unowned data
+// secondary. Return DOS_UNUSED on exhaustion without publishing a partial owner.
+// No reads or status publication. Use the REL leaf APIs with these pages,
+// not ordinary dos_stage/dos_get/dos_put. Public REL OPEN remains disabled.
+// Only clean read ownership is supported, not dirty native CLSREL completion.
+uint8_t dos_rel_channel_claim(dos_unit_t* unit, dos_media_ref_t media, uint8_t secondary);
 
 // Replace the retained status and restart its unread cursor.
 void dos_status(dos_unit_t* unit, dos_model_t model, dos_status_code_t code, uint8_t track, uint8_t sector);
