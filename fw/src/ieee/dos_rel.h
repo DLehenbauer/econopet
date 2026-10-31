@@ -69,6 +69,8 @@ void dos_rel_lookup_start(dos_rel_lookup_t* lookup, dos_model_t model, dos_media
 // Read at most one index sector. FOUND exposes the data-sector coordinates,
 // not a ready record. MISSING is SSTEST's range result, not a completed P/50
 // reply (SSEND, data-buffer positioning and record-length checks still follow).
+// SSPOS accepts a second ER1 without rereading: malformed data coordinates,
+// including track zero, then reach the subsequent data read's geometry check.
 // Failed reads may alter scratch but never publish a usable data link.
 dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* lookup, dos_media_bank_t* media,
                                             uint8_t scratch[DISKIMAGE_SECTOR_SIZE]);

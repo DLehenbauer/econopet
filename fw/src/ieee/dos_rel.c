@@ -111,6 +111,8 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/sstest
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/sstest
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ssutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssutil
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/system
     //
     // SSTEST/ST50/ST20 and RDSS1C/RDSS1B select group, side and data links.
@@ -136,22 +138,29 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
         lookup->phase = DOS_REL_LOOKUP_GROUP;
         return lookup->track == 0 ? missing(lookup) : lookup->result;
     }
-    // Native header equality precedes the six-side bound. Once a selected
-    // side is read, SSTEST consumes its pointer without another header check.
-    if (lookup->phase != DOS_REL_LOOKUP_SIDE && scratch[DOS_REL_SIDE_NUMBER_OFFSET] != lookup->address.side) {
+    // SSPOS repeats SSTEST after IBRD, accepting ER1 without another read.
+    // Header equality still precedes the side-table/range decision.
+    const bool resident = scratch[DOS_REL_SIDE_NUMBER_OFFSET] == lookup->address.side;
+    if (!resident) {
         if (lookup->address.side >= DOS_REL_SIDE_COUNT) {
             return missing(lookup);
         }
         const uint8_t index = DOS_REL_SIDE_TABLE_OFFSET + 2u * lookup->address.side;
-        lookup->track = scratch[index];
-        lookup->sector = scratch[index + 1u];
-        lookup->phase = DOS_REL_LOOKUP_SIDE;
-        return lookup->track == 0 ? missing(lookup) : lookup->result;
+        if (scratch[index] == 0) {
+            return missing(lookup);
+        }
+        if (lookup->phase != DOS_REL_LOOKUP_SIDE) {
+            lookup->track = scratch[index];
+            lookup->sector = scratch[index + 1u];
+            lookup->phase = DOS_REL_LOOKUP_SIDE;
+            return lookup->result;
+        }
     }
-    // SSTEST tests the track byte at SSIND. The sector may legitimately be zero.
+    // Only header equality tests SSIND's track. A second ER1 accepts even a
+    // zero data track, leaving geometry validation to the later data read.
     lookup->track = scratch[lookup->address.index];
     lookup->sector = scratch[lookup->address.index + 1u];
-    if (lookup->track == 0) {
+    if (resident && lookup->track == 0) {
         return missing(lookup);
     }
     lookup->result = DOS_REL_LOOKUP_FOUND;

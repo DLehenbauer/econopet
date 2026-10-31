@@ -162,6 +162,44 @@ START_TEST(test_lookup_native_wrapped_indices_and_last_group) {
 }
 END_TEST
 
+// SSPOS repeats SSTEST after IBRD, accepting ER1 without following another side.
+START_TEST(test_lookup_retests_selected_side_range) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int variant = (unsigned int)_i % 5u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_index(&bank, &image, format, 0, 0);
+    image.bytes[2][DOS_REL_GROUP_TABLE_OFFSET] = 1;
+    image.bytes[0][DOS_REL_SIDE_TABLE_OFFSET + 2u] = 1;
+    image.bytes[0][DOS_REL_SIDE_TABLE_OFFSET + 3u] = 1;
+    image.bytes[1][DOS_REL_SIDE_NUMBER_OFFSET] = variant >= 3 ? 1 : 0;
+    image.bytes[1][DOS_REL_SIDE_TABLE_OFFSET + 2u] = variant == 0 || variant == 3 ? 0 : 1;
+    image.bytes[1][DOS_REL_SIDE_TABLE_OFFSET + 3u] = 6;
+    image.bytes[1][DOS_REL_POINTER_OFFSET] = variant == 2 || variant == 4 ? 0 : 1;
+    image.bytes[1][DOS_REL_POINTER_OFFSET + 1u] = 3;
+    dos_rel_lookup_t lookup;
+    dos_rel_lookup_start(&lookup, models[format], reference, 1, format == 2 ? 2 : 0,
+                         dos_rel_address(models[format], 241, 127, 1));
+    uint8_t scratch[DISKIMAGE_SECTOR_SIZE];
+    for (unsigned int step = 0; lookup.result == DOS_REL_LOOKUP_PENDING; ++step) {
+        ck_assert_uint_lt(step, 3);
+        const unsigned int reads = image.reads;
+        dos_rel_lookup_step(&lookup, &bank, scratch);
+        ck_assert_uint_eq(image.reads, reads + 1u);
+    }
+    const bool missing = variant == 0 || variant == 4;
+    ck_assert_int_eq(lookup.result, missing ? DOS_REL_LOOKUP_MISSING : DOS_REL_LOOKUP_FOUND);
+    ck_assert_int_eq(lookup.media_result, DOS_MEDIA_OK);
+    ck_assert_uint_eq(lookup.track, missing || variant == 2 ? 0 : 1);
+    ck_assert_uint_eq(lookup.sector, missing ? 0 : 3);
+    const unsigned int reads = 2u + (format == 2);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_int_eq(dos_rel_lookup_step(&lookup, &bank, scratch),
+                     missing ? DOS_REL_LOOKUP_MISSING : DOS_REL_LOOKUP_FOUND);
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
 // Missing group, side or data pointers differ from storage failures.
 START_TEST(test_lookup_missing_ranges) {
     const unsigned int format = (unsigned int)_i / 4u;
@@ -665,6 +703,35 @@ START_TEST(test_record_explicit_incomplete_boundaries) {
     bool eoi = false;
     ck_assert(!dos_rel_record_peek(&record, &bank, data[0], data[1], &byte, &eoi));
     ck_assert_uint_eq(byte, 0xa5);
+}
+END_TEST
+
+// A second ER3 requests SSEND, but accepted ER1 coordinates reach data validation.
+START_TEST(test_record_selected_side_range_and_geometry_handoff) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool missing = (unsigned int)_i % 2u == 0;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_index(&bank, &image, format, 0, 0);
+    image.bytes[2][DOS_REL_GROUP_TABLE_OFFSET] = 1;
+    image.bytes[0][DOS_REL_SIDE_TABLE_OFFSET + 2u] = 1;
+    image.bytes[0][DOS_REL_SIDE_TABLE_OFFSET + 3u] = 1;
+    image.bytes[1][DOS_REL_SIDE_TABLE_OFFSET + 2u] = missing ? 0 : 1;
+    image.bytes[1][DOS_REL_SIDE_TABLE_OFFSET + 3u] = 6;
+    image.bytes[1][DOS_REL_POINTER_OFFSET] = missing ? 1 : 0;
+    image.bytes[1][DOS_REL_POINTER_OFFSET + 1u] = 3;
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, 241, 127, 1);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], data[2][DISKIMAGE_SECTOR_SIZE];
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, data[0], data[1]),
+                     missing ? DOS_REL_RECORD_NO_INDEX : DOS_REL_RECORD_FAILED);
+    ck_assert_int_eq(record.lookup.media_result, missing ? DOS_MEDIA_OK : DOS_MEDIA_RANGE);
+    ck_assert_uint_eq(image.reads, 2u + (format == 2));
+    uint8_t byte = 0xa5;
+    bool eoi = false;
+    ck_assert(!dos_rel_record_peek(&record, &bank, data[0], data[1], &byte, &eoi));
+    ck_assert_uint_eq(byte, 0xa5);
+    ck_assert(!eoi);
 }
 END_TEST
 
@@ -1300,6 +1367,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_record_address_boundaries, 0, 3);
     tcase_add_loop_test(core, test_lookup_uses_side_tables_and_super_groups, 0, 12);
     tcase_add_loop_test(core, test_lookup_native_wrapped_indices_and_last_group, 0, 6);
+    tcase_add_loop_test(core, test_lookup_retests_selected_side_range, 0, 15);
     tcase_add_loop_test(core, test_lookup_missing_ranges, 0, 12);
     tcase_add_loop_test(core, test_lookup_failure_and_replacement, 0, 18);
     tcase_add_loop_test(core, test_lookup_geometry_errors, 0, 6);
@@ -1312,6 +1380,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_end_cancel_restart_and_peer_generation, 0, 3);
     tcase_add_loop_test(core, test_record_read_preparation_and_actual_get, 0, 27);
     tcase_add_loop_test(core, test_record_explicit_incomplete_boundaries, 0, 3);
+    tcase_add_loop_test(core, test_record_selected_side_range_and_geometry_handoff, 0, 6);
     tcase_add_loop_test(core, test_record_storage_and_stale_failures, 0, 24);
     tcase_add_loop_test(core, test_record_defers_unused_prefetch_failure, 0, 9);
     tcase_add_loop_test(core, test_record_cancel_restart_and_cached_generation, 0, 12);
