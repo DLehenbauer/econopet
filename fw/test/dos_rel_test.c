@@ -2596,6 +2596,75 @@ START_TEST(test_clean_position_buffer_reuse) {
 }
 END_TEST
 
+// Positioned RDREL traverses complete records with native NRBUF reads and WRITE-header reuse.
+START_TEST(test_clean_position_buffer_get_continuation) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    const uint8_t target = variant == 1 || variant == 4 ? 4 : variant == 2 ? 5 : 3;
+    const uint16_t number = target - 1u;
+    const unsigned int size = 200;
+    const bool saved_write = variant == 3 || variant == 4;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    image.bytes[5][0] = 1;
+    image.bytes[5][1] = 6;
+    image.bytes[6][1] = UINT8_MAX;
+    for (unsigned int offset = 0; offset < 4u * DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++offset) {
+        image.bytes[3u + offset / DISKIMAGE_SECTOR_PAYLOAD_SIZE]
+                   [DISKIMAGE_SECTOR_LINK_SIZE + offset % DISKIMAGE_SECTOR_PAYLOAD_SIZE] = 'A' + offset / size;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    dos_rel_channel_prepare_open(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 3, size);
+    finish_pipeline(&unit, &bank, &image);
+    dos_channel_t* const state = &unit.channels[channel];
+    if (saved_write || variant == 5) {
+        // Distinct saved WRITE bytes prove BHERE reuse, while NRBUF must refill a selected WRITE alternate.
+        const uint8_t page = state->buffers[saved_write ? target - 3u : 1u];
+        unit.buffer_writes |= (uint16_t)(1u << page);
+        unit.buffers[page].resident = false;
+        for (unsigned int offset = DISKIMAGE_SECTOR_LINK_SIZE; offset < DISKIMAGE_SECTOR_SIZE; ++offset) {
+            unit.buffers[page].bytes[offset] += 'a' - 'A';
+        }
+    }
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const unsigned int reads = image.reads;
+    const unsigned int position_reads = target - 3u;
+    const unsigned int continuation_reads = variant == 5 ? 3u : 5u - target;
+    ck_assert(dos_rel_channel_position_buffer(&unit, channel, number, 0, 1, target));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(image.reads, reads + position_reads);
+    const dos_unit_t positioned = unit;
+    const unsigned int start = (number - 1u) * size;
+    for (unsigned int consumed = 0; consumed < 2u * size; ++consumed) {
+        uint8_t byte;
+        bool eoi;
+        dos_source_t source;
+        const unsigned int offset = start + consumed;
+        const unsigned int record = offset / size;
+        const bool saved = saved_write && 3u + offset / DISKIMAGE_SECTOR_PAYLOAD_SIZE == target;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(byte, (saved ? 'a' : 'A') + record);
+        ck_assert_int_eq(eoi, (consumed + 1u) % size == 0);
+        ck_assert_uint_eq(state->rel.number, number + consumed / size);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->ready && !state->failed);
+        ck_assert_uint_eq(state->rel.number, number + (consumed + 1u) / size);
+        ck_assert_mem_eq(unit.status, positioned.status, sizeof(unit.status));
+        ck_assert_uint_eq(unit.status_position, positioned.status_position);
+    }
+    ck_assert_uint_eq(image.reads, reads + position_reads + continuation_reads);
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+    ck_assert_mem_eq(&unit.buffers[state->buffers[2]], &positioned.buffers[state->buffers[2]], sizeof(dos_buffer_t));
+    ck_assert(dos_close(&unit, &bank, models[format], 2));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
 // Clean positioning stops required jobs, defers unused failures and cancels without I/O.
 START_TEST(test_clean_position_buffer_failure_and_cancel) {
     const unsigned int format = (unsigned int)_i / 5u;
@@ -3227,6 +3296,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_clean_nrbuf_terminal_next_pointer, 0, 3);
     tcase_add_loop_test(core, test_clean_nrbuf_resident_terminal_records, 0, 12);
     tcase_add_loop_test(core, test_clean_position_buffer_reuse, 0, 24);
+    tcase_add_loop_test(core, test_clean_position_buffer_get_continuation, 0, 18);
     tcase_add_loop_test(core, test_clean_position_buffer_failure_and_cancel, 0, 15);
     tcase_add_loop_test(core, test_clean_position_buffer_required_prefetch_error, 0, 12);
     tcase_add_loop_test(core, test_clean_position_buffer_peer_prefix, 0, 3);
