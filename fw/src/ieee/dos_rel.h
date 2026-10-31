@@ -195,6 +195,8 @@ typedef enum {
     DOS_REL_RECORD_DIRTY_NEXT,
     DOS_REL_RECORD_POSITION_WAIT_OTHER,
     DOS_REL_RECORD_POSITION_WAIT_COLD,
+    DOS_REL_RECORD_POSITION_WAIT_FOLLOWING,
+    DOS_REL_RECORD_WAIT_CACHED,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own
@@ -214,6 +216,8 @@ typedef struct {
     bool following_failed;
     // Owner's 8250 SSSGRP tag, independent of directory-channel admission.
     uint8_t cached_group;
+    // Cold host version-cache preparation, using the remaining record padding.
+    uint8_t bam_steps;
 } dos_rel_record_t;
 
 // Start positioning a valid nonzero-length record using the directory root.

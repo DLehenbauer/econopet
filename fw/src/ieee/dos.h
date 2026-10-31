@@ -488,6 +488,8 @@ bool dos_rel_channel_position(dos_unit_t* unit, uint8_t channel, uint16_t number
 // the dirty mask and pages. Write only the dirty active data page to its saved
 // header, using the existing BAM-version/storage gate. Success clears only
 // that mask bit, without advancing the record or changing retained status.
+// Each call performs at most one BAM READ/flush or data WRITE. False without
+// channel failure retains cold-version preparation (repeat this leaf call).
 // Failure keeps the bytes/mask and marks this channel failed for explicit
 // retry. An already-clean active page performs no I/O. Backing-store flush,
 // buffer switching, file flags and complete native error cleanup remain separate.
@@ -528,7 +530,8 @@ bool dos_rel_channel_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t chan
 // FULL stops with its final dirty page still owned, without a flush or CLOSE.
 bool dos_rel_channel_pad(dos_unit_t* unit, uint8_t channel);
 
-// Permit one explicit retry of a retained NRBUF WRITE or awaited refill READ.
+// Permit one explicit retry of a retained NRBUF WRITE, BAM preparation or
+// awaited refill/SETLST READ.
 // No I/O/status reset and no repeated GET or record-counter advancement.
 // A retired cached-write cursor cannot be revived after lifetime failure.
 bool dos_rel_channel_retry_write(dos_unit_t* unit, uint8_t channel);

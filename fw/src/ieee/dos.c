@@ -71,6 +71,7 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_DIRECTORY_BLOCKS_HIGH 31u
 #define DOS_BAM_TRACK_8050 38u
 #define DOS_BAM_TRACKS_PER_PART 50u
+#define DOS_BAM_MAX_PARTS 4u
 #define DOS_DIRECTORY_LINE_SIZE 32u
 #define DOS_DIRECTORY_NAME_SIZE 27u
 #define DOS_DIRECTORY_PATTERN_DRIVE DISKIMAGE_FILENAME_SIZE
@@ -411,7 +412,10 @@ static void free_drive_channels(dos_unit_t* const unit, const uint8_t drive) {
         const uint8_t owner = dos_find_channel(unit, candidate);
         if (owner != DOS_UNUSED) {
             const dos_channel_t* const channel = &unit->channels[owner];
-            const uint16_t page = 1u << channel->buffers[channel->active];
+            const uint8_t active = channel->file_type == DISKIMAGE_FTYPE_REL && channel->directory == DOS_DIRECTORY_NONE
+                                       ? channel->rel.record.active
+                                       : channel->active;
+            const uint16_t page = 1u << channel->buffers[active];
             if (((unit->buffer_drives & page) != 0) == (drive != 0)) {
                 free_channel(unit, owner);
             }
@@ -666,7 +670,7 @@ static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media,
     // cannot serve this track. Bound traversal as a corrupt-image safeguard.
     uint8_t bam_track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
     uint8_t bam_sector = 0;
-    for (unsigned int part = 0; part < 4; ++part) {
+    for (unsigned int part = 0; part < DOS_BAM_MAX_PARTS; ++part) {
         if (!bam->buffer.resident || bam->media.identity != reference.identity || bam->buffer.track != bam_track ||
             bam->buffer.sector != bam_sector) {
             if (!flush_bam(unit, media, bam)) {
@@ -929,7 +933,8 @@ static bool rel_nrbuf_pending(const dos_channel_t* const channel) {
            ((channel->rel.record.phase >= DOS_REL_RECORD_CLEAN_GET &&
              channel->rel.record.phase <= DOS_REL_RECORD_RESUME_NEXT) ||
             channel->rel.record.phase == DOS_REL_RECORD_DIRTY_GET ||
-            channel->rel.record.phase == DOS_REL_RECORD_DIRTY_NEXT);
+            channel->rel.record.phase == DOS_REL_RECORD_DIRTY_NEXT ||
+            channel->rel.record.phase == DOS_REL_RECORD_WAIT_CACHED);
 }
 
 // Recognize positioning independently of the owner's read/write access.
@@ -944,7 +949,8 @@ static bool rel_position_pending(const dos_channel_t* const channel) {
            ((channel->rel.record.phase >= DOS_REL_RECORD_POSITION_MATCH &&
              channel->rel.record.phase <= DOS_REL_RECORD_POSITION_END_SIDE) ||
             channel->rel.record.phase == DOS_REL_RECORD_POSITION_WAIT_OTHER ||
-            channel->rel.record.phase == DOS_REL_RECORD_POSITION_WAIT_COLD);
+            channel->rel.record.phase == DOS_REL_RECORD_POSITION_WAIT_COLD ||
+            channel->rel.record.phase == DOS_REL_RECORD_POSITION_WAIT_FOLLOWING);
 }
 
 // Report runnable existing-record writes, excluding failed or directory owners.
@@ -1076,6 +1082,10 @@ static void rel_read_state(dos_unit_t* const unit, dos_channel_t* const channel)
     // readiness. Missing CR/EOI remains readable without setting error 50 until
     // an actual GET. Host storage and unsupported traversal errors are separate.
     const dos_rel_record_result_t result = channel->rel.record.result;
+    if (channel->failed && rel_nrbuf_pending(channel)) {
+        channel->ready = false;
+        return;
+    }
     if (result == DOS_REL_RECORD_NEEDS_LINK && (channel->rel_write & DOS_REL_WRITE_FINISHED)) {
         // An owned window stops before an uncached native NRBUF job.
         // Preserve its status and ownership instead of inventing syntax 30.
@@ -1371,6 +1381,65 @@ bool dos_rel_channel_resume_read(dos_unit_t* const unit, dos_media_bank_t* const
     return true;
 }
 
+// Prepare SETJOB's cold version cache with at most one BAM READ or flush per call.
+static bool rel_write_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const state) {
+    // Both pinned jobs:SETJOB/SJB2 read byte 2 of the currently cached BAM.
+    // The cold host write_version path first selects the last track's BAM.
+    // Retain that walk across passes instead of changing the selected part.
+    dos_rel_record_t* const record = &state->rel.record;
+    dos_bam_t* const bam = &unit->bam[state->media.slot];
+    const dos_model_t model = state->rel_model;
+    const bool resident = bam->buffer.resident && bam->media.identity == state->media.identity;
+    if (record->bam_steps == 0 && resident) {
+        return true;
+    }
+    if (record->bam_steps == 0) {
+        record->bam_steps = 1;
+    }
+    const uint8_t last_track = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                               : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                         : DISKIMAGE_D82_TRACK_COUNT;
+    uint8_t track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
+    uint8_t sector = 0;
+    if (record->bam_steps > 1 && resident) {
+        const unsigned int low = bam->buffer.bytes[4], high = bam->buffer.bytes[5];
+        if (model == DOS_MODEL_4040 || (low != 0 && low < high && high - low <= DOS_BAM_TRACKS_PER_PART &&
+                                        last_track >= low && last_track < high)) {
+            record->bam_steps = 0;
+            return true;
+        }
+        track = bam->buffer.bytes[0];
+        sector = bam->buffer.bytes[1];
+        if (record->bam_steps > DOS_BAM_MAX_PARTS || track == 0 ||
+            (track == directory_track(model) && sector == DOS_DIRECTORY_FIRST_SECTOR)) {
+            state->failed = true;
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, last_track, 0);
+            return false;
+        }
+    }
+    // A dirty predecessor owns its own pass. Failed reads retain its full cache.
+    if (bam->dirty) {
+        state->failed = !flush_bam(unit, media, bam);
+        return false;
+    }
+    uint8_t bytes[DISKIMAGE_SECTOR_SIZE];
+    if (!storage_error(unit, media, state->media, read_sector(unit, media, state->media, track, sector, bytes), false,
+                       track, sector)) {
+        state->failed = true;
+        return false;
+    }
+    if (bam->media.identity != state->media.identity) {
+        unit->free_blocks_valid[state->media.slot] = false;
+    }
+    memcpy(bam->buffer.bytes, bytes, sizeof(bytes));
+    bam->buffer.track = track;
+    bam->buffer.sector = sector;
+    bam->buffer.resident = true;
+    bam->media = state->media;
+    ++record->bam_steps;
+    return false;
+}
+
 // Write a physical data page without moving the owner's current read/write cursor.
 static bool rel_write_page(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t channel,
                            const uint8_t page, uint8_t* const dirty) {
@@ -1413,6 +1482,12 @@ static bool rel_write_page(dos_unit_t* const unit, dos_media_bank_t* const media
     // publishes this owner's drive, retaining bytes and dirty bits for retry.
     const uint8_t selected_drive = unit->selected_drive;
     unit->selected_drive = state->media.slot;
+    if (!rel_write_bam(unit, media, state)) {
+        if (!state->failed) {
+            unit->selected_drive = selected_drive;
+        }
+        return false;
+    }
     if (!write_sector(unit, media, state->media, buffer->track, buffer->sector, buffer->bytes)) {
         state->failed = true;
         return false;
@@ -1518,6 +1593,23 @@ bool dos_rel_channel_advance_write(dos_unit_t* const unit, dos_media_bank_t* con
     return true;
 }
 
+// Distinguish a required failed read-ahead from terminal mount-lifetime failures.
+static bool rel_failed_prefetch(const dos_channel_t* const state) {
+    const dos_rel_record_t* const record = &state->rel.record;
+    return state->access == DOS_ACCESS_MODIFY && record->result == DOS_REL_RECORD_FAILED && record->following_failed &&
+           (record->lookup.media_result == DOS_MEDIA_OK || record->lookup.media_result == DOS_MEDIA_IO_ERROR ||
+            record->lookup.media_result == DOS_MEDIA_RANGE);
+}
+
+// Publish ERROR/ERROR1's failed saved header while retaining an explicit host retry.
+static void rel_prefetch_error(dos_unit_t* const unit, dos_channel_t* const state) {
+    const dos_buffer_t* const failed = &unit->buffers[state->buffers[state->rel.record.active ^ 1u]];
+    state->ready = false;
+    state->failed = true;
+    unit->selected_drive = state->media.slot;
+    dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, failed->track, failed->sector);
+}
+
 // Apply SETLST only to completed clean window bytes, without submitting prefetch.
 static void rel_next_cached(dos_unit_t* const unit, const dos_media_bank_t* const media, dos_channel_t* const state) {
     // ROM sources:
@@ -1541,6 +1633,11 @@ static void rel_next_cached(dos_unit_t* const unit, const dos_media_bank_t* cons
     }
     dos_rel_record_prepare_cached(&state->rel.record, media, unit->buffers[state->buffers[0]].bytes,
                                   unit->buffers[state->buffers[1]].bytes);
+    if (rel_failed_prefetch(state)) {
+        state->rel.record.result = DOS_REL_RECORD_PENDING;
+        state->rel.record.phase = DOS_REL_RECORD_WAIT_CACHED;
+        rel_prefetch_error(unit, state);
+    }
 }
 
 // Resume clean NRBUF using one retained read, prefetch or no-I/O join per pass.
@@ -1573,6 +1670,24 @@ static void rel_nrbuf_work(dos_unit_t* const unit, dos_media_bank_t* const media
                       phase == DOS_REL_RECORD_PREFETCH_NEXT || phase == DOS_REL_RECORD_RESUME_NEXT;
     const uint8_t active_index = state->buffers[record->active];
     dos_buffer_t* const active = &unit->buffers[active_index];
+    if (phase == DOS_REL_RECORD_WAIT_CACHED) {
+        const uint8_t other = record->active ^ 1u;
+        const uint8_t dirty = other == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING;
+        vet(!(state->rel_write & dirty), "REL cached retry must not overwrite a dirty page");
+        dos_buffer_t* const following = &unit->buffers[state->buffers[other]];
+        record->lookup.media_result =
+            read_sector(unit, media, state->media, following->track, following->sector, following->bytes);
+        following->resident = record->lookup.media_result == DOS_MEDIA_OK;
+        following->failed = !following->resident;
+        if (following->failed) {
+            rel_prefetch_error(unit, state);
+            return;
+        }
+        record->following = true;
+        record->following_failed = false;
+        record->phase = DOS_REL_RECORD_RESUME_NEXT;
+        return;
+    }
     if (phase == DOS_REL_RECORD_DIRTY_GET || phase == DOS_REL_RECORD_DIRTY_NEXT || phase == DOS_REL_RECORD_CLEAN_GET ||
         phase == DOS_REL_RECORD_CLEAN_NEXT) {
         const bool clean = phase == DOS_REL_RECORD_CLEAN_GET || phase == DOS_REL_RECORD_CLEAN_NEXT;
@@ -1636,7 +1751,7 @@ static void rel_nrbuf_work(dos_unit_t* const unit, dos_media_bank_t* const media
     record->phase = DOS_REL_RECORD_FOLLOWING;
     if (next) {
         rel_next_cached(unit, media, state);
-        if (record->result == DOS_REL_RECORD_PENDING) {
+        if (record->result == DOS_REL_RECORD_PENDING && !rel_nrbuf_pending(state)) {
             record->lookup.media_result = DOS_MEDIA_IO_ERROR;
             record->result = DOS_REL_RECORD_FAILED;
         }
@@ -1683,6 +1798,21 @@ static void rel_queue_nrbuf(dos_unit_t* const unit, dos_channel_t* const state, 
     state->ready = false;
 }
 
+// Retain a failed GET/NXTREC job without replaying its committed byte or count.
+static void rel_wait_failed_prefetch(dos_unit_t* const unit, dos_channel_t* const state, const uint8_t active,
+                                     const bool next, const bool needs_link) {
+    // Both REL1:NRBUF await the selected page, while REL4:SETLST awaits
+    // an alternate scan without changing the already-selected native pointer.
+    rel_prefetch_error(unit, state);
+    if (needs_link) {
+        state->rel.record.result = DOS_REL_RECORD_NEEDS_LINK;
+        rel_queue_nrbuf(unit, state, active, next);
+    } else {
+        state->rel.record.result = DOS_REL_RECORD_PENDING;
+        state->rel.record.phase = DOS_REL_RECORD_WAIT_CACHED;
+    }
+}
+
 // Begin post-CLREC RD40 once, retaining delayed completion status through NRBUF.
 static void rel_finish_work(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const state) {
     // ROM sources:
@@ -1695,10 +1825,11 @@ static void rel_finish_work(dos_unit_t* const unit, dos_media_bank_t* const medi
     dos_rel_record_t* const record = &state->rel.record;
     if (record->result == DOS_REL_RECORD_FULL) {
         const uint8_t active = record->active;
+        const bool needs_link = record->pointer >= record->next;
         record->result = DOS_REL_RECORD_END;
         dos_rel_record_next(record, media, unit->buffers[state->buffers[0]].bytes,
                             unit->buffers[state->buffers[1]].bytes);
-        if (record->result == DOS_REL_RECORD_FAILED) {
+        if (record->result == DOS_REL_RECORD_FAILED && !rel_failed_prefetch(state)) {
             rel_write_result(unit, state);
             return;
         }
@@ -1708,12 +1839,16 @@ static void rel_finish_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         }
         state->rel.no_record = false;
         state->rel_write |= DOS_REL_WRITE_FINISHED;
+        if (rel_failed_prefetch(state)) {
+            rel_wait_failed_prefetch(unit, state, active, true, needs_link);
+            return;
+        }
         if (record->active != active || record->result == DOS_REL_RECORD_NEEDS_LINK) {
             rel_queue_nrbuf(unit, state, active, true);
             return;
         }
         rel_next_cached(unit, media, state);
-        if (record->result == DOS_REL_RECORD_PENDING) {
+        if (record->result == DOS_REL_RECORD_PENDING && !rel_nrbuf_pending(state)) {
             record->lookup.media_result = DOS_MEDIA_IO_ERROR;
             record->result = DOS_REL_RECORD_FAILED;
         }
@@ -2023,8 +2158,10 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
         return;
     }
     if (phase != DOS_REL_RECORD_POSITION_READY) {
-        const bool wait = phase == DOS_REL_RECORD_POSITION_WAIT_OTHER || phase == DOS_REL_RECORD_POSITION_WAIT_COLD;
-        const bool following = phase == DOS_REL_RECORD_POSITION_FOLLOWING;
+        const bool wait = phase == DOS_REL_RECORD_POSITION_WAIT_OTHER || phase == DOS_REL_RECORD_POSITION_WAIT_COLD ||
+                          phase == DOS_REL_RECORD_POSITION_WAIT_FOLLOWING;
+        const bool following =
+            phase == DOS_REL_RECORD_POSITION_FOLLOWING || phase == DOS_REL_RECORD_POSITION_WAIT_FOLLOWING;
         dos_buffer_t* const target = &unit->buffers[state->buffers[record->active ^ (following ? 1u : 0u)]];
         const uint8_t track = wait ? target->track : following ? active->bytes[0] : record->lookup.track;
         const uint8_t sector = wait ? target->sector : following ? active->bytes[1] : record->lookup.sector;
@@ -2037,8 +2174,9 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
             target->sector = sector;
             target->resident = record->lookup.media_result == DOS_MEDIA_OK;
             target->failed = !target->resident;
-            if (target->failed && (!following || (record->lookup.media_result != DOS_MEDIA_IO_ERROR &&
-                                                  record->lookup.media_result != DOS_MEDIA_RANGE))) {
+            if (target->failed && (wait || !following ||
+                                   (record->lookup.media_result != DOS_MEDIA_IO_ERROR &&
+                                    record->lookup.media_result != DOS_MEDIA_RANGE))) {
                 state->failed = true;
                 unit->selected_drive = state->media.slot;
                 dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, track, sector);
@@ -2061,6 +2199,10 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
         // SETLST's DBLBUF requires this failed job. Report its saved header,
         // like ERROR/ERROR1, not the target header or a lifetime diagnostic.
         const dos_buffer_t* const following = &unit->buffers[state->buffers[record->active ^ 1u]];
+        if (state->access == DOS_ACCESS_MODIFY) {
+            record->result = DOS_REL_RECORD_PENDING;
+            record->phase = DOS_REL_RECORD_POSITION_WAIT_FOLLOWING;
+        }
         state->failed = true;
         unit->selected_drive = state->media.slot;
         dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, following->track, following->sector);
@@ -2913,9 +3055,9 @@ static bool directory_growth_pending(const dos_unit_t* const unit, const dos_med
                                      const uint8_t sector) {
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const owner = &unit->channels[index];
-        if (owner->allocated && owner->grow_pending && owner->media.identity == reference.identity &&
-            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
-            owner->directory_track == track &&
+        if (owner->allocated && (owner->file_type != DISKIMAGE_FTYPE_REL || owner->directory != DOS_DIRECTORY_NONE) &&
+            owner->grow_pending && owner->media.identity == reference.identity && owner->media.unit == reference.unit &&
+            owner->media.slot == reference.slot && owner->directory_track == track &&
             (owner->directory_sector == sector || owner->grow_from_sector == sector)) {
             return true;
         }
@@ -2928,7 +3070,8 @@ static bool directory_slot_reserved(const dos_unit_t* const unit, const dos_medi
                                     const uint8_t entry) {
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const owner = &unit->channels[index];
-        if (owner->allocated && owner->access != DOS_ACCESS_READ && owner->media.identity == reference.identity &&
+        if (owner->allocated && (owner->file_type != DISKIMAGE_FTYPE_REL || owner->directory != DOS_DIRECTORY_NONE) &&
+            owner->access != DOS_ACCESS_READ && owner->media.identity == reference.identity &&
             owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
             owner->directory_sector == sector && (owner->grow_pending || owner->directory_entry == entry)) {
             return true;
@@ -3189,6 +3332,12 @@ static void block_start(dos_unit_t* const unit, dos_media_bank_t* const media, c
             return;
         }
         state = &unit->channels[channel];
+        if (state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE) {
+            // Ordinary editors alias the REL cursor/flags. Public REL block
+            // editing remains excluded until it has a native owner join.
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
         if (state->access != DOS_ACCESS_DIRECT && operation != 'P' && state->directory != DOS_DIRECTORY_NONE) {
             // Formatted LOAD listings remain an explicit host-policy exclusion.
             dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
@@ -7759,10 +7908,15 @@ void dos_get(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
             vet(state->ready, "REL GET exceeded its staged prefix");
             const uint8_t active = state->rel.record.active;
             const uint16_t number = state->rel.number;
+            const uint8_t pointer = state->rel.record.pointer, next = state->rel.record.next;
             dos_rel_reader_get(&state->rel, state->rel_model, media, unit->buffers[state->buffers[0]].bytes,
                                unit->buffers[state->buffers[1]].bytes);
-            if (state->rel.record.result != DOS_REL_RECORD_FAILED &&
-                (state->rel.record.active != active || state->rel.record.result == DOS_REL_RECORD_NEEDS_LINK)) {
+            if (rel_failed_prefetch(state)) {
+                const bool advanced = state->rel.number != number;
+                rel_wait_failed_prefetch(unit, state, active, advanced,
+                                         advanced ? pointer >= next : pointer == UINT8_MAX);
+            } else if (state->rel.record.result != DOS_REL_RECORD_FAILED &&
+                       (state->rel.record.active != active || state->rel.record.result == DOS_REL_RECORD_NEEDS_LINK)) {
                 rel_queue_nrbuf(unit, state, active, state->rel.number != number);
             } else {
                 rel_next_cached(unit, media, state);
