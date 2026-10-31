@@ -57,6 +57,21 @@ typedef struct {
     bool super;
 } dos_rel_lookup_t;
 
+// ADDREL reuses the lookup cursor's storage after SSEND/POSBUF complete.
+// The common prefix keeps the captured media/error available to owned jobs.
+typedef struct {
+    dos_media_ref_t media;
+    dos_media_result_t media_result;
+    uint8_t side;
+    uint8_t pointer;
+    uint8_t group;
+    uint8_t target_side;
+    uint8_t target_index;
+    uint8_t target_group;
+    uint8_t track;
+    uint8_t sector;
+} dos_rel_growth_t;
+
 // FNDREL/RECORD arithmetic only. Zero record/position aliases one. Overflow
 // positions restart at the record's first byte and retain the error indication.
 dos_rel_address_t dos_rel_address(dos_model_t model, uint16_t record, uint8_t record_size, uint8_t position);
@@ -197,12 +212,23 @@ typedef enum {
     DOS_REL_RECORD_POSITION_WAIT_COLD,
     DOS_REL_RECORD_POSITION_WAIT_FOLLOWING,
     DOS_REL_RECORD_WAIT_CACHED,
+    DOS_REL_RECORD_CREATE_SIDE,
+    DOS_REL_RECORD_CREATE_SIDE_WRITE,
+    DOS_REL_RECORD_CREATE_SUPER,
+    DOS_REL_RECORD_CREATE_SUPER_WRITE,
+    DOS_REL_RECORD_CREATE_DATA,
+    DOS_REL_RECORD_CREATE_MAP,
+    DOS_REL_RECORD_CREATE_READY,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own
 // channels, publish status or implement dirty-buffer reuse/growth.
 typedef struct {
-    dos_rel_lookup_t lookup;
+    // Lookup and growth never overlap, retaining the same media/error prefix.
+    union {
+        dos_rel_lookup_t lookup;
+        dos_rel_growth_t growth;
+    };
     // Byte-sized dos_rel_record_result_t and dos_rel_record_phase_t tags.
     uint8_t result;
     uint8_t phase;
