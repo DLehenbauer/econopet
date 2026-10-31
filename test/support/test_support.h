@@ -49,6 +49,9 @@ void test_register_file(const char* path, const char* content);
 // Reports exact path membership without opening or modifying a registered file.
 bool test_file_registered(const char* path);
 
+// Counts live cookie-backed FILE handles, including unregistered borrowers.
+size_t test_open_file_count(void);
+
 // Registers a mutable or read-only binary file for code that uses stdio.
 void test_register_binary_file(const char* path, const void* data, size_t size, bool writable);
 

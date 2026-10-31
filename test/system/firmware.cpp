@@ -120,6 +120,9 @@ void FirmwareSession::close() {
         unmounted = ieee_drive_unmount_all();
     } catch (...) {
         error = std::current_exception();
+        // A failed board cannot quiesce through SPI again. Retire native
+        // borrowers while fixture storage is still alive, then rethrow below.
+        ieee_drive_abort();
     }
     if (!unmounted && !error)
         throw board_.failure<std::runtime_error>("firmware close", "drive media are busy");

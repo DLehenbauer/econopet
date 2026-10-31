@@ -31,6 +31,12 @@ void ieee_drive_reset(void);
 // Removes all mounted images. Failure retains native media for a later retry.
 bool ieee_drive_unmount_all(void);
 
+#if !defined(PICO_ON_DEVICE) || !PICO_ON_DEVICE
+// Discards dirty simulator state and closes storage without SPI after a failed
+// board is permanently retired. Never substitute this for durable unmount.
+void ieee_drive_abort(void);
+#endif
+
 // Mounts a path relative to /disks into a slot (0-7), or removes it for NULL.
 // Returns false for unavailable/unsupported media, a type mismatch with the
 // other slot, or a busy bus, retaining the old unit. A full /disks/ path

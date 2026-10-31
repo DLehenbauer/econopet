@@ -28,6 +28,11 @@ before transport reset. This avoids finalizing cached BAM references belonging
 to a detached generation. Configuration loading halts the CPU and requires
 successful unmount before applying setup actions in their declared order.
 
+Presence withdrawal retires old roles before a coincident accepted LISTEN or
+TALK can select a retained peer. Secondary/OPEN/CLOSE commands require the
+addressed unit to remain present, so withdrawal cannot flush a peer's response.
+Completed transport events retain their historical owners.
+
 Qualification also exposed a narrow inherited DOS error-path defect. Named
 COPY selected the output drive before rejecting an existing target. Native
 `rename:CY` calls `CHKIO` before that selection, so error 63 must retain
@@ -43,6 +48,13 @@ The system tests compile the real DOS engine and facade in Debug and drive
 the production FPGA top through SPI and PIA/VIA handshakes. Controller and
 passive wire observations remain independent. Firmware service runs during
 cooperative command settlement and between received bytes.
+
+If teardown encounters an observer/deadline exception, host-only non-SPI
+cleanup discards the failed simulator's dirty DOS/media state and closes its
+FILE borrowers before unregistering fixture storage. The original exception
+is rethrown. Rejected teardown preconditions remain retryable and production
+hardware still requires durable unmount. An unpublished mount candidate uses
+GCC cleanup ownership, including C exception unwinding in host builds.
 
 Legacy whole-file FIFO assumptions are replaced with native bounded GET
 progress. Public REL acceptance constructs valid side/super-sector metadata
@@ -104,6 +116,8 @@ CTest registry is authoritative, not a successful run that discovers no tests.
 Detailed command logs, counts and exact reconstruction receipts accompany the
 staged snapshot privately.
 
+The original publication baseline (before PR feedback fixes) was:
+
 | Check | Result |
 | --- | --- |
 | Configured Debug firmware | 5,756 cases (5,703 ordinary and 53 fatal/assert), all pass over final reviewed #130 |
@@ -117,6 +131,25 @@ staged snapshot privately.
 The earlier immutable-publication qualification (5,588 firmware cases and a
 717-case system run followed by the COPY correction rerun) remains archived
 separately. It is not substituted for the complete final-main run above.
+
+The PR feedback fixes were qualified separately:
+
+| Check | Result |
+| --- | --- |
+| Debug firmware | All 5,756 cases pass |
+| Actual system registry | All 720 cases pass across disjoint 601-case and 119-case batches, including three added lifecycle regressions |
+| Gateware | All 64 entries pass across the full run and corrected IEEE reruns, including 144 coincident-withdrawal cases |
+| Production ARM and ROM | Fresh builds pass, with simulator-only discard absent from the ARM object |
+| Production FPGA | Fresh C3 map/interface/PNR/programming/export pass with unchanged SDC and flow inputs |
+| C3 timed paths | Worst reported setup +0.299 ns and hold +0.086 ns, timing checker passes |
+
+The original half-hour root system wrapper timed out locally after 601
+passing cases and on original-head CI after 607 passing cases, without test
+assertion failures. The wrapper now allows one hour for native cooperative
+SPI workloads, retaining its two-worker resource bound and individual test
+deadlines. The generated wrapper properties were checked. A complete run
+through the new wrapper remains for new-head CI, rather than being inferred
+from the split local results. Reference tooling was not rerun for these fixes.
 
 STA coverage is not complete. The unchanged MC6809 paths retain two
 unclocked pins and two unconstrained NMI-latch endpoints. The unchanged

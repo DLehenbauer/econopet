@@ -233,7 +233,7 @@ module ieee (
     wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
     logic [UNIT_COUNT-1:0] listen_units = '0;
-    wire listening = |listen_units;
+    wire listening = |(listen_units & unit_mask);
     logic talking   = 1'b0;
     logic [7:0] sa = 8'h00;
     logic [UNIT_COUNT-1:0][7:0] unit_sa = '0;
@@ -342,6 +342,12 @@ module ieee (
             prev_bus_dav_n <= 1'b1;
             prev_atn_n     <= 1'b1;
         end else begin
+            // Withdraw old roles before an accepted command selects a retained
+            // peer. Later per-bit/role updates must win over these defaults.
+            if (|(listen_units & ~unit_mask)) listen_units <= listen_units & unit_mask;
+            if (addressed && !unit_mask[addressed_unit]) addressed <= 1'b0;
+            if (talking && !unit_mask[talk_unit]) talking <= 1'b0;
+
             // Retain source progress before later ATN bytes and release boundaries.
             if (atn_end_due) atn_end_pending <= 1'b1;
             if (atn_active) listen_checkpoint_armed <= 1'b1;
@@ -401,7 +407,7 @@ module ieee (
                                     talk_unit <= primary_unit;
                                 end
                             end
-                            8'b011?_????: if (addressed) begin
+                            8'b011?_????: if (addressed && unit_mask[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // secondary (data)
                                 unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Fresh status per request: the kernel re-reads
@@ -411,7 +417,8 @@ module ieee (
                                     && (~pia2_pb_out & 8'h0F) == 8'h0F)
                                     txs_flush <= 1'b1;
                             end
-                            8'b1110_????: if (addressed && listen_units[addressed_unit]) begin
+                            8'b1110_????: if (addressed && unit_mask[addressed_unit]
+                                && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // CLOSE
                                 unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Discard queued file data in fabric, before
@@ -422,7 +429,8 @@ module ieee (
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
-                            8'b1111_????: if (addressed && listen_units[addressed_unit]) begin
+                            8'b1111_????: if (addressed && unit_mask[addressed_unit]
+                                && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // OPEN
                                 unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
@@ -449,7 +457,7 @@ module ieee (
             end
             // LSN21 observes DAV even if transport is full and the sender times out.
             if (!atn_active && listening && listen_checkpoint_armed && !bus_dav_n) begin
-                listen_byte_units <= listen_units;
+                listen_byte_units <= listen_units & unit_mask;
                 listen_checkpoint_armed <= 1'b0;
             end
             // ATNIRQ abandons LSN21, but cannot retract an already completed exit.
@@ -557,10 +565,7 @@ module ieee (
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
             // A host media change may remove one unit without resetting peers.
-            if (|(listen_units & ~unit_mask)) listen_units <= listen_units & unit_mask;
-            if (addressed && !unit_mask[addressed_unit]) addressed <= 1'b0;
             if (talking && !unit_mask[talk_unit]) begin
-                talking <= 1'b0;
                 talk_st <= T_IDLE;
                 talk_eoi_fetched <= 1'b0;
                 dev_dav_n <= 1'b1;

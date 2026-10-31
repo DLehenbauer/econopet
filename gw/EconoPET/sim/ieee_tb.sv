@@ -897,6 +897,120 @@ module ieee_tb;
         end
     endtask
 
+    // Align the control-plane withdrawal with the CPU's DAV-producing write.
+    task automatic withdraw_on_command(input logic [7:0] command_byte,
+                                       input logic [7:0] presence);
+        ctl_dio(command_byte);
+        // Drive off-edge so both simulators sample the same CRB/control write.
+        // Both FF banks commit together, then command acceptance sees the mask.
+        @(negedge sys_clock);
+        rs = 4'd3; cpu_data = 8'h34; cpu_we = 1; cpu_be = 1;
+        cpu_addr_strobe = 1;
+        @(negedge sys_clock);
+        cpu_addr_strobe = 0;
+        pia2_cs = 1;
+        repeat (4) @(negedge sys_clock);
+        cpu_data_strobe = 1;
+        wb_addr = common_pkg::wb_ieee_addr(IEEE_REG_CTRL);
+        wb_dout = presence;
+        wb_we = 1;
+        wb_cycle = 1;
+        wb_strobe = 1;
+        @(negedge sys_clock);
+        cpu_data_strobe = 0;
+        wb_strobe = 0;
+        wb_cycle = 0;
+        wb_we = 0;
+        `assert_equal(dut.unit_mask, presence[7:4]);
+        `assert_equal(dut.prev_bus_dav_n, 1'b1);
+        `assert_equal(dut.bus_dav_n, 1'b0);
+        `assert_equal(dut.addressed, 1'b1);
+        `assert_equal(dut.unit_mask[dut.addressed_unit], 1'b0);
+        @(negedge sys_clock);
+        cpu_be = 0; cpu_we = 0; pia2_cs = 0;
+        repeat (g_tail) @(negedge sys_clock);
+        ctl_wait(8'h01, 8'h01);
+        ctl_dav(0);
+        ctl_wait(8'h01, 8'h00);
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);
+    endtask
+
+    // A withdrawn role must not overwrite an acknowledged retained peer selection.
+    task automatic check_coincident_unit_selection;
+        logic [7:0] selected;
+        for (int retired = 0; retired < 4; ++retired) begin
+            for (int peer = 0; peer < 4; ++peer) begin
+                if (peer != retired) for (int roles = 0; roles < 4; ++roles) begin
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK);
+                    ctl_atn(1);
+                    ctl_send((roles[0] ? 8'h48 : 8'h28) + 8'(retired));
+                    mcu_drain_rx;
+                    rx_bytes.delete();
+                    rx_isatn.delete();
+                    rx_iseoi.delete();
+                    selected = (roles[1] ? 8'h48 : 8'h28) + 8'(peer);
+                    withdraw_on_command(selected, 8'h10 << peer);
+                    mcu_drain_rx;
+                    `assert_equal(rx_bytes.size(), 1);
+                    `assert_equal(rx_bytes[0], selected);
+                    `assert_equal(rx_isatn[0], 1'b1);
+                    `assert_equal(dut.addressed, 1'b1);
+                    `assert_equal(dut.addressed_unit, 2'(peer));
+                    `assert_equal(dut.listen_units, roles[1] ? 4'b0 : (4'b1 << peer));
+                    `assert_equal(dut.talking, roles[1]);
+                    if (roles[1]) `assert_equal(dut.talk_unit, 2'(peer));
+                    ctl_atn(0);
+                end
+            end
+        end
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        rx_bytes.delete();
+        rx_isatn.delete();
+        rx_iseoi.delete();
+    endtask
+
+    // Withdrawn addressing must not flush a retained peer's queued response.
+    task automatic check_coincident_secondary_withdrawal;
+        logic [7:0] command_byte;
+        for (int retired = 0; retired < 4; ++retired) begin
+            for (int peer = 0; peer < 4; ++peer) begin
+                if (peer != retired) for (int role = 0; role < 2; ++role) begin
+                    for (int operation = 0; operation < 4; ++operation) begin
+                        case (operation)
+                            0: command_byte = 8'h62;
+                            1: command_byte = 8'h6F;
+                            2: command_byte = 8'hE2;
+                            3: command_byte = 8'hF2;
+                        endcase
+                        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+                        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK);
+                        ctl_atn(1);
+                        ctl_send(8'h28 + 8'(peer));
+                        ctl_send((role ? 8'h48 : 8'h28) + 8'(retired));
+                        mcu_drain_rx;
+                        mcu_write(IEEE_REG_TX, 8'hA5);
+                        mcu_write(IEEE_REG_TXS, 8'h5A);
+                        withdraw_on_command(command_byte, 8'h10 << peer);
+                        `assert_equal(dut.addressed, 1'b0);
+                        `assert_equal(dut.unit_sa[retired], 8'h20);
+                        `assert_equal(dut.listen_units, 4'b1 << peer);
+                        `assert_equal(dut.talking, 1'b0);
+                        `assert_equal(dut.tx_count, 1);
+                        `assert_equal(dut.txs_count, 1);
+                        ctl_atn(0);
+                    end
+                end
+            end
+        end
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        rx_bytes.delete();
+        rx_isatn.delete();
+        rx_iseoi.delete();
+    endtask
+
     task static run;
         logic [7:0] d, st;
         logic eoi;
@@ -1470,6 +1584,9 @@ module ieee_tb;
         mcu_read(IEEE_REG_STATUS, st);
         `assert_equal(st[6], 0);           // not talking
         `assert_equal(st[5], 0);           // not listening
+
+        check_coincident_unit_selection;
+        check_coincident_secondary_withdrawal;
 
         $display("[%t] END IEEE drive emulation test", $time);
     endtask

@@ -148,6 +148,49 @@ void write_file(System& system, FirmwareSession& firmware, IeeeController& contr
     require_sequence(wire.records(), expected, "ordinary PUT and CLOSE wire sequence");
 }
 
+// Failed-board teardown must retire a dirty writer before freeing its backing.
+TEST_F(SystemTest, DirtyWriterTeardownExceptionDetachesStorageWithoutSpi) {
+    for (const bool deadline : {false, true}) {
+        SCOPED_TRACE(deadline ? "deadline" : "observer");
+        System board;
+        IeeeController controller(board);
+        FirmwareSession firmware(board);
+        firmware.mount(D64::empty());
+        open_file(board, controller, Channel{DataChannel}, "0:DIRTY,S,W");
+        service_rx(board, firmware, "dirty teardown OPEN");
+        controller.command(Listen(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{DataChannel}));
+        controller.data(0x5a);
+        controller.command(Unlisten);
+        service_rx(board, firmware, "dirty teardown PUT");
+        ASSERT_EQ(test_open_file_count(), 1u);
+
+        if (deadline) {
+            EXPECT_THROW(board.service_until([](const System&) { return false; },
+                                             [&](System&, econopet::Cycles) { firmware.close(); }, 1,
+                                             "dirty teardown deadline"),
+                         std::runtime_error);
+        } else {
+            auto observation =
+                board.observe([](const System&) { throw std::runtime_error("dirty teardown observer"); });
+            try {
+                firmware.close();
+                FAIL() << "expected teardown observer failure";
+            } catch (const std::runtime_error& error) {
+                EXPECT_STREQ(error.what(), "dirty teardown observer");
+            }
+        }
+        ASSERT_EQ(test_open_file_count(), 0u);
+        EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+        System other;
+        FirmwareSession replacement(other);
+        replacement.mount(D64::empty());
+        replacement.service();
+        replacement.close();
+        EXPECT_EQ(test_open_file_count(), 0u);
+    }
+}
+
 // Send one EOI-terminated record through the controller and production firmware.
 void put_record(System& system, FirmwareSession& firmware, IeeeController& controller, Channel channel,
                 const std::vector<uint8_t>& bytes) {

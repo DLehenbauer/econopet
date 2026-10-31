@@ -639,6 +639,13 @@ static bool open_candidate(const char* const filename, FILE** const file, dos_me
     return true;
 }
 
+// Retire unpublished storage on normal return or host SPI exception unwinding.
+static void close_candidate(FILE** const file) {
+    if (*file != NULL) {
+        fclose(*file);
+    }
+}
+
 // Mount a disks-relative file or remove one slot for NULL, preserving peers.
 // Reject invalid candidates or busy transport without replacing the live mount.
 bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
@@ -660,7 +667,9 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     }
     const unsigned int unit = slot / DOS_MEDIA_SLOTS_PER_UNIT;
     const unsigned int drive = slot % DOS_MEDIA_SLOTS_PER_UNIT;
-    FILE* candidate;
+    // Both supported GCC toolchains honor cleanup on return. Host tests also
+    // compile C frames with -fexceptions, so SPI unwinding cannot leak a FILE.
+    FILE* candidate __attribute__((cleanup(close_candidate))) = NULL;
     dos_media_io_t replacement;
     if (!open_candidate(filename, &candidate, &replacement)) {
         return false;
@@ -671,9 +680,6 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     };
     dos_model_t model;
     if (dos_media_validate_pair(pair, &model) != DOS_MEDIA_OK || !quiescent()) {
-        if (candidate != NULL) {
-            fclose(candidate);
-        }
         return false;
     }
     // Finalization can replace status even when rebinding subsequently fails.
@@ -683,9 +689,6 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     }
     if (dos_work_pending(&units[unit]) || !dos_finalize(&units[unit], &media) ||
         dos_media_set_unit(&media, unit, pair) != DOS_MEDIA_OK) {
-        if (candidate != NULL) {
-            fclose(candidate);
-        }
         resume_tx();
         return false;
     }
@@ -707,6 +710,7 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
         fclose(files[slot]);
     }
     files[slot] = candidate;
+    candidate = NULL;
     dos_reset(&units[unit], model);
     listening[unit] = false;
     if (talker == unit) {
@@ -768,6 +772,31 @@ bool ieee_drive_unmount_all(void) {
     ieee_drive_reset();
     return true;
 }
+
+#if !defined(PICO_ON_DEVICE) || !PICO_ON_DEVICE
+// Abandon a failed simulator's native owners without evaluating its SPI fabric.
+void ieee_drive_abort(void) {
+    // Host-only emergency cleanup has no ROM counterpart. Normal durable
+    // unmount remains mandatory on hardware. Discard dirty test state before
+    // closing callbacks, preserving the bank's monotonic media generation.
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        dos_reset(&units[unit], DOS_MODEL_NONE);
+        media.units[unit] = (dos_media_unit_t){0};
+        listening[unit] = false;
+    }
+    data_queue = (native_queue_t){0};
+    status_queue = (native_queue_t){0};
+    addressed = talker = NATIVE_UNIT_NONE;
+    secondary = 0;
+    next_job = 0;
+    for (unsigned int slot = 0; slot < count_of(files); ++slot) {
+        if (files[slot] != NULL) {
+            fclose(files[slot]);
+            files[slot] = NULL;
+        }
+    }
+}
+#endif
 
 // Reset transport and successfully finalized DOS units without removing media.
 // Failed owners retain their DOS state. Coordinate with the PET/fabric reset path.

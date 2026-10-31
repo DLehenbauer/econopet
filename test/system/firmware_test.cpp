@@ -335,6 +335,43 @@ TEST_F(SystemTest, FirmwareBurstDeadlineFailureReleasesSessionOwnership) {
     EXPECT_NO_THROW(FirmwareSession next(other));
 }
 
+// An interrupted mount owns its unpublished FILE until failed-board teardown.
+TEST_F(SystemTest, FirmwareInterruptedMountRetiresCandidateAndMountedFiles) {
+    FirmwareSession session(system);
+    session.mount(disk_fixture::D64::empty());
+    auto observation = system.observe([](const System&) { throw UnwindSentinel{23}; });
+    EXPECT_THROW(session.mount(disk_fixture::D64::empty().bytes(), "candidate.d64", 1), UnwindSentinel);
+    EXPECT_EQ(test_open_file_count(), 1u);
+    EXPECT_THROW(session.close(), std::logic_error);
+    observation.reset();
+    ASSERT_EQ(test_open_file_count(), 0u);
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disks/candidate.d64"));
+    System other;
+    EXPECT_NO_THROW(FirmwareSession next(other));
+}
+
+// Late transport failure must tolerate storage already detached by normal unmount.
+TEST_F(SystemTest, FirmwareDetachedUnmountExceptionPreservesOriginalError) {
+    FirmwareSession session(system);
+    session.mount(disk_fixture::D64::empty());
+    auto observation = system.observe([](const System&) {
+        if (test_open_file_count() == 0)
+            throw UnwindSentinel{29};
+    });
+    try {
+        session.close();
+        FAIL() << "expected post-detachment observer failure";
+    } catch (const UnwindSentinel& error) {
+        EXPECT_EQ(error.value, 29);
+    }
+    observation.reset();
+    ASSERT_EQ(test_open_file_count(), 0u);
+    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    System other;
+    EXPECT_NO_THROW(FirmwareSession next(other));
+}
+
 // Failure during session initialization must not retain the process-global board.
 TEST_F(SystemTest, FirmwareInitializationFailureReleasesBinding) {
     auto observation =

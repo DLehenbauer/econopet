@@ -28,6 +28,10 @@ typedef struct mem_file_s {
 } mem_file_t;
 
 static mem_file_t* mem_files = NULL;
+static size_t open_cookie_count;
+
+// Reports live stdio borrowers independently of registered backing ownership.
+size_t test_open_file_count(void) { return open_cookie_count; }
 
 // Finds a registered file without accessing the host filesystem.
 static mem_file_t* find_mem_file(const char* path) {
@@ -165,6 +169,7 @@ static int test_file_seek(void* cookie, off64_t* offset, int whence) {
 
 // Releases the handle without removing its registered backing file.
 static int test_file_close(void* cookie) {
+    --open_cookie_count;
     free(cookie);
     return 0;
 }
@@ -191,7 +196,13 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
         .seek = test_file_seek,
         .close = test_file_close,
     };
-    return fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
+    FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
+    if (stream != NULL) {
+        ++open_cookie_count;
+    } else {
+        free(cookie);
+    }
+    return stream;
 }
 
 // Returns monotonic host time in the microsecond units expected by Pico code.
