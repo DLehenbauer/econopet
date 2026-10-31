@@ -4036,7 +4036,7 @@ static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
     // before CLRCB retires command storage, deferring all disk work.
     const dos_model_t model = media->units[index].model;
     const uint8_t* const bytes = unit->command_bytes;
-    dos_format_work_t work = {.duplicate = duplicate, .phase = DOS_FORMAT_INITIALIZE};
+    dos_format_work_t work = {.duplicate = duplicate, .phase = DOS_FORMAT_INITIALIZE, .reader = DOS_UNUSED};
     uint8_t drive = unit->last_drive;
     unsigned int commas;
     if (duplicate) {
@@ -4057,7 +4057,8 @@ static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
             return;
         }
         for (unsigned int position = 0; position < length; ++position) {
-            if (bytes[position] == '*' || bytes[position] == '?' || (position >= after && bytes[position] == '=')) {
+            if (bytes[position] == '*' || bytes[position] == '?' ||
+                (position >= after - 2u && bytes[position] == '=')) {
                 dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
                 return;
             }
@@ -4086,6 +4087,16 @@ static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
     }
     work.media = (dos_media_ref_t){.unit = index, .slot = drive};
     dos_media_reference(media, index, drive, &work.media);
+    if (duplicate && work.media.identity != 0 && work.source.identity != 0) {
+        const diskimage_t* const target = &media->units[index].slots[drive].io.image;
+        const diskimage_t* const source = &media->units[index].slots[work.source.slot].io.image;
+        // Distinct slot generations do not make a shared backing image safe to erase.
+        if (target->read == source->read && target->ctx == source->ctx) {
+            unit->selected_drive = drive;
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+            return;
+        }
+    }
     unit->format = work;
     unit->command = DOS_COMMAND_FORMAT;
     unit->selected_drive = duplicate ? work.source.slot : drive;
@@ -4358,6 +4369,16 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         return;
     }
     if (work->phase == DOS_FORMAT_MAP || work->phase == DOS_FORMAT_RESERVE) {
+        if (work->phase == DOS_FORMAT_RESERVE && model != DOS_MODEL_4040 && work->reader == DOS_UNUSED) {
+            // NEW3's OPNIRD requires a logical index and two pages even though
+            // the formatter can compute the rebuilt map without their bytes.
+            work->reader = allocate_channel(unit, reference, DOS_INTERNAL_READ_SECONDARY, 2);
+            if (work->reader == DOS_UNUSED) {
+                dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+                goto failed;
+            }
+            unit->channels[work->reader].ready = false;
+        }
         format_map(unit, media, work->phase == DOS_FORMAT_RESERVE);
         const uint8_t track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
         const uint8_t sector = work->part * DOS_BAM_PART_INTERLEAVE;
@@ -4416,6 +4437,10 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     unit->free_blocks[reference.slot] = free_blocks - (model == DOS_MODEL_4040 ? 0u : parts);
     unit->free_blocks_valid[reference.slot] = true;
+    if (work->reader != DOS_UNUSED) {
+        free_channel(unit, work->reader);
+        work->reader = DOS_UNUSED;
+    }
     unit->command = DOS_COMMAND_IDLE;
     command_end(unit, model);
     return;
@@ -4424,8 +4449,12 @@ failed:
     // HEADER and generated formatter pages borrow BAM storage without keeping
     // a valid map binding. Preserve the cache only before scratch was touched.
     if (work->phase >= DOS_FORMAT_ERASE || (!work->full && work->phase >= DOS_FORMAT_HEADER)) {
-        *bam = (dos_bam_t){0};
+        *bam = (dos_bam_t){.media = reference};
         unit->free_blocks_valid[reference.slot] = false;
+    }
+    if (work->reader != DOS_UNUSED) {
+        free_channel(unit, work->reader);
+        work->reader = DOS_UNUSED;
     }
     if (work->duplicate && work->phase >= DOS_FORMAT_ERASE) {
         unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);

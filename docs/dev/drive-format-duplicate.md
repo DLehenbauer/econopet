@@ -35,9 +35,12 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Channel scope and scratch | 4040 versus selected DOS 2.7 modes | Both new sources, `N108/NEW`, respective `tst3:CLRCHN/CLDCHN`, `tst2:INITDR`, `getact:GETACT`, and both duplct sources, `DUP1` | Quick INITDR abandons selected active-job-drive owners. Full 4040 NEW retains channels. DOS 2.7 full NEW releases SA14..1 across both disks but retains SA0. DUPLICATE initializes source then abandons target owners without CLOSE | `format_initialize/format_work`, channel-lifecycle and busy-scratch tests, shared landed `free_drive_channels` | MAME corroborates physical shared RAM and dual-drive models. Native listings control channel scope. Host scratch-conflict rejection is explicitly not native scratch corruption |
 | Raw-sector DUPLICATE | All selected targets with matching native geometry | Both duplct sources, `DUPLCT/DUP1/CPYD1/CPYTRK/SETRH/SETR3/READS/WRITES`, respective `copysetup:PRSEQ` | Adjacent distinct ASCII 0/1 selectors surround `=`. Initialize/version-check source, format target, copy every sector, then initialize target. Tracks ascend, eleven-page groups descend, sectors within each group ascend. Source remains unchanged | `format_copy_group/format_work`, both-direction whole-image/source-isolation and read/write failure tests | VICE's virtual-drive dispatcher leaves DUPLICATE unused, so it is not corroboration for the native algorithm. MAME confirms the two-drive ROM execution models, not a fresh successful formatter run |
 | Failure and retained initialization result | All selected targets, with explicit host persistence policy | Both new/duplct sources, `INITDR`, `VNERR`, `ERROR`, `ENDCMD` | Stop after failed initialization or media I/O, retain any destructive prefix, release only command-owned scratch. Consuming the status line cannot turn failed initialization into success | `format_work`, initial/final INITDR status-consumption, stale-generation, storage-failure and recovery tests | Selected ROMs establish failure exits. Captured generations, asynchronous status consumption and backing-file flush are firmware mechanisms, not electrical/controller equivalence |
-| Prefix pattern validation | All selected targets | Both `parsex:PRSCLN/PARSE/TAGCMD` and `romtbl:STRUCT` NEW mask | Retain prefix '*'/'?' for syntax 30 before any media access, in both quick/full mode. An '=' before ':' is not a second file group | `format_start`, prefix-pattern rejection and allowed-prefix-equals controls | The existing command parser is not native evidence. Both pinned PARSE routines retain PATFLG across the colon |
+| Prefix pattern and equals validation | All selected targets | Both `parsex:PRSCLN/PARSE/TAGCMD/TC30` and `romtbl:STRUCT` NEW mask | Retain prefix '*'/'?' for syntax 30 before any media access. TAGCMD decrements the post-colon pointer twice before scanning for '=', so `N=:NEW` is rejected while `N=0:OK` is allowed | `format_start`, quick/full prefix-pattern and adjacent-equals rejection plus earlier-prefix-equals controls | The existing command parser is not native evidence. Both pinned PARSE routines retain PATFLG across the colon |
 | Operation-local drive selection | All selected targets | Both `new:N101/N108`, `duplct:DUPLCT/DUP1` and `parsex:ENDCMD/SCREND` | Successful NEW records its selected disk in LSTDRV and DOS 2.7's status drive. Version rejection identifies NEW's disk or DUPLICATE's source, regardless of a yielded peer read error | `format_work`, bidirectional peer-error, inherited-drive and NEW/DUPLICATE version-rejection regressions | Cooperative peer interleaving is host behavior. Explicit reselection preserves the ROM's DRVNUM ownership |
 | Borrowed BAM failure recovery | All selected targets, host cache policy | Both `new:N110` and DOS 2.7 `new:N160`, alongside landed BAM load/write contracts | Failed scratch read/write/reload must not expose partial or unbound bytes as a resident BAM. Subsequent B-W and B-A/MAPOUT reload real metadata. Rejection before scratch retains dirty allocation state | `format_work` failure exit, partial-read/untouched-write recovery and pre-scratch rejection controls | Cache invalidation is host lifetime policy, not a native rollback. Already written sectors remain changed |
+| Late internal reader ownership | Selected DOS 2.7 modes, not 4040 | DOS 2.7 `new:NEW3/N150/N160 -> tst4:OPNIRD -> opchnl:OPNRCH -> tst3:GETRCH/FNDLNX/GETBUF` | Reserve a logical channel and two pooled pages at the late map-reservation phase. Exhausted peer owners cause 70 after the metadata prefix, without releasing them. Release only formatter claims after success/error | `format_work`, exhausted logical-index/page tests with late-read failure and recovery, plus unchanged 4040 controls | The host can compute freshly generated metadata without using these pages' contents, but cannot omit their native resource cost |
+| DUPLICATE backing-store alias rejection | Host adaptation, no physical-drive counterpart | Native duplct's `DUP1/FORMAT` assumes distinct physical disks. Host descriptors may alias despite different selectors | Identical read callback/context is rejected with host policy 25 before INITDR or erase, in either direction, including a read-only source | `format_start`, alias/source-immutability regressions | Descriptor equality cannot prove that different contexts refer to distinct files. The facade must ensure distinct underlying backing stores |
+| Failed formatter persistence ownership | Host adaptation, no controller-flush counterpart | Host `dos_finalize`/`dos_media_flush_unit`, retaining the existing native destructive prefix | Discard scratch validity, not its captured media reference. Failed backing flush remains observable and retryable without another OPEN. Remounted media cannot acquire old finalization | `format_work`, direct finalization failure/retry and replacement-generation controls | No rollback, automatic command-time flush or mount-policy change is introduced |
 
 [4040-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/master
 [8250-master]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/master
@@ -77,10 +80,18 @@ and reset behavior remains intact.
 Every formatter continuation reselects its operation's disk before publishing
 status or ENDCMD. The shared version-rejection path separately selects the
 initialized disk (DUPLICATE's source). Failed HEADER, generated-map and final
-reload phases discard borrowed BAM residency and its cached free-block total.
+reload phases discard borrowed BAM residency and its cached free-block total,
+while retaining the captured reference needed to finalize dirty backing writes.
 Full-format scratch rejection happens before this borrowing and retains the
 previous cache, including dirty allocations. No rollback or extra sector page
 is introduced.
+
+DOS 2.7 NEW retains its late internal reader's logical index and two existing
+pooled pages through map reservation and final reload, then releases them.
+4040 NEW does not gain that resource requirement. DUPLICATE rejects a source
+and destination with the same read callback/context before initialization,
+without forbidding harmless alias mounts globally or pretending to detect
+aliases hidden behind distinct contexts.
 
 Command completion is not a backing-file flush. Existing facade finalization
 or remount owns that persistence boundary. REL, arbitrary memory execution,
@@ -93,8 +104,8 @@ media were changed, and no new latency or IEEE electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 3321 focused DOS cases and 4304 total firmware
-Check cases (4257 ordinary plus 47 fatal/assert cases). Tests and dependencies
+The isolated candidate passes 3360 focused DOS cases and 4343 total firmware
+Check cases (4296 ordinary plus 47 fatal/assert cases). Tests and dependencies
 use Debug. The RP2040 production RelWithDebInfo build, clang-format dry run
 and whitespace checks pass.
 
@@ -110,3 +121,7 @@ cover prefix patterns and prefix-equals controls, peer errors before completion
 or version rejection, subsequent drive-less NEW, partial HEADER/final reload,
 first-write failures, native-write/allocation/finalization recovery, and
 preserved dirty cache on pre-scratch rejection.
+The second feedback round adds 39 further variants for colon-adjacent equals,
+backing aliases, direct failed-format finalization/retry/remount, and native
+internal-reader capacity/cleanup. Final fixtures reproduce 34 failures against
+the first feedback fix and 60 against initial PR production, with zero errors.

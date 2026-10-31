@@ -311,6 +311,7 @@ typedef struct {
     uint8_t group_low;
     uint8_t buffer;
     uint8_t first_buffer;
+    uint8_t reader;
     bool empty_name;
     bool full;
     bool duplicate;

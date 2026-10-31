@@ -9675,7 +9675,8 @@ END_TEST
 // Invalid NEW groups and non-distinct PRSEQ selectors fail before media access.
 START_TEST(test_format_and_duplicate_native_parser_rejections) {
     static const char* const commands[] = {
-        "N0", "N0:*,AB", "N0:X=Y", "N0,1:X", "D0=0", "D2=1", "N*0:NEW,AB", "N?1:NEW", "N*0:NEW", "N?0:NEW,AB",
+        "N0",         "N0:*,AB", "N0:X=Y",  "N0,1:X",     "D0=0",   "D2=1",
+        "N*0:NEW,AB", "N?1:NEW", "N*0:NEW", "N?0:NEW,AB", "N=:NEW", "N=:NEW,AB",
     };
     const unsigned int format = (unsigned int)_i / count_of(commands);
     const unsigned int variant = (unsigned int)_i % count_of(commands);
@@ -9690,6 +9691,163 @@ START_TEST(test_format_and_duplicate_native_parser_rejections) {
     ck_assert_uint_eq(unit.buffer_use, 0);
     ck_assert_uint_eq(image.reads + image.writes + image.flushes, 0);
     free(image.bytes);
+}
+END_TEST
+
+// Distinct drive selectors must not authorize destructive copying of one backing image onto itself.
+START_TEST(test_duplicate_rejects_aliased_image) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const unsigned int target = (unsigned int)_i / 3u % 2u;
+    const bool readonly_source = _i >= 6;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_media_io_t pair[2] = {bank.units[0].slots[0].io, bank.units[0].slots[0].io};
+    if (readonly_source) {
+        pair[target ^ 1u].image.write = NULL;
+    }
+    ck_assert_uint_eq(dos_media_set_unit(&bank, 0, pair), DOS_MEDIA_OK);
+    uint8_t* const saved = malloc(image.size);
+    ck_assert_ptr_nonnull(saved);
+    memcpy(saved, image.bytes, image.size);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, target == 0 ? "D0=1" : "D1=0");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(image.writes + image.reads + image.flushes, 0);
+    ck_assert_mem_eq(image.bytes, saved, image.size);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(saved);
+    free(image.bytes);
+}
+END_TEST
+
+// Invalidating formatter scratch must retain the identity needed to flush its destructive prefix.
+START_TEST(test_format_failure_finalization_flushes_captured_media) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const unsigned int failure = (unsigned int)_i / 3u;
+    dos_media_bank_t bank = {0};
+    image_t image, source;
+    mount_blank(&bank, &image, format);
+    if (failure == 3) {
+        mount_peer(&bank, &source, format);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, failure == 3 ? "D0=1" : failure == 0 ? "N0:NEW,AB" : "N0:NEW");
+    if (failure == 2) {
+        const unsigned int writes = format == 0 ? 2u : format == 1 ? 5u : 7u;
+        for (unsigned int step = 0; image.writes < writes; ++step) {
+            ck_assert_uint_lt(step, 40);
+            dos_work(&unit, &bank);
+        }
+        image.fail_read = image.reads + 1u;
+    } else {
+        image.fail_write = failure == 1 ? 1u : 3u;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, failure == 2 ? DOS_STATUS_READ_ERROR : DOS_STATUS_WRITE_ERROR);
+    ck_assert(bank.units[0].slots[0].dirty);
+    const unsigned int writes = image.writes;
+    image.fail_flush = true;
+    ck_assert(!dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(image.flushes, 1);
+    ck_assert(bank.units[0].slots[0].dirty);
+    image.fail_flush = false;
+    ck_assert(dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(image.flushes, 2);
+    ck_assert(!bank.units[0].slots[0].dirty);
+    ck_assert(dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(image.flushes, 2);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+    if (failure == 3) {
+        free(source.bytes);
+    }
+}
+END_TEST
+
+// Retained failed-format flush ownership must not acquire a replacement generation.
+START_TEST(test_format_failure_finalization_rejects_replaced_media) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0}, replacement_bank = {0};
+    image_t image, replacement;
+    mount_blank(&bank, &image, format);
+    mount_blank(&replacement_bank, &replacement, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    image.fail_write = 3;
+    send_command(&unit, &bank, "N0:NEW,AB");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(dos_media_set_slot(&bank, 0, 0, &replacement_bank.units[0].slots[0].io), DOS_MEDIA_OK);
+    ck_assert(!dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(replacement.reads + replacement.writes + replacement.flushes, 0);
+    free(image.bytes);
+    free(replacement.bytes);
+}
+END_TEST
+
+// DOS 2.7's late OPNIRD needs one logical index and two pages, preserving surviving peers.
+START_TEST(test_format_reserves_native_reader_with_exhausted_peers) {
+    const unsigned int format = (unsigned int)_i % 3u;
+    const bool pages = _i >= 3;
+    dos_media_bank_t bank = {0};
+    image_t target, peer;
+    mount_blank(&bank, &target, format);
+    mount_peer(&bank, &peer, format);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    send_command(&unit, &bank, "I1");
+    finish_open(&unit, &bank);
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        ck_assert_uint_ne(open_name(&unit, &bank, index + 2u, "#"), DOS_UNUSED);
+    }
+    if (pages) {
+        for (unsigned int index = 0; index < 6; ++index) {
+            char name[8];
+            snprintf(name, sizeof(name), "#%u", index);
+            ck_assert_uint_eq(open_name(&unit, &bank, 8, name), DOS_UNUSED);
+            ck_assert_uint_eq(unit.status_code, DOS_STATUS_NO_CHANNEL);
+        }
+        ck_assert(dos_close(&unit, &bank, model, 7));
+    }
+    const uint16_t use = unit.buffer_use;
+    const unsigned int peer_operations = peer.writes + peer.flushes;
+    dos_channel_t saved[DOS_FILE_CHANNEL_COUNT];
+    memcpy(saved, unit.channels, sizeof(saved));
+    send_command(&unit, &bank, "N0:NEW");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, format == 0 ? DOS_STATUS_OK : DOS_STATUS_NO_CHANNEL);
+    ck_assert_uint_eq(unit.buffer_use, use);
+    ck_assert_mem_eq(unit.channels, saved, sizeof(saved));
+    ck_assert_uint_eq(peer.writes + peer.flushes, peer_operations);
+    if (format != 0) {
+        // Free just enough peer capacity, then fail after acquiring the internal reader.
+        ck_assert(dos_close(&unit, &bank, model, 6));
+        const uint16_t retained = unit.buffer_use;
+        send_command(&unit, &bank, "N0:NEW");
+        const unsigned int writes = target.writes + (format == 1 ? 5u : 7u);
+        for (unsigned int step = 0; target.writes < writes; ++step) {
+            ck_assert_uint_lt(step, 40);
+            dos_work(&unit, &bank);
+        }
+        target.fail_read = target.reads + 1u;
+        finish_open(&unit, &bank);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert_uint_eq(unit.buffer_use, retained);
+        target.fail_read = 0;
+        send_command(&unit, &bank, "N0:RECOVER");
+        finish_open(&unit, &bank);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert_uint_eq(unit.buffer_use, retained);
+    }
+    free(target.bytes);
+    free(peer.bytes);
 }
 END_TEST
 
@@ -10091,11 +10249,15 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_format_and_duplicate_reject_replaced_media, 0, 24);
     tcase_add_loop_test(core, test_format_id_and_inherited_drive_boundaries, 0, 9);
     tcase_add_loop_test(core, test_format_initialization_result_survives_status_consumption, 0, 9);
-    tcase_add_loop_test(core, test_format_and_duplicate_native_parser_rejections, 0, 30);
+    tcase_add_loop_test(core, test_format_and_duplicate_native_parser_rejections, 0, 36);
     tcase_add_loop_test(core, test_format_restores_drive_after_peer_error, 0, 18);
     tcase_add_loop_test(core, test_format_failure_reloads_bam_before_recovery, 0, 12);
     tcase_add_loop_test(core, test_format_prescratch_rejection_preserves_bam, 0, 3);
     tcase_add_loop_test(core, test_format_allows_equals_in_prefix, 0, 3);
+    tcase_add_loop_test(core, test_duplicate_rejects_aliased_image, 0, 12);
+    tcase_add_loop_test(core, test_format_failure_finalization_flushes_captured_media, 0, 12);
+    tcase_add_loop_test(core, test_format_failure_finalization_rejects_replaced_media, 0, 3);
+    tcase_add_loop_test(core, test_format_reserves_native_reader_with_exhausted_peers, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }
