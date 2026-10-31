@@ -160,6 +160,10 @@ typedef enum {
     DOS_REL_RECORD_INDEX,
     DOS_REL_RECORD_DATA,
     DOS_REL_RECORD_FOLLOWING,
+    // Internal OPNRCH jobs precede the first record's prepared-byte state.
+    DOS_REL_RECORD_OPEN_DATA,
+    DOS_REL_RECORD_OPEN_FOLLOWING,
+    DOS_REL_RECORD_OPEN_SIDE,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own

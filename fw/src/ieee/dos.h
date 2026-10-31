@@ -94,8 +94,16 @@ typedef struct {
     uint8_t directory_track;
     uint8_t directory_sector;
     uint8_t directory_entry;
-    uint8_t first_track;
-    uint8_t first_sector;
+    union {
+        struct {
+            uint8_t first_track;
+            uint8_t first_sector;
+        };
+        struct {
+            uint8_t rel_root_track;
+            uint8_t rel_root_sector;
+        };
+    };
     uint8_t closing;
     uint16_t blocks;
     bool allocated;
@@ -442,6 +450,12 @@ uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
 // not use ordinary dos_put on this storage. Public REL OPEN remains disabled.
 // Only clean read ownership is supported, not dirty native CLSREL completion.
 uint8_t dos_rel_channel_claim(dos_unit_t* unit, dos_media_ref_t media, uint8_t secondary);
+
+// Internal initial read from a fresh claim and validated directory metadata.
+// Preserve native directory-data/side-job order, not public OPEN admission.
+// Full read/write flags, resident RECORD and dirty ownership remain excluded.
+void dos_rel_channel_prepare_open(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t root_track,
+                                  uint8_t root_sector, uint8_t data_track, uint8_t data_sector, uint8_t size);
 
 // Internal cold, clean positioned read, not native OPEN or public RECORD.
 // Retire this channel's FIFO copies and borrowed writes first. Supply a
