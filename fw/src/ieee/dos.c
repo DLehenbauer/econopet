@@ -124,6 +124,7 @@ typedef enum {
     DOS_FORMAT_MAP,
     DOS_FORMAT_DIRECTORY,
     DOS_FORMAT_DISK_HEADER,
+    DOS_FORMAT_CHAIN,
     DOS_FORMAT_RESERVE,
     DOS_FORMAT_RELOAD,
     DOS_FORMAT_COPY_READ,
@@ -2946,7 +2947,8 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         free_drive_channels(unit, drive);
         // Discard dirty cached allocation state instead of persisting it.
         // The free-block total stays invalid until every map range is counted.
-        *bam = (dos_bam_t){0};
+        // Backing flush ownership survives even if the first refill fails.
+        *bam = (dos_bam_t){.media = reference};
         unit->free_blocks[drive] = 0;
         unit->free_blocks_valid[drive] = false;
         work->started = true;
@@ -4056,11 +4058,15 @@ static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, 
             dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
             return;
         }
+        unsigned int separators = 0;
         for (unsigned int position = 0; position < length; ++position) {
             if (bytes[position] == '*' || bytes[position] == '?' ||
                 (position >= after - 2u && bytes[position] == '=')) {
                 dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
                 return;
+            }
+            if (bytes[position] == ',' && ++separators == DOS_FILENAME_COUNT - 1u) {
+                break;
             }
         }
         const uint8_t selector = bytes[after - 2u];
@@ -4368,17 +4374,45 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
         return;
     }
-    if (work->phase == DOS_FORMAT_MAP || work->phase == DOS_FORMAT_RESERVE) {
-        if (work->phase == DOS_FORMAT_RESERVE && model != DOS_MODEL_4040 && work->reader == DOS_UNUSED) {
-            // NEW3's OPNIRD requires a logical index and two pages even though
-            // the formatter can compute the rebuilt map without their bytes.
+    if (work->phase == DOS_FORMAT_CHAIN) {
+        if (work->reader == DOS_UNUSED) {
+            // NEW3 opens OPNIRD only after publishing the metadata prefix.
             work->reader = allocate_channel(unit, reference, DOS_INTERNAL_READ_SECONDARY, 2);
             if (work->reader == DOS_UNUSED) {
                 dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
                 goto failed;
             }
             unit->channels[work->reader].ready = false;
+            work->track = directory_track(model);
+            work->sector = 0;
+            work->part = 0;
         }
+        // N150/NXTBUF must select every header/BAM/directory page. Split the
+        // native double-buffered jobs into one synchronous read per turn.
+        if (work->part++ >= parts + 2u) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->track, work->sector);
+            goto failed;
+        }
+        dos_channel_t* const reader = &unit->channels[work->reader];
+        dos_buffer_t* const page = &unit->buffers[reader->buffers[reader->active]];
+        if (!storage_error(unit, media, reference,
+                           read_sector(unit, media, reference, work->track, work->sector, page->bytes), false,
+                           work->track, work->sector)) {
+            goto failed;
+        }
+        page->track = work->track;
+        page->sector = work->sector;
+        page->resident = true;
+        work->track = page->bytes[0];
+        work->sector = page->bytes[1];
+        reader->active ^= 1u;
+        if (work->track == 0) {
+            work->part = 0;
+            work->phase = DOS_FORMAT_RESERVE;
+        }
+        return;
+    }
+    if (work->phase == DOS_FORMAT_MAP || work->phase == DOS_FORMAT_RESERVE) {
         format_map(unit, media, work->phase == DOS_FORMAT_RESERVE);
         const uint8_t track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
         const uint8_t sector = work->part * DOS_BAM_PART_INTERLEAVE;
@@ -4389,6 +4423,9 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             goto failed;
         }
         if (work->phase == DOS_FORMAT_RESERVE) {
+            bam->buffer.track = track;
+            bam->buffer.sector = sector;
+            unit->free_blocks[reference.slot] = 0;
             work->phase = DOS_FORMAT_RELOAD;
         } else if (++work->part == parts) {
             work->part = 0;
@@ -4411,31 +4448,61 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (!write_sector(unit, media, reference, directory_track(model), sector, bytes)) {
             goto failed;
         }
-        work->phase = sector == DOS_DIRECTORY_FIRST_SECTOR && model != DOS_MODEL_4040 ? DOS_FORMAT_DISK_HEADER
-                                                                                      : DOS_FORMAT_RESERVE;
+        work->phase = model == DOS_MODEL_4040                ? DOS_FORMAT_RESERVE
+                      : sector == DOS_DIRECTORY_FIRST_SECTOR ? DOS_FORMAT_DISK_HEADER
+                                                             : DOS_FORMAT_CHAIN;
         return;
     }
     vet(work->phase == DOS_FORMAT_RELOAD, "invalid format phase %u", work->phase);
     // NF05 leaves the final map range cached. Do not call INITDR here: NEW
     // does not abandon the additional channels that a fresh INITDR would.
-    const uint8_t track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
-    const uint8_t sector = (parts - 1u) * DOS_BAM_PART_INTERLEAVE;
-    if (!storage_error(unit, media, reference, read_sector(unit, media, reference, track, sector, bytes), false, track,
-                       sector)) {
-        goto failed;
-    }
-    bam->buffer.track = track;
-    bam->buffer.sector = sector;
-    bam->buffer.resident = true;
-    unsigned int free_blocks = 0;
-    for (unsigned int current_track = 1; current_track <= tracks; ++current_track) {
-        unsigned int sectors;
-        vet(diskimage_track_sectors(image->type, current_track, &sectors), "invalid format track");
-        if (current_track != directory_track(model)) {
-            free_blocks += sectors;
+    if (model == DOS_MODEL_4040) {
+        if (!storage_error(unit, media, reference,
+                           read_sector(unit, media, reference, DOS_DIRECTORY_TRACK_4040, 0, bytes), false,
+                           DOS_DIRECTORY_TRACK_4040, 0)) {
+            goto failed;
+        }
+        bam->buffer.track = DOS_DIRECTORY_TRACK_4040;
+        bam->buffer.sector = 0;
+        unsigned int free_blocks = 0;
+        for (unsigned int current_track = 1; current_track <= tracks; ++current_track) {
+            unsigned int sectors;
+            vet(diskimage_track_sectors(image->type, current_track, &sectors), "invalid format track");
+            if (current_track != directory_track(model)) {
+                free_blocks += sectors;
+            }
+        }
+        unit->free_blocks[reference.slot] = free_blocks;
+    } else {
+        // NF05 starts with the freshly scrubbed first part already cached.
+        // Follow subsequent ranges one read per turn, retaining the final part.
+        if (work->part != 0) {
+            if (!storage_error(unit, media, reference,
+                               read_sector(unit, media, reference, work->track, work->sector, bytes), false,
+                               work->track, work->sector)) {
+                goto failed;
+            }
+            bam->buffer.track = work->track;
+            bam->buffer.sector = work->sector;
+        }
+        const unsigned int low = work->part * DOS_BAM_TRACKS_PER_PART + 1u;
+        const unsigned int high = MIN(low + DOS_BAM_TRACKS_PER_PART, tracks + 1u);
+        if (bytes[4] != low || bytes[5] != high) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, bam->buffer.track, bam->buffer.sector);
+            goto failed;
+        }
+        for (unsigned int track = low; track < high; ++track) {
+            if (track != directory_track(model)) {
+                unit->free_blocks[reference.slot] += bytes[6u + (track - low) * 5u];
+            }
+        }
+        if (++work->part < parts) {
+            work->track = bytes[0];
+            work->sector = bytes[1];
+            return;
         }
     }
-    unit->free_blocks[reference.slot] = free_blocks - (model == DOS_MODEL_4040 ? 0u : parts);
+    bam->buffer.resident = true;
     unit->free_blocks_valid[reference.slot] = true;
     if (work->reader != DOS_UNUSED) {
         free_channel(unit, work->reader);

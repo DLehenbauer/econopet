@@ -9675,8 +9675,8 @@ END_TEST
 // Invalid NEW groups and non-distinct PRSEQ selectors fail before media access.
 START_TEST(test_format_and_duplicate_native_parser_rejections) {
     static const char* const commands[] = {
-        "N0",         "N0:*,AB", "N0:X=Y",  "N0,1:X",     "D0=0",   "D2=1",
-        "N*0:NEW,AB", "N?1:NEW", "N*0:NEW", "N?0:NEW,AB", "N=:NEW", "N=:NEW,AB",
+        "N0",      "N0:*,AB",    "N0:X=Y", "N0,1:X",    "D0=0",       "D2=1",       "N*0:NEW,AB",   "N?1:NEW",
+        "N*0:NEW", "N?0:NEW,AB", "N=:NEW", "N=:NEW,AB", "N0:X,AB,,*", "N0:X,AB,,=", "N*0:X,AB,,,*",
     };
     const unsigned int format = (unsigned int)_i / count_of(commands);
     const unsigned int variant = (unsigned int)_i % count_of(commands);
@@ -9690,6 +9690,115 @@ START_TEST(test_format_and_duplicate_native_parser_rejections) {
     ck_assert_uint_eq(unit.status_code, variant == 0 || variant == 3 ? DOS_STATUS_NO_FILE : DOS_STATUS_SYNTAX);
     ck_assert_uint_eq(unit.buffer_use, 0);
     ck_assert_uint_eq(image.reads + image.writes + image.flushes, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// INITDR failure must retain the dirty disk's flush owner across every shared caller.
+START_TEST(test_failed_initialization_retains_prior_format_flush) {
+    static const char* const commands[] = {"N0:NEW", "I0", "D1=0", "V0"};
+    const unsigned int format = (unsigned int)_i % 3u;
+    const unsigned int command = (unsigned int)_i / 3u;
+    dos_media_bank_t bank = {0};
+    image_t image, target;
+    mount_blank(&bank, &image, format);
+    if (command == 2) {
+        mount_peer(&bank, &target, format);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "N0:OLD,AB");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert(bank.units[0].slots[0].dirty);
+    image.fail_read = image.reads + 1u;
+    send_command(&unit, &bank, commands[command]);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    image.fail_flush = true;
+    ck_assert(!dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(image.flushes, 1);
+    ck_assert(bank.units[0].slots[0].dirty);
+    image.fail_flush = false;
+    ck_assert(dos_finalize(&unit, &bank));
+    ck_assert_uint_eq(image.flushes, 2);
+    ck_assert(!bank.units[0].slots[0].dirty);
+    free(image.bytes);
+    if (command == 2) {
+        ck_assert_uint_eq(target.reads + target.writes + target.flushes, 0);
+        free(target.bytes);
+    }
+}
+END_TEST
+
+// PARSE stops at the fourth comma, before examining any following pattern or equals.
+START_TEST(test_format_ignores_suffix_after_native_comma_limit) {
+    static const char* const commands[] = {"N0:X,AB,,,*", "N0:X,AB,,,=", "N0:X,AB,,,?"};
+    const unsigned int format = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    memset(sector_bytes(&image, type, 1, 0), 0x55, DISKIMAGE_SECTOR_SIZE);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, commands[(unsigned int)_i / 3u]);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    const uint8_t* const label = sector_bytes(&image, type, format == 0 ? 18 : 39, 0) + (format == 0 ? 144 : 6);
+    ck_assert_uint_eq(label[0], 'X');
+    ck_assert_mem_eq(label + 18, "AB", 2);
+    ck_assert_uint_eq(sector_bytes(&image, type, 1, 0)[0], 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// Required late header/BAM/directory and NF05 reads cannot be replaced by synthetic success.
+START_TEST(test_format_propagates_late_metadata_chain_failures) {
+    const unsigned int format = (unsigned int)_i % 2u + 1u;
+    const bool full = (unsigned int)_i / 2u % 2u != 0;
+    const unsigned int stage = (unsigned int)_i / 4u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, full ? "N0:NEW,AB" : "N0:NEW");
+    const unsigned int prefix =
+        (full ? image.size / DISKIMAGE_SECTOR_SIZE : 0u) + (format == 1 ? 4u : 6u) + (stage >= 4);
+    for (unsigned int step = 0; image.writes < prefix; ++step) {
+        ck_assert_uint_lt(step, DISKIMAGE_D82_SIZE / DISKIMAGE_SECTOR_SIZE + 100u);
+        dos_work(&unit, &bank);
+    }
+    const unsigned int track = stage == 0 || stage == 3 ? 39u : 38u;
+    const unsigned int sector = stage == 0 || stage == 1 || stage == 5 ? 0u
+                                : stage == 3                           ? 1u
+                                : stage == 4                           ? 3u
+                                : format == 1                          ? 3u
+                                                                       : 9u;
+    ck_assert(diskimage_sector_offset(type, track, sector, &image.fail_read_offset));
+    for (unsigned int step = 0; dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 40);
+        const unsigned int operations = image.reads + image.writes;
+        dos_work(&unit, &bank);
+        ck_assert_uint_le(image.reads + image.writes - operations, 1);
+    }
+    ck_assert_uint_eq(unit.status_code, stage == 5 ? DOS_STATUS_OK : DOS_STATUS_READ_ERROR);
+    if (stage != 5) {
+        char expected[40];
+        snprintf(expected, sizeof(expected), "23,READ ERROR,%02u,%02u,0\r", track, sector);
+        ck_assert_str_eq(unit.status, expected);
+        ck_assert(!unit.bam[0].buffer.resident);
+        ck_assert(!unit.free_blocks_valid[0]);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    image.fail_read_offset = 0;
+    send_command(&unit, &bank, "N0:RECOVER,AB");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
     free(image.bytes);
 }
 END_TEST
@@ -10249,7 +10358,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_format_and_duplicate_reject_replaced_media, 0, 24);
     tcase_add_loop_test(core, test_format_id_and_inherited_drive_boundaries, 0, 9);
     tcase_add_loop_test(core, test_format_initialization_result_survives_status_consumption, 0, 9);
-    tcase_add_loop_test(core, test_format_and_duplicate_native_parser_rejections, 0, 36);
+    tcase_add_loop_test(core, test_format_and_duplicate_native_parser_rejections, 0, 45);
     tcase_add_loop_test(core, test_format_restores_drive_after_peer_error, 0, 18);
     tcase_add_loop_test(core, test_format_failure_reloads_bam_before_recovery, 0, 12);
     tcase_add_loop_test(core, test_format_prescratch_rejection_preserves_bam, 0, 3);
@@ -10258,6 +10367,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_format_failure_finalization_flushes_captured_media, 0, 12);
     tcase_add_loop_test(core, test_format_failure_finalization_rejects_replaced_media, 0, 3);
     tcase_add_loop_test(core, test_format_reserves_native_reader_with_exhausted_peers, 0, 6);
+    tcase_add_loop_test(core, test_failed_initialization_retains_prior_format_flush, 0, 12);
+    tcase_add_loop_test(core, test_format_ignores_suffix_after_native_comma_limit, 0, 9);
+    tcase_add_loop_test(core, test_format_propagates_late_metadata_chain_failures, 0, 24);
     suite_add_tcase(suite, core);
     return suite;
 }
