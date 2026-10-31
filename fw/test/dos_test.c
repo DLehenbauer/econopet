@@ -11599,6 +11599,149 @@ START_TEST(test_input_new_collection_survives_pending_worker_retirement) {
 }
 END_TEST
 
+// Public peer errors and status GET cannot replace a retained REL COPY outcome.
+START_TEST(test_copy_rel_completion_uses_writer_outcome_not_public_status) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool overflow = (unsigned int)_i % 2u;
+    dos_media_bank_t bank = {0}, peer_bank = {0};
+    image_t image, peer_image;
+    mount_blank(&bank, &image, format);
+    fixture_rel_short(&image, format, 13);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    uint8_t peer = DOS_UNUSED;
+    if (overflow) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:SEQ,S,W"), DOS_UNUSED);
+        put_bytes(&unit, &bank, 2, 'S', 14);
+        ck_assert(dos_close(&unit, &bank, model, 2));
+    } else {
+        mount_blank(&peer_bank, &peer_image, format);
+        fixture_file(&peer_image, format, 0, "PEER", DISKIMAGE_FTYPE_SEQ, 0x20, 255);
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &peer_bank.units[0].slots[0].io), DOS_MEDIA_OK);
+        peer_image.fail_read = peer_image.reads + 3u;
+        peer = open_name(&unit, &bank, 3, "1:PEER,S,R");
+        ck_assert_uint_ne(peer, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        peer_image.fail_read = 0;
+    }
+    send_command(&unit, &bank, overflow ? "C0:OUT=0:REL,0:SEQ" : "C0:OUT=0:REL");
+    bool interleaved = false;
+    for (unsigned int step = 0; dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 8192);
+        if (!interleaved && unit.command == DOS_COMMAND_COPY && unit.copy.writer != DOS_UNUSED) {
+            const dos_channel_t* const writer = &unit.channels[unit.copy.writer];
+            if (writer->allocated && writer->ready && writer->file_type == DISKIMAGE_FTYPE_REL &&
+                writer->rel.input_phase == DOS_REL_INPUT_IDLE && writer->rel.input_eoi &&
+                writer->rel.input_overflow == overflow) {
+                const dos_channel_t retained = *writer;
+                if (overflow) {
+                    ck_assert_uint_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+                    uint8_t status[DOS_STATUS_LINE_CAPACITY];
+                    bool eoi;
+                    const unsigned int length = dos_status_stage(&unit, status, sizeof(status), &eoi);
+                    ck_assert(eoi);
+                    dos_status_get(&unit, model, length);
+                    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+                } else {
+                    unsigned int consumed = 0;
+                    while (consumed < DISKIMAGE_SECTOR_PAYLOAD_SIZE) {
+                        uint8_t bytes[DOS_STAGE_CAPACITY];
+                        bool eoi;
+                        const unsigned int length = dos_stage(&unit, &bank, peer, bytes, sizeof(bytes), &eoi);
+                        ck_assert_uint_gt(length, 0);
+                        dos_get(&unit, &bank, peer, length);
+                        consumed += length;
+                    }
+                    uint8_t byte;
+                    bool eoi;
+                    ck_assert_uint_eq(dos_stage(&unit, &bank, peer, &byte, 1, &eoi), 0);
+                    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+                }
+                ck_assert_mem_eq(writer, &retained, sizeof(retained));
+                interleaved = true;
+            }
+        }
+        dos_work(&unit, &bank);
+    }
+    ck_assert(interleaved);
+    ck_assert_uint_eq(unit.status_code, overflow ? DOS_STATUS_RECORD_OVERFLOW : DOS_STATUS_OK);
+    if (!overflow) {
+        const uint8_t reader = open_name(&unit, &bank, 2, "0:OUT");
+        ck_assert_uint_ne(reader, DOS_UNUSED);
+        for (unsigned int record = 0; record < 3; ++record) {
+            uint8_t byte;
+            bool eoi;
+            ck_assert_uint_eq(dos_stage(&unit, &bank, reader, &byte, 1, &eoi), 1);
+            ck_assert_uint_eq(byte, 'A' + record);
+            ck_assert(eoi);
+            dos_get(&unit, &bank, reader, 1);
+            finish_open(&unit, &bank);
+        }
+        free(peer_image.bytes);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Failed REL publication reserves its name until retry or actual abandonment.
+START_TEST(test_rename_cannot_claim_failed_rel_publication_name) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool partial = (unsigned int)_i % 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t name[] = "0:REL,L,\x7f";
+    image.fail_write = image.writes + (format == 2 ? 5u : 4u);
+    image.fail_write_without_changes = !partial;
+    dos_open(&unit, &bank, 0, 2, name, sizeof(name) - 1u);
+    finish_open(&unit, &bank);
+    const uint8_t owner = dos_find_channel(&unit, 2);
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert(unit.channels[owner].failed);
+    const dos_channel_t retained = unit.channels[owner];
+    const dos_open_work_t publication = unit.open;
+    image.fail_write = 0;
+    const unsigned int writes = image.writes;
+    send_command(&unit, &bank, "R0:REL=0:ABSENT");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    send_command(&unit, &bank, partial ? "R0:OTHER=0:REL" : "R0:REL=0:SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_mem_eq(&unit.channels[owner], &retained, sizeof(retained));
+    ck_assert_mem_eq(&unit.open, &publication, sizeof(publication));
+
+    // Retry publication without another live entry taking its retained name.
+    dos_close(&unit, &bank, model, 2);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t* const directory = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    unsigned int relatives = 0, sources = 0;
+    for (unsigned int offset = 0; offset < DISKIMAGE_SECTOR_SIZE; offset += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
+        const uint8_t* const entry = directory + offset;
+        if (entry[2] != DISKIMAGE_FTYPE_DEL) {
+            relatives += memcmp(entry + 5, "REL", 3) == 0;
+            sources += memcmp(entry + 5, "SOURCE", 6) == 0;
+        }
+    }
+    ck_assert_uint_eq(relatives, 1);
+    ck_assert_uint_eq(sources, 1);
+    const uint8_t source = open_name(&unit, &bank, 3, "0:SOURCE");
+    ck_assert_uint_ne(source, DOS_UNUSED);
+    expect_bytes(&unit, &bank, source, 4, 0x20);
+    free(image.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -11877,6 +12020,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_directory_reopen_after_rel_write_releases_only_previous_owner, 0, 6);
     tcase_add_loop_test(core, test_input_open_retains_overflow_byte_for_next_rel_request, 0, 3);
     tcase_add_loop_test(core, test_input_new_collection_survives_pending_worker_retirement, 0, 24);
+    tcase_add_loop_test(core, test_copy_rel_completion_uses_writer_outcome_not_public_status, 0, 6);
+    tcase_add_loop_test(core, test_rename_cannot_claim_failed_rel_publication_name, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }

@@ -4099,10 +4099,20 @@ static const dos_channel_t* unpublished_writer(const dos_unit_t* const unit, con
                                                const uint8_t name[DISKIMAGE_FILENAME_SIZE], const uint8_t secondary) {
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         const dos_channel_t* const owner = &unit->channels[index];
-        if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
-            owner->closing != DOS_CLOSE_ABORT_OPEN && owner->secondary != secondary &&
-            owner->media.unit == reference.unit && owner->media.slot == reference.slot &&
-            owner->media.identity == reference.identity && memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
+        if (!owner->allocated || owner->secondary == secondary || owner->media.unit != reference.unit ||
+            owner->media.slot != reference.slot || owner->media.identity != reference.identity) {
+            continue;
+        }
+        if (owner->file_type == DISKIMAGE_FTYPE_REL && owner->directory == DOS_DIRECTORY_NONE) {
+            // REL ADDFIL intent lives outside the channel's tagged storage.
+            if (unit->open.rel_phase != DOS_OPEN_REL_NONE && unit->open.access == DOS_ACCESS_WRITE &&
+                unit->open.append_channel == index + 1u &&
+                memcmp(unit->open.name, name, DISKIMAGE_FILENAME_SIZE) == 0) {
+                return owner;
+            }
+        } else if (owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+                   owner->closing != DOS_CLOSE_ABORT_OPEN &&
+                   memcmp(owner->pattern, name, DISKIMAGE_FILENAME_SIZE) == 0) {
             return owner;
         }
     }
@@ -5156,11 +5166,20 @@ static void rename_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         // partial rename cannot safely give that intent another visible alias.
         for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
             const dos_channel_t* const owner = &unit->channels[index];
-            if (owner->allocated && owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
-                owner->closing != DOS_CLOSE_ABORT_OPEN && owner->media.unit == source.unit &&
-                owner->media.slot == source.slot && owner->media.identity == source.identity &&
-                owner->directory_track == work->source_track && owner->directory_sector == work->source_sector &&
-                owner->directory_entry == work->source_entry) {
+            const bool relative = owner->file_type == DISKIMAGE_FTYPE_REL && owner->directory == DOS_DIRECTORY_NONE;
+            // A failed REL ADDFIL can be partially visible before the channel
+            // acquires committed coordinates. Its OPEN owner retains the slot.
+            const bool publication =
+                relative
+                    ? unit->open.rel_phase == DOS_OPEN_REL_PUBLISH && unit->open.access == DOS_ACCESS_WRITE &&
+                          unit->open.append_channel == index + 1u && unit->open.empty_track == work->source_track &&
+                          unit->open.empty_sector == work->source_sector && unit->open.empty_entry == work->source_entry
+                    : owner->access == DOS_ACCESS_WRITE && !owner->directory_published &&
+                          owner->closing != DOS_CLOSE_ABORT_OPEN && owner->directory_track == work->source_track &&
+                          owner->directory_sector == work->source_sector &&
+                          owner->directory_entry == work->source_entry;
+            if (owner->allocated && owner->media.unit == source.unit && owner->media.slot == source.slot &&
+                owner->media.identity == source.identity && publication) {
                 dos_status(unit, model, DOS_STATUS_WRITE_ERROR, work->source_track, work->source_sector);
                 rename_finish(unit);
                 return;
@@ -6567,7 +6586,10 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             rel_work(unit, media);
             return;
         }
-        if (unit->status_code != DOS_STATUS_OK) {
+        // Peer errors and status GET cannot replace this retained byte's outcome.
+        if (writer->rel.input_eoi && writer->rel.input_overflow) {
+            unit->selected_drive = writer->media.slot;
+            dos_status(unit, model, DOS_STATUS_RECORD_OVERFLOW, 0, 0);
             copy_finish(unit);
             return;
         }
