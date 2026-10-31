@@ -65,6 +65,142 @@ dos_rel_address_t dos_rel_address(const dos_model_t model, const uint16_t record
     };
 }
 
+// Compute CLSREL's SSCALC/SSSCAL result, without traversing the data chain.
+uint16_t dos_rel_blocks(const dos_model_t model, const uint8_t group, const uint8_t side, const uint8_t index) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ssutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssutil
+    //
+    // CLSREL uses SSEND's endpoint with SSCALC, or SSSCAL plus two for 8250.
+    // The owner handles SCRUB, directory publication and channel release.
+
+    // Keep the native byte subtraction even for malformed endpoints. Full
+    // sides count 120 data pages plus one side page, not just data blocks.
+    const uint8_t last = (uint8_t)(index - (DOS_REL_POINTER_OFFSET - DISKIMAGE_SECTOR_LINK_SIZE));
+    const uint32_t count = (uint32_t)side * (DOS_REL_POINTER_COUNT + 1u) + last / 2u + 1u;
+    // Big REL includes complete six-side groups and the super page. Retain
+    // only the native directory count's low word.
+    return model == DOS_MODEL_8250
+               ? (uint16_t)(count + (uint32_t)group * DOS_REL_SIDE_COUNT * (DOS_REL_POINTER_COUNT + 1u) + 1u)
+               : (uint16_t)count;
+}
+
+// ADDNR returns carry at a page seam, skipping the following sector's link.
+static uint8_t fill_next(const uint8_t size, const uint8_t next, bool* const crosses) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/nulbuf
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/nulbuf
+    //
+    // ADDNR/AN05/AN10 adds RS to NR with byte wrap and skips the link.
+    // crosses carries the native carry result separately from the byte value.
+
+    // NR zero denotes a seam, not a record marker in the link bytes.
+    if (next == 0) {
+        *crosses = true;
+        return DISKIMAGE_SECTOR_LINK_SIZE;
+    }
+    const unsigned int sum = next + size;
+    *crosses = sum >= DISKIMAGE_SECTOR_SIZE;
+    return sum == DISKIMAGE_SECTOR_SIZE ? DISKIMAGE_SECTOR_LINK_SIZE
+                                        : (uint8_t)(sum + (*crosses ? DISKIMAGE_SECTOR_LINK_SIZE : 0u));
+}
+
+// Initialize newly allocated REL data using the native byte-wide marker loop.
+uint8_t dos_rel_fill(uint8_t bytes[DISKIMAGE_SECTOR_SIZE], const uint8_t size, uint8_t next) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/nulbuf
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/nulbuf
+    //
+    // NULBUF/NB10/NB20 clears payload and inserts $FF empty-record markers
+    // using ADDNR. The returned NR feeds the next fill or NULLNK at the owner.
+    // Requiring nonzero RS is a helper safeguard, not native zero-size behavior.
+    vet(size != 0, "REL new data requires a nonzero record size");
+    // Clear only the payload, then retain ADDNR's byte-wide marker behavior.
+    // A wrapped incoming NR can deliberately place a marker in the link bytes.
+    memset(bytes + DISKIMAGE_SECTOR_LINK_SIZE, 0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    bool crosses;
+    uint8_t marker = fill_next(size, next, &crosses);
+    do {
+        next = marker;
+        bytes[marker] = UINT8_MAX;
+        marker = fill_next(size, next, &crosses);
+    } while (!crosses);
+    // Exact ADC wrap returns A=2, but BIT ER00 preserves Z=1 for NB30.
+    const bool zero = next != 0 && (unsigned int)next + size == DISKIMAGE_SECTOR_SIZE;
+    return zero || marker == 0 ? 0 : next;
+}
+
+// Preserve ADDREL's byte subtraction, signed count loops and capacity rounding.
+dos_rel_growth_plan_t dos_rel_growth_plan(const dos_model_t model, const uint16_t number, const uint8_t size,
+                                          const uint8_t group, const uint8_t side, const uint8_t index) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // No direct ROM entry for this host wrapper. ADDREL clears RECPTR before
+    // FNDREL. Supply that target to shared preflight without reserving blocks.
+    return dos_rel_growth_plan_at(model, dos_rel_address(model, number, size, 0), size, group, side, index);
+}
+
+// Share native ADDR1 arithmetic between record growth and COPY's CYEXT entry.
+dos_rel_growth_plan_t dos_rel_growth_plan_at(const dos_model_t model, const dos_rel_address_t address,
+                                             const uint8_t size, const uint8_t group, const uint8_t side,
+                                             const uint8_t index) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ssutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssutil
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    //
+    // AR10/AR25/AR30 and ADDBIG feed SSCALC/SSSCAL after rounding the target
+    // record's end. DOS 2.7 COPY:CYEXT enters ADDR1 with an existing endpoint,
+    // bypassing FNDREL. The owner separately compares this plan with NUMFRE.
+    vet(size != 0, "REL growth requires a nonzero record size");
+    dos_rel_growth_plan_t plan = {.address = address};
+    // A spanning record needs the next data pointer. Byte wrap advances SSNUM,
+    // then only the 8250 big-file path may carry into a new group.
+    if ((unsigned int)size - 1u + plan.address.offset >= DISKIMAGE_SECTOR_SIZE) {
+        plan.address.index += DISKIMAGE_SECTOR_LINK_SIZE;
+        if (plan.address.index == 0) {
+            ++plan.address.side;
+            plan.address.index = DOS_REL_POINTER_OFFSET;
+        }
+    }
+    if (plan.address.side >= DOS_REL_SIDE_COUNT) {
+        if (model != DOS_MODEL_8250) {
+            plan.too_large = true;
+            return plan;
+        }
+        plan.address.side = 0;
+        ++plan.address.group;
+    }
+    // Preserve SBC's byte borrow across SSIND and SSNUM rather than replacing
+    // native preflight with a mathematical difference between file lengths.
+    const bool borrow = plan.address.index < index;
+    const uint8_t pointers = (uint8_t)(plan.address.index - index - (borrow ? DOS_REL_POINTER_OFFSET : 0u));
+    const int difference = (int)plan.address.side - side - borrow;
+    uint8_t sides = (uint8_t)difference;
+    // SSCALC/SSSCAL use decrement-and-sign loops, including the $80 entry.
+    // Keep their low-word results even for wrapped or backward endpoints.
+    if (model != DOS_MODEL_8250) {
+        const unsigned int iterations = sides <= 128u ? sides : 0;
+        plan.blocks = (uint16_t)(iterations * DOS_REL_POINTER_COUNT + pointers / 2u + sides);
+    } else {
+        if (difference < 0) {
+            sides += DOS_REL_SIDE_COUNT;
+        }
+        const uint8_t groups = (uint8_t)(plan.address.group - group - (difference < 0));
+        const unsigned int group_iterations = groups <= 128u ? groups : 0;
+        const unsigned int side_iterations = sides <= 128u ? sides : 0;
+        plan.blocks = (uint16_t)(group_iterations * DOS_REL_SIDE_COUNT * (DOS_REL_POINTER_COUNT + 1u) +
+                                 side_iterations * (DOS_REL_POINTER_COUNT + 1u) + pointers / 2u);
+    }
+    return plan;
+}
+
 // Begin a bounded SSTEST/RDSS1 lookup without allocating a separate index cache.
 void dos_rel_lookup_start(dos_rel_lookup_t* const lookup, const dos_model_t model, const dos_media_ref_t media,
                           const uint8_t track, const uint8_t sector, const dos_rel_address_t address) {
