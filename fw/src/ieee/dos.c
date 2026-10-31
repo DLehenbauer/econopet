@@ -10,9 +10,9 @@
 #include "fatal.h"
 #include "ieee/ieee_protocol.h"
 
-// Read/write, metadata, direct/block, reset and COPY foundations of the replacement
-// DOS. The production facade still selects the legacy engine. FORMAT
-// and REL are not enabled here. Sector callbacks and cooperative workers are
+// Read/write, metadata, direct/block, reset, COPY and NEW/DUPLICATE foundations of the replacement
+// DOS. The production facade still selects the legacy engine.
+// REL is not enabled here. Sector callbacks and cooperative workers are
 // host adaptations, not controller jobs or electrical IEEE handshakes.
 //
 // The selected ROMs are 4040 revision 2 and shared DOS 2.7 in 8050 MPI or 8250
@@ -110,6 +110,27 @@ typedef enum {
     DOS_COPY_CLOSE,
     DOS_COPY_ALL_NEXT,
 } dos_copy_phase_t;
+
+#define DOS_DUPLICATE_LAST_BUFFER 10u
+#define DOS_DIRECTORY_LAST_MARKER 0xffu
+#define DOS_DISK_ID_OFFSET 18u
+#define DOS_DISK_VERSION_OFFSET 21u
+
+typedef enum {
+    DOS_FORMAT_INITIALIZE,
+    DOS_FORMAT_START,
+    DOS_FORMAT_ERASE,
+    DOS_FORMAT_MAP,
+    DOS_FORMAT_DIRECTORY,
+    DOS_FORMAT_DISK_HEADER,
+    DOS_FORMAT_BAM,
+    DOS_FORMAT_CHAIN,
+    DOS_FORMAT_RESERVE,
+    DOS_FORMAT_RELOAD,
+    DOS_FORMAT_COPY_READ,
+    DOS_FORMAT_COPY_WRITE,
+    DOS_FORMAT_COPY_FINISH,
+} dos_format_phase_t;
 
 typedef enum {
     DOS_SCRATCH_SEARCH,
@@ -2926,7 +2947,8 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         free_drive_channels(unit, drive);
         // Discard dirty cached allocation state instead of persisting it.
         // The free-block total stays invalid until every map range is counted.
-        *bam = (dos_bam_t){0};
+        // Backing flush ownership survives even if the first refill fails.
+        *bam = (dos_bam_t){.media = reference};
         unit->free_blocks[drive] = 0;
         unit->free_blocks_valid[drive] = false;
         work->started = true;
@@ -2951,6 +2973,8 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         bam->buffer.track = track;
         bam->buffer.sector = 0;
         bam->buffer.resident = model == DOS_MODEL_4040;
+        const unsigned int name = model == DOS_MODEL_4040 ? DOS_HEADER_NAME_4040 : DOS_HEADER_NAME_8050;
+        memcpy(work->id, bam->buffer.bytes + name + DOS_DISK_ID_OFFSET, sizeof(work->id));
         work->next_track = 1;
         if (model != DOS_MODEL_4040) {
             return;
@@ -3984,7 +4008,532 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
 }
 
-// Dispatch collected metadata, block, reset and COPY commands without taking over transport collection.
+// Schedule the shared INITDR prefix without giving it ownership of ENDCMD.
+static void format_initialize(dos_unit_t* const unit, const dos_media_ref_t reference) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // No direct ROM entry: retain NEW/DUPLICATE's INITDR prefix as a shared
+    // cooperative job. Unlike INTDRV, this prefix must not finish the command.
+    unit->initialize = (dos_initialize_work_t){
+        .first_drive = reference.slot,
+        .slots = 1u << reference.slot,
+        .pending = true,
+    };
+    unit->initialize.media[reference.slot] = reference;
+}
+
+// Parse NEW's TAGCMD/ONEDRV names or DUPLICATE's adjacent PRSEQ selectors.
+static void format_start(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
+                         const unsigned int length, const bool duplicate) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/copysetup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/copysetup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/trnsfr
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/trnsfr
+    //
+    // NEW uses ONEDRV and FILTBL+1 to distinguish quick/full mode. DUPLCT
+    // uses PRSEQ's adjacent drive selectors. Capture names, IDs and media
+    // before CLRCB retires command storage, deferring all disk work.
+    const dos_model_t model = media->units[index].model;
+    const uint8_t* const bytes = unit->command_bytes;
+    dos_format_work_t work = {.duplicate = duplicate, .phase = DOS_FORMAT_INITIALIZE, .reader = DOS_UNUSED};
+    uint8_t drive = unit->last_drive;
+    unsigned int commas;
+    if (duplicate) {
+        const unsigned int after = command_delimiter(bytes, length, '=', &commas);
+        if (after < 2u || (bytes[after] != '0' && bytes[after] != '1') ||
+            (bytes[after - 2u] != '0' && bytes[after - 2u] != '1') || bytes[after] == bytes[after - 2u]) {
+            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+            return;
+        }
+        drive = bytes[after - 2u] - '0';
+        work.source = (dos_media_ref_t){.unit = index, .slot = drive ^ 1u};
+        dos_media_reference(media, index, work.source.slot, &work.source);
+        work.full = true;
+    } else {
+        const unsigned int after = command_delimiter(bytes, length, ':', &commas);
+        if (after == 0 || commas != 0) {
+            dos_status(unit, model, DOS_STATUS_NO_FILE, 0, 0);
+            return;
+        }
+        unsigned int separators = 0;
+        for (unsigned int position = 0; position < length; ++position) {
+            if (bytes[position] == '*' || bytes[position] == '?' ||
+                (position >= after - 2u && bytes[position] == '=')) {
+                dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+                return;
+            }
+            if (bytes[position] == ',' && ++separators == DOS_FILENAME_COUNT - 1u) {
+                break;
+            }
+        }
+        const uint8_t selector = bytes[after - 2u];
+        if (selector == '0' || selector == '1') {
+            drive = selector - '0';
+        }
+        work.empty_name = command_name(bytes, length, after, work.name) == 0;
+        if (work.empty_name) {
+            // TRCMBF copies the delimiter once even when FNDLMT finds no name.
+            work.name[0] = bytes[after];
+        }
+        unsigned int comma = after;
+        while (comma < length && bytes[comma] != ',') {
+            ++comma;
+        }
+        work.full = comma + 1u < length;
+        if (work.full) {
+            // TRNAME truncates the name, but FILTBL+1 still addresses the
+            // original ID. Its second byte can be retained command storage.
+            work.id[0] = bytes[comma + 1u];
+            work.id[1] = bytes[comma + 2u];
+            work.phase = DOS_FORMAT_START;
+        }
+    }
+    work.media = (dos_media_ref_t){.unit = index, .slot = drive};
+    dos_media_reference(media, index, drive, &work.media);
+    if (duplicate && work.media.identity != 0 && work.source.identity != 0) {
+        const diskimage_t* const target = &media->units[index].slots[drive].io.image;
+        const diskimage_t* const source = &media->units[index].slots[work.source.slot].io.image;
+        // Distinct slot generations do not make a shared backing image safe to erase.
+        if (target->read == source->read && target->ctx == source->ctx) {
+            unit->selected_drive = drive;
+            dos_status(unit, model, DOS_STATUS_WRITE_ERROR, 0, 0);
+            return;
+        }
+    }
+    unit->format = work;
+    unit->command = DOS_COMMAND_FORMAT;
+    unit->selected_drive = duplicate ? work.source.slot : drive;
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+    if (work.phase == DOS_FORMAT_INITIALIZE) {
+        format_initialize(unit, duplicate ? work.source : work.media);
+    }
+}
+
+// Build one native NEWMAP page, optionally reserving the directory/BAM chain.
+static void format_map(dos_unit_t* const unit, const dos_media_bank_t* const media, const bool reserve) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/verdir
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/new
+    //
+    // NEWMAP builds free-sector bits, then NEW reserves directory/BAM links.
+    // Construct one host page at a time: four-byte 4040 entries or five-byte
+    // DOS 2.7 entries with an exclusive upper track bound. No I/O occurs.
+    const dos_format_work_t* const work = &unit->format;
+    const dos_model_t model = media->units[work->media.unit].model;
+    const diskimage_t* const image = &media->units[work->media.unit].slots[work->media.slot].io.image;
+    const unsigned int tracks = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                          : DISKIMAGE_D82_TRACK_COUNT;
+    const unsigned int parts = (tracks + DOS_BAM_TRACKS_PER_PART - 1u) / DOS_BAM_TRACKS_PER_PART;
+    uint8_t* const bytes = unit->bam[work->media.slot].buffer.bytes;
+    memset(bytes, 0, DISKIMAGE_SECTOR_SIZE);
+    const unsigned int low = model == DOS_MODEL_4040 ? 1u : work->part * DOS_BAM_TRACKS_PER_PART + 1u;
+    const unsigned int high = model == DOS_MODEL_4040 ? tracks + 1u : MIN(low + DOS_BAM_TRACKS_PER_PART, tracks + 1u);
+    // Chain DOS 2.7's 50-track map parts before the common directory sector.
+    bytes[0] = model == DOS_MODEL_4040   ? DOS_DIRECTORY_TRACK_4040
+               : work->part + 1u < parts ? DOS_BAM_TRACK_8050
+                                         : DOS_DIRECTORY_TRACK_8050;
+    bytes[1] = model == DOS_MODEL_4040 || work->part + 1u == parts ? DOS_DIRECTORY_FIRST_SECTOR
+                                                                   : (work->part + 1u) * DOS_BAM_PART_INTERLEAVE;
+    bytes[DOS_BAM_VERSION_OFFSET] = model == DOS_MODEL_4040 ? DOS_VERSION_4040 : DOS_VERSION_8050;
+    if (model != DOS_MODEL_4040) {
+        bytes[4] = low;
+        bytes[5] = high;
+    }
+    // Count only real geometry bits as free. Reservation clears the same
+    // directory/header and BAM allocations that NEW marks through USEDTS.
+    for (unsigned int track = low; track < high; ++track) {
+        unsigned int sectors;
+        vet(diskimage_track_sectors(image->type, track, &sectors), "invalid format track %u", track);
+        uint8_t* const entry = bytes + (model == DOS_MODEL_4040 ? track * 4u : 6u + (track - low) * 5u);
+        for (unsigned int sector = 0; sector < sectors; ++sector) {
+            const bool used =
+                reserve && ((track == directory_track(model) && sector <= DOS_DIRECTORY_FIRST_SECTOR) ||
+                            (model != DOS_MODEL_4040 && track == DOS_BAM_TRACK_8050 &&
+                             sector % DOS_BAM_PART_INTERLEAVE == 0 && sector / DOS_BAM_PART_INTERLEAVE < parts));
+            if (!used) {
+                ++entry[0];
+                entry[1u + sector / 8u] |= (uint8_t)(1u << (sector % 8u));
+            }
+        }
+    }
+}
+
+// Transfer NEW's padded label, ID and DOS version to its native header offsets.
+static void format_label(dos_unit_t* const unit, const dos_model_t model) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/new
+    //
+    // NEW and DOS 2.7 TRNHDR install TRNAME's padded name, two-byte disk ID
+    // and version 2A/2C. Header offsets differ from the BAM entry layout.
+    const dos_format_work_t* const work = &unit->format;
+    uint8_t* const bytes = unit->bam[work->media.slot].buffer.bytes;
+    const unsigned int name = model == DOS_MODEL_4040 ? DOS_HEADER_NAME_4040 : DOS_HEADER_NAME_8050;
+    // Empty TRNAME copies one delimiter plus all 27 padding bytes.
+    memset(bytes + name, DISKIMAGE_FILENAME_PADDING, DOS_DIRECTORY_NAME_SIZE + work->empty_name);
+    memcpy(bytes + name, work->name, DISKIMAGE_FILENAME_SIZE);
+    memcpy(bytes + name + DOS_DISK_ID_OFFSET, work->id, sizeof(work->id));
+    bytes[name + DOS_DISK_VERSION_OFFSET] = '2';
+    bytes[name + DOS_DISK_VERSION_OFFSET + 1u] = model == DOS_MODEL_4040 ? DOS_VERSION_4040 : DOS_VERSION_8050;
+}
+
+// Begin the next native eleven-buffer DUPLICATE group on the current track.
+static void format_copy_group(dos_format_work_t* const work) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/duplct
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/duplct
+    //
+    // SETRH/SETR3 fills jobs 10 down to zero while decrementing SECTOR.
+    // This host phase initializer retains that eleven-page grouping, but
+    // format_work submits reads and writes serially rather than in parallel.
+    work->group_low = work->sector > DOS_DUPLICATE_LAST_BUFFER ? work->sector - DOS_DUPLICATE_LAST_BUFFER : 0;
+    work->first_buffer = DOS_DUPLICATE_LAST_BUFFER - (work->sector - work->group_low);
+    work->buffer = work->first_buffer;
+    work->phase = DOS_FORMAT_COPY_READ;
+}
+
+// Advance destructive NEW/DUPLICATE by at most one synchronous media operation.
+static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/duplct
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/duplct
+    //
+    // Raw images expose formatter data bytes, not magnetic headers/gaps.
+    // Both pinned formatter payloads write zero-filled sector data. Their
+    // physical retries, parallel controller jobs and RAM code echo are not
+    // modeled here. Captured identities and one-sector turns bound host work.
+    dos_format_work_t* const work = &unit->format;
+    const dos_media_ref_t reference = work->media;
+    const dos_model_t model = media->units[reference.unit].model;
+    const diskimage_t* const image = &media->units[reference.unit].slots[reference.slot].io.image;
+    dos_bam_t* const bam = &unit->bam[reference.slot];
+    uint8_t* const bytes = bam->buffer.bytes;
+    const unsigned int tracks = model == DOS_MODEL_4040   ? DISKIMAGE_D64_TRACK_COUNT
+                                : model == DOS_MODEL_8050 ? DISKIMAGE_D80_TRACK_COUNT
+                                                          : DISKIMAGE_D82_TRACK_COUNT;
+    const unsigned int parts = (tracks + DOS_BAM_TRACKS_PER_PART - 1u) / DOS_BAM_TRACKS_PER_PART;
+    const uint8_t version = model == DOS_MODEL_4040 ? DOS_VERSION_4040 : DOS_VERSION_8050;
+    if (work->phase == DOS_FORMAT_INITIALIZE || work->phase == DOS_FORMAT_COPY_FINISH) {
+        if (unit->initialize.pending) {
+            initialize_work(unit, media);
+            return;
+        }
+        if (!unit->initialize.succeeded) {
+            if (work->phase == DOS_FORMAT_COPY_FINISH) {
+                unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);
+            }
+            unit->command = DOS_COMMAND_IDLE;
+            return;
+        }
+        if (work->phase == DOS_FORMAT_COPY_FINISH) {
+            unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);
+            unit->command = DOS_COMMAND_IDLE;
+            unit->selected_drive = reference.slot;
+            command_end(unit, model);
+            return;
+        }
+        const dos_media_ref_t initialized = work->duplicate ? work->source : reference;
+        const dos_bam_t* const initialized_bam = &unit->bam[initialized.slot];
+        if (initialized_bam->buffer.bytes[DOS_BAM_VERSION_OFFSET] != version) {
+            unit->selected_drive = initialized.slot;
+            dos_status(unit, model, DOS_STATUS_POWER_ON, initialized_bam->buffer.track, initialized_bam->buffer.sector);
+            unit->command = DOS_COMMAND_IDLE;
+            return;
+        }
+        unit->selected_drive = reference.slot;
+        if (!work->duplicate) {
+            memcpy(work->id, unit->initialize.id, sizeof(work->id));
+        }
+        work->phase = DOS_FORMAT_START;
+        return;
+    }
+    dos_media_ref_t current;
+    unit->selected_drive = reference.slot;
+    if (dos_media_reference(media, reference.unit, reference.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != reference.identity) {
+        storage_error(unit, media, reference, reference.identity == 0 ? DOS_MEDIA_ABSENT : DOS_MEDIA_STALE, true,
+                      work->track, work->sector);
+        goto failed;
+    }
+    if (work->duplicate &&
+        (dos_media_reference(media, work->source.unit, work->source.slot, &current) != DOS_MEDIA_OK ||
+         current.identity != work->source.identity)) {
+        storage_error(unit, media, work->source, DOS_MEDIA_STALE, false, work->track, work->sector);
+        goto failed;
+    }
+    if (work->phase == DOS_FORMAT_START) {
+        if (work->full) {
+            // DOS 2.7 NEW calls CLRCHN (SA 14..1, on either disk).
+            // DUPLICATE calls CLDCHN for each disk. Neither path CLOSEs writers.
+            if (work->duplicate) {
+                free_drive_channels(unit, reference.slot);
+            } else if (model != DOS_MODEL_4040) {
+                for (uint8_t secondary = IEEE_COMMAND_CHANNEL; --secondary != IEEE_LOAD_CHANNEL;) {
+                    const uint8_t owner = dos_find_channel(unit, secondary);
+                    if (owner != DOS_UNUSED) {
+                        free_channel(unit, owner);
+                    }
+                }
+            }
+            // Never overwrite live pages with formatter/copy scratch. This is
+            // an explicit host resource safeguard, as for VALIDATE's fixed pages.
+            const unsigned int scratch_count = work->duplicate           ? DOS_DUPLICATE_LAST_BUFFER + 1u
+                                               : model == DOS_MODEL_4040 ? 3u
+                                                                         : 4u;
+            const uint16_t scratch = (1u << scratch_count) - 1u;
+            if (unit->buffer_use & scratch) {
+                dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+                goto failed;
+            }
+            if (work->duplicate) {
+                unit->buffer_use |= scratch;
+            }
+        }
+        *bam = (dos_bam_t){.media = reference};
+        bam->buffer.resident = true;
+        bam->buffer.bytes[DOS_BAM_VERSION_OFFSET] = version;
+        unit->free_blocks_valid[reference.slot] = false;
+        work->track = 1;
+        work->sector = 0;
+        work->part = 0;
+        work->phase = work->full ? DOS_FORMAT_ERASE : model == DOS_MODEL_4040 ? DOS_FORMAT_DIRECTORY : DOS_FORMAT_MAP;
+        return;
+    }
+    if (work->phase == DOS_FORMAT_ERASE) {
+        memset(bytes, 0, DISKIMAGE_SECTOR_SIZE);
+        // Formatting replaces foreign versions without consulting their BAM.
+        // It still goes through media generation/write-protection validation.
+        if (!storage_error(unit, media, reference, dos_media_write(media, reference, work->track, work->sector, bytes),
+                           true, work->track, work->sector)) {
+            goto failed;
+        }
+        unsigned int sectors;
+        vet(diskimage_track_sectors(image->type, work->track, &sectors), "invalid format track %u", work->track);
+        if (++work->sector == sectors) {
+            work->sector = 0;
+            ++work->track;
+        }
+        if (work->track > tracks) {
+            bytes[DOS_BAM_VERSION_OFFSET] = version;
+            if (work->duplicate) {
+                work->track = 1;
+                vet(diskimage_track_sectors(image->type, work->track, &sectors), "invalid duplicate track");
+                work->sector = sectors - 1u;
+                format_copy_group(work);
+            } else {
+                work->phase = model == DOS_MODEL_4040 ? DOS_FORMAT_DIRECTORY : DOS_FORMAT_MAP;
+            }
+        }
+        return;
+    }
+    if (work->phase == DOS_FORMAT_COPY_READ || work->phase == DOS_FORMAT_COPY_WRITE) {
+        const uint8_t sector = work->group_low + work->buffer - work->first_buffer;
+        uint8_t* const page = unit->buffers[work->buffer].bytes;
+        if (work->phase == DOS_FORMAT_COPY_READ) {
+            if (!storage_error(unit, media, work->source,
+                               read_sector(unit, media, work->source, work->track, sector, page), false, work->track,
+                               sector)) {
+                goto failed;
+            }
+        } else if (!write_sector(unit, media, reference, work->track, sector, page)) {
+            goto failed;
+        }
+        if (++work->buffer > DOS_DUPLICATE_LAST_BUFFER) {
+            work->buffer = work->first_buffer;
+            if (work->phase == DOS_FORMAT_COPY_READ) {
+                work->phase = DOS_FORMAT_COPY_WRITE;
+            } else if (work->group_low != 0) {
+                work->sector = work->group_low - 1u;
+                format_copy_group(work);
+            } else if (++work->track <= tracks) {
+                unsigned int sectors;
+                vet(diskimage_track_sectors(image->type, work->track, &sectors), "invalid duplicate track");
+                work->sector = sectors - 1u;
+                format_copy_group(work);
+            } else {
+                work->phase = DOS_FORMAT_COPY_FINISH;
+                format_initialize(unit, reference);
+            }
+        }
+        return;
+    }
+    if (work->phase == DOS_FORMAT_BAM) {
+        // NEW3/USEDTS refills the first map before OPNIRD can exhaust channels.
+        if (!storage_error(unit, media, reference, read_sector(unit, media, reference, DOS_BAM_TRACK_8050, 0, bytes),
+                           false, DOS_BAM_TRACK_8050, 0)) {
+            goto failed;
+        }
+        bam->buffer.track = DOS_BAM_TRACK_8050;
+        bam->buffer.sector = 0;
+        if (!mark_sector(unit, media, reference, directory_track(model), 0, false)) {
+            goto failed;
+        }
+        work->phase = DOS_FORMAT_CHAIN;
+        return;
+    }
+    if (work->phase == DOS_FORMAT_CHAIN) {
+        if (work->reader == DOS_UNUSED) {
+            // NEW3 opens OPNIRD only after publishing the metadata prefix.
+            work->reader = allocate_channel(unit, reference, DOS_INTERNAL_READ_SECONDARY, 2);
+            if (work->reader == DOS_UNUSED) {
+                dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+                goto failed;
+            }
+            unit->channels[work->reader].ready = false;
+            work->track = directory_track(model);
+            work->sector = 0;
+            work->part = 0;
+        }
+        // N150/NXTBUF must select every header/BAM/directory page. Split the
+        // native double-buffered jobs into one synchronous read per turn.
+        if (work->part++ >= parts + 2u) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, work->track, work->sector);
+            goto failed;
+        }
+        dos_channel_t* const reader = &unit->channels[work->reader];
+        dos_buffer_t* const page = &unit->buffers[reader->buffers[reader->active]];
+        if (!storage_error(unit, media, reference,
+                           read_sector(unit, media, reference, work->track, work->sector, page->bytes), false,
+                           work->track, work->sector)) {
+            goto failed;
+        }
+        page->track = work->track;
+        page->sector = work->sector;
+        page->resident = true;
+        work->track = page->bytes[0];
+        work->sector = page->bytes[1];
+        reader->active ^= 1u;
+        if (work->track == 0) {
+            work->part = 0;
+            work->phase = DOS_FORMAT_RESERVE;
+        }
+        return;
+    }
+    if (work->phase == DOS_FORMAT_MAP || work->phase == DOS_FORMAT_RESERVE) {
+        format_map(unit, media, work->phase == DOS_FORMAT_RESERVE);
+        const uint8_t track = model == DOS_MODEL_4040 ? DOS_DIRECTORY_TRACK_4040 : DOS_BAM_TRACK_8050;
+        const uint8_t sector = work->part * DOS_BAM_PART_INTERLEAVE;
+        if (model == DOS_MODEL_4040) {
+            format_label(unit, model);
+        }
+        if (!write_sector(unit, media, reference, track, sector, bytes)) {
+            goto failed;
+        }
+        if (work->phase == DOS_FORMAT_RESERVE) {
+            bam->buffer.track = track;
+            bam->buffer.sector = sector;
+            bam->dirty = false;
+            unit->free_blocks[reference.slot] = 0;
+            work->phase = DOS_FORMAT_RELOAD;
+        } else if (++work->part == parts) {
+            work->part = 0;
+            work->phase = DOS_FORMAT_DIRECTORY;
+        }
+        return;
+    }
+    if (work->phase == DOS_FORMAT_DIRECTORY || work->phase == DOS_FORMAT_DISK_HEADER) {
+        memset(bytes, 0, DISKIMAGE_SECTOR_SIZE);
+        const uint8_t sector = work->phase == DOS_FORMAT_DIRECTORY ? DOS_DIRECTORY_FIRST_SECTOR : 0;
+        if (sector == DOS_DIRECTORY_FIRST_SECTOR) {
+            bytes[1] = DOS_DIRECTORY_LAST_MARKER;
+        } else {
+            bytes[0] = DOS_BAM_TRACK_8050;
+            bytes[DOS_BAM_VERSION_OFFSET] = version;
+            format_label(unit, model);
+        }
+        // The shared cache doubles as the write source, so keep its version
+        // unset or native. A directory page's byte 2 is zero.
+        if (!write_sector(unit, media, reference, directory_track(model), sector, bytes)) {
+            goto failed;
+        }
+        work->phase = model == DOS_MODEL_4040                ? DOS_FORMAT_RESERVE
+                      : sector == DOS_DIRECTORY_FIRST_SECTOR ? DOS_FORMAT_DISK_HEADER
+                                                             : DOS_FORMAT_BAM;
+        return;
+    }
+    vet(work->phase == DOS_FORMAT_RELOAD, "invalid format phase %u", work->phase);
+    // NF05 leaves the final map range cached. Do not call INITDR here: NEW
+    // does not abandon the additional channels that a fresh INITDR would.
+    if (model == DOS_MODEL_4040) {
+        // 4040 NEW ends after DRTWRT. Retain the generated map without a read.
+        unsigned int free_blocks = 0;
+        for (unsigned int current_track = 1; current_track <= tracks; ++current_track) {
+            unsigned int sectors;
+            vet(diskimage_track_sectors(image->type, current_track, &sectors), "invalid format track");
+            if (current_track != directory_track(model)) {
+                free_blocks += sectors;
+            }
+        }
+        unit->free_blocks[reference.slot] = free_blocks;
+    } else {
+        // NF05 starts with the freshly scrubbed first part already cached.
+        // Follow subsequent ranges one read per turn, retaining the final part.
+        if (work->part != 0) {
+            if (!storage_error(unit, media, reference,
+                               read_sector(unit, media, reference, work->track, work->sector, bytes), false,
+                               work->track, work->sector)) {
+                goto failed;
+            }
+            bam->buffer.track = work->track;
+            bam->buffer.sector = work->sector;
+        }
+        const unsigned int low = work->part * DOS_BAM_TRACKS_PER_PART + 1u;
+        const unsigned int high = MIN(low + DOS_BAM_TRACKS_PER_PART, tracks + 1u);
+        if (bytes[4] != low || bytes[5] != high) {
+            dos_status(unit, model, DOS_STATUS_DIRECTORY_ERROR, bam->buffer.track, bam->buffer.sector);
+            goto failed;
+        }
+        for (unsigned int track = low; track < high; ++track) {
+            if (track != directory_track(model)) {
+                unit->free_blocks[reference.slot] += bytes[6u + (track - low) * 5u];
+            }
+        }
+        if (++work->part < parts) {
+            work->track = bytes[0];
+            work->sector = bytes[1];
+            return;
+        }
+    }
+    bam->buffer.resident = true;
+    unit->free_blocks_valid[reference.slot] = true;
+    if (work->reader != DOS_UNUSED) {
+        free_channel(unit, work->reader);
+        work->reader = DOS_UNUSED;
+    }
+    unit->command = DOS_COMMAND_IDLE;
+    command_end(unit, model);
+    return;
+
+failed:
+    // Generated formatter pages borrow BAM storage without keeping a valid map
+    // binding. Preserve the cache only before scratch was touched.
+    if (work->phase >= DOS_FORMAT_ERASE) {
+        *bam = (dos_bam_t){.media = reference};
+        unit->free_blocks_valid[reference.slot] = false;
+    }
+    if (work->reader != DOS_UNUSED) {
+        free_channel(unit, work->reader);
+        work->reader = DOS_UNUSED;
+    }
+    if (work->duplicate && work->phase >= DOS_FORMAT_ERASE) {
+        unit->buffer_use &= (uint16_t)~((1u << (DOS_DUPLICATE_LAST_BUFFER + 1u)) - 1u);
+    }
+    unit->command = DOS_COMMAND_IDLE;
+}
+
+// Dispatch collected metadata, block, reset, COPY and NEW/DUPLICATE commands without taking over transport collection.
 // The caller completes preceding work before submitting another request.
 void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const unsigned int index,
                  const uint8_t* const request, unsigned int length) {
@@ -4041,6 +4590,8 @@ void dos_command(dos_unit_t* const unit, dos_media_bank_t* const media, const un
             scratch_start(unit, media, index, length);
         } else if (bytes[0] == 'C') {
             copy_start(unit, media, index, length);
+        } else if (bytes[0] == 'N' || bytes[0] == 'D') {
+            format_start(unit, media, index, length, bytes[0] == 'D');
         } else if (bytes[0] == 'V') {
             // VALDAT uses SIMPRS but initializes only the selected disk.
             // Capture its identity before any deferred initialization I/O.
@@ -5055,6 +5606,9 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     case DOS_COMMAND_COPY:
         copy_work(unit, media);
         return;
+    case DOS_COMMAND_FORMAT:
+        format_work(unit, media);
+        return;
     case DOS_COMMAND_VALIDATE:
         validate_work(unit, media);
         return;
@@ -5546,6 +6100,12 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             return false;
         }
     } else if (channel->directory == DOS_DIRECTORY_FOOTER) {
+        // A surviving listing cannot refill or recount a formatter-owned BAM.
+        if (unit->command == DOS_COMMAND_FORMAT && channel->media.unit == unit->format.media.unit &&
+            (channel->media.slot == unit->format.media.slot ||
+             (unit->format.duplicate && channel->media.slot == unit->format.source.slot))) {
+            return false;
+        }
         if (!free_blocks(unit, media, channel->media, &number)) {
             channel->ready = false;
             return false;

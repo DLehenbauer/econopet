@@ -172,6 +172,7 @@ typedef struct {
 typedef struct {
     dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
     uint16_t next_track;
+    uint8_t id[2]; // Raw-image ID from the last successfully read directory header.
     uint8_t first_drive;
     uint8_t slots;
     bool started;
@@ -298,6 +299,25 @@ typedef struct {
     bool data_pending;
 } dos_validate_work_t;
 
+// NEW and DUPLICATE retain only cursors, borrowing the existing BAM/data pages.
+typedef struct {
+    dos_media_ref_t media;
+    dos_media_ref_t source;
+    uint8_t name[DISKIMAGE_FILENAME_SIZE];
+    uint8_t id[2];
+    uint8_t phase;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t part;
+    uint8_t group_low;
+    uint8_t buffer;
+    uint8_t first_buffer;
+    uint8_t reader;
+    bool empty_name;
+    bool full;
+    bool duplicate;
+} dos_format_work_t;
+
 // A block job retains its media identity while borrowing the channel's active page.
 typedef struct {
     dos_media_ref_t media;
@@ -328,6 +348,7 @@ typedef enum {
     DOS_COMMAND_RENAME,
     DOS_COMMAND_SCRATCH,
     DOS_COMMAND_COPY,
+    DOS_COMMAND_FORMAT,
     DOS_COMMAND_VALIDATE,
 } dos_command_work_t;
 
@@ -345,6 +366,7 @@ typedef struct {
         dos_rename_work_t rename;
         dos_scratch_work_t scratch;
         dos_copy_work_t copy;
+        dos_format_work_t format;
         dos_validate_work_t validate;
     };
     uint16_t buffer_use;
