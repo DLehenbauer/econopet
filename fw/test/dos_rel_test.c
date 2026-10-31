@@ -7440,6 +7440,303 @@ START_TEST(test_storage_zero_size_creation_remains_bounded) {
 }
 END_TEST
 
+// Compare transport-owned input with independently scheduled native primitives.
+START_TEST(test_listen_retained_stream) {
+    static const uint8_t record_sizes[] = {1, 10, 127, 254, 255};
+    const unsigned int format = (unsigned int)_i / count_of(record_sizes);
+    const uint8_t size = record_sizes[(unsigned int)_i % count_of(record_sizes)];
+    rel_growth_image_t *const image = malloc(sizeof(*image)), *const expected = malloc(sizeof(*expected));
+    ck_assert_ptr_nonnull(image);
+    ck_assert_ptr_nonnull(expected);
+    dos_media_bank_t bank = {0}, expected_bank = {0};
+    dos_unit_t unit, expected_unit;
+    const uint8_t channel = prepare_growth(&unit, &bank, image, format, size);
+    const uint8_t expected_channel = prepare_growth(&expected_unit, &expected_bank, expected, format, size);
+    dos_channel_t *const state = &unit.channels[channel], *const baseline = &expected_unit.channels[expected_channel];
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(2), true);
+    for (unsigned int record = 0; record < 4; ++record) {
+        if (baseline->rel.record.result == DOS_REL_RECORD_MISSING) {
+            ck_assert(dos_rel_channel_grow(&expected_unit, expected_channel));
+            finish_growth(&expected_unit, &expected_bank, expected);
+        } else {
+            ck_assert(dos_rel_channel_begin_write(&expected_unit, expected_channel));
+        }
+        const unsigned int length = record == 1 ? size : record == 2 ? size + 2u : 1;
+        for (unsigned int offset = 0; offset < length; ++offset) {
+            const uint8_t byte = 'A' + offset % 26u;
+            const bool eoi = offset + 1u == length, overflow = baseline->rel.record.result == DOS_REL_RECORD_FULL;
+            if (!overflow) {
+                ck_assert(dos_rel_channel_put(&expected_unit, &expected_bank, expected_channel, byte));
+                finish_growth(&expected_unit, &expected_bank, expected);
+            }
+            if (eoi) {
+                ck_assert(dos_rel_channel_finish_write(&expected_unit, expected_channel, overflow));
+                finish_growth(&expected_unit, &expected_bank, expected);
+            }
+            dos_listen_put(&unit, &bank, byte, eoi);
+            ck_assert(dos_work_pending(&unit));
+            ck_assert(!state->ready);
+            ck_assert(!dos_close(&unit, &bank, models[format], 2));
+            ck_assert(!dos_finalize(&unit, &bank));
+            ck_assert(!dos_rel_channel_position(&unit, channel, 1, 0));
+            finish_growth(&unit, &bank, image);
+            ck_assert(!state->failed);
+            ck_assert_uint_eq(state->rel.input_phase, DOS_REL_INPUT_IDLE);
+            ck_assert_mem_eq(&state->rel.record, &baseline->rel.record, sizeof(state->rel.record));
+            ck_assert_uint_eq(state->rel.number, baseline->rel.number);
+            ck_assert_uint_eq(state->rel_write, baseline->rel_write);
+            ck_assert_int_eq(state->ready, baseline->ready);
+            ck_assert_mem_eq(unit.buffers, expected_unit.buffers, sizeof(unit.buffers));
+            ck_assert_mem_eq(image->bytes, expected->bytes, sizes[format]);
+            ck_assert_int_eq(unit.status_code, expected_unit.status_code);
+        }
+    }
+    ck_assert_uint_eq(image->flushes, 0);
+    ck_assert_uint_eq(unit.buffer_use, expected_unit.buffer_use);
+    free(expected);
+    free(image);
+}
+END_TEST
+
+// A failed ADDREL retains its already-popped byte independently of command input.
+START_TEST(test_listen_growth_retry_retains_byte) {
+    const unsigned int format = (unsigned int)_i;
+    rel_growth_image_t* const image = malloc(sizeof(*image));
+    ck_assert_ptr_nonnull(image);
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    const uint8_t channel = prepare_growth(&unit, &bank, image, format, 127);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_position(&unit, channel, 3, 0));
+    finish_growth(&unit, &bank, image);
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(2), true);
+    image->fail_write = image->writes + 1u;
+    dos_listen_put(&unit, &bank, 'Z', true);
+    finish_growth(&unit, &bank, image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel.input_phase, DOS_REL_INPUT_PUT);
+    ck_assert_uint_eq(state->rel.input, 'Z');
+    ck_assert(state->rel.input_eoi);
+    ck_assert(!dos_close(&unit, &bank, models[format], 2));
+    ck_assert(!dos_finalize(&unit, &bank));
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    dos_input_put(&unit, 'X', false);
+    ck_assert_uint_eq(state->rel.input, 'Z');
+    ck_assert(dos_rel_channel_retry_grow(&unit, channel));
+    finish_growth(&unit, &bank, image);
+    ck_assert(!state->failed && state->ready);
+    ck_assert_uint_eq(state->rel.input_phase, DOS_REL_INPUT_IDLE);
+    ck_assert_uint_eq(state->rel.number, 4);
+    const dos_buffer_t* const active = &unit.buffers[state->buffers[state->rel.record.active]];
+    ck_assert_uint_eq(active->bytes[DISKIMAGE_SECTOR_LINK_SIZE], 'Z');
+    ck_assert_uint_eq(active->bytes[DISKIMAGE_SECTOR_LINK_SIZE + 1u], 0);
+    ck_assert_uint_eq(image->flushes, 0);
+    free(image);
+}
+END_TEST
+
+// Binary RECORD preserves raw counters, native SA mapping and delayed errors.
+START_TEST(test_record_command_completion) {
+    static const struct {
+        uint16_t number;
+        uint8_t position, secondary, length;
+    } cases[] = {
+        {0, 0, 2, 5},   {1, 1, 2, 5},  {2, 127, 2, 5}, {2, 128, 2, 5}, {2, 129, 2, 5}, {3, 0, 2, 5},  {3, 255, 2, 5},
+        {1, 0, 130, 5}, {1, 0, 17, 5}, {1, 0, 18, 5},  {0, 0, 2, 2},   {0, 0, 0, 1},   {13, 0, 2, 4}, {2, 13, 2, 5},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases), variant = (unsigned int)_i % count_of(cases);
+    rel_growth_image_t* const image = malloc(sizeof(*image));
+    ck_assert_ptr_nonnull(image);
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    const uint8_t channel = prepare_growth(&unit, &bank, image, format, 127);
+    dos_channel_t* const state = &unit.channels[channel];
+    state->secondary = cases[variant].secondary & IEEE_CMD_ADDRESS_MASK;
+    const uint8_t request[] = {'P', cases[variant].secondary, (uint8_t)cases[variant].number,
+                               (uint8_t)(cases[variant].number >> 8u), cases[variant].position};
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    for (unsigned int byte = 0; byte < cases[variant].length; ++byte) {
+        dos_input_put(&unit, request[byte], byte + 1u == cases[variant].length);
+    }
+    ck_assert(dos_input_ready(&unit));
+    dos_input_dispatch(&unit, &bank, 3);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert(!state->ready);
+    ck_assert_int_eq(unit.command, DOS_COMMAND_RECORD);
+    ck_assert(!dos_close(&unit, &bank, models[format], state->secondary));
+    ck_assert(!dos_finalize(&unit, &bank));
+    ck_assert(!dos_rel_channel_close(&unit, channel));
+    ck_assert_uint_eq(unit.input.length, 0);
+    ck_assert(!unit.input.collecting && !unit.input.complete);
+    finish_growth(&unit, &bank, image);
+    ck_assert(!state->failed && state->ready);
+    ck_assert_int_eq(unit.command, DOS_COMMAND_IDLE);
+    ck_assert_uint_eq(state->rel.number, cases[variant].number);
+    const dos_rel_address_t address =
+        dos_rel_address(models[format], cases[variant].number, 127, cases[variant].position);
+    const bool missing = cases[variant].number >= 3;
+    ck_assert_int_eq(unit.status_code, missing            ? DOS_STATUS_NO_RECORD
+                                       : address.overflow ? DOS_STATUS_RECORD_OVERFLOW
+                                                          : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert(!state->rel.no_record);
+    uint8_t byte;
+    bool eoi;
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, state->secondary, &byte, 1, &eoi, &source), 1);
+    if (missing) {
+        ck_assert_uint_eq(byte, '\r');
+        ck_assert(eoi);
+    }
+    ck_assert_uint_eq(image->flushes, 0);
+    free(image);
+}
+END_TEST
+
+// A short binary P reads the bounded CMDBUF bytes deliberately retained by U0.
+START_TEST(test_record_command_stale_input) {
+    const unsigned int format = (unsigned int)_i;
+    rel_growth_image_t* const image = malloc(sizeof(*image));
+    ck_assert_ptr_nonnull(image);
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    const uint8_t channel = prepare_growth(&unit, &bank, image, format, 127);
+    unit.channels[channel].secondary = IEEE_LOAD_CHANNEL;
+    const uint8_t retained[] = {'U', '0', 2, 0, 5};
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    for (unsigned int byte = 0; byte < sizeof(retained); ++byte) {
+        dos_input_put(&unit, retained[byte], byte + 1u == sizeof(retained));
+    }
+    dos_input_dispatch(&unit, &bank, 3);
+    ck_assert_mem_eq(unit.input.bytes, retained, sizeof(retained));
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    dos_input_put(&unit, 'P', true);
+    dos_input_dispatch(&unit, &bank, 3);
+    finish_growth(&unit, &bank, image);
+    ck_assert(!unit.channels[channel].failed && unit.channels[channel].ready);
+    ck_assert_uint_eq(unit.channels[channel].rel.number, 2);
+    ck_assert_uint_eq(unit.channels[channel].rel.record.pointer, dos_rel_address(models[format], 2, 127, 5).offset);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_OK);
+    const uint8_t cleared[DOS_COMMAND_RECEIVE_CAPACITY] = {0};
+    ck_assert_mem_eq(unit.input.bytes, cleared, sizeof(cleared));
+    free(image);
+}
+END_TEST
+
+// Failed public RECORD jobs retain their pages without holding command dispatch.
+START_TEST(test_record_command_failure_retry) {
+    const unsigned int format = (unsigned int)_i;
+    rel_growth_image_t* const image = malloc(sizeof(*image));
+    ck_assert_ptr_nonnull(image);
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    const uint8_t channel = prepare_growth(&unit, &bank, image, format, 127);
+    unit.channels[channel].rel.record.cached_group = DOS_REL_GROUP_NONE;
+    unit.buffers[unit.channels[channel].buffers[2]].resident = false;
+    unit.buffers[unit.channels[channel].buffers[2]].bytes[DOS_REL_SIDE_NUMBER_OFFSET] = 1;
+    image->fail_read = image->reads + 1u;
+    const uint8_t request[] = {'P', 2, 1, 0, 0};
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    for (unsigned int byte = 0; byte < sizeof(request); ++byte) {
+        dos_input_put(&unit, request[byte], byte + 1u == sizeof(request));
+    }
+    dos_input_dispatch(&unit, &bank, 3);
+    finish_growth(&unit, &bank, image);
+    ck_assert(unit.channels[channel].failed && !unit.channels[channel].ready);
+    ck_assert_int_eq(unit.command, DOS_COMMAND_IDLE);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    const dos_unit_t retained = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &retained, sizeof(unit));
+    ck_assert(dos_rel_channel_retry_position(&unit, channel));
+    finish_growth(&unit, &bank, image);
+    ck_assert(!unit.channels[channel].failed && unit.channels[channel].ready);
+    ck_assert_uint_eq(image->flushes, 0);
+    free(image);
+}
+END_TEST
+
+// A byte already stored before NRBUF must not replay when its EOI job retries.
+START_TEST(test_listen_stored_byte_retry) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0}, expected = {0};
+    dos_media_bank_t bank = {0}, expected_bank = {0};
+    dos_unit_t unit, expected_unit;
+    dos_reset(&unit, models[format]);
+    dos_reset(&expected_unit, models[format]);
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    const dos_media_ref_t expected_reference = mount_job_image(&expected_bank, &expected, format, 3, 1, true);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 253);
+    const uint8_t expected_channel =
+        prepare_job_channel(&expected_unit, &expected_bank, &expected, format, expected_reference, 2, 253);
+    dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(2), true);
+    dos_input_address(&expected_unit, &expected_bank, models[format], IEEE_CMD_SECONDARY(2), true);
+    image.fail_write = 1;
+    dos_listen_put(&unit, &bank, 'Z', true);
+    finish_pipeline(&unit, &bank, &image);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel.input_phase, DOS_REL_INPUT_EOI);
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_NEEDS_WRITEBACK);
+    ck_assert_uint_eq(unit.buffers[state->buffers[state->rel.record.active]].bytes[UINT8_MAX], 'Z');
+    const unsigned int reads = image.reads, writes = image.writes;
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    dos_listen_put(&expected_unit, &expected_bank, 'Z', true);
+    finish_pipeline(&expected_unit, &expected_bank, &expected);
+    ck_assert(!state->failed && state->ready);
+    ck_assert_uint_eq(state->rel.input_phase, DOS_REL_INPUT_IDLE);
+    ck_assert_mem_eq(&state->rel.record, &expected_unit.channels[expected_channel].rel.record,
+                     sizeof(state->rel.record));
+    ck_assert_mem_eq(unit.buffers, expected_unit.buffers, sizeof(unit.buffers));
+    ck_assert_mem_eq(image.bytes, expected.bytes, sizeof(image.bytes));
+    ck_assert_uint_eq(image.flushes, 0);
+}
+END_TEST
+
+// Failed input retains only its owner's byte while a peer completes LISTEN.
+START_TEST(test_listen_failed_owner_peer) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        mount_job_image(&bank, &images[owner], format, 2, owner, true);
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 253);
+    }
+    images[0].fail_write = 1;
+    const uint16_t peer_number = unit.channels[channels[1]].rel.number;
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_input_address(&unit, &bank, models[format], IEEE_CMD_SECONDARY(2u + owner), true);
+        dos_listen_put(&unit, &bank, 'X' + owner, true);
+    }
+    while (!unit.channels[channels[0]].failed) {
+        ck_assert(dos_work_pending(&unit));
+        dos_work(&unit, &bank);
+    }
+    const dos_channel_t retained = unit.channels[channels[0]];
+    const dos_buffer_t first = unit.buffers[retained.buffers[0]], second = unit.buffers[retained.buffers[1]];
+    finish_pipeline(&unit, &bank, &images[1]);
+    ck_assert_mem_eq(&unit.channels[channels[0]], &retained, sizeof(retained));
+    ck_assert_mem_eq(&unit.buffers[retained.buffers[0]], &first, sizeof(first));
+    ck_assert_mem_eq(&unit.buffers[retained.buffers[1]], &second, sizeof(second));
+    ck_assert(!unit.channels[channels[1]].failed && unit.channels[channels[1]].ready);
+    ck_assert_uint_eq(unit.channels[channels[1]].rel.input_phase, DOS_REL_INPUT_IDLE);
+    ck_assert_uint_eq(unit.channels[channels[1]].rel.number, peer_number + 1u);
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+}
+END_TEST
+
 Suite* dos_rel_suite(void) {
     Suite* const suite = suite_create("dos_rel");
     TCase* const core = tcase_create("lookup and clean reads");
@@ -7539,6 +7836,13 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_storage_close_completes_or_shortcuts, 0, 36);
     tcase_add_loop_test(core, test_pipeline_position_resident_index, 0, 24);
     tcase_add_loop_test(core, test_pipeline_position_index_failure, 0, 9);
+    tcase_add_loop_test(core, test_listen_retained_stream, 0, 15);
+    tcase_add_loop_test(core, test_listen_growth_retry_retains_byte, 0, 3);
+    tcase_add_loop_test(core, test_record_command_completion, 0, 42);
+    tcase_add_loop_test(core, test_record_command_stale_input, 0, 3);
+    tcase_add_loop_test(core, test_record_command_failure_retry, 0, 3);
+    tcase_add_loop_test(core, test_listen_stored_byte_retry, 0, 3);
+    tcase_add_loop_test(core, test_listen_failed_owner_peer, 0, 3);
     suite_add_tcase(suite, core);
     tcase_add_loop_test(core, test_pipeline_open_directory_link_and_initial_record, 0, 18);
     tcase_add_loop_test(core, test_pipeline_open_failed_jobs_and_lifetime, 0, 12);

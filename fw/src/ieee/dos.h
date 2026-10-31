@@ -220,6 +220,7 @@ typedef struct {
     uint8_t append_channel;
     uint8_t creation_drive;
     uint8_t record_size;
+    uint8_t rel_phase;
     bool record_parameter;
     bool replace;
     bool wildcard;
@@ -326,6 +327,12 @@ typedef struct {
     uint8_t empty_sector;
     uint8_t empty_entry;
     uint8_t last_sector;
+    uint8_t record_size;
+    uint8_t resume_phase;
+    uint8_t end_group;
+    uint8_t end_side;
+    uint8_t end_index;
+    bool missing_writer;
     bool empty_target;
     bool name_conflict;
     bool pending;
@@ -412,7 +419,23 @@ typedef enum {
     DOS_COMMAND_FORMAT,
     DOS_COMMAND_VALIDATE,
     DOS_COMMAND_CLOSE,
+    DOS_COMMAND_RECORD,
 } dos_command_work_t;
+
+// One bounded OPEN/command record, independent of the unit's bus role.
+typedef struct {
+    uint8_t bytes[DOS_COMMAND_RECEIVE_CAPACITY];
+    uint8_t length;
+    uint8_t secondary;
+    bool collecting;
+    bool complete;
+} dos_input_t;
+
+// Read-only status cursor for transport diagnostics.
+typedef struct {
+    unsigned int position;
+    unsigned int length;
+} dos_status_progress_t;
 
 typedef struct {
     dos_buffer_t buffers[DOS_BUFFER_COUNT];
@@ -434,6 +457,7 @@ typedef struct {
             uint8_t secondary;
             uint8_t model;
         } close;
+        uint8_t record_channel;
     };
     uint16_t buffer_use;
     uint16_t buffer_drives;
@@ -446,12 +470,33 @@ typedef struct {
     uint8_t last_program_track;
     uint8_t last_program_sector;
     uint8_t last_program_drive;
-    uint8_t command_bytes[DOS_COMMAND_RECEIVE_CAPACITY];
+    union {
+        uint8_t command_bytes[DOS_COMMAND_RECEIVE_CAPACITY];
+        dos_input_t input;
+    };
     char status[DOS_STATUS_LINE_CAPACITY];
     uint8_t status_length;
     uint8_t status_position;
     dos_status_code_t status_code;
 } dos_unit_t;
+
+// Apply a routed secondary or OPEN/CLOSE after retiring affected FIFO copies.
+void dos_input_address(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t command, bool listening);
+
+// Collect one byte without executing its EOI-completed request.
+void dos_input_put(dos_unit_t* unit, uint8_t byte, bool eoi);
+
+// Report a complete request without consuming or dispatching it.
+bool dos_input_ready(const dos_unit_t* unit);
+
+// Dispatch completed input only after preceding work and FIFO fencing.
+void dos_input_dispatch(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index);
+
+// Deliver routed data or capture one REL byte until native byte/EOI work finishes.
+void dos_listen_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t byte, bool eoi);
+
+// Snapshot the status cursor without advancing its source.
+dos_status_progress_t dos_status_progress(const dos_unit_t* unit);
 
 // Retain the resolved source across TALK changes until its staged copy is retired.
 typedef struct {
