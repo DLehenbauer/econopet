@@ -164,6 +164,13 @@ typedef enum {
     DOS_REL_RECORD_OPEN_DATA,
     DOS_REL_RECORD_OPEN_FOLLOWING,
     DOS_REL_RECORD_OPEN_SIDE,
+    // Clean NRBUF retires actual GET before prefetch and cached resumption.
+    DOS_REL_RECORD_CLEAN_GET,
+    DOS_REL_RECORD_CLEAN_NEXT,
+    DOS_REL_RECORD_PREFETCH_GET,
+    DOS_REL_RECORD_PREFETCH_NEXT,
+    DOS_REL_RECORD_RESUME_GET,
+    DOS_REL_RECORD_RESUME_NEXT,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own

@@ -979,6 +979,131 @@ static void rel_open_work(dos_unit_t* const unit, dos_media_bank_t* const media,
                         unit->buffers[channel->buffers[1]].bytes);
 }
 
+// Apply SETLST only to completed clean window bytes, without submitting prefetch.
+static void rel_next_cached(dos_unit_t* const unit, const dos_media_bank_t* const media, dos_channel_t* const state) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4
+    //
+    // Host join for SETLST/FNDLST. A deferred unused prefetch is not a
+    // current failure, but a failed or foreign-drive page is not a window.
+    for (unsigned int page = 0; page < 2u; ++page) {
+        const uint8_t index = state->buffers[page];
+        const dos_buffer_t* const buffer = &unit->buffers[index];
+        const bool deferred = page != state->rel.record.active && state->rel.record.following_failed;
+        if ((!deferred && (buffer->failed || (!buffer->resident && (unit->buffer_writes & (1u << index))))) ||
+            ((unit->buffer_drives >> index) & 1u) != state->media.slot) {
+            return;
+        }
+    }
+    dos_rel_record_prepare_cached(&state->rel.record, media, unit->buffers[state->buffers[0]].bytes,
+                                  unit->buffers[state->buffers[1]].bytes);
+}
+
+// Resume clean NRBUF using one retained read, prefetch or no-I/O join per pass.
+static void rel_nrbuf_work(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const state) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1
+    //
+    // NRBU50 selects the alternate, TSTWRT refills reused WRITE pages, and
+    // NRBU70 submits unawaited RDAB read-ahead. This clean-only host join
+    // distinguishes actual GET from an already-counted NXTREC.
+    dos_rel_record_t* const record = &state->rel.record;
+    dos_media_ref_t current;
+    if (dos_media_reference(media, state->media.unit, state->media.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != state->media.identity) {
+        record->lookup.media_result = DOS_MEDIA_STALE;
+        record->result = DOS_REL_RECORD_FAILED;
+        rel_read_state(unit, state);
+        return;
+    }
+    const uint8_t phase = record->phase;
+    const bool next = phase == DOS_REL_RECORD_CLEAN_NEXT || phase == DOS_REL_RECORD_PREFETCH_NEXT ||
+                      phase == DOS_REL_RECORD_RESUME_NEXT;
+    dos_buffer_t* const active = &unit->buffers[state->buffers[record->active]];
+    if (phase == DOS_REL_RECORD_CLEAN_GET || phase == DOS_REL_RECORD_CLEAN_NEXT) {
+        // A NONE-job alternate retains native bytes. Only a previous WRITE
+        // or failed transfer requires RDAB, not absence of a READ header.
+        if ((unit->buffer_writes & (1u << state->buffers[record->active])) || active->failed) {
+            record->lookup.media_result =
+                read_sector(unit, media, state->media, record->lookup.track, record->lookup.sector, active->bytes);
+            active->track = record->lookup.track;
+            active->sector = record->lookup.sector;
+            active->resident = record->lookup.media_result == DOS_MEDIA_OK;
+            active->failed = !active->resident;
+            if (active->failed) {
+                record->result = DOS_REL_RECORD_FAILED;
+                rel_read_state(unit, state);
+                return;
+            }
+        }
+        record->following = false;
+        record->following_failed = false;
+        record->phase = next ? DOS_REL_RECORD_PREFETCH_NEXT : DOS_REL_RECORD_PREFETCH_GET;
+        return;
+    }
+    if (phase == DOS_REL_RECORD_PREFETCH_GET || phase == DOS_REL_RECORD_PREFETCH_NEXT) {
+        const uint8_t track = active->bytes[0], sector = active->bytes[1];
+        if (track != 0) {
+            dos_buffer_t* const following = &unit->buffers[state->buffers[record->active ^ 1u]];
+            record->lookup.media_result = read_sector(unit, media, state->media, track, sector, following->bytes);
+            following->track = track;
+            following->sector = sector;
+            following->resident = record->lookup.media_result == DOS_MEDIA_OK;
+            following->failed = !following->resident;
+            record->following = following->resident;
+            record->following_failed =
+                record->lookup.media_result == DOS_MEDIA_IO_ERROR || record->lookup.media_result == DOS_MEDIA_RANGE;
+            if (following->failed && !record->following_failed) {
+                record->result = DOS_REL_RECORD_FAILED;
+                rel_read_state(unit, state);
+                return;
+            }
+        }
+        record->phase = next ? DOS_REL_RECORD_RESUME_NEXT : DOS_REL_RECORD_RESUME_GET;
+        return;
+    }
+    // NXTREC's counter already advanced. Its SETLST join must not repeat GET.
+    record->phase = DOS_REL_RECORD_FOLLOWING;
+    if (next) {
+        rel_next_cached(unit, media, state);
+        if (record->result == DOS_REL_RECORD_PENDING) {
+            record->lookup.media_result = DOS_MEDIA_IO_ERROR;
+            record->result = DOS_REL_RECORD_FAILED;
+        }
+    } else {
+        record->result = DOS_REL_RECORD_READY;
+    }
+    rel_read_state(unit, state);
+}
+
+// Capture the clean outgoing link before scheduling the selected NRBUF page.
+static void rel_queue_nrbuf(dos_unit_t* const unit, dos_channel_t* const state, const uint8_t active, const bool next) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1
+    //
+    // Host FIFO retirement boundary for RDLNK/DBLBUF. A terminal NONE-job
+    // alternate still has bytes, so it is not automatically missing data.
+    dos_rel_record_t* const record = &state->rel.record;
+    const dos_buffer_t* const outgoing = &unit->buffers[state->buffers[active]];
+    record->lookup.track = outgoing->bytes[0];
+    record->lookup.sector = outgoing->bytes[1];
+    if (record->active == active) {
+        record->active ^= 1u;
+    }
+    // Select NR only if the leaf stopped before NXTR20. A resident terminal
+    // page already has its pointer selected and NR advanced (possibly zero).
+    if (next && record->result == DOS_REL_RECORD_NEEDS_LINK) {
+        record->pointer = record->next;
+        record->position = 0;
+    }
+    record->result = DOS_REL_RECORD_PENDING;
+    record->phase = next ? DOS_REL_RECORD_CLEAN_NEXT : DOS_REL_RECORD_CLEAN_GET;
+    state->ready = false;
+}
+
 // Advance one clean REL owner without borrowing the unit command-work union.
 static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM sources:
@@ -998,6 +1123,10 @@ static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             continue;
         }
         const dos_rel_record_t* const record = &channel->rel.record;
+        if (record->phase >= DOS_REL_RECORD_CLEAN_GET && record->phase <= DOS_REL_RECORD_RESUME_NEXT) {
+            rel_nrbuf_work(unit, media, channel);
+            return;
+        }
         if (record->phase >= DOS_REL_RECORD_OPEN_DATA && record->phase <= DOS_REL_RECORD_OPEN_SIDE) {
             rel_open_work(unit, media, channel);
             rel_read_state(unit, channel);
@@ -6577,8 +6706,10 @@ unsigned int dos_stage(dos_unit_t* const unit, dos_media_bank_t* const media, co
         if (!state->ready) {
             return 0;
         }
+        // Retire the page seam before exposing bytes depending on NRBUF jobs.
+        const unsigned int limit = MIN(capacity, DISKIMAGE_SECTOR_SIZE - state->rel.record.pointer);
         const unsigned int length = dos_rel_reader_stage(&state->rel, media, unit->buffers[state->buffers[0]].bytes,
-                                                         unit->buffers[state->buffers[1]].bytes, output, capacity, eoi);
+                                                         unit->buffers[state->buffers[1]].bytes, output, limit, eoi);
         if (state->rel.record.result == DOS_REL_RECORD_FAILED) {
             rel_read_state(unit, state);
         }
@@ -6637,9 +6768,17 @@ void dos_get(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
         }
         for (unsigned int index = 0; index < count; ++index) {
             vet(state->ready, "REL GET exceeded its staged prefix");
+            const uint8_t active = state->rel.record.active;
+            const uint16_t number = state->rel.number;
             dos_rel_reader_get(&state->rel, state->rel_model, media, unit->buffers[state->buffers[0]].bytes,
                                unit->buffers[state->buffers[1]].bytes);
-            rel_read_state(unit, state);
+            if (state->rel.record.result != DOS_REL_RECORD_FAILED &&
+                (state->rel.record.active != active || state->rel.record.result == DOS_REL_RECORD_NEEDS_LINK)) {
+                rel_queue_nrbuf(unit, state, active, state->rel.number != number);
+            } else {
+                rel_next_cached(unit, media, state);
+                rel_read_state(unit, state);
+            }
             // A valid staged count can outlive its media. Retain the first
             // terminal failure instead of replaying the remaining GETs.
             if (state->failed) {
