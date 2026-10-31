@@ -39,6 +39,22 @@ Failed directory writes restart from READ, preserving entries committed by
 peers after the failure. Host finalization drains only its current storage
 owner and rejects an overlapping command owner.
 
+Every shared sector publisher also retires matching peers' saved CLSDIR
+snapshots (including partial host WRITE failures). The affected REL rereads
+its directory sector in a separate pass before applying its type/count edit.
+This covers ordinary CLOSE and OPEN, directory growth and command publishers
+without a new lock or page. Other media identities and sector coordinates
+do not match. A failed or replaced-media reread retains the owner for the
+existing explicit-retry/lifetime policy.
+
+CLSALL's reader-cancellation shortcut excludes all retained creation, growth
+and CLOSE jobs, including failed creation and bounded RS=0 work. Reopening
+the same secondary through direct, directory or ordinary OPEN also rejects
+a retained storage job with the internal-core syntax boundary before lookup,
+AUTOI or page reuse. Native GETRCH normally FRECHNs the old owner, but it has
+no counterpart for these suspended host storage jobs. Ordinary owners and
+completed clean internal readers retain their existing OPEN/CLOSE behavior.
+
 Captured media identity guards every storage boundary. Replacing either slot
 cannot redirect old allocations or writes onto replacement media. A dirty
 backing unit is flushed before release (additional firmware durability policy,
@@ -74,11 +90,13 @@ generated assembly are not part of this batch.
 | Side and super-group expansion | All selected models, 8250 big-REL branch | [4040 NEWSS][new40], [DOS 2.7 NEWSS][new27] NS20/NS40/NS50/NEWSS4, [SYSTEM][sys27] RDSSSA/WRTSSS/RDSS1D | Publish new side, repair old side tables, and publish/read 8250 super-group links without losing pooled descriptors | Native growth pages and ten retained persistence-phase failure variants | VICE's data/side/super graph, MAME's hardware-mode distinction |
 | CLSREL and directory publication | 4040 versus DOS 2.7 DYFILE | [4040 CLOSE][cls40] CLSREL/CLSDIR, [DOS 2.7 CLOSE][cls27] CLSREL/CLSBIG/CLSRE1/CLSD5 | SCRUB without padding, await alternate, publish native low-word block count. DOS 2.7 skips clean CLSDIR. Preserve replacement-bit handling | `rel_close_work`, native close, failure, peer-directory and replaced-media cases | VICE corroborates commit/release, but its `vdrive_rel_close` pads through `fillrecord` (not native CLSREL) |
 | Ordered close and failure retention | All selected models | CLOSE/CLSALL/CLSCHN/FRECHN in both CLOSE units | Explicit 0 bypasses CLSREL, CLSALL orders descending SA including 0, SA 0/1 retain status. Failed owners and later peers survive | Storage CLOSE/CLSALL and finalize-owner/peer cases, full ordinary regression suite | MAME executes the selected ROMs. Host retries/flush are explicitly additional policies |
+| Fresh directory publication across host yields | All selected models | Both CLOSE:CLSDIR -> TST4:DRTRD -> JOBS:DOIT/WATJOB (4040 WATJOB is in TST2), then CLSD5/CLSD6 -> DOIT | A type/count edit must not restore a sector older than a completed peer publication | `invalidate_rel_directory`, staggered REL/ordinary CLOSE, partial WRITE and invalidated-reread regressions | VICE REL commit/release and MAME selected models, host snapshot retirement is an explicit adaptation |
+| Suspended creation ownership | All selected models | Both OPCHNL:OW20/OW21 await side/data jobs before OROW. CLOSE:CLSALL/CLS20 order descending SA. TST3:GETRCH normally calls FRECHN | Host CLOSE/OPEN cannot mistake a suspended creator for a disposable reader or lose its allocation/retry state | `close_work`, `dos_open`, pending/failed/RS=0 CLSALL and three OPEN-path regressions | VICE completes construction/commit before releasing buffers, explicit host retention is not a native OPEN error policy |
 
 ## Qualification
 
-The isolated candidate passes 1,577 REL cases in 134 groups and 5,994 firmware
-cases (5,947 ordinary plus 47 fatal/assert). It adds 261 cases in 17 groups.
+The isolated candidate passes 1,619 REL cases in 138 groups and 6,036 firmware
+cases (5,989 ordinary plus 47 fatal/assert). It adds 303 cases in 21 groups.
 All 115 unaffected core groups remain token-identical. Two existing groups
 change only where full CLOSE intentionally replaces the core's temporary fence.
 All 29 `dos_rel.c` leaf helpers remain byte-identical to #128.

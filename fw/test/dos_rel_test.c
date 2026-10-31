@@ -7046,44 +7046,50 @@ START_TEST(test_pipeline_rel_close_replaced_media) {
 }
 END_TEST
 
+// Prepare two independent REL files whose entries share one directory sector.
+static void prepare_directory_peers(dos_unit_t* const unit, dos_media_bank_t* const bank, rel_image_t* const image,
+                                    const unsigned int format, uint8_t channels[2]) {
+    const dos_media_ref_t reference = mount_job_image(bank, image, format, 3, 1, true);
+    for (unsigned int file = 0; file < 2; ++file) {
+        memset(image->bytes[file], 0, DISKIMAGE_SECTOR_SIZE);
+        image->bytes[file][1] = 17;
+        image->bytes[file][4] = 1;
+        image->bytes[file][5] = file;
+        image->bytes[file][16] = 1;
+        image->bytes[file][17] = 3u + file;
+        image->bytes[3u + file][0] = 0;
+        image->bytes[3u + file][1] = UINT8_MAX;
+    }
+    memset(image->bytes[5], 0, DISKIMAGE_SECTOR_SIZE);
+    image->bytes[5][3] = 1;
+    image->bytes[5][4] = 1;
+    memset(image->bytes[6], 0x5a, DISKIMAGE_SECTOR_SIZE);
+    dos_reset(unit, models[format]);
+    unit->bam[1] = (dos_bam_t){.media = reference, .buffer = {.resident = true}};
+    for (unsigned int file = 0; file < 2; ++file) {
+        channels[file] = dos_rel_channel_claim(unit, reference, 2u + file);
+        ck_assert_uint_ne(channels[file], DOS_UNUSED);
+        const uint8_t root = format == 2 ? (file == 0 ? 2 : 5) : file;
+        dos_rel_channel_prepare(unit, channels[file], models[format], 1, root, 1, 200, 0);
+        finish_pipeline(unit, bank, image);
+        dos_channel_t* const state = &unit->channels[channels[file]];
+        state->directory_track = 1;
+        state->directory_sector = 6;
+        state->directory_entry = (file + 1u) * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        image->bytes[6][state->directory_entry + 2u] = DISKIMAGE_FTYPE_REL;
+        ck_assert(dos_rel_channel_begin_write(unit, channels[file]));
+        ck_assert(dos_rel_channel_put(unit, bank, channels[file], 'Z' - file));
+    }
+}
+
 // A peer close can commit after failure without a retry restoring stale entries.
 START_TEST(test_pipeline_rel_close_peer_directory) {
     const unsigned int format = (unsigned int)_i;
     rel_image_t image = {0};
     dos_media_bank_t bank = {0};
-    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
-    for (unsigned int file = 0; file < 2; ++file) {
-        memset(image.bytes[file], 0, DISKIMAGE_SECTOR_SIZE);
-        image.bytes[file][1] = 17;
-        image.bytes[file][4] = 1;
-        image.bytes[file][5] = file;
-        image.bytes[file][16] = 1;
-        image.bytes[file][17] = 3u + file;
-        image.bytes[3u + file][0] = 0;
-        image.bytes[3u + file][1] = UINT8_MAX;
-    }
-    memset(image.bytes[5], 0, DISKIMAGE_SECTOR_SIZE);
-    image.bytes[5][3] = 1;
-    image.bytes[5][4] = 1;
-    memset(image.bytes[6], 0x5a, DISKIMAGE_SECTOR_SIZE);
     dos_unit_t unit;
-    dos_reset(&unit, models[format]);
-    unit.bam[1] = (dos_bam_t){.media = reference, .buffer = {.resident = true}};
     uint8_t channels[2];
-    for (unsigned int file = 0; file < count_of(channels); ++file) {
-        channels[file] = dos_rel_channel_claim(&unit, reference, 2u + file);
-        ck_assert_uint_ne(channels[file], DOS_UNUSED);
-        const uint8_t root = format == 2 ? (file == 0 ? 2 : 5) : file;
-        dos_rel_channel_prepare(&unit, channels[file], models[format], 1, root, 1, 200, 0);
-        finish_pipeline(&unit, &bank, &image);
-        dos_channel_t* const state = &unit.channels[channels[file]];
-        state->directory_track = 1;
-        state->directory_sector = 6;
-        state->directory_entry = (file + 1u) * DISKIMAGE_DIRECTORY_ENTRY_SIZE;
-        image.bytes[6][state->directory_entry + 2u] = DISKIMAGE_FTYPE_REL;
-        ck_assert(dos_rel_channel_begin_write(&unit, channels[file]));
-        ck_assert(dos_rel_channel_put(&unit, &bank, channels[file], 'Z' - file));
-    }
+    prepare_directory_peers(&unit, &bank, &image, format, channels);
     image.fail_write = 2;
     ck_assert(dos_rel_channel_close(&unit, channels[0]));
     ck_assert(dos_rel_channel_close(&unit, channels[1]));
@@ -7115,6 +7121,242 @@ START_TEST(test_pipeline_rel_close_peer_directory) {
     ck_assert_uint_eq(image.writes, 5);
     ck_assert_uint_eq(image.flushes, 2);
     ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
+// A successful or partial peer publication cannot be erased by a saved CLSDIR.
+START_TEST(test_rel_close_staggered_directory_publishers) {
+    const unsigned int format = (unsigned int)_i / 3u, publisher = (unsigned int)_i % 3u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    uint8_t channels[2];
+    prepare_directory_peers(&unit, &bank, &image, format, channels);
+    dos_channel_t* const later = &unit.channels[channels[1]];
+
+    // Yield with the higher-index owner's read-modify-write already prepared.
+    ck_assert(dos_rel_channel_close(&unit, channels[1]));
+    for (unsigned int step = 0; later->closing != DOS_CLOSE_REL_DIRECTORY_WRITE; ++step) {
+        ck_assert_uint_lt(step, 16);
+        dos_work(&unit, &bank);
+        ck_assert(!later->failed);
+    }
+    if (publisher == 0) {
+        ck_assert(dos_rel_channel_close(&unit, channels[0]));
+    } else {
+        // Reuse the claimed pool pages as an ordinary writer and enter real CLSWRT/CLSDIR.
+        dos_channel_t* const peer = &unit.channels[channels[0]];
+        const dos_channel_t owned = *peer;
+        *peer = (dos_channel_t){
+            .media = owned.media,
+            .secondary = owned.secondary,
+            .access = DOS_ACCESS_WRITE,
+            .allocated = true,
+            .file_type = DISKIMAGE_FTYPE_SEQ,
+            .buffers = {owned.buffers[0], owned.buffers[1], owned.buffers[2]},
+            .position = 3,
+            .first_track = 1,
+            .first_sector = 3,
+            .directory_track = owned.directory_track,
+            .directory_sector = owned.directory_sector,
+            .directory_entry = owned.directory_entry,
+            .directory_published = true,
+        };
+        image.bytes[6][peer->directory_entry + 2u] = DISKIMAGE_FTYPE_SEQ;
+        if (publisher == 2) {
+            image.fail_write = image.writes + 2u;
+        }
+        ck_assert_int_eq(dos_close(&unit, &bank, models[format], 2), publisher != 2);
+    }
+    finish_pipeline(&unit, &bank, &image);
+    if (publisher == 2) {
+        ck_assert(dos_close(&unit, &bank, models[format], 2));
+    }
+    const uint8_t* const peer = image.bytes[6] + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+    const uint8_t* const closed = peer + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+    ck_assert_uint_eq(peer[2], (publisher == 0 ? DISKIMAGE_FTYPE_REL : DISKIMAGE_FTYPE_SEQ) | 0x80u);
+    ck_assert_uint_eq(peer[30], publisher == 0 ? (format == 2 ? 3 : 2) : 1);
+    ck_assert_uint_eq(peer[31], 0);
+    ck_assert_uint_eq(closed[2], DISKIMAGE_FTYPE_REL | 0x80u);
+    ck_assert_uint_eq(closed[30], format == 2 ? 3 : 2);
+    ck_assert_uint_eq(closed[31], 0);
+    ck_assert_uint_eq(image.bytes[3][2], 'Z');
+    ck_assert_uint_eq(image.bytes[4][2], 'Y');
+    ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
+// A retired directory snapshot requires a real guarded READ, including its failures.
+START_TEST(test_rel_close_invalidated_directory_retry) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool replaced = (unsigned int)_i % 2u != 0;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    uint8_t channels[2];
+    prepare_directory_peers(&unit, &bank, &image, format, channels);
+    dos_channel_t* const later = &unit.channels[channels[1]];
+    ck_assert(dos_rel_channel_close(&unit, channels[1]));
+    for (unsigned int step = 0; later->closing != DOS_CLOSE_REL_DIRECTORY_WRITE; ++step) {
+        ck_assert_uint_lt(step, 16);
+        dos_work(&unit, &bank);
+    }
+    ck_assert(dos_rel_channel_close(&unit, channels[0]));
+    for (unsigned int step = 0; unit.channels[channels[0]].allocated; ++step) {
+        ck_assert_uint_lt(step, 16);
+        dos_work(&unit, &bank);
+    }
+    uint8_t peer[DISKIMAGE_DIRECTORY_ENTRY_SIZE];
+    memcpy(peer, image.bytes[6] + DISKIMAGE_DIRECTORY_ENTRY_SIZE, sizeof(peer));
+    const uint16_t use = unit.buffer_use;
+    if (replaced) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    } else {
+        image.fail_read = image.reads + 1u;
+    }
+    const unsigned int reads = image.reads, writes = image.writes;
+    dos_work(&unit, &bank);
+    ck_assert(later->allocated && later->failed && !later->ready);
+    ck_assert_uint_eq(unit.buffer_use, use);
+    ck_assert_uint_eq(image.reads, reads + !replaced);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    ck_assert_mem_eq(image.bytes[6] + DISKIMAGE_DIRECTORY_ENTRY_SIZE, peer, sizeof(peer));
+    ck_assert_int_eq(unit.status_code, replaced ? DOS_STATUS_WRITE_ERROR : DOS_STATUS_READ_ERROR);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert_int_eq(dos_rel_channel_retry_close(&unit, channels[1]), !replaced);
+    if (!replaced) {
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+        ck_assert_mem_eq(image.bytes[6] + DISKIMAGE_DIRECTORY_ENTRY_SIZE, peer, sizeof(peer));
+        ck_assert_uint_eq(image.bytes[6][2u * DISKIMAGE_DIRECTORY_ENTRY_SIZE + 2u], DISKIMAGE_FTYPE_REL | 0x80u);
+        ck_assert_uint_eq(image.bytes[6][2u * DISKIMAGE_DIRECTORY_ENTRY_SIZE + 30u], format == 2 ? 3 : 2);
+    }
+}
+END_TEST
+
+// CLSALL must stop before an unfinished creator, including failed and RS=0 jobs.
+START_TEST(test_rel_close_all_retains_creation) {
+    const unsigned int format = (unsigned int)_i / 6u, variant = (unsigned int)_i / 2u % 3u;
+    const uint8_t secondary = (unsigned int)_i % 2u == 0 ? IEEE_LOAD_CHANNEL : 2;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    prepare_create_image(&unit, &bank, &images[0], format, 0);
+    const dos_media_ref_t higher_ref = mount_job_image(&bank, &images[1], format, 3, 1, true);
+    dos_media_ref_t reference;
+    ck_assert_int_eq(dos_media_reference(&bank, 3, 0, &reference), DOS_MEDIA_OK);
+    unit.bam[0].media = reference;
+    const uint8_t higher = prepare_job_channel(&unit, &bank, &images[1], format, higher_ref, 4, 0);
+    prepare_close_metadata(&unit, higher, &images[1]);
+    ck_assert(dos_rel_channel_begin_write(&unit, higher));
+    ck_assert(dos_rel_channel_put(&unit, &bank, higher, 'Z'));
+    const uint8_t lower = dos_rel_channel_claim(&unit, reference, secondary);
+    dos_rel_channel_create(&unit, lower, models[format], 1, 0, variant == 2 ? 0 : 200);
+    const uint8_t phase = variant == 2 ? DOS_REL_RECORD_CREATE_DATA : DOS_REL_RECORD_CREATE_MAP;
+    for (unsigned int step = 0; unit.channels[lower].rel.record.phase != phase; ++step) {
+        ck_assert_uint_lt(step, 12);
+        dos_work(&unit, &bank);
+    }
+    if (variant == 1) {
+        images[0].fail_write = images[0].writes + 1u;
+        dos_work(&unit, &bank);
+        ck_assert(unit.channels[lower].failed);
+    } else if (variant == 2) {
+        dos_work(&unit, &bank);
+    }
+    const dos_channel_t retained = unit.channels[lower];
+    dos_buffer_t pages[DOS_CHANNEL_BUFFER_COUNT];
+    uint16_t use = 0;
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        pages[page] = unit.buffers[retained.buffers[page]];
+        use |= 1u << retained.buffers[page];
+    }
+    const unsigned int writes = images[0].writes;
+    ck_assert(!dos_close(&unit, &bank, models[format], IEEE_COMMAND_CHANNEL));
+    for (unsigned int step = 0; unit.command == DOS_COMMAND_CLOSE; ++step) {
+        ck_assert_uint_lt(step, 32);
+        dos_work(&unit, &bank);
+    }
+    ck_assert_mem_eq(&unit.channels[lower], &retained, sizeof(retained));
+    ck_assert_uint_eq(unit.buffer_use, use);
+    ck_assert_uint_eq(images[0].writes, writes);
+    ck_assert_uint_eq(dos_find_channel(&unit, 4), DOS_UNUSED);
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        ck_assert_mem_eq(&unit.buffers[retained.buffers[page]], &pages[page], sizeof(pages[page]));
+    }
+    ck_assert(!dos_close(&unit, &bank, models[format], secondary));
+    if (variant != 2) {
+        if (variant == 1) {
+            ck_assert(dos_rel_channel_retry_create(&unit, lower));
+        }
+        finish_pipeline(&unit, &bank, &images[0]);
+        ck_assert(unit.channels[lower].ready && !unit.channels[lower].failed);
+        ck_assert_uint_eq(images[0].writes, writes + 1u);
+        ck_assert_uint_eq(images[0].bytes[0][1], 201);
+    } else {
+        for (unsigned int pass = 0; pass < DOS_STAGE_CAPACITY; ++pass) {
+            dos_work(&unit, &bank);
+            ck_assert_mem_eq(&unit.channels[lower], &retained, sizeof(retained));
+        }
+    }
+}
+END_TEST
+
+// Reopening a secondary cannot abandon a failed creator's allocations or retry.
+START_TEST(test_rel_creation_retains_owner_across_open) {
+    static const char* const requests[] = {"#", "$0", "0:FILE,S,R"};
+    const unsigned int format = (unsigned int)_i / count_of(requests);
+    const char* const request = requests[(unsigned int)_i % count_of(requests)];
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const dos_media_ref_t reference = prepare_create_image(&unit, &bank, &image, format, 0);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    dos_rel_channel_create(&unit, channel, models[format], 1, 0, 200);
+    for (unsigned int step = 0; unit.channels[channel].rel.record.phase != DOS_REL_RECORD_CREATE_MAP; ++step) {
+        ck_assert_uint_lt(step, 12);
+        dos_work(&unit, &bank);
+    }
+    image.fail_write = image.writes + 1u;
+    dos_work(&unit, &bank);
+    ck_assert(unit.channels[channel].failed && !dos_work_pending(&unit));
+
+    // Supply a real ordinary match for OPEN's lookup and channel-construction path.
+    ck_assert(
+        diskimage_sector_offset(bank.units[3].slots[0].io.image.type, format == 0 ? 18 : 39, 1, &image.offsets[4]));
+    ck_assert(
+        diskimage_sector_offset(bank.units[3].slots[0].io.image.type, format == 0 ? 18 : 39, 0, &image.offsets[3]));
+    memset(image.bytes[3], 0, DISKIMAGE_SECTOR_SIZE);
+    image.bytes[3][1] = UINT8_MAX;
+    memset(image.bytes[4], 0, DISKIMAGE_SECTOR_SIZE);
+    image.bytes[4][1] = UINT8_MAX;
+    image.bytes[4][2] = DISKIMAGE_FTYPE_SEQ | 0x80u;
+    image.bytes[4][3] = 1;
+    memset(image.bytes[4] + 5, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+    memcpy(image.bytes[4] + 5, "FILE", 4);
+    const dos_unit_t retained = unit;
+    const unsigned int reads = image.reads, writes = image.writes, flushes = image.flushes;
+    dos_open(&unit, &bank, 3, 2, (const uint8_t*)request, strlen(request));
+    for (unsigned int step = 0; dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 16);
+        dos_work(&unit, &bank);
+    }
+    ck_assert_mem_eq(&unit.channels[channel], &retained.channels[channel], sizeof(dos_channel_t));
+    ck_assert_mem_eq(unit.buffers, retained.buffers, sizeof(unit.buffers));
+    ck_assert_mem_eq(unit.bam, retained.bam, sizeof(unit.bam));
+    ck_assert_uint_eq(unit.buffer_use, retained.buffer_use);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(image.flushes, flushes);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_SYNTAX);
+    ck_assert(dos_rel_channel_retry_create(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(unit.channels[channel].ready && !unit.channels[channel].failed);
+    ck_assert_uint_eq(image.writes, writes + 1u);
+    ck_assert_uint_eq(image.bytes[0][1], 201);
 }
 END_TEST
 
@@ -7335,6 +7577,10 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_rel_finalize_peer_retention, 0, 3);
     tcase_add_loop_test(core, test_pipeline_rel_close_replaced_media, 0, 9);
     tcase_add_loop_test(core, test_pipeline_rel_close_peer_directory, 0, 3);
+    tcase_add_loop_test(core, test_rel_close_staggered_directory_publishers, 0, 9);
+    tcase_add_loop_test(core, test_rel_close_invalidated_directory_retry, 0, 6);
+    tcase_add_loop_test(core, test_rel_close_all_retains_creation, 0, 18);
+    tcase_add_loop_test(core, test_rel_creation_retains_owner_across_open, 0, 9);
     tcase_add_loop_test(core, test_storage_zero_size_creation_remains_bounded, 0, 3);
     return suite;
 }

@@ -3117,7 +3117,7 @@ static void close_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     while ((index = close_channel(unit, secondary)) != DOS_UNUSED) {
         dos_channel_t* const state = &unit->channels[index];
         if (state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE) {
-            if (state->access == DOS_ACCESS_READ && state->directory_track == 0 && !rel_close_pending(state)) {
+            if (state->access == DOS_ACCESS_READ && state->directory_track == 0 && !rel_owned_job_pending(state)) {
                 free_channel(unit, index);
                 continue;
             }
@@ -3279,6 +3279,23 @@ static bool write_version(dos_unit_t* const unit, dos_media_bank_t* const media,
     return true;
 }
 
+// Retire saved CLSDIR snapshots after another publisher may have changed their sector.
+static void invalidate_rel_directory(dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                                     const uint8_t sector, const uint8_t* const publisher) {
+    // Both pinned CLOSE:CLSDIR routines own DRTRD through DOIT. Host yields
+    // permit peer writes, so reread instead of restoring their older sector.
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        dos_channel_t* const state = &unit->channels[index];
+        if (state->allocated && state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE &&
+            state->closing == DOS_CLOSE_REL_DIRECTORY_WRITE && state->media.unit == reference.unit &&
+            state->media.slot == reference.slot && state->media.identity == reference.identity &&
+            state->directory_track == track && state->directory_sector == sector &&
+            unit->buffers[state->buffers[state->rel.record.active]].bytes != publisher) {
+            state->closing = DOS_CLOSE_REL_DIRECTORY_READ;
+        }
+    }
+}
+
 // Write a native sector, retaining its caller-owned bytes after any failure.
 static bool write_sector(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
                          const uint8_t track, const uint8_t sector, const uint8_t* const bytes) {
@@ -3294,8 +3311,12 @@ static bool write_sector(dos_unit_t* const unit, dos_media_bank_t* const media, 
         return false;
     }
     unit->buffer_writes |= bit;
-    return storage_error(unit, media, reference, dos_media_write(media, reference, track, sector, bytes), true, track,
-                         sector);
+    const dos_media_result_t result = dos_media_write(media, reference, track, sector, bytes);
+    // A failed host callback can have partially changed the directory too.
+    if (result == DOS_MEDIA_OK || result == DOS_MEDIA_IO_ERROR) {
+        invalidate_rel_directory(unit, reference, track, sector, bytes);
+    }
+    return storage_error(unit, media, reference, result, true, track, sector);
 }
 
 // SCRBAM/MAPOUT write a dirty BAM before replacing its sole per-drive cache.
@@ -7570,6 +7591,13 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // '*' requests can finish here. '#' opens a raw shared page.
     vet(!dos_work_pending(unit), "native OPEN requires its preceding job to complete");
     const dos_model_t model = media->units[index].model;
+    const uint8_t previous = dos_find_channel(unit, secondary);
+    if (previous != DOS_UNUSED && unit->channels[previous].file_type == DISKIMAGE_FTYPE_REL &&
+        unit->channels[previous].directory == DOS_DIRECTORY_NONE && rel_owned_job_pending(&unit->channels[previous])) {
+        // Failed host jobs are not runnable, but OPEN must not discard their retry ownership.
+        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
+        return;
+    }
     // ROM tst2:L42 collects bounded input. The approved 4040 revision-2 pointer
     // limit is 59, matching DOS 2.7, not the older source's 41. The C
     // receive capacity bounds the raw copy. CMDSET applies the logical
