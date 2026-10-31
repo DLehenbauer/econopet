@@ -101,8 +101,10 @@ typedef struct {
     bool allocated;
     bool ready;
     bool failed;
-    // file_type selects ordinary metadata or the REL reader. Routing,
-    // teardown and pool ownership remain outside this shared storage.
+    uint8_t rel_model;
+    // Listings always use ordinary metadata (file_type is their filter).
+    // Otherwise file_type selects ordinary metadata or the REL reader.
+    // Routing, teardown and ownership remain outside this shared storage.
     union {
         struct {
             uint16_t traversed;
@@ -395,6 +397,12 @@ typedef struct {
     dos_status_code_t status_code;
 } dos_unit_t;
 
+// Retain the resolved source across TALK changes until its staged copy is retired.
+typedef struct {
+    uint8_t channel;
+    bool status;
+} dos_source_t;
+
 // Reset bounded DOS resources, retaining external media bindings.
 void dos_reset(dos_unit_t* unit, dos_model_t model);
 
@@ -406,7 +414,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned 
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
               unsigned int length);
 
-// Advance one command phase or ordinary lookup/APPEND continuation.
+// Advance one command, ordinary lookup/APPEND or clean REL read continuation.
 void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
 
 // Dispatch an already-collected metadata, block, INITIALIZE or user request.
@@ -430,10 +438,26 @@ uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
 
 // Internal reservation only: claim data/data/side pages for an unowned data
 // secondary. Return DOS_UNUSED on exhaustion without publishing a partial owner.
-// No reads or status publication. Use the REL leaf APIs with these pages,
-// not ordinary dos_stage/dos_get/dos_put. Public REL OPEN remains disabled.
+// No reads or status publication. Prepare before dos_stage/dos_get, and do
+// not use ordinary dos_put on this storage. Public REL OPEN remains disabled.
 // Only clean read ownership is supported, not dirty native CLSREL completion.
 uint8_t dos_rel_channel_claim(dos_unit_t* unit, dos_media_ref_t media, uint8_t secondary);
+
+// Internal cold, clean positioned read, not native OPEN or public RECORD.
+// Retire this channel's FIFO copies and borrowed writes first. Supply a
+// validated nonzero record size and directory side/super root. Work preserves
+// status on success. No resident/dirty POSBUF reuse or SSEND fallback.
+void dos_rel_channel_prepare(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t track, uint8_t sector,
+                             uint16_t number, uint8_t size, uint8_t position);
+
+// Resolve a decoded secondary and preview bytes with an owner for actual GETs.
+// Zero output has no source to retain. Retire old sources before mutation/reuse.
+unsigned int dos_output_stage(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t* output,
+                              unsigned int capacity, bool* eoi, dos_source_t* source);
+
+// Commit consumption against the captured source, not a later TALK selection.
+void dos_output_get(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, dos_source_t source,
+                    unsigned int count);
 
 // Replace the retained status and restart its unread cursor.
 void dos_status(dos_unit_t* unit, dos_model_t model, dos_status_code_t code, uint8_t track, uint8_t sector);
@@ -451,5 +475,6 @@ unsigned int dos_status_stage(const dos_unit_t* unit, uint8_t* output, unsigned 
 // Acknowledge actual status progress, clearing status only when CR is consumed.
 void dos_status_get(dos_unit_t* unit, dos_model_t model, unsigned int count);
 
-// Report whether cooperative OPEN, initialization or command work remains.
+// Report runnable OPEN, initialization, command or clean REL channel work.
+// Failed REL owners retain their pages but do not request automatic retries.
 bool dos_work_pending(const dos_unit_t* unit);
