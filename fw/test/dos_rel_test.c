@@ -1977,7 +1977,7 @@ START_TEST(test_pipeline_command_priority_and_job_headers) {
 }
 END_TEST
 
-// Unsupported cold SSEND/terminal-NRBUF handoffs are not native missing records.
+// Cold SSEND remains incomplete, while clean terminal NRBUF retains NONE-job bytes.
 START_TEST(test_pipeline_retains_incomplete_boundaries) {
     const unsigned int format = (unsigned int)_i / 2u;
     const bool link = (unsigned int)_i % 2u;
@@ -2004,8 +2004,25 @@ START_TEST(test_pipeline_retains_incomplete_boundaries) {
         ck_assert_uint_le(count, DISKIMAGE_SECTOR_SIZE);
         dos_output_get(&unit, &bank, models[format], source, length);
     }
-    ck_assert_int_eq(unit.channels[channel].rel.record.result,
-                     link ? DOS_REL_RECORD_NEEDS_LINK : DOS_REL_RECORD_NO_INDEX);
+    if (link) {
+        ck_assert_int_eq(unit.channels[channel].rel.record.result, DOS_REL_RECORD_PENDING);
+        ck_assert(!unit.channels[channel].ready && dos_work_pending(&unit));
+        const unsigned int reads = image.reads;
+        const uint16_t number = unit.channels[channel].rel.number;
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert(unit.channels[channel].ready && !unit.channels[channel].failed);
+        ck_assert_uint_eq(unit.channels[channel].rel.number, number);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_POWER_ON);
+        uint8_t output = 0xa5;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &output, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(output, 0);
+        ck_assert(eoi);
+        return;
+    }
+    ck_assert_int_eq(unit.channels[channel].rel.record.result, DOS_REL_RECORD_NO_INDEX);
     ck_assert(unit.channels[channel].allocated && unit.channels[channel].failed);
     ck_assert(!unit.channels[channel].ready && !dos_work_pending(&unit));
     ck_assert_int_eq(unit.status_code, DOS_STATUS_SYNTAX);
@@ -2288,6 +2305,176 @@ START_TEST(test_pipeline_open_step_order_and_cancel) {
     ck_assert_mem_eq(&unit, &closed, sizeof(closed));
     ck_assert_uint_eq(image.reads, reads);
     ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
+// Clean actual GETs queue native read-ahead without borrowing writer ownership.
+START_TEST(test_pipeline_open_clean_nrbuf) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, IEEE_LOAD_CHANNEL);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_rel_channel_prepare_open(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 3, 200);
+    finish_pipeline(&unit, &bank, &image);
+    for (unsigned int byte = 0; byte < DISKIMAGE_SECTOR_PAYLOAD_SIZE - 1u; ++byte) {
+        uint8_t output;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, IEEE_LOAD_CHANNEL, &output, 1, &eoi, &source), 1);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        finish_pipeline(&unit, &bank, &image);
+    }
+
+    uint8_t output[16];
+    bool eoi;
+    dos_source_t source;
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, IEEE_LOAD_CHANNEL, output, sizeof(output), &eoi, &source), 1);
+    ck_assert_uint_eq(output[0], 'A');
+    ck_assert(!eoi);
+    ck_assert_mem_eq(&unit, &before, sizeof(before));
+    dos_output_get(&unit, &bank, models[format], source, 1);
+    ck_assert(!state->ready && !state->failed && dos_work_pending(&unit));
+    ck_assert_int_eq(state->access, DOS_ACCESS_READ);
+    ck_assert_uint_eq(state->rel.record.active, 1);
+    ck_assert_uint_eq(image.reads, reads);
+    if (variant == 1) {
+        image.fail_read = reads + 1u;
+    } else if (variant == 2) {
+        mount_open_image(&bank, &replacement, format, 3, 1);
+    }
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(replacement.reads, 0);
+    ck_assert_uint_eq(image.reads, reads + (variant != 2));
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+    ck_assert_int_eq(state->ready, variant != 2);
+    ck_assert_int_eq(state->failed, variant == 2);
+    if (variant != 2) {
+        const dos_buffer_t* const following = &unit.buffers[state->buffers[0]];
+        ck_assert_uint_eq(following->sector, 5);
+        ck_assert_int_eq(following->failed, variant == 1);
+        ck_assert_int_eq(state->rel.record.following_failed, variant == 1);
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, IEEE_LOAD_CHANNEL, output, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(output[0], 'B');
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_POWER_ON);
+    }
+    if (variant == 1) {
+        for (unsigned int byte = 0; !state->failed; ++byte) {
+            ck_assert_uint_lt(byte, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+            ck_assert_uint_eq(dos_output_stage(&unit, &bank, IEEE_LOAD_CHANNEL, output, 1, &eoi, &source), 1);
+            dos_output_get(&unit, &bank, models[format], source, 1);
+            finish_pipeline(&unit, &bank, &image);
+        }
+        ck_assert_uint_eq(state->rel.number, 3);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert(!dos_work_pending(&unit));
+    }
+    ck_assert(dos_close(&unit, &bank, models[format], IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
+// A queued clean seam retains its owner through reused-page refill, failure or CLOSE.
+START_TEST(test_clean_nrbuf_refill_failure_and_cancel) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    dos_rel_channel_prepare_open(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 3, 200);
+    finish_pipeline(&unit, &bank, &image);
+    for (unsigned int count = 0; count < DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++count) {
+        uint8_t byte;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        if (count + 1u < DISKIMAGE_SECTOR_PAYLOAD_SIZE) {
+            finish_pipeline(&unit, &bank, &image);
+        }
+    }
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(!state->ready && !state->failed && dos_work_pending(&unit));
+    const unsigned int reads = image.reads;
+    const uint16_t use = unit.buffer_use;
+    const uint16_t number = state->rel.number;
+    if (variant == 2) {
+        ck_assert(dos_close(&unit, &bank, models[format], 2));
+        const dos_unit_t closed = unit;
+        dos_work(&unit, &bank);
+        ck_assert_mem_eq(&unit, &closed, sizeof(closed));
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    } else {
+        const uint8_t page = state->buffers[state->rel.record.active];
+        unit.buffer_writes |= (uint16_t)(1u << page);
+        if (variant == 1) {
+            image.fail_read = reads + 1u;
+        }
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert_uint_eq(image.reads, reads + (variant == 0 ? 2u : 1u));
+        ck_assert_int_eq(state->failed, variant == 1);
+        ck_assert_int_eq(state->ready, variant == 0);
+        ck_assert_uint_eq(state->rel.number, number);
+        ck_assert_uint_eq(unit.buffer_use, use);
+        ck_assert_uint_eq(unit.buffers[page].track, 1);
+        ck_assert_uint_eq(unit.buffers[page].sector, 4);
+        ck_assert_int_eq(unit.buffers[page].resident, variant == 0);
+        ck_assert_int_eq(unit.buffers[page].failed, variant == 1);
+        ck_assert_uint_eq(unit.buffer_writes & (1u << page), 0);
+        ck_assert_int_eq(unit.status_code, variant == 1 ? DOS_STATUS_READ_ERROR : DOS_STATUS_POWER_ON);
+        const dos_unit_t completed = unit;
+        dos_work(&unit, &bank);
+        ck_assert_mem_eq(&unit, &completed, sizeof(completed));
+    }
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
+// NXTREC selects NR after a terminal unbuffered seam without recounting the record.
+START_TEST(test_clean_nrbuf_terminal_next_pointer) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 1, 10, 0, false);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    dos_rel_channel_prepare(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 10, 0);
+    finish_pipeline(&unit, &bank, &image);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_rel_record_t* const record = &state->rel.record;
+    record->pointer = record->last = UINT8_MAX;
+    record->next = DISKIMAGE_SECTOR_LINK_SIZE;
+    unit.buffers[state->buffers[record->active ^ 1u]].bytes[DISKIMAGE_SECTOR_LINK_SIZE] = 'Q';
+    uint8_t byte;
+    bool eoi;
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+    ck_assert(eoi);
+    const unsigned int reads = image.reads;
+    const uint16_t number = state->rel.number;
+    dos_output_get(&unit, &bank, models[format], source, 1);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(record->pointer, DISKIMAGE_SECTOR_LINK_SIZE);
+    ck_assert_uint_eq(state->rel.number, (uint16_t)(number + 1u));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(state->rel.number, (uint16_t)(number + 1u));
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+    ck_assert_uint_eq(byte, 'Q');
+    ck_assert(eoi);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_POWER_ON);
 }
 END_TEST
 
@@ -2743,5 +2930,8 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_pipeline_open_failed_jobs_and_lifetime, 0, 12);
     tcase_add_loop_test(core, test_pipeline_open_peer_isolation, 0, 3);
     tcase_add_loop_test(core, test_pipeline_open_step_order_and_cancel, 0, 9);
+    tcase_add_loop_test(core, test_pipeline_open_clean_nrbuf, 0, 9);
+    tcase_add_loop_test(core, test_clean_nrbuf_refill_failure_and_cancel, 0, 9);
+    tcase_add_loop_test(core, test_clean_nrbuf_terminal_next_pointer, 0, 3);
     return suite;
 }
