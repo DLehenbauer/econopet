@@ -151,6 +151,9 @@ typedef enum {
     DOS_REL_RECORD_MISSING,
     DOS_REL_RECORD_NEEDS_LINK,
     DOS_REL_RECORD_FAILED,
+    DOS_REL_RECORD_WRITING,
+    DOS_REL_RECORD_FULL,
+    DOS_REL_RECORD_NEEDS_WRITEBACK,
 } dos_rel_record_result_t;
 
 typedef enum {
@@ -202,6 +205,45 @@ bool dos_rel_record_peek(dos_rel_record_t* record, const dos_media_bank_t* media
 // record. NEEDS_LINK still requires unbuffered native NRBUF handling.
 // A missing record retains CR/EOI on repeated GETs until repositioned.
 dos_rel_record_result_t dos_rel_record_get(dos_rel_record_t* record, const dos_media_bank_t* media);
+
+#define DOS_REL_DIRTY_FIRST 1u
+#define DOS_REL_DIRTY_FOLLOWING 2u
+
+// Internal RELPUT leaf for an already-prepared existing record. Retire read
+// readiness/FIFO copies first. Accepted bytes enter WRITING, disabling GET and
+// preview until the owner completes the native write-to-read transition.
+// OR the physical data-page bit into the owner's retained dirty mask. FULL is
+// OVRFLO, not error 51. NEEDS_WRITEBACK retains the byte/dirty bit and wrapped
+// pointer zero, stopping before NRBUF (even with a resident following page).
+// Other results, including MISSING (needs ADDREL), do not accept a byte.
+// No I/O, allocation, file flags, status, record advance or persistence.
+dos_rel_record_result_t dos_rel_record_put(dos_rel_record_t* record, const dos_media_bank_t* media,
+                                           uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                           uint8_t following[DISKIMAGE_SECTOR_SIZE], uint8_t byte, uint8_t* dirty);
+
+// CLREC's zero-padding leaf only. Stop at FULL, a writeback boundary or failure
+// within at most one page. This is not WRTREL's EOI/next-record/status completion.
+// Keep dirty pages/mask owned across failure, cancellation and repositioning.
+dos_rel_record_result_t dos_rel_record_pad(dos_rel_record_t* record, const dos_media_bank_t* media,
+                                           uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                           uint8_t following[DISKIMAGE_SECTOR_SIZE], uint8_t* dirty);
+
+// Prepare post-CLREC RD40 only when NXTREC stays in the active cached page.
+// No I/O, dirty-bit clearing, counter/flag/status update or page selection.
+// Reuse a cached following page for SETLST if required. False retains FULL
+// at an uncached/NRBUF boundary. Stale media instead retires the cursor.
+bool dos_rel_record_finish_write(dos_rel_record_t* record, const dos_media_bank_t* media,
+                                 const uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                 const uint8_t following[DISKIMAGE_SECTOR_SIZE]);
+
+// Complete cached NXTREC/SETLST after in-page EOI or acknowledged dirty NRBUF.
+// The owner supplies both completed native data-window pages, including an
+// inactive page retained after WRITE. SETLST may scan that page without making
+// it a resident forward-link target for GET. No I/O, NRBUF, counter or status
+// update. Only PENDING/FOLLOWING is eligible. Stale media retires the cursor.
+bool dos_rel_record_prepare_cached(dos_rel_record_t* record, const dos_media_bank_t* media,
+                                   const uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                   const uint8_t following[DISKIMAGE_SECTOR_SIZE]);
 
 // Continue only after END, using native NR and the current low-byte pointer.
 // Does no I/O: PENDING schedules clean page reads through record_step. Reuse
