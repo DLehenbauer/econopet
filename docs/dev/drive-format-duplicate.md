@@ -38,7 +38,9 @@ claims about DOS 2.5, 8250LP or arbitrary controller ROMs.
 | Prefix pattern and equals validation | All selected targets | Both `parsex:PRSCLN/PARSE/TAGCMD/TC30/PR28` and `romtbl:STRUCT` NEW mask, `equate:MXFILS=5` | Retain prefix '*'/'?' for syntax 30 before media access. TAGCMD decrements the post-colon pointer twice before scanning for '=', so `N=:NEW` is rejected while `N=0:OK` is allowed. Stop suffix validation at the fourth comma: following patterns/equals are ignored | `format_start`, quick/full prefix-pattern and adjacent-equals rejection, plus earlier-prefix-equals and before/after-comma-limit controls | Both pinned PARSE routines retain PATFLG across the colon but stop at their bounded comma table |
 | Operation-local drive selection | All selected targets | Both `new:N101/N108`, `duplct:DUPLCT/DUP1` and `parsex:ENDCMD/SCREND` | Successful NEW records its selected disk in LSTDRV and DOS 2.7's status drive. Version rejection identifies NEW's disk or DUPLICATE's source, regardless of a yielded peer read error | `format_work`, bidirectional peer-error, inherited-drive and NEW/DUPLICATE version-rejection regressions | Cooperative peer interleaving is host behavior. Explicit reselection preserves the ROM's DRVNUM ownership |
 | Borrowed BAM failure recovery | All selected targets, host cache policy | Both `new:N110` and DOS 2.7 `new:N160`, alongside landed BAM load/write contracts | Failed scratch read/write/reload must not expose partial or unbound bytes as a resident BAM. Subsequent B-W and B-A/MAPOUT reload real metadata. Rejection before scratch retains dirty allocation state | `format_work` failure exit, partial-read/untouched-write recovery and pre-scratch rejection controls | Cache invalidation is host lifetime policy, not a native rollback. Already written sectors remain changed |
-| Late internal reader and metadata reads | Selected DOS 2.7 modes, not 4040 | DOS 2.7 `new:NEW3/N150/N160 -> tst4:OPNIRD/NXTBUF -> opchnl:OPNRCH -> tst3:GETRCH/FNDLNX/GETBUF`, `tst2:STRDBL/NF05/NF10` | Reserve a logical channel and two pooled pages after the metadata prefix. Follow the written header/BAM/directory links, then reserve the map and count NF05 ranges through the last BAM. Propagate required read failures. Exhausted peer owners cause 70 without being released | `format_work`, exhausted index/page cases and quick/full late header/BAM/directory/NF05 failures, plus cached-first-map and unchanged 4040 controls | Serial one-sector jobs preserve selected-page failure observation, not physical controller concurrency, retries or latency. No synthetic read success substitutes for backing I/O |
+| Late internal reader and metadata reads | Selected DOS 2.7 modes, not 4040 | DOS 2.7 `new:NEW3/N150/N160 -> frets:SETMAP/RDNBAM/USEDTS`, `tst4:OPNIRD/NXTBUF -> opchnl:OPNRCH -> tst3:GETRCH/FNDLNX/GETBUF`, `tst2:STRDBL/NF05/NF10` | After the metadata prefix, refill 38/0 and reserve the header before allocating OPNIRD's logical channel and two pooled pages. Follow the written header/BAM/directory links, then reserve the remaining metadata and count NF05 ranges. An earlier BAM read error precedes exhausted-channel status 70 | `format_work`, exhausted index/page cases with and without a combined BAM read fault, plus quick/full late metadata/NF05 failures and cached-first-map controls | Serial one-sector jobs preserve selected-page failure observation, not physical controller concurrency, retries or latency. No synthetic read success substitutes for backing I/O |
+| Surviving listing and formatter BAM ownership | Selected DOS 2.7 modes, host cooperative scheduling | DOS 2.7 `new:NEW/CLRCHN` retains SA0, `new:N160/NF05` owns the BAM count, and `lstdir:MSGFRE` emits the directory footer | Preparing a retained footer must not evict FORMAT's map or overwrite its partial count. Yield footer preparation while its drive is formatter-owned, preserving ready state and resuming after success or failure | `prepare_directory_line`, surviving-SA0 tests immediately before and after the first NF05 count, with successful and failed completion | A host scheduling safeguard, not a physical timing claim. Already staged rows remain readable and unrelated-drive footers are not blocked |
+| 4040 completion without reread | Selected 4040 revision 2 | [4040 new][4040-new], final `DRTWRT -> ENDCMD` | After the final metadata write, retain the generated BAM and calculate the host free count without another read. A newly armed read failure cannot turn completed NEW into status 23 | `format_work`, quick/full final-write read-fault controls and adjusted failed-format recovery/finalization controls | The selected listing has no final BAM reload. This does not claim controller retry or timing equivalence |
 | DUPLICATE backing-store alias rejection | Host adaptation, no physical-drive counterpart | Native duplct's `DUP1/FORMAT` assumes distinct physical disks. Host descriptors may alias despite different selectors | Identical read callback/context is rejected with host policy 25 before INITDR or erase, in either direction, including a read-only source | `format_start`, alias/source-immutability regressions | Descriptor equality cannot prove that different contexts refer to distinct files. The facade must ensure distinct underlying backing stores |
 | Failed formatter persistence ownership | Host adaptation, no controller-flush counterpart | Host `dos_finalize`/`dos_media_flush_unit`, retaining the existing native destructive prefix | Discard scratch validity, not its captured media reference. Failed backing flush remains observable and retryable without another OPEN. Remounted media cannot acquire old finalization | `format_work`, direct finalization failure/retry and replacement-generation controls | No rollback, automatic command-time flush or mount-policy change is introduced |
 | Failed reinitialization after dirty NEW | All selected targets, host backing persistence policy | Both `tst2:INITDR` discard native map state. Shared host `initialize_work` must independently retain backing flush ownership | A completed, unflushed NEW followed by failed NEW/I/VALIDATE/DUPLICATE initialization still fails and retries finalization when backing flush fails | `initialize_work`, sequential dirty-format then first-refill failure tests for all shared callers | Discarding dirty cached allocations is not permission to forget already issued backing writes |
@@ -87,17 +89,28 @@ Full-format scratch rejection happens before this borrowing and retains the
 previous cache, including dirty allocations. No rollback or extra sector page
 is introduced.
 
-DOS 2.7 NEW retains its late internal reader's logical index and two existing
+DOS 2.7 NEW refills the first BAM and reserves the header before attempting
+its late internal reader allocation. Thus a 38/0 read failure is reported
+before exhausted logical indexes or pages can return 70. It retains the reader's
+logical index and two existing
 pooled pages while rereading the written metadata chain, then through map
 reservation and NF05's ascending map scan. The first map is already cached
 after reservation, later map ranges are read from their links, and the final
 range remains resident. Each late worker turn performs at most one synchronous
 read/write, with a bounded metadata-chain guard. It releases the reader on
 success or failure.
-4040 NEW does not gain that resource requirement. DUPLICATE rejects a source
+4040 NEW does not gain that resource requirement or a final BAM reread after
+its last metadata write. It retains the generated map instead.
+DUPLICATE rejects a source
 and destination with the same read callback/context before initialization,
 without forbidding harmless alias mounts globally or pretending to detect
 aliases hidden behind distinct contexts.
+
+A surviving listing yields only when preparing a footer for a drive currently
+owned by NEW/DUPLICATE. This protects both the shared BAM binding and NF05's
+partial count without adding another cache or counter. Ready state and already
+staged rows remain intact. Success and failure both release this scheduling
+gate when the command becomes idle.
 
 Shared INITDR also retains its captured media reference before the first
 refill. Failed initialization after an earlier dirty NEW cannot silently
@@ -115,8 +128,8 @@ media were changed, and no new latency or IEEE electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 3414 focused DOS cases and 4397 total firmware
-Check cases (4350 ordinary plus 47 fatal/assert cases). Tests and dependencies
+The isolated candidate passes 3428 focused DOS cases and 4411 total firmware
+Check cases (4364 ordinary plus 47 fatal/assert cases). Tests and dependencies
 use Debug. The RP2040 production RelWithDebInfo build, clang-format dry run
 and whitespace checks pass.
 
@@ -141,3 +154,8 @@ failures, native comma-table boundaries and actual late metadata/NF05 reads.
 Final fixtures reproduce 35 failures against the second feedback fix and 101
 against initial PR production, with zero errors. Late-read tests also assert
 the one-operation-per-turn bound and recovery without leaked formatter pages.
+The fourth round adds 14 variants for surviving-SA0 footer boundaries and
+failure cleanup, BAM-read precedence over exhausted indexes/pages, and quick/full
+4040 completion without a reread. Two earlier 4040 late-read fixtures now
+correctly expect success. Final fixtures reproduce 16 failures against the
+third feedback fix and 116 against initial PR production, with zero errors.

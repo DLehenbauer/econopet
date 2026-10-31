@@ -9754,6 +9754,89 @@ START_TEST(test_format_ignores_suffix_after_native_comma_limit) {
 }
 END_TEST
 
+// A retained SA0 footer must wait for NEW's shared BAM and count ownership to end.
+START_TEST(test_format_serializes_surviving_directory_footer) {
+    const unsigned int format = (unsigned int)_i % 2u + 1u;
+    const bool counted = (unsigned int)_i / 2u % 2u != 0;
+    const bool fail = _i >= 4;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    uint8_t output[DOS_STAGE_CAPACITY];
+    bool eoi;
+    const unsigned int header = dos_stage(&unit, &bank, listing, output, sizeof(output), &eoi);
+    ck_assert_uint_eq(header, 32);
+    dos_get(&unit, &bank, listing, header);
+    ck_assert_uint_eq(dos_stage(&unit, &bank, listing, output, sizeof(output), &eoi), 0);
+    const uint16_t use = unit.buffer_use;
+    send_command(&unit, &bank, "N0:NEW,AB");
+    const unsigned int prefix = image.size / DISKIMAGE_SECTOR_SIZE + (format == 1 ? 5u : 7u);
+    for (unsigned int step = 0; image.writes < prefix; ++step) {
+        ck_assert_uint_lt(step, DISKIMAGE_D82_SIZE / DISKIMAGE_SECTOR_SIZE + 100u);
+        dos_work(&unit, &bank);
+    }
+    if (counted) {
+        dos_work(&unit, &bank);
+    }
+    const dos_bam_t saved = unit.bam[0];
+    const unsigned int total = unit.free_blocks[0];
+    const unsigned int reads = image.reads;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, listing, output, sizeof(output), &eoi), 0);
+    ck_assert(!eoi);
+    ck_assert(unit.channels[listing].ready);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_mem_eq(&unit.bam[0], &saved, sizeof(saved));
+    ck_assert_uint_eq(unit.free_blocks[0], total);
+    if (fail) {
+        image.fail_read = image.reads + 1u;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, fail ? DOS_STATUS_READ_ERROR : DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, use);
+    image.fail_read = 0;
+    const unsigned int footer = dos_stage(&unit, &bank, listing, output, sizeof(output), &eoi);
+    ck_assert_uint_eq(footer, 32);
+    ck_assert(eoi);
+    ck_assert_uint_eq(output[2] | ((unsigned int)output[3] << 8u), format == 1 ? 2052u : 4133u);
+    dos_get(&unit, &bank, listing, footer);
+    ck_assert(dos_close(&unit, &bank, bank.units[0].model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// 4040 ENDCMD follows the final metadata write without another controller read.
+START_TEST(test_format_4040_completes_without_final_bam_read) {
+    const bool full = _i != 0;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, 0);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, full ? "N0:NEW,AB" : "N0:NEW");
+    const unsigned int writes = (full ? image.size / DISKIMAGE_SECTOR_SIZE : 0u) + 2u;
+    for (unsigned int step = 0; image.writes < writes; ++step) {
+        ck_assert_uint_lt(step, DISKIMAGE_D64_SIZE / DISKIMAGE_SECTOR_SIZE + 100u);
+        dos_work(&unit, &bank);
+    }
+    const unsigned int reads = image.reads;
+    image.fail_read = reads + 1u;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert(unit.bam[0].buffer.resident);
+    ck_assert_mem_eq(unit.bam[0].buffer.bytes, sector_bytes(&image, bank.units[0].slots[0].io.image.type, 18, 0),
+                     DISKIMAGE_SECTOR_SIZE);
+    ck_assert_uint_eq(unit.free_blocks[0], 664);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
 // Required late header/BAM/directory and NF05 reads cannot be replaced by synthetic success.
 START_TEST(test_format_propagates_late_metadata_chain_failures) {
     const unsigned int format = (unsigned int)_i % 2u + 1u;
@@ -9856,7 +9939,9 @@ START_TEST(test_format_failure_finalization_flushes_captured_media) {
         image.fail_write = failure == 1 ? 1u : 3u;
     }
     finish_open(&unit, &bank);
-    ck_assert_uint_eq(unit.status_code, failure == 2 ? DOS_STATUS_READ_ERROR : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.status_code, failure != 2  ? DOS_STATUS_WRITE_ERROR
+                                        : format == 0 ? DOS_STATUS_OK
+                                                      : DOS_STATUS_READ_ERROR);
     ck_assert(bank.units[0].slots[0].dirty);
     const unsigned int writes = image.writes;
     image.fail_flush = true;
@@ -9902,8 +9987,9 @@ END_TEST
 
 // DOS 2.7's late OPNIRD needs one logical index and two pages, preserving surviving peers.
 START_TEST(test_format_reserves_native_reader_with_exhausted_peers) {
-    const unsigned int format = (unsigned int)_i % 3u;
-    const bool pages = _i >= 3;
+    const bool fault = _i >= 6;
+    const unsigned int format = fault ? ((unsigned int)_i - 6u) % 2u + 1u : (unsigned int)_i % 3u;
+    const bool pages = fault ? _i >= 8 : _i >= 3;
     dos_media_bank_t bank = {0};
     image_t target, peer;
     mount_blank(&bank, &target, format);
@@ -9930,8 +10016,22 @@ START_TEST(test_format_reserves_native_reader_with_exhausted_peers) {
     dos_channel_t saved[DOS_FILE_CHANNEL_COUNT];
     memcpy(saved, unit.channels, sizeof(saved));
     send_command(&unit, &bank, "N0:NEW");
+    if (fault) {
+        const unsigned int prefix = target.writes + (format == 1 ? 4u : 6u);
+        for (unsigned int step = 0; target.writes < prefix; ++step) {
+            ck_assert_uint_lt(step, 40);
+            dos_work(&unit, &bank);
+        }
+        target.fail_read = target.reads + 1u;
+    }
     finish_open(&unit, &bank);
-    ck_assert_uint_eq(unit.status_code, format == 0 ? DOS_STATUS_OK : DOS_STATUS_NO_CHANNEL);
+    ck_assert_uint_eq(unit.status_code, format == 0 ? DOS_STATUS_OK
+                                        : fault     ? DOS_STATUS_READ_ERROR
+                                                    : DOS_STATUS_NO_CHANNEL);
+    if (fault) {
+        ck_assert_str_eq(unit.status, "23,READ ERROR,38,00,0\r");
+        target.fail_read = 0;
+    }
     ck_assert_uint_eq(unit.buffer_use, use);
     ck_assert_mem_eq(unit.channels, saved, sizeof(saved));
     ck_assert_uint_eq(peer.writes + peer.flushes, peer_operations);
@@ -10057,7 +10157,9 @@ START_TEST(test_format_failure_reloads_bam_before_recovery) {
         image.fail_write_without_changes = true;
     }
     finish_open(&unit, &bank);
-    ck_assert_uint_eq(unit.status_code, failure == 0 || failure == 2 ? DOS_STATUS_READ_ERROR : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.status_code, failure == 2 && format == 0    ? DOS_STATUS_OK
+                                        : failure == 0 || failure == 2 ? DOS_STATUS_READ_ERROR
+                                                                       : DOS_STATUS_WRITE_ERROR);
     image.fail_read = image.fail_write = 0;
     ck_assert_uint_ne(open_name(&unit, &bank, 2, "#"), DOS_UNUSED);
     put_bytes(&unit, &bank, 2, 0x40, 4);
@@ -10366,10 +10468,12 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_duplicate_rejects_aliased_image, 0, 12);
     tcase_add_loop_test(core, test_format_failure_finalization_flushes_captured_media, 0, 12);
     tcase_add_loop_test(core, test_format_failure_finalization_rejects_replaced_media, 0, 3);
-    tcase_add_loop_test(core, test_format_reserves_native_reader_with_exhausted_peers, 0, 6);
+    tcase_add_loop_test(core, test_format_reserves_native_reader_with_exhausted_peers, 0, 10);
     tcase_add_loop_test(core, test_failed_initialization_retains_prior_format_flush, 0, 12);
     tcase_add_loop_test(core, test_format_ignores_suffix_after_native_comma_limit, 0, 9);
     tcase_add_loop_test(core, test_format_propagates_late_metadata_chain_failures, 0, 24);
+    tcase_add_loop_test(core, test_format_serializes_surviving_directory_footer, 0, 8);
+    tcase_add_loop_test(core, test_format_4040_completes_without_final_bam_read, 0, 2);
     suite_add_tcase(suite, core);
     return suite;
 }

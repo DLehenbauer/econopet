@@ -124,6 +124,7 @@ typedef enum {
     DOS_FORMAT_MAP,
     DOS_FORMAT_DIRECTORY,
     DOS_FORMAT_DISK_HEADER,
+    DOS_FORMAT_BAM,
     DOS_FORMAT_CHAIN,
     DOS_FORMAT_RESERVE,
     DOS_FORMAT_RELOAD,
@@ -4203,6 +4204,7 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/new
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/new
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/frets
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/map
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/duplct
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/duplct
@@ -4374,6 +4376,20 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
         return;
     }
+    if (work->phase == DOS_FORMAT_BAM) {
+        // NEW3/USEDTS refills the first map before OPNIRD can exhaust channels.
+        if (!storage_error(unit, media, reference, read_sector(unit, media, reference, DOS_BAM_TRACK_8050, 0, bytes),
+                           false, DOS_BAM_TRACK_8050, 0)) {
+            goto failed;
+        }
+        bam->buffer.track = DOS_BAM_TRACK_8050;
+        bam->buffer.sector = 0;
+        if (!mark_sector(unit, media, reference, directory_track(model), 0, false)) {
+            goto failed;
+        }
+        work->phase = DOS_FORMAT_CHAIN;
+        return;
+    }
     if (work->phase == DOS_FORMAT_CHAIN) {
         if (work->reader == DOS_UNUSED) {
             // NEW3 opens OPNIRD only after publishing the metadata prefix.
@@ -4425,6 +4441,7 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (work->phase == DOS_FORMAT_RESERVE) {
             bam->buffer.track = track;
             bam->buffer.sector = sector;
+            bam->dirty = false;
             unit->free_blocks[reference.slot] = 0;
             work->phase = DOS_FORMAT_RELOAD;
         } else if (++work->part == parts) {
@@ -4450,20 +4467,14 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
         work->phase = model == DOS_MODEL_4040                ? DOS_FORMAT_RESERVE
                       : sector == DOS_DIRECTORY_FIRST_SECTOR ? DOS_FORMAT_DISK_HEADER
-                                                             : DOS_FORMAT_CHAIN;
+                                                             : DOS_FORMAT_BAM;
         return;
     }
     vet(work->phase == DOS_FORMAT_RELOAD, "invalid format phase %u", work->phase);
     // NF05 leaves the final map range cached. Do not call INITDR here: NEW
     // does not abandon the additional channels that a fresh INITDR would.
     if (model == DOS_MODEL_4040) {
-        if (!storage_error(unit, media, reference,
-                           read_sector(unit, media, reference, DOS_DIRECTORY_TRACK_4040, 0, bytes), false,
-                           DOS_DIRECTORY_TRACK_4040, 0)) {
-            goto failed;
-        }
-        bam->buffer.track = DOS_DIRECTORY_TRACK_4040;
-        bam->buffer.sector = 0;
+        // 4040 NEW ends after DRTWRT. Retain the generated map without a read.
         unsigned int free_blocks = 0;
         for (unsigned int current_track = 1; current_track <= tracks; ++current_track) {
             unsigned int sectors;
@@ -6096,6 +6107,12 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             return false;
         }
     } else if (channel->directory == DOS_DIRECTORY_FOOTER) {
+        // A surviving listing cannot refill or recount a formatter-owned BAM.
+        if (unit->command == DOS_COMMAND_FORMAT && channel->media.unit == unit->format.media.unit &&
+            (channel->media.slot == unit->format.media.slot ||
+             (unit->format.duplicate && channel->media.slot == unit->format.source.slot))) {
+            return false;
+        }
         if (!free_blocks(unit, media, channel->media, &number)) {
             channel->ready = false;
             return false;
