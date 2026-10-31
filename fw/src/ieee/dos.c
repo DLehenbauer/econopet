@@ -6539,6 +6539,11 @@ void dos_get(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
             dos_rel_reader_get(&state->rel, state->rel_model, media, unit->buffers[state->buffers[0]].bytes,
                                unit->buffers[state->buffers[1]].bytes);
             rel_read_state(unit, state);
+            // A valid staged count can outlive its media. Retain the first
+            // terminal failure instead of replaying the remaining GETs.
+            if (state->failed) {
+                break;
+            }
             if (state->rel.no_record) {
                 unit->selected_drive = state->media.slot;
                 dos_status(unit, state->rel_model, DOS_STATUS_NO_RECORD, 0, 0);

@@ -28,6 +28,8 @@ events. Preview and the final good record's EOI-to-missing handoff do not
 publish error 50. An actual GET of an already missing CR/EOI does.
 Media identity/generation failures use the captured model and owner drive
 with the existing host generic READ ERROR 23 and zero track/sector.
+A valid staged GET batch stops at terminal owner failure, retaining its
+status and borrowed pages rather than replaying the remaining count.
 
 `dos_output_stage/get` retains either the resolved logical channel or the
 status source across later TALK selections. It adds no lifetime/generation
@@ -69,7 +71,7 @@ native controller scheduling parity.
 | One-job continuation and deferred prefetch | All selected targets | [4040 rel1][4040-rel1] / [DOS 2.7 rel1][8250-rel1], NRBUF, [4040 tst2][4040-tst2] / [DOS 2.7 tst2][8250-tst2] STRDBL/DBLBUF | Preserve current bytes while a following page is pending or failed. Do not report an unused failed prefetch as a current read failure | `rel_work`, pending-refill, generation/I/O and job-header cases, `finish_pipeline` bounds every REL step to one read | VICE's two-page read/swap path corroborates data ownership, not the host cooperative schedule or exact eager prefetch timing |
 | Missing-byte error timing | All selected targets | [4040 rel3][4040-rel3] / [DOS 2.7 rel3][8250-rel3], RDREL/RD05, [4040 erproc][4040-erproc] / [DOS 2.7 erproc][8250-erproc] NOREC | Prepare CR/EOI without error 50. Actual GET of the already missing byte publishes 50 with zero coordinates, not preview or the last good EOI handoff | REL `dos_stage/get`, prefix/status/missing-GET cases | VICE explicitly returns CR and sets NO RECORD past the last record, but has no speculative FIFO preview |
 | Record end and model flags | Selected 4040 versus DOS 2.7 targets | [4040 rel4][4040-rel4] / [DOS 2.7 rel4][8250-rel4], END/NXTREC and GETFLG call path | Advance the raw record counter at actual EOI, retain the selected model's flags and schedule clean page handoff without consuming a preview suffix | Existing reader leaf helpers unchanged, pipeline prefix/refill tests | VICE independently tracks record progress and page swaps, not the ROM's model-specific flag storage |
-| Saved job identity and host failures | All targets, labeled host media safeguard | [4040 tsutil][4040-tsutil] / [DOS 2.7 tsutil][8250-tsutil] RDAB/SJ10/RDLNK and both tst2 STRDBL, [4040 parsex][4040-parsex] / [DOS 2.7 parsex][8250-parsex] CMDERR/JCMDER | Preserve each attempted page's track/sector and job drive/READ bit. Stale host identity never publishes failed bytes. Generic 23 and unsupported-boundary 30 are host policies, not native controller decoding | `rel_work/rel_read_state`, command-priority/job-header, generation/removal and explicit-boundary cases | VICE tracks per-page coordinates. [MAME 4040][mame-4040] / [8050/8250][mame-8050] establish selected ROM/hardware modes, not execution of these host policies |
+| Saved job identity and host failures | All targets, labeled host media safeguard | [4040 tsutil][4040-tsutil] / [DOS 2.7 tsutil][8250-tsutil] RDAB/SJ10/RDLNK and both tst2 STRDBL, [4040 parsex][4040-parsex] / [DOS 2.7 parsex][8250-parsex] CMDERR/JCMDER | Preserve each attempted page's track/sector and job drive/READ bit. Stale host identity never publishes failed bytes. Stop staged GET replay at terminal failure without losing pages or status. Generic 23 and unsupported-boundary 30 are host policies, not native controller decoding | `rel_work/rel_read_state`, command-priority/job-header, generation/removal, staged-batch removal/remount through both GET APIs and explicit-boundary cases | VICE tracks per-page coordinates. [MAME 4040][mame-4040] / [8050/8250][mame-8050] establish selected ROM/hardware modes, not execution of these host policies |
 | Preview/commit ownership | All selected targets, host FIFO adaptation | [4040 ieee][4040-ieee] / [DOS 2.7 ieee][8250-ieee] TLK10/TLK30 and [4040 tst4][4040-tst4] / [DOS 2.7 tst4][8250-tst4] GET/GETERC | Commit the captured channel or status source even after another TALK selection. Clear status only after its final CR is consumed | `dos_output_stage/get`, peer/status, ordinary-source and interrupted-prefix cases | VICE corroborates separate data/error channels but does not model this hardware FIFO retirement contract |
 | Directory and ordinary isolation | All selected targets, host union discriminator | [4040 lstdir][4040-lstdir] / [DOS 2.7 lstdir][8250-lstdir], STDIR/GETDIR | A REL type filter still produces directory bytes and final EOI, never REL record state. Zero-capacity preview changes no reader/listing state | Directory routing guard, existing relative-filter/reopen/zero-capacity regressions and ordinary-source cases | Native listing source is authoritative. VICE/MAME model corroboration is not evidence for the C union layout |
 
@@ -79,8 +81,8 @@ full-ROM execution, physical acceptance, timing or electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 489 focused REL cases (54 test groups) and
-4906 total firmware cases (4859 ordinary plus 47 fatal/assert). Tests and
+The isolated candidate passes 501 focused REL cases (55 test groups) and
+4918 total firmware cases (4871 ordinary plus 47 fatal/assert). Tests and
 dependencies use Debug. The RP2040 production RelWithDebInfo build,
 clang-format and whitespace checks pass. All 29 REL helpers remain unchanged.
 Existing engine helpers are unchanged except the four scheduler/output entry

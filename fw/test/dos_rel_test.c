@@ -1789,6 +1789,80 @@ START_TEST(test_pipeline_generation_and_io_failures) {
 }
 END_TEST
 
+// Stale media stops a valid multi-byte GET without discarding its owner or pages.
+START_TEST(test_pipeline_stale_media_stops_staged_batch) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const bool replace = (unsigned int)_i / 2u % 2u != 0;
+    const bool retained = (unsigned int)_i % 2u != 0;
+    rel_image_t image = {0}, peer_image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record_at(&bank, &image, format, 1, 254, 0, false, 0, 1);
+    const dos_media_ref_t peer_reference = mount_record_at(&bank, &peer_image, format, 1, 254, 0, false, 1, 0);
+    memcpy(image.bytes[3] + DISKIMAGE_SECTOR_LINK_SIZE, "ABCD", 4);
+    peer_image.bytes[3][DISKIMAGE_SECTOR_LINK_SIZE] = 'P';
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    const uint8_t peer = dos_rel_channel_claim(&unit, peer_reference, 3);
+    dos_rel_channel_prepare(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 254, 0);
+    dos_rel_channel_prepare(&unit, peer, models[format], 1, format == 2 ? 2 : 0, 1, 254, 0);
+    finish_pipeline(&unit, &bank, &image);
+    uint8_t output[DOS_STAGE_CAPACITY];
+    bool eoi;
+    dos_source_t source, selected;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source), 4);
+    ck_assert_mem_eq(output, "ABCD", 4);
+    dos_output_get(&unit, &bank, models[format], source, 1);
+    const unsigned int length = dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source);
+    ck_assert_uint_eq(length, 3);
+    ck_assert_mem_eq(output, "BCD", 3);
+    ck_assert(eoi);
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 3, output, sizeof(output), &eoi, &selected), 1);
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const dos_channel_t before = unit.channels[channel], peer_before = unit.channels[peer];
+    const uint16_t use = unit.buffer_use, writes = unit.buffer_writes, drives = unit.buffer_drives;
+    dos_buffer_t pages[DOS_CHANNEL_BUFFER_COUNT];
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        pages[page] = unit.buffers[before.buffers[page]];
+    }
+    if (replace) {
+        mount_record_at(&bank, &replacement, format, 1, 254, 0, false, 0, 1);
+    } else {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, NULL), DOS_MEDIA_OK);
+    }
+    const unsigned int reads = image.reads, peer_reads = peer_image.reads;
+    if (retained) {
+        dos_output_get(&unit, &bank, models[format], source, length);
+    } else {
+        dos_get(&unit, &bank, channel, length);
+    }
+    ck_assert(unit.channels[channel].allocated && unit.channels[channel].failed);
+    ck_assert(!unit.channels[channel].ready && !dos_work_pending(&unit));
+    ck_assert_int_eq(unit.channels[channel].rel.record.result, DOS_REL_RECORD_FAILED);
+    ck_assert_int_eq(unit.channels[channel].rel.record.lookup.media_result, DOS_MEDIA_STALE);
+    ck_assert_uint_eq(unit.channels[channel].rel.record.pointer, before.rel.record.pointer);
+    ck_assert_uint_eq(unit.channels[channel].rel.number, before.rel.number);
+    ck_assert_str_eq(unit.status, format == 0 ? "23,READ ERROR,00,00\r" : "23,READ ERROR,00,00,1\r");
+    ck_assert_uint_eq(unit.status_position, 0);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.buffer_use, use);
+    ck_assert_uint_eq(unit.buffer_writes, writes);
+    ck_assert_uint_eq(unit.buffer_drives, drives);
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        ck_assert_mem_eq(&unit.buffers[before.buffers[page]], &pages[page], sizeof(pages[page]));
+    }
+    ck_assert_mem_eq(&unit.channels[peer], &peer_before, sizeof(peer_before));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(peer_image.reads, peer_reads);
+    ck_assert_uint_eq(replacement.reads, 0);
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(peer_image.reads, peer_reads);
+    ck_assert_uint_eq(replacement.reads, 0);
+}
+END_TEST
+
 // Preparing/repositioning one owner preserves a peer's cursor and borrowed pages.
 START_TEST(test_pipeline_peer_reposition_and_drive_status) {
     const unsigned int format = (unsigned int)_i;
@@ -2412,6 +2486,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_pipeline_prefix_status_and_missing_get, 0, 3);
     tcase_add_loop_test(core, test_pipeline_pending_refill_and_close_cancel, 0, 6);
     tcase_add_loop_test(core, test_pipeline_generation_and_io_failures, 0, 15);
+    tcase_add_loop_test(core, test_pipeline_stale_media_stops_staged_batch, 0, 12);
     tcase_add_loop_test(core, test_pipeline_peer_reposition_and_drive_status, 0, 3);
     tcase_add_loop_test(core, test_pipeline_command_priority_and_job_headers, 0, 9);
     tcase_add_loop_test(core, test_pipeline_retains_incomplete_boundaries, 0, 6);
