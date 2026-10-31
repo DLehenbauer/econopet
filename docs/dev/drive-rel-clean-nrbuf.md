@@ -22,8 +22,11 @@ nonzero forward track. Each pass performs at most one read, with no WRITE or
 flush. Attempted coordinates, drive bits and READ headers remain observable.
 
 Unused prefetch I/O/range failures stay deferred while valid current data
-remains readable. NXTREC resumes SETLST/FNDLST against completed window bytes
-without repeating actual GET or the raw record increment. Successful work
+remains readable. NXTREC preserves the leaf's selected pointer when NR has
+already advanced (including NR zero on a resident terminal page). Only a
+NEEDS_LINK leaf stop requires selecting NR in the host join. NXTREC resumes
+SETLST/FNDLST against completed window bytes without repeating actual GET
+or the raw record increment. Successful work
 does not replace retained status. Missing CR/EOI still reports error 50 only
 on actual GET of the already-missing byte.
 
@@ -55,8 +58,8 @@ GETBUF overlays do not justify unchanged older-source POSBUF parity.
 
 ## Validation and exclusions
 
-The isolated slice passes 588 focused REL cases in 62 groups and all 5005
-firmware cases (4958 ordinary plus 47 fatal/assert). Tests/frameworks and
+The isolated slice passes 600 focused REL cases in 63 groups and all 5017
+firmware cases (4970 ordinary plus 47 fatal/assert). Tests/frameworks and
 dependencies use Debug. RP2040 production RelWithDebInfo, clang-format,
 whitespace and the unit bound pass. All 59 dependency groups/registrations
 remain, with only the three terminal-NRBUF expectations intentionally
@@ -65,6 +68,10 @@ without future dirty-state fields. Nine added cases cover reused WRITE
 refill, required READ failure and pending CLOSE.
 Three additional terminal NXTREC cases verify that NR is selected before
 cached SETLST, without repeating the record increment.
+Twelve resident terminal-page cases use distinct complete records with
+127- and 254-byte lengths, covering all models and both GET APIs. They
+verify uninterrupted bytes, EOI, record numbers, no extra I/O and the
+final missing CR/EOI. The 254-byte cases also cover already-advanced NR zero.
 
 Public REL admission/dispatch, resident/dirty RECORD/POSBUF, full SSEND,
 dirty NRBUF/writeback/retry, PUT integration, creation/growth, full CLSREL

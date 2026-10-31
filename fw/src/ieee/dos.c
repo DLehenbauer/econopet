@@ -1093,8 +1093,9 @@ static void rel_queue_nrbuf(dos_unit_t* const unit, dos_channel_t* const state, 
     if (record->active == active) {
         record->active ^= 1u;
     }
-    // NXTR20 selects NR even when the leaf stopped at an unbuffered link.
-    if (next) {
+    // Select NR only if the leaf stopped before NXTR20. A resident terminal
+    // page already has its pointer selected and NR advanced (possibly zero).
+    if (next && record->result == DOS_REL_RECORD_NEEDS_LINK) {
         record->pointer = record->next;
         record->position = 0;
     }

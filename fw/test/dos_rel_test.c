@@ -2478,6 +2478,58 @@ START_TEST(test_clean_nrbuf_terminal_next_pointer) {
 }
 END_TEST
 
+// Resident terminal NXTREC keeps the selected record, including wrapped NR zero.
+START_TEST(test_clean_nrbuf_resident_terminal_records) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const bool direct_get = (unsigned int)_i % 2u != 0;
+    const unsigned int size =
+        (unsigned int)_i % 4u < 2u ? DISKIMAGE_SECTOR_PAYLOAD_SIZE / 2u : DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    image.bytes[4][0] = 0;
+    image.bytes[4][1] = UINT8_MAX;
+    for (unsigned int offset = 0; offset < 2u * DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++offset) {
+        image.bytes[3u + offset / DISKIMAGE_SECTOR_PAYLOAD_SIZE]
+                   [DISKIMAGE_SECTOR_LINK_SIZE + offset % DISKIMAGE_SECTOR_PAYLOAD_SIZE] = 'A' + offset / size;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, 2);
+    dos_rel_channel_prepare_open(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 3, size);
+    finish_pipeline(&unit, &bank, &image);
+    const unsigned int reads = image.reads;
+    dos_channel_t* const state = &unit.channels[channel];
+    for (unsigned int offset = 0; offset < 2u * DISKIMAGE_SECTOR_PAYLOAD_SIZE; ++offset) {
+        uint8_t byte;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(byte, 'A' + offset / size);
+        ck_assert_int_eq(eoi, (offset + 1u) % size == 0);
+        ck_assert_uint_eq(state->rel.number, 1u + offset / size);
+        if (direct_get) {
+            dos_get(&unit, &bank, channel, 1);
+        } else {
+            dos_output_get(&unit, &bank, models[format], source, 1);
+        }
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->ready && !state->failed);
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_POWER_ON);
+    }
+    uint8_t byte;
+    bool eoi;
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+    ck_assert_uint_eq(byte, '\r');
+    ck_assert(eoi);
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+    ck_assert(dos_close(&unit, &bank, models[format], 2));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+}
+END_TEST
+
 // In-page writes use the current pointer, preserve read flags and pad only the record suffix.
 START_TEST(test_record_put_and_pad_borrowed_pages) {
     const unsigned int format = (unsigned int)_i / 4u;
@@ -2933,5 +2985,6 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_pipeline_open_clean_nrbuf, 0, 9);
     tcase_add_loop_test(core, test_clean_nrbuf_refill_failure_and_cancel, 0, 9);
     tcase_add_loop_test(core, test_clean_nrbuf_terminal_next_pointer, 0, 3);
+    tcase_add_loop_test(core, test_clean_nrbuf_resident_terminal_records, 0, 12);
     return suite;
 }
