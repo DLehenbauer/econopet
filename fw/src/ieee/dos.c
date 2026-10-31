@@ -642,6 +642,17 @@ static bool storage_error(dos_unit_t* const unit, dos_media_bank_t* const media,
     return false;
 }
 
+// Restart incomplete REL walks when another job replaces their shared drive cache.
+static void restart_rel_bam(dos_unit_t* const unit, const uint8_t drive, const dos_channel_t* const publisher) {
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        dos_channel_t* const owner = &unit->channels[index];
+        if (owner != publisher && owner->allocated && owner->directory == DOS_DIRECTORY_NONE &&
+            owner->file_type == DISKIMAGE_FTYPE_REL && owner->media.slot == drive && owner->rel.record.bam_steps != 0) {
+            owner->rel.record.bam_steps = 1;
+        }
+    }
+}
+
 // SETMAP/MBAM follow the DOS 2.7 BAM links and select a track's count/bitmap.
 static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
                           const uint8_t track) {
@@ -692,6 +703,7 @@ static uint8_t* bam_entry(dos_unit_t* const unit, dos_media_bank_t* const media,
             bam->buffer.sector = bam_sector;
             bam->buffer.resident = true;
             bam->media = reference;
+            restart_rel_bam(unit, reference.slot, NULL);
         }
         if (model == DOS_MODEL_4040) {
             if (track != 0 && track <= DISKIMAGE_D64_TRACK_COUNT) {
@@ -1436,6 +1448,7 @@ static bool rel_write_bam(dos_unit_t* const unit, dos_media_bank_t* const media,
     bam->buffer.sector = sector;
     bam->buffer.resident = true;
     bam->media = state->media;
+    restart_rel_bam(unit, state->media.slot, state);
     ++record->bam_steps;
     return false;
 }
@@ -3421,6 +3434,7 @@ static void auto_initialize(dos_unit_t* const unit, const uint8_t drive) {
         // Discard dirty cached allocation state without flushing it. Clearing
         // the entire cache also consumes the flag, making this a one-shot step.
         unit->bam[drive] = (dos_bam_t){0};
+        restart_rel_bam(unit, drive, NULL);
         unit->free_blocks[drive] = 0;
         unit->free_blocks_valid[drive] = false;
     }
@@ -4434,6 +4448,7 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
         // The free-block total stays invalid until every map range is counted.
         // Backing flush ownership survives even if the first refill fails.
         *bam = (dos_bam_t){.media = reference};
+        restart_rel_bam(unit, drive, NULL);
         unit->free_blocks[drive] = 0;
         unit->free_blocks_valid[drive] = false;
         work->started = true;
@@ -4665,6 +4680,7 @@ static void validate_work(dos_unit_t* const unit, dos_media_bank_t* const media)
         dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, 0);
         if (bam->media.identity == reference.identity) {
             *bam = (dos_bam_t){0};
+            restart_rel_bam(unit, reference.slot, NULL);
         }
         unit->free_blocks_valid[reference.slot] = false;
         validate_finish(unit);
@@ -5788,6 +5804,7 @@ static void format_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
         *bam = (dos_bam_t){.media = reference};
         bam->buffer.resident = true;
+        restart_rel_bam(unit, reference.slot, NULL);
         bam->buffer.bytes[DOS_BAM_VERSION_OFFSET] = version;
         unit->free_blocks_valid[reference.slot] = false;
         work->track = 1;
@@ -6006,6 +6023,7 @@ failed:
     // binding. Preserve the cache only before scratch was touched.
     if (work->phase >= DOS_FORMAT_ERASE) {
         *bam = (dos_bam_t){.media = reference};
+        restart_rel_bam(unit, reference.slot, NULL);
         unit->free_blocks_valid[reference.slot] = false;
     }
     if (work->reader != DOS_UNUSED) {

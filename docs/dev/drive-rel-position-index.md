@@ -91,6 +91,12 @@ Each pass performs only one BAM READ, dirty predecessor flush or data WRITE.
 Failed BAM READs leave the old complete cache and dirty data intact. The walk
 still selects the last track's part, while an initially resident cache keeps
 its current part and byte-2 version policy (including version zero).
+Another job's successful BAM replacement or invalidation restarts incomplete
+walks on that drive. This includes commands admitted while a failed owner has
+stopped polling and caller-driven leaves paused between calls. Peer-drive
+replacements and unsuccessful B-F reads do not change a walk's progress. The
+restart retains the cold final-part goal without increasing the I/O bound or
+discarding dirty metadata.
 INITIALIZE uses `rel.record.active` for REL owners, not the aliased writer
 flags. Directory REL filters still use ordinary `active`. CLDCHN selects
 the saved pool job's drive, not the channel's media slot, and abandons writers
@@ -146,15 +152,16 @@ binary or generated assembly is published.
 | Read return and retained WRITE windows | All selected targets | Both [4040 REL3][4040-rel3] / [DOS 2.7 REL3][8250-rel3], RDREL/RD40, both [4040 REL4][4040-rel4] / [DOS 2.7 REL4][8250-rel4], SETLST/FNDLST, REL1 NRBUF | Actual GET owns progress and missing 50. Scan retained native pages, write the outgoing dirty page before exposure, retain raw counter across job retry | Short-prefix, missing CR/EOI, retained WRITE-window, dirty readback/refill and lifetime cases | VICE corroborates record reads, but its larger cache and high-level indexing do not establish native byte-wide windows |
 | Host failure retention and CLOSE fence | Explicit internal host adaptation, not full native CLOSE | No direct ROM entry for explicit C retries or the core-only fence. Both TSUTIL SCRUB and TST2 WATJOB establish the native jobs being adapted | Retain dirty owners after failure, do not poll or write replacement media. Until CLSREL joins later, refuse internal writer CLOSE without cleanup | WRITE/refill retries, remounts, peers and 36 CLOSE-shortcut variants | MAME model declarations establish target selection, not host recovery or the deliberately excluded CLSREL implementation |
 | Active-page INITIALIZE selection | All selected targets | Both [4040 TST3][4040-tst3] / [DOS 2.7 TST3][8250-tst3], CLDCHN/RELBUF, GETACT and LSTJOB | Select the actual active data page's saved drive and release all its pages without writer CLOSE. Directory REL filters use ordinary metadata | Twelve dirty/finished/reversed-role/directory-filter cases preserve peer owners and issue no WRITE | Pinned native teardown, not the channel's host media-slot field |
-| Cold version-cache preparation | Explicit cooperative adaptation preserving all selected targets | Both [4040 JOBS][4040-jobs] / [DOS 2.7 JOBS][8250-jobs], SETJOB/SJB2/SJB3, TST2 INITDR/NF05 and [DOS 2.7 FRETS][8250-frets], SETMAP/RDBAM/RDNBAM | Gate WRITE on current cached byte 2, accepting zero. Cold host preparation leaves the last track's part resident. Split BAM READ/flush and data WRITE across passes | Twenty-one cold-cache success, first/last READ retry, conflicting part versions, remount and dirty predecessor cases assert the combined I/O bound | Native jobs define cache/version semantics, not the C scheduler |
+| Cold version-cache preparation | Explicit cooperative adaptation preserving all selected targets | Both [4040 JOBS][4040-jobs] / [DOS 2.7 JOBS][8250-jobs], SETJOB/SJB2/SJB3, TST2 INITDR/NF05 and [DOS 2.7 FRETS][8250-frets], SETMAP/RDBAM/RDNBAM | Gate WRITE on current cached byte 2, accepting zero. Cold host preparation leaves the last track's part resident. Split BAM READ/flush and data WRITE across passes | Twenty-four cold-cache success, READ retry, conflicting versions, remount, dirty predecessor and corrupt-link cases, plus twelve B-F/retry interleavings | Native jobs define cache/version semantics, not the C scheduler |
 
 ## Validation and exclusions
 
-The isolated candidate passes 1283 REL cases in 115 groups and all 5700
-firmware cases (5653 ordinary plus 47 fatal/assert). This includes all 716
-previously staged cases, 492 writer/dirty/retry/CLOSE-boundary cases and 75
+The isolated candidate passes 1298 REL cases in 116 groups and all 5715
+firmware cases (5668 ordinary plus 47 fatal/assert). This includes all 716
+previously staged cases, 492 writer/dirty/retry/CLOSE-boundary cases and 90
 feedback regressions covering INITIALIZE, required-prefetch recovery and cold
-BAM version preparation.
+BAM version preparation, including twelve real B-F/retained-WRITE interleavings
+and bounded self-link safeguards.
 All 74 previously staged groups remain unchanged, and final #126 adds its
 12 required-prefetch error cases. All merged registrations remain unchanged, including
 final #125's resident-terminal fix and final #123's stale-batch safeguards.
