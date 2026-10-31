@@ -423,6 +423,7 @@ typedef enum {
 } dos_command_work_t;
 
 // One bounded OPEN/command record, independent of the unit's bus role.
+// It owns shared command RAM while older workers retain separate parsed arguments.
 typedef struct {
     uint8_t bytes[DOS_COMMAND_RECEIVE_CAPACITY];
     uint8_t length;

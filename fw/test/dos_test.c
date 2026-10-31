@@ -11438,6 +11438,167 @@ START_TEST(test_initialize_retires_failed_rel_publication) {
 }
 END_TEST
 
+// Replacing an EOI-completed collection cannot run it under the new secondary.
+START_TEST(test_input_completed_request_reselection_discards_old_dispatch) {
+    const unsigned int format = (unsigned int)_i / 6u, selection = (unsigned int)_i % 3u;
+    const bool opening = (unsigned int)_i % 6u < 3u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t peer = open_name(&unit, &bank, 2, "#");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const dos_channel_t saved = unit.channels[peer];
+    dos_input_address(&unit, &bank, model, opening ? IEEE_CMD_OPEN(4) : IEEE_CMD_SECONDARY(15), true);
+    dos_input_put(&unit, 'I', false);
+    dos_input_put(&unit, '0', true);
+    ck_assert(dos_input_ready(&unit));
+    const unsigned int reads = image.reads, writes = image.writes;
+    dos_input_address(&unit, &bank, model, selection == 2 ? IEEE_CMD_CLOSE(4) : IEEE_CMD_SECONDARY(2), selection != 1);
+    ck_assert(!dos_input_ready(&unit));
+    dos_input_dispatch(&unit, &bank, 0);
+    finish_open(&unit, &bank);
+    ck_assert(!dos_input_ready(&unit));
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), peer);
+    ck_assert_mem_eq(&unit.channels[peer], &saved, sizeof(saved));
+    ck_assert_uint_eq(dos_find_channel(&unit, 4), DOS_UNUSED);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    free(image.bytes);
+}
+END_TEST
+
+// Raw and BASIC directory OPEN abandon a healthy REL writer without ordinary CLOSE.
+START_TEST(test_directory_reopen_after_rel_write_releases_only_previous_owner) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool basic = (unsigned int)_i % 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_rel_short(&image, format, 13);
+    const dos_model_t model = bank.units[0].model;
+    const uint8_t secondary = basic ? IEEE_LOAD_CHANNEL : 2;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    ck_assert_uint_ne(open_name(&unit, &bank, secondary, basic ? "0:REL,L" : "0:REL"), DOS_UNUSED);
+    const uint8_t peer = open_name(&unit, &bank, 3, "#");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const dos_channel_t saved = unit.channels[peer];
+    dos_input_address(&unit, &bank, model, IEEE_CMD_SECONDARY(secondary), true);
+    dos_listen_put(&unit, &bank, 'Z', false);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.channels[dos_find_channel(&unit, secondary)].access, DOS_ACCESS_MODIFY);
+    const uint8_t directory = open_name(&unit, &bank, secondary, basic ? "$0:*" : "$0");
+    ck_assert_uint_ne(directory, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_ne(unit.channels[directory].file_type, DISKIMAGE_FTYPE_REL);
+    ck_assert_uint_eq(unit.channels[directory].directory, basic ? DOS_DIRECTORY_HEADER : DOS_DIRECTORY_NONE);
+    if (!basic) {
+        const dos_buffer_t* const header = &unit.buffers[unit.channels[directory].buffers[0]];
+        ck_assert_uint_eq(header->track, format == 0 ? 18 : 39);
+        ck_assert_uint_eq(header->sector, 0);
+    }
+    ck_assert_mem_eq(&unit.channels[peer], &saved, sizeof(saved));
+    free(image.bytes);
+}
+END_TEST
+
+// CLRCB's retained overflow CR supplies the next bounded OPEN's record-size byte.
+START_TEST(test_input_open_retains_overflow_byte_for_next_rel_request) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    uint8_t first[DOS_COMMAND_RECEIVE_CAPACITY];
+    memset(first, 'X', sizeof(first));
+    first[0] = '0';
+    first[1] = ':';
+    first[DOS_COMMAND_LIMIT] = '\r';
+    dos_input_address(&unit, &bank, model, IEEE_CMD_OPEN(4), true);
+    for (unsigned int byte = 0; byte < sizeof(first); ++byte) {
+        dos_input_put(&unit, first[byte], byte + 1u == sizeof(first));
+    }
+    dos_input_dispatch(&unit, &bank, 0);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.input.bytes[DOS_COMMAND_LIMIT], '\r');
+
+    // The size lies just beyond logical EOF, in the preserved receive byte.
+    uint8_t second[DOS_COMMAND_LIMIT];
+    memset(second, 'X', sizeof(second));
+    second[0] = '0';
+    second[1] = ':';
+    memcpy(second + sizeof(second) - 3u, ",L,", 3);
+    dos_input_address(&unit, &bank, model, IEEE_CMD_OPEN(2), true);
+    for (unsigned int byte = 0; byte < sizeof(second); ++byte) {
+        dos_input_put(&unit, second[byte], byte + 1u == sizeof(second));
+    }
+    dos_input_dispatch(&unit, &bank, 0);
+    finish_open(&unit, &bank);
+    const uint8_t owner = dos_find_channel(&unit, 2);
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.channels[owner].file_type, DISKIMAGE_FTYPE_REL);
+    ck_assert_uint_eq(unit.channels[owner].rel.record.size, '\r');
+    ck_assert(!dos_work_pending(&unit));
+    free(image.bytes);
+}
+END_TEST
+
+// Worker retirement must preserve a newer OPEN/command until its ordered dispatch.
+START_TEST(test_input_new_collection_survives_pending_worker_retirement) {
+    const unsigned int format = (unsigned int)_i / 8u, worker = (unsigned int)_i % 8u / 2u;
+    const bool opening = (unsigned int)_i % 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    if (worker == 2) {
+        fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+        send_command(&unit, &bank, "C0:OUT=0:SOURCE");
+    } else {
+        fixture_rel_short(&image, format, 13);
+        if (worker == 1) {
+            const uint8_t name[] = "0:REL";
+            dos_open(&unit, &bank, 0, 2, name, sizeof(name) - 1u);
+        } else {
+            ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:REL"), DOS_UNUSED);
+            if (worker == 0) {
+                const uint8_t position[] = {'P', 2, 2, 0, 1};
+                dos_command(&unit, &bank, 0, position, sizeof(position));
+            } else {
+                dos_close(&unit, &bank, model, 2);
+            }
+        }
+    }
+    ck_assert(dos_work_pending(&unit));
+    dos_input_address(&unit, &bank, model, opening ? IEEE_CMD_OPEN(4) : IEEE_CMD_SECONDARY(15), true);
+    dos_input_put(&unit, opening ? '#' : 'I', opening);
+    if (!opening) {
+        dos_input_put(&unit, '0', true);
+    }
+    ck_assert(dos_input_ready(&unit));
+    const dos_input_t retained = unit.input;
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_mem_eq(&unit.input, &retained, sizeof(retained));
+    dos_input_dispatch(&unit, &bank, 0);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_int_eq(dos_find_channel(&unit, 4) != DOS_UNUSED, opening);
+    if (!opening) {
+        ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    }
+    free(image.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -11712,6 +11873,10 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_all_rel_close_preserves_buffer_zero_peer, 0, 6);
     tcase_add_loop_test(core, test_copy_rel_ordinary_sector_boundary, 0, 9);
     tcase_add_loop_test(core, test_initialize_retires_failed_rel_publication, 0, 12);
+    tcase_add_loop_test(core, test_input_completed_request_reselection_discards_old_dispatch, 0, 18);
+    tcase_add_loop_test(core, test_directory_reopen_after_rel_write_releases_only_previous_owner, 0, 6);
+    tcase_add_loop_test(core, test_input_open_retains_overflow_byte_for_next_rel_request, 0, 3);
+    tcase_add_loop_test(core, test_input_new_collection_survives_pending_worker_retirement, 0, 24);
     suite_add_tcase(suite, core);
     return suite;
 }

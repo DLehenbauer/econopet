@@ -305,7 +305,11 @@ void dos_status(dos_unit_t* const unit, const dos_model_t model, const dos_statu
 static void clear_command(dos_unit_t* const unit) {
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
-    memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+    // A newer receive record owns this aliased RAM. The preceding worker's
+    // parsed arguments are already separate, so retirement cannot erase it.
+    if (!unit->input.collecting && !unit->input.complete) {
+        memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+    }
 }
 
 // Remember the successful command's drive and publish a fresh OK status.
@@ -3196,7 +3200,6 @@ static void close_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     if (secondary > IEEE_SAVE_CHANNEL) {
         command_end(unit, unit->close.model);
-        memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
     }
     unit->command = DOS_COMMAND_IDLE;
 }
@@ -7717,7 +7720,9 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     const uint8_t previous = dos_find_channel(unit, secondary);
     if (previous != DOS_UNUSED) {
         // Retire a writable host owner without publishing CLOSE's ENDCMD.
-        if (unit->channels[previous].access != DOS_ACCESS_READ &&
+        if ((unit->channels[previous].file_type != DISKIMAGE_FTYPE_REL ||
+             unit->channels[previous].directory != DOS_DIRECTORY_NONE) &&
+            unit->channels[previous].access != DOS_ACCESS_READ &&
             unit->channels[previous].access != DOS_ACCESS_DIRECT &&
             !finish_channel(unit, media, &unit->channels[previous])) {
             return false;
@@ -9439,13 +9444,13 @@ void dos_input_address(dos_unit_t* const unit, dos_media_bank_t* const media, co
     dos_input_t* const input = &unit->input;
     input->secondary = command;
     input->collecting = false;
+    input->complete = false;
     if (IEEE_CMD_CLASS(command) == IEEE_CMD_CLOSE_BASE) {
         vet(listening, "native OPEN/CLOSE requires a routed listener");
         if (IEEE_CMD_IS_OPEN(command)) {
             // A new OPEN replaces the collection record, not its DOS channel.
             // Resource allocation remains deferred until EOI and dispatch.
             input->collecting = true;
-            input->complete = false;
             input->length = 0;
         } else {
             dos_close(unit, media, model, IEEE_CMD_CHANNEL(command));
@@ -9456,7 +9461,6 @@ void dos_input_address(dos_unit_t* const unit, dos_media_bank_t* const media, co
         // writes use dos_put rather than this collector. TALK only records SA.
         if (listening && IEEE_CMD_CHANNEL(command) == IEEE_COMMAND_CHANNEL) {
             input->collecting = true;
-            input->complete = false;
             input->length = 0;
         }
     }
@@ -9502,6 +9506,8 @@ void dos_input_dispatch(dos_unit_t* const unit, dos_media_bank_t* const media, c
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/idle
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/idle
     //
     // PUT defers EOI-completed input through CMDWAT, and OPEN interprets the
     // collected name. The facade has synchronized GETs and retired affected
@@ -9511,23 +9517,26 @@ void dos_input_dispatch(dos_unit_t* const unit, dos_media_bank_t* const media, c
         return;
     }
     vet(!dos_work_pending(unit), "native dispatch requires its preceding job to complete");
+    const uint8_t secondary = input->secondary, length = input->length;
+    uint8_t request[DOS_COMMAND_RECEIVE_CAPACITY];
+    memcpy(request, input->bytes, sizeof(request));
+    // VIDLE clears CMDWAT before PARSXQ. Consume this receive ownership before
+    // command retirement, leaving a subsequent collection independently live.
+    input->complete = false;
+    input->collecting = false;
+    input->length = 0;
     bool clear = true;
-    if (IEEE_CMD_IS_OPEN(input->secondary) && IEEE_CMD_CHANNEL(input->secondary) != IEEE_COMMAND_CHANNEL) {
-        dos_open(unit, media, index, IEEE_CMD_CHANNEL(input->secondary), input->bytes, input->length);
-    } else if (input->length != 0) {
-        uint8_t request[DOS_COMMAND_RECEIVE_CAPACITY];
-        memcpy(request, input->bytes, sizeof(request));
-        dos_command(unit, media, index, request, input->length);
+    if (IEEE_CMD_IS_OPEN(secondary) && IEEE_CMD_CHANNEL(secondary) != IEEE_COMMAND_CHANNEL) {
+        dos_open(unit, media, index, IEEE_CMD_CHANNEL(secondary), request, length);
+    } else if (length != 0) {
+        dos_command(unit, media, index, request, length);
         clear = false;
     }
     // U0 returns without CLRCB. Preserve that bounded stale-selector behavior,
     // while ordinary completions/errors clear the native command storage.
     if (clear) {
-        memset(input->bytes, 0, sizeof(input->bytes));
+        clear_command(unit);
     }
-    input->complete = false;
-    input->collecting = false;
-    input->length = 0;
 }
 
 // Route ordinary PUT bytes incrementally, leaving EOI distinct from CLOSE.
