@@ -18,7 +18,9 @@ extern "C" {
 }
 
 namespace {
-struct UnwindSentinel { int value = 0; };
+struct UnwindSentinel {
+    int value = 0;
+};
 static_assert(!std::is_copy_constructible_v<FirmwareSession>);
 static_assert(!std::is_move_constructible_v<FirmwareSession>);
 static_assert(!std::is_constructible_v<FirmwareSession, System&&>);
@@ -27,29 +29,30 @@ constexpr econopet::CpuAddress kResult{0x0200};
 
 // Capture completed-CS transactions and MSB-first MOSI bytes at clock boundaries.
 class SpiCapture {
-public:
+  public:
     // Subscribe before the operation under test and retain the scoped owner.
-    explicit SpiCapture(System& system) : subscription_(system.observe([this](const System& board) {
-        const auto pins = board.snapshot();
-        if (!pins.spi_cs_ni && !selected_) {
-            transactions.emplace_back();
-            bits_ = 0;
-            byte_ = 0;
-        }
-        if (!pins.spi_cs_ni && pins.spi_sck_i && !clock_) {
-            byte_ = static_cast<uint8_t>((byte_ << 1) | pins.spi_sdo_i);
-            if (++bits_ == 8) {
-                transactions.back().push_back(byte_);
-                bits_ = 0;
-                byte_ = 0;
-            }
-        }
-        selected_ = !pins.spi_cs_ni;
-        clock_ = pins.spi_sck_i;
-    })) {}
+    explicit SpiCapture(System& system)
+        : subscription_(system.observe([this](const System& board) {
+              const auto pins = board.snapshot();
+              if (!pins.spi_cs_ni && !selected_) {
+                  transactions.emplace_back();
+                  bits_ = 0;
+                  byte_ = 0;
+              }
+              if (!pins.spi_cs_ni && pins.spi_sck_i && !clock_) {
+                  byte_ = static_cast<uint8_t>((byte_ << 1) | pins.spi_sdo_i);
+                  if (++bits_ == 8) {
+                      transactions.back().push_back(byte_);
+                      bits_ = 0;
+                      byte_ = 0;
+                  }
+              }
+              selected_ = !pins.spi_cs_ni;
+              clock_ = pins.spi_sck_i;
+          })) {}
     std::vector<std::vector<uint8_t>> transactions;
 
-private:
+  private:
     bool selected_ = false, clock_ = false;
     unsigned bits_ = 0;
     uint8_t byte_ = 0;
@@ -107,10 +110,11 @@ TEST_F(FirmwareTest, FirmwareServiceConsumesActiveDeadline) {
     const auto start = system.time();
     bool complete = false;
     system.service_until([&](const System&) { return complete; },
-        [&](System&, econopet::Cycles) {
-            firmware.service();
-            complete = true;
-        }, cost, "firmware service");
+                         [&](System&, econopet::Cycles) {
+                             firmware.service();
+                             complete = true;
+                         },
+                         cost, "firmware service");
     EXPECT_EQ(system.time() - start, cost);
     EXPECT_FALSE(system.spi().peek_failed());
 }
@@ -120,7 +124,8 @@ TEST_F(FirmwareTest, ConfiguredRunFirmwareServiceAdapterUsesRealSpiAndDeadline) 
     firmware.mount(disk_fixture::D64::empty());
     SpiCapture capture(system);
     const auto start = system.time();
-    system.execution().within(10000)
+    system.execution()
+        .within(10000)
         .after(2, [](System& board) { board.set_external_interrupts(false, true); })
         .every(1, Scheduler::MissedService::Coalesce, firmware.service_adapter())
         .until([&](const System&) { return !capture.transactions.empty(); })
@@ -135,13 +140,12 @@ TEST_F(FirmwareTest, ConfiguredRunFirmwareServiceAdapterUsesRealSpiAndDeadline) 
 TEST_F(FirmwareTest, ConfiguredRunFirmwareAdapterRejectsForeignAndClosedSessions) {
     auto service = firmware.service_adapter();
     System other;
-    EXPECT_THROW(other.execution().within(10)
-        .every(1, Scheduler::MissedService::Reject, service).run(), std::invalid_argument);
+    EXPECT_THROW(other.execution().within(10).every(1, Scheduler::MissedService::Reject, service).run(),
+                 std::invalid_argument);
     EXPECT_FALSE(other.spi().peek_failed());
     firmware.close();
     EXPECT_THROW(firmware.service_adapter(), std::logic_error);
-    EXPECT_THROW(system.execution().within(10)
-        .every(1, ServiceTiming::AfterSlice, service).run(), std::logic_error);
+    EXPECT_THROW(system.execution().within(10).every(1, ServiceTiming::AfterSlice, service).run(), std::logic_error);
     EXPECT_FALSE(system.spi().peek_failed());
 }
 
@@ -157,11 +161,10 @@ TEST_F(FirmwareTest, SchedulerInterleavesFirmwareSpiAndExactStimulus) {
         EXPECT_FALSE(board.snapshot().spi_cs_ni);
         board.set_external_interrupts(false, true);
     });
-    scheduler.every(system.time(), 1000, Scheduler::MissedService::Coalesce,
-        [&](System&, econopet::Cycles) {
-            firmware.service();
-            complete = true;
-        });
+    scheduler.every(system.time(), 1000, Scheduler::MissedService::Coalesce, [&](System&, econopet::Cycles) {
+        firmware.service();
+        complete = true;
+    });
     scheduler.run_until([&](const System&) { return complete; }, 10000, "scheduled firmware");
     ASSERT_TRUE(applied);
     EXPECT_EQ(*applied, at);
@@ -195,7 +198,7 @@ TEST_F(FirmwareTest, FirmwareSpiAdapterReachesProductionRamAndRegisters) {
     EXPECT_EQ(system.peek(kSpiRamProbe), 0x5a);
     system.poke(kSpiRamProbe, 0x42);
     EXPECT_EQ(spi_read_at(fpga::address(kSpiRamProbe).value()), 0x42);
-    const auto enable = fpga::IeeeControl{fpga::IeeeControlBit::Enabled}.bits();
+    const auto enable = fpga::IeeeControl{fpga::IeeeControlBit::AllEmulatedUnits}.bits();
     spi_write_at(fpga::address(fpga::Register::IeeeControl).value(), enable);
     EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
     spi_write_at(fpga::address(fpga::Register::IeeeControl).value(), 0);
@@ -210,10 +213,9 @@ TEST_F(FirmwareTest, FirmwareBulkTransfersUseProductionSequentialTransactions) {
     uint8_t destination[sizeof(source)]{};
     spi_read(kSpiRamProbe.value(), sizeof(destination), destination);
     EXPECT_EQ(std::vector<uint8_t>(std::begin(destination), std::end(destination)),
-        std::vector<uint8_t>(std::begin(source), std::end(source)));
+              std::vector<uint8_t>(std::begin(source), std::end(source)));
     const std::vector<std::vector<uint8_t>> expected{
-        {0xc0, 0x12, 0x34, 0x42}, {0xa0, 0x5a}, {0xa0, 0xa5},
-        {0x40, 0x12, 0x34}, {0x20}, {0x20}, {0x20}};
+        {0xc0, 0x12, 0x34, 0x42}, {0xa0, 0x5a}, {0xa0, 0xa5}, {0x40, 0x12, 0x34}, {0x20}, {0x20}, {0x20}};
     EXPECT_EQ(capture.transactions, expected);
 }
 
@@ -243,8 +245,7 @@ TEST_F(FirmwareTest, FirmwareSameBlockKeepsOneChipSelectTransaction) {
     SpiCapture capture(system);
     const uint8_t source[] = {0x41, 0x52, 0x63};
     spi_write_same_block(kSpiRamProbe.value(), source, sizeof(source));
-    const std::vector<std::vector<uint8_t>> expected{
-        {0xc0, 0x12, 0x34, 0x41, 0x80, 0x52, 0x80, 0x63}};
+    const std::vector<std::vector<uint8_t>> expected{{0xc0, 0x12, 0x34, 0x41, 0x80, 0x52, 0x80, 0x63}};
     EXPECT_EQ(capture.transactions, expected);
     EXPECT_EQ(system.peek(kSpiRamProbe), 0x63);
     EXPECT_EQ(system.peek(kSpiRamProbe + 1), System::IdleRamByte);
@@ -263,10 +264,10 @@ TEST_F(FirmwareTest, FirmwareEmptyTransfersAndFillUseDocumentedTransactions) {
     EXPECT_EQ(capture.transactions, (std::vector<std::vector<uint8_t>>{{0x40, 0x12, 0x34}}));
     capture.transactions.clear();
     spi_fill(kSpiRamProbe.value(), 0x5a, 3);
-    const std::vector<std::vector<uint8_t>> expected{
-        {0xc0, 0x12, 0x34, 0x5a}, {0xa0, 0x5a}, {0xa0, 0x5a}};
+    const std::vector<std::vector<uint8_t>> expected{{0xc0, 0x12, 0x34, 0x5a}, {0xa0, 0x5a}, {0xa0, 0x5a}};
     EXPECT_EQ(capture.transactions, expected);
-    for (int offset = 0; offset < 3; ++offset) EXPECT_EQ(system.peek(kSpiRamProbe + offset), 0x5a);
+    for (int offset = 0; offset < 3; ++offset)
+        EXPECT_EQ(system.peek(kSpiRamProbe + offset), 0x5a);
 }
 
 // The optional adapter never falls back to an unbound or already closed board.
@@ -289,7 +290,8 @@ TEST_F(FirmwareTest, FirmwareFillPreservesProductionChunkBoundaries) {
     constexpr size_t length = TEMP_BUFFER_SIZE + 2;
     spi_fill(kSpiRamProbe.value(), 0x5a, length);
     std::vector<std::vector<uint8_t>> expected{{0xc0, 0x12, 0x34, 0x5a}};
-    for (size_t index = 1; index < TEMP_BUFFER_SIZE; ++index) expected.push_back({0xa0, 0x5a});
+    for (size_t index = 1; index < TEMP_BUFFER_SIZE; ++index)
+        expected.push_back({0xa0, 0x5a});
     expected.push_back({0xc0, 0x1a, 0x34, 0x5a});
     expected.push_back({0xa0, 0x5a});
     EXPECT_EQ(capture.transactions, expected);
@@ -319,9 +321,11 @@ TEST_F(SystemTest, FirmwareBurstDeadlineFailureReleasesSessionOwnership) {
     constexpr econopet::Cycles budget = 200;
     const auto start = system.time();
     EXPECT_THROW(system.service_until([](const System&) { return false; },
-        [&](System&, econopet::Cycles) {
-            spi_write_same_block(kSpiRamProbe.value(), source, sizeof(source));
-        }, budget, "interrupted firmware burst"), std::runtime_error);
+                                      [&](System&, econopet::Cycles) {
+                                          spi_write_same_block(kSpiRamProbe.value(), source, sizeof(source));
+                                      },
+                                      budget, "interrupted firmware burst"),
+                 std::runtime_error);
     EXPECT_EQ(system.time() - start, budget);
     EXPECT_TRUE(system.spi().peek_failed());
     EXPECT_TRUE(system.snapshot().spi_cs_ni);
@@ -333,9 +337,8 @@ TEST_F(SystemTest, FirmwareBurstDeadlineFailureReleasesSessionOwnership) {
 
 // Failure during session initialization must not retain the process-global board.
 TEST_F(SystemTest, FirmwareInitializationFailureReleasesBinding) {
-    auto observation = system.observe([](const System&) {
-        throw std::runtime_error("firmware initialization observer failure");
-    });
+    auto observation =
+        system.observe([](const System&) { throw std::runtime_error("firmware initialization observer failure"); });
     EXPECT_THROW(FirmwareSession session(system), std::runtime_error);
     EXPECT_TRUE(system.spi().peek_failed());
     System other;
@@ -344,13 +347,14 @@ TEST_F(SystemTest, FirmwareInitializationFailureReleasesBinding) {
 
 // Local ROM-style owners report failed-board teardown without aborting the runner.
 TEST_F(SystemTest, FirmwareTestSessionReportsTeardownFailureAndReleasesBinding) {
-    EXPECT_NONFATAL_FAILURE({
-        FirmwareTestSession session(system);
-        auto observation = system.observe([](const System&) {
-            throw std::runtime_error("firmware transport observer failure");
-        });
-        EXPECT_THROW(spi_read_at(kSpiRamProbe.value()), std::runtime_error);
-    }, "firmware teardown failed");
+    EXPECT_NONFATAL_FAILURE(
+        {
+            FirmwareTestSession session(system);
+            auto observation =
+                system.observe([](const System&) { throw std::runtime_error("firmware transport observer failure"); });
+            EXPECT_THROW(spi_read_at(kSpiRamProbe.value()), std::runtime_error);
+        },
+        "firmware teardown failed");
     EXPECT_TRUE(system.spi().peek_failed());
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
@@ -359,11 +363,13 @@ TEST_F(SystemTest, FirmwareTestSessionReportsTeardownFailureAndReleasesBinding) 
 // A live non-standard observer exception must reach the reporter, not terminate the runner.
 TEST_F(SystemTest, FirmwareTestSessionReportsNonStandardDestructorFailure) {
     System::ObserverSubscription observation;
-    EXPECT_NONFATAL_FAILURE({
-        FirmwareTestSession session(system);
-        session.mount(disk_fixture::D64::empty());
-        observation = system.observe([](const System&) { throw UnwindSentinel{}; });
-    }, "firmware teardown failed: non-standard exception");
+    EXPECT_NONFATAL_FAILURE(
+        {
+            FirmwareTestSession session(system);
+            session.mount(disk_fixture::D64::empty());
+            observation = system.observe([](const System&) { throw UnwindSentinel{}; });
+        },
+        "firmware teardown failed: non-standard exception");
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
     EXPECT_FALSE(test_file_registered("/disks/test.d64"));
@@ -390,9 +396,8 @@ TEST_F(FirmwareTest, FirmwareFixtureReportsNonStandardExplicitTeardownFailure) {
 // Standard fixture teardown keeps the original diagnostic through the shared reporter.
 TEST_F(FirmwareTest, FirmwareFixtureReportsOriginalStandardTeardownDiagnostic) {
     firmware.mount(disk_fixture::D64::empty());
-    auto observation = system.observe([](const System&) {
-        throw std::runtime_error("explicit teardown observer failure");
-    });
+    auto observation =
+        system.observe([](const System&) { throw std::runtime_error("explicit teardown observer failure"); });
     EXPECT_NONFATAL_FAILURE(TearDown(), "firmware teardown failed: explicit teardown observer failure");
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
@@ -415,7 +420,8 @@ TEST_F(SystemTest, FirmwareTeardownReporterRetainsOriginalExceptionAndFrozenTrac
             session.mount(disk_fixture::D64::empty());
             rx.emplace(session.trace_rx());
             observation = board.observe([standard](const System&) {
-                if (standard) throw std::runtime_error("original teardown diagnostic");
+                if (standard)
+                    throw std::runtime_error("original teardown diagnostic");
                 throw UnwindSentinel{42};
             });
         }
@@ -474,17 +480,19 @@ TEST_F(SystemTest, FirmwareExplicitCloseRethrowsNonStandardFailureAfterCleanup) 
 TEST_F(SystemTest, FirmwareNonStandardTeardownDuringUnwindPreservesOuterFailure) {
     System::ObserverSubscription observation;
     bool caught_outer = false;
-    EXPECT_NONFATAL_FAILURE({
-        try {
-            FirmwareTestSession session(system);
-            session.mount(disk_fixture::D64::empty());
-            observation = system.observe([](const System&) { throw UnwindSentinel{}; });
-            throw std::runtime_error("outer scenario failure");
-        } catch (const std::runtime_error& error) {
-            EXPECT_STREQ(error.what(), "outer scenario failure");
-            caught_outer = true;
-        }
-    }, "firmware teardown failed: non-standard exception");
+    EXPECT_NONFATAL_FAILURE(
+        {
+            try {
+                FirmwareTestSession session(system);
+                session.mount(disk_fixture::D64::empty());
+                observation = system.observe([](const System&) { throw UnwindSentinel{}; });
+                throw std::runtime_error("outer scenario failure");
+            } catch (const std::runtime_error& error) {
+                EXPECT_STREQ(error.what(), "outer scenario failure");
+                caught_outer = true;
+            }
+        },
+        "firmware teardown failed: non-standard exception");
     observation.reset();
     EXPECT_TRUE(caught_outer);
     EXPECT_FALSE(test_file_registered("/disks/test.d64"));
@@ -495,16 +503,19 @@ TEST_F(SystemTest, FirmwareNonStandardTeardownDuringUnwindPreservesOuterFailure)
 // Without a reporter, both exception domains retain the documented fail-fast policy.
 TEST_F(SystemTest, FirmwareUnhandledDestructorFailuresEmitDiagnosticsAndTerminate) {
     for (const bool standard : {false, true}) {
-        EXPECT_DEATH({
-            System::ObserverSubscription observation;
-            FirmwareSession session(system);
-            session.mount(disk_fixture::D64::empty());
-            observation = system.observe([standard](const System&) {
-                if (standard) throw std::runtime_error("unhandled standard failure");
-                throw UnwindSentinel{};
-            });
-        }, standard ? "firmware teardown failed: unhandled standard failure"
-                    : "firmware teardown failed: non-standard exception");
+        EXPECT_DEATH(
+            {
+                System::ObserverSubscription observation;
+                FirmwareSession session(system);
+                session.mount(disk_fixture::D64::empty());
+                observation = system.observe([standard](const System&) {
+                    if (standard)
+                        throw std::runtime_error("unhandled standard failure");
+                    throw UnwindSentinel{};
+                });
+            },
+            standard ? "firmware teardown failed: unhandled standard failure"
+                     : "firmware teardown failed: non-standard exception");
     }
     // Each death-test child has independent bindings, leaving the parent usable.
     EXPECT_NO_THROW(FirmwareSession next(system));
@@ -514,42 +525,45 @@ TEST_F(SystemTest, FirmwareUnhandledDestructorFailuresEmitDiagnosticsAndTerminat
 TEST_F(SystemTest, FirmwareRejectedDestructorReportsThenTerminatesInEveryGuardedContext) {
     enum class Context { Observation, PinEdit, PeripheralEdit, ScheduledStimulus, ScopedSpi, RawSpi };
     for (const auto context : {Context::Observation, Context::PinEdit, Context::PeripheralEdit,
-                              Context::ScheduledStimulus, Context::ScopedSpi, Context::RawSpi}) {
-        EXPECT_DEATH({
-            auto session = std::make_unique<FirmwareSession>(system, [](std::exception_ptr error) {
-                try {
-                    std::rethrow_exception(error);
-                } catch (const std::logic_error&) {
-                    std::fputs("reported rejected teardown: ", stderr);
+                               Context::ScheduledStimulus, Context::ScopedSpi, Context::RawSpi}) {
+        EXPECT_DEATH(
+            {
+                auto session = std::make_unique<FirmwareSession>(system, [](std::exception_ptr error) {
+                    try {
+                        std::rethrow_exception(error);
+                    } catch (const std::logic_error&) {
+                        std::fputs("reported rejected teardown: ", stderr);
+                    }
+                });
+                session->mount(disk_fixture::D64::empty());
+                switch (context) {
+                case Context::Observation: {
+                    auto observation = system.observe([&](const System&) { session.reset(); });
+                    system.tick(1);
+                    break;
                 }
-            });
-            session->mount(disk_fixture::D64::empty());
-            switch (context) {
-            case Context::Observation: {
-                auto observation = system.observe([&](const System&) { session.reset(); });
-                system.tick(1);
-                break;
-            }
-            case Context::PinEdit:
-                system.raw_stimulus([&](auto&) { session.reset(); });
-                break;
-            case Context::PeripheralEdit:
-                system.io().pia1().inputs([&](auto&) { session.reset(); });
-                break;
-            case Context::ScheduledStimulus:
-                system.execution().within(10)
-                    .after(1, [&](System&) { session.reset(); })
-                    .run("rejected session destruction");
-                break;
-            case Context::ScopedSpi:
-                system.spi().transaction([&](auto&) { session.reset(); });
-                break;
-            case Context::RawSpi:
-                system.drive_spi(false, false, false);
-                session.reset();
-                break;
-            }
-        }, "reported rejected teardown: firmware teardown cannot abandon an active session");
+                case Context::PinEdit:
+                    system.raw_stimulus([&](auto&) { session.reset(); });
+                    break;
+                case Context::PeripheralEdit:
+                    system.io().pia1().inputs([&](auto&) { session.reset(); });
+                    break;
+                case Context::ScheduledStimulus:
+                    system.execution()
+                        .within(10)
+                        .after(1, [&](System&) { session.reset(); })
+                        .run("rejected session destruction");
+                    break;
+                case Context::ScopedSpi:
+                    system.spi().transaction([&](auto&) { session.reset(); });
+                    break;
+                case Context::RawSpi:
+                    system.drive_spi(false, false, false);
+                    session.reset();
+                    break;
+                }
+            },
+            "reported rejected teardown: firmware teardown cannot abandon an active session");
     }
     // The rejecting child processes must never corrupt the parent registry.
     EXPECT_NO_THROW(FirmwareSession next(system));
@@ -634,15 +648,16 @@ TEST_F(SystemTest, FirmwareMountRejectsSharedRegistryCollisionWithoutClaimingIt)
     {
         FirmwareSession session(system);
         const auto start = system.time();
-        expect_failure<std::invalid_argument>(system, "firmware mount",
-            [&] { session.mount(disk_fixture::D64::empty()); }, "already registered");
+        expect_failure<std::invalid_argument>(
+            system, "firmware mount", [&] { session.mount(disk_fixture::D64::empty()); }, "already registered");
         EXPECT_EQ(system.time(), start);
         session.close();
     }
     // Closing the rejecting session must preserve the original backing bytes.
     FILE* file = std::fopen(path, "rb");
     ASSERT_NE(file, nullptr);
-    for (const auto byte : original) EXPECT_EQ(std::fgetc(file), byte);
+    for (const auto byte : original)
+        EXPECT_EQ(std::fgetc(file), byte);
     EXPECT_EQ(std::fgetc(file), EOF);
     EXPECT_EQ(std::fclose(file), 0);
     test_unregister_file(path);
@@ -695,16 +710,18 @@ TEST_F(FirmwareTest, FirmwareOperationsRejectObservationAndInputEditReentry) {
 TEST_F(FirmwareTest, FirmwareOperationsRejectScheduledStimulusReentry) {
     firmware.mount(disk_fixture::D64::empty());
     bool checked = false;
-    system.execution().within(10000)
-        .after(7, [&](System& board) {
-            EXPECT_FALSE(board.snapshot().spi_cs_ni);
-            const auto at = board.time();
-            EXPECT_THROW(firmware.close(), std::logic_error);
-            EXPECT_THROW(firmware.mount(disk_fixture::D64::empty(), "nested.d64"), std::logic_error);
-            EXPECT_THROW(firmware.service(), std::logic_error);
-            EXPECT_EQ(board.time(), at);
-            checked = true;
-        })
+    system.execution()
+        .within(10000)
+        .after(7,
+               [&](System& board) {
+                   EXPECT_FALSE(board.snapshot().spi_cs_ni);
+                   const auto at = board.time();
+                   EXPECT_THROW(firmware.close(), std::logic_error);
+                   EXPECT_THROW(firmware.mount(disk_fixture::D64::empty(), "nested.d64"), std::logic_error);
+                   EXPECT_THROW(firmware.service(), std::logic_error);
+                   EXPECT_EQ(board.time(), at);
+                   checked = true;
+               })
         .service(firmware.service_adapter())
         .until([&](const System&) { return checked; })
         .run("firmware stimulus guard");

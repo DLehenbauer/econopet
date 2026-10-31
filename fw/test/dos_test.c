@@ -9186,6 +9186,32 @@ START_TEST(test_copy_cross_drive_read_and_allocation_status) {
 }
 END_TEST
 
+// CHKIO reports the last LOOKUP drive before CY selects its output drive.
+START_TEST(test_copy_cross_drive_collision_retains_lookup_drive) {
+    const unsigned int format = (unsigned int)_i % 3u, target = (unsigned int)_i / 3u;
+    const unsigned int source = target ^ 1u;
+    dos_media_bank_t bank = {0};
+    image_t images[2];
+    mount_blank(&bank, &images[0], format);
+    mount_peer(&bank, &images[1], format);
+    fixture_file(&images[0], format, 0, "SAME", DISKIMAGE_FTYPE_SEQ, 0x20, 22);
+    fixture_file(&images[1], format, 0, "SAME", DISKIMAGE_FTYPE_SEQ, 0x60, 22);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    char command[sizeof("C0:SAME=1:SAME")], expected[sizeof("63, FILE EXISTS,00,00,1\r")];
+    snprintf(command, sizeof(command), "C%c:SAME=%c:SAME", '0' + (int)target, '0' + (int)source);
+    send_command(&unit, &bank, command);
+    finish_open(&unit, &bank);
+    snprintf(expected, sizeof(expected), "63, FILE EXISTS,00,00%s", format == 0 ? "\r" : source ? ",1\r" : ",0\r");
+    ck_assert_str_eq(unit.status, expected);
+    ck_assert_uint_eq(unit.selected_drive, source);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(images[0].writes + images[1].writes, 0);
+    free(images[0].bytes);
+    free(images[1].bytes);
+}
+END_TEST
+
 // A successful peer replacement can retire lookup's chain before its deferred OPEN.
 START_TEST(test_copy_revalidates_source_after_successful_peer_close) {
     const unsigned int format = (unsigned int)_i % 3u;
@@ -12265,6 +12291,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_respects_retained_reclaim_entry, 0, 15);
     tcase_add_loop_test(core, test_copy_append_reselects_owner_after_peer_error, 0, 3);
     tcase_add_loop_test(core, test_copy_cross_drive_read_and_allocation_status, 0, 12);
+    tcase_add_loop_test(core, test_copy_cross_drive_collision_retains_lookup_drive, 0, 6);
     tcase_add_loop_test(core, test_copy_revalidates_source_after_successful_peer_close, 0, 12);
     tcase_add_loop_test(core, test_copy_retires_active_binding_before_sector_reuse, 0, 6);
     tcase_add_loop_test(core, test_copy_all_allows_close_of_completed_source, 0, 6);

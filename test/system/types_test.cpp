@@ -27,10 +27,8 @@ enum class WideBit : uint16_t { Byte = 0xff, High = 0x100, All = Byte | High };
 using WideFlags = Flags<WideBit>;
 
 // Check multiplier participation without triggering an implicit numeric conversion.
-template<class Multiplier>
-concept CycleMultiplier = requires(Cycles duration, Multiplier count) {
-    duration * count;
-};
+template <class Multiplier>
+concept CycleMultiplier = requires(Cycles duration, Multiplier count) { duration * count; };
 
 static_assert(CycleMultiplier<int>);
 static_assert(CycleMultiplier<uint64_t>);
@@ -107,6 +105,9 @@ TEST(BoardTypes, IeeeEncodingsMatchHardware) {
     EXPECT_EQ(ECONOPET_WB_IEEE_CTRL_ADDR, 0x70000u);
     EXPECT_EQ(ECONOPET_WB_IEEE_TXS_LAST_ADDR, 0x70007u);
     EXPECT_EQ(ECONOPET_IEEE_CTRL_FLUSH_MASK, 0x02u);
+    EXPECT_EQ(ECONOPET_IEEE_CTRL_UNIT_MASK_SHIFT, 4u);
+    EXPECT_EQ(ECONOPET_IEEE_CTRL_UNIT_MASK, 0xf0u);
+    EXPECT_EQ(ECONOPET_IEEE_CTRL_RD_ENABLE_MASK, 0x01u);
     EXPECT_EQ(ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK, 0x02u);
     EXPECT_EQ(ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK, 0x04u);
     EXPECT_EQ(ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK, 0x08u);
@@ -176,15 +177,13 @@ TEST(BoardTypes, DurationsCheckConstructionAndHalfTicks) {
     EXPECT_EQ(Cycles{3}.half_ticks(), 6u);
     EXPECT_EQ(Cycles::from_half_ticks(6), Cycles{3});
     EXPECT_EQ(Cycles{Cycles::Maximum}.half_ticks(), Cycles::Maximum * HalfTicksPerCycle);
-    EXPECT_EQ(Cycles::from_half_ticks(Cycles::Maximum * HalfTicksPerCycle),
-        Cycles{Cycles::Maximum});
+    EXPECT_EQ(Cycles::from_half_ticks(Cycles::Maximum * HalfTicksPerCycle), Cycles{Cycles::Maximum});
     EXPECT_THROW(Cycles{-1}, std::out_of_range);
     EXPECT_THROW(Cycles{std::numeric_limits<int64_t>::min()}, std::out_of_range);
     EXPECT_THROW(Cycles{Cycles::Maximum + 1}, std::out_of_range);
     EXPECT_THROW(Cycles{std::numeric_limits<uint64_t>::max()}, std::out_of_range);
     EXPECT_THROW(Cycles::from_half_ticks(1), std::logic_error);
-    EXPECT_THROW(Cycles::from_half_ticks(std::numeric_limits<uint64_t>::max()),
-        std::logic_error);
+    EXPECT_THROW(Cycles::from_half_ticks(std::numeric_limits<uint64_t>::max()), std::logic_error);
 }
 
 // Duration arithmetic never wraps at either representable endpoint.
@@ -254,8 +253,7 @@ TEST(BoardTypes, FlagSetsCheckMasksAndPreserveTheirDomain) {
     EXPECT_NE(empty, ready_reset);
     EXPECT_THROW(CpuControl::from_bits(8), std::invalid_argument);
     EXPECT_THROW(CpuControl::from_bits(0x100), std::invalid_argument);
-    EXPECT_THROW(CpuControl::from_bits(std::numeric_limits<uint64_t>::max()),
-        std::invalid_argument);
+    EXPECT_THROW(CpuControl::from_bits(std::numeric_limits<uint64_t>::max()), std::invalid_argument);
     EXPECT_THROW(CpuControl{static_cast<CpuControlBit>(8)}, std::invalid_argument);
     EXPECT_THROW(ready_reset.contains(static_cast<CpuControlBit>(8)), std::invalid_argument);
 }
@@ -267,10 +265,8 @@ TEST(BoardTypes, FlagSetsRejectBitsBeyondByteCapacity) {
     EXPECT_EQ(WideFlags::from_bits(0).bits(), 0);
     EXPECT_TRUE(byte.contains(WideBit::Byte));
     EXPECT_EQ(WideFlags{WideBit::Byte}, byte);
-    EXPECT_THROW(WideFlags::from_bits(std::to_underlying(WideBit::High)),
-        std::invalid_argument);
-    EXPECT_THROW(WideFlags::from_bits(std::to_underlying(WideBit::All)),
-        std::invalid_argument);
+    EXPECT_THROW(WideFlags::from_bits(std::to_underlying(WideBit::High)), std::invalid_argument);
+    EXPECT_THROW(WideFlags::from_bits(std::to_underlying(WideBit::All)), std::invalid_argument);
     EXPECT_THROW(WideFlags{WideBit::High}, std::invalid_argument);
     EXPECT_THROW(WideFlags{WideBit::All}, std::invalid_argument);
     EXPECT_THROW(byte.contains(WideBit::High), std::invalid_argument);

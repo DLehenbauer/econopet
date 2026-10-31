@@ -101,18 +101,26 @@
 #define ECONOPET_WB_IEEE_TXS_ADDR 0x70006u
 #define ECONOPET_WB_IEEE_TXS_LAST_ADDR 0x70007u
 
-// IEEE control-write masks (See common_pkg.sv for more details)
-#define ECONOPET_IEEE_CTRL_ENABLE_MASK 0x01u
+// IEEE control-write masks (See common_pkg.sv for more details).
+// Bit 0 is reserved and ignored. FIFO flushes are one-shot requests.
 #define ECONOPET_IEEE_CTRL_FLUSH_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK 0x04u
 #define ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK 0x08u
+// Bits 4-7 select emulated devices 8-11: 1 = emulate, 0 = do not emulate.
+// Every CTRL write replaces this mask, including writes requesting a flush.
+// Zero disables emulation and leaves physical IEEE I/O untouched. Any set bit
+// enables bus interception, masking physical devices at ALL addresses.
+// This is not a per-address switch between emulated and physical devices.
+#define ECONOPET_IEEE_CTRL_UNIT_MASK_SHIFT 4u
+#define ECONOPET_IEEE_CTRL_UNIT_MASK 0xf0u
 
 // IEEE control-read masks (See common_pkg.sv for more details)
+// Read-only enabled indication: at least one emulated device is selected.
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
-#define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u  // RX-head EOI, valid with RX_AVAIL.
-#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u // Ordered boundary: zero = ATN release, else listener mask.
+#define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u        // RX-head EOI, valid with RX_AVAIL.
+#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u    // Ordered boundary: zero = ATN release, else listener mask.
 #define ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK 0x20u // Status DAV awaits acknowledgement.
 #define ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK 0x40u // Ordered source progress/IDLE metadata.
 

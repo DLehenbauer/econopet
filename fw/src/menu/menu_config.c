@@ -21,9 +21,9 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
     log_info("Loading config: %d", selected_config);
 
-    // Suspend the CPU while we're loading the config.
+    // Suspend the CPU and remove the previous configuration's disks first.
     set_cpu(CPU_HALT);
-    ieee_drive_unmount_all();
+    vet(ieee_drive_unmount_all(), "Failed to unmount IEEE disks");
 
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
     // transferred on the data bus.  This has the effect of making it appear that unmapped
@@ -49,7 +49,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config) {
         .on_exit_config = NULL,
         .on_default = NULL,
     };
-    
+
     parse_config_file("/config.yaml", &sink, selected_config);
     roms_refresh_char_rom();
 }
@@ -62,22 +62,17 @@ typedef struct context_s {
 } context_t;
 
 static void on_default_callback(void* context, const char* id) {
-    context_t* const ctx = (context_t*) context;
+    context_t* const ctx = (context_t*)context;
     strncpy(ctx->default_id, id, sizeof(ctx->default_id) - 1);
     ctx->default_id[sizeof(ctx->default_id) - 1] = '\0';
 }
 
 static void on_config_callback(void* context, const char* id, const char* name) {
-    context_t* const ctx = (context_t*) context;
-    window_puts_n(
-        ctx->window,
-        window_xy(ctx->window, 0, ctx->config_count),
-        name,
-        ctx->window->width
-    );
+    context_t* const ctx = (context_t*)context;
+    window_puts_n(ctx->window, window_xy(ctx->window, 0, ctx->config_count), name, ctx->window->width);
 
     if (ctx->default_id[0] != '\0' && strcmp(id, ctx->default_id) == 0) {
-        ctx->default_index = (int) ctx->config_count;
+        ctx->default_index = (int)ctx->config_count;
     }
 
     ctx->config_count++;
@@ -87,7 +82,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     context_t context = {
         .window = window,
         .config_count = 0,
-        .default_id = { 0 },
+        .default_id = {0},
         .default_index = -1,
     };
 
@@ -107,8 +102,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     bool has_default = context.default_id[0] != '\0';
     bool default_matched = has_default && context.default_index >= 0;
 
-    vet(!has_default || default_matched,
-        "/config.yaml: unknown default '%s'", context.default_id);
+    vet(!has_default || default_matched, "/config.yaml: unknown default '%s'", context.default_id);
 
     // If the machine was powered on and a default config was specified, automatically
     // boot it without showing the menu.
@@ -121,10 +115,8 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     pet_nmi();
 
     // Pre-select the default config (if found) or the first config
-    unsigned int selected_config = default_matched
-        ? (unsigned int) context.default_index
-        : 0;
-    
+    unsigned int selected_config = default_matched ? (unsigned int)context.default_index : 0;
+
     window_reverse(window, window_xy(window, 0, selected_config), 40);
 
     while (true) {
@@ -138,32 +130,32 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         } while (ch == EOF);
 
         switch (ch) {
-            case KEY_UP: {
-                window_reverse(window, window_xy(window, 0, selected_config), 40);
-                selected_config = (selected_config + context.config_count - 1) % context.config_count;
-                window_reverse(window, window_xy(window, 0, selected_config), 40);
-                break;
-            }
-            case KEY_DOWN: 
-            case KEY_BTN_SHORT: {
-                window_reverse(window, window_xy(window, 0, selected_config), 40);
-                selected_config = (selected_config + 1) % context.config_count;
-                window_reverse(window, window_xy(window, 0, selected_config), 40);
-                break;
-            }
-            case '\r':
-            case '\n':
-            case KEY_BTN_LONG: {
-                return load_config(setup_sink, selected_config);
-            }
-            case 'T':
-            case 't': {
-                set_cpu(CPU_HALT);
-                test_ram();
-            }
+        case KEY_UP: {
+            window_reverse(window, window_xy(window, 0, selected_config), 40);
+            selected_config = (selected_config + context.config_count - 1) % context.config_count;
+            window_reverse(window, window_xy(window, 0, selected_config), 40);
+            break;
+        }
+        case KEY_DOWN:
+        case KEY_BTN_SHORT: {
+            window_reverse(window, window_xy(window, 0, selected_config), 40);
+            selected_config = (selected_config + 1) % context.config_count;
+            window_reverse(window, window_xy(window, 0, selected_config), 40);
+            break;
+        }
+        case '\r':
+        case '\n':
+        case KEY_BTN_LONG: {
+            return load_config(setup_sink, selected_config);
+        }
+        case 'T':
+        case 't': {
+            set_cpu(CPU_HALT);
+            test_ram();
+        }
 
-            default:
-                break;
+        default:
+            break;
         }
     }
 }

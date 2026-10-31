@@ -6132,6 +6132,8 @@ static void copy_lookup_finish(dos_unit_t* const unit, dos_media_bank_t* const m
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rename
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/lookup
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/lookup
     //
     // CHKIN checks all source entries before CHKIO rejects existing output.
     // COPY/COP05 instead rebinds the first source as IWSA for self-concat,
@@ -6215,6 +6217,8 @@ static void copy_lookup_finish(dos_unit_t* const unit, dos_media_bank_t* const m
     }
     // Without the self-concat exception, an existing target is FILE EXISTS.
     if (work->found & 1u) {
+        // CY calls CHKIO before selecting the output drive. Keep LOOKUP's drive.
+        unit->selected_drive = work->drive;
         dos_status(unit, model, DOS_STATUS_FILE_EXISTS, 0, 0);
         copy_finish(unit);
         return;

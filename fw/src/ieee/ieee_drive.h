@@ -10,19 +10,9 @@
 // (device - 8) * 2 + drive.
 //
 // The FPGA (ieee.sv) runs the bus handshake and exposes byte FIFOs over
-// SPI/Wishbone; this module implements the DOS layer: OPEN by filename,
-// the channel-15 status channel per unit, sequential streaming with EOI,
-// and CBM relative files (Super-OS/9).
-//
-
-// Capacity for ordinary formatted DOS status lines, not arbitrary channel-15
-// data such as memory-read replies. DOS_4040 and DOS_8250 ramvar place ERRBUF
-// in the final 36 bytes before $4400. Reserve that text, its transmitted CR,
-// and a host C terminating null (which is not transmitted).
-// Sources: https://github.com/mist64/cbmsrc/blob/master/DOS_4040/ramvar
-//          https://github.com/mist64/cbmsrc/blob/master/DOS_8250/ramvar
-#define IEEE_STATUS_TEXT_MAX 36u
-#define IEEE_STATUS_LINE_CAPACITY (IEEE_STATUS_TEXT_MAX + 1u + 1u)
+// SPI/Wishbone. The facade routes requests to the ROM-structured DOS engine,
+// including ordinary and REL reads/writes, commands, CLOSE and channel-15
+// status. Unsupported operations explicitly fail. There is no legacy fallback.
 
 // Initializes IEEE-488 emulation with no mounted images and fresh DOS/channel
 // state. The fabric remains transparent until an image is mounted.
@@ -38,11 +28,12 @@ void ieee_drive_init(void);
 //       firmware does not detect or recover from an independent fabric reset.
 void ieee_drive_reset(void);
 
-// Removes all mounted disk images.
-void ieee_drive_unmount_all(void);
+// Removes all mounted images. Failure retains native media for a later retry.
+bool ieee_drive_unmount_all(void);
 
-// Mounts a path relative to /disks into a slot (0-7). Returns false when the
-// file was not found or is not a supported disk image. A full /disks/ path
+// Mounts a path relative to /disks into a slot (0-7), or removes it for NULL.
+// Returns false for unavailable/unsupported media, a type mismatch with the
+// other slot, or a busy bus, retaining the old unit. A full /disks/ path
 // exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
 bool ieee_drive_mount(unsigned int slot, const char* filename);
 

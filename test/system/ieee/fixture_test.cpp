@@ -25,8 +25,7 @@ TEST_P(KernalFixtureTest, ResolvesEntriesAndRejectsUnsupportedRoutines) {
     EXPECT_EQ(rom.entry(KernalRoutine::Cint), entries.Cint);
     EXPECT_EQ(rom.entry(KernalRoutine::Talk), entries.Talk);
     EXPECT_EQ(rom.entry(KernalRoutine::Openi), entries.Openi);
-    EXPECT_NE(rom.name(KernalRoutine::Talk).find(test_rom::metadata(GetParam()).identity),
-              std::string::npos);
+    EXPECT_NE(rom.name(KernalRoutine::Talk).find(test_rom::metadata(GetParam()).identity), std::string::npos);
     system.poke(econopet::SramAddress{(entries.Cint).value()}, 0);
     EXPECT_EQ(rom.entry(KernalRoutine::Cint), entries.Cint);
     EXPECT_THROW(rom.entry(static_cast<KernalRoutine>(999)), std::invalid_argument);
@@ -43,9 +42,7 @@ TEST_P(KernalFixtureTest, ProgramHasNoImplicitIeeeInitialization) {
     auto test = rom.program();
     const auto answer = test.byte("answer");
     const auto started = system.time();
-    const auto result = test.within(FixtureBudget).run([&](auto& p) {
-        p.lda(imm(0x42)).sta(answer);
-    });
+    const auto result = test.within(FixtureBudget).run([&](auto& p) { p.lda(imm(0x42)).sta(answer); });
     EXPECT_EQ(result[answer], 0x42);
     EXPECT_EQ(result.started(), started);
     EXPECT_LE(result.completed() - started, FixtureBudget);
@@ -61,12 +58,14 @@ TEST_P(KernalFixtureTest, ConfiguredRunSharesRelativeTimingVocabulary) {
     auto test = rom.program();
     const auto answer = test.byte("answer");
     unsigned calls = 0;
-    const auto result = test.within(FixtureBudget)
-        .after(0, [](System& board) { board.set_external_interrupts(false, true); }, RunAnchor::CpuRelease)
-        .every(5, MissedService::Reject,
-            [&](System&, econopet::Cycles) { ++calls; }, RunAnchor::CpuRelease)
-        .until([](const System&) { return true; })
-        .run([&](auto& p) { p.lda(imm(0x42)).sta(answer); });
+    const auto result =
+        test.within(FixtureBudget)
+            .after(
+                0, [](System& board) { board.set_external_interrupts(false, true); }, RunAnchor::CpuRelease)
+            .every(
+                5, MissedService::Reject, [&](System&, econopet::Cycles) { ++calls; }, RunAnchor::CpuRelease)
+            .until([](const System&) { return true; })
+            .run([&](auto& p) { p.lda(imm(0x42)).sta(answer); });
     EXPECT_EQ(result[answer], 0x42);
     EXPECT_GT(calls, 0);
     EXPECT_FALSE(system.peek_stimulus().cpu_nmi_n_i);
@@ -81,8 +80,8 @@ TEST_P(KernalFixtureTest, ExplicitSetupEmitsRealFileAndDeviceInstructions) {
     const auto device = zero.byte("device", KernalWorkspace::Device.value());
     const auto secondary = zero.byte("secondary", KernalWorkspace::Secondary.value());
     const auto length = zero.byte("filename length", KernalWorkspace::FilenameLength.value());
-    const auto pointer = zero.word("filename pointer", KernalWorkspace::Filename.value(),
-        test_asm::ByteOrder::LittleEndian);
+    const auto pointer =
+        zero.word("filename pointer", KernalWorkspace::Filename.value(), test_asm::ByteOrder::LittleEndian);
     const auto payload = test.lower_bank("payload").buffer("filename", 0, sizeof(filename));
     const auto status = zero.byte("status", KernalWorkspace::Status.value());
     test.capture(status);
@@ -105,8 +104,7 @@ TEST_P(KernalFixtureTest, ExplicitSetupEmitsRealFileAndDeviceInstructions) {
 }
 
 // Exercise real ROM initialization once, then preserve its I/O state across a private gate.
-template<class Fixture>
-void check_rom_phases(System& board, Fixture& rom) {
+template <class Fixture> void check_rom_phases(System& board, Fixture& rom) {
     auto test = rom.program(test_asm::ProgramMode::Phased);
     const auto answer = test.byte("answer");
     const auto other = test.byte("other");
@@ -122,9 +120,7 @@ void check_rom_phases(System& board, Fixture& rom) {
     EXPECT_EQ(test.capture(paused)[answer], 0x31);
     const auto orb = board.ieee().peek_via_orb();
     bool reset_seen = false;
-    auto reset_observation = board.observe([&](const System& observed) {
-        reset_seen |= observed.cpu().peek_reset();
-    });
+    auto reset_observation = board.observe([&](const System& observed) { reset_seen |= observed.cpu().peek_reset(); });
     const auto writes = board.io().pia2().writes().count();
     board.tick(20);
     EXPECT_EQ(test.capture(paused)[answer], 0x31);
@@ -151,11 +147,10 @@ TEST_F(SystemTest, WaterlooFixturePhasesPreserveRealRomInitializedIeeeState) {
 }
 
 // Replacing the revision rejects old phase capabilities without trying to release them.
-template<class Fixture>
-void check_replaced_phase(System& board, Fixture& rom, test_rom::Set replacement) {
+template <class Fixture> void check_replaced_phase(System& board, Fixture& rom, test_rom::Set replacement) {
     auto test = rom.program(test_asm::ProgramMode::Phased);
-    auto paused = test.within(FixtureBudget).pause([](auto& p) { p.pause("first"); },
-        [](System& board, econopet::Cycles) { board.tick(1); });
+    auto paused = test.within(FixtureBudget)
+                      .pause([](auto& p) { p.pause("first"); }, [](System& board, econopet::Cycles) { board.tick(1); });
     board.cpu().assert_reset();
     board.load_rom_set(replacement, System::FixtureOverlap::Replace);
     const auto started = board.time();
@@ -168,7 +163,7 @@ void check_replaced_phase(System& board, Fixture& rom, test_rom::Set replacement
 TEST_P(KernalFixtureTest, PhasesRejectReplacedRevisionWithoutReleaseOrCapture) {
     KernalFixture rom(system, GetParam());
     check_replaced_phase(system, rom,
-        GetParam() == test_rom::Set::Upgrade ? test_rom::Set::Rom4 : test_rom::Set::Upgrade);
+                         GetParam() == test_rom::Set::Upgrade ? test_rom::Set::Rom4 : test_rom::Set::Upgrade);
 }
 
 TEST_F(SystemTest, WaterlooFixturePhasesRejectReplacedRevisionWithoutReleaseOrCapture) {
@@ -176,11 +171,10 @@ TEST_F(SystemTest, WaterlooFixturePhasesRejectReplacedRevisionWithoutReleaseOrCa
     check_replaced_phase(system, rom, test_rom::Set::Rom4);
 }
 
-INSTANTIATE_TEST_SUITE_P(Pet, KernalFixtureTest,
-    testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4),
-    [](const testing::TestParamInfo<test_rom::Set>& info) {
-        return info.param == test_rom::Set::Upgrade ? "Rom2" : "Rom4";
-    });
+INSTANTIATE_TEST_SUITE_P(Pet, KernalFixtureTest, testing::Values(test_rom::Set::Upgrade, test_rom::Set::Rom4),
+                         [](const testing::TestParamInfo<test_rom::Set>& info) {
+                             return info.param == test_rom::Set::Upgrade ? "Rom2" : "Rom4";
+                         });
 
 TEST_F(SystemTest, RomFixturesRejectMismatchedRevisionsWithoutMutation) {
     const auto started = system.time();
@@ -215,7 +209,8 @@ TEST_F(SystemTest, RomProgramRechecksRevisionAfterAssembly) {
     EXPECT_THROW(test.within(FixtureBudget).run([&](auto& p) {
         p.lda(imm(0x42)).sta(answer);
         system.load_rom_set(test_rom::Set::Rom4, System::FixtureOverlap::Replace);
-    }), std::logic_error);
+    }),
+                 std::logic_error);
     EXPECT_EQ(system.time(), started);
     EXPECT_EQ(system.peek(econopet::SramAddress{rom.code.start().value()}), original);
 }
@@ -224,14 +219,18 @@ TEST_F(SystemTest, RomProgramRechecksRevisionDuringFirmwareStyleService) {
     KernalFixture rom(system, test_rom::Set::Upgrade);
     auto test = rom.program();
     bool serviced = false;
-    EXPECT_THROW(test.within(FixtureBudget).run([](auto& p) {
-        const auto park = p.mark("park");
-        p.jmp(park);
-    }, [&](System& board, econopet::Cycles) {
-        serviced = true;
-        board.cpu().assert_reset();
-        board.load_rom_set(test_rom::Set::Rom4, System::FixtureOverlap::Replace);
-    }), std::logic_error);
+    EXPECT_THROW(test.within(FixtureBudget)
+                     .run(
+                         [](auto& p) {
+                             const auto park = p.mark("park");
+                             p.jmp(park);
+                         },
+                         [&](System& board, econopet::Cycles) {
+                             serviced = true;
+                             board.cpu().assert_reset();
+                             board.load_rom_set(test_rom::Set::Rom4, System::FixtureOverlap::Replace);
+                         }),
+                 std::logic_error);
     EXPECT_TRUE(serviced);
     EXPECT_TRUE(system.cpu().peek_reset());
     EXPECT_EQ(system.selected_rom()->set, test_rom::Set::Rom4);
@@ -243,9 +242,7 @@ TEST_F(SystemTest, RomProgramRemainsBoundAfterFixtureDestruction) {
         return rom.program();
     }();
     const auto answer = test.byte("answer");
-    const auto result = test.within(FixtureBudget).run([&](auto& p) {
-        p.lda(imm(0x42)).sta(answer);
-    });
+    const auto result = test.within(FixtureBudget).run([&](auto& p) { p.lda(imm(0x42)).sta(answer); });
     EXPECT_EQ(result[answer], 0x42);
 }
 
@@ -279,7 +276,7 @@ TEST_F(SystemTest, WaterlooFixtureNativeSetupExplicitlyClearsHooksBeforeIeeeInit
 
 TEST_F(SystemTest, WaterlooFixtureNativeHooksPermitRealUntalkTransport) {
     WaterlooFixture rom(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     auto wire = system.trace_ieee();
     const auto checkpoint = system.cpu(CPU_SOFT_6809).peek_fetch_checkpoint();
     auto test = rom.program();
@@ -327,8 +324,7 @@ TEST_F(SystemTest, WaterlooFixtureExplicitInitializerEstablishesRomRegisterState
 }
 
 // Exercise the explicit scenario path independently of the convenience builder.
-template<class Fixture>
-void check_explicit_rom_run(System& board, Fixture& rom) {
+template <class Fixture> void check_explicit_rom_run(System& board, Fixture& rom) {
     test_asm::Program<typename Fixture::Cpu, System> program(rom, rom.code);
     const auto marker = rom.completion(rom.completion_region);
     program.lda(imm(0x52)).sta(rom.results.start()).finish(marker);
@@ -359,12 +355,13 @@ TEST_F(SystemTest, RomFixtureExplicitBudgetServiceRejectsRevisionReplacement) {
     p.jmp(park).finish(rom.completion(rom.completion_region));
     bool serviced = false;
     EXPECT_THROW(rom.run(p, rom.results, FixtureBudget, "explicit stale revision",
-        [&](System& board, econopet::Cycles) {
-            serviced = true;
-            board.cpu().assert_reset();
-            board.load_rom_set(test_rom::Set::Rom4, System::FixtureOverlap::Replace);
-            board.tick(1);
-        }), std::logic_error);
+                         [&](System& board, econopet::Cycles) {
+                             serviced = true;
+                             board.cpu().assert_reset();
+                             board.load_rom_set(test_rom::Set::Rom4, System::FixtureOverlap::Replace);
+                             board.tick(1);
+                         }),
+                 std::logic_error);
     EXPECT_TRUE(serviced);
     EXPECT_EQ(system.selected_rom()->set, test_rom::Set::Rom4);
 }
@@ -386,20 +383,22 @@ TEST_F(SystemTest, WaterlooFixtureProgramOwnsCpuStackAndExplicitFileSetup) {
     EXPECT_EQ(result[answer], 0x42);
     EXPECT_EQ(system.snapshot().cpu_selection_o, std::to_underlying(CPU_SOFT_6809));
     EXPECT_EQ(result[direct.word(WaterlooWorkspace::ActiveBlock.value(), test_asm::ByteOrder::BigEndian)],
-        WaterlooWorkspace::Block.value());
+              WaterlooWorkspace::Block.value());
     EXPECT_EQ(result[block.byte(WaterlooWorkspace::Primary - WaterlooWorkspace::Block)], 9);
     EXPECT_EQ(result[block.byte(WaterlooWorkspace::Secondary - WaterlooWorkspace::Block)], FileChannel);
     EXPECT_EQ(result[block.byte(WaterlooWorkspace::DeviceCode - WaterlooWorkspace::Block)], 0x81);
     EXPECT_EQ(result[block.word(WaterlooWorkspace::RecordSizeHigh - WaterlooWorkspace::Block,
-        test_asm::ByteOrder::BigEndian)], 1);
+                                test_asm::ByteOrder::BigEndian)],
+              1);
     EXPECT_EQ(result[block.word(WaterlooWorkspace::WaitParameterHigh - WaterlooWorkspace::Block,
-        test_asm::ByteOrder::BigEndian)], 0);
+                                test_asm::ByteOrder::BigEndian)],
+              0);
     EXPECT_EQ(result[block.byte(WaterlooWorkspace::TransferState - WaterlooWorkspace::Block)], 0);
     EXPECT_EQ(result[block.byte(WaterlooWorkspace::DiskFlags - WaterlooWorkspace::Block)], 0x40);
     EXPECT_EQ(result[direct.word(WaterlooWorkspace::FilenameCursor.value(), test_asm::ByteOrder::BigEndian)],
-        WaterlooWorkspace::Filename.value());
+              WaterlooWorkspace::Filename.value());
     EXPECT_EQ(result[block.slice(WaterlooWorkspace::Filename - WaterlooWorkspace::Block, sizeof(filename))],
-        (std::vector<uint8_t>{'T', 'E', 'S', 'T'}));
+              (std::vector<uint8_t>{'T', 'E', 'S', 'T'}));
     EXPECT_EQ(system.io().pia2().writes().count(), 0);
 }
 
@@ -456,26 +455,27 @@ TEST_F(SystemTest, RomFixtureFileValidationRejectsWaterlooBoundaryBeforeEmission
 }
 
 // Run maximum-sized literal emission, native setup and both phase handshakes together.
-template<class Fixture>
+template <class Fixture>
 void check_maximum_filename(System& board, Fixture& rom, size_t size, test_asm::ProgramMode mode) {
     constexpr bool kernal = std::is_same_v<typename Fixture::Cpu, test_asm::Mos6502>;
     auto test = rom.program(mode);
     const auto answer = test.byte("answer");
     auto data = test.lower_bank(kernal ? "payload" : "control block and filename");
-    const auto filename = data.buffer("maximum filename",
-        kernal ? 0 : WaterlooWorkspace::Filename - WaterlooWorkspace::Block, size);
+    const auto filename =
+        data.buffer("maximum filename", kernal ? 0 : WaterlooWorkspace::Filename - WaterlooWorkspace::Block, size);
     const auto pointer = [&] {
         if constexpr (kernal)
-            return test.lower_bank("zero page").word("filename pointer", KernalWorkspace::Filename.value(),
-                test_asm::ByteOrder::LittleEndian);
+            return test.lower_bank("zero page")
+                .word("filename pointer", KernalWorkspace::Filename.value(), test_asm::ByteOrder::LittleEndian);
         else
-            return test.lower_bank("direct page").word("filename cursor", WaterlooWorkspace::FilenameCursor.value(),
-                test_asm::ByteOrder::BigEndian);
+            return test.lower_bank("direct page")
+                .word("filename cursor", WaterlooWorkspace::FilenameCursor.value(), test_asm::ByteOrder::BigEndian);
     }();
     test.capture(filename);
     test.capture(pointer);
     std::vector<uint8_t> bytes(size);
-    for (size_t i = 0; i < size; ++i) bytes[i] = static_cast<uint8_t>(i ^ 0xa5);
+    for (size_t i = 0; i < size; ++i)
+        bytes[i] = static_cast<uint8_t>(i ^ 0xa5);
     const std::vector<uint8_t> poison(size, 0xcc);
     data.initialize(filename, poison);
     const auto assemble = [&](auto& p) {
@@ -484,7 +484,8 @@ void check_maximum_filename(System& board, Fixture& rom, size_t size, test_asm::
         rom.file(p, bytes);
         EXPECT_EQ(data.read(filename), poison);
         p.lda(imm(0x42)).sta(answer);
-        if (mode == test_asm::ProgramMode::Phased) p.pause("maximum filename prepared");
+        if (mode == test_asm::ProgramMode::Phased)
+            p.pause("maximum filename prepared");
         p.lda(imm(0x43)).sta(answer);
     };
     const auto result = [&] {
@@ -517,12 +518,12 @@ TEST_F(SystemTest, WaterlooFixtureMaximumFilenameExecutesInCompleteAndPhasedProg
 }
 
 // Verify the explicit scenario path has the same usable maximum, without builder startup.
-template<class Fixture>
-void check_explicit_maximum_filename(System& board, Fixture& rom, size_t size) {
+template <class Fixture> void check_explicit_maximum_filename(System& board, Fixture& rom, size_t size) {
     constexpr bool kernal = std::is_same_v<typename Fixture::Cpu, test_asm::Mos6502>;
     test_asm::Program<typename Fixture::Cpu, System> p(rom, rom.code);
     constexpr uint8_t Native6809InterruptMasks = 0x50;
-    if constexpr (!kernal) p.orcc(imm(Native6809InterruptMasks)).lds(test_asm::imm16(rom.stack_top()));
+    if constexpr (!kernal)
+        p.orcc(imm(Native6809InterruptMasks)).lds(test_asm::imm16(rom.stack_top()));
     const std::vector<uint8_t> bytes(size, 'M');
     rom.init_ieee(p);
     rom.device(p);
@@ -531,8 +532,8 @@ void check_explicit_maximum_filename(System& board, Fixture& rom, size_t size) {
     const auto result = rom.run(p, rom.results, KernalBudget, "explicit maximum filename");
     EXPECT_EQ(result.raw_bytes(), (std::vector<uint8_t>{0x42, 0}));
     const auto data = rom.lower_bank(rom.region(kernal ? "payload" : "control block and filename"));
-    const auto filename = data.buffer("maximum filename",
-        kernal ? 0 : WaterlooWorkspace::Filename - WaterlooWorkspace::Block, size);
+    const auto filename =
+        data.buffer("maximum filename", kernal ? 0 : WaterlooWorkspace::Filename - WaterlooWorkspace::Block, size);
     EXPECT_EQ(data.read(filename), bytes);
     EXPECT_EQ(board.peek(econopet::SramAddress{rom.code.start().value()}), kernal ? 0x78 : 0x1a);
 }
@@ -556,8 +557,8 @@ TEST_F(SystemTest, WaterlooFixtureReservesBothHookTablesInBothExecutionPaths) {
     for (const auto mode : {test_asm::ProgramMode::Complete, test_asm::ProgramMode::Phased}) {
         auto test = rom.program(mode);
         for (const auto address : {0x0580, 0x05bf, 0x05c0, 0x05ff}) {
-            EXPECT_THROW(rom.reserve("hook alias", test_asm::RegionKind::Data,
-                econopet::CpuAddress{address}, 1), std::invalid_argument);
+            EXPECT_THROW(rom.reserve("hook alias", test_asm::RegionKind::Data, econopet::CpuAddress{address}, 1),
+                         std::invalid_argument);
             EXPECT_THROW(test.data("hook alias", econopet::CpuAddress{address}, 1), std::invalid_argument);
         }
         EXPECT_EQ(test.lower_bank("I/O hooks").buffer("all hooks", 0, 128).address(), hooks.start());
@@ -598,10 +599,9 @@ TEST_F(SystemTest, WaterlooFixtureCustomCodeUsesSameLayoutInExplicitAndBuilderPa
 
 TEST_F(SystemTest, RomFixtureCustomCodeCannotOverlapReservedWorkspace) {
     const auto started = system.time();
-    EXPECT_THROW((KernalFixture(system, test_rom::Set::Upgrade,
-        {econopet::CpuAddress{0x0400}, 0x100})), std::invalid_argument);
-    EXPECT_THROW((WaterlooFixture(system,
-        {econopet::CpuAddress{0x0580}, 0x100})), std::invalid_argument);
+    EXPECT_THROW((KernalFixture(system, test_rom::Set::Upgrade, {econopet::CpuAddress{0x0400}, 0x100})),
+                 std::invalid_argument);
+    EXPECT_THROW((WaterlooFixture(system, {econopet::CpuAddress{0x0580}, 0x100})), std::invalid_argument);
     EXPECT_FALSE(system.selected_rom());
     EXPECT_EQ(system.time(), started);
 }
@@ -609,8 +609,9 @@ TEST_F(SystemTest, RomFixtureCustomCodeCannotOverlapReservedWorkspace) {
 TEST_F(SystemTest, RomFixtureCpuBindingCannotBeForgedByDirectBuilderConstruction) {
     KernalFixture rom(system, test_rom::Set::Upgrade);
     const auto started = system.time();
-    EXPECT_THROW((RomProgramBuilder<test_asm::Mc6809>(system, test_rom::Set::Upgrade, {},
-        test_asm::ProgramMode::Complete)), std::invalid_argument);
+    EXPECT_THROW(
+        (RomProgramBuilder<test_asm::Mc6809>(system, test_rom::Set::Upgrade, {}, test_asm::ProgramMode::Complete)),
+        std::invalid_argument);
     EXPECT_EQ(system.time(), started);
 }
 } // namespace

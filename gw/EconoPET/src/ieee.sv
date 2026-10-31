@@ -10,7 +10,8 @@ import common_pkg::*;
 // IEEE-related I/O registers and, when enabled, INJECTS the CPU's reads of
 // the IEEE status/input registers so that an emulated drive appears on the
 // otherwise-empty bus. Disabled it is fully passive (physical devices are
-// untouched); enabled it replaces the CPU's view of the bus, so ALL physical
+// untouched). Selecting any emulated unit enables interception, which replaces
+// the CPU's view of the bus, so ALL physical
 // IEEE devices are masked -- enable only with nothing on the connector. The byte-level handshake (acceptor and talker roles)
 // runs here in fabric -- IEEE-488 is flow-controlled, so the MCU can
 // service the FIFOs over Wishbone/SPI at its own rate while the CPU
@@ -65,8 +66,10 @@ module ieee (
     // ------------------------------------------------------------------
     // Control / status registers
     // ------------------------------------------------------------------
-    logic enable = 1'b0;
     logic flush = 1'b0;
+    // Active-high emulated-device presence. No units means physical passthrough.
+    logic [3:0] unit_mask = '0;
+    wire enable = |unit_mask;
 
     // ------------------------------------------------------------------
     // Snooped CPU-side IEEE line states (all _n: 1 = released)
@@ -225,7 +228,8 @@ module ieee (
     // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
     localparam int UNIT_COUNT = 4;
-    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00};
+    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00}
+        && unit_mask[primary_unit];
     wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
     logic [UNIT_COUNT-1:0] listen_units = '0;
@@ -412,9 +416,9 @@ module ieee (
                                 unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Discard queued file data in fabric, before
                                 // the MCU even sees the command -- but only
-                                // for real data channels: ch15 CLOSE/OPEN is
-                                // the DOS command channel and must not drop
-                                // an in-flight stream (firmware ignores it).
+                                // for real data channels. Firmware handles
+                                // ch15 OPEN/CLOSE lifetimes without discarding
+                                // an unrelated unit's selected response.
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
@@ -552,6 +556,17 @@ module ieee (
                 && (atn_active || listening)))
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
+            // A host media change may remove one unit without resetting peers.
+            if (|(listen_units & ~unit_mask)) listen_units <= listen_units & unit_mask;
+            if (addressed && !unit_mask[addressed_unit]) addressed <= 1'b0;
+            if (talking && !unit_mask[talk_unit]) begin
+                talking <= 1'b0;
+                talk_st <= T_IDLE;
+                talk_eoi_fetched <= 1'b0;
+                dev_dav_n <= 1'b1;
+                dev_eoi_n <= 1'b1;
+                dev_dio <= 8'hFF;
+            end
         end
     end
 
@@ -622,10 +637,10 @@ module ieee (
                                 | (!rx_empty && rx_mem[rx_rd][11]
                                     ? IEEE_CTRL_RD_RX_TALK_EVENT_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
-                        enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
                         mcu_tx_flush <= wbp_data_i[IEEE_CTRL_DATA_FLUSH_BIT];
                         mcu_txs_flush <= wbp_data_i[IEEE_CTRL_STATUS_FLUSH_BIT];
+                        unit_mask <= wbp_data_i[IEEE_CTRL_UNIT_MASK_SHIFT +: $bits(unit_mask)];
                     end
                 end
                 IEEE_REG_STATUS: wbp_data_o <= status;
