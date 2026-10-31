@@ -81,6 +81,45 @@ typedef enum {
     DOS_CLOSE_BAM,
     DOS_CLOSE_FLUSH,
     DOS_CLOSE_ABORT_OPEN,
+    DOS_CLOSE_REL_SCRUB,
+    DOS_CLOSE_REL_WAIT,
+    DOS_CLOSE_REL_REFILL,
+    DOS_CLOSE_REL_INDEX,
+    DOS_CLOSE_REL_DIRECTORY_READ,
+    DOS_CLOSE_REL_DIRECTORY_WRITE,
+    DOS_CLOSE_REL_FLUSH,
+    DOS_GROW_REL_END,
+    DOS_GROW_REL_POSITION_END,
+    DOS_GROW_REL_START,
+    DOS_GROW_REL_LINK,
+    DOS_GROW_REL_LINK_LAST,
+    DOS_GROW_REL_OLD_WRITE,
+    DOS_GROW_REL_NEXT_SELECT,
+    DOS_GROW_REL_LAST_SELECT,
+    DOS_GROW_REL_NEXT_WAIT,
+    DOS_GROW_REL_LAST_WAIT,
+    DOS_GROW_REL_NEXT_REFILL,
+    DOS_GROW_REL_LAST_REFILL,
+    DOS_GROW_REL_NEXT_ALLOCATE,
+    DOS_GROW_REL_NEXT_FILL,
+    DOS_GROW_REL_LAST_FILL,
+    DOS_GROW_REL_DATA_WRITE,
+    DOS_GROW_REL_INDEX,
+    DOS_GROW_REL_DECIDE,
+    DOS_GROW_REL_SIDE_ALLOCATE,
+    DOS_GROW_REL_SIDE_SCRUB,
+    DOS_GROW_REL_SIDE_REFILL,
+    DOS_GROW_REL_SIDE_WRITE,
+    DOS_GROW_REL_SIDE_OLD_WRITE,
+    DOS_GROW_REL_SIDE_PREVIOUS,
+    DOS_GROW_REL_SUPER_READ,
+    DOS_GROW_REL_SUPER_WRITE,
+    DOS_GROW_REL_GROUP_READ,
+    DOS_GROW_REL_INDEX_WRITE,
+    DOS_GROW_REL_MAP,
+    DOS_GROW_REL_REPOSITION,
+    DOS_GROW_REL_REPOSITION_REFILL,
+    DOS_GROW_REL_POSITION,
 } dos_close_phase_t;
 
 typedef struct {
@@ -372,6 +411,7 @@ typedef enum {
     DOS_COMMAND_COPY,
     DOS_COMMAND_FORMAT,
     DOS_COMMAND_VALIDATE,
+    DOS_COMMAND_CLOSE,
 } dos_command_work_t;
 
 typedef struct {
@@ -390,6 +430,10 @@ typedef struct {
         dos_copy_work_t copy;
         dos_format_work_t format;
         dos_validate_work_t validate;
+        struct {
+            uint8_t secondary;
+            uint8_t model;
+        } close;
     };
     uint16_t buffer_use;
     uint16_t buffer_drives;
@@ -563,6 +607,25 @@ bool dos_rel_channel_resume_read(dos_unit_t* unit, dos_media_bank_t* media, uint
 
 // Retry only a retained positioning job, without swapping or capturing the request twice.
 bool dos_rel_channel_retry_position(dos_unit_t* unit, uint8_t channel);
+
+// Retain OW20's initial data allocation while scheduling side/super/data jobs.
+void dos_rel_channel_create(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t data_track,
+                            uint8_t data_sector, uint8_t size);
+
+// Resume only the failed, retained creation phase, not its earlier allocations.
+bool dos_rel_channel_retry_create(dos_unit_t* unit, uint8_t channel);
+
+// Enter WR60's ADDREL boundary without accepting or buffering its input byte.
+bool dos_rel_channel_grow(dos_unit_t* unit, uint8_t channel);
+
+// Retry only a retained ADDREL job, preserving its allocations and role swaps.
+bool dos_rel_channel_retry_grow(dos_unit_t* unit, uint8_t channel);
+
+// Begin CLSREL without CLREC padding or ordinary writer-union interpretation.
+bool dos_rel_channel_close(dos_unit_t* unit, uint8_t channel);
+
+// Resume a retained job without redoing SCRUB, buffer selection or block counts.
+bool dos_rel_channel_retry_close(dos_unit_t* unit, uint8_t channel);
 
 // Resolve a decoded secondary and preview bytes with an owner for actual GETs.
 // Zero output has no source to retain. Retire old sources before mutation/reuse.

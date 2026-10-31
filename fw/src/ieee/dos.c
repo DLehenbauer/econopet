@@ -42,6 +42,11 @@ static bool prepare_mapout_4040(dos_unit_t* const unit, dos_media_bank_t* const 
 static bool finish_channel(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const channel);
 static bool finish_directory_growth(dos_unit_t* const unit, dos_media_bank_t* const media,
                                     dos_channel_t* const channel);
+static bool rel_close_pending(const dos_channel_t* channel);
+static bool rel_owned_job_pending(const dos_channel_t* channel);
+static void rel_close_work(dos_unit_t* unit, dos_media_bank_t* media, uint8_t index);
+static bool allocate_sector(dos_unit_t* unit, dos_media_bank_t* media, dos_media_ref_t reference, uint8_t* track,
+                            uint8_t* sector, bool directory);
 static bool write_sector(dos_unit_t* unit, dos_media_bank_t* media, dos_media_ref_t reference, uint8_t track,
                          uint8_t sector, const uint8_t* bytes);
 static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos_bam_t* const bam);
@@ -63,6 +68,7 @@ static bool flush_bam(dos_unit_t* const unit, dos_media_bank_t* const media, dos
 #define DOS_DIRECTORY_SECTOR_OFFSET 4u
 #define DOS_DIRECTORY_NAME_OFFSET 5u
 #define DOS_FILE_CLOSED_MASK 0x80u
+#define DOS_FILE_TYPE_NIBBLE_MASK 0x0fu
 #define DOS_FILE_TYPE_MASK 7u
 #define DOS_FILE_LOCKED_MASK 0x40u
 #define DOS_FILE_TRACK_MASK_4040 0x3fu
@@ -454,24 +460,42 @@ bool dos_close(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_
     // data secondaries for SA 15. Select the matching allocated C record or
     // all data records, then release their resources through free_channel.
     // Missing records need no release. Command/error storage is not released.
-    // Ordinary writers persist synchronously. Host I/O failures retain their
-    // owners and the unclosed peers for a later retry.
+    // Ordinary writers persist synchronously. CLSREL retains a cooperative
+    // command owner until native jobs and host durability have completed.
+    if (unit->command == DOS_COMMAND_CLOSE) {
+        return false;
+    }
     uint8_t channel;
     while ((channel = close_channel(unit, secondary)) != DOS_UNUSED) {
         dos_channel_t* const state = &unit->channels[channel];
-        // Full CLSREL remains a later slice. Even CLOSE 0 must retain a
-        // writer's pages instead of taking the ordinary FRECHN shortcut.
-        if (state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE &&
-            state->access == DOS_ACCESS_MODIFY) {
-            dos_status(unit, model, DOS_STATUS_SYNTAX, 0, 0);
+        if (state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE) {
+            if (unit->command != DOS_COMMAND_IDLE) {
+                return false;
+            }
+            if (rel_owned_job_pending(state) && !(rel_close_pending(state) && state->failed)) {
+                return false;
+            }
+            // Explicit CLOSE 0 is FRECHN, not CLSCHN. CLSALL still uses
+            // CLSCHN for its final secondary zero.
+            // Clean internal readers without directory coordinates still allow cancellation.
+            if (secondary != IEEE_LOAD_CHANNEL && state->rel.record.result != DOS_REL_RECORD_IDLE &&
+                (state->access != DOS_ACCESS_READ || state->directory_track != 0 || rel_close_pending(state))) {
+                if (!(state->failed ? dos_rel_channel_retry_close(unit, channel)
+                                    : dos_rel_channel_close(unit, channel))) {
+                    return false;
+                }
+                unit->close.secondary = secondary;
+                unit->close.model = model;
+                unit->command = DOS_COMMAND_CLOSE;
+                return false;
+            }
+        } else if (secondary != IEEE_LOAD_CHANNEL && state->access == DOS_ACCESS_DIRECT && model == DOS_MODEL_4040 &&
+                   state->closing == DOS_CLOSE_DATA && !prepare_mapout_4040(unit, media, state)) {
             return false;
         }
-        // Explicit CLOSE 0 enters FRECHN directly, unlike a CLSALL visit.
-        if (secondary != IEEE_LOAD_CHANNEL && state->access == DOS_ACCESS_DIRECT && model == DOS_MODEL_4040 &&
-            state->closing == DOS_CLOSE_DATA && !prepare_mapout_4040(unit, media, state)) {
-            return false;
-        }
-        if (secondary != IEEE_LOAD_CHANNEL && state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
+        if (secondary != IEEE_LOAD_CHANNEL &&
+            (state->file_type != DISKIMAGE_FTYPE_REL || state->directory != DOS_DIRECTORY_NONE) &&
+            state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
             return false;
         }
         free_channel(unit, channel);
@@ -915,10 +939,10 @@ void dos_rel_channel_prepare(dos_unit_t* const unit, const uint8_t channel, cons
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL preparation requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    vet(state->access == DOS_ACCESS_READ && state->rel.record.result != DOS_REL_RECORD_WRITING &&
-            state->rel.record.result != DOS_REL_RECORD_FULL &&
+    vet(state->access == DOS_ACCESS_READ && !rel_owned_job_pending(state) &&
+            state->rel.record.result != DOS_REL_RECORD_WRITING && state->rel.record.result != DOS_REL_RECORD_FULL &&
             state->rel.record.result != DOS_REL_RECORD_NEEDS_WRITEBACK,
-        "clean REL preparation cannot abandon owned writes");
+        "clean REL preparation cannot abandon owned jobs or writes");
     state->ready = false;
     state->failed = false;
     state->rel_model = (uint8_t)model;
@@ -979,6 +1003,51 @@ static bool rel_write_pending(const dos_channel_t* const channel) {
             channel->rel.record.result == DOS_REL_RECORD_NEEDS_WRITEBACK || rel_nrbuf_pending(channel));
 }
 
+// Recognize CLSREL ownership independently of a record's read/write result.
+static bool rel_close_pending(const dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: CLSREL's blocking operations become retained
+    // close phases, including an additional host flush before release.
+    return channel->closing >= DOS_CLOSE_REL_SCRUB && channel->closing <= DOS_CLOSE_REL_FLUSH;
+}
+
+// Creation owns its allocations even when a failed job is not runnable.
+static bool rel_create_pending(const dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // No direct ROM entry: OPNWCH/OW20/OW21 creation owns its pages and
+    // allocations across yields and host failures, even when not runnable.
+    return channel->rel.record.phase >= DOS_REL_RECORD_CREATE_SIDE &&
+           channel->rel.record.phase <= DOS_REL_RECORD_CREATE_READY;
+}
+
+// ADDREL owns the cursor through SSEND, NEWSS and final repositioning.
+static bool rel_growth_pending(const dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // No direct ROM entry: ADDREL's SSEND-through-POSITN lifetime is encoded
+    // in the channel's tagged continuation, not a second unit command job.
+    return channel->closing >= DOS_GROW_REL_END && channel->closing <= DOS_GROW_REL_POSITION;
+}
+
+// Do not let another API discard a retained native metadata mutation.
+static bool rel_owned_job_pending(const dos_channel_t* const channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: combine retained creation, ADDREL and CLSREL
+    // ownership so another host API cannot abandon a partially applied job.
+    return rel_close_pending(channel) || rel_create_pending(channel) || rel_growth_pending(channel);
+}
+
 // Capture clean or dirty positioning without abandoning owned pages.
 static bool rel_position_start(dos_unit_t* const unit, const uint8_t channel, const uint16_t number,
                                const uint8_t position) {
@@ -995,7 +1064,7 @@ static bool rel_position_start(dos_unit_t* const unit, const uint8_t channel, co
         "REL positioning requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
     dos_rel_record_t* const record = &state->rel.record;
-    if (state->failed || rel_position_pending(state) ||
+    if (state->failed || rel_owned_job_pending(state) ||
         (state->access != DOS_ACCESS_READ && state->access != DOS_ACCESS_MODIFY) ||
         (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_READBACK | DOS_REL_WRITE_EOI)) ||
         (record->result != DOS_REL_RECORD_READY && record->result != DOS_REL_RECORD_WRITING &&
@@ -1072,7 +1141,8 @@ bool dos_rel_channel_retry_position(dos_unit_t* const unit, const uint8_t channe
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL positioning retry requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (!state->failed || !rel_position_pending(state)) {
+    if (!state->failed || !rel_position_pending(state) || rel_create_pending(state) || rel_growth_pending(state) ||
+        rel_close_pending(state)) {
         return false;
     }
     if (state->rel.record.phase == DOS_REL_RECORD_POSITION_OTHER) {
@@ -1172,6 +1242,185 @@ static void rel_open_work(dos_unit_t* const unit, dos_media_bank_t* const media,
                         unit->buffers[channel->buffers[1]].bytes);
 }
 
+// Retain OW20's initial data allocation while scheduling side/super/data jobs.
+void dos_rel_channel_create(dos_unit_t* const unit, const uint8_t channel, const dos_model_t model,
+                            const uint8_t data_track, const uint8_t data_sector, const uint8_t size) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // OPNWCH/OW20 seeds a side page after the first data allocation. This
+    // host initializer has no direct ROM entry and performs no sector I/O.
+    // Preserve size zero for the worker's bounded native NULBUF loop.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL creation requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    vet(state->access == DOS_ACCESS_READ && state->rel.record.result == DOS_REL_RECORD_IDLE,
+        "REL creation requires a fresh claim");
+    vet(data_track != 0, "REL creation requires allocated data");
+    state->ready = false;
+    state->failed = false;
+    state->rel_model = (uint8_t)model;
+    state->rel.record = (dos_rel_record_t){
+        .lookup = {.media = state->media},
+        .result = DOS_REL_RECORD_PENDING,
+        .phase = DOS_REL_RECORD_CREATE_SIDE,
+        .size = size,
+    };
+    state->rel.record.cached_group = DOS_REL_GROUP_NONE;
+    dos_buffer_t* const data = &unit->buffers[state->buffers[0]];
+    data->track = data_track;
+    data->sector = data_sector;
+    memset(unit->buffers[state->buffers[2]].bytes, 0, DISKIMAGE_SECTOR_SIZE);
+}
+
+// Resume only the failed, retained creation phase, not its earlier allocations.
+bool dos_rel_channel_retry_create(dos_unit_t* const unit, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // No direct ROM entry: explicitly rearm a failed host OPNWCH continuation.
+    // Retain already-allocated pages and the exact side/super/data phase.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL creation retry requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    if (!state->failed || !rel_create_pending(state) || state->rel.record.result != DOS_REL_RECORD_PENDING) {
+        return false;
+    }
+    state->failed = false;
+    return true;
+}
+
+// Enter WR60's ADDREL boundary without accepting or buffering its input byte.
+bool dos_rel_channel_grow(dos_unit_t* const unit, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // WRTREL:WR60 preserves DATA around ADDREL, which starts with SSEND.
+    // The host queues that boundary without storing a byte or allocating yet.
+    // Existing dirty bits and DYFILE history survive the role transition.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL growth requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    if (state->failed || rel_owned_job_pending(state) || state->rel.record.result != DOS_REL_RECORD_MISSING ||
+        (state->access != DOS_ACCESS_READ && state->access != DOS_ACCESS_MODIFY) ||
+        (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_READBACK | DOS_REL_WRITE_EOI))) {
+        return false;
+    }
+    state->ready = false;
+    state->access = DOS_ACCESS_MODIFY;
+    state->rel_write &= DOS_REL_DIRTY_FIRST | DOS_REL_DIRTY_FOLLOWING | DOS_REL_WRITE_MODIFIED;
+    state->closing = DOS_GROW_REL_END;
+    state->rel.record.result = DOS_REL_RECORD_PENDING;
+    state->rel.record.phase = DOS_REL_RECORD_POSITION_END;
+    return true;
+}
+
+// Retry only a retained ADDREL job, preserving its allocations and role swaps.
+bool dos_rel_channel_retry_grow(dos_unit_t* const unit, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // No direct ROM entry: resume a retained host ADDREL failure. A failed
+    // awaited page needs an explicit refill, not repeated allocation or a
+    // second descriptor swap. Terminal cursor failures cannot be rearmed here.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL growth retry requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    if (!state->failed || !rel_growth_pending(state) || state->rel.record.result == DOS_REL_RECORD_FAILED ||
+        state->rel.record.result == DOS_REL_RECORD_NO_INDEX) {
+        return false;
+    }
+    if (state->closing == DOS_GROW_REL_POSITION_END || state->closing == DOS_GROW_REL_POSITION) {
+        if (state->rel.record.phase == DOS_REL_RECORD_POSITION_OTHER) {
+            state->rel.record.phase = DOS_REL_RECORD_POSITION_WAIT_OTHER;
+        } else if (state->rel.record.phase == DOS_REL_RECORD_POSITION_COLD) {
+            state->rel.record.phase = DOS_REL_RECORD_POSITION_WAIT_COLD;
+        }
+    } else if (state->closing == DOS_GROW_REL_NEXT_WAIT) {
+        state->closing = DOS_GROW_REL_NEXT_REFILL;
+    } else if (state->closing == DOS_GROW_REL_LAST_WAIT) {
+        state->closing = DOS_GROW_REL_LAST_REFILL;
+    } else if (state->closing == DOS_GROW_REL_SIDE_SCRUB &&
+               unit->buffers[state->buffers[state->rel.record.active]].failed) {
+        state->closing = DOS_GROW_REL_SIDE_REFILL;
+    } else if (state->closing == DOS_GROW_REL_REPOSITION &&
+               unit->buffers[state->buffers[state->rel.record.active]].failed) {
+        state->closing = DOS_GROW_REL_REPOSITION_REFILL;
+    }
+    state->failed = false;
+    return true;
+}
+
+// Begin CLSREL without CLREC padding or ordinary writer-union interpretation.
+bool dos_rel_channel_close(dos_unit_t* const unit, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // CLSREL starts with SCRUB, not CLREC. No direct ROM entry for queuing
+    // this host continuation. Pending input or metadata mutation must finish
+    // first, and an existing close owner is retained rather than restarted.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL CLOSE requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    if (state->failed || rel_create_pending(state) || rel_growth_pending(state) ||
+        (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_READBACK | DOS_REL_WRITE_EOI))) {
+        return false;
+    }
+    if (rel_close_pending(state)) {
+        return true;
+    }
+    const uint8_t result = state->rel.record.result;
+    if (result != DOS_REL_RECORD_READY && result != DOS_REL_RECORD_WRITING && result != DOS_REL_RECORD_FULL &&
+        result != DOS_REL_RECORD_MISSING) {
+        return false;
+    }
+    state->ready = false;
+    state->closing = DOS_CLOSE_REL_SCRUB;
+    return true;
+}
+
+// Resume a retained job without redoing SCRUB, buffer selection or block counts.
+bool dos_rel_channel_retry_close(dos_unit_t* const unit, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: explicitly retry retained host CLSREL work.
+    // A failed alternate-page wait becomes a refill without repeating SCRUB,
+    // DBLBUF or a completed block-count calculation.
+    vet(channel < DOS_FILE_CHANNEL_COUNT && unit->channels[channel].allocated &&
+            unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
+            unit->channels[channel].directory == DOS_DIRECTORY_NONE,
+        "REL CLOSE retry requires an owned channel");
+    dos_channel_t* const state = &unit->channels[channel];
+    if (!state->failed || !rel_close_pending(state) || state->rel.record.result == DOS_REL_RECORD_FAILED ||
+        state->rel.record.result == DOS_REL_RECORD_NO_INDEX) {
+        return false;
+    }
+    if (state->closing == DOS_CLOSE_REL_WAIT) {
+        state->closing = DOS_CLOSE_REL_REFILL;
+    }
+    state->failed = false;
+    return true;
+}
+
 // Retire read readiness without discarding a returning writer's dirty ownership.
 bool dos_rel_channel_begin_write(dos_unit_t* const unit, const uint8_t channel) {
     // ROM sources:
@@ -1187,7 +1436,7 @@ bool dos_rel_channel_begin_write(dos_unit_t* const unit, const uint8_t channel) 
     dos_channel_t* const state = &unit->channels[channel];
     const bool returning =
         state->access == DOS_ACCESS_MODIFY && state->ready && (state->rel_write & DOS_REL_WRITE_FINISHED);
-    if ((state->access != DOS_ACCESS_READ && !returning) || state->failed || rel_position_pending(state) ||
+    if ((state->access != DOS_ACCESS_READ && !returning) || state->failed || rel_owned_job_pending(state) ||
         state->rel.record.result != DOS_REL_RECORD_READY ||
         (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_READBACK | DOS_REL_WRITE_EOI))) {
         return false;
@@ -1234,7 +1483,7 @@ bool dos_rel_channel_put(dos_unit_t* const unit, dos_media_bank_t* const media, 
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL PUT requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_owned_job_pending(state) ||
         (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_FINISHED)) ||
         (state->rel.record.result != DOS_REL_RECORD_READY && state->rel.record.result != DOS_REL_RECORD_WRITING)) {
         return false;
@@ -1258,7 +1507,7 @@ bool dos_rel_channel_pad(dos_unit_t* const unit, const uint8_t channel) {
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL padding requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_owned_job_pending(state) ||
         (state->rel_write & DOS_REL_WRITE_FINISHED)) {
         return false;
     }
@@ -1287,7 +1536,7 @@ bool dos_rel_channel_finish_write(dos_unit_t* const unit, const uint8_t channel,
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL EOI requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_owned_job_pending(state) ||
         (state->rel_write & (DOS_REL_WRITE_FINISHED | DOS_REL_WRITE_EOI)) ||
         (overflow && state->rel.record.result != DOS_REL_RECORD_FULL) ||
         (state->rel.record.result != DOS_REL_RECORD_FULL && !dos_rel_channel_pad(unit, channel))) {
@@ -1311,7 +1560,7 @@ bool dos_rel_channel_retry_write(dos_unit_t* const unit, const uint8_t channel) 
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL retry requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || !state->failed || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || !state->failed || rel_owned_job_pending(state) ||
         (state->rel.record.result != DOS_REL_RECORD_NEEDS_WRITEBACK && !(state->rel_write & DOS_REL_WRITE_READBACK) &&
          !rel_nrbuf_pending(state))) {
         return false;
@@ -1336,7 +1585,7 @@ bool dos_rel_channel_finish_cached(dos_unit_t* const unit, dos_media_bank_t* con
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL completion requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || state->failed || rel_owned_job_pending(state) ||
         (state->rel_write & (DOS_REL_WRITE_PADDING | DOS_REL_WRITE_FINISHED))) {
         return false;
     }
@@ -1376,7 +1625,7 @@ bool dos_rel_channel_resume_read(dos_unit_t* const unit, dos_media_bank_t* const
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL read restoration requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
-    if (state->access != DOS_ACCESS_MODIFY || state->failed || state->ready || rel_position_pending(state) ||
+    if (state->access != DOS_ACCESS_MODIFY || state->failed || state->ready || rel_owned_job_pending(state) ||
         !(state->rel_write & DOS_REL_WRITE_FINISHED) ||
         (state->rel_write & (DOS_REL_WRITE_READBACK | DOS_REL_WRITE_EOI)) ||
         (state->rel.record.result != DOS_REL_RECORD_READY && state->rel.record.result != DOS_REL_RECORD_MISSING)) {
@@ -1524,6 +1773,9 @@ bool dos_rel_channel_writeback(dos_unit_t* const unit, dos_media_bank_t* const m
             unit->channels[channel].file_type == DISKIMAGE_FTYPE_REL &&
             unit->channels[channel].directory == DOS_DIRECTORY_NONE,
         "REL writeback requires an owned non-directory channel");
+    if (rel_owned_job_pending(&unit->channels[channel])) {
+        return false;
+    }
     const dos_rel_record_t* const record = &unit->channels[channel].rel.record;
     vet(record->result == DOS_REL_RECORD_WRITING || record->result == DOS_REL_RECORD_FULL ||
             record->result == DOS_REL_RECORD_NEEDS_WRITEBACK,
@@ -1548,7 +1800,7 @@ bool dos_rel_channel_advance_write(dos_unit_t* const unit, dos_media_bank_t* con
         "REL write continuation requires an owned channel");
     dos_channel_t* const state = &unit->channels[channel];
     dos_rel_record_t* const record = &state->rel.record;
-    if (record->result != DOS_REL_RECORD_NEEDS_WRITEBACK) {
+    if (rel_owned_job_pending(state) || record->result != DOS_REL_RECORD_NEEDS_WRITEBACK) {
         return false;
     }
     vet(!state->ready && record->active < 2u && record->pointer == 0 &&
@@ -2224,6 +2476,676 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
     rel_read_state(unit, state);
 }
 
+// Execute OW20/OWBREL/OW21 without adding a fourth page or replaying allocations.
+static void rel_create_work(dos_unit_t* const unit, dos_media_bank_t* const media, dos_channel_t* const state) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/opchnl
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/opchnl
+    //
+    // OPNWCH/OW20 writes the initial side, OWBREL adds the 8250 super page,
+    // and OW21 uses NULBUF/NULLNK before OROW. Host phases retain allocation
+    // and WRITE boundaries so retries do not allocate another side or super.
+    dos_rel_record_t* const record = &state->rel.record;
+    dos_media_ref_t current;
+    if (dos_media_reference(media, state->media.unit, state->media.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != state->media.identity) {
+        record->lookup.media_result = DOS_MEDIA_STALE;
+        record->result = DOS_REL_RECORD_FAILED;
+        state->failed = true;
+        unit->selected_drive = state->media.slot;
+        dos_status(unit, state->rel_model, DOS_STATUS_WRITE_ERROR, 0, 0);
+        return;
+    }
+    dos_buffer_t* const data = &unit->buffers[state->buffers[0]];
+    dos_buffer_t* const side = &unit->buffers[state->buffers[2]];
+    const uint8_t selected = unit->selected_drive;
+    unit->selected_drive = state->media.slot;
+    if (record->phase == DOS_REL_RECORD_CREATE_SIDE) {
+        uint8_t track = data->track, sector = data->sector;
+        if (!allocate_sector(unit, media, state->media, &track, &sector, false)) {
+            state->failed = true;
+            return;
+        }
+        state->rel_root_track = side->track = track;
+        state->rel_root_sector = side->sector = sector;
+        side->bytes[1] = DOS_REL_POINTER_OFFSET + 1u;
+        side->bytes[3] = record->size;
+        side->bytes[DOS_REL_SIDE_TABLE_OFFSET] = track;
+        side->bytes[DOS_REL_SIDE_TABLE_OFFSET + 1u] = sector;
+        side->bytes[DOS_REL_POINTER_OFFSET] = data->track;
+        side->bytes[DOS_REL_POINTER_OFFSET + 1u] = data->sector;
+        record->phase = DOS_REL_RECORD_CREATE_SIDE_WRITE;
+    } else if (record->phase == DOS_REL_RECORD_CREATE_SUPER) {
+        const uint8_t first_track = state->rel_root_track, first_sector = state->rel_root_sector;
+        // JNXTTS reloads GETHDR from the active data page, not the side job.
+        uint8_t track = data->track, sector = data->sector;
+        if (!allocate_sector(unit, media, state->media, &track, &sector, false)) {
+            state->failed = true;
+            return;
+        }
+        // OWBREL reuses the side page for the super sector, not another cache.
+        memset(side->bytes, 0, DISKIMAGE_SECTOR_SIZE);
+        side->bytes[0] = side->bytes[DOS_REL_GROUP_TABLE_OFFSET] = first_track;
+        side->bytes[1] = side->bytes[DOS_REL_GROUP_TABLE_OFFSET + 1u] = first_sector;
+        side->bytes[DOS_REL_SIDE_NUMBER_OFFSET] = DOS_REL_GROUP_SUPER;
+        state->rel_root_track = side->track = track;
+        state->rel_root_sector = side->sector = sector;
+        record->phase = DOS_REL_RECORD_CREATE_SUPER_WRITE;
+    } else if (record->phase == DOS_REL_RECORD_CREATE_SIDE_WRITE ||
+               record->phase == DOS_REL_RECORD_CREATE_SUPER_WRITE) {
+        if (!write_sector(unit, media, state->media, side->track, side->sector, side->bytes)) {
+            state->failed = true;
+            return;
+        }
+        side->resident = true;
+        side->failed = false;
+        const bool super = record->phase == DOS_REL_RECORD_CREATE_SUPER_WRITE;
+        state->rel.record.cached_group = super ? DOS_REL_GROUP_SUPER : DOS_REL_GROUP_NONE;
+        record->phase =
+            !super && state->rel_model == DOS_MODEL_8250 ? DOS_REL_RECORD_CREATE_SUPER : DOS_REL_RECORD_CREATE_DATA;
+    } else if (record->phase == DOS_REL_RECORD_CREATE_DATA) {
+        if (record->size == 0) {
+            // Both selected ROMs loop in NULBUF:NB20 at NR=2 for RS=0.
+            // Keep that unit pending without hanging the MCU's other units.
+            memset(data->bytes + DISKIMAGE_SECTOR_LINK_SIZE, 0, DISKIMAGE_SECTOR_SIZE - DISKIMAGE_SECTOR_LINK_SIZE);
+            data->bytes[DISKIMAGE_SECTOR_LINK_SIZE] = UINT8_MAX;
+            record->next = DISKIMAGE_SECTOR_LINK_SIZE;
+            return;
+        }
+        // OW21 seeds NR with -RS. NULLNK stores NR-1, not a generic length.
+        record->next = dos_rel_fill(data->bytes, record->size, (uint8_t)(0u - record->size));
+        data->bytes[0] = 0;
+        data->bytes[1] = (uint8_t)(record->next - 1u);
+        if (!write_sector(unit, media, state->media, data->track, data->sector, data->bytes)) {
+            state->failed = true;
+            return;
+        }
+        data->resident = true;
+        data->failed = false;
+        record->phase = DOS_REL_RECORD_CREATE_MAP;
+    } else if (record->phase == DOS_REL_RECORD_CREATE_MAP) {
+        if (!flush_bam(unit, media, &unit->bam[state->media.slot])) {
+            state->failed = true;
+            return;
+        }
+        record->phase = DOS_REL_RECORD_CREATE_READY;
+    } else {
+        vet(record->phase == DOS_REL_RECORD_CREATE_READY, "REL creation requires its retained job");
+        record->next = DISKIMAGE_SECTOR_LINK_SIZE;
+        record->result = DOS_REL_RECORD_END;
+        record->phase = DOS_REL_RECORD_FOLLOWING;
+        state->rel.number = 1;
+        dos_rel_record_next(record, media, data->bytes, unit->buffers[state->buffers[1]].bytes);
+        rel_read_state(unit, state);
+    }
+    unit->selected_drive = selected;
+}
+
+// Await an existing page job without silently resubmitting a failed READ.
+static bool rel_growth_wait(dos_unit_t* const unit, dos_channel_t* const state) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // No direct ROM entry: expose ADDREL's DBLBUF/WATJOB result for an
+    // already-selected page. A failed host READ needs explicit refill retry,
+    // not another descriptor swap or optimistic use of stale payload.
+    const dos_buffer_t* const buffer = &unit->buffers[state->buffers[state->rel.record.active]];
+    if (!buffer->failed) {
+        return true;
+    }
+    state->failed = true;
+    dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, buffer->track, buffer->sector);
+    return false;
+}
+
+// Service one ADDREL/NEWSS decision or job with the same three owned pages.
+static void rel_growth_step(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/newss
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/newss
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rename
+    //
+    // ADDREL/ADRELS starts at SSEND/POSBUF, ADDR1 preflights growth, and
+    // NEWSS updates side links. Host phases retain all three pages and committed jobs.
+    dos_channel_t* const state = &unit->channels[channel];
+    dos_rel_record_t* const record = &state->rel.record;
+    dos_rel_growth_t* const growth = &record->growth;
+    dos_buffer_t* const data = &unit->buffers[state->buffers[record->active]];
+    dos_buffer_t* const side = &unit->buffers[state->buffers[2]];
+    const uint8_t dirty = record->active == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING;
+    const uint8_t phase = state->closing;
+    if (phase == DOS_GROW_REL_END) {
+        if (record->result == DOS_REL_RECORD_PENDING) {
+            rel_position_index_work(unit, media, state);
+            return;
+        }
+        vet(record->result == DOS_REL_RECORD_MISSING, "REL growth requires completed SSEND");
+        record->lookup.track = side->bytes[record->lookup.address.index];
+        record->lookup.sector = side->bytes[(uint8_t)(record->lookup.address.index + 1u)];
+        record->result = DOS_REL_RECORD_PENDING;
+        record->phase = DOS_REL_RECORD_POSITION_MATCH;
+        state->closing = DOS_GROW_REL_POSITION_END;
+        return;
+    }
+    if (phase == DOS_GROW_REL_POSITION_END) {
+        if (record->phase != DOS_REL_RECORD_POSITION_READY) {
+            rel_position_work(unit, media, channel);
+        } else {
+            // ADRELS calls POSBUF, not POSITN/NXOUT on the last record.
+            record->position = 0;
+            state->closing = DOS_GROW_REL_START;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_START) {
+        // Preserve the leaf planner's native byte borrowing and sign loops.
+        const dos_rel_address_t last = record->lookup.address;
+        const dos_rel_growth_plan_t plan =
+            dos_rel_growth_plan(state->rel_model, state->rel.number, record->size, last.group, last.side, last.index);
+        uint16_t available;
+        if (!free_blocks(unit, media, state->media, &available)) {
+            state->failed = true;
+            return;
+        }
+        if (plan.too_large || plan.blocks > available) {
+            state->failed = true;
+            dos_status(unit, state->rel_model, DOS_STATUS_FILE_TOO_LARGE, 0, 0);
+            return;
+        }
+        if (state->rel_model == DOS_MODEL_8250 && plan.blocks == 0) {
+            record->result = DOS_REL_RECORD_READY;
+            record->phase = DOS_REL_RECORD_FOLLOWING;
+            state->closing = DOS_CLOSE_DATA;
+            return;
+        }
+        *growth = (dos_rel_growth_t){
+            .media = state->media,
+            .side = last.side,
+            .pointer = (uint8_t)(last.index + DISKIMAGE_SECTOR_LINK_SIZE),
+            .group = last.group,
+            .target_side = plan.address.side,
+            .target_index = plan.address.index,
+            .target_group = plan.address.group,
+        };
+        record->next = (uint8_t)(data->bytes[1] + 1u);
+        record->phase = DOS_REL_RECORD_FOLLOWING;
+        state->closing = plan.blocks == 1 ? DOS_GROW_REL_LINK_LAST : DOS_GROW_REL_LINK;
+        return;
+    }
+    if (phase == DOS_GROW_REL_LINK || phase == DOS_GROW_REL_LINK_LAST || phase == DOS_GROW_REL_NEXT_ALLOCATE ||
+        phase == DOS_GROW_REL_SIDE_ALLOCATE) {
+        // Save NXTTS once, then advance the phase before a later WRITE.
+        // Allocation failure retains this owner rather than rolling back peers.
+        uint8_t track = data->track, sector = data->sector;
+        if (!allocate_sector(unit, media, state->media, &track, &sector, false)) {
+            state->failed = true;
+            return;
+        }
+        growth->track = track;
+        growth->sector = sector;
+        if (phase == DOS_GROW_REL_SIDE_ALLOCATE) {
+            record->active ^= 1u;
+            state->closing = DOS_GROW_REL_SIDE_SCRUB;
+        } else {
+            data->bytes[0] = track;
+            data->bytes[1] = sector;
+            state->rel_write |= dirty;
+            rel_write_result(unit, state);
+            state->closing = phase == DOS_GROW_REL_LINK_LAST       ? DOS_GROW_REL_LAST_SELECT
+                             : phase == DOS_GROW_REL_NEXT_ALLOCATE ? DOS_GROW_REL_NEXT_FILL
+                                                                   : DOS_GROW_REL_OLD_WRITE;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_NEXT_SELECT || phase == DOS_GROW_REL_LAST_SELECT) {
+        record->active ^= 1u;
+        state->closing = phase == DOS_GROW_REL_LAST_SELECT ? DOS_GROW_REL_LAST_WAIT : DOS_GROW_REL_NEXT_WAIT;
+        return;
+    }
+    if (phase == DOS_GROW_REL_NEXT_WAIT || phase == DOS_GROW_REL_LAST_WAIT) {
+        if (!rel_growth_wait(unit, state)) {
+            return;
+        }
+        vet(!(state->rel_write & dirty), "REL growth must not replace dirty inactive data");
+        const dos_buffer_t* const previous = &unit->buffers[state->buffers[record->active ^ 1u]];
+        data->track = previous->bytes[0];
+        data->sector = previous->bytes[1];
+        data->resident = true;
+        state->closing = phase == DOS_GROW_REL_LAST_WAIT ? DOS_GROW_REL_LAST_FILL : DOS_GROW_REL_NEXT_ALLOCATE;
+        return;
+    }
+    if (phase == DOS_GROW_REL_NEXT_FILL || phase == DOS_GROW_REL_LAST_FILL) {
+        record->next = dos_rel_fill(data->bytes, record->size, record->next);
+        if (phase == DOS_GROW_REL_LAST_FILL) {
+            data->bytes[0] = 0;
+            data->bytes[1] = (uint8_t)(record->next - 1u);
+        }
+        state->rel_write |= dirty;
+        rel_write_result(unit, state);
+        state->closing = DOS_GROW_REL_DATA_WRITE;
+        return;
+    }
+    if (phase == DOS_GROW_REL_OLD_WRITE || phase == DOS_GROW_REL_DATA_WRITE) {
+        if (rel_write_page(unit, media, channel, record->active, &state->rel_write)) {
+            state->closing = phase == DOS_GROW_REL_OLD_WRITE ? DOS_GROW_REL_NEXT_SELECT : DOS_GROW_REL_INDEX;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_INDEX) {
+        if (growth->pointer == 0) {
+            state->closing = DOS_GROW_REL_SIDE_ALLOCATE;
+        } else {
+            side->bytes[growth->pointer] = data->track;
+            side->bytes[(uint8_t)(growth->pointer + 1u)] = data->sector;
+            growth->pointer += DISKIMAGE_SECTOR_LINK_SIZE;
+            state->closing = DOS_GROW_REL_DECIDE;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_DECIDE) {
+        if (data->bytes[0] != 0 && ((state->rel_model == DOS_MODEL_8250 && growth->group < growth->target_group) ||
+                                    growth->side != growth->target_side || growth->pointer <= growth->target_index)) {
+            state->closing = growth->side == growth->target_side && growth->pointer == growth->target_index &&
+                                     (state->rel_model != DOS_MODEL_8250 || growth->group >= growth->target_group)
+                                 ? DOS_GROW_REL_LAST_SELECT
+                                 : DOS_GROW_REL_NEXT_SELECT;
+        } else {
+            side->bytes[0] = 0;
+            side->bytes[1] = (uint8_t)(growth->pointer - 1u);
+            state->closing = DOS_GROW_REL_INDEX_WRITE;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_SIDE_SCRUB) {
+        // NEWSS borrows the inactive data page only after DBLBUF/SCRUB.
+        // Within a group copy its header/table, at a new 8250 group start fresh.
+        if (!rel_growth_wait(unit, state)) {
+            return;
+        }
+        if (state->rel_write & dirty) {
+            rel_write_page(unit, media, channel, record->active, &state->rel_write);
+            return;
+        }
+        memset(data->bytes, 0, DISKIMAGE_SECTOR_SIZE);
+        const bool group = state->rel_model == DOS_MODEL_8250 && growth->side >= DOS_REL_SIDE_COUNT - 1u;
+        if (!group) {
+            memcpy(data->bytes, side->bytes, DOS_REL_POINTER_OFFSET);
+        }
+        const uint8_t number = group ? 0 : (uint8_t)(side->bytes[DOS_REL_SIDE_NUMBER_OFFSET] + 1u);
+        data->bytes[0] = 0;
+        data->bytes[1] = DOS_REL_POINTER_OFFSET + 1u;
+        data->bytes[DOS_REL_SIDE_NUMBER_OFFSET] = number;
+        data->bytes[3] = record->size;
+        data->bytes[(uint8_t)(DOS_REL_SIDE_TABLE_OFFSET + 2u * number)] = growth->track;
+        data->bytes[(uint8_t)(DOS_REL_SIDE_TABLE_OFFSET + 2u * number + 1u)] = growth->sector;
+        data->track = growth->track;
+        data->sector = growth->sector;
+        data->resident = true;
+        state->rel_write |= dirty;
+        state->closing = DOS_GROW_REL_SIDE_WRITE;
+        return;
+    }
+    if (phase == DOS_GROW_REL_SIDE_WRITE) {
+        if (!rel_write_page(unit, media, channel, record->active, &state->rel_write)) {
+            return;
+        }
+        // NS20 transfers descriptors, not payload copies. The old side page
+        // becomes data scratch and the initialized data page becomes SS.
+        const uint8_t old_side = state->buffers[2];
+        state->buffers[2] = state->buffers[record->active];
+        state->buffers[record->active] = old_side;
+        dos_buffer_t* const previous = &unit->buffers[old_side];
+        previous->bytes[0] = growth->track;
+        previous->bytes[1] = growth->sector;
+        const uint8_t number = data->bytes[DOS_REL_SIDE_NUMBER_OFFSET];
+        growth->pointer = DOS_REL_SIDE_TABLE_OFFSET + 2u * number - DISKIMAGE_SECTOR_LINK_SIZE;
+        if (number != 0 || state->rel_model != DOS_MODEL_8250 || growth->side < DOS_REL_SIDE_COUNT - 1u) {
+            previous->bytes[(uint8_t)(DOS_REL_SIDE_TABLE_OFFSET + 2u * number)] = growth->track;
+            previous->bytes[(uint8_t)(DOS_REL_SIDE_TABLE_OFFSET + 2u * number + 1u)] = growth->sector;
+            growth->pointer -= DISKIMAGE_SECTOR_LINK_SIZE;
+        }
+        state->rel_write |= dirty;
+        state->closing = DOS_GROW_REL_SIDE_OLD_WRITE;
+        return;
+    }
+    if (phase == DOS_GROW_REL_SIDE_OLD_WRITE) {
+        if (!rel_write_page(unit, media, channel, record->active, &state->rel_write)) {
+            return;
+        }
+        if (state->rel_model == DOS_MODEL_8250 && growth->side >= DOS_REL_SIDE_COUNT - 1u) {
+            record->active ^= 1u;
+            state->closing = DOS_GROW_REL_SUPER_READ;
+        } else if (growth->pointer >= DOS_REL_SIDE_TABLE_OFFSET - 1u) {
+            state->closing = DOS_GROW_REL_SIDE_PREVIOUS;
+        } else {
+            record->active ^= 1u;
+            growth->side = side->bytes[DOS_REL_SIDE_NUMBER_OFFSET];
+            growth->pointer = DOS_REL_POINTER_OFFSET;
+            state->closing = DOS_GROW_REL_INDEX;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_SUPER_READ || phase == DOS_GROW_REL_GROUP_READ || phase == DOS_GROW_REL_SIDE_PREVIOUS ||
+        phase == DOS_GROW_REL_SIDE_REFILL || phase == DOS_GROW_REL_NEXT_REFILL || phase == DOS_GROW_REL_LAST_REFILL ||
+        phase == DOS_GROW_REL_REPOSITION_REFILL) {
+        // NS40/NS50 patch earlier side tables. At an 8250 group seam, reuse
+        // the side page for the super update, then reload the new group.
+        // Failed host reads retain their physical header for an exact retry.
+        const bool super = phase == DOS_GROW_REL_SUPER_READ, group = phase == DOS_GROW_REL_GROUP_READ;
+        dos_buffer_t* const target = super || group ? side : data;
+        const bool previous = phase == DOS_GROW_REL_SIDE_PREVIOUS;
+        const uint8_t track = super                         ? state->rel_root_track
+                              : group                       ? growth->track
+                              : previous && !target->failed ? data->bytes[growth->pointer]
+                                                            : target->track;
+        const uint8_t sector = super                         ? state->rel_root_sector
+                               : group                       ? growth->sector
+                               : previous && !target->failed ? data->bytes[(uint8_t)(growth->pointer + 1u)]
+                                                             : target->sector;
+        unit->buffer_writes &= (uint16_t)~remember_buffer_drive(unit, state->media, target->bytes);
+        if (super || group) {
+            state->rel.record.cached_group = DOS_REL_GROUP_NONE;
+        }
+        const dos_media_result_t result = read_sector(unit, media, state->media, track, sector, target->bytes);
+        record->lookup.media_result = result;
+        target->track = track;
+        target->sector = sector;
+        target->resident = result == DOS_MEDIA_OK;
+        target->failed = !target->resident;
+        if (target->failed) {
+            state->failed = true;
+            dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, track, sector);
+            return;
+        }
+        if (super) {
+            ++growth->group;
+            const uint8_t offset = DOS_REL_GROUP_TABLE_OFFSET + 2u * growth->group;
+            side->bytes[offset] = growth->track;
+            side->bytes[(uint8_t)(offset + 1u)] = growth->sector;
+            state->closing = DOS_GROW_REL_SUPER_WRITE;
+        } else if (group) {
+            state->rel.record.cached_group = growth->group;
+            growth->side = side->bytes[DOS_REL_SIDE_NUMBER_OFFSET];
+            growth->pointer = DOS_REL_POINTER_OFFSET;
+            state->closing = DOS_GROW_REL_INDEX;
+        } else if (previous) {
+            const uint8_t offset = DOS_REL_SIDE_TABLE_OFFSET + 2u * side->bytes[DOS_REL_SIDE_NUMBER_OFFSET];
+            data->bytes[offset] = growth->track;
+            data->bytes[(uint8_t)(offset + 1u)] = growth->sector;
+            growth->pointer -= DISKIMAGE_SECTOR_LINK_SIZE;
+            state->rel_write |= dirty;
+            state->closing = DOS_GROW_REL_SIDE_OLD_WRITE;
+        } else {
+            state->closing = phase == DOS_GROW_REL_SIDE_REFILL   ? DOS_GROW_REL_SIDE_SCRUB
+                             : phase == DOS_GROW_REL_NEXT_REFILL ? DOS_GROW_REL_NEXT_WAIT
+                             : phase == DOS_GROW_REL_LAST_REFILL ? DOS_GROW_REL_LAST_WAIT
+                                                                 : DOS_GROW_REL_REPOSITION;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_SUPER_WRITE || phase == DOS_GROW_REL_INDEX_WRITE) {
+        if (!write_sector(unit, media, state->media, side->track, side->sector, side->bytes)) {
+            state->failed = true;
+            return;
+        }
+        if (phase == DOS_GROW_REL_SUPER_WRITE) {
+            state->rel.record.cached_group = DOS_REL_GROUP_SUPER;
+            state->closing = DOS_GROW_REL_GROUP_READ;
+        } else {
+            state->closing = DOS_GROW_REL_MAP;
+        }
+        return;
+    }
+    if (phase == DOS_GROW_REL_MAP) {
+        // ADDREL persists allocation before returning through POSITN.
+        // Keep this BAM boundary separate from host backing-store durability.
+        if (!flush_bam(unit, media, &unit->bam[state->media.slot])) {
+            state->failed = true;
+            return;
+        }
+        record->active ^= 1u;
+        state->closing = DOS_GROW_REL_REPOSITION;
+        return;
+    }
+    if (phase == DOS_GROW_REL_REPOSITION) {
+        if (!rel_growth_wait(unit, state)) {
+            return;
+        }
+        record->lookup = (dos_rel_lookup_t){
+            .media = state->media,
+            .address = dos_rel_address(state->rel_model, state->rel.number, record->size, 0),
+            .result = DOS_REL_LOOKUP_PENDING,
+            .super = state->rel_model == DOS_MODEL_8250,
+        };
+        record->phase = DOS_REL_RECORD_POSITION_INDEX;
+        state->closing = DOS_GROW_REL_POSITION;
+        return;
+    }
+    vet(phase == DOS_GROW_REL_POSITION, "REL growth requires its retained job");
+    if (record->result == DOS_REL_RECORD_PENDING) {
+        rel_position_work(unit, media, channel);
+    } else {
+        if (record->result == DOS_REL_RECORD_MISSING) {
+            dos_status(unit, state->rel_model, DOS_STATUS_NO_RECORD, 0, 0);
+        }
+        state->closing = DOS_CLOSE_DATA;
+    }
+}
+
+// Guard every continuation against replacement media and retire read readiness.
+static void rel_growth_work(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t channel) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/addrel
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/addrel
+    //
+    // No direct ROM entry: wrap one cooperative ADDREL step with a captured
+    // mount-generation guard. Preserve the prior drive on success, but select
+    // this owner for errors without releasing its dirty pages or allocations.
+    dos_channel_t* const state = &unit->channels[channel];
+    dos_media_ref_t current;
+    const uint8_t selected = unit->selected_drive;
+    unit->selected_drive = state->media.slot;
+    if (dos_media_reference(media, state->media.unit, state->media.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != state->media.identity) {
+        state->rel.record.lookup.media_result = DOS_MEDIA_STALE;
+        state->rel.record.result = DOS_REL_RECORD_FAILED;
+        state->failed = true;
+        dos_status(unit, state->rel_model, DOS_STATUS_WRITE_ERROR, 0, 0);
+    } else {
+        rel_growth_step(unit, media, channel);
+    }
+    state->ready = false;
+    if (!state->failed) {
+        unit->selected_drive = selected;
+    }
+}
+
+// Complete CLSREL without CLREC padding or ordinary MAPOUT union access.
+static void rel_close_work(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_t index) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // CLSREL uses SCRUB/DBLBUF/SSEND, without CLREC padding. Only 4040 always
+    // CLSDIRs, while DOS 2.7 checks DYFILE. Host failure retention and the final
+    // backing-store flush are adaptations, not native MAPOUT.
+    dos_channel_t* const state = &unit->channels[index];
+    dos_rel_record_t* const record = &state->rel.record;
+    dos_media_ref_t current;
+    if (dos_media_reference(media, state->media.unit, state->media.slot, &current) != DOS_MEDIA_OK ||
+        current.identity != state->media.identity) {
+        record->lookup.media_result = DOS_MEDIA_STALE;
+        record->result = DOS_REL_RECORD_FAILED;
+        state->failed = true;
+        unit->selected_drive = state->media.slot;
+        dos_status(unit, state->rel_model, DOS_STATUS_WRITE_ERROR, 0, 0);
+        return;
+    }
+    if (state->closing == DOS_CLOSE_REL_SCRUB) {
+        const uint8_t bit = record->active == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING;
+        if (state->rel_write & bit) {
+            if (unit->command == DOS_COMMAND_CLOSE) {
+                unit->selected_drive = state->media.slot;
+            }
+            rel_write_page(unit, media, index, record->active, &state->rel_write);
+            return;
+        }
+        record->active ^= 1u;
+        state->closing = DOS_CLOSE_REL_WAIT;
+        return;
+    }
+    dos_buffer_t* const buffer = &unit->buffers[state->buffers[record->active]];
+    if (state->closing == DOS_CLOSE_REL_REFILL) {
+        if (unit->command == DOS_COMMAND_CLOSE) {
+            unit->selected_drive = state->media.slot;
+        }
+        unit->buffer_writes &= (uint16_t)~remember_buffer_drive(unit, state->media, buffer->bytes);
+        const dos_media_result_t result =
+            read_sector(unit, media, state->media, buffer->track, buffer->sector, buffer->bytes);
+        buffer->resident = result == DOS_MEDIA_OK;
+        buffer->failed = !buffer->resident;
+        state->closing = DOS_CLOSE_REL_WAIT;
+    }
+    if (state->closing == DOS_CLOSE_REL_WAIT) {
+        if (buffer->failed) {
+            state->failed = true;
+            unit->selected_drive = state->media.slot;
+            dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, buffer->track, buffer->sector);
+            return;
+        }
+        record->lookup.result = DOS_REL_LOOKUP_PENDING;
+        record->result = DOS_REL_RECORD_PENDING;
+        record->phase = DOS_REL_RECORD_POSITION_END;
+        state->closing = DOS_CLOSE_REL_INDEX;
+        return;
+    }
+    if (state->closing == DOS_CLOSE_REL_INDEX) {
+        if (record->result == DOS_REL_RECORD_PENDING) {
+            // IBOP selects the owner only when SSEND submits a side job.
+            if (unit->command == DOS_COMMAND_CLOSE && (record->phase == DOS_REL_RECORD_POSITION_END_SUPER ||
+                                                       record->phase == DOS_REL_RECORD_POSITION_END_GROUP ||
+                                                       record->phase == DOS_REL_RECORD_POSITION_END_SIDE)) {
+                unit->selected_drive = state->media.slot;
+            }
+            rel_position_index_work(unit, media, state);
+            state->ready = false;
+            return;
+        }
+        vet(record->result == DOS_REL_RECORD_MISSING, "REL CLOSE requires completed SSEND");
+        // Recompute the native data/side/super count from SSEND's endpoint.
+        // A clean DOS 2.7 REL leaves its directory entry untouched.
+        state->blocks = dos_rel_blocks(state->rel_model, record->lookup.address.group, record->lookup.address.side,
+                                       record->lookup.address.index);
+        if (state->rel_model != DOS_MODEL_4040 && !(state->rel_write & DOS_REL_WRITE_MODIFIED)) {
+            if (media->units[state->media.unit].slots[state->media.slot].dirty) {
+                state->closing = DOS_CLOSE_REL_FLUSH;
+            } else {
+                free_channel(unit, index);
+            }
+        } else {
+            state->closing = DOS_CLOSE_REL_DIRECTORY_READ;
+        }
+        return;
+    }
+    if (state->closing == DOS_CLOSE_REL_DIRECTORY_READ) {
+        if (unit->command == DOS_COMMAND_CLOSE) {
+            unit->selected_drive = state->media.slot;
+        }
+        unit->buffer_writes &= (uint16_t)~remember_buffer_drive(unit, state->media, buffer->bytes);
+        const dos_media_result_t result =
+            read_sector(unit, media, state->media, state->directory_track, state->directory_sector, buffer->bytes);
+        buffer->track = state->directory_track;
+        buffer->sector = state->directory_sector;
+        buffer->resident = result == DOS_MEDIA_OK;
+        buffer->failed = !buffer->resident;
+        if (buffer->failed) {
+            state->failed = true;
+            unit->selected_drive = state->media.slot;
+            dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, buffer->track, buffer->sector);
+            return;
+        }
+        uint8_t* const entry = buffer->bytes + state->directory_entry;
+        // CLSDIR skips replacement/type edits for a REL with bit $20 set.
+        // Otherwise CLSD5 retains the low nibble and sets the closed bit.
+        if (!(entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_REPLACED_MASK)) {
+            entry[DOS_DIRECTORY_TYPE_OFFSET] =
+                (entry[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_NIBBLE_MASK) | DOS_FILE_CLOSED_MASK;
+        }
+        entry[DOS_DIRECTORY_BLOCKS_LOW] = (uint8_t)state->blocks;
+        entry[DOS_DIRECTORY_BLOCKS_HIGH] = (uint8_t)(state->blocks >> 8u);
+        state->closing = DOS_CLOSE_REL_DIRECTORY_WRITE;
+        return;
+    }
+    const uint8_t selected = unit->selected_drive;
+    unit->selected_drive = state->media.slot;
+    if (state->closing == DOS_CLOSE_REL_DIRECTORY_WRITE) {
+        if (!write_sector(unit, media, state->media, buffer->track, buffer->sector, buffer->bytes)) {
+            // A retry must reread the current directory, preserving peers
+            // that committed after the failed host write.
+            state->closing = DOS_CLOSE_REL_DIRECTORY_READ;
+            state->failed = true;
+            return;
+        }
+        state->closing = DOS_CLOSE_REL_FLUSH;
+        unit->selected_drive = selected;
+        return;
+    }
+    vet(state->closing == DOS_CLOSE_REL_FLUSH, "REL CLOSE requires its retained durability phase");
+    // The host flush is additional durability policy, not native MAPOUT.
+    if (!storage_error(unit, media, state->media, dos_media_flush_unit(media, state->media.unit), true, 0, 0)) {
+        state->failed = true;
+        return;
+    }
+    unit->selected_drive = selected;
+    free_channel(unit, index);
+}
+
+// Continue ordered CLOSE/CLSALL after its first REL owner entered CLSREL.
+static void close_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // CLOSE/CLSALL visits one SA or all in descending order. SA 0/1 skips
+    // ENDCMD, higher SAs finish with it. No direct ROM entry for this host
+    // continuation around CLSREL, whose failed owner must remain allocated.
+    const uint8_t secondary = unit->close.secondary;
+    uint8_t index;
+    while ((index = close_channel(unit, secondary)) != DOS_UNUSED) {
+        dos_channel_t* const state = &unit->channels[index];
+        if (state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE) {
+            if (state->access == DOS_ACCESS_READ && state->directory_track == 0 && !rel_owned_job_pending(state)) {
+                free_channel(unit, index);
+                continue;
+            }
+            if (state->failed || (!rel_close_pending(state) && !dos_rel_channel_close(unit, index))) {
+                unit->command = DOS_COMMAND_IDLE;
+                return;
+            }
+            rel_close_work(unit, media, index);
+            return;
+        }
+        if (state->access == DOS_ACCESS_DIRECT && unit->close.model == DOS_MODEL_4040 &&
+            state->closing == DOS_CLOSE_DATA && !prepare_mapout_4040(unit, media, state)) {
+            unit->command = DOS_COMMAND_IDLE;
+            return;
+        }
+        if (state->access != DOS_ACCESS_READ && !finish_channel(unit, media, state)) {
+            unit->command = DOS_COMMAND_IDLE;
+            return;
+        }
+        free_channel(unit, index);
+    }
+    if (secondary > IEEE_SAVE_CHANNEL) {
+        command_end(unit, unit->close.model);
+        memset(unit->command_bytes, 0, DOS_COMMAND_LIMIT);
+    }
+    unit->command = DOS_COMMAND_IDLE;
+}
+
 // Advance one REL owner without borrowing the unit command-work union.
 static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM sources:
@@ -2233,13 +3155,25 @@ static void rel_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
     //
     // No direct ROM entry: cooperative phases replace blocking STRDBL/NRBUF
-    // jobs. Service at most one owner and one READ/WRITE callback per pass,
-    // leaving failed jobs and dirty pages owned for explicit retry.
+    // jobs. Service at most one owner per pass, leaving failed jobs and dirty
+    // pages owned for explicit retry. Allocation can traverse multiple BAM parts.
     for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         dos_channel_t* const channel = &unit->channels[index];
         if (!channel->allocated || channel->file_type != DISKIMAGE_FTYPE_REL ||
             channel->directory != DOS_DIRECTORY_NONE || channel->failed) {
             continue;
+        }
+        if (rel_create_pending(channel)) {
+            rel_create_work(unit, media, channel);
+            return;
+        }
+        if (rel_growth_pending(channel)) {
+            rel_growth_work(unit, media, (uint8_t)index);
+            return;
+        }
+        if (rel_close_pending(channel)) {
+            rel_close_work(unit, media, (uint8_t)index);
+            return;
         }
         if (rel_position_pending(channel)) {
             rel_position_work(unit, media, (uint8_t)index);
@@ -2345,6 +3279,23 @@ static bool write_version(dos_unit_t* const unit, dos_media_bank_t* const media,
     return true;
 }
 
+// Retire saved CLSDIR snapshots after another publisher may have changed their sector.
+static void invalidate_rel_directory(dos_unit_t* const unit, const dos_media_ref_t reference, const uint8_t track,
+                                     const uint8_t sector, const uint8_t* const publisher) {
+    // Both pinned CLOSE:CLSDIR routines own DRTRD through DOIT. Host yields
+    // permit peer writes, so reread instead of restoring their older sector.
+    for (unsigned int index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
+        dos_channel_t* const state = &unit->channels[index];
+        if (state->allocated && state->file_type == DISKIMAGE_FTYPE_REL && state->directory == DOS_DIRECTORY_NONE &&
+            state->closing == DOS_CLOSE_REL_DIRECTORY_WRITE && state->media.unit == reference.unit &&
+            state->media.slot == reference.slot && state->media.identity == reference.identity &&
+            state->directory_track == track && state->directory_sector == sector &&
+            unit->buffers[state->buffers[state->rel.record.active]].bytes != publisher) {
+            state->closing = DOS_CLOSE_REL_DIRECTORY_READ;
+        }
+    }
+}
+
 // Write a native sector, retaining its caller-owned bytes after any failure.
 static bool write_sector(dos_unit_t* const unit, dos_media_bank_t* const media, const dos_media_ref_t reference,
                          const uint8_t track, const uint8_t sector, const uint8_t* const bytes) {
@@ -2360,8 +3311,12 @@ static bool write_sector(dos_unit_t* const unit, dos_media_bank_t* const media, 
         return false;
     }
     unit->buffer_writes |= bit;
-    return storage_error(unit, media, reference, dos_media_write(media, reference, track, sector, bytes), true, track,
-                         sector);
+    const dos_media_result_t result = dos_media_write(media, reference, track, sector, bytes);
+    // A failed host callback can have partially changed the directory too.
+    if (result == DOS_MEDIA_OK || result == DOS_MEDIA_IO_ERROR) {
+        invalidate_rel_directory(unit, reference, track, sector, bytes);
+    }
+    return storage_error(unit, media, reference, result, true, track, sector);
 }
 
 // SCRBAM/MAPOUT write a dirty BAM before replacing its sole per-drive cache.
@@ -2925,6 +3880,26 @@ bool dos_finalize(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // survive for retry rather than being cleared by a partial finalization.
     for (uint8_t index = 0; index < DOS_FILE_CHANNEL_COUNT; ++index) {
         dos_channel_t* const channel = &unit->channels[index];
+        if (channel->allocated && channel->file_type == DISKIMAGE_FTYPE_REL &&
+            channel->directory == DOS_DIRECTORY_NONE) {
+            if (unit->command != DOS_COMMAND_IDLE || (rel_owned_job_pending(channel) && !rel_close_pending(channel))) {
+                return false;
+            }
+            if (channel->access == DOS_ACCESS_READ && channel->directory_track == 0 && !rel_close_pending(channel)) {
+                continue;
+            }
+            if (channel->failed ? !dos_rel_channel_retry_close(unit, index) : !dos_rel_channel_close(unit, index)) {
+                return false;
+            }
+            // Drain only this storage owner, preserving all unfinished peers on failure.
+            while (channel->allocated && !channel->failed) {
+                rel_close_work(unit, media, index);
+            }
+            if (channel->allocated) {
+                return false;
+            }
+            continue;
+        }
         if (channel->allocated && channel->access != DOS_ACCESS_READ && !finish_channel(unit, media, channel)) {
             return false;
         }
@@ -6616,6 +7591,13 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     // '*' requests can finish here. '#' opens a raw shared page.
     vet(!dos_work_pending(unit), "native OPEN requires its preceding job to complete");
     const dos_model_t model = media->units[index].model;
+    const uint8_t previous = dos_find_channel(unit, secondary);
+    if (previous != DOS_UNUSED && unit->channels[previous].file_type == DISKIMAGE_FTYPE_REL &&
+        unit->channels[previous].directory == DOS_DIRECTORY_NONE && rel_owned_job_pending(&unit->channels[previous])) {
+        // Failed host jobs are not runnable, but OPEN must not discard their retry ownership.
+        command_error(unit, model, secondary, DOS_STATUS_SYNTAX);
+        return;
+    }
     // ROM tst2:L42 collects bounded input. The approved 4040 revision-2 pointer
     // limit is 59, matching DOS 2.7, not the older source's 41. The C
     // receive capacity bounds the raw copy. CMDSET applies the logical
@@ -7100,6 +8082,9 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
 
     // The tag owns transient command state, independent of OPEN's pending flag.
     switch (unit->command) {
+    case DOS_COMMAND_CLOSE:
+        close_work(unit, media);
+        return;
     case DOS_COMMAND_RENAME:
         rename_work(unit, media);
         return;
@@ -8024,7 +9009,8 @@ bool dos_work_pending(const dos_unit_t* const unit) {
         if (channel->allocated && channel->file_type == DISKIMAGE_FTYPE_REL &&
             channel->directory == DOS_DIRECTORY_NONE && !channel->failed &&
             ((channel->access == DOS_ACCESS_READ && channel->rel.record.result == DOS_REL_RECORD_PENDING) ||
-             rel_position_pending(channel) || rel_write_pending(channel))) {
+             rel_position_pending(channel) || rel_write_pending(channel) || rel_create_pending(channel) ||
+             rel_growth_pending(channel) || rel_close_pending(channel))) {
             return true;
         }
     }
