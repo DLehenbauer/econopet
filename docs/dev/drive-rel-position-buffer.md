@@ -27,7 +27,9 @@ Each pass makes one decision or at most one READ. Required READ and selected
 alternate failures stop without automatic retry, preserving owned pages,
 failed headers, phase and raw counter. They report the host READ ERROR 23
 policy with attempted track/sector and the owner's drive. Unused prefetch
-I/O/range failure remains deferred. A generation mismatch stops before any
+I/O/range failure remains deferred. If cached SETLST needs that failed
+alternate, positioning reports its saved header rather than the selected
+current-page header or zero coordinates. A generation mismatch stops before any
 replacement read and reports the existing host error at zero coordinates.
 
 POSITN/P2/P30/NXOUT and cached SETLST/FNDLST prepare the requested byte without
@@ -55,16 +57,16 @@ claimed equivalent. No private generated assembly or binary is published.
 | Behavior | Target peripheral/ROM | Primary source and routine | Required observable result | EconoPET code and test | Corroboration |
 |----------|-----------------------|----------------------------|----------------------------|------------------------|---------------|
 | Current/alternate BHERE and cold rotation | All selected targets, with approved 4040 revision-2 overlay | [4040 record][4040-record] / [DOS 2.7 record][8250-record], POSBUF/BHERE/SCRUB/P80/STRDBL | Current header match reuses bytes without READ. Otherwise try alternate only for a nonzero outgoing link. P80 rotates before cold refill | `rel_position_work`, 24 reuse cases cover current, alternate, both cold rotations, terminal alternate, raw zero and completed WRITE-header bytes | [VICE position][vice-position] corroborates header-based dual-buffer reuse but omits native P80/SCRUB sequencing. [MAME 4040][mame-4040] identifies revision-2 chips, not execution of this C path |
-| Required page wait, prefetch and headers | All selected targets | Both record POSBUF and [4040 tst2][4040-tst2] / [DOS 2.7 tst2][8250-tst2], DBLBUF/WATJOB/STRDBL, [4040 tsutil][4040-tsutil] / [DOS 2.7 tsutil][8250-tsutil], RDAB/GETHDR/SETHDR | Stop selected failed pages. Refill current target before prefetch, preserve READ drive/coordinates, defer only unused prefetch failure | Failure/cancellation cases assert current target error, failed alternate, deferred following data and zero WRITE/flush | VICE postpones some next-page reads and therefore corroborates ownership, not exact eager ordering. [MAME MPI][mame-mpi] establishes selected 8050/8250 hardware modes |
+| Required page wait, prefetch and headers | All selected targets | Both record POSBUF and [4040 tst2][4040-tst2] / [DOS 2.7 tst2][8250-tst2], DBLBUF/WATJOB/STRDBL, [4040 tsutil][4040-tsutil] / [DOS 2.7 tsutil][8250-tsutil], RDAB/GETHDR/SETHDR, both rel4 SETLST/DBLBUF and [4040 erproc][4040-erproc] / [DOS 2.7 erproc][8250-erproc], ERROR/ERROR1 | Stop selected failed pages. Refill current target before prefetch, preserve READ drive/coordinates, defer only unused prefetch failure. A required failed alternate reports its saved job header | Failure/cancellation cases assert current target error, failed alternate, deferred following data and zero WRITE/flush. Twelve cached-SETLST cases cover old/new failed alternates on current reuse, alternate reuse and cold refill, plus stale generation retaining zero coordinates | VICE postpones some next-page reads and therefore corroborates ownership, not exact eager ordering. [MAME MPI][mame-mpi] establishes selected 8050/8250 hardware modes |
 | Raw identity, flags and byte readiness | All selected targets | Both record R30/R40/POSITN/P2/P30, [4040 rel4][4040-rel4] / [DOS 2.7 rel4][8250-rel4], SETLST/FNDLST, both rel3 RD15/RD05 | Retain raw record zero while addressing record one. Normalize position, clear 4040 GETFLG only, prepare the requested byte/EOI without GET. Success retains command status | Reuse cases check raw zero, position two, flags, selected byte, side-page identity and status cursor. Existing counter/missing-byte leaf cases unchanged | VICE normalizes through its own high-level record indexing and scans zero tails. It does not establish native raw wrapping or the C scheduling boundary |
 | Bounded host scheduling, lifetime and source ownership | Explicit host adaptation supporting all targets | No direct ROM entry for generation/source tokens or C phase tags. Native POSBUF/DBLBUF establish required page/byte ordering | One READ per pass, no replacement reads, no writes/flushes, cancel pending work, preserve another owner's retained prefix | Three failure/remount/CLOSE cases per relevant variant, three peer-prefix cases and unchanged scheduler/layout assertions | MAME model declarations do not prove host generation guards, generic status 23 mapping or cooperative cancellation |
 
 ## Validation and exclusions
 
-The isolated candidate passes 642 focused REL cases in 66 groups and all
-5059 firmware cases (5012 ordinary plus 47 fatal/assert). Tests/frameworks
+The isolated candidate passes 654 focused REL cases in 67 groups and all
+5071 firmware cases (5024 ordinary plus 47 fatal/assert). Tests/frameworks
 and dependencies use Debug. RP2040 production RelWithDebInfo, clang-format,
-whitespace and the unit bound pass. The 42 new cases cover only this clean
+whitespace and the unit bound pass. The 54 new cases cover only this clean
 data-window primitive. No prior expectation or registration is changed.
 
 Full resident SSTEST/SSPOS/SSEND and 8250 group traversal, dirty positioning/
@@ -80,6 +82,8 @@ fresh full-ROM execution, board acceptance or an electrical/timing claim.
 [8250-tsutil]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
 [4040-rel4]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4
 [8250-rel4]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4
+[4040-erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+[8250-erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
 [vice-position]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-rel.c#L1115-L1324
 [mame-4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp#L142-L150
 [mame-mpi]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c8050.cpp#L79-L80

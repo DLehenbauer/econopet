@@ -1155,6 +1155,8 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/record
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
     //
     // Selected 4040 revision-2 POSBUF, like DOS 2.7, swaps at P80 before
     // STRDBL. Older unmodified 4040 source is revision 1. This host join
@@ -1233,6 +1235,15 @@ static void rel_position_work(dos_unit_t* const unit, dos_media_bank_t* const me
     record->phase = DOS_REL_RECORD_FOLLOWING;
     dos_rel_record_prepare_cached(record, media, unit->buffers[state->buffers[0]].bytes,
                                   unit->buffers[state->buffers[1]].bytes);
+    if (record->result == DOS_REL_RECORD_FAILED && record->following_failed) {
+        // SETLST's DBLBUF requires this failed job. Report its saved header,
+        // like ERROR/ERROR1, not the target header or a lifetime diagnostic.
+        const dos_buffer_t* const following = &unit->buffers[state->buffers[record->active ^ 1u]];
+        state->failed = true;
+        unit->selected_drive = state->media.slot;
+        dos_status(unit, state->rel_model, DOS_STATUS_READ_ERROR, following->track, following->sector);
+        return;
+    }
     rel_read_state(unit, state);
 }
 
