@@ -18,6 +18,8 @@ typedef struct {
     unsigned int fail_read;
     unsigned int writes;
     unsigned int flushes;
+    unsigned int fail_write;
+    bool fail_flush;
 } rel_image_t;
 
 static const dos_model_t models[] = {DOS_MODEL_4040, DOS_MODEL_8050, DOS_MODEL_8250};
@@ -1615,14 +1617,14 @@ START_TEST(test_channel_claim_peer_teardown_and_ordinary_reuse) {
 }
 END_TEST
 
-// Bound cooperative unit service to one media read per call.
+// Bound cooperative unit service to one media READ or WRITE per call.
 static void finish_pipeline(dos_unit_t* const unit, dos_media_bank_t* const bank, rel_image_t* const image) {
     unsigned int steps = 0;
     while (dos_work_pending(unit)) {
         ck_assert_uint_lt(steps++, 16);
-        const unsigned int reads = image->reads;
+        const unsigned int reads = image->reads, writes = image->writes;
         dos_work(unit, bank);
-        ck_assert_uint_le(image->reads - reads, 1);
+        ck_assert_uint_le(image->reads - reads + image->writes - writes, 1);
     }
 }
 
@@ -2839,6 +2841,395 @@ START_TEST(test_clean_position_buffer_peer_prefix) {
 }
 END_TEST
 
+// Prepare a clean owner with a real side/data window, without write-only setup.
+static uint8_t prepare_clean_index_channel(dos_unit_t* const unit, dos_media_bank_t* const bank,
+                                           rel_image_t* const image, const unsigned int format,
+                                           const dos_media_ref_t reference, const uint8_t secondary) {
+    const uint8_t channel = dos_rel_channel_claim(unit, reference, secondary);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    dos_rel_channel_prepare(unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 200, 0);
+    finish_pipeline(unit, bank, image);
+    ck_assert(unit->channels[channel].ready && !unit->channels[channel].failed);
+    return channel;
+}
+
+// Resident SSTEST precedes range checks and SSPOS's second test branches on N only.
+START_TEST(test_clean_position_resident_index) {
+    const unsigned int format = (unsigned int)_i / 9u;
+    const unsigned int variant = (unsigned int)_i % 9u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, format, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_buffer_t* const side = &unit.buffers[state->buffers[2]];
+    image.bytes[0][4] = 1;
+    image.bytes[0][5] = 0;
+    image.bytes[0][1] = UINT8_MAX;
+    image.bytes[1][1] = UINT8_MAX;
+    image.bytes[1][2] = variant == 2 || variant == 8 ? 0 : 1;
+    image.bytes[1][6] = 1;
+    image.bytes[1][7] = 1;
+    image.bytes[1][16] = variant == 8 ? 0 : 1;
+    image.bytes[1][17] = 4;
+    uint16_t number = variant == 0 ? 0 : 1;
+    if (variant == 1 || variant == 2 || variant == 8) {
+        number = 154;
+        image.bytes[0][6] = 1;
+        image.bytes[0][7] = 1;
+    } else if (variant >= 3) {
+        image.bytes[0][16] = 0;
+        if (variant == 4) {
+            number = 916;
+        } else if (variant == 5) {
+            memset(image.bytes[0] + DOS_REL_SIDE_TABLE_OFFSET, 0, DOS_REL_SIDE_COUNT * 2u);
+        } else if (variant == 6) {
+            image.bytes[0][6] = 1;
+            image.bytes[0][7] = 1;
+        } else if (variant == 7) {
+            image.bytes[0][0] = 1;
+        }
+    }
+    memcpy(side->bytes, image.bytes[0], sizeof(side->bytes));
+    const dos_rel_record_t before = state->rel.record;
+    state->rel.get_active = true;
+    state->rel.no_record = true;
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_position(&unit, channel, number, 0));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert(!state->ready && !state->failed && dos_work_pending(&unit));
+    ck_assert(!state->rel.no_record);
+    ck_assert_int_eq(state->rel.get_active, format != 0);
+    const dos_unit_t pending = unit;
+    ck_assert(!dos_rel_channel_position(&unit, channel, 2, 1));
+    ck_assert_mem_eq(&unit, &pending, sizeof(pending));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(state->rel.number, number);
+    ck_assert_uint_eq(state->directory, DOS_DIRECTORY_NONE);
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+    const unsigned int extra_reads = variant == 1 || variant == 2 ? 2 : variant == 6 || variant == 8 ? 1 : 0;
+    ck_assert_uint_eq(image.reads, reads + extra_reads + (format == 2 && variant >= 3 && variant < 8 ? 2 : 0));
+    if (variant == 5 || variant == 7 || variant == 8) {
+        ck_assert(state->failed && !state->ready);
+        ck_assert_str_eq(unit.status, variant == 8  ? format == 0 ? "23,READ ERROR,00,04\r" : "23,READ ERROR,00,04,1\r"
+                                      : format == 0 ? "67,ILLEGAL TRACK OR SECTOR,00,00\r"
+                                                    : "67,ILLEGAL TRACK OR SECTOR,00,00,1\r");
+        ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+        return;
+    }
+    ck_assert(state->ready && !state->failed);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_FILE_EXISTS);
+    ck_assert_uint_eq(unit.status_position, 2);
+    uint8_t output = 0;
+    bool eoi = false;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 1);
+    if (variant < 3) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_READY);
+        ck_assert_uint_eq(output, variant == 0 ? 'A' : 'B');
+        ck_assert_uint_eq(state->rel.record.pointer, variant == 0 ? 2 : 122);
+        ck_assert_uint_eq(side->bytes[DOS_REL_SIDE_NUMBER_OFFSET], variant == 1 ? 1 : 0);
+    } else {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_MISSING);
+        ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+        ck_assert_uint_eq(state->rel.record.next, before.next);
+        ck_assert_uint_eq(state->rel.record.lookup.address.index, 254);
+        ck_assert_uint_eq(state->rel.record.lookup.address.side, variant == 6 ? 1 : 0);
+        ck_assert_uint_eq(output, '\r');
+        ck_assert(eoi);
+        ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[2], 'A');
+        dos_get(&unit, &bank, channel, 1);
+        ck_assert_str_eq(unit.status,
+                         format == 0 ? "50, RECORD NOT PRESENT,00,00\r" : "50, RECORD NOT PRESENT,00,00,1\r");
+        ck_assert_uint_eq(state->rel.number, number);
+        ck_assert(state->rel.no_record);
+    }
+}
+END_TEST
+
+// Failed side/super/last-side waits retain pages, while remount/CLOSE stop all reads.
+START_TEST(test_clean_position_index_failure_and_cancel) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, format, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    image.bytes[0][6] = 1;
+    image.bytes[0][7] = 1;
+    image.bytes[1][1] = UINT8_MAX;
+    image.bytes[1][2] = 1;
+    image.bytes[1][16] = 1;
+    image.bytes[1][17] = 4;
+    memcpy(unit.buffers[state->buffers[2]].bytes, image.bytes[0], DISKIMAGE_SECTOR_SIZE);
+    if (variant == 1 && format == 2) {
+        state->rel.record.cached_group = DOS_REL_GROUP_NONE;
+    }
+    ck_assert(dos_rel_channel_position(&unit, channel, variant == 1 && format != 2 ? 916 : 154, 0));
+    const unsigned int reads = image.reads;
+    const dos_rel_record_t before = state->rel.record;
+    const uint16_t use = unit.buffer_use;
+    if (variant == 2) {
+        mount_open_image(&bank, &replacement, format, 3, 1);
+    } else if (variant == 3) {
+        ck_assert(dos_close(&unit, &bank, models[format], 2));
+    } else {
+        image.fail_read = reads + 1u;
+    }
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(image.reads, reads + (variant < 2));
+    ck_assert_uint_eq(replacement.reads | replacement.writes | image.writes | image.flushes, 0);
+    if (variant == 3) {
+        ck_assert(!state->allocated);
+        ck_assert_uint_eq(unit.buffer_use, 0);
+        return;
+    }
+    ck_assert(state->allocated && state->failed && !state->ready);
+    ck_assert_uint_eq(unit.buffer_use, use);
+    ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+    ck_assert_uint_eq(state->rel.record.next, before.next);
+    ck_assert_str_eq(unit.status, variant == 2  ? format == 0 ? "23,READ ERROR,00,00\r" : "23,READ ERROR,00,00,1\r"
+                                  : format == 0 ? "23,READ ERROR,01,01\r"
+                                  : variant == 1 && format == 2 ? "23,READ ERROR,01,02,1\r"
+                                                                : "23,READ ERROR,01,01,1\r");
+    const dos_unit_t failed = unit;
+    dos_work(&unit, &bank);
+    ck_assert(!dos_rel_channel_position(&unit, channel, 1, 0));
+    ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+}
+END_TEST
+
+// RDLG directly reuses group 90, but scans a super table after other cached groups.
+START_TEST(test_clean_position_last_group_cache) {
+    const unsigned int variant = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, 2, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, DOS_MODEL_8250);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, 2, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_buffer_t* const side = &unit.buffers[state->buffers[2]];
+    image.bytes[0][1] = UINT8_MAX;
+    image.bytes[0][4] = 1;
+    image.bytes[0][16] = 0;
+    image.bytes[2][DOS_REL_GROUP_TABLE_OFFSET + 2u * DOS_REL_END_GROUP_START] = 1;
+    image.bytes[2][DOS_REL_GROUP_TABLE_OFFSET + 2u * DOS_REL_END_GROUP_START + 1u] = 0;
+    state->rel.record.cached_group = variant == 0   ? DOS_REL_END_GROUP_START
+                                     : variant == 1 ? DOS_REL_MAX_GROUP
+                                     : variant == 2 ? DOS_REL_GROUP_SUPER
+                                                    : DOS_REL_GROUP_NONE;
+    memcpy(side->bytes, image.bytes[variant == 2 ? 2 : 0], sizeof(side->bytes));
+    if (variant == 1) {
+        side->bytes[DOS_REL_SIDE_NUMBER_OFFSET] = 2;
+        side->bytes[82] = 0;
+    }
+    state->rel.record.size = UINT8_MAX;
+    const dos_rel_record_t before = state->rel.record;
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_position(&unit, channel, variant == 1 ? UINT16_MAX : 64547, 0));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_MISSING);
+    ck_assert_uint_eq(state->directory, DOS_DIRECTORY_NONE);
+    ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+    ck_assert_uint_eq(state->rel.record.next, before.next);
+    ck_assert_uint_eq(state->rel.record.cached_group, DOS_REL_END_GROUP_START);
+    ck_assert_uint_eq(state->rel.record.lookup.address.group, DOS_REL_END_GROUP_START);
+    ck_assert_uint_eq(state->rel.record.lookup.address.side, 0);
+    ck_assert_uint_eq(state->rel.record.lookup.address.index, 254);
+    ck_assert_uint_eq(image.reads, reads + (variant == 0 ? 0 : variant == 2 ? 1 : 2));
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
+// Even wrapped high side numbers accept equal headers before the six-side limit.
+START_TEST(test_clean_position_wrapped_resident_header) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, format, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    state->rel.record.size = UINT8_MAX;
+    const dos_rel_address_t address = dos_rel_address(models[format], UINT16_MAX, UINT8_MAX, 0);
+    dos_buffer_t* const side = &unit.buffers[state->buffers[2]];
+    memset(side->bytes, 0, sizeof(side->bytes));
+    side->bytes[DOS_REL_SIDE_NUMBER_OFFSET] = address.side;
+    side->bytes[address.index] = 1;
+    side->bytes[address.index + 1u] = 3;
+    state->rel.record.cached_group = address.group;
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_position(&unit, channel, UINT16_MAX, 0));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(state->directory, DOS_DIRECTORY_NONE);
+    ck_assert_uint_eq(state->rel.record.pointer, address.offset);
+    ck_assert_uint_eq(state->rel.number, UINT16_MAX);
+    ck_assert_uint_eq(image.reads, reads);
+    uint8_t output;
+    bool eoi;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 1);
+    ck_assert_uint_eq(output, 'A');
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
+// OPEN leaves the big index uncached, repeated positioning reuses it, CLOSE retires it.
+START_TEST(test_clean_position_open_cache_lifetime) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channel = DOS_UNUSED;
+    for (unsigned int lifetime = 0; lifetime < 2u; ++lifetime) {
+        const uint8_t reclaimed = dos_rel_channel_claim(&unit, reference, 2);
+        ck_assert_uint_ne(reclaimed, DOS_UNUSED);
+        if (lifetime != 0) {
+            ck_assert_uint_eq(reclaimed, channel);
+        }
+        channel = reclaimed;
+        dos_rel_channel_prepare_open(&unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 3, 200);
+        finish_pipeline(&unit, &bank, &image);
+        for (unsigned int request = 0; request < 2u; ++request) {
+            const unsigned int reads = image.reads;
+            ck_assert(dos_rel_channel_position(&unit, channel, 1, 0));
+            finish_pipeline(&unit, &bank, &image);
+            ck_assert_uint_eq(image.reads, reads + (format == 2 && request == 0 ? 2 : 0));
+            uint8_t output;
+            bool eoi;
+            ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 1);
+            ck_assert_uint_eq(output, 'A');
+        }
+        ck_assert(dos_close(&unit, &bank, models[format], 2));
+        ck_assert_uint_eq(unit.buffer_use, 0);
+    }
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
+// A failed index owner must not replace another unit's retained output prefix.
+START_TEST(test_clean_position_index_peer_prefix) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        const dos_media_ref_t reference = mount_open_image(&bank, &images[owner], format, owner, owner);
+        channels[owner] = prepare_clean_index_channel(&unit, &bank, &images[owner], format, reference, owner + 2u);
+    }
+    dos_buffer_t* const side = &unit.buffers[unit.channels[channels[0]].buffers[2]];
+    side->bytes[6] = 1;
+    side->bytes[7] = 1;
+    uint8_t output[8];
+    bool eoi;
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 3, output, sizeof(output), &eoi, &source), sizeof(output));
+    const dos_channel_t peer = unit.channels[channels[1]];
+    images[0].fail_read = images[0].reads + 1u;
+    ck_assert(dos_rel_channel_position(&unit, channels[0], 154, 0));
+    finish_pipeline(&unit, &bank, &images[0]);
+    ck_assert(unit.channels[channels[0]].failed);
+    ck_assert_mem_eq(&unit.channels[channels[1]], &peer, sizeof(peer));
+    const unsigned int reads = images[1].reads;
+    const dos_channel_t failed = unit.channels[channels[0]];
+    dos_output_get(&unit, &bank, models[format], source, sizeof(output));
+    ck_assert_uint_eq(unit.channels[channels[1]].rel.record.pointer, peer.rel.record.pointer + sizeof(output));
+    ck_assert_uint_eq(images[1].reads, reads);
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(images[0].writes | images[1].writes | images[0].flushes | images[1].flushes, 0);
+}
+END_TEST
+
+// Failed group replacement invalidates its tag, empty super-table underflow stays unsupported.
+START_TEST(test_clean_position_group_failure_and_empty_table) {
+    const unsigned int variant = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, 2, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, DOS_MODEL_8250);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, 2, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_buffer_t* const side = &unit.buffers[state->buffers[2]];
+    if (variant == 2) {
+        side->bytes[DOS_REL_POINTER_OFFSET] = 0;
+    } else {
+        state->rel.record.cached_group = DOS_REL_GROUP_SUPER;
+        memcpy(side->bytes, image.bytes[2], sizeof(side->bytes));
+    }
+    if (variant == 3) {
+        memset(side->bytes, 0, sizeof(side->bytes));
+    }
+    state->rel.record.size = UINT8_MAX;
+    const unsigned int reads = image.reads;
+    image.fail_read = reads + 1u;
+    ck_assert(dos_rel_channel_position(&unit, channel, variant == 1 || variant == 3 ? 64547 : 1, 0));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->directory, DOS_DIRECTORY_NONE);
+    ck_assert_uint_eq(image.reads, reads + (variant != 3));
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+    if (variant == 3) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_NO_INDEX);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_SYNTAX);
+        uint8_t output = 0xee;
+        bool eoi = false;
+        ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 0);
+        ck_assert_uint_eq(output, 0xee);
+    } else {
+        ck_assert_uint_eq(state->rel.record.cached_group, DOS_REL_GROUP_NONE);
+        ck_assert_str_eq(unit.status, variant == 2 ? "23,READ ERROR,01,02,1\r" : "23,READ ERROR,01,00,1\r");
+        ck_assert(side->failed && !side->resident);
+    }
+}
+END_TEST
+
+// SSEND's DEY endpoint wraps byte zero and one without moving the data cursor.
+START_TEST(test_clean_position_terminal_endpoint_wrap) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const uint8_t endpoint = (unsigned int)_i % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_open_image(&bank, &image, format, 3, 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_clean_index_channel(&unit, &bank, &image, format, reference, 2);
+    dos_channel_t* const state = &unit.channels[channel];
+    image.bytes[0][1] = endpoint;
+    image.bytes[0][DOS_REL_SIDE_TABLE_OFFSET] = 1;
+    image.bytes[0][DOS_REL_POINTER_OFFSET] = 0;
+    memcpy(unit.buffers[state->buffers[2]].bytes, image.bytes[0], DISKIMAGE_SECTOR_SIZE);
+    const dos_rel_record_t before = state->rel.record;
+    ck_assert(dos_rel_channel_position(&unit, channel, 1, 0));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_MISSING);
+    ck_assert_uint_eq(state->rel.record.lookup.address.index, endpoint == 0 ? UINT8_MAX : 0);
+    ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+    ck_assert_uint_eq(state->rel.record.next, before.next);
+    uint8_t output;
+    bool eoi;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 1);
+    ck_assert_uint_eq(output, '\r');
+    ck_assert(eoi);
+    ck_assert_uint_eq(image.writes | image.flushes, 0);
+}
+END_TEST
+
 // In-page writes use the current pointer, preserve read flags and pad only the record suffix.
 START_TEST(test_record_put_and_pad_borrowed_pages) {
     const unsigned int format = (unsigned int)_i / 4u;
@@ -3228,6 +3619,2545 @@ START_TEST(test_record_put_peer_isolation) {
 END_TEST
 
 // Register native index, clean-read and allocation-preflight contracts.
+// Consume one explicit sector, allowing a partial write before failure.
+static bool write_index(void* const context, const uint32_t offset, const void* const input, const size_t length) {
+    rel_image_t* const image = context;
+    ck_assert_uint_eq(length, DISKIMAGE_SECTOR_SIZE);
+    ++image->writes;
+    for (unsigned int page = 0; page < count_of(image->bytes); ++page) {
+        if (image->offsets[page] == offset) {
+            const bool failed = image->writes == image->fail_write;
+            memcpy(image->bytes[page], input, failed ? length / 2u : length);
+            return !failed;
+        }
+    }
+    ck_abort_msg("unexpected REL write at offset %u", offset);
+    return false;
+}
+
+// Keep sector publication distinct from backing-store durability.
+static bool flush_index(void* const context) {
+    rel_image_t* const image = context;
+    ++image->flushes;
+    return !image->fail_flush;
+}
+
+// Bind existing records with optional writes and injected storage failures.
+static dos_media_ref_t mount_job_image(dos_media_bank_t* const bank, rel_image_t* const image,
+                                       const unsigned int format, const unsigned int unit, const unsigned int slot,
+                                       const bool writable) {
+    dos_media_ref_t reference = mount_record_at(bank, image, format, 1, 200, 0, true, unit, slot);
+    image->bytes[4][0] = 1;
+    image->bytes[4][1] = 5;
+    image->bytes[5][1] = UINT8_MAX;
+    for (unsigned int page = 3; page < 6; ++page) {
+        memset(image->bytes[page] + 2, 'A' + page - 3u, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    }
+    if (writable) {
+        dos_media_io_t io = bank->units[unit].slots[slot].io;
+        io.image.write = write_index;
+        io.flush = flush_index;
+        ck_assert_int_eq(dos_media_set_slot(bank, unit, slot, &io), DOS_MEDIA_OK);
+        ck_assert_int_eq(dos_media_reference(bank, unit, slot, &reference), DOS_MEDIA_OK);
+    }
+    return reference;
+}
+
+// Prepare an existing record and consume real GETs before taking writer ownership.
+static uint8_t prepare_job_channel(dos_unit_t* const unit, dos_media_bank_t* const bank, rel_image_t* const image,
+                                   const unsigned int format, const dos_media_ref_t reference, const uint8_t secondary,
+                                   const unsigned int consumed) {
+    const uint8_t channel = dos_rel_channel_claim(unit, reference, secondary);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    dos_rel_channel_prepare(unit, channel, models[format], 1, format == 2 ? 2 : 0, 1, 200, 0);
+    finish_pipeline(unit, bank, image);
+    for (unsigned int byte = 0; byte < consumed; ++byte) {
+        uint8_t output;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(unit, bank, secondary, &output, 1, &eoi, &source), 1);
+        dos_output_get(unit, bank, models[format], source, 1);
+        finish_pipeline(unit, bank, image);
+    }
+    dos_channel_t* const state = &unit->channels[channel];
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_READY);
+    state->ready = false;
+    // SETJOB permits version zero in the currently resident per-drive BAM.
+    unit->bam[reference.slot] = (dos_bam_t){.media = reference, .buffer = {.resident = true}};
+    return channel;
+}
+
+// CLDCHN uses the active data page's LSTJOB, never writer flags or the media slot.
+START_TEST(test_initialize_relative_active_job) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    rel_image_t image = {0}, peer_image = {0};
+    dos_media_bank_t bank = {0};
+    mount_job_image(&bank, &peer_image, format, 3, 0, true);
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_media_ref_t peer_reference;
+    ck_assert_int_eq(dos_media_reference(&bank, 3, 0, &peer_reference), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t peer = prepare_job_channel(&unit, &bank, &peer_image, format, peer_reference, 3, 0);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t active;
+    if (variant == 3) {
+        state->directory = DOS_DIRECTORY_HEADER;
+        state->active = 1;
+        active = state->active;
+    } else {
+        ck_assert(dos_rel_channel_begin_write(&unit, channel));
+        state->rel.record.active = variant == 1;
+        ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+        if (variant == 2) {
+            ck_assert(dos_rel_channel_pad(&unit, channel));
+            finish_pipeline(&unit, &bank, &image);
+        }
+        active = state->rel.record.active;
+    }
+    const uint16_t active_bit = 1u << state->buffers[active];
+    const uint16_t other_bit = 1u << state->buffers[active ^ 1u];
+    unit.buffer_drives =
+        (unit.buffer_drives & (uint16_t)~(active_bit | other_bit)) | (variant == 1 ? other_bit : active_bit);
+    const dos_channel_t owner = *state, peer_before = unit.channels[peer];
+    const unsigned int writes = image.writes;
+    // Fail INITDR's metadata read after teardown so this fixture needs no blank disk.
+    image.fail_read = image.reads + 1u;
+    const uint8_t request[] = {'I', '1'};
+    dos_command(&unit, &bank, 3, request, sizeof(request));
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_mem_eq(&unit.channels[peer], &peer_before, sizeof(peer_before));
+    if (variant == 1) {
+        ck_assert_mem_eq(state, &owner, sizeof(owner));
+    } else {
+        ck_assert(!state->allocated);
+        for (unsigned int page = 0; page < count_of(owner.buffers); ++page) {
+            ck_assert(!(unit.buffer_use & (1u << owner.buffers[page])));
+        }
+    }
+}
+END_TEST
+
+// Ordinary block editors cannot reinterpret the retained REL cursor or writer flags.
+START_TEST(test_relative_writer_rejects_ordinary_block_editors) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int command = (unsigned int)_i % 5u;
+    static const char* const requests[] = {"B-R:2,1,1,3", "B-W:2,1,1,3", "U1:2,1,1,3", "U2:2,1,1,3", "B-P:2,2"};
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    const dos_channel_t owner = unit.channels[channel];
+    const unsigned int reads = image.reads, writes = image.writes;
+    dos_command(&unit, &bank, 3, (const uint8_t*)requests[command], strlen(requests[command]));
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_SYNTAX);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert_mem_eq(&unit.channels[channel], &owner, sizeof(owner));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+}
+END_TEST
+
+// Required MODIFY SETLST failures retry only the failed alternate, then consume the record.
+START_TEST(test_position_required_prefetch_retry) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    const bool remount = (unsigned int)_i % 6u >= 3u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    if (variant == 0) {
+        image.fail_read = 3u + (format == 2);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (variant != 0) {
+        image.fail_read = image.reads + (variant == 2 ? 2u : 1u);
+        if (variant == 2) {
+            unit.buffers[state->buffers[1]].sector = 6;
+        }
+    }
+    const uint16_t number = variant == 0 ? 2 : 3;
+    ck_assert(dos_rel_channel_position_buffer(&unit, channel, number, 0, 1, variant == 0 ? 3 : 4));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    const dos_channel_t failed = *state;
+    const uint8_t required = variant == 0 ? 4 : 5;
+    char status[sizeof(unit.status)];
+    snprintf(status, sizeof(status), format == 0 ? "%02u,READ ERROR,01,%02u\r" : "%02u,READ ERROR,01,%02u,1\r",
+             DOS_STATUS_READ_ERROR, required);
+    ck_assert_str_eq(unit.status, status);
+    ck_assert(dos_rel_channel_retry_position(&unit, channel));
+    image.fail_read = image.reads + 1u;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel.number, failed.rel.number);
+    ck_assert_uint_eq(state->rel.record.active, failed.rel.record.active);
+    ck_assert_uint_eq(state->rel_write, failed.rel_write);
+    if (remount) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+        ck_assert(dos_rel_channel_retry_position(&unit, channel));
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->failed && !state->ready);
+        ck_assert_int_eq(state->rel.record.lookup.media_result, DOS_MEDIA_STALE);
+        ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+        ck_assert(!dos_rel_channel_retry_position(&unit, channel));
+        return;
+    }
+    ck_assert(dos_rel_channel_retry_position(&unit, channel));
+    const unsigned int reads = image.reads, writes = image.writes;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(image.reads, reads + 1u);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_str_eq(unit.status, status);
+    const unsigned int first_bytes = variant == 0 ? 54u : 108u;
+    for (unsigned int byte = 0; byte < 200; ++byte) {
+        uint8_t output;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &output, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(output, (variant == 0 ? 'A' : 'B') + (byte >= first_bytes));
+        ck_assert_int_eq(eoi, byte == 199);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        finish_pipeline(&unit, &bank, &image);
+    }
+    ck_assert_uint_eq(state->rel.number, number + 1u);
+}
+END_TEST
+
+// Replace unused index fixture pages with an explicit valid native BAM chain.
+static unsigned int prepare_job_bam(dos_media_bank_t* const bank, rel_image_t* const image, const unsigned int format,
+                                    const dos_media_ref_t reference) {
+    const unsigned int parts = format == 0 ? 1u : format == 1 ? 2u : 4u;
+    const unsigned int pages[] = {0, 1, 2, 6};
+    const unsigned int tracks[] = {DISKIMAGE_D64_TRACK_COUNT, DISKIMAGE_D80_TRACK_COUNT, DISKIMAGE_D82_TRACK_COUNT};
+    const unsigned int tracks_per_part = 50u, interleave = 3u;
+    for (unsigned int part = 0; part < parts; ++part) {
+        const unsigned int page = pages[part];
+        memset(image->bytes[page], 0, DISKIMAGE_SECTOR_SIZE);
+        ck_assert(diskimage_sector_offset(bank->units[reference.unit].slots[reference.slot].io.image.type,
+                                          format == 0 ? 18 : 38, part * interleave, &image->offsets[page]));
+        image->bytes[page][0] = part + 1u < parts ? 38 : 0;
+        image->bytes[page][1] = (part + 1u) * interleave;
+        if (format != 0) {
+            image->bytes[page][4] = 1u + part * tracks_per_part;
+            image->bytes[page][5] = MIN(1u + (part + 1u) * tracks_per_part, tracks[format] + 1u);
+        }
+    }
+    return parts;
+}
+
+// The initial version gate must walk the cold BAM without combining it with WRITE.
+START_TEST(test_write_cold_bam_is_cooperative) {
+    const unsigned int format = (unsigned int)_i / 8u;
+    const unsigned int variant = (unsigned int)_i % 8u;
+    rel_image_t image = {0}, peer_image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t peer_reference = mount_job_image(&bank, &peer_image, format, 0, 1, true);
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    const unsigned int parts = prepare_job_bam(&bank, &image, format, reference);
+    const unsigned int pages[] = {0, 1, 2, 6};
+    const unsigned int tracks_per_part = 50u, interleave = 3u;
+    if (variant == 3 || variant == 4) {
+        image.bytes[pages[variant == 3 ? parts - 1u : 0]][2] = UINT8_MAX;
+    } else if (variant == 7 && format != 0) {
+        image.bytes[0][0] = 38;
+        image.bytes[0][1] = 0;
+    }
+    unit.bam[1] = (dos_bam_t){0};
+    if (variant == 6) {
+        // The previous cache remains a live dirty owner on an independent media unit.
+        peer_image.offsets[0] = image.offsets[0];
+        unit.bam[1] = (dos_bam_t){
+            .media = peer_reference, .buffer = {.track = format == 0 ? 18 : 38, .resident = true}, .dirty = true};
+        if (format != 0) {
+            unit.bam[1].buffer.bytes[4] = 1;
+            unit.bam[1].buffer.bytes[5] = tracks_per_part + 1u;
+        }
+        const unsigned int entry = format == 0 ? 4u : 6u;
+        unit.bam[1].buffer.bytes[entry] = 1;
+        unit.bam[1].buffer.bytes[entry + 1u] = 1;
+    }
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    const unsigned int reads = image.reads;
+    if (variant == 1 || variant == 2) {
+        image.fail_read = reads + (variant == 1 ? 1u : parts);
+        // Reach the failed BAM read one pass at a time, retaining the old complete cache.
+        for (unsigned int pass = 0; pass < 16 && !state->failed; ++pass) {
+            const dos_bam_t old_bam = unit.bam[1];
+            const unsigned int old_reads = image.reads, old_writes = image.writes;
+            dos_work(&unit, &bank);
+            ck_assert_uint_le(image.reads - old_reads + image.writes - old_writes, 1);
+            if (state->failed) {
+                ck_assert_mem_eq(&unit.bam[1], &old_bam, sizeof(old_bam));
+            }
+        }
+        ck_assert(state->failed);
+        ck_assert_uint_eq(image.writes, 0);
+        ck_assert(state->rel_write & DOS_REL_DIRTY_FIRST);
+        ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    } else if (variant == 5) {
+        dos_work(&unit, &bank);
+        ck_assert_uint_eq(image.reads, reads + 1u);
+        ck_assert_uint_eq(image.writes, 0);
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->failed);
+        ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+        ck_assert(state->rel_write & DOS_REL_DIRTY_FIRST);
+        return;
+    } else if (variant == 6) {
+        dos_work(&unit, &bank);
+        ck_assert_uint_eq(peer_image.writes, 1);
+        ck_assert_uint_eq(peer_image.bytes[0][format == 0 ? 4u : 6u], 1);
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(image.writes, 0);
+        ck_assert(!unit.bam[1].dirty);
+    }
+    finish_pipeline(&unit, &bank, &image);
+    if (variant == 7 && format != 0) {
+        ck_assert(state->failed);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_DIRECTORY_ERROR);
+        ck_assert_uint_eq(image.reads, reads + 4u);
+        ck_assert_uint_eq(image.writes, 0);
+        return;
+    }
+    if (variant == 3 || (variant == 4 && parts == 1)) {
+        ck_assert(state->failed);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_POWER_ON);
+        ck_assert_uint_eq(image.writes, 0);
+        ck_assert(state->rel_write & DOS_REL_DIRTY_FIRST);
+        return;
+    }
+    ck_assert(!state->failed);
+    ck_assert_uint_eq(image.reads, reads + parts + (variant == 1 || variant == 2));
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.bytes[3][UINT8_MAX], 'Z');
+    ck_assert_uint_eq(unit.bam[1].buffer.sector, (parts - 1u) * interleave);
+}
+END_TEST
+
+// B-F may replace a paused leaf or failed writer's BAM before explicit retry.
+START_TEST(test_write_bam_command_replacement) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    rel_image_t image = {0}, peer_image = {0};
+    dos_media_bank_t bank = {0};
+    mount_job_image(&bank, &peer_image, format, 3, 0, true);
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, variant == 1 ? 253 : 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    const unsigned int parts = prepare_job_bam(&bank, &image, format, reference);
+    dos_media_ref_t peer;
+    ck_assert_int_eq(dos_media_reference(&bank, 3, 0, &peer), DOS_MEDIA_OK);
+    prepare_job_bam(&bank, &peer_image, format, peer);
+    unit.bam[1] = (dos_bam_t){0};
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (variant == 1) {
+        image.fail_read = image.reads + parts;
+    }
+    // The direct leaf is explicitly caller-driven. Failed cooperative jobs also stop polling.
+    for (unsigned int part = 0; part < parts; ++part) {
+        const unsigned int reads = image.reads, writes = image.writes;
+        ck_assert(!dos_rel_channel_writeback(&unit, &bank, channel, &state->rel_write));
+        ck_assert_uint_le(image.reads - reads + image.writes - writes, 1);
+    }
+    ck_assert_int_eq(state->failed, variant == 1);
+    ck_assert(!dos_work_pending(&unit));
+    const dos_channel_t saved = *state;
+    const dos_bam_t cached = unit.bam[1];
+    if (variant == 3 && format != 0) {
+        image.fail_read = image.reads + 1u;
+    }
+    const uint8_t request[] = "B-F:1,1,1", peer_request[] = "B-F:0,1,1";
+    dos_command(&unit, &bank, 3, variant == 2 ? peer_request : request, sizeof(request) - 1u);
+    dos_work(&unit, &bank);
+    ck_assert(!dos_work_pending(&unit));
+    if (variant == 2 || (variant == 3 && format != 0)) {
+        ck_assert_mem_eq(&unit.bam[1], &cached, sizeof(cached));
+        ck_assert_mem_eq(state, &saved, sizeof(saved));
+    } else {
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_OK);
+    }
+    if (variant == 1) {
+        ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    }
+    bool completed = false;
+    for (unsigned int pass = 0; pass < 16 && !completed && !state->failed; ++pass) {
+        const unsigned int reads = image.reads, writes = image.writes;
+        completed = dos_rel_channel_writeback(&unit, &bank, channel, &state->rel_write);
+        ck_assert_uint_le(image.reads - reads + image.writes - writes, 1);
+    }
+    ck_assert(completed && !state->failed);
+    ck_assert_uint_eq(state->rel.number, saved.rel.number);
+    ck_assert_uint_eq(state->rel.record.pointer, saved.rel.record.pointer);
+    ck_assert_uint_eq(image.bytes[3][variant == 1 ? UINT8_MAX : 2], 'Z');
+    ck_assert(!(state->rel_write & DOS_REL_DIRTY_FIRST));
+}
+END_TEST
+
+// Dirty POSBUF must preserve the native cached job and explicit retry.
+START_TEST(test_pipeline_position_buffer_reuse) {
+    const unsigned int format = (unsigned int)_i / 8u;
+    const unsigned int variant = (unsigned int)_i % 8u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    if (variant == 5 || variant == 7) {
+        image.bytes[3][0] = 0;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    if (variant == 1 || variant == 3 || variant >= 6) {
+        ck_assert(dos_rel_channel_begin_write(&unit, channel));
+        if (variant == 3) {
+            const dos_rel_record_t saved = state->rel.record;
+            state->rel.record.active ^= 1u;
+            ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Q'));
+            ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &state->rel_write));
+            state->rel.record = saved;
+        } else {
+            ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+        }
+    }
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads, writes = image.writes;
+    const uint8_t target = variant < 2 ? 3 : variant < 4 ? 4 : 5;
+    const uint8_t position = variant == 1 ? 2 : 0;
+    ck_assert(dos_rel_channel_position_buffer(&unit, channel, 1, position, 1, target));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert(!state->ready && !state->failed);
+    ck_assert(!dos_rel_channel_position_buffer(&unit, channel, 2, 0, 1, 3));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(image.reads, reads + (variant >= 2));
+    ck_assert_uint_eq(image.writes, writes + (variant >= 6));
+    ck_assert_uint_eq(image.flushes, 0);
+    const bool other = variant == 2 || variant == 3 || variant == 5 || variant == 7;
+    ck_assert_uint_eq(state->rel.record.active, other);
+    ck_assert_uint_eq(state->rel.record.pointer, variant == 1 ? 3 : 2);
+    ck_assert_uint_eq(state->rel.number, 1);
+    ck_assert_uint_eq(state->rel_write & (DOS_REL_DIRTY_FIRST | DOS_REL_DIRTY_FOLLOWING),
+                      variant == 1 ? DOS_REL_DIRTY_FIRST : 0);
+    ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
+    ck_assert_mem_eq(unit.status, before.status, sizeof(unit.status));
+    ck_assert_uint_eq(unit.status_position, before.status_position);
+    if (variant == 1) {
+        ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[2], 'Z');
+        ck_assert_uint_eq(image.bytes[3][2], 'A');
+    } else if (variant >= 6) {
+        ck_assert_uint_eq(image.bytes[3][2], 'Z');
+        ck_assert_uint_eq(image.bytes[3][3], 'A');
+    }
+    uint8_t output;
+    bool eoi;
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &output, 1, &eoi, &source), 1);
+    ck_assert_uint_eq(output, variant == 3 ? 'Q' : 'A' + target - 3u);
+    ck_assert(!eoi);
+    ck_assert(!dos_rel_channel_retry_position(&unit, channel));
+}
+END_TEST
+
+// Failed positioning retains its job and dirty ownership, never new media.
+START_TEST(test_pipeline_position_buffer_failures) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int variant = (unsigned int)_i % 5u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    if (variant == 4) {
+        image.fail_read = 3u + (format == 2);
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    if (variant == 0) {
+        ck_assert(dos_rel_channel_begin_write(&unit, channel));
+        ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+        image.fail_write = image.writes + 1u;
+    } else if (variant == 1 || variant == 2) {
+        image.fail_read = image.reads + 1u;
+    }
+    ck_assert(dos_rel_channel_position_buffer(&unit, channel, 1, 0, 1, variant == 2 ? 4 : 5));
+    if (variant == 3) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_int_eq(state->failed, variant != 2);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    const unsigned int reads = image.reads, writes = image.writes;
+    const dos_unit_t failed = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    if (variant == 3) {
+        ck_assert_int_eq(state->rel.record.lookup.media_result, DOS_MEDIA_STALE);
+        ck_assert(!dos_rel_channel_retry_position(&unit, channel));
+    } else if (variant == 2) {
+        ck_assert(state->ready && state->rel.record.following_failed);
+    } else {
+        ck_assert(dos_rel_channel_retry_position(&unit, channel));
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->ready && !state->failed);
+        ck_assert_uint_eq(state->rel.number, 1);
+        ck_assert_uint_eq(state->rel.record.pointer, 2);
+        ck_assert_uint_ne(unit.buffer_use, 0);
+        ck_assert_uint_eq(image.flushes, 0);
+        if (variant == 0) {
+            ck_assert_uint_eq(image.bytes[3][2], 'Z');
+            ck_assert_uint_eq(image.bytes[3][3], 'A');
+        }
+    }
+}
+END_TEST
+
+// Write the saved physical page without clearing the peer's dirty bit.
+START_TEST(test_channel_writeback_saved_page_and_dirty_mask) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    const unsigned int consumed[] = {0, 199, 253, 254, 399, 507};
+    const dos_rel_record_result_t results[] = {
+        DOS_REL_RECORD_WRITING,
+        DOS_REL_RECORD_FULL,
+        DOS_REL_RECORD_NEEDS_WRITEBACK,
+    };
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, variant % 2u, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, consumed[variant]);
+    dos_channel_t* const state = &unit.channels[channel];
+    const unsigned int active = state->rel.record.active;
+    ck_assert_uint_eq(active, variant >= 3);
+    const uint8_t peer_bit = active == 0 ? DOS_REL_DIRTY_FOLLOWING : DOS_REL_DIRTY_FIRST;
+    uint8_t dirty = peer_bit;
+    ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, 'Z', &dirty),
+                     results[variant % 3u]);
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    dos_unit_t before = unit;
+    uint8_t expected[7][DISKIMAGE_SECTOR_SIZE];
+    memcpy(expected, image.bytes, sizeof(expected));
+    const dos_buffer_t* const buffer = &unit.buffers[state->buffers[active]];
+    ck_assert_uint_eq(buffer->track, 1);
+    ck_assert_uint_eq(buffer->sector, active == 0 ? 3 : 4);
+    memcpy(expected[buffer->sector], buffer->bytes, DISKIMAGE_SECTOR_SIZE);
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert_mem_eq(image.bytes, expected, sizeof(expected));
+    before.buffer_writes |= (uint16_t)1u << state->buffers[active];
+    ck_assert_mem_eq(&unit, &before, sizeof(before));
+    ck_assert_uint_eq(dirty, peer_bit);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert(bank.units[reference.unit].slots[reference.slot].dirty);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(dirty, peer_bit);
+}
+END_TEST
+
+// Storage/version/lifetime failures retain the page, mask and record for explicit retry.
+START_TEST(test_channel_writeback_failures_and_retry) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int variant = (unsigned int)_i % 5u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, variant != 1);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t dirty = DOS_REL_DIRTY_FOLLOWING;
+    ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, 'Z', &dirty),
+                     DOS_REL_RECORD_WRITING);
+    if (variant == 0) {
+        image.fail_write = 1;
+    } else if (variant == 2) {
+        unit.bam[1].buffer.bytes[2] = 'X';
+    } else if (variant == 3) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    } else if (variant == 4) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    const dos_rel_reader_t before = state->rel;
+    const dos_buffer_t saved = unit.buffers[state->buffers[0]];
+    const unsigned int reads = image.reads;
+    ck_assert(!dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert(state->failed && !state->ready);
+    ck_assert_mem_eq(&state->rel, &before, sizeof(before));
+    ck_assert_mem_eq(&unit.buffers[state->buffers[0]], &saved, sizeof(saved));
+    ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FIRST | DOS_REL_DIRTY_FOLLOWING);
+    ck_assert_uint_eq(image.writes, variant == 0);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(replacement.writes, 0);
+    ck_assert_uint_eq(replacement.reads, 0);
+    ck_assert_int_eq(unit.status_code, variant == 1   ? DOS_STATUS_WRITE_PROTECT
+                                       : variant == 2 ? DOS_STATUS_POWER_ON
+                                                      : DOS_STATUS_WRITE_ERROR);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_ptr_nonnull(strstr(unit.status, format == 0 ? ",01,03\r" : ",01,03,1\r"));
+    ck_assert(!dos_work_pending(&unit));
+    if (variant == 0 || variant == 2) {
+        image.fail_write = 0;
+        unit.bam[1].buffer.bytes[2] = 0;
+        char status[DOS_STATUS_LINE_CAPACITY];
+        memcpy(status, unit.status, sizeof(status));
+        ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+        ck_assert(!state->failed && !state->ready);
+        ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FOLLOWING);
+        ck_assert_mem_eq(image.bytes[3], saved.bytes, DISKIMAGE_SECTOR_SIZE);
+        ck_assert_mem_eq(unit.status, status, sizeof(status));
+        ck_assert_mem_eq(&state->rel, &before, sizeof(before));
+    }
+}
+END_TEST
+
+// Successful callback completion is not a flush or full record/CLOSE completion.
+START_TEST(test_channel_writeback_flush_remains_separate) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 0, 0, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t dirty = 0;
+    dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                       unit.buffers[state->buffers[1]].bytes, 'Z', &dirty);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert_uint_eq(dirty, 0);
+    ck_assert(bank.units[0].slots[0].dirty);
+    const dos_unit_t before = unit;
+    image.fail_flush = true;
+    ck_assert_int_eq(dos_media_flush_unit(&bank, 0), DOS_MEDIA_IO_ERROR);
+    ck_assert(bank.units[0].slots[0].dirty);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 1);
+    image.fail_flush = false;
+    ck_assert_int_eq(dos_media_flush_unit(&bank, 0), DOS_MEDIA_OK);
+    ck_assert(!bank.units[0].slots[0].dirty);
+    ck_assert_uint_eq(image.flushes, 2);
+    ck_assert_mem_eq(&unit, &before, sizeof(before));
+}
+END_TEST
+
+// A peer drive's successful job cannot clear a failed writer or its retained status.
+START_TEST(test_channel_writeback_peer_failure_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    mount_job_image(&bank, &images[0], format, 2, 0, true);
+    mount_job_image(&bank, &images[1], format, 2, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2], dirty[2] = {0};
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 0);
+        dos_channel_t* const state = &unit.channels[channels[owner]];
+        dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                           unit.buffers[state->buffers[1]].bytes, 'X' + owner, &dirty[owner]);
+    }
+    images[0].fail_write = 1;
+    ck_assert(!dos_rel_channel_writeback(&unit, &bank, channels[0], &dirty[0]));
+    const dos_channel_t failed = unit.channels[channels[0]];
+    const dos_buffer_t saved = unit.buffers[failed.buffers[0]];
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channels[1], &dirty[1]));
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[0]], &saved, sizeof(saved));
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(dirty[0], DOS_REL_DIRTY_FIRST);
+    ck_assert_uint_eq(dirty[1], 0);
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(images[1].bytes[3][2], 'Y');
+}
+END_TEST
+
+// Dirty NRBUF selects the linked page at byte 2 without advancing the record.
+START_TEST(test_channel_write_handoff_cached_and_refilled) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    const unsigned int consumed[] = {253, 507};
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, variant % 2u, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, consumed[variant / 3u]);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_buffer_t* const old = &unit.buffers[state->buffers[state->rel.record.active]];
+    dos_buffer_t* const next = &unit.buffers[state->buffers[state->rel.record.active ^ 1u]];
+    const uint8_t next_bit = state->rel.record.active == 0 ? DOS_REL_DIRTY_FOLLOWING : DOS_REL_DIRTY_FIRST;
+    uint8_t dirty = variant % 3u == 2 ? next_bit : 0;
+    ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, 'Z', &dirty),
+                     DOS_REL_RECORD_NEEDS_WRITEBACK);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    if (variant % 3u == 1) {
+        // A recycled written page or deferred READ is not the following sector.
+        if (variant < 3) {
+            next->sector = old->sector;
+        } else {
+            unit.buffer_drives ^= (uint16_t)(1u << state->buffers[state->rel.record.active ^ 1u]);
+        }
+        state->rel.record.following = false;
+    } else if (variant % 3u == 2) {
+        next->bytes[2] = 'P';
+    }
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+    ck_assert_uint_eq(image.reads, reads + (variant % 3u == 1));
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(dirty, variant % 3u == 2 ? next_bit : 0);
+    dos_rel_reader_t expected = before.channels[channel].rel;
+    expected.record.active ^= 1u;
+    expected.record.pointer = 2;
+    expected.record.following = false;
+    expected.record.following_failed = false;
+    expected.record.result = DOS_REL_RECORD_WRITING;
+    ck_assert_mem_eq(&state->rel, &expected, sizeof(expected));
+    ck_assert(!state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_mem_eq(old, &before.buffers[before.channels[channel].buffers[before.channels[channel].rel.record.active]],
+                     sizeof(*old));
+    ck_assert(next->resident && !next->failed);
+    ck_assert_uint_eq(next->track, old->bytes[0]);
+    ck_assert_uint_eq(next->sector, old->bytes[1]);
+    const uint8_t* const expected_bytes =
+        variant % 3u == 1 ? image.bytes[old->bytes[1]] : before.buffers[state->buffers[expected.record.active]].bytes;
+    ck_assert_mem_eq(next->bytes, expected_bytes, DISKIMAGE_SECTOR_SIZE);
+    ck_assert_uint_eq((unit.buffer_drives >> state->buffers[expected.record.active]) & 1u, reference.slot);
+    ck_assert_mem_eq(unit.status, before.status, sizeof(unit.status));
+    ck_assert_uint_eq(unit.status_position, before.status_position);
+    ck_assert_uint_eq(unit.selected_drive, before.selected_drive);
+    ck_assert(!dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+    ck_assert_uint_eq(image.reads, reads + (variant % 3u == 1));
+    ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, 'Y', &dirty),
+                     DOS_REL_RECORD_WRITING);
+    ck_assert_uint_eq(next->bytes[2], 'Y');
+    ck_assert_uint_eq(dirty, next_bit);
+    ck_assert_int_eq(dos_rel_record_pad(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, &dirty),
+                     DOS_REL_RECORD_FULL);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    ck_assert_uint_eq(image.writes, 2);
+    ck_assert_uint_eq(dirty, 0);
+    ck_assert_mem_eq(image.bytes[next->sector], next->bytes, DISKIMAGE_SECTOR_SIZE);
+}
+END_TEST
+
+// Native TSTWRT requires READ even when a completed WRITE header matches the link.
+START_TEST(test_channel_write_handoff_matching_written_header) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 0, 0, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t dirty = 0;
+    ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                        unit.buffers[state->buffers[1]].bytes, 'Z', &dirty),
+                     DOS_REL_RECORD_NEEDS_WRITEBACK);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    const dos_rel_record_t saved = state->rel.record;
+    state->rel.record.active ^= 1u;
+    state->rel.record.result = DOS_REL_RECORD_WRITING;
+    dirty = DOS_REL_DIRTY_FOLLOWING;
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    state->rel.record = saved;
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+    ck_assert_uint_eq(image.reads, reads + 1);
+    ck_assert_uint_eq(image.writes, 2);
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_WRITING);
+    ck_assert_uint_eq(state->rel.record.active, 1);
+    ck_assert_uint_eq(state->rel.record.pointer, 2);
+    ck_assert(!(unit.buffer_writes & (1u << state->buffers[1])));
+    ck_assert(unit.buffer_writes & (1u << state->buffers[0]));
+}
+END_TEST
+
+// Pending writes, protected dirty pages and missing links cannot be overwritten.
+START_TEST(test_channel_write_handoff_blocked_ownership) {
+    const unsigned int format = (unsigned int)_i / 5u;
+    const unsigned int variant = (unsigned int)_i % 5u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 0, 0, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, variant == 4 ? 199 : 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t dirty = variant == 1 || variant == 2 ? DOS_REL_DIRTY_FOLLOWING : 0;
+    dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                       unit.buffers[state->buffers[1]].bytes, 'Z', &dirty);
+    if (variant == 0) {
+        image.fail_write = 1;
+        ck_assert(!dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    } else {
+        ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    }
+    if (variant == 1) {
+        unit.buffers[state->buffers[1]].sector = 3;
+    } else if (variant == 2) {
+        unit.buffers[state->buffers[1]].failed = true;
+    } else if (variant == 3) {
+        unit.buffers[state->buffers[0]].bytes[0] = 0;
+    }
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads, writes = image.writes;
+    for (unsigned int attempt = 0; attempt < 2; ++attempt) {
+        ck_assert(!dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+        ck_assert_mem_eq(&unit, &before, sizeof(before));
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(image.writes, writes);
+        ck_assert_uint_eq(image.flushes, 0);
+    }
+}
+END_TEST
+
+// Failed reads keep the written page selected and block PUT until explicit retry.
+START_TEST(test_channel_write_handoff_failure_and_retry) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t dirty = 0;
+    dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                       unit.buffers[state->buffers[1]].bytes, 'Z', &dirty);
+    ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &dirty));
+    if (variant < 4) {
+        unit.buffers[state->buffers[1]].resident = false;
+    }
+    if (variant == 0) {
+        image.fail_read = image.reads + 1u;
+    } else if (variant == 1) {
+        unit.buffers[state->buffers[0]].bytes[1] = UINT8_MAX;
+    } else if (variant == 2 || variant == 4) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    } else {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads;
+    ck_assert(!dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_uint_eq(dirty, 0);
+    ck_assert_uint_eq(image.reads, reads + (variant == 0));
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(replacement.reads, 0);
+    ck_assert_uint_eq(replacement.writes, 0);
+    ck_assert_mem_eq(&unit.buffers[state->buffers[0]], &before.buffers[state->buffers[0]], sizeof(dos_buffer_t));
+    dos_rel_reader_t expected = before.channels[channel].rel;
+    expected.record.lookup.media_result = variant == 0   ? DOS_MEDIA_IO_ERROR
+                                          : variant == 1 ? DOS_MEDIA_RANGE
+                                                         : DOS_MEDIA_STALE;
+    ck_assert_mem_eq(&state->rel, &expected, sizeof(expected));
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    const char* const coordinates =
+        variant == 1 ? (format == 0 ? ",01,55\r" : ",01,255,1\r") : (format == 0 ? ",01,04\r" : ",01,04,1\r");
+    ck_assert_ptr_nonnull(strstr(unit.status, coordinates));
+    if (variant == 0) {
+        dos_buffer_t* const next = &unit.buffers[state->buffers[1]];
+        ck_assert(next->failed && !next->resident);
+        ck_assert_uint_eq(next->bytes[0], 0xee);
+        ck_assert_int_eq(dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                            next->bytes, 'X', &dirty),
+                         DOS_REL_RECORD_NEEDS_WRITEBACK);
+        char status[DOS_STATUS_LINE_CAPACITY];
+        memcpy(status, unit.status, sizeof(status));
+        ck_assert(dos_rel_channel_advance_write(&unit, &bank, channel, dirty));
+        ck_assert_uint_eq(image.reads, reads + 2u);
+        ck_assert_uint_eq(image.writes, 1);
+        ck_assert(next->resident && !next->failed && !state->failed);
+        ck_assert_uint_eq(state->rel.record.active, 1);
+        ck_assert_uint_eq(state->rel.record.pointer, 2);
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_WRITING);
+        ck_assert_mem_eq(next->bytes, image.bytes[4], DISKIMAGE_SECTOR_SIZE);
+        ck_assert_mem_eq(unit.status, status, sizeof(status));
+    }
+}
+END_TEST
+
+// A peer's refill cannot retire the failed writer or overwrite its retained status.
+START_TEST(test_channel_write_handoff_peer_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2], dirty[2] = {0};
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        const dos_media_ref_t reference = mount_job_image(&bank, &images[owner], format, 2, owner, true);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 253);
+        dos_channel_t* const state = &unit.channels[channels[owner]];
+        dos_rel_record_put(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                           unit.buffers[state->buffers[1]].bytes, 'X' + owner, &dirty[owner]);
+        ck_assert(dos_rel_channel_writeback(&unit, &bank, channels[owner], &dirty[owner]));
+        unit.buffers[state->buffers[1]].resident = false;
+    }
+    images[0].fail_read = images[0].reads + 1u;
+    ck_assert(!dos_rel_channel_advance_write(&unit, &bank, channels[0], dirty[0]));
+    const dos_channel_t failed = unit.channels[channels[0]];
+    const dos_buffer_t old = unit.buffers[failed.buffers[0]], partial = unit.buffers[failed.buffers[1]];
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    ck_assert(dos_rel_channel_advance_write(&unit, &bank, channels[1], dirty[1]));
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[0]], &old, sizeof(old));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[1]], &partial, sizeof(partial));
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(dirty[0] | dirty[1], 0);
+    ck_assert_int_eq(unit.channels[channels[1]].rel.record.result, DOS_REL_RECORD_WRITING);
+}
+END_TEST
+
+// Owned CLREC resumes through cooperative NRBUF without consuming another byte.
+START_TEST(test_owned_writer_cooperative_padding) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    const dos_rel_reader_t before = state->rel;
+    const uint16_t buffers = unit.buffer_use;
+    const unsigned int reads = image.reads;
+    ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(!dos_rel_channel_begin_write(&unit, channel));
+    if (variant == 1) {
+        unit.buffers[state->buffers[1]].sector = 3;
+    }
+    if (variant != 2) {
+        ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_NEEDS_WRITEBACK);
+    }
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+    ck_assert_uint_eq(image.writes, 0);
+    ck_assert_uint_eq(image.reads, reads);
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    unsigned int steps = 0;
+    while (dos_work_pending(&unit)) {
+        ck_assert_uint_lt(steps++, 5);
+        const unsigned int prior_reads = image.reads, prior_writes = image.writes;
+        dos_work(&unit, &bank);
+        ck_assert_uint_le(image.reads - prior_reads + image.writes - prior_writes, 1);
+        ck_assert(!state->ready && !state->failed);
+    }
+    ck_assert_uint_eq(steps, variant == 2 ? 4 : 3);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.reads, reads + (variant == 1));
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(image.bytes[3][255], variant == 2 ? 0 : 'Z');
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FULL);
+    ck_assert_uint_eq(state->rel.record.active, 1);
+    ck_assert_uint_eq(state->rel.record.pointer, state->rel.record.next - 1u);
+    for (unsigned int offset = DISKIMAGE_SECTOR_LINK_SIZE; offset < state->rel.record.next; ++offset) {
+        ck_assert_uint_eq(unit.buffers[state->buffers[1]].bytes[offset], 0);
+    }
+    ck_assert_uint_eq(state->rel_write, DOS_REL_DIRTY_FOLLOWING | (format != 0 ? DOS_REL_WRITE_MODIFIED : 0));
+    ck_assert_uint_eq(state->rel.number, before.number);
+    ck_assert_int_eq(state->rel.get_active, before.get_active);
+    ck_assert_int_eq(state->rel.no_record, before.no_record);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(unit.status_position, 2);
+    ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    ck_assert(!dos_work_pending(&unit));
+    dos_channel_t owned = *state;
+    ck_assert(!dos_close(&unit, &bank, models[format], 2));
+    ck_assert_mem_eq(state, &owned, sizeof(owned));
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+}
+END_TEST
+
+// Failed owned jobs stop polling, retain flags/pages and require explicit retry.
+START_TEST(test_owned_writer_failure_retry_and_lifetime) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, variant == 5 ? 252 : 253);
+    dos_channel_t* const state = &unit.channels[channel];
+    unsigned int external_flushes = 0;
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (variant == 5) {
+        const dos_buffer_t saved = unit.buffers[state->buffers[0]];
+        const uint8_t flags = state->rel_write;
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+        ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FAILED);
+        ck_assert(state->failed && !state->ready);
+        ck_assert_uint_eq(state->rel_write, flags);
+        ck_assert_mem_eq(&unit.buffers[state->buffers[0]], &saved, sizeof(saved));
+        ck_assert(!dos_rel_channel_retry_write(&unit, channel));
+        ck_assert(!dos_work_pending(&unit));
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+        ck_assert_uint_eq(image.writes, 0);
+    } else {
+        ck_assert(dos_rel_channel_pad(&unit, channel));
+        if (variant == 0) {
+            image.fail_write = 1;
+        } else if (variant == 1) {
+            unit.bam[1].buffer.bytes[2] = 'X';
+        } else if (variant == 2 || variant == 4) {
+            dos_work(&unit, &bank);
+            ck_assert_uint_eq(image.writes, 1);
+            if (variant == 2) {
+                unit.buffers[state->buffers[1]].resident = false;
+                image.fail_read = image.reads + 1u;
+            } else {
+                mount_job_image(&bank, &replacement, format, 3, 1, true);
+                external_flushes = image.flushes;
+            }
+        } else {
+            ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+        }
+        const dos_buffer_t saved = unit.buffers[state->buffers[0]];
+        const uint8_t flags = state->rel_write;
+        dos_work(&unit, &bank);
+        ck_assert(state->failed && !state->ready);
+        ck_assert(!dos_work_pending(&unit));
+        ck_assert_uint_eq(state->rel_write, flags);
+        ck_assert_mem_eq(&unit.buffers[state->buffers[0]], &saved, sizeof(saved));
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_NEEDS_WRITEBACK);
+        const dos_unit_t failed = unit;
+        const unsigned int reads = image.reads, writes = image.writes;
+        dos_work(&unit, &bank);
+        ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+        ck_assert(!dos_rel_channel_pad(&unit, channel));
+        ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(image.writes, writes);
+        unit.bam[1].buffer.bytes[2] = 0;
+        ck_assert(dos_rel_channel_retry_write(&unit, channel));
+        ck_assert(dos_work_pending(&unit));
+        if (variant < 3) {
+            unsigned int steps = 0;
+            while (dos_work_pending(&unit)) {
+                ck_assert_uint_lt(steps++, 5);
+                dos_work(&unit, &bank);
+            }
+            ck_assert(!state->failed);
+            ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FULL);
+            ck_assert_mem_eq(unit.status, failed.status, sizeof(unit.status));
+            ck_assert_uint_eq(state->rel_write & DOS_REL_WRITE_PADDING, 0);
+            ck_assert_uint_eq(state->rel_write & DOS_REL_DIRTY_FOLLOWING, DOS_REL_DIRTY_FOLLOWING);
+        } else {
+            dos_work(&unit, &bank);
+            ck_assert(state->failed && !dos_work_pending(&unit));
+            ck_assert_uint_eq(image.reads, reads);
+            ck_assert_uint_eq(image.writes, writes);
+        }
+    }
+    ck_assert_uint_eq(replacement.reads, 0);
+    ck_assert_uint_eq(replacement.writes, 0);
+    ck_assert_uint_eq(image.flushes, external_flushes);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+}
+END_TEST
+
+// A failed owner cannot prevent a peer's CLREC jobs or lose its retained state.
+START_TEST(test_owned_writer_peer_and_pool_ownership) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        mount_job_image(&bank, &images[owner], format, 2, owner, true);
+    }
+    uint16_t owned_buffers = 0;
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 253);
+        for (unsigned int page = 0; page < DOS_CHANNEL_BUFFER_COUNT; ++page) {
+            const uint16_t bit = 1u << unit.channels[channels[owner]].buffers[page];
+            ck_assert_uint_eq(owned_buffers & bit, 0);
+            owned_buffers |= bit;
+        }
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        ck_assert(dos_rel_channel_begin_write(&unit, channels[owner]));
+        ck_assert(dos_rel_channel_put(&unit, &bank, channels[owner], 'X' + owner));
+        ck_assert(dos_rel_channel_pad(&unit, channels[owner]));
+    }
+    images[0].fail_write = 1;
+    dos_work(&unit, &bank);
+    const dos_channel_t failed = unit.channels[channels[0]];
+    const dos_buffer_t saved = unit.buffers[failed.buffers[0]];
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    ck_assert(failed.failed && dos_work_pending(&unit));
+    unsigned int steps = 0;
+    while (dos_work_pending(&unit)) {
+        ck_assert_uint_lt(steps++, 4);
+        dos_work(&unit, &bank);
+    }
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[0]], &saved, sizeof(saved));
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_int_eq(unit.channels[channels[1]].rel.record.result, DOS_REL_RECORD_FULL);
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(unit.buffer_use, owned_buffers);
+}
+END_TEST
+
+// Prepare an explicit selected index entry, retaining the shared sparse job image.
+// Prepare an explicit selected index entry in the shared job image.
+static uint8_t prepare_completion_channel(dos_unit_t* const unit, dos_media_bank_t* const bank,
+                                          rel_image_t* const image, const unsigned int format,
+                                          const dos_media_ref_t reference, const uint16_t number, const uint8_t size,
+                                          const uint8_t position) {
+    const dos_rel_address_t address = dos_rel_address(models[format], number, size, position);
+    image->bytes[0][2] = address.side;
+    image->bytes[0][address.index] = 1;
+    image->bytes[0][address.index + 1u] = 3;
+    image->bytes[2][DOS_REL_GROUP_TABLE_OFFSET + 2u * address.group] = 1;
+    const uint8_t channel = dos_rel_channel_claim(unit, reference, 2);
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    dos_rel_channel_prepare(unit, channel, models[format], 1, format == 2 ? 2 : 0, number, size, position);
+    finish_pipeline(unit, bank, image);
+    ck_assert_int_eq(unit->channels[channel].rel.record.result, DOS_REL_RECORD_READY);
+    unit->bam[reference.slot] = (dos_bam_t){.media = reference, .buffer = {.resident = true}};
+    return channel;
+}
+
+// Cached RD40 precedes overflow status and never releases dirty ownership.
+START_TEST(test_owned_cached_completion_status_and_cursor) {
+    const unsigned int format = (unsigned int)_i / 12u;
+    const unsigned int variant = (unsigned int)_i % 12u;
+    const unsigned int index = variant / 2u;
+    const bool overflow = variant % 2u;
+    static const struct {
+        uint16_t number;
+        uint8_t size, position, pointer, last, active;
+        bool missing;
+    } cases[] = {
+        {0, 10, 0, 12, 12, 0, false},    {1, 1, 0, 3, 3, 0, false},    {UINT16_MAX, 1, 0, 5, 5, 0, false},
+        {1, 200, 0, 202, 147, 0, false}, {26, 10, 4, 8, 17, 1, false}, {1, 254, 0, 255, 255, 0, true},
+    };
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, index % 2u, true);
+    if (index == 0) {
+        for (unsigned int page = 3; page < 6; ++page) {
+            memset(image.bytes[page] + DISKIMAGE_SECTOR_LINK_SIZE, 0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+        }
+    } else if (cases[index].missing) {
+        image.bytes[3][0] = 0;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, cases[index].number,
+                                                       cases[index].size, cases[index].position);
+    if (index == 3) {
+        uint8_t byte;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+    }
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FULL);
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    unit.last_drive = unit.selected_drive = reference.slot ^ 1u;
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads, writes = image.writes;
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, overflow));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
+    ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write | DOS_REL_WRITE_FINISHED);
+    ck_assert_uint_eq(state->rel.number, (uint16_t)(cases[index].number + 1u));
+    ck_assert_uint_eq(state->rel.record.pointer, cases[index].pointer);
+    ck_assert_uint_eq(state->rel.record.last, cases[index].last);
+    ck_assert_uint_eq(state->rel.record.active, cases[index].active);
+    ck_assert_int_eq(state->rel.record.result, cases[index].missing ? DOS_REL_RECORD_MISSING : DOS_REL_RECORD_READY);
+    ck_assert(!state->ready && !state->failed && !state->rel.get_active && !state->rel.no_record);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert_uint_eq(unit.last_drive, before.last_drive);
+    ck_assert_uint_eq(unit.selected_drive, reference.slot);
+    if (!overflow && format == 0) {
+        ck_assert_mem_eq(unit.status, before.status, sizeof(unit.status));
+        ck_assert_uint_eq(unit.status_position, 2);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_FILE_EXISTS);
+    } else {
+        char expected[DOS_STATUS_LINE_CAPACITY];
+        const char* const text = overflow ? "51,OVERFLOW IN RECORD" : "00, OK";
+        if (format == 0) {
+            snprintf(expected, sizeof(expected), "%s,00,00\r", text);
+        } else {
+            snprintf(expected, sizeof(expected), "%s,00,00,%u\r", text, reference.slot);
+        }
+        ck_assert_str_eq(unit.status, expected);
+        ck_assert_uint_eq(unit.status_position, 0);
+        ck_assert_int_eq(unit.status_code, overflow ? DOS_STATUS_RECORD_OVERFLOW : DOS_STATUS_OK);
+    }
+    uint8_t byte = 0xee;
+    bool eoi = false;
+    ck_assert(dos_rel_record_peek(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                  unit.buffers[state->buffers[1]].bytes, &byte, &eoi));
+    ck_assert_uint_eq(byte, cases[index].missing ? '\r' : index == 0 ? 0 : cases[index].active == 0 ? 'A' : 'B');
+    ck_assert_int_eq(eoi, cases[index].pointer == cases[index].last);
+    const dos_unit_t finished = unit;
+    ck_assert(!dos_rel_channel_finish_cached(&unit, &bank, channel, !overflow));
+    ck_assert(!dos_rel_channel_put(&unit, &bank, channel, 'X'));
+    ck_assert(!dos_rel_channel_pad(&unit, channel));
+    ck_assert(!dos_rel_channel_begin_write(&unit, channel));
+    dos_source_t source;
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 0);
+    ck_assert_mem_eq(&unit, &finished, sizeof(finished));
+}
+END_TEST
+
+// Only completed padding with its full native window can publish cached 51.
+START_TEST(test_owned_cached_completion_boundaries) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 0, 0, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel =
+        variant == 3 ? prepare_completion_channel(&unit, &bank, &image, format, reference, 2, 127, 127)
+                     : prepare_job_channel(&unit, &bank, &image, format, reference, 2, variant == 2 ? 399 : 0);
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (variant == 1) {
+        ck_assert(dos_rel_channel_pad(&unit, channel));
+    }
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads, writes = image.writes;
+    ck_assert_int_eq(dos_rel_channel_finish_cached(&unit, &bank, channel, true), variant == 2);
+    if (variant == 2) {
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+        ck_assert_uint_eq(unit.channels[channel].rel.number, before.channels[channel].rel.number + 1u);
+        ck_assert_uint_ne(unit.channels[channel].rel_write & DOS_REL_WRITE_FINISHED, 0);
+    } else {
+        ck_assert_mem_eq(&unit, &before, sizeof(before));
+    }
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+}
+END_TEST
+
+// Stale media cannot commit the counter or a successful end-record status.
+START_TEST(test_owned_cached_completion_stale_retains_dirty) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool replace = (unsigned int)_i % 2u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 199);
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    const dos_unit_t before = unit;
+    if (replace) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    } else {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    }
+    const unsigned int reads = image.reads;
+    ck_assert(!dos_rel_channel_finish_cached(&unit, &bank, channel, true));
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FAILED);
+    ck_assert_uint_eq(state->rel.number, before.channels[channel].rel.number);
+    ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write);
+    ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 0);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_ptr_nonnull(strstr(unit.status, format == 0 ? ",01,03\r" : ",01,03,1\r"));
+    ck_assert(!dos_rel_channel_retry_write(&unit, channel));
+}
+END_TEST
+
+// A peer's model-specific completion changes status, never another owner's pages.
+START_TEST(test_owned_cached_completion_peer_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        mount_job_image(&bank, &images[owner], format, 2, owner, true);
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 199);
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        ck_assert(dos_rel_channel_begin_write(&unit, channels[owner]));
+        ck_assert(dos_rel_channel_put(&unit, &bank, channels[owner], 'X' + owner));
+    }
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channels[0], true));
+    const dos_channel_t first = unit.channels[channels[0]];
+    const dos_buffer_t saved = unit.buffers[first.buffers[first.rel.record.active]];
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channels[1], false));
+    ck_assert_mem_eq(&unit.channels[channels[0]], &first, sizeof(first));
+    ck_assert_mem_eq(&unit.buffers[first.buffers[first.rel.record.active]], &saved, sizeof(saved));
+    ck_assert_int_eq(unit.status_code, format == 0 ? DOS_STATUS_RECORD_OVERFLOW : DOS_STATUS_OK);
+    ck_assert_uint_eq(images[0].writes | images[1].writes, 0);
+}
+END_TEST
+
+// Finish an in-page write, optionally reversing the two physical data roles.
+// Complete an in-page write, optionally reversing physical data roles.
+static uint8_t prepare_cached_read_return(dos_unit_t* const unit, dos_media_bank_t* const bank,
+                                          rel_image_t* const image, const unsigned int format,
+                                          const dos_media_ref_t reference, const uint8_t size, const bool reverse) {
+    const uint8_t channel = prepare_completion_channel(unit, bank, image, format, reference, 1, size, 0);
+    dos_channel_t* const state = &unit->channels[channel];
+    if (reverse) {
+        const uint8_t first = state->buffers[0];
+        state->buffers[0] = state->buffers[1];
+        state->buffers[1] = first;
+        state->rel.record.active ^= 1u;
+    }
+    ck_assert(!dos_rel_channel_resume_read(unit, bank, channel));
+    ck_assert(dos_rel_channel_begin_write(unit, channel));
+    ck_assert(dos_rel_channel_put(unit, bank, channel, 'Z'));
+    ck_assert(dos_rel_channel_pad(unit, channel));
+    finish_pipeline(unit, bank, image);
+    ck_assert(dos_rel_channel_finish_cached(unit, bank, channel, true));
+    return channel;
+}
+
+// Commit a previously staged prefix only through the outgoing dirty page seam.
+// Retire a real short prefix before consuming the outgoing dirty-page seam.
+static void consume_dirty_read_page(dos_unit_t* const unit, dos_media_bank_t* const bank, const unsigned int format,
+                                    const uint8_t channel) {
+    dos_channel_t* const state = &unit->channels[channel];
+    const unsigned int remaining = DISKIMAGE_SECTOR_SIZE - state->rel.record.pointer;
+    unsigned int consumed = 0;
+    while (state->ready) {
+        ck_assert_uint_lt(consumed, remaining);
+        const dos_unit_t before = *unit;
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        dos_source_t source;
+        const unsigned int count =
+            dos_output_stage(unit, bank, state->secondary, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        ck_assert_uint_le(count, remaining - consumed);
+        ck_assert_mem_eq(unit, &before, sizeof(before));
+        for (unsigned int index = 0; index < count; ++index) {
+            ck_assert_uint_eq(output[index], 'A');
+        }
+        // Retire one short actual prefix first, abandoning its speculative tail.
+        const unsigned int taken = consumed == 0 ? 1 : count;
+        dos_output_get(unit, bank, models[format], source, taken);
+        consumed += taken;
+    }
+    ck_assert_uint_eq(consumed, remaining);
+    ck_assert(state->rel_write & DOS_REL_WRITE_READBACK);
+    ck_assert(dos_work_pending(unit));
+}
+
+// A second LISTEN resumes at the actual GET cursor and preserves dirty pages.
+START_TEST(test_cached_read_return_reenters_write) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_cached_read_return(&unit, &bank, &image, format, reference, 200, false);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(!dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    if (variant == 2) {
+        consume_dirty_read_page(&unit, &bank, format, channel);
+        const dos_unit_t pending = unit;
+        ck_assert(!dos_rel_channel_begin_write(&unit, channel));
+        ck_assert_mem_eq(&unit, &pending, sizeof(pending));
+        finish_pipeline(&unit, &bank, &image);
+    } else if (variant == 1) {
+        uint8_t byte;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+    }
+
+    const dos_unit_t before = unit;
+    const uint8_t active = state->rel.record.active, pointer = state->rel.record.pointer;
+    const unsigned int reads = image.reads, writes = image.writes;
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(!state->ready && !state->failed);
+    ck_assert_int_eq(state->access, DOS_ACCESS_MODIFY);
+    ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write & (uint8_t)~DOS_REL_WRITE_FINISHED);
+    ck_assert_mem_eq(&state->rel, &before.channels[channel].rel, sizeof(state->rel));
+    ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(unit.buffer_use, before.buffer_use);
+    ck_assert_mem_eq(unit.status, before.status, sizeof(unit.status));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Y'));
+    ck_assert_uint_eq(unit.buffers[state->buffers[active]].bytes[pointer], 'Y');
+    ck_assert_uint_ne(state->rel_write & (active == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING), 0);
+    ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[2], 'Z');
+    ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[3], 0);
+    ck_assert_int_eq(state->rel.get_active, before.channels[channel].rel.get_active);
+    ck_assert_uint_eq(state->rel.number, 2);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert(dos_rel_channel_finish_write(&unit, channel, false));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(state->rel.number, 3);
+    ck_assert_int_eq(unit.status_code, format == 0 ? DOS_STATUS_RECORD_OVERFLOW : DOS_STATUS_OK);
+    ck_assert_uint_eq(image.flushes, 0);
+}
+END_TEST
+
+// Dirty NRBUF writes the outgoing saved header before exposing the next page.
+START_TEST(test_cached_read_return_dirty_boundary) {
+    const unsigned int format = (unsigned int)_i / 8u;
+    const unsigned int variant = (unsigned int)_i % 8u;
+    const unsigned int slot = variant / 4u;
+    const bool reverse = (variant / 2u) % 2u, eoi_crossing = variant % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, slot, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel =
+        prepare_cached_read_return(&unit, &bank, &image, format, reference, eoi_crossing ? 127 : 200, reverse);
+    dos_channel_t* const state = &unit.channels[channel];
+    const dos_unit_t finished = unit;
+    const unsigned int reads = image.reads;
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    ck_assert(state->ready && state->access == DOS_ACCESS_MODIFY);
+    ck_assert_mem_eq(&state->rel, &finished.channels[channel].rel, sizeof(state->rel));
+    ck_assert_mem_eq(unit.buffers, finished.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(state->rel_write, finished.channels[channel].rel_write);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 0);
+    const uint8_t outgoing = state->rel.record.active;
+    const dos_buffer_t saved = unit.buffers[state->buffers[outgoing]];
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    ck_assert_uint_eq(state->rel.record.active, outgoing ^ 1u);
+    ck_assert_uint_eq(state->rel.number, eoi_crossing ? 3 : 2);
+    const dos_rel_reader_t cursor = state->rel;
+    const uint8_t flags = state->rel_write;
+    const unsigned int callbacks = image.reads + image.writes;
+    uint8_t output[DOS_STAGE_CAPACITY];
+    bool eoi;
+    dos_source_t source;
+    ck_assert(!dos_rel_channel_resume_read(&unit, &bank, channel));
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source), 0);
+    ck_assert_uint_eq(image.reads + image.writes, callbacks);
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_mem_eq(image.bytes[3], saved.bytes, sizeof(saved.bytes));
+    ck_assert_mem_eq(unit.buffers, finished.buffers, sizeof(unit.buffers));
+    if (eoi_crossing) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_READY);
+        ck_assert_uint_eq(state->rel.record.pointer, 2);
+        ck_assert_uint_eq(state->rel.record.next, 129);
+        ck_assert_uint_eq(state->rel.record.last, 128);
+        ck_assert_uint_eq(state->rel.number, cursor.number);
+    } else {
+        ck_assert_mem_eq(&state->rel, &cursor, sizeof(cursor));
+    }
+    const uint8_t bit = outgoing == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING;
+    ck_assert_uint_eq(state->rel_write, flags & (uint8_t)~(bit | DOS_REL_WRITE_READBACK));
+    ck_assert_mem_eq(unit.status, finished.status, sizeof(unit.status));
+    ck_assert_uint_eq(unit.status_position, finished.status_position);
+    ck_assert_uint_eq(unit.selected_drive, finished.selected_drive);
+    ck_assert_uint_eq(unit.last_drive, finished.last_drive);
+    ck_assert(state->ready);
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, 1, &eoi, &source), 1);
+    ck_assert_uint_eq(output[0], 'B');
+    while (state->ready) {
+        const unsigned int count = dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        dos_output_get(&unit, &bank, models[format], source, count);
+    }
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_PENDING);
+    ck_assert_int_eq(state->rel.record.phase, eoi_crossing ? DOS_REL_RECORD_CLEAN_NEXT : DOS_REL_RECORD_CLEAN_GET);
+    ck_assert(!state->failed && dos_work_pending(&unit));
+    const dos_unit_t boundary = unit;
+    ck_assert(!dos_rel_channel_resume_read(&unit, &bank, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed && !dos_work_pending(&unit));
+    ck_assert_uint_eq(state->rel.number, boundary.channels[channel].rel.number);
+    ck_assert_uint_eq(state->rel.record.pointer, boundary.channels[channel].rel.record.pointer);
+    ck_assert_mem_eq(unit.status, boundary.status, sizeof(unit.status));
+    ck_assert_uint_eq(image.reads, reads + 1);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, 1, &eoi, &source), 1);
+    ck_assert_uint_eq(output[0], 'C');
+}
+END_TEST
+
+// Failed post-GET writes keep the consumed cursor and physical dirty page for retry.
+START_TEST(test_cached_read_return_write_failure_retry) {
+    const unsigned int format = (unsigned int)_i / 8u;
+    const unsigned int variant = (unsigned int)_i % 8u;
+    const unsigned int failure = variant / 2u;
+    const bool eoi_crossing = variant % 2u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel =
+        prepare_cached_read_return(&unit, &bank, &image, format, reference, eoi_crossing ? 127 : 200, true);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    if (failure == 0) {
+        image.fail_write = 1;
+    } else if (failure == 1) {
+        unit.bam[1].buffer.bytes[2] = UINT8_MAX;
+    } else if (failure == 2) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    } else {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    const dos_unit_t before = unit;
+    const unsigned int reads = image.reads;
+    dos_work(&unit, &bank);
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_mem_eq(&state->rel, &before.channels[channel].rel, sizeof(state->rel));
+    ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write);
+    ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, failure == 0);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    ck_assert_int_eq(unit.status_code, failure == 1 ? DOS_STATUS_POWER_ON : DOS_STATUS_WRITE_ERROR);
+    if (failure != 1) {
+        ck_assert_ptr_nonnull(strstr(unit.status, format == 0 ? ",01,03\r" : ",01,03,1\r"));
+    }
+    const dos_unit_t failed = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+    ck_assert(!dos_rel_channel_resume_read(&unit, &bank, channel));
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    unit.bam[1].buffer.bytes[2] = 0;
+    dos_work(&unit, &bank);
+    if (failure < 2 && eoi_crossing) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_READY);
+        ck_assert_uint_eq(state->rel.record.pointer, before.channels[channel].rel.record.pointer);
+        ck_assert_uint_eq(state->rel.number, before.channels[channel].rel.number);
+    } else {
+        ck_assert_mem_eq(&state->rel, &before.channels[channel].rel, sizeof(state->rel));
+    }
+    ck_assert_mem_eq(unit.status, failed.status, sizeof(unit.status));
+    if (failure < 2) {
+        ck_assert(!state->failed && state->ready);
+        ck_assert_uint_eq(image.writes, failure == 0 ? 2 : 1);
+        ck_assert(!(state->rel_write & (DOS_REL_DIRTY_FOLLOWING | DOS_REL_WRITE_READBACK)));
+    } else {
+        ck_assert(state->failed && !state->ready);
+        ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write);
+        ck_assert_uint_eq(image.writes | replacement.writes | replacement.reads, 0);
+    }
+    ck_assert(!dos_work_pending(&unit));
+}
+END_TEST
+
+// Read restoration and actual GET both reject replaced media without losing dirty bytes.
+START_TEST(test_cached_read_return_lifetime) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    const bool resumed = variant >= 2, replace = variant % 2u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_cached_read_return(&unit, &bank, &image, format, reference, 200, false);
+    uint8_t byte;
+    bool eoi;
+    dos_source_t source;
+    if (resumed) {
+        ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &byte, 1, &eoi, &source), 1);
+    }
+    const dos_unit_t before = unit;
+    if (replace) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    } else {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    }
+    if (resumed) {
+        dos_output_get(&unit, &bank, models[format], source, 1);
+    } else {
+        ck_assert(!dos_rel_channel_resume_read(&unit, &bank, channel));
+    }
+    const dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FAILED);
+    ck_assert_uint_eq(state->rel.record.pointer, before.channels[channel].rel.record.pointer);
+    ck_assert_uint_eq(state->rel.number, before.channels[channel].rel.number);
+    ck_assert_uint_eq(state->rel_write, before.channels[channel].rel_write);
+    ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(image.writes | replacement.reads | replacement.writes, 0);
+    ck_assert(!dos_rel_channel_retry_write(&unit, channel));
+}
+END_TEST
+
+// Restoring a missing CR/EOI does not publish 50 until an actual GET.
+START_TEST(test_cached_read_return_missing_get) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool overflow = (unsigned int)_i % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    image.bytes[3][0] = 0;
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, 1, 254, 0);
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, overflow));
+    const dos_unit_t before = unit;
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    ck_assert_mem_eq(unit.status, before.status, sizeof(unit.status));
+    for (unsigned int repeat = 0; repeat < 2; ++repeat) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source), 1);
+        ck_assert_uint_eq(output[0], '\r');
+        ck_assert(eoi);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        ck_assert_str_eq(unit.status,
+                         format == 0 ? "50, RECORD NOT PRESENT,00,00\r" : "50, RECORD NOT PRESENT,00,00,1\r");
+        ck_assert(unit.channels[channel].ready && !dos_work_pending(&unit));
+        ck_assert_uint_eq(unit.channels[channel].rel.number, before.channels[channel].rel.number);
+        ck_assert_uint_eq(unit.channels[channel].rel_write, before.channels[channel].rel_write);
+        ck_assert_mem_eq(unit.buffers, before.buffers, sizeof(unit.buffers));
+        ck_assert_uint_eq(image.writes | image.flushes, 0);
+    }
+}
+END_TEST
+
+// A peer can finish its cached read WRITE while the first owner retains a failure.
+START_TEST(test_cached_read_return_peer_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        mount_job_image(&bank, &images[owner], format, 2, owner, true);
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_job_channel(&unit, &bank, &images[owner], format, reference, 2u + owner, 199);
+    }
+    const uint16_t buffers = unit.buffer_use;
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        const uint8_t channel = channels[owner];
+        ck_assert(dos_rel_channel_begin_write(&unit, channel));
+        ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+        ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, true));
+        ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+        consume_dirty_read_page(&unit, &bank, format, channel);
+    }
+    images[0].fail_write = 1;
+    dos_work(&unit, &bank);
+    const dos_channel_t failed = unit.channels[channels[0]];
+    const dos_buffer_t saved = unit.buffers[failed.buffers[0]];
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    ck_assert(failed.failed && dos_work_pending(&unit));
+    dos_work(&unit, &bank);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert(unit.channels[channels[1]].ready && !unit.channels[channels[1]].failed);
+    while (unit.channels[channels[1]].rel.number == 2) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        dos_source_t source;
+        const unsigned int count = dos_output_stage(&unit, &bank, 3, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        dos_output_get(&unit, &bank, models[format], source, count);
+    }
+    ck_assert(unit.channels[channels[1]].ready);
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[0]], &saved, sizeof(saved));
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+}
+END_TEST
+
+// Native SETLST observes old WRITE bytes, not a speculative forward-link refill.
+START_TEST(test_cached_next_retained_write_window) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    const bool reverse = variant >= 3;
+    const unsigned int pattern = variant % 3u;
+    const unsigned int prefixes[] = {0, 1, 100};
+    const uint8_t expected_last[] = {255, 2, 93};
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, 1, 200, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    if (reverse) {
+        const uint8_t first = state->buffers[0];
+        state->buffers[0] = state->buffers[1];
+        state->buffers[1] = first;
+        state->rel.record.active ^= 1u;
+    }
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    for (unsigned int prefix = 0; prefix < prefixes[pattern]; ++prefix) {
+        ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    }
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, true));
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    const unsigned int reads = image.reads;
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    dos_work(&unit, &bank);
+    ck_assert(state->ready && state->rel.number == 2);
+    const dos_buffer_t inactive = unit.buffers[state->buffers[state->rel.record.active ^ 1u]];
+    uint8_t output[DOS_STAGE_CAPACITY];
+    bool eoi;
+    dos_source_t source;
+    while (state->rel.number == 2) {
+        const unsigned int count = dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        dos_output_get(&unit, &bank, models[format], source, count);
+    }
+    ck_assert(state->ready && !state->failed && !state->rel.record.following);
+    ck_assert_uint_eq(state->rel.record.pointer, 148);
+    ck_assert_uint_eq(state->rel.record.next, 94);
+    ck_assert_uint_eq(state->rel.record.last, expected_last[pattern]);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_mem_eq(&unit.buffers[state->buffers[state->rel.record.active ^ 1u]], &inactive, sizeof(inactive));
+    while (state->ready) {
+        const unsigned int count = dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        for (unsigned int index = 0; index < count; ++index) {
+            ck_assert_uint_eq(output[index], 'B');
+        }
+        dos_output_get(&unit, &bank, models[format], source, count);
+    }
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_PENDING);
+    ck_assert_int_eq(state->rel.record.phase, pattern == 0 ? DOS_REL_RECORD_CLEAN_NEXT : DOS_REL_RECORD_CLEAN_GET);
+    ck_assert_uint_eq(state->rel.number, pattern == 0 ? 4 : 3);
+    ck_assert(!state->failed && dos_work_pending(&unit));
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    const dos_rel_reader_t before = state->rel;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed && !dos_work_pending(&unit));
+    ck_assert_uint_eq(state->rel.number, before.number);
+    ck_assert_uint_eq(state->rel.record.pointer, before.record.pointer);
+    ck_assert_int_eq(state->rel.record.result, pattern == 0 ? DOS_REL_RECORD_MISSING : DOS_REL_RECORD_READY);
+    ck_assert_uint_eq(state->rel.record.next, 94);
+    ck_assert_uint_eq(image.reads, reads + 1);
+    ck_assert_uint_eq(image.writes, 1);
+}
+END_TEST
+
+// Dirty NRBUF awaits a reused WRITE page without clean-branch prefetch.
+START_TEST(test_owned_nrbuf_dirty_refill) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool next = (unsigned int)_i % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    if (next) {
+        memset(image.bytes[3] + 2, 0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    }
+    image.bytes[5][0] = 1;
+    image.bytes[5][1] = 6;
+    image.bytes[6][1] = UINT8_MAX;
+    memset(image.bytes[6] + 2, 'D', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, 26, 10, 4);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, true));
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    const unsigned int reads = image.reads, writes = image.writes;
+    unsigned int consumed = 0;
+    while (state->ready) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        const unsigned int count = dos_stage(&unit, &bank, channel, output, sizeof(output), &eoi);
+        ck_assert_uint_gt(count, 0);
+        for (unsigned int index = 0; index < count; ++index) {
+            ck_assert_uint_eq(output[index], 'B');
+        }
+        dos_get(&unit, &bank, channel, count);
+        consumed += count;
+        ck_assert_uint_le(consumed, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    }
+    ck_assert(state->rel_write & DOS_REL_WRITE_READBACK);
+    ck_assert_int_eq(state->rel.record.phase, next ? DOS_REL_RECORD_DIRTY_NEXT : DOS_REL_RECORD_DIRTY_GET);
+    const uint16_t number = state->rel.number;
+    const uint8_t pointer = state->rel.record.pointer;
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes + 1);
+    ck_assert(!state->ready && dos_work_pending(&unit));
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(image.reads, reads + 1);
+    ck_assert_int_eq(state->rel.record.phase, next ? DOS_REL_RECORD_RESUME_NEXT : DOS_REL_RECORD_RESUME_GET);
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed && !state->rel.record.following);
+    ck_assert_uint_eq(state->rel.number, number);
+    ck_assert_uint_eq(state->rel.record.pointer, pointer);
+    ck_assert_uint_eq(image.reads, reads + 1);
+    ck_assert_uint_eq(image.writes, writes + 1);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+}
+END_TEST
+
+// Host refill failures stop polling, retain the consumed cursor and retry only I/O.
+START_TEST(test_owned_nrbuf_read_failure_retry) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    const bool next = variant % 2u;
+    const unsigned int failure = variant / 2u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel =
+        prepare_cached_read_return(&unit, &bank, &image, format, reference, next ? 127 : 200, false);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    dos_work(&unit, &bank);
+    while (state->ready) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        const unsigned int count = dos_stage(&unit, &bank, channel, output, sizeof(output), &eoi);
+        ck_assert_uint_gt(count, 0);
+        dos_get(&unit, &bank, channel, count);
+    }
+    const dos_rel_reader_t cursor = state->rel;
+    const unsigned int reads = image.reads, writes = image.writes;
+    if (failure == 0) {
+        image.fail_read = reads + 1;
+    } else if (failure == 1) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+    } else {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    dos_work(&unit, &bank);
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert_uint_eq(state->rel.number, cursor.number);
+    ck_assert_uint_eq(state->rel.record.pointer, cursor.record.pointer);
+    ck_assert_uint_eq(image.reads, reads + (failure == 0));
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    const dos_unit_t failed = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+    ck_assert_int_eq(dos_rel_channel_retry_write(&unit, channel), failure == 0);
+    if (failure == 0) {
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->ready && !state->failed);
+        ck_assert_uint_eq(state->rel.number, cursor.number);
+        ck_assert_uint_eq(state->rel.record.pointer, cursor.record.pointer);
+        ck_assert_uint_eq(image.reads, reads + 2);
+        ck_assert_uint_eq(image.writes, writes);
+        ck_assert_mem_eq(unit.status, failed.status, sizeof(unit.status));
+    }
+}
+END_TEST
+
+// A failed clean-branch prefetch is deferred until SETLST or NRBUF needs it.
+START_TEST(test_owned_nrbuf_deferred_prefetch_failure) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const bool next = (unsigned int)_i % 2u;
+    const bool remount = (unsigned int)_i % 4u >= 2u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    image.bytes[5][0] = 1;
+    image.bytes[5][1] = 6;
+    image.bytes[6][1] = UINT8_MAX;
+    memset(image.bytes[6] + 2, 'D', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel =
+        prepare_cached_read_return(&unit, &bank, &image, format, reference, next ? 127 : 200, false);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    dos_work(&unit, &bank);
+    while (state->ready) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        const unsigned int count = dos_stage(&unit, &bank, channel, output, sizeof(output), &eoi);
+        ck_assert_uint_gt(count, 0);
+        dos_get(&unit, &bank, channel, count);
+    }
+    const unsigned int reads = image.reads;
+    image.fail_read = reads + 2;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed && state->rel.record.following_failed);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+    unsigned int consumed = 0;
+    while (state->ready) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        const unsigned int count = dos_stage(&unit, &bank, channel, output, sizeof(output), &eoi);
+        ck_assert_uint_gt(count, 0);
+        for (unsigned int index = 0; index < count; ++index) {
+            ck_assert_uint_eq(output[index], 'C');
+        }
+        dos_get(&unit, &bank, channel, count);
+        consumed += count;
+        ck_assert_uint_le(consumed, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    }
+    ck_assert_uint_eq(consumed, next ? DISKIMAGE_SECTOR_PAYLOAD_SIZE : 1);
+    ck_assert(state->failed && !dos_work_pending(&unit));
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_PENDING);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(image.reads, reads + 2);
+    ck_assert_uint_eq(image.writes, 1);
+    ck_assert_uint_eq(image.flushes, 0);
+    const uint16_t number = state->rel.number;
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    image.fail_read = image.reads + 1u;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel.number, number);
+    if (remount) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+        ck_assert(dos_rel_channel_retry_write(&unit, channel));
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->failed && !state->ready);
+        ck_assert_int_eq(state->rel.record.lookup.media_result, DOS_MEDIA_STALE);
+        ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+        return;
+    }
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(state->rel.number, number);
+    ck_assert_uint_eq(image.reads, reads + 4u);
+    const unsigned int length = next ? 127u : 200u;
+    for (unsigned int byte = 0; byte < length; ++byte) {
+        uint8_t output;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &output, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(output, next || byte >= 162u ? 'D' : 'C');
+        ck_assert_int_eq(eoi, byte == length - 1u);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        finish_pipeline(&unit, &bank, &image);
+    }
+    ck_assert_uint_eq(state->rel.number, number + 1u);
+}
+END_TEST
+
+// EOI commits NXTREC once even when an earlier speculative READ is now required.
+START_TEST(test_eoi_required_prefetch_retry) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    image.fail_read = 3u + (format == 2);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, 2, 127, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(state->rel.record.following_failed);
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    ck_assert(dos_rel_channel_finish_write(&unit, channel, false));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel.number, 3);
+    ck_assert(state->rel_write & DOS_REL_WRITE_EOI);
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed);
+    ck_assert_uint_eq(state->rel.number, 3);
+    ck_assert(!(state->rel_write & DOS_REL_WRITE_EOI));
+    for (unsigned int byte = 0; byte < 127; ++byte) {
+        uint8_t output;
+        bool eoi;
+        dos_source_t source;
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, &output, 1, &eoi, &source), 1);
+        ck_assert_uint_eq(output, 'B');
+        ck_assert_int_eq(eoi, byte == 126);
+        dos_output_get(&unit, &bank, models[format], source, 1);
+        finish_pipeline(&unit, &bank, &image);
+    }
+    ck_assert_uint_eq(state->rel.number, 4);
+}
+END_TEST
+
+// Complete EOI includes queued padding, dirty NRBUF and delayed status.
+START_TEST(test_owned_full_eoi_completion) {
+    const unsigned int format = (unsigned int)_i / 18u;
+    const unsigned int variant = (unsigned int)_i % 18u;
+    const unsigned int shape = variant / 3u, completion = variant % 3u;
+    const uint8_t sizes[] = {254, 127, 200, 254, 10, 255};
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    if (shape == 3) {
+        image.bytes[3][0] = 0;
+    }
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint16_t number = shape == 1 ? 2 : shape == 4 ? 26 : 1;
+    const uint8_t channel =
+        prepare_completion_channel(&unit, &bank, &image, format, reference, number, sizes[shape], shape == 4 ? 4 : 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (completion != 0) {
+        ck_assert(dos_rel_channel_pad(&unit, channel));
+        finish_pipeline(&unit, &bank, &image);
+    } else if (state->rel.record.result != DOS_REL_RECORD_FULL) {
+        const dos_unit_t before = unit;
+        ck_assert(!dos_rel_channel_finish_write(&unit, channel, true));
+        ck_assert_mem_eq(&unit, &before, sizeof(before));
+    }
+    unit.selected_drive = unit.last_drive = 0;
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    dos_status_get(&unit, models[format], 2);
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    const uint16_t buffers = unit.buffer_use;
+    const unsigned int reads = image.reads, writes = image.writes;
+    ck_assert(dos_rel_channel_finish_write(&unit, channel, completion == 2));
+    ck_assert(!state->ready && dos_work_pending(&unit));
+    ck_assert_uint_eq(state->rel.number, number);
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    const dos_unit_t queued = unit;
+    ck_assert(!dos_rel_channel_finish_write(&unit, channel, false));
+    ck_assert_mem_eq(&unit, &queued, sizeof(queued));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->ready && !state->failed && !dos_work_pending(&unit));
+    ck_assert_uint_eq(state->rel.number, number + 1u);
+    ck_assert(!state->rel.no_record);
+    ck_assert(!(state->rel_write & (DOS_REL_WRITE_EOI | DOS_REL_WRITE_OVERFLOW | DOS_REL_WRITE_PADDING)));
+    ck_assert(state->rel_write & DOS_REL_WRITE_FINISHED);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes + (shape < 2 || (shape == 4 && completion == 0)));
+    ck_assert_uint_eq(image.flushes, 0);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    if (completion == 2) {
+        ck_assert_str_eq(unit.status,
+                         format == 0 ? "51,OVERFLOW IN RECORD,00,00\r" : "51,OVERFLOW IN RECORD,00,00,1\r");
+    } else if (format == 0) {
+        ck_assert_mem_eq(unit.status, status, sizeof(status));
+        ck_assert_uint_eq(unit.status_position, 2);
+    } else {
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_OK);
+    }
+    if (shape == 3) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_MISSING);
+        ck_assert_uint_eq(state->rel.record.last, UINT8_MAX);
+        ck_assert(state->rel_write & DOS_REL_DIRTY_FIRST);
+    }
+    ck_assert(!dos_rel_channel_finish_write(&unit, channel, false));
+    ck_assert(!dos_rel_channel_resume_read(&unit, &bank, channel));
+}
+END_TEST
+
+// Failed completion jobs retain EOI/overflow until an explicit successful retry.
+START_TEST(test_owned_full_eoi_write_failure_retry) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int failure = (unsigned int)_i % 3u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_completion_channel(&unit, &bank, &image, format, reference, 1, 254, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    ck_assert(dos_rel_channel_pad(&unit, channel));
+    finish_pipeline(&unit, &bank, &image);
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    ck_assert(dos_rel_channel_finish_write(&unit, channel, true));
+    dos_work(&unit, &bank);
+    ck_assert_uint_eq(state->rel.number, 2);
+    ck_assert(state->rel_write & DOS_REL_WRITE_READBACK);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_FILE_EXISTS);
+    if (failure == 0) {
+        image.fail_write = 1;
+    } else if (failure == 1) {
+        unit.bam[1].buffer.bytes[2] = UINT8_MAX;
+    } else {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    }
+    const dos_rel_reader_t cursor = state->rel;
+    const dos_buffer_t saved = unit.buffers[state->buffers[0]];
+    dos_work(&unit, &bank);
+    ck_assert(state->failed && !state->ready && !dos_work_pending(&unit));
+    ck_assert(state->rel_write & DOS_REL_WRITE_EOI);
+    ck_assert(state->rel_write & DOS_REL_WRITE_OVERFLOW);
+    ck_assert(state->rel_write & DOS_REL_DIRTY_FIRST);
+    ck_assert_mem_eq(&state->rel, &cursor, sizeof(cursor));
+    ck_assert_mem_eq(&unit.buffers[state->buffers[0]], &saved, sizeof(saved));
+    ck_assert_int_eq(unit.status_code, failure == 1 ? DOS_STATUS_POWER_ON : DOS_STATUS_WRITE_ERROR);
+    ck_assert(dos_rel_channel_retry_write(&unit, channel));
+    unit.bam[1].buffer.bytes[2] = 0;
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(state->rel.number, 2);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    if (failure < 2) {
+        ck_assert(state->ready && !state->failed);
+        ck_assert(!(state->rel_write & (DOS_REL_WRITE_EOI | DOS_REL_WRITE_OVERFLOW | DOS_REL_DIRTY_FIRST)));
+        ck_assert_str_eq(unit.status,
+                         format == 0 ? "51,OVERFLOW IN RECORD,00,00\r" : "51,OVERFLOW IN RECORD,00,00,1\r");
+    } else {
+        ck_assert(state->failed && !state->ready);
+        ck_assert(state->rel_write & DOS_REL_WRITE_EOI);
+        ck_assert_mem_eq(&state->rel, &cursor, sizeof(cursor));
+    }
+}
+END_TEST
+
+// A failed EOI owner cannot block or mutate a peer's queued completion.
+START_TEST(test_owned_full_eoi_peer_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    uint8_t channels[2];
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        mount_job_image(&bank, &images[owner], format, 2, owner, true);
+    }
+    for (unsigned int owner = 0; owner < count_of(channels); ++owner) {
+        dos_media_ref_t reference;
+        ck_assert_int_eq(dos_media_reference(&bank, 2, owner, &reference), DOS_MEDIA_OK);
+        channels[owner] = prepare_completion_channel(&unit, &bank, &images[owner], format, reference, 1, 254, 0);
+        unit.channels[channels[owner]].secondary = 4u + owner;
+        ck_assert(dos_rel_channel_begin_write(&unit, channels[owner]));
+        ck_assert(dos_rel_channel_put(&unit, &bank, channels[owner], 'Z'));
+        ck_assert(dos_rel_channel_pad(&unit, channels[owner]));
+        finish_pipeline(&unit, &bank, &images[owner]);
+    }
+    images[0].fail_write = 1;
+    ck_assert(dos_rel_channel_finish_write(&unit, channels[0], true));
+    ck_assert(dos_rel_channel_finish_write(&unit, channels[1], false));
+    for (unsigned int step = 0; !unit.channels[channels[0]].failed; ++step) {
+        ck_assert_uint_lt(step, 8);
+        dos_work(&unit, &bank);
+    }
+    const dos_channel_t failed = unit.channels[channels[0]];
+    const dos_buffer_t saved = unit.buffers[failed.buffers[0]];
+    const uint16_t buffers = unit.buffer_use;
+    finish_pipeline(&unit, &bank, &images[1]);
+    ck_assert_mem_eq(&unit.channels[channels[0]], &failed, sizeof(failed));
+    ck_assert_mem_eq(&unit.buffers[failed.buffers[0]], &saved, sizeof(saved));
+    ck_assert(unit.channels[channels[1]].ready && !unit.channels[channels[1]].failed);
+    ck_assert_uint_eq(unit.channels[channels[1]].rel.number, 2);
+    ck_assert_uint_eq(images[0].writes, 1);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(unit.buffer_use, buffers);
+    ck_assert(dos_rel_channel_retry_write(&unit, channels[0]));
+    finish_pipeline(&unit, &bank, &images[0]);
+    ck_assert(unit.channels[channels[0]].ready && !unit.channels[channels[0]].failed);
+    ck_assert_uint_eq(unit.channels[channels[0]].rel.number, 2);
+    ck_assert_uint_eq(images[0].writes, 2);
+    ck_assert_uint_eq(images[1].writes, 1);
+    ck_assert_uint_eq(images[0].flushes | images[1].flushes, 0);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_RECORD_OVERFLOW);
+}
+END_TEST
+
+// Cached SETLST requires completed same-drive pages and a current media token.
+START_TEST(test_cached_next_window_guards) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_cached_read_return(&unit, &bank, &image, format, reference, 200, false);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_resume_read(&unit, &bank, channel));
+    consume_dirty_read_page(&unit, &bank, format, channel);
+    dos_work(&unit, &bank);
+    const uint8_t inactive_index = state->buffers[state->rel.record.active ^ 1u];
+    if (variant == 0) {
+        unit.buffers[inactive_index].resident = false;
+    } else if (variant == 1) {
+        unit.buffers[inactive_index].failed = true;
+    } else {
+        unit.buffer_drives ^= (uint16_t)1u << inactive_index;
+    }
+    const unsigned int reads = image.reads, writes = image.writes;
+    while (state->ready) {
+        uint8_t output[DOS_STAGE_CAPACITY];
+        bool eoi;
+        dos_source_t source;
+        const unsigned int count = dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &source);
+        ck_assert_uint_gt(count, 0);
+        dos_output_get(&unit, &bank, models[format], source, count);
+    }
+    ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_PENDING);
+    ck_assert_int_eq(state->rel.record.phase, DOS_REL_RECORD_FOLLOWING);
+    ck_assert_uint_eq(state->rel.number, 3);
+    ck_assert(!state->failed && !dos_work_pending(&unit));
+    const dos_unit_t boundary = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &boundary, sizeof(boundary));
+    if (variant == 0) {
+        state->rel.record.phase = DOS_REL_RECORD_DATA;
+        const dos_rel_record_t before = state->rel.record;
+        ck_assert(!dos_rel_record_prepare_cached(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                                 unit.buffers[state->buffers[1]].bytes));
+        ck_assert_mem_eq(&state->rel.record, &before, sizeof(before));
+    } else {
+        if (variant == 1) {
+            mount_job_image(&bank, &replacement, format, 3, 1, true);
+        } else {
+            ck_assert_int_eq(dos_media_set_slot(&bank, 3, 1, NULL), DOS_MEDIA_OK);
+        }
+        ck_assert(!dos_rel_record_prepare_cached(&state->rel.record, &bank, unit.buffers[state->buffers[0]].bytes,
+                                                 unit.buffers[state->buffers[1]].bytes));
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_FAILED);
+        ck_assert_int_eq(state->rel.record.lookup.media_result, DOS_MEDIA_STALE);
+        ck_assert_uint_eq(state->rel.number, boundary.channels[channel].rel.number);
+    }
+    ck_assert_mem_eq(unit.buffers, boundary.buffers, sizeof(unit.buffers));
+    ck_assert_uint_eq(state->rel_write, boundary.channels[channel].rel_write);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+}
+END_TEST
+
+// Register REL indexing independently of full record-channel implementation.
+
+// Dirty indexed positioning retains page bits through lookup and retry.
+START_TEST(test_pipeline_position_resident_index) {
+    const unsigned int format = (unsigned int)_i / 8u;
+    const unsigned int variant = (unsigned int)_i % 8u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    dos_buffer_t* const side = &unit.buffers[state->buffers[2]];
+    image.bytes[0][4] = 1;
+    image.bytes[0][5] = 0;
+    image.bytes[0][1] = UINT8_MAX;
+    image.bytes[1][1] = UINT8_MAX;
+    image.bytes[1][2] = variant == 2 ? 0 : 1;
+    image.bytes[1][6] = 1;
+    image.bytes[1][7] = 1;
+    image.bytes[1][16] = 1;
+    image.bytes[1][17] = 4;
+    uint16_t number = 1;
+    if (variant == 1 || variant == 2) {
+        number = 154;
+        image.bytes[0][6] = 1;
+        image.bytes[0][7] = 1;
+    } else if (variant >= 3) {
+        image.bytes[0][16] = 0;
+        if (variant == 4) {
+            number = 916;
+        } else if (variant == 5) {
+            memset(image.bytes[0] + 4, 0, DOS_REL_SIDE_COUNT * 2u);
+        } else if (variant == 6) {
+            image.bytes[0][6] = 1;
+            image.bytes[0][7] = 1;
+        } else if (variant == 7) {
+            image.bytes[0][0] = 1;
+        }
+    }
+    memcpy(side->bytes, image.bytes[0], sizeof(side->bytes));
+    ck_assert(side->resident && !side->failed);
+    ck_assert_uint_eq(side->track, 1);
+    ck_assert_uint_eq(side->sector, 0);
+    if (format == 2) {
+        ck_assert_uint_eq(state->rel.record.cached_group, 0);
+    }
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    const dos_rel_record_t before = state->rel.record;
+    const uint8_t flags = state->rel_write;
+    dos_status(&unit, models[format], DOS_STATUS_FILE_EXISTS, 0, 0);
+    const unsigned int reads = image.reads, writes = image.writes;
+    ck_assert(dos_rel_channel_position(&unit, channel, number, 0));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert(!state->ready && dos_work_pending(&unit));
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert_uint_eq(state->rel.number, number);
+    ck_assert(!state->rel.no_record);
+    ck_assert_uint_eq(image.writes, writes + (variant == 1 || variant == 2));
+    ck_assert_uint_eq(state->rel_write & DOS_REL_WRITE_MODIFIED, flags & DOS_REL_WRITE_MODIFIED);
+    ck_assert_uint_eq(image.flushes, 0);
+    const unsigned int extra_reads = variant == 1 || variant == 2 ? 2 : variant == 6 ? 1 : 0;
+    ck_assert_uint_eq(image.reads, reads + extra_reads + (format == 2 && variant >= 3 ? 2 : 0));
+    if (variant == 5 || variant == 7) {
+        ck_assert(state->failed && !state->ready);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_ILLEGAL_SYSTEM_TRACK_SECTOR);
+        ck_assert_str_eq(unit.status,
+                         format == 0 ? "67,ILLEGAL TRACK OR SECTOR,00,00\r" : "67,ILLEGAL TRACK OR SECTOR,00,00,1\r");
+        ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+        return;
+    }
+    ck_assert(state->ready && !state->failed);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_FILE_EXISTS);
+    uint8_t output = 0;
+    bool eoi = false;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, channel, &output, 1, &eoi), 1);
+    if (variant < 3) {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_READY);
+        ck_assert_uint_eq(output, variant == 0 ? 'Z' : 'B');
+        ck_assert_uint_eq(state->rel.record.pointer, variant == 0 ? 2 : 122);
+        ck_assert_uint_eq(side->bytes[2], variant == 1 ? 1 : 0);
+    } else {
+        ck_assert_int_eq(state->rel.record.result, DOS_REL_RECORD_MISSING);
+        ck_assert_uint_eq(state->rel.record.pointer, before.pointer);
+        ck_assert_uint_eq(state->rel.record.next, before.next);
+        ck_assert_uint_eq(state->rel_write & DOS_REL_DIRTY_FIRST, DOS_REL_DIRTY_FIRST);
+        ck_assert_uint_eq(state->rel.record.lookup.address.index, 254);
+        ck_assert_uint_eq(state->rel.record.lookup.address.side, variant == 6 ? 1 : 0);
+        ck_assert_uint_eq(output, '\r');
+        ck_assert(eoi);
+        ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[2], 'Z');
+        ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[3], 'A');
+        dos_get(&unit, &bank, channel, 1);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_NO_RECORD);
+        ck_assert_uint_eq(state->rel.number, number);
+        ck_assert(state->rel.no_record);
+    }
+}
+END_TEST
+
+// Failed side jobs retain their precise retry phase and never poll new media.
+START_TEST(test_pipeline_position_index_failure) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int failure = (unsigned int)_i % 3u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference, 2, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    image.bytes[0][6] = 1;
+    image.bytes[0][7] = 1;
+    image.bytes[1][1] = UINT8_MAX;
+    image.bytes[1][2] = 1;
+    image.bytes[1][16] = 1;
+    image.bytes[1][17] = 4;
+    memcpy(unit.buffers[state->buffers[2]].bytes, image.bytes[0], DISKIMAGE_SECTOR_SIZE);
+    if (failure == 1 && format == 2) {
+        state->rel.record.cached_group = DOS_REL_GROUP_NONE;
+    }
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    const uint8_t flags = state->rel_write;
+    ck_assert(dos_rel_channel_position(&unit, channel, 154, 0));
+    const unsigned int reads = image.reads, writes = image.writes;
+    if (failure == 2) {
+        mount_job_image(&bank, &replacement, format, 3, 1, true);
+    } else {
+        image.fail_read = reads + 1u;
+    }
+    finish_pipeline(&unit, &bank, &image);
+    ck_assert(state->failed && !state->ready);
+    ck_assert_uint_eq(state->rel_write, flags | DOS_REL_WRITE_FINISHED);
+    ck_assert_uint_eq(unit.buffers[state->buffers[0]].bytes[2], 'Z');
+    ck_assert_uint_eq(image.reads, reads + (failure != 2));
+    ck_assert_uint_eq(image.writes, writes);
+    ck_assert_uint_eq(replacement.reads | replacement.writes, 0);
+    ck_assert_int_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    const dos_unit_t failed = unit;
+    dos_work(&unit, &bank);
+    ck_assert_mem_eq(&unit, &failed, sizeof(failed));
+    ck_assert_int_eq(dos_rel_channel_retry_position(&unit, channel), failure != 2);
+    if (failure != 2) {
+        finish_pipeline(&unit, &bank, &image);
+        ck_assert(state->ready && !state->failed);
+        ck_assert_uint_eq(state->rel.number, 154);
+        ck_assert_uint_eq(state->rel.record.pointer, 122);
+        ck_assert_uint_eq(image.writes, writes + 1u);
+        ck_assert_uint_eq(image.bytes[3][2], 'Z');
+        ck_assert_mem_eq(unit.status, failed.status, sizeof(unit.status));
+    }
+}
+END_TEST
+
+// Without CLSREL, every CLOSE shortcut retains internal writer ownership.
+START_TEST(test_core_close_retains_writer_pages) {
+    const unsigned int format = (unsigned int)_i / 12u;
+    const unsigned int variant = (unsigned int)_i % 12u;
+    const uint8_t secondaries[] = {IEEE_LOAD_CHANNEL, 2, IEEE_COMMAND_CHANNEL};
+    const uint8_t secondary = secondaries[variant / 4u];
+    const unsigned int completion = variant % 4u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_job_image(&bank, &image, format, 3, 1, true);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = prepare_job_channel(&unit, &bank, &image, format, reference,
+                                                secondary == IEEE_COMMAND_CHANNEL ? 2 : secondary, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    ck_assert(dos_rel_channel_begin_write(&unit, channel));
+    ck_assert(dos_rel_channel_put(&unit, &bank, channel, 'Z'));
+    if (completion != 0) {
+        ck_assert(dos_rel_channel_pad(&unit, channel));
+        finish_pipeline(&unit, &bank, &image);
+    }
+    if (completion == 3) {
+        ck_assert(dos_rel_channel_writeback(&unit, &bank, channel, &state->rel_write));
+    }
+    if (completion >= 2) {
+        ck_assert(dos_rel_channel_finish_cached(&unit, &bank, channel, false));
+    }
+    const dos_channel_t owner = *state;
+    const uint16_t buffers = unit.buffer_use;
+    const unsigned int reads = image.reads, writes = image.writes, flushes = image.flushes;
+    dos_buffer_t pages[DOS_CHANNEL_BUFFER_COUNT];
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        pages[page] = unit.buffers[state->buffers[page]];
+    }
+    for (unsigned int attempt = 0; attempt < 2; ++attempt) {
+        ck_assert(!dos_close(&unit, &bank, models[format], secondary));
+        ck_assert_mem_eq(state, &owner, sizeof(owner));
+        ck_assert_uint_eq(unit.buffer_use, buffers);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_SYNTAX);
+        ck_assert_uint_eq(image.reads, reads);
+        ck_assert_uint_eq(image.writes, writes);
+        ck_assert_uint_eq(image.flushes, flushes);
+        for (unsigned int page = 0; page < count_of(pages); ++page) {
+            ck_assert_mem_eq(&unit.buffers[state->buffers[page]], &pages[page], sizeof(pages[page]));
+        }
+    }
+}
+END_TEST
+
 Suite* dos_rel_suite(void) {
     Suite* const suite = suite_create("dos_rel");
     TCase* const core = tcase_create("lookup and clean reads");
@@ -3286,6 +6216,47 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_pipeline_command_priority_and_job_headers, 0, 9);
     tcase_add_loop_test(core, test_pipeline_retains_incomplete_boundaries, 0, 6);
     tcase_add_loop_test(core, test_output_sources_keep_status_and_ordinary_owners, 0, 3);
+    tcase_add_loop_test(core, test_pipeline_position_buffer_reuse, 0, 24);
+    tcase_add_loop_test(core, test_initialize_relative_active_job, 0, 12);
+    tcase_add_loop_test(core, test_relative_writer_rejects_ordinary_block_editors, 0, 15);
+    tcase_add_loop_test(core, test_position_required_prefetch_retry, 0, 18);
+    tcase_add_loop_test(core, test_write_cold_bam_is_cooperative, 0, 24);
+    tcase_add_loop_test(core, test_write_bam_command_replacement, 0, 12);
+    tcase_add_loop_test(core, test_pipeline_position_buffer_failures, 0, 15);
+    tcase_add_loop_test(core, test_channel_writeback_saved_page_and_dirty_mask, 0, 18);
+    tcase_add_loop_test(core, test_channel_writeback_failures_and_retry, 0, 15);
+    tcase_add_loop_test(core, test_channel_writeback_flush_remains_separate, 0, 3);
+    tcase_add_loop_test(core, test_channel_writeback_peer_failure_isolation, 0, 3);
+    tcase_add_loop_test(core, test_channel_write_handoff_cached_and_refilled, 0, 18);
+    tcase_add_loop_test(core, test_channel_write_handoff_matching_written_header, 0, 3);
+    tcase_add_loop_test(core, test_channel_write_handoff_blocked_ownership, 0, 15);
+    tcase_add_loop_test(core, test_channel_write_handoff_failure_and_retry, 0, 18);
+    tcase_add_loop_test(core, test_channel_write_handoff_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_owned_writer_cooperative_padding, 0, 9);
+    tcase_add_loop_test(core, test_owned_writer_failure_retry_and_lifetime, 0, 18);
+    tcase_add_loop_test(core, test_owned_writer_peer_and_pool_ownership, 0, 3);
+    tcase_add_loop_test(core, test_owned_cached_completion_status_and_cursor, 0, 36);
+    tcase_add_loop_test(core, test_owned_cached_completion_boundaries, 0, 12);
+    tcase_add_loop_test(core, test_owned_cached_completion_stale_retains_dirty, 0, 6);
+    tcase_add_loop_test(core, test_owned_cached_completion_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_cached_read_return_reenters_write, 0, 9);
+    tcase_add_loop_test(core, test_cached_read_return_dirty_boundary, 0, 24);
+    tcase_add_loop_test(core, test_cached_read_return_write_failure_retry, 0, 24);
+    tcase_add_loop_test(core, test_cached_read_return_lifetime, 0, 12);
+    tcase_add_loop_test(core, test_cached_read_return_missing_get, 0, 6);
+    tcase_add_loop_test(core, test_cached_read_return_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_cached_next_retained_write_window, 0, 18);
+    tcase_add_loop_test(core, test_owned_nrbuf_dirty_refill, 0, 6);
+    tcase_add_loop_test(core, test_owned_nrbuf_read_failure_retry, 0, 18);
+    tcase_add_loop_test(core, test_owned_nrbuf_deferred_prefetch_failure, 0, 12);
+    tcase_add_loop_test(core, test_eoi_required_prefetch_retry, 0, 3);
+    tcase_add_loop_test(core, test_owned_full_eoi_completion, 0, 54);
+    tcase_add_loop_test(core, test_owned_full_eoi_write_failure_retry, 0, 9);
+    tcase_add_loop_test(core, test_owned_full_eoi_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_cached_next_window_guards, 0, 9);
+    tcase_add_loop_test(core, test_core_close_retains_writer_pages, 0, 36);
+    tcase_add_loop_test(core, test_pipeline_position_resident_index, 0, 24);
+    tcase_add_loop_test(core, test_pipeline_position_index_failure, 0, 9);
     suite_add_tcase(suite, core);
     tcase_add_loop_test(core, test_pipeline_open_directory_link_and_initial_record, 0, 18);
     tcase_add_loop_test(core, test_pipeline_open_failed_jobs_and_lifetime, 0, 12);
@@ -3300,5 +6271,13 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_clean_position_buffer_failure_and_cancel, 0, 15);
     tcase_add_loop_test(core, test_clean_position_buffer_required_prefetch_error, 0, 12);
     tcase_add_loop_test(core, test_clean_position_buffer_peer_prefix, 0, 3);
+    tcase_add_loop_test(core, test_clean_position_resident_index, 0, 27);
+    tcase_add_loop_test(core, test_clean_position_index_failure_and_cancel, 0, 12);
+    tcase_add_loop_test(core, test_clean_position_last_group_cache, 0, 4);
+    tcase_add_loop_test(core, test_clean_position_wrapped_resident_header, 0, 3);
+    tcase_add_loop_test(core, test_clean_position_open_cache_lifetime, 0, 3);
+    tcase_add_loop_test(core, test_clean_position_index_peer_prefix, 0, 3);
+    tcase_add_loop_test(core, test_clean_position_group_failure_and_empty_table, 0, 4);
+    tcase_add_loop_test(core, test_clean_position_terminal_endpoint_wrap, 0, 6);
     return suite;
 }

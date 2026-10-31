@@ -86,7 +86,11 @@ typedef enum {
 typedef struct {
     dos_media_ref_t media;
     uint8_t buffers[DOS_CHANNEL_BUFFER_COUNT];
-    uint8_t active;
+    // file_type selects the ordinary active index or REL write flags.
+    union {
+        uint8_t active;
+        uint8_t rel_write;
+    };
     uint8_t secondary;
     uint8_t access;
     uint8_t directory;
@@ -422,7 +426,7 @@ bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned 
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
               unsigned int length);
 
-// Advance one command, ordinary lookup/APPEND or clean REL read continuation.
+// Advance one command, ordinary lookup/APPEND or retained REL read/write job.
 void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
 
 // Dispatch an already-collected metadata, block, INITIALIZE or user request.
@@ -432,6 +436,7 @@ void dos_command(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, 
 
 // Persist then release a secondary, retaining failed writers for retry.
 // Command secondary 15 closes all data channels in descending order.
+// Internal REL writers remain allocated until the later full CLSREL join.
 bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t secondary);
 
 // Apply a decoded ordinary or direct PUT byte without treating EOI as file completion.
@@ -448,12 +453,12 @@ uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
 // secondary. Return DOS_UNUSED on exhaustion without publishing a partial owner.
 // No reads or status publication. Prepare before dos_stage/dos_get, and do
 // not use ordinary dos_put on this storage. Public REL OPEN remains disabled.
-// Only clean read ownership is supported, not dirty native CLSREL completion.
+// Writer ownership is retained internally. Native CLSREL is not implemented.
 uint8_t dos_rel_channel_claim(dos_unit_t* unit, dos_media_ref_t media, uint8_t secondary);
 
 // Internal initial read from a fresh claim and validated directory metadata.
 // Preserve native directory-data/side-job order, not public OPEN admission.
-// Full read/write flags, resident RECORD and dirty ownership remain excluded.
+// This initializer requires fresh clean ownership, not an existing writer.
 void dos_rel_channel_prepare_open(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t root_track,
                                   uint8_t root_sector, uint8_t data_track, uint8_t data_sector, uint8_t size);
 
@@ -464,12 +469,100 @@ void dos_rel_channel_prepare_open(dos_unit_t* unit, uint8_t channel, dos_model_t
 void dos_rel_channel_prepare(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t track, uint8_t sector,
                              uint16_t number, uint8_t size, uint8_t position);
 
-// Internal clean POSBUF after the caller has resolved SSPOS and retired FIFO
-// copies. Retain data/data/side ownership, reject busy/failed/write owners and
-// perform no I/O here. Public RECORD status/admission and index traversal remain
+// Internal clean or dirty POSBUF after resolved SSPOS and FIFO retirement.
+// Retain data/data/side ownership, reject busy/failed owners and perform no I/O
+// here. Public RECORD status/admission and index traversal remain
 // the caller's responsibility. Work retains successful status.
 bool dos_rel_channel_position_buffer(dos_unit_t* unit, uint8_t channel, uint16_t number, uint8_t position,
                                      uint8_t track, uint8_t sector);
+
+// Internal FNDREL/SSPOS/SSEND and clean/dirty POSBUF request. Retire this
+// owner's FIFO copies first. Keep pages, dirty bits and media identity.
+// Reject busy/failed owners without mutation. Each work pass submits at most
+// one READ/WRITE. Missing previews CR/EOI, actual GET owns error 50.
+// Public RECORD is excluded. Successful work retains command status.
+bool dos_rel_channel_position(dos_unit_t* unit, uint8_t channel, uint16_t number, uint8_t position);
+
+// Internal WRTOUT job leaf, not NRBUF, CLOSE or a durability acknowledgement.
+// Retire read readiness/FIFO copies before cached writes. The owner retains
+// the dirty mask and pages. Write only the dirty active data page to its saved
+// header, using the existing BAM-version/storage gate. Success clears only
+// that mask bit, without advancing the record or changing retained status.
+// Each call performs at most one BAM READ/flush or data WRITE. False without
+// channel failure retains cold-version preparation (repeat this leaf call).
+// Failure keeps the bytes/mask and marks this channel failed for explicit
+// retry. An already-clean active page performs no I/O. Backing-store flush,
+// buffer switching, file flags and complete native error cleanup remain separate.
+bool dos_rel_channel_writeback(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, uint8_t* dirty);
+
+// Continue a pending dirty NRBUF after its active page's writeback succeeds.
+// Select the following page at pointer 2, using its matching resident header
+// or at most one explicit read. A previous WRITE forces READ even when the
+// saved header matches. No writes, prefetch, record advance or status
+// completion. Missing links and dirty pages that would be overwritten block
+// without I/O/status changes. Other record modes are unchanged and return false.
+// Read/lifetime failure retains the old active page and pending cursor for
+// explicit retry. The caller retains both pages and the unchanged dirty mask.
+// Native speculative-job timing and controller-error cleanup remain separate.
+bool dos_rel_channel_advance_write(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, uint8_t dirty);
+
+#define DOS_REL_WRITE_MODIFIED 4u
+#define DOS_REL_WRITE_PADDING 8u
+#define DOS_REL_WRITE_FINISHED 16u
+#define DOS_REL_WRITE_READBACK 32u
+#define DOS_REL_WRITE_EOI 64u
+#define DOS_REL_WRITE_OVERFLOW 128u
+
+// Internal cached writer ownership, not public OPEN/LISTEN or EOI completion.
+// Retire all staged FIFO copies first. Preserve native read flags/counter and
+// keep the three pages allocated. Full CLSREL remains a later owner join.
+// A ready retained-writer read return may reenter without dropping dirty bits
+// or DYFILE. An unfinished EOI, pending job or unexposed completion cannot.
+bool dos_rel_channel_begin_write(dos_unit_t* unit, uint8_t channel);
+
+// Store one byte through the channel's retained dirty mask, without I/O.
+// Return true only for an actual store. Pending/padding/full/failed writers
+// cannot accept bytes. Actual lifetime failure retains ownership and status.
+bool dos_rel_channel_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, uint8_t byte);
+
+// Queue bounded CLREC padding across linked pages, not EOI/next-record/status.
+// dos_work services padding and required NRBUF jobs outside the command union.
+// FULL stops with its final dirty page still owned, without a flush or CLOSE.
+bool dos_rel_channel_pad(dos_unit_t* unit, uint8_t channel);
+
+// Permit one explicit retry of a retained NRBUF WRITE, BAM preparation or
+// awaited refill/SETLST READ.
+// No I/O/status reset and no repeated GET or record-counter advancement.
+// A retired cached-write cursor cannot be revived after lifetime failure.
+bool dos_rel_channel_retry_write(dos_unit_t* unit, uint8_t channel);
+
+// Internal post-CLREC WRTREL completion for cached same-page RD40 only.
+// overflow means the EOI-marked byte arrived after FULL, not merely that the
+// last accepted byte filled the record. Publish delayed 51 after preparation.
+// Otherwise 4040 retains status and DOS 2.7 publishes OK without ENDCMD.
+// Retain dirty pages/flags and withhold transport readiness until resume_read.
+// FINISHED blocks more input and clean reprepare. No I/O/flush.
+// False leaves unsupported NRBUF/uncached continuations and status unchanged.
+bool dos_rel_channel_finish_cached(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, bool overflow);
+
+// Queue complete existing-record WRTREL completion, including CLREC/NRBUF.
+// Publish overflow/OK only after RD40 prepares the next byte. Pending work
+// retains the three pages and consumed cursor across explicit job retries.
+// overflow requires an EOI byte rejected after the record was already FULL.
+// The caller retains any unaccepted transport byte separately.
+bool dos_rel_channel_finish_write(dos_unit_t* unit, uint8_t channel, bool overflow);
+
+// Restore cached staging/GET after finish_cached, retaining MODIFY ownership,
+// pages, dirty/model flags and status. Validate captured media without I/O.
+// A dirty NRBUF crossing retires readiness and queues its outgoing WRITE.
+// Failure requires explicit retry. Cached SETLST uses the retained native
+// window, without treating old WRITE data as a forward-link GET cache.
+// Await reused WRITE pages and prefetch only on the native clean branch.
+// These jobs retain writer ownership instead of using clean reprepare.
+bool dos_rel_channel_resume_read(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel);
+
+// Retry only a retained positioning job, without swapping or capturing the request twice.
+bool dos_rel_channel_retry_position(dos_unit_t* unit, uint8_t channel);
 
 // Resolve a decoded secondary and preview bytes with an owner for actual GETs.
 // Zero output has no source to retain. Retire old sources before mutation/reuse.

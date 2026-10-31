@@ -179,6 +179,24 @@ typedef enum {
     DOS_REL_RECORD_POSITION_DATA,
     DOS_REL_RECORD_POSITION_FOLLOWING,
     DOS_REL_RECORD_POSITION_READY,
+    // Clean SSPOS/SSEND decisions and one-page side/group reads.
+    DOS_REL_RECORD_POSITION_INDEX,
+    DOS_REL_RECORD_POSITION_TEST,
+    DOS_REL_RECORD_POSITION_SUPER,
+    DOS_REL_RECORD_POSITION_GROUP,
+    DOS_REL_RECORD_POSITION_SIDE,
+    DOS_REL_RECORD_POSITION_END,
+    DOS_REL_RECORD_POSITION_END_SUPER,
+    DOS_REL_RECORD_POSITION_END_GROUP,
+    DOS_REL_RECORD_POSITION_END_SCAN,
+    DOS_REL_RECORD_POSITION_END_SIDE,
+    // Existing-record dirty NRBUF and explicit selected-page retry.
+    DOS_REL_RECORD_DIRTY_GET,
+    DOS_REL_RECORD_DIRTY_NEXT,
+    DOS_REL_RECORD_POSITION_WAIT_OTHER,
+    DOS_REL_RECORD_POSITION_WAIT_COLD,
+    DOS_REL_RECORD_POSITION_WAIT_FOLLOWING,
+    DOS_REL_RECORD_WAIT_CACHED,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own
@@ -196,6 +214,10 @@ typedef struct {
     uint8_t active;
     bool following;
     bool following_failed;
+    // Owner's 8250 SSSGRP tag, independent of directory-channel admission.
+    uint8_t cached_group;
+    // Cold host version-cache preparation, using the remaining record padding.
+    uint8_t bam_steps;
 } dos_rel_record_t;
 
 // Start positioning a valid nonzero-length record using the directory root.
