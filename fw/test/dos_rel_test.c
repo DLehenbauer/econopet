@@ -1360,7 +1360,107 @@ START_TEST(test_reader_generation_guards) {
 }
 END_TEST
 
-// Register native index arithmetic, bounded traversal and clean-read contracts.
+// NULBUF retains BIT ER00's exact-wrap Z flag as well as byte-wide ADC carry.
+START_TEST(test_fill_native_record_markers) {
+    static const struct {
+        uint8_t size, seed, next, first;
+        unsigned int count;
+    } cases[] = {
+        {1, 255, 0, 2, 254},   {2, 254, 0, 2, 127},   {10, 246, 252, 2, 26}, {127, 129, 0, 2, 2},
+        {128, 128, 130, 2, 2}, {200, 56, 202, 2, 2},  {253, 3, 255, 2, 2},   {254, 2, 0, 2, 1},
+        {255, 1, 2, 2, 1},     {255, 254, 0, 255, 1}, {255, 255, 0, 0, 1},   {200, 100, 246, 46, 2},
+    };
+    for (unsigned int test = 0; test < count_of(cases); ++test) {
+        uint8_t bytes[DISKIMAGE_SECTOR_SIZE], expected[DISKIMAGE_SECTOR_SIZE] = {0x12, 0x34};
+        memset(bytes, 0x5a, sizeof(bytes));
+        bytes[0] = expected[0];
+        bytes[1] = expected[1];
+        for (unsigned int marker = 0; marker < cases[test].count; ++marker) {
+            expected[cases[test].first + marker * cases[test].size] = UINT8_MAX;
+        }
+        ck_assert_uint_eq(dos_rel_fill(bytes, cases[test].size, cases[test].seed), cases[test].next);
+        ck_assert_mem_eq(bytes, expected, sizeof(expected));
+    }
+}
+END_TEST
+
+// Check preflight's native wrap and deliberate side-boundary undercount.
+START_TEST(test_growth_native_preflight) {
+    const dos_model_t model = models[_i];
+    const dos_rel_growth_plan_t one = dos_rel_growth_plan(model, 3, 127, 0, 0, 16);
+    ck_assert_uint_eq(one.blocks, 1);
+    ck_assert(!one.too_large);
+    const dos_rel_growth_plan_t boundary = dos_rel_growth_plan(model, 121, 254, 0, 0, 254);
+    ck_assert_uint_eq(boundary.blocks, 1);
+    ck_assert_uint_eq(boundary.address.side, 1);
+    ck_assert_uint_eq(boundary.address.index, 16);
+    const dos_rel_growth_plan_t group = dos_rel_growth_plan(model, 721, 254, 0, 0, 16);
+    ck_assert_int_eq(group.too_large, model != DOS_MODEL_8250);
+    if (model == DOS_MODEL_8250) {
+        ck_assert_uint_eq(group.blocks, 726);
+        ck_assert_uint_eq(group.address.group, 1);
+    }
+}
+END_TEST
+
+// CLSREL uses SSEND's byte-wide endpoint, including malformed DEY results.
+START_TEST(test_blocks_native_endpoints_and_low_word) {
+    const dos_model_t model = models[_i];
+    static const struct {
+        uint8_t group, side, index;
+        uint16_t small, big;
+    } cases[] = {
+        {0, 0, 16, 2, 3},    {0, 0, 254, 121, 122},  {0, 5, 254, 726, 727},
+        {0, 0, 0, 122, 123}, {0, 0, 1, 122, 123},    {0, 0, 13, 128, 129},
+        {0, 0, 14, 1, 2},    {90, 5, 254, 726, 531}, {91, 5, 254, 726, 1257},
+    };
+    for (unsigned int test = 0; test < count_of(cases); ++test) {
+        ck_assert_uint_eq(dos_rel_blocks(model, cases[test].group, cases[test].side, cases[test].index),
+                          model == DOS_MODEL_8250 ? cases[test].big : cases[test].small);
+    }
+}
+END_TEST
+
+// ADDR1 rounds only spanning endpoints, with model-specific sixth-side carry.
+START_TEST(test_growth_endpoint_span_and_group_carry) {
+    const dos_model_t model = models[(unsigned int)_i / 4u];
+    const unsigned int variant = (unsigned int)_i % 4u;
+    const uint8_t size = variant < 2 ? 254 : 255;
+    const uint8_t side = variant == 3 ? 5 : 0;
+    const dos_rel_address_t address = {.side = side, .index = 254, .offset = variant == 1 ? 3 : 2};
+    const dos_rel_growth_plan_t plan = dos_rel_growth_plan_at(model, address, size, 0, side, 254);
+    ck_assert_int_eq(plan.too_large, variant == 3 && model != DOS_MODEL_8250);
+    if (!plan.too_large) {
+        ck_assert_uint_eq(plan.blocks, variant == 0 ? 0 : 1);
+        ck_assert_uint_eq(plan.address.index, variant == 0 ? 254 : 16);
+        ck_assert_uint_eq(plan.address.side, variant == 0 || variant == 3 ? 0 : 1);
+        ck_assert_uint_eq(plan.address.group, variant == 3 ? 1 : 0);
+    }
+}
+END_TEST
+
+// Native SBC and decrement/sign loops are not mathematical endpoint subtraction.
+START_TEST(test_growth_preflight_borrow_and_signed_loops) {
+    const dos_model_t model = models[_i];
+    static const struct {
+        uint8_t target_side, current_side, current_index;
+        uint16_t small, big;
+    } cases[] = {
+        {1, 1, 254, 256, 606},
+        {0, 128, 16, 15488, 0},
+        {0, 129, 16, 15367, 0},
+    };
+    for (unsigned int test = 0; test < count_of(cases); ++test) {
+        const dos_rel_address_t address = {.side = cases[test].target_side, .index = 16, .offset = 2};
+        const dos_rel_growth_plan_t plan =
+            dos_rel_growth_plan_at(model, address, 1, 0, cases[test].current_side, cases[test].current_index);
+        ck_assert(!plan.too_large);
+        ck_assert_uint_eq(plan.blocks, model == DOS_MODEL_8250 ? cases[test].big : cases[test].small);
+    }
+}
+END_TEST
+
+// Register native index, clean-read and allocation-preflight contracts.
 Suite* dos_rel_suite(void) {
     Suite* const suite = suite_create("dos_rel");
     TCase* const core = tcase_create("lookup and clean reads");
@@ -1395,6 +1495,11 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_reader_preview_defers_failed_page_until_actual_get, 0, 3);
     tcase_add_loop_test(core, test_reader_pending_refill_and_deferred_error_counter, 0, 3);
     tcase_add_loop_test(core, test_reader_generation_guards, 0, 12);
+    tcase_add_test(core, test_fill_native_record_markers);
+    tcase_add_loop_test(core, test_growth_native_preflight, 0, 3);
+    tcase_add_loop_test(core, test_blocks_native_endpoints_and_low_word, 0, 3);
+    tcase_add_loop_test(core, test_growth_endpoint_span_and_group_carry, 0, 12);
+    tcase_add_loop_test(core, test_growth_preflight_borrow_and_signed_loops, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }

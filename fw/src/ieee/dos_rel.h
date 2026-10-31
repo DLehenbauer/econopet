@@ -61,6 +61,32 @@ typedef struct {
 // positions restart at the record's first byte and retain the error indication.
 dos_rel_address_t dos_rel_address(dos_model_t model, uint16_t record, uint8_t record_size, uint8_t position);
 
+// CLSREL's native low-word block count from SSEND's group/side/index result.
+// Preserve byte-wide subtraction for malformed endpoints and 16-bit rollover.
+uint16_t dos_rel_blocks(dos_model_t model, uint8_t group, uint8_t side, uint8_t index);
+
+// NULBUF/ADDNR clear a new data payload and insert native empty-record markers.
+// Return the retained byte-wide NR, including its zero/wrap conventions. The
+// caller supplies the preceding NR and later installs NULLNK or a forward link.
+uint8_t dos_rel_fill(uint8_t bytes[DISKIMAGE_SECTOR_SIZE], uint8_t size, uint8_t next);
+
+typedef struct {
+    dos_rel_address_t address;
+    uint16_t blocks;
+    bool too_large;
+} dos_rel_growth_plan_t;
+
+// ADDREL rounds the requested record's end, then computes its native low-word
+// allocation preflight from SSEND. This is not a reservation or a corrected
+// mathematical sector count. The owner compares blocks with NUMFRE separately.
+dos_rel_growth_plan_t dos_rel_growth_plan(dos_model_t model, uint16_t number, uint8_t size, uint8_t group, uint8_t side,
+                                          uint8_t index);
+
+// CYEXT enters ADDR1 with the source SSEND address and RELPTR zero, bypassing
+// FNDREL. Preserve that endpoint rather than inventing a target record number.
+dos_rel_growth_plan_t dos_rel_growth_plan_at(dos_model_t model, dos_rel_address_t address, uint8_t size, uint8_t group,
+                                             uint8_t side, uint8_t index);
+
 // Capture the directory's side-sector root and a normalized record address.
 // Starting again explicitly abandons the previous result without performing I/O.
 void dos_rel_lookup_start(dos_rel_lookup_t* lookup, dos_model_t model, dos_media_ref_t media, uint8_t track,
