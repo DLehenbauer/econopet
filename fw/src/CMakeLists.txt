@@ -55,6 +55,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/tape.c
     ${FW_SRC_DIR}/ieee/diskimage.c
     ${FW_SRC_DIR}/ieee/dos_media.c
+    ieee/dos_rel.c
     ieee/dos.c
     ${FW_SRC_DIR}/ieee/ieee_drive.c
     ${FW_SRC_DIR}/tape_dir.c

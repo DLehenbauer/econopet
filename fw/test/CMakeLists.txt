@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
     ${SRC_DIR}/ieee/dos_media.c
+    ${SRC_DIR}/ieee/dos_rel.c
     ${SRC_DIR}/ieee/dos.c
     ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
@@ -50,6 +51,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/dos_media_test.c
+    ${TEST_DIR}/dos_rel_test.c
     ${TEST_DIR}/dos_test.c
     ${TEST_DIR}/global_test.c
     ${TEST_DIR}/ieee_drive_test.c
