@@ -11830,6 +11830,158 @@ START_TEST(test_copy_rel_cached_source_replacement_reports_failure) {
 }
 END_TEST
 
+// An unpublished REL owns its planned entry, not an unrelated lookup cursor.
+START_TEST(test_pending_rel_does_not_bind_unrelated_directory_entry) {
+    const unsigned int format = (unsigned int)_i / 4u, operation = (unsigned int)_i % 4u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_file(&image, format, 0, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t name[] = "0:REL,L,\x7f";
+    image.fail_write = image.writes + (operation < 2 ? 1u : (format == 2 ? 5u : 4u));
+    dos_open(&unit, &bank, 0, 2, name, sizeof(name) - 1u);
+    finish_open(&unit, &bank);
+    const uint8_t owner = dos_find_channel(&unit, 2);
+    ck_assert_uint_ne(owner, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    const dos_channel_t retained = unit.channels[owner];
+    const dos_open_work_t publication = unit.open;
+    image.fail_write = 0;
+
+    // Mutate only SOURCE while the failed creation retains its separate slot.
+    send_command(&unit, &bank, operation % 2u == 0 ? "S0:SOURCE" : "R0:OTHER=0:SOURCE");
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, operation % 2u == 0 ? DOS_STATUS_FILES_SCRATCHED : DOS_STATUS_OK);
+    if (operation % 2u == 0) {
+        ck_assert_str_eq(unit.status,
+                         model == DOS_MODEL_4040 ? "01, FILES SCRATCHED,01,00\r" : "01, FILES SCRATCHED,01,00,0\r");
+    }
+    ck_assert_mem_eq(&unit.channels[owner], &retained, sizeof(retained));
+    ck_assert_mem_eq(&unit.open, &publication, sizeof(publication));
+    dos_close(&unit, &bank, model, 2);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_ne(open_name(&unit, &bank, 2, "0:REL"), DOS_UNUSED);
+    if (operation % 2u != 0) {
+        const uint8_t source = open_name(&unit, &bank, 3, "0:OTHER");
+        ck_assert_uint_ne(source, DOS_UNUSED);
+        expect_bytes(&unit, &bank, source, 4, 0x20);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Failed REL OPEN retires parser RAM before a short RECORD can reuse its tail.
+START_TEST(test_failed_rel_open_retires_command_without_repositioning_peer) {
+    const unsigned int format = (unsigned int)_i / 7u, fault = (unsigned int)_i % 7u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_rel_short(&image, format, 13);
+    fixture_file(&image, format, 1, "SOURCE", DISKIMAGE_FTYPE_SEQ, 0x20, 4);
+    const dos_model_t model = bank.units[0].model;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t peer = open_name(&unit, &bank, 10, "0:REL");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    if (fault == 4) {
+        for (uint8_t secondary = 3; secondary < 8; ++secondary) {
+            ck_assert_uint_ne(open_name(&unit, &bank, secondary, "#"), DOS_UNUSED);
+        }
+    } else if (fault == 5) {
+        ck_assert_uint_ne(open_name(&unit, &bank, 3, "0:SOURCE"), DOS_UNUSED);
+        ck_assert_uint_ne(open_name(&unit, &bank, 4, "0:SOURCE"), DOS_UNUSED);
+        ck_assert_uint_ne(open_name(&unit, &bank, 5, "#"), DOS_UNUSED);
+    }
+    const dos_channel_t saved_peer = unit.channels[peer];
+    unit.command_bytes[DOS_COMMAND_LIMIT] = 0x5a;
+    if (fault == 0 || fault == 6) {
+        ck_assert(diskimage_sector_offset(type, fault == 6 ? (format == 0 ? 18 : 38) : 2, 0, &image.fail_read_offset));
+    } else if (fault == 2 || fault == 3) {
+        image.fail_write = image.writes + (fault == 2 ? 1u : (format == 2 ? 5u : 4u));
+    }
+    const uint8_t* const request = (const uint8_t*)(fault == 2 || fault == 3 || fault == 6 ? "0:NEW,L,\x7f" : "0:REL");
+    dos_open(&unit, &bank, 0, 2, request, (unsigned int)strlen((const char*)request));
+    if (fault == 1) {
+        dos_work(&unit, &bank);
+        ck_assert_uint_ne(unit.open.append_channel, 0);
+        image.fail_read = image.reads + 1u;
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, fault == 1 && format == 2  ? DOS_STATUS_OK
+                                        : fault == 4 || fault == 5 ? DOS_STATUS_NO_CHANNEL
+                                        : fault == 2 || fault == 3 ? DOS_STATUS_WRITE_ERROR
+                                                                   : DOS_STATUS_READ_ERROR);
+    ck_assert_mem_eq(&unit.channels[peer], &saved_peer, sizeof(saved_peer));
+    image.fail_read_offset = 0;
+    image.fail_read = 0;
+    image.fail_write = 0;
+
+    // A one-byte P must resolve cleared SA zero, not ':' from the failed OPEN.
+    send_input_command(&unit, &bank, "P", false);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NO_CHANNEL);
+    ck_assert_mem_eq(&unit.channels[peer], &saved_peer, sizeof(saved_peer));
+    ck_assert_uint_eq(unit.command_bytes[DOS_COMMAND_LIMIT], 0x5a);
+    if (fault == 2 || fault == 3) {
+        dos_close(&unit, &bank, model, 2);
+        finish_open(&unit, &bank);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Failed creation retirement cannot erase a newer complete or partial RECORD.
+START_TEST(test_failed_rel_open_preserves_newer_record_collection) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool complete = (unsigned int)_i % 2u;
+    dos_media_bank_t bank = {0};
+    image_t image;
+    mount_blank(&bank, &image, format);
+    fixture_rel_short(&image, format, 13);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t peer = open_name(&unit, &bank, 10, "0:REL");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    const uint8_t name[] = "0:NEW,L,\x7f";
+    image.fail_write = image.writes + (format == 2 ? 5u : 4u);
+    dos_open(&unit, &bank, 0, 2, name, sizeof(name) - 1u);
+    dos_input_address(&unit, &bank, model, IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL), true);
+    const uint8_t position[] = {'P', 10, 2, 0, 1};
+    const unsigned int prefix = complete ? sizeof(position) : 3u;
+    for (unsigned int index = 0; index < prefix; ++index) {
+        dos_input_put(&unit, position[index], index + 1u == sizeof(position));
+    }
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_WRITE_ERROR);
+    ck_assert_mem_eq(unit.input.bytes, position, prefix);
+    ck_assert_uint_eq(unit.input.length, prefix);
+    ck_assert_uint_eq(dos_input_ready(&unit), complete);
+    for (unsigned int index = prefix; index < sizeof(position); ++index) {
+        dos_input_put(&unit, position[index], index + 1u == sizeof(position));
+    }
+    dos_input_dispatch(&unit, &bank, 0);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    bool eoi;
+    uint8_t byte;
+    ck_assert_uint_eq(dos_stage(&unit, &bank, peer, &byte, 1, &eoi), 1);
+    ck_assert_uint_eq(byte, 'B');
+    ck_assert(eoi);
+    image.fail_write = 0;
+    dos_close(&unit, &bank, model, 2);
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    free(image.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -12112,6 +12264,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_rename_cannot_claim_failed_rel_publication_name, 0, 6);
     tcase_add_loop_test(core, test_scratch_cannot_free_partial_rel_publication, 0, 3);
     tcase_add_loop_test(core, test_copy_rel_cached_source_replacement_reports_failure, 0, 3);
+    tcase_add_loop_test(core, test_pending_rel_does_not_bind_unrelated_directory_entry, 0, 12);
+    tcase_add_loop_test(core, test_failed_rel_open_retires_command_without_repositioning_peer, 0, 21);
+    tcase_add_loop_test(core, test_failed_rel_open_preserves_newer_record_collection, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }

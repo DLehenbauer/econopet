@@ -68,6 +68,14 @@ If a partial WRITE makes the planned slot visible, RENAME also excludes that
 source slot until publication commits or the owner is explicitly released.
 SCRATCH's active-entry test likewise uses that planned slot during retained
 publication, so partial directory visibility cannot free still-owned REL chains.
+Creation does not bind lookup's unmatched directory coordinates to its channel.
+Only successful ADDFIL installs committed coordinates, so a failed creation
+cannot protect an unrelated entry from SCRATCH. Unrelated RENAME remains allowed.
+Terminal REL OPEN failures retire logical command RAM, including early channel,
+buffer and initial-allocation failures, without losing retained creation intent.
+A subsequent short RECORD cannot inherit the failed name and reposition a peer.
+As with successful retirement, a newer complete or partial collection keeps its
+receive RAM.
 
 COPY retains reviewed stale-entry, namespace, ordinary prefetch and reclamation
 checks. The first source supplies output type. REL input uses GIBYTE semantics,
@@ -117,6 +125,7 @@ approved composition rather than inferring absence from the archive.
 | Mixed-source COPY handoff | Both selected DOS families | Both RENAME:CY20 -> GIBYTE -> [4040 tst4]/[8250 tst4]:GBYTE/GET -> TST2:RDBYT/DBLBUF/WATJOB, then CY15:PIBYTE | Complete or reject the ordinary source successor before retaining its offset-255 byte for REL output | `copy_work`, valid 254-byte REL/ordinary COPY, terminal control, overflow completion and failed-successor ordering cases | MAME selected models corroborate ROM/hardware selection. VICE is not an oracle for CYEXT or native seam ordering |
 | Retire only released storage ownership | Both selected DOS families | Both CLOSE:CLSREL -> [4040 tst3]/[8250 tst3]:FRECHN/RELBUF. INITDR -> CLDCHN -> FRECHN | Successful CLSREL releases once. Native abandonment retires matching host publication intent, while another drive and live retry retain theirs | `free_channel`, `copy_work`, copy-all buffer-zero peer, failed construction/publication INITIALIZE and fresh OPEN/finalization regressions | VICE REL commit/release and both MAME selected models, host ADDFIL retention is an explicit adaptation |
 | Private COPY completion and pending namespace | Both selected DOS families | Both RENAME:CY15/PIBYTE -> REL2:WR30/WR40 retain EOI/overflow through CLREC/RD40. RENAME:CHKIO/TRNAME and ADDFIL publish resolved names/slots | Public status consumption/errors cannot replace the retained output outcome. Failed host ADDFIL reserves its name and any partially visible planned source slot | `copy_work`, `unpublished_writer`, `rename_work`, real peer-read/status-GET interleavings and failed/partial publication RENAME plus successful retry cases | VICE corroborates REL commit ownership, not host yielded ADDFIL retry or private COPY completion |
+| Failed OPEN retirement and binding | Both selected DOS families | Both ADDFIL:AF50 install DIRENT or DSEC/DIND after DRTWRT. Both [4040 erproc]/[8250 erproc]:CMDER3 call CLRCB | Failed creation has no committed lookup binding. Retire command RAM without changing retry intent or a newer host collection | `dos_work`, `public_rel_open_work`, unrelated SCRATCH/RENAME, short RECORD after early/late OPEN failure and newer collection regressions | Selected 8250 OR21 defers super-root READ, so its side-read probe is a success control |
 
 [4040 open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
 [8250 open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
@@ -144,6 +153,8 @@ approved composition rather than inferring absence from the archive.
 [8250 idle]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/idle
 [4040 parsex]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/parsex
 [8250 parsex]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
+[4040 erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
+[8250 erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
 [VICE REL]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-rel.c
 [MAME 4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp
 [MAME 8050]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c8050.cpp
@@ -158,15 +169,18 @@ unchanged, including reviewed NRBUF, cold BAM preparation, SCRATCH/VALIDATE and
 native block admission. The COPY joins retain reviewed ordinary namespace,
 prefetch and stale-binding checks.
 
-Reconciled Debug firmware qualification passes 6,333 cases (6,286 ordinary and 47
-fatal/assert), including 1,691 REL cases and 3,659 DOS cases. The 120 additional
+Reconciled Debug firmware qualification passes 6,372 cases (6,325 ordinary and 47
+fatal/assert), including 1,691 REL cases and 3,698 DOS cases. The 159 additional
 feedback cases include 45 reproduced failures against the original publication
 and 51 against the first fix publication, plus twelve third-cycle reproductions
 (including a related partial-publication source-rename defect), and three
 partial-publication SCRATCH reproductions. Cached source replacement reproduces
 false success on 4040, while DOS 2.7 preallocation already detects the stale
 generation on the same scheduling probe. Entry-point, terminal-page and
-stale-media controls remain covered. Production firmware
+stale-media controls remain covered. Six unrelated-entry SCRATCH and twenty
+stale short-RECORD cases reproduce the final OPEN failure-path findings.
+Unrelated RENAME, 8250's deferred super-sector read and newer receive ownership
+remain controls. Production firmware
 builds with `RelWithDebInfo`, and the ROM build passes. Actual compiler layouts
 for record/channel/unit are 36/68/4588 bytes in Debug and 32/64/4552 bytes on ARM,
 within the 4608-byte unit bound. Formatter and whitespace checks pass.

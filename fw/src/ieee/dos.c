@@ -8707,6 +8707,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (relative && internal == DOS_UNUSED) {
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
         dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+        clear_command(unit);
         return;
     }
     uint8_t initial_track = 0, initial_sector = 0;
@@ -8714,6 +8715,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         !allocate_sector(unit, media, reference, &initial_track, &initial_sector, true)) {
         free_channel(unit, internal);
         unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+        clear_command(unit);
         return;
     }
 
@@ -8751,6 +8753,13 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     if (relative) {
         state->file_type = DISKIMAGE_FTYPE_REL;
         state->rel = (dos_rel_reader_t){0};
+        // ADDFIL binds creation only after its WRITE. Lookup's unmatched
+        // cursor may name an unrelated live entry while host retry is retained.
+        if (work->access == DOS_ACCESS_WRITE) {
+            state->directory_track = 0;
+            state->directory_sector = 0;
+            state->directory_entry = 0;
+        }
         if (work->access != DOS_ACCESS_WRITE) {
             // OPNRCH runs STRDBL before asking GETBUF for its side page.
             dos_buffer_t* const first = &unit->buffers[state->buffers[0]];
@@ -8772,6 +8781,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                 free_channel(unit, channel);
                 free_channel(unit, internal);
                 unit->buffer_use &= (uint16_t)~((1u << work->scratch) | (1u << work->scratch_second));
+                clear_command(unit);
                 return;
             }
         }
@@ -8783,6 +8793,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         if (state->buffers[2] == DOS_UNUSED) {
             free_channel(unit, channel);
             dos_status(unit, model, DOS_STATUS_NO_CHANNEL, 0, 0);
+            clear_command(unit);
             return;
         }
         state->ready = false;
@@ -9807,6 +9818,7 @@ static void public_rel_open_work(dos_unit_t* const unit, dos_media_bank_t* const
             work->append_channel = 0;
             free_channel(unit, index);
         }
+        clear_command(unit);
         return;
     }
     if (work->rel_phase == DOS_OPEN_REL_NONE) {
