@@ -6642,8 +6642,14 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         uint8_t byte;
         bool eoi;
         if (!dos_rel_record_peek(&reader->rel.record, media, unit->buffers[reader->buffers[0]].bytes,
-                                 unit->buffers[reader->buffers[1]].bytes, &byte, &eoi) ||
-            !copy_put(unit, media, byte, eoi, DOS_COPY_REL_GET)) {
+                                 unit->buffers[reader->buffers[1]].bytes, &byte, &eoi)) {
+            // Cached preview also rejects stale media. Report that failure
+            // before abandoning the partial writer, even without a READ job.
+            dos_status(unit, model, DOS_STATUS_READ_ERROR, 0, 0);
+            copy_finish(unit);
+            return;
+        }
+        if (!copy_put(unit, media, byte, eoi, DOS_COPY_REL_GET)) {
             copy_finish(unit);
             return;
         }

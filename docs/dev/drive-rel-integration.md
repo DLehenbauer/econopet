@@ -85,6 +85,8 @@ REL COPY completion uses the writer's retained EOI/overflow flags, not the
 mutable public status line. A peer read error cannot abandon healthy output,
 and consuming status cannot mask an actual overflow. Storage failure remains
 the writer's retained failure condition.
+If cached REL source preview rejects a replaced media generation, COPY reports
+READ error before abandoning its partial output, even without a new READ job.
 
 Finalization retains main's durability policy: persist retained dirty BAMs and
 backing-store state even after an abandoned internal writer. It never replays a
@@ -150,19 +152,21 @@ approved composition rather than inferring absence from the archive.
 
 All 138 published REL groups and 248 retained ordinary DOS groups have unchanged
 executable tokens. The sole retired DOS group enforced the superseded blanket
-REL COPY exclusion. Seven new REL groups and twenty-nine new DOS groups qualify the
+REL COPY exclusion. Seven new REL groups and thirty new DOS groups qualify the
 joined behavior. The 29 REL leaf helpers and 139 other engine helpers are
 unchanged, including reviewed NRBUF, cold BAM preparation, SCRATCH/VALIDATE and
 native block admission. The COPY joins retain reviewed ordinary namespace,
 prefetch and stale-binding checks.
 
-Reconciled Debug firmware qualification passes 6,330 cases (6,283 ordinary and 47
-fatal/assert), including 1,691 REL cases and 3,656 DOS cases. The 117 additional
+Reconciled Debug firmware qualification passes 6,333 cases (6,286 ordinary and 47
+fatal/assert), including 1,691 REL cases and 3,659 DOS cases. The 120 additional
 feedback cases include 45 reproduced failures against the original publication
 and 51 against the first fix publication, plus twelve third-cycle reproductions
 (including a related partial-publication source-rename defect), and three
-partial-publication SCRATCH reproductions, with six
-entry-point and terminal-page controls. Production firmware
+partial-publication SCRATCH reproductions. Cached source replacement reproduces
+false success on 4040, while DOS 2.7 preallocation already detects the stale
+generation on the same scheduling probe. Entry-point, terminal-page and
+stale-media controls remain covered. Production firmware
 builds with `RelWithDebInfo`, and the ROM build passes. Actual compiler layouts
 for record/channel/unit are 36/68/4588 bytes in Debug and 32/64/4552 bytes on ARM,
 within the 4608-byte unit bound. Formatter and whitespace checks pass.

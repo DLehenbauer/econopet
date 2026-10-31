@@ -11789,6 +11789,47 @@ START_TEST(test_scratch_cannot_free_partial_rel_publication) {
 }
 END_TEST
 
+// Cached REL source bytes must not turn stale media into successful partial COPY.
+START_TEST(test_copy_rel_cached_source_replacement_reports_failure) {
+    const unsigned int format = (unsigned int)_i;
+    dos_media_bank_t bank = {0}, source_bank = {0}, replacement_bank = {0};
+    image_t target, source, replacement;
+    mount_blank(&bank, &target, format);
+    mount_blank(&source_bank, &source, format);
+    mount_blank(&replacement_bank, &replacement, format);
+    fixture_rel_short(&source, format, 13);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &source_bank.units[0].slots[0].io), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    dos_reset(&unit, bank.units[0].model);
+    send_command(&unit, &bank, "C0:OUT=1:REL");
+    bool replaced = false;
+    unsigned int writes = 0;
+    for (unsigned int step = 0; dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 8192);
+        if (!replaced && unit.command == DOS_COMMAND_COPY && unit.copy.writer != DOS_UNUSED) {
+            const dos_channel_t* const writer = &unit.channels[unit.copy.writer];
+            const dos_channel_t* const reader = &unit.channels[unit.copy.reader];
+            if (writer->allocated && writer->ready && writer->file_type == DISKIMAGE_FTYPE_REL &&
+                writer->rel.input_phase == DOS_REL_INPUT_IDLE && !writer->rel.input_eoi &&
+                reader->rel.record.result == DOS_REL_RECORD_READY) {
+                writes = target.writes;
+                ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &replacement_bank.units[0].slots[0].io), DOS_MEDIA_OK);
+                replaced = true;
+            }
+        }
+        dos_work(&unit, &bank);
+    }
+    ck_assert(replaced);
+    ck_assert_uint_ne(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(target.writes, writes);
+    ck_assert_uint_eq(replacement.writes, 0);
+    free(replacement.bytes);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -12070,6 +12111,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_copy_rel_completion_uses_writer_outcome_not_public_status, 0, 6);
     tcase_add_loop_test(core, test_rename_cannot_claim_failed_rel_publication_name, 0, 6);
     tcase_add_loop_test(core, test_scratch_cannot_free_partial_rel_publication, 0, 3);
+    tcase_add_loop_test(core, test_copy_rel_cached_source_replacement_reports_failure, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }
