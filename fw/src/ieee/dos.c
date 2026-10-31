@@ -6569,6 +6569,15 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         } else if (rel_growth_pending(writer)) {
             rel_growth_work(unit, media, work->writer);
         } else {
+            const dos_channel_t* const reader = &unit->channels[work->reader];
+            if (reader->rel.record.result == DOS_REL_RECORD_MISSING) {
+                // CYEXT precedes the first GIBYTE. Initial LRF enters RD05,
+                // unlike the normal EOF prepared after the last good record.
+                unit->selected_drive = reader->media.slot;
+                dos_status(unit, model, DOS_STATUS_NO_RECORD, 0, 0);
+                copy_finish(unit);
+                return;
+            }
             if (work->missing_writer) {
                 // CYEXT's POSITN does not clear an inherited LRF. WR60
                 // must still run ADDREL, even after preallocation found data.

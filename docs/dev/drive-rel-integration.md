@@ -95,6 +95,10 @@ and consuming status cannot mask an actual overflow. Storage failure remains
 the writer's retained failure condition.
 If cached REL source preview rejects a replaced media generation, COPY reports
 READ error before abandoning its partial output, even without a new READ job.
+DOS 2.7 CYEXT still completes before the first source GET. If that first record
+was already missing, the resumed GIBYTE path reports error 50 rather than
+treating it as ordinary EOF. Preallocation errors retain precedence. This does
+not change the valid last-record-to-missing handoff, which excludes its EOF CR.
 
 Finalization retains main's durability policy: persist retained dirty BAMs and
 backing-store state even after an abandoned internal writer. It never replays a
@@ -126,6 +130,7 @@ approved composition rather than inferring absence from the archive.
 | Retire only released storage ownership | Both selected DOS families | Both CLOSE:CLSREL -> [4040 tst3]/[8250 tst3]:FRECHN/RELBUF. INITDR -> CLDCHN -> FRECHN | Successful CLSREL releases once. Native abandonment retires matching host publication intent, while another drive and live retry retain theirs | `free_channel`, `copy_work`, copy-all buffer-zero peer, failed construction/publication INITIALIZE and fresh OPEN/finalization regressions | VICE REL commit/release and both MAME selected models, host ADDFIL retention is an explicit adaptation |
 | Private COPY completion and pending namespace | Both selected DOS families | Both RENAME:CY15/PIBYTE -> REL2:WR30/WR40 retain EOI/overflow through CLREC/RD40. RENAME:CHKIO/TRNAME and ADDFIL publish resolved names/slots | Public status consumption/errors cannot replace the retained output outcome. Failed host ADDFIL reserves its name and any partially visible planned source slot | `copy_work`, `unpublished_writer`, `rename_work`, real peer-read/status-GET interleavings and failed/partial publication RENAME plus successful retry cases | VICE corroborates REL commit ownership, not host yielded ADDFIL retry or private COPY completion |
 | Failed OPEN retirement and binding | Both selected DOS families | Both ADDFIL:AF50 install DIRENT or DSEC/DIND after DRTWRT. Both [4040 erproc]/[8250 erproc]:CMDER3 call CLRCB | Failed creation has no committed lookup binding. Retire command RAM without changing retry intent or a newer host collection | `dos_work`, `public_rel_open_work`, unrelated SCRATCH/RENAME, short RECORD after early/late OPEN failure and newer collection regressions | Selected 8250 OR21 defers super-root READ, so its side-read probe is a success control |
+| Initial missing COPY record | Both selected DOS families | Both RENAME:CY20 -> GIBYTE -> TST4:GET -> [4040 rel3]/[8250 rel3]:RDREL/RD05. DOS 2.7 CY10 first calls CYEXT | Actual first GET with LRF reports 50 after any required CYEXT, not successful EOF. Prior SSEND/ADDR1 failure wins | `copy_work`, normal/copy-all missing-first-record regressions and selected cached-index/READ-error controls | VICE is not used as a CYEXT or failure-order oracle |
 
 [4040 open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/open
 [8250 open]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/open
@@ -155,6 +160,8 @@ approved composition rather than inferring absence from the archive.
 [8250 parsex]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/parsex
 [4040 erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/erproc
 [8250 erproc]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/erproc
+[4040 rel3]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3
+[8250 rel3]: https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3
 [VICE REL]: https://github.com/VICE-Team/svn-mirror/blob/a0e14df25846cd7f06043f24b48677bf45c02149/vice/src/vdrive/vdrive-rel.c
 [MAME 4040]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c2040.cpp
 [MAME 8050]: https://github.com/mamedev/mame/blob/f379cd060ac3b2bd567ebbd0957aed059d6895ff/src/devices/bus/ieee488/c8050.cpp
@@ -169,8 +176,8 @@ unchanged, including reviewed NRBUF, cold BAM preparation, SCRATCH/VALIDATE and
 native block admission. The COPY joins retain reviewed ordinary namespace,
 prefetch and stale-binding checks.
 
-Reconciled Debug firmware qualification passes 6,372 cases (6,325 ordinary and 47
-fatal/assert), including 1,691 REL cases and 3,698 DOS cases. The 159 additional
+Reconciled Debug firmware qualification passes 6,381 cases (6,334 ordinary and 47
+fatal/assert), including 1,691 REL cases and 3,707 DOS cases. The 168 additional
 feedback cases include 45 reproduced failures against the original publication
 and 51 against the first fix publication, plus twelve third-cycle reproductions
 (including a related partial-publication source-rename defect), and three
@@ -180,7 +187,10 @@ generation on the same scheduling probe. Entry-point, terminal-page and
 stale-media controls remain covered. Six unrelated-entry SCRATCH and twenty
 stale short-RECORD cases reproduce the final OPEN failure-path findings.
 Unrelated RENAME, 8250's deferred super-sector read and newer receive ownership
-remain controls. Production firmware
+remain controls.
+COPY with a missing first record adds nine cases, including five reproduced
+DOS 2.7 false successes, normal and copy-all paths, 4040 error-50 controls and
+8250 SSEND READ-error precedence. Production firmware
 builds with `RelWithDebInfo`, and the ROM build passes. Actual compiler layouts
 for record/channel/unit are 36/68/4588 bytes in Debug and 32/64/4552 bytes on ARM,
 within the 4608-byte unit bound. Formatter and whitespace checks pass.

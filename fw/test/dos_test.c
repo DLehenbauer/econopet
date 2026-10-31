@@ -11982,6 +11982,64 @@ START_TEST(test_failed_rel_open_preserves_newer_record_collection) {
 }
 END_TEST
 
+// CYEXT must not turn an initially missing record into a successful EOF.
+START_TEST(test_copy_rel_missing_first_record_reports_native_error) {
+    const unsigned int format = (unsigned int)_i / 3u, mode = (unsigned int)_i % 3u;
+    dos_media_bank_t bank = {0}, source_bank = {0};
+    image_t target, source;
+    mount_blank(&bank, &target, format);
+    mount_blank(&source_bank, &source, format);
+    fixture_rel_short(&source, format, 13);
+    const diskimage_type_t type = source_bank.units[0].slots[0].io.image.type;
+    uint8_t* const entry = sector_bytes(&source, type, format == 0 ? 18 : 39, 1);
+    uint8_t* side = sector_bytes(&source, type, entry[21], entry[22]);
+    if (format == 2) {
+        side = sector_bytes(&source, type, side[DOS_REL_GROUP_TABLE_OFFSET], side[DOS_REL_GROUP_TABLE_OFFSET + 1u]);
+    }
+    entry[23] = UINT8_MAX;
+    side[3] = UINT8_MAX;
+    uint8_t* const data = sector_bytes(&source, type, entry[3], entry[4]);
+    memset(data, 'A', DISKIMAGE_SECTOR_SIZE);
+    data[0] = 0;
+    data[1] = UINT8_MAX;
+    dos_media_io_t io = source_bank.units[0].slots[0].io;
+    io.image.write = NULL;
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &io), DOS_MEDIA_OK);
+    dos_unit_t unit;
+    const dos_model_t model = bank.units[0].model;
+    dos_reset(&unit, model);
+    const uint8_t peer = open_name(&unit, &bank, 3, "#");
+    const dos_channel_t saved_peer = unit.channels[peer];
+    const uint16_t pages = unit.buffer_use;
+    send_command(&unit, &bank, mode == 1 ? "C0=1" : "C0:OUT=1:REL");
+    bool injected = false;
+    for (unsigned int step = 0; dos_work_pending(&unit); ++step) {
+        ck_assert_uint_lt(step, 8192);
+        if (mode == 2 && !injected && unit.copy.reader != DOS_UNUSED) {
+            const dos_channel_t* const reader = &unit.channels[unit.copy.reader];
+            if (reader->allocated && reader->file_type == DISKIMAGE_FTYPE_REL &&
+                reader->rel.record.result == DOS_REL_RECORD_MISSING) {
+                source.fail_read = source.reads + 1u;
+                injected = true;
+            }
+        }
+        dos_work(&unit, &bank);
+    }
+    ck_assert_uint_eq(injected, mode == 2);
+    const bool index_failure = mode == 2 && model == DOS_MODEL_8250;
+    ck_assert_uint_eq(unit.status_code, index_failure ? DOS_STATUS_READ_ERROR : DOS_STATUS_NO_RECORD);
+    if (!index_failure) {
+        ck_assert_str_eq(unit.status, model == DOS_MODEL_4040 ? "50, RECORD NOT PRESENT,00,00\r"
+                                                              : "50, RECORD NOT PRESENT,00,00,1\r");
+    }
+    ck_assert_uint_eq(unit.buffer_use, pages);
+    ck_assert_mem_eq(&unit.channels[peer], &saved_peer, sizeof(saved_peer));
+    ck_assert_uint_eq(source.writes, 0);
+    free(source.bytes);
+    free(target.bytes);
+}
+END_TEST
+
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
     TCase* const core = tcase_create("ordinary files");
@@ -12267,6 +12325,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_pending_rel_does_not_bind_unrelated_directory_entry, 0, 12);
     tcase_add_loop_test(core, test_failed_rel_open_retires_command_without_repositioning_peer, 0, 21);
     tcase_add_loop_test(core, test_failed_rel_open_preserves_newer_record_collection, 0, 6);
+    tcase_add_loop_test(core, test_copy_rel_missing_first_record_reports_native_error, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }
