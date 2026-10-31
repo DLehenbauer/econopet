@@ -419,6 +419,13 @@ static void free_channel(dos_unit_t* const unit, const uint8_t channel) {
     // FREBUF, and RELINX frees LINDX. C also returns a listing's pattern page.
     dos_channel_t* const state = &unit->channels[channel];
 
+    // Native abandonment cannot leave host ADDFIL pointing at a freed owner.
+    if (unit->open.rel_phase != DOS_OPEN_REL_NONE && unit->open.append_channel == channel + 1u) {
+        unit->open.pending = false;
+        unit->open.rel_phase = DOS_OPEN_REL_NONE;
+        unit->open.append_channel = 0;
+    }
+
     // Return all owned buffers to the C pool and invalidate cached contents,
     // corresponding to RELBUF/FREBUF without the ROM's rotating bitmap.
     for (unsigned int index = 0; index < count_of(state->buffers); ++index) {
@@ -1150,7 +1157,7 @@ bool dos_rel_channel_position_buffer(dos_unit_t* const unit, const uint8_t chann
     // No direct ROM entry: join POSITN/POSBUF after the caller has resolved
     // SSPOS. Supplied coordinates select data, not a side-page root.
     vet(track != 0, "REL positioning requires a selected data pointer");
-    if (!rel_position_start(unit, channel, number, position)) {
+    if (!dos_rel_channel_position(unit, channel, number, position)) {
         return false;
     }
     dos_rel_record_t* const record = &unit->channels[channel].rel.record;
@@ -5965,14 +5972,6 @@ static void copy_finish(dos_unit_t* const unit) {
     // Pending/command fields are cooperative scheduling state, not ROM fields.
     dos_copy_work_t* const work = &unit->copy;
 
-    // FREICH also abandons the internal writer's retained ADDFIL continuation.
-    // COPY admission excludes a pre-existing public publication owner.
-    if (unit->open.rel_phase != DOS_OPEN_REL_NONE) {
-        unit->open.pending = false;
-        unit->open.rel_phase = DOS_OPEN_REL_NONE;
-        unit->open.append_channel = 0;
-    }
-
     // Release only allocated channels, including partially constructed jobs.
     if (work->reader != DOS_UNUSED && unit->channels[work->reader].allocated) {
         free_channel(unit, work->reader);
@@ -6684,7 +6683,9 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         }
         // Copy-all retains its reader/iterator but releases each finished writer.
         if (work->all_files) {
-            free_channel(unit, work->writer);
+            if (writer->allocated) {
+                free_channel(unit, work->writer);
+            }
             work->writer = DOS_UNUSED;
             work->phase = DOS_COPY_ALL_NEXT;
             return;
@@ -6704,14 +6705,7 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         copy_finish(unit);
         return;
     }
-    if (unit->channels[work->writer].file_type == DISKIMAGE_FTYPE_REL && reader->position < end) {
-        const uint8_t byte = buffer->bytes[reader->position++];
-        const bool eoi = buffer->bytes[0] == 0 && reader->position == end;
-        if (!copy_put(unit, media, byte, eoi, DOS_COPY_BYTES)) {
-            copy_finish(unit);
-        }
-        return;
-    }
+    const bool relative = unit->channels[work->writer].file_type == DISKIMAGE_FTYPE_REL;
     // Reuse the burst bound for scheduler fairness, not IEEE preview/GET.
     for (unsigned int copied = 0; copied < DOS_STAGE_CAPACITY && reader->position < end; ++copied) {
         unit->selected_drive = reader->media.slot;
@@ -6736,11 +6730,12 @@ static void copy_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             }
         }
         unit->selected_drive = unit->channels[work->writer].media.slot;
-        if (!write_byte(unit, media, &unit->channels[work->writer], byte)) {
+        const bool eoi = buffer->bytes[0] == 0 && reader->position == end;
+        if (!copy_put(unit, media, byte, eoi, DOS_COPY_BYTES)) {
             copy_finish(unit);
             return;
         }
-        if (switching) {
+        if (switching || relative) {
             return;
         }
     }
@@ -9443,6 +9438,7 @@ void dos_input_address(dos_unit_t* const unit, dos_media_bank_t* const media, co
     // Primary roles and the required pause/GET fence stay in ieee_drive.c.
     dos_input_t* const input = &unit->input;
     input->secondary = command;
+    input->collecting = false;
     if (IEEE_CMD_CLASS(command) == IEEE_CMD_CLOSE_BASE) {
         vet(listening, "native OPEN/CLOSE requires a routed listener");
         if (IEEE_CMD_IS_OPEN(command)) {
@@ -9460,6 +9456,7 @@ void dos_input_address(dos_unit_t* const unit, dos_media_bank_t* const media, co
         // writes use dos_put rather than this collector. TALK only records SA.
         if (listening && IEEE_CMD_CHANNEL(command) == IEEE_COMMAND_CHANNEL) {
             input->collecting = true;
+            input->complete = false;
             input->length = 0;
         }
     }
