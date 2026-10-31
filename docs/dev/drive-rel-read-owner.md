@@ -30,6 +30,8 @@ Media identity/generation failures use the captured model and owner drive
 with the existing host generic READ ERROR 23 and zero track/sector.
 A valid staged GET batch stops at terminal owner failure, retaining its
 status and borrowed pages rather than replaying the remaining count.
+Later acknowledgments of that staged prefix also skip reader replay, including
+when another preview detected the failure before the first acknowledgment.
 
 `dos_output_stage/get` retains either the resolved logical channel or the
 status source across later TALK selections. It adds no lifetime/generation
@@ -81,8 +83,8 @@ full-ROM execution, physical acceptance, timing or electrical claim is made.
 
 ## Validation
 
-The isolated candidate passes 501 focused REL cases (55 test groups) and
-4918 total firmware cases (4871 ordinary plus 47 fatal/assert). Tests and
+The isolated candidate passes 525 focused REL cases (55 test groups) and
+4942 total firmware cases (4895 ordinary plus 47 fatal/assert). Tests and
 dependencies use Debug. The RP2040 production RelWithDebInfo build,
 clang-format and whitespace checks pass. All 29 REL helpers remain unchanged.
 Existing engine helpers are unchanged except the four scheduler/output entry

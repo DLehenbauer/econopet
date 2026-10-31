@@ -1791,9 +1791,11 @@ END_TEST
 
 // Stale media stops a valid multi-byte GET without discarding its owner or pages.
 START_TEST(test_pipeline_stale_media_stops_staged_batch) {
-    const unsigned int format = (unsigned int)_i / 4u;
-    const bool replace = (unsigned int)_i / 2u % 2u != 0;
-    const bool retained = (unsigned int)_i % 2u != 0;
+    const unsigned int format = (unsigned int)_i / 12u;
+    const bool replace = (unsigned int)_i / 6u % 2u != 0;
+    const bool retained = (unsigned int)_i / 3u % 2u != 0;
+    const bool split = (unsigned int)_i % 3u == 1u;
+    const bool failed_preview = (unsigned int)_i % 3u == 2u;
     rel_image_t image = {0}, peer_image = {0}, replacement = {0};
     dos_media_bank_t bank = {0};
     const dos_media_ref_t reference = mount_record_at(&bank, &image, format, 1, 254, 0, false, 0, 1);
@@ -1832,10 +1834,20 @@ START_TEST(test_pipeline_stale_media_stops_staged_batch) {
         ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, NULL), DOS_MEDIA_OK);
     }
     const unsigned int reads = image.reads, peer_reads = peer_image.reads;
+    if (failed_preview) {
+        ck_assert_uint_eq(dos_output_stage(&unit, &bank, 2, output, sizeof(output), &eoi, &selected), 0);
+        ck_assert(!eoi);
+    }
     if (retained) {
-        dos_output_get(&unit, &bank, models[format], source, length);
+        dos_output_get(&unit, &bank, models[format], source, split ? 1u : length);
+        if (split) {
+            dos_output_get(&unit, &bank, models[format], source, length - 1u);
+        }
     } else {
-        dos_get(&unit, &bank, channel, length);
+        dos_get(&unit, &bank, channel, split ? 1u : length);
+        if (split) {
+            dos_get(&unit, &bank, channel, length - 1u);
+        }
     }
     ck_assert(unit.channels[channel].allocated && unit.channels[channel].failed);
     ck_assert(!unit.channels[channel].ready && !dos_work_pending(&unit));
@@ -2486,7 +2498,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_pipeline_prefix_status_and_missing_get, 0, 3);
     tcase_add_loop_test(core, test_pipeline_pending_refill_and_close_cancel, 0, 6);
     tcase_add_loop_test(core, test_pipeline_generation_and_io_failures, 0, 15);
-    tcase_add_loop_test(core, test_pipeline_stale_media_stops_staged_batch, 0, 12);
+    tcase_add_loop_test(core, test_pipeline_stale_media_stops_staged_batch, 0, 36);
     tcase_add_loop_test(core, test_pipeline_peer_reposition_and_drive_status, 0, 3);
     tcase_add_loop_test(core, test_pipeline_command_priority_and_job_headers, 0, 9);
     tcase_add_loop_test(core, test_pipeline_retains_incomplete_boundaries, 0, 6);

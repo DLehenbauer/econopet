@@ -6534,6 +6534,10 @@ void dos_get(dos_unit_t* const unit, dos_media_bank_t* const media, const uint8_
         return;
     }
     if (state->allocated && state->file_type == DISKIMAGE_FTYPE_REL) {
+        // Later acknowledgments can still retire the failed owner's staged suffix.
+        if (state->failed) {
+            return;
+        }
         for (unsigned int index = 0; index < count; ++index) {
             vet(state->ready, "REL GET exceeded its staged prefix");
             dos_rel_reader_get(&state->rel, state->rel_model, media, unit->buffers[state->buffers[0]].bytes,
