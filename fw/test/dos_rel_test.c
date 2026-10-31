@@ -9,6 +9,7 @@
 
 #include "ieee/dos.h"
 #include "ieee/dos_rel.h"
+#include "ieee/ieee_protocol.h"
 
 typedef struct {
     uint8_t bytes[7][DISKIMAGE_SECTOR_SIZE];
@@ -1460,6 +1461,156 @@ START_TEST(test_growth_preflight_borrow_and_signed_loops) {
 }
 END_TEST
 
+// Drive the compact reader in its real channel overlay and owned pool pages.
+START_TEST(test_reader_claimed_channel_pool_and_teardown) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 2, 200, 0, true);
+    memset(image.bytes[3] + 202, 'A', 54);
+    memset(image.bytes[4] + 2, 'B', 146);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, IEEE_LOAD_CHANNEL);
+    ck_assert_uint_eq(channel, 0);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint8_t* const first = unit.buffers[state->buffers[0]].bytes;
+    uint8_t* const following = unit.buffers[state->buffers[1]].bytes;
+    uint8_t* const side = unit.buffers[state->buffers[2]].bytes;
+    dos_rel_reader_start(&state->rel, models[format], reference, 1, format == 2 ? 2 : 0, 2, 200, 0);
+    ck_assert_int_eq(prepare_record(&state->rel.record, &bank, &image, side, first, following), DOS_REL_RECORD_READY);
+    for (unsigned int got = 0; got < 200; ++got) {
+        uint8_t output;
+        bool eoi;
+        ck_assert_uint_eq(dos_rel_reader_stage(&state->rel, &bank, first, following, &output, 1, &eoi), 1);
+        ck_assert_uint_eq(output, got < 54 ? 'A' : 'B');
+        ck_assert_int_eq(eoi, got == 199);
+        ck_assert_int_eq(dos_rel_reader_get(&state->rel, models[format], &bank, first, following),
+                         eoi ? DOS_REL_RECORD_MISSING : DOS_REL_RECORD_READY);
+    }
+    ck_assert_uint_eq(state->rel.number, 3);
+    ck_assert(!state->rel.no_record);
+    ck_assert(dos_close(&unit, &bank, models[format], IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(dos_find_channel(&unit, IEEE_LOAD_CHANNEL), DOS_UNUSED);
+}
+END_TEST
+
+// The third REL page must not turn exhaustion into a partially published owner.
+START_TEST(test_channel_claim_partial_pool_and_logical_exhaustion) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int available = (unsigned int)_i % 4u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_index(&bank, &image, format, 0, format % DOS_MEDIA_SLOTS_PER_UNIT);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    unit.buffer_use = (1u << DOS_BUFFER_COUNT) - 1u;
+    if (available < DOS_CHANNEL_BUFFER_COUNT) {
+        for (unsigned int page = 0; page < available; ++page) {
+            unit.buffer_use &= (uint16_t)~(1u << (DOS_BUFFER_COUNT - 1u - page));
+        }
+    } else {
+        unit.buffer_use = 0;
+        for (unsigned int channel = 0; channel < DOS_FILE_CHANNEL_COUNT; ++channel) {
+            unit.channels[channel].allocated = true;
+            unit.channels[channel].secondary = channel;
+        }
+    }
+    const uint16_t used = unit.buffer_use;
+    dos_channel_t saved[DOS_CHANNEL_COUNT];
+    memcpy(saved, unit.channels, sizeof(saved));
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    ck_assert_uint_eq(dos_rel_channel_claim(&unit, reference, IEEE_COMMAND_CHANNEL - 1u), DOS_UNUSED);
+    ck_assert_uint_eq(unit.buffer_use, used);
+    ck_assert_mem_eq(unit.channels, saved, sizeof(saved));
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    ck_assert_uint_eq(dos_find_channel(&unit, IEEE_COMMAND_CHANNEL - 1u), DOS_UNUSED);
+    ck_assert_uint_eq(image.reads, 0);
+}
+END_TEST
+
+// REL teardown must not reinterpret its reader bytes as ordinary routing flags.
+START_TEST(test_channel_claim_peer_teardown_and_ordinary_reuse) {
+    const unsigned int format = (unsigned int)_i / DOS_MEDIA_SLOTS_PER_UNIT;
+    const unsigned int slot = (unsigned int)_i % DOS_MEDIA_SLOTS_PER_UNIT;
+    rel_image_t image = {0}, peer_image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_index(&bank, &image, format, 0, slot);
+    const dos_media_ref_t peer_reference = mount_index(&bank, &peer_image, format, 0, slot ^ 1u);
+    dos_unit_t unit;
+    dos_reset(&unit, models[format]);
+    unit.directory_internal = 1;
+    char status[DOS_STATUS_LINE_CAPACITY];
+    memcpy(status, unit.status, sizeof(status));
+    unit.selected_drive = slot ^ 1u;
+    unit.buffer_writes = (1u << DOS_BUFFER_COUNT) - 1u;
+    for (unsigned int page = 0; page < DOS_BUFFER_COUNT; ++page) {
+        memset(unit.buffers[page].bytes, 0xa5, DISKIMAGE_SECTOR_SIZE);
+        unit.buffers[page].resident = true;
+        unit.buffers[page].failed = true;
+    }
+    const uint8_t secondary = 2;
+    const uint8_t channel = dos_rel_channel_claim(&unit, reference, secondary);
+    ck_assert_uint_eq(channel, 1);
+    dos_channel_t* const state = &unit.channels[channel];
+    uint16_t claimed = 0;
+    for (unsigned int page = 0; page < DOS_CHANNEL_BUFFER_COUNT; ++page) {
+        const uint8_t buffer = DOS_BUFFER_COUNT - 1u - page;
+        const uint16_t bit = 1u << buffer;
+        claimed |= bit;
+        ck_assert_uint_eq(state->buffers[page], buffer);
+        ck_assert(!unit.buffers[buffer].resident);
+        ck_assert(!unit.buffers[buffer].failed);
+        ck_assert_uint_eq(unit.buffer_writes & bit, 0);
+        ck_assert_int_eq((unit.buffer_drives & bit) != 0, slot != 0);
+        for (unsigned int byte = 0; byte < DISKIMAGE_SECTOR_SIZE; ++byte) {
+            ck_assert_uint_eq(unit.buffers[buffer].bytes[byte], 0xa5);
+        }
+    }
+    ck_assert_uint_eq(unit.buffer_use, claimed);
+    ck_assert_uint_eq(state->file_type, DISKIMAGE_FTYPE_REL);
+    ck_assert(!state->ready);
+    ck_assert_mem_eq(unit.status, status, sizeof(status));
+    dos_rel_reader_start(&state->rel, models[format], reference, 1, 0, UINT16_MAX, UINT8_MAX, UINT8_MAX);
+    const uint8_t peer = dos_rel_channel_claim(&unit, peer_reference, secondary + 1u);
+    ck_assert_uint_eq(peer, 2);
+    dos_rel_reader_start(&unit.channels[peer].rel, models[format], peer_reference, 1, 0, 7, 127, 3);
+    const dos_channel_t saved = unit.channels[peer];
+    dos_buffer_t pages[DOS_CHANNEL_BUFFER_COUNT];
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        pages[page] = unit.buffers[saved.buffers[page]];
+    }
+    const uint16_t remaining = unit.buffer_use & (uint16_t)~claimed;
+    ck_assert(dos_close(&unit, &bank, models[format], secondary));
+    ck_assert_uint_eq(unit.buffer_use, remaining);
+    ck_assert_uint_eq(unit.directory_internal, 1);
+    ck_assert_uint_eq(dos_find_channel(&unit, secondary), DOS_UNUSED);
+
+    // Reuse the released descriptor as an ordinary direct page, not REL state.
+    const uint8_t request[] = "#";
+    dos_open(&unit, &bank, 0, IEEE_LOAD_CHANNEL, request, sizeof(request) - 1u);
+    ck_assert_uint_eq(dos_find_channel(&unit, IEEE_LOAD_CHANNEL), channel);
+    ck_assert_int_eq(state->access, DOS_ACCESS_DIRECT);
+    ck_assert_uint_eq(state->buffers[0], DOS_BUFFER_COUNT - 1u);
+    ck_assert_uint_eq(state->buffers[1], DOS_UNUSED);
+    ck_assert_uint_eq(state->buffers[2], DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, models[format], IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, remaining);
+    ck_assert_uint_eq(unit.directory_internal, 1);
+    ck_assert_mem_eq(&unit.channels[peer], &saved, sizeof(saved));
+    for (unsigned int page = 0; page < count_of(pages); ++page) {
+        ck_assert_mem_eq(&unit.buffers[saved.buffers[page]], &pages[page], sizeof(pages[page]));
+    }
+    ck_assert(dos_close(&unit, &bank, models[format], secondary + 1u));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(unit.directory_internal, 1);
+    ck_assert_uint_eq(image.reads, 0);
+    ck_assert_uint_eq(peer_image.reads, 0);
+}
+END_TEST
+
 // In-page writes use the current pointer, preserve read flags and pad only the record suffix.
 START_TEST(test_record_put_and_pad_borrowed_pages) {
     const unsigned int format = (unsigned int)_i / 4u;
@@ -1893,6 +2044,9 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_record_put_requires_prepared_existing_record, 0, 9);
     tcase_add_loop_test(core, test_record_put_generation_retains_dirty_pages, 0, 12);
     tcase_add_loop_test(core, test_record_put_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_reader_claimed_channel_pool_and_teardown, 0, 3);
+    tcase_add_loop_test(core, test_channel_claim_partial_pool_and_logical_exhaustion, 0, 12);
+    tcase_add_loop_test(core, test_channel_claim_peer_teardown_and_ordinary_reuse, 0, 6);
     tcase_add_loop_test(core, test_record_finish_write_cached_boundaries, 0, 36);
     tcase_add_loop_test(core, test_record_prepare_cached_completed_window, 0, 18);
     tcase_add_loop_test(core, test_record_cached_completion_generation, 0, 6);
