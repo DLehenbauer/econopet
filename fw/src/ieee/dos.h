@@ -464,6 +464,13 @@ void dos_rel_channel_prepare_open(dos_unit_t* unit, uint8_t channel, dos_model_t
 void dos_rel_channel_prepare(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t track, uint8_t sector,
                              uint16_t number, uint8_t size, uint8_t position);
 
+// Internal clean POSBUF after the caller has resolved SSPOS and retired FIFO
+// copies. Retain data/data/side ownership, reject busy/failed/write owners and
+// perform no I/O here. Public RECORD status/admission and index traversal remain
+// the caller's responsibility. Work retains successful status.
+bool dos_rel_channel_position_buffer(dos_unit_t* unit, uint8_t channel, uint16_t number, uint8_t position,
+                                     uint8_t track, uint8_t sector);
+
 // Resolve a decoded secondary and preview bytes with an owner for actual GETs.
 // Zero output has no source to retain. Retire old sources before mutation/reuse.
 unsigned int dos_output_stage(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t* output,

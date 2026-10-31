@@ -171,6 +171,14 @@ typedef enum {
     DOS_REL_RECORD_PREFETCH_NEXT,
     DOS_REL_RECORD_RESUME_GET,
     DOS_REL_RECORD_RESUME_NEXT,
+    // Clean POSBUF joins a caller-resolved data pointer without a side lookup.
+    DOS_REL_RECORD_POSITION_MATCH,
+    DOS_REL_RECORD_POSITION_SCRUB,
+    DOS_REL_RECORD_POSITION_OTHER,
+    DOS_REL_RECORD_POSITION_COLD,
+    DOS_REL_RECORD_POSITION_DATA,
+    DOS_REL_RECORD_POSITION_FOLLOWING,
+    DOS_REL_RECORD_POSITION_READY,
 } dos_rel_record_phase_t;
 
 // Records over caller-owned native side/data/data pages. This does not own
