@@ -631,6 +631,62 @@ bool dos_rel_record_peek(dos_rel_record_t* const record, const dos_media_bank_t*
     return true;
 }
 
+// Store one cached REL byte, stopping before native dirty-buffer jobs.
+dos_rel_record_result_t dos_rel_record_put(dos_rel_record_t* const record, const dos_media_bank_t* const media,
+                                           uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                           uint8_t following[DISKIMAGE_SECTOR_SIZE], const uint8_t byte,
+                                           uint8_t* const dirty) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2
+    //
+    // RELPUT/SDIRTY stores before advancing; RELP07 sets OVRFLO, while
+    // RELP10 can enter NRBUF. FULL represents that flag, not native error 51.
+    // The owner handles WRTREL's input guard, file flags, EOI and persistence.
+    if (record->result != DOS_REL_RECORD_READY && record->result != DOS_REL_RECORD_WRITING) {
+        return record->result;
+    }
+    if (!record_current(record, media)) {
+        return record->result;
+    }
+    vet(first != NULL && following != NULL && dirty != NULL, "REL write requires borrowed pages and dirty mask");
+    vet(record->active < 2u && record->pointer >= DISKIMAGE_SECTOR_LINK_SIZE, "invalid REL write cursor");
+
+    // Preserve SDIRTY/store effects even when the subsequent advance needs I/O.
+    *dirty |= record->active == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING;
+    (record->active == 0 ? first : following)[record->pointer] = byte;
+    record->result = DOS_REL_RECORD_WRITING;
+    uint8_t next = (uint8_t)(record->pointer + 1u);
+    if (next == 0 && record->next != 0) {
+        next = DISKIMAGE_SECTOR_LINK_SIZE;
+    }
+    // At a full record keep the last accepted pointer. At a page seam retain
+    // wrapped pointer zero and stop before NRBUF, even with cached read-ahead.
+    if (next == record->next) {
+        record->result = DOS_REL_RECORD_FULL;
+    } else if (++record->pointer == 0) {
+        record->result = DOS_REL_RECORD_NEEDS_WRITEBACK;
+    }
+    return record->result;
+}
+
+// Zero the remaining in-page record bytes without fabricating EOI completion.
+dos_rel_record_result_t dos_rel_record_pad(dos_rel_record_t* const record, const dos_media_bank_t* const media,
+                                           uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                           uint8_t following[DISKIMAGE_SECTOR_SIZE], uint8_t* const dirty) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2
+    //
+    // CLREC repeats RELPUT with zero until OVRFLO. The cooperative leaf also
+    // stops before NRBUF writeback, leaving dirty ownership with the caller.
+    // WRTREL's EOI, RD40 and status completion are not performed here.
+    do {
+        dos_rel_record_put(record, media, first, following, 0, dirty);
+    } while (record->result == DOS_REL_RECORD_WRITING);
+    return record->result;
+}
+
 // Commit actual GET only, leaving next-record preparation to an explicit call.
 dos_rel_record_result_t dos_rel_record_get(dos_rel_record_t* const record, const dos_media_bank_t* const media) {
     // ROM sources:
@@ -728,6 +784,81 @@ dos_rel_record_result_t dos_rel_record_next(dos_rel_record_t* const record, cons
     }
     record_prepare(record, current_page, record->active == 0 ? following : first);
     return record->result;
+}
+
+// Prepare cached RD40 without exposing dirty pages to the clean read scheduler.
+bool dos_rel_record_finish_write(dos_rel_record_t* const record, const dos_media_bank_t* const media,
+                                 const uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                 const uint8_t following[DISKIMAGE_SECTOR_SIZE]) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1
+    //
+    // WRTREL:WR40 finishes CLREC before RD40 calls NXTREC and GETPRE.
+    // No direct ROM entry for this cached-only host fast path: the owner
+    // retains dirty pages, record counting, status and any required NRBUF jobs.
+    if (record->result != DOS_REL_RECORD_FULL || !record_current(record, media)) {
+        return false;
+    }
+    if (record->next != 0 && record->pointer >= record->next) {
+        return false;
+    }
+    // Speculate in a copy. Refuse a seam or unavailable page without losing
+    // FULL or the dirty window (a stale-media guard may still retire it).
+    dos_rel_record_t next = *record;
+    next.result = DOS_REL_RECORD_END;
+    dos_rel_record_next(&next, media, first, following);
+    if (next.result == DOS_REL_RECORD_PENDING && next.phase == DOS_REL_RECORD_FOLLOWING) {
+        // The clean reader requests a deferred prefetch even for an in-page
+        // SETLST. Skip that I/O only when the end scan needs no unknown page.
+        const uint8_t* const current = next.active == 0 ? first : following;
+        const unsigned int end = next.pointer + next.size;
+        const uint8_t limit = (uint8_t)(end + (end >= DISKIMAGE_SECTOR_SIZE ? DISKIMAGE_SECTOR_LINK_SIZE : 0u));
+        const uint8_t last = limit == DISKIMAGE_SECTOR_LINK_SIZE ? UINT8_MAX : (uint8_t)(limit - 1u);
+        if (current[0] != 0 && next.pointer > last && !next.following) {
+            return false;
+        }
+        record_prepare(&next, current, next.active == 0 ? following : first);
+    }
+    if (next.result != DOS_REL_RECORD_READY && next.result != DOS_REL_RECORD_MISSING) {
+        return false;
+    }
+    if (next.result == DOS_REL_RECORD_MISSING) {
+        next.last = next.pointer;
+    }
+    *record = next;
+    return true;
+}
+
+// Apply native SETLST to the completed buffer window without scheduling a READ.
+bool dos_rel_record_prepare_cached(dos_rel_record_t* const record, const dos_media_bank_t* const media,
+                                   const uint8_t first[DISKIMAGE_SECTOR_SIZE],
+                                   const uint8_t following[DISKIMAGE_SECTOR_SIZE]) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel1
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel1
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/rel4
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/rel4
+    //
+    // No direct ROM entry for this host scheduling join. NXTREC:NXTR20 calls
+    // SETLST without refreshing the inactive page. DBLBUF/FNDLST can therefore
+    // scan a previous WRITE's data. The owner supplies that completed window.
+    if (record->result != DOS_REL_RECORD_PENDING || record->phase != DOS_REL_RECORD_FOLLOWING ||
+        !record_current(record, media)) {
+        return false;
+    }
+    // Temporarily authorize the end scan, not subsequent GET or read-ahead.
+    dos_rel_record_t next = *record;
+    next.following = true;
+    record_prepare(&next, next.active == 0 ? first : following, next.active == 0 ? following : first);
+    // A native scan does not prove that the inactive page matches the link.
+    next.following = record->following;
+    *record = next;
+    return record->result == DOS_REL_RECORD_READY || record->result == DOS_REL_RECORD_MISSING;
 }
 
 // Abandon preparation and preview state without changing borrowed page ownership.

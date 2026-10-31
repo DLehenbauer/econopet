@@ -1460,6 +1460,394 @@ START_TEST(test_growth_preflight_borrow_and_signed_loops) {
 }
 END_TEST
 
+// In-page writes use the current pointer, preserve read flags and pad only the record suffix.
+START_TEST(test_record_put_and_pad_borrowed_pages) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int active = (unsigned int)_i % 2u;
+    const bool after_get = (unsigned int)_i % 4u >= 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 1, 10, 3, false);
+    memset(image.bytes[3] + 2, 'A', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    dos_unit_t pool = {0};
+    uint8_t* const current = pool.buffers[5].bytes;
+    uint8_t* const other = pool.buffers[2].bytes;
+    memset(other, 0x99, DISKIMAGE_SECTOR_SIZE);
+    dos_rel_reader_t reader;
+    dos_rel_reader_start(&reader, models[format], reference, 1, format == 2 ? 2 : 0, 1, 10, 3);
+    ck_assert_int_eq(prepare_record(&reader.record, &bank, &image, pool.buffers[8].bytes, current, other),
+                     DOS_REL_RECORD_READY);
+    reader.record.active = active;
+    uint8_t* const first = active == 0 ? current : other;
+    uint8_t* const following = active == 0 ? other : current;
+    if (after_get) {
+        ck_assert_int_eq(dos_rel_reader_get(&reader, models[format], &bank, first, following), DOS_REL_RECORD_READY);
+    }
+    const uint8_t pointer = after_get ? 5 : 4;
+    ck_assert_uint_eq(reader.record.pointer, pointer);
+    const bool get_active = reader.get_active;
+    uint8_t expected[DISKIMAGE_SECTOR_SIZE];
+    memcpy(expected, current, sizeof(expected));
+    expected[pointer] = 'Z';
+    const unsigned int reads = image.reads;
+    uint8_t dirty = active == 0 ? DOS_REL_DIRTY_FOLLOWING : DOS_REL_DIRTY_FIRST;
+    ck_assert_int_eq(dos_rel_record_put(&reader.record, &bank, first, following, 'Z', &dirty), DOS_REL_RECORD_WRITING);
+    ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FIRST | DOS_REL_DIRTY_FOLLOWING);
+    ck_assert_uint_eq(reader.record.pointer, pointer + 1u);
+    ck_assert_mem_eq(current, expected, sizeof(expected));
+    const dos_rel_record_t writing = reader.record;
+    uint8_t output = 0xee;
+    bool eoi = true;
+    ck_assert(!dos_rel_record_peek(&reader.record, &bank, first, following, &output, &eoi));
+    ck_assert_uint_eq(output, 0xee);
+    ck_assert(eoi);
+    ck_assert_int_eq(dos_rel_record_get(&reader.record, &bank), DOS_REL_RECORD_WRITING);
+    ck_assert_int_eq(dos_rel_record_next(&reader.record, &bank, first, following), DOS_REL_RECORD_WRITING);
+    ck_assert_mem_eq(&reader.record, &writing, sizeof(writing));
+    ck_assert_int_eq(dos_rel_record_pad(&reader.record, &bank, first, following, &dirty), DOS_REL_RECORD_FULL);
+    memset(expected + pointer + 1u, 0, 11u - pointer);
+    ck_assert_mem_eq(current, expected, sizeof(expected));
+    ck_assert_uint_eq(reader.record.pointer, 11);
+    ck_assert_uint_eq(reader.record.next, 12);
+    ck_assert_int_eq(reader.get_active, get_active);
+    ck_assert_int_eq(get_active, after_get && format == 0);
+    ck_assert_uint_eq(reader.number, 1);
+    for (unsigned int byte = 0; byte < DISKIMAGE_SECTOR_SIZE; ++byte) {
+        ck_assert_uint_eq(other[byte], 0x99);
+    }
+    ck_assert_mem_eq(image.bytes[3] + 2, "AAAAAAAAAA", 10);
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
+// Native NR=0/2 fill in place, while other wraps retain effects before NRBUF.
+START_TEST(test_record_put_native_wrap_and_deferred_prefetch) {
+    static const struct {
+        uint16_t number;
+        uint8_t size, position, next;
+        bool following, failed_prefetch, writeback;
+    } cases[] = {
+        {2, 127, 127, 0, false, false, false}, {2, 127, 127, 2, true, false, false},
+        {2, 200, 54, 148, true, false, true},  {1, 255, 253, 3, true, false, true},
+        {2, 127, 127, 2, true, true, false},
+    };
+    const unsigned int format = (unsigned int)_i / count_of(cases);
+    const unsigned int which = (unsigned int)_i % count_of(cases);
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, cases[which].number, cases[which].size,
+                                                   cases[which].position, cases[which].following);
+    memset(image.bytes[3] + 2, 'A', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    memset(image.bytes[4] + 2, 'B', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    image.fail_read = cases[which].failed_prefetch ? 3u + (format == 2) : 0;
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, cases[which].number,
+                         cases[which].size, cases[which].position);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], first[DISKIMAGE_SECTOR_SIZE], following[DISKIMAGE_SECTOR_SIZE] = {0};
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, first, following), DOS_REL_RECORD_READY);
+    ck_assert_uint_eq(record.pointer, which == 3 ? 254 : 255);
+    ck_assert_uint_eq(record.next, cases[which].next);
+    ck_assert_int_eq(record.following_failed, cases[which].failed_prefetch);
+    uint8_t saved[DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved, following, sizeof(saved));
+    const unsigned int reads = image.reads;
+    uint8_t dirty = 0;
+    if (which == 3) {
+        ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Y', &dirty), DOS_REL_RECORD_WRITING);
+        ck_assert_uint_eq(first[254], 'Y');
+    }
+    const dos_rel_record_result_t result =
+        cases[which].writeback ? DOS_REL_RECORD_NEEDS_WRITEBACK : DOS_REL_RECORD_FULL;
+    ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Z', &dirty), result);
+    ck_assert_uint_eq(first[255], 'Z');
+    ck_assert_uint_eq(record.pointer, cases[which].writeback ? 0 : 255);
+    ck_assert_uint_eq(record.active, 0);
+    ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FIRST);
+    const dos_rel_record_t before = record;
+    for (unsigned int repeat = 0; repeat < 2; ++repeat) {
+        ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'X', &dirty), result);
+        ck_assert_int_eq(dos_rel_record_pad(&record, &bank, first, following, &dirty), result);
+        ck_assert_mem_eq(&record, &before, sizeof(before));
+        ck_assert_uint_eq(first[255], 'Z');
+        ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FIRST);
+    }
+    ck_assert_mem_eq(following, saved, sizeof(saved));
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
+// Missing growth, pending positioning and failed reads never accept cached writes.
+START_TEST(test_record_put_requires_prepared_existing_record) {
+    const unsigned int format = (unsigned int)_i / 3u;
+    const unsigned int variant = (unsigned int)_i % 3u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 2, 200, 54, false);
+    image.fail_read = variant == 2 ? 1 : 0;
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, 2, 200, 54);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE] = {0}, first[DISKIMAGE_SECTOR_SIZE] = {0};
+    uint8_t following[DISKIMAGE_SECTOR_SIZE] = {0};
+    const dos_rel_record_result_t result = variant == 0   ? DOS_REL_RECORD_MISSING
+                                           : variant == 1 ? DOS_REL_RECORD_PENDING
+                                                          : DOS_REL_RECORD_FAILED;
+    if (variant != 1) {
+        ck_assert_int_eq(prepare_record(&record, &bank, &image, side, first, following), result);
+    }
+    const dos_rel_record_t before = record;
+    uint8_t saved[2][DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved[0], first, sizeof(first));
+    memcpy(saved[1], following, sizeof(following));
+    const unsigned int reads = image.reads;
+    uint8_t dirty = 0;
+    ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Z', &dirty), result);
+    ck_assert_int_eq(dos_rel_record_pad(&record, &bank, first, following, &dirty), result);
+    ck_assert_mem_eq(&record, &before, sizeof(before));
+    ck_assert_mem_eq(first, saved[0], sizeof(first));
+    ck_assert_mem_eq(following, saved[1], sizeof(following));
+    ck_assert_uint_eq(dirty, 0);
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
+// Replacement/removal rejects new stores without losing already-dirty cached bytes.
+START_TEST(test_record_put_generation_retains_dirty_pages) {
+    const unsigned int format = (unsigned int)_i / 4u;
+    const unsigned int variant = (unsigned int)_i % 4u;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 1, 10, 0, false);
+    image.bytes[3][2] = 'A';
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, 1, 10, 0);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], first[DISKIMAGE_SECTOR_SIZE], following[DISKIMAGE_SECTOR_SIZE] = {0};
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, first, following), DOS_REL_RECORD_READY);
+    uint8_t dirty = DOS_REL_DIRTY_FOLLOWING;
+    if (variant >= 2) {
+        ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Z', &dirty), DOS_REL_RECORD_WRITING);
+    }
+    if (variant & 1u) {
+        mount_index(&bank, &replacement, format, 0, 0);
+    } else {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, NULL), DOS_MEDIA_OK);
+    }
+    uint8_t saved[DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved, first, sizeof(saved));
+    const uint8_t pointer = record.pointer, prior_dirty = dirty;
+    const unsigned int reads = image.reads;
+    if (variant & 1u) {
+        ck_assert_int_eq(dos_rel_record_pad(&record, &bank, first, following, &dirty), DOS_REL_RECORD_FAILED);
+    } else {
+        ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'X', &dirty), DOS_REL_RECORD_FAILED);
+    }
+    ck_assert_int_eq(record.lookup.media_result, DOS_MEDIA_STALE);
+    ck_assert_uint_eq(record.pointer, pointer);
+    ck_assert_uint_eq(dirty, prior_dirty);
+    ck_assert_mem_eq(first, saved, sizeof(saved));
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(replacement.reads, 0);
+}
+END_TEST
+
+// WR40/RD40 may reuse only a completed window, never schedule clean I/O over dirty pages.
+START_TEST(test_record_finish_write_cached_boundaries) {
+    static const struct {
+        uint16_t number;
+        uint8_t size, position;
+        bool linked, resident, complete;
+        uint8_t pointer, next, last;
+    } cases[] = {
+        {1, 10, 0, false, false, true, 12, 22, 21},     {1, 254, 0, false, false, true, 255, 0, 255},
+        {2, 127, 127, true, false, false, 255, 2, 255}, {1, 10, 0, true, false, true, 12, 22, 21},
+        {2, 125, 0, true, false, false, 251, 252, 251}, {2, 125, 0, true, true, true, 252, 123, 122},
+    };
+    const unsigned int format = (unsigned int)_i / (2u * count_of(cases));
+    const unsigned int which = (unsigned int)_i / 2u % count_of(cases);
+    const unsigned int active = (unsigned int)_i % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, cases[which].number, cases[which].size,
+                                                   cases[which].position, cases[which].linked);
+    memset(image.bytes[3] + DISKIMAGE_SECTOR_LINK_SIZE, 'A', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    memset(image.bytes[4] + DISKIMAGE_SECTOR_LINK_SIZE, 'B', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, cases[which].number,
+                         cases[which].size, cases[which].position);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], current[DISKIMAGE_SECTOR_SIZE], other[DISKIMAGE_SECTOR_SIZE] = {0};
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, current, other), DOS_REL_RECORD_READY);
+    record.active = active;
+    record.following = cases[which].resident;
+    uint8_t* const first = active == 0 ? current : other;
+    uint8_t* const following = active == 0 ? other : current;
+    uint8_t dirty = 0;
+    ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Z', &dirty),
+                     which == 2 ? DOS_REL_RECORD_FULL : DOS_REL_RECORD_WRITING);
+    ck_assert_int_eq(dos_rel_record_pad(&record, &bank, first, following, &dirty), DOS_REL_RECORD_FULL);
+    const dos_rel_record_t before = record;
+    uint8_t saved[2][DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved[0], current, sizeof(current));
+    memcpy(saved[1], other, sizeof(other));
+    const unsigned int reads = image.reads;
+    ck_assert_int_eq(dos_rel_record_finish_write(&record, &bank, first, following), cases[which].complete);
+    ck_assert_uint_eq(record.active, active);
+    ck_assert_uint_eq(record.pointer, cases[which].pointer);
+    ck_assert_uint_eq(record.next, cases[which].next);
+    ck_assert_uint_eq(record.last, cases[which].last);
+    if (!cases[which].complete) {
+        ck_assert_mem_eq(&record, &before, sizeof(before));
+    } else {
+        ck_assert_int_eq(record.result, which == 1 ? DOS_REL_RECORD_MISSING : DOS_REL_RECORD_READY);
+        uint8_t byte = 0;
+        bool eoi = false;
+        ck_assert(dos_rel_record_peek(&record, &bank, first, following, &byte, &eoi));
+        ck_assert_uint_eq(byte, which == 1 ? '\r' : 'A');
+        ck_assert_int_eq(eoi, which == 1);
+        const dos_rel_record_t completed = record;
+        ck_assert(!dos_rel_record_finish_write(&record, &bank, first, following));
+        ck_assert_mem_eq(&record, &completed, sizeof(completed));
+    }
+    ck_assert_uint_eq(dirty, active == 0 ? DOS_REL_DIRTY_FIRST : DOS_REL_DIRTY_FOLLOWING);
+    ck_assert_mem_eq(current, saved[0], sizeof(current));
+    ck_assert_mem_eq(other, saved[1], sizeof(other));
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
+// SETLST may scan a completed inactive page without authorizing GET to follow it.
+START_TEST(test_record_prepare_cached_completed_window) {
+    const unsigned int format = (unsigned int)_i / 6u;
+    const unsigned int variant = (unsigned int)_i % 6u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 1, 255, 253, true);
+    memset(image.bytes[3] + DISKIMAGE_SECTOR_LINK_SIZE, 'A', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    memset(image.bytes[4] + DISKIMAGE_SECTOR_LINK_SIZE, 'B', DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, 1, 255, 253);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], first[DISKIMAGE_SECTOR_SIZE], following[DISKIMAGE_SECTOR_SIZE];
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, first, following), DOS_REL_RECORD_READY);
+
+    // Model the owner's completed NRBUF window, not a proven read-ahead target.
+    record.result = variant == 1 ? DOS_REL_RECORD_READY : DOS_REL_RECORD_PENDING;
+    record.phase = variant == 2 ? DOS_REL_RECORD_INDEX : DOS_REL_RECORD_FOLLOWING;
+    record.following = false;
+    record.following_failed = variant == 4;
+    if (variant == 3) {
+        ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, NULL), DOS_MEDIA_OK);
+    } else if (variant == 5) {
+        first[0] = 0;
+        record.pointer = DISKIMAGE_SECTOR_LINK_SIZE;
+        record.position = 0;
+    }
+    const dos_rel_record_t before = record;
+    uint8_t saved[2][DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved[0], first, sizeof(first));
+    memcpy(saved[1], following, sizeof(following));
+    const unsigned int reads = image.reads;
+    ck_assert_int_eq(dos_rel_record_prepare_cached(&record, &bank, first, following), variant == 0 || variant == 5);
+    ck_assert(!record.following);
+    if (variant == 0) {
+        ck_assert_int_eq(record.result, DOS_REL_RECORD_READY);
+        ck_assert_uint_eq(record.pointer, 254);
+        ck_assert_uint_eq(record.next, 3);
+        ck_assert_uint_eq(record.last, 2);
+        ck_assert_int_eq(dos_rel_record_get(&record, &bank), DOS_REL_RECORD_READY);
+        ck_assert_int_eq(dos_rel_record_get(&record, &bank), DOS_REL_RECORD_NEEDS_LINK);
+    } else if (variant == 1 || variant == 2) {
+        ck_assert_mem_eq(&record, &before, sizeof(before));
+    } else if (variant == 5) {
+        ck_assert_int_eq(record.result, DOS_REL_RECORD_MISSING);
+        uint8_t byte = 0;
+        bool eoi = false;
+        ck_assert(dos_rel_record_peek(&record, &bank, first, following, &byte, &eoi));
+        ck_assert_uint_eq(byte, '\r');
+        ck_assert(eoi);
+    } else {
+        ck_assert_int_eq(record.result, DOS_REL_RECORD_FAILED);
+        if (variant == 3) {
+            ck_assert_int_eq(record.lookup.media_result, DOS_MEDIA_STALE);
+        }
+    }
+    ck_assert_mem_eq(first, saved[0], sizeof(first));
+    ck_assert_mem_eq(following, saved[1], sizeof(following));
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
+// Both cached completion entries retire stale cursors without losing dirty bytes.
+START_TEST(test_record_cached_completion_generation) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool prepare = (unsigned int)_i % 2u != 0;
+    rel_image_t image = {0}, replacement = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_record(&bank, &image, format, 1, 10, 0, false);
+    dos_rel_record_t record;
+    dos_rel_record_start(&record, models[format], reference, 1, format == 2 ? 2 : 0, 1, 10, 0);
+    uint8_t side[DISKIMAGE_SECTOR_SIZE], first[DISKIMAGE_SECTOR_SIZE], following[DISKIMAGE_SECTOR_SIZE] = {0};
+    ck_assert_int_eq(prepare_record(&record, &bank, &image, side, first, following), DOS_REL_RECORD_READY);
+    uint8_t dirty = 0;
+    ck_assert_int_eq(dos_rel_record_put(&record, &bank, first, following, 'Z', &dirty), DOS_REL_RECORD_WRITING);
+    ck_assert_int_eq(dos_rel_record_pad(&record, &bank, first, following, &dirty), DOS_REL_RECORD_FULL);
+    if (prepare) {
+        record.result = DOS_REL_RECORD_PENDING;
+        record.phase = DOS_REL_RECORD_FOLLOWING;
+    }
+    uint8_t saved[DISKIMAGE_SECTOR_SIZE];
+    memcpy(saved, first, sizeof(saved));
+    const uint8_t pointer = record.pointer;
+    const unsigned int reads = image.reads;
+    mount_record(&bank, &replacement, format, 1, 10, 0, false);
+    if (prepare) {
+        ck_assert(!dos_rel_record_prepare_cached(&record, &bank, first, following));
+    } else {
+        ck_assert(!dos_rel_record_finish_write(&record, &bank, first, following));
+    }
+    ck_assert_int_eq(record.result, DOS_REL_RECORD_FAILED);
+    ck_assert_int_eq(record.lookup.media_result, DOS_MEDIA_STALE);
+    ck_assert_uint_eq(record.pointer, pointer);
+    ck_assert_mem_eq(first, saved, sizeof(saved));
+    ck_assert_uint_eq(first[DISKIMAGE_SECTOR_LINK_SIZE], 'Z');
+    ck_assert_uint_eq(dirty, DOS_REL_DIRTY_FIRST);
+    ck_assert_uint_eq(image.reads, reads);
+    ck_assert_uint_eq(replacement.reads, 0);
+}
+END_TEST
+
+// Independent caller-owned cursors/pages/masks survive another unit's invalidation.
+START_TEST(test_record_put_peer_isolation) {
+    const unsigned int format = (unsigned int)_i;
+    rel_image_t images[2] = {0};
+    dos_media_bank_t bank = {0};
+    dos_rel_record_t records[2];
+    dos_unit_t pool = {0};
+    uint8_t dirty[2] = {0};
+    for (unsigned int owner = 0; owner < count_of(records); ++owner) {
+        const dos_media_ref_t reference = mount_record_at(&bank, &images[owner], format, 1, 10, 0, false, owner, owner);
+        images[owner].bytes[3][2] = 'A' + owner;
+        dos_rel_record_start(&records[owner], models[format], reference, 1, format == 2 ? 2 : 0, 1, 10, 0);
+        ck_assert_int_eq(prepare_record(&records[owner], &bank, &images[owner], pool.buffers[8 + owner].bytes,
+                                        pool.buffers[4 + owner].bytes, pool.buffers[1 + owner].bytes),
+                         DOS_REL_RECORD_READY);
+    }
+    ck_assert_int_eq(
+        dos_rel_record_put(&records[0], &bank, pool.buffers[4].bytes, pool.buffers[1].bytes, 'Z', &dirty[0]),
+        DOS_REL_RECORD_WRITING);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, NULL), DOS_MEDIA_OK);
+    ck_assert_int_eq(dos_rel_record_pad(&records[0], &bank, pool.buffers[4].bytes, pool.buffers[1].bytes, &dirty[0]),
+                     DOS_REL_RECORD_FAILED);
+    const dos_rel_record_t retired = records[0];
+    const dos_buffer_t saved = pool.buffers[4];
+    ck_assert_int_eq(dos_rel_record_pad(&records[1], &bank, pool.buffers[5].bytes, pool.buffers[2].bytes, &dirty[1]),
+                     DOS_REL_RECORD_FULL);
+    ck_assert_mem_eq(&records[0], &retired, sizeof(retired));
+    ck_assert_mem_eq(&pool.buffers[4], &saved, sizeof(saved));
+    ck_assert_uint_eq(pool.buffers[4].bytes[2], 'Z');
+    ck_assert_uint_eq(pool.buffers[5].bytes[2], 0);
+    ck_assert_uint_eq(dirty[0], DOS_REL_DIRTY_FIRST);
+    ck_assert_uint_eq(dirty[1], DOS_REL_DIRTY_FIRST);
+}
+END_TEST
+
 // Register native index, clean-read and allocation-preflight contracts.
 Suite* dos_rel_suite(void) {
     Suite* const suite = suite_create("dos_rel");
@@ -1500,6 +1888,14 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_blocks_native_endpoints_and_low_word, 0, 3);
     tcase_add_loop_test(core, test_growth_endpoint_span_and_group_carry, 0, 12);
     tcase_add_loop_test(core, test_growth_preflight_borrow_and_signed_loops, 0, 3);
+    tcase_add_loop_test(core, test_record_put_and_pad_borrowed_pages, 0, 12);
+    tcase_add_loop_test(core, test_record_put_native_wrap_and_deferred_prefetch, 0, 15);
+    tcase_add_loop_test(core, test_record_put_requires_prepared_existing_record, 0, 9);
+    tcase_add_loop_test(core, test_record_put_generation_retains_dirty_pages, 0, 12);
+    tcase_add_loop_test(core, test_record_put_peer_isolation, 0, 3);
+    tcase_add_loop_test(core, test_record_finish_write_cached_boundaries, 0, 36);
+    tcase_add_loop_test(core, test_record_prepare_cached_completed_window, 0, 18);
+    tcase_add_loop_test(core, test_record_cached_completion_generation, 0, 6);
     suite_add_tcase(suite, core);
     return suite;
 }
