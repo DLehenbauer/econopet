@@ -40,12 +40,14 @@ package common_pkg;
     localparam WB_KBD_DECODE_PREFIX  = 5'b01100;
     localparam WB_BRAM_DECODE_PREFIX = 5'b01101;
     localparam WB_IEEE_DECODE_PREFIX = 5'b01110;
+    localparam WB_IO_DECODE_PREFIX   = 13'b0111_1000_0000_0;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_RAM_BASE_ADDR = {WB_RAM_DECODE_PREFIX, 18'b0};
     localparam logic [WB_ADDR_WIDTH-1:0] WB_REG_BASE_ADDR = {WB_REG_DECODE_PREFIX, 16'b0};
     localparam logic [WB_ADDR_WIDTH-1:0] WB_CRTC_BASE_ADDR = {WB_CRTC_DECODE_PREFIX, 16'b0};
     localparam logic [WB_ADDR_WIDTH-1:0] WB_KBD_BASE_ADDR = {WB_KBD_DECODE_PREFIX, 15'b0};
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BRAM_BASE_ADDR = {WB_BRAM_DECODE_PREFIX, 15'b0};
     localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_BASE_ADDR = {WB_IEEE_DECODE_PREFIX, 15'b0};
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IO_BASE_ADDR = {WB_IO_DECODE_PREFIX, 7'b0};
 
     //
     // Register file
@@ -659,6 +661,11 @@ package common_pkg;
 
     function logic[WB_ADDR_WIDTH-1:0] wb_crtc_addr(input logic[CRTC_ADDR_REG_WIDTH-1:0] register);
         return { WB_CRTC_DECODE_PREFIX, (WB_ADDR_WIDTH - CRTC_ADDR_REG_WIDTH - $bits(WB_CRTC_DECODE_PREFIX))'('0), register };
+    endfunction
+
+    // Maps a physical PIA/VIA offset into the MCU's halted-CPU I/O window.
+    function logic[WB_ADDR_WIDTH-1:0] wb_io_addr(input logic[6:0] address);
+        return {WB_IO_DECODE_PREFIX, address};
     endfunction
 
     function logic[WB_ADDR_WIDTH-1:0] wb_kbd_addr(input logic[KBD_COL_WIDTH-1:0] register);
