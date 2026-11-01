@@ -36,11 +36,15 @@ module timing_6809 (
     logic e_reg = 1'b0;
     logic q_reg = 1'b0;
 
-    // Finish the current bus cycle before pausing. Reset still needs clock
-    // edges because the vendored core samples nRESET on falling E.
+    // Keep clocking while reset is asserted so the core can sample nRESET on
+    // falling E.
+    wire cycle_request = cpu_ready_i || cpu_reset_i;
+
+    // Firmware changes READY/reset during Wishbone SPI slots, outside the CPU
+    // slot, so the request can directly enable or pause whole 6809 cycles.
+    // Reset still needs clock edges because the core samples nRESET on falling E.
     always_ff @(posedge sys_clock_i) begin
-        if (!cpu_be_i && !e_reg && !q_reg)
-            cycle_enabled <= cpu_ready_i || cpu_reset_i;
+        cycle_enabled <= cycle_request;
     end
     assign cpu6809_halted_o = !cycle_enabled && !e_reg && !q_reg;
 
@@ -67,13 +71,21 @@ module timing_6809 (
     logic cpu_wr_en_prev = 1'b0;
     always_ff @(posedge sys_clock_i) begin
         cpu_wr_en_prev <= cpu_wr_en_i;
-        if (!cycle_enabled)                     q_reg <= 1'b0;
+        if (!cycle_enabled)                      q_reg <= 1'b0;
         else if (cpu_addr_strobe_i)              q_reg <= 1'b1;
         else if (cpu_wr_en_prev && !cpu_wr_en_i) q_reg <= 1'b0;
     end
     assign cpu6809_q_o = q_reg;
 
     // synthesis off
+    logic cycle_request_prev = 1'b0;
+    always_ff @(posedge sys_clock_i) begin
+        if (cycle_request != cycle_request_prev)
+            assert (!cpu_be_i && !e_reg && !q_reg)
+                else $fatal(1, "6809 run request changed during an active CPU cycle");
+        cycle_request_prev <= cycle_request;
+    end
+
     initial begin
         // The reused per-round events carry their own timing assertions in
         // timing.sv. The one datasheet minimum this module owns: the 1000ns

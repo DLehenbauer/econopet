@@ -48,7 +48,7 @@ module superpet_top_tb;
     int e_high_cycles = 0;
     int q_high_cycles = 0;
 
-    // Pause and resume may remove cycles, but must never shorten an E or Q pulse.
+    // Pausing may skip whole 6809 bus cycles, but an active E/Q pulse must finish at full width.
     always @(negedge sys_clock) begin
         // Capture-time qualification must preserve the original consumer phase.
         `assert_equal(top.main.active_data_strobe,
@@ -230,7 +230,7 @@ module superpet_top_tb;
         spi1_driver.write_at(addr_i, data_i);
     endtask
 
-    // Finish the admitted cycle, preserve all registers, and resume at every slot phase.
+    // Pause via SPI, preserve all registers, and resume without resetting the core.
     task static halt_resume_test;
         logic [111:0] saved_registers;
         logic [CPU_ADDR_WIDTH-1:0] saved_addr;
@@ -253,11 +253,8 @@ module superpet_top_tb;
         repeat (32) @(negedge cpu_clock);
 
         for (int phase = 0; phase < 64; phase++) begin
-            // Directly vary the READY transition phase (SPI normally lands in its slot).
-            @(negedge sys_clock);
-            while (top.main.timing.cycle_count != 6'(phase)) @(negedge sys_clock);
-            top.main.register_file.register[REG_CPU] = 8'h00;
-            #1;
+            // Change READY through Wishbone, which admits writes only in SPI slots.
+            spi_write_at(WB_CPU_ADDR, 8'h00);
             wait_cycles = 0;
             while (!top.main.cpu6809_halted && wait_cycles < 128) begin
                 @(negedge sys_clock);
@@ -314,7 +311,7 @@ module superpet_top_tb;
         end
         `assert_equal(top.main.mc6809_addr, 16'he840)
         `assert_equal(top.main.active_wr_en, 1'b1)
-        top.main.register_file.register[REG_CPU] = 8'h00;
+        spi_write_at(WB_CPU_ADDR, 8'h00);
         repeat (128) @(negedge sys_clock);
         `assert_equal(top.main.cpu6809_halted, 1'b1)
         `assert_equal(top.main.ieee.via_orb, 8'h5a)
@@ -350,7 +347,7 @@ module superpet_top_tb;
             `assert_equal(top.main.mc6809.core.CpuState,
                 (wait_instruction == 0 ? top.main.mc6809.core.CPUSTATE_SYNC :
                                          top.main.mc6809.core.CPUSTATE_CWAI_POST))
-            top.main.register_file.register[REG_CPU] = 8'h00;
+            spi_write_at(WB_CPU_ADDR, 8'h00);
             repeat (128) @(negedge sys_clock);
             `assert_equal(top.main.cpu6809_halted, 1'b1)
             saved_registers = top.main.mc6809_regdata;

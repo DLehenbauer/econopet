@@ -368,14 +368,15 @@ module main (
                                                  : cpu_is_soft6502 ? !m6502_rw
                                                  :                   cpu_we_i;
     wire [    DATA_WIDTH-1:0] active_cpu_dout    = cpu_is_6809 ? mc6809_dout : m6502_dout;
-    // Reset keeps 6809 clocks running, but never overrides bridge reservation.
+    // Reset keeps E/Q clocking so the 6809 can sample nRESET. Bridge
+    // reservations still block its bus access.
     wire                      active_be          = cpu_is_6809 ? cpu6809_be && !io_ctl_bus_reserve
-                                                              : cpu_bus_be;
+                                                               : cpu_bus_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe && !io_ctl_bus_reserve
-                                                              : cpu_addr_strobe;
+                                                               : cpu_addr_strobe;
     wire                      active_data_strobe = cpu_active_data_strobe_q;
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en && !io_ctl_bus_reserve
-                                                              : cpu_wr_en;
+                                                               : cpu_wr_en;
 
     // Physical-6502 presence detector. When the physical CPU is selected
     // (cpu_soft=0) and running, a populated chip drives the shared address bus
