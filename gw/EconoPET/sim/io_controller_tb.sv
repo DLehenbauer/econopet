@@ -64,6 +64,7 @@ module io_controller_tb;
     logic pia2_cs;
     logic via_cs;
     logic [DATA_WIDTH-1:0] read_data = 8'hff;
+    logic cpu_halted = 1'b1;
 
     assign cpu_data = (bus_own && !bus_we) ? read_data : 'x;
 
@@ -80,6 +81,7 @@ module io_controller_tb;
         .wbp_sel_i(1'b1),
 
         .cpu_ready_i(1'b0),
+        .cpu_halted_i(cpu_halted),
         .cpu_slot_be_i(cpu_slot_be),
         .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),
@@ -175,6 +177,22 @@ module io_controller_tb;
         wb_we = 1'b0;
         wb_cycle = 1'b0;
         wb_strobe = 1'b0;
+
+        // A pending halt must keep both reservation and external drivers inactive.
+        cpu_halted = 1'b0;
+        start_request(7'h10, 1'b0, 8'h00);
+        repeat (128) begin
+            @(negedge clock);
+            `assert_equal(bus_reserve, 1'b0)
+            `assert_equal(bus_own, 1'b0)
+            `assert_equal(wb_ack, 1'b0)
+            `assert_equal(wb_stall, 1'b1)
+        end
+        cpu_halted = 1'b1;
+        @(posedge wb_ack);
+        wb_cycle = 1'b0;
+        @(posedge clock);
+        @(negedge clock);
 
         check_request(7'h10, 1'b1, 8'ha5, CS_PIA1);
         check_request(7'h2f, 1'b1, 8'h5a, CS_PIA2);

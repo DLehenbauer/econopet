@@ -50,7 +50,7 @@ typedef enum {
     CPU_NMI   = ECONOPET_REG_CPU_NMI_MASK,
 } cpu_state_t;
 
-// Set the CPU control flags.
+// Set CPU control flags. Clearing READY waits for a state-preserving 6809 halt.
 void set_cpu(cpu_state_t state);
 
 // Return the current CPU control flags.

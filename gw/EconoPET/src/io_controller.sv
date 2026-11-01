@@ -19,6 +19,7 @@ module io_controller (
     input  logic                      wbp_sel_i,
 
     input  logic                      cpu_ready_i,
+    input  logic                      cpu_halted_i,
     input  logic                      cpu_slot_be_i,
     input  logic                      cpu_data_strobe_i,
     input  logic                      cpu_hold_strobe_i,
@@ -35,8 +36,9 @@ module io_controller (
     output logic                      pia2_cs_o,
     output logic                      via_cs_o
 );
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         IDLE,
+        WAIT_HALT,
         WAIT_SLOT,
         ACTIVE,
         ACK
@@ -104,9 +106,13 @@ module io_controller (
                         addr_q <= wbp_addr_i[6:0];
                         data_q <= wbp_data_i;
                         we_q <= wbp_we_i;
-                        state_q <= WAIT_SLOT;
+                        state_q <= WAIT_HALT;
                     end
                 end
+            end
+
+            WAIT_HALT: begin
+                if (cpu_halted_i) state_q <= WAIT_SLOT;
             end
 
             WAIT_SLOT: begin

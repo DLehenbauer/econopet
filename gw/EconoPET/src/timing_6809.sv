@@ -13,6 +13,8 @@ import common_pkg::*;
 // soft core does not share -- it only needs the E/Q edge ordering.
 module timing_6809 (
     input  logic sys_clock_i,
+    input  logic cpu_ready_i,
+    input  logic cpu_reset_i,
 
     // Reused, unmodified per-round CPU-slot events from 'timing' (the
     // existing 6502 timing generator running alongside this module).
@@ -27,21 +29,33 @@ module timing_6809 (
     output logic cpu6809_q_o,
     output logic cpu6809_addr_strobe_o,
     output logic cpu6809_hold_strobe_o,
-    output logic cpu6809_wr_en_o
+    output logic cpu6809_wr_en_o,
+    output logic cpu6809_halted_o
 );
+    logic cycle_enabled = 1'b0;
+    logic e_reg = 1'b0;
+    logic q_reg = 1'b0;
+
+    // Finish the current bus cycle before pausing. Reset still needs clock
+    // edges because the vendored core samples nRESET on falling E.
+    always_ff @(posedge sys_clock_i) begin
+        if (!cpu_be_i && !e_reg && !q_reg)
+            cycle_enabled <= cpu_ready_i || cpu_reset_i;
+    end
+    assign cpu6809_halted_o = !cycle_enabled && !e_reg && !q_reg;
+
     // The per-round CPU-slot events pass straight through: SRAM/IO see the
     // same BE/address/data timing as the 6502 case.
-    assign cpu6809_be_o          = cpu_be_i;
-    assign cpu6809_addr_strobe_o = cpu_addr_strobe_i;
-    assign cpu6809_hold_strobe_o = cpu_hold_strobe_i;
-    assign cpu6809_wr_en_o       = cpu_wr_en_i;
+    assign cpu6809_be_o          = cpu_be_i && cycle_enabled;
+    assign cpu6809_addr_strobe_o = cpu_addr_strobe_i && cycle_enabled;
+    assign cpu6809_hold_strobe_o = cpu_hold_strobe_i && cycle_enabled;
+    assign cpu6809_wr_en_o       = cpu_wr_en_i && cycle_enabled;
 
     // E: registered copy of cpu_clock_i (the PHI2-shaped pulse), so the E
     // edges land one sys clock after the arbiter's. main.sv provides the
     // shared captured-data strobe used by both soft cores.
-    logic e_reg = 1'b0;
     always_ff @(posedge sys_clock_i) begin
-        e_reg <= cpu_clock_i;
+        e_reg <= cycle_enabled && cpu_clock_i;
     end
     assign cpu6809_e_o = e_reg;
 
@@ -50,11 +64,11 @@ module timing_6809 (
     // E. Q must therefore fall once per bus cycle, before E falls: it rises
     // with the address strobe and falls one sys clock after the
     // write-enable window closes, still ahead of the registered E's fall.
-    logic q_reg = 1'b0;
     logic cpu_wr_en_prev = 1'b0;
     always_ff @(posedge sys_clock_i) begin
         cpu_wr_en_prev <= cpu_wr_en_i;
-        if (cpu_addr_strobe_i)                   q_reg <= 1'b1;
+        if (!cycle_enabled)                     q_reg <= 1'b0;
+        else if (cpu_addr_strobe_i)              q_reg <= 1'b1;
         else if (cpu_wr_en_prev && !cpu_wr_en_i) q_reg <= 1'b0;
     end
     assign cpu6809_q_o = q_reg;

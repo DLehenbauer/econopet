@@ -242,6 +242,7 @@ module main (
 
     logic cpu6809_be, cpu6809_e, cpu6809_q;
     logic cpu6809_addr_strobe, cpu6809_hold_strobe, cpu6809_wr_en;
+    logic cpu6809_halted;
 
     // cpu_irq_i is asynchronous to sys_clock_i (wire-ORed by the real
     // PIA1/PIA2/VIA chips), so double-flop it before mc6809i's nIRQ.
@@ -262,7 +263,9 @@ module main (
 
     timing_6809 timing_6809 (
         .sys_clock_i(sys_clock_i),
-        .cpu_be_i(cpu_bus_be),
+        .cpu_ready_i(reg_cpu_ready),
+        .cpu_reset_i(cpu_reset_i || !cpu_is_6809),
+        .cpu_be_i(timing_cpu_be),
         .cpu_clock_i(cpu_clock_o),
         .cpu_addr_strobe_i(cpu_addr_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),
@@ -273,7 +276,8 @@ module main (
         .cpu6809_q_o(cpu6809_q),
         .cpu6809_addr_strobe_o(cpu6809_addr_strobe),
         .cpu6809_hold_strobe_o(cpu6809_hold_strobe),
-        .cpu6809_wr_en_o(cpu6809_wr_en)
+        .cpu6809_wr_en_o(cpu6809_wr_en),
+        .cpu6809_halted_o(cpu6809_halted)
     );
 
     // Capture read data before external PHI2 falls. The soft cores advance
@@ -295,7 +299,9 @@ module main (
         cpu_data_strobe_q <= cpu_data_strobe;
     end
     always_ff @(posedge cpu_data_strobe_q) begin
-        soft_cpu_data_q <= read_data_q;
+        // Bridge traffic must not replace the paused core's pending read data.
+        if (!cpu_is_6809 || (!cpu6809_halted && !io_ctl_bus_reserve))
+            soft_cpu_data_q <= read_data_q;
     end
 
     superpet_mc6809 mc6809 (
@@ -454,6 +460,7 @@ module main (
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
         .phys_cpu_active_i(phys_cpu_active),
+        .cpu_halt_pending_i(cpu_is_6809 && !reg_cpu_ready && !cpu_reset_i && !cpu6809_halted),
 
         // CPU control register
         .cpu_ready_o(reg_cpu_ready),
@@ -707,6 +714,7 @@ module main (
     //
     // The bridge uses the CPU's bus slot. Firmware must clear the register
     // file's CPU_READY bit (reg_cpu_ready) before requesting I/O access.
+    // A 6809 finishes its current E/Q cycle before the bridge reserves the bus.
     //
     logic [    DATA_WIDTH-1:0] io_ctl_wb_din;
     logic                      io_ctl_wb_stall;
@@ -734,6 +742,7 @@ module main (
         .wbp_sel_i(io_wb_sel),
 
         .cpu_ready_i(reg_cpu_ready),
+        .cpu_halted_i(!cpu_is_6809 || cpu_reset_i || cpu6809_halted),
         .cpu_slot_be_i(timing_cpu_be),
         .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),

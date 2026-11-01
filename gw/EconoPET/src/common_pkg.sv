@@ -101,6 +101,7 @@ package common_pkg;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_KEYBOARD_MASK = 1 << REG_STATUS_KEYBOARD_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_BP_HALT_MASK = 1 << REG_STATUS_BP_HALT_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_PHYS_CPU_MASK = 1 << REG_STATUS_PHYS_CPU_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_STATUS_CPU_HALT_PENDING_MASK = 8'h20;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_READY_MASK = 1 << REG_CPU_READY_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_RESET_MASK = 1 << REG_CPU_RESET_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_NMI_MASK = 1 << REG_CPU_NMI_BIT;

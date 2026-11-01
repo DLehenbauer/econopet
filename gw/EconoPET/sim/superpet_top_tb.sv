@@ -45,6 +45,23 @@ module superpet_top_tb;
     logic cpu_clock;
     logic cpu_ready;
 
+    int e_high_cycles = 0;
+    int q_high_cycles = 0;
+
+    // Pause and resume may remove cycles, but must never shorten an E or Q pulse.
+    always @(negedge sys_clock) begin
+        if (top.main.cpu6809_e) e_high_cycles++;
+        else if (e_high_cycles != 0) begin
+            `assert_equal(e_high_cycles, (top.main.timing.CPU_PHI_END - top.main.timing.CPU_PHI_START))
+            e_high_cycles = 0;
+        end
+        if (top.main.cpu6809_q) q_high_cycles++;
+        else if (q_high_cycles != 0) begin
+            `assert_equal(q_high_cycles, (top.main.timing.CPU_WR_END - top.main.timing.CPU_ADDR_STROBE))
+            q_high_cycles = 0;
+        end
+    end
+
     logic [CPU_ADDR_WIDTH-1:0] top_addr;
     logic [CPU_ADDR_WIDTH-1:0] top_addr_oe;
     logic [DATA_WIDTH-1:0] top_data;
@@ -205,6 +222,110 @@ module superpet_top_tb;
         spi1_driver.write_at(addr_i, data_i);
     endtask
 
+    // Finish the admitted cycle, preserve all registers, and resume at every slot phase.
+    task static halt_resume_test;
+        logic [111:0] saved_registers;
+        logic [CPU_ADDR_WIDTH-1:0] saved_addr;
+        logic [DATA_WIDTH-1:0] saved_data;
+        logic [DATA_WIDTH-1:0] result;
+        logic [DATA_WIDTH-1:0] saved_counter;
+        int wait_cycles;
+
+        // Run INCA / STA $0200 / BRA back, with a nonzero initial accumulator.
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00300), 8'h86);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'h42);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00302), 8'h4c);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00303), 8'hb7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00304), 8'h02);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00305), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00306), 8'h20);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00307), 8'hfa);
+        spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+        repeat (32) @(negedge cpu_clock);
+
+        for (int phase = 0; phase < 64; phase++) begin
+            // Directly vary the READY transition phase (SPI normally lands in its slot).
+            @(negedge sys_clock);
+            while (top.main.timing.cycle_count != 6'(phase)) @(negedge sys_clock);
+            top.main.register_file.register[REG_CPU] = 8'h00;
+            #1;
+            `assert_equal(top.main.register_file.cpu_halt_pending_i, !top.main.cpu6809_halted)
+            wait_cycles = 0;
+            while (!top.main.cpu6809_halted && wait_cycles < 128) begin
+                @(negedge sys_clock);
+                wait_cycles++;
+            end
+            `assert_equal(top.main.cpu6809_halted, 1'b1)
+            `assert_equal(cpu_reset_n, 1'b1)
+            saved_registers = top.main.mc6809_regdata;
+            saved_addr = top.main.mc6809_addr;
+            saved_data = top.main.soft_cpu_data_q;
+            saved_counter = mock_sram.mem[17'h00200];
+            repeat (128) begin
+                @(negedge sys_clock);
+                `assert_equal(top.main.cpu6809_e, 1'b0)
+                `assert_equal(top.main.cpu6809_q, 1'b0)
+                `assert_equal(top.main.active_be, 1'b0)
+                `assert_equal(top.main.cpu6809_wr_en, 1'b0)
+                `assert_exact_equal(top.main.mc6809_regdata, saved_registers)
+                `assert_equal(mock_sram.mem[17'h00200], saved_counter)
+            end
+
+            // Memory and physical PIA/VIA access must not alter the paused CPU.
+            spi_write_at(common_pkg::wb_ram_addr(17'h00201), 8'(phase));
+            spi_write_at(common_pkg::wb_io_addr(7'h10), 8'h09);
+            spi_read_at(common_pkg::wb_io_addr(7'h12), result);
+            `assert_equal(result, 8'h10)
+            `assert_exact_equal(top.main.mc6809_regdata, saved_registers)
+            `assert_equal(top.main.mc6809_addr, saved_addr)
+            `assert_exact_equal(top.main.soft_cpu_data_q, saved_data)
+            `assert_equal(mock_sram.mem[17'h00200], saved_counter)
+            spi_read_at(WB_STATUS_ADDR, result);
+            `assert_equal((result & REG_STATUS_CPU_HALT_PENDING_MASK), 8'h00)
+
+            // READY resumes the loop rather than restarting it at the reset vector.
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            repeat (32) @(negedge cpu_clock);
+            `assert_equal(cpu_reset_n, 1'b1)
+            `assert_compare(mock_sram.mem[17'h00200], !=, saved_counter)
+        end
+
+        // SYNC and CWAI must pause even though nHALT waits for instruction fetch.
+        for (int wait_instruction = 0; wait_instruction < 2; wait_instruction++) begin
+            spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00300), 8'h10);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'hce);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00302), 8'h08);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00303), 8'h00);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00304), wait_instruction == 0 ? 8'h13 : 8'h3c);
+            spi_write_at(common_pkg::wb_ram_addr(17'h00305), 8'hff);
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            // Observe the actual wait state, not a fixed instruction budget.
+            wait_cycles = 0;
+            while (top.main.mc6809.core.CpuState !=
+                   (wait_instruction == 0 ? top.main.mc6809.core.CPUSTATE_SYNC :
+                                            top.main.mc6809.core.CPUSTATE_CWAI_POST)
+                   && wait_cycles < 128 * 64) begin
+                @(negedge sys_clock);
+                wait_cycles++;
+            end
+            `assert_equal(top.main.mc6809.core.CpuState,
+                (wait_instruction == 0 ? top.main.mc6809.core.CPUSTATE_SYNC :
+                                         top.main.mc6809.core.CPUSTATE_CWAI_POST))
+            top.main.register_file.register[REG_CPU] = 8'h00;
+            repeat (128) @(negedge sys_clock);
+            `assert_equal(top.main.cpu6809_halted, 1'b1)
+            saved_registers = top.main.mc6809_regdata;
+            spi_write_at(common_pkg::wb_io_addr(7'h40), 8'ha5);
+            `assert_exact_equal(top.main.mc6809_regdata, saved_registers)
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            repeat (16) @(negedge cpu_clock);
+            `assert_equal(top.main.cpu6809_halted, 1'b0)
+        end
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -241,7 +362,7 @@ module superpet_top_tb;
         // this is cleared -- overriding manual_reset_n entirely. Must clear
         // it via SPI, same as top_tb.sv's own cpu reset sequencing.
         $display("[%t]   Releasing reset via REG_CPU", $time);
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         // Budget generously for reset sync + 3 instructions.
         $display("[%t]   Waiting for program to execute", $time);
@@ -255,6 +376,7 @@ module superpet_top_tb;
         spi_read_at(common_pkg::wb_ram_addr(17'h00200), dout);
         $display("[%t]   RAM[$0200] (SPI read) = $%02x (expect $42)", $time, dout);
         `assert_equal(dout, 8'h42);
+        halt_resume_test;
 
         // --- Phase 2: SuperPET $9000-$9FFF bank switching ---
         // Reproduces TEST.BANKS' first failing case. The program does not
@@ -314,7 +436,7 @@ module superpet_top_tb;
         $display("[%t]   Re-asserting and releasing reset for phase 2", $time);
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
         #20000;
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         #800000;
 
@@ -393,7 +515,7 @@ module superpet_top_tb;
         $display("[%t]   Re-asserting and releasing reset for phase 3", $time);
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0010);
         #20000;
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         #800000;
 

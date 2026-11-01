@@ -1669,7 +1669,7 @@ Startup does not imply program completion.
 
 6502 reset vectors use little-endian bytes at $FFFC, while 6809 vectors use
 big-endian bytes at $FFFE. Reset hold is 1,280 system cycles. Release sets READY
-for both physical and soft 6502, clears it for soft 6809, and verifies resolved reset.
+for every CPU and verifies resolved reset.
 External reset cannot be overridden. Selection requires quiescent reset, and
 stale bound views cannot release another core or overwrite its vector.
 Direct vector installation also requires an idle, unowned SPI bus. It drains
@@ -1681,6 +1681,19 @@ clocks or memory changes.
 Physical-6502 startup requires explicit fixture vector/memory setup, and its
 fetch history is unsupported. `write_control_raw(byte)` is the escape hatch
 for deliberately unusual control sequences.
+
+Clearing `REG_CPU`'s READY bit pauses the soft 6809 after its admitted bus
+cycle and hold interval finish. Registered E/Q clocks remain low and CPU bus
+strobes are suppressed, without asserting reset or discarding CPU state.
+Setting READY resumes at the next complete CPU slot. Reset keeps E/Q running
+because the core samples reset on falling E.
+
+`REG_STATUS` bit 5 (`ECONOPET_REG_STATUS_CPU_HALT_PENDING_MASK`) is set while
+a selected, non-reset 6809 is finishing its halt. Firmware
+[`set_cpu()`](../../fw/src/driver.c) waits for this bit to clear before returning
+from a READY-clear write. Raw SPI users must perform the same check before
+changing CPU memory. The physical I/O bridge independently waits for the halt
+before reserving a CPU bus slot.
 
 ```cpp
 auto cpu = board.cpu(CPU_SOFT_6502);
