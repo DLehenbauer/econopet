@@ -2,6 +2,26 @@
 
 This document summarizes how the `cbm-edit-rom` project implements colour handling (palette, storage, and usage) for PET/CBM systems, with pointers to the relevant source files in `rom/external/cbm-edit-rom`.
 
+## Building the Editor ROMs
+
+The editor submodule is pinned to commit
+`0d76581a46bfd5019d94dc0ba49ac222019ad40e` on
+`DLehenbauer/cbm-edit-rom`'s `init-colors-fix` branch
+([sjgray/cbm-edit-rom#20](https://github.com/sjgray/cbm-edit-rom/pull/20)).
+This initializes the editor before setting the ColourPET defaults, preventing
+the editor's zero-page clear from resetting foreground and background to black.
+
+CMake generates separate configurations from the upstream ColourPET config
+because this branch's unconditional assignments do not accept ACME `-D`
+overrides. This preserves graphics and business keyboard selection without
+modifying the submodule's source.
+
+Run `cmake --preset default`, then `cmake --build --preset rom`.
+The outputs are `build/rom/bin/colourpet-n40.bin` (graphics keyboard) and
+`build/rom/bin/colourpet-b40.bin` (business keyboard), both 40-column RGBI ROMs
+with the upper/graphics font selected at startup. SD card packaging includes
+these binaries under `roms/`.
+
 ## Modes and Formats
 - **Digital mode (RGBI, 16 colours):**
   - One byte per screen cell in colour RAM.
