@@ -749,6 +749,14 @@ static uint8_t open_name(dos_unit_t* const unit, dos_media_bank_t* const bank, c
     return dos_find_channel(unit, secondary);
 }
 
+// Opens a native request whose fixed-width filename may contain NUL bytes.
+static uint8_t open_bytes(dos_unit_t* const unit, dos_media_bank_t* const bank, const uint8_t secondary,
+                          const uint8_t* const name, const unsigned int length) {
+    dos_open(unit, bank, 0, secondary, name, length);
+    finish_open(unit, bank);
+    return dos_find_channel(unit, secondary);
+}
+
 // Writes deterministic bytes through ordinary LISTEN, rather than the name buffer.
 static void put_bytes(dos_unit_t* const unit, dos_media_bank_t* const bank, const uint8_t secondary,
                       const unsigned int first, const unsigned int count) {
@@ -1371,6 +1379,127 @@ START_TEST(test_directory_type_filters_patterns_and_raw_chain) {
         ck_assert_mem_eq(bytes + index * DISKIMAGE_SECTOR_PAYLOAD_SIZE,
                          sector_bytes(&image, type, track, sector) + DISKIMAGE_SECTOR_LINK_SIZE,
                          DISKIMAGE_SECTOR_PAYLOAD_SIZE);
+    }
+    free(image.bytes);
+}
+END_TEST
+
+// Exercise the directory reservation and EOI path for the native REL type filter.
+START_TEST(test_filtered_directory_rel_type_stays_a_directory) {
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, (unsigned int)_i);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    uint8_t bytes[2u * DISKIMAGE_SECTOR_PAYLOAD_SIZE];
+    uint8_t channel = open_name(&unit, &bank, 0, "$0:*=L");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_gt(unit.directory_internal, 0);
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), 64);
+    ck_assert(dos_close(&unit, &bank, model, 0));
+    ck_assert_uint_eq(unit.directory_internal, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+
+    channel = open_name(&unit, &bank, 0, "$0:*=L");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, bytes, sizeof(bytes)), 64);
+    ck_assert(dos_close(&unit, &bank, model, 0));
+    ck_assert_uint_eq(unit.directory_internal, 0);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+static const struct {
+    const char* filename;
+    size_t filename_length;
+    const char* pattern;
+    bool matches;
+} native_open_wildcard_cases[] = {
+    {"BASIC", 5, "?ASIC", true},
+    {"BASIC", 5, "BASI?", true},
+    {"BASIC", 5, "BA?IC", true},
+    {"BASIC", 5, "B?S?C", true},
+    {"BASIC", 5, "?????", true},
+    {"BASIC", 5, "?*", true},
+    {"BASIC", 5, "B?S*", true},
+    {"BASIC", 5, "?????*", true},
+    {"BASIC", 5, "BASIC*?", true},
+    {"BASIC", 5, "BASIC", true},
+    {"BASIC", 5, "BAS*", true},
+    {"BASIC", 5, "BASIC?", false},
+    {"BASIC", 5, "BASI??", false},
+    {"BASIC", 5, "BA?IX", false},
+    {"BASIC", 5, "B?SI", false},
+    {"BASIC", 5, "BASIC?*", false},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNO?", true},
+    {"ABCDEFGHIJKLMNOP", 16, "????????????????", true},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMN?", false},
+    {"A\xa4"
+     "B",
+     3, "A?B", true},
+    {"A", 1, "?", true},
+    {"A", 1, "??", false},
+    {"BASIC", 5, "?", false},
+    {"BASIC", 5, "*", true},
+    {"BASIC", 5, "B*X", true},
+    {"BASIC", 5, "X*", false},
+    {"ABCDEFGHIJKLMNOP", 16, "?????????????????", true},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNOPX", true},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNO?X", true},
+    {"ABCDEFGHIJKLMNOP", 16, "ABCDEFGHIJKLMNOX?", false},
+    {"ABCDEFGHIJKLMNO", 15, "?????????????????", false},
+    {"ABCDEFGHIJKLMNO\0", 16, "?????????????????", true},
+    {"BaSIC", 5, "BAS?C", false},
+    {"BaSIC", 5, "BaS?C", true},
+    {"BaSIC", 5, "B?SIC", true},
+    {"BASIC", 5, "bAS?C", false},
+    {"A\0B", 3, "A?B", true},
+    {"A\0B", 3, "A", false},
+    {"A\0B", 3, "A?", false},
+    {"\0AB", 3, "?AB", true},
+    {"ABCDEFGHIJKLMNO\0", 16, "????????????????", true},
+};
+
+// Verify native OPEN selection, file bytes, EOI and exact misses for wildcard boundaries.
+START_TEST(test_open_native_wildcard_boundaries) {
+    const unsigned int format = (unsigned int)_i / count_of(native_open_wildcard_cases);
+    const size_t index = (size_t)_i % count_of(native_open_wildcard_cases);
+    const diskimage_type_t type = format == 0 ? diskimage_type_d64 : diskimage_type_d80;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    const uint8_t writer = open_name(&unit, &bank, 2, "0:FIXTURE,S,W");
+    ck_assert_uint_ne(writer, DOS_UNUSED);
+    put_bytes(&unit, &bank, 2, 'W', 4);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+
+    const uint8_t directory_track = format == 0 ? 18 : 39;
+    uint8_t* const entry = sector_bytes(&image, type, directory_track, 1);
+    memset(entry + 5, DISKIMAGE_FILENAME_PADDING, DISKIMAGE_FILENAME_SIZE);
+    memcpy(entry + 5, native_open_wildcard_cases[index].filename, native_open_wildcard_cases[index].filename_length);
+    uint8_t name[2u + DISKIMAGE_FILENAME_SIZE + 1u + 4u];
+    name[0] = '0';
+    name[1] = ':';
+    const unsigned int pattern_length = (unsigned int)strlen(native_open_wildcard_cases[index].pattern);
+    memcpy(name + 2, native_open_wildcard_cases[index].pattern, pattern_length);
+    name[2u + pattern_length] = ',';
+    name[3u + pattern_length] = 'S';
+    name[4u + pattern_length] = ',';
+    name[5u + pattern_length] = 'R';
+    const uint8_t channel = open_bytes(&unit, &bank, IEEE_LOAD_CHANNEL, name, 2u + pattern_length + 4u);
+    if (native_open_wildcard_cases[index].matches) {
+        ck_assert_msg(channel != DOS_UNUSED, "format %u pattern '%s' status %u", format,
+                      native_open_wildcard_cases[index].pattern, unit.status_code);
+        expect_bytes(&unit, &bank, channel, 4, 'W');
+        ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    } else {
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_int_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
     }
     free(image.bytes);
 }
@@ -6688,6 +6817,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_read_only_create_and_append_leave_media_unchanged, 0, 3);
     tcase_add_loop_test(core, test_save_override_last_program_and_status_retention, 0, 3);
     tcase_add_loop_test(core, test_directory_type_filters_patterns_and_raw_chain, 0, 3);
+    tcase_add_loop_test(core, test_filtered_directory_rel_type_stays_a_directory, 0, 3);
+    tcase_add_loop_test(core, test_open_native_wildcard_boundaries, 0, 2 * count_of(native_open_wildcard_cases));
     tcase_add_loop_test(core, test_dual_drive_writers_and_directory_selection, 0, 3);
     tcase_add_loop_test(core, test_allocation_bam_write_failure_preserves_peer_and_retries, 1, 3);
     tcase_add_loop_test(core, test_bam_count_mismatch_is_not_persisted_as_success, 0, 3);

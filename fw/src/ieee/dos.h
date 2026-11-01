@@ -159,7 +159,11 @@ typedef struct {
             uint8_t rel_root_sector;
         };
     };
-    uint8_t rel_model;
+    // REL readers and filtered directory listings use mutually exclusive state.
+    union {
+        uint8_t rel_model;
+        uint8_t directory_file_type;
+    };
     uint8_t directory_track;
     uint8_t directory_sector;
     uint8_t directory_entry;

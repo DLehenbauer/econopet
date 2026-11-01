@@ -272,9 +272,11 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
         lookup->phase = DOS_REL_LOOKUP_GROUP;
         return lookup->track == 0 ? missing(lookup) : lookup->result;
     }
-    // Native header equality precedes the six-side bound. Once a selected
-    // side is read, SSTEST consumes its pointer without another header check.
-    if (lookup->phase != DOS_REL_LOOKUP_SIDE && scratch[DOS_REL_SIDE_NUMBER_OFFSET] != lookup->address.side) {
+    // Native header equality precedes the six-side bound. SSPOS repeats
+    // SSTEST after reading a selected page, so a mismatched page uses its
+    // resident side-table entry before accepting the requested data pointer.
+    const bool header_matches = scratch[DOS_REL_SIDE_NUMBER_OFFSET] == lookup->address.side;
+    if (lookup->phase != DOS_REL_LOOKUP_SIDE && !header_matches) {
         if (lookup->address.side >= DOS_REL_SIDE_COUNT) {
             return missing(lookup);
         }
@@ -284,10 +286,17 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
         lookup->phase = DOS_REL_LOOKUP_SIDE;
         return lookup->track == 0 ? missing(lookup) : lookup->result;
     }
+    const bool malformed_side = lookup->phase == DOS_REL_LOOKUP_SIDE && !header_matches;
+    if (malformed_side) {
+        const uint8_t side_track = scratch[DOS_REL_SIDE_TABLE_OFFSET + 2u * lookup->address.side];
+        if (side_track == 0) {
+            return missing(lookup);
+        }
+    }
     // SSTEST tests the track byte at SSIND. The sector may legitimately be zero.
     lookup->track = scratch[lookup->address.index];
     lookup->sector = scratch[lookup->address.index + 1u];
-    if (lookup->track == 0) {
+    if (lookup->track == 0 && !malformed_side) {
         return missing(lookup);
     }
     lookup->result = DOS_REL_LOOKUP_FOUND;

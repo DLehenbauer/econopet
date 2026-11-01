@@ -6331,16 +6331,16 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
         if (cursor < length) {
             switch (input[cursor]) {
             case 'P':
-                channel->file_type = DISKIMAGE_FTYPE_PRG;
+                channel->directory_file_type = DISKIMAGE_FTYPE_PRG;
                 break;
             case 'S':
-                channel->file_type = DISKIMAGE_FTYPE_SEQ;
+                channel->directory_file_type = DISKIMAGE_FTYPE_SEQ;
                 break;
             case 'U':
-                channel->file_type = DISKIMAGE_FTYPE_USR;
+                channel->directory_file_type = DISKIMAGE_FTYPE_USR;
                 break;
             case 'L':
-                channel->file_type = DISKIMAGE_FTYPE_REL;
+                channel->directory_file_type = DISKIMAGE_FTYPE_REL;
                 break;
             default:
                 break;
@@ -8506,7 +8506,8 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
                             pattern[DISKIMAGE_FILENAME_SIZE] == channel->media.slot) &&
                            name_matches(pattern, entry + DOS_DIRECTORY_NAME_OFFSET);
             }
-            if (type != DISKIMAGE_FTYPE_DEL && (channel->file_type == 0 || type == channel->file_type) && matches) {
+            if (type != DISKIMAGE_FTYPE_DEL &&
+                (channel->directory_file_type == 0 || type == channel->directory_file_type) && matches) {
                 directory_name(entry, name);
                 number = entry[DOS_DIRECTORY_BLOCKS_LOW] | ((uint16_t)entry[DOS_DIRECTORY_BLOCKS_HIGH] << 8u);
                 found = true;

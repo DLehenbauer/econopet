@@ -216,6 +216,43 @@ START_TEST(test_lookup_missing_ranges) {
 }
 END_TEST
 
+// Repeat native SSTEST against the selected side page's table after a bad header.
+START_TEST(test_lookup_retests_malformed_side_header) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool side_present = (unsigned int)_i % 2u;
+    rel_image_t image = {0};
+    dos_media_bank_t bank = {0};
+    const dos_media_ref_t reference = mount_index(&bank, &image, format, 0, 0);
+    const dos_rel_address_t address = dos_rel_address(models[format], 241, 127, 1);
+    image.bytes[0][2] = 0;
+    image.bytes[0][6] = 1;
+    image.bytes[0][7] = 1;
+    image.bytes[1][2] = 0;
+    image.bytes[1][6] = side_present ? 1 : 0;
+    image.bytes[1][7] = 0;
+    image.bytes[1][address.index] = side_present ? 0 : 35;
+    image.bytes[1][address.index + 1u] = 3;
+    image.bytes[2][3u + address.group * 2u] = 1;
+    image.bytes[2][4u + address.group * 2u] = 0;
+
+    dos_rel_lookup_t lookup;
+    dos_rel_lookup_start(&lookup, models[format], reference, 1, format == 2 ? 2 : 0, address);
+    uint8_t scratch[DISKIMAGE_SECTOR_SIZE];
+    for (unsigned int step = 0; step < (format == 2 ? 3u : 2u); ++step) {
+        const unsigned int reads = image.reads;
+        dos_rel_lookup_step(&lookup, &bank, scratch);
+        ck_assert_uint_eq(image.reads, reads + 1u);
+    }
+    ck_assert_int_eq(lookup.result, side_present ? DOS_REL_LOOKUP_FOUND : DOS_REL_LOOKUP_MISSING);
+    ck_assert_int_eq(lookup.media_result, DOS_MEDIA_OK);
+    ck_assert_uint_eq(lookup.track, 0);
+    ck_assert_uint_eq(lookup.sector, side_present ? 3 : 0);
+    const unsigned int reads = image.reads;
+    ck_assert_int_eq(dos_rel_lookup_step(&lookup, &bank, scratch), lookup.result);
+    ck_assert_uint_eq(image.reads, reads);
+}
+END_TEST
+
 // Every index read rejects partial storage data and stale media before publication.
 START_TEST(test_lookup_failure_and_replacement) {
     const unsigned int format = (unsigned int)_i / 6u;
@@ -5718,6 +5755,7 @@ Suite* dos_rel_suite(void) {
     tcase_add_loop_test(core, test_lookup_uses_side_tables_and_super_groups, 0, 12);
     tcase_add_loop_test(core, test_lookup_native_wrapped_indices_and_last_group, 0, 6);
     tcase_add_loop_test(core, test_lookup_missing_ranges, 0, 12);
+    tcase_add_loop_test(core, test_lookup_retests_malformed_side_header, 0, 6);
     tcase_add_loop_test(core, test_lookup_failure_and_replacement, 0, 18);
     tcase_add_loop_test(core, test_lookup_geometry_errors, 0, 6);
     tcase_add_loop_test(core, test_lookup_cancel_restart_and_peer_isolation, 0, 3);
