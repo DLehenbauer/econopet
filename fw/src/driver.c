@@ -531,7 +531,11 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
 
 // Translates the PET's physical PIA/VIA range into its MCU Wishbone window.
 static uint32_t pet_io_addr(const uint16_t addr) {
-    vet(addr >= 0xE810 && addr <= 0xE87F,
+    // Restrict access to $E810-$E84F, excluding the unmapped $E800-$E80F
+    // hole (which the bridge acknowledges with $FF) and upper VIA mirrors.
+    // Reading $E87F would also prefetch Wishbone address 0x78080, outside
+    // the bridge window, and stall waiting for an acknowledgement.
+    vet(addr >= 0xE810 && addr <= 0xE84F,
         "PET I/O address out of range: $%04X", addr);
 
     return ECONOPET_WB_IO_BASE_ADDR | (addr & 0x7f);
@@ -540,7 +544,7 @@ static uint32_t pet_io_addr(const uint16_t addr) {
 /**
  * Reads a physical PET I/O register through the FPGA.
  *
- * The PET address must be in the PIA/VIA range $E810-$E87F. The CPU must
+ * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
  * already be halted so it cannot access the I/O bus concurrently. The PET
  * address is translated to the FPGA I/O window before the SPI read.
  *
@@ -558,7 +562,7 @@ uint8_t pet_io_read(const uint16_t addr) {
 /**
  * Writes a physical PET I/O register through the FPGA.
  *
- * The PET address must be in the PIA/VIA range $E810-$E87F. The CPU must
+ * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
  * already be halted so it cannot access the I/O bus concurrently. The PET
  * address is translated to the FPGA I/O window before the SPI write.
  *
