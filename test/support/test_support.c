@@ -22,10 +22,16 @@ typedef struct mem_file_s {
     size_t size;
     size_t capacity;
     bool writable;
+    bool fail_writes;
+    struct mem_file_s* owner;
     struct mem_file_s* next;
 } mem_file_t;
 
 static mem_file_t* mem_files = NULL;
+static size_t open_cookie_count;
+
+// Reports live stdio borrowers independently of registered backing ownership.
+size_t test_open_file_count(void) { return open_cookie_count; }
 
 // Finds a registered file without accessing the host filesystem.
 static mem_file_t* find_mem_file(const char* path) {
@@ -38,9 +44,7 @@ static mem_file_t* find_mem_file(const char* path) {
 }
 
 // Share duplicate detection with fixture owners before they claim a path.
-bool test_file_registered(const char* path) {
-    return find_mem_file(path) != NULL;
-}
+bool test_file_registered(const char* path) { return find_mem_file(path) != NULL; }
 
 // Registers a read-only text fixture using the binary backing store.
 void test_register_file(const char* path, const char* content) {
@@ -48,8 +52,7 @@ void test_register_file(const char* path, const char* content) {
 }
 
 // Copies fixture bytes into a uniquely named, optionally writable backing store.
-void test_register_binary_file(const char* path, const void* data, size_t size,
-                               bool writable) {
+void test_register_binary_file(const char* path, const void* data, size_t size, bool writable) {
     // Check fixture identity before allocating its metadata and content.
     assert(path[0] == '/');
     vet_path_length(strlen(path));
@@ -62,12 +65,21 @@ void test_register_binary_file(const char* path, const void* data, size_t size,
     file->size = size;
     file->capacity = size;
     file->writable = writable;
+    file->fail_writes = false;
+    file->owner = file;
     file->content = malloc(file->capacity);
     memcpy(file->content, data, file->size);
 
     // Publish the fully initialized fixture to subsequent open calls.
     file->next = mem_files;
     mem_files = file;
+}
+
+// Share fault state with already-open cookies without changing their offsets.
+void test_fail_file_writes(const char* path, bool fail) {
+    mem_file_t* file = find_mem_file(path);
+    assert(file != NULL);
+    file->fail_writes = fail;
 }
 
 // Unlinks and frees a registered fixture once its handles are closed.
@@ -117,40 +129,47 @@ FILE* sd_open(const char* path, const char* mode) {
 // Reads a cookie-backed fixture and advances its per-handle offset.
 static ssize_t test_file_read(void* cookie, char* buffer, size_t size) {
     mem_file_t* file = cookie;
-    size_t* pos = (size_t*) (file + 1);
+    size_t* pos = (size_t*)(file + 1);
     size_t remaining = file->size - *pos;
-    if (size > remaining) size = remaining;
+    if (size > remaining)
+        size = remaining;
     memcpy(buffer, file->content + *pos, size);
     *pos += size;
-    return (ssize_t) size;
+    return (ssize_t)size;
 }
 
 // Writes within the registered capacity of a mutable fixture.
 static ssize_t test_file_write(void* cookie, const char* buffer, size_t size) {
     mem_file_t* file = cookie;
-    size_t* pos = (size_t*) (file + 1);
-    if (!file->writable || *pos > file->capacity || size > file->capacity - *pos) return -1;
+    size_t* pos = (size_t*)(file + 1);
+    if (!file->writable || file->owner->fail_writes || *pos > file->capacity || size > file->capacity - *pos)
+        return -1;
     memcpy(file->content + *pos, buffer, size);
     *pos += size;
-    if (*pos > file->size) file->size = *pos;
-    return (ssize_t) size;
+    if (*pos > file->size)
+        file->size = *pos;
+    return (ssize_t)size;
 }
 
 // Resolves stdio seeks within a registered fixture.
 static int test_file_seek(void* cookie, off64_t* offset, int whence) {
     mem_file_t* file = cookie;
-    size_t* pos = (size_t*) (file + 1);
+    size_t* pos = (size_t*)(file + 1);
     int64_t target = *offset;
-    if (whence == SEEK_CUR) target += (int64_t) *pos;
-    if (whence == SEEK_END) target += (int64_t) file->size;
-    if (target < 0 || (uint64_t) target > file->size) return -1;
-    *pos = (size_t) target;
+    if (whence == SEEK_CUR)
+        target += (int64_t)*pos;
+    if (whence == SEEK_END)
+        target += (int64_t)file->size;
+    if (target < 0 || (uint64_t)target > file->size)
+        return -1;
+    *pos = (size_t)target;
     *offset = target;
     return 0;
 }
 
 // Releases the handle without removing its registered backing file.
 static int test_file_close(void* cookie) {
+    --open_cookie_count;
     free(cookie);
     return 0;
 }
@@ -161,13 +180,15 @@ extern FILE* __real_fopen(const char* path, const char* mode);
 FILE* __wrap_fopen(const char* path, const char* mode) {
     // Delegate host paths and reject updates to read-only fixtures.
     mem_file_t* file = find_mem_file(path);
-    if (file == NULL) return __real_fopen(path, mode);
-    if (strchr(mode, '+') != NULL && !file->writable) return NULL;
+    if (file == NULL)
+        return __real_fopen(path, mode);
+    if (strchr(mode, '+') != NULL && !file->writable)
+        return NULL;
 
     // Give each handle its own metadata snapshot and cursor.
     mem_file_t* cookie = malloc(sizeof(*cookie) + sizeof(size_t));
     *cookie = *file;
-    *(size_t*) (cookie + 1) = 0;
+    *(size_t*)(cookie + 1) = 0;
     // Bind stdio operations to the registered backing bytes.
     cookie_io_functions_t io = {
         .read = test_file_read,
@@ -175,26 +196,27 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
         .seek = test_file_seek,
         .close = test_file_close,
     };
-    return fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
+    FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
+    if (stream != NULL) {
+        ++open_cookie_count;
+    } else {
+        free(cookie);
+    }
+    return stream;
 }
 
 // Returns monotonic host time in the microsecond units expected by Pico code.
 uint64_t time_us_64(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * MICROSECONDS_PER_SECOND
-        + (uint64_t)ts.tv_nsec / NANOSECONDS_PER_MICROSECOND;
+    return (uint64_t)ts.tv_sec * MICROSECONDS_PER_SECOND + (uint64_t)ts.tv_nsec / NANOSECONDS_PER_MICROSECOND;
 }
 
 // Returns the Pico-compatible representation of host monotonic time.
-absolute_time_t get_absolute_time(void) {
-    return time_us_64();
-}
+absolute_time_t get_absolute_time(void) { return time_us_64(); }
 
 // Converts a host microsecond timestamp to Pico-compatible milliseconds.
-uint32_t to_ms_since_boot(absolute_time_t time) {
-    return (uint32_t) (time / MICROSECONDS_PER_MILLISECOND);
-}
+uint32_t to_ms_since_boot(absolute_time_t time) { return (uint32_t)(time / MICROSECONDS_PER_MILLISECOND); }
 
 // Provides the firmware allocator with a Debug-only host allocation check.
 void* vetted_malloc(size_t size) {

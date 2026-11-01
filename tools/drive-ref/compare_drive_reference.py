@@ -69,6 +69,22 @@ def ordinary_file_prefix(actions):
     return actions[:last + 3]
 
 
+def secondary_image(reference, original):
+    """Verify an optional captured slot-1 input and final image before replay."""
+    secondary = original["media"].get("secondary")
+    if secondary is None:
+        return None
+    if secondary["slot"] != 1:
+        raise ValueError("only captured slot-1 secondary images are supported")
+    for key in ("initial", "final"):
+        if Path(secondary[key]).name != secondary[key]:
+            raise ValueError("secondary image name must stay inside the reference directory")
+        path = reference / secondary[key]
+        if sha256(path) != secondary[key + "_sha256"] or path.stat().st_size != secondary["size"]:
+            raise ValueError("reference secondary image identity changed")
+    return reference / secondary["initial"]
+
+
 def main():
     """Verify identical inputs, run a bounded replay, and classify gaps without masking them."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -80,7 +96,7 @@ def main():
     selection.add_argument("--read-only", action="store_true",
                            help="compare the exact prefix before the first write transaction")
     selection.add_argument("--ordinary-files", action="store_true",
-                           help="include write/close/readback, excluding the later UJ command")
+                           help="include write/close/readback, excluding the M4 UJ command")
     args = parser.parse_args()
     reference = args.reference_dir.resolve()
     original = json.loads((reference / "result.json").read_text(encoding="ascii"))
@@ -113,6 +129,9 @@ def main():
                                  encoding="ascii")
     tool = args.replay_tool.resolve()
     command = [str(tool), str(initial), str(replay_script), str(output / "candidate")]
+    source = secondary_image(reference, original)
+    if source is not None:
+        command.append(str(source))
     with (output / "replay.log").open("w", encoding="ascii") as log:
         execution = subprocess.run(
             command,
@@ -152,8 +171,22 @@ def main():
         unexplained.append({"case": "read-only", "field": "unexpected media mutation"})
     if not failure_case and not differences and sha256(final) != expected_media:
         unexplained.append({"case": "write", "field": "media differs despite matching transactions"})
+    secondary_media = None
+    if source is not None:
+        secondary = original["media"]["secondary"]
+        source_final = candidate / ("source-final." + extension)
+        source_expected = secondary["initial_sha256" if args.read_only else "final_sha256"]
+        secondary_media = {
+            "reference_sha256": source_expected, "candidate_sha256": sha256(source_final),
+            "equal": sha256(source_final) == source_expected,
+            "size": source_final.stat().st_size,
+        }
+        if sha256(source) != secondary["initial_sha256"] or source_final.stat().st_size != secondary["size"]:
+            raise ValueError("replay changed secondary input identity or geometry")
+        if not secondary_media["equal"]:
+            unexplained.append({"case": "secondary-media", "field": "secondary persisted image differs"})
     report = {
-        "schema": 1, "model": original["model"], "engine": "production-firmware",
+        "schema": 1, "model": original["model"], "engine": "native",
         "read_only_prefix": args.read_only, "selected_replay_sha256": sha256(replay_script),
         "ordinary_files_prefix": args.ordinary_files,
         "reference_sha256": sha256(reference / "result.json"),
@@ -188,6 +221,8 @@ def main():
             "cold boot IFC is captured by the reference but is not a replayed byte transaction",
         ],
     }
+    if secondary_media is not None:
+        report["media"]["secondary"] = secondary_media
     (output / "comparison.json").write_text(json.dumps(report, indent=2) + "\n", encoding="ascii")
     print(f'{original["model"]}: {len(observed["frames"])} accepted frames, '
           f"{len(unexplained)} unexplained differences, stopped case={failure_case}")

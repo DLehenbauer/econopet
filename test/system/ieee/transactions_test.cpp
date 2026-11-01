@@ -13,10 +13,8 @@ using testing::ElementsAre;
 using testing::HasSubstr;
 
 // Reject a public arbitrary category/byte factory, including detail-namespace helpers.
-template<class Factory>
-concept UncheckedCommandFactory = requires {
-    Factory::make(CommandCategory::Listen, uint8_t{0xff});
-};
+template <class Factory>
+concept UncheckedCommandFactory = requires { Factory::make(CommandCategory::Listen, uint8_t{0xff}); };
 static_assert(!UncheckedCommandFactory<detail::CommandFactory>);
 static_assert(!std::is_aggregate_v<Command>);
 static_assert(!std::is_default_constructible_v<Command>);
@@ -38,7 +36,7 @@ static_assert(!std::is_constructible_v<fpga::IeeeControl, fpga::IeeeControlStatu
 // Readback and command masks remain distinct, and status bit 7 is never EOI.
 TEST(IeeeTransactions, RegisterFlagsPreserveTheirHardwareDomains) {
     EXPECT_EQ(pet::EoiInput, 0x40);
-    EXPECT_EQ((fpga::IeeeControlBit::Enabled | fpga::IeeeControlBit::Flush).bits(), 0x03);
+    EXPECT_EQ((fpga::IeeeControlBit::AllEmulatedUnits | fpga::IeeeControlBit::Flush).bits(), 0xf2);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::TxRoom}.bits(), 0x02);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::DataActive}.bits(), 0x04);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::RxEoi}.bits(), 0x08);
@@ -49,7 +47,8 @@ TEST(IeeeTransactions, RegisterFlagsPreserveTheirHardwareDomains) {
     EXPECT_TRUE(fpga::IeeeStatus::from_bits(0x80).contains(fpga::IeeeStatusBit::TalkStarved));
     EXPECT_FALSE(fpga::IeeeStatus::from_bits(0x80).contains(fpga::IeeeStatusBit::RxReady));
     EXPECT_EQ(fpga::IeeeControl{fpga::IeeeControlBit::StatusFlush}.bits(), 0x08);
-    EXPECT_THROW(fpga::IeeeControl::from_bits(0x10), std::invalid_argument);
+    EXPECT_EQ(fpga::IeeeControl::from_bits(0x10).bits(), 0x10);
+    EXPECT_THROW(fpga::IeeeControl::from_bits(0x01), std::invalid_argument);
     EXPECT_EQ(fpga::IeeeControlStatus{fpga::IeeeControlStatusBit::StatusActive}.bits(), 0x20);
     EXPECT_EQ(fpga::IeeeControlStatus::from_bits(0x7f).bits(), 0x7f);
     EXPECT_THROW(fpga::IeeeControlStatus::from_bits(0x80), std::invalid_argument);
@@ -110,10 +109,8 @@ TEST(IeeeTransactions, AllCheckedFactoriesPreserveCommandConstructionInvariants)
 
 // Named records compose directly with standard exact sequence matchers.
 TEST(IeeeTransactions, ExpectedRecordsComposeWithElementsAre) {
-    const std::vector<Record> records{
-        command(Listen(Device{8})), data('A'), data('B', Eoi::Last), command(Unlisten)};
-    EXPECT_THAT(records, ElementsAre(command(Listen(Device{8})), data('A'),
-        data('B', Eoi::Last), command(Unlisten)));
+    const std::vector<Record> records{command(Listen(Device{8})), data('A'), data('B', Eoi::Last), command(Unlisten)};
+    EXPECT_THAT(records, ElementsAre(command(Listen(Device{8})), data('A'), data('B', Eoi::Last), command(Unlisten)));
     EXPECT_NO_THROW(require_sequence(records, records, "captured"));
     EXPECT_NO_THROW(require_sequence({}, {}, "no records"));
     EXPECT_THROW(data(0, Eoi::Unobserved), std::invalid_argument);
@@ -132,7 +129,7 @@ TEST(IeeeTransactions, SequenceDiagnosticsIncludeByteAtnAndEoi) {
     }
     EXPECT_THAT(*sequence_mismatch({command(Unlisten)}, expected), HasSubstr("actual {missing}"));
     EXPECT_THAT(*sequence_mismatch(expected, {command(Unlisten)}),
-        HasSubstr("index=1: expected {end}, actual {byte=0x42 ATN=0 EOI=1}"));
+                HasSubstr("index=1: expected {end}, actual {byte=0x42 ATN=0 EOI=1}"));
     EXPECT_THROW(require_sequence({data('A')}, expected, "mismatch"), std::runtime_error);
     EXPECT_THAT(describe(Record{'B', false, Eoi::Unobserved}), HasSubstr("EOI=unobserved"));
     EXPECT_THAT(describe(Record{'B', false, static_cast<Eoi>(99)}), HasSubstr("EOI=invalid(99)"));

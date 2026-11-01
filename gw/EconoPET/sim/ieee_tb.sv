@@ -276,7 +276,7 @@ module ieee_tb;
                                           input bit interrupted);
         int first_event;
         int previous_boundaries;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
         ctl_send(8'h28);
         ctl_send(8'h63);
@@ -337,7 +337,7 @@ module ieee_tb;
     task automatic check_talk_event(input bit status_fifo, input bit fetched, input bit interrupted);
         logic [7:0] d;
         int first_event;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
         ctl_send(8'h4B);
         ctl_send(status_fifo ? 8'h6F : 8'h63);
@@ -389,7 +389,7 @@ module ieee_tb;
         logic eoi;
 
         mcu_drain_rx;
-        mcu_write(IEEE_REG_CTRL, 8'h03);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
         ctl_send(8'h48);
         ctl_send(status_fifo ? 8'h6F : 8'h61);
@@ -457,7 +457,7 @@ module ieee_tb;
         logic [7:0] d;
         logic eoi;
         int first_data;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_drain_rx;
         ctl_atn(1);
         ctl_send(8'h29);
@@ -521,7 +521,7 @@ module ieee_tb;
         record_length = eof_at_capacity ? dut.RX_DEPTH - LISTENER_BOUNDARIES : RECORD_LENGTH;
         $display("[%t]   peer backpressure boundary=%b eof_at_capacity=%b",
             $time, pending_boundary, eof_at_capacity);
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_drain_rx;
         ctl_atn(1);
         ctl_send(8'h29);
@@ -600,7 +600,7 @@ module ieee_tb;
         logic eoi;
         localparam logic [7:0] OWNER_CHANNEL_ONE = IEEE_TX_OWNER_VALID_MASK | 8'h01;
         $display("[%t]   data owner other_unit=%b", $time, other_unit);
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_SA, OWNER_CHANNEL_ONE);
         mcu_write(IEEE_REG_TX, "X");
         mcu_write(IEEE_REG_TX_LAST, "Y");
@@ -625,7 +625,7 @@ module ieee_tb;
         `assert_equal(eoi, 1'b0);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'd1);
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'd1);
 
@@ -656,7 +656,7 @@ module ieee_tb;
     task automatic check_owner_pause(input bit prefetch, input bit status_fifo);
         logic [7:0] d;
         logic eoi;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | (status_fifo ? 8'h0F : 8'h01));
         mcu_write(status_fifo ? IEEE_REG_TXS : IEEE_REG_TX, "X");
         mcu_write(status_fifo ? IEEE_REG_TXS_LAST : IEEE_REG_TX_LAST, "Y");
@@ -710,7 +710,7 @@ module ieee_tb;
     task automatic check_status_owner;
         logic [7:0] d;
         logic eoi;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_TX_LAST, "D");
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | 8'h0F);
         ctl_atn(1);
@@ -733,7 +733,7 @@ module ieee_tb;
         `assert_equal(eoi, 1'b1);
         mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK | IEEE_TX_OWNER_PAUSE_MASK);
         mcu_write(IEEE_REG_TXS_LAST, "X");
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_STATUS_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_STATUS_FLUSH_MASK);
         mcu_read(IEEE_REG_TXS, d);
         `assert_equal(d, 8'd1);
         `assert_equal(dut.txs_count, 0);
@@ -752,7 +752,7 @@ module ieee_tb;
     // Coincident discard cannot erase GET progress for the already-presented byte.
     task automatic check_prefetch_flush_collision;
         logic [7:0] d;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_write(IEEE_REG_TX, "X");
         mcu_write(IEEE_REG_TX_LAST, "Y");
         ctl_atn(1);
@@ -770,7 +770,7 @@ module ieee_tb;
                     && dut.snap_rs == 0 && !cpu_data[1]);
                 @(negedge sys_clock);
                 wb_addr = common_pkg::wb_ieee_addr(IEEE_REG_CTRL);
-                wb_dout = IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_DATA_FLUSH_MASK;
+                wb_dout = IEEE_CTRL_UNIT_MASK | IEEE_CTRL_DATA_FLUSH_MASK;
                 wb_we = 1;
                 wb_cycle = 1;
                 wb_strobe = 1;
@@ -795,7 +795,7 @@ module ieee_tb;
     task automatic check_prefetch_wrap(input bit status_fifo);
         logic [7:0] d;
         logic eoi;
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         ctl_atn(1);
         ctl_send(8'h48);
         ctl_send(status_fifo ? 8'h6F : 8'h60);
@@ -815,6 +815,202 @@ module ieee_tb;
         mcu_drain_rx;
     endtask
 
+    // Check the host-only selection contract, independently of native ROM commands.
+    task automatic check_emulated_unit_selection;
+        logic [7:0] d;
+
+        // Power-on and the retired enable bit must leave interception disabled.
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), 8'h00);
+        mcu_write(IEEE_REG_CTRL, 8'h01);
+        mcu_read(IEEE_REG_CTRL, d);
+        `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), 8'h00);
+
+        // With no emulated units, command traffic neither selects nor queues work.
+        // Drive DAV directly because there is deliberately no device to acknowledge it.
+        ctl_atn(1);
+        for (int unit = 0; unit < 4; ++unit) begin
+            ctl_dio(8'h28 + 8'(unit));
+            ctl_dav(1);
+            ctl_dav(0);
+            ctl_dio(8'h48 + 8'(unit));
+            ctl_dav(1);
+            ctl_dav(0);
+        end
+        `assert_equal(dut.listen_units, 4'b0000);
+        `assert_equal(dut.talking, 1'b0);
+        mcu_read(IEEE_REG_STATUS, d);
+        `assert_equal((d & IEEE_ST_RX_AVAIL_MASK), 8'h00);
+        cpu_read(0, 0, 1, 4'd0, d);
+        `assert_equal(d, 8'hFF); // No injected VIA read, despite asserted ATN.
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);
+        ctl_atn(0);
+
+        // Each literal one-hot mask enables only the corresponding emulated address.
+        for (int unit = 0; unit < 4; ++unit) begin
+            mcu_write(IEEE_REG_CTRL, 8'h10 << unit);
+            mcu_read(IEEE_REG_CTRL, d);
+            `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), IEEE_CTRL_RD_ENABLE_MASK);
+            ctl_atn(1);
+            for (int address = 0; address < 4; ++address) begin
+                ctl_send(8'h28 + 8'(address));
+                `assert_equal(dut.addressed, (address == unit));
+                `assert_equal((dut.listen_units & (4'b0001 << address)),
+                    (address == unit ? (4'b0001 << unit) : 4'b0000));
+                ctl_send(8'h48 + 8'(address));
+                `assert_equal(dut.talking, (address == unit));
+            end
+
+            // Removing the sole listener withdraws its role without UNLISTEN.
+            ctl_send(8'h28 + 8'(unit));
+            `assert_equal(dut.listen_units, (4'b0001 << unit));
+            mcu_write(IEEE_REG_CTRL, 8'h00);
+            mcu_read(IEEE_REG_CTRL, d);
+            `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), 8'h00);
+            `assert_equal(dut.listen_units, 4'b0000);
+
+            // Removing the sole talker also releases its lines and physical I/O.
+            mcu_write(IEEE_REG_CTRL, 8'h10 << unit);
+            ctl_send(8'h48 + 8'(unit));
+            `assert_equal(dut.talking, 1'b1);
+            mcu_write(IEEE_REG_CTRL, 8'h00);
+            mcu_read(IEEE_REG_CTRL, d);
+            `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), 8'h00);
+            `assert_equal(dut.listen_units, 4'b0000);
+            `assert_equal(dut.talking, 1'b0);
+            `assert_equal(dut.addressed, 1'b0);
+            `assert_equal(dut.dev_nrfd_n, 1'b1);
+            `assert_equal(dut.dev_ndac_n, 1'b1);
+            `assert_equal(dut.dev_dav_n, 1'b1);
+            `assert_equal(dut.dev_eoi_n, 1'b1);
+            `assert_equal(dut.dev_dio, 8'hFF);
+            cpu_read(0, 0, 1, 4'd0, d);
+            `assert_equal(d, 8'hFF);
+            ctl_atn(0);
+
+            // Flush requests still work with no units selected and do not enable any.
+            mcu_write(IEEE_REG_CTRL, IEEE_CTRL_FLUSH_MASK);
+            mcu_read(IEEE_REG_CTRL, d);
+            `assert_equal((d & IEEE_CTRL_RD_ENABLE_MASK), 8'h00);
+            mcu_read(IEEE_REG_STATUS, d);
+            `assert_equal((d & IEEE_ST_RX_AVAIL_MASK), 8'h00);
+        end
+    endtask
+
+    // Align the control-plane withdrawal with the CPU's DAV-producing write.
+    task automatic withdraw_on_command(input logic [7:0] command_byte,
+                                       input logic [7:0] presence);
+        ctl_dio(command_byte);
+        // Drive off-edge so both simulators sample the same CRB/control write.
+        // Both FF banks commit together, then command acceptance sees the mask.
+        @(negedge sys_clock);
+        rs = 4'd3; cpu_data = 8'h34; cpu_we = 1; cpu_be = 1;
+        cpu_addr_strobe = 1;
+        @(negedge sys_clock);
+        cpu_addr_strobe = 0;
+        pia2_cs = 1;
+        repeat (4) @(negedge sys_clock);
+        cpu_data_strobe = 1;
+        wb_addr = common_pkg::wb_ieee_addr(IEEE_REG_CTRL);
+        wb_dout = presence;
+        wb_we = 1;
+        wb_cycle = 1;
+        wb_strobe = 1;
+        @(negedge sys_clock);
+        cpu_data_strobe = 0;
+        wb_strobe = 0;
+        wb_cycle = 0;
+        wb_we = 0;
+        `assert_equal(dut.unit_mask, presence[7:4]);
+        `assert_equal(dut.prev_bus_dav_n, 1'b1);
+        `assert_equal(dut.bus_dav_n, 1'b0);
+        `assert_equal(dut.addressed, 1'b1);
+        `assert_equal(dut.unit_mask[dut.addressed_unit], 1'b0);
+        @(negedge sys_clock);
+        cpu_be = 0; cpu_we = 0; pia2_cs = 0;
+        repeat (g_tail) @(negedge sys_clock);
+        ctl_wait(8'h01, 8'h01);
+        ctl_dav(0);
+        ctl_wait(8'h01, 8'h00);
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);
+    endtask
+
+    // A withdrawn role must not overwrite an acknowledged retained peer selection.
+    task automatic check_coincident_unit_selection;
+        logic [7:0] selected;
+        for (int retired = 0; retired < 4; ++retired) begin
+            for (int peer = 0; peer < 4; ++peer) begin
+                if (peer != retired) for (int roles = 0; roles < 4; ++roles) begin
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK);
+                    ctl_atn(1);
+                    ctl_send((roles[0] ? 8'h48 : 8'h28) + 8'(retired));
+                    mcu_drain_rx;
+                    rx_bytes.delete();
+                    rx_isatn.delete();
+                    rx_iseoi.delete();
+                    selected = (roles[1] ? 8'h48 : 8'h28) + 8'(peer);
+                    withdraw_on_command(selected, 8'h10 << peer);
+                    mcu_drain_rx;
+                    `assert_equal(rx_bytes.size(), 1);
+                    `assert_equal(rx_bytes[0], selected);
+                    `assert_equal(rx_isatn[0], 1'b1);
+                    `assert_equal(dut.addressed, 1'b1);
+                    `assert_equal(dut.addressed_unit, 2'(peer));
+                    `assert_equal(dut.listen_units, roles[1] ? 4'b0 : (4'b1 << peer));
+                    `assert_equal(dut.talking, roles[1]);
+                    if (roles[1]) `assert_equal(dut.talk_unit, 2'(peer));
+                    ctl_atn(0);
+                end
+            end
+        end
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        rx_bytes.delete();
+        rx_isatn.delete();
+        rx_iseoi.delete();
+    endtask
+
+    // Withdrawn addressing must not flush a retained peer's queued response.
+    task automatic check_coincident_secondary_withdrawal;
+        logic [7:0] command_byte;
+        for (int retired = 0; retired < 4; ++retired) begin
+            for (int peer = 0; peer < 4; ++peer) begin
+                if (peer != retired) for (int role = 0; role < 2; ++role) begin
+                    for (int operation = 0; operation < 4; ++operation) begin
+                        case (operation)
+                            0: command_byte = 8'h62;
+                            1: command_byte = 8'h6F;
+                            2: command_byte = 8'hE2;
+                            3: command_byte = 8'hF2;
+                        endcase
+                        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+                        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK);
+                        ctl_atn(1);
+                        ctl_send(8'h28 + 8'(peer));
+                        ctl_send((role ? 8'h48 : 8'h28) + 8'(retired));
+                        mcu_drain_rx;
+                        mcu_write(IEEE_REG_TX, 8'hA5);
+                        mcu_write(IEEE_REG_TXS, 8'h5A);
+                        withdraw_on_command(command_byte, 8'h10 << peer);
+                        `assert_equal(dut.addressed, 1'b0);
+                        `assert_equal(dut.unit_sa[retired], 8'h20);
+                        `assert_equal(dut.listen_units, 4'b1 << peer);
+                        `assert_equal(dut.talking, 1'b0);
+                        `assert_equal(dut.tx_count, 1);
+                        `assert_equal(dut.txs_count, 1);
+                        ctl_atn(0);
+                    end
+                end
+            end
+        end
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_drain_rx;
+        rx_bytes.delete();
+        rx_isatn.delete();
+        rx_iseoi.delete();
+    endtask
+
     task static run;
         logic [7:0] d, st;
         logic eoi;
@@ -828,16 +1024,18 @@ module ieee_tb;
         ifc = 1'b0;
         repeat (2) @(posedge sys_clock);
 
-        // MCU: enable + flush
-        mcu_write(IEEE_REG_CTRL, 8'h03);
-        mcu_write(IEEE_REG_CTRL, 8'h01);
+        check_emulated_unit_selection;
+
+        // MCU: select all emulated devices and flush.
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK);
 
         // CTRL flush clears every FIFO, while data-only flush preserves the
         // status FIFO. The data FIFO advertises room only for complete
         // 64-byte bursts and accepts exactly its advertised capacity.
         mcu_write(IEEE_REG_TX, 8'hA0);
         mcu_write(IEEE_REG_TXS, 8'hB0);
-        mcu_write(IEEE_REG_CTRL, 8'h03);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         @(posedge sys_clock);
         `assert_equal(dut.rx_count, 0);
         `assert_equal(dut.tx_count, 0);
@@ -845,11 +1043,11 @@ module ieee_tb;
 
         mcu_write(IEEE_REG_TX, 8'hA0);
         mcu_write(IEEE_REG_TXS, 8'hB0);
-        mcu_write(IEEE_REG_CTRL, 8'h05);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
         @(posedge sys_clock);
         `assert_equal(dut.tx_count, 0);
         `assert_equal(dut.txs_count, 1);
-        mcu_write(IEEE_REG_CTRL, 8'h03);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         @(posedge sys_clock);
 
         for (int i = 0; i < 960; i++) mcu_write(IEEE_REG_TX, i[7:0]);
@@ -861,7 +1059,7 @@ module ieee_tb;
         for (int i = 0; i < 63; i++) mcu_write(IEEE_REG_TX, i[7:0]);
         mcu_read(IEEE_REG_STATUS, st);
         `assert_equal(st[2], 1'b1);
-        mcu_write(IEEE_REG_CTRL, 8'h05);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
         @(posedge sys_clock);
         mcu_read(IEEE_REG_STATUS, st);
         `assert_equal(st[2], 1'b0);
@@ -1155,7 +1353,7 @@ module ieee_tb;
                 g_tail = saved_tail;
                 ctl_atn(1); ctl_send(8'h5F); ctl_atn(0);
                 mcu_drain_rx;
-                mcu_write(IEEE_REG_CTRL, 8'h05);   // flush data FIFO between records
+                mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_DATA_FLUSH_MASK);
             end
             $display("[%t]   dense counted-read terminate/resume verified", $time);
         end
@@ -1164,7 +1362,7 @@ module ieee_tb;
         for (int unit = 0; unit < 4; unit++) begin
             for (int peer = 0; peer < 4; peer++) begin
                 if (peer != unit) begin
-                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+                    mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
                     mcu_push("", 1);
                     mcu_write(IEEE_REG_SA, IEEE_TX_OWNER_VALID_MASK
                         | (unit << IEEE_TX_OWNER_UNIT_SHIFT) | 8'h02);
@@ -1191,6 +1389,22 @@ module ieee_tb;
             end
         end
         // Peripherals retain independent listener roles and primary selection.
+        // Only emulated devices 8 and 10 are present, with no physical passthrough.
+        mcu_write(IEEE_REG_CTRL, 8'h50);
+        ctl_atn(1);
+        ctl_send(8'h28);
+        `assert_equal(dut.listen_units, 4'b0001);
+        ctl_send(8'h29);
+        `assert_equal(dut.listen_units, 4'b0001);
+        `assert_equal(dut.addressed, 1'b0);
+        ctl_send(8'h4A);
+        `assert_equal(dut.talking, 1'b1);
+        ctl_send(8'h49);
+        `assert_equal(dut.talking, 1'b0);
+        ctl_send(8'h3F);
+        ctl_atn(0);
+        mcu_drain_rx;
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         for (int unit = 0; unit < 4; unit++) begin
             int peer;
             peer = (unit + 1) % 4;
@@ -1215,7 +1429,7 @@ module ieee_tb;
             ctl_atn(0);
             mcu_drain_rx;
         end
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
 
         // --- Unit 9: the fabric answers DEV_ADDR+1 with the same machinery
         // (Super-OS/9 d8d9 = dual units 8 and 9). LISTEN 9 must capture data
@@ -1302,7 +1516,7 @@ module ieee_tb;
         check_prefetch_flush_collision;
         check_prefetch_wrap(0);
         check_prefetch_wrap(1);
-        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_ENABLE_MASK | IEEE_CTRL_FLUSH_MASK);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
         mcu_read(IEEE_REG_TX, d);
         `assert_equal(d, 8'd0);
 
@@ -1370,6 +1584,9 @@ module ieee_tb;
         mcu_read(IEEE_REG_STATUS, st);
         `assert_equal(st[6], 0);           // not talking
         `assert_equal(st[5], 0);           // not listening
+
+        check_coincident_unit_selection;
+        check_coincident_secondary_withdrawal;
 
         $display("[%t] END IEEE drive emulation test", $time);
     endtask

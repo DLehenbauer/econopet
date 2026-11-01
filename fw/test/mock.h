@@ -17,8 +17,10 @@
 
 extern uint8_t mock_ram[MOCK_RAM_SIZE];
 
-// Resets RAM, register FIFOs, CPU flags, and breakpoint observations.
+// Resets RAM, register FIFOs, CPU flags, breakpoint observations, and input.
 void mock_reset(void);
+// Supplies menu input through a test reader, or restores EOF when NULL.
+void mock_input_set_reader(int (*reader)(void));
 // Sets the address returned by the mocked breakpoint register.
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.

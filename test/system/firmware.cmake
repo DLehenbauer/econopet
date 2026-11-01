@@ -12,6 +12,9 @@ add_library(econopet_firmware_transport STATIC
     ieee/ieee_drive_spi_adapter.cpp
     ieee/ieee_drive_log_stub.c
     "${ECONOPET_ROOT}/fw/src/ieee/ieee_drive.c"
+    "${ECONOPET_ROOT}/fw/src/ieee/dos_media.c"
+    "${ECONOPET_ROOT}/fw/src/ieee/dos_rel.c"
+    "${ECONOPET_ROOT}/fw/src/ieee/dos.c"
     "${ECONOPET_ROOT}/fw/src/cbm/filename.c"
     "${ECONOPET_ROOT}/fw/src/fatal.c"
     "${ECONOPET_ROOT}/fw/src/sd/path.c"

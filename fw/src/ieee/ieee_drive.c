@@ -2,134 +2,541 @@
 // https://github.com/dlehenbauer/econopet
 
 #include "pch.h"
+
 #include "ieee_drive.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#if defined(PICO_RP2040)
-#include "pico/time.h"
-#endif
-
 #include "diag/log/log.h"
-#include "diskimage.h"
 #include "driver.h"
 #include "fatal.h"
 #include "hardware_contract.h"
-#include "ieee_protocol.h"
+#include "ieee/dos.h"
+#include "ieee/ieee_protocol.h"
 #include "sd/sd.h"
 
-#define DEV_ADDR 8
+// Firmware transport facade for EconoPET's IEEE-488 drive support.
+//
+// gw/EconoPET/src/ieee.sv implements the electrical handshake and ordered
+// receive/transmit FIFOs. driver.c carries register accesses over SPI, with
+// hardware_contract.h defining the shared register, owner, and event encodings.
+// This file turns those events into per-unit DOS requests and publishes DOS
+// output back to the fabric. It does not implement electrical handshakes in C.
+//
+// dos.c owns request collection/dispatch, secondary semantics, directory lookup,
+// logical channels, file cursors, EOF, and status text. dos_media.c guards
+// raw-sector access and mounted-media generations,
+// while diskimage.c detects formats and translates track/sector geometry.
+// This facade owns the FILE handles, device presence, listener/talker routing,
+// cooperative scheduling, and coordination of transport/DOS/media lifetimes.
+//
+// The C adaptation separates the ROM's intertwined bus and DOS routines:
+// decoded command bytes replace the ROM's port sampling, bounded input records
+// replace command-buffer collection, and staged FIFO suffixes replace direct
+// CHNDAT presentation. Only observed NRFD GET counts advance DOS sources.
+// Staging, presenting DAV, and receiving NDAC are not interchangeable progress
+// boundaries. Pause/synchronize/discard ordering keeps unconsumed suffixes
+// reversible when addressing, commands, or mounts change.
+//
+// ROM references use mist64/cbmsrc commit
+// 01bd60f162ef92212ef0cb67546ae8f42be34168. Targets are 4040 DOS 2.0
+// revision 2 (901468-14/-15/-16, with approved source overlays) and shared
+// 8050/8250 DOS 2.7 (901887-01/901888-01). docs/dev/drive-emulation.md records
+// revision correspondence and staged scope. Function-local references explain
+// ROM behavior without claiming that host mounting or FIFO registers are native.
+// Current DOS capabilities and known omissions are documented there rather
+// than inferred from the transport's ability to route a request.
 
-// The fabric answers devices 8 through 11, each a dual-drive unit. Mount
-// slot = unit * DRIVES_PER_UNIT + drive, so slots 0/1 map to device 8 and
-// slots 6/7 map to device 11.
-#define NUM_UNITS       4
-#define DRIVES_PER_UNIT 2
-#define NUM_DRIVES      (NUM_UNITS * DRIVES_PER_UNIT)
-#define COMMAND_VALIDATION_LIMIT 58
-#define COMMAND_4040_RECEIVE_CAPACITY 41
-#define COMMAND_RECEIVE_CAPACITY (COMMAND_VALIDATION_LIMIT + 1)
-#define DEFAULT_CHANNEL 0
+// Out-of-range sentinel for firmware addressing state, not an IEEE address.
+#define NATIVE_UNIT_NONE DOS_MEDIA_UNIT_COUNT
+// Bound ordered RX entries processed per main-loop pass, including metadata.
+#define NATIVE_RX_BUDGET 64u
+// Fabric TXS capacity, independent of the data FIFO's burst allowance.
+#define NATIVE_STATUS_CAPACITY 32u
+// Retain the first addressing exchange without logging every transfer.
+#define NATIVE_COMMAND_LOG_BUDGET 8u
 
-// Write fabric control without changing firmware channel state.
-static void ieee_ctrl_write(uint8_t value) {
-    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, value);
+_Static_assert(ECONOPET_IEEE_TX_BURST_CHUNK <= DOS_STAGE_CAPACITY, "fabric staging exceeds the DOS preview bound");
+
+// One staged suffix in a global fabric FIFO, tied to its native source owner.
+// counter is the modulo-256 GET baseline, not the number of queued SPI writes.
+typedef struct {
+    unsigned int remaining;
+    uint8_t unit;
+    dos_source_t source;
+    uint8_t counter;
+} native_queue_t;
+
+// Static storage keeps DOS/media identity independent of transient bus roles.
+// files owns handles borrowed by media callbacks. Data and status FIFOs each
+// have one global staged owner, whereas listener roles and DOS state are per unit.
+static dos_media_bank_t media;
+static dos_unit_t units[DOS_MEDIA_UNIT_COUNT];
+static FILE* files[DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT];
+static bool listening[DOS_MEDIA_UNIT_COUNT];
+static native_queue_t data_queue, status_queue;
+static uint8_t addressed = NATIVE_UNIT_NONE, talker = NATIVE_UNIT_NONE, secondary;
+static uint8_t next_job;
+static unsigned int command_logs_remaining;
+static bool log_service_pending;
+
+// Computes IEEE presence from complete unit models, never from another unit.
+static uint8_t present_units(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/dskint
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+    //
+    // DIAGOK/BEGIN derive one device's primary address from hardware switches.
+    // No direct ROM entry for this host presence policy: a configured pair
+    // selects an emulated device even if only one slot is occupied.
+    // Empty slots stay absent within that device.
+    // Bit positions map units 0..3 to primary device addresses 8..11.
+    uint8_t mask = 0;
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        if (media.units[unit].model != DOS_MODEL_NONE) {
+            mask |= (uint8_t)(1u << unit);
+        }
+    }
+    return mask;
 }
 
-// ----------------------------------------------------------------------------
-// Disk images
-// ----------------------------------------------------------------------------
+// Every native CTRL write selects the mounted emulated units, or disables
+// emulation when none are present. Flush requests preserve that selection.
+static void control(const uint8_t flags) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // DCDE compares primary addresses with LSNADR/TLKADR. No direct ROM entry
+    // for the host CTRL register: its mask enables those virtual responders
+    // together, while flush flags affect fabric storage rather than DOS channels.
+    // Every fabric CTRL write replaces the unit mask, including FIFO flushes.
+    // Recompute it rather than accidentally disabling a peer with a bare flag.
+    // Any selected unit enables interception globally, not selective pass-through
+    // to physical devices at other addresses. An empty mask restores transparency.
+    const uint8_t mask = present_units();
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, (mask << ECONOPET_IEEE_CTRL_UNIT_MASK_SHIFT) | flags);
+}
 
-typedef struct {
-    FILE* file;
-    diskimage_t image;
-    bool present;
-    char name[SD_PATH_MAX];  // image path currently "inserted"
-} drive_t;
+// Parks only new presentations. A byte already awaiting NDAC remains driven.
+static void pause_tx(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // TLK10 presents CHNDAT and TLK35 holds the byte until NDAC releases.
+    // No direct ROM entry for this host fence. PAUSE gates only the start
+    // of another presentation, not an already-driven byte or its GET accounting.
+    // Fabric owner PAUSE blocks new presentations without withdrawing DAV from
+    // an already active byte. It is a transport fence, not native GET progress
+    // or evidence that the bus is idle. sync_tx/quiescent inspect that separately.
+    spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, ECONOPET_IEEE_TX_OWNER_VALID_MASK | ECONOPET_IEEE_TX_OWNER_PAUSE_MASK);
+}
 
-static drive_t drives[NUM_DRIVES];
-static bool emulation_enabled = false;
+// Restores the current native source after ordered RX work.
+static void resume_tx(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // TALK/FNDRCH selects a ready logical source before TLK10 presents it.
+    // No direct ROM entry for the host owner register. Rebind its unit/SA
+    // only after ordered RX handling, without treating that write as native GET.
+    // Bind the fabric source to the selected unit/secondary and clear PAUSE.
+    // Data and status are distinguished by secondary 15 in the fabric.
+    // With no selected talker, leave the owner register untouched rather than
+    // inventing a source or releasing a presentation by rewriting its queue.
+    if (talker != NATIVE_UNIT_NONE) {
+        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
+                     ECONOPET_IEEE_TX_OWNER_VALID_MASK | (talker << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | secondary);
+    }
+}
 
-typedef enum {
-    drive_model_4040,
-    drive_model_8050,
-} drive_model_t;
+// Commits only actual NRFD GET progress, including interrupted presentations.
+static void sync_queue(native_queue_t* const queue, const bool status) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // ROM TALK/TLK20/TLK30 calls GET when NRFD requests source progress,
+    // before TLK35 finishes waiting for NDAC. The alternate TLK20 exit can
+    // return to IDLE without GET. Thus neither queued SPI writes nor completed
+    // DAV/NDAC handshakes alone determine how far the DOS cursor has advanced.
+    // No direct ROM entry for this host FIFO/counter reconciliation.
+    if (queue->remaining == 0) {
+        return;
+    }
+    // The fabric counts actual GETs separately for data and status. Subtract
+    // the saved counter modulo 256, which is unambiguous within the bounded
+    // staging window. Reject progress beyond the owned suffix as a contract
+    // violation, then retain the new baseline and outstanding length.
+    const uint8_t current = spi_read_at(status ? ECONOPET_WB_IEEE_TXS_ADDR : ECONOPET_WB_IEEE_TX_ADDR);
+    const uint8_t count = (uint8_t)(current - queue->counter);
+    vet(count <= queue->remaining, "native transport GET exceeds its staging window");
+    queue->counter = current;
+    queue->remaining -= count;
+    // Commit against the recorded owner, not today's talker. An intervening
+    // selection or interrupted presentation must not charge a different unit.
+    // Status GET may replace the retained record with OK on CR consumption.
+    if (status) {
+        const dos_status_progress_t progress = dos_status_progress(&units[queue->unit]);
+        if (count != 0) {
+            log_debug("IEEE u%u get p%u +%u q%u c%u", queue->unit, progress.position, count, queue->remaining, current);
+            if (progress.position + count == progress.length) {
+                log_info("IEEE u%u status complete n%u", queue->unit, progress.length);
+            }
+        }
+    }
+    dos_output_get(&units[queue->unit], &media, media.units[queue->unit].model, queue->source, count);
+}
 
-// ----------------------------------------------------------------------------
-// REL chain cache (built at mount time)
-// ----------------------------------------------------------------------------
-// The Super-OS/9 loader bounds drive latency with a counted DAV poll
-// (~1.25s at 1MHz), so chains are prebuilt at mount. Links never change
-// after mount (record writes reuse existing sectors).
-#define CHAIN_CACHE_SLOTS 4
+// Reconciles both independent FIFO owners before mutation or replacement.
+static void sync_tx(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // No direct ROM entry: reconcile the host's two queues against TLK30's
+    // GET boundary. A source may still belong to an earlier bus selection.
+    // Data and status sources have independent FIFO counters and native cursors.
+    // Reconcile both before replacing either source or changing DOS state.
+    sync_queue(&data_queue, false);
+    sync_queue(&status_queue, true);
+}
 
-typedef struct {
-    bool valid;
-    uint8_t track, sector;              // chain start track/sector = cache key
-    diskchain_t chain;
-} chain_cache_entry_t;
+// Discards staged copies, not native progress, after pausing and synchronizing.
+static void discard_queue(const bool status) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // No direct ROM entry: native TALK presents CHNDAT without a copied FIFO
+    // suffix. Drop only the host preview after reconciling TLK30 GET progress,
+    // rather than closing its channel or restarting the native source cursor.
+    // Caller has paused presentations and committed actual GET progress.
+    // FIFO-only flushes preserve fabric GET counters. Drop only staged copies,
+    // leaving native cursors available to rebuild an interrupted suffix.
+    // control also preserves the mounted-device mask during this flush.
+    control(status ? ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK : ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+    if (status) {
+        status_queue.remaining = 0;
+    } else {
+        data_queue.remaining = 0;
+    }
+}
 
-static chain_cache_entry_t chain_cache[NUM_DRIVES][CHAIN_CACHE_SLOTS];
+// Publishes at most one bounded native suffix, leaving GET cursors unchanged.
+static void fill_tx(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // ROM TALK/TALK1 checks channel readiness and TLK10 presents CHNDAT with
+    // its readiness/EOI flags. The FIFO adaptation previews a bounded suffix
+    // through dos_output_stage instead of advancing GET on enqueue.
+    // There is no direct ROM entry for this host FIFO staging operation.
+    // Do not replace a still-owned suffix or fabricate an unopened file source.
+    if (talker == NATIVE_UNIT_NONE) {
+        return;
+    }
+    const bool status = secondary == IEEE_COMMAND_CHANNEL;
+    native_queue_t* const queue = status ? &status_queue : &data_queue;
+    if (queue->remaining != 0) {
+        return;
+    }
+    uint8_t bytes[ECONOPET_IEEE_TX_BURST_CHUNK];
+    bool eoi;
+    // TXS has 32 entries. Native formatted status fits in that bounded queue.
+    const unsigned int capacity = status ? NATIVE_STATUS_CAPACITY : sizeof(bytes);
+    dos_source_t source;
+    const unsigned int count = dos_output_stage(&units[talker], &media, secondary, bytes, capacity, &eoi, &source);
+    if (count == 0) {
+        return;
+    }
+    // Capture the source owner and current GET baseline before publication.
+    // Later sync_queue commits only the observed consumed prefix of this copy.
+    queue->unit = talker;
+    queue->source = source;
+    queue->counter = spi_read_at(status ? ECONOPET_WB_IEEE_TXS_ADDR : ECONOPET_WB_IEEE_TX_ADDR);
+    queue->remaining = count;
+    const uint32_t regular = status ? ECONOPET_WB_IEEE_TXS_ADDR : ECONOPET_WB_IEEE_TX_ADDR;
+    const uint32_t last = status ? ECONOPET_WB_IEEE_TXS_LAST_ADDR : ECONOPET_WB_IEEE_TX_LAST_ADDR;
+    const unsigned int regular_count = count - (unsigned int)eoi;
+    // Regular writes enqueue nonfinal bytes. Only the dedicated LAST register
+    // tags the final byte with EOI, so a short non-EOF chunk is not terminated.
+    // Diagnostic only: isolate status WRITE_SAME bursts without slowing file data.
+    if (status) {
+        for (unsigned int index = 0; index < regular_count; ++index) {
+            spi_write_at(regular, bytes[index]);
+        }
+    } else if (regular_count != 0) {
+        spi_write_same_block(regular, bytes, regular_count);
+    }
+    if (eoi) {
+        spi_write_at(last, bytes[count - 1]);
+    }
+    if (status) {
+        // INFO retains initial lengths when per-GET DEBUG records wrap.
+        const dos_status_progress_t progress = dos_status_progress(&units[talker]);
+        if (progress.position == 0) {
+            log_info("IEEE u%u status n%u e%u t%02x abs", talker, count, eoi, bytes[count - 1]);
+        }
+        log_debug("IEEE u%u put p%u n%u e%u t%02x [%.*s]", talker, progress.position, count, eoi, bytes[count - 1],
+                  (int)(count - (unsigned int)eoi), (const char*)bytes);
+    }
+}
 
-static void chain_cache_build(unsigned int slot) {
-    uint32_t t0 = to_ms_since_boot(get_absolute_time());
-    unsigned int cache_slot = 0;
-    diskimage_entry_t e;
+// Retire this unit's staged copies before permitting ordered DOS dispatch.
+static void dispatch(const uint8_t unit) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/idle
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/idle
+    //
+    // PUT:L45 marks CMDWAT after EOI, then IDLE/VIDLE calls PARSXQ.
+    // No direct ROM entry for this host transport fence. Dispatch a completed
+    // DOS record only after withdrawing copies that its execution may replace.
+    // The caller has paused and synchronized actual GETs before reaching this
+    // ordered boundary. DOS owns readiness, request interpretation, and errors.
+    if (!dos_input_ready(&units[unit])) {
+        return;
+    }
+    // Remove stale copies for this unit before dos_open/status can replace
+    // their underlying source state. Other units' status suffixes remain owned.
+    if (data_queue.remaining != 0 && data_queue.unit == unit) {
+        discard_queue(false);
+    }
+    if (status_queue.remaining != 0 && status_queue.unit == unit) {
+        discard_queue(true);
+    }
+    dos_input_dispatch(&units[unit], &media, unit);
+}
 
-    for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++)
-        chain_cache[slot][i].valid = false;
-
-    for (unsigned int i = 0; diskimage_entry(&drives[slot].image, i, &e); i++) {
-        if (e.file_type != DISKIMAGE_FTYPE_REL) continue;
-        if (cache_slot >= CHAIN_CACHE_SLOTS) {
-            log_info("ieee: drive %u: more REL files than %u cache slots",
-                     slot, CHAIN_CACHE_SLOTS);
+// Decodes IEEE roles separately from per-unit command and channel ownership.
+static void command(const uint8_t byte) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // ROM ATNIRQ/ATN30 samples a command and DCDE decodes primary/secondary
+    // addresses and OPEN/CLOSE. ATN50/ATN60 select listener or talker execution.
+    // The fabric already sampled the logical byte. Track firmware roles and
+    // DOS ownership here without duplicating the port-level handshake.
+    if (command_logs_remaining != 0) {
+        --command_logs_remaining;
+        log_info("IEEE cmd %02x mask%02x addr%u talk%u", byte, present_units(), addressed, talker);
+    }
+    const uint8_t address = IEEE_CMD_ADDRESS(byte);
+    const uint8_t unit = address >= 8 && address < 8 + DOS_MEDIA_UNIT_COUNT && (present_units() & (1u << (address - 8)))
+                             ? (unsigned int)(address - 8)
+                             : NATIVE_UNIT_NONE;
+    switch (IEEE_CMD_CLASS(byte)) {
+    case IEEE_CMD_LISTEN_BASE:
+        // Primary LISTEN selects a mounted device. UNLISTEN clears every
+        // listener and offers each completed record for deferred dispatch.
+        // Per-unit listener flags allow data fan-out to multiple devices.
+        addressed = unit;
+        if (byte == IEEE_CMD_UNLISTEN) {
+            addressed = NATIVE_UNIT_NONE;
+            for (uint8_t index = 0; index < DOS_MEDIA_UNIT_COUNT; ++index) {
+                listening[index] = false;
+                dispatch(index);
+            }
+        } else if (unit != NATIVE_UNIT_NONE) {
+            listening[unit] = true;
+            if (talker == unit) {
+                talker = NATIVE_UNIT_NONE;
+            }
+        }
+        break;
+    case IEEE_CMD_TALK_BASE:
+        // TALK selects at most one source and clears that unit's listener
+        // role. UNTALK removes the talker without freeing its DOS channel.
+        addressed = unit;
+        if (byte == IEEE_CMD_UNTALK) {
+            talker = NATIVE_UNIT_NONE;
+        } else {
+            talker = unit;
+            if (unit != NATIVE_UNIT_NONE) {
+                listening[unit] = false;
+            }
+        }
+        break;
+    case IEEE_CMD_SECONDARY_BASE:
+        // A secondary applies only to the last valid primary selection.
+        // TALK chooses a retained source. DOS decides whether a listening
+        // secondary starts input collection.
+        if (addressed == NATIVE_UNIT_NONE) {
             break;
         }
-        chain_cache_entry_t* c = &chain_cache[slot][cache_slot];
-        if (!diskchain_build(&c->chain, &drives[slot].image,
-                             e.start_track, e.start_sector))
-            continue;
-        c->track = e.start_track;
-        c->sector = e.start_sector;
-        c->valid = true;
-        cache_slot++;
+        dos_input_address(&units[addressed], &media, media.units[addressed].model, byte,
+                          talker != addressed && listening[addressed]);
+        if (talker == addressed) {
+            secondary = IEEE_CMD_CHANNEL(byte);
+            // A selected source is rebuilt from retained native GET progress.
+            discard_queue(secondary == IEEE_COMMAND_CHANNEL);
+        }
+        break;
+    case IEEE_CMD_CLOSE_BASE:
+        // Commodore OPEN/CLOSE extensions require a selected listener.
+        // OPEN starts a fresh name record. CLOSE releases DOS resources
+        // after outstanding GET progress was synchronized by the caller.
+        if (addressed == NATIVE_UNIT_NONE || !listening[addressed]) {
+            break;
+        }
+        // Fabric OPEN/CLOSE flushes data globally. Rebuild any peer suffix
+        // from its retained GET cursor rather than retaining a phantom queue.
+        discard_queue(false);
+        if (!IEEE_CMD_IS_OPEN(byte)) {
+            if (IEEE_CMD_CHANNEL(byte) == IEEE_COMMAND_CHANNEL) {
+                const dos_status_progress_t progress = dos_status_progress(&units[addressed]);
+                log_info("IEEE u%u close status p%u/%u", addressed, progress.position, progress.length);
+            }
+            if (data_queue.remaining != 0 && data_queue.unit == addressed) {
+                discard_queue(false);
+            }
+            if (status_queue.remaining != 0 && status_queue.unit == addressed) {
+                discard_queue(true);
+            }
+        }
+        dos_input_address(&units[addressed], &media, media.units[addressed].model, byte, true);
+        break;
+    default:
+        break;
     }
-    log_info("ieee: drive %u: %u REL chain(s) cached in %lu ms",
-             slot, cache_slot,
-             (unsigned long) (to_ms_since_boot(get_absolute_time()) - t0));
 }
 
-static const diskchain_t* chain_cache_find(unsigned int slot, uint8_t track,
-                                           uint8_t sector) {
-    for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) {
-        chain_cache_entry_t* c = &chain_cache[slot][i];
-        if (c->valid && c->track == track && c->sector == sector) return &c->chain;
+// Service bounded DOS work and ordered fabric events once per main-loop pass.
+// Preserve active presentations and resume output only after pending RX ordering.
+void ieee_drive_task(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // ROM ATNIRQ interrupts normal DOS work and IEEE LISTEN/TALK exchange bytes
+    // through PUT/GET. This adaptation instead services ordered fabric entries
+    // cooperatively, separating source progress, command decoding, and DOS work.
+    // There is no direct ROM entry for this main-loop scheduler.
+    // No configured model means no emulated transport work to service.
+    if (present_units() == 0) {
+        return;
     }
-    return NULL;
+    sync_tx();
+    // Round-robin selection advances at most one unit with pending DOS work.
+    // If any command or channel job remains runnable, service output but leave
+    // subsequent RX entries queued so they cannot overtake that operation.
+    // A directory chain must yield to the main loop, even on corrupt media.
+    for (unsigned int step = 0; step < DOS_MEDIA_UNIT_COUNT; ++step) {
+        const uint8_t unit = next_job;
+        next_job = (next_job + 1) % DOS_MEDIA_UNIT_COUNT;
+        if (dos_work_pending(&units[unit])) {
+            dos_work(&units[unit], &media);
+            break;
+        }
+    }
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        if (dos_work_pending(&units[unit])) {
+            fill_tx();
+            resume_tx();
+            return;
+        }
+    }
+    for (unsigned int work = 0; work < NATIVE_RX_BUDGET; ++work) {
+        // Check for queued work, pause new output, and reconcile GETs before
+        // examining the head. An active DAV must finish before this event is
+        // popped or source state is changed. Leave PAUSE set when returning.
+        uint8_t flags = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
+        if (log_service_pending) {
+            log_service_pending = false;
+            log_info("IEEE service mask%02x st%02x", present_units(), flags);
+        }
+        if (!(flags & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) {
+            break;
+        }
+        pause_tx();
+        sync_tx();
+        const uint8_t state = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
+        if (state & (ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK | ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK)) {
+            return;
+        }
+        flags = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
+        // CTRL carries RX-head metadata. Read the head byte, then explicitly
+        // pop it through RX. Ordered metadata entries are not controller bytes.
+        const uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
+        spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);
+        if (state & ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK) {
+            // Zero boundary payload denotes ATN release and permits dispatch.
+            // Nonzero listener-boundary metadata is consumed without dispatch.
+            if (byte == 0) {
+                for (uint8_t unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+                    dispatch(unit);
+                }
+            }
+        } else if (!(state & ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK)) {
+            // TALK-event metadata is consumed without entering the parser.
+            // Actual source advancement is already reflected in GET counters.
+            // ATN bytes update roles, while ordinary bytes fan out only to
+            // listeners. DOS handles collection limits and EOI completion
+            // without dispatching mid-entry.
+            if (flags & ECONOPET_IEEE_ST_RX_ATN_MASK) {
+                command(byte);
+            } else {
+                for (uint8_t unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+                    if (listening[unit]) {
+                        // Ordinary PUT may publish a storage error, retiring its old status copy first.
+                        if (status_queue.remaining != 0 && status_queue.unit == unit) {
+                            discard_queue(true);
+                        }
+                        dos_listen_put(&units[unit], &media, byte, (state & ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK) != 0);
+                    }
+                }
+            }
+        }
+        // Preserve later ordered entries until the current DOS work completes.
+        bool pending = false;
+        for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+            pending |= dos_work_pending(&units[unit]);
+        }
+        if (pending) {
+            break;
+        }
+    }
+    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) {
+        return;
+    }
+    // Do not publish/resume a source ahead of unprocessed ordered RX work.
+    // Recheck after publication as SPI writes can overlap a new bus selection.
+    fill_tx();
+    // SPI publication may overlap a newer selection. Process it before resuming.
+    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) {
+        return;
+    }
+    resume_tx();
 }
 
-// Executes exact-size reads against a retained FILE owner.
-static bool file_read(void* ctx, uint32_t offset, void* buf, size_t len) {
+// Executes exact-size, bounded reads against a retained FILE owner.
+static bool file_read(void* const context, const uint32_t offset, void* const output, const size_t length) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
     //
     // RDAB/RDIN/RDSS submit native sector jobs. No direct ROM entry for this
-    // FILE callback: diskimage translates native coordinates to host byte
-    // offsets without emulating controller retries. The facade owns the FILE.
-
+    // FILE callback: diskimage/dos_media translate and validate those requests
+    // before reaching host byte offsets, without emulating controller retries.
+    // Host backing-store adapter, not a ROM read job. dos_media resolves a
+    // current media identity and valid sector before invoking this callback.
     // Seek each request independently and require the full requested length.
-    // A short read may modify output before false is returned.
-    FILE* f = (FILE*)ctx;
-    if (fseek(f, (long)offset, SEEK_SET) != 0)
-        return false;
-    return fread(buf, 1, len, f) == len;
+    // A short read may modify output before false is returned. The FILE owner
+    // remains this facade, which must not close it while a binding can use it.
+    FILE* const file = context;
+    clearerr(file);
+    return fseek(file, (long)offset, SEEK_SET) == 0 && fread(output, 1, length, file) == length;
 }
 
-// Completes and flushes an exact-size write without retrying a partial failure.
-static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) {
+// Completes exact-size sector updates without retrying a possibly partial write.
+static bool file_write(void* const context, const uint32_t offset, const void* const input, const size_t length) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tsutil
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tsutil
@@ -137,1084 +544,308 @@ static bool file_write(void* ctx, uint32_t offset, const void* buf, size_t len) 
     // WRTOUT/WRTAB/WRTSS submit native WRITE jobs. No direct ROM entry for
     // this host callback. A failed fwrite can modify storage partially, so
     // return failure without replaying it or closing the facade-owned FILE.
-
-    FILE* f = (FILE*)ctx;
-    if (fseek(f, (long)offset, SEEK_SET) != 0)
-        return false;
-    if (fwrite(buf, 1, len, f) != len)
-        return false;
-    // This legacy adapter flushes each complete write before reporting success.
-    // The host flush is not native CLOSE, a bus acknowledgement, or a power-loss guarantee.
-    return fflush(f) == 0;
+    FILE* const file = context;
+    clearerr(file);
+    return fseek(file, (long)offset, SEEK_SET) == 0 && fwrite(input, 1, length, file) == length;
 }
 
-// Mounts a path relative to /disks into a global drive slot.
-static bool mount_image(unsigned int slot, const char* filename) {
+// Flushes the retained owner without closing it on failure.
+static bool file_flush(void* const context) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // CLSCHN writes native metadata through CLSDIR/MAPOUT. No direct ROM
+    // entry for fflush: this extra host persistence boundary neither performs
+    // those DOS writes nor acknowledges a bus byte. Failure leaves ownership.
+    FILE* const file = context;
+    clearerr(file);
+    return fflush(file) == 0;
+}
 
-    char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, filename);
-    // Read-write when the card allows it (REL record writes, OS-9 format);
-    // fall back to read-only rather than failing the mount.
-    bool writable = true;
-    FILE* f = fopen(path, "r+b");
-    if (f == NULL) {
-        writable = false;
-        f = fopen(path, "rb");
-    }
-    if (f == NULL) return false;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-
-    // .hdd = flat hard-disk REL container (any 258-multiple size); everything
-    // else opens by the exact d64/d80 container sizes.
-    const char* dot = strrchr(filename, '.');
-    bool is_hdd = (dot != NULL && strcasecmp(dot, ".hdd") == 0);
-
-    diskimage_t img;
-    bool opened = is_hdd ? diskimage_open_hdd(&img, file_read, f, (uint32_t) size)
-                         : diskimage_open(&img, file_read, f, (uint32_t) size);
-    // Raw D82 support prepares the new media layer, not the legacy DOS facade.
-    if (!opened || img.type == diskimage_type_d82) {
-        log_info("ieee: %s has unsupported size %ld, ignored", path, size);
-        fclose(f);
+// Rejects a busy mutation without withdrawing active DAV or consuming RX work.
+static bool quiescent(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ieee
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ieee
+    //
+    // TLK30 commits GET before TLK35 can finish its presentation. No direct
+    // ROM entry for this host mutation guard: reconcile progress, then require
+    // no driven byte and no queued RX event before allowing a binding change.
+    // Host mutation guard: stop new presentations and commit observed GETs.
+    // Neither PAUSE nor empty software queues alone proves a safe boundary.
+    pause_tx();
+    sync_tx();
+    const uint8_t state = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
+    const uint8_t flags = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
+    if ((state & (ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK | ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK)) ||
+        (flags & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) {
+        resume_tx();
         return false;
     }
-
-    if (drives[slot].file != NULL) fclose(drives[slot].file);
-    drives[slot].file = f;
-    drives[slot].image = img;
-    drives[slot].image.ctx = f;
-    drives[slot].image.write = writable ? file_write : NULL;
-    drives[slot].present = true;
-    snprintf(drives[slot].name, sizeof(drives[slot].name), "%s", filename);
-    log_info("ieee: drive %u = %s (%ld bytes)", slot, path, size);
-    chain_cache_build(slot);
+    // Success leaves new presentations paused for the caller's binding change.
+    // This checks transport activity, not absence of allocated DOS channels.
     return true;
 }
 
-// ----------------------------------------------------------------------------
-// DOS state
-// ----------------------------------------------------------------------------
+// Opens a complete candidate without disturbing a live binding or channel.
+static bool open_candidate(const char* const filename, FILE** const file, dos_media_io_t* const replacement) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    //
+    // INITDR seeks and reads native disk metadata. No direct ROM entry for
+    // preparing a host image candidate: opening a FILE and detecting geometry
+    // here must not initialize a drive or replace an existing DOS binding.
+    // Host filesystem preparation has no native ROM counterpart. Start with
+    // empty outputs so NULL denotes removal without opening any storage.
+    *file = NULL;
+    *replacement = (dos_media_io_t){0};
+    if (filename != NULL) {
+        // Prefer writable media, falling back to read-only. Detect exact raw
+        // image size without reading directory/BAM contents or changing a live
+        // binding. Every failure after fopen closes only the candidate handle.
+        char path[SD_PATH_MAX];
+        sd_make_path(path, SD_DIR_DISKS, filename);
+        FILE* candidate = fopen(path, "r+b");
+        const bool writable = candidate != NULL;
+        if (candidate == NULL) {
+            candidate = fopen(path, "rb");
+        }
+        if (candidate == NULL) {
+            return false;
+        }
+        // Sector/BAM caches belong to DOS, not independently buffered FILE aliases.
+        if (setvbuf(candidate, NULL, _IONBF, 0) != 0) {
+            fclose(candidate);
+            return false;
+        }
+        if (fseek(candidate, 0, SEEK_END) != 0) {
+            fclose(candidate);
+            return false;
+        }
+        const long size = ftell(candidate);
+        if (size < 0 || (unsigned long)size > UINT32_MAX ||
+            !diskimage_open(&replacement->image, file_read, candidate, (uint32_t)size)) {
+            fclose(candidate);
+            return false;
+        }
+        if (writable) {
+            replacement->image.write = file_write;
+            replacement->flush = file_flush;
+        }
+        *file = candidate;
+    }
+    return true;
+}
 
-typedef enum {
-    st_code_ok = 0,
-    st_code_read_error = 23,
-    st_code_write_protect = 26,
-    st_code_long_line = 32,
-    st_code_record_missing = 50,
-    st_code_record_overflow = 51,
-    st_code_file_not_found = 62,
-    st_code_file_type_mismatch = 64,
-    st_code_no_channel = 70,
-    st_code_power_on = 73,
-} status_code_t;
+// Retire unpublished storage on normal return or host SPI exception unwinding.
+static void close_candidate(FILE** const file) {
+    if (*file != NULL) {
+        fclose(*file);
+    }
+}
 
-typedef struct {
-    status_code_t code;
-    uint8_t track;
-    uint8_t sector;
-    uint8_t drive;
-    unsigned int read_pos;
-    uint32_t generation;
-    bool formatted;
-    drive_model_t model;
-} drive_status_t;
-
-// Per-unit DOS status: each IEEE unit has its own channel-15 command channel,
-// so status is tracked and served per unit.
-static drive_status_t drive_status[NUM_UNITS] = {
-    { .code = st_code_power_on },
-    { .code = st_code_power_on },
-    { .code = st_code_power_on },
-    { .code = st_code_power_on },
-};
-static uint8_t status_tx_unit = NUM_UNITS;
-static uint8_t status_tx_prefetched;
-static unsigned int status_tx_remaining;
-static uint32_t status_tx_generation;
-static bool status_tx_pending;
-
-static void set_status(unsigned int slot, status_code_t code, uint8_t track,
-                       uint8_t sector) {
-    drive_status_t* const status = &drive_status[slot / DRIVES_PER_UNIT];
-    const uint32_t generation = status->generation + 1;
-    *status = (drive_status_t) {
-        .code = code,
-        .track = track,
-        .sector = sector,
-        .drive = (uint8_t) (slot % DRIVES_PER_UNIT),
-        .generation = generation,
+// Mount a disks-relative file or remove one slot for NULL, preserving peers.
+// Reject invalid candidates or busy transport without replacing the live mount.
+bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: host rebinding is neither INITDR nor a DOS command.
+    // Finish old writers through the modeled CLOSE paths before publishing a
+    // new media generation. The unit shares DOS state across its two slots.
+    // Host lifecycle policy: map the facade's flat slot index to unit/drive.
+    // Prepare a separate candidate and validate the complete proposed pair
+    // before asking the transport to pause. files owns the handles that media
+    // descriptors borrow, so a failed proposal must close only the candidate.
+    if (slot >= count_of(files)) {
+        return false;
+    }
+    const unsigned int unit = slot / DOS_MEDIA_SLOTS_PER_UNIT;
+    const unsigned int drive = slot % DOS_MEDIA_SLOTS_PER_UNIT;
+    // Both supported GCC toolchains honor cleanup on return. Host tests also
+    // compile C frames with -fexceptions, so SPI unwinding cannot leak a FILE.
+    FILE* candidate __attribute__((cleanup(close_candidate))) = NULL;
+    dos_media_io_t replacement;
+    if (!open_candidate(filename, &candidate, &replacement)) {
+        return false;
+    }
+    const dos_media_io_t pair[] = {
+        drive == 0 ? replacement : media.units[unit].slots[0].io,
+        drive == 1 ? replacement : media.units[unit].slots[1].io,
     };
-}
-
-// Reconcile native GET progress, which survives FIFO replacement and wraps modulo 256.
-static uint8_t tx_progress(uint32_t address, uint8_t* previous, unsigned int remaining) {
-    const uint8_t current = spi_read_at(address);
-    const uint8_t advanced = (uint8_t) (current - *previous);
-    vet(advanced <= remaining, "IEEE prefetch exceeds its pending batch");
-    *previous = current;
-    return advanced;
-}
-
-// Advance the status owner only on GET, acknowledging the error at terminal CR.
-static void status_tx_sync(void) {
-    if (status_tx_unit == NUM_UNITS) return;
-    drive_status_t* const status = &drive_status[status_tx_unit];
-    const uint8_t advanced = tx_progress(ECONOPET_WB_IEEE_TXS_ADDR,
-        &status_tx_prefetched, status_tx_remaining);
-    status_tx_remaining -= advanced;
-    if (status->generation == status_tx_generation) {
-        status->read_pos += advanced;
-        if (status_tx_remaining == 0)
-            set_status(status_tx_unit * DRIVES_PER_UNIT + status->drive, st_code_ok, 0, 0);
+    dos_model_t model;
+    if (dos_media_validate_pair(pair, &model) != DOS_MEDIA_OK || !quiescent()) {
+        return false;
     }
-    if (status_tx_remaining == 0) status_tx_unit = NUM_UNITS;
-}
-
-static bool mcu_talking = false;
-
-// Only the most recently primary-addressed unit accepts a secondary address.
-static uint8_t addressed_unit = NUM_UNITS;
-static uint8_t talk_unit = 0;
-static uint8_t file_unit = 0;    // unit of the open sequential file
-
-static uint8_t stream_slot = 0;
-
-typedef enum {
-    receive_idle,
-    receive_name,
-    receive_command,
-} receive_mode_t;
-
-// Native OPEN names and commands share one counted input buffer per peripheral.
-typedef struct {
-    bool listening;
-    receive_mode_t mode;
-    uint8_t channel;
-    uint8_t secondary;
-    uint8_t pending;
-    unsigned int length;
-    uint8_t bytes[COMMAND_RECEIVE_CAPACITY + 1]; // Spare byte for filename termination.
-} receive_state_t;
-static receive_state_t receive_states[NUM_UNITS];
-
-// One data channel at a time (all the Waterloo loader needs).
-typedef enum {
-    file_channel_closed,
-    file_channel_readable,
-    file_channel_exhausted,
-    file_channel_consumed,
-} file_channel_state_t;
-
-static file_channel_state_t file_state = file_channel_closed;
-static uint8_t file_chan = 0;
-static diskstream_t stream;
-static bool streaming = false; // addressed TX top-up, independent of channel lifetime
-static uint32_t streamed_bytes = 0;
-
-// ---------------------------------------------------------------------------
-// CBM RELative-file channels (Super-OS/9 keeps its filesystems inside REL
-// files, reclen 129, and reads them with ch15 'P' position commands).
-// ---------------------------------------------------------------------------
-#define MAX_REL_CHANNELS 4
-
-typedef struct {
-    bool in_use;
-    uint8_t chan;           // secondary address 0-14 (unique per unit, not globally)
-    uint8_t slot;           // global mount slot backing this channel
-    uint8_t reclen;
-    // Absolute byte offsets into the record stream (vdrive-rel.c semantics).
-    // Native trimming retains the selected byte when the whole record is NUL.
-    // The flat extension keeps its existing transparent-empty-record behavior.
-    uint32_t cur_record;    // 1-based, per CBM convention
-    uint32_t record_base;   // physical payload offset, including native pointer wrap
-    uint32_t bufptr;
-    int32_t  length;
-    bool     missing;       // positioned past the last record
-    uint16_t pending_size;
-    uint16_t pending_pos;
-    bool pending_record;
-    uint8_t pending[DISKIMAGE_REL_MAX_RECORD_LENGTH];
-    // Record-write staging (LISTEN data, committed at UNLISTEN):
-    bool     wr_active;
-    uint16_t wr_pos;        // start position within the record (from P)
-    uint16_t wr_count;
-    uint8_t  wr_buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
-    diskchain_t chain;
-} rel_channel_t;
-
-static rel_channel_t rel_chans[MAX_REL_CHANNELS];
-static rel_channel_t* data_tx_channel;
-static uint8_t data_tx_prefetched;
-static uint8_t data_tx_owner; // Retained queue binding, not the transient hardware pause.
-static void rel_next_record(rel_channel_t* rc);
-static void rel_prepare(rel_channel_t* rc);
-
-// Reconcile the sole bounded REL batch with actual native GETs, not queue writes.
-// Fabric resets must be MCU-coordinated through ieee_drive_reset(), which
-// invalidates this batch. Independent physical CPU/fabric resets are unsupported.
-static void data_tx_sync(void) {
-    if (data_tx_channel == NULL) return;
-    rel_channel_t* const rc = data_tx_channel;
-    const uint8_t advanced = tx_progress(ECONOPET_WB_IEEE_TX_ADDR,
-        &data_tx_prefetched, rc->pending_size - rc->pending_pos);
-    rc->pending_pos += advanced;
-    rc->bufptr += advanced;
-    if (advanced != 0 && rc->pending_record && rc->pending_pos == rc->pending_size) {
-        // GET of the EOI byte prepares the following record before NDAC.
-        // Detach the drained batch before positioning can invalidate a queue.
-        data_tx_channel = NULL;
-        rel_next_record(rc);
-        if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
+    // Finalization can replace status even when rebinding subsequently fails.
+    // Earlier persistence is not rolled back, but old FILE bindings stay owned.
+    if (status_queue.remaining != 0 && status_queue.unit == unit) {
+        discard_queue(true);
     }
-}
-
-// Stop either source without withdrawing a byte awaiting NDAC.
-static void tx_pause(void) {
-    // Pause even without a tracked REL batch: full flush leaves TX unbound,
-    // and hardware may already be serving a later queued channel selection.
-    spi_write_at(ECONOPET_WB_IEEE_SA_ADDR,
-        ECONOPET_IEEE_TX_OWNER_VALID_MASK | ECONOPET_IEEE_TX_OWNER_PAUSE_MASK);
-}
-
-// Restore a retained queue owner after a temporary RX-service pause.
-static void tx_resume(void) {
-    if (mcu_talking
-        && IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary) == IEEE_COMMAND_CHANNEL) {
-        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, ECONOPET_IEEE_TX_OWNER_VALID_MASK
-            | (talk_unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | IEEE_COMMAND_CHANNEL);
-    } else if (data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK) {
-        spi_write_at(ECONOPET_WB_IEEE_SA_ADDR, data_tx_owner);
+    if (dos_work_pending(&units[unit]) || !dos_finalize(&units[unit], &media) ||
+        dos_media_set_unit(&media, unit, pair) != DOS_MEDIA_OK) {
+        resume_tx();
+        return false;
     }
-}
-
-// Save the unread tail before firmware or fabric reuses the shared data FIFO.
-// Ordinary RX service has already waited for the active presentation to finish.
-// Explicit reset/remount instead deliberately invalidates the old transfer.
-static void data_tx_park(void) {
-    tx_pause();
-    data_tx_sync();
-    data_tx_channel = NULL;
-    data_tx_owner = 0;
-}
-
-// Retain the queued owner, releasing it only after ordered RX processing finishes.
-static void data_tx_bind(uint8_t unit, uint8_t chan) {
-    data_tx_owner = ECONOPET_IEEE_TX_OWNER_VALID_MASK
-        | (unit << ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) | chan;
-}
-
-// Channels are keyed by (unit, chan): the d8d9 descriptor table reuses
-// secondary addresses 2/3 on BOTH units, so the channel number alone is
-// ambiguous.
-static rel_channel_t* rel_find(uint8_t unit, uint8_t chan) {
-    for (int i = 0; i < MAX_REL_CHANNELS; i++)
-        if (rel_chans[i].in_use && rel_chans[i].chan == chan
-            && rel_chans[i].slot / DRIVES_PER_UNIT == unit) return &rel_chans[i];
-    return NULL;
-}
-
-// Resets DOS and protocol state that must not outlive initialization.
-static void reset_protocol_state(void) {
-    for (unsigned int unit = 0; unit < NUM_UNITS; unit++) {
-        set_status(unit * DRIVES_PER_UNIT, st_code_power_on, 0, 0);
+    // Media publication succeeded and old unit references are now stale.
+    // Temporarily withdraw this device from the fabric mask, preserving peers,
+    // then discard its staged copies before resetting their native sources.
+    const uint8_t peers = present_units() & (uint8_t)~(1u << unit);
+    spi_write_at(ECONOPET_WB_IEEE_CTRL_ADDR, peers << ECONOPET_IEEE_CTRL_UNIT_MASK_SHIFT);
+    if (data_queue.remaining != 0 && data_queue.unit == unit) {
+        discard_queue(false);
     }
-
-    mcu_talking = false;
-    addressed_unit = NUM_UNITS;
-    talk_unit = 0;
-    file_unit = 0;
-    stream_slot = 0;
-    memset(receive_states, 0, sizeof(receive_states));
-    file_state = file_channel_closed;
-    file_chan = 0;
-    stream = (diskstream_t) { 0 };
-    streaming = false;
-    streamed_bytes = 0;
-    data_tx_channel = NULL;
-    data_tx_owner = 0;
-    status_tx_unit = NUM_UNITS;
-    status_tx_remaining = 0;
-    status_tx_pending = false;
-    memset(rel_chans, 0, sizeof(rel_chans));
+    if (status_queue.remaining != 0 && status_queue.unit == unit) {
+        discard_queue(true);
+    }
+    // Close the retired slot handle only after successful binding replacement.
+    // Reset both drives' shared DOS state, but retain the unchanged partner's
+    // FILE and other units' DOS/input state. Clear bus selections of this unit.
+    if (files[slot] != NULL) {
+        fclose(files[slot]);
+    }
+    files[slot] = candidate;
+    candidate = NULL;
+    dos_reset(&units[unit], model);
+    listening[unit] = false;
+    if (talker == unit) {
+        talker = NATIVE_UNIT_NONE;
+    }
+    if (addressed == unit) {
+        addressed = NATIVE_UNIT_NONE;
+    }
+    // Restore the complete presence mask and resume any surviving peer talker.
+    control(0);
+    resume_tx();
+    log_info("IEEE mount u%u d%u rw%u %.24s", unit, drive, replacement.image.write != NULL,
+             filename != NULL ? filename : "(removed)");
+    return true;
 }
 
-static drive_model_t get_drive_model(unsigned int slot) {
-    // First check for a disk present in the requested drive.  If that drive is
-    // empty, try the other drive in the same unit.  If both drives are empty,
-    // return the default drive model (4040).
-    if (!drives[slot].present) slot ^= 1u;
-    if (!drives[slot].present) return drive_model_4040;
-
-    // Determine the drive model based on the type of the mounted disk image.
-    const diskimage_type_t type = drives[slot].image.type;
-    return type == diskimage_type_d80 || type == diskimage_type_hdd
-        ? drive_model_8050
-        : drive_model_4040;
+// Remove every mounted image after quiescence and successful media flushing.
+// Retain handles and bindings if the transition cannot be completed.
+bool ieee_drive_unmount_all(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/close
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/close
+    //
+    // No direct ROM entry: native CLOSE/CLSALL releases channels, not FILE
+    // handles or mounted images. Host teardown finalizes every unit before
+    // detaching any binding. Successful earlier finalization is not rolled back.
+    // Host teardown is distinct from native DOS reset. Reject active transport
+    // without detaching handles. dos_media flushes all units before removing
+    // any binding, retaining them on a failure and allowing a later retry.
+    if (present_units() != 0 && !quiescent()) {
+        return false;
+    }
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        if (status_queue.remaining != 0 && status_queue.unit == unit) {
+            discard_queue(true);
+        }
+        if (dos_work_pending(&units[unit]) || !dos_finalize(&units[unit], &media)) {
+            resume_tx();
+            return false;
+        }
+    }
+    if (dos_media_unmount_all(&media) != DOS_MEDIA_OK) {
+        resume_tx();
+        return false;
+    }
+    // No live binding can invoke these callbacks after successful detachment.
+    // Release every owned FILE, then reset DOS and fabric state with no devices
+    // selected. The media bank's generation survives this reset/unmount cycle.
+    for (unsigned int slot = 0; slot < count_of(files); ++slot) {
+        if (files[slot] != NULL) {
+            fclose(files[slot]);
+        }
+        files[slot] = NULL;
+    }
+    // Detached generations cannot finalize cached BAM references again.
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        dos_reset(&units[unit], DOS_MODEL_NONE);
+    }
+    ieee_drive_reset();
+    return true;
 }
 
-// Position the engine at record 'rec', byte 'pos' within it, and compute
-// the trimmed length (last non-zero byte), like vdrive_rel_position.
-static void rel_position_at(rel_channel_t* rc, uint32_t rec, uint32_t base, uint8_t pos) {
-    uint8_t buf[DISKIMAGE_REL_MAX_RECORD_LENGTH];
-    if (data_tx_channel == rc) {
-        data_tx_park();
-        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
+#if !defined(PICO_ON_DEVICE) || !PICO_ON_DEVICE
+// Abandon a failed simulator's native owners without evaluating its SPI fabric.
+void ieee_drive_abort(void) {
+    // Host-only emergency cleanup has no ROM counterpart. Normal durable
+    // unmount remains mandatory on hardware. Discard dirty test state before
+    // closing callbacks, preserving the bank's monotonic media generation.
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        dos_reset(&units[unit], DOS_MODEL_NONE);
+        media.units[unit] = (dos_media_unit_t){0};
+        listening[unit] = false;
     }
-    rc->pending_size = 0;
-    rc->pending_pos = 0;
-    rc->pending_record = false;
-    rc->cur_record = rec;
-    rc->record_base = base;
-    rc->missing = (rec == 0)
-        || base + rc->reclen > diskchain_size(&rc->chain);
-    if (rc->missing) return;
-
-    rc->bufptr = base + pos;
-    rc->length = (int32_t) (base + rc->reclen - 1);
-    if (!diskchain_read(&rc->chain, base, buf, rc->reclen)) {
-        rc->missing = true;
-        return;
-    }
-    // Native FNDLST scans the whole record, independently of the P byte offset.
-    const int32_t trim_start = (int32_t) (rc->chain.flat ? rc->bufptr : base);
-    while (rc->length >= trim_start
-           && buf[rc->length - base] == 0) {
-        rc->length--;
-    }
-    // SETLST falls back to GETPNT only if the entire native record is empty.
-    if (!rc->chain.flat && pos < rc->reclen && rc->length < (int32_t) base)
-        rc->length = (int32_t) rc->bufptr;
-    if (!rc->chain.flat && rc->length < (int32_t) rc->bufptr) {
-        const uint32_t block = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-        const uint32_t last_block = (uint32_t) rc->length / DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-        if (block != last_block) {
-            // SETLST cannot search the previous buffer after P selected its successor.
-            rc->length = (int32_t) rc->bufptr;
-        } else {
-            // RDREL compares physical byte pointers, not logical record offsets.
-            // A last-character pointer behind P is reached in the next buffer.
-            rc->length += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
+    data_queue = (native_queue_t){0};
+    status_queue = (native_queue_t){0};
+    addressed = talker = NATIVE_UNIT_NONE;
+    secondary = 0;
+    next_job = 0;
+    for (unsigned int slot = 0; slot < count_of(files); ++slot) {
+        if (files[slot] != NULL) {
+            fclose(files[slot]);
+            files[slot] = NULL;
         }
     }
 }
+#endif
 
-// Explicit P selects a logical record, independently of the current buffer.
-static void rel_position(rel_channel_t* rc, uint32_t rec, uint8_t pos) {
-    rel_position_at(rc, rec, rec == 0 ? 0 : (rec - 1) * (uint32_t) rc->reclen, pos);
-}
-
-// NXTREC retains the active physical buffer when NR is ahead of its pointer.
-static void rel_next_record(rel_channel_t* rc) {
-    uint32_t base = rc->record_base + rc->reclen;
-    if (!rc->chain.flat) {
-        base = rc->bufptr / DISKIMAGE_SECTOR_PAYLOAD_SIZE * DISKIMAGE_SECTOR_PAYLOAD_SIZE
-            + base % DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-        // bufptr is one past the prefetched record's final character.
-        if (base < rc->bufptr) base += DISKIMAGE_SECTOR_PAYLOAD_SIZE;
-    }
-    rel_position_at(rc, rc->cur_record + 1, base, 0);
-}
-
-// Save prepared record data independently of shared FIFO ownership (native RD25).
-static void rel_prepare(rel_channel_t* rc) {
-    if (rc->pending_pos < rc->pending_size) return;
-    while (!rc->missing && (int32_t) rc->bufptr > rc->length)
-        rel_next_record(rc);
-    rc->pending_pos = 0;
-    rc->pending_record = false;
-    if (rc->missing) {
-        set_status(rc->slot, st_code_record_missing, 0, 0);
-        rc->pending[0] = 0x0D;
-        rc->pending_size = 1;
-    } else {
-        rc->pending_size = (uint16_t) (rc->length - rc->bufptr + 1);
-        vet(rc->pending_size > 0 && rc->pending_size <= sizeof(rc->pending),
-            "IEEE REL response exceeds its bounded pending buffer");
-        if (!diskchain_read(&rc->chain, rc->bufptr, rc->pending, rc->pending_size)) {
-            set_status(rc->slot, st_code_read_error, 0, 0);
-            rc->pending[0] = 0x0D;
-            rc->pending_size = 1;
-        } else {
-            rc->pending_record = true;
-        }
-    }
-}
-
-// Restore the immutable unread response, with EOI on its last byte.
-static void rel_serve(rel_channel_t* rc) {
-    _Static_assert(DISKIMAGE_REL_MAX_RECORD_LENGTH < UINT8_MAX,
-        "REL batch must be smaller than the prefetch counter modulus");
-    data_tx_sync();
-    if (data_tx_channel == rc && rc->pending_pos < rc->pending_size) {
-        data_tx_bind(rc->slot / DRIVES_PER_UNIT, rc->chan);
-        return;
-    }
-
-    data_tx_park();
-    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-    rel_prepare(rc);
-
-    const uint16_t n = rc->pending_size - rc->pending_pos;
-    data_tx_prefetched = spi_read_at(ECONOPET_WB_IEEE_TX_ADDR);
-    data_tx_channel = rc;
-    // Keep presentation paused until the immutable unread suffix is restored.
-    if (n > 1)
-        spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, rc->pending + rc->pending_pos, n - 1u);
-    spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, rc->pending[rc->pending_size - 1]);
-    data_tx_bind(rc->slot / DRIVES_PER_UNIT, rc->chan);
-    streamed_bytes += n;   // REL read, attributed to this channel's slot
-}
-
-// Begin collecting a record write on this channel (kernel did LISTEN +
-// secondary): bytes land at the position set by the last P command.
-static void rel_write_begin(rel_channel_t* rc) {
-    data_tx_sync();
-    if (data_tx_channel == rc) {
-        data_tx_park();
-        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-    }
-    rc->pending_size = 0;
-    rc->pending_pos = 0;
-    uint32_t base = rc->record_base;
-    rc->wr_active = true;
-    rc->wr_count = 0;
-    if (rc->missing || rc->bufptr < base || rc->bufptr >= base + rc->reclen) {
-        rc->wr_pos = 0;         // fresh record start
-    } else {
-        rc->wr_pos = (uint16_t) (rc->bufptr - base);
-    }
-}
-
-static void rel_write_byte(rel_channel_t* rc, uint8_t byte) {
-    if (rc->wr_pos + rc->wr_count >= rc->reclen) {
-        set_status(rc->slot, st_code_record_overflow, 0, 0);
-        return;
-    }
-    rc->wr_buf[rc->wr_count++] = byte;
-}
-
-// Commit at UNLISTEN, CBM-style: bytes land at the position, the record
-// tail is zero-filled (what the read side's null-trim recovers), and the
-// engine advances.
-static void rel_write_commit(rel_channel_t* rc) {
-    uint8_t rec[DISKIMAGE_REL_MAX_RECORD_LENGTH];
-    rc->wr_active = false;
-    if (rc->missing) {
-        set_status(rc->slot, st_code_record_missing, 0, 0);
-        return;
-    }
-    uint32_t base = rc->record_base;
-    if (!diskchain_read(&rc->chain, base, rec, rc->reclen)) {
-        set_status(rc->slot, st_code_read_error, 0, 0);
-        return;
-    }
-    memcpy(rec + rc->wr_pos, rc->wr_buf, rc->wr_count);
-    memset(rec + rc->wr_pos + rc->wr_count, 0,
-           rc->reclen - rc->wr_pos - rc->wr_count);
-    if (!diskchain_write(&rc->chain, base, rec, rc->reclen)) {
-        set_status(rc->slot, st_code_write_protect, 0, 0);
-        log_info("ieee: REL write failed (read-only?) rec %lu",
-                 (unsigned long) rc->cur_record);
-        return;
-    }
-    // WR40 reaches RD40/NXTREC with the physical buffer pointer, not a fresh P.
-    rel_position_at(rc, rc->cur_record + 1, base + rc->reclen, 0);
-    if (!rc->chain.flat && !rc->missing) rel_prepare(rc);
-}
-
-// Starts counted command collection for both OPEN 15 and secondary address 15.
-static void ch15_begin(uint8_t unit) {
-    receive_states[unit].mode = receive_command;
-    receive_states[unit].channel = IEEE_COMMAND_CHANNEL;
-}
-
-// Execute the collected command after native IDLE dispatch, not on receipt of EOI.
-static void ch15_execute(uint8_t ch15_unit) {
-    receive_state_t* const command = &receive_states[ch15_unit];
-    const uint8_t* const ch15_cmd = command->bytes;
-    const unsigned int ch15_cmd_len = command->length;
-    command->length = 0;
-    if (ch15_cmd_len == 0) return;
-
-    if (ch15_cmd[0] == 'P' && ch15_cmd_len >= 4) {
-        // P + channel byte ($60 | chan) + record lo + record hi [+ position]
-        rel_channel_t* rc = rel_find(ch15_unit, ch15_cmd[1] & 0x0F);
-        uint32_t rec = ch15_cmd[2] | ((uint32_t) ch15_cmd[3] << 8);
-        uint8_t pos = (ch15_cmd_len >= 5 && ch15_cmd[4] >= 1) ? (uint8_t) (ch15_cmd[4] - 1) : 0;
-        if (rc == NULL) {
-            const uint8_t channel = ch15_cmd[1] & IEEE_CMD_CHANNEL_MASK;
-            const bool sequential = channel == IEEE_CMD_CHANNEL_MASK
-                || (file_state != file_channel_closed
-                    && file_unit == ch15_unit && file_chan == channel);
-            set_status(ch15_unit * DRIVES_PER_UNIT
-                       + drive_status[ch15_unit].drive,
-                       sequential ? st_code_file_type_mismatch : st_code_no_channel, 0, 0);
-        } else {
-            const bool overflow = pos >= rc->reclen;
-            if (overflow) pos = 0;
-            rel_position(rc, rec, pos);
-            set_status(rc->slot,
-                       rc->missing ? st_code_record_missing
-                           : overflow ? st_code_record_overflow : st_code_ok, 0, 0);
-        }
-    } else if (ch15_cmd[0] == 'I' || ch15_cmd[0] == 'V') {
-        uint8_t drive = drive_status[ch15_unit].drive;
-        for (unsigned int index = 1; index < ch15_cmd_len; index++) {
-            if (ch15_cmd[index] == '0' || ch15_cmd[index] == '1') {
-                drive = (uint8_t) (ch15_cmd[index] - '0');
-                break;
-            }
-        }
-        set_status(ch15_unit * DRIVES_PER_UNIT + drive, st_code_ok, 0, 0);
-    } else {
-        log_info("ieee: ch15 command %02x len %u (ignored)", ch15_cmd[0], ch15_cmd_len);
-    }
-}
-
-// Consume a pending OPEN from the shared buffer when the peripheral reaches IDLE.
-static void resolve_open(uint8_t open_unit) {
-    receive_state_t* const input = &receive_states[open_unit];
-    char* const open_name = (char*) input->bytes;
-    const uint8_t open_chan = input->channel;
-    open_name[input->length] = '\0';
-    input->length = 0;
-
-    // Split off the ",PRG"/",SEQ" type suffix.
-    char* comma = strchr(open_name, ',');
-    if (comma != NULL) *comma = '\0';
-
-    rel_channel_t* const previous = rel_find(open_unit, open_chan & 0x0F);
-    if (previous != NULL) previous->in_use = false;
-
-    // Slot = the addressed unit's pair, plus the drive number from the
-    // "0:"/"1:" (or "0."/"1.") prefix; default drive 0 of that unit.
-    unsigned int slot = open_unit * DRIVES_PER_UNIT;
-    if ((open_name[0] == '0' || open_name[0] == '1')
-        && (open_name[1] == ':' || open_name[1] == '.')) {
-        slot = open_unit * DRIVES_PER_UNIT
-             + (unsigned int) (open_name[0] - '0');
-    }
-    // Fall back to the unit's other drive only for ordinary files: OS-9's
-    // per-drive REL containers are drive-specific, and aliasing them can
-    // corrupt the mounted system disk.
-    if (!drives[slot].present && drives[slot ^ 1u].present
-        && drives[slot ^ 1u].image.type != diskimage_type_hdd) {
-        log_info("ieee: drive %u empty, using drive %u", slot, slot ^ 1u);
-        slot ^= 1u;
-    }
-
-    file_state = file_channel_closed;
-    streaming = false;
-    // New file: discard any stale queued data from a previous channel.
-    data_tx_park();
-    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-
-    if (!drives[slot].present) {
-        set_status(slot, st_code_file_not_found, 0, 0);
-        log_info("ieee: OPEN '%s': no disk image mounted", open_name);
-        return;
-    }
-
-    diskimage_entry_t entry;
-    if (!diskimage_find(&drives[slot].image, open_name, &entry)) {
-        set_status(slot, st_code_file_not_found, 0, 0);
-        log_info("ieee: OPEN '%s': not found", open_name);
-        return;
-    }
-
-    if (entry.file_type == DISKIMAGE_FTYPE_REL) {
-        // Relative file: record-addressed access on this channel (used by
-        // Super-OS/9 for its embedded filesystems). Reuse the slot if this
-        // channel was already open, else take a free one.
-        rel_channel_t* rc = rel_find(open_unit, open_chan & 0x0F);
-        if (rc == NULL) {
-            for (int i = 0; i < MAX_REL_CHANNELS; i++)
-                if (!rel_chans[i].in_use) { rc = &rel_chans[i]; break; }
-        }
-        // Use the mount-time chain cache; live build only for chains it
-        // doesn't know (e.g. more REL files than cache slots).
-        const diskchain_t* cached = (rc != NULL)
-            ? chain_cache_find(slot, entry.start_track, entry.start_sector)
-            : NULL;
-        if (cached != NULL) {
-            rc->chain = *cached;
-        }
-        if (rc == NULL
-            || (cached == NULL
-                && !diskchain_build(&rc->chain, &drives[slot].image,
-                                    entry.start_track, entry.start_sector))) {
-            set_status(slot, st_code_file_not_found, 0, 0);
-            log_info("ieee: REL OPEN '%s' failed", open_name);
-            return;
-        }
-        if (entry.record_len > DISKIMAGE_REL_MAX_RECORD_LENGTH) {
-            set_status(slot, st_code_file_not_found, 0, 0);
-            log_info("ieee: REL OPEN '%s' bad reclen %u", open_name, entry.record_len);
-            return;
-        }
-        rc->in_use = true;
-        rc->wr_active = false;
-        rc->slot = (uint8_t) slot;
-        rc->chan = open_chan & 0x0F;
-        rc->reclen = entry.record_len >= DISKIMAGE_REL_MIN_RECORD_LENGTH
-            ? entry.record_len : 129;
-        rel_position(rc, 1, 0);
-        set_status(slot, st_code_ok, 0, 0);
-        log_info("ieee: REL OPEN '%s' ok (chan %u, reclen %u, %lu bytes)",
-                 open_name, rc->chan, rc->reclen,
-                 (unsigned long) diskchain_size(&rc->chain));
-        return;
-    }
-
-    if (!diskstream_open(&stream, &drives[slot].image,
-                         entry.start_track, entry.start_sector)) {
-        set_status(slot, st_code_file_not_found, 0, 0);
-        log_info("ieee: OPEN '%s': stream open failed", open_name);
-        return;
-    }
-
-    file_state = file_channel_readable;
-    stream_slot = (uint8_t) slot;
-    file_chan = open_chan;
-    file_unit = open_unit;
-    set_status(slot, st_code_ok, 0, 0);
-    streamed_bytes = 0;
-    log_info("ieee: OPEN '%s' ok (chan %u)", open_name, file_chan);
-}
-
-// Native TALK/TALK1 returns through NOTLK for unallocated or consumed SEQ data.
-static bool talk_source_ready(void) {
-    if (!mcu_talking) return false;
-    const uint8_t channel = IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary);
-    return channel == IEEE_COMMAND_CHANNEL || rel_find(talk_unit, channel) != NULL
-        || ((file_state == file_channel_readable || file_state == file_channel_exhausted)
-            && file_unit == talk_unit && file_chan == channel);
-}
-
-// Dispatch at IDLE/VIDLE. An explicit routine exit bypasses retained role ownership.
-static void dispatch_pending(uint8_t idle_unit) {
-    for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
-        receive_state_t* const input = &receive_states[unit];
-        if (!input->pending || (input->listening && unit != idle_unit)
-            || (talk_unit == unit && unit != idle_unit && talk_source_ready())) continue;
-        input->pending = 0;
-        unsigned int length = input->length;
-        if (length > 1) {
-            if (input->bytes[length - 1] == '\r') --length;
-            else if (input->bytes[length - 2] == '\r') length -= 2;
-        }
-        if (length > COMMAND_VALIDATION_LIMIT) {
-            input->length = 0;
-            set_status(unit * DRIVES_PER_UNIT + drive_status[unit].drive, st_code_long_line, 0, 0);
-        } else if (IEEE_CMD_IS_OPEN(input->secondary)
-            && IEEE_CMD_CHANNEL(input->secondary) != IEEE_COMMAND_CHANNEL) {
-            input->length = length;
-            resolve_open(unit);
-        } else {
-            // RECORD reads raw binary fields outside CMDSIZ. Text commands do not.
-            if (input->bytes[0] != 'P') input->length = length;
-            ch15_execute(unit);
-        }
-    }
-}
-
-// Queue only the unread status suffix, retaining DOS lifetime until its CR GET.
-static void push_status(unsigned int unit) {
-    status_tx_sync();
-    ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK);
-    drive_status_t* const retained = &drive_status[unit];
-    if (!retained->formatted) {
-        retained->model = get_drive_model(unit * DRIVES_PER_UNIT + retained->drive);
-        retained->formatted = true;
-    }
-    const char* text;
-    char line[IEEE_STATUS_LINE_CAPACITY];
-    const drive_status_t status = drive_status[unit];
-    const drive_model_t model = status.model;
-
-    switch (status.code) {
-        case st_code_ok:              text = " OK"; break;
-        case st_code_read_error:      text = "READ ERROR"; break;
-        case st_code_write_protect:   text = "WRITE PROTECT ON"; break;
-        case st_code_long_line:       text = "SYNTAX ERROR"; break;
-        case st_code_record_missing:  text = "RECORD NOT PRESENT"; break;
-        case st_code_record_overflow: text = "OVERFLOW IN RECORD"; break;
-        case st_code_file_not_found:  text = " FILE NOT FOUND"; break;
-        case st_code_file_type_mismatch: text = " FILE TYPE MISMATCH"; break;
-        case st_code_no_channel:      text = "NO CHANNEL"; break;
-        case st_code_power_on:
-            text = model == drive_model_8050
-                ? "CBM DOS V2.7"
-                : "CBM DOS V2";
-            break;
-        default:                      text = ""; break;
-    }
-    const int n = model == drive_model_8050
-        ? snprintf(line, sizeof(line), "%02u,%s,%02u,%02u,%u",
-                   (unsigned int) status.code, text, status.track, status.sector,
-                   status.drive)
-        : snprintf(line, sizeof(line), "%02u,%s,%02u,%02u",
-                   (unsigned int) status.code, text, status.track, status.sector);
-
-    vet(n >= 0 && (size_t) n <= IEEE_STATUS_TEXT_MAX,
-        "IEEE status text exceeds its %u-byte capacity", IEEE_STATUS_TEXT_MAX);
-    vet(status.read_pos <= (unsigned int) n, "IEEE status progress exceeds its text");
-    status_tx_unit = (uint8_t) unit;
-    status_tx_generation = status.generation;
-    status_tx_remaining = (unsigned int) n + 1 - status.read_pos;
-    status_tx_prefetched = spi_read_at(ECONOPET_WB_IEEE_TXS_ADDR);
-    for (unsigned int i = status.read_pos; i < (unsigned int) n; i++)
-        spi_write_at(ECONOPET_WB_IEEE_TXS_ADDR, (uint8_t) line[i]);
-    spi_write_at(ECONOPET_WB_IEEE_TXS_LAST_ADDR, 0x0D);
-}
-
-// Fill the TX FIFO from the open stream until the fabric reports no room
-// for another chunk.
-static void service_tx(void) {
-    _Static_assert(ECONOPET_IEEE_TX_BURST_CHUNK >= DISKIMAGE_SECTOR_LINK_SIZE + 2,
-        "native one-byte EOF response must fit a TX burst");
-    // An underrun mid-record times out the kernel's counted read.
-    uint8_t buf[ECONOPET_IEEE_TX_BURST_CHUNK];
-
-    for (;;) {
-        uint8_t ctrl = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
-        if (!(ctrl & ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK)) return;
-
-        size_t n = 0;
-        bool last = false;
-        uint8_t last_byte = 0;
-
-        while (n < ECONOPET_IEEE_TX_BURST_CHUNK) {
-            uint8_t byte;
-            bool is_last;
-            if (!diskstream_next(&stream, &byte, &is_last)) {
-                // Preserve the valid prefix, but release the failed channel
-                // without inventing an EOF byte, as native TLKERR/FRECHN do.
-                if (n > 0) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n);
-                streamed_bytes += n;
-                log_info("ieee: read error after %lu bytes", (unsigned long) streamed_bytes);
-                set_status(stream_slot, st_code_read_error, 0, 0);
-                file_state = file_channel_closed;
-                streaming = false;
-                return;
-            }
-            if (is_last) {
-                // REL reads share byte accounting, not this stream's cursor.
-                if (stream.sectors == 1 && stream.pos == DISKIMAGE_SECTOR_LINK_SIZE + 1
-                    && (stream.img->type == diskimage_type_d64
-                        || stream.img->type == diskimage_type_d80)) {
-                    // Native OR30 loses the sole byte's initial EOF. The wrapped
-                    // buffer pointer leaks both link bytes before repeating it.
-                    buf[n++] = byte;
-                    for (size_t i = 0; i < DISKIMAGE_SECTOR_LINK_SIZE; ++i)
-                        buf[n++] = stream.buf[i];
-                }
-                last = true;
-                last_byte = byte;
-                break;
-            }
-            buf[n++] = byte;
-        }
-
-        if (n > 0) spi_write_same_block(ECONOPET_WB_IEEE_TX_ADDR, buf, n);
-        streamed_bytes += n;
-
-        if (last) {
-            // Final byte carries EOI: separate address, so not part of the burst.
-            spi_write_at(ECONOPET_WB_IEEE_TX_LAST_ADDR, last_byte);
-            streamed_bytes++;
-            log_info("ieee: stream complete, %lu bytes", (unsigned long) streamed_bytes);
-            streaming = false;
-            file_state = file_channel_exhausted;
-            return;
-        }
-    }
-}
-
-static void handle_command(uint8_t cmd) {
-    switch (IEEE_CMD_CLASS(cmd)) {
-        case IEEE_CMD_LISTEN_BASE:  // LISTEN / UNLISTEN
-            addressed_unit = NUM_UNITS;
-            if (cmd == IEEE_CMD_UNLISTEN) {
-                for (unsigned int unit = 0; unit < NUM_UNITS; ++unit) {
-                    receive_states[unit].listening = false;
-                    receive_states[unit].mode = receive_idle;
-                }
-                for (int i = 0; i < MAX_REL_CHANNELS; i++)
-                    if (rel_chans[i].in_use && rel_chans[i].wr_active)
-                        rel_write_commit(&rel_chans[i]);
-            } else {
-                const uint8_t a = IEEE_CMD_ADDRESS(cmd);
-                if (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS) {
-                    addressed_unit = (uint8_t) (a - DEV_ADDR);
-                    receive_states[addressed_unit].listening = true;
-                    receive_states[addressed_unit].mode = receive_idle;
-                    receive_states[addressed_unit].channel = DEFAULT_CHANNEL;
-                    receive_states[addressed_unit].secondary = IEEE_CMD_LISTEN_BASE;
-                    if (mcu_talking && talk_unit == addressed_unit) {
-                        mcu_talking = false;
-                        streaming = false;
-                    }
-                }
-            }
-            break;
-
-        case IEEE_CMD_TALK_BASE:  // TALK / UNTALK
-            addressed_unit = NUM_UNITS;
-            streaming = false;
-            if (cmd == IEEE_CMD_UNTALK) {
-                mcu_talking = false;
-                // Channel data persists across UNTALK (continuation) -- just
-                // pause the top-up until the next TALK on the data channel.
-                streaming = false;
-            } else {
-                uint8_t a = IEEE_CMD_ADDRESS(cmd);
-                mcu_talking = (a >= DEV_ADDR && a < DEV_ADDR + NUM_UNITS);
-                if (mcu_talking) {
-                    talk_unit = (uint8_t) (a - DEV_ADDR);
-                    addressed_unit = talk_unit;
-                    receive_states[talk_unit].listening = false;
-                    receive_states[talk_unit].mode = receive_idle;
-                    receive_states[talk_unit].channel = DEFAULT_CHANNEL;
-                    receive_states[talk_unit].secondary = IEEE_CMD_LISTEN_BASE;
-                }
-            }
-            break;
-
-        case IEEE_CMD_SECONDARY_BASE:  // secondary address (data channel)
-            if (addressed_unit == NUM_UNITS) break;
-            receive_states[addressed_unit].secondary = cmd;
-            if (receive_states[addressed_unit].listening) {
-                rel_channel_t* wrc;
-                const uint8_t listen_unit = addressed_unit;
-                const uint8_t listen_chan = IEEE_CMD_CHANNEL(cmd);
-                receive_states[listen_unit].channel = listen_chan;
-                receive_states[listen_unit].mode = receive_idle;
-                if (listen_chan == 15) {
-                    ch15_begin(listen_unit);
-                } else if ((wrc = rel_find(listen_unit, listen_chan)) != NULL) {
-                    rel_write_begin(wrc);
-                }
-            }
-            if (mcu_talking && talk_unit == addressed_unit) {
-                streaming = false;
-                uint8_t chan = IEEE_CMD_CHANNEL(cmd);
-                rel_channel_t* rc;
-                if (chan == 15) {
-                    status_tx_pending = true;
-                } else if ((rc = rel_find(talk_unit, chan)) != NULL) {
-                    rel_serve(rc);
-                } else if ((file_state == file_channel_readable
-                            || file_state == file_channel_exhausted)
-                    && talk_unit == file_unit && chan == file_chan) {
-                    if (data_tx_channel != NULL) {
-                        data_tx_park();
-                        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                    }
-                    data_tx_bind(file_unit, file_chan);
-                    streaming = file_state == file_channel_readable;
-                }
-            }
-            break;
-
-        case IEEE_CMD_CLOSE_BASE:  // CLOSE ($Ex) / OPEN ($Fx)
-            if (addressed_unit == NUM_UNITS
-                || !receive_states[addressed_unit].listening) break;
-            receive_states[addressed_unit].secondary = cmd;
-            // Fabric has already flushed ordinary OPEN/CLOSE, but its GET
-            // counter still records genuine progress before that discard.
-            if (IEEE_CMD_CHANNEL(cmd) != 15) data_tx_park();
-            if (IEEE_CMD_IS_OPEN(cmd)) {
-                receive_states[addressed_unit].channel = IEEE_CMD_CHANNEL(cmd);
-                if (IEEE_CMD_CHANNEL(cmd) == 15) {
-                    ch15_begin(addressed_unit);
-                } else {
-                    receive_states[addressed_unit].mode = receive_name;
-                }
-            } else {
-                rel_channel_t* rc = rel_find(addressed_unit, IEEE_CMD_CHANNEL(cmd));
-                if (rc != NULL) {
-                rc->in_use = false;
-                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                } else if (addressed_unit == file_unit && IEEE_CMD_CHANNEL(cmd) == file_chan) {
-                file_state = file_channel_closed;
-                streaming = false;
-                ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK);
-                }
-            }
-            break;
-
-        default:
-            break;
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Public API
-// ----------------------------------------------------------------------------
-
-// Apply mounted-media enablement after callers have parked or reset DOS state.
-static void sync_emulation_enabled(void) {
-    bool has_mounted_drive = false;
-    for (unsigned int slot = 0; slot < NUM_DRIVES; slot++) {
-        if (drives[slot].present) {
-            has_mounted_drive = true;
-            break;
-        }
-    }
-    emulation_enabled = has_mounted_drive;
-    if (emulation_enabled) {
-        ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_FLUSH_MASK);
-        log_info("ieee: virtual drive enabled");
-    } else {
-        ieee_ctrl_write(0);
-        log_info("ieee: virtual drive off (real hardware bus)");
-    }
-}
-
-void ieee_drive_init(void) {
-    // Initialization always starts from a stock-PET bus and fresh DOS state.
-    ieee_drive_unmount_all();
-}
-
+// Reset transport and successfully finalized DOS units without removing media.
+// Failed owners retain their DOS state. Coordinate with the PET/fabric reset path.
 void ieee_drive_reset(void) {
-    reset_protocol_state();
-    if (emulation_enabled) ieee_ctrl_write(ECONOPET_IEEE_CTRL_ENABLE_MASK | ECONOPET_IEEE_CTRL_FLUSH_MASK);
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/dskint
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+    //
+    // DIAGOK/BEGIN bootstraps channel tables and command/error readiness.
+    // No direct ROM entry for this coordinated host reset. It is not U9/UI,
+    // and mounted FILEs and media generations survive it.
+    // This is a coordinated firmware reset, not a port of ROM power-on
+    // diagnostics, head initialization, or command-channel reset execution.
+    // Reinitialize only finalized units using their retained models, dropping
+    // their partial input. Clear bus listener roles even for a failed owner.
+    for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
+        // Failed finalization must survive a PET reset with its owner and error.
+        if (dos_finalize(&units[unit], &media)) {
+            dos_reset(&units[unit], media.units[unit].model);
+        }
+        listening[unit] = false;
+    }
+    // Global fabric flush resets FIFO GET counters, so abandon both staged
+    // owners/baselines as well as addressing and round-robin scheduling state.
+    // control preserves presence from mounted media while requesting the flush.
+    data_queue = (native_queue_t){0};
+    status_queue = (native_queue_t){0};
+    addressed = talker = NATIVE_UNIT_NONE;
+    secondary = 0;
+    next_job = 0;
+    control(ECONOPET_IEEE_CTRL_FLUSH_MASK);
+    command_logs_remaining = NATIVE_COMMAND_LOG_BUDGET;
+    log_service_pending = true;
+    const uint8_t state = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
+    const uint8_t flags = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
+    log_info("IEEE reset mask%02x ctrl%02x st%02x", present_units(), state, flags);
 }
 
-void ieee_drive_unmount_all(void) {
-    for (unsigned int slot = 0; slot < NUM_DRIVES; slot++) {
-        if (drives[slot].file != NULL) fclose(drives[slot].file);
-        drives[slot] = (drive_t) { 0 };
-        for (unsigned int i = 0; i < CHAIN_CACHE_SLOTS; i++) {
-            chain_cache[slot][i].valid = false;
-        }
-    }
-    reset_protocol_state();
-    sync_emulation_enabled();
-}
-
-bool ieee_drive_mount(unsigned int slot, const char* filename) {
-    if (slot >= NUM_DRIVES) return false;
-
-    bool mounted = mount_image(slot, filename);
-    if (!mounted) log_info("ieee: could not mount disk image: /disks/%s", filename);
-    if (mounted) {
-        status_tx_sync();
-        status_tx_unit = NUM_UNITS;
-        status_tx_pending = false;
-        data_tx_park();
-        for (unsigned int index = 0; index < MAX_REL_CHANNELS; ++index)
-            if (rel_chans[index].slot == slot) rel_chans[index].in_use = false;
-        if (stream_slot == slot) {
-            file_state = file_channel_closed;
-            streaming = false;
-        }
-        sync_emulation_enabled();
-    }
-    return mounted;
-}
-
-void ieee_drive_task(void) {
-    if (!emulation_enabled) return;
-    data_tx_sync();
-    status_tx_sync();
-
-    // Drain the RX FIFO (commands and listener data).
-    for (unsigned int i = 0; i < 64; i++) {
-        uint8_t st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
-        if (!(st & ECONOPET_IEEE_ST_RX_AVAIL_MASK)) break;
-
-        // Hardware may already be serving a newer selection than this RX head.
-        // Pause first, then yield until NDAC releases the latched byte. Never
-        // block the MCU or flush/rebind its FIFO while a listener is sampling.
-        tx_pause();
-        status_tx_sync();
-        const uint8_t ctrl = spi_read_at(ECONOPET_WB_IEEE_CTRL_ADDR);
-        if (ctrl & (ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK
-            | ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK)) return;
-
-        // Sample the head's ATN flag immediately before its paired RX read,
-        // after the pause transactions (also preserving semantic RX tracing).
-        st = spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR);
-        bool is_atn = (st & ECONOPET_IEEE_ST_RX_ATN_MASK) != 0;
-        uint8_t byte = spi_read_at(ECONOPET_WB_IEEE_RX_ADDR);
-        spi_write_at(ECONOPET_WB_IEEE_RX_ADDR, 0);   // explicit pop (reads are side-effect-free)
-
-        if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK) {
-            if (byte == 0) {
-                dispatch_pending(NUM_UNITS);
-            } else {
-                for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
-                    const receive_state_t* const input = &receive_states[unit];
-                    // LSN25 keeps accepting SA1. OPEN/commands and writable REL
-                    // stay in LSN30/PUT, even after this transport checkpoint.
-                    if ((byte & (1u << unit)) && input->listening
-                        && input->mode == receive_idle && input->channel != IEEE_SAVE_CHANNEL
-                        && rel_find(unit, input->channel) == NULL)
-                        dispatch_pending(unit);
-                }
-            }
-            continue;
-        }
-        if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK) {
-            const uint8_t unit = (byte >> ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT) & (NUM_UNITS - 1);
-            const uint8_t channel = IEEE_CMD_CHANNEL(byte);
-            const bool eoi_get = (byte & ECONOPET_IEEE_RX_TALK_EOI_GET_MASK) != 0;
-            if (eoi_get && file_state == file_channel_exhausted
-                && file_unit == unit && file_chan == channel)
-                file_state = file_channel_consumed;
-            // ATN-interrupted EOF records progress only. TALK1 rechecks readiness,
-            // while unread TLK20 termination returns to IDLE even for a ready source.
-            if (!eoi_get || (byte & ECONOPET_IEEE_RX_TALK_RECHECK_MASK))
-                dispatch_pending(eoi_get ? NUM_UNITS : unit);
-            continue;
-        }
-        if (is_atn) {
-            handle_command(byte);
-        } else {
-            for (uint8_t unit = 0; unit < NUM_UNITS; ++unit) {
-                receive_state_t* const input = &receive_states[unit];
-                if (!input->listening) continue;
-                if (input->mode != receive_idle) {
-                    const unsigned int capacity =
-                        get_drive_model(unit * DRIVES_PER_UNIT + drive_status[unit].drive)
-                            == drive_model_4040
-                        ? COMMAND_4040_RECEIVE_CAPACITY : COMMAND_RECEIVE_CAPACITY;
-                    if (input->length < capacity)
-                        input->bytes[input->length++] = byte;
-                    if (ctrl & ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK) {
-                        ++input->pending;
-                    }
-                } else {
-                    rel_channel_t* wrc = rel_find(unit, input->channel);
-                    if (wrc != NULL && wrc->wr_active) rel_write_byte(wrc, byte);
-                }
-            }
-        }
-    }
-
-    // Native UNLISTEN/foreign LISTEN preserve TLKACT and its queued response.
-    // Only resume a retained binding, never one invalidated by queue parking.
-    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) return;
-    // Deferred peer OPEN/CLOSE may reuse TX after the final TALK selection.
-    // Restore its immutable unread REL suffix before releasing the paused source.
-    if (mcu_talking && !(data_tx_owner & ECONOPET_IEEE_TX_OWNER_VALID_MASK)) {
-        rel_channel_t* const rc =
-            rel_find(talk_unit, IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary));
-        if (rc != NULL) rel_serve(rc);
-    }
-    if (status_tx_pending) {
-        if (mcu_talking
-            && IEEE_CMD_CHANNEL(receive_states[talk_unit].secondary) == IEEE_COMMAND_CHANNEL)
-            push_status(talk_unit);
-        status_tx_pending = false;
-    }
-    // A secondary accepted during TXS filling may have discarded its prefix.
-    // Keep sources paused until ordered RX processing rebuilds the response.
-    if (spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK) return;
-    tx_resume();
-    if (streaming) service_tx();
+// Initialize the facade with no mounted media and fresh DOS/transport state.
+void ieee_drive_init(void) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/dskint
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
+    //
+    // DIAGOK/BEGIN establishes native DOS channel state. No direct ROM entry
+    // for this host facade initializer: establish an empty media bank through
+    // normal teardown, not by zeroing live handles or reusing old identities.
+    // Static state starts empty. Reuse normal teardown so repeated init cannot
+    // silently leak handles or discard unflushed media. Failure to establish
+    // the required quiescent/unmounted state is a fatal initialization error.
+    vet(ieee_drive_unmount_all(), "native initialization requires quiescent media");
 }

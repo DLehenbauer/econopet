@@ -184,19 +184,24 @@ package common_pkg;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TXS_LAST_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TXS_LAST));
 
     // IEEE control-write bit indices and masks.
-    // ENABLE is replaced on every CTRL write, so include it when flushing to stay
-    // enabled. FIFO flushes are one-shot requests, not read-back flags.
-    localparam int unsigned IEEE_CTRL_ENABLE_BIT = 0;     // Enable the emulated drive.
+    // Bit 0 is reserved and ignored. FIFO flushes are one-shot requests,
+    // not read-back flags.
     localparam int unsigned IEEE_CTRL_FLUSH_BIT = 1;      // Flush FIFOs and protocol state.
     localparam int unsigned IEEE_CTRL_DATA_FLUSH_BIT = 2; // Flush only the data TX FIFO.
     localparam int unsigned IEEE_CTRL_STATUS_FLUSH_BIT = 3; // Replace status storage without acknowledging GET.
-    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_ENABLE_MASK = (1 << IEEE_CTRL_ENABLE_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_FLUSH_MASK = (1 << IEEE_CTRL_FLUSH_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_DATA_FLUSH_MASK = (1 << IEEE_CTRL_DATA_FLUSH_BIT);
     localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_STATUS_FLUSH_MASK = (1 << IEEE_CTRL_STATUS_FLUSH_BIT);
+    // Bits 4-7 select emulated devices 8-11: 1 = emulate, 0 = do not emulate.
+    // Every CTRL write replaces this mask, including writes requesting a flush.
+    // Zero disables emulation and leaves physical IEEE I/O untouched. Any set bit
+    // enables bus interception, masking physical devices at ALL addresses.
+    // This is not a per-address switch between emulated and physical devices.
+    localparam int unsigned IEEE_CTRL_UNIT_MASK_SHIFT = 4;
+    localparam logic [DATA_WIDTH-1:0] IEEE_CTRL_UNIT_MASK = 8'hF0;
 
     // IEEE control-read bit indices and masks (asymmetric with writes).
-    localparam int unsigned IEEE_CTRL_RD_ENABLE_BIT = 0;  // Drive is enabled.
+    localparam int unsigned IEEE_CTRL_RD_ENABLE_BIT = 0;  // At least one emulated device is selected.
     localparam int unsigned IEEE_CTRL_RD_TX_ROOM_BIT = 1; // Data TX FIFO has room for IEEE_TX_BURST_CHUNK bytes.
     localparam int unsigned IEEE_CTRL_RD_DATA_ACTIVE_BIT = 2; // Data DAV remains asserted until listener acknowledgement.
     localparam int unsigned IEEE_CTRL_RD_RX_EOI_BIT = 3; // DAV-sampled EOI of the RX head, valid while RX_AVAIL is set.

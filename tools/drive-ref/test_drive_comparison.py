@@ -10,7 +10,8 @@ import unittest
 from unittest.mock import patch
 
 import compare_drive_reference as comparison
-from compare_drive_reference import compare_frames, ordinary_file_prefix
+from compare_drive_reference import compare_frames, ordinary_file_prefix, secondary_image
+from drive_reference import sha256
 
 
 class ComparisonTest(unittest.TestCase):
@@ -70,6 +71,34 @@ class ComparisonTest(unittest.TestCase):
         """A missing native termination cannot be manufactured by the comparator."""
         with self.assertRaises(ValueError):
             ordinary_file_prefix(["readback R 13 0 1", "control H 40 1 0"])
+
+    def test_absent_secondary_does_not_change_single_image_replay(self):
+        """Historical single-image captures retain their original replay inputs."""
+        self.assertIsNone(secondary_image(Path("."), {"media": {}}))
+
+    def test_secondary_requires_both_retained_identities(self):
+        """Verify source input, native final and geometry before issuing a replay."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            initial, final = root / "source-initial.d64", root / "source-final.d64"
+            initial.write_bytes(b"source")
+            final.write_bytes(initial.read_bytes())
+            secondary = dict(slot=1, initial=initial.name, final=final.name,
+                             initial_sha256=sha256(initial), final_sha256=sha256(final), size=6)
+            result = {"media": {"secondary": secondary}}
+            self.assertEqual(secondary_image(root, result), initial)
+            final.write_bytes(b"change")
+            with self.assertRaisesRegex(ValueError, "identity"):
+                secondary_image(root, result)
+
+    def test_secondary_rejects_other_slots_and_external_names(self):
+        """A captured secondary must not mount an arbitrary slot or escape its directory."""
+        result = {"media": {"secondary": dict(slot=2)}}
+        with self.assertRaisesRegex(ValueError, "slot-1"):
+            secondary_image(Path("."), result)
+        result["media"]["secondary"] = dict(slot=1, initial="../source.d64")
+        with self.assertRaisesRegex(ValueError, "reference directory"):
+            secondary_image(Path("."), result)
 
 
 class ReceivedTest(unittest.TestCase):

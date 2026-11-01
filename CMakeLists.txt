@@ -244,7 +244,10 @@ endif()
 # Run the standalone suite so its host and contract test registration remains authoritative.
 if(BUILD_SYSTEM_TESTS)
     # Reserve the child suite's bounded parallelism in the parent scheduler too.
-    set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 1800)
+    # Native DOS scenarios perform cooperative work over physical SPI. Keep
+    # the two-worker resource bound and individual deadlines, but allow the
+    # complete suite to outlive its former legacy-facade half-hour budget.
+    set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 3600)
     add_test(
         NAME system_tests
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system

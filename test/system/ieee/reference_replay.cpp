@@ -141,7 +141,7 @@ void service_rx(System& board, FirmwareSession& firmware) {
 
 // Run identical byte/ATN/EOI stimuli, retaining every replacement DOS difference.
 int replay(const std::filesystem::path& image_path, const std::filesystem::path& script,
-           const std::filesystem::path& directory) {
+           const std::filesystem::path& directory, const std::filesystem::path& source_path) {
     const auto actions = load_actions(script);
     std::ifstream input(image_path, std::ios::binary);
     const std::vector<uint8_t> image{std::istreambuf_iterator<char>(input), {}};
@@ -156,6 +156,16 @@ int replay(const std::filesystem::path& image_path, const std::filesystem::path&
     FirmwareSession firmware(board);
     const auto name = "reference" + image_path.extension().string();
     firmware.mount(image, name.c_str());
+    std::vector<uint8_t> source;
+    const auto source_name = "source" + image_path.extension().string();
+    if (!source_path.empty()) {
+        std::ifstream source_input(source_path, std::ios::binary);
+        source.assign(std::istreambuf_iterator<char>(source_input), {});
+        if (source_input.bad() || source.empty()) {
+            throw std::runtime_error("cannot read replay source image");
+        }
+        firmware.mount(source, source_name.c_str(), 1);
+    }
     NetTrace trace(board, directory / "ieee-wire.csv");
     auto received = output_file(directory / "received.csv");
     received << "action,case,expected,actual,expected_eoi,actual_eoi\n";
@@ -184,6 +194,9 @@ int replay(const std::filesystem::path& image_path, const std::filesystem::path&
     trace.finish();
     received.close();
     save_media(name.c_str(), image.size(), directory / ("final" + image_path.extension().string()));
+    if (!source_path.empty()) {
+        save_media(source_name.c_str(), source.size(), directory / ("source-final" + image_path.extension().string()));
+    }
     auto coverage = output_file(directory / "coverage.txt");
     coverage << "completed=" << completed << "\nrequested=" << actions.size() << "\nfailure=" << failure << '\n';
     coverage.close();
@@ -195,10 +208,11 @@ int replay(const std::filesystem::path& image_path, const std::filesystem::path&
 // Accept explicit disposable input/output paths, never operator SD-card images by default.
 int main(int argc, char** argv) {
     try {
-        if (argc != 4) {
-            throw std::invalid_argument("usage: econopet_drive_reference IMAGE REPLAY NEW_OUTPUT_DIRECTORY");
+        if (argc != 4 && argc != 5) {
+            throw std::invalid_argument(
+                "usage: econopet_drive_reference IMAGE REPLAY NEW_OUTPUT_DIRECTORY [SOURCE_IMAGE]");
         }
-        return replay(argv[1], argv[2], argv[3]);
+        return replay(argv[1], argv[2], argv[3], argc == 5 ? std::filesystem::path{argv[4]} : std::filesystem::path{});
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

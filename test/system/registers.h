@@ -39,11 +39,12 @@ using Status = econopet::Flags<StatusBit>;
 using econopet::operator|;
 
 enum class IeeeControlBit : uint8_t {
-    Enabled = ECONOPET_IEEE_CTRL_ENABLE_MASK,
+    // Select all four emulated devices. Zero selection leaves physical I/O alone.
+    AllEmulatedUnits = ECONOPET_IEEE_CTRL_UNIT_MASK,
     Flush = ECONOPET_IEEE_CTRL_FLUSH_MASK,
     DataFlush = ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK,
     StatusFlush = ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK,
-    All = Enabled | Flush | DataFlush | StatusFlush,
+    All = AllEmulatedUnits | Flush | DataFlush | StatusFlush,
 };
 using IeeeControl = econopet::Flags<IeeeControlBit>;
 
@@ -136,7 +137,8 @@ inline void validate_command(econopet::ByteView bytes) {
     constexpr uint8_t AddressHighMask = ECONOPET_SPI_CMD_ADDRESS_HIGH_MASK;
     constexpr size_t AbsoluteReadSize = 3;
     constexpr size_t RelativeReadSize = 1;
-    if (bytes.size() == 0) throw std::invalid_argument("empty FPGA SPI command");
+    if (bytes.size() == 0)
+        throw std::invalid_argument("empty FPGA SPI command");
     const auto command = static_cast<SpiCommand>(bytes[0] & OpcodeMask);
     const bool absolute = command == SpiCommand::ReadAt || command == SpiCommand::WriteAt;
     const bool write = (bytes[0] & std::to_underlying(SpiCommand::WriteSame)) != 0;

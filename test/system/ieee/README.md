@@ -52,7 +52,7 @@ for the projection and active-drain semantics.
 
 ## Receive data from firmware
 
-Follow [StreamsDosStatusOverProductionTop](drive_test.cpp) for a complete
+Follow [ReplacementReadsAndConsumesStatusThroughProductionSpi](drive_test.cpp) for a complete
 receive sequence: mount media, send and service OPEN, address TALK with its
 secondary, service firmware to supply outgoing bytes, then call
 `controller.receive()` and check the returned bytes against the wire trace.
