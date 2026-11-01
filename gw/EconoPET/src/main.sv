@@ -288,6 +288,7 @@ module main (
     logic [DATA_WIDTH-1:0] cpu_data_q = '0;
     logic [DATA_WIDTH-1:0] soft_cpu_data_q = '0;
     logic                  cpu_data_strobe_q = 1'b0;
+    logic                  cpu_active_data_strobe_q = 1'b0;
     logic [DATA_WIDTH-1:0] read_data_q = '0;
     always_ff @(posedge sys_clock_i) begin
         if (cpu_data_strobe) begin
@@ -297,6 +298,8 @@ module main (
             read_data_q <= cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
         end
         cpu_data_strobe_q <= cpu_data_strobe;
+        // Qualify at capture, giving falling-edge consumers a registered enable.
+        cpu_active_data_strobe_q <= cpu_data_strobe && active_be;
     end
     always_ff @(posedge cpu_data_strobe_q) begin
         // Bridge traffic must not replace the paused core's pending read data.
@@ -370,7 +373,7 @@ module main (
                                                               : cpu_bus_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe && !io_ctl_bus_reserve
                                                               : cpu_addr_strobe;
-    wire                      active_data_strobe = cpu_data_strobe_q && active_be;
+    wire                      active_data_strobe = cpu_active_data_strobe_q;
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en && !io_ctl_bus_reserve
                                                               : cpu_wr_en;
 
@@ -718,7 +721,8 @@ module main (
     //
     // The bridge uses the CPU's bus slot. Firmware must clear the register
     // file's CPU_READY bit (reg_cpu_ready) before requesting I/O access.
-    // A 6809 finishes its current E/Q cycle before the bridge reserves the bus.
+    // SPI slots occur with BE and E/Q low, so the preceding READY-clear write
+    // pauses the 6809 before a later SPI slot can admit the I/O request.
     //
     logic [    DATA_WIDTH-1:0] io_ctl_wb_din;
     logic                      io_ctl_wb_stall;
@@ -746,7 +750,6 @@ module main (
         .wbp_sel_i(io_wb_sel),
 
         .cpu_ready_i(reg_cpu_ready),
-        .cpu_halted_i(!cpu_is_6809 || cpu_reset_i || cpu6809_halted),
         .cpu_slot_be_i(timing_cpu_be),
         .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),

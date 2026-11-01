@@ -50,6 +50,9 @@ module superpet_top_tb;
 
     // Pause and resume may remove cycles, but must never shorten an E or Q pulse.
     always @(negedge sys_clock) begin
+        // Capture-time qualification must preserve the original consumer phase.
+        `assert_equal(top.main.active_data_strobe,
+                      (top.main.cpu_data_strobe_q && top.main.active_be))
         if (top.main.cpu_is_6809 && top.main.io_ctl_bus_reserve) begin
             `assert_equal(top.main.active_be, 1'b0)
             `assert_equal(top.main.active_addr_strobe, 1'b0)

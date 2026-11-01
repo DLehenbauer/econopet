@@ -1692,9 +1692,16 @@ because the core samples reset on falling E.
 a selected, non-reset 6809 is finishing its halt. Firmware
 [`set_cpu()`](../../fw/src/driver.c) waits for this bit to clear before returning
 from a READY-clear write. Raw SPI users must perform the same check before
-changing CPU memory. The physical I/O bridge independently waits for the halt
-before reserving a CPU bus slot (unless reset is already asserted). Reservation
-suppresses CPU bus enables in either case, even while reset keeps E/Q running.
+changing CPU memory. SPI requests are admitted outside CPU bus cycles. A
+READY-clear write disables the 6809 cycle generator before a later SPI slot
+can admit an I/O request, so the bridge reserves the next CPU slot without a
+separate halt-confirmation wait. Reservation suppresses CPU bus enables even
+while reset keeps E/Q running.
+
+CPU-facing data strobes are qualified by bus ownership at data capture and
+registered with the captured data. This preserves the consumer phase while
+removing the combinational reservation path into falling-edge SID writes.
+Video and bridge captures continue to use the raw data strobe.
 
 ```cpp
 auto cpu = board.cpu(CPU_SOFT_6502);

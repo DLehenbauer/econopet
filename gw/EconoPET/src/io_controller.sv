@@ -19,7 +19,6 @@ module io_controller (
     input  logic                      wbp_sel_i,
 
     input  logic                      cpu_ready_i,
-    input  logic                      cpu_halted_i,
     input  logic                      cpu_slot_be_i,
     input  logic                      cpu_data_strobe_i,
     input  logic                      cpu_hold_strobe_i,
@@ -37,11 +36,10 @@ module io_controller (
     output logic                      via_cs_o
 );
     typedef enum logic [2:0] {
-        IDLE,
-        WAIT_HALT,
-        WAIT_SLOT,
-        ACTIVE,
-        ACK
+        IDLE      = 3'b000,
+        WAIT_SLOT = 3'b010,
+        ACTIVE    = 3'b011,
+        ACK       = 3'b100
     } state_t;
 
     typedef enum logic [1:0] {
@@ -52,6 +50,8 @@ module io_controller (
     } io_device_t;
 
     state_t state_q = IDLE;
+    // Avoid state decoding on the high-fanout CPU bus-enable path.
+    logic bus_reserve_q = 1'b0;
     logic [6:0] addr_q;             // [6:4] Device select, [3:0] Address within device range
     logic [DATA_WIDTH-1:0] data_q;
     logic we_q;
@@ -60,7 +60,7 @@ module io_controller (
     // and observes it. External-bus ownership ends before entering ACK.
     assign wbp_stall_o = state_q != IDLE && state_q != ACK;
     assign wbp_ack_o = state_q == ACK;
-    assign bus_reserve_o = state_q == WAIT_SLOT || state_q == ACTIVE;
+    assign bus_reserve_o = bus_reserve_q;
     assign bus_own_o = state_q == ACTIVE;
     assign bus_addr_o = {8'he8, 1'b0, addr_q};
     assign bus_data_o = data_q;
@@ -106,13 +106,10 @@ module io_controller (
                         addr_q <= wbp_addr_i[6:0];
                         data_q <= wbp_data_i;
                         we_q <= wbp_we_i;
-                        state_q <= WAIT_HALT;
+                        bus_reserve_q <= 1'b1;
+                        state_q <= WAIT_SLOT;
                     end
                 end
-            end
-
-            WAIT_HALT: begin
-                if (cpu_halted_i) state_q <= WAIT_SLOT;
             end
 
             WAIT_SLOT: begin
@@ -127,6 +124,7 @@ module io_controller (
                 // This strobe is observed one system clock after PHI2 falls,
                 // preserving the external devices' post-PHI2 hold interval.
                 if (cpu_hold_strobe_i) begin
+                    bus_reserve_q <= 1'b0;
                     state_q <= ACK;
                 end
             end
@@ -135,7 +133,10 @@ module io_controller (
                 if (!wbp_cycle_i) state_q <= IDLE;
             end
 
-            default: state_q <= IDLE;
+            default: begin
+                bus_reserve_q <= 1'b0;
+                state_q <= IDLE;
+            end
         endcase
     end
 endmodule
