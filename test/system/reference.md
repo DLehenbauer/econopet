@@ -1693,7 +1693,8 @@ a selected, non-reset 6809 is finishing its halt. Firmware
 [`set_cpu()`](../../fw/src/driver.c) waits for this bit to clear before returning
 from a READY-clear write. Raw SPI users must perform the same check before
 changing CPU memory. The physical I/O bridge independently waits for the halt
-before reserving a CPU bus slot.
+before reserving a CPU bus slot (unless reset is already asserted). Reservation
+suppresses CPU bus enables in either case, even while reset keeps E/Q running.
 
 ```cpp
 auto cpu = board.cpu(CPU_SOFT_6502);

@@ -50,6 +50,11 @@ module superpet_top_tb;
 
     // Pause and resume may remove cycles, but must never shorten an E or Q pulse.
     always @(negedge sys_clock) begin
+        if (top.main.cpu_is_6809 && top.main.io_ctl_bus_reserve) begin
+            `assert_equal(top.main.active_be, 1'b0)
+            `assert_equal(top.main.active_addr_strobe, 1'b0)
+            `assert_equal(top.main.active_wr_en, 1'b0)
+        end
         if (top.main.cpu6809_e) e_high_cycles++;
         else if (e_high_cycles != 0) begin
             `assert_equal(e_high_cycles, (top.main.timing.CPU_PHI_END - top.main.timing.CPU_PHI_START))
@@ -291,6 +296,38 @@ module superpet_top_tb;
             `assert_compare(mock_sram.mem[17'h00200], !=, saved_counter)
         end
 
+        // Halt just after a VIA write so the IEEE snoop retains a write snapshot.
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00300), 8'h86);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00301), 8'h5a);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00302), 8'hb7);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00303), 8'he8);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00304), 8'h40);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00305), 8'h20);
+        spi_write_at(common_pkg::wb_ram_addr(17'h00306), 8'hfb);
+        spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+        wait_cycles = 0;
+        while (!(top.main.active_wr_en && top.main.mc6809_addr == 16'he840)
+               && wait_cycles < 128 * 64) begin
+            @(negedge sys_clock);
+            wait_cycles++;
+        end
+        `assert_equal(top.main.mc6809_addr, 16'he840)
+        `assert_equal(top.main.active_wr_en, 1'b1)
+        top.main.register_file.register[REG_CPU] = 8'h00;
+        repeat (128) @(negedge sys_clock);
+        `assert_equal(top.main.cpu6809_halted, 1'b1)
+        `assert_equal(top.main.ieee.via_orb, 8'h5a)
+
+        // Raw bus strobes and bridge data must not replay the retained CPU write.
+        spi_read_at(common_pkg::wb_io_addr(7'h12), result);
+        `assert_equal(result, 8'h10)
+        `assert_equal(top.main.ieee.via_orb, 8'h5a)
+        saved_registers = top.main.mc6809_regdata;
+        repeat (128) @(negedge sys_clock);
+        `assert_equal(top.main.ieee.via_orb, 8'h5a)
+        `assert_exact_equal(top.main.mc6809_regdata, saved_registers)
+
         // SYNC and CWAI must pause even though nHALT waits for instruction fetch.
         for (int wait_instruction = 0; wait_instruction < 2; wait_instruction++) begin
             spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
@@ -324,6 +361,12 @@ module superpet_top_tb;
             `assert_equal(top.main.cpu6809_halted, 1'b0)
         end
         spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        // Reset requires E/Q edges, but bridge traffic must still own the bus alone.
+        spi_write_at(common_pkg::wb_io_addr(7'h10), 8'h09);
+        spi_read_at(common_pkg::wb_io_addr(7'h12), result);
+        `assert_equal(result, 8'h10)
+        `assert_equal(cpu_reset_n, 1'b0)
+        `assert_equal(top.main.cpu6809_halted, 1'b0)
     endtask
 
     task static run;
