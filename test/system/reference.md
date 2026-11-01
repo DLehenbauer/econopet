@@ -1688,14 +1688,11 @@ strobes are suppressed, without asserting reset or discarding CPU state.
 Setting READY resumes at the next complete CPU slot. Reset keeps E/Q running
 because the core samples reset on falling E.
 
-`REG_STATUS` bit 5 (`ECONOPET_REG_STATUS_CPU_HALT_PENDING_MASK`) is set while
-a selected, non-reset 6809 is finishing its halt. Firmware
-[`set_cpu()`](../../fw/src/driver.c) waits for this bit to clear before returning
-from a READY-clear write. Raw SPI users must perform the same check before
-changing CPU memory. SPI requests are admitted outside CPU bus cycles. A
+SPI requests are admitted outside CPU bus cycles. A
 READY-clear write disables the 6809 cycle generator before a later SPI slot
-can admit an I/O request, so the bridge reserves the next CPU slot without a
-separate halt-confirmation wait. Reservation suppresses CPU bus enables even
+can admit a memory or I/O request, so neither firmware nor the bridge needs a
+separate halt-confirmation wait. The bridge reserves the next CPU slot directly.
+Reservation suppresses CPU bus enables even
 while reset keeps E/Q running.
 
 CPU-facing data strobes are qualified by bus ownership at data capture and

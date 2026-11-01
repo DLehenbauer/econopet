@@ -732,10 +732,8 @@ TEST_F(SystemTest, ClearingReadyPauses6809WithoutResetAndResumesMemoryWrites) {
     system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == Marker; },
                      ExecutionBudget, "6809 running before halt");
 
-    // Complete the READY-clear SPI write and observe the firmware halt barrier.
+    // SPI-slot ordering pauses the CPU before subsequent memory traffic.
     cpu.write_control_raw(0);
-    const auto status = fpga::Status::from_bits(system.spi().read(fpga::Register::Status));
-    ASSERT_FALSE(status.contains(fpga::StatusBit::CpuHaltPending));
     ASSERT_FALSE(cpu.peek_reset());
     const auto address = cpu.peek_address();
     const auto checkpoint = cpu.peek_fetch_checkpoint();

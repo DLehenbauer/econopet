@@ -22,7 +22,6 @@ module register_file(
     input  logic                      config_crt_i,      // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     input  logic                      config_keyboard_i, // Keyboard type (0 = Business, 1 = Graphics)
     input  logic                      phys_cpu_active_i, // Physical 6502 address activity detected
-    input  logic                      cpu_halt_pending_i, // CPU_READY cleared, final 6809 cycle still active
 
     // CPU register
     output logic                      cpu_ready_o,
@@ -107,7 +106,7 @@ module register_file(
             // we process the next SPI command.
             //
             // Order must match bit order declared in common_pkg.sv.
-            register[REG_STATUS] <= { 2'b00, cpu_halt_pending_i, phys_cpu_active_i,
+            register[REG_STATUS] <= { 3'b000, phys_cpu_active_i,
                                       bp_halted_i, config_keyboard_i, config_crt_i,
                                       text_mode_i};
 

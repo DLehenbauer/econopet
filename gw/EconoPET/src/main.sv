@@ -467,7 +467,6 @@ module main (
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
         .phys_cpu_active_i(phys_cpu_active),
-        .cpu_halt_pending_i(cpu_is_6809 && !reg_cpu_ready && !cpu_reset_i && !cpu6809_halted),
 
         // CPU control register
         .cpu_ready_o(reg_cpu_ready),

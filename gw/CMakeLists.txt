@@ -71,7 +71,7 @@ add_custom_command(
     ${XML_CHECK_COMMAND}
     # Use timing-directed P&R for CPU-slot control into the SID's falling-edge registers.
     COMMAND "./efx.sh" --flow compile --output_dir "${FPGA_OUTPUT_DIR}" --work_dir "${FPGA_WORK_DIR}"
-        --pnr_opts seed=0 optimization_level=TIMING_3
+        --pnr_opts seed=0 optimization_level=TIMING_3 placer_effort_level=3
     ${XML_RESTORE_COMMAND}
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"

@@ -23,7 +23,6 @@ module register_file_tb;
     logic text_mode;
     logic config_crt;
     logic config_keyboard;
-    logic cpu_halt_pending = 1'b0;
 
     // CPU control register
     logic cpu_ready;
@@ -55,7 +54,6 @@ module register_file_tb;
         .text_mode_i(text_mode),
         .config_crt_i(config_crt),
         .config_keyboard_i(config_keyboard),
-        .cpu_halt_pending_i(cpu_halt_pending),
 
         // CPU control register
         .cpu_ready_o(cpu_ready),
@@ -105,8 +103,6 @@ module register_file_tb;
         `assert_equal(data[REG_STATUS_CRT_BIT], config_crt);
         `assert_equal(data[REG_STATUS_KEYBOARD_BIT], config_keyboard);
         `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b0);
-        `assert_equal((data & REG_STATUS_CPU_HALT_PENDING_MASK),
-                      (cpu_halt_pending ? REG_STATUS_CPU_HALT_PENDING_MASK : 8'h00));
     endtask
 
     task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);
@@ -161,10 +157,6 @@ module register_file_tb;
         test_status(1'b0, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_GRAPHICS);
         test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_BUSINESS);
         test_status(1'b0, CONFIG_CRT_FIXED, CONFIG_KEYBOARD_GRAPHICS);
-        test_status(1'b1, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_BUSINESS);
-        cpu_halt_pending = 1'b1;
-        test_status(1'b1, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_BUSINESS);
-        cpu_halt_pending = 1'b0;
         test_status(1'b1, CONFIG_CRT_CRTC, CONFIG_KEYBOARD_BUSINESS);
 
         // Breakpoint: BP_HALT appears in status register

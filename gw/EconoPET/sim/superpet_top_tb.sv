@@ -258,7 +258,6 @@ module superpet_top_tb;
             while (top.main.timing.cycle_count != 6'(phase)) @(negedge sys_clock);
             top.main.register_file.register[REG_CPU] = 8'h00;
             #1;
-            `assert_equal(top.main.register_file.cpu_halt_pending_i, !top.main.cpu6809_halted)
             wait_cycles = 0;
             while (!top.main.cpu6809_halted && wait_cycles < 128) begin
                 @(negedge sys_clock);
@@ -289,8 +288,6 @@ module superpet_top_tb;
             `assert_equal(top.main.mc6809_addr, saved_addr)
             `assert_exact_equal(top.main.soft_cpu_data_q, saved_data)
             `assert_equal(mock_sram.mem[17'h00200], saved_counter)
-            spi_read_at(WB_STATUS_ADDR, result);
-            `assert_equal((result & REG_STATUS_CPU_HALT_PENDING_MASK), 8'h00)
 
             // READY resumes the loop rather than restarting it at the reset vector.
             spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);

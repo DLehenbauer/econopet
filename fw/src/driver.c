@@ -593,12 +593,6 @@ void pet_io_write(const uint16_t addr, const uint8_t data) {
  */
 void set_cpu(cpu_state_t state) {
     spi_write_at(ECONOPET_WB_CPU_ADDR, (uint8_t)state);
-    // Do not let callers change memory or disks before the final 6809 cycle ends.
-    if (!(state & CPU_READY)) {
-        while (spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_CPU_HALT_PENDING_MASK) {
-            tight_loop_contents();
-        }
-    }
 }
 
 /**
