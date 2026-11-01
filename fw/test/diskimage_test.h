@@ -9,8 +9,11 @@
 
 #include <check.h>
 
+// Resolves an independently checked D64 fixture coordinate.
 uint32_t diskimage_test_d64_offset(unsigned int track, unsigned int sector);
+// Builds an ordinary two-sector BASIC PRG fixture.
 uint8_t* diskimage_test_make_d64(void);
+// Builds an ordinary four-byte BASIC PRG fixture.
 uint8_t* diskimage_test_make_d80(void);
-
+// Exercises raw format recognition and geometry without DOS algorithms.
 Suite* diskimage_suite(void);

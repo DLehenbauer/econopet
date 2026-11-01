@@ -110,8 +110,6 @@ void dos_rel_lookup_start(dos_rel_lookup_t* lookup, dos_model_t model, dos_media
 // Read at most one index sector. FOUND exposes the data-sector coordinates,
 // not a ready record. MISSING is SSTEST's range result, not a completed P/50
 // reply (SSEND, data-buffer positioning and record-length checks still follow).
-// SSPOS accepts a second ER1 without rereading: malformed data coordinates,
-// including track zero, then reach the subsequent data read's geometry check.
 // Failed reads may alter scratch but never publish a usable data link.
 dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* lookup, dos_media_bank_t* media,
                                             uint8_t scratch[DISKIMAGE_SECTOR_SIZE]);
@@ -175,43 +173,37 @@ typedef enum {
     DOS_REL_RECORD_INDEX,
     DOS_REL_RECORD_DATA,
     DOS_REL_RECORD_FOLLOWING,
-    // Internal OPNRCH jobs precede the first record's prepared-byte state.
-    DOS_REL_RECORD_OPEN_DATA,
-    DOS_REL_RECORD_OPEN_FOLLOWING,
-    DOS_REL_RECORD_OPEN_SIDE,
-    // Clean NRBUF retires actual GET before prefetch and cached resumption.
+    // Owned NRBUF continuations distinguish actual GET from NXTREC.
+    DOS_REL_RECORD_DIRTY_GET,
+    DOS_REL_RECORD_DIRTY_NEXT,
     DOS_REL_RECORD_CLEAN_GET,
     DOS_REL_RECORD_CLEAN_NEXT,
     DOS_REL_RECORD_PREFETCH_GET,
     DOS_REL_RECORD_PREFETCH_NEXT,
     DOS_REL_RECORD_RESUME_GET,
     DOS_REL_RECORD_RESUME_NEXT,
-    // Clean POSBUF joins a caller-resolved data pointer without a side lookup.
-    DOS_REL_RECORD_POSITION_MATCH,
-    DOS_REL_RECORD_POSITION_SCRUB,
-    DOS_REL_RECORD_POSITION_OTHER,
-    DOS_REL_RECORD_POSITION_COLD,
-    DOS_REL_RECORD_POSITION_DATA,
-    DOS_REL_RECORD_POSITION_FOLLOWING,
-    DOS_REL_RECORD_POSITION_READY,
-    // Clean SSPOS/SSEND decisions and one-page side/group reads.
+    DOS_REL_RECORD_OPEN_DATA,
+    DOS_REL_RECORD_OPEN_FOLLOWING,
+    DOS_REL_RECORD_OPEN_SIDE,
     DOS_REL_RECORD_POSITION_INDEX,
-    DOS_REL_RECORD_POSITION_TEST,
     DOS_REL_RECORD_POSITION_SUPER,
     DOS_REL_RECORD_POSITION_GROUP,
     DOS_REL_RECORD_POSITION_SIDE,
+    DOS_REL_RECORD_POSITION_TEST,
     DOS_REL_RECORD_POSITION_END,
     DOS_REL_RECORD_POSITION_END_SUPER,
     DOS_REL_RECORD_POSITION_END_GROUP,
     DOS_REL_RECORD_POSITION_END_SCAN,
     DOS_REL_RECORD_POSITION_END_SIDE,
-    // Existing-record dirty NRBUF and explicit selected-page retry.
-    DOS_REL_RECORD_DIRTY_GET,
-    DOS_REL_RECORD_DIRTY_NEXT,
+    DOS_REL_RECORD_POSITION_MATCH,
+    DOS_REL_RECORD_POSITION_SCRUB,
+    DOS_REL_RECORD_POSITION_OTHER,
+    DOS_REL_RECORD_POSITION_COLD,
     DOS_REL_RECORD_POSITION_WAIT_OTHER,
     DOS_REL_RECORD_POSITION_WAIT_COLD,
-    DOS_REL_RECORD_POSITION_WAIT_FOLLOWING,
-    DOS_REL_RECORD_WAIT_CACHED,
+    DOS_REL_RECORD_POSITION_DATA,
+    DOS_REL_RECORD_POSITION_FOLLOWING,
+    DOS_REL_RECORD_POSITION_READY,
     DOS_REL_RECORD_CREATE_SIDE,
     DOS_REL_RECORD_CREATE_SIDE_WRITE,
     DOS_REL_RECORD_CREATE_SUPER,
@@ -224,7 +216,6 @@ typedef enum {
 // Records over caller-owned native side/data/data pages. This does not own
 // channels, publish status or implement dirty-buffer reuse/growth.
 typedef struct {
-    // Lookup and growth never overlap, retaining the same media/error prefix.
     union {
         dos_rel_lookup_t lookup;
         dos_rel_growth_t growth;
@@ -240,10 +231,6 @@ typedef struct {
     uint8_t active;
     bool following;
     bool following_failed;
-    // Owner's 8250 SSSGRP tag, independent of directory-channel admission.
-    uint8_t cached_group;
-    // Cold host version-cache preparation, using the remaining record padding.
-    uint8_t bam_steps;
 } dos_rel_record_t;
 
 // Start positioning a valid nonzero-length record using the directory root.
@@ -324,8 +311,6 @@ dos_rel_record_result_t dos_rel_record_next(dos_rel_record_t* record, const dos_
 // Cancel only the preparation/read cursor, without flushing or freeing pages.
 void dos_rel_record_cancel(dos_rel_record_t* record);
 
-// Caller-owned pages contain the payload. This cursor retains only record
-// progress. no_record describes the last actual GET, not a missing preview.
 typedef enum {
     DOS_REL_INPUT_IDLE,
     DOS_REL_INPUT_PUT,
@@ -333,6 +318,9 @@ typedef enum {
     DOS_REL_INPUT_FINISH,
 } dos_rel_input_phase_t;
 
+// The owner supplies pages, routing and allocation. Retain one received byte
+// across native jobs without borrowing command collection or another page.
+// no_record describes the last actual GET, not a missing-record preview.
 typedef struct {
     dos_rel_record_t record;
     uint16_t number;

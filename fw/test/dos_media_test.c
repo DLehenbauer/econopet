@@ -21,18 +21,15 @@ typedef struct {
 } storage_t;
 
 static const uint32_t image_sizes[] = {
-    DISKIMAGE_D64_SIZE,
-    DISKIMAGE_D80_SIZE,
-    DISKIMAGE_D82_SIZE,
+    DISKIMAGE_D64_SIZE, DISKIMAGE_D80_SIZE, DISKIMAGE_D82_SIZE,
 };
 static const dos_model_t models[] = {
-    DOS_MODEL_4040,
-    DOS_MODEL_8050,
-    DOS_MODEL_8250,
+    DOS_MODEL_4040, DOS_MODEL_8050, DOS_MODEL_8250,
 };
 
 // Records sector reads without allocating an image-sized test buffer.
-static bool read_storage(void* const context, const uint32_t offset, void* const output, const size_t length) {
+static bool read_storage(void* const context, const uint32_t offset, void* const output,
+    const size_t length) {
     storage_t* const storage = context;
     ck_assert_uint_eq(length, DISKIMAGE_SECTOR_SIZE);
     ++storage->reads;
@@ -42,12 +39,13 @@ static bool read_storage(void* const context, const uint32_t offset, void* const
 }
 
 // Models a write that can change backing bytes before reporting failure.
-static bool write_storage(void* const context, const uint32_t offset, const void* const input, const size_t length) {
+static bool write_storage(void* const context, const uint32_t offset, const void* const input,
+    const size_t length) {
     storage_t* const storage = context;
     ck_assert_uint_eq(length, DISKIMAGE_SECTOR_SIZE);
     ++storage->writes;
     storage->offset = offset;
-    storage->value = *(const uint8_t*)input;
+    storage->value = *(const uint8_t*) input;
     return !storage->fail_write;
 }
 
@@ -67,8 +65,8 @@ static dos_media_io_t make_media(storage_t* const storage, const unsigned int fo
 }
 
 // Obtains a mounted reference and checks the full result, not a default value.
-static dos_media_ref_t mounted_reference(const dos_media_bank_t* const bank, const unsigned int unit,
-                                         const unsigned int slot) {
+static dos_media_ref_t mounted_reference(const dos_media_bank_t* const bank,
+    const unsigned int unit, const unsigned int slot) {
     dos_media_ref_t reference;
     ck_assert_int_eq(dos_media_reference(bank, unit, slot, &reference), DOS_MEDIA_OK);
     ck_assert_uint_ne(reference.identity, 0);
@@ -79,8 +77,8 @@ static dos_media_ref_t mounted_reference(const dos_media_bank_t* const bank, con
 
 // Mounts a single disk into either slot without redirecting the empty partner.
 START_TEST(test_single_slot_selects_model_and_keeps_partner_absent) {
-    const unsigned int format = (unsigned int)_i / DOS_MEDIA_SLOTS_PER_UNIT;
-    const unsigned int slot = (unsigned int)_i % DOS_MEDIA_SLOTS_PER_UNIT;
+    const unsigned int format = (unsigned int) _i / DOS_MEDIA_SLOTS_PER_UNIT;
+    const unsigned int slot = (unsigned int) _i % DOS_MEDIA_SLOTS_PER_UNIT;
     storage_t storage = {.value = 0x5a};
     const dos_media_io_t media = make_media(&storage, format);
     dos_media_bank_t bank = {0};
@@ -101,12 +99,11 @@ END_TEST
 
 // Validates all three homogeneous pairs and all six ordered mixed pairs.
 START_TEST(test_complete_pair_validation_is_side_effect_free) {
-    const unsigned int first = (unsigned int)_i / count_of(image_sizes);
-    const unsigned int second = (unsigned int)_i % count_of(image_sizes);
+    const unsigned int first = (unsigned int) _i / count_of(image_sizes);
+    const unsigned int second = (unsigned int) _i % count_of(image_sizes);
     storage_t storage[2] = {0};
     const dos_media_io_t pair[] = {
-        make_media(&storage[0], first),
-        make_media(&storage[1], second),
+        make_media(&storage[0], first), make_media(&storage[1], second),
     };
     dos_model_t model = DOS_MODEL_NONE;
     const dos_media_result_t expected = first == second ? DOS_MEDIA_OK : DOS_MEDIA_MIXED_PAIR;
@@ -171,15 +168,11 @@ START_TEST(test_invalid_descriptors_are_not_mounts) {
     dos_media_io_t pair[2] = {make_media(&storage, 0), {0}};
     const dos_media_io_t valid = pair[0];
     const uint32_t invalid_sizes[] = {
-        0,
-        DISKIMAGE_D64_SIZE - 1,
-        DISKIMAGE_D64_SIZE + 1,
+        0, DISKIMAGE_D64_SIZE - 1, DISKIMAGE_D64_SIZE + 1,
         DISKIMAGE_D64_SIZE + DISKIMAGE_D64_SIZE / DISKIMAGE_SECTOR_SIZE,
-        DISKIMAGE_D80_SIZE - 1,
-        DISKIMAGE_D80_SIZE + 1,
+        DISKIMAGE_D80_SIZE - 1, DISKIMAGE_D80_SIZE + 1,
         DISKIMAGE_D80_SIZE + DISKIMAGE_D80_SIZE / DISKIMAGE_SECTOR_SIZE,
-        DISKIMAGE_D82_SIZE - 1,
-        DISKIMAGE_D82_SIZE + 1,
+        DISKIMAGE_D82_SIZE - 1, DISKIMAGE_D82_SIZE + 1,
         DISKIMAGE_D82_SIZE + DISKIMAGE_D82_SIZE / DISKIMAGE_SECTOR_SIZE,
     };
     dos_model_t model = DOS_MODEL_8250;
@@ -211,7 +204,7 @@ START_TEST(test_remount_invalidates_unit_without_cross_unit_reset) {
     dos_media_bank_t bank = {0};
     ck_assert_int_eq(dos_media_set_unit(&bank, 0, pair), DOS_MEDIA_OK);
     pair[0] = make_media(&storage[2], 1);
-    pair[1] = (dos_media_io_t){0};
+    pair[1] = (dos_media_io_t) {0};
     ck_assert_int_eq(dos_media_set_unit(&bank, 1, pair), DOS_MEDIA_OK);
     const dos_media_ref_t old0 = mounted_reference(&bank, 0, 0);
     const dos_media_ref_t old1 = mounted_reference(&bank, 0, 1);
@@ -292,8 +285,7 @@ START_TEST(test_second_slot_flush_failure_keeps_complete_pair) {
     dos_media_bank_t bank = {0};
     ck_assert_int_eq(dos_media_set_unit(&bank, 0, pair), DOS_MEDIA_OK);
     const dos_media_ref_t references[] = {
-        mounted_reference(&bank, 0, 0),
-        mounted_reference(&bank, 0, 1),
+        mounted_reference(&bank, 0, 0), mounted_reference(&bank, 0, 1),
     };
     const uint8_t sector[DISKIMAGE_SECTOR_SIZE] = {0x38};
     for (unsigned int slot = 0; slot < count_of(references); ++slot)
@@ -318,13 +310,13 @@ START_TEST(test_bulk_teardown_retains_bindings_then_invalidates_jobs) {
     for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
         const unsigned int format = unit % count_of(image_sizes);
         const dos_media_io_t pair[] = {
-            make_media(&storage[unit][0], format),
-            make_media(&storage[unit][1], format),
+            make_media(&storage[unit][0], format), make_media(&storage[unit][1], format),
         };
         ck_assert_int_eq(dos_media_set_unit(&bank, unit, pair), DOS_MEDIA_OK);
         for (unsigned int slot = 0; slot < DOS_MEDIA_SLOTS_PER_UNIT; ++slot) {
             references[unit][slot] = mounted_reference(&bank, unit, slot);
-            ck_assert_int_eq(dos_media_write(&bank, references[unit][slot], 1, 0, sector), DOS_MEDIA_OK);
+            ck_assert_int_eq(dos_media_write(&bank, references[unit][slot], 1, 0, sector),
+                DOS_MEDIA_OK);
         }
     }
     storage[2][1].fail_flush = true;
@@ -425,14 +417,15 @@ END_TEST
 
 // Model-specific BAM access is one sector callback, not an image-sized cache.
 START_TEST(test_model_bam_access_is_bounded_and_media_bound) {
-    const unsigned int format = (unsigned int)_i;
+    const unsigned int format = (unsigned int) _i;
     storage_t storage = {.value = 0x55};
     const dos_media_io_t media = make_media(&storage, format);
     dos_media_bank_t bank = {0};
     ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &media), DOS_MEDIA_OK);
     const dos_media_ref_t reference = mounted_reference(&bank, 0, 1);
     const unsigned int parts = 1u << format;
-    const uint32_t first_offset = format == 0 ? 357 * DISKIMAGE_SECTOR_SIZE : 37 * 29 * DISKIMAGE_SECTOR_SIZE;
+    const uint32_t first_offset = format == 0 ? 357 * DISKIMAGE_SECTOR_SIZE
+        : 37 * 29 * DISKIMAGE_SECTOR_SIZE;
     uint8_t sector[DISKIMAGE_SECTOR_SIZE];
     for (unsigned int part = 0; part < parts; ++part) {
         ck_assert_int_eq(dos_media_read_bam(&bank, reference, part, sector), DOS_MEDIA_OK);
@@ -467,10 +460,10 @@ END_TEST
 Suite* dos_media_suite(void) {
     Suite* const suite = suite_create("dos_media");
     TCase* const core = tcase_create("core");
-    tcase_add_loop_test(core, test_single_slot_selects_model_and_keeps_partner_absent, 0,
-                        count_of(image_sizes) * DOS_MEDIA_SLOTS_PER_UNIT);
-    tcase_add_loop_test(core, test_complete_pair_validation_is_side_effect_free, 0,
-                        count_of(image_sizes) * count_of(image_sizes));
+    tcase_add_loop_test(core, test_single_slot_selects_model_and_keeps_partner_absent,
+        0, count_of(image_sizes) * DOS_MEDIA_SLOTS_PER_UNIT);
+    tcase_add_loop_test(core, test_complete_pair_validation_is_side_effect_free,
+        0, count_of(image_sizes) * count_of(image_sizes));
     tcase_add_test(core, test_rejected_pair_retains_dirty_mount_and_identity);
     tcase_add_test(core, test_invalid_descriptors_are_not_mounts);
     tcase_add_test(core, test_remount_invalidates_unit_without_cross_unit_reset);

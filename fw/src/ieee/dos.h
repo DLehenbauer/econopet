@@ -6,18 +6,25 @@
 #include "ieee/dos_media.h"
 #include "ieee/dos_rel.h"
 
-// INTTAB reserves logical indices 6/7 and leaves twelve shared data pages.
+// Pinned equate plus DOS_4040 dskint / DOS_8250 begin reserve indices 6 and 7
+// and initialize twelve data buffers. OPNRCH claims two buffers per ordinary file.
 #define DOS_CHANNEL_COUNT 8u
 #define DOS_FILE_CHANNEL_COUNT 6u
 #define DOS_BUFFER_COUNT 12u
 #define DOS_CHANNEL_BUFFER_COUNT 3u
 #define DOS_COMMAND_LIMIT 58u
+// Keep one over-limit byte so the revision-2 / DOS 2.7 length check can reject it.
 #define DOS_COMMAND_RECEIVE_CAPACITY (DOS_COMMAND_LIMIT + 1u)
 #define DOS_FILENAME_COUNT 5u
 #define DOS_UNUSED 0xffu
+
+// Bound speculative byte traversal so preview cannot evict an unread buffer.
 #define DOS_STAGE_CAPACITY 64u
 
-// ERRBUF has 36 text bytes, followed here by transmitted CR and a host null.
+// DOS_4040/DOS_8250 ramvar reserve 36 bytes for ERRBUF before $4400.
+// Include transmitted CR and the host-only terminating null.
+// https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ramvar
+// https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ramvar
 #define DOS_STATUS_TEXT_MAX 36u
 #define DOS_STATUS_LINE_CAPACITY (DOS_STATUS_TEXT_MAX + 1u + 1u)
 
@@ -29,12 +36,12 @@ typedef enum {
     DOS_STATUS_WRITE_PROTECT = 26,
     DOS_STATUS_SYNTAX = 30,
     DOS_STATUS_INVALID_COMMAND = 31,
-    DOS_STATUS_COMMAND_TOO_LONG = 32,
     DOS_STATUS_INVALID_NAME = 33,
-    DOS_STATUS_NO_FILE = 34,
+    DOS_STATUS_COMMAND_TOO_LONG = 32,
     DOS_STATUS_NO_RECORD = 50,
     DOS_STATUS_RECORD_OVERFLOW = 51,
     DOS_STATUS_FILE_TOO_LARGE = 52,
+    DOS_STATUS_NO_FILE = 34,
     DOS_STATUS_FILE_OPEN = 60,
     DOS_STATUS_NOT_FOUND = 62,
     DOS_STATUS_FILE_EXISTS = 63,
@@ -77,7 +84,6 @@ typedef enum {
     DOS_CLOSE_DATA,
     DOS_CLOSE_DIRECTORY,
     DOS_CLOSE_OLD_CHAIN,
-    DOS_CLOSE_RECLAIM,
     DOS_CLOSE_BAM,
     DOS_CLOSE_FLUSH,
     DOS_CLOSE_ABORT_OPEN,
@@ -125,18 +131,24 @@ typedef enum {
 typedef struct {
     dos_media_ref_t media;
     uint8_t buffers[DOS_CHANNEL_BUFFER_COUNT];
-    // file_type selects the ordinary active index or REL write flags.
+    // file_type selects the ordinary active index or internal REL write flags.
     union {
         uint8_t active;
         uint8_t rel_write;
     };
     uint8_t secondary;
-    uint8_t access;
-    uint8_t directory;
     uint8_t file_type;
-    uint8_t directory_track;
-    uint8_t directory_sector;
-    uint8_t directory_entry;
+    bool allocated;
+    bool ready;
+    // Byte-sized access/directory/close enum tags keep per-channel state bounded.
+    uint8_t access;
+    // file_type selects the listing phase or native SSSGRP cache.
+    union {
+        uint8_t directory;
+        uint8_t rel_group;
+    };
+    uint8_t closing;
+    bool failed;
     union {
         struct {
             uint8_t first_track;
@@ -147,15 +159,13 @@ typedef struct {
             uint8_t rel_root_sector;
         };
     };
-    uint8_t closing;
-    uint16_t blocks;
-    bool allocated;
-    bool ready;
-    bool failed;
     uint8_t rel_model;
-    // Listings always use ordinary metadata (file_type is their filter).
-    // Otherwise file_type selects ordinary metadata or the REL reader.
-    // Routing, teardown and ownership remain outside this shared storage.
+    uint8_t directory_track;
+    uint8_t directory_sector;
+    uint8_t directory_entry;
+    uint16_t blocks;
+    // file_type selects ordinary metadata or the REL reader. Routing, teardown
+    // and pool ownership stay outside this mutually exclusive state.
     union {
         struct {
             uint16_t traversed;
@@ -170,19 +180,19 @@ typedef struct {
             uint8_t next_track;
             uint8_t next_sector;
             uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
-            uint8_t grow_from_sector;
-            uint8_t pattern_count;
-            uint8_t directory_searches;
             union {
                 uint8_t line_length;
                 uint8_t direct_byte;
                 uint8_t read_byte;
             };
+            uint8_t pattern_count;
+            uint8_t grow_from_sector;
             union {
                 bool line_eoi;
                 bool direct_eoi;
                 bool read_eoi;
             };
+            bool both_drives;
             bool replaced;
             bool directory_dirty;
             bool directory_published;
@@ -207,46 +217,46 @@ typedef struct {
     uint8_t track;
     uint8_t sector;
     uint8_t secondary;
-    uint8_t name_length;
     uint8_t type;
-    uint8_t access;
     uint8_t scratch;
     uint8_t scratch_second;
-    uint8_t last_track;
-    uint8_t last_sector;
     uint8_t empty_track;
     uint8_t empty_sector;
     uint8_t empty_entry;
-    uint8_t append_channel;
+    uint8_t last_track;
+    uint8_t last_sector;
     uint8_t creation_drive;
+    uint8_t append_channel;
     uint8_t record_size;
     uint8_t rel_phase;
+    dos_access_t access;
     bool record_parameter;
     bool replace;
-    bool wildcard;
     bool default_drive;
-    bool first_program;
     bool tried_other;
     bool pending;
 } dos_open_work_t;
+
+// Decode OPEN's bounded command page before lookup. Supply all 59 command
+// bytes so OP60 may inspect a retained tail byte after CMDSET trimming.
+// The caller resolves missing-file creation and SA 0/1 defaults after lookup.
+bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned int length, uint8_t* drive,
+                    dos_open_work_t* work);
 
 // INITIALIZE owns selected media identities while reloading header/BAM state.
 typedef struct {
     dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
     uint16_t next_track;
-    uint8_t id[2]; // Raw-image ID from the last successfully read directory header.
     uint8_t first_drive;
     uint8_t slots;
     bool started;
     bool pending;
-    bool succeeded;
 } dos_initialize_work_t;
 
 // RENAME retains names and media identities while searching linked directories.
 typedef struct {
     dos_media_ref_t media[DOS_MEDIA_SLOTS_PER_UNIT];
     uint8_t names[2][DISKIMAGE_FILENAME_SIZE];
-    uint8_t name_lengths[2];
     uint16_t visited;
     uint8_t source_drive;
     uint8_t source_track;
@@ -259,7 +269,6 @@ typedef struct {
     bool both_drives;
     bool tried_peer;
     bool empty_target;
-    bool name_conflict;
     bool commit;
     bool pending;
 } dos_rename_work_t;
@@ -290,14 +299,12 @@ typedef struct {
     uint8_t buffers[2];
     uint8_t phase;
     uint8_t count;
-    bool data_pending;
     bool pending;
 } dos_scratch_work_t;
 
 // COPY saves the bounded LOOKUP table, not file data or whole-chain indexes.
 typedef struct {
     uint8_t name[DISKIMAGE_FILENAME_SIZE];
-    uint8_t name_length;
     uint8_t drive;
     uint8_t type;
     uint8_t track;
@@ -321,7 +328,6 @@ typedef struct {
     uint8_t reader;
     uint8_t writer;
     uint8_t source;
-    uint8_t invalidated_file; // One-based descriptor retired by a peer replacement CLOSE.
     uint8_t phase;
     uint8_t empty_track;
     uint8_t empty_sector;
@@ -334,7 +340,6 @@ typedef struct {
     uint8_t end_index;
     bool missing_writer;
     bool empty_target;
-    bool name_conflict;
     bool pending;
     bool all_files;
     uint8_t all_track;
@@ -364,7 +369,6 @@ typedef struct {
     uint8_t error_track;
     uint8_t error_sector;
     bool directory_chain;
-    bool data_pending;
 } dos_validate_work_t;
 
 // NEW and DUPLICATE retain only cursors, borrowing the existing BAM/data pages.
@@ -380,8 +384,6 @@ typedef struct {
     uint8_t group_low;
     uint8_t buffer;
     uint8_t first_buffer;
-    uint8_t reader;
-    bool empty_name;
     bool full;
     bool duplicate;
 } dos_format_work_t;
@@ -409,30 +411,35 @@ typedef struct {
 
 typedef enum {
     DOS_COMMAND_IDLE,
+    DOS_COMMAND_RENAME,
+    DOS_COMMAND_SCRATCH,
+    DOS_COMMAND_COPY,
+    DOS_COMMAND_VALIDATE,
+    DOS_COMMAND_FORMAT,
     DOS_COMMAND_BLOCK_READ,
     DOS_COMMAND_BLOCK_WRITE,
     DOS_COMMAND_BLOCK_MAP,
     DOS_COMMAND_READ_POINTER,
-    DOS_COMMAND_RENAME,
-    DOS_COMMAND_SCRATCH,
-    DOS_COMMAND_COPY,
-    DOS_COMMAND_FORMAT,
-    DOS_COMMAND_VALIDATE,
-    DOS_COMMAND_CLOSE,
     DOS_COMMAND_RECORD,
+    DOS_COMMAND_CLOSE,
 } dos_command_work_t;
 
-// One bounded OPEN/command record, independent of the unit's bus role.
-// It owns shared command RAM while older workers retain separate parsed arguments.
+// Command/OPEN collection is per unit, independent of bus listener ownership.
 typedef struct {
     uint8_t bytes[DOS_COMMAND_RECEIVE_CAPACITY];
-    uint8_t length;
+    unsigned int length;
     uint8_t secondary;
     bool collecting;
     bool complete;
 } dos_input_t;
 
-// Read-only status cursor for transport diagnostics.
+// Retain the resolved source across TALK changes until its staged copy is retired.
+typedef struct {
+    uint8_t channel;
+    bool status;
+} dos_source_t;
+
+// Read-only diagnostic snapshot, not mutable transport or DOS ownership.
 typedef struct {
     unsigned int position;
     unsigned int length;
@@ -441,145 +448,121 @@ typedef struct {
 typedef struct {
     dos_buffer_t buffers[DOS_BUFFER_COUNT];
     dos_channel_t channels[DOS_CHANNEL_COUNT];
-    dos_bam_t bam[DOS_MEDIA_SLOTS_PER_UNIT];
+    uint16_t buffer_use;
+    // Native LSTJOB drive bits survive buffer release and 4040 explicit OPEN.
+    uint16_t buffer_drives;
+    // TSTWRT distinguishes the most recent READ and WRITE for each pool page.
+    uint16_t buffer_writes;
+    uint8_t selected_drive;
+    uint8_t last_drive;
+    uint8_t status_position;
+    uint8_t status_length;
+    char status[DOS_STATUS_LINE_CAPACITY];
+    dos_status_code_t status_code;
     dos_open_work_t open;
     dos_initialize_work_t initialize;
-    // The command tag owns the transient worker and its shared pages.
+    // Ordered commands cannot overlap. The tag, not aliased pending flags,
+    // determines which transient state owns buffers and channels.
     dos_command_work_t command;
     union {
-        dos_block_work_t block;
-        dos_block_map_work_t block_map;
         dos_rename_work_t rename;
         dos_scratch_work_t scratch;
         dos_copy_work_t copy;
-        dos_format_work_t format;
         dos_validate_work_t validate;
+        dos_format_work_t format;
+        dos_block_work_t block;
+        dos_block_map_work_t block_map;
+        // The channel retains RECORD's decoded counter and positioning job.
+        uint8_t record_channel;
         struct {
             uint8_t secondary;
             uint8_t model;
         } close;
-        uint8_t record_channel;
     };
-    uint16_t buffer_use;
-    uint16_t buffer_drives;
-    uint16_t buffer_writes;
-    uint16_t free_blocks[DOS_MEDIA_SLOTS_PER_UNIT];
-    bool free_blocks_valid[DOS_MEDIA_SLOTS_PER_UNIT];
+    dos_input_t input;
+    dos_bam_t bam[DOS_MEDIA_SLOTS_PER_UNIT];
     uint8_t directory_internal;
-    uint8_t selected_drive;
-    uint8_t last_drive;
+    // Host-only durability for NXDRBK after REL's native MAPOUT.
+    uint8_t rel_directory_bam;
     uint8_t last_program_track;
     uint8_t last_program_sector;
     uint8_t last_program_drive;
-    union {
-        uint8_t command_bytes[DOS_COMMAND_RECEIVE_CAPACITY];
-        dos_input_t input;
-    };
-    char status[DOS_STATUS_LINE_CAPACITY];
-    uint8_t status_length;
-    uint8_t status_position;
-    dos_status_code_t status_code;
+    uint16_t free_blocks[DOS_MEDIA_SLOTS_PER_UNIT];
+    bool free_blocks_valid[DOS_MEDIA_SLOTS_PER_UNIT];
 } dos_unit_t;
 
-// Apply a routed secondary or OPEN/CLOSE after retiring affected FIFO copies.
-void dos_input_address(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t command, bool listening);
-
-// Collect one byte without executing its EOI-completed request.
-void dos_input_put(dos_unit_t* unit, uint8_t byte, bool eoi);
-
-// Report a complete request without consuming or dispatching it.
-bool dos_input_ready(const dos_unit_t* unit);
-
-// Dispatch completed input only after preceding work and FIFO fencing.
-void dos_input_dispatch(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index);
-
-// Deliver routed data or capture one REL byte until native byte/EOI work finishes.
-void dos_listen_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t byte, bool eoi);
-
-// Snapshot the status cursor without advancing its source.
-dos_status_progress_t dos_status_progress(const dos_unit_t* unit);
-
-// Retain the resolved source across TALK changes until its staged copy is retired.
-typedef struct {
-    uint8_t channel;
-    bool status;
-} dos_source_t;
-
-// Reset bounded DOS resources, retaining external media bindings.
-void dos_reset(dos_unit_t* unit, dos_model_t model);
-
-// Parse bounded OPEN input into the caller's defaults without doing I/O.
-bool dos_open_parse(const uint8_t input[DOS_COMMAND_RECEIVE_CAPACITY], unsigned int length, uint8_t* drive,
-                    dos_open_work_t* work);
-
-// Start an ordinary file, directory or direct page, rejecting REL operations.
-void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* request,
-              unsigned int length);
-
-// Advance one command, ordinary lookup/APPEND or retained REL read/write job.
-void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
-
-// Dispatch an already-collected metadata, block, INITIALIZE or user request.
-// Complete preceding work first. Command-channel transport collection is separate.
-void dos_command(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, const uint8_t* request,
-                 unsigned int length);
-
-// Persist then release a secondary, retaining failed writers for retry.
-// Command secondary 15 closes all data channels in descending order.
-// Internal REL writers remain allocated until the later full CLSREL join.
-bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t secondary);
-
-// Apply a decoded ordinary or direct PUT byte without treating EOI as file completion.
-void dos_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t byte);
-
-// Persist writers, unit BAMs and backing stores without releasing successful owners.
-// The caller must quiesce transport and complete pending lookup first.
-bool dos_finalize(dos_unit_t* unit, dos_media_bank_t* media);
-
-// Find an allocated secondary or return DOS_UNUSED.
-uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
-
-// Internal reservation only: claim data/data/side pages for an unowned data
-// secondary. Return DOS_UNUSED on exhaustion without publishing a partial owner.
-// No reads or status publication. Prepare before dos_stage/dos_get, and do
-// not use ordinary dos_put on this storage. Public REL OPEN remains disabled.
-// Writer ownership is retained internally. Native CLSREL is not implemented.
+// Internal REL ownership prerequisite, not OPEN or record preparation.
+// The caller retires any prior owner of secondary first. Claim three shared
+// pages and one logical channel, initially not ready. Return DOS_UNUSED on
+// exhaustion, retaining peers and publishing no status or disk I/O.
 uint8_t dos_rel_channel_claim(dos_unit_t* unit, dos_media_ref_t media, uint8_t secondary);
 
-// Internal initial read from a fresh claim and validated directory metadata.
-// Preserve native directory-data/side-job order, not public OPEN admission.
-// This initializer requires fresh clean ownership, not an existing writer.
+// Prepare OPNRCH on a fresh claim using the directory's first data link, not
+// FNDREL's first side pointer. Preserve common directory ownership. Small REL
+// reads its side root after STRDBL, while 8250 only captures the super root.
+// Each worker step performs at most one read.
 void dos_rel_channel_prepare_open(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t root_track,
                                   uint8_t root_sector, uint8_t data_track, uint8_t data_sector, uint8_t size);
 
-// Internal cold, clean positioned read, not native OPEN or public RECORD.
-// Retire this channel's FIFO copies and borrowed writes first. Supply a
-// validated nonzero record size and directory side/super root. Work preserves
-// status on success. No resident/dirty POSBUF reuse or SSEND fallback.
+// Queue OPNWCH/OW20 on a fresh claim after INTTS has allocated the supplied
+// first data sector. Allocate/write the side and optional super sector, write
+// NULBUF/NULLNK data and MAPOUT, then prepare OROW. Keep allocations and pages
+// through failed jobs. The public OPEN/COPY owner then publishes ADDFIL.
+void dos_rel_channel_create(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t data_track,
+                            uint8_t data_sector, uint8_t size);
+
+// Retry only a retained creation job. Never replay successful allocations.
+bool dos_rel_channel_retry_create(dos_unit_t* unit, uint8_t channel);
+
+// Queue native ADDREL for the current missing writer record after retiring
+// FIFO copies. Retain the same three pages through NEWSS role transfers and
+// failures. Success prepares RELPUT without storing its input byte. This does
+// not publish ENDCMD or acknowledge EOI.
+bool dos_rel_channel_grow(dos_unit_t* unit, uint8_t channel);
+
+// Retry a retained growth job without repeating allocation or marker filling.
+bool dos_rel_channel_retry_grow(dos_unit_t* unit, uint8_t channel);
+
+// Internal clean positioned-read entry, not public OPEN or RECORD.
+// Retire this channel's FIFO copies first. The caller supplies validated
+// nonzero record length and side/super root from the selected directory entry.
+// Preparation is cooperative and preserves status on success. No dirty-page
+// reuse, initial command status or persistent directory metadata is supplied.
 void dos_rel_channel_prepare(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t track, uint8_t sector,
                              uint16_t number, uint8_t size, uint8_t position);
 
-// Internal clean or dirty POSBUF after resolved SSPOS and FIFO retirement.
-// Retain data/data/side ownership, reject busy/failed owners and perform no I/O
-// here. Public RECORD status/admission and index traversal remain
-// the caller's responsibility. Work retains successful status.
+// Internal RECORD/POSITN continuation after SSPOS selected a valid data link.
+// Retire FIFO copies first. Preserve dirty pages, reuse matching native headers
+// and perform SCRUB/STRDBL cooperatively. This does not resolve the side index
+// or publish RECORD's final 50/51/ENDCMD. False leaves the current owner intact.
 bool dos_rel_channel_position_buffer(dos_unit_t* unit, uint8_t channel, uint16_t number, uint8_t position,
                                      uint8_t track, uint8_t sector);
 
-// Internal FNDREL/SSPOS/SSEND and clean/dirty POSBUF request. Retire this
-// owner's FIFO copies first. Keep pages, dirty bits and media identity.
-// Reject busy/failed owners without mutation. Each work pass submits at most
-// one READ/WRITE. Missing previews CR/EOI, actual GET owns error 50.
-// Public RECORD is excluded. Successful work retains command status.
+// Prepare RECORD using its resident side page and native 8250 group cache.
+// Retire FIFO copies first. SSPOS reuses the side page, SSEND handles absent
+// records, and successful lookups retain POSBUF's dirty-safe window behavior.
+// Command completion/status, growth and malformed empty-super traversal remain
+// the owner's responsibility. No allocation, ENDCMD or start-time I/O.
 bool dos_rel_channel_position(dos_unit_t* unit, uint8_t channel, uint16_t number, uint8_t position);
+
+// Explicitly retry a failed positioning job without replaying RECORD's start.
+// Replaced-media cursors cannot be revived. Dirty ownership remains retained.
+bool dos_rel_channel_retry_position(dos_unit_t* unit, uint8_t channel);
+
+// Queue native CLSREL after retiring FIFO copies. SCRUB does not pad records.
+// Retain the three pages through failed data/index/directory writes and the
+// additional host flush. Successful completion frees only this channel.
+// Public CLOSE and lifecycle finalization route through this retained owner.
+bool dos_rel_channel_close(dos_unit_t* unit, uint8_t channel);
+
+// Explicitly retry retained close I/O, not terminal corruption/stale media.
+bool dos_rel_channel_retry_close(dos_unit_t* unit, uint8_t channel);
 
 // Internal WRTOUT job leaf, not NRBUF, CLOSE or a durability acknowledgement.
 // Retire read readiness/FIFO copies before cached writes. The owner retains
 // the dirty mask and pages. Write only the dirty active data page to its saved
 // header, using the existing BAM-version/storage gate. Success clears only
 // that mask bit, without advancing the record or changing retained status.
-// Each call performs at most one BAM READ/flush or data WRITE. False without
-// channel failure retains cold-version preparation (repeat this leaf call).
 // Failure keeps the bytes/mask and marks this channel failed for explicit
 // retry. An already-clean active page performs no I/O. Backing-store flush,
 // buffer switching, file flags and complete native error cleanup remain separate.
@@ -605,7 +588,7 @@ bool dos_rel_channel_advance_write(dos_unit_t* unit, dos_media_bank_t* media, ui
 
 // Internal cached writer ownership, not public OPEN/LISTEN or EOI completion.
 // Retire all staged FIFO copies first. Preserve native read flags/counter and
-// keep the three pages allocated. Full CLSREL remains a later owner join.
+// keep the three pages allocated until CLSREL finishes.
 // A ready retained-writer read return may reenter without dropping dirty bits
 // or DYFILE. An unfinished EOI, pending job or unexposed completion cannot.
 bool dos_rel_channel_begin_write(dos_unit_t* unit, uint8_t channel);
@@ -620,8 +603,7 @@ bool dos_rel_channel_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t chan
 // FULL stops with its final dirty page still owned, without a flush or CLOSE.
 bool dos_rel_channel_pad(dos_unit_t* unit, uint8_t channel);
 
-// Permit one explicit retry of a retained NRBUF WRITE, BAM preparation or
-// awaited refill/SETLST READ.
+// Permit one explicit retry of a retained NRBUF WRITE or awaited refill READ.
 // No I/O/status reset and no repeated GET or record-counter advancement.
 // A retired cached-write cursor cannot be revived after lifetime failure.
 bool dos_rel_channel_retry_write(dos_unit_t* unit, uint8_t channel);
@@ -639,7 +621,7 @@ bool dos_rel_channel_finish_cached(dos_unit_t* unit, dos_media_bank_t* media, ui
 // Publish overflow/OK only after RD40 prepares the next byte. Pending work
 // retains the three pages and consumed cursor across explicit job retries.
 // overflow requires an EOI byte rejected after the record was already FULL.
-// The caller retains any unaccepted transport byte separately.
+// LISTEN retains its byte separately while this continuation completes.
 bool dos_rel_channel_finish_write(dos_unit_t* unit, uint8_t channel, bool overflow);
 
 // Restore cached staging/GET after finish_cached, retaining MODIFY ownership,
@@ -651,53 +633,71 @@ bool dos_rel_channel_finish_write(dos_unit_t* unit, uint8_t channel, bool overfl
 // These jobs retain writer ownership instead of using clean reprepare.
 bool dos_rel_channel_resume_read(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel);
 
-// Retry only a retained positioning job, without swapping or capturing the request twice.
-bool dos_rel_channel_retry_position(dos_unit_t* unit, uint8_t channel);
+// Resets one native unit's resources/status, without changing mounted media.
+void dos_reset(dos_unit_t* unit, dos_model_t model);
 
-// Retain OW20's initial data allocation while scheduling side/super/data jobs.
-void dos_rel_channel_create(dos_unit_t* unit, uint8_t channel, dos_model_t model, uint8_t data_track,
-                            uint8_t data_sector, uint8_t size);
+// Applies a decoded secondary/OPEN/CLOSE byte after transport synchronization.
+// Listening controls input acceptance, not primary device addressing.
+void dos_input_address(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t command, bool listening);
 
-// Resume only the failed, retained creation phase, not its earlier allocations.
-bool dos_rel_channel_retry_create(dos_unit_t* unit, uint8_t channel);
+// Accepts one routed input byte and records EOI without executing the request.
+void dos_input_put(dos_unit_t* unit, uint8_t byte, bool eoi);
 
-// Enter WR60's ADDREL boundary without accepting or buffering its input byte.
-bool dos_rel_channel_grow(dos_unit_t* unit, uint8_t channel);
+// Route data or collect OPEN/command input. REL retains one popped byte per
+// owner across growth/page/EOI jobs. dos_work_pending blocks subsequent RX.
+void dos_listen_put(dos_unit_t* unit, dos_media_bank_t* media, uint8_t byte, bool eoi);
 
-// Retry only a retained ADDREL job, preserving its allocations and role swaps.
-bool dos_rel_channel_retry_grow(dos_unit_t* unit, uint8_t channel);
+// Reports whether an ordered execution boundary has a completed request.
+bool dos_input_ready(const dos_unit_t* unit);
 
-// Begin CLSREL without CLREC padding or ordinary writer-union interpretation.
-bool dos_rel_channel_close(dos_unit_t* unit, uint8_t channel);
+// Executes a completed request after the caller retires affected staged output.
+void dos_input_dispatch(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index);
 
-// Resume a retained job without redoing SCRUB, buffer selection or block counts.
-bool dos_rel_channel_retry_close(dos_unit_t* unit, uint8_t channel);
+// Reports bounded work that must finish before later ordered commands execute.
+bool dos_work_pending(const dos_unit_t* unit);
 
-// Resolve a decoded secondary and preview bytes with an owner for actual GETs.
-// Zero output has no source to retain. Retire old sources before mutation/reuse.
+// Resolves a secondary and previews bytes, returning an owner for actual GETs.
+// A zero count has no source to retain. Mutations require retiring old sources.
 unsigned int dos_output_stage(dos_unit_t* unit, dos_media_bank_t* media, uint8_t secondary, uint8_t* output,
                               unsigned int capacity, bool* eoi, dos_source_t* source);
 
-// Commit consumption against the captured source, not a later TALK selection.
+// Commits actual consumption against the source captured by dos_output_stage.
 void dos_output_get(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, dos_source_t source,
                     unsigned int count);
 
-// Replace the retained status and restart its unread cursor.
+// Returns retained status progress for transport diagnostics without exposing text.
+dos_status_progress_t dos_status_progress(const dos_unit_t* unit);
+
+// Starts an ordinary-file or directory OPEN. Finish existing ordered work first.
+// REL and direct channels remain outside the ordinary-file OPEN path.
+void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* name,
+              unsigned int length);
+
+// Advances bounded directory, append-chain, initialize, or command work.
+void dos_work(dos_unit_t* unit, dos_media_bank_t* media);
+
+// Persists and releases the secondary, retaining write ownership on I/O failure.
+// CLOSE 15 visits data secondaries 14..0. REL queues cooperative CLSREL and
+// returns false until work retires. Repeating CLOSE retries a failed CLSREL.
+bool dos_close(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model, uint8_t secondary);
+
+// Finalizes ordinary writers and closes quiescent REL owners without clearing
+// errors. Retains failed and not-yet-completed owners for retry.
+bool dos_finalize(dos_unit_t* unit, dos_media_bank_t* media);
+
+// Formats a native status, retaining its drive and profile until replaced.
 void dos_status(dos_unit_t* unit, dos_model_t model, dos_status_code_t code, uint8_t track, uint8_t sector);
 
-// Preview a bounded reader/directory prefix without committing consumption.
+// Returns an ordinary channel index, or DOS_UNUSED if it is not open.
+uint8_t dos_find_channel(const dos_unit_t* unit, uint8_t secondary);
+
+// Stages a bounded unread suffix without advancing the native GET cursor.
 unsigned int dos_stage(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, uint8_t* output,
                        unsigned int capacity, bool* eoi);
 
-// Commit only bytes actually consumed from a previously staged prefix.
+// Observes actual FIFO GET progress for a previously staged ordinary source.
 void dos_get(dos_unit_t* unit, dos_media_bank_t* media, uint8_t channel, unsigned int count);
 
-// Preview the retained status suffix, including CR with EOI.
+// Stages the retained status suffix and acknowledges only actual CR GET.
 unsigned int dos_status_stage(const dos_unit_t* unit, uint8_t* output, unsigned int capacity, bool* eoi);
-
-// Acknowledge actual status progress, clearing status only when CR is consumed.
 void dos_status_get(dos_unit_t* unit, dos_model_t model, unsigned int count);
-
-// Report runnable OPEN, initialization, command or clean REL channel work.
-// Failed REL owners retain their pages but do not request automatic retries.
-bool dos_work_pending(const dos_unit_t* unit);
