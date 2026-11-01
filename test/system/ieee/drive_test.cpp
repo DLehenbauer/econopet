@@ -255,6 +255,8 @@ std::string receive_status(System& system, FirmwareSession& firmware, IeeeContro
 
 // Cover short files and both sides of the first sector boundary.
 class DrivePrgTest : public FirmwareTest, public testing::WithParamInterface<size_t> {};
+// Bound each physical transfer scenario while covering both writable slots.
+class DriveWriteTest : public FirmwareTest, public testing::WithParamInterface<unsigned int> {};
 // Cross all three native models with both local slot positions.
 class NativeDriveTest : public FirmwareTest, public testing::WithParamInterface<int> {};
 // Cover the ordinary one-byte EOF quirk with zero, CR and high-bit bytes.
@@ -339,28 +341,33 @@ void reject_media_mutations() {
 } // namespace
 
 // ROM OPNWCH/APPEND/CLSWRT must persist independently through production SPI.
-TEST_F(FirmwareTest, OrdinaryWritesPersistBothDisksAndRetainInterruptedReadback) {
+TEST_P(DriveWriteTest, OrdinaryWritesPersistBothDisksAndRetainInterruptedReadback) {
     constexpr Device Drive{DeviceAddress};
     constexpr Channel Input{DataChannel};
+    const auto slot = GetParam();
+    const auto selected = std::to_string(slot) + ":FILE";
+    const auto peer = std::to_string(1 - slot) + ":FILE";
     IeeeController controller(system);
     firmware.mount(D64{}.bytes(), "write0.d64", 0);
     firmware.mount(D64{}.bytes(), "write1.d64", 1);
-    std::vector<uint8_t> first(255), second(508), suffix(22);
-    for (size_t index = 0; index < first.size(); ++index)
-        first[index] = static_cast<uint8_t>(index);
-    for (size_t index = 0; index < second.size(); ++index)
-        second[index] = static_cast<uint8_t>(0x20 + index);
+    std::vector<uint8_t> payload(slot == 0 ? 255 : 508), suffix(22);
+    const std::vector<uint8_t> peer_payload{0xd1, 0xd2, 0xd3, 0xd4};
+    for (size_t index = 0; index < payload.size(); ++index)
+        payload[index] = static_cast<uint8_t>((slot == 0 ? 0 : 0x20) + index);
     for (size_t index = 0; index < suffix.size(); ++index)
         suffix[index] = static_cast<uint8_t>(0x80 + index);
-    write_file(system, firmware, controller, "0:FILE,S,W", first);
-    write_file(system, firmware, controller, "1:FILE,S,W", second);
-    write_file(system, firmware, controller, "0:FILE,A", suffix);
-    first.insert(first.end(), suffix.begin(), suffix.end());
+    // Retain an independently persisted peer while exercising the large transfer.
+    write_file(system, firmware, controller, peer + ",S,W", peer_payload);
+    write_file(system, firmware, controller, selected + ",S,W", payload);
+    if (slot == 0) {
+        write_file(system, firmware, controller, selected + ",A", suffix);
+        payload.insert(payload.end(), suffix.begin(), suffix.end());
+    }
     ASSERT_TRUE(ieee_drive_unmount_all());
     ASSERT_TRUE(ieee_drive_mount(0, "write0.d64"));
     ASSERT_TRUE(ieee_drive_mount(1, "write1.d64"));
-    for (const auto& [name, expected] :
-         std::vector<std::pair<std::string, std::vector<uint8_t>>>{{"0:F?L*,S,R", first}, {"1:FILE,S,R", second}}) {
+    for (const auto& [name, expected] : std::vector<std::pair<std::string, std::vector<uint8_t>>>{
+             {slot == 0 ? "0:F?L*,S,R" : selected + ",S,R", payload}, {peer + ",S,R", peer_payload}}) {
         open_file(system, controller, Input, name);
         service_rx(system, firmware, "persisted OPEN");
         controller.command(Talk(Drive));
@@ -382,6 +389,8 @@ TEST_F(FirmwareTest, OrdinaryWritesPersistBothDisksAndRetainInterruptedReadback)
         controller.command(Untalk);
         service_rx(system, firmware, "persisted UNTALK");
     }
+    if (slot != 0)
+        return;
     write_file(system, firmware, controller, "@0:FILE,S,W", suffix);
     open_file(system, controller, Input, "0:FILE,S,R");
     service_rx(system, firmware, "replacement OPEN");
@@ -395,6 +404,8 @@ TEST_F(FirmwareTest, OrdinaryWritesPersistBothDisksAndRetainInterruptedReadback)
     controller.command(Untalk);
     service_rx(system, firmware, "replacement UNTALK");
 }
+
+INSTANTIATE_TEST_SUITE_P(Slots, DriveWriteTest, testing::Values(0u, 1u));
 
 // TLK20 aborts without GET before NRFD assertion, but TLK30 GET survives ATN.
 TEST_P(DriveInterruptionTest, BusyMutationAndAtnRetainExactNativeGetProgress) {

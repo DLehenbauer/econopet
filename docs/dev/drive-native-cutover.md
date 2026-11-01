@@ -147,9 +147,21 @@ The original half-hour root system wrapper timed out locally after 601
 passing cases and on original-head CI after 607 passing cases, without test
 assertion failures. The wrapper now allows one hour for native cooperative
 SPI workloads, retaining its two-worker resource bound and individual test
-deadlines. The generated wrapper properties were checked. A complete run
-through the new wrapper remains for new-head CI, rather than being inferred
-from the split local results. Reference tooling was not rerun for these fixes.
+deadlines. The generated wrapper properties were checked. The split local
+results alone do not establish a passing complete root wrapper. Reference
+tooling was not rerun for these fixes.
+
+Subsequent CI on `b7f19738` completed the aggregate wrapper in 2,556.77 seconds
+with 719 passing cases and one 300-second per-case timeout in the combined
+ordinary write/readback scenario. That scenario passed locally in 136.22
+seconds, but combined both large physical transfers under one wall-clock
+deadline. It is now split by writable slot, retaining the 255-byte and
+508-byte boundary payloads, independent peer persistence, interrupted
+readback/status, append and replacement checks. Both slots keep an active
+peer rather than becoming single-drive tests. The registry grows to 721
+cases. The two split cases pass under two-worker contention in 65.76 and
+104.74 seconds, alongside all three related reader block-write cases.
+Neither individual deadlines nor the aggregate worker/budget policy change.
 
 STA coverage is not complete. The unchanged MC6809 paths retain two
 unclocked pins and two unconstrained NMI-latch endpoints. The unchanged
