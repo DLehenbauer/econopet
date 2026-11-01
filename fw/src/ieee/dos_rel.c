@@ -118,7 +118,7 @@ uint8_t dos_rel_fill(uint8_t bytes[DISKIMAGE_SECTOR_SIZE], const uint8_t size, u
     // using ADDNR. The returned NR feeds the next fill or NULLNK at the owner.
     // Requiring nonzero RS is a helper safeguard, not native zero-size behavior.
     vet(size != 0, "REL new data requires a nonzero record size");
-    // Leave link bytes caller-owned and mark record starts until ADDNR carries.
+    // Native byte-wide marker arithmetic can wrap to index 0, overwriting the first link byte.
     memset(bytes + DISKIMAGE_SECTOR_LINK_SIZE, 0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
     bool crosses;
     uint8_t marker = fill_next(size, next, &crosses);

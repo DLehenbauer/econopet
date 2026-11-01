@@ -672,8 +672,8 @@ void dos_output_get(dos_unit_t* unit, dos_media_bank_t* media, dos_model_t model
 // Returns retained status progress for transport diagnostics without exposing text.
 dos_status_progress_t dos_status_progress(const dos_unit_t* unit);
 
-// Starts an ordinary-file or directory OPEN. Finish existing ordered work first.
-// REL and direct channels remain outside the ordinary-file OPEN path.
+// Starts a direct, directory, ordinary-file, or REL OPEN. Finish existing
+// ordered work first; ordinary lookup and REL construction may defer to dos_work.
 void dos_open(dos_unit_t* unit, dos_media_bank_t* media, unsigned int index, uint8_t secondary, const uint8_t* name,
               unsigned int length);
 
