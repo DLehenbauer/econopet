@@ -276,7 +276,7 @@ module ieee_sys_tb;
 
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU_SEL), 8'(CPU_SEL_SOFT_6809));
         spi_write_at(common_pkg::wb_ieee_addr(IEEE_REG_CTRL), IEEE_CTRL_UNIT_MASK);
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);   // release
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);   // release and run
 
         // Poll fabric status over SPI like the firmware does; print the same
         // fields as the F8 debug line for direct hardware comparison.

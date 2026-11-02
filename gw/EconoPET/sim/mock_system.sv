@@ -58,6 +58,7 @@ module mock_system (
     logic pia1_cs_n;
     logic pia2_cs_n;
     logic via_cs_n;
+    logic [DATA_WIDTH-1:0] io_data = 8'h10;
 
     // SPI
     logic spi_sck;
@@ -184,7 +185,7 @@ module mock_system (
         .ram_data_oe_i(ram_data_oe),
 
         // Incoming bus outputs from 'mock_io' module
-        .io_data_i(8'h10),
+        .io_data_i(io_data),
         .io_oe_n_i(io_oe_n),
 
         .bus_addr_o(bus_addr),
@@ -192,6 +193,10 @@ module mock_system (
         .bus_data_oe_o(bus_data_mux_oe),
         .bus_we_n_o(bus_we_n)
     );
+
+    task static set_io_data(input logic [DATA_WIDTH-1:0] data);
+        io_data = data;
+    endtask
 
     spi1_driver spi1_driver (
         .clock_i(sys_clock),

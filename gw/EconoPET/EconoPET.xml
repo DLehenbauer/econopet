@@ -51,6 +51,7 @@
         <efx:design_file name="external/icesid/icesid/dac.v" version="default" library="default"/>
         <efx:design_file name="external/icesid/icesid/output.v" version="default" library="default"/>
         <efx:design_file name="src/io.sv" version="default" library="default"/>
+        <efx:design_file name="src/io_controller.sv" version="default" library="default"/>
         <efx:design_file name="src/delay.sv" version="default" library="default"/>
         <efx:design_file name="src/cpu_data_mux.sv" version="default" library="default"/>
         <efx:design_file name="src/open_bus.sv" version="default" library="default"/>
@@ -82,6 +83,7 @@
         <efx:sim_file name="sim/acia6551_tb.sv"/>
         <efx:sim_file name="sim/stopwatch.sv"/>
         <efx:sim_file name="sim/top_tb.sv"/>
+        <efx:sim_file name="sim/io_controller_tb.sv"/>
         <efx:sim_file name="sim/bram_tb.sv"/>
         <efx:sim_file name="sim/ram_tb.sv"/>
         <efx:sim_file name="sim/timing_tb.sv"/>

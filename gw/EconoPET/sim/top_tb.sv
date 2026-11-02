@@ -173,6 +173,27 @@ module top_tb;
         $display("[%t] End CRTC Write Test", $time);
     endtask
 
+    task static spi_io_test;
+        logic [DATA_WIDTH-1:0] dout;
+
+        $display("[%t] Begin SPI/Physical I/O Test", $time);
+
+        // mock_system's physical I/O model returns $10. This crosses a CPU
+        // slot before the SPI controller regains its grant to receive ACK.
+        mock_system.spi_read_at(common_pkg::wb_io_addr(7'h10), dout);
+        `assert_equal(dout, 8'h10)
+
+        // A physical key transition after the CPU is halted must be visible
+        // through the same path used by the firmware's PIA1 matrix scan.
+        mock_system.set_io_data(8'ha5);
+        mock_system.spi_write_at(common_pkg::wb_io_addr(7'h10), 8'h09);
+        mock_system.spi_read_at(common_pkg::wb_io_addr(7'h12), dout);
+        `assert_equal(dout, 8'ha5)
+        mock_system.set_io_data(8'h10);
+
+        $display("[%t] End SPI/Physical I/O Test", $time);
+    endtask
+
     task static crtc_read_test;
         integer r;
         logic [DATA_WIDTH-1:0] dout;
@@ -489,6 +510,7 @@ module top_tb;
         spi_ram_test;
         cpu_ram_test;
         usb_keyboard_test;
+        spi_io_test;
         crtc_write_test;
         crtc_read_test;
         sid_write_test;

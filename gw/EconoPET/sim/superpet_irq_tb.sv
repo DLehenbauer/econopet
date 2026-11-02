@@ -212,7 +212,7 @@ module superpet_irq_tb;
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU_SEL), 8'(CPU_SEL_SOFT_6809));
 
         $display("[%t]   Releasing reset via REG_CPU", $time);
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         // Let the program reach its idle loop (~50 bus cycles at 1us each).
         #200000;

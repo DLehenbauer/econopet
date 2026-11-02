@@ -684,7 +684,7 @@ TEST_F(SystemTest, CpuLifecycleSwitchesNativeCoresAndPreservesHistoryAcrossReset
     EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
     EXPECT_EQ(system.peek(SramAddress{Result.value()}), 0);
     run(CPU_SOFT_6809, Entry6809, OtherMarker);
-    EXPECT_EQ(system.cpu().read_control(), CpuControl{});
+    EXPECT_EQ(system.cpu().read_control(), CpuControl{CpuControlBit::Ready});
     EXPECT_EQ(system.peek(SramAddress{pet::Reset6809.value()}), Entry6809.value() >> 8);
     EXPECT_EQ(system.peek(SramAddress{(pet::Reset6809 + 1).value()}), Entry6809.value() & 0xff);
     EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint));
@@ -723,6 +723,34 @@ TEST_F(SystemTest, Halted6502SyncDoesNotAdvanceFetchCheckpoint) {
     system.run_until(
         [&](const System& board) { return board.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint); },
         ExecutionBudget, "6502 resumed fetch");
+}
+
+TEST_F(SystemTest, ClearingReadyPauses6809WithoutResetAndResumesMemoryWrites) {
+    install_loop(system, CPU_SOFT_6809, Entry6809, Marker);
+    auto cpu = system.cpu(CPU_SOFT_6809);
+    cpu.start(Entry6809);
+    system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == Marker; },
+                     ExecutionBudget, "6809 running before halt");
+
+    // SPI-slot ordering pauses the CPU before subsequent memory traffic.
+    cpu.write_control_raw(0);
+    ASSERT_FALSE(cpu.peek_reset());
+    const auto address = cpu.peek_address();
+    const auto checkpoint = cpu.peek_fetch_checkpoint();
+
+    // SPI memory traffic cannot advance the halted core or replace its pending data.
+    system.spi().write(fpga::address(SramAddress{Result.value()}), 0);
+    system.tick(ExecutionSlice);
+    EXPECT_EQ(system.peek(SramAddress{Result.value()}), 0);
+    EXPECT_EQ(cpu.peek_address(), address);
+    EXPECT_EQ(cpu.peek_fetch_checkpoint(), checkpoint);
+    EXPECT_FALSE(cpu.peek_reset());
+
+    // Resuming without reset restores ordinary CPU writes.
+    cpu.write_control_raw(CpuControl{CpuControlBit::Ready}.bits());
+    system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == Marker; },
+                     ExecutionBudget, "6809 resumed after halt");
+    EXPECT_FALSE(cpu.peek_reset());
 }
 
 // Operand/data reads, inactive cores and physical SYNC cannot invent a soft-core fetch.
@@ -766,9 +794,8 @@ TEST_F(SystemTest, CpuSelectionReadsAndResetReleaseAcceptSuperpetIoMode) {
         EXPECT_EQ(system.cpu().read_selection(), selection);
         EXPECT_NO_THROW(system.cpu(selection).release_reset());
         EXPECT_FALSE(system.cpu().peek_reset());
-        const bool ready = selection != CPU_SOFT_6809;
-        EXPECT_EQ(system.snapshot().cpu_ready_o, ready);
-        EXPECT_EQ(system.cpu().read_control(), ready ? CpuControl{CpuControlBit::Ready} : CpuControl{});
+        EXPECT_TRUE(system.snapshot().cpu_ready_o);
+        EXPECT_EQ(system.cpu().read_control(), CpuControl{CpuControlBit::Ready});
         EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), configuration);
     }
 }
