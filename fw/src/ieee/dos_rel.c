@@ -9,6 +9,7 @@
 #include "ieee/dos.h"
 
 _Static_assert(sizeof(dos_rel_lookup_t) <= 24u, "REL lookup must not acquire a private page or index cache");
+_Static_assert(sizeof(dos_rel_growth_t) <= sizeof(dos_rel_lookup_t), "REL growth must reuse the lookup cursor");
 _Static_assert(sizeof(dos_rel_end_t) <= 32u, "REL end lookup must borrow the existing side page");
 _Static_assert(sizeof(dos_rel_record_t) <= 36u, "REL record must borrow the existing three channel pages");
 _Static_assert(sizeof(dos_rel_reader_t) <= 40u, "REL reader must not own staging bytes or another page");
@@ -117,8 +118,7 @@ uint8_t dos_rel_fill(uint8_t bytes[DISKIMAGE_SECTOR_SIZE], const uint8_t size, u
     // using ADDNR. The returned NR feeds the next fill or NULLNK at the owner.
     // Requiring nonzero RS is a helper safeguard, not native zero-size behavior.
     vet(size != 0, "REL new data requires a nonzero record size");
-    // Clear only the payload, then retain ADDNR's byte-wide marker behavior.
-    // A wrapped incoming NR can deliberately place a marker in the link bytes.
+    // Native byte-wide marker arithmetic can wrap to index 0, overwriting the first link byte.
     memset(bytes + DISKIMAGE_SECTOR_LINK_SIZE, 0, DISKIMAGE_SECTOR_PAYLOAD_SIZE);
     bool crosses;
     uint8_t marker = fill_next(size, next, &crosses);
@@ -247,8 +247,6 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/sstest
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/sstest
-    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/ssutil
-    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/ssutil
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/system
     //
     // SSTEST/ST50/ST20 and RDSS1C/RDSS1B select group, side and data links.
@@ -274,29 +272,31 @@ dos_rel_lookup_result_t dos_rel_lookup_step(dos_rel_lookup_t* const lookup, dos_
         lookup->phase = DOS_REL_LOOKUP_GROUP;
         return lookup->track == 0 ? missing(lookup) : lookup->result;
     }
-    // SSPOS repeats SSTEST after IBRD, accepting ER1 without another read.
-    // Header equality still precedes the side-table/range decision.
-    const bool resident = scratch[DOS_REL_SIDE_NUMBER_OFFSET] == lookup->address.side;
-    if (!resident) {
+    // Native header equality precedes the six-side bound. SSPOS repeats
+    // SSTEST after reading a selected page, so a mismatched page uses its
+    // resident side-table entry before accepting the requested data pointer.
+    const bool header_matches = scratch[DOS_REL_SIDE_NUMBER_OFFSET] == lookup->address.side;
+    if (lookup->phase != DOS_REL_LOOKUP_SIDE && !header_matches) {
         if (lookup->address.side >= DOS_REL_SIDE_COUNT) {
             return missing(lookup);
         }
         const uint8_t index = DOS_REL_SIDE_TABLE_OFFSET + 2u * lookup->address.side;
-        if (scratch[index] == 0) {
+        lookup->track = scratch[index];
+        lookup->sector = scratch[index + 1u];
+        lookup->phase = DOS_REL_LOOKUP_SIDE;
+        return lookup->track == 0 ? missing(lookup) : lookup->result;
+    }
+    const bool malformed_side = lookup->phase == DOS_REL_LOOKUP_SIDE && !header_matches;
+    if (malformed_side) {
+        const uint8_t side_track = scratch[DOS_REL_SIDE_TABLE_OFFSET + 2u * lookup->address.side];
+        if (side_track == 0) {
             return missing(lookup);
         }
-        if (lookup->phase != DOS_REL_LOOKUP_SIDE) {
-            lookup->track = scratch[index];
-            lookup->sector = scratch[index + 1u];
-            lookup->phase = DOS_REL_LOOKUP_SIDE;
-            return lookup->result;
-        }
     }
-    // Only header equality tests SSIND's track. A second ER1 accepts even a
-    // zero data track, leaving geometry validation to the later data read.
+    // SSTEST tests the track byte at SSIND. The sector may legitimately be zero.
     lookup->track = scratch[lookup->address.index];
     lookup->sector = scratch[lookup->address.index + 1u];
-    if (resident && lookup->track == 0) {
+    if (lookup->track == 0 && !malformed_side) {
         return missing(lookup);
     }
     lookup->result = DOS_REL_LOOKUP_FOUND;
@@ -900,7 +900,7 @@ unsigned int dos_rel_reader_stage(dos_rel_reader_t* const reader, const dos_medi
     // No direct ROM entry for FIFO staging. TLK10 presents CHNDAT/CHNRDY,
     // while only TLK30 calls GET. Copying a cursor allows bounded preview
     // without committing record counters, GETFLG, missing status or page jobs.
-    // Dirty-page seams are outside this clean-read foundation.
+    // The caller caps dirty-page seams before staging an NRBUF-dependent byte.
     vet(capacity <= DOS_STAGE_CAPACITY && eoi != NULL && (capacity == 0 || output != NULL),
         "invalid REL staging window");
     *eoi = false;
