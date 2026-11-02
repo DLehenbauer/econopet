@@ -253,6 +253,8 @@ module superpet_top_tb;
         repeat (32) @(negedge cpu_clock);
 
         for (int phase = 0; phase < 64; phase++) begin
+            // Sweep the READY-clear request through every sys_clock phase.
+            repeat (phase) @(negedge sys_clock);
             // Change READY through Wishbone, which admits writes only in SPI slots.
             spi_write_at(WB_CPU_ADDR, 8'h00);
             wait_cycles = 0;
