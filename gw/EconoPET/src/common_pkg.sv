@@ -57,7 +57,6 @@ package common_pkg;
     localparam int unsigned REG_STATUS_CRT_BIT           = 1;   // Diagonal CRT size (0 = 12", 1 = 9")
     localparam int unsigned REG_STATUS_KEYBOARD_BIT      = 2;   // Keyboard Type (0 = Business, 1 = Graphics)
     localparam int unsigned REG_STATUS_BP_HALT_BIT       = 3;   // Breakpoint halt (1 = CPU halted on STP fetch)
-    localparam int unsigned REG_STATUS_PHYS_CPU_BIT      = 4;   // Physical 6502 detected (probe loop seen at $0400)
 
     // Register 1: CPU control
     localparam int unsigned REG_CPU                 = 1;
@@ -98,7 +97,6 @@ package common_pkg;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_CRT_MASK = 1 << REG_STATUS_CRT_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_KEYBOARD_MASK = 1 << REG_STATUS_KEYBOARD_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_BP_HALT_MASK = 1 << REG_STATUS_BP_HALT_BIT;
-    localparam logic [DATA_WIDTH-1:0] REG_STATUS_PHYS_CPU_MASK = 1 << REG_STATUS_PHYS_CPU_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_READY_MASK = 1 << REG_CPU_READY_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_RESET_MASK = 1 << REG_CPU_RESET_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_CPU_NMI_MASK = 1 << REG_CPU_NMI_BIT;

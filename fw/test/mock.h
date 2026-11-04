@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "hardware_contract.h"
+#include "driver.h"
 #include "test_support.h"
 
 #define MOCK_RAM_SIZE (1u << ECONOPET_CPU_ADDR_WIDTH)
@@ -19,6 +20,14 @@ extern uint8_t mock_ram[MOCK_RAM_SIZE];
 
 // Resets RAM, register FIFOs, CPU flags, breakpoint observations, and input.
 void mock_reset(void);
+// Invokes the callback on status polls while the mocked CPU is running.
+void mock_cpu_set_run_callback(void (*callback)(void));
+// Returns the last CPU selected through the driver mock.
+cpu_type_t mock_cpu_type(void);
+// Switches the firmware clock to deterministic time until mock_reset().
+void mock_clock_set(uint64_t now);
+// Advances the deterministic firmware clock without sleeping.
+void mock_clock_advance(uint64_t delta);
 // Supplies menu input through a test reader, or restores EOF when NULL.
 void mock_input_set_reader(int (*reader)(void));
 // Sets the address returned by the mocked breakpoint register.

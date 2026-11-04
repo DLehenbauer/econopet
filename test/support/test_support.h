@@ -37,6 +37,9 @@ typedef struct hid_keyboard_report_s {
 // Returns host monotonic time in microseconds.
 uint64_t time_us_64(void);
 
+// Platform adapters provide the Pico SDK reset-pulse delay on host targets.
+void sleep_us(uint64_t us);
+
 // Returns host monotonic time using the Pico SDK time representation.
 absolute_time_t get_absolute_time(void);
 
@@ -66,3 +69,6 @@ void test_clear_files(void);
 
 // Requires a subsequent fatal message to contain the given text.
 void test_expect_fatal_message(const char* substring);
+
+// Inspect cleanup state before the next host fatal error aborts.
+void test_expect_fatal_callback(void (*callback)(void));

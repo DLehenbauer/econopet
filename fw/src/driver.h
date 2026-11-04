@@ -71,10 +71,6 @@ typedef enum {
 void set_cpu_type(cpu_type_t cpu);
 void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io);
 
-// True if a W65C02S is socketed. First call probes (clobbers $0400-$0402
-// and $FFFC), then caches.
-bool physical_cpu_present(void);
-
 void sync_state();
 
 uint16_t bp_hit_addr();

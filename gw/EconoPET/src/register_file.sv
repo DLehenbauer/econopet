@@ -21,7 +21,6 @@ module register_file(
     input  logic                      text_mode_i,       // VIA CA2 (0 = upper/graphics, 1 = upper/lower)
     input  logic                      config_crt_i,      // Display type (0 = 12"/CRTC/20kHz, 1 = 9"/non-CRTC/15kHz)
     input  logic                      config_keyboard_i, // Keyboard type (0 = Business, 1 = Graphics)
-    input  logic                      phys_cpu_active_i, // Physical 6502 address activity detected
 
     // CPU register
     output logic                      cpu_ready_o,
@@ -29,7 +28,6 @@ module register_file(
     output logic                      cpu_nmi_o,
     output logic [1:0]                cpu_sel_o,         // CPU_SEL_* (phys 6502 / soft 6809 / soft 6502)
     output logic                      superpet_io_o,     // machine type: SuperPET I/O visible to a 6502 too
-    output logic                      cpu_sel_wr_o,      // 1-cycle pulse when REG_CPU_SEL is written (arms/clears the detector)
 
     // Breakpoint
     input  logic                      bp_halted_i,       // Breakpoint module has halted the CPU
@@ -45,7 +43,6 @@ module register_file(
     initial begin
         wbp_ack_o    = '0;
         bp_clear_o   = '0;
-        cpu_sel_wr_o = '0;
 
         register[REG_STATUS] = '0;
 
@@ -76,7 +73,6 @@ module register_file(
 
     always_ff @(posedge wb_clock_i) begin
         bp_clear_o   <= '0;
-        cpu_sel_wr_o <= '0;
 
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
             wbp_data_o <= register[reg_addr];
@@ -90,11 +86,6 @@ module register_file(
                     bp_clear_o <= wbp_data_i[REG_BP_CTL_CLEAR_BIT];
                 end else begin
                     register[reg_addr] <= wbp_data_i;
-                    // Writing the CPU-select register arms/clears the physical-
-                    // CPU activity detector (see main.sv).
-                    if (reg_addr == REG_CPU_SEL[REG_ADDR_WIDTH-1:0]) begin
-                        cpu_sel_wr_o <= 1'b1;
-                    end
                 end
             end
             wbp_ack_o <= 1'b1;
@@ -106,7 +97,7 @@ module register_file(
             // we process the next SPI command.
             //
             // Order must match bit order declared in common_pkg.sv.
-            register[REG_STATUS] <= { 3'b000, phys_cpu_active_i,
+            register[REG_STATUS] <= { 4'b0000,
                                       bp_halted_i, config_keyboard_i, config_crt_i,
                                       text_mode_i};
 

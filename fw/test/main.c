@@ -6,6 +6,7 @@
 #include "char_encoding_test.h"
 #include "config_parser_test.h"
 #include "crtc_test.h"
+#include "cpu_test.h"
 #include "diskimage_test.h"
 #include "dos_media_test.h"
 #include "dos_rel_test.h"
@@ -45,8 +46,9 @@ int run_suite() {
     number_failed += srunner_ntests_failed(sr1);
     srunner_free(sr1);
 
-    // These tests are run in a separate process as they intentionally abort.
+    // These tests need process isolation for fatal paths or one-time startup state.
     SRunner* sr2 = srunner_create(breakpoint_fatal_suite());
+    srunner_add_suite(sr2, cpu_suite());
     srunner_add_suite(sr2, config_parser_fatal_suite());
     srunner_add_suite(sr2, ieee_drive_fatal_suite());
     srunner_add_suite(sr2, global_suite());

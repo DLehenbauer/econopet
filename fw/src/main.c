@@ -4,6 +4,7 @@
 #include "pch.h"
 
 #include "breakpoint.h"
+#include "cpu.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
 #include "display/display.h"
@@ -221,11 +222,9 @@ int main() {
     usb_init();         // Initialize USB subsystem
     cli_init();         // Start CLI on UART serial
     bp_init();          // Initialize breakpoint subsystem
+    cpu_init();         // Detect the physical CPU before loading configuration
     ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
 
-    // Probe before any config is loaded -- it clobbers $0400-$0402 and $FFFC.
-    physical_cpu_present();
-    
     // Enter boot menu
     menu_enter(/* is_boot: */ true);
 

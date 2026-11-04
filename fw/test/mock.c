@@ -17,6 +17,35 @@
 
 uint8_t mock_ram[MOCK_RAM_SIZE];
 static int (*input_reader)(void);
+static void (*cpu_run_callback)(void);
+static cpu_state_t mock_cpu_state;
+static cpu_type_t selected_cpu;
+static bool clock_overridden;
+static uint64_t clock_us;
+
+uint64_t __real_time_us_64(void);
+
+// Keep ordinary tests on monotonic time and allow deterministic breakpoint waits.
+uint64_t __wrap_time_us_64(void) {
+    return clock_overridden ? clock_us : __real_time_us_64();
+}
+
+void mock_clock_set(uint64_t now) {
+    clock_overridden = true;
+    clock_us = now;
+}
+
+void mock_clock_advance(uint64_t delta) {
+    ck_assert(clock_overridden);
+    clock_us += delta;
+}
+
+// Model the probe's minimum reset pulse without delaying host tests.
+void sleep_us(uint64_t us) {
+    if (clock_overridden) {
+        clock_us += us;
+    }
+}
 
 typedef struct {
     uint8_t byte;
@@ -187,6 +216,12 @@ void mock_ieee_clear_status(void) {
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
 uint8_t spi_read_at(uint32_t addr) {
+    if (addr == ECONOPET_WB_STATUS_ADDR) {
+        if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
+            cpu_run_callback();
+        }
+        return system_state.bp_halted ? ECONOPET_REG_STATUS_BP_HALT_MASK : 0;
+    }
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
         if (addr == ECONOPET_WB_IEEE_TX_ADDR) return mock_ieee.prefetched;
@@ -299,11 +334,23 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
-static cpu_state_t mock_cpu_state;
-
 // Records CPU control flags for subsequent host-side reads.
 void set_cpu(cpu_state_t state) {
     mock_cpu_state = state;
+}
+
+// Supplies CPU execution effects independently of the breakpoint probe.
+void mock_cpu_set_run_callback(void (*callback)(void)) {
+    cpu_run_callback = callback;
+}
+
+// Record socket/soft-core routing independently of execution flags.
+void set_cpu_type(cpu_type_t cpu) {
+    selected_cpu = cpu;
+}
+
+cpu_type_t mock_cpu_type(void) {
+    return selected_cpu;
 }
 
 // Returns the most recently recorded CPU control flags.
@@ -344,6 +391,10 @@ void mock_reset(void) {
     mock_bp_cleared = false;
     mock_cpu_state = CPU_RESET;
     input_reader = NULL;
+    cpu_run_callback = NULL;
+    selected_cpu = CPU_PHYS_6502;
+    clock_overridden = false;
+    clock_us = 0;
 }
 
 // Configures the address observed by breakpoint handling.
