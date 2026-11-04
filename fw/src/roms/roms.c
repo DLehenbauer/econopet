@@ -41,14 +41,13 @@ const uint8_t* roms_get_char_rom(video_text_mode_t mode) {
 }
 
 void start_menu_rom(menu_rom_boot_reason_t reason) {
-    // Menu ROM is 6502 code -- force the soft 6502 even when re-entering
-    // from a 6809 session.
-    set_cpu_type(CPU_SOFT_6502);
-
     vet(reason < 2, "Menu ROM boot reason out of range: %d", reason);
     
     // Suspended CPU while initializing ROMs.
     set_cpu(CPU_HALT);
+
+    // Menus and fatal rendering must not depend on physical CPU detection.
+    set_cpu_type(CPU_SOFT_6502);
 
     // Query the PET model (according to the onboard DIP switches).
     read_pet_model(&system_state);

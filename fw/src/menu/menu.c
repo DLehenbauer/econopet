@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 
+#include "cpu.h"
 #include "diag/log/log.h"
 #include "display/char_encoding.h"
 #include "display/display.h"
@@ -257,10 +258,6 @@ void menu_enter(bool is_boot) {
     log_info("-- Enter Menu --");
 
     tape_deinit();
-
-    // The menu ROM needs a 6502: use the socketed CPU if present, else the
-    // soft core (the fabric powers on with the physical CPU selected).
-    set_cpu_type(physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502);
 
     system_state.video_source = video_source_firmware;
     
