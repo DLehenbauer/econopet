@@ -48,7 +48,8 @@ module audio (
     logic signed [15:0] sid_out;
 
     sid #(
-        .POT_SUPPORT(0)
+        .POT_SUPPORT(0),
+        .CURVE_6581_FILE("external/icesid/icesid/curve_6581.hex")
     ) sid (
         .clk   (sys_clock_i),  // System clock
         .clkEn (clk1_en_i),    // 1 MHz clock enable
