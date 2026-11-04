@@ -30,9 +30,12 @@ module sid_reset_tb;
         .iAddr(addr),
         .iDataW(data),
         .oDataR(data_out),
-        .oOut(sid_out),
+        .oOut(sid_out)
+`ifndef VERILATOR
+        ,
         .ioPotX(pot_x),
         .ioPotY(pot_y)
+`endif
     );
 
     task write_register (
