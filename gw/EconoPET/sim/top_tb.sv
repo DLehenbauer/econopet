@@ -465,6 +465,95 @@ module top_tb;
         $display("[%t] End Breakpoint Test", $time);
     endtask
 
+    // Detect socket-side execution of the startup probe, independent of menu ROMs.
+    task static cpu_probe_test;
+        localparam logic [CPU_ADDR_WIDTH-1:0] RESET_VECTOR = 16'hFFFC;
+        localparam logic [CPU_ADDR_WIDTH-1:0] PROBE_START = 16'h0400;
+        localparam logic [CPU_ADDR_WIDTH-1:0] PROBE_ROUTINE = 16'h0405;
+        localparam logic [CPU_ADDR_WIDTH-1:0] PROBE_LOOP = 16'h040A;
+        localparam logic [CPU_ADDR_WIDTH-1:0] PROBE_RESULT = 16'h0410;
+        localparam logic [DATA_WIDTH-1:0] PROBE_MARKER = 8'hA5;
+        localparam logic [DATA_WIDTH-1:0] PROBE_SENTINEL = 8'h00;
+        localparam logic [DATA_WIDTH-1:0] STP_OPCODE = 8'hDB;
+        localparam logic [DATA_WIDTH-1:0] JMP_OPCODE = 8'h4C;
+        localparam logic [DATA_WIDTH-1:0] SEI_OPCODE = 8'h78;
+        localparam logic [DATA_WIDTH-1:0] CLD_OPCODE = 8'hD8;
+        localparam logic [DATA_WIDTH-1:0] LDA_IMMEDIATE_OPCODE = 8'hA9;
+        localparam logic [DATA_WIDTH-1:0] STA_ABSOLUTE_OPCODE = 8'h8D;
+        localparam int PROBE_SIZE = 13;
+        localparam int PROBE_RUN_CYCLES = 100;
+        logic [DATA_WIDTH-1:0] program_bytes [PROBE_SIZE];
+        logic [DATA_WIDTH-1:0] status;
+        logic [DATA_WIDTH-1:0] addr_lo;
+        logic [DATA_WIDTH-1:0] addr_hi;
+        logic [DATA_WIDTH-1:0] marker;
+
+        // Install the same stack-independent JMP/store/loop flow as cpu_init().
+        program_bytes[0] = SEI_OPCODE;
+        program_bytes[1] = CLD_OPCODE;
+        program_bytes[2] = JMP_OPCODE;
+        program_bytes[3] = PROBE_ROUTINE[7:0];
+        program_bytes[4] = PROBE_ROUTINE[15:8];
+        program_bytes[5] = LDA_IMMEDIATE_OPCODE;
+        program_bytes[6] = PROBE_MARKER;
+        program_bytes[7] = STA_ABSOLUTE_OPCODE;
+        program_bytes[8] = PROBE_RESULT[7:0];
+        program_bytes[9] = PROBE_RESULT[15:8];
+        program_bytes[10] = JMP_OPCODE;
+        program_bytes[11] = PROBE_LOOP[7:0];
+        program_bytes[12] = PROBE_LOOP[15:8];
+
+        // Select the socket, keeping both soft cores reset throughout detection.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_RESET_MASK);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU_SEL), {6'b0, CPU_SEL_PHYS_6502});
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_BP_CTL), REG_BP_CTL_CLEAR_MASK);
+        for (int i = 0; i < PROBE_SIZE; ++i) begin
+            mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, PROBE_START} + 17'(i)), program_bytes[i]);
+        end
+        mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, PROBE_RESULT}), PROBE_SENTINEL);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, PROBE_LOOP}), STP_OPCODE);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, RESET_VECTOR}), PROBE_START[7:0]);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, RESET_VECTOR + 16'd1}), PROBE_START[15:8]);
+
+        // A static address without opcode fetches must not count as a CPU.
+        mock_system.cpu_stop;
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
+        mock_system.cpu_read(PROBE_LOOP, status);
+        repeat (PROBE_RUN_CYCLES) @(posedge cpu_clock);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), status);
+        `assert_equal(status[REG_STATUS_BP_HALT_BIT], 1'b0);
+        mock_system.spi_read_at(common_pkg::wb_ram_addr({1'b0, PROBE_RESULT}), marker);
+        `assert_equal(marker, PROBE_SENTINEL);
+
+        // Actual socket-side execution must store the marker before the loop trap.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_RESET_MASK);
+        mock_system.cpu_start;
+        repeat (4) @(posedge cpu_clock);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
+        repeat (PROBE_RUN_CYCLES) @(posedge cpu_clock);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), status);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_LO), addr_lo);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_BP_ADDR_HI), addr_hi);
+        `assert_equal(status[REG_STATUS_BP_HALT_BIT], 1'b1);
+        `assert_equal({addr_hi, addr_lo}, PROBE_LOOP);
+        `assert_equal(cpu_ready, 1'b0);
+        mock_system.spi_read_at(common_pkg::wb_ram_addr({1'b0, PROBE_RESULT}), marker);
+        `assert_equal(marker, PROBE_MARKER);
+
+        // Restore JMP-self while halted, then verify clean reset without a new hit.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_RESET_MASK);
+        mock_system.spi_write_at(common_pkg::wb_ram_addr({1'b0, PROBE_LOOP}), JMP_OPCODE);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_BP_CTL), REG_BP_CTL_CLEAR_MASK);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
+        repeat (PROBE_RUN_CYCLES) @(posedge cpu_clock);
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_STATUS), status);
+        `assert_equal(status[REG_STATUS_BP_HALT_BIT], 1'b0);
+        `assert_equal(cpu_ready, 1'b1);
+
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_RESET_MASK);
+        mock_system.cpu_stop;
+    endtask
+
     task static open_bus_test;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -518,6 +607,7 @@ module top_tb;
         bram_test;
         open_bus_test;
         breakpoint_test;
+        cpu_probe_test;
 
         mock_system.rom_init;
         mock_system.cpu_start;

@@ -72,36 +72,37 @@ typedef struct {
 
 // Checks exact raw sizes, writable flush support, and the complete pair.
 // Does no I/O and leaves model unchanged on failure.
-dos_media_result_t dos_media_validate_pair(const dos_media_io_t pair[DOS_MEDIA_SLOTS_PER_UNIT], dos_model_t* model);
+dos_media_result_t dos_media_validate_pair(
+    const dos_media_io_t pair[DOS_MEDIA_SLOTS_PER_UNIT], dos_model_t* model);
 
 // Publishes a complete pair only after validation and flushing the old pair.
 // The facade must first quiesce the unit and finalize its pending DOS work.
 // A successful change invalidates both slots' old references, not other units.
 dos_media_result_t dos_media_set_unit(dos_media_bank_t* bank, unsigned int unit,
-                                      const dos_media_io_t pair[DOS_MEDIA_SLOTS_PER_UNIT]);
+    const dos_media_io_t pair[DOS_MEDIA_SLOTS_PER_UNIT]);
 
 // Applies the same unit-local lifecycle when mounting or removing one slot.
-dos_media_result_t dos_media_set_slot(dos_media_bank_t* bank, unsigned int unit, unsigned int slot,
-                                      const dos_media_io_t* media);
+dos_media_result_t dos_media_set_slot(dos_media_bank_t* bank, unsigned int unit,
+    unsigned int slot, const dos_media_io_t* media);
 
 // Issues a unit-and-slot-bound reference, leaving output unchanged on failure.
-dos_media_result_t dos_media_reference(const dos_media_bank_t* bank, unsigned int unit, unsigned int slot,
-                                       dos_media_ref_t* reference);
+dos_media_result_t dos_media_reference(const dos_media_bank_t* bank, unsigned int unit,
+    unsigned int slot, dos_media_ref_t* reference);
 
 // Reads one validated sector. A failed callback may partially modify output.
-dos_media_result_t dos_media_read(dos_media_bank_t* bank, dos_media_ref_t reference, unsigned int track,
-                                  unsigned int sector, uint8_t output[DISKIMAGE_SECTOR_SIZE]);
+dos_media_result_t dos_media_read(dos_media_bank_t* bank, dos_media_ref_t reference,
+    unsigned int track, unsigned int sector, uint8_t output[DISKIMAGE_SECTOR_SIZE]);
 
 // Reads one native BAM sector on demand (one for 4040, two for 8050, four
 // for 8250). This is raw access, not allocation, validation, or BAM repair.
 // BAM track 18 (4040) or 38 (8050/8250) is not a generic directory location.
-dos_media_result_t dos_media_read_bam(dos_media_bank_t* bank, dos_media_ref_t reference, unsigned int part,
-                                      uint8_t output[DISKIMAGE_SECTOR_SIZE]);
+dos_media_result_t dos_media_read_bam(dos_media_bank_t* bank, dos_media_ref_t reference,
+    unsigned int part, uint8_t output[DISKIMAGE_SECTOR_SIZE]);
 
 // Marks the media dirty before attempting a write, including partial failures.
 // Success means written to the backing callback, not yet flushed or DOS-acked.
-dos_media_result_t dos_media_write(dos_media_bank_t* bank, dos_media_ref_t reference, unsigned int track,
-                                   unsigned int sector, const uint8_t input[DISKIMAGE_SECTOR_SIZE]);
+dos_media_result_t dos_media_write(dos_media_bank_t* bank, dos_media_ref_t reference,
+    unsigned int track, unsigned int sector, const uint8_t input[DISKIMAGE_SECTOR_SIZE]);
 
 // Flushes dirty media without discarding dirty state on failure.
 dos_media_result_t dos_media_flush_unit(dos_media_bank_t* bank, unsigned int unit);

@@ -5,5 +5,6 @@ cmake_minimum_required(VERSION 3.13)
 project(prgs LANGUAGES NONE)
 
 add_subdirectory(bp)
+add_subdirectory(colortest)
 add_subdirectory(open-bus)
 add_subdirectory(reload)

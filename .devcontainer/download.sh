@@ -65,6 +65,7 @@ https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/kernal-4.901465-2
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-b000.901465-23.bin|-|-|roms/-|43b3a9f5e1c762af0b3bb6cc71aafb84
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin|-|-|roms/-|84cb402449c6107b7d2b636cb28f0042
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin|-|-|roms/-|0f9bd7123d99892ce80f1e7e438c2194
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff.970020-12.bin|-|-|roms/-|a4ffd0a17cb675f0b45e9c085126e44c
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff-970034-12.bin|-|-|roms/-|c03098d26dbb1a23737d3286f264bc97
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/characters.901640-01.bin|-|-|roms/-|dd30641d9e6a221edd725d1e529dcbdb
 https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disks/superpet/os9/-|a772ba7ad5d2f6a635a092f80f80d45c

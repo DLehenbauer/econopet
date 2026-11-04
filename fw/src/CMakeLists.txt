@@ -40,6 +40,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/breakpoint.c
     ${FW_SRC_DIR}/cbm/filename.c
     ${FW_SRC_DIR}/cbm/petscii.c
+    ${FW_SRC_DIR}/cpu.c
     ${FW_SRC_DIR}/display/char_encoding.c
     ${FW_SRC_DIR}/driver.c
     ${FW_SRC_DIR}/fatal.c

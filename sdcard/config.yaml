@@ -252,7 +252,169 @@ configs:
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "e5f362f3e5e6eef1f9"
-  - id: colourpet-40
+
+  - id: superpet-6502-50hz
+    name: "SuperPET 6502 (80 Col 50 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same graphics-keyboard adaptation as the 80-column PET.
+          - action: "patch"
+            address: 0xe545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0xe6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+          - action: "fix-checksum"
+            checksum: 0xe0
+            start-addr: 0xe000
+            end-addr: 0xe7ff
+            fix-addr: 0xe7ff
+      - action: "set"
+        cpu: "6502"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
+
+  - id: superpet-6502-60hz
+    name: "SuperPET 6502 (80 Col 60 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same graphics-keyboard adaptation as the 80-column PET.
+          - action: "patch"
+            address: 0xe545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0xe6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+      - action: "set"
+        cpu: "6502"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
+
+  # Retain the existing ID for saved defaults selecting the 50 Hz Waterloo set.
+  - id: superpet-6809-50hz
+    name: "SuperPET 6809 (80 Col 50 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xa000
+            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+          - address: 0xc000
+            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+          - address: 0xe000
+            file: "/roms/waterloo-e000-ffff-970034-12.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # All SuperPETs had a business keyboard. This patch replaces the four
+          # 81-byte keyboard translation tables with graphics-keyboard mappings.
+          # Default character mode unshifted.
+          - action: "patch"
+            address: 0xdf40
+            hex: "003d2e7f033c205bff2d30003eff5d40002b32ff3f2c6e767833310d3b6d62637a2a35ff3a6b6866733634ff6c6a6764612f38ff706979727739375e6f75746571040a09295c27242207015f2826252321"
+          # Default character mode shifted.
+          - action: "patch"
+            address: 0xdf91
+            hex: "002d8b7f022c207bff3d8a002eff7d60003b82ff2f3c4e565883810d2b4d42435a3a85ff2a4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080c5f3836353331"
+          # Alternate character mode unshifted.
+          - action: "patch"
+            address: 0xdfe2
+            hex: "002b2e7f033c205bff3d30003eff7b27003a32ff3f2c6e767833310d3b6d62637a5f35ff2d6b6866733634ff6c6a6764612f38ff70697972773937606f75746571040a09285c2624400701ff2a5e252321"
+          # Alternate character mode shifted.
+          - action: "patch"
+            address: 0xe033
+            hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
+      # Mount the OS/9 system diskette in device 8, drive 0.
+      - action: "mount"
+        file: "superpet/os9/os9-systemdisk.d80"
+      # The SuperPET menu expects the Waterloo Languages disk in device 8, drive 1.
+      - action: "mount"
+        drive: 1
+        file: "superpet/Waterloo2-Languages.d80"
+      - action: "set"
+        cpu: "6809"
+        machine: "superpet"   # implied by cpu 6809; also valid with a 6502
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+
+  - id: superpet-6809-60hz
+    name: "SuperPET 6809 (80 Col 60 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xa000
+            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+          - address: 0xc000
+            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+          - address: 0xe000
+            file: "/roms/waterloo-e000-ffff.970020-12.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same four graphics-keyboard tables as the 50 Hz Waterloo set.
+          - action: "patch"
+            address: 0xdf40
+            hex: "003d2e7f033c205bff2d30003eff5d40002b32ff3f2c6e767833310d3b6d62637a2a35ff3a6b6866733634ff6c6a6764612f38ff706979727739375e6f75746571040a09295c27242207015f2826252321"
+          - action: "patch"
+            address: 0xdf91
+            hex: "002d8b7f022c207bff3d8a002eff7d60003b82ff2f3c4e565883810d2b4d42435a3a85ff2a4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080c5f3836353331"
+          - action: "patch"
+            address: 0xdfe2
+            hex: "002b2e7f033c205bff3d30003eff7b27003a32ff3f2c6e767833310d3b6d62637a5f35ff2d6b6866733634ff6c6a6764612f38ff70697972773937606f75746571040a09285c2624400701ff2a5e252321"
+          - action: "patch"
+            address: 0xe033
+            hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
+      - action: "mount"
+        file: "superpet/os9/os9-systemdisk.d80"
+      - action: "mount"
+        drive: 1
+        file: "superpet/Waterloo2-Languages.d80"
+      - action: "set"
+        cpu: "6809"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+
+  - id: colourpet-40-60hz
     name: "ColourPET (40 Col 60 Hz) [ALPHA]"
     setup:
       - action: "load"
@@ -283,30 +445,3 @@ configs:
         columns: 40
         video-ram-kb: 3
         tape: "2ef415f4c9cad1d4da"
-
-  - id: superpet
-    name: "SuperPET 6809 (Waterloo)"
-    setup:
-      - action: "load"
-        files:
-          - address: 0xa000
-            file: "/roms/waterloo-a000-bfff.970018-12.bin"
-          - address: 0xc000
-            file: "/roms/waterloo-c000-dfff.970019-12.bin"
-          - address: 0xe000
-            file: "/roms/waterloo-e000-ffff-970034-12.bin"
-          - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
-      # Mount the OS/9 system diskette in device 8, drive 0.
-      - action: "mount"
-        file: "superpet/os9/os9-systemdisk.d80"
-      # The SuperPET menu expects the Waterloo Languages disk in device 8, drive 1.
-      - action: "mount"
-        drive: 1
-        file: "superpet/Waterloo2-Languages.d80"
-      - action: "set"
-        cpu: "6809"
-        machine: "superpet"   # implied by cpu 6809; also valid with a 6502
-        usb-keymap: "/ukm/us.bin"
-        columns: 80
-        video-ram-kb: 2

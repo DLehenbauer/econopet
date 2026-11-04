@@ -292,8 +292,8 @@ dos_media_result_t dos_media_read(dos_media_bank_t* const bank, const dos_media_
 
 // Resolve a model's zero-based BAM part to its physical track and sector.
 // Leave outputs unchanged if the model or part has no supported BAM location.
-static dos_media_result_t bam_sector(const dos_model_t model, const unsigned int part, unsigned int* const track,
-                                     unsigned int* const sector) {
+static dos_media_result_t bam_sector(const dos_model_t model, const unsigned int part,
+                                     unsigned int* const track, unsigned int* const sector) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/begin
@@ -421,6 +421,5 @@ dos_media_result_t dos_media_unmount_all(dos_media_bank_t* const bank) {
     for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
         bank->units[unit] = (dos_media_unit_t){0};
     }
-
     return DOS_MEDIA_OK;
 }

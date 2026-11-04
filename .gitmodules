@@ -10,15 +10,16 @@
 	url = https://github.com/dlehenbauer/pico-vfs.git
 [submodule "gw/EconoPET/external/icesid"]
 	path = gw/EconoPET/external/icesid
-	# Fork with pulse-width pipelining and parallel envelope carry/borrow logic.
+	# Fork with Efinity-compatible multipliers and optional potentiometer support.
 	url = https://github.com/DLehenbauer/icesid
-	branch = efinix-t8
+	branch = efinity-support
 [submodule "fw/external/libyaml"]
 	path = fw/external/libyaml
 	url = https://github.com/yaml/libyaml.git
 [submodule "rom/external/cbm-edit-rom"]
 	path = rom/external/cbm-edit-rom
 	url = https://github.com/DLehenbauer/cbm-edit-rom.git
+	branch = init-colors-fix
 [submodule "gw/EconoPET/external/m6502"]
 	path = gw/EconoPET/external/m6502
 	url = https://github.com/DLehenbauer/m6502.git

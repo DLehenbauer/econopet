@@ -378,28 +378,6 @@ module main (
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en && !io_ctl_bus_reserve
                                                                : cpu_wr_en;
 
-    // Physical-6502 presence detector. When the physical CPU is selected
-    // (cpu_soft=0) and running, a populated chip drives the shared address bus
-    // (cpu_addr_i) with its fetch sequence. An empty socket leaves the bus
-    // floating, so match all three fetches of a JMP-self loop rather than
-    // any bus activity. Armed/cleared by a REG_CPU_SEL write.
-    localparam logic [CPU_ADDR_WIDTH-1:0] PROBE_LOOP_ADDR = 16'h0400;
-
-    logic       cpu_sel_wr;
-    logic       phys_cpu_active = 1'b0;
-    logic [2:0] phys_probe_seen = '0;
-    always_ff @(posedge sys_clock_i) begin
-        if (cpu_sel_wr) begin
-            phys_cpu_active <= 1'b0;
-            phys_probe_seen <= '0;
-        end else if (!cpu_soft && active_data_strobe) begin
-            if (cpu_addr_i == PROBE_LOOP_ADDR)           phys_probe_seen[0] <= 1'b1;
-            if (cpu_addr_i == PROBE_LOOP_ADDR + 16'd1)   phys_probe_seen[1] <= 1'b1;
-            if (cpu_addr_i == PROBE_LOOP_ADDR + 16'd2)   phys_probe_seen[2] <= 1'b1;
-            if (&phys_probe_seen) phys_cpu_active <= 1'b1;
-        end
-    end
-
     wire cpu_wr_strobe = active_data_strobe && active_cpu_we;
 
     //
@@ -467,14 +445,12 @@ module main (
         .text_mode_i(text_mode_i),
         .config_crt_i(config_crt_i),
         .config_keyboard_i(config_keyboard_i),
-        .phys_cpu_active_i(phys_cpu_active),
 
         // CPU control register
         .cpu_ready_o(reg_cpu_ready),
         .cpu_reset_o(cpu_reset_o),
         .cpu_nmi_o(cpu_nmi_o),
         .cpu_sel_o(cpu_sel),
-        .cpu_sel_wr_o(cpu_sel_wr),
         .superpet_io_o(superpet_io),
 
         // Breakpoint

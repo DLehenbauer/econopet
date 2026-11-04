@@ -49,9 +49,7 @@ module sid_env_tb;
         input logic [3:0] control
     );
         expected_envelope = value;
-        if (control[3]) begin
-            expected_envelope = 8'haa;
-        end else begin
+        if (!control[3]) begin
             case (1'b1)
                 stage[0]:
                     if (control[0] && value != 8'hff && control[1])

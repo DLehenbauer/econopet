@@ -10,15 +10,15 @@
  BASIC 4.0      | ROM 4.0        | 4.0        | Basic Level IV
  BASIC 4.0R     | ROM 4.1        | 4.0        | Basic Level IV
 
+### Sources
+
 * [ROM Genealogy](http://penguincentral.com/retrocomputing/PET/petroms.pdf) is official Commodore documentation preserved by Ethan Dicks
 * [ROM Genealogy](https://archive.org/details/commodore-newsletter-volume-1-number-10/page/31/mode/1up) is a subset of the above from Commodore Newsletter Vol 1, No 10 (1982)
 * Jim Butterfield's [What Software Do I Have?](https://archive.org/details/cbm_magazine_index-interface/interface/1981/interface-13-198107/page/n10/mode/1up) article in Interface Magazine (July 1981)
 
 ## ROM 1.0
 
-Early production PET 2001 units used MOS 6540 ROMs (28-pin).  Later revisions used 2316 ROMs (24-pin).
-
-The 28-pin and 24-pin ROMs have different IC and part numbers, but their contents are identical.
+The 28-pin and 24-pin ROMs have different IC and part numbers, but their contents are identical (see [Appendix A](#appendix-a-6540-roms-28-pin)).
 
 Highlights:
 
@@ -44,16 +44,18 @@ Address | Location | 6540 IC# | 6540 Part# | 2316B IC# | 2316B Part# | CRC-32   
 Graphics/QWERTY keyboard scanmap at $e75c:
 
 ```text
->C:e75c  3d 2e ff 03  3c 20 5b 12   =...< [.
->C:e764  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
->C:e76c  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
->C:e774  33 31 0d 3b  4d 42 43 5a   31.;MBCZ
->C:e77c  2a 35 ff 3a  4b 48 46 53   *5.:KHFS
->C:e784  36 34 ff 4c  4a 47 44 41   64.LJGDA
->C:e78c  2f 38 ff 50  49 59 52 57   /8.PIYRW
->C:e794  39 37 5e 4f  55 54 45 51   97^OUTEQ
->C:e79c  14 11 ff 29  5c 27 24 22   ...)\'$"
->C:e7a4  1d 13 5f 28  26 25 23 21   .._(&%#!
+ADDR  ORIGINAL DATA TABLE     | KIN7   KIN6   KIN5       KIN4   KIN3 KIN2  KIN1 KIN0       | SIGNAL
+----  ----------------------- | ------ ------ ---------- ------ ---- ----- ---- ---------- | ------
+e75c: 3d 2e ff 03 3c 20 5b 12 | =      .      NONE       STOP   <    SPACE [    RVS        | KSCAN9
+e764: 2d 30 00 3e ff 5d 40 00 | -      0      RSHIFT     >      NONE ]     @    LSHIFT     | KSCAN8
+e76c: 2b 32 ff 3f 2c 4e 56 58 | +      2      NONE       ?      ,    N     V    X          | KSCAN7
+e774: 33 31 0d 3b 4d 42 43 5a | 3      1      RETURN     ;      M    B     C    Z          | KSCAN6
+e77c: 2a 35 ff 3a 4b 48 46 53 | *      5      NONE       :      K    H     F    S          | KSCAN5
+e784: 36 34 ff 4c 4a 47 44 41 | 6      4      NONE       L      J    G     D    A          | KSCAN4
+e78c: 2f 38 ff 50 49 59 52 57 | /      8      NONE       P      I    Y     R    W          | KSCAN3
+e794: 39 37 5e 4f 55 54 45 51 | 9      7      UP-ARROW   O      U    T     E    Q          | KSCAN2
+e79c: 14 11 ff 29 5c 27 24 22 | DEL    DOWN   NONE       )      \    '     $    "          | KSCAN1
+e7a4: 1d 13 5f 28 26 25 23 21 | RIGHT  HOME   BACK-ARROW (      &    %     #    !          | KSCAN0
 ```
 
 ### Vertical Refresh
@@ -139,19 +141,21 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 Business/QWERTY keyboard scanmap at $e6fb:
 
 ```text
->C:e6fb  50 e7 3a 03  39 36 33 df   P.:.963.
->C:e703  b1 2f ff 13  4d 20 58 12   ./..M X.
->C:e70b  b2 ff ff b0  2c 4e 56 5a   ....,NVZ
->C:e713  b3 00 ff ae  2e 42 43 00   .....BC.
->C:e71b  b4 db 4f 11  55 54 45 51   ..O.UTEQ
->C:e723  14 50 49 dc  59 52 57 89   .PI.YRW.
->C:e72b  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
->C:e733  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
->C:e73b  b9 ff de b7  b0 37 34 31   .....741
->C:e743  ff ff 1d b8  2d 38 35 32   ....-852
+ADDR  ORIGINAL DATA TABLE     | KIN7   KIN6   KIN5       KIN4   KIN3 KIN2  KIN1 KIN0       | SIGNAL
+----  ----------------------- | ------ ------ ---------- ------ ---- ----- ---- ---------- | ------
+e6fb: 50 e7 3a 03 39 36 33 df | P      $E7    :          STOP   9    6     3    BACK-ARROW | KSCAN9
+e703: b1 2f ff 13 4d 20 58 12 | KP 1   /      NONE       HOME   M    SPACE X    RVS        | KSCAN8
+e70b: b2 ff ff b0 2c 4e 56 5a | KP 2   NONE   NONE       KP 0   ,    N     V    Z          | KSCAN7
+e713: b3 00 ff ae 2e 42 43 00 | KP 3   RSHIFT NONE       KP .   .    B     C    LSHIFT     | KSCAN6
+e71b: b4 db 4f 11 55 54 45 51 | KP 4   [      O          DOWN   U    T     E    Q          | KSCAN5
+e723: 14 50 49 dc 59 52 57 89 | DEL    P      I          \      Y    R     W    TAB        | KSCAN4
+e72b: b6 c0 4c 0d 4a 47 44 41 | KP 6   @      L          RETURN J    G     D    A          | KSCAN3
+e733: b5 3b 4b dd 48 46 53 9b | KP 5   ;      K          ]      H    F     S    ESC        | KSCAN2
+e73b: b9 ff de b7 b0 37 34 31 | KP 9   NONE   UP-ARROW   KP 7   0    7     4    1          | KSCAN1
+e743: ff ff 1d b8 2d 38 35 32 | NONE   NONE   RIGHT      KP 8   -    8     5    2          | KSCAN0
 ```
 
-Note that the first two table entries are an instruction. Presumably these keys are unpressable? (CTRL-V, CTRL-D)
+`KP` denotes keypad keys. Business scanmaps use bit 7 to mark unshiftable entries.
 
 ```text
 .C:e6fb  50 E7       BVC $E6E4
@@ -221,16 +225,18 @@ Address | Location | IC#       | Part#     | CRC-32   | Checksum
 #### Graphics Scanmap (901498-01, 901499-01)
 
 ```text
->C:e73f  3d 2e 10 03  3c 20 5b 12   =...< [.
->C:e747  2d 30 00 3e  ff 5d 40 00   -0.>.]@.
->C:e74f  2b 32 ff 3f  2c 4e 56 58   +2.?,NVX
->C:e757  33 31 0d 3b  4d 42 43 5a   31.;MBCZ
->C:e75f  2a 35 ff 3a  4b 48 46 53   *5.:KHFS
->C:e767  36 34 ff 4c  4a 47 44 41   64.LJGDA
->C:e76f  2f 38 ff 50  49 59 52 57   /8.PIYRW
->C:e777  39 37 5e 4f  55 54 45 51   97^OUTEQ
->C:e77f  14 11 09 29  5c 27 24 22   ...)\'$"
->C:e787  1d 13 5f 28  26 25 23 21   .._(&%#!
+ADDR  ORIGINAL DATA TABLE     | KIN7   KIN6   KIN5       KIN4   KIN3 KIN2  KIN1 KIN0       | SIGNAL
+----  ----------------------- | ------ ------ ---------- ------ ---- ----- ---- ---------- | ------
+e73f: 3d 2e 10 03 3c 20 5b 12 | =      .      REPEAT     STOP   <    SPACE [    RVS        | KSCAN9
+e747: 2d 30 00 3e ff 5d 40 00 | -      0      RSHIFT     >      NONE ]     @    LSHIFT     | KSCAN8
+e74f: 2b 32 ff 3f 2c 4e 56 58 | +      2      NONE       ?      ,    N     V    X          | KSCAN7
+e757: 33 31 0d 3b 4d 42 43 5a | 3      1      RETURN     ;      M    B     C    Z          | KSCAN6
+e75f: 2a 35 ff 3a 4b 48 46 53 | *      5      NONE       :      K    H     F    S          | KSCAN5
+e767: 36 34 ff 4c 4a 47 44 41 | 6      4      NONE       L      J    G     D    A          | KSCAN4
+e76f: 2f 38 ff 50 49 59 52 57 | /      8      NONE       P      I    Y     R    W          | KSCAN3
+e777: 39 37 5e 4f 55 54 45 51 | 9      7      UP-ARROW   O      U    T     E    Q          | KSCAN2
+e77f: 14 11 09 29 5c 27 24 22 | DEL    DOWN   TAB        )      \    '     $    "          | KSCAN1
+e787: 1d 13 5f 28 26 25 23 21 | RIGHT  HOME   BACK-ARROW (      &    %     #    !          | KSCAN0
 ```
 
 #### CRTC Tables (901499-01)
@@ -464,17 +470,26 @@ Graphics Mode
 #### Business Scanmap (901474-03, 901474-04)
 
 ```text
->C:e6d1  16 04 3a 03  39 36 33 df   ..:.963.
->C:e6d9  b1 2f 15 13  4d 20 58 12   ./..M X.
->C:e6e1  b2 10 0f b0  2c 4e 56 5a   ....,NVZ
->C:e6e9  b3 00 19 ae  2e 42 43 00   .....BC.
->C:e6f1  b4 db 4f 11  55 54 45 51   ..O.UTEQ
->C:e6f9  14 50 49 dc  59 52 57 09   .PI.YRW.
->C:e701  b6 c0 4c 0d  4a 47 44 41   ..L.JGDA
->C:e709  b5 3b 4b dd  48 46 53 9b   .;K.HFS.
->C:e711  b9 06 de b7  b0 37 34 31   .....741
->C:e719  05 0e 1d b8  2d 38 35 32   ....-852
+ADDR  ORIGINAL DATA TABLE     | KIN7   KIN6   KIN5       KIN4   KIN3 KIN2  KIN1 KIN0       | SIGNAL
+----  ----------------------- | ------ ------ ---------- ------ ---- ----- ---- ---------- | ------
+e6d1: 16 04 3a 03 39 36 33 df | CTRL-V CTRL-D :          STOP   9    6     3    BACK-ARROW | KSCAN9
+e6d9: b1 2f 15 13 4d 20 58 12 | KP 1   /      CTRL-U     HOME   M    SPACE X    RVS        | KSCAN8
+e6e1: b2 10 0f b0 2c 4e 56 5a | KP 2   REPEAT CTRL-O     KP 0   ,    N     V    Z          | KSCAN7
+e6e9: b3 00 19 ae 2e 42 43 00 | KP 3   RSHIFT CTRL-Y     KP .   .    B     C    LSHIFT     | KSCAN6
+e6f1: b4 db 4f 11 55 54 45 51 | KP 4   [      O          DOWN   U    T     E    Q          | KSCAN5
+e6f9: 14 50 49 dc 59 52 57 09 | DEL    P      I          \      Y    R     W    TAB        | KSCAN4
+e701: b6 c0 4c 0d 4a 47 44 41 | KP 6   @      L          RETURN J    G     D    A          | KSCAN3
+e709: b5 3b 4b dd 48 46 53 9b | KP 5   ;      K          ]      H    F     S    ESC        | KSCAN2
+e711: b9 06 de b7 b0 37 34 31 | KP 9   CTRL-F UP-ARROW   KP 7   0    7     4    1          | KSCAN1
+e719: 05 0e 1d b8 2d 38 35 32 | CTRL-E CTRL-N RIGHT      KP 8   -    8     5    2          | KSCAN0
 ```
+
+`KP` denotes keypad keys, and `CTRL-*` identifies control codes, not a physical
+CTRL modifier. Business scanmaps use bit 7 to mark unshiftable entries.
+
+Note that the first two table entries are an instruction. Presumably these keys
+are unpressable? (CTRL-V, CTRL-D)
+
 
 Below are the edit rom changes required for the graphics keyboard:
 
@@ -611,10 +626,176 @@ ROM          | Address | Location | IC#       | Part#      | CRC-32   | Checksum
 Editor ASCII | -       | UE8      | -         | 324243-02B | -        | -
 Editor DIN   | -       | UE8      | -         | 324243-03  | -        | -
 
+## SuperPET Waterloo ROMs
+
+The shipped configuration offers 50 Hz and 60 Hz choices for each CPU.
+6502 mode uses the 8032 BASIC 4, editor, and Kernal ROMs with the SuperPET
+`901640-01` character ROM. The 6809 choices use the Waterloo sets below.
+The existing `superpet` configuration ID retains the 6809 50 Hz setup.
+
+### 4K ROMs
+
+Only available for 60 Hz.  Uses five 4KB ROMs and one 2KB ROM at U21.
+
+ROM          | Address       | Location | IC#       | Part#     | CRC-32   | Checksum
+-------------|---------------|----------|-----------|-----------|----------|---------
+Waterloo     | $A000-$AFFF   | U17      | 2532      | 901898-01 | 728a998b | -
+Waterloo     | $B000-$BFFF   | U18      | 2532      | 901898-02 | 6beb7c62 | -
+Waterloo     | $C000-$CFFF   | U19      | 2532      | 901898-03 | 5db4983d | -
+Waterloo     | $D000-$DFFF   | U20      | 2532      | 901898-04 | f55fc559 | -
+Waterloo     | $E000-$E7FF   | U21      | 2516      | 901897-01 | b2cee903 | -
+Waterloo     | $F000-$FFFF   | U22      | 2532      | 901898-05 | f42df0cb | -
+
+### 8K ROMs (60 Hz)
+
+The A/B and C/D ROMs concatenate the corresponding 4KB ROMs. The E/F ROM
+combines the 2KB E ROM, 2KB of `$FF` padding, and then the 4KB F ROM.
+
+ROM          | Address       | Location | IC#       | Part#     | CRC-32   | Checksum
+-------------|---------------|----------|-----------|-----------|----------|---------
+Waterloo     | $A000-$BFFF   | U47      | 2764      | 970018-12 | a20bfbf5 | -
+Waterloo     | $C000-$DFFF   | U48      | 2764      | 970019-12 | 14a3a0d8 | -
+Waterloo     | $E000-$FFFF   | U49      | 2764      | 970020-12 | 7ee2fedd | -
+
+### 8K ROMs (50 Hz)
+
+Identical to the 60 Hz set except for U49, which changes three CRTC
+initialization-table bytes for 50 Hz video timing.
+
+ROM          | Address       | Location | IC#       | Part#     | CRC-32   | Checksum
+-------------|---------------|----------|-----------|-----------|----------|---------
+Waterloo     | $A000-$BFFF   | U47      | 2764      | 970018-12 | a20bfbf5 | -
+Waterloo     | $C000-$DFFF   | U48      | 2764      | 970019-12 | 14a3a0d8 | -
+Waterloo     | $E000-$FFFF   | U49      | 2764      | 970034-12 | 65504368 | -
+
+### CRTC Tables
+
+The initialization table at `$E0BD` supplies R0-R17. R16 and R17 are
+read-only light-pen registers, so writes to those entries have no effect.
+
+Address | Register | Meaning | `970020-12` (60 Hz) | `970034-12` (50 Hz)
+--------|----------|---------|--------------------|-------------------
+`$E0BD` | R0 | Horizontal total (character clocks minus one) | `$31` (49) | `$31` (49)
+`$E0BE` | R1 | Horizontal displayed (character clocks) | `$28` (40) | `$28` (40)
+`$E0BF` | R2 | Horizontal-sync position (character clock) | `$29` (41) | `$29` (41)
+`$E0C0` | R3 | Sync widths (horizontal: 15 character clocks) | `$0F` (15) | `$0F` (15)
+`$E0C1` | R4 | Vertical total (rows minus one) | `$20` (32) | `$27` (39)
+`$E0C2` | R5 | Extra scanlines per frame | `$03` (3) | `$00` (0)
+`$E0C3` | R6 | Vertical displayed (rows) | `$19` (25) | `$19` (25)
+`$E0C4` | R7 | Vertical-sync position (row) | `$1D` (29) | `$20` (32)
+`$E0C5` | R8 | Interlace mode (non-interlaced) | `$00` (0) | `$00` (0)
+`$E0C6` | R9 | Maximum raster address (scanlines per row minus one) | `$09` (9) | `$09` (9)
+`$E0C7` | R10 | Cursor start raster and blink mode | `$00` (0) | `$00` (0)
+`$E0C8` | R11 | Cursor end raster | `$00` (0) | `$00` (0)
+`$E0C9` | R12 | Display start address (high byte) | `$30` (48) | `$30` (48)
+`$E0CA` | R13 | Display start address (low byte) | `$00` (0) | `$00` (0)
+`$E0CB` | R14 | Cursor address (high byte) | `$00` (0) | `$00` (0)
+`$E0CC` | R15 | Cursor address (low byte) | `$00` (0) | `$00` (0)
+`$E0CD` | R16 | Light-pen address (high byte, read-only) | `$00` (0) | `$00` (0)
+`$E0CE` | R17 | Light-pen address (low byte, read-only) | `$00` (0) | `$00` (0)
+
+### Disassembly
+
+The TPUG December 1983 SuperPET distribution contains an annotated 6809
+disassembly of the Waterloo operating-system ROMs. This is a historical
+disassembly, not original Waterloo source. The accompanying notes do not
+identify the ROM revision.
+
+The disks are available in the [TPUG Library CD archive](https://archive.org/details/tpugusersgroupcd).
+Within the ISO, look under `PET/S-Super PET/`:
+
+Disk | Disk label | Relevant files
+-----|------------|---------------
+`(s)t8.d64` | `superpet-dec/83a` | `OPSYSDIS*`, `MAP*`, `NOTE_FROM_*`, `*.MACRO`, `LIBRARY.MAC`, `describe.dec/83`
+`(s)t9.d64` | `superpet-dec/83b` | `OPSYSDIS.*`
+`(s)ta.d64` | `superpet-dec/83c` | `OPSYSDIS.*`
+
+Some section filenames have an `X` suffix (for example, `OPSYSDIS.5X`). Keep
+these names and read the sections in numeric order, starting with the unnumbered
+`OPSYSDIS`. `OPSYSDIS.34` contains only the final page footer. The separate
+`MAP*` files associate ROM addresses with the disassembly's labels.
+
+### Extracting the disassembly
+
+Install `bsdtar`, VICE's `c1541` utility, and Python 3, then run:
+
+```sh
+./tools/waterloo-rom-src/extract.sh TPUG.iso DESTINATION
+```
+
+The script extracts the three D64 images from the ISO and writes raw files
+under `DESTINATION/raw/{t8,t9,ta}/` and all relevant readable copies together
+under `DESTINATION/src/`. Use a fresh destination (the script does not overwrite
+existing raw disk or `src` directories).
+
+`DESTINATION/src/` contains readable ASCII reference listings, not buildable
+source. Read `NOTE_FROM_JOHN.txt` and `NOTE_FROM_DICK.txt` before relying on the
+code. John warns that a disassembler bug may have produced incorrect output and
+that uncommented sections need verification. Check labels, addresses, and
+instructions against the ROM binaries for the revision being studied.
+
+### Graphics-keyboard patch (Waterloo revision 12)
+
+The `superpet` configuration in [config.yaml](../../../sdcard/config.yaml)
+patches the Waterloo keyboard tables when EconoPET's keyboard setting is
+`graphics`. Business-keyboard configurations retain the original ROM bytes.
+
+`OPSYSDIS.22` contains the keyboard scanner at `$DEF3` and the translation
+routine at `$DE80`. The scanner selects KSCAN 0 through 9 through PIA1 port A
+(`$E810`) and reads active-low KIN bits through port B (`$E812`). A key's index is
+`80 - 8 * KSCAN - KIN`. Index zero means no key. The scanner tests the default
+unshifted table at `$DF40` for zero-valued entries to detect Shift, then adds
+81 to the index if either Shift is pressed. Two Shifts still add only 81.
+
+The translator selects a table pair using RAM byte `$0128`. Zero is the
+default character mode, and `$FF` selects the alternate character mode.
+This is a character-mode selection, not a graphics/business keyboard switch.
+The tables are data, although the archived disassembly decodes much of this
+region as instructions.
+
+Table | Address | Size | Offset in ROM file
+------|---------|------|-------------------
+Default, unshifted | `$DF40-$DF90` | 81 | `$1F40` in `970019-12`
+Default, shifted | `$DF91-$DFE1` | 81 | `$1F91` in `970019-12`
+Alternate, unshifted | `$DFE2-$E032` | 81 | `$1FE2` in `970019-12`, continuing at `$0000` in `970034-12`
+Alternate, shifted | `$E033-$E083` | 81 | `$0033` in `970034-12`
+
+Each table starts with a zero no-key sentinel, followed by 80 matrix entries.
+The patch moves Shift to graphics positions KSCAN 8/KIN 0 and KSCAN 8/KIN 5.
+No scanner instructions or translation-table pointers need changing.
+Patch all four tables (324 bytes), not just the first 80-byte scanmap as with
+the Commodore editor ROMs.
+
+The layout follows the graphics matrix used by the existing 80-column PET
+patches, with Waterloo's native codes rather than PETSCII. Letters produce
+lowercase ASCII unshifted and uppercase ASCII shifted. Cursor keys, Home,
+Delete, Stop, Return, and shifted keypad digits retain their native Waterloo
+translations. For punctuation printed on a graphics key but reached with Shift
+on the business keyboard, the patch swaps that business key's unshifted/shifted
+translations. For example, `=` produces `=` normally and `-` with Shift in the
+default character mode. Both character modes retain their original
+business-key translation pairs, so alternate-mode punctuation can differ from
+the graphics keycaps.
+
+RVS remains unused, as it is in the original Waterloo tables. The graphics
+matrix has no physical ESC, TAB, or REPEAT keys. As in the existing PET graphics
+map, the otherwise unwired KSCAN 1/KIN 5 and KSCAN 9/KIN 5 positions expose TAB
+and REPEAT for injected matrix input. No key is reassigned to ESC. Programs
+requiring the business keyboard's ESC function need a separate mapping policy.
+The ROM's automatic key repeat is unchanged. This patch does not change
+keyboard handling in OS-9 or other disk-loaded software that bypasses these ROM
+routines.
+
+The `WaterlooKeyboard` system tests parse the shipped configuration with the
+production parser, inject matrix input through FPGA SPI, and execute the real
+6809 scanner and translator against the revision-12 ROMs. They compare relocated
+keys with original business-key translations in both character modes and check
+both Shift keys, modifier-only input, and unchanged business ROMs. Physical
+graphics-keyboard testing and application-level validation remain necessary.
+
 ## Appendix A: 6540 ROMs (28-pin)
 
-Some static PET units use 28-pin 6540 ROMs instead of the 24-pin 23xx ROMs standardized
-on by Commodore in later models.
+Some static PET units use 28-pin 6540 ROMs. The content of the 6540 ROMs are identical to the their 24-pin 23xx counterparts.
 
 Mainboard | ROMs  | RAM
 ----------|-------|-----
@@ -622,8 +803,6 @@ Mainboard | ROMs  | RAM
 320081    | 2316B | 6550
 320132    | 6540  | 2114
 320137    | 2316B | 2114
-
-The content of the 6540 ROMs are identical to the their 23xx counterparts.
 
 ## Appendix B: ROM Table
 
@@ -703,6 +882,16 @@ PET 2001    | Basic                   | PET Basic 3 $D8 (H6)                    
 PET 2001    | Editor                  | PET Basic 3 $E0 (H3)                           | 901439-17  | 2KB  | E000-E7FF | 6540-024  | 3       | -        | -         | 0xe459ab32 | 6502  
 PET 2001    | Kernal                  | PET Basic 3 $F0 (H4)                           | 901439-18  | 2KB  | F000-F7FF | 6540-025  | 3       | -        | -         | 0x8745fc8a | 6502  
 PET 2001    | Kernal                  | PET Basic 3 $F8 (H7)                           | 901439-19  | 2KB  | F800-FFFF | 6540-026  | 3       | -        | -         | 0xfd2c1f87 | 6502  
+SuperPET    | -                       | SuperPET Waterloo $A (U17)                     | 901898-01  | 4KB  | A000-AFFF | 2332      | -       | -        | -         | 0x728a998b | 6809
+SuperPET    | -                       | SuperPET Waterloo $A and $B (U47)              | 970018-12  | 8KB  | A000-BFFF | 2364      | -       | -        | -         | 0xa20bfbf5 | 6809
+SuperPET    | -                       | SuperPET Waterloo $B (U18)                     | 901898-02  | 4KB  | B000-BFFF | 2332      | -       | -        | -         | 0x6beb7c62 | 6809
+SuperPET    | -                       | SuperPET Waterloo $C (U19)                     | 901898-03  | 4KB  | C000-CFFF | 2332      | -       | -        | -         | 0x5db4983d | 6809
+SuperPET    | -                       | SuperPET Waterloo $C and $D (U48)              | 970019-12  | 8KB  | C000-DFFF | 2364      | -       | -        | -         | 0x14a3a0d8 | 6809
+SuperPET    | -                       | SuperPET Waterloo $D (U20)                     | 901898-04  | 4KB  | D000-DFFF | 2332      | -       | -        | -         | 0xf55fc559 | 6809
+SuperPET    | -                       | SuperPET Waterloo $E 60 Hz (U21)               | 901897-01  | 2KB  | E000-E7FF | 2316B     | -       | -        | -         | 0xb2cee903 | 6809
+SuperPET    | -                       | SuperPET Waterloo $E and $F 50Hz (U49)         | 970034-12  | 8KB  | E000-FFFF | 2364      | -       | -        | -         | 0x65504368 | 6809
+SuperPET    | -                       | SuperPET Waterloo $E and $F 60Hz (U49)         | 970020-12  | 8KB  | E000-FFFF | 2364      | -       | -        | -         | 0x7ee2fedd | 6809
+SuperPET    | -                       | SuperPET Waterloo $F (U22)                     | 901898-05  | 4KB  | F000-FFFF | 2332      | -       | -        | -         | 0xf42df0cb | 6809
 
 ## Reference
 

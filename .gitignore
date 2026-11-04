@@ -98,13 +98,8 @@ core
 #
 # Temporary and cache files
 #
-/.tmp/**
-!/.tmp/**/
-!/.tmp/**/.gitkeep
-
-/.cache/**
-!/.cache/**/
-!/.cache/**/.gitkeep
+/.tmp/
+/.cache/
 
 #
 # VS Code Local History extension

@@ -618,33 +618,6 @@ void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
     spi_write_at(ECONOPET_WB_CPU_SEL_ADDR, (uint8_t) cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
 }
 
-// Run the physical CPU on a JMP-self at $0400 and check
-// ECONOPET_REG_STATUS_PHYS_CPU_MASK. An empty socket leaves the bus static.
-static bool detect_physical_cpu(void) {
-    spi_write_at(0x0400, 0x4C);   // JMP ...
-    spi_write_at(0x0401, 0x00);   // ... $0400
-    spi_write_at(0x0402, 0x04);
-    spi_write_at(0xFFFC, 0x00);   // reset vector -> $0400
-    spi_write_at(0xFFFD, 0x04);
-
-    set_cpu(CPU_RESET);
-    set_cpu_type(CPU_PHYS_6502);   // arms detector
-    set_cpu(CPU_READY);
-    sleep_us(5000);
-    const uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
-    set_cpu(CPU_RESET);  // halt again
-    return (status & ECONOPET_REG_STATUS_PHYS_CPU_MASK) != 0;
-}
-
-bool physical_cpu_present(void) {
-    static int8_t cached = -1;   // -1 = not yet probed
-    if (cached < 0) {
-        cached = detect_physical_cpu() ? 1 : 0;
-        log_info("physical 6502: %s", cached ? "detected" : "not populated (using soft CPU)");
-    }
-    return cached != 0;
-}
-
 /**
  * Reads the PET hardware configuration from the FPGA status register.
  * 

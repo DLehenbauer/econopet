@@ -46,7 +46,6 @@
 #define ECONOPET_REG_STATUS_CRT_MASK 0x02u
 #define ECONOPET_REG_STATUS_KEYBOARD_MASK 0x04u
 #define ECONOPET_REG_STATUS_BP_HALT_MASK 0x08u
-#define ECONOPET_REG_STATUS_PHYS_CPU_MASK 0x10u
 
 // CPU control masks (See common_pkg.sv for more details)
 #define ECONOPET_REG_CPU_READY_MASK 0x01u

@@ -706,7 +706,7 @@ START_TEST(test_validate_sdcard_config_yaml) {
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
     
     int num_configs = test_ctx.config_exit_count;
-    ck_assert_int_eq(num_configs, 8);  // Should have exactly 8 configs
+    ck_assert_int_eq(num_configs, 11);  // Six PET, four SuperPET, and one ColourPET configuration.
     
     // Load each configuration and require all referenced disk images to exist.
     mounted_image_root = media_root;

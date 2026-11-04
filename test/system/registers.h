@@ -32,8 +32,7 @@ enum class StatusBit : uint8_t {
     FixedDisplay = ECONOPET_REG_STATUS_CRT_MASK,
     GraphicsKeyboard = ECONOPET_REG_STATUS_KEYBOARD_MASK,
     BreakpointHalt = ECONOPET_REG_STATUS_BP_HALT_MASK,
-    PhysicalCpu = ECONOPET_REG_STATUS_PHYS_CPU_MASK,
-    All = Text | FixedDisplay | GraphicsKeyboard | BreakpointHalt | PhysicalCpu,
+    All = Text | FixedDisplay | GraphicsKeyboard | BreakpointHalt,
 };
 using Status = econopet::Flags<StatusBit>;
 using econopet::operator|;

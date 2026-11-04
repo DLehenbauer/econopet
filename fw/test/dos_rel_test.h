@@ -5,5 +5,5 @@
 
 #include <check.h>
 
-// Tests bounded native index traversal, clean records and preview/GET isolation.
+// Tests native record arithmetic and bounded side/super-side-sector lookup.
 Suite* dos_rel_suite(void);

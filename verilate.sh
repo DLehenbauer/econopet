@@ -26,8 +26,8 @@ ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
 # Invoke seed.sh to get the effective test seed (empty if none is set).
 SEED="$("$SCRIPT_DIR/seed.sh")" || exit 1
 
-# Reuse sim.sh's generated file list.
-[ -f "$PROJ_DIR/work_sim/EconoPET.f" ] || "$SCRIPT_DIR/sim.sh" -u >/dev/null
+# Refresh the generated file list in case EconoPET.xml changed.
+"$SCRIPT_DIR/sim.sh" --update-only >/dev/null
 
 cd "$PROJ_DIR" || exit 1
 
