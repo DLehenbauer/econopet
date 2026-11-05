@@ -17,25 +17,30 @@ set(FPGA_WORK_DIR ${CMAKE_CURRENT_BINARY_DIR}/work)
 
 message(VERBOSE "FPGA_PROJECT_DIR: ${FPGA_PROJECT_DIR}")
 
-file(GLOB FPGA_SRC_FILES CONFIGURE_DEPENDS
-    # Unfortunately, running the 'compile' flow modifies the EconoPET.xml file, which will
-    # cause unnecessary rebuilds if we include it here.
-    #"${FPGA_PROJECT_DIR}/EconoPET.xml"
+# Track project settings without rebuilding for Efinity's run-status updates.
+set(FPGA_PROJECT_FILE "${FPGA_PROJECT_DIR}/EconoPET.xml")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FPGA_PROJECT_FILE}")
+file(READ "${FPGA_PROJECT_FILE}" FPGA_PROJECT_CONFIG)
+string(REGEX REPLACE
+    " (last_change|sw_version|last_run_state|last_run_flow|config_result_in_sync|design_ood|place_ood|route_ood)=\"[^\"]*\""
+    "" FPGA_PROJECT_CONFIG "${FPGA_PROJECT_CONFIG}")
+string(SHA256 FPGA_PROJECT_CONFIG_HASH "${FPGA_PROJECT_CONFIG}")
+set(FPGA_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/project-config.sha256")
+file(GENERATE OUTPUT "${FPGA_PROJECT_CONFIG_FILE}" CONTENT "${FPGA_PROJECT_CONFIG_HASH}\n")
 
+file(GLOB_RECURSE FPGA_SRC_FILES CONFIGURE_DEPENDS
     # Top-level project/config files
     "${FPGA_PROJECT_DIR}/EconoPET.peri.xml"
     "${FPGA_PROJECT_DIR}/*.sdc"
 
     # HDL sources
     "${FPGA_PROJECT_DIR}/src/*"
-    "${FPGA_PROJECT_DIR}/src/**/*"
 )
 
 # Append external source files to FPGA_SRC_FILES, ignoring .git directories from submodules.
 # First, we gather all files from the external directory:
-file(GLOB FPGA_EXTERNAL_SRC_FILES
+file(GLOB_RECURSE FPGA_EXTERNAL_SRC_FILES CONFIGURE_DEPENDS
     "${FPGA_PROJECT_DIR}/external/*"
-    "${FPGA_PROJECT_DIR}/external/**/*"
 )
 
 # Then append only those that are not in .git directories:
@@ -75,7 +80,7 @@ add_custom_command(
     ${XML_RESTORE_COMMAND}
     OUTPUT ${FPGA_BITSTREAM_FILE}
     BYPRODUCTS "${FPGA_OUTPUT_DIR}" "${FPGA_WORK_DIR}"
-    DEPENDS ${FPGA_SRC_FILES}
+    DEPENDS ${FPGA_SRC_FILES} "${FPGA_PROJECT_CONFIG_FILE}" "${CMAKE_CURRENT_SOURCE_DIR}/efx.sh"
     USES_TERMINAL
     VERBATIM
 )
