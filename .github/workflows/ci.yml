@@ -55,6 +55,8 @@ jobs:
           push: ${{ github.event_name == 'push' && 'always' || 'never' }}
           runCmd: |
             set -e
+            # Mounts are already applied. Restore tracked input before versioning.
+            git restore --source=HEAD -- .devcontainer/devcontainer.json
             cmake --preset default
             # The all presets include the host system and hardware contract suite.
             cmake --build --preset all
