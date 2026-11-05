@@ -22,15 +22,23 @@ program_command="program build/fw/src/firmware.elf verify reset exit"
 # 
 #    Error: Failed to connect multidrop rp2040.dap0
 #
-# Picoprobe documentation uses 5000 kHz:
+# Documentation uses 5000 kHz:
 # https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
 #
-# Note: previous top speed was 31249 kHz.  Reduced to 20833 kHz for Debugprobe v2.2.2.
+# Latest Debugprobe firmware available here:
+# https://github.com/raspberrypi/debugprobe
+#
+# Notes:
+#  - 31250 kHz fails immediately with Debugprobe v2.3.1.
+#  - Empirically, 20833 KHz is more reliable than 31249 KHz when pipelined.
 if openocd "${openocd_args[@]}" -c "adapter speed 20833" -c "init" -c "$program_command"; then
   exit 0
 fi
 
-# Quirk mode requires initialization before serializing CMSIS-DAP transfers.
+# `cmsis-dap quirk enable` serializes CMSIS-DAP transfers to work around
+# intermittent probe communication failures that can report "Could not allocate
+# bounce buffer for flash programming". Quirk mode requires initialization
+# before serializing CMSIS-DAP transfers.
 if openocd "${openocd_args[@]}" \
   -c "adapter speed 5000" \
   -c "init" \
