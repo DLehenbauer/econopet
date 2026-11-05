@@ -194,7 +194,7 @@ class WaterlooKeyboard : public SystemTest, public testing::WithParamInterface<c
 TEST_P(WaterlooKeyboard, BusinessConfigurationLeavesRomsUnchanged) {
     apply(pet_keyboard_model_business);
     EXPECT_EQ(patched_bytes_, 0u);
-    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk.d80");
+    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk-b.d80");
     EXPECT_EQ(rom_bytes(), original_);
     EXPECT_EQ(scan({{3, 0}}, 0)[1], 'a');
     EXPECT_EQ(scan({{3, 0}, {6, 0}}, 0)[1], 'A');
@@ -204,7 +204,7 @@ TEST_P(WaterlooKeyboard, BusinessConfigurationLeavesRomsUnchanged) {
 TEST_P(WaterlooKeyboard, GraphicsConfigurationRelocatesNativeTranslations) {
     apply(pet_keyboard_model_graphics);
     EXPECT_EQ(patched_bytes_, 4 * TableSize);
-    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk-graphics.d80");
+    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk-n.d80");
     const auto patched = rom_bytes();
     for (size_t i = 0; i < patched.size(); ++i)
         if (i + 0xa000 < TableStart || i + 0xa000 >= TableEnd)

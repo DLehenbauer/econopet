@@ -73,9 +73,10 @@ sector chain rather than treating the PRG as a contiguous D80 byte range.
 
 ### Generated Disk
 
-[download.sh](../../.devcontainer/download.sh) retains the original disk and
+[download.sh](../../.devcontainer/download.sh) installs the original disk as
+`os9-systemdisk-b.d80` and
 uses [patch-os9-keyboard.py](../../.devcontainer/patch-os9-keyboard.py) to
-create `os9-systemdisk-graphics.d80`. The patcher checks both the source D80
+create `os9-systemdisk-n.d80`. The patcher checks both the source D80
 and loader identity, follows the PRG sector chain, and changes only its
 payload. It preserves the original OS-9 REL container and disk metadata.
 The SuperPET configurations mount the graphics disk for graphics keyboards and

@@ -68,7 +68,7 @@ https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff.970020-12.bin|-|-|roms/-|a4ffd0a17cb675f0b45e9c085126e44c
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff-970034-12.bin|-|-|roms/-|c03098d26dbb1a23737d3286f264bc97
 https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/characters.901640-01.bin|-|-|roms/-|dd30641d9e6a221edd725d1e529dcbdb
-https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disks/superpet/os9/-|a772ba7ad5d2f6a635a092f80f80d45c
+https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disks/superpet/os9/os9-systemdisk-b.d80|a772ba7ad5d2f6a635a092f80f80d45c
 https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-1.d64.gz|-|-|disks/superpet/-|0c32478f4636b8387b62da3dde1f2acb
 https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-2.d64.gz|-|-|disks/superpet/-|9c9db97f8f56ae408b098abab6db7a5b
 https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz|-|-|disks/superpet/-|0d062e32b06e0285fae2cc9800b97fc9
@@ -235,8 +235,8 @@ install_media_list "${MEDIA_LIST}"
 # separate graphics-keyboard version without changing the OS-9 REL container.
 readonly OS9_DISK_DIR="${MEDIA_DIR}/disks/superpet/os9"
 python3 "${SCRIPT_DIR}/patch-os9-keyboard.py" \
-  "${OS9_DISK_DIR}/os9-systemdisk.d80" \
-  "${OS9_DISK_DIR}/os9-systemdisk-graphics.d80"
+  "${OS9_DISK_DIR}/os9-systemdisk-b.d80" \
+  "${OS9_DISK_DIR}/os9-systemdisk-n.d80"
 
 # Waterloo2 was distributed as two D64s. Merge these into one D80, add the
 # memory-test programs, then remove the temporary source images.

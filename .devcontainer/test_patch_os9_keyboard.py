@@ -26,7 +26,7 @@ class Os9KeyboardPatchTests(unittest.TestCase):
         media = os.environ.get("ECONOPET_MEDIA_DIR")
         if not media:
             raise unittest.SkipTest("ECONOPET_MEDIA_DIR is not set")
-        cls.source = Path(media) / "disks/superpet/os9/os9-systemdisk.d80"
+        cls.source = Path(media) / "disks/superpet/os9/os9-systemdisk-b.d80"
         if not cls.source.is_file():
             raise unittest.SkipTest("OS-9 system disk is not installed")
         cls.image = cls.source.read_bytes()

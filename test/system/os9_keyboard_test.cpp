@@ -39,7 +39,7 @@ size_t sector_offset(unsigned track, unsigned sector) {
 std::vector<uint8_t> loader() {
     const char* media = std::getenv("ECONOPET_MEDIA_DIR");
     if (!media || !*media) throw std::runtime_error("ECONOPET_MEDIA_DIR is not set");
-    const auto path = std::filesystem::path{media} / "disks/superpet/os9/os9-systemdisk-graphics.d80";
+    const auto path = std::filesystem::path{media} / "disks/superpet/os9/os9-systemdisk-n.d80";
     std::ifstream input(path, std::ios::binary);
     if (!input) throw std::runtime_error("missing graphics OS-9 disk: " + path.string());
     const std::vector<uint8_t> image{std::istreambuf_iterator<char>{input}, {}};

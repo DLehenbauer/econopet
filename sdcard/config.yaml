@@ -364,10 +364,10 @@ configs:
       - if: "graphics"
         then:
           - action: "mount"
-            file: "superpet/os9/os9-systemdisk-graphics.d80"
+            file: "superpet/os9/os9-systemdisk-n.d80"
         else:
           - action: "mount"
-            file: "superpet/os9/os9-systemdisk.d80"
+            file: "superpet/os9/os9-systemdisk-b.d80"
       # The SuperPET menu expects the Waterloo Languages disk in device 8, drive 1.
       - action: "mount"
         drive: 1
@@ -410,10 +410,10 @@ configs:
       - if: "graphics"
         then:
           - action: "mount"
-            file: "superpet/os9/os9-systemdisk-graphics.d80"
+            file: "superpet/os9/os9-systemdisk-n.d80"
         else:
           - action: "mount"
-            file: "superpet/os9/os9-systemdisk.d80"
+            file: "superpet/os9/os9-systemdisk-b.d80"
       - action: "mount"
         drive: 1
         file: "superpet/Waterloo2-Languages.d80"
