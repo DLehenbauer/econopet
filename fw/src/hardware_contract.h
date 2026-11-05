@@ -30,6 +30,7 @@
 #define ECONOPET_WB_KBD_BASE_ADDR 0x60000u
 #define ECONOPET_WB_BRAM_BASE_ADDR 0x68000u
 #define ECONOPET_WB_IEEE_BASE_ADDR 0x70000u
+#define ECONOPET_WB_IO_BASE_ADDR 0x78000u
 
 // Register-file Wishbone byte addresses (See common_pkg.sv for more details)
 #define ECONOPET_WB_STATUS_ADDR 0x40000u

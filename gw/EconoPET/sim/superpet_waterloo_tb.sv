@@ -260,7 +260,7 @@ module superpet_waterloo_tb;
         spi_write_at(common_pkg::wb_reg_addr(REG_CPU_SEL), 8'(CPU_SEL_SOFT_6809));
 
         $display("[%t]   Releasing reset via REG_CPU", $time);
-        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'b0000_0000);
+        spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         // Stop as soon as the menu lands rather than burning a fixed budget.
         // Wait on the bottom entry, not the banner: the banner is up at ~150ms

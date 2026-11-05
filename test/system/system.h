@@ -1277,13 +1277,11 @@ class System {
         if (read_cpu_selection() != cpu)
             throw failure<std::runtime_error>("select_cpu", "CPU selection did not take effect");
     }
-    // Release shared reset with the selected core's READY policy and verify it.
+    // Release shared reset and enable execution for either soft CPU.
     void release_reset() {
         require_mutable_access();
         remember("release_reset");
-        const auto selection = read_cpu_selection();
-        const econopet::CpuControl control =
-            selection != CPU_SOFT_6809 ? econopet::CpuControl{econopet::CpuControlBit::Ready} : econopet::CpuControl{};
+        const econopet::CpuControl control{econopet::CpuControlBit::Ready};
         spi_write_at(fpga::address(fpga::Register::CpuControl), control.bits());
         if (read_cpu_control() != control || dut_->cpu_reset_active_o)
             throw failure<std::runtime_error>("release_reset",
