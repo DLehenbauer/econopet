@@ -26,8 +26,8 @@ verilate(econopet_fpga_model
     TOP_MODULE system
     DIRECTORY "${VERILATED_DIR}"
     SOURCES ${GATEWARE_SOURCES} "${GATEWARE_DIR}/sim/system.sv" "${GATEWARE_DIR}/verilator.vlt"
-    # Match verilate.sh's warning policy without suppressing diagnostic output.
-    VERILATOR_ARGS --assert -O3 --timescale 1ns/1ps -Wno-fatal
+    # Refresh dependencies on regeneration and keep the simulator warning policy.
+    VERILATOR_ARGS --make cmake --assert -O3 --timescale 1ns/1ps -Wno-fatal
         "-I${GATEWARE_DIR}/external/m6502/rtl")
 target_include_directories(econopet_fpga_model SYSTEM PUBLIC
     "${VERILATED_DIR}" "${VERILATOR_ROOT}/include")

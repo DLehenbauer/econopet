@@ -45,7 +45,7 @@ sim_files = [path for path in sim_files if not path.endswith("_pkg.sv")]
 sim_files = [path for path in sim_files if not path.endswith(".svh")]
 
 # Verilator-only benches may use SystemVerilog features unsupported by Icarus.
-# They are compiled explicitly by verilate.sh, not through this shared file list.
+# Native CMake model targets compile them without this shared Icarus file list.
 verilator_only_testbenches = {"sim/video_crtc_timing_tb.sv"}
 sim_files = [path for path in sim_files if path not in verilator_only_testbenches]
 
