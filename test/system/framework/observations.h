@@ -3,6 +3,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -93,6 +94,30 @@ private:
     std::shared_ptr<TraceState<Record>> state_;
     System::ObserverSubscription subscription_;
 };
+
+struct IeeeBusLevels {
+    bool dav_released, atn_released, eoi_released;
+    uint8_t byte;
+};
+
+// Resolve device, fitted GPIO and external levels without double-counting CPU snoops.
+inline IeeeBusLevels ieee_bus_levels(const System& board) {
+    const auto pins = board.snapshot();
+    const auto& io = board.io();
+    const auto pia1_inputs = io.pia1().peek_inputs();
+    const auto pia2_inputs = io.pia2().peek_inputs();
+    const auto via_inputs = io.via().peek_inputs();
+    // Input-mode pins release the bus regardless of retained output latches.
+    const auto& pia2_port = io.pia2().state().pb;
+    const auto pia2_outputs = static_cast<uint8_t>(pia2_port.outr | ~pia2_port.ddr);
+    const auto& via_port = io.via().state().pb;
+    const auto via_outputs = static_cast<uint8_t>(via_port.outr | ~via_port.ddr);
+    return {
+        pins.ieee_device_dav_no && io.pia2().cb2() && (via_inputs.port_b & pet::Dav) != 0,
+        pia2_inputs.ca1 && (via_outputs & pet::Atn) != 0,
+        pins.ieee_device_eoi_no && io.pia1().ca2() && (pia1_inputs.port_a & pet::EoiInput) != 0,
+        static_cast<uint8_t>(~(pins.ieee_device_dio_o & pia2_outputs & pia2_inputs.port_a))};
+}
 
 struct AvLevels {
     bool video, horizontal, vertical, jiffy, audio_left, audio_right;
@@ -245,6 +270,10 @@ System::trace_signal(test_observation::Signal signal) & {
         case Signal::Pia1Irq: return board.io().pia1().irq();
         case Signal::Pia2Irq: return board.io().pia2().irq();
         case Signal::ViaIrq: return board.io().via().irq();
+        case Signal::IeeeDav: return test_observation::ieee_bus_levels(board).dav_released;
+        case Signal::IeeeAtn: return test_observation::ieee_bus_levels(board).atn_released;
+        case Signal::IeeeEoi: return test_observation::ieee_bus_levels(board).eoi_released;
+        case Signal::IeeeRxReady: return p.ieee_rx_ready_o;
         }
         throw board.failure<std::invalid_argument>("trace_signal", "unsupported signal");
     };

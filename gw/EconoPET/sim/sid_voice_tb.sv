@@ -29,58 +29,49 @@ module sid_voice_tb;
         .oOut(voice_out)
     );
 
+    // Drive writes before the rising edge that samples them.
     task write_register (
         input logic [4:0] reg_addr,
         input logic [7:0] reg_data
     );
-        @(posedge clock);
+        @(negedge clock);
         addr = reg_addr;
         data = reg_data;
         write_en = 1'b1;
-        @(negedge clock);
+        @(posedge clock);
         #1;
         write_en = 1'b0;
     endtask
 
+    // Advance through the pulse comparator and output mixer registers.
+    task advance_pulse_output;
+        repeat (2) begin
+            @(posedge clock);
+            #1;
+        end
+    endtask
+
+    // Exercise pulse widths below, above, and equal to the fixed phase.
     task run;
-        // phase[23:12] starts at $555. Set PW=$600, which selects low.
+        // Enable the pulse waveform. The phase stays at $555 because clkEn is low.
+        write_register(5'h04, 8'h40);
+
+        // At phase $555, PW=$600 selects low.
         write_register(5'h02, 8'h00);
         write_register(5'h03, 8'h06);
+        advance_pulse_output();
+        `assert_equal(voice_out, 12'h000)
 
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.regPWPos, 12'h600)
-        `assert_equal(sid_voice.wavPulse, 12'hfff)
-
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.wavPulse, 12'h000)
-
-        // Set PW=$400, which selects high. The comparator result changes one
-        // full clock after the shadow register captures the write.
+        // At phase $555, PW=$400 selects high.
         write_register(5'h03, 8'h04);
-
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.regPWPos, 12'h400)
-        `assert_equal(sid_voice.wavPulse, 12'h000)
-
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.wavPulse, 12'hfff)
+        advance_pulse_output();
+        `assert_equal(voice_out, 12'hfff)
 
         // Equality selects low because the pulse comparator uses <=.
         write_register(5'h02, 8'h55);
         write_register(5'h03, 8'h05);
-
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.regPWPos, 12'h555)
-        `assert_equal(sid_voice.wavPulse, 12'hfff)
-
-        @(posedge clock);
-        #1;
-        `assert_equal(sid_voice.wavPulse, 12'h000)
+        advance_pulse_output();
+        `assert_equal(voice_out, 12'h000)
     endtask
 
     `TB_INIT

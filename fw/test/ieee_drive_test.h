@@ -5,6 +5,7 @@
 
 #include <check.h>
 
+// Exercises the sole production facade, media lifecycle and configuration path.
 Suite* ieee_drive_suite(void);
 
 // Returns path-validation tests that require a forked runner for fatal errors.

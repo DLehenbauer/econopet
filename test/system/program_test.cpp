@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
+#include <array>
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "framework/system_test.h"
 #include "host_memory.h"
@@ -78,6 +80,51 @@ TEST_F(SystemTest, ProgramBuilder6502OwnsExecutionAndDetachedResults) {
     EXPECT_THROW(test.run([](auto&) {}), std::logic_error);
     EXPECT_THROW(test.byte("late"), std::logic_error);
     EXPECT_THROW(test.within(1), std::logic_error);
+}
+
+TEST_F(SystemTest, ProgramLayoutDeclaresCapturableOrdinaryDataWithoutImplicitClearing) {
+    LayoutOverrides layout;
+    layout.data = {{"payload", {econopet::CpuAddress{0x0400}, 2}}};
+    const auto check = [&](auto& test) {
+        auto view = test.lower_bank("payload");
+        const auto payload = view.buffer("payload bytes", 0, 2);
+        const std::array<uint8_t, 2> initial{0x11, 0x22};
+        const auto started = system.time();
+        view.initialize(payload, initial);
+        test.capture(payload);
+        EXPECT_EQ(system.time(), started);
+        const auto result = test.within(ExecutionBudget).run([&](auto& p) {
+            p.lda(imm(0x42)).sta(payload.byte(0));
+        });
+        EXPECT_EQ(result[payload], (std::vector<uint8_t>{0x42, 0x22}));
+    };
+    auto mos = system.program6502(Layout::Pet, layout);
+    check(mos);
+    auto mc = system.program6809(Layout::Pet, layout);
+    check(mc);
+}
+
+TEST_F(SystemTest, ProgramLayoutDeclaredDataRejectsInvalidReservationsWithoutMutation) {
+    const auto started = system.time();
+    const auto original = memory_image(system);
+    LayoutOverrides layout;
+    layout.data = {{"code alias", {econopet::CpuAddress{0x0300}, 1}}};
+    EXPECT_THROW(system.program6502(Layout::Pet, layout), std::invalid_argument);
+    layout.data = {{"code", {econopet::CpuAddress{0x0600}, 1}}};
+    EXPECT_THROW(system.program6809(Layout::Pet, layout), std::invalid_argument);
+    layout.workspace = {{"workspace", {econopet::CpuAddress{0x0600}, 2}}};
+    layout.data = {{"workspace alias", {econopet::CpuAddress{0x0601}, 1}}};
+    EXPECT_THROW(system.program6502(Layout::Pet, layout), std::invalid_argument);
+    layout.data = {{"empty", {econopet::CpuAddress{0x0700}, 0}}};
+    EXPECT_THROW(system.program6809(Layout::Pet, layout), std::out_of_range);
+    layout.data = {{"wrap", {econopet::CpuAddress{0xffff}, 2}}};
+    EXPECT_THROW(system.program6502(Layout::Pet, layout), std::out_of_range);
+    layout.workspace.clear();
+    layout.data = {{"release alias", {econopet::CpuAddress{0x02fe}, 1}}};
+    EXPECT_THROW(system.program6502(test_asm::ProgramMode::Phased, Layout::Pet, layout),
+        std::invalid_argument);
+    EXPECT_EQ(system.time(), started);
+    EXPECT_EQ(memory_image(system), original);
 }
 
 // Accessing a temporary program result transfers the interval before destruction.

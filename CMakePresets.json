@@ -25,7 +25,7 @@
         {
             "name": "all",
             "displayName": "Build All",
-            "description": "Build all subprojects (ROM, firmware, gateware, firmware/system tests, SD card)",
+            "description": "Build all subprojects (ROM, firmware, gateware and simulator models, firmware/system tests, SD card)",
             "configurePreset": "default",
             "targets": ["all_projects"]
         },
@@ -49,6 +49,13 @@
             "description": "Build host fixtures, hardware contract, board and firmware integration tests",
             "configurePreset": "default",
             "targets": ["system_test_project"]
+        },
+        {
+            "name": "gw-test",
+            "displayName": "Gateware Test Models",
+            "description": "Build all native Verilator model targets before running gateware tests",
+            "configurePreset": "default",
+            "targets": ["gateware_models"]
         },
         {
             "name": "gw",

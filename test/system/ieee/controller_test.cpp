@@ -23,15 +23,220 @@ static_assert(!std::is_move_constructible_v<IeeeController>);
 
 struct InterruptedTransfer {};
 
+enum class AbortPhase { BeforeNrfd, AfterNrfd };
+
+// A literal unit mask is the only enable control, regardless of reserved write bit 0.
+TEST_F(SystemTest, IeeeUnitMaskAloneControlsEnabledReadback) {
+    EXPECT_FALSE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
+    for (unsigned int mask = 0; mask < 16; ++mask) {
+        for (unsigned int reserved = 0; reserved < 2; ++reserved) {
+            system.spi().write(fpga::Register::IeeeControl, static_cast<uint8_t>((mask << 4) | reserved));
+            EXPECT_EQ(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled), mask != 0)
+                << "mask=" << mask << " reserved=" << reserved;
+        }
+    }
+    system.ieee().write_control({});
+    EXPECT_FALSE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
+}
+
+// Separate native NRFD-triggered prefetch from the private CPU read and NDAC handshake.
+void check_talk_abort(System& system, AbortPhase phase, bool sample_data, bool status_fifo) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{status_fifo ? CommandChannel : LoadChannel}));
+    system.spi().write(status_fifo ? fpga::Register::IeeeTxStatus : fpga::Register::IeeeTx, 'X');
+    system.spi().write(status_fifo ? fpga::Register::IeeeTxStatusLast : fpga::Register::IeeeTxLast, 'Y');
+    auto wire = system.trace_ieee();
+
+    // Release ATN while blocked, then present X with NRFD released and NDAC asserted.
+    controller.write(pet::Pia2ControlA, PiaC2Low.bits());
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; }, ByteBudget,
+                     "in-flight talker byte");
+    const uint8_t via_levels =
+        phase == AbortPhase::AfterNrfd ? static_cast<uint8_t>(BusReleased & ~pet::Nrfd) : BusReleased;
+    if (phase == AbortPhase::AfterNrfd)
+        controller.write(pet::ViaPortB, via_levels);
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    if (sample_data)
+        ASSERT_EQ(static_cast<uint8_t>(~controller.read(pet::Pia2PortA)), 'X');
+
+    // Hold the chosen readiness state before ATN, without ever releasing NDAC.
+    constexpr Cycles AbortDwell{20000};
+    system.tick(AbortDwell);
+    ASSERT_EQ(system.ieee().peek_nrfd_released(), phase == AbortPhase::BeforeNrfd);
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(via_levels & ~pet::Atn));
+    ASSERT_TRUE(system.snapshot().ieee_bus_dav_no);
+    std::vector<Record> expected_wire{data('X')};
+    if (!status_fifo) {
+        controller.command(Untalk);
+        controller.command(Talk(Device{DeviceAddress}));
+        controller.command(Secondary(Channel{LoadChannel}));
+        expected_wire.insert(expected_wire.end(), {command(Untalk), command(Talk(Device{DeviceAddress})),
+                                                   command(Secondary(Channel{LoadChannel}))});
+    }
+    // Release command-free ATN for status: a fresh secondary deliberately flushes TXS.
+    std::vector<Record> received;
+    for (size_t i = 0; i < 2; ++i) {
+        received.push_back(controller.receive());
+        if (received.back().eoi == Eoi::Last)
+            break;
+    }
+    // TLK20 enters GET on asserted NRFD. TLK35 waits for NDAC only after that prefetch.
+    const std::vector<Record> expected = phase == AbortPhase::BeforeNrfd
+                                             ? std::vector<Record>{data('X'), data('Y', Eoi::Last)}
+                                             : std::vector<Record>{data('Y', Eoi::Last)};
+    require_sequence(received, expected, "resume at native prefetch boundary");
+    expected_wire.insert(expected_wire.end(), expected.begin(), expected.end());
+    require_sequence(wire.records(), expected_wire, "aborted and resumed wire transfers");
+}
+
+// Run each native prefetch boundary against the independent data and status FIFOs.
+class IeeeAbortTest : public SystemTest, public testing::WithParamInterface<bool> {};
+
+// With NRFD still released, TLK20 has not called GET when ATN interrupts.
+TEST_P(IeeeAbortTest, IeeeAbortBeforeNrfdPreservesUnreadByte) {
+    check_talk_abort(system, AbortPhase::BeforeNrfd, false, GetParam());
+}
+
+// A private PET read cannot advance the native drive while NRFD remains released.
+TEST_P(IeeeAbortTest, IeeeAbortBeforeNrfdPreservesSampledByte) {
+    check_talk_abort(system, AbortPhase::BeforeNrfd, true, GetParam());
+}
+
+// TLK30 prefetches the next byte on asserted NRFD even without a private PET read.
+TEST_P(IeeeAbortTest, IeeeAbortAfterNrfdPrefetchesUnreadByte) {
+    check_talk_abort(system, AbortPhase::AfterNrfd, false, GetParam());
+}
+
+// After NRFD-triggered prefetch, ATN resumes at Y whether or not the PET sampled X.
+TEST_P(IeeeAbortTest, IeeeAbortAfterNrfdPrefetchesSampledByte) {
+    check_talk_abort(system, AbortPhase::AfterNrfd, true, GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(DataAndStatus, IeeeAbortTest, testing::Bool());
+
+// Reproduce Waterloo revision-12 $C14F-$C16D ordering without reading the next byte.
+TEST_F(SystemTest, IeeeWaterlooCountedTerminationPreservesUnreadByte) {
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{LoadChannel}));
+    system.spi().write(fpga::Register::IeeeTx, 'X');
+    system.spi().write(fpga::Register::IeeeTx, 'Y');
+    system.spi().write(fpga::Register::IeeeTxLast, 'Z');
+    auto wire = system.trace_ieee();
+    ASSERT_EQ(controller.receive(), data('X'));
+
+    // The fast source presents Y when Waterloo releases NRFD, before NDAC.
+    controller.write(pet::ViaPortB, BusReleased);
+    system.run_until([](const System& board) { return !board.snapshot().ieee_bus_dav_no; }, ByteBudget,
+                     "Waterloo unread next byte");
+    ASSERT_FALSE(system.ieee().peek_ndac_released());
+    controller.write(pet::Pia2ControlA, PiaC2High.bits());
+    system.run_until([](const System& board) { return board.snapshot().ieee_bus_dav_no; }, ByteBudget,
+                     "Waterloo DAV release before ATN");
+    controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Atn));
+
+    // UNTALK and a fresh TALK must return Y, not skip it or repeat accepted X.
+    controller.command(Untalk);
+    controller.command(Talk(Device{DeviceAddress}));
+    controller.command(Secondary(Channel{LoadChannel}));
+    EXPECT_EQ(controller.receive(), data('Y'));
+    EXPECT_EQ(controller.receive(), data('Z', Eoi::Last));
+    require_sequence(wire.records(),
+                     {data('X'), data('Y'), command(Untalk), command(Talk(Device{DeviceAddress})),
+                      command(Secondary(Channel{LoadChannel})), data('Y'), data('Z', Eoi::Last)},
+                     "Waterloo counted-read continuation");
+}
+
+// Signal traces observe physical input drivers even when no IEEE byte is transferred.
+TEST_F(SystemTest, IeeeSignalTracesResolvePhysicalLevelsWithoutInitialEdges) {
+    using test_observation::Signal;
+    IeeeController controller(system);
+    const auto start = system.time();
+    auto dav = system.trace_signal(Signal::IeeeDav);
+    auto atn = system.trace_signal(Signal::IeeeAtn);
+    auto eoi = system.trace_signal(Signal::IeeeEoi);
+    EXPECT_EQ(system.time(), start);
+    EXPECT_TRUE(dav.records().empty());
+    EXPECT_TRUE(atn.records().empty());
+    EXPECT_TRUE(eoi.records().empty());
+
+    // Independently assert the fitted input pins, not the fabric's CPU output snoops.
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
+    system.tick(1);
+    system.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
+    system.tick(1);
+    system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = false; });
+    system.tick(1);
+    system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = true; });
+    system.tick(1);
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a &= static_cast<uint8_t>(~pet::EoiInput); });
+    system.tick(1);
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a |= pet::EoiInput; });
+    system.tick(1);
+    unsigned first_cycle = 1;
+    for (const auto* trace : {&dav, &atn, &eoi}) {
+        ASSERT_EQ(trace->records().size(), 2u);
+        EXPECT_EQ(trace->records()[0].at, start + Cycles{first_cycle});
+        EXPECT_TRUE(trace->records()[0].before);
+        EXPECT_FALSE(trace->records()[0].after);
+        EXPECT_EQ(trace->records()[1].at, start + Cycles{first_cycle + 1});
+        EXPECT_FALSE(trace->records()[1].before);
+        EXPECT_TRUE(trace->records()[1].after);
+        first_cycle += 2;
+    }
+}
+
+// RX readiness is FIFO evidence, separate from active-low physical wire transitions.
+TEST_F(SystemTest, IeeeSignalTraceRxReadyTracksEnqueueAndDrain) {
+    using test_observation::Signal;
+    IeeeController controller(system);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
+    auto ready = system.trace_signal(Signal::IeeeRxReady);
+    EXPECT_TRUE(ready.records().empty());
+    controller.command(Unlisten);
+    ASSERT_EQ(ready.records().size(), 1u);
+    EXPECT_FALSE(ready.records().front().before);
+    EXPECT_TRUE(ready.records().front().after);
+    const auto sequence = drain_rx(system, 1, ByteBudget, "RX-ready transition");
+    ASSERT_EQ(sequence.size(), 1u);
+    EXPECT_EQ(sequence.front(), command(Unlisten));
+    ASSERT_EQ(ready.records().size(), 2u);
+    EXPECT_TRUE(ready.records().back().before);
+    EXPECT_FALSE(ready.records().back().after);
+    EXPECT_LT(ready.records().front().at, ready.records().back().at);
+}
+
+// Quiet wire coverage remains source-bound, movable and detached after stopping.
+TEST_F(SystemTest, IeeeWireFactoryRetainsQuietCoverageAcrossMoveAndStop) {
+    auto wire = system.trace_ieee();
+    auto moved = std::move(wire);
+    EXPECT_THROW(wire.capture(), std::logic_error);
+    const auto first = system.time();
+    system.tick(2);
+    const auto last = system.time();
+    moved.stop();
+    system.tick(1);
+    const auto capture = moved.capture(system.trace_window(first, last));
+    EXPECT_TRUE(capture.records().empty());
+    EXPECT_TRUE(capture.complete());
+    EXPECT_THROW(moved.capture(system.trace_window(first, system.time())), std::out_of_range);
+    EXPECT_EQ(capture.window().completed(), last);
+}
+
 // Mailbox startup must release the bus before enabling its physical GPIO outputs.
 TEST_F(SystemTest, IeeeControllerInitializesPhysicalDirectionsWithoutBusGlitches) {
     bool drove_low = false;
     auto startup = system.observe([&](const System& observed) {
         const auto& pia = observed.io().pia2().state().pb;
         const auto& via = observed.io().via().state().pb;
-        drove_low |= (pia.ddr & ~pia.outr) != 0
-            || (via.ddr & ~via.outr & (pet::Atn | pet::Nrfd)) != 0
-            || !observed.io().pia2().cb2() || !observed.io().pia2().ca2();
+        drove_low |= (pia.ddr & ~pia.outr) != 0 || (via.ddr & ~via.outr & (pet::Atn | pet::Nrfd)) != 0 ||
+                     !observed.io().pia2().cb2() || !observed.io().pia2().ca2();
     });
     IeeeController controller(system);
     EXPECT_FALSE(drove_low);
@@ -83,9 +288,8 @@ TEST_F(SystemTest, IeeeControllerRejectsReuseAfterInterruptedBusOperation) {
 // Independently drive a physical listener that is not ready until a later boundary.
 TEST_F(SystemTest, IeeeControllerWaitsForListenerReadinessBeforeDav) {
     IeeeController controller(system);
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~(pet::NrfdInput | pet::Ndac));
-    });
+    system.io().via().inputs(
+        [](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~(pet::NrfdInput | pet::Ndac)); });
     const auto start = system.time();
     const auto ready_at = start + Cycles{20000};
     const auto accepted_at = start + Cycles{30000};
@@ -96,9 +300,8 @@ TEST_F(SystemTest, IeeeControllerWaitsForListenerReadinessBeforeDav) {
             premature_dav = true;
     });
     Scheduler scheduler(system);
-    scheduler.at(ready_at, [](System& board) {
-        board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::NrfdInput; });
-    });
+    scheduler.at(ready_at,
+                 [](System& board) { board.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::NrfdInput; }); });
     scheduler.at(accepted_at, [](System& board) {
         EXPECT_FALSE(board.snapshot().ieee_bus_dav_no);
         EXPECT_EQ(board.snapshot().ieee_bus_dio_o, static_cast<uint8_t>(~'A'));
@@ -109,9 +312,7 @@ TEST_F(SystemTest, IeeeControllerWaitsForListenerReadinessBeforeDav) {
     });
     scheduler.at(rearmed_at, [](System& board) {
         EXPECT_TRUE(board.snapshot().ieee_bus_dav_no);
-        board.io().via().inputs([](auto& inputs) {
-            inputs.port_b &= static_cast<uint8_t>(~pet::Ndac);
-        });
+        board.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Ndac); });
     });
     controller.data('A');
     EXPECT_FALSE(premature_dav);
@@ -122,12 +323,12 @@ TEST_F(SystemTest, IeeeControllerWaitsForListenerReadinessBeforeDav) {
 // A handshake deadline invalidates the controller even between mailbox commands.
 TEST_F(SystemTest, IeeeControllerRejectsReuseAfterInterruptedHandshake) {
     IeeeController controller(system);
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~(pet::NrfdInput | pet::Ndac));
-    });
+    system.io().via().inputs(
+        [](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~(pet::NrfdInput | pet::Ndac)); });
     EXPECT_THROW(system.service_until([](const System&) { return false; },
-        [&](System&, Cycles) { controller.data('A'); },
-        Cycles{20000}, "listener never ready"), std::runtime_error);
+                                      [&](System&, Cycles) { controller.data('A'); }, Cycles{20000},
+                                      "listener never ready"),
+                 std::runtime_error);
     EXPECT_TRUE(controller.peek_failed());
     EXPECT_TRUE(system.snapshot().ieee_bus_dav_no);
     const auto stopped = system.time();
@@ -138,14 +339,13 @@ TEST_F(SystemTest, IeeeControllerRejectsReuseAfterInterruptedHandshake) {
 // Captured sequence checks have no board effects and FIFO sampling consumes only on request.
 TEST_F(SystemTest, IeeeTransactionsSeparateWireCaptureFromFifoConsumption) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     auto wire = system.trace_ieee();
     controller.command(Listen(Device{8}));
     controller.data('A');
     controller.data('B', Eoi::Last);
     controller.command(Unlisten);
-    const std::vector<Record> expected{
-        command(Listen(Device{8})), data('A'), data('B', Eoi::Last), command(Unlisten)};
+    const std::vector<Record> expected{command(Listen(Device{8})), data('A'), data('B', Eoi::Last), command(Unlisten)};
     const auto before = system.time();
     require_sequence(wire.records(), expected, "wire");
     EXPECT_EQ(system.time(), before);
@@ -154,10 +354,9 @@ TEST_F(SystemTest, IeeeTransactionsSeparateWireCaptureFromFifoConsumption) {
     EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
     const auto head = take_rx(system);
     ASSERT_TRUE(head);
-    EXPECT_EQ(*head, fifo_record(command(Listen(Device{8}))));
+    EXPECT_EQ(*head, command(Listen(Device{8})));
     const auto rest = drain_rx(system, 3, ByteBudget, "remaining");
-    EXPECT_THAT(rest, ElementsAre(fifo_record(data('A')), fifo_record(data('B', Eoi::Last)),
-        fifo_record(command(Unlisten))));
+    EXPECT_THAT(rest, ElementsAre(data('A'), data('B', Eoi::Last), command(Unlisten)));
     EXPECT_FALSE(take_rx(system));
     EXPECT_TRUE(rx_empty_now(system));
     ASSERT_EQ(wire.times().size(), expected.size());
@@ -169,9 +368,9 @@ TEST_F(SystemTest, IeeeTransactionsSeparateWireCaptureFromFifoConsumption) {
 // Raw malformed-command tests remain possible, but unobserved EOI cannot drive pins.
 TEST_F(SystemTest, IeeeTransactionsRawStimulusRejectsUnknownEoiBeforeClocking) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     const auto before = system.time();
-    EXPECT_THROW(controller.raw_send(fifo_record(data('A'))), std::invalid_argument);
+    EXPECT_THROW(controller.raw_send(Record{'A', false, Eoi::Unobserved}), std::invalid_argument);
     EXPECT_EQ(system.time(), before);
     auto wire = system.trace_ieee();
     controller.raw_send(raw_record(0x19, true, Eoi::Last));
@@ -181,7 +380,7 @@ TEST_F(SystemTest, IeeeTransactionsRawStimulusRejectsUnknownEoiBeforeClocking) {
 // Device-to-controller EOI comes from the real wire, not FIFO status.
 TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     auto wire = system.trace_ieee();
     controller.command(Talk(Device{8}));
     controller.command(Secondary(Channel{0}));
@@ -211,8 +410,7 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     EXPECT_FALSE(system.io().pia2().ca2());
     // Unrelated SPI clocks must not start another byte while the acceptor is busy.
     EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Talking));
-    EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})),
-        command(Secondary(Channel{0})), data('X')));
+    EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})), command(Secondary(Channel{0})), data('X')));
     EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
@@ -222,14 +420,15 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     EXPECT_THAT(attention_edges, ElementsAre(true));
     controller.command(Untalk);
     EXPECT_FALSE(system.ieee().peek_talking());
-    EXPECT_THAT(attention_edges, ElementsAre(true, false));
+    EXPECT_THAT(attention_edges, ElementsAre(true, false, true));
 
     // Passive wire capture includes received data, while RX stores commands only.
-    require_sequence(wire.records(), {command(Talk(Device{8})),
-        command(Secondary(Channel{0})), data('X'), data('Y', Eoi::Last),
-        command(Untalk)}, "received wire bytes");
-    require_drained_sequence(system, fifo_records({command(Talk(Device{8})),
-        command(Secondary(Channel{0})), command(Untalk)}), ByteBudget, "received commands");
+    require_sequence(
+        wire.records(),
+        {command(Talk(Device{8})), command(Secondary(Channel{0})), data('X'), data('Y', Eoi::Last), command(Untalk)},
+        "received wire bytes");
+    require_drained_sequence(system, {command(Talk(Device{8})), command(Secondary(Channel{0})), command(Untalk)},
+                             ByteBudget, "received commands");
 }
 
 // A separately timed physical source checks acceptance without the FPGA talker.
@@ -243,9 +442,7 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
         EXPECT_NE(board.io().via().state().pins & M6522_PB1, 0);
         EXPECT_FALSE(board.io().pia2().ca2());
         board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'X'); });
-        board.io().via().inputs([](auto& inputs) {
-            inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-        });
+        board.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     });
     scheduler.at(start + source_period * 2, [](System& board) {
         EXPECT_EQ(board.io().via().state().pins & M6522_PB1, 0);
@@ -256,12 +453,8 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
         EXPECT_NE(board.io().via().state().pins & M6522_PB1, 0);
         EXPECT_FALSE(board.io().pia2().ca2());
         board.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'Y'); });
-        board.io().pia1().inputs([](auto& inputs) {
-            inputs.port_a &= static_cast<uint8_t>(~EoiInput);
-        });
-        board.io().via().inputs([](auto& inputs) {
-            inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-        });
+        board.io().pia1().inputs([](auto& inputs) { inputs.port_a &= static_cast<uint8_t>(~EoiInput); });
+        board.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     });
     scheduler.at(start + source_period * 4, [](System& board) {
         EXPECT_EQ(board.io().via().state().pins & M6522_PB1, 0);
@@ -286,12 +479,11 @@ TEST_F(SystemTest, IeeeControllerReceiveRearmsBeforeTheNextPhysicalByte) {
 TEST_F(SystemTest, IeeeControllerReceiveRetainsFailureWhileWaitingForDavRelease) {
     IeeeController controller(system);
     system.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~'X'); });
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-    });
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     EXPECT_THROW(system.service_until([](const System&) { return false; },
-        [&](System&, Cycles) { controller.receive(); },
-        Cycles{30000}, "source never releases DAV"), std::runtime_error);
+                                      [&](System&, Cycles) { controller.receive(); }, Cycles{30000},
+                                      "source never releases DAV"),
+                 std::runtime_error);
     EXPECT_TRUE(controller.peek_failed());
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_TRUE(system.ieee().peek_ndac_released());
@@ -304,7 +496,7 @@ TEST_F(SystemTest, IeeeControllerReceiveRetainsFailureWhileWaitingForDavRelease)
 // Switching through command mode preserves the next unread byte and its EOI.
 TEST_F(SystemTest, IeeeControllerReceiveContinuesAcrossUntalkAndTalk) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     auto wire = system.trace_ieee();
     controller.command(Talk(Device{8}));
     controller.command(Secondary(Channel{0}));
@@ -318,26 +510,25 @@ TEST_F(SystemTest, IeeeControllerReceiveContinuesAcrossUntalkAndTalk) {
     EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
-    EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})),
-        command(Secondary(Channel{0})), data('X'), command(Untalk),
-        command(Talk(Device{8})), command(Secondary(Channel{0})), data('Y', Eoi::Last)));
+    EXPECT_THAT(wire.records(),
+                ElementsAre(command(Talk(Device{8})), command(Secondary(Channel{0})), data('X'), command(Untalk),
+                            command(Talk(Device{8})), command(Secondary(Channel{0})), data('Y', Eoi::Last)));
     EXPECT_FALSE(controller.peek_failed());
 }
 
 // Shared active assertions reject missing and trailing records without hiding flags.
 TEST_F(SystemTest, IeeeTransactionsDrainingAssertionsAreExactAndBounded) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     EXPECT_THROW(drain_rx(system, 0, ByteBudget, "bad limit"), std::invalid_argument);
-    EXPECT_THROW(require_drained_sequence(system, fifo_records({command(Unlisten)}),
-        ByteBudget, "missing"), std::runtime_error);
+    EXPECT_THROW(require_drained_sequence(system, {command(Unlisten)}, ByteBudget, "missing"), std::runtime_error);
     controller.command(Listen(Device{8}));
     controller.data('A');
     EXPECT_THROW(drain_rx(system, 1, ByteBudget, "bounded"), std::runtime_error);
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(data('A'))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{data('A')});
     controller.command(Unlisten);
     EXPECT_THROW(require_drained_sequence(system, {}, ByteBudget, "trailing"), std::runtime_error);
-    EXPECT_TRUE(rx_empty_now(system));
+    EXPECT_FALSE(take_rx(system));
     controller.command(Unlisten);
     controller.command(Untalk);
     try {
@@ -345,15 +536,15 @@ TEST_F(SystemTest, IeeeTransactionsDrainingAssertionsAreExactAndBounded) {
         FAIL() << "accepted surplus FIFO records";
     } catch (const std::runtime_error& error) {
         EXPECT_THAT(error.what(), HasSubstr("index=0"));
-        EXPECT_THAT(error.what(), HasSubstr("byte=0x3f ATN=1 EOI=unobserved"));
+        EXPECT_THAT(error.what(), HasSubstr("byte=0x3f ATN=1 EOI=0"));
     }
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(command(Untalk))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{command(Untalk)});
 }
 
 // A drain's nested status/data/acknowledgment clocks share the entire operation budget.
 TEST_F(SystemTest, IeeeTransactionsDrainHonorsDeadline) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     controller.command(Unlisten);
     const auto before = system.time();
     EXPECT_THROW(drain_rx(system, 2, Cycles{1}, "tiny deadline"), std::runtime_error);
@@ -364,7 +555,7 @@ TEST_F(SystemTest, IeeeTransactionsDrainHonorsDeadline) {
 // Quiet intervals include their endpoints and never consume an existing record.
 TEST_F(SystemTest, IeeeTransactionsEmptyNowIsNotAQuietInterval) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     EXPECT_TRUE(rx_empty_now(system));
     const auto before = system.time();
     require_rx_remains_empty(system, Cycles{100}, "quiet");
@@ -373,17 +564,16 @@ TEST_F(SystemTest, IeeeTransactionsEmptyNowIsNotAQuietInterval) {
     controller.command(Unlisten);
     EXPECT_THROW(require_rx_remains_empty(system, Cycles{0}, "nonempty endpoint"), std::runtime_error);
     EXPECT_TRUE(system.snapshot().ieee_rx_ready_o);
-    EXPECT_EQ(take_rx(system), std::optional<Record>{fifo_record(command(Unlisten))});
+    EXPECT_EQ(take_rx(system), std::optional<Record>{command(Unlisten)});
 }
 
 // A future CPU DAV edge invalidates a quiet interval even after an empty SPI sample.
 TEST_F(SystemTest, IeeeTransactionsQuietIntervalDetectsLaterCpuTransfer) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     system.cpu().assert_reset();
     test_asm::Scenario scenario(system);
-    const auto code = scenario.reserve("delayed DAV", test_asm::RegionKind::Code,
-        econopet::CpuAddress{0x0300}, 0x100);
+    const auto code = scenario.reserve("delayed DAV", test_asm::RegionKind::Code, econopet::CpuAddress{0x0300}, 0x100);
     scenario.reserve("vectors", test_asm::RegionKind::Vectors, econopet::CpuAddress{0xfffa}, 6);
     test_asm::mos6502::Program program(scenario, code);
     program.lda(test_asm::imm(PiaC2High.bits())).sta(pet::Pia2ControlB);
@@ -405,7 +595,7 @@ TEST_F(SystemTest, IeeeTransactionsQuietIntervalDetectsLaterCpuTransfer) {
 // Subscriptions disconnect cleanly and do not invent in-flight transfers at attachment.
 TEST_F(SystemTest, IeeeTransactionsWireObserversComposeAndDisconnect) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     auto first = system.trace_ieee();
     {
         auto second = system.trace_ieee();
@@ -427,12 +617,8 @@ TEST_F(SystemTest, IeeeTransactionsWireObserversComposeAndDisconnect) {
 TEST_F(SystemTest, IeeeWireTraceAttachesDuringPhysicalDavWithoutInventingAByte) {
     IeeeController controller(system);
     system.io().pia2().inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(~0xa5); });
-    system.io().pia1().inputs([](auto& inputs) {
-        inputs.port_a &= static_cast<uint8_t>(~EoiInput);
-    });
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-    });
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a &= static_cast<uint8_t>(~EoiInput); });
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     auto wire = system.trace_ieee();
     system.tick(10);
     EXPECT_TRUE(wire.records().empty());
@@ -440,9 +626,7 @@ TEST_F(SystemTest, IeeeWireTraceAttachesDuringPhysicalDavWithoutInventingAByte) 
     // A release followed by a new assertion creates exactly one physical byte.
     system.io().via().inputs([](auto& inputs) { inputs.port_b |= pet::Dav; });
     system.tick(1);
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-    });
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     system.tick(10);
     EXPECT_THAT(wire.records(), ElementsAre(data(0xa5, Eoi::Last)));
     EXPECT_TRUE(wire.capture().complete());
@@ -457,17 +641,13 @@ TEST_F(SystemTest, IeeeWireTraceResolvesPhysicalInputsAndOverlappingDavDrivers) 
         inputs.port_a = 0x0f;
         inputs.ca1 = false;
     });
-    system.io().pia1().inputs([](auto& inputs) {
-        inputs.port_a &= static_cast<uint8_t>(~EoiInput);
-    });
+    system.io().pia1().inputs([](auto& inputs) { inputs.port_a &= static_cast<uint8_t>(~EoiInput); });
     auto wire = system.trace_ieee();
     controller.write(pet::Pia2ControlB, PiaC2Low.bits());
     EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last)));
 
     // Hand off DAV while it remains asserted, without inventing assertion edges.
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-    });
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     system.tick(1);
     controller.write(pet::Pia2ControlB, PiaC2High.bits());
     controller.write(pet::Pia2ControlB, PiaC2Low.bits());
@@ -477,12 +657,9 @@ TEST_F(SystemTest, IeeeWireTraceResolvesPhysicalInputsAndOverlappingDavDrivers) 
 
     // Only a complete bus release permits another byte's DAV assertion.
     controller.write(pet::Pia2ControlB, PiaC2High.bits());
-    system.io().via().inputs([](auto& inputs) {
-        inputs.port_b &= static_cast<uint8_t>(~pet::Dav);
-    });
+    system.io().via().inputs([](auto& inputs) { inputs.port_b &= static_cast<uint8_t>(~pet::Dav); });
     system.tick(1);
-    EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last),
-        raw_record(0xff, true, Eoi::Last)));
+    EXPECT_THAT(wire.records(), ElementsAre(raw_record(0xff, true, Eoi::Last), raw_record(0xff, true, Eoi::Last)));
 }
 
 // The fitted PIA can assert DAV in handshake mode without a fabric DAV edge.
@@ -565,8 +742,8 @@ TEST_F(SystemTest, IeeeWireTraceCpuDirectionChangesReleaseAtnAndDio) {
         inputs.ca1 = false;
     });
     controller.write(pet::Pia2ControlB, PiaC2Low.bits());
-    EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0x51),
-        raw_record(0, true, Eoi::More)));
+    EXPECT_THAT(wire.records(),
+                ElementsAre(raw_record('R', true, Eoi::More), data(0x51), raw_record(0, true, Eoi::More)));
 
     // Reenabling output directions restores the retained byte and controller ATN.
     controller.write(pet::Pia2ControlB, econopet::io::PiaDdrAccess.bits());
@@ -575,7 +752,7 @@ TEST_F(SystemTest, IeeeWireTraceCpuDirectionChangesReleaseAtnAndDio) {
     system.io().pia2().inputs([](auto& inputs) { inputs.ca1 = true; });
     controller.write(pet::Pia2ControlB, PiaC2Low.bits());
     EXPECT_THAT(wire.records(), ElementsAre(raw_record('R', true, Eoi::More), data(0x51),
-        raw_record(0, true, Eoi::More), raw_record('R', true, Eoi::More)));
+                                            raw_record(0, true, Eoi::More), raw_record('R', true, Eoi::More)));
 }
 
 // A stale controller DAV snoop is not a second bus participant.
@@ -608,7 +785,7 @@ TEST_F(SystemTest, IeeeWireTraceIgnoresStaleControllerDavAtAttachmentAndCapture)
 // Preserve device DIO without also including a released controller's raw latch.
 TEST_F(SystemTest, IeeeWireTraceDeviceDataIgnoresInputModeControllerLatch) {
     IeeeController controller(system);
-    system.ieee().write_control(fpga::IeeeControlBit::Enabled);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
     controller.command(Talk(Device{8}));
     controller.command(Secondary(Channel{0}));
     controller.write(pet::Pia2ControlB, PiaC2High.bits());
@@ -621,8 +798,7 @@ TEST_F(SystemTest, IeeeWireTraceDeviceDataIgnoresInputModeControllerLatch) {
     system.spi().write(fpga::Register::IeeeTxLast, 'X');
     controller.write(pet::ViaPortB, static_cast<uint8_t>(BusReleased & ~pet::Nrfd));
     controller.write(pet::ViaPortB, BusReleased);
-    system.run_until([&](const System&) { return !wire.records().empty(); },
-        ByteBudget, "device DAV assertion");
+    system.run_until([&](const System&) { return !wire.records().empty(); }, ByteBudget, "device DAV assertion");
     EXPECT_THAT(wire.records(), ElementsAre(data('X', Eoi::Last)));
 }
 

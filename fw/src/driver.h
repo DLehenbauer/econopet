@@ -56,6 +56,10 @@ void set_cpu(cpu_state_t state);
 // Return the current CPU control flags.
 cpu_state_t get_cpu(void);
 
+// Accesses a physical PET PIA/VIA register while the CPU is halted.
+uint8_t pet_io_read(uint16_t addr);
+void pet_io_write(uint16_t addr, uint8_t data);
+
 // In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
 // the FPGA.
 typedef enum {
@@ -70,10 +74,6 @@ typedef enum {
 // valid argument.
 void set_cpu_type(cpu_type_t cpu);
 void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io);
-
-// True if a W65C02S is socketed. First call probes (clobbers $0400-$0402
-// and $FFFC), then caches.
-bool physical_cpu_present(void);
 
 void sync_state();
 

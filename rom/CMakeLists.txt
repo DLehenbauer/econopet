@@ -40,8 +40,7 @@ add_custom_target("PET_ROM" ALL
 # =============================================================================
 # ColourPET Edit ROMs (ACME)
 # =============================================================================
-# Build 4 variants: graphics/business keyboard x 40/80 columns.
-# The config file uses !ifndef guards so ACME -D flags override defaults.
+# Build graphics/business keyboard variants from generated configurations.
 
 # Find the ACME cross-assembler
 find_program(ACME_EXECUTABLE acme REQUIRED)
@@ -49,6 +48,9 @@ message(STATUS "Found ACME: ${ACME_EXECUTABLE}")
 
 # Define paths for ColourPET edit ROM
 set(CBM_EDIT_ROM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/cbm-edit-rom)
+set(COLOURPET_CONFIG ${CBM_EDIT_ROM_DIR}/config-custom/!colourpet40.asm)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${COLOURPET_CONFIG})
+file(READ ${COLOURPET_CONFIG} COLOURPET_CONFIG_TEXT)
 
 # Collect all assembly source files as dependencies
 file(GLOB COLOURPET_ASM_SOURCES 
@@ -83,21 +85,31 @@ foreach(VARIANT_NAME ${COLOURPET_VARIANTS})
     list(GET COLOURPET_FONTSET  ${_idx} _FONTSET)
 
     set(VARIANT_OUTPUT ${BIN_DIR}/${VARIANT_NAME}.bin)
+    set(VARIANT_CONFIG ${CMAKE_CURRENT_BINARY_DIR}/${VARIANT_NAME}.asm)
+
+    # The PR branch assigns defaults unconditionally, so -D cannot select variants.
+    set(VARIANT_CONFIG_TEXT "${COLOURPET_CONFIG_TEXT}")
+    foreach(SETTING CODEBASE KEYSCAN KEYBOARD COLUMNS FONTSET)
+        if(NOT VARIANT_CONFIG_TEXT MATCHES "(^|\n)${SETTING}[ \t]*=[ \t]*[0-9]+")
+            message(FATAL_ERROR "Missing ColourPET configuration setting: ${SETTING}")
+        endif()
+        string(REGEX REPLACE
+            "(^|\n)${SETTING}[ \t]*=[ \t]*[0-9]+"
+            "\\1${SETTING} = ${_${SETTING}}"
+            VARIANT_CONFIG_TEXT "${VARIANT_CONFIG_TEXT}"
+        )
+    endforeach()
+    file(GENERATE OUTPUT ${VARIANT_CONFIG} CONTENT "${VARIANT_CONFIG_TEXT}")
 
     add_custom_command(
         OUTPUT ${VARIANT_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${BIN_DIR}
         COMMAND ${ACME_EXECUTABLE}
-            -DCODEBASE=${_CODEBASE}
-            -DKEYSCAN=${_KEYSCAN}
-            -DKEYBOARD=${_KEYBOARD}
-            -DCOLUMNS=${_COLUMNS}
-            -DFONTSET=${_FONTSET}
             -o ${VARIANT_OUTPUT}
             -f plain
-            config-custom/!colourpet40.asm
+            ${VARIANT_CONFIG}
         WORKING_DIRECTORY ${CBM_EDIT_ROM_DIR}
-        DEPENDS ${COLOURPET_ASM_SOURCES}
+        DEPENDS ${COLOURPET_ASM_SOURCES} ${VARIANT_CONFIG}
         COMMENT "Assembling ColourPET edit ROM: ${VARIANT_NAME}"
         VERBATIM
     )

@@ -9,6 +9,12 @@
 #include "system_state.h"
 #include "usb/keyboard.h"
 
+// Performs a full PET reset, including CPU, IEEE-488 drive, and USB keyboard
+// state.
+//
+// NOTE: PET/fabric resets *must* go through `pet_reset()`. Pulling the CPU
+//       /RESB pin low independently is unsupported, as firmware does not detect
+//       or recover from an independent fabric reset.
 void pet_reset() {
     // Per the W65C02S datasheet (sections 3.10 - 3.11):
     //

@@ -37,6 +37,9 @@ typedef struct hid_keyboard_report_s {
 // Returns host monotonic time in microseconds.
 uint64_t time_us_64(void);
 
+// Platform adapters provide the Pico SDK reset-pulse delay on host targets.
+void sleep_us(uint64_t us);
+
 // Returns host monotonic time using the Pico SDK time representation.
 absolute_time_t get_absolute_time(void);
 
@@ -49,9 +52,14 @@ void test_register_file(const char* path, const char* content);
 // Reports exact path membership without opening or modifying a registered file.
 bool test_file_registered(const char* path);
 
+// Counts live cookie-backed FILE handles, including unregistered borrowers.
+size_t test_open_file_count(void);
+
 // Registers a mutable or read-only binary file for code that uses stdio.
-void test_register_binary_file(const char* path, const void* data, size_t size,
-                               bool writable);
+void test_register_binary_file(const char* path, const void* data, size_t size, bool writable);
+
+// Toggle backing-store write failures for existing and future fixture handles.
+void test_fail_file_writes(const char* path, bool fail);
 
 // Removes one registered file after all of its handles have been closed.
 void test_unregister_file(const char* path);
@@ -61,3 +69,6 @@ void test_clear_files(void);
 
 // Requires a subsequent fatal message to contain the given text.
 void test_expect_fatal_message(const char* substring);
+
+// Inspect cleanup state before the next host fatal error aborts.
+void test_expect_fatal_callback(void (*callback)(void));

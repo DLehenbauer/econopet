@@ -30,6 +30,7 @@
 #define ECONOPET_WB_KBD_BASE_ADDR 0x60000u
 #define ECONOPET_WB_BRAM_BASE_ADDR 0x68000u
 #define ECONOPET_WB_IEEE_BASE_ADDR 0x70000u
+#define ECONOPET_WB_IO_BASE_ADDR 0x78000u
 
 // Register-file Wishbone byte addresses (See common_pkg.sv for more details)
 #define ECONOPET_WB_STATUS_ADDR 0x40000u
@@ -45,7 +46,6 @@
 #define ECONOPET_REG_STATUS_CRT_MASK 0x02u
 #define ECONOPET_REG_STATUS_KEYBOARD_MASK 0x04u
 #define ECONOPET_REG_STATUS_BP_HALT_MASK 0x08u
-#define ECONOPET_REG_STATUS_PHYS_CPU_MASK 0x10u
 
 // CPU control masks (See common_pkg.sv for more details)
 #define ECONOPET_REG_CPU_READY_MASK 0x01u
@@ -101,14 +101,36 @@
 #define ECONOPET_WB_IEEE_TXS_ADDR 0x70006u
 #define ECONOPET_WB_IEEE_TXS_LAST_ADDR 0x70007u
 
-// IEEE control-write masks (See common_pkg.sv for more details)
-#define ECONOPET_IEEE_CTRL_ENABLE_MASK 0x01u
+// IEEE control-write masks (See common_pkg.sv for more details).
+// Bit 0 is reserved and ignored. FIFO flushes are one-shot requests.
 #define ECONOPET_IEEE_CTRL_FLUSH_MASK 0x02u
 #define ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK 0x08u
+// Bits 4-7 select emulated devices 8-11: 1 = emulate, 0 = do not emulate.
+// Every CTRL write replaces this mask, including writes requesting a flush.
+// Zero disables emulation and leaves physical IEEE I/O untouched. Any set bit
+// enables bus interception, masking physical devices at ALL addresses.
+// This is not a per-address switch between emulated and physical devices.
+#define ECONOPET_IEEE_CTRL_UNIT_MASK_SHIFT 4u
+#define ECONOPET_IEEE_CTRL_UNIT_MASK 0xf0u
 
 // IEEE control-read masks (See common_pkg.sv for more details)
+// Read-only enabled indication: at least one emulated device is selected.
 #define ECONOPET_IEEE_CTRL_RD_ENABLE_MASK 0x01u
 #define ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK 0x02u
+#define ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK 0x04u
+#define ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK 0x08u        // RX-head EOI, valid with RX_AVAIL.
+#define ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK 0x10u    // Ordered boundary: zero = ATN release, else listener mask.
+#define ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK 0x20u // Status DAV awaits acknowledgement.
+#define ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK 0x40u // Ordered source progress/IDLE metadata.
+
+// TALK-event payload uses the owner unit/channel layout in bits 5:0.
+// No EOI_GET means native TLK20 returned to IDLE without GET.
+// EOI_GET records consumed data EOF. RECHECK marks the subsequent TALK1 boundary.
+#define ECONOPET_IEEE_RX_TALK_EOI_GET_MASK 0x80u
+#define ECONOPET_IEEE_RX_TALK_RECHECK_MASK 0x40u
+// Boundary payload: listeners whose first data DAV has released in this ATN phase.
+#define ECONOPET_IEEE_RX_LISTEN_UNITS_MASK 0x0fu
 
 // IEEE status masks (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_ST_RX_AVAIL_MASK 0x01u
@@ -122,3 +144,11 @@
 
 // IEEE data FIFO capacity guaranteed by TX room (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_TX_BURST_CHUNK 64u
+
+// TX/TXS reads report modulo-256 NRFD GET progress for data/status respectively.
+// FIFO replacement preserves counts. IFC and global flush reset them.
+// SA writes bind either source to a unit/channel. PAUSE holds new presentations.
+// Zero retains unbound bench access. Pausing preserves active DAV until NDAC.
+#define ECONOPET_IEEE_TX_OWNER_VALID_MASK 0x80u
+#define ECONOPET_IEEE_TX_OWNER_PAUSE_MASK 0x40u
+#define ECONOPET_IEEE_TX_OWNER_UNIT_SHIFT 4u

@@ -40,67 +40,183 @@ struct SpiUnwindSentinel : std::runtime_error {
 
 // Install a tiny native instruction loop without the later assembler or ROM layer.
 void install_loop(System& board, cpu_type_t cpu, CpuAddress entry, uint8_t marker) {
-    const std::array<uint8_t, 8> mos6502{
-        0xa9, marker, 0x8d, static_cast<uint8_t>(Result.value()),
-        static_cast<uint8_t>(Result.value() >> 8), 0x4c,
-        static_cast<uint8_t>(entry.value()), static_cast<uint8_t>(entry.value() >> 8)};
+    const std::array<uint8_t, 8> mos6502{0xa9,
+                                         marker,
+                                         0x8d,
+                                         static_cast<uint8_t>(Result.value()),
+                                         static_cast<uint8_t>(Result.value() >> 8),
+                                         0x4c,
+                                         static_cast<uint8_t>(entry.value()),
+                                         static_cast<uint8_t>(entry.value() >> 8)};
     const std::array<uint8_t, 7> mc6809{
-        0x86, marker, 0xb7, static_cast<uint8_t>(Result.value() >> 8),
-        static_cast<uint8_t>(Result.value()), 0x20, 0xf9};
+        0x86, marker, 0xb7, static_cast<uint8_t>(Result.value() >> 8), static_cast<uint8_t>(Result.value()),
+        0x20, 0xf9};
     if (cpu == CPU_SOFT_6502) {
-        for (size_t index = 0; index < mos6502.size(); ++index) board.poke(SramAddress{entry.value() + index}, mos6502[index]);
+        for (size_t index = 0; index < mos6502.size(); ++index)
+            board.poke(SramAddress{entry.value() + index}, mos6502[index]);
     } else {
-        for (size_t index = 0; index < mc6809.size(); ++index) board.poke(SramAddress{entry.value() + index}, mc6809[index]);
+        for (size_t index = 0; index < mc6809.size(); ++index)
+            board.poke(SramAddress{entry.value() + index}, mc6809[index]);
     }
 }
 
 // Each view independently rejects temporary owners and active const-board work.
-template<class Owner>
+template <class Owner>
 concept HasSpiView = requires(Owner&& owner) { std::forward<Owner>(owner).spi(); };
-template<class Owner>
+template <class Owner>
 concept HasCpuView = requires(Owner&& owner) { std::forward<Owner>(owner).cpu(); };
-template<class View>
+template <class Owner>
+concept HasIeeeView = requires(Owner&& owner) { std::forward<Owner>(owner).ieee(); };
+template <class View>
 concept HasRead = requires(View& view) { view.read(fpga::Register::Status); };
-template<class View>
+template <class View>
 concept HasControlRead = requires(View& view) { view.read_control(); };
-template<class View>
+template <class View>
 concept HasStart = requires(View& view) { view.start(); };
-template<class View>
+template <class View>
 concept HasByte = requires(View& view) { view.byte(uint8_t{}); };
-template<class View>
+template <class View>
 concept HasFinish = requires(View& view) { view.finish(); };
-template<class Result>
-struct CallbackResult {
+template <class Result> struct CallbackResult {
     Result operator()(System::SpiCommands&) const;
 };
-template<class Result>
+template <class Result>
 concept CanReturnSpiResult = requires(System::SpiView<System>& view) { view.transaction(CallbackResult<Result>{}); };
+template <class View>
+concept HasCheckedTransaction = requires(View& view) { view.transaction(CallbackResult<void>{}); };
+template <class Owner>
+concept RejectsTemporaryViews = !requires(Owner&& owner) { std::forward<Owner>(owner).spi(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).cpu(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).ieee(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).io(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).execution(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).program6502(); } &&
+                                !requires(Owner&& owner) { std::forward<Owner>(owner).program6809(); };
+template <template <class> class View>
+constexpr bool BorrowsPersistentBoard =
+    std::is_constructible_v<View<System>, System&> && std::is_constructible_v<View<const System>, System&> &&
+    std::is_constructible_v<View<const System>, const System&> && !std::is_constructible_v<View<System>, System&&> &&
+    !std::is_constructible_v<View<const System>, System&&> &&
+    !std::is_constructible_v<View<const System>, const System&&>;
 static_assert(HasSpiView<System&> && HasSpiView<const System&>);
 static_assert(!HasSpiView<System> && !HasSpiView<const System>);
 static_assert(HasCpuView<System&> && HasCpuView<const System&>);
 static_assert(!HasCpuView<System> && !HasCpuView<const System>);
+static_assert(HasIeeeView<System&> && HasIeeeView<const System&>);
+static_assert(!HasIeeeView<System> && !HasIeeeView<const System>);
+static_assert(HasControlRead<System::IeeeView<System>> && !HasControlRead<System::IeeeView<const System>>);
+static_assert(!std::is_reference_v<decltype(std::declval<const System&&>().observation_source())>);
 static_assert(HasRead<System::SpiView<System>> && !HasRead<System::SpiView<const System>>);
 static_assert(HasControlRead<System::CpuView<System>> && !HasControlRead<System::CpuView<const System>>);
 static_assert(HasStart<System::CpuView<System>> && !HasStart<System::CpuView<const System>>);
 static_assert(!HasByte<System::SpiCommands> && !HasFinish<System::SpiCommands>);
 static_assert(!HasByte<System::SpiView<System>>);
-static_assert(!std::is_copy_constructible_v<System::SpiTransaction> && !std::is_move_constructible_v<System::SpiTransaction>);
+static_assert(HasCheckedTransaction<System::SpiView<System>> && !HasCheckedTransaction<System::SpiView<const System>>);
+static_assert(!std::is_copy_constructible_v<System::SpiTransaction> &&
+              !std::is_move_constructible_v<System::SpiTransaction>);
 static_assert(std::is_nothrow_destructible_v<System::SpiTransaction>);
 static_assert(CanReturnSpiResult<void> && CanReturnSpiResult<std::unique_ptr<int>>);
 static_assert(!CanReturnSpiResult<int&> && !CanReturnSpiResult<const int&>);
 static_assert(!CanReturnSpiResult<int*> && !CanReturnSpiResult<std::reference_wrapper<int>>);
 static_assert(!CanReturnSpiResult<const std::reference_wrapper<int>>);
-static_assert(!std::is_constructible_v<System::SpiView<const System>, System&&>);
-static_assert(!std::is_constructible_v<System::SpiView<const System>, const System&&>);
-static_assert(!std::is_constructible_v<System::CpuView<const System>, System&&>);
-static_assert(!std::is_constructible_v<System::CpuView<const System>, const System&&>);
+static_assert(RejectsTemporaryViews<System> && RejectsTemporaryViews<const System>);
+static_assert(BorrowsPersistentBoard<System::SpiView>);
+static_assert(BorrowsPersistentBoard<System::CpuView>);
+static_assert(BorrowsPersistentBoard<System::IeeeView>);
+static_assert(std::is_same_v<decltype(std::declval<econopet::io::Pia6520&>().peek_inputs()), econopet::io::Inputs>);
+static_assert(std::is_same_v<decltype(std::declval<econopet::io::Via6522&>().peek_inputs()), econopet::io::Inputs>);
+} // namespace
+
+// Temporary boards return owned identity and metadata rather than dangling views.
+TEST(SystemOwnership, TemporaryBoardAccessOwnsIdentityAndMetadata) {
+    const auto& source = System{}.observation_source();
+    EXPECT_NE(source, nullptr);
+    const auto& metadata = System{}.selected_rom();
+    EXPECT_FALSE(metadata.has_value());
+}
+
+// Passive API families share completed observations without starting SPI transactions.
+TEST_F(SystemTest, PassiveFamiliesRemainClockFreeDuringObservationAndAfterSpiFailure) {
+    system.cpu(CPU_SOFT_6502).prepare();
+    const auto inspect = [&](const System& board) {
+        const auto at = board.time();
+        const auto pins = board.snapshot();
+        EXPECT_EQ(std::to_underlying(board.cpu().peek_selection()), pins.cpu_selection_o);
+        EXPECT_EQ(board.cpu().peek_reset(), pins.cpu_reset_active_o);
+        EXPECT_EQ(board.cpu(CPU_SOFT_6502).peek_address(), pins.soft6502_addr_o);
+        EXPECT_EQ(board.cpu(CPU_SOFT_6809).peek_address(), pins.soft6809_addr_o);
+        EXPECT_EQ(board.ieee().peek_via_orb(), pins.ieee_via_orb_o);
+        EXPECT_EQ(board.ieee().peek_pia2_pb(), pins.ieee_pia2_pb_out_o);
+        EXPECT_EQ(board.ieee().peek_nrfd_released(), pins.ieee_cpu_nrfd_no);
+        EXPECT_EQ(board.ieee().peek_ndac_released(), pins.ieee_cpu_ndac_no);
+        EXPECT_EQ(board.ieee().peek_listening(), pins.ieee_listening_o);
+        EXPECT_EQ(board.ieee().peek_talking(), pins.ieee_talking_o);
+        board.cpu().peek_fetch_checkpoint();
+        EXPECT_EQ(board.time(), at);
+    };
+    const auto start = system.time();
+    inspect(system);
+    unsigned samples = 0;
+    auto subscription = system.observe([&](const System& board) {
+        inspect(board);
+        EXPECT_FALSE(board.spi().peek_failed());
+        ++samples;
+    });
+    system.tick(3);
+    EXPECT_EQ(samples, 3u);
+    EXPECT_EQ(system.time(), start + Cycles{3});
+    subscription.reset();
+
+    // An unfinished raw byte fails closed without disabling passive diagnostics.
+    {
+        auto transaction = system.spi().raw_transaction();
+        transaction.bit(true);
+    }
+    const auto stopped = system.time();
+    inspect(system);
+    EXPECT_TRUE(system.spi().peek_failed());
+    EXPECT_THROW(system.cpu().read_selection(), std::logic_error);
+    EXPECT_EQ(system.time(), stopped);
+}
+
+// Getter-like active reads retain physical SPI routing and elapsed-time semantics.
+TEST_F(SystemTest, ActiveFamilyReadsAdvanceTimeAndMatchPassiveEvidence) {
+    auto cpu = system.cpu(CPU_SOFT_6809);
+    cpu.prepare();
+    auto before = system.time();
+    EXPECT_EQ(cpu.read_selection(), cpu.peek_selection());
+    EXPECT_GT(system.time(), before);
+    before = system.time();
+    EXPECT_TRUE(cpu.read_control().contains(CpuControlBit::Reset));
+    EXPECT_GT(system.time(), before);
+    system.poke(RamProbe, Marker);
+    before = system.time();
+    EXPECT_EQ(system.spi().read(fpga::address(RamProbe)), system.peek(RamProbe));
+    EXPECT_GT(system.time(), before);
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits | fpga::IeeeControlBit::Flush);
+    before = system.time();
+    EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
+    EXPECT_GT(system.time(), before);
+    EXPECT_TRUE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::TxRoom));
+    before = system.time();
+    EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::TxEmpty));
+    EXPECT_GT(system.time(), before);
+    system.ieee().write_control({});
+    EXPECT_FALSE(system.ieee().read_control().contains(fpga::IeeeControlStatusBit::Enabled));
 }
 
 TEST_F(SystemTest, SpiCommandsValidateBeforeMutation) {
-    const std::vector<std::vector<uint8_t>> invalid{
-        {}, {0x40}, {0x40, 0x12}, {0x40, 0x12, 0x34, 0},
-        {0xc0, 0x12, 0x34}, {0xc0, 0x12, 0x34, 0x5a, 0},
-        {0x20, 0}, {0xa0}, {0x10}, {0x21}, {0xd0, 0x12, 0x34, 0x5a}};
+    const std::vector<std::vector<uint8_t>> invalid{{},
+                                                    {0x40},
+                                                    {0x40, 0x12},
+                                                    {0x40, 0x12, 0x34, 0},
+                                                    {0xc0, 0x12, 0x34},
+                                                    {0xc0, 0x12, 0x34, 0x5a, 0},
+                                                    {0x20, 0},
+                                                    {0xa0},
+                                                    {0x10},
+                                                    {0x21},
+                                                    {0xd0, 0x12, 0x34, 0x5a}};
     const auto start = system.time();
     for (const auto& bytes : invalid) {
         expect_failure<std::invalid_argument>(system, "SPI command", [&] { system.spi().command(bytes); });
@@ -133,9 +249,8 @@ TEST_F(SystemTest, SpiReachesProductionRegistersAndBothSramBanksUnderReset) {
 TEST_F(SystemTest, UnmappedWishboneAccessFailsClosedWithBoundedEvidence) {
     const auto start = system.time();
     const auto marker = system.peek(RamProbe);
-    expect_failure<std::runtime_error>(system, "deadline", [&] {
-        system.spi().read(LastWishboneAddress);
-    }, "controller readiness");
+    expect_failure<std::runtime_error>(
+        system, "deadline", [&] { system.spi().read(LastWishboneAddress); }, "controller readiness");
     EXPECT_GT(system.time(), start);
     EXPECT_EQ(system.peek(RamProbe), marker);
     EXPECT_TRUE(system.spi().peek_failed());
@@ -192,11 +307,12 @@ TEST_F(SystemTest, RawSpiAbortsPartialInputAndRejectsCompetingOwners) {
 TEST_F(SystemTest, RawSpiTimingVariationKeepsEveryCompleteClockPhase) {
     for (const auto half_period : {Cycles{2}, Cycles{5}}) {
         auto owner = system.spi().raw_transaction(half_period);
-        const std::array<uint8_t, 4> bytes{
-            fpga::command_byte(fpga::SpiCommand::WriteAt, fpga::address(RamProbe)),
-            static_cast<uint8_t>(RamProbe.value() >> 8), static_cast<uint8_t>(RamProbe.value()), Marker};
+        const std::array<uint8_t, 4> bytes{fpga::command_byte(fpga::SpiCommand::WriteAt, fpga::address(RamProbe)),
+                                           static_cast<uint8_t>(RamProbe.value() >> 8),
+                                           static_cast<uint8_t>(RamProbe.value()), Marker};
         const auto start = system.time();
-        for (const auto value : bytes) owner.byte(value);
+        for (const auto value : bytes)
+            owner.byte(value);
         constexpr uint64_t HalfPeriodsPerByte = 17;
         EXPECT_EQ(system.time() - start, half_period * HalfPeriodsPerByte * bytes.size());
         owner.finish();
@@ -208,12 +324,14 @@ TEST_F(SystemTest, RawSpiTimingVariationKeepsEveryCompleteClockPhase) {
 
 TEST_F(SystemTest, UnfinishedRawSpiScopeFailsClosedWithoutUnwindClocks) {
     auto stopped = system.time();
-    EXPECT_THROW({
-        auto owner = system.spi().raw_transaction();
-        owner.bit(true);
-        stopped = system.time();
-        throw UnwindSentinel{};
-    }, UnwindSentinel);
+    EXPECT_THROW(
+        {
+            auto owner = system.spi().raw_transaction();
+            owner.bit(true);
+            stopped = system.time();
+            throw UnwindSentinel{};
+        },
+        UnwindSentinel);
     EXPECT_EQ(system.time(), stopped);
     EXPECT_TRUE(system.spi().peek_failed());
     EXPECT_TRUE(system.snapshot().spi_cs_ni);
@@ -229,13 +347,13 @@ TEST_F(SystemTest, UnfinishedRawSpiScopeFailsClosedWithoutUnwindClocks) {
 
 TEST_F(SystemTest, CheckedSpiCallbackPreservesCommandPipelineAndReturnsOwnedResult) {
     const auto address = fpga::address(RamProbe);
-    const std::array<uint8_t, 4> first{
-        fpga::command_byte(fpga::SpiCommand::WriteAt, address),
-        static_cast<uint8_t>(address.value() >> 8), static_cast<uint8_t>(address.value()), Marker};
+    const std::array<uint8_t, 4> first{fpga::command_byte(fpga::SpiCommand::WriteAt, address),
+                                       static_cast<uint8_t>(address.value() >> 8),
+                                       static_cast<uint8_t>(address.value()), Marker};
     const std::array<uint8_t, 2> next{fpga::command_byte(fpga::SpiCommand::WriteNext), OtherMarker};
-    const std::array<uint8_t, 3> seek{
-        fpga::command_byte(fpga::SpiCommand::ReadAt, address),
-        static_cast<uint8_t>(address.value() >> 8), static_cast<uint8_t>(address.value())};
+    const std::array<uint8_t, 3> seek{fpga::command_byte(fpga::SpiCommand::ReadAt, address),
+                                      static_cast<uint8_t>(address.value() >> 8),
+                                      static_cast<uint8_t>(address.value())};
     const std::array<uint8_t, 1> read_next{fpga::command_byte(fpga::SpiCommand::ReadNext)};
     const auto result = system.spi().transaction([&](auto& commands) {
         EXPECT_FALSE(system.snapshot().spi_cs_ni);
@@ -266,7 +384,8 @@ TEST_F(SystemTest, CheckedSpiCallbackFailuresRetainOriginalExceptionAndTimestamp
         commands.command(next);
         stopped = system.time();
         throw UnwindSentinel{};
-    }), UnwindSentinel);
+    }),
+                 UnwindSentinel);
     EXPECT_TRUE(entered);
     EXPECT_EQ(system.time(), stopped);
     EXPECT_TRUE(system.spi().peek_failed());
@@ -287,7 +406,8 @@ TEST_F(SystemTest, CheckedSpiCompletionFailureCannotReturnSuccess) {
     EXPECT_THROW(system.spi().transaction([&](auto&) {
         work_completed = true;
         return Marker;
-    }), SpiUnwindSentinel);
+    }),
+                 SpiUnwindSentinel);
     EXPECT_TRUE(work_completed);
     EXPECT_EQ(system.time(), stopped);
     EXPECT_TRUE(system.spi().peek_failed());
@@ -323,11 +443,10 @@ TEST_F(SystemTest, SpiExceptionsAtEveryTransportPhaseRetainOriginalFailure) {
         auto subscription = subject.observe([&](const System& observed) {
             ++callbacks;
             const auto pins = observed.snapshot();
-            if ((phase == Phase::Setup && !pins.spi_cs_ni && !pins.spi_sck_i)
-                || (phase == Phase::Shift && !pins.spi_cs_ni && pins.spi_sck_i)
-                || (phase == Phase::Drain && !pins.spi_cs_ni && pins.spi_stall_o
-                    && callbacks > WriteTransferCycles)
-                || (phase == Phase::Release && pins.spi_cs_ni)) {
+            if ((phase == Phase::Setup && !pins.spi_cs_ni && !pins.spi_sck_i) ||
+                (phase == Phase::Shift && !pins.spi_cs_ni && pins.spi_sck_i) ||
+                (phase == Phase::Drain && !pins.spi_cs_ni && pins.spi_stall_o && callbacks > WriteTransferCycles) ||
+                (phase == Phase::Release && pins.spi_cs_ni)) {
                 injected = true;
                 stopped = observed.time();
                 throw SpiUnwindSentinel{};
@@ -359,8 +478,7 @@ TEST_F(SystemTest, CheckedSpiValidationCanBeCaughtInsideOwnerButUnwindingFailsCl
     });
     EXPECT_FALSE(system.spi().peek_failed());
     EXPECT_NO_THROW(system.spi().read(fpga::Register::Status));
-    EXPECT_THROW(system.spi().transaction([&](auto& commands) { commands.command(empty); }),
-        std::invalid_argument);
+    EXPECT_THROW(system.spi().transaction([&](auto& commands) { commands.command(empty); }), std::invalid_argument);
     EXPECT_TRUE(system.spi().peek_failed());
     EXPECT_TRUE(system.snapshot().spi_cs_ni);
 }
@@ -371,9 +489,9 @@ TEST_F(SystemTest, SpiReadyWaitAcceptsFinalCycleAndRestoresShortDeadline) {
     auto reference_owner = reference.spi().raw_transaction();
     auto owner = system.spi().raw_transaction();
     auto short_owner = short_board.spi().raw_transaction();
-    const std::array<uint8_t, 4> bytes{
-        fpga::command_byte(fpga::SpiCommand::WriteAt, fpga::address(RamProbe)),
-        static_cast<uint8_t>(RamProbe.value() >> 8), static_cast<uint8_t>(RamProbe.value()), Marker};
+    const std::array<uint8_t, 4> bytes{fpga::command_byte(fpga::SpiCommand::WriteAt, fpga::address(RamProbe)),
+                                       static_cast<uint8_t>(RamProbe.value() >> 8),
+                                       static_cast<uint8_t>(RamProbe.value()), Marker};
     for (const auto value : bytes) {
         reference_owner.byte(value);
         owner.byte(value);
@@ -407,10 +525,11 @@ TEST_F(SystemTest, ActiveSpiPollingCountsEveryTransportCycle) {
     const auto active_start = system.time();
     bool complete = false;
     system.service_until([&](const System&) { return complete; },
-        [&](System& board, Cycles remaining) {
-            EXPECT_EQ(remaining, cost);
-            complete = board.spi().read(fpga::address(RamProbe)) == System::IdleRamByte;
-        }, cost, "SPI poll");
+                         [&](System& board, Cycles remaining) {
+                             EXPECT_EQ(remaining, cost);
+                             complete = board.spi().read(fpga::address(RamProbe)) == System::IdleRamByte;
+                         },
+                         cost, "SPI poll");
     EXPECT_EQ(system.time() - active_start, cost);
     EXPECT_FALSE(system.spi().peek_failed());
 }
@@ -419,17 +538,20 @@ TEST_F(SystemTest, ActiveSpiStallAndReleaseCannotExtendDeadline) {
     constexpr Cycles StallDeadline{200};
     const auto start = system.time();
     EXPECT_THROW(system.service_until([](const System&) { return false; },
-        [](System& board, Cycles) { board.spi().read(LastWishboneAddress); },
-        StallDeadline, "outer SPI deadline"), std::runtime_error);
+                                      [](System& board, Cycles) { board.spi().read(LastWishboneAddress); },
+                                      StallDeadline, "outer SPI deadline"),
+                 std::runtime_error);
     EXPECT_EQ(system.time() - start, StallDeadline);
     EXPECT_TRUE(system.spi().peek_failed());
     System short_board;
     constexpr Cycles ShortBudget{3};
     const auto short_start = short_board.time();
     bool completed_work = false;
-    EXPECT_THROW(short_board.service_until([](const System&) { return false; },
-        [&](System& board, Cycles) { board.spi().transaction([&](auto&) { completed_work = true; }); },
-        ShortBudget, "release deadline"), std::runtime_error);
+    EXPECT_THROW(short_board.service_until(
+                     [](const System&) { return false; },
+                     [&](System& board, Cycles) { board.spi().transaction([&](auto&) { completed_work = true; }); },
+                     ShortBudget, "release deadline"),
+                 std::runtime_error);
     EXPECT_TRUE(completed_work);
     EXPECT_EQ(short_board.time() - short_start, Cycles{2});
     EXPECT_TRUE(short_board.spi().peek_failed());
@@ -438,12 +560,20 @@ TEST_F(SystemTest, ActiveSpiStallAndReleaseCannotExtendDeadline) {
 TEST_F(SystemTest, CaughtSpiFailureCannotBeReportedAsSuccessfulCompletion) {
     unsigned predicates = 0;
     bool caught = false;
-    EXPECT_THROW(system.service_until([&](const System&) { ++predicates; return caught; },
-        [&](System& board, Cycles) {
-            try {
-                board.spi().transaction([](auto&) { throw UnwindSentinel{}; });
-            } catch (const UnwindSentinel&) { caught = true; }
-        }, Cycles{10}, "caught SPI failure"), std::logic_error);
+    EXPECT_THROW(system.service_until(
+                     [&](const System&) {
+                         ++predicates;
+                         return caught;
+                     },
+                     [&](System& board, Cycles) {
+                         try {
+                             board.spi().transaction([](auto&) { throw UnwindSentinel{}; });
+                         } catch (const UnwindSentinel&) {
+                             caught = true;
+                         }
+                     },
+                     Cycles{10}, "caught SPI failure"),
+                 std::logic_error);
     EXPECT_TRUE(caught);
     EXPECT_EQ(predicates, 1u);
     EXPECT_TRUE(system.spi().peek_failed());
@@ -452,6 +582,7 @@ TEST_F(SystemTest, CaughtSpiFailureCannotBeReportedAsSuccessfulCompletion) {
 TEST_F(SystemTest, SpiAndCpuViewsRejectCapturedMutationFromObservationAndEdits) {
     auto spi = system.spi();
     auto cpu = system.cpu(CPU_SOFT_6502);
+    auto ieee = system.ieee();
     const auto verify = [&] {
         const auto start = system.time();
         EXPECT_THROW(spi.read(fpga::Register::Status), std::logic_error);
@@ -466,6 +597,9 @@ TEST_F(SystemTest, SpiAndCpuViewsRejectCapturedMutationFromObservationAndEdits) 
         EXPECT_THROW(cpu.release_reset(), std::logic_error);
         EXPECT_THROW(cpu.write_vector(Entry6502), std::logic_error);
         EXPECT_THROW(cpu.write_control_raw(0), std::logic_error);
+        EXPECT_THROW(ieee.read_status(), std::logic_error);
+        EXPECT_THROW(ieee.read_control(), std::logic_error);
+        EXPECT_THROW(ieee.write_control({}), std::logic_error);
         EXPECT_EQ(system.time(), start);
         EXPECT_FALSE(spi.peek_failed());
     };
@@ -533,9 +667,8 @@ TEST_F(SystemTest, CpuLifecycleSwitchesNativeCoresAndPreservesHistoryAcrossReset
     const auto run = [&](cpu_type_t selection, CpuAddress entry, uint8_t value) {
         system.cpu(selection).start(entry);
         EXPECT_FALSE(system.cpu().peek_reset());
-        system.run_until([&](const System& board) {
-            return board.peek(SramAddress{Result.value()}) == value;
-        }, ExecutionBudget, "native CPU loop");
+        system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == value; },
+                         ExecutionBudget, "native CPU loop");
     };
     run(CPU_SOFT_6502, Entry6502, Marker);
     EXPECT_TRUE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, 0));
@@ -551,7 +684,7 @@ TEST_F(SystemTest, CpuLifecycleSwitchesNativeCoresAndPreservesHistoryAcrossReset
     EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
     EXPECT_EQ(system.peek(SramAddress{Result.value()}), 0);
     run(CPU_SOFT_6809, Entry6809, OtherMarker);
-    EXPECT_EQ(system.cpu().read_control(), CpuControl{});
+    EXPECT_EQ(system.cpu().read_control(), CpuControl{CpuControlBit::Ready});
     EXPECT_EQ(system.peek(SramAddress{pet::Reset6809.value()}), Entry6809.value() >> 8);
     EXPECT_EQ(system.peek(SramAddress{(pet::Reset6809 + 1).value()}), Entry6809.value() & 0xff);
     EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint));
@@ -575,8 +708,8 @@ TEST_F(SystemTest, Halted6502SyncDoesNotAdvanceFetchCheckpoint) {
     system.poke(SramAddress{Entry6502.value()}, StopOpcode);
     auto cpu = system.cpu(CPU_SOFT_6502);
     cpu.start(Entry6502);
-    system.run_until([](const System& board) { return !board.snapshot().cpu_ready_o; },
-        ExecutionBudget, "6502 stopped on SYNC");
+    system.run_until([](const System& board) { return !board.snapshot().cpu_ready_o; }, ExecutionBudget,
+                     "6502 stopped on SYNC");
     ASSERT_EQ(cpu.peek_address(), Entry6502);
     const auto checkpoint = cpu.peek_fetch_checkpoint();
     system.tick(ExecutionSlice);
@@ -587,25 +720,82 @@ TEST_F(SystemTest, Halted6502SyncDoesNotAdvanceFetchCheckpoint) {
     EXPECT_EQ(cpu.peek_fetch_checkpoint(), checkpoint);
     system.poke(SramAddress{Entry6502.value()}, NopOpcode);
     system.spi().write(fpga::Register::Breakpoint, ECONOPET_REG_BP_CTL_CLEAR_MASK);
-    system.run_until([&](const System& board) {
-        return board.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint);
-    }, ExecutionBudget, "6502 resumed fetch");
+    system.run_until(
+        [&](const System& board) { return board.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint); },
+        ExecutionBudget, "6502 resumed fetch");
+}
+
+TEST_F(SystemTest, ClearingReadyPauses6809WithoutResetAndResumesMemoryWrites) {
+    install_loop(system, CPU_SOFT_6809, Entry6809, Marker);
+    auto cpu = system.cpu(CPU_SOFT_6809);
+    cpu.start(Entry6809);
+    system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == Marker; },
+                     ExecutionBudget, "6809 running before halt");
+
+    // SPI-slot ordering pauses the CPU before subsequent memory traffic.
+    cpu.write_control_raw(0);
+    ASSERT_FALSE(cpu.peek_reset());
+    const auto address = cpu.peek_address();
+    const auto checkpoint = cpu.peek_fetch_checkpoint();
+
+    // SPI memory traffic cannot advance the halted core or replace its pending data.
+    system.spi().write(fpga::address(SramAddress{Result.value()}), 0);
+    system.tick(ExecutionSlice);
+    EXPECT_EQ(system.peek(SramAddress{Result.value()}), 0);
+    EXPECT_EQ(cpu.peek_address(), address);
+    EXPECT_EQ(cpu.peek_fetch_checkpoint(), checkpoint);
+    EXPECT_FALSE(cpu.peek_reset());
+
+    // Resuming without reset restores ordinary CPU writes.
+    cpu.write_control_raw(CpuControl{CpuControlBit::Ready}.bits());
+    system.run_until([&](const System& board) { return board.peek(SramAddress{Result.value()}) == Marker; },
+                     ExecutionBudget, "6809 resumed after halt");
+    EXPECT_FALSE(cpu.peek_reset());
+}
+
+// Operand/data reads, inactive cores and physical SYNC cannot invent a soft-core fetch.
+TEST_F(SystemTest, CpuFetchAttributionRejectsDataAndPhysicalSync) {
+    test_asm::Scenario scenario(system);
+    test_asm::mos6502::Program program(scenario, scenario.reserve("code", test_asm::RegionKind::Code, Entry6502, 32));
+    program.lda(Result).sta(Result + 1).jmp(program.mark("park"));
+    program.install();
+    system.poke(SramAddress{Result.value()}, Marker);
+    system.cpu(CPU_SOFT_6502).start(Entry6502);
+    system.tick(ExecutionSlice);
+    ASSERT_EQ(system.peek(SramAddress{(Result + 1).value()}), Marker);
+    ASSERT_TRUE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, 0));
+    for (const auto address : {Entry6502 + 1, Entry6502 + 2, Result, Result + 1}) {
+        EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(address, 0));
+        EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_fetched_at(address, 0));
+    }
+    system.cpu().assert_reset();
+    const auto checkpoint = system.cpu().peek_fetch_checkpoint();
+    for (const auto selection : {CPU_SOFT_6502, CPU_SOFT_6809, CPU_PHYS_6502}) {
+        system.cpu(selection).select();
+        system.drive_physical_cpu({Entry6502, std::nullopt, true});
+        system.spi().read(fpga::address(SramAddress{Entry6502.value()}));
+        system.tick(ExecutionSlice);
+        EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
+    }
+    system.cpu().release_reset();
+    system.tick(ExecutionSlice);
+    EXPECT_EQ(system.cpu().peek_fetch_checkpoint(), checkpoint);
+    EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(Entry6502, checkpoint));
+    EXPECT_FALSE(system.cpu(CPU_SOFT_6809).peek_fetched_at(Entry6502, checkpoint));
 }
 
 TEST_F(SystemTest, CpuSelectionReadsAndResetReleaseAcceptSuperpetIoMode) {
     for (const auto selection : {CPU_PHYS_6502, CPU_SOFT_6502, CPU_SOFT_6809}) {
         system.cpu(selection).prepare();
-        const auto configuration = static_cast<uint8_t>(
-            static_cast<uint8_t>(selection) | ECONOPET_CPU_SEL_SUPERPET_IO_MASK);
+        const auto configuration =
+            static_cast<uint8_t>(static_cast<uint8_t>(selection) | ECONOPET_CPU_SEL_SUPERPET_IO_MASK);
         system.spi().write(fpga::Register::CpuSelect, configuration);
         EXPECT_EQ(system.cpu().peek_selection(), selection);
         EXPECT_EQ(system.cpu().read_selection(), selection);
         EXPECT_NO_THROW(system.cpu(selection).release_reset());
         EXPECT_FALSE(system.cpu().peek_reset());
-        const bool ready = selection != CPU_SOFT_6809;
-        EXPECT_EQ(system.snapshot().cpu_ready_o, ready);
-        EXPECT_EQ(system.cpu().read_control(),
-            ready ? CpuControl{CpuControlBit::Ready} : CpuControl{});
+        EXPECT_TRUE(system.snapshot().cpu_ready_o);
+        EXPECT_EQ(system.cpu().read_control(), CpuControl{CpuControlBit::Ready});
         EXPECT_EQ(system.spi().read(fpga::Register::CpuSelect), configuration);
     }
 }
@@ -627,8 +817,7 @@ TEST_F(SystemTest, CpuControlReadsIgnoreUnspecifiedRegisterBits) {
 
 TEST_F(SystemTest, CpuLifecyclePreservesSuperpetModeDuringCoreSelection) {
     system.cpu().assert_reset();
-    system.spi().write(fpga::Register::CpuSelect,
-        ECONOPET_CPU_SEL_SOFT_6502 | ECONOPET_CPU_SEL_SUPERPET_IO_MASK);
+    system.spi().write(fpga::Register::CpuSelect, ECONOPET_CPU_SEL_SOFT_6502 | ECONOPET_CPU_SEL_SUPERPET_IO_MASK);
     for (const auto selected : {CPU_SOFT_6502, CPU_PHYS_6502, CPU_SOFT_6809}) {
         auto cpu = system.cpu(selected);
         cpu.select();
@@ -646,8 +835,7 @@ TEST_F(SystemTest, AssertedVideoStatusBitDenotesTextMode) {
     constexpr uint8_t Ca2FixedLow = 0x0c;
     constexpr uint8_t Ca2FixedHigh = 0x0e;
     for (const bool text : {false, true}) {
-        io::write(system.io().via(), io::ViaRegister::Pcr,
-            text ? Ca2FixedHigh : Ca2FixedLow, system.time());
+        io::write(system.io().via(), io::ViaRegister::Pcr, text ? Ca2FixedHigh : Ca2FixedLow, system.time());
         system.tick(1);
         const auto raw = system.spi().read(fpga::Register::Status);
         EXPECT_EQ((raw & ECONOPET_REG_STATUS_TEXT_MODE_MASK) != 0, text);
@@ -660,9 +848,9 @@ TEST_F(SystemTest, ResetVectorRequiresIdleAndDrainedSpiTransport) {
     cpu.prepare();
     const auto vector = SramAddress{pet::Reset6502.value()};
     const auto address = fpga::address(vector);
-    const std::array<uint8_t, 4> write{
-        fpga::command_byte(fpga::SpiCommand::WriteAt, address),
-        static_cast<uint8_t>(address.value() >> 8), static_cast<uint8_t>(address.value()), Marker};
+    const std::array<uint8_t, 4> write{fpga::command_byte(fpga::SpiCommand::WriteAt, address),
+                                       static_cast<uint8_t>(address.value() >> 8),
+                                       static_cast<uint8_t>(address.value()), Marker};
     system.spi().transaction([&](auto& commands) {
         commands.command(write);
         const auto start = system.time();
@@ -713,8 +901,8 @@ TEST_F(SystemTest, Native6809SyncHistoryIsInspectableAndSurvivesReset) {
     auto cpu = system.cpu(CPU_SOFT_6809);
     cpu.start(Entry6809);
     const auto checkpoint = cpu.peek_fetch_checkpoint();
-    system.run_until([](const System& board) { return board.snapshot().soft6809_fetch_o; },
-        ExecutionBudget, "6809 native SYNC");
+    system.run_until([](const System& board) { return board.snapshot().soft6809_fetch_o; }, ExecutionBudget,
+                     "6809 native SYNC");
     const auto observed = cpu.peek_address();
     EXPECT_TRUE(cpu.peek_fetched_at(observed, checkpoint));
     EXPECT_FALSE(system.cpu(CPU_SOFT_6502).peek_fetched_at(observed, checkpoint));

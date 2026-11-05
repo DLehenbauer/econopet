@@ -16,7 +16,7 @@ extern "C" {
 #include "test_support.h"
 }
 
-// RX observations share the wire record shape, with EOI explicitly unobserved.
+// RX observations retain the DAV-sampled byte, ATN and EOI.
 using IeeeRxRecord = ieee_test::Record;
 class FirmwareRxTrace;
 
@@ -24,7 +24,7 @@ class FirmwareRxTrace;
 // Declare after the board. Concurrent or nested sessions are unsupported.
 // Mutating operations require an idle bus, outside observation/input-edit/stimulus callbacks.
 class FirmwareSession {
-public:
+  public:
     // Receive the original teardown exception of any type and return without throwing.
     using TeardownErrorHandler = void (*)(std::exception_ptr);
 
@@ -37,19 +37,17 @@ public:
     // Unmount and release all owned globals, propagating any teardown error.
     void close();
     // Install a writable fixture under an unregistered shared path in drive slot zero.
-    void mount(const std::vector<uint8_t>& image, const char* name = "test.d64");
+    void mount(const std::vector<uint8_t>& image, const char* name = "test.d64", unsigned int slot = 0);
     // Mount an owned checked fixture, copying bytes before the temporary expires.
-    void mount(const disk_fixture::D64& image, const char* name = "test.d64") {
-        mount(image.bytes(), name);
-    }
+    void mount(const disk_fixture::D64& image, const char* name = "test.d64") { mount(image.bytes(), name); }
     // Run one cooperative drive service pass through real FPGA SPI pins.
     void service();
     // Service this board while the session lives, rejecting closed or expired owners.
     RunConfiguration::Service service_adapter();
-    // Own RX storage and registration, recording absolute production status/RX reads.
+    // Own RX storage and registration for absolute production CTRL/STATUS/RX reads.
     FirmwareRxTrace trace_rx();
 
-private:
+  private:
     std::shared_ptr<bool> active_ = std::make_shared<bool>(false);
     System& board_;
     std::vector<std::string> fixture_paths_;
@@ -57,16 +55,17 @@ private:
     test_observation::TraceSource<IeeeRxRecord> rx_source_;
 };
 
-// Records adjacent absolute status/RX reads, with no intervening board cycles.
+// Records adjacent absolute CTRL/STATUS/RX reads, with no intervening board cycles.
 // This semantic trace does not decode arbitrary pipelined or burst traffic.
-// RX contains byte/ATN only. Use ieee_test::WireTrace for EOI evidence.
+// Use ieee_test::WireTrace for independent physical EOI evidence.
 class FirmwareRxTrace : public test_observation::ScopedRecorder<IeeeRxRecord> {
-public:
+  public:
     FirmwareRxTrace(const FirmwareRxTrace&) = delete;
     FirmwareRxTrace& operator=(const FirmwareRxTrace&) = delete;
     FirmwareRxTrace(FirmwareRxTrace&&) noexcept = default;
     FirmwareRxTrace& operator=(FirmwareRxTrace&&) noexcept = default;
-private:
+
+  private:
     friend class FirmwareSession;
     // Register with this session only, allowing independent simultaneous recorders.
     FirmwareRxTrace(System& board, test_observation::TraceSource<IeeeRxRecord>& source);

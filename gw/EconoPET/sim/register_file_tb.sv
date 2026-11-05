@@ -103,6 +103,7 @@ module register_file_tb;
         `assert_equal(data[REG_STATUS_CRT_BIT], config_crt);
         `assert_equal(data[REG_STATUS_KEYBOARD_BIT], config_keyboard);
         `assert_equal(data[REG_STATUS_BP_HALT_BIT], 1'b0);
+        `assert_equal(data[7:4], 4'b0000);
     endtask
 
     task test_reg(input logic [REG_ADDR_WIDTH-1:0] addr, input logic [DATA_WIDTH-1:0] data);

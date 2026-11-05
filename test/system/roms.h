@@ -70,13 +70,14 @@ inline constexpr CommodoreEntries Rom4Entries{
 
 // Exact Waterloo revision-12 entries, including prepared-state boundaries.
 struct WaterlooEntries {
-    econopet::CpuAddress IeeeInit, AtnDown, AtnUp, EoiDown, EoiUp;
+    econopet::CpuAddress IeeeInit, ClearIoHooks, AtnDown, AtnUp, EoiDown, EoiUp;
     econopet::CpuAddress Unlisten, Untalk, Listen, Talk, EoiByte, FinalByte, ByteOut;
     econopet::CpuAddress Open, Close, RelOpen, Scratch, Rename, Initialize;
     econopet::CpuAddress Input, RelPosition, Status;
 };
 inline constexpr WaterlooEntries WaterlooRevision12{
     .IeeeInit = econopet::CpuAddress{0xc188},
+    .ClearIoHooks = econopet::CpuAddress{0xe77a},
     .AtnDown = econopet::CpuAddress{0xc14f},
     .AtnUp = econopet::CpuAddress{0xc16e},
     .EoiDown = econopet::CpuAddress{0xc176},

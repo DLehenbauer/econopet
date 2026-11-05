@@ -32,24 +32,30 @@ enum class StatusBit : uint8_t {
     FixedDisplay = ECONOPET_REG_STATUS_CRT_MASK,
     GraphicsKeyboard = ECONOPET_REG_STATUS_KEYBOARD_MASK,
     BreakpointHalt = ECONOPET_REG_STATUS_BP_HALT_MASK,
-    PhysicalCpu = ECONOPET_REG_STATUS_PHYS_CPU_MASK,
-    All = Text | FixedDisplay | GraphicsKeyboard | BreakpointHalt | PhysicalCpu,
+    All = Text | FixedDisplay | GraphicsKeyboard | BreakpointHalt,
 };
 using Status = econopet::Flags<StatusBit>;
 using econopet::operator|;
 
 enum class IeeeControlBit : uint8_t {
-    Enabled = ECONOPET_IEEE_CTRL_ENABLE_MASK,
+    // Select all four emulated devices. Zero selection leaves physical I/O alone.
+    AllEmulatedUnits = ECONOPET_IEEE_CTRL_UNIT_MASK,
     Flush = ECONOPET_IEEE_CTRL_FLUSH_MASK,
     DataFlush = ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK,
-    All = Enabled | Flush | DataFlush,
+    StatusFlush = ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK,
+    All = AllEmulatedUnits | Flush | DataFlush | StatusFlush,
 };
 using IeeeControl = econopet::Flags<IeeeControlBit>;
 
 enum class IeeeControlStatusBit : uint8_t {
     Enabled = ECONOPET_IEEE_CTRL_RD_ENABLE_MASK,
     TxRoom = ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK,
-    All = Enabled | TxRoom,
+    DataActive = ECONOPET_IEEE_CTRL_RD_DATA_ACTIVE_MASK,
+    RxEoi = ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK,
+    RxAtnEnd = ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK,
+    RxTalkEvent = ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK,
+    StatusActive = ECONOPET_IEEE_CTRL_RD_STATUS_ACTIVE_MASK,
+    All = Enabled | TxRoom | DataActive | RxEoi | RxAtnEnd | StatusActive | RxTalkEvent,
 };
 using IeeeControlStatus = econopet::Flags<IeeeControlStatusBit>;
 
@@ -130,7 +136,8 @@ inline void validate_command(econopet::ByteView bytes) {
     constexpr uint8_t AddressHighMask = ECONOPET_SPI_CMD_ADDRESS_HIGH_MASK;
     constexpr size_t AbsoluteReadSize = 3;
     constexpr size_t RelativeReadSize = 1;
-    if (bytes.size() == 0) throw std::invalid_argument("empty FPGA SPI command");
+    if (bytes.size() == 0)
+        throw std::invalid_argument("empty FPGA SPI command");
     const auto command = static_cast<SpiCommand>(bytes[0] & OpcodeMask);
     const bool absolute = command == SpiCommand::ReadAt || command == SpiCommand::WriteAt;
     const bool write = (bytes[0] & std::to_underlying(SpiCommand::WriteSame)) != 0;

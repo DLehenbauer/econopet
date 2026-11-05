@@ -243,14 +243,20 @@ endif()
 
 # Run the standalone suite so its host and contract test registration remains authoritative.
 if(BUILD_SYSTEM_TESTS)
+    # Reserve the child suite's bounded parallelism in the parent scheduler too.
+    # Native DOS scenarios perform cooperative work over physical SPI. Keep
+    # the two-worker resource bound and individual deadlines, but allow the
+    # complete suite to outlive its former legacy-facade half-hour budget.
+    set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 3600)
     add_test(
         NAME system_tests
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system
-            --output-on-failure --no-tests=error
+            --parallel 2 --output-on-failure --no-tests=error
     )
     set_tests_properties(system_tests PROPERTIES
         LABELS "sys;system;host;contract"
-        TIMEOUT 300
+        TIMEOUT ${SYSTEM_TEST_SUITE_TIMEOUT_SECONDS}
+        PROCESSORS 2
         ENVIRONMENT "${ECONOPET_TEST_ENV}"
     )
 endif()
@@ -278,6 +284,11 @@ if(BUILD_FPGA)
         FIXTURES_SETUP gateware_filelists
     )
 
+    # Native targets share one compiler-job budget across all models.
+    add_custom_target(gateware_models)
+    add_dependencies(all_projects gateware_models)
+    include(cmake/VerilatorModels.cmake)
+
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
@@ -289,10 +300,13 @@ if(BUILD_FPGA)
             set(TB_RAND_RESET ${GW_RAND_RESET_DEFAULT})
         endif()
 
+        add_gateware_model(${TB_NAME})
+
         if(TB_NAME IN_LIST GW_VERILATOR_ONLY_TESTS)
             add_test(
                 NAME ${TB_NAME}
-                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
+                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
 
@@ -304,7 +318,6 @@ if(BUILD_FPGA)
             set_tests_properties(${TB_NAME} PROPERTIES
                 LABELS "${TB_LABELS}"
                 TIMEOUT 1800
-                FIXTURES_REQUIRED gateware_filelists
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         else()
@@ -320,16 +333,16 @@ if(BUILD_FPGA)
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
 
-            # Verilator variant. Timeout covers compiling the model, not just running it.
+            # Execution has its own budget, independent of model compilation.
             add_test(
                 NAME ${TB_NAME}_vl
-                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
+                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
             set_tests_properties(${TB_NAME}_vl PROPERTIES
                 LABELS "gw;sim;vl"
                 TIMEOUT 600
-                FIXTURES_REQUIRED gateware_filelists
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         endif()

@@ -6,7 +6,11 @@
 #include "char_encoding_test.h"
 #include "config_parser_test.h"
 #include "crtc_test.h"
+#include "cpu_test.h"
 #include "diskimage_test.h"
+#include "dos_media_test.h"
+#include "dos_rel_test.h"
+#include "dos_test.h"
 #include "global_test.h"
 #include "ieee_drive_test.h"
 #include "keyscan_test.h"
@@ -27,6 +31,9 @@ int run_suite() {
     srunner_add_suite(sr1, config_parser_suite());
     srunner_add_suite(sr1, crtc_suite());
     srunner_add_suite(sr1, diskimage_suite());
+    srunner_add_suite(sr1, dos_media_suite());
+    srunner_add_suite(sr1, dos_rel_suite());
+    srunner_add_suite(sr1, dos_suite());
     srunner_add_suite(sr1, ieee_drive_suite());
     srunner_add_suite(sr1, keyscan_suite());
     srunner_add_suite(sr1, keystate_suite());
@@ -39,8 +46,9 @@ int run_suite() {
     number_failed += srunner_ntests_failed(sr1);
     srunner_free(sr1);
 
-    // These tests are run in a separate process as they intentionally abort.
+    // These tests need process isolation for fatal paths or one-time startup state.
     SRunner* sr2 = srunner_create(breakpoint_fatal_suite());
+    srunner_add_suite(sr2, cpu_suite());
     srunner_add_suite(sr2, config_parser_fatal_suite());
     srunner_add_suite(sr2, ieee_drive_fatal_suite());
     srunner_add_suite(sr2, global_suite());

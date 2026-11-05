@@ -141,18 +141,6 @@ inline Record command(Command value) { return raw_record(value.byte(), true, Eoi
 // Expected payload records release ATN, with explicit final-byte EOI.
 inline Record data(uint8_t byte, Eoi eoi = Eoi::More) { return raw_record(byte, false, eoi); }
 
-// Explicitly discard EOI when expecting the RX FIFO's byte/ATN-only format.
-inline Record fifo_record(Record record) {
-    record.eoi = Eoi::Unobserved;
-    return record;
-}
-
-// Build RX expectations while visibly opting out of unsupported EOI evidence.
-inline std::vector<Record> fifo_records(std::vector<Record> records) {
-    for (auto& record : records) record = fifo_record(record);
-    return records;
-}
-
 // Print all wire fields for standalone diagnostics and GoogleTest matchers.
 inline void PrintTo(const Record& record, std::ostream* stream) {
     std::ostringstream text;

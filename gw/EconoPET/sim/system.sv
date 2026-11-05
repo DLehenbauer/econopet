@@ -164,6 +164,9 @@ module system (
     output logic ieee_rx_ready_o,
     output logic ieee_bus_dav_no,
     output logic ieee_bus_atn_no,
+    output logic ieee_bus_nrfd_no,
+    output logic ieee_bus_ndac_no,
+    output logic ieee_bus_eoi_no,
     output logic ieee_device_dav_no,
     output logic ieee_device_eoi_no,
     output logic [7:0] ieee_device_dio_o,
@@ -186,6 +189,9 @@ module system (
     assign ieee_rx_ready_o = !top.main.ieee.rx_empty;
     assign ieee_bus_dav_no = top.main.ieee.bus_dav_n;
     assign ieee_bus_atn_no = top.main.ieee.cpu_atn_n;
+    assign ieee_bus_nrfd_no = top.main.ieee.bus_nrfd_n;
+    assign ieee_bus_ndac_no = top.main.ieee.bus_ndac_n;
+    assign ieee_bus_eoi_no = top.main.ieee.bus_eoi_n;
     assign ieee_device_dav_no = top.main.ieee.dev_dav_n;
     assign ieee_device_eoi_no = top.main.ieee.dev_eoi_n;
     assign ieee_device_dio_o = top.main.ieee.dev_dio;

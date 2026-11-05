@@ -10,7 +10,8 @@ import common_pkg::*;
 // IEEE-related I/O registers and, when enabled, INJECTS the CPU's reads of
 // the IEEE status/input registers so that an emulated drive appears on the
 // otherwise-empty bus. Disabled it is fully passive (physical devices are
-// untouched); enabled it replaces the CPU's view of the bus, so ALL physical
+// untouched). Selecting any emulated unit enables interception, which replaces
+// the CPU's view of the bus, so ALL physical
 // IEEE devices are masked -- enable only with nothing on the connector. The byte-level handshake (acceptor and talker roles)
 // runs here in fabric -- IEEE-488 is flow-controlled, so the MCU can
 // service the FIFOs over Wishbone/SPI at its own rate while the CPU
@@ -65,8 +66,10 @@ module ieee (
     // ------------------------------------------------------------------
     // Control / status registers
     // ------------------------------------------------------------------
-    logic enable = 1'b0;
     logic flush = 1'b0;
+    // Active-high emulated-device presence. No units means physical passthrough.
+    logic [3:0] unit_mask = '0;
+    wire enable = |unit_mask;
 
     // ------------------------------------------------------------------
     // Snooped CPU-side IEEE line states (all _n: 1 = released)
@@ -76,7 +79,9 @@ module ieee (
     logic [7:0] pia2_crb    = 8'h00;
     logic [7:0] via_orb     = 8'hFF;
     logic [3:0] pia1_pa_out = 4'h0;    // keyboard column select (for $E810 compose)
+    logic [7:0] pia1_cra = 8'h00;
 
+    wire cpu_eoi_n  = (pia1_cra[5:4] == 2'b11) ? pia1_cra[3] : 1'b1;
     wire cpu_ndac_n = (pia2_cra[5:4] == 2'b11) ? pia2_cra[3] : 1'b1;
     wire cpu_dav_n  = (pia2_crb[5:4] == 2'b11) ? pia2_crb[3] : 1'b1;
     wire cpu_atn_n  = via_orb[2];
@@ -134,6 +139,7 @@ module ieee (
             pia2_crb    <= 8'h00;
             via_orb     <= 8'hFF;
             pia1_pa_out <= 4'h0;
+            pia1_cra    <= 8'h00;
         end else if (cpu_wr) begin
             if (snap_pia2) begin
                 unique case (pia_rs)
@@ -145,6 +151,7 @@ module ieee (
             end
             if (snap_via && snap_rs == 4'd0) via_orb <= cpu_data_i;
             if (snap_pia1 && pia_rs == 2'd0) pia1_pa_out <= cpu_data_i[3:0];
+            if (snap_pia1 && pia_rs == 2'd1) pia1_cra <= cpu_data_i;
         end
     end
 
@@ -160,11 +167,12 @@ module ieee (
     wire bus_dav_n  = cpu_dav_n  & dev_dav_n;
     wire bus_ndac_n = cpu_ndac_n & dev_ndac_n;
     wire bus_nrfd_n = cpu_nrfd_n & dev_nrfd_n;
+    wire bus_eoi_n = cpu_eoi_n & dev_eoi_n;
     wire [7:0] bus_dio = pia2_pb_out & dev_dio;
 
     // ------------------------------------------------------------------
     // FIFOs
-    //   RX: CPU -> MCU, 9-bit entries {atn, data} (commands tagged)
+    //   RX: CPU -> MCU, {talk_event, atn_end, eoi, atn, data}.
     //   TX: MCU -> CPU, 9-bit entries {eoi, data}
     // ------------------------------------------------------------------
     localparam RX_DEPTH = 32;
@@ -174,17 +182,22 @@ module ieee (
     // to LUT-RAM, so depth is LUT-bounded.
     localparam TX_DEPTH = 1024;
 
-    logic [8:0] rx_mem [RX_DEPTH-1:0];
+    logic [11:0] rx_mem [RX_DEPTH-1:0];
     logic [$clog2(RX_DEPTH)-1:0] rx_wr = '0, rx_rd = '0;
     logic [$clog2(RX_DEPTH):0]   rx_count = '0;
     wire rx_empty = rx_count == 0;
     wire rx_full  = rx_count == ($clog2(RX_DEPTH)+1)'(RX_DEPTH);
+    wire rx_room = !rx_full
+        && !(rx_push && rx_count == ($clog2(RX_DEPTH)+1)'(RX_DEPTH - 1));
 
     logic [8:0] tx_mem [TX_DEPTH-1:0];
     logic [$clog2(TX_DEPTH)-1:0] tx_wr = '0, tx_rd = '0;
     logic [$clog2(TX_DEPTH):0]   tx_count = '0;
     wire tx_empty = tx_count == 0;
     wire tx_full  = tx_count == ($clog2(TX_DEPTH)+1)'(TX_DEPTH);
+    logic [7:0] tx_prefetched = '0;
+    logic [7:0] txs_prefetched = '0;
+    logic [7:0] tx_owner = '0;
 
     // Burst-fill flow control: the MCU fills the FIFO with batched WRITE_SAME
     // bursts (one held-low CS transaction per chunk) to keep up with the 1MHz
@@ -203,42 +216,58 @@ module ieee (
     wire txs_full  = txs_count == ($clog2(TXS_DEPTH)+1)'(TXS_DEPTH);
 
     // Talker source: status FIFO on channel 15, data FIFO otherwise.
-    wire serving_status = sa[3:0] == 4'hF;
+    wire serving_status = talk_sa[3:0] == 4'hF;
 
     // ------------------------------------------------------------------
     // Device protocol state
     // ------------------------------------------------------------------
     // The emulation answers four unit addresses, DEV_ADDR through DEV_ADDR+3
-    // (devices 8 through 11), each a dual-drive unit. The fabric doesn't care WHICH unit is
-    // addressed: handshake state, sa, and the FIFOs are shared (only one
-    // talker/listener is ever active at a time), and the MCU learns the unit
-    // from the raw LISTEN/TALK command bytes forwarded through the RX FIFO.
+    // (devices 8 through 11), each a dual-drive unit. Handshake and FIFOs
+    // are shared, but roles and secondary selections belong to each unit.
+    // The MCU also learns the unit from commands forwarded through RX.
     // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
+    localparam int UNIT_COUNT = 4;
+    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00}
+        && unit_mask[primary_unit];
+    wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
-    logic listening = 1'b0;
+    logic [UNIT_COUNT-1:0] listen_units = '0;
+    wire listening = |(listen_units & unit_mask);
     logic talking   = 1'b0;
     logic [7:0] sa = 8'h00;
+    logic [UNIT_COUNT-1:0][7:0] unit_sa = '0;
+    logic addressed = 1'b0;
+    logic [1:0] addressed_unit = '0;
+    logic [1:0] talk_unit = '0;
+    wire [7:0] talk_sa = unit_sa[talk_unit];
+    wire owner_matches = !(|(tx_owner & IEEE_TX_OWNER_PAUSE_MASK))
+        && (!(|(tx_owner & IEEE_TX_OWNER_VALID_MASK))
+            || (tx_owner[IEEE_TX_OWNER_UNIT_SHIFT +: 2] == talk_unit
+                && tx_owner[3:0] == talk_sa[3:0]));
 
     wire atn_active = enable && !cpu_atn_n;
 
     logic prev_bus_dav_n = 1'b1;
     logic prev_atn_n     = 1'b1;
+    logic atn_end_pending = 1'b0;
+    wire atn_end_due = atn_end_pending || (!prev_atn_n && cpu_atn_n);
+    logic listen_checkpoint_armed = 1'b0;
+    logic [3:0] listen_byte_units = '0;
+    logic [3:0] listen_end_pending = '0;
+    wire listen_end_due = |listen_end_pending;
 
-    // Talker sub-state
-    typedef enum logic [1:0] { T_IDLE, T_DAV, T_ACK, T_REARM } talk_state_t;
+    // Native TLK20/TLK30 prefetches on NRFD before TLK35 waits for NDAC.
+    typedef enum logic [2:0] { T_IDLE, T_DAV, T_PREFETCH, T_ACK, T_REARM, T_DONE } talk_state_t;
     talk_state_t talk_st = T_IDLE;
-
-    // Set once the CPU has read the in-flight byte at $E820. The kernel
-    // re-arms NDAC after every accepted byte, including the last of a
-    // counted read, so a terminate is line-identical to an accept. Pop only
-    // consumed bytes: the phantom accept then leaves the byte queued for
-    // the next TALK.
-    logic byte_consumed = 1'b0;
+    logic talk_eoi_fetched = 1'b0;
+    logic talk_event_pending = 1'b0;
+    logic [7:0] talk_event_data = '0;
+    wire talk_event_due = talk_event_pending || (atn_active && talk_eoi_fetched);
 
     // RX push request from the acceptor
     logic rx_push = 1'b0;          // init: else a phantom push under rand reset
-    logic [8:0] rx_push_data = '0;
+    logic [11:0] rx_push_data = '0;
 
 
     // Data-FIFO flush, requested by the MCU (on OPEN/CLOSE) via CTRL bit 2.
@@ -260,11 +289,25 @@ module ieee (
         txs_flush <= 1'b0;
 
         if (ifc_i) begin
-            listening      <= 1'b0;
+            tx_prefetched <= '0;
+            txs_prefetched <= '0;
+            atn_end_pending <= 1'b0;
+            listen_checkpoint_armed <= 1'b0;
+            listen_byte_units <= '0;
+            listen_end_pending <= '0;
+            talk_event_pending <= 1'b0;
+            talk_eoi_fetched <= 1'b0;
+            talk_event_data <= '0;
+            // Supported PET/fabric resets are MCU-coordinated with ieee_drive_reset().
+            // Independently pulling the physical CPU reset pin low is unsupported.
+            listen_units   <= '0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            unit_sa        <= '0;
+            addressed      <= 1'b0;
+            addressed_unit <= '0;
+            talk_unit      <= '0;
             talk_st        <= T_IDLE;
-            byte_consumed  <= 1'b0;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
             dev_dav_n      <= 1'b1;
@@ -274,11 +317,23 @@ module ieee (
             prev_atn_n     <= 1'b1;
             rx_push_data   <= '0;
         end else if (flush || !enable) begin
-            listening      <= 1'b0;
+            if (flush) tx_prefetched <= '0;
+            if (flush) txs_prefetched <= '0;
+            atn_end_pending <= 1'b0;
+            listen_checkpoint_armed <= 1'b0;
+            listen_byte_units <= '0;
+            listen_end_pending <= '0;
+            talk_event_pending <= 1'b0;
+            talk_eoi_fetched <= 1'b0;
+            talk_event_data <= '0;
+            listen_units   <= '0;
             talking        <= 1'b0;
             sa             <= 8'h00;
+            unit_sa        <= '0;
+            addressed      <= 1'b0;
+            addressed_unit <= '0;
+            talk_unit      <= '0;
             talk_st        <= T_IDLE;
-            byte_consumed  <= 1'b0;
             dev_nrfd_n     <= 1'b1;
             dev_ndac_n     <= 1'b1;
             dev_dav_n      <= 1'b1;
@@ -287,27 +342,37 @@ module ieee (
             prev_bus_dav_n <= 1'b1;
             prev_atn_n     <= 1'b1;
         end else begin
-            if (atn_active || listening) begin
-                // Acceptor role. Abort any in-flight talker handshake. If
-                // the CPU already READ the in-flight byte ($E820) but ATN
-                // arrived before its NDAC release, the byte was delivered --
-                // pop it now or the next TALK re-serves a duplicate.
-                if (talk_st != T_IDLE) begin
-                    if (talk_st == T_ACK && byte_consumed) begin
-                        if (serving_status) txs_pop <= 1'b1;
-                        else                tx_pop  <= 1'b1;
-                    end
-                    talk_st   <= T_IDLE;
-                    dev_dav_n <= 1'b1;
-                    dev_dio   <= 8'hFF;
-                    dev_eoi_n <= 1'b1;
-                end
+            // Withdraw old roles before an accepted command selects a retained
+            // peer. Later per-bit/role updates must win over these defaults.
+            if (|(listen_units & ~unit_mask)) listen_units <= listen_units & unit_mask;
+            if (addressed && !unit_mask[addressed_unit]) addressed <= 1'b0;
+            if (talking && !unit_mask[talk_unit]) talking <= 1'b0;
 
+            // Retain source progress before later ATN bytes and release boundaries.
+            if (atn_end_due) atn_end_pending <= 1'b1;
+            if (atn_active) listen_checkpoint_armed <= 1'b1;
+            if (talk_event_pending) begin
+                if (rx_room) begin
+                    rx_push <= 1'b1;
+                    rx_push_data <= {1'b1, 3'b0, talk_event_data};
+                    talk_event_pending <= 1'b0;
+                end
+            end else if (listen_end_due && !talk_event_due && rx_room) begin
+                rx_push <= 1'b1;
+                rx_push_data <= {2'b01, 2'b0, 4'b0, listen_end_pending};
+                listen_end_pending <= '0;
+            end else if (atn_end_due && !talk_event_due && rx_room) begin
+                rx_push <= 1'b1;
+                rx_push_data <= {2'b01, 10'b0};
+                atn_end_pending <= 1'b0;
+            end
+            if (atn_active || listening) begin
                 if (prev_atn_n && !cpu_atn_n) begin
                     dev_ndac_n <= 1'b0;    // join the handshake on ATN assert
                 end
 
-                if (prev_bus_dav_n && !bus_dav_n && !rx_full) begin
+                if (prev_bus_dav_n && !bus_dav_n && rx_room
+                    && !atn_end_due && !talk_event_due && !listen_end_due) begin
                     // Byte valid and room to store it: capture and accept.
                     // (While RX is full, hold NDAC asserted and wait -- IEEE
                     // flow control backpressures the CPU until the MCU drains
@@ -315,40 +380,69 @@ module ieee (
                     if (atn_active) begin
                         // Command byte: update protocol state and forward to MCU.
                         priority casez (~pia2_pb_out)
-                            8'h3F:   listening <= 1'b0;                       // UNLISTEN
-                            8'h5F:   talking <= 1'b0;                         // UNTALK (channel data persists)
-                            8'b001?_????: listening <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
-                            8'b010?_????: talking   <= (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00} ? 1'b1 : 1'b0;
-                            8'b011?_????: if (listening || talking) begin
+                            8'h3F: begin                                     // UNLISTEN
+                                listen_units <= '0;
+                                addressed <= 1'b0;
+                            end
+                            8'h5F: begin                                     // UNTALK (channel data persists)
+                                talking <= 1'b0;
+                                addressed <= 1'b0;
+                            end
+                            8'b001?_????: begin
+                                addressed <= own_address;
+                                if (own_address) begin
+                                    addressed_unit <= primary_unit;
+                                    listen_units[primary_unit] <= 1'b1;
+                                    unit_sa[primary_unit] <= 8'h20;
+                                    if (talk_unit == primary_unit) talking <= 1'b0;
+                                end
+                            end
+                            8'b010?_????: begin
+                                addressed <= own_address;
+                                talking <= own_address;
+                                if (own_address) begin
+                                    addressed_unit <= primary_unit;
+                                    listen_units[primary_unit] <= 1'b0;
+                                    unit_sa[primary_unit] <= 8'h20;
+                                    talk_unit <= primary_unit;
+                                end
+                            end
+                            8'b011?_????: if (addressed && unit_mask[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // secondary (data)
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Fresh status per request: the kernel re-reads
                                 // channel 15 often; stale unread status bytes
                                 // must not misalign the next read.
-                                if (talking && (~pia2_pb_out & 8'h0F) == 8'h0F)
+                                if (talking && talk_unit == addressed_unit
+                                    && (~pia2_pb_out & 8'h0F) == 8'h0F)
                                     txs_flush <= 1'b1;
                             end
-                            8'b1110_????: if (listening) begin
+                            8'b1110_????: if (addressed && unit_mask[addressed_unit]
+                                && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // CLOSE
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 // Discard queued file data in fabric, before
                                 // the MCU even sees the command -- but only
-                                // for real data channels: ch15 CLOSE/OPEN is
-                                // the DOS command channel and must not drop
-                                // an in-flight stream (firmware ignores it).
+                                // for real data channels. Firmware handles
+                                // ch15 OPEN/CLOSE lifetimes without discarding
+                                // an unrelated unit's selected response.
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
-                            8'b1111_????: if (listening) begin
+                            8'b1111_????: if (addressed && unit_mask[addressed_unit]
+                                && listen_units[addressed_unit]) begin
                                 sa <= ~pia2_pb_out;                           // OPEN
+                                unit_sa[addressed_unit] <= ~pia2_pb_out;
                                 if ((~pia2_pb_out & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             default: ;
                         endcase
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b1, ~pia2_pb_out};
+                        rx_push_data <= {2'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
                     end else begin
                         rx_push <= 1'b1;
-                        rx_push_data <= {1'b0, ~pia2_pb_out};
+                        rx_push_data <= {2'b0, !bus_eoi_n, 1'b0, ~bus_dio};
                     end
                     dev_nrfd_n <= 1'b0;
                     dev_ndac_n <= 1'b1;    // accepted
@@ -357,50 +451,104 @@ module ieee (
                     dev_ndac_n <= 1'b0;
                     dev_nrfd_n <= 1'b1;
                 end
+            end else begin
+                dev_ndac_n <= 1'b1;
+                dev_nrfd_n <= 1'b1;
+            end
+            // LSN21 observes DAV even if transport is full and the sender times out.
+            if (!atn_active && listening && listen_checkpoint_armed && !bus_dav_n) begin
+                listen_byte_units <= listen_units & unit_mask;
+                listen_checkpoint_armed <= 1'b0;
+            end
+            // ATNIRQ abandons LSN21, but cannot retract an already completed exit.
+            if (atn_active) listen_byte_units <= '0;
+            else if (|listen_byte_units && bus_dav_n) begin
+                listen_end_pending <= listen_byte_units;
+                listen_byte_units <= '0;
+            end
+
+            // A peer virtual unit can accept while the selected source talks.
+            if (atn_active) begin
+                // ATN aborts presentation without repeating an earlier GET.
+                if (talk_eoi_fetched) begin
+                    talk_event_pending <= 1'b1;
+                    talk_event_data <= IEEE_RX_TALK_EOI_GET_MASK
+                        | {2'b0, talk_unit, talk_sa[3:0]};
+                    talk_eoi_fetched <= 1'b0;
+                end
+                talk_st   <= T_IDLE;
+                dev_dav_n <= 1'b1;
+                dev_dio   <= 8'hFF;
+                dev_eoi_n <= 1'b1;
             end else if (talking) begin
                 // Talker role (source handshake). Bytes come from the TX FIFO;
                 // if it runs dry mid-file the handshake simply pauses (the
                 // CPU waits on DAV) until the MCU refills it.
                 unique case (talk_st)
                     T_IDLE: begin
-                        dev_ndac_n <= 1'b1;
-                        dev_nrfd_n <= 1'b1;
-                        if (serving_status ? !txs_empty : !tx_empty) talk_st <= T_DAV;
+                        if (!talk_event_due && !listen_end_due && owner_matches
+                            && (serving_status ? !txs_empty : !tx_empty))
+                            talk_st <= T_DAV;
                     end
                     // Source handshake may only begin once an acceptor is
                     // present (NDAC asserted) and ready (NRFD released) --
                     // starting on NRFD alone loses the first byte if the
-                    // acceptor hasn't configured NDAC yet.
-                    T_DAV: if (bus_nrfd_n && !bus_ndac_n) begin
+                    // acceptor hasn't configured NDAC yet. A virtual peer
+                    // also needs RX space before DAV, or active-byte protection
+                    // prevents firmware from draining the queue it must accept into.
+                    T_DAV: if (bus_nrfd_n && !bus_ndac_n
+                               && !talk_event_due && !atn_end_due && !listen_end_due
+                               && (!listening || (rx_room && !atn_end_due))
+                               && owner_matches && (serving_status ? !txs_empty : !tx_empty)) begin
                         dev_dio   <= serving_status ? ~txs_mem[txs_rd][7:0] : ~tx_mem[tx_rd][7:0];
                         dev_eoi_n <= serving_status ? ~txs_mem[txs_rd][8]   : ~tx_mem[tx_rd][8];
                         dev_dav_n <= 1'b0;
-                        byte_consumed <= 1'b0;
-                        talk_st   <= T_ACK;
+                        talk_st   <= T_PREFETCH;
                     end
-                    T_ACK: begin
-                        if (cpu_data_strobe_i && !snap_we && snap_pia2
-                            && pia_rs == 2'd0) begin
-                            byte_consumed <= 1'b1;   // CPU read $E820
-                        end
-                        if (cpu_ndac_n) begin        // NDAC released: accept or terminate
-                            if (byte_consumed) begin
-                                if (serving_status) txs_pop <= 1'b1;
-                                else                tx_pop  <= 1'b1;
+                    T_PREFETCH, T_ACK: begin
+                        // Owner changes stop new presentations, not this one.
+                        // Native TLK35 holds DAV/DIO/EOI until NDAC releases.
+                        if (talk_st == T_PREFETCH && !bus_nrfd_n) begin
+                            if (serving_status) begin
+                                txs_pop <= 1'b1;
+                                txs_prefetched <= txs_prefetched + 1'b1;
                             end
+                            else begin
+                                tx_pop <= 1'b1;
+                                // Count GET itself, even if a simultaneous
+                                // queue discard wins the FIFO pointer update.
+                                tx_prefetched <= tx_prefetched + 1'b1;
+                                if (!dev_eoi_n) talk_eoi_fetched <= 1'b1;
+                            end
+                            talk_st <= T_ACK;
+                        end
+                        // Both phases can finish on NDAC, including unread
+                        // termination or NRFD and NDAC observed together.
+                        if (bus_ndac_n) begin
                             dev_dav_n <= 1'b1;
                             dev_dio   <= 8'hFF;
                             dev_eoi_n <= 1'b1;
-                            talk_st   <= T_REARM;
+                            if (talk_st == T_PREFETCH && bus_nrfd_n) begin
+                                talk_event_pending <= 1'b1;
+                                talk_event_data <= {2'b00, talk_unit, talk_sa[3:0]};
+                                talk_st <= T_DONE;
+                            end else begin
+                                talk_st <= T_REARM;
+                            end
                         end
                     end
-                    T_REARM: if (!cpu_ndac_n) begin     // acceptor re-armed
+                    T_REARM: if (!bus_ndac_n) begin     // all acceptors re-armed
+                        if (talk_eoi_fetched) begin
+                            talk_event_pending <= 1'b1;
+                            talk_event_data <= IEEE_RX_TALK_EOI_GET_MASK | IEEE_RX_TALK_RECHECK_MASK
+                                | {2'b0, talk_unit, talk_sa[3:0]};
+                            talk_eoi_fetched <= 1'b0;
+                        end
                         talk_st <= T_IDLE;
                     end
+                    T_DONE: ;
                 endcase
             end else begin
-                dev_nrfd_n <= 1'b1;
-                dev_ndac_n <= 1'b1;
                 dev_dav_n  <= 1'b1;
                 dev_eoi_n  <= 1'b1;
                 dev_dio    <= 8'hFF;
@@ -411,9 +559,19 @@ module ieee (
             // FIFO was full, the capture above was suppressed -- keep
             // prev_bus_dav_n high so the edge re-fires once the MCU drains
             // a slot, instead of being lost forever (bus deadlock).
-            if (!(prev_bus_dav_n && !bus_dav_n && rx_full && (atn_active || listening)))
+            if (!(prev_bus_dav_n && !bus_dav_n
+                && (!rx_room || atn_end_due || talk_event_due || listen_end_due)
+                && (atn_active || listening)))
                 prev_bus_dav_n <= bus_dav_n;
             prev_atn_n     <= cpu_atn_n;
+            // A host media change may remove one unit without resetting peers.
+            if (talking && !unit_mask[talk_unit]) begin
+                talk_st <= T_IDLE;
+                talk_eoi_fetched <= 1'b0;
+                dev_dav_n <= 1'b1;
+                dev_eoi_n <= 1'b1;
+                dev_dio <= 8'hFF;
+            end
         end
     end
 
@@ -443,7 +601,7 @@ module ieee (
     assign status[IEEE_ST_RX_AVAIL_BIT] = !rx_empty;
 
     logic rx_pop_req = 1'b0, tx_push_req = 1'b0, txs_push_req = 1'b0;
-    logic mcu_tx_flush;
+    logic mcu_tx_flush, mcu_txs_flush;
     logic [8:0] tx_push_data = '0;
     logic [8:0] txs_push_data = '0;
 
@@ -451,6 +609,7 @@ module ieee (
         wbp_ack_o <= 1'b0;
         flush <= 1'b0;
         mcu_tx_flush <= 1'b0;
+        mcu_txs_flush <= 1'b0;
         rx_pop_req <= 1'b0;
         tx_push_req <= 1'b0;
         txs_push_req <= 1'b0;
@@ -458,6 +617,9 @@ module ieee (
         if (ifc_i) begin
             tx_push_data <= '0;
             txs_push_data <= '0;
+            tx_owner <= '0;
+        end else if (flush) begin
+            tx_owner <= '0;
         end
 
         // IFC resets the emulated drive, but the MCU control plane remains
@@ -466,14 +628,24 @@ module ieee (
             wbp_ack_o <= 1'b1;
             unique case (reg_addr)
                 IEEE_REG_CTRL: begin
-                    // CTRL writes: bit0 = enable,  bit1 = flush FIFOs/state, bit2 = flush data FIFO.
-                    // CTRL reads:  bit0 = enabled, bit1 = data FIFO burst room.
+                    // FIFO-only flushes preserve GET counters and protocol roles.
                     wbp_data_o <= (tx_room ? IEEE_CTRL_RD_TX_ROOM_MASK : DATA_WIDTH'(0))
-                                | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0));
+                                | (enable ? IEEE_CTRL_RD_ENABLE_MASK : DATA_WIDTH'(0))
+                                | (!serving_status && !dev_dav_n
+                                    ? IEEE_CTRL_RD_DATA_ACTIVE_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][9]
+                                    ? IEEE_CTRL_RD_RX_EOI_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][10]
+                                    ? IEEE_CTRL_RD_RX_ATN_END_MASK : DATA_WIDTH'(0))
+                                | (serving_status && !dev_dav_n
+                                    ? IEEE_CTRL_RD_STATUS_ACTIVE_MASK : DATA_WIDTH'(0))
+                                | (!rx_empty && rx_mem[rx_rd][11]
+                                    ? IEEE_CTRL_RD_RX_TALK_EVENT_MASK : DATA_WIDTH'(0));
                     if (wbp_we_i) begin
-                        enable       <= wbp_data_i[IEEE_CTRL_ENABLE_BIT];
                         flush        <= wbp_data_i[IEEE_CTRL_FLUSH_BIT];
                         mcu_tx_flush <= wbp_data_i[IEEE_CTRL_DATA_FLUSH_BIT];
+                        mcu_txs_flush <= wbp_data_i[IEEE_CTRL_STATUS_FLUSH_BIT];
+                        unit_mask <= wbp_data_i[IEEE_CTRL_UNIT_MASK_SHIFT +: $bits(unit_mask)];
                     end
                 end
                 IEEE_REG_STATUS: wbp_data_o <= status;
@@ -486,7 +658,7 @@ module ieee (
                     if (wbp_we_i && !ifc_i && !rx_empty) rx_pop_req <= 1'b1;
                 end
                 IEEE_REG_TX: begin
-                    wbp_data_o <= 8'h00;   // write-only (data TX FIFO push)
+                    wbp_data_o <= tx_prefetched;
                     if (wbp_we_i && !ifc_i && !tx_full) begin
                         tx_push_req  <= 1'b1;
                         tx_push_data <= {1'b0, wbp_data_i};
@@ -499,9 +671,12 @@ module ieee (
                         tx_push_data <= {1'b1, wbp_data_i};
                     end
                 end
-                IEEE_REG_SA: wbp_data_o <= sa;
+                IEEE_REG_SA: begin
+                    wbp_data_o <= sa;
+                    if (wbp_we_i && !ifc_i && !flush) tx_owner <= wbp_data_i;
+                end
                 IEEE_REG_TXS: begin
-                    wbp_data_o <= 8'h00;   // write-only (status TX FIFO push)
+                    wbp_data_o <= txs_prefetched;
                     if (wbp_we_i && !ifc_i && !txs_full) begin
                         txs_push_req  <= 1'b1;
                         txs_push_data <= {1'b0, wbp_data_i};
@@ -541,7 +716,7 @@ module ieee (
                 endcase
             end
 
-            if (txs_flush) begin
+            if (txs_flush || mcu_txs_flush) begin
                 txs_wr <= '0; txs_rd <= '0; txs_count <= '0;
             end else begin
                 if (txs_push_req && !txs_full) begin

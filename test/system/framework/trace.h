@@ -250,7 +250,7 @@ private:
 
 enum class AvSampling { EveryCycle, ChangesOnly };
 enum class Signal { CpuReset, CpuIrq, CpuNmi, CpuReady, Video, Horizontal, Vertical, Jiffy,
-                    AudioLeft, AudioRight, Pia1Irq, Pia2Irq, ViaIrq };
+                    AudioLeft, AudioRight, Pia1Irq, Pia2Irq, ViaIrq, IeeeDav, IeeeAtn, IeeeEoi, IeeeRxReady };
 struct SignalTransition {
     econopet::CycleTime at;
     bool before, after;

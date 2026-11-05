@@ -37,6 +37,7 @@ struct LayoutOverrides {
     std::optional<econopet::CpuAddress> completion;
     std::optional<econopet::CpuAddress> release;
     std::vector<std::pair<std::string, MemoryRegion>> workspace;
+    std::vector<std::pair<std::string, MemoryRegion>> data;
 };
 
 enum class RegionKind { Code, Stack, Mailbox, Results, Vectors, Data, Workspace };

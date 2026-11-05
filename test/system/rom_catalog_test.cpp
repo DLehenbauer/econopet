@@ -110,8 +110,9 @@ TEST(RomCatalog, WaterlooMetadataMatchesRevision12Ledger) {
         CpuAddress WaterlooEntries::* member;
         uint16_t address;
     };
-    constexpr std::array<Expected, 21> entries{{
+    constexpr std::array<Expected, 22> entries{{
         {"IEEEInit", &WaterlooEntries::IeeeInit, 0xc188},
+        {"clear I/O hooks", &WaterlooEntries::ClearIoHooks, 0xe77a},
         {"ATNDown", &WaterlooEntries::AtnDown, 0xc14f},
         {"ATNUp", &WaterlooEntries::AtnUp, 0xc16e},
         {"EOIDown", &WaterlooEntries::EoiDown, 0xc176},

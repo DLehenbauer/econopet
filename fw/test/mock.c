@@ -8,6 +8,7 @@
 
 #include "driver.h"
 #include "hardware_contract.h"
+#include "ieee/ieee_protocol.h"
 #include "system_state.h"
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,36 @@
 // ---------------------------------------------------------------------------
 
 uint8_t mock_ram[MOCK_RAM_SIZE];
+static int (*input_reader)(void);
+static void (*cpu_run_callback)(void);
+static cpu_state_t mock_cpu_state;
+static cpu_type_t selected_cpu;
+static bool clock_overridden;
+static uint64_t clock_us;
+
+uint64_t __real_time_us_64(void);
+
+// Keep ordinary tests on monotonic time and allow deterministic breakpoint waits.
+uint64_t __wrap_time_us_64(void) {
+    return clock_overridden ? clock_us : __real_time_us_64();
+}
+
+void mock_clock_set(uint64_t now) {
+    clock_overridden = true;
+    clock_us = now;
+}
+
+void mock_clock_advance(uint64_t delta) {
+    ck_assert(clock_overridden);
+    clock_us += delta;
+}
+
+// Model the probe's minimum reset pulse without delaying host tests.
+void sleep_us(uint64_t us) {
+    if (clock_overridden) {
+        clock_us += us;
+    }
+}
 
 typedef struct {
     uint8_t byte;
@@ -23,9 +54,14 @@ typedef struct {
 
 static struct {
     uint8_t ctrl;
+    uint8_t prefetched;
+    uint8_t status_prefetched;
     struct {
         uint8_t byte;
         bool atn;
+        bool eoi;
+        bool atn_end;
+        bool talk_event;
     } rx[MOCK_IEEE_RX_CAPACITY];
     size_t rx_head;
     size_t rx_count;
@@ -33,6 +69,8 @@ static struct {
     size_t data_count;
     mock_ieee_tx_byte_t status[MOCK_IEEE_TXS_CAPACITY];
     size_t status_count;
+    size_t status_repeat_after;
+    uint8_t tx_owner;
 } mock_ieee;
 
 // Identifies addresses belonging to the emulated FPGA IEEE register block.
@@ -44,19 +82,54 @@ static bool mock_ieee_addr(uint32_t addr) {
 static void mock_ieee_flush(bool data_only) {
     mock_ieee.data_count = 0;
     if (!data_only) {
+        mock_ieee.prefetched = 0;
+        mock_ieee.status_prefetched = 0;
         mock_ieee.rx_head = 0;
         mock_ieee.rx_count = 0;
         mock_ieee.status_count = 0;
+        mock_ieee.tx_owner = 0;
     }
 }
 
 // Appends one PET byte and ATN tag to the bounded receive FIFO.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte) {
+    mock_ieee_enqueue_rx_eoi(atn, byte, false);
+}
+
+// Appends explicit DAV-sampled metadata without inferring EOI from later commands.
+void mock_ieee_enqueue_rx_eoi(bool atn, uint8_t byte, bool eoi) {
     ck_assert_uint_lt(mock_ieee.rx_count, MOCK_IEEE_RX_CAPACITY);
     size_t index = (mock_ieee.rx_head + mock_ieee.rx_count) % MOCK_IEEE_RX_CAPACITY;
     mock_ieee.rx[index].atn = atn;
     mock_ieee.rx[index].byte = byte;
+    mock_ieee.rx[index].eoi = eoi;
+    mock_ieee.rx[index].atn_end = false;
+    mock_ieee.rx[index].talk_event = false;
     mock_ieee.rx_count++;
+}
+
+// Queue the native ATN50 boundary independently of command and payload bytes.
+void mock_ieee_enqueue_atn_end(void) {
+    mock_ieee_enqueue_rx(false, 0);
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].atn_end = true;
+}
+
+// Use the existing ordered-boundary tag without inventing a command or GET.
+void mock_ieee_enqueue_listen_end(uint8_t units) {
+    ck_assert_uint_gt(units, 0);
+    ck_assert_uint_eq(units & ~ECONOPET_IEEE_RX_LISTEN_UNITS_MASK, 0);
+    mock_ieee_enqueue_atn_end();
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].byte = units;
+}
+
+// Retain native source progress separately from controller-sent bytes.
+void mock_ieee_enqueue_talk_event(uint8_t owner, uint8_t flags) {
+    mock_ieee_enqueue_rx(false,
+        (owner & ~(ECONOPET_IEEE_TX_OWNER_VALID_MASK | ECONOPET_IEEE_TX_OWNER_PAUSE_MASK)) | flags);
+    const size_t index = (mock_ieee.rx_head + mock_ieee.rx_count - 1) % MOCK_IEEE_RX_CAPACITY;
+    mock_ieee.rx[index].talk_event = true;
 }
 
 // Returns the captured file-channel byte count.
@@ -78,7 +151,20 @@ bool mock_ieee_data_eoi(size_t index) {
 
 // Models the controller consuming all captured file-channel bytes.
 void mock_ieee_clear_data(void) {
-    mock_ieee.data_count = 0;
+    mock_ieee_consume_data(mock_ieee.data_count);
+}
+
+// Advances only native GET progress, preserving the unread FIFO suffix.
+void mock_ieee_consume_data(size_t count) {
+    ck_assert_uint_le(count, mock_ieee.data_count);
+    for (size_t index = 0; index < count; ++index)
+        if (mock_ieee.data[index].eoi)
+            mock_ieee_enqueue_talk_event(mock_ieee.tx_owner,
+                ECONOPET_IEEE_RX_TALK_EOI_GET_MASK | ECONOPET_IEEE_RX_TALK_RECHECK_MASK);
+    mock_ieee.prefetched = (uint8_t) (mock_ieee.prefetched + count);
+    mock_ieee.data_count -= count;
+    memmove(mock_ieee.data, mock_ieee.data + count,
+        mock_ieee.data_count * sizeof(mock_ieee.data[0]));
 }
 
 // Returns the captured command-channel byte count.
@@ -98,21 +184,61 @@ bool mock_ieee_status_eoi(size_t index) {
     return mock_ieee.status[index].eoi;
 }
 
-// Models the controller consuming all captured command-channel bytes.
-void mock_ieee_clear_status(void) {
+// Discards transport storage independently of status GET progress.
+void mock_ieee_discard_status(void) {
     mock_ieee.status_count = 0;
+}
+
+// Injects one ordered hardware selection in the middle of firmware publication.
+void mock_ieee_repeat_status_after(size_t writes) {
+    ck_assert_uint_gt(writes, 0);
+    mock_ieee.status_repeat_after = writes;
+}
+
+// Observes the firmware's source gate without treating SA readback as the owner.
+bool mock_ieee_tx_paused(void) {
+    return (mock_ieee.tx_owner & ECONOPET_IEEE_TX_OWNER_PAUSE_MASK) != 0;
+}
+
+// Models a prefix of status GETs, retaining its unread transport suffix.
+void mock_ieee_consume_status(size_t count) {
+    ck_assert_uint_le(count, mock_ieee.status_count);
+    mock_ieee.status_prefetched = (uint8_t) (mock_ieee.status_prefetched + count);
+    mock_ieee.status_count -= count;
+    memmove(mock_ieee.status, mock_ieee.status + count,
+        mock_ieee.status_count * sizeof(mock_ieee.status[0]));
+}
+
+// Models fetching the complete queued response.
+void mock_ieee_clear_status(void) {
+    mock_ieee_consume_status(mock_ieee.status_count);
 }
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
 uint8_t spi_read_at(uint32_t addr) {
+    if (addr == ECONOPET_WB_STATUS_ADDR) {
+        if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
+            cpu_run_callback();
+        }
+        return system_state.bp_halted ? ECONOPET_REG_STATUS_BP_HALT_MASK : 0;
+    }
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
+        if (addr == ECONOPET_WB_IEEE_TX_ADDR) return mock_ieee.prefetched;
+        if (addr == ECONOPET_WB_IEEE_TXS_ADDR) return mock_ieee.status_prefetched;
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
-            uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_ENABLE_MASK)
+            uint8_t ctrl = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_UNIT_MASK)
                 ? ECONOPET_IEEE_CTRL_RD_ENABLE_MASK : 0;
             if (mock_ieee.data_count <= MOCK_IEEE_TX_CAPACITY - ECONOPET_IEEE_TX_BURST_CHUNK) {
                 ctrl |= ECONOPET_IEEE_CTRL_RD_TX_ROOM_MASK;
             }
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].eoi) {
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_EOI_MASK;
+            }
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].atn_end)
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_ATN_END_MASK;
+            if (mock_ieee.rx_count != 0 && mock_ieee.rx[mock_ieee.rx_head].talk_event)
+                ctrl |= ECONOPET_IEEE_CTRL_RD_RX_TALK_EVENT_MASK;
             return ctrl;
         }
         if (addr == ECONOPET_WB_IEEE_STATUS_ADDR) {
@@ -149,6 +275,9 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
             mock_ieee.ctrl = data;
             if (data & ECONOPET_IEEE_CTRL_FLUSH_MASK) mock_ieee_flush(false);
             if (data & ECONOPET_IEEE_CTRL_DATA_FLUSH_MASK) mock_ieee_flush(true);
+            if (data & ECONOPET_IEEE_CTRL_STATUS_FLUSH_MASK) mock_ieee_discard_status();
+        } else if (addr == ECONOPET_WB_IEEE_SA_ADDR) {
+            mock_ieee.tx_owner = data;
         } else if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             if (mock_ieee.rx_count != 0) {
                 mock_ieee.rx_head = (mock_ieee.rx_head + 1) % MOCK_IEEE_RX_CAPACITY;
@@ -166,6 +295,11 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
                 .byte = data,
                 .eoi = addr == ECONOPET_WB_IEEE_TXS_LAST_ADDR,
             };
+            if (mock_ieee.status_repeat_after != 0 && --mock_ieee.status_repeat_after == 0) {
+                mock_ieee_discard_status();
+                mock_ieee_enqueue_rx(true, IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL));
+                mock_ieee_enqueue_atn_end();
+            }
         }
         return 0;
     }
@@ -200,11 +334,23 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
-static cpu_state_t mock_cpu_state;
-
 // Records CPU control flags for subsequent host-side reads.
 void set_cpu(cpu_state_t state) {
     mock_cpu_state = state;
+}
+
+// Supplies CPU execution effects independently of the breakpoint probe.
+void mock_cpu_set_run_callback(void (*callback)(void)) {
+    cpu_run_callback = callback;
+}
+
+// Record socket/soft-core routing independently of execution flags.
+void set_cpu_type(cpu_type_t cpu) {
+    selected_cpu = cpu;
+}
+
+cpu_type_t mock_cpu_type(void) {
+    return selected_cpu;
 }
 
 // Returns the most recently recorded CPU control flags.
@@ -244,6 +390,11 @@ void mock_reset(void) {
     mock_bp_addr = 0;
     mock_bp_cleared = false;
     mock_cpu_state = CPU_RESET;
+    input_reader = NULL;
+    cpu_run_callback = NULL;
+    selected_cpu = CPU_PHYS_6502;
+    clock_overridden = false;
+    clock_us = 0;
 }
 
 // Configures the address observed by breakpoint handling.
@@ -281,12 +432,17 @@ void display_task(void) { }
 // Leaves hardware input initialization inactive in host tests.
 void input_init(void) { }
 
+// Installs deterministic menu input without hardware polling.
+void mock_input_set_reader(int (*reader)(void)) {
+    input_reader = reader;
+}
+
 // Leaves hardware input polling inactive in host tests.
 void input_task(void) { }
 
-// Reports that no host input character is available.
+// Reads test-provided menu input, reporting EOF when no reader is installed.
 int input_getch(void) {
-    return EOF;
+    return input_reader != NULL ? input_reader() : EOF;
 }
 
 // ---------------------------------------------------------------------------

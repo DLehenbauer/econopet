@@ -529,6 +529,54 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     release_temp_buffer(&temp_buffer);
 }
 
+// Translates the PET's physical PIA/VIA range into its MCU Wishbone window.
+static uint32_t pet_io_addr(const uint16_t addr) {
+    // Restrict access to $E810-$E84F, excluding the unmapped $E800-$E80F
+    // hole (which the bridge acknowledges with $FF) and upper VIA mirrors.
+    // Reading $E87F would also prefetch Wishbone address 0x78080, outside
+    // the bridge window, and stall waiting for an acknowledgement.
+    vet(addr >= 0xE810 && addr <= 0xE84F,
+        "PET I/O address out of range: $%04X", addr);
+
+    return ECONOPET_WB_IO_BASE_ADDR | (addr & 0x7f);
+}
+
+/**
+ * Reads a physical PET I/O register through the FPGA.
+ *
+ * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
+ * already be halted so it cannot access the I/O bus concurrently. The PET
+ * address is translated to the FPGA I/O window before the SPI read.
+ *
+ * @param addr PET I/O register address
+ * @return The byte value read from the register
+ */
+uint8_t pet_io_read(const uint16_t addr) {
+    // If the CPU is ready, it owns the bus and PET I/O access is not allowed.
+    vet(!(get_cpu() & CPU_READY),
+        "PET I/O access while CPU is ready: $%04X", addr);
+
+    return spi_read_at(pet_io_addr(addr));
+}
+
+/**
+ * Writes a physical PET I/O register through the FPGA.
+ *
+ * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
+ * already be halted so it cannot access the I/O bus concurrently. The PET
+ * address is translated to the FPGA I/O window before the SPI write.
+ *
+ * @param addr PET I/O register address
+ * @param data Byte value to write to the register
+ */
+void pet_io_write(const uint16_t addr, const uint8_t data) {
+    // If the CPU is ready, it owns the bus and PET I/O access is not allowed.
+    vet(!(get_cpu() & CPU_READY),
+        "PET I/O access while CPU is ready: $%04X", addr);
+
+    spi_write_at(pet_io_addr(addr), data);
+}
+
 /**
  * Controls the PET CPU state via the CPU control register.
  *
@@ -568,33 +616,6 @@ void set_cpu_type(cpu_type_t cpu) {
 // Plain set_cpu_type clears it, so the menu always boots a stock PET.
 void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
     spi_write_at(ECONOPET_WB_CPU_SEL_ADDR, (uint8_t) cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
-}
-
-// Run the physical CPU on a JMP-self at $0400 and check
-// ECONOPET_REG_STATUS_PHYS_CPU_MASK. An empty socket leaves the bus static.
-static bool detect_physical_cpu(void) {
-    spi_write_at(0x0400, 0x4C);   // JMP ...
-    spi_write_at(0x0401, 0x00);   // ... $0400
-    spi_write_at(0x0402, 0x04);
-    spi_write_at(0xFFFC, 0x00);   // reset vector -> $0400
-    spi_write_at(0xFFFD, 0x04);
-
-    set_cpu(CPU_RESET);
-    set_cpu_type(CPU_PHYS_6502);   // arms detector
-    set_cpu(CPU_READY);
-    sleep_us(5000);
-    const uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
-    set_cpu(CPU_RESET);  // halt again
-    return (status & ECONOPET_REG_STATUS_PHYS_CPU_MASK) != 0;
-}
-
-bool physical_cpu_present(void) {
-    static int8_t cached = -1;   // -1 = not yet probed
-    if (cached < 0) {
-        cached = detect_physical_cpu() ? 1 : 0;
-        log_info("physical 6502: %s", cached ? "detected" : "not populated (using soft CPU)");
-    }
-    return cached != 0;
 }
 
 /**
