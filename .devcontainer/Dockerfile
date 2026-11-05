@@ -4,73 +4,26 @@ ARG VARIANT="ubuntu"
 ARG PLATFORM="linux/amd64"
 FROM --platform=${PLATFORM} mcr.microsoft.com/devcontainers/base:${VARIANT}
 
-# From https://github.com/raspberrypi/pico-sdk/releases
-#  and https://github.com/raspberrypi/picotool/releases
-ARG PICO_SDK_VERSION="2.3.0"
-
-# From https://github.com/raspberrypi/openocd/tags
-ARG OPENOCD_VERSION="sdk-2.3.0"
-
-# From https://github.com/chipsalliance/verible/releases
-ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
-
-# From https://github.com/verilator/verilator/releases
-ARG VERILATOR_VERSION="v5.044"
-
-# From https://github.com/steveicarus/iverilog/releases
-ARG IVERILOG_VERSION="v12_0"
+# Keep costly, stable installations before smaller or frequently edited inputs.
+# Download, install and clean each temporary source tree in one layer.
+# Declare tool versions at first use to avoid invalidating unrelated earlier layers.
 
 # Efinity software requires a free license from Efinix. Please do the right thing.
-# From https://www.efinixinc.com/support/
-ARG EFINITY_MAJOR_MINOR="2025.2"
-ARG EFINITY_PATCH="288.2.10"
-
-# From https://apt.kitware.com/
-# Pin to 3.x: CMake 4.x removed compat with cmake_minimum_required(VERSION < 3.5)
-# which breaks external dependencies (e.g., libyaml). Update when deps are fixed.
-ARG CMAKE_VERSION="3.*"
-
-# From https://github.com/caddyserver/caddy/releases
-ARG CADDY_VERSION="2.7.6"
-
-# Cache large downloads:
-
-# Download Efinity software -- Requires a free license from Efinix. Please do the right thing.
 #
 #   1. Create an account on the Efinix website.
 #   2. Log in to your account.
 #   3. Navigate to the Efinity page to request your free license.
 #      (See: https://www.efinixinc.com/support/)
 #
+# From https://www.efinixinc.com/support/
+ARG EFINITY_MAJOR_MINOR="2025.2"
+ARG EFINITY_PATCH="288.2.10"
 ARG EFINITY_ARCHIVE="efinity-${EFINITY_MAJOR_MINOR}.${EFINITY_PATCH}-linux-x64.tar.bz2"
-RUN wget https://www.efinixinc.com/dl/${EFINITY_ARCHIVE} -P /tmp
-
-# Clone Raspberry Pi Pico SDK
-# (See https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
-ENV PICO_SDK_PATH="/opt/pico-sdk"
-RUN cd /opt && \
-    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/pico-sdk.git && \
-    cd ${PICO_SDK_PATH} && \
-    git submodule update --init --recursive --depth 1 --single-branch
-
-# Clone 'picotool': Pico SDK recommends installing this tool separately.
-RUN cd /tmp && \
-    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/picotool.git
-
-# Clone fork of OpenOCD for debugging RP2040
-RUN cd /tmp && \
-    git clone --branch "${OPENOCD_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/openocd.git
-
-# Clone Verilator (built from source)
-RUN cd /tmp && \
-    git clone --branch ${VERILATOR_VERSION} --depth 1 --single-branch https://github.com/verilator/verilator.git
-
-# Clone Icarus Verilog (built from source)
-RUN cd /tmp && \
-    git clone --branch ${IVERILOG_VERSION} --depth 1 --single-branch https://github.com/steveicarus/iverilog.git
-
-ARG VERIBLE_ARCHIVE="verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz"
-RUN wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/${VERIBLE_ARCHIVE} -P /tmp
+RUN wget "https://www.efinixinc.com/dl/${EFINITY_ARCHIVE}" -P /tmp && \
+    tar -xjvf "/tmp/${EFINITY_ARCHIVE}" -C /opt && \
+    rm -f "/tmp/${EFINITY_ARCHIVE}" && \
+    chmod +x /opt/efinity/${EFINITY_MAJOR_MINOR}/bin/setup.sh
+ENV EFINITY_HOME="/opt/efinity/${EFINITY_MAJOR_MINOR}"
 
 # Install apt package dependencies.
 #
@@ -171,8 +124,14 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ ${UBUNTU_CODENAME} main" \
     | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
     apt-get update && \
-    apt-get -y install --no-install-recommends kitware-archive-keyring
+    apt-get -y install --no-install-recommends kitware-archive-keyring && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# From https://apt.kitware.com/
+# Pin to 3.x: CMake 4.x removed compat with cmake_minimum_required(VERSION < 3.5)
+# which breaks external dependencies (e.g., libyaml). Update when deps are fixed.
+ARG CMAKE_VERSION="3.*"
 RUN apt-get update && apt-get -y install --no-install-recommends \
     acme \
     advancecomp \
@@ -214,14 +173,12 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     python3-venv \
     texinfo \
     universal-ctags \
-    vice
+    vice && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Fail build if CMake is not installed correctly.
 RUN cmake --version
-
-# Clean apt cache and temporary files
-RUN apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
 
 # Fix warnings from Cortex-Debug extension
 # (See https://forums.raspberrypi.com/viewtopic.php?t=333146)
@@ -229,13 +186,13 @@ RUN cd /usr/bin && \
     ln -s /usr/bin/objdump objdump-multiarch && \
     ln -s /usr/bin/nm nm-multiarch
 
-#
-# Build and install the tools
-#
-
 # Install Verilator (built from source)
 # (Do this early as it takes a while).
-RUN cd /tmp/verilator && \
+# From https://github.com/verilator/verilator/releases
+ARG VERILATOR_VERSION="v5.044"
+RUN git clone --branch "${VERILATOR_VERSION}" --depth 1 --single-branch \
+    https://github.com/verilator/verilator.git /tmp/verilator && \
+    cd /tmp/verilator && \
     autoconf && \
     ./configure && \
     make -j$(nproc) && \
@@ -245,7 +202,11 @@ RUN cd /tmp/verilator && \
 
 # Install Icarus Verilog (built from source)
 # (Do this early as it takes a while).
-RUN cd /tmp/iverilog && \
+# From https://github.com/steveicarus/iverilog/releases
+ARG IVERILOG_VERSION="v12_0"
+RUN git clone --branch "${IVERILOG_VERSION}" --depth 1 --single-branch \
+    https://github.com/steveicarus/iverilog.git /tmp/iverilog && \
+    cd /tmp/iverilog && \
     sh autoconf.sh && \
     sh configure && \
     make -j$(nproc) && \
@@ -253,8 +214,37 @@ RUN cd /tmp/iverilog && \
     cd /tmp && \
     rm -rf iverilog
 
-# Install 'picotool'
-RUN cd /tmp/picotool && \
+# Install OpenOCD (built from source for RP2040)
+# (See: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
+# '--disable-werror': glibc 2.42+ made strchr() const-preserving, which trips
+# OpenOCD's -Werror=discarded-qualifiers in src/jtag/drivers/vdebug.c.
+# From https://github.com/raspberrypi/openocd/tags
+ARG OPENOCD_VERSION="sdk-2.3.0"
+RUN git clone --branch "${OPENOCD_VERSION}" --depth 1 --single-branch \
+    https://github.com/raspberrypi/openocd.git /tmp/openocd && \
+    cd /tmp/openocd && \
+    ./bootstrap && \
+    ./configure --disable-werror && \
+    make -j$(nproc) && \
+    sudo make install && \
+    cd /tmp && \
+    rm -rf openocd
+
+# Clone Raspberry Pi Pico SDK before building picotool, which uses it.
+# (See https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
+# From https://github.com/raspberrypi/pico-sdk/releases
+#  and https://github.com/raspberrypi/picotool/releases
+ARG PICO_SDK_VERSION="2.3.0"
+ENV PICO_SDK_PATH="/opt/pico-sdk"
+RUN cd /opt && \
+    git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch https://github.com/raspberrypi/pico-sdk.git && \
+    cd ${PICO_SDK_PATH} && \
+    git submodule update --init --recursive --depth 1 --single-branch
+
+# Install 'picotool': Pico SDK recommends installing this tool separately.
+RUN git clone --branch "${PICO_SDK_VERSION}" --depth 1 --single-branch \
+    https://github.com/raspberrypi/picotool.git /tmp/picotool && \
+    cd /tmp/picotool && \
     mkdir build && \
     cd build && \
     cmake .. && \
@@ -263,36 +253,23 @@ RUN cd /tmp/picotool && \
     cd /tmp && \
     rm -rf picotool
 
-# Install OpenOCD (built from source for RP2040)
-# (See: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf)
-# '--disable-werror': glibc 2.42+ made strchr() const-preserving, which trips
-# OpenOCD's -Werror=discarded-qualifiers in src/jtag/drivers/vdebug.c.
-RUN cd /tmp/openocd && \
-    ./bootstrap && \
-    ./configure --disable-werror && \
-    make -j$(nproc) && \
-    sudo make install && \
-    cd /tmp && \
-    rm -rf openocd
-
-# Install Efinity -- Requires a free license from Efinix. Please do the right thing.
-# (See: https://www.efinixinc.com/support/)
-RUN tar -xjvf /tmp/${EFINITY_ARCHIVE} -C /opt && \
-    rm -rf /tmp/${EFINITY_ARCHIVE} && \
-    chmod +x /opt/efinity/${EFINITY_MAJOR_MINOR}/bin/setup.sh
-ENV EFINITY_HOME="/opt/efinity/${EFINITY_MAJOR_MINOR}"
-
 # Install Verible (download from chipsalliance)
-RUN mkdir -p /opt/verible && \
-    tar -x -f /tmp/${VERIBLE_ARCHIVE} -C /opt/verible --strip-components 1 && \
-    rm -rf /tmp/${VERIBLE_ARCHIVE}
+# From https://github.com/chipsalliance/verible/releases
+ARG VERIBLE_VERSION="v0.0-4007-g98bdb38a"
+ARG VERIBLE_ARCHIVE="verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz"
+RUN wget "https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/${VERIBLE_ARCHIVE}" -P /tmp && \
+    mkdir -p /opt/verible && \
+    tar -x -f "/tmp/${VERIBLE_ARCHIVE}" -C /opt/verible --strip-components 1 && \
+    rm -f "/tmp/${VERIBLE_ARCHIVE}"
 ENV PATH="/opt/verible/bin:${PATH}"
 
 # Install Caddy (static file server to test gh-pages site)
+# From https://github.com/caddyserver/caddy/releases
+ARG CADDY_VERSION="2.7.6"
 RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" -o /tmp/caddy.tar.gz && \
     tar -xzf /tmp/caddy.tar.gz -C /tmp && \
     install -m 0755 /tmp/caddy /usr/local/bin/caddy && \
-    rm -f /tmp/caddy.tar.gz
+    rm -f /tmp/caddy.tar.gz /tmp/caddy
 
 # Install uv (Python package manager for m6502 tests)
 # (See: https://github.com/astral-sh/uv)

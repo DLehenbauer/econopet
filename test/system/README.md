@@ -56,27 +56,32 @@ git submodule update --init --recursive
 
 # Configure and build host, board and isolated firmware executables.
 cmake --preset default
-cmake --build --preset sys-test --parallel 2
+cmake --build --preset sys-test --parallel
 
-# Run the complete nested suite through the root wrapper.
-ctest --preset sys --output-on-failure --no-tests=error
+# Run all system cases through the root CTest scheduler.
+ctest --preset sys --parallel --output-on-failure --no-tests=error
 
-# Rebuild after edits, then select individual cases in the nested build.
-cmake --build --preset sys-test --parallel 2
-ctest --test-dir build/system --parallel 2 --output-on-failure --no-tests=error \
+# Rebuild after edits, then select individual cases from the root.
+cmake --build --preset sys-test --parallel
+ctest --preset sys --parallel --output-on-failure --no-tests=error \
   -R 'SpiRegistersCpuAndDriveMount|waterloo_atn_down_case'
 
-# List nested cases without executing them. CTest does not build.
-ctest --test-dir build/system -N
+# List system cases without executing them. CTest does not build.
+ctest --preset sys -N
 ```
 
 Set `ECONOPET_MEDIA_DIR` before configuring. ROM cases require legally
 supplied images under its `roms/` directory. Historical `DISABLED_` cases stay
-excluded. The root preset selects the `system_tests` wrapper, not individual
-`firmware.*` or `board.*` names. Use `--test-dir build/system` for case filters
-or bounded inner parallelism. Each discovered case runs in an isolated process.
-The wrapper has a 30-minute aggregate budget, while individual host, board and
-firmware cases retain five-minute limits.
+excluded. Root CTest loads the separate system build's registrations at test
+discovery time, so individual `system.*`, `firmware.*`, and `board.*` cases share
+one scheduler with the other root tests. The `sys` preset selects these cases by
+label and supports `-R` case filters directly. The standalone
+`--test-dir build/system` entry point remains available. Build before running
+CTest, which does not configure or compile missing executables.
+Each discovered case runs in an isolated process with the configured media and
+seed-file paths. Individual host, board and firmware cases retain five-minute
+limits, hardware-contract checks have one-minute limits, and there is no
+aggregate system-suite timeout.
 
 Requirements, standalone/offline builds, optional board integration, and
 seed replay are in the [build reference](reference.md#building-fixture-tests).

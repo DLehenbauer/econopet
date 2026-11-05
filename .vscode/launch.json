@@ -25,11 +25,18 @@
             // 
             //    Error: Failed to connect multidrop rp2040.dap0
             //
-            // Picoprobe documentation uses 5000 Hz:
+            // Documentation uses 5000 kHz:
             // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
             //
-            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
-            "serverArgs": ["-c", "adapter speed 20833"],
+            // Latest Debugprobe firmware available here:
+            // https://github.com/raspberrypi/debugprobe
+            //
+            // Notes:
+            //  - 31250 kHz fails immediately with Debugprobe v2.3.1.
+            //  - `cmsis-dap quirk enable` serializes CMSIS-DAP transfers to
+            //    work around intermittent probe communication failures that can
+            //    report "Could not allocate bounce buffer for flash programming".
+            "serverArgs": ["-c", "adapter speed 31249", "-c", "init", "-c", "cmsis-dap quirk enable"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToEntryPoint": "main",
             // Work around for stopping at main on restart
@@ -63,103 +70,6 @@
                 }
             ],
             "preLaunchTask": "CMake: Build Firmware Test"
-        },
-        {
-            "name": "PicoDVI Example",
-            "cwd": "${workspaceRoot}",
-            "executable": "${workspaceRoot}/fw/external/PicoDVI/software/build/apps/colour_terminal/colour_terminal.elf",
-            "request": "launch",
-            "type": "cortex-debug",
-            "servertype": "openocd",
-            // This may need to be arm-none-eabi-gdb depending on your system
-            "gdbPath" : "gdb-multiarch",
-            "device": "RP2040",
-            "configFiles": [
-                // Change interface to "interface/picoprobe.cfg" if using older Picoprobe firmware.
-                "interface/cmsis-dap.cfg",
-                "target/rp2040.cfg"
-            ],
-            // Reduce the adapter speed if 'openocd' reports the following error:
-            // 
-            //    Error: Failed to connect multidrop rp2040.dap0
-            //
-            // Picoprobe documentation uses 5000 Hz:
-            // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            //
-            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
-            "serverArgs": ["-c", "adapter speed 20833"],
-            "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
-            "runToEntryPoint": "main",
-            // Work around for stopping at main on restart
-            "postRestartCommands": [
-                "break main",
-                "continue"
-            ]
-        },
-        {
-            "name": "FatFS SPI Example",
-            "cwd": "${workspaceRoot}",
-            //"executable": "${workspaceRoot}/fw/external/no-OS-FatFS-SD-SPI-RPi-Pico/example/build/FatFS_SPI_example.elf",
-            "executable": "${workspaceRoot}/fw/external/no-OS-FatFS-SD-SPI-RPi-Pico/simple_example/build/simple_example.elf",
-            "request": "launch",
-            "type": "cortex-debug",
-            "servertype": "openocd",
-            // Change 'gpbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
-            "gdbPath" : "gdb-multiarch",
-            "device": "RP2040",
-            "configFiles": [
-                // Change interface to "interface/picoprobe.cfg" if using older Picoprobe firmware.
-                "interface/cmsis-dap.cfg",
-                "target/rp2040.cfg"
-            ],
-            // Reduce the adapter speed if 'openocd' reports the following error:
-            // 
-            //    Error: Failed to connect multidrop rp2040.dap0
-            //
-            // Picoprobe documentation uses 5000 Hz:
-            // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            //
-            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
-            "serverArgs": ["-c", "adapter speed 20833"],
-            "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
-            "runToEntryPoint": "main",
-            // Work around for stopping at main on restart
-            "postRestartCommands": [
-                "break main",
-                "continue"
-            ]
-        },
-        {
-            "name": "TinyUSB Example",
-            "cwd": "${workspaceRoot}",
-            "executable": "/opt/pico/pico-examples/build/usb/host/host_cdc_msc_hid/host_cdc_msc_hid.elf",
-            "request": "launch",
-            "type": "cortex-debug",
-            "servertype": "openocd",
-            // Change 'gpbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
-            "gdbPath" : "gdb-multiarch",
-            "device": "RP2040",
-            "configFiles": [
-                // Change interface to "interface/picoprobe.cfg" if using older Picoprobe firmware.
-                "interface/cmsis-dap.cfg",
-                "target/rp2040.cfg"
-            ],
-            // Reduce the adapter speed if 'openocd' reports the following error:
-            // 
-            //    Error: Failed to connect multidrop rp2040.dap0
-            //
-            // Picoprobe documentation uses 5000 Hz:
-            // https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
-            //
-            // Note: previous top speed was 31249 Hz.  Reduced to 20833 Hz for Debugprobe v2.2.2.
-            "serverArgs": ["-c", "adapter speed 20833"],
-            "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
-            "runToEntryPoint": "main",
-            // Work around for stopping at main on restart
-            "postRestartCommands": [
-                "break main",
-                "continue"
-            ]
         }
     ]
 }

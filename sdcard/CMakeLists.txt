@@ -6,10 +6,6 @@ cmake_minimum_required(VERSION 3.13.1)
 
 project(sdcard)
 
-# Output directories on the SD image
-set(sdcard_root_dir ${CMAKE_CURRENT_BINARY_DIR}/sdcard_root)
-set(sdcard_rom_dir ${sdcard_root_dir}/roms)
-
 # ECONOPET_MEDIA_DIR is required and contains roms/ and disks/.
 if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
     if(DEFINED ENV{ECONOPET_MEDIA_DIR} AND NOT "$ENV{ECONOPET_MEDIA_DIR}" STREQUAL "")
@@ -21,103 +17,27 @@ if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
     message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks.")
 endif()
 
-message(STATUS "Using media from: ${ECONOPET_MEDIA_DIR}")
-
-# Reset the generated staging area so stale files from a previous configure/build
-# don't linger in the packaged SD card contents.
-file(REMOVE_RECURSE "${sdcard_root_dir}")
-file(MAKE_DIRECTORY "${sdcard_root_dir}")
-file(MAKE_DIRECTORY "${sdcard_rom_dir}")
-
-# Copy static files from the source 'sdcard' directory to the build output
-# during configuration.
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/config.yaml" DESTINATION "${sdcard_root_dir}")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/bootloader.uf2" DESTINATION "${sdcard_root_dir}")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/README.md" DESTINATION "${sdcard_root_dir}")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/../NOTICE.md" DESTINATION "${sdcard_root_dir}")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/ukm" DESTINATION "${sdcard_root_dir}")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/prgs/README.md" DESTINATION "${sdcard_root_dir}/prgs")
-file(COPY "${ECONOPET_MEDIA_DIR}/roms" DESTINATION "${sdcard_root_dir}")
-file(COPY "${ECONOPET_MEDIA_DIR}/disks" DESTINATION "${sdcard_root_dir}")
-
-# Copy any ROM .bin files produced by the 'rom' target into sdcard/roms
-# (exclude the special firmware-embedded 'menu.rom'). Print status for each.
-# The sdcard project builds under ${CMAKE_CURRENT_BINARY_DIR} which is
-# typically ${TOP}/build/sdcard. The ROM binaries live under ${TOP}/build/rom/bin.
-get_filename_component(build_root "${CMAKE_CURRENT_BINARY_DIR}" DIRECTORY)
-set(rom_bin_dir "${build_root}/rom/bin")
-file(GLOB rom_bin_files "${rom_bin_dir}/*.bin")
-message(STATUS "Scanning ROM bin directory: ${rom_bin_dir}")
-message(STATUS "Found ROM bins: ${rom_bin_files}")
-
-set(sdcard_rom_outputs)
-foreach(bin_file ${rom_bin_files})
-    get_filename_component(bin_name "${bin_file}" NAME)
-    add_custom_command(
-        OUTPUT "${sdcard_rom_dir}/${bin_name}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_rom_dir}"
-        COMMAND ${CMAKE_COMMAND} -E echo "Including ROM: ${bin_name}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${bin_file}"
-                "${sdcard_rom_dir}/${bin_name}"
-        DEPENDS "${bin_file}"
-        COMMENT "Copying ${bin_name} to SD card roms"
-        VERBATIM
-    )
-    list(APPEND sdcard_rom_outputs "${sdcard_rom_dir}/${bin_name}")
+foreach(required_var FIRMWARE_UF2 FPGA_BITSTREAM)
+    if(NOT DEFINED ${required_var})
+        message(FATAL_ERROR "${required_var} must be defined.")
+    endif()
 endforeach()
 
-# Get firmware and FPGA paths from CMake variables (set by super-project)
-# These should be passed in as -DFIRMWARE_UF2=... and -DFPGA_BITSTREAM=...
-if(NOT DEFINED FIRMWARE_UF2)
-    message(FATAL_ERROR "FIRMWARE_UF2 must be defined (path to firmware.elf.uf2)")
-endif()
-
-if(NOT DEFINED FPGA_BITSTREAM)
-    message(FATAL_ERROR "FPGA_BITSTREAM must be defined (path to EconoPET.hex.bin)")
-endif()
-
-message(STATUS "Firmware UF2: ${FIRMWARE_UF2}")
-message(STATUS "FPGA Bitstream: ${FPGA_BITSTREAM}")
-
-# Copy firmware UF2 into the SD card root at build time
-add_custom_command(
-    OUTPUT "${sdcard_root_dir}/firmware.uf2"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${FIRMWARE_UF2}"
-            "${sdcard_root_dir}/firmware.uf2"
-    DEPENDS "${FIRMWARE_UF2}"
-    COMMENT "Copying firmware.uf2 to SD card root"
-    VERBATIM
-)
-
-# Copy FPGA bitstream into sdcard_root/fpga
-add_custom_command(
-    OUTPUT "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${sdcard_root_dir}/fpga"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${FPGA_BITSTREAM}"
-            "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
-    DEPENDS "${FPGA_BITSTREAM}"
-    COMMENT "Copying EconoPET.hex.bin to SD card fpga directory"
-    VERBATIM
-)
-
-# Package the SD card contents. The zip is named for the version and commit it
-# was built from, and carries a matching 'build-info.yaml', both of which are
-# produced by the packaging script so that they describe the tree as of the
-# build rather than as of the last configure. That makes the zip filename
-# unknown here, so this is a custom target (which always runs) rather than a
-# custom command producing a named output.
+# Rebuild staging on every package invocation, including additions and removals.
+get_filename_component(build_root "${CMAKE_CURRENT_BINARY_DIR}" DIRECTORY)
 add_custom_target(sdcard ALL
     COMMAND ${CMAKE_COMMAND}
-            -DSDCARD_ROOT_DIR=${sdcard_root_dir}
-            -DSDCARD_ZIP_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            "-DSDCARD_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/sdcard_root"
+            "-DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}"
+            "-DROM_BIN_DIR=${build_root}/rom/bin"
+            "-DFIRMWARE_UF2=${FIRMWARE_UF2}"
+            "-DFPGA_BITSTREAM=${FPGA_BITSTREAM}"
+            -P "${CMAKE_CURRENT_LIST_DIR}/Stage.cmake"
+    COMMAND ${CMAKE_COMMAND}
+            "-DSDCARD_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/sdcard_root"
+            "-DSDCARD_ZIP_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/Package.cmake"
-    DEPENDS "${sdcard_root_dir}/firmware.uf2"
-            "${sdcard_root_dir}/fpga/EconoPET.hex.bin"
-            ${sdcard_rom_outputs}
-    COMMENT "Packaging SD card contents"
+    DEPENDS "${FIRMWARE_UF2}" "${FPGA_BITSTREAM}"
+    COMMENT "Staging and packaging SD card contents"
     VERBATIM
 )

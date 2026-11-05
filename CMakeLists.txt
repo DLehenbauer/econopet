@@ -135,6 +135,8 @@ if(BUILD_SYSTEM_TESTS)
             -DCMAKE_BUILD_TYPE=Debug
             -DBUILD_TESTING=ON
             -DBUILD_BOARD_TESTS=ON
+            -DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}
+            -DECONOPET_TEST_SEED_FILE=${SUPER_BUILD_DIR}/test.seed
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
@@ -151,9 +153,6 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
         DEPENDS firmware_project fpga_project
         CMAKE_ARGS
             -G Ninja
-            -DPICO_PLATFORM=rp2040
-            -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
-            -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
             -DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}
             -DFIRMWARE_UF2=${FIRMWARE_UF2}
             -DFPGA_BITSTREAM=${FPGA_BITSTREAM}
@@ -241,24 +240,14 @@ if(BUILD_TESTS)
     )
 endif()
 
-# Run the standalone suite so its host and contract test registration remains authoritative.
+# Load standalone test registrations at CTest time, after build-time discovery.
 if(BUILD_SYSTEM_TESTS)
-    # Reserve the child suite's bounded parallelism in the parent scheduler too.
-    # Native DOS scenarios perform cooperative work over physical SPI. Keep
-    # the two-worker resource bound and individual deadlines, but allow the
-    # complete suite to outlive its former legacy-facade half-hour budget.
-    set(SYSTEM_TEST_SUITE_TIMEOUT_SECONDS 3600)
-    add_test(
-        NAME system_tests
-        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${SUPER_BUILD_DIR}/system
-            --parallel 2 --output-on-failure --no-tests=error
-    )
-    set_tests_properties(system_tests PROPERTIES
-        LABELS "sys;system;host;contract"
-        TIMEOUT ${SYSTEM_TEST_SUITE_TIMEOUT_SECONDS}
-        PROCESSORS 2
-        ENVIRONMENT "${ECONOPET_TEST_ENV}"
-    )
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/SystemTests.cmake.in"
+        "${CMAKE_BINARY_DIR}/SystemTests.cmake"
+        @ONLY)
+    set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+        "${CMAKE_BINARY_DIR}/SystemTests.cmake")
 endif()
 
 # Add Verilog simulation tests to root CTest

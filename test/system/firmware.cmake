@@ -62,4 +62,5 @@ gtest_discover_tests(econopet_firmware_tests
     TEST_PREFIX "firmware."
     WORKING_DIRECTORY "${BOARD_RUNTIME_DIR}"
     DISCOVERY_TIMEOUT ${SYSTEM_DISCOVERY_TIMEOUT_SECONDS}
-    PROPERTIES LABELS "system\\;board\\;firmware" TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
+    PROPERTIES LABELS "sys\\;system\\;board\\;firmware"
+        ${SYSTEM_TEST_ENV_PROPERTIES} TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
