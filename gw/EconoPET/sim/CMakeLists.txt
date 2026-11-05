@@ -8,7 +8,7 @@ find_program(IVERILOG iverilog REQUIRED)
 find_program(VVP vvp REQUIRED)
 
 # Set paths
-set(PROJ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
+get_filename_component(PROJ_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 set(WORK_SIM_DIR ${PROJ_DIR}/work_sim)
 set(REPO_DIR ${PROJ_DIR}/../..)
 set(SIM_FILELIST ${WORK_SIM_DIR}/EconoPET.f)

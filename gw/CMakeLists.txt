@@ -19,12 +19,19 @@ message(VERBOSE "FPGA_PROJECT_DIR: ${FPGA_PROJECT_DIR}")
 
 # Track project settings without rebuilding for Efinity's run-status updates.
 set(FPGA_PROJECT_FILE "${FPGA_PROJECT_DIR}/EconoPET.xml")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FPGA_PROJECT_FILE}")
-file(READ "${FPGA_PROJECT_FILE}" FPGA_PROJECT_CONFIG)
-string(REGEX REPLACE
-    " (last_change|sw_version|last_run_state|last_run_flow|config_result_in_sync|design_ood|place_ood|route_ood)=\"[^\"]*\""
-    "" FPGA_PROJECT_CONFIG "${FPGA_PROJECT_CONFIG}")
-string(SHA256 FPGA_PROJECT_CONFIG_HASH "${FPGA_PROJECT_CONFIG}")
+set(FPGA_PROJECT_CONFIG_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/project_config.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${FPGA_PROJECT_FILE}" "${FPGA_PROJECT_CONFIG_SCRIPT}")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${FPGA_PROJECT_CONFIG_SCRIPT}" "${FPGA_PROJECT_FILE}"
+    OUTPUT_VARIABLE FPGA_PROJECT_CONFIG_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE FPGA_PROJECT_CONFIG_RESULT
+)
+if(NOT FPGA_PROJECT_CONFIG_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to fingerprint Efinity project configuration.")
+endif()
 set(FPGA_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/project-config.sha256")
 file(GENERATE OUTPUT "${FPGA_PROJECT_CONFIG_FILE}" CONTENT "${FPGA_PROJECT_CONFIG_HASH}\n")
 

@@ -28,9 +28,11 @@ class FpgaBuildTests(unittest.TestCase):
         project = source / "EconoPET"
         simulation = project / "sim"
         simulation.mkdir(parents=True)
-        (simulation / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 3.13)\nproject(sim NONE)\n")
+        shutil.copyfile(ROOT / "gw/EconoPET/sim/CMakeLists.txt",
+                        simulation / "CMakeLists.txt")
         shutil.copyfile(ROOT / "gw/CMakeLists.txt", source / "CMakeLists.txt")
+        helper = ROOT / "gw/project_config.py"
+        shutil.copyfile(helper, source / helper.name)
         self.project_file = project / "EconoPET.xml"
         ET.register_namespace("efx", NAMESPACE)
         tree = ET.Element(f"{{{NAMESPACE}}}project", name="EconoPET", last_change="0")
@@ -55,10 +57,11 @@ ET.register_namespace("efx", "http://www.efinixinc.com/enf_proj")
 project = pathlib.Path("EconoPET/EconoPET.xml")
 tree = ET.parse(project)
 root = tree.getroot()
-count = int(root.attrib["last_change"]) + 1
+bitstream = output / "EconoPET.hex.bin"
+count = int(bitstream.read_text()) + 1 if bitstream.exists() else 1
 root.set("last_change", str(count))
 tree.write(project)
-(output / "EconoPET.hex.bin").write_text(str(count))
+bitstream.write_text(str(count))
 """)
         compiler.chmod(0o755)
         self.build = self.root / "build"
@@ -98,6 +101,46 @@ tree.write(project)
         self.external_file.with_name("new.v").write_text("new source")
         self.run_command(*self.build_command)
         self.assertEqual(self.compile_count(), 3)
+
+    def test_xml_serialization_and_cli_metadata_preserve_bitstream(self):
+        """Ignore XML formatting and the exact metadata updated/pruned by efx_run."""
+        self.run_command(*self.build_command)
+        fingerprint = self.build / "project-config.sha256"
+        timestamp = fingerprint.stat().st_mtime_ns
+        tree = ET.parse(self.project_file)
+        root = tree.getroot()
+        for attribute in ("last_change", "sw_version", "last_run_state",
+                          "last_run_flow", "config_result_in_sync",
+                          "design_ood", "place_ood", "route_ood",
+                          "last_change_date", "location", "last_run_tool"):
+            root.set(attribute, "tool metadata")
+        # Reorder attributes, change prefixes/quotes and expand empty elements.
+        root.attrib = dict(reversed(list(root.attrib.items())))
+        ET.indent(tree, space="\t")
+        ET.register_namespace("other", NAMESPACE)
+        xml = ET.tostring(root, encoding="unicode", short_empty_elements=False)
+        self.project_file.write_text(
+            '<?xml version="1.0"?>\r\n<!-- command-line rewrite -->\r\n'
+            + xml.replace('"', "'").replace("\n", "\r\n"))
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
+        self.assertEqual(fingerprint.stat().st_mtime_ns, timestamp)
+
+        # CLI pruning removes legacy status attributes before its next write.
+        tree = ET.parse(self.project_file)
+        for attribute in ("last_change_date", "location", "last_run_tool"):
+            tree.getroot().attrib.pop(attribute)
+        ET.indent(tree, space="  ")
+        tree.write(self.project_file, xml_declaration=True, encoding="utf-8")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
+        self.assertEqual(fingerprint.stat().st_mtime_ns, timestamp)
+
+        # Significant attribute whitespace is data, not XML indentation.
+        tree.find(f".//{{{NAMESPACE}}}param").set("value", "speed ")
+        tree.write(self.project_file)
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 2)
 
 
 if __name__ == "__main__":
