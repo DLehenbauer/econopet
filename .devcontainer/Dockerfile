@@ -304,6 +304,7 @@ ENV PATH="/root/.local/bin:${PATH}"
 ENV ECONOPET_MEDIA_DIR="/opt/econopet/media"
 COPY download.sh /tmp/download.sh
 COPY merge-disks.py /tmp/merge-disks.py
+COPY patch-os9-keyboard.py /tmp/patch-os9-keyboard.py
 RUN chmod +x /tmp/download.sh && \
     /tmp/download.sh /opt/econopet && \
-    rm -f /tmp/download.sh /tmp/merge-disks.py
+    rm -f /tmp/download.sh /tmp/merge-disks.py /tmp/patch-os9-keyboard.py

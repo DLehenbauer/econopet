@@ -138,6 +138,11 @@ class WaterlooKeyboard : public SystemTest, public testing::WithParamInterface<c
                         fixture.system.poke(SramAddress{address + i}, patch->data[i]);
                     fixture.patched_bytes_ += patch->size;
                 },
+            .on_mount =
+                [](void* context, uint32_t device, uint32_t drive, const char* filename) {
+                    if (device == 8 && drive == 0)
+                        static_cast<WaterlooKeyboard*>(context)->system_disk_ = filename;
+                },
             .system_state = &state,
         };
         const config_sink_t sink{.setup = &setup};
@@ -178,6 +183,7 @@ class WaterlooKeyboard : public SystemTest, public testing::WithParamInterface<c
 
     std::vector<uint8_t> original_;
     size_t patched_bytes_ = 0;
+    std::string system_disk_;
 
   private:
     bool registered_ = false;
@@ -188,6 +194,7 @@ class WaterlooKeyboard : public SystemTest, public testing::WithParamInterface<c
 TEST_P(WaterlooKeyboard, BusinessConfigurationLeavesRomsUnchanged) {
     apply(pet_keyboard_model_business);
     EXPECT_EQ(patched_bytes_, 0u);
+    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk-b.d80");
     EXPECT_EQ(rom_bytes(), original_);
     EXPECT_EQ(scan({{3, 0}}, 0)[1], 'a');
     EXPECT_EQ(scan({{3, 0}, {6, 0}}, 0)[1], 'A');
@@ -197,6 +204,7 @@ TEST_P(WaterlooKeyboard, BusinessConfigurationLeavesRomsUnchanged) {
 TEST_P(WaterlooKeyboard, GraphicsConfigurationRelocatesNativeTranslations) {
     apply(pet_keyboard_model_graphics);
     EXPECT_EQ(patched_bytes_, 4 * TableSize);
+    EXPECT_EQ(system_disk_, "superpet/os9/os9-systemdisk-n.d80");
     const auto patched = rom_bytes();
     for (size_t i = 0; i < patched.size(); ++i)
         if (i + 0xa000 < TableStart || i + 0xa000 >= TableEnd)
