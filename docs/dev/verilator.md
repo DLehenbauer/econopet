@@ -1,17 +1,19 @@
 # Running testbenches under Verilator
 
-`./verilate.sh TEST_NAME [RAND_RESET]` compiles a testbench with
-`verilator --binary --timing` and runs it. Verilator 5.028+.
+Native CMake targets compile testbenches through Verilator's `verilate()`
+integration. `./verilate.sh TEST_NAME [RAND_RESET]` runs a previously built
+testbench with the shared seed. Verilator 5.028+.
 
 Build generated models and the Verilator runtime with optimized
-`RelWithDebInfo` flags: Verilator `-O3`, C++ `-O3 -g -DNDEBUG`, native CPU tuning,
-and link-time optimization. Keep SV assertions enabled with `--assert`.
+`RelWithDebInfo` flags: Verilator `-O3`, C++ `-O3 -g -DNDEBUG`, and native CPU
+tuning. Disable link-time optimization to reduce CI build time.
+Keep SV assertions enabled with `--assert`.
 These locally built executables target the build host, not portable distribution.
 Avoid unsafe math optimizations that change simulation semantics.
 
 Compile linked test, framework, and firmware sources separately in `Debug`
 (without `NDEBUG`). Do not apply generated-model flags to an entire integrated
-test target. The current script builds only generated code and the runtime.
+test target. These model targets contain only generated code and the runtime.
 
 Verilator's compiled model runs the long boot-style benches orders of
 magnitude faster than iverilog, making them practical to run routinely.
@@ -23,20 +25,44 @@ Quick benches are registered twice: `<name>` on Icarus (label `iv`) and
 and take the `boot` label.
 
 ```sh
-ctest --preset gw --parallel        # quick benches under both simulators
+cmake --build --preset gw-test --parallel  # compile models through one Ninja scheduler
+ctest --preset gw --parallel       # quick benches under both simulators
 ctest --preset gw-iv --parallel     # quick benches under Icarus only
 ctest --preset gw-vl --parallel     # quick benches under Verilator only
 ctest --preset gw-boot --parallel   # full-boot benches (slow)
 ```
 
-`work_sim/obj_<name>/` caches the compiled model, so a rerun costs almost
-nothing while a cold run pays the C++ build. That build dominates the short
+Compilation and execution are separate stages. `cmake --build --preset all`
+includes the simulator models, so the existing CI build prepares them before
+running CTest without an additional CI step. To build only the Verilator models,
+use `cmake --build --preset gw-test` before a Verilator execution preset.
+It compiles every model, including boot benches. One Ninja scheduler controls
+compilation and linking across models without
+nested Make builds or per-model all-core worker pools. Use `--parallel N` or
+`CMAKE_BUILD_PARALLEL_LEVEL=N` to limit total build jobs on memory-constrained
+runners. Each executable links as soon as its own model objects are ready,
+without an all-model compilation barrier or a separate link pool.
+Initial Verilator generation happens during configuration, with subsequent
+generation and C++ rebuilds tracked by CMake's native dependencies.
+Compilation consumes the build stage's budget, not the CTest execution timeout.
+Verilator execution never builds models and has its own
+timeout (600 seconds for dual-simulator benches, 1800 for Verilator-only benches).
+If the build stage fails, stop rather than running potentially stale executables.
+
+`build/CMakeFiles/<name>_vl_model.dir/` caches the generated model and C++ objects.
+Executables are in `build/gw-test/bin/`. An unchanged rebuild does no compiler
+work, while a cold build stage pays the C++ build. That build dominates the short
 benches -- `wbp_mux_tb` is ~4s to compile and 2ms to simulate -- so Verilator
-only wins where simulated time is large. Two concurrent `ctest` runs will
-collide over those directories.
+only wins where simulated time is large. Do not run independent model builds
+concurrently or rebuild a model while it is executing.
+
+After building, use `./verilate.sh TEST_NAME [RAND_RESET]` to run a bench directly.
+The wrapper fails with build instructions if the executable is missing and
+never compiles or refreshes source lists. CTest supplies the exact target path
+so execution also works with a non-default CMake binary directory.
 
 `sim.sh --update-only` atomically replaces generated simulation file lists only
-when their contents change. Parallel subproject CTest build fixtures can
+when their contents change. Parallel subproject Icarus build fixtures can
 therefore share those lists without observing a partially written file or
 invalidating unchanged cached Icarus images.
 

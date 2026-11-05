@@ -2,59 +2,32 @@
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
 #
-# Compile and run a gateware testbench under Verilator (--binary --timing).
-# Usage: ./verilate.sh TEST_NAME [RAND_RESET]
+# Run a prebuilt Verilator testbench with the shared test seed.
+# Usage: ./verilate.sh TEST_NAME_OR_EXECUTABLE [RAND_RESET]
 #   RAND_RESET: 0 (default; required for m6502), 1 (all ones), or 2 (random).
 # See docs/dev/verilator.md.
 
-SCRIPT_DIR="$(readlink -f $(dirname "$0"))"
-PROJ_DIR="$SCRIPT_DIR/gw/EconoPET"
-TEST_NAME="$1"
+set -euo pipefail
+
+SCRIPT_DIR="$(readlink -f "$(dirname "$0")")"
+MODEL="${1:-}"
 RAND_RESET="${2:-0}"
 
-if [ -z "$TEST_NAME" ]; then
-    echo "Usage: $0 TEST_NAME [RAND_RESET]"
+if [ -z "$MODEL" ] || [ "$#" -gt 2 ]; then
+    echo "Usage: $0 TEST_NAME_OR_EXECUTABLE [RAND_RESET]" >&2
     exit 1
 fi
 
-if [ -z "${ECONOPET_MEDIA_DIR:-}" ]; then
-    echo "Error: ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks."
+# CTest supplies the exact target path. Direct invocations use the default preset.
+if [[ "$MODEL" != */* ]]; then
+    MODEL="$SCRIPT_DIR/build/gw-test/bin/${MODEL}_vl"
+fi
+if [ ! -x "$MODEL" ]; then
+    echo "Error: $MODEL is missing. Run cmake --build --preset gw-test first." >&2
     exit 1
 fi
-ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
-
-# Invoke seed.sh to get the effective test seed (empty if none is set).
-SEED="$("$SCRIPT_DIR/seed.sh")" || exit 1
-
-# Refresh the generated file list in case EconoPET.xml changed.
-"$SCRIPT_DIR/sim.sh" --update-only >/dev/null
-
-cd "$PROJ_DIR" || exit 1
-
-# Build threads per model; lower it if running many of these at once.
-VERILATOR_JOBS="${VERILATOR_JOBS:-$(nproc)}"
-
-VERILATOR_ONLY_TESTBENCHES=(video_crtc_timing_tb)
-VERILATOR_ONLY_SOURCES=()
-for VERILATOR_ONLY_TESTBENCH in "${VERILATOR_ONLY_TESTBENCHES[@]}"; do
-    if [ "$TEST_NAME" = "$VERILATOR_ONLY_TESTBENCH" ]; then
-        VERILATOR_ONLY_SOURCES+=("sim/${TEST_NAME}.sv")
-    fi
-done
-
-# Optimize this generated-only executable. Compile integrated C/C++ separately in Debug.
-verilator --binary --timing --assert -O3 -j "$VERILATOR_JOBS" \
-    -CFLAGS "-g -DNDEBUG -march=native -flto" \
-    -LDFLAGS "-flto" \
-    -MAKEFLAGS "OPT_FAST=-O3 OPT_SLOW=-O3 OPT_GLOBAL=-O3" \
-    --x-assign unique --x-initial unique \
-    -Wno-fatal -Wno-lint -Wno-style \
-    --timescale 1ns/1ps \
-    --top-module "$TEST_NAME" \
-    --Mdir "work_sim/obj_${TEST_NAME}" -o "${TEST_NAME}_vl" \
-    -Iexternal/m6502/rtl \
-    -DECONOPET_ROMS_DIR=\"${ROMS_DIR}\" \
-    -f work_sim/EconoPET.f verilator.vlt "${VERILATOR_ONLY_SOURCES[@]}" || exit $?
+MODEL="$(readlink -f "$MODEL")"
+SEED="$("$SCRIPT_DIR/seed.sh")"
 
 VERILATOR_ARGS=("+verilator+rand+reset+${RAND_RESET}")
 if [ -n "$SEED" ]; then
@@ -62,4 +35,6 @@ if [ -n "$SEED" ]; then
     VERILATOR_ARGS+=("+verilator+seed+${SEED}" "+seed=${SEED}")
 fi
 
-exec "work_sim/obj_${TEST_NAME}/${TEST_NAME}_vl" "${VERILATOR_ARGS[@]}"
+# SID lookup tables and testbench output paths are project-relative.
+cd "$SCRIPT_DIR/gw/EconoPET"
+exec "$MODEL" "${VERILATOR_ARGS[@]}"

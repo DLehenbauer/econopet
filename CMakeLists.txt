@@ -284,6 +284,11 @@ if(BUILD_FPGA)
         FIXTURES_SETUP gateware_filelists
     )
 
+    # Native targets share one compiler-job budget across all models.
+    add_custom_target(gateware_models)
+    add_dependencies(all_projects gateware_models)
+    include(cmake/VerilatorModels.cmake)
+
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
     foreach(TB_FILE ${TB_FILES})
@@ -295,10 +300,13 @@ if(BUILD_FPGA)
             set(TB_RAND_RESET ${GW_RAND_RESET_DEFAULT})
         endif()
 
+        add_gateware_model(${TB_NAME})
+
         if(TB_NAME IN_LIST GW_VERILATOR_ONLY_TESTS)
             add_test(
                 NAME ${TB_NAME}
-                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
+                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
 
@@ -310,7 +318,6 @@ if(BUILD_FPGA)
             set_tests_properties(${TB_NAME} PROPERTIES
                 LABELS "${TB_LABELS}"
                 TIMEOUT 1800
-                FIXTURES_REQUIRED gateware_filelists
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         else()
@@ -326,16 +333,16 @@ if(BUILD_FPGA)
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
 
-            # Verilator variant. Timeout covers compiling the model, not just running it.
+            # Execution has its own budget, independent of model compilation.
             add_test(
                 NAME ${TB_NAME}_vl
-                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh ${TB_NAME} ${TB_RAND_RESET}
+                COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
+                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
             set_tests_properties(${TB_NAME}_vl PROPERTIES
                 LABELS "gw;sim;vl"
                 TIMEOUT 600
-                FIXTURES_REQUIRED gateware_filelists
                 ENVIRONMENT "${ECONOPET_TEST_ENV}"
             )
         endif()
