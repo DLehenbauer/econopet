@@ -70,6 +70,16 @@ with open(os.environ['RUN_OUTPUT'], 'w') as output:
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("+verilator+seed+456", json.loads(self.output.read_text())["args"])
 
+    def test_capture_directory(self):
+        """Create the boot-capture directory before invoking a prebuilt model."""
+        self.model.write_text("""#!/usr/bin/env python3
+from pathlib import Path
+Path('outflow/probe.pgm').write_text('P2\\n1 1\\n255\\n0\\n')
+""")
+        result = self.invoke("probe_tb")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / "gw/EconoPET/outflow/probe.pgm").is_file())
+
     def test_missing_model(self):
         """Fail with build instructions rather than implicitly compiling."""
         result = self.invoke("missing_tb")

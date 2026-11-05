@@ -37,4 +37,5 @@ fi
 
 # SID lookup tables and testbench output paths are project-relative.
 cd "$SCRIPT_DIR/gw/EconoPET"
+mkdir -p outflow
 exec "$MODEL" "${VERILATOR_ARGS[@]}"

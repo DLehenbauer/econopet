@@ -40,7 +40,8 @@ function(add_gateware_model NAME)
         OPT_FAST -O3
         OPT_SLOW -O3
         OPT_GLOBAL -O3
-        VERILATOR_ARGS --main --timing --assert -O3
+        # Refresh the native dependency manifest on build-time regeneration too.
+        VERILATOR_ARGS --make cmake --main --timing --assert -O3
             --x-assign unique --x-initial unique
             --timescale 1ns/1ps -Wno-fatal -Wno-lint -Wno-style
             "-I${GW_MODEL_DIR}" "-I${GW_MODEL_DIR}/external/m6502/rtl"
