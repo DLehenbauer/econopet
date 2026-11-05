@@ -49,7 +49,7 @@ set_target_properties(econopet_drive_reference PROPERTIES
 
 # Isolate firmware globals and fopen wrapping from board-only and host-only tests.
 add_executable(econopet_firmware_tests
-    econopet_top_smoke.cpp firmware_test.cpp waterloo_keyboard_test.cpp ieee/drive_test.cpp
+    econopet_top_smoke.cpp firmware_test.cpp waterloo_keyboard_test.cpp os9_keyboard_test.cpp ieee/drive_test.cpp
     ieee/commodore_rom_test.cpp ieee/waterloo_rom_test.cpp framework/scheduler.cpp)
 target_compile_features(econopet_firmware_tests PRIVATE cxx_std_23)
 target_compile_definitions(econopet_firmware_tests PRIVATE

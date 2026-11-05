@@ -231,6 +231,13 @@ install_media_list() {
 # post-processing.
 install_media_list "${MEDIA_LIST}"
 
+# Retain the original system disk for business keyboards and generate a
+# separate graphics-keyboard version without changing the OS-9 REL container.
+readonly OS9_DISK_DIR="${MEDIA_DIR}/disks/superpet/os9"
+python3 "${SCRIPT_DIR}/patch-os9-keyboard.py" \
+  "${OS9_DISK_DIR}/os9-systemdisk.d80" \
+  "${OS9_DISK_DIR}/os9-systemdisk-graphics.d80"
+
 # Waterloo2 was distributed as two D64s. Merge these into one D80, add the
 # memory-test programs, then remove the temporary source images.
 readonly WATERLOO_DISK_DIR="${MEDIA_DIR}/disks/superpet"

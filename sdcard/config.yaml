@@ -360,9 +360,14 @@ configs:
           - action: "patch"
             address: 0xe033
             hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
-      # Mount the OS/9 system diskette in device 8, drive 0.
-      - action: "mount"
-        file: "superpet/os9/os9-systemdisk.d80"
+      # Use the OS-9 loader that matches the selected keyboard matrix.
+      - if: "graphics"
+        then:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk-graphics.d80"
+        else:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk.d80"
       # The SuperPET menu expects the Waterloo Languages disk in device 8, drive 1.
       - action: "mount"
         drive: 1
@@ -402,8 +407,13 @@ configs:
           - action: "patch"
             address: 0xe033
             hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
-      - action: "mount"
-        file: "superpet/os9/os9-systemdisk.d80"
+      - if: "graphics"
+        then:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk-graphics.d80"
+        else:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk.d80"
       - action: "mount"
         drive: 1
         file: "superpet/Waterloo2-Languages.d80"
