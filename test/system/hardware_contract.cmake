@@ -49,7 +49,7 @@ add_test(NAME system.HardwareContract.MatchesCommonPackage
         "-DCONTRACT_IMAGE=${HARDWARE_CONTRACT_IMAGE}"
         -P "${CMAKE_CURRENT_LIST_DIR}/hardware_contract/test.cmake")
 set_tests_properties(system.HardwareContract.MatchesCommonPackage PROPERTIES
-    LABELS "system;host;contract" TIMEOUT 60)
+    LABELS "sys;system;host;contract" ENVIRONMENT "${ECONOPET_TEST_ENV}" TIMEOUT 60)
 
 # Guard discovery against whitespace variations and unsupported macro forms.
 add_test(NAME system.HardwareContract.Discovery
@@ -59,4 +59,4 @@ add_test(NAME system.HardwareContract.Discovery
         "-DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/hardware_contract_discovery"
         -P "${CMAKE_CURRENT_LIST_DIR}/hardware_contract/discovery_test.cmake")
 set_tests_properties(system.HardwareContract.Discovery PROPERTIES
-    LABELS "system;host;contract" TIMEOUT 60)
+    LABELS "sys;system;host;contract" ENVIRONMENT "${ECONOPET_TEST_ENV}" TIMEOUT 60)

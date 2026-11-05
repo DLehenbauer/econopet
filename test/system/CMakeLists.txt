@@ -11,10 +11,29 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(FATAL_ERROR "Host system tests require CMAKE_BUILD_TYPE=Debug")
 endif()
 include(CTest)
+
+# GoogleTest discovers individual cases after the test executable is built.
+# Before that discovery exists, CMake registers a NOT_BUILT placeholders to
+# force a failure indicating that the tests need to be built first. Include that
+# placeholder in the root system-test selection.
+set_property(DIRECTORY APPEND PROPERTY LABELS sys)
 option(BUILD_BOARD_TESTS "Build production-top board and host firmware tests with Verilator" OFF)
 
 # Compile transport-independent fixtures without a board or firmware runtime.
 get_filename_component(ECONOPET_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+# Forward superbuild settings while preserving inherited standalone environments.
+set(ECONOPET_TEST_ENV "")
+foreach(variable IN ITEMS ECONOPET_TEST_SEED_FILE ECONOPET_MEDIA_DIR)
+    if(DEFINED ${variable})
+        list(APPEND ECONOPET_TEST_ENV "${variable}=${${variable}}")
+    endif()
+endforeach()
+# Preserve the environment through list expansion and GoogleTest's generated list.
+set(SYSTEM_TEST_ENV_PROPERTIES "")
+if(ECONOPET_TEST_ENV)
+    string(REPLACE ";" "\\\\;" SYSTEM_TEST_ENV "${ECONOPET_TEST_ENV}")
+    set(SYSTEM_TEST_ENV_PROPERTIES ENVIRONMENT "${SYSTEM_TEST_ENV}")
+endif()
 add_library(econopet_disk_fixtures STATIC
     "${ECONOPET_ROOT}/test/support/test_fatal.c"
     "${ECONOPET_ROOT}/test/support/d64_fixture.c"
@@ -59,7 +78,8 @@ set(SYSTEM_TEST_TIMEOUT_SECONDS 300)
 gtest_discover_tests(econopet_system_tests
     TEST_PREFIX "system."
     DISCOVERY_TIMEOUT ${SYSTEM_DISCOVERY_TIMEOUT_SECONDS}
-    PROPERTIES LABELS "system\\;host\\;unit" TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
+    PROPERTIES LABELS "sys\\;system\\;host\\;unit"
+        ${SYSTEM_TEST_ENV_PROPERTIES} TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
 
 include(hardware_contract.cmake)
 

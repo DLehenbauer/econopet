@@ -25,6 +25,21 @@ jobs:
         with:
           lfs: true
 
+      # The Linux runner needs build output in its checkout for artifact upload.
+      - name: Disable local build volume
+        shell: python
+        run: |
+          import json
+          import re
+          from pathlib import Path
+
+          config_path = Path(".devcontainer/devcontainer.json")
+          text = config_path.read_text()
+          text = re.sub(r'("(?:\\.|[^"\\])*")|//[^\n]*', lambda m: m[1] or "", text)
+          config = json.loads(text)
+          del config["mounts"]
+          config_path.write_text(json.dumps(config, indent=4) + "\n")
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: CC0-1.0
+# https://github.com/dlehenbauer/econopet
+
+if(CMAKE_SCRIPT_MODE_FILE)
+    message(FATAL_ERROR "System tests are not configured. Run: cmake --build --preset sys-test")
+endif()
+
+# Traverse the separate build as a test directory, not a nested CTest process.
+if(EXISTS "@SUPER_BUILD_DIR@/system/CTestTestfile.cmake")
+    subdirs("@SUPER_BUILD_DIR@/system")
+else()
+    add_test(system.NOT_BUILT "@CMAKE_COMMAND@" -P "${CMAKE_CURRENT_LIST_FILE}")
+    set_tests_properties(system.NOT_BUILT PROPERTIES LABELS "sys;system")
+endif()

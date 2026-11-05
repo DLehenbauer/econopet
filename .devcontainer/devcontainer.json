@@ -5,6 +5,11 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
+    // Improve build performance by keeping generated files on Docker's Linux
+    // filesystem, not the host bind mount.
+    "mounts": [
+        "source=econopet-build-${devcontainerId},target=${containerWorkspaceFolder}/build,type=volume"
+    ],
     "features": {
         // Install Node.js (via nvm), plus npm/yarn/pnpm.
         // (See: https://github.com/devcontainers/features/tree/main/src/node)
