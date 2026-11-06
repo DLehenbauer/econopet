@@ -70,6 +70,18 @@ if(BUILD_FPGA)
         BUILD_ALWAYS TRUE
     )
     set(FPGA_BITSTREAM ${SUPER_BUILD_DIR}/gw/outflow/EconoPET.hex.bin)
+
+    ExternalProject_Add(gateware_models
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/gw/simulator
+        BINARY_DIR ${SUPER_BUILD_DIR}/gw-test
+        CMAKE_ARGS
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target gateware_models
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
 endif()
 
 # ============================================================================
@@ -273,10 +285,8 @@ if(BUILD_FPGA)
         FIXTURES_SETUP gateware_filelists
     )
 
-    # Native targets share one compiler-job budget across all models.
-    add_custom_target(gateware_models)
+    # Simulator generation and compilation stay outside the root build graph.
     add_dependencies(all_projects gateware_models)
-    include(cmake/VerilatorModels.cmake)
 
     # Discover testbenches and add each as a separate test
     file(GLOB TB_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/gw/EconoPET/sim/*_tb.sv")
@@ -289,13 +299,13 @@ if(BUILD_FPGA)
             set(TB_RAND_RESET ${GW_RAND_RESET_DEFAULT})
         endif()
 
-        add_gateware_model(${TB_NAME})
+        set(TB_EXECUTABLE "${SUPER_BUILD_DIR}/gw-test/bin/${TB_NAME}_vl")
 
         if(TB_NAME IN_LIST GW_VERILATOR_ONLY_TESTS)
             add_test(
                 NAME ${TB_NAME}
                 COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
-                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
+                    "${TB_EXECUTABLE}" ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
 
@@ -326,7 +336,7 @@ if(BUILD_FPGA)
             add_test(
                 NAME ${TB_NAME}_vl
                 COMMAND ${CMAKE_SOURCE_DIR}/verilate.sh
-                    $<TARGET_FILE:${TB_NAME}_vl> ${TB_RAND_RESET}
+                    "${TB_EXECUTABLE}" ${TB_RAND_RESET}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
             set_tests_properties(${TB_NAME}_vl PROPERTIES

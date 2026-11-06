@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: CC0-1.0
 # https://github.com/dlehenbauer/econopet
 
-"""Fingerprint Efinity configuration independently of XML serialization."""
+"""Read synthesis inputs and fingerprint Efinity project configuration."""
 
+import argparse
 import hashlib
 import json
-import sys
 import xml.etree.ElementTree as ET
 
 
@@ -32,8 +32,19 @@ def configuration(element):
 
 
 def main():
-    """Print a stable digest without changing the source project."""
-    root = ET.parse(sys.argv[1]).getroot()
+    """Print declared synthesis inputs or a serialization-independent digest."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("project")
+    parser.add_argument("--sources", action="store_true")
+    args = parser.parse_args()
+    root = ET.parse(args.project).getroot()
+    if args.sources:
+        namespace = {"efx": "http://www.efinixinc.com/enf_proj"}
+        for query in ("./efx:design_info/efx:design_file",
+                      "./efx:constraint_info/efx:sdc_file"):
+            for entry in root.findall(query, namespace):
+                print(entry.attrib["name"])
+        return
     for attribute in RUN_METADATA:
         root.attrib.pop(attribute, None)
     encoded = json.dumps(configuration(root), ensure_ascii=True).encode("ascii")

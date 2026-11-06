@@ -1,5 +1,19 @@
 # FPGA
 
+## Build dependencies
+
+The bitstream build reads synthesis sources and SDC inputs from
+[`EconoPET.xml`](../../gw/EconoPET/EconoPET.xml), without recursively scanning
+source directories. Register new synthesis sources in that project.
+
+Supporting inputs that are not declared in the project (the peripheral
+configuration, included 6502 instruction header, and SID curve data) are listed
+explicitly in [`gw/CMakeLists.txt`](../../gw/CMakeLists.txt). Update that list
+when adding headers or memory initialization files.
+
+Unregistered files, simulation-only sources, dependency installations, caches,
+and external core build outputs do not invalidate the bitstream.
+
 ## Documentation
 
 * [T20 Datasheet](https://www.efinixinc.com/docs/trion20-ds-v5.10.pdf)
