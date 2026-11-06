@@ -84,7 +84,7 @@ static void shifts(const bool held) {
     const hid_keyboard_report_t report = {
         .modifier = held ? KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT : 0
     };
-    process_kbd_report(1, &report);
+    process_kbd_report(1, 0, &report);
 }
 
 // SD activity never changes gesture classification, even if release precedes polling.

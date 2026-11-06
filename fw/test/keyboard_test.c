@@ -29,13 +29,13 @@ bool tuh_hid_set_report(uint8_t dev_addr, uint8_t idx, uint8_t report_id, uint8_
 }
 
 // Delivers a real HID report without dispatching the PET matrix or polling menu input.
-static void report_key_from(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
+static void report_key_from(uint8_t dev_addr, uint8_t instance, uint8_t keycode, uint8_t modifiers) {
     const hid_keyboard_report_t report = {.modifier = modifiers, .keycode = {keycode}};
-    process_kbd_report(dev_addr, &report);
+    process_kbd_report(dev_addr, instance, &report);
 }
 
 static void report_key(uint8_t keycode, uint8_t modifiers) {
-    report_key_from(1, keycode, modifiers);
+    report_key_from(1, 0, keycode, modifiers);
 }
 
 // Starts each report trace with an empty keyboard and firmware menu routing.
@@ -253,13 +253,48 @@ START_TEST(test_usb_menu_chords_are_per_keyboard) {
     ck_assert(!expect_hid_output_report);
 
     const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
-    report_key_from(1, 0, both);
+    report_key_from(1, 0, 0, both);
     mock_clock_advance(INPUT_LONG_PRESS_US / 2);
-    report_key_from(2, 0, 0);
+    report_key_from(2, 0, 0, 0);
     mock_clock_advance(INPUT_LONG_PRESS_US / 2);
     ck_assert(keyboard_menu_requested());
 
     usb_keyboard_removed(2, 0);
+    ck_assert(keyboard_menu_requested());
+    keyboard_menu_consume();
+    usb_keyboard_removed(1, 0);
+}
+END_TEST
+
+// Reports and removal from one HID interface do not cancel another interface's chord.
+START_TEST(test_usb_menu_chords_are_per_interface) {
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 1);
+    ck_assert(!expect_hid_output_report);
+
+    const usb_keymap_entry_t key = system_state.usb_keymap_data[
+        pet_keyboard_model_graphics][usb_keymap_kind_symbolic][HID_KEY_A];
+    report_key_from(1, 0, HID_KEY_A, 0);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    report_key_from(1, 1, 0, 0);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    report_key_from(1, 0, 0, 0);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
+
+    const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    report_key_from(1, 0, 0, both);
+    mock_clock_advance(INPUT_LONG_PRESS_US / 2);
+    report_key_from(1, 1, 0, 0);
+    mock_clock_advance(INPUT_LONG_PRESS_US / 2);
+    ck_assert(keyboard_menu_requested());
+
+    usb_keyboard_removed(1, 1);
     ck_assert(keyboard_menu_requested());
     keyboard_menu_consume();
     usb_keyboard_removed(1, 0);
@@ -491,6 +526,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_menu_chord_reset_before_poll);
     tcase_add_test(core, test_usb_menu_chord_removed_before_poll);
     tcase_add_test(core, test_usb_menu_chords_are_per_keyboard);
+    tcase_add_test(core, test_usb_menu_chords_are_per_interface);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);

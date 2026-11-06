@@ -31,5 +31,6 @@ void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers);
 void usb_keyboard_reset(system_state_t* system_state);
 void usb_keyboard_added(uint8_t dev_addr, uint8_t instance);
 void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance);
-void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report);
+void keyboard_source_removed(uint8_t dev_addr, uint8_t instance);
+void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_t const* report);
 void dispatch_key_events();
