@@ -72,6 +72,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/diag/log/log.c
     ${FW_SRC_DIR}/ui/cli.c
     ${FW_SRC_DIR}/ui/console.c
+    ${FW_SRC_DIR}/ui/tui.c
     ${FW_SRC_DIR}/usb/hid_app.c
     ${FW_SRC_DIR}/usb/keyboard.c
     ${FW_SRC_DIR}/usb/keyscan.c

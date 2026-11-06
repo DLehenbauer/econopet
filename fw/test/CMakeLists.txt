@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/system_state.c
+    ${SRC_DIR}/ui/tui.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
@@ -71,6 +72,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/system_state_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/test_support_test.c
+    ${TEST_DIR}/tui_test.c
     ${TEST_DIR}/window_test.c
 )
 

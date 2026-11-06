@@ -21,6 +21,7 @@
 #include "tape_dir_test.h"
 #include "system_state_test.h"
 #include "test_support_test.h"
+#include "tui_test.h"
 #include "menu_browser_test.h"
 
 int run_suite() {
@@ -42,6 +43,7 @@ int run_suite() {
     srunner_add_suite(sr1, petscii_suite());
     srunner_add_suite(sr1, system_state_suite());
     srunner_add_suite(sr1, tape_dir_suite());
+    srunner_add_suite(sr1, tui_suite());
     srunner_add_suite(sr1, menu_browser_suite());
     srunner_set_fork_status(sr1, CK_NOFORK);
     srunner_run_all(sr1, CK_VERBOSE);
@@ -57,6 +59,7 @@ int run_suite() {
     srunner_add_suite(sr2, log_fatal_suite());
     srunner_add_suite(sr2, menu_browser_fatal_suite());
     srunner_add_suite(sr2, test_support_suite());
+    srunner_add_suite(sr2, tui_fatal_suite());
     srunner_add_suite(sr2, window_suite());
     srunner_run_all(sr2, CK_VERBOSE);
     number_failed += srunner_ntests_failed(sr2);
