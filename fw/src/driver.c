@@ -29,7 +29,7 @@ static void cmd_start() {
     //
     // Consequently, we control the CS signal manually (but use the PrimeCell SSP for the
     // the other SPI signals.)
-    gpio_put(FPGA_SPI_CSN_GP, 0);
+    gpio_put(FPGA_SPI_CSN_GP, false);
 }
 
 /**
@@ -44,7 +44,7 @@ static void cmd_end() {
     // deasserted early.  Therefore, we must wait until SPI_STALL_GP is low before deasserting CS.
     while (gpio_get(SPI_STALL_GP));
 
-    gpio_put(FPGA_SPI_CSN_GP, 1);
+    gpio_put(FPGA_SPI_CSN_GP, true);
 }
 
 /**

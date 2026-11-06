@@ -31,7 +31,7 @@ bool sd_init() {
     // Deassert SD CS
     gpio_init(SD_CSN_GP);
     gpio_set_dir(SD_CSN_GP, GPIO_OUT);
-    gpio_put(SD_CSN_GP, 1);
+    gpio_put(SD_CSN_GP, true);
 
     blockdevice_t* sd = blockdevice_sd_create(
         SD_SPI_INSTANCE,
