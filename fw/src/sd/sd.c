@@ -18,6 +18,7 @@
 #include "fatal.h"
 #include "global.h"
 #include "hw.h"
+#include "sd/activity.h"
 
 _Static_assert(SD_PATH_MAX == PATH_MAX,
                "SD path capacity must match pico-vfs");
@@ -40,6 +41,10 @@ bool sd_init() {
         SD_CSN_GP,
         SD_SPI_MHZ * MHZ,
         /* enable_crc: */ false);
+
+    // Hook physical reads/writes to show activity on the LED and track the last
+    // completion time for SD activity monitoring.
+    sd_activity_install(sd);
 
     filesystem_t* fat = filesystem_fat_create();
 

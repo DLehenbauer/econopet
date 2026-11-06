@@ -19,6 +19,7 @@
 #include "global.h"
 #include "hw.h"
 #include "input.h"
+#include "input_controls.h"
 #include "menu_config.h"
 #include "pet.h"
 #include "roms/checksum.h"
@@ -255,6 +256,9 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
 }
 
 void menu_enter(bool is_boot) {
+    // Suppress held gestures and pending button releases, including on boot where
+    // entry bypasses input_getch()'s event consumption.
+    input_controls_consume();
     log_info("-- Enter Menu --");
 
     tape_deinit();
@@ -290,20 +294,4 @@ void menu_enter(bool is_boot) {
     pet_reset();
 
     log_info("-- Exit Menu --");
-}
-
-void menu_task(void) {
-    // Check for button events from the input queue
-    int key = input_getch();
-
-    switch (key) {
-        case KEY_BTN_SHORT:
-            pet_reset();
-            break;
-        case KEY_BTN_LONG:
-            menu_enter(/* is_boot: */ false);
-            break;
-        default:
-            break;
-    }
 }

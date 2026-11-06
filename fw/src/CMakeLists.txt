@@ -46,11 +46,13 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/fatal.c
     ${FW_SRC_DIR}/global.c
     ${FW_SRC_DIR}/input.c
+    ${FW_SRC_DIR}/input_controls.c
     ${FW_SRC_DIR}/main.c
     ${FW_SRC_DIR}/reset.c
     ${FW_SRC_DIR}/menu/menu.c
     ${FW_SRC_DIR}/menu/menu_browser.c
     ${FW_SRC_DIR}/menu/menu_config.c
+    ${FW_SRC_DIR}/menu/menu_runtime.c
     ${FW_SRC_DIR}/display/display.c
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c
@@ -66,6 +68,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/roms/roms.c
     ${FW_SRC_DIR}/roms/checksum.c
     ${FW_SRC_DIR}/sd/sd.c
+    ${FW_SRC_DIR}/sd/activity.c
     ${FW_SRC_DIR}/sd/path.c
     ${FW_SRC_DIR}/config/config.c
     ${FW_SRC_DIR}/diag/mem.c

@@ -27,12 +27,17 @@ typedef uint64_t absolute_time_t;
 
 #define TEST_HID_KEYBOARD_KEY_COUNT 6
 
-// Host representation of a TinyUSB HID keyboard report.
+#if defined(ECONOPET_TEST_TINYUSB)
+// Firmware unit tests use the real 'tusb.h'
+#include "tusb.h"
+#else
+// System tests currently avoid the TinyUSB dependency
 typedef struct hid_keyboard_report_s {
     uint8_t modifier;
     uint8_t reserved;
     uint8_t keycode[TEST_HID_KEYBOARD_KEY_COUNT];
 } hid_keyboard_report_t;
+#endif
 
 // Returns host monotonic time in microseconds.
 uint64_t time_us_64(void);

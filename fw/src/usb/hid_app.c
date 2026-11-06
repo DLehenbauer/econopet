@@ -98,11 +98,11 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
   log_info("HID device address = %d, instance = %d is unmounted", dev_addr, instance);
 
-  // Only keyboard interfaces are tracked at mount -- other HID interfaces on a
-  // composite device would hit fatal() in usb_keyboard_removed().
   const uint8_t itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
     usb_keyboard_removed(dev_addr, instance);
+  } else {
+    keyboard_source_removed(dev_addr, instance);
   }
 }
 
@@ -115,7 +115,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   {
     case HID_ITF_PROTOCOL_KEYBOARD:
       TU_LOG2("HID receive boot keyboard report\r\n");
-      process_kbd_report(dev_addr, (hid_keyboard_report_t const*) report);
+      process_kbd_report(dev_addr, instance, (hid_keyboard_report_t const*) report);
     break;
 
     case HID_ITF_PROTOCOL_MOUSE:
@@ -299,7 +299,7 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
       case HID_USAGE_DESKTOP_KEYBOARD:
         TU_LOG1("HID receive keyboard report\r\n");
         // Assume keyboard follow boot report layout
-        process_kbd_report(dev_addr, (hid_keyboard_report_t const*) report );
+        process_kbd_report(dev_addr, instance, (hid_keyboard_report_t const*) report );
       break;
 
       case HID_USAGE_DESKTOP_MOUSE:

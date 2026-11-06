@@ -34,8 +34,11 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/display/window.c
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/sd/path.c
+    ${SRC_DIR}/sd/activity.c
+    ${SRC_DIR}/input_controls.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
+    ${SRC_DIR}/menu/menu_runtime.c
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/ui/tui.c
@@ -47,6 +50,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/ieee/dos.c
     ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
+    ${SRC_DIR}/usb/keyboard.c
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/breakpoint_test.c
     ${TEST_DIR}/char_encoding_test.c
@@ -60,6 +64,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/global_test.c
     ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c
+    ${TEST_DIR}/keyboard_test.c
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
@@ -70,6 +75,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/system_state_test.c
+    ${TEST_DIR}/sd_activity_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/test_support_test.c
     ${TEST_DIR}/tui_test.c
@@ -91,6 +97,11 @@ target_link_options(${PROJECT_NAME} PRIVATE
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")
+target_include_directories(${PROJECT_NAME} PRIVATE "${EXTERNAL_DIR}/pico-vfs/include")
+
+# Exercise report handling with TinyUSB's real HID definitions, without its hardware runtime.
+target_include_directories(${PROJECT_NAME} PRIVATE "${PICO_SDK_PATH}/lib/tinyusb/src")
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_TINYUSB CFG_TUSB_MCU=OPT_MCU_NONE)
 
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})

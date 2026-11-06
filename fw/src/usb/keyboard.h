@@ -17,6 +17,12 @@ extern uint8_t pet_key_matrix[KEY_COL_COUNT];
 
 uint8_t key_rc_to_i(uint8_t col, uint8_t row);
 int keyboard_getch();
+// Enables HID navigation buffering while the configuration menu is active.
+void keyboard_menu_set_active(bool active);
+// Reports an eligible dual-Shift hold at the common menu long-press threshold.
+bool keyboard_menu_requested(void);
+// Suppresses held menu chords until release, including stale injected Shift state.
+void keyboard_menu_consume(void);
 
 // Enqueue synthesized key events (used by terminal injection)
 void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers);
@@ -25,5 +31,6 @@ void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers);
 void usb_keyboard_reset(system_state_t* system_state);
 void usb_keyboard_added(uint8_t dev_addr, uint8_t instance);
 void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance);
-void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report);
+void keyboard_source_removed(uint8_t dev_addr, uint8_t instance);
+void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_t const* report);
 void dispatch_key_events();

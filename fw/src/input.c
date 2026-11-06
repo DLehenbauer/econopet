@@ -7,6 +7,7 @@
 #include "diag/log/log.h"
 #include "driver.h"
 #include "hw.h"
+#include "input_controls.h"
 #include "system_state.h"
 #include "term_inject.h"
 #include "ui/cli.h"
@@ -37,77 +38,6 @@ static int dequeue_key(void) {
     int keycode = input_buffer[input_buffer_tail];
     input_buffer_tail = (input_buffer_tail + 1) & INPUT_BUFFER_CAPACITY_MASK;
     return keycode;
-}
-
-// Read state of MENU button
-static bool read_button_debounced(void) {
-    static uint64_t last_change_time = 0;
-    static bool raw_state = true;       // Last raw button state (initial: pressed for capacitor charging)
-    static bool debounced_state = true; // Debounced button state
-    
-    const uint64_t DEBOUNCE_TIME_US = 50000;  // 50ms debounce time
-
-    bool current_raw = !gpio_get(MENU_BTN_GP);  // Active low button
-    uint64_t current_time = time_us_64();
-
-    // Check if raw button state has changed, record the new state and time.
-    if (current_raw != raw_state) {
-        raw_state = current_raw;
-        last_change_time = current_time;
-
-        // Return previous debounced state during transition
-        return debounced_state;
-    }
-
-    // Check if we're still in debounce period
-    if ((current_time - last_change_time) < DEBOUNCE_TIME_US) {
-        // Still debouncing, return previous debounced state
-        return debounced_state;
-    }
-
-    // Button state is stable, update debounced state
-    debounced_state = current_raw;
-    return debounced_state;
-}
-
-// Returns KEY_BTN_SHORT, KEY_BTN_LONG, or EOF for no action
-static int get_button_action(void) {
-    // Track button press/release events and timing for short/long press detection
-    static bool is_pressed = true;     // Initial state matches debounced initial state
-    static bool was_handled = true;
-    static uint64_t press_start;
-    
-    const uint64_t LONG_PRESS_TIME_US = 500000; // 500ms for long press
-
-    bool was_pressed = is_pressed;
-    is_pressed = read_button_debounced();
-    
-    uint64_t current_time = time_us_64();
-    int action = EOF;
-
-    if (!is_pressed) {
-        // Button is not currently pressed.
-        if (was_pressed && !was_handled) {
-            // Button has just been released and did not previously exceed the
-            // long-press threshold.
-            action = KEY_BTN_SHORT;
-            log_debug("MENU button: short press");
-        }
-    } else {
-        // The button is currently pressed.
-        if (!was_pressed) {
-            // Button has just been pressed (after debounce).  Record the start time.
-            press_start = current_time;
-            was_handled = false;
-        } else if (!was_handled && (current_time - press_start > LONG_PRESS_TIME_US)) {
-            // Button has been held for more than 500ms.  Consider this a long press.
-            was_handled = true;
-            action = KEY_BTN_LONG;
-            log_debug("MENU button: long press");
-        }
-    }
-
-    return action;
 }
 
 // Map escape sequences to key constants. (ESC [ has already been matched.)
@@ -243,20 +173,23 @@ void input_task(void) {
     // 4. Sync USB keyboard state to FPGA
     sync_state();
     
-    // 5. Handle button based on mode (always goes to firmware).
-    int button_action = get_button_action();
-    if (button_action != EOF) {
-        enqueue_key(button_action);
-    }
+    // 5. Sample button state.
+    input_button_update(!gpio_get(MENU_BTN_GP));
 }
 
 int input_getch(void) {
-    // First check keyboard input (PET and USB)
+    // Menu button and SHIFT-SHIFT escape sequence
+    const int control = input_controls_getch();
+    if (control != EOF) {
+        return control;
+    }
+
+    // Keyboard input (PET and USB)
     int keycode = keyboard_getch();
     if (keycode != EOF) {
         return keycode;
     }
     
-    // Then check the firmware input queue (UART + button events)
+    // UART input queue
     return dequeue_key();
 }

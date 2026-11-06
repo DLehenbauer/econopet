@@ -73,11 +73,15 @@ START_TEST(test_keyscan_getch) {
         PET_KEY_DOWN_N,
         PET_KEY_RIGHT_N,
         PET_KEY_RETURN_N,
+        PET_KEY_RUNSTOP_N,
+        PET_KEY_DELETE_N,
 
         // Business
         PET_KEY_DOWN_B,
         PET_KEY_RIGHT_B,
         PET_KEY_RETURN_B,
+        PET_KEY_RUNSTOP_B,
+        PET_KEY_DELETE_B,
     };
 
     static const int expected_keys_unshifted[] = {
@@ -85,11 +89,15 @@ START_TEST(test_keyscan_getch) {
         KEY_DOWN,
         KEY_RIGHT,
         '\n',
+        '\e',
+        '\b',
 
         // Business
         KEY_DOWN,
         KEY_RIGHT,
         '\n',
+        '\e',
+        '\b',
     };
 
     static_assert(count_of(pet_keys) == count_of(expected_keys_unshifted),
@@ -113,11 +121,15 @@ START_TEST(test_keyscan_getch) {
         KEY_UP,
         KEY_LEFT,
         '\n',
+        '\e',
+        '\b',
 
         // Business
         KEY_UP,
         KEY_LEFT,
         '\n',
+        '\e',
+        '\b',
     };
 
     static_assert(count_of(expected_keys_shifted) == count_of(expected_keys_unshifted),

@@ -6,5 +6,6 @@
 #include "system_state.h"
 
 void menu_enter(bool is_boot);
+// Polls runtime controls, deferring reset/menu entry until physical SD activity is quiet.
 void menu_task(void);
 void read_keymap(const char* filename, system_state_t* config);
