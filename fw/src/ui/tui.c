@@ -79,10 +79,12 @@ static void normalize_screen_state(tui_controller_t* const controller) {
             const size_t rows = MIN(component->bounds.height, available);
             component->list.visible_rows = MIN(component->list.visible_rows, rows);
             list_clamp(&component->list);
+            vet(component->list.count == 0 || (component->list.visible_rows != 0 && component->bounds.width != 0 &&
+                                               component->bounds.x < controller->window->width),
+                "TUI list with items is outside the visible window");
             if (component->list.load_page != NULL && (component->list.first_visible != old_first_visible ||
                                                       component->list.visible_rows != old_visible_rows)) {
                 component->list.page_valid = false;
-                controller->pending_page_refresh = true;
             }
         }
     }
@@ -112,13 +114,31 @@ static void normalize_screen(tui_controller_t* const controller) {
             prepare_list(&screen->components[i].list);
         }
     }
-    controller->pending_page_refresh = false;
 }
 
 // Normalizes the resulting screen after a callback, unless the callback dismissed the controller.
 static void refresh_active_screen(tui_controller_t* const controller) {
     if (controller->active) {
         normalize_screen(controller);
+    }
+}
+
+// Rejects paint callbacks that leave list geometry or indices invalid.
+static void vet_paint_state(const tui_screen_t* const screen, const window_t* const window) {
+    for (size_t i = 0; i < screen->component_count; i++) {
+        const tui_component_t* const component = &screen->components[i];
+        if (component->kind != tui_component_list)
+            continue;
+        const tui_list_t* const list = &component->list;
+        const unsigned int available = component->bounds.y < window->height ? window->height - component->bounds.y : 0;
+        const size_t max_rows = MIN(component->bounds.height, available);
+        vet(list->visible_rows <= max_rows, "TUI list geometry changed during rendering");
+        vet(list->count == 0 ||
+                (list->visible_rows != 0 && component->bounds.width != 0 && component->bounds.x < window->width),
+            "TUI list with items is outside the visible window");
+        vet(list->count == 0 ? list->selected == 0 && list->first_visible == 0
+                             : list->selected < list->count && list->first_visible < list->count,
+            "TUI list model changed during rendering");
     }
 }
 
@@ -238,13 +258,7 @@ void tui_controller_render(tui_controller_t* const controller) {
     if (screen->on_paint != NULL) {
         screen->on_paint(window, screen->context);
     }
-    normalize_screen_state(controller);
-    if (!controller->active || active_screen(controller) != screen) {
-        controller->rendering = false;
-        if (controller->active)
-            controller->dirty = true;
-        return;
-    }
+    vet_paint_state(screen, window);
 
     for (size_t i = 0; i < screen->component_count; i++) {
         const tui_component_t* const component = &screen->components[i];
@@ -326,17 +340,6 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
         return;
     }
 
-    if (controller->pending_page_refresh) {
-        tui_screen_t* const screen = active_screen(controller);
-        for (size_t i = 0; i < screen->component_count; i++) {
-            tui_component_t* const pending = &screen->components[i];
-            if (pending->kind == tui_component_list && !pending->list.page_valid) {
-                prepare_list(&pending->list);
-                controller->dirty = true;
-            }
-        }
-        controller->pending_page_refresh = false;
-    }
     if (action == tui_action_none) {
         return;
     }

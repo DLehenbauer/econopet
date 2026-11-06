@@ -24,7 +24,7 @@ typedef struct tui_controller_s tui_controller_t;
 
 typedef void (*tui_activate_fn)(tui_controller_t* controller, void* context, size_t index);
 typedef void (*tui_screen_fn)(tui_controller_t* controller, void* context);
-typedef void (*tui_paint_fn)(const window_t* window, void* context);
+typedef void (*tui_paint_fn)(const window_t* window, const void* context);
 typedef const char* (*tui_label_fn)(void* context, size_t index);
 typedef bool (*tui_page_fn)(void* context, size_t first, size_t rows);
 
@@ -92,7 +92,7 @@ typedef struct {
     tui_screen_fn on_show;
     // User data passed to the screen callbacks.
     void* context;
-    // Called while rendering to paint screen-specific content; must not navigate the controller.
+    // Called while rendering to paint screen-specific content; must not mutate screen models or navigate.
     tui_paint_fn on_paint;
     // Called for a back action; when NULL, the controller pops this screen.
     tui_screen_fn on_back;
@@ -117,8 +117,6 @@ struct tui_controller_s {
     bool dirty;
     // True while painting, when controller operations that mutate navigation are forbidden.
     bool rendering;
-    // True when a render-time model change invalidated a page that must be reloaded before input.
-    bool pending_page_refresh;
 };
 
 // Starts a borrowed window/screen hierarchy. Its storage must outlive the controller.

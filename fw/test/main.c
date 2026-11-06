@@ -59,6 +59,7 @@ int run_suite() {
     srunner_add_suite(sr2, log_fatal_suite());
     srunner_add_suite(sr2, menu_browser_fatal_suite());
     srunner_add_suite(sr2, test_support_suite());
+    srunner_add_suite(sr2, tui_fatal_suite());
     srunner_add_suite(sr2, window_suite());
     srunner_run_all(sr2, CK_VERBOSE);
     number_failed += srunner_ntests_failed(sr2);

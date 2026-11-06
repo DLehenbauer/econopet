@@ -6,3 +6,5 @@
 #include <check.h>
 
 Suite* tui_suite(void);
+// Returns the TUI suite for process-isolated fatal-path tests.
+Suite* tui_fatal_suite(void);

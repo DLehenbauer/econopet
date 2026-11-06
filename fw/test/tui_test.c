@@ -4,8 +4,11 @@
 #include "pch.h"
 #include "tui_test.h"
 
-#include "ui/tui.h"
+#include <signal.h>
+
 #include "display/char_encoding.h"
+#include "test_support.h"
+#include "ui/tui.h"
 
 static uint8_t screen_buffer[40 * 25];
 static unsigned int button_activations;
@@ -53,16 +56,32 @@ START_TEST(test_tui_list_navigation) {
 }
 END_TEST
 
-// Fully clipped lists cannot receive focus or activation, including when no control is visible.
-START_TEST(test_tui_ignores_fully_clipped_controls) {
+// A list with items but no drawable rows is an invalid screen layout.
+START_TEST(test_tui_rejects_fully_clipped_list) {
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 25, 38, 1},
+        .list = {.labels = (const char* const[]){"ONE"}, .count = 1, .visible_rows = 1},
+    };
+    tui_screen_t screen = {.components = &component, .component_count = 1};
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    test_expect_fatal_message("TUI list with items is outside the visible window");
+    tui_controller_init(&controller, &window, &screen);
+}
+END_TEST
+
+// Empty clipped lists are harmless and remain excluded from focus and activation.
+START_TEST(test_tui_allows_empty_clipped_list) {
     tui_component_t components[] = {
         {
             .kind = tui_component_list,
             .bounds = {1, 25, 38, 1},
             .list =
                 {
-                    .labels = (const char* const[]){"ONE", "TWO"},
-                    .count = 2,
+                    .labels = NULL,
+                    .count = 0,
                     .visible_rows = 1,
                     .on_activate = count_list_activation,
                 },
@@ -481,36 +500,17 @@ static void pop_current_screen_on_show(tui_controller_t* const controller, void*
 
 typedef struct {
     tui_component_t* list;
-    size_t load_attempts;
-    size_t loaded_first;
-    size_t activated;
 } paint_model_context_t;
 
-// Records page loads so rendering-time I/O can be distinguished from deferred refresh.
-static bool load_paint_model_page(void* const context, size_t first, size_t rows) {
-    (void)rows;
-    paint_model_context_t* const model = context;
-    model->load_attempts++;
-    model->loaded_first = first;
-    return true;
-}
-
-// Shrinks the test model while painting to exercise render-time index normalization.
-static void shrink_list_on_paint(const window_t* const window, void* const context) {
+// Shrinks the test model while painting to exercise the paint-state invariant.
+static void shrink_list_on_paint(const window_t* const window, const void* const context) {
     (void)window;
-    paint_model_context_t* const model = context;
+    const paint_model_context_t* const model = context;
     shrink_list_model(model->list);
 }
 
-// Records which clamped item is activated after a paint-time model change.
-static void record_paint_model_activation(tui_controller_t* const controller, void* const context, size_t index) {
-    (void)controller;
-    paint_model_context_t* const model = context;
-    model->activated = index;
-}
-
-// Paint-time model changes clamp stale indices without loading pages during rendering.
-START_TEST(test_tui_normalizes_model_changes_during_paint) {
+// A paint callback that invalidates list indices must fail before rendering.
+START_TEST(test_tui_rejects_model_changes_during_paint) {
     static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
     tui_component_t component = {
         .kind = tui_component_list,
@@ -520,8 +520,6 @@ START_TEST(test_tui_normalizes_model_changes_during_paint) {
                 .labels = labels,
                 .count = count_of(labels),
                 .visible_rows = 2,
-                .on_activate = record_paint_model_activation,
-                .load_page = load_paint_model_page,
             },
     };
     paint_model_context_t model = {.list = &component};
@@ -539,25 +537,42 @@ START_TEST(test_tui_normalizes_model_changes_during_paint) {
     for (size_t i = 0; i < 4; i++) {
         tui_controller_dispatch(&controller, tui_action_down);
     }
-    ck_assert_uint_eq(component.list.selected, 4);
-    ck_assert_uint_eq(component.list.first_visible, 3);
-    const size_t loads_before_render = model.load_attempts;
-
+    test_expect_fatal_message("TUI list model changed during rendering");
     tui_controller_render(&controller);
-    ck_assert_uint_eq(component.list.selected, 0);
-    ck_assert_uint_eq(component.list.first_visible, 0);
-    ck_assert(!component.list.page_valid);
-    ck_assert_uint_eq(model.load_attempts, loads_before_render);
-    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], CH_SPACE);
+}
+END_TEST
 
-    tui_controller_dispatch(&controller, tui_action_none);
-    ck_assert(component.list.page_valid);
-    ck_assert_uint_eq(model.loaded_first, 0);
-    ck_assert_uint_eq(model.load_attempts, loads_before_render + 1);
+typedef struct {
+    tui_controller_t* controller;
+} paint_navigation_context_t;
+
+// Attempts to navigate through an indirect controller reference while painting.
+static void pop_screen_on_paint(const window_t* const window, const void* const context) {
+    (void)window;
+    const paint_navigation_context_t* const model = context;
+    tui_controller_pop(model->controller);
+}
+
+// Screen navigation through an indirect controller reference is forbidden during paint.
+START_TEST(test_tui_rejects_navigation_during_paint) {
+    tui_component_t component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "ROOT"},
+    };
+    tui_controller_t controller;
+    paint_navigation_context_t model = {.controller = &controller};
+    tui_screen_t screen = {
+        .components = &component,
+        .component_count = 1,
+        .context = &model,
+        .on_paint = pop_screen_on_paint,
+    };
+    const window_t window = init_window();
+
+    tui_controller_init(&controller, &window, &screen);
+    test_expect_fatal_message("cannot change TUI screens while rendering");
     tui_controller_render(&controller);
-    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
-    tui_controller_dispatch(&controller, tui_action_activate);
-    ck_assert_uint_eq(model.activated, 0);
 }
 END_TEST
 
@@ -797,18 +812,28 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_overlapping_page_navigation);
     tcase_add_test(test_case, test_tui_buttons_and_screen_stack);
     tcase_add_test(test_case, test_tui_empty_list_focuses_button);
-    tcase_add_test(test_case, test_tui_ignores_fully_clipped_controls);
+    tcase_add_test(test_case, test_tui_allows_empty_clipped_list);
     tcase_add_test(test_case, test_tui_parent_focus_and_mixed_navigation);
     tcase_add_test(test_case, test_tui_positioned_render_is_bounded);
     tcase_add_loop_test(test_case, test_tui_selection_remains_visible_when_clipped, 0, 2);
     tcase_add_test(test_case, test_tui_page_provider);
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
     tcase_add_test(test_case, test_tui_refreshes_parent_after_callback_navigation);
-    tcase_add_test(test_case, test_tui_normalizes_model_changes_during_paint);
     tcase_add_test(test_case, test_tui_skips_refresh_after_root_dismissal);
     tcase_add_test(test_case, test_tui_skips_normalization_after_on_show_dismissal);
     tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);
     tcase_add_test(test_case, test_tui_repaint_invalidation);
     suite_add_tcase(suite, test_case);
+    return suite;
+}
+
+// Isolates fatal checks for invalid screen layouts and paint-time mutations.
+Suite* tui_fatal_suite(void) {
+    Suite* const suite = suite_create("tui-fatal");
+    TCase* const invariants = tcase_create("rendering");
+    tcase_add_test_raise_signal(invariants, test_tui_rejects_fully_clipped_list, SIGABRT);
+    tcase_add_test_raise_signal(invariants, test_tui_rejects_model_changes_during_paint, SIGABRT);
+    tcase_add_test_raise_signal(invariants, test_tui_rejects_navigation_during_paint, SIGABRT);
+    suite_add_tcase(suite, invariants);
     return suite;
 }
