@@ -100,7 +100,7 @@ void fpga_init() {
     // so we can control via software.
     gpio_init(FPGA_SPI_CSN_GP);
     gpio_set_dir(FPGA_SPI_CSN_GP, GPIO_OUT);
-    gpio_put(FPGA_SPI_CSN_GP, 1);
+    gpio_put(FPGA_SPI_CSN_GP, true);
 
     // Configure STALL.  STALL is asserted by the FPGA while it is busy processing the last SPI command.
     gpio_init(SPI_STALL_GP);
@@ -124,9 +124,9 @@ void fpga_init() {
     } else {
         // Create a clean CRESET_N pulse to initiate FPGA configuration.
         gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
-        gpio_put(FPGA_CRESET_GP, 1);
+        gpio_put(FPGA_CRESET_GP, true);
         sleep_ms(1);  // t_CRESET_N = 320 ns
-        gpio_put(FPGA_CRESET_GP, 0);
+        gpio_put(FPGA_CRESET_GP, false);
         sleep_ms(1);  // t_CRESET_N = 320 ns
 
         // Efinix requires SPI mode 3 for configuration.
@@ -141,10 +141,10 @@ void fpga_init() {
         // The Efinix FPGA samples CS_N on the positive edge of CRESET_N to
         // select passive vs. active SPI configuration.  (0 = Passive, 1 =
         // Active)
-        gpio_put(FPGA_SPI_CSN_GP, 0);
+        gpio_put(FPGA_SPI_CSN_GP, false);
 
         sleep_ms(1);  // t_CRESET_N = 320 ns
-        gpio_put(FPGA_CRESET_GP, 1);
+        gpio_put(FPGA_CRESET_GP, true);
         sleep_ms(1);  // t_CRESET_N = 320 ns
 
         // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must
@@ -164,7 +164,7 @@ void fpga_init() {
 
         // Deassert CS_N to signal end of configuration.
         sleep_ms(1);  // t_CRESET_N = 320 ns
-        gpio_put(FPGA_SPI_CSN_GP, 1);
+        gpio_put(FPGA_SPI_CSN_GP, true);
 
         // Restore SPI mode 0
         spi_set_format(FPGA_SPI_INSTANCE, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
@@ -197,18 +197,20 @@ void fpga_init() {
 }
 
 int main() {
-    // Note: A prolonged period without a valid sync signal may cause the PET monitor to
-    // display a "bright spot" which can damage the CRT phosphor. Therefore, we initialize
-    // the FPGA as soon as possible to start generating a native video for the PET.
+    // Note: A prolonged period without a valid sync signal may cause the PET
+    // monitor to display a "bright spot" which can damage the CRT phosphor.
+    // Therefore, we initialize the FPGA as soon as possible to start generating
+    // a native video for the PET.
     //
-    // We limit the work done before fpga_init() to tasks that are either very fast or
-    // prerequisites for FPGA configuration.
+    // We limit the work done before fpga_init() to tasks that are either very
+    // fast or prerequisites for FPGA configuration.
 
-    // Turn on LED to signal that the RP2040 has booted.  'sd_init()' will turn LED off.
-    // If the LED is "stuck on" at boot, this typically means the sd card is missing.
+    // Turn on LED to signal that the RP2040 has booted.  'sd_init()' will install an
+    // activity handler that will blink the LED during sd card operations. If the SD
+    // card fails to mount, the LED will remain "stuck on" to indicate an error.
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-    gpio_put(PICO_DEFAULT_LED_PIN, 1);
+    gpio_put(PICO_DEFAULT_LED_PIN, true);
 
     log_init();     // Initialize logging subsystem early for boot diagnostics
     input_init();   // Begin charging debounce capacitor for menu button (if any)
