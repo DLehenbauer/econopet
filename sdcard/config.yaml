@@ -190,7 +190,7 @@ configs:
           #     keyboard keyscan routine.  Noteably:
           #     - LDTB2 has moved from $e748 to $e74b
           #     - LOAD/RUN string moved from $e760 to $e763 and reduced from 9 to 6 chars
-          #       ('lO' instead 'load', etc.)
+          #       ('lO' instead of 'load', etc.)
           - action: "load"
             files:
             - address: 0xe000
@@ -253,80 +253,6 @@ configs:
         video-ram-kb: 1
         tape: "e5f362f3e5e6eef1f9"
 
-  - id: superpet-6502-50hz
-    name: "SuperPET 6502 (80 Col 50 Hz)"
-    setup:
-      - action: "load"
-        files:
-          - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
-          - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
-          - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
-          - address: 0xe000
-            file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
-          - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
-          - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
-      - if: "graphics"
-        then:
-          # Use the same graphics-keyboard adaptation as the 80-column PET.
-          - action: "patch"
-            address: 0xe545
-            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
-          - action: "patch"
-            address: 0xe6d1
-            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
-          - action: "fix-checksum"
-            checksum: 0xe0
-            start-addr: 0xe000
-            end-addr: 0xe7ff
-            fix-addr: 0xe7ff
-      - action: "set"
-        cpu: "6502"
-        machine: "superpet"
-        usb-keymap: "/ukm/us.bin"
-        columns: 80
-        video-ram-kb: 2
-        tape: "2ef415f4c9cad1d4da"
-
-  - id: superpet-6502-60hz
-    name: "SuperPET 6502 (80 Col 60 Hz)"
-    setup:
-      - action: "load"
-        files:
-          - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
-          - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
-          - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
-          - address: 0xe000
-            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
-          - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
-          - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
-      - if: "graphics"
-        then:
-          # Use the same graphics-keyboard adaptation as the 80-column PET.
-          - action: "patch"
-            address: 0xe545
-            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
-          - action: "patch"
-            address: 0xe6d1
-            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
-      - action: "set"
-        cpu: "6502"
-        machine: "superpet"
-        usb-keymap: "/ukm/us.bin"
-        columns: 80
-        video-ram-kb: 2
-        tape: "2ef415f4c9cad1d4da"
-
-  # Retain the existing ID for saved defaults selecting the 50 Hz Waterloo set.
   - id: superpet-6809-50hz
     name: "SuperPET 6809 (80 Col 50 Hz)"
     setup:
@@ -423,6 +349,79 @@ configs:
         usb-keymap: "/ukm/us.bin"
         columns: 80
         video-ram-kb: 2
+
+  - id: superpet-6502-50hz
+    name: "SuperPET 6502 (80 Col 50 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same graphics-keyboard adaptation as the 80-column PET.
+          - action: "patch"
+            address: 0xe545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0xe6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+          - action: "fix-checksum"
+            checksum: 0xe0
+            start-addr: 0xe000
+            end-addr: 0xe7ff
+            fix-addr: 0xe7ff
+      - action: "set"
+        cpu: "6502"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
+
+  - id: superpet-6502-60hz
+    name: "SuperPET 6502 (80 Col 60 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same graphics-keyboard adaptation as the 80-column PET.
+          - action: "patch"
+            address: 0xe545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0xe6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+      - action: "set"
+        cpu: "6502"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
 
   - id: colourpet-40-60hz
     name: "ColourPET (40 Col 60 Hz) [ALPHA]"
