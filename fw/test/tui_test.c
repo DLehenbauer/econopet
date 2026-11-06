@@ -608,6 +608,29 @@ START_TEST(test_tui_rejects_navigation_during_paint) {
 }
 END_TEST
 
+// Attempts to consume the controller repaint from inside an activation callback.
+static void render_during_activation(tui_controller_t* const controller, void* const context) {
+    (void)context;
+    tui_controller_render(controller);
+}
+
+// Callback code cannot render before dispatch completes its state refresh.
+START_TEST(test_tui_rejects_render_during_callback) {
+    tui_component_t component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "RENDER", .on_activate = render_during_activation},
+    };
+    tui_screen_t screen = {.components = &component, .component_count = 1};
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &screen);
+    test_expect_fatal_message("cannot render TUI from a callback");
+    tui_controller_dispatch(&controller, tui_action_activate);
+}
+END_TEST
+
 // Dismissing the root skips refresh because its page source may be closed by the callback.
 START_TEST(test_tui_skips_refresh_after_root_dismissal) {
     page_source_state_t source = {.open = true};
@@ -871,6 +894,7 @@ Suite* tui_fatal_suite(void) {
     tcase_add_test_raise_signal(invariants, test_tui_rejects_fully_clipped_list, SIGABRT);
     tcase_add_test_raise_signal(invariants, test_tui_rejects_model_changes_during_paint, SIGABRT);
     tcase_add_test_raise_signal(invariants, test_tui_rejects_navigation_during_paint, SIGABRT);
+    tcase_add_test_raise_signal(invariants, test_tui_rejects_render_during_callback, SIGABRT);
     suite_add_tcase(suite, invariants);
     return suite;
 }

@@ -117,6 +117,8 @@ struct tui_controller_s {
     bool dirty;
     // True while painting, when controller operations that mutate navigation are forbidden.
     bool rendering;
+    // Nesting depth of user callbacks, during which direct rendering is forbidden.
+    size_t callback_depth;
 };
 
 // Starts a borrowed window/screen hierarchy. Its storage must outlive the controller.
@@ -129,7 +131,7 @@ void tui_controller_pop(tui_controller_t* controller);
 bool tui_controller_is_active(const tui_controller_t* controller);
 // Reports whether navigation or invalidation requires repainting the screen.
 bool tui_controller_needs_render(const tui_controller_t* controller);
-// Paints the current screen into its character window.
+// Paints the current screen into its character window; call only after callbacks return.
 void tui_controller_render(tui_controller_t* controller);
 // Applies navigation or invokes the focused component's activation callback.
 void tui_controller_dispatch(tui_controller_t* controller, tui_action_t action);

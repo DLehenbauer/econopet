@@ -59,10 +59,23 @@ static bool component_is_focusable(const tui_component_t* const component, const
 }
 
 // Loads a borrowed label page outside the rendering path.
-static void prepare_list(tui_list_t* const list) {
+static void prepare_list(tui_controller_t* const controller, tui_list_t* const list) {
     list_clamp(list);
-    list->page_valid = list->load_page == NULL
-        || list->load_page(list->context, list->first_visible, list->visible_rows);
+    if (list->load_page == NULL) {
+        list->page_valid = true;
+        return;
+    }
+
+    controller->callback_depth++;
+    list->page_valid = list->load_page(list->context, list->first_visible, list->visible_rows);
+    controller->callback_depth--;
+}
+
+// Invokes a screen callback while tracking callback nesting.
+static void call_screen_callback(tui_controller_t* const controller, tui_screen_fn callback, void* context) {
+    controller->callback_depth++;
+    callback(controller, context);
+    controller->callback_depth--;
 }
 
 // Clamps list state and retains focus without loading pages.
@@ -111,7 +124,7 @@ static void normalize_screen(tui_controller_t* const controller) {
     tui_screen_t* const screen = active_screen(controller);
     for (size_t i = 0; i < screen->component_count; i++) {
         if (screen->components[i].kind == tui_component_list) {
-            prepare_list(&screen->components[i].list);
+            prepare_list(controller, &screen->components[i].list);
         }
     }
 }
@@ -157,7 +170,7 @@ void tui_controller_init(tui_controller_t* const controller, const window_t* con
         .dirty = true,
     };
     if (initial_screen->on_show != NULL) {
-        initial_screen->on_show(controller, initial_screen->context);
+        call_screen_callback(controller, initial_screen->on_show, initial_screen->context);
     }
     refresh_active_screen(controller);
 }
@@ -172,7 +185,7 @@ void tui_controller_push(tui_controller_t* const controller, tui_screen_t* const
     controller->focused_component = 0;
     controller->dirty = true;
     if (screen->on_show != NULL) {
-        screen->on_show(controller, screen->context);
+        call_screen_callback(controller, screen->on_show, screen->context);
     }
     refresh_active_screen(controller);
 }
@@ -191,7 +204,7 @@ void tui_controller_pop(tui_controller_t* const controller) {
     controller->focused_component = controller->saved_focus[controller->screen_count - 1];
     tui_screen_t* const screen = active_screen(controller);
     if (screen->on_show != NULL) {
-        screen->on_show(controller, screen->context);
+        call_screen_callback(controller, screen->on_show, screen->context);
     }
     refresh_active_screen(controller);
 }
@@ -251,6 +264,7 @@ static void render_button(const tui_controller_t* const controller, const tui_bu
 
 void tui_controller_render(tui_controller_t* const controller) {
     vet(!controller->rendering, "cannot render TUI recursively");
+    vet(controller->callback_depth == 0, "cannot render TUI from a callback");
     const window_t* const window = controller->window;
     tui_screen_t* const screen = active_screen(controller);
 
@@ -349,7 +363,7 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
         controller->dirty = true;
         if (active_screen(controller)->on_back != NULL) {
             tui_screen_t* const screen = active_screen(controller);
-            screen->on_back(controller, screen->context);
+            call_screen_callback(controller, screen->on_back, screen->context);
             refresh_active_screen(controller);
         } else {
             tui_controller_pop(controller);
@@ -402,11 +416,13 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
             controller->dirty = true;
             if (component->kind == tui_component_list) {
                 if (component->list.count != 0 && component->list.page_valid && component->list.on_activate != NULL) {
+                    controller->callback_depth++;
                     component->list.on_activate(controller, component->list.context, component->list.selected);
+                    controller->callback_depth--;
                     refresh_active_screen(controller);
                 }
             } else if (component->button.on_activate != NULL) {
-                component->button.on_activate(controller, component->button.context);
+                call_screen_callback(controller, component->button.on_activate, component->button.context);
                 refresh_active_screen(controller);
             }
             break;
@@ -420,7 +436,7 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
         if (target->kind == tui_component_list) {
             list_clamp(&target->list);
             if (target != component || target->list.first_visible != old_first || !target->list.page_valid)
-                prepare_list(&target->list);
+                prepare_list(controller, &target->list);
         }
         if (controller->focused_component != old_focus ||
             (target->kind == tui_component_list &&
