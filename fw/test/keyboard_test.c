@@ -39,6 +39,7 @@ static void setup(void) {
     mock_reset();
     mock_clock_set(0);
     expect_hid_output_report = false;
+    keyboard_menu_set_active(false);
     saved_state = system_state;
     system_state.term_input_dest = term_input_to_firmware;
     system_state.term_mode = term_mode_video;
@@ -48,6 +49,7 @@ static void setup(void) {
     dispatch_key_events();
     usb_keyboard_reset(&system_state);
     (void) keyboard_menu_requested();
+    keyboard_menu_set_active(true);
 }
 
 // Releases any final press before restoring the shared machine configuration.
@@ -57,6 +59,7 @@ static void teardown(void) {
     usb_keyboard_reset(&system_state);
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));
     (void) keyboard_menu_requested();
+    keyboard_menu_set_active(false);
     system_state = saved_state;
 }
 
@@ -128,6 +131,7 @@ END_TEST
 
 // Navigation outside the menu still reaches the configured PET keyboard matrix.
 START_TEST(test_runtime_navigation_uses_pet_matrix) {
+    keyboard_menu_set_active(false);
     system_state.term_input_dest = term_input_to_pet;
     const key_event_t down = PET_KEY_DOWN_N;
     usb_keymap_entry_t* const entry = &system_state.usb_keymap_data[
@@ -151,9 +155,9 @@ START_TEST(test_menu_queue_lifecycle) {
     report_key(0, 0);
     if (_i == 0) usb_keyboard_reset(&system_state);
     else {
-        system_state.term_input_dest = term_input_to_pet;
+        keyboard_menu_set_active(false);
         ck_assert_int_eq(keyboard_getch(), EOF);
-        system_state.term_input_dest = term_input_to_firmware;
+        keyboard_menu_set_active(true);
     }
     ck_assert_int_eq(keyboard_getch(), EOF);
 }
@@ -276,6 +280,24 @@ START_TEST(test_pet_menu_chord) {
     system_state.term_input_dest = term_input_to_pet;
     mock_clock_advance(INPUT_LONG_PRESS_US);
     ck_assert(!keyboard_menu_requested());
+}
+END_TEST
+
+// Both PET layouts retain a qualified chord when release precedes the next poll.
+START_TEST(test_pet_menu_chord_release_before_poll) {
+    system_state.term_input_dest = term_input_to_pet;
+    system_state.pet_keyboard_model = _i == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
+    const key_event_t left = _i == 0 ? PET_KEY_LSHIFT_N : PET_KEY_LSHIFT_B;
+    const key_event_t right = _i == 0 ? PET_KEY_RSHIFT_N : PET_KEY_RSHIFT_B;
+    pet_key_matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
+    pet_key_matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));
+    ck_assert(!keyboard_menu_requested());
+
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    pet_key_matrix[PET_KEY_COL(left)] |= 1u << PET_KEY_ROW(left);
+    pet_key_matrix[PET_KEY_COL(right)] |= 1u << PET_KEY_ROW(right);
+    ck_assert_int_eq(input_getch(), KEY_SHIFT_SHIFT);
+    ck_assert_int_eq(input_getch(), EOF);
 }
 END_TEST
 
@@ -413,6 +435,7 @@ START_TEST(test_menu_hid_navigation_after_entry) {
 
     system_state.term_input_dest = term_input_to_firmware;
     system_state.term_mode = term_mode_cli;
+    keyboard_menu_set_active(false);
     menu_hid_input_index = 0;
     mock_input_set_reader(menu_hid_input);
     menu_config_show(&window, &sink, false);
@@ -440,6 +463,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_menu_chord_reset_before_poll);
     tcase_add_test(core, test_usb_menu_chord_removed_before_poll);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
+    tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);

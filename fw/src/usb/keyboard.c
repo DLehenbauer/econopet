@@ -84,6 +84,7 @@ static bool menu_active;
 static input_hold_t usb_menu_hold;
 static input_hold_t pet_menu_hold;
 static bool usb_menu_pending;
+static bool pet_menu_pending;
 
 // Reports whether USB navigation belongs to the active configuration menu.
 static bool menu_input_active(void) {
@@ -506,14 +507,18 @@ bool keyboard_menu_requested(void) {
         if (col == PET_KEY_COL(right)) allowed |= 1u << PET_KEY_ROW(right);
         chord_only &= (uint8_t)(pet_key_matrix[col] | allowed) == UINT8_MAX;
     }
+    if (!chord_only && input_hold_ready(&pet_menu_hold))
+        pet_menu_pending = true;
     input_hold_update(&pet_menu_hold, chord_only);
-    return usb_menu_pending || input_hold_ready(&usb_menu_hold) || input_hold_ready(&pet_menu_hold);
+    return usb_menu_pending || input_hold_ready(&usb_menu_hold)
+        || pet_menu_pending || input_hold_ready(&pet_menu_hold);
 }
 
 // Refreshes the PET snapshot before suppressing any currently held chord.
 void keyboard_menu_consume(void) {
     (void) keyboard_menu_requested();
     usb_menu_pending = false;
+    pet_menu_pending = false;
     input_hold_consume(&usb_menu_hold);
     input_hold_consume(&pet_menu_hold);
 }
