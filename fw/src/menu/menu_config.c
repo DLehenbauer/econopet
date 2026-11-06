@@ -16,6 +16,7 @@
 #include "input.h"
 #include "pet.h"
 #include "roms/roms.h"
+#include "usb/keyboard.h"
 
 void load_config(const setup_sink_t* const setup_sink, int selected_config) {
     // Load the selected config
@@ -119,6 +120,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
 
     window_reverse(window, window_xy(window, 0, selected_config), 40);
 
+    keyboard_menu_set_active(true);
     while (true) {
         // Sync display (writes buffer to PET RAM and terminal)
         display_task();
@@ -146,6 +148,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         case '\r':
         case '\n':
         case KEY_BTN_LONG: {
+            keyboard_menu_set_active(false);
             return load_config(setup_sink, selected_config);
         }
         case 'T':

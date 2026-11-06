@@ -80,13 +80,20 @@ static uint8_t key_buffer_next_read_index = 0;
 static int menu_key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t menu_key_write_index;
 static uint8_t menu_key_read_index;
+static bool menu_active;
 static input_hold_t usb_menu_hold;
 static input_hold_t pet_menu_hold;
+static bool usb_menu_pending;
 
-// Reports whether USB navigation belongs to the firmware's video menu.
+// Reports whether USB navigation belongs to the active configuration menu.
 static bool menu_input_active(void) {
-    return system_state.term_input_dest == term_input_to_firmware
-        && system_state.term_mode == term_mode_video;
+    return menu_active;
+}
+
+// Starts or stops menu-specific USB navigation and discards stale key presses.
+void keyboard_menu_set_active(bool active) {
+    menu_key_read_index = menu_key_write_index = 0;
+    menu_active = active;
 }
 
 // Uses HID navigation keys directly, independent of PET keymaps and injected Shift.
@@ -292,6 +299,7 @@ void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
             // Remove keyboard from our list of attached keyboards.
             attached_keyboards[i].attached = false;
             menu_key_read_index = menu_key_write_index = 0;
+            usb_menu_pending = false;
             input_hold_update(&usb_menu_hold, false);
             return;
         }
@@ -444,6 +452,8 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     bool chord_only = modifiers == shifts;
     for (size_t i = 0; i < count_of(report->keycode); ++i)
         chord_only &= report->keycode[i] == 0;
+    if (!chord_only && input_hold_ready(&usb_menu_hold))
+        usb_menu_pending = true;
     input_hold_update(&usb_menu_hold, chord_only);
 
     // For each previously pressed key, check if the key still exists in the
@@ -497,12 +507,13 @@ bool keyboard_menu_requested(void) {
         chord_only &= (uint8_t)(pet_key_matrix[col] | allowed) == UINT8_MAX;
     }
     input_hold_update(&pet_menu_hold, chord_only);
-    return input_hold_ready(&usb_menu_hold) || input_hold_ready(&pet_menu_hold);
+    return usb_menu_pending || input_hold_ready(&usb_menu_hold) || input_hold_ready(&pet_menu_hold);
 }
 
 // Refreshes the PET snapshot before suppressing any currently held chord.
 void keyboard_menu_consume(void) {
     (void) keyboard_menu_requested();
+    usb_menu_pending = false;
     input_hold_consume(&usb_menu_hold);
     input_hold_consume(&pet_menu_hold);
 }

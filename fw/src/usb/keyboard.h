@@ -17,6 +17,8 @@ extern uint8_t pet_key_matrix[KEY_COL_COUNT];
 
 uint8_t key_rc_to_i(uint8_t col, uint8_t row);
 int keyboard_getch();
+// Enables HID navigation buffering while the configuration menu is active.
+void keyboard_menu_set_active(bool active);
 // Reports an eligible dual-Shift hold at the common menu long-press threshold.
 bool keyboard_menu_requested(void);
 // Suppresses held menu chords until release, including stale injected Shift state.

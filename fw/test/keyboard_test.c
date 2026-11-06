@@ -12,18 +12,20 @@
 #include "usb/keyscan.h"
 
 static system_state_t saved_state;
+static bool expect_hid_output_report;
 
-// Fails if these report-only tests unexpectedly try to control a physical keyboard.
+// Rejects unexpected HID output except for the explicit attachment test.
 bool tuh_hid_set_report(uint8_t dev_addr, uint8_t idx, uint8_t report_id, uint8_t report_type,
                         void* report, uint16_t len) {
-    (void) dev_addr;
     (void) idx;
     (void) report_id;
     (void) report_type;
     (void) report;
-    (void) len;
-    ck_abort_msg("unexpected USB output report in keyboard input test");
-    return false;
+    ck_assert_msg(expect_hid_output_report, "unexpected USB output report in keyboard input test");
+    expect_hid_output_report = false;
+    ck_assert_uint_eq(dev_addr, 1);
+    ck_assert_uint_eq(len, sizeof(uint8_t));
+    return true;
 }
 
 // Delivers a real HID report without dispatching the PET matrix or polling menu input.
@@ -36,6 +38,7 @@ static void report_key(uint8_t keycode, uint8_t modifiers) {
 static void setup(void) {
     mock_reset();
     mock_clock_set(0);
+    expect_hid_output_report = false;
     saved_state = system_state;
     system_state.term_input_dest = term_input_to_firmware;
     system_state.term_mode = term_mode_video;
@@ -55,6 +58,19 @@ static void teardown(void) {
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));
     (void) keyboard_menu_requested();
     system_state = saved_state;
+}
+
+static unsigned int menu_hid_input_index;
+static const uint8_t menu_hid_keys[] = {HID_KEY_ARROW_DOWN, HID_KEY_ENTER};
+
+// Supplies buffered HID navigation to the production configuration menu.
+static int menu_hid_input(void) {
+    ck_assert_uint_lt(menu_hid_input_index, count_of(menu_hid_keys));
+    report_key(menu_hid_keys[menu_hid_input_index++], 0);
+    report_key(0, 0);
+    const int key = keyboard_getch();
+    ck_assert_msg(key != EOF, "HID navigation was not buffered for the menu");
+    return key;
 }
 
 // Rapid taps survive batching, matrix dispatch and ring-buffer wraparound in order.
@@ -176,6 +192,46 @@ START_TEST(test_usb_menu_chord) {
     ck_assert(!keyboard_menu_requested());
     report_key(0, both);
     ck_assert(!keyboard_menu_requested());
+}
+END_TEST
+
+// A qualified USB chord released before polling remains a pending menu event.
+START_TEST(test_usb_menu_chord_release_before_poll) {
+    system_state.term_input_dest = term_input_to_pet;
+    const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    report_key(0, both);
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    report_key(0, 0);
+    ck_assert_int_eq(input_getch(), KEY_SHIFT_SHIFT);
+    ck_assert_int_eq(input_getch(), EOF);
+}
+END_TEST
+
+// Reset discards a qualified USB chord that has not yet been consumed.
+START_TEST(test_usb_menu_chord_reset_before_poll) {
+    system_state.term_input_dest = term_input_to_pet;
+    const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    report_key(0, both);
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    report_key(0, 0);
+    usb_keyboard_reset(&system_state);
+    ck_assert_int_eq(input_getch(), EOF);
+}
+END_TEST
+
+// Removing the source keyboard discards its unconsumed qualified chord.
+START_TEST(test_usb_menu_chord_removed_before_poll) {
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+
+    system_state.term_input_dest = term_input_to_pet;
+    const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    report_key(0, both);
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    report_key(0, 0);
+    usb_keyboard_removed(1, 0);
+    ck_assert_int_eq(input_getch(), EOF);
 }
 END_TEST
 
@@ -334,6 +390,41 @@ START_TEST(test_legacy_menu_control_dispatch) {
 }
 END_TEST
 
+// The production menu buffers HID taps even with terminal routing left in CLI mode.
+START_TEST(test_menu_hid_navigation_after_entry) {
+    test_register_file("/config.yaml",
+        "configs:\n"
+        "  - name: First\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 40\n"
+        "  - name: Second\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n");
+    uint8_t screen_buffer[40 * 25];
+    const window_t window = window_create(screen_buffer, 40, 25);
+    unsigned int columns = 0;
+    const setup_sink_t sink = {
+        .context = &columns,
+        .on_set_options = record_menu_columns,
+        .system_state = &system_state,
+    };
+
+    system_state.term_input_dest = term_input_to_firmware;
+    system_state.term_mode = term_mode_cli;
+    menu_hid_input_index = 0;
+    mock_input_set_reader(menu_hid_input);
+    menu_config_show(&window, &sink, false);
+    mock_input_set_reader(NULL);
+
+    ck_assert_uint_eq(menu_hid_input_index, count_of(menu_hid_keys));
+    ck_assert_uint_eq(columns, 80);
+    ck_assert_int_eq(keyboard_getch(), EOF);
+    test_clear_files();
+}
+END_TEST
+
 // Creates report-level regression coverage for firmware menu and PET runtime input.
 Suite* keyboard_suite(void) {
     Suite* const suite = suite_create("keyboard");
@@ -345,11 +436,15 @@ Suite* keyboard_suite(void) {
     tcase_add_loop_test(core, test_runtime_navigation_uses_pet_matrix, 0, 2);
     tcase_add_loop_test(core, test_menu_queue_lifecycle, 0, 2);
     tcase_add_test(core, test_usb_menu_chord);
+    tcase_add_test(core, test_usb_menu_chord_release_before_poll);
+    tcase_add_test(core, test_usb_menu_chord_reset_before_poll);
+    tcase_add_test(core, test_usb_menu_chord_removed_before_poll);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);
     tcase_add_test(core, test_legacy_menu_control_dispatch);
+    tcase_add_test(core, test_menu_hid_navigation_after_entry);
     suite_add_tcase(suite, core);
     return suite;
 }
