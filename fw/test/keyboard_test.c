@@ -515,8 +515,8 @@ START_TEST(test_batched_shifted_reports_preserve_key_releases) {
     report_keys(left_shift, held_a, count_of(held_a));
     report_keys(left_shift, released, count_of(released));
     dispatch_all_key_events();
-    ck_assert_uint_eq(usb_key_matrix[shifted_a.col] & (1u << shifted_a.row), 0);
-    ck_assert_uint_eq(usb_key_matrix[shifted_b.col] & (1u << shifted_b.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shifted_a.col] & (1u << shifted_a.row), 1u << shifted_a.row);
+    ck_assert_uint_eq(usb_key_matrix[shifted_b.col] & (1u << shifted_b.row), 1u << shifted_b.row);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
 
     report_keys(0, released, count_of(released));
