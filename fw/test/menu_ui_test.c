@@ -20,6 +20,7 @@
 #include "ieee/ieee_protocol.h"
 #include "input.h"
 #include "input_controls.h"
+#include "input_uart.h"
 #include "menu/menu_config.h"
 #include "menu/menu_screen.h"
 #include "menu/menu_ui.h"
@@ -1381,6 +1382,49 @@ START_TEST(test_transient_directory_scan_failure) {
 }
 END_TEST
 
+// UART CRLF must not eject a disk when its CR opens the picker.
+START_TEST(test_uart_crlf_across_picker_transition) {
+    make_file("disk.d64");
+    register_disk("disk.d64");
+    ck_assert_int_eq(ieee_drive_try_mount(0, "disk.d64"), DOS_MEDIA_OK);
+    open_slot(0);
+    tui_controller_dispatch(&menu.controller, tui_action_back);
+    ck_assert_uint_eq(menu.controller.screen_count, 2);
+
+    input_uart_filter_t filter = {0};
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\r'));
+    if (input_uart_accept(&filter, '\n', true))
+        tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\n'));
+    ck_assert_uint_eq(menu.controller.screen_count, 3);
+    ck_assert_str_eq(ieee_drive_filename(0), "disk.d64");
+
+    // A separate keyboard Enter remains an independent activation.
+    tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\n'));
+    ck_assert_uint_eq(menu.controller.screen_count, 2);
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+}
+END_TEST
+
+// Filtering spans UART polls and routing changes without altering non-menu input.
+START_TEST(test_uart_line_endings) {
+    input_uart_filter_t filter = {0};
+    ck_assert(input_uart_accept(&filter, '\n', true));
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    ck_assert(!input_uart_accept(&filter, '\n', true));
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    ck_assert(!input_uart_accept(&filter, '\n', true));
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    ck_assert(input_uart_accept(&filter, 'x', true));
+    ck_assert(input_uart_accept(&filter, '\n', true));
+    ck_assert(input_uart_accept(&filter, '\r', false));
+    ck_assert(input_uart_accept(&filter, '\n', false));
+    ck_assert(input_uart_accept(&filter, '\r', true));
+    ck_assert(!input_uart_accept(&filter, '\n', false));
+}
+END_TEST
+
 // Picker filtering follows native media support, including case-insensitive D82.
 START_TEST(test_native_formats_include_d82_and_exclude_hdd) {
     make_file("alpha.D64");
@@ -1542,6 +1586,8 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_disk_choice_is_immediate);
     tcase_add_test(cases, test_browser_errors_and_root_confinement);
     tcase_add_loop_test(cases, test_transient_directory_scan_failure, 0, 3);
+    tcase_add_test(cases, test_uart_crlf_across_picker_transition);
+    tcase_add_test(cases, test_uart_line_endings);
     tcase_add_test(cases, test_native_formats_include_d82_and_exclude_hdd);
     tcase_add_test(cases, test_empty_and_missing_directories);
     tcase_add_test(cases, test_deep_directories_do_not_grow_screen_stack);

@@ -47,6 +47,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/global.c
     ${FW_SRC_DIR}/input.c
     ${FW_SRC_DIR}/input_controls.c
+    ${FW_SRC_DIR}/input_uart.c
     ${FW_SRC_DIR}/main.c
     ${FW_SRC_DIR}/reset.c
     ${FW_SRC_DIR}/menu/menu.c

@@ -36,6 +36,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/sd/path.c
     ${SRC_DIR}/sd/activity.c
     ${SRC_DIR}/input_controls.c
+    ${SRC_DIR}/input_uart.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/menu_runtime.c
