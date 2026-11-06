@@ -47,6 +47,52 @@ START_TEST(test_tui_list_navigation) {
 }
 END_TEST
 
+// Overlapping pages retain the shared edge and move selection through each page boundary.
+START_TEST(test_tui_overlapping_page_navigation) {
+    static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN"};
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 3},
+        .list =
+            {
+                .labels = labels,
+                .count = count_of(labels),
+                .visible_rows = 3,
+                .overlapping_pages = true,
+            },
+    };
+    tui_screen_t screen = {.components = &component, .component_count = 1};
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &screen);
+    tui_controller_dispatch(&controller, tui_action_page_down);
+    ck_assert_uint_eq(component.list.first_visible, 2);
+    ck_assert_uint_eq(component.list.selected, 3);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('T'));
+    ck_assert_uint_eq(screen_buffer[4 * 40 + 1], ascii_to_vrom('F') ^ 0x80);
+    ck_assert_uint_eq(screen_buffer[5 * 40 + 1], ascii_to_vrom('F'));
+
+    tui_controller_dispatch(&controller, tui_action_page_down);
+    ck_assert_uint_eq(component.list.first_visible, 4);
+    ck_assert_uint_eq(component.list.selected, 5);
+    tui_controller_dispatch(&controller, tui_action_page_down);
+    ck_assert_uint_eq(component.list.first_visible, 4);
+    ck_assert_uint_eq(component.list.selected, 6);
+
+    tui_controller_dispatch(&controller, tui_action_page_up);
+    ck_assert_uint_eq(component.list.first_visible, 2);
+    ck_assert_uint_eq(component.list.selected, 3);
+    tui_controller_dispatch(&controller, tui_action_page_up);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    ck_assert_uint_eq(component.list.selected, 1);
+    tui_controller_dispatch(&controller, tui_action_page_up);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    ck_assert_uint_eq(component.list.selected, 0);
+}
+END_TEST
+
 // Idle and no-op navigation preserve the painted screen without another clear.
 START_TEST(test_tui_repaint_invalidation) {
     static const char* const labels[] = {"ONE", "TWO"};
@@ -608,6 +654,7 @@ Suite* tui_suite(void) {
     TCase* const test_case = tcase_create("core");
 
     tcase_add_test(test_case, test_tui_list_navigation);
+    tcase_add_test(test_case, test_tui_overlapping_page_navigation);
     tcase_add_test(test_case, test_tui_buttons_and_screen_stack);
     tcase_add_test(test_case, test_tui_empty_list_focuses_button);
     tcase_add_test(test_case, test_tui_parent_focus_and_mixed_navigation);
