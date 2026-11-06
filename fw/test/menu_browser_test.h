@@ -8,6 +8,7 @@
 // Shared filesystem fixture controls used by browser and menu integration tests.
 extern char directory_root[64];
 extern bool fail_readdir;
+extern bool fail_next_readdir;
 extern bool unknown_entry_types;
 extern unsigned int directory_scans, metadata_reads;
 

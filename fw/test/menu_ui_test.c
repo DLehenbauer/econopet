@@ -139,7 +139,7 @@ static void setup(void) {
     mock_reset();
     test_clear_files();
     ieee_drive_init();
-    fail_readdir = false;
+    fail_readdir = fail_next_readdir = false;
     unknown_entry_types = false;
     directory_scans = metadata_reads = 0;
     setup_count = 0;
@@ -185,7 +185,7 @@ static void remove_fixture_directory(const char* path) {
 
 // Closes facade-owned files before clearing fixtures or deleting their directory.
 static void teardown(void) {
-    fail_readdir = false;
+    fail_readdir = fail_next_readdir = false;
     ck_assert(ieee_drive_unmount_all());
     test_clear_files();
     ck_assert_uint_eq(guarded_screen[0], 0xa5);
@@ -1346,6 +1346,41 @@ START_TEST(test_browser_errors_and_root_confinement) {
 }
 END_TEST
 
+// A transient scan failure stays recoverable on open, descent, and parent navigation.
+START_TEST(test_transient_directory_scan_failure) {
+    char folder[PATH_MAX];
+    snprintf(folder, sizeof(folder), "%s/child", directory_root);
+    ck_assert_int_eq(mkdir(folder, 0700), 0);
+    make_file("child/disk.d64");
+    if (_i == 0) {
+        fail_next_readdir = true;
+        open_slot(0);
+    } else {
+        open_slot(0);
+        move_to(1);
+        if (_i == 2) {
+            tui_controller_dispatch(&menu.controller, tui_action_activate);
+            ck_assert_str_eq(menu.browser.path, "/disks/child");
+        }
+        fail_next_readdir = true;
+        tui_controller_dispatch(&menu.controller, _i == 1 ? tui_action_activate : tui_action_back);
+    }
+
+    ck_assert_uint_eq(menu.picker_control.list.count, 0);
+    ck_assert(!menu.picker_control.list.page_valid);
+    ck_assert_str_eq(menu.browser.error, "Cannot read directory");
+    tui_controller_render(&menu.controller);
+    tui_controller_dispatch(&menu.controller, tui_action_back);
+    if (menu.controller.screen_count == 3)
+        tui_controller_dispatch(&menu.controller, tui_action_back);
+    ck_assert_uint_eq(menu.controller.screen_count, 2);
+    open_slot(0);
+    ck_assert_uint_gt(menu.picker_control.list.count, 0);
+    ck_assert(menu.picker_control.list.page_valid);
+    ck_assert_str_eq(menu.browser.error, "");
+}
+END_TEST
+
 // Picker filtering follows native media support, including case-insensitive D82.
 START_TEST(test_native_formats_include_d82_and_exclude_hdd) {
     make_file("alpha.D64");
@@ -1506,6 +1541,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_nested_browsing_mount_and_eject);
     tcase_add_test(cases, test_disk_choice_is_immediate);
     tcase_add_test(cases, test_browser_errors_and_root_confinement);
+    tcase_add_loop_test(cases, test_transient_directory_scan_failure, 0, 3);
     tcase_add_test(cases, test_native_formats_include_d82_and_exclude_hdd);
     tcase_add_test(cases, test_empty_and_missing_directories);
     tcase_add_test(cases, test_deep_directories_do_not_grow_screen_stack);

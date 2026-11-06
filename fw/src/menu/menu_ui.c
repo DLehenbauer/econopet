@@ -228,6 +228,7 @@ static size_t special_count(const menu_ui_t* menu) {
 // Adds presentation-only Eject and parent rows to a bounded filesystem page.
 static bool disk_page(void* context, size_t first, size_t rows) {
     menu_ui_t* const menu = context;
+    if (menu->picker_control.list.count == 0) return false;
     const size_t specials = special_count(menu);
     const size_t file_first = first > specials ? first - specials : 0;
     const size_t virtual_rows = first < specials ? specials - first : 0;
