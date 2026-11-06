@@ -284,18 +284,21 @@ set_multicycle_path -hold 1 -start \
 #
 # DIP switches, active-low open-drain CPU signals, and VIA-driven audio/graphic
 # signals. These are either static (change only at power-on) or asynchronous to
-# sys_clock_i. The RTL uses level-sensitive sampling gated by bus slot enables,
-# not edge-sensitive synchronizers.
+# the fabric and soft-core clocks. Sampling or synchronization is documented
+# for each input group below.
 
 set_false_path -from [get_ports {config_crt_i config_keyboard_i}]
 set_false_path -from [get_ports {text_mode_i}]
 set_false_path -from [get_ports {diag_i via_cb2_i}]
 set_false_path -from [get_ports {cpu_reset_n_i}]
 
-# cpu_irq_n_i feeds the soft cores through a double-flop synchronizer --
-# async by design. cpu_nmi_n_i is still optimized away (no fanout); its
-# constraint is omitted to avoid warnings.
+# cpu_irq_n_i feeds both soft cores through main.sv's two sys_clock_i stages.
 set_false_path -from [get_ports {cpu_irq_n_i}]
+
+# cpu_nmi_n_i feeds m6502's nmi_n_sync/nmi_n_sync2 synchronizer, sampled on
+# falling cpu_phi edges. Only the asynchronous pad launch is excluded;
+# the synchronizer's stage-to-stage paths retain their normal timing checks.
+set_false_path -from [get_ports {cpu_nmi_n_i}]
 
 # pmod2_i: UART RXD/~CTS, double-flop synchronized inside acia6551 -- async by design.
 # No synchronous timing requirement.
