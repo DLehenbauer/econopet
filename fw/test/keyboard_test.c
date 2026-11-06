@@ -483,10 +483,12 @@ START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
         system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
     const usb_keymap_entry_t key = {.row = 0, .col = 0};
     const usb_keymap_entry_t shift = {.row = 1, .col = 0};
+    const usb_keymap_entry_t control = {.row = 2, .col = 0};
     keymap[HID_KEY_A] = (usb_keymap_entry_t) {.row = key.row, .col = key.col, .shift = true};
     keymap[HID_KEY_A | 0x100] =
         (usb_keymap_entry_t) {.row = key.row, .col = key.col, .unshift = true};
     keymap[HID_KEY_SHIFT_LEFT] = shift;
+    keymap[HID_KEY_CONTROL_LEFT] = control;
     usb_keyboard_reset(&system_state);
 
     report_key(HID_KEY_A, 0);
@@ -497,10 +499,20 @@ START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
-    report_key(0, 0);
+    const uint8_t left_control = KEYBOARD_MODIFIER_LEFTCTRL;
+    report_key(HID_KEY_A, left_control);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 0);
+    report_key(0, left_control);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 0);
+    report_key(0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 1u << control.row);
 
     const uint8_t left_shift = KEYBOARD_MODIFIER_LEFTSHIFT;
     report_key(HID_KEY_A, left_shift);
@@ -511,13 +523,21 @@ START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
-    report_key(0, left_shift);
+    const uint8_t left_shift_and_control = left_shift | left_control;
+    report_key(HID_KEY_A, left_shift_and_control);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 0);
+    report_key(0, left_shift_and_control);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 0);
     report_key(0, 0);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    ck_assert_uint_eq(usb_key_matrix[control.col] & (1u << control.row), 1u << control.row);
 }
 END_TEST
 

@@ -78,12 +78,22 @@ typedef struct {
 #define KEY_BUFFER_LOG2_CAPACITY 4
 #define KEY_BUFFER_CAPACITY (1 << KEY_BUFFER_LOG2_CAPACITY)
 #define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
+#define KEYCODE_COUNT (UINT8_MAX + 1u)
+
+typedef enum {
+    keymap_override_none,
+    keymap_override_shift,
+    keymap_override_unshift,
+} keymap_override_t;
 
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
 // Tracks raw HID modifiers; key events may carry separate keymap overrides.
 static uint8_t queued_report_modifiers;
+static keymap_override_t keymap_overrides[KEYCODE_COUNT];
+static uint8_t active_keymap_override_keys[KEYCODE_COUNT];
+static uint16_t active_keymap_override_count;
 
 // Preserve navigation press edges even when USB servicing receives press and release together.
 static MenuKeyEvent menu_key_buffer[KEY_BUFFER_CAPACITY];
@@ -92,6 +102,35 @@ static uint8_t menu_key_read_index;
 static bool menu_active;
 static input_hold_t pet_menu_hold;
 static bool pet_menu_pending;
+
+// Keeps the most recently pressed held-key override active until that key is released.
+static void set_keymap_override(uint8_t keycode, keymap_override_t override) {
+    for (size_t i = 0; i < active_keymap_override_count; ++i) {
+        if (active_keymap_override_keys[i] == keycode) {
+            for (size_t j = i + 1; j < active_keymap_override_count; ++j)
+                active_keymap_override_keys[j - 1] = active_keymap_override_keys[j];
+            --active_keymap_override_count;
+            break;
+        }
+    }
+
+    keymap_overrides[keycode] = override;
+    if (override != keymap_override_none)
+        active_keymap_override_keys[active_keymap_override_count++] = keycode;
+}
+
+// Applies the latest held-key override to raw HID modifiers.
+static uint8_t apply_keymap_override(uint8_t modifiers) {
+    if (active_keymap_override_count == 0)
+        return modifiers;
+
+    const uint8_t keycode = active_keymap_override_keys[active_keymap_override_count - 1];
+    if (keymap_overrides[keycode] == keymap_override_shift)
+        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
+    else if (keymap_overrides[keycode] == keymap_override_unshift)
+        modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
+    return modifiers;
+}
 
 // Reports whether USB navigation belongs to the active configuration menu.
 static bool menu_input_active(void) {
@@ -213,15 +252,15 @@ static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t
 }
 
 // Queues a modifier transition even when a report contains no key changes.
-static void enqueue_modifier_event(uint8_t modifiers) {
+static void enqueue_modifier_event(uint8_t report_modifiers) {
     uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
     if (new_write_index != key_buffer_next_read_index) {
         key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-            .modifiers = modifiers,
+            .modifiers = apply_keymap_override(report_modifiers),
             .modifier_only = true,
         };
         key_buffer_next_write_index = new_write_index;
-        queued_report_modifiers = modifiers;
+        queued_report_modifiers = report_modifiers;
     }
 }
 
@@ -267,7 +306,8 @@ void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
 
-    enqueue_key_event(keycode, row, col, modifiers, /* pressed: */ false);
+    set_keymap_override(keycode, keymap_override_none);
+    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ false);
 }
 
 void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
@@ -281,15 +321,11 @@ void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
 
-    if (keyInfo.shift) { 
-        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
-    }
+    set_keymap_override(keycode, keyInfo.unshift
+        ? keymap_override_unshift
+        : keyInfo.shift ? keymap_override_shift : keymap_override_none);
 
-    if (keyInfo.unshift) {
-        modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
-    }
-
-    enqueue_key_event(keycode, row, col, modifiers, /* pressed: */ true);
+    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ true);
 
     keystate_set(keycode, KEYSTATE_PRESSED_FLAG | (is_shifted ? KEYSTATE_SHIFTED_FLAG : 0));
 }
