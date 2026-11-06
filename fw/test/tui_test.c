@@ -427,6 +427,64 @@ static void pop_current_screen_on_show(tui_controller_t* const controller, void*
     tui_controller_pop(controller);
 }
 
+static void pop_current_screen_on_paint(tui_controller_t* const controller, void* const context) {
+    (void)context;
+    tui_controller_pop(controller);
+}
+
+// Rendering stops when on_paint dismisses the root screen.
+START_TEST(test_tui_stops_render_after_on_paint_dismissal) {
+    tui_component_t component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "STALE"},
+    };
+    tui_screen_t screen = {
+        .components = &component,
+        .component_count = 1,
+        .on_paint = pop_current_screen_on_paint,
+    };
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &screen);
+    tui_controller_render(&controller);
+    ck_assert(!tui_controller_is_active(&controller));
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 15], CH_SPACE);
+}
+END_TEST
+
+// Rendering stops when on_paint switches to a different active screen.
+START_TEST(test_tui_stops_render_after_on_paint_changes_screen) {
+    tui_component_t parent_component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "PARENT"},
+    };
+    tui_component_t child_component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "STALE"},
+    };
+    tui_screen_t parent = {.components = &parent_component, .component_count = 1};
+    tui_screen_t child = {
+        .components = &child_component,
+        .component_count = 1,
+        .on_paint = pop_current_screen_on_paint,
+    };
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &parent);
+    tui_controller_push(&controller, &child);
+    tui_controller_render(&controller);
+    ck_assert(tui_controller_is_active(&controller));
+    ck_assert_uint_eq(controller.screen_count, 1);
+    ck_assert(tui_controller_needs_render(&controller));
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 15], CH_SPACE);
+}
+END_TEST
+
 // Dismissing the root skips refresh because its page source may be closed by the callback.
 START_TEST(test_tui_skips_refresh_after_root_dismissal) {
     page_source_state_t source = {.open = true};
@@ -663,6 +721,8 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_page_provider);
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
     tcase_add_test(test_case, test_tui_refreshes_parent_after_callback_navigation);
+    tcase_add_test(test_case, test_tui_stops_render_after_on_paint_dismissal);
+    tcase_add_test(test_case, test_tui_stops_render_after_on_paint_changes_screen);
     tcase_add_test(test_case, test_tui_skips_refresh_after_root_dismissal);
     tcase_add_test(test_case, test_tui_skips_normalization_after_on_show_dismissal);
     tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);

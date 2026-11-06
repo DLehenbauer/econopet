@@ -204,6 +204,11 @@ void tui_controller_render(tui_controller_t* const controller) {
     if (screen->on_paint != NULL) {
         screen->on_paint(controller, screen->context);
     }
+    if (!controller->active || active_screen(controller) != screen) {
+        if (controller->active)
+            controller->dirty = true;
+        return;
+    }
 
     for (size_t i = 0; i < screen->component_count; i++) {
         const tui_component_t* const component = &screen->components[i];
