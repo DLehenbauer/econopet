@@ -81,9 +81,11 @@ static int menu_key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t menu_key_write_index;
 static uint8_t menu_key_read_index;
 static bool menu_active;
-static input_hold_t usb_menu_hold;
+#define USB_DEVICE_ADDRESS_COUNT 128
+static hid_keyboard_report_t previous_keyboard_reports[USB_DEVICE_ADDRESS_COUNT];
+static input_hold_t usb_menu_holds[USB_DEVICE_ADDRESS_COUNT];
 static input_hold_t pet_menu_hold;
-static bool usb_menu_pending;
+static bool usb_menu_pending[USB_DEVICE_ADDRESS_COUNT];
 static bool pet_menu_pending;
 
 // Reports whether USB navigation belongs to the active configuration menu.
@@ -300,8 +302,9 @@ void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
             // Remove keyboard from our list of attached keyboards.
             attached_keyboards[i].attached = false;
             menu_key_read_index = menu_key_write_index = 0;
-            usb_menu_pending = false;
-            input_hold_update(&usb_menu_hold, false);
+            memset(&previous_keyboard_reports[dev_addr], 0, sizeof(previous_keyboard_reports[dev_addr]));
+            usb_menu_pending[dev_addr] = false;
+            input_hold_update(&usb_menu_holds[dev_addr], false);
             return;
         }
     }
@@ -440,27 +443,23 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
 }
 
 void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
-    (void) dev_addr;
-
-    static hid_keyboard_report_t prev_report = {
-        .modifier = 0,
-        .reserved = 0,
-        .keycode = { 0, 0, 0, 0, 0, 0 },
-    };
+    // USB device addresses are 7-bit and uniquely identify a keyboard source.
+    hid_keyboard_report_t* const prev_report = &previous_keyboard_reports[dev_addr];
+    input_hold_t* const menu_hold = &usb_menu_holds[dev_addr];
 
     const uint8_t modifiers = report->modifier;
     const uint8_t shifts = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
     bool chord_only = modifiers == shifts;
     for (size_t i = 0; i < count_of(report->keycode); ++i)
         chord_only &= report->keycode[i] == 0;
-    if (!chord_only && input_hold_ready(&usb_menu_hold))
-        usb_menu_pending = true;
-    input_hold_update(&usb_menu_hold, chord_only);
+    if (!chord_only && input_hold_ready(menu_hold))
+        usb_menu_pending[dev_addr] = true;
+    input_hold_update(menu_hold, chord_only);
 
     // For each previously pressed key, check if the key still exists in the
     // new report.  If not, the key has been released.
-    for (uint8_t i = 0; i < sizeof(prev_report.keycode); i++) {
-        const uint8_t keycode = prev_report.keycode[i];
+    for (uint8_t i = 0; i < sizeof(prev_report->keycode); i++) {
+        const uint8_t keycode = prev_report->keycode[i];
         if (keycode && !find_key_in_report(report, keycode)) {
             usb_keyboard_enqueue_key_up(keycode, modifiers);
         }
@@ -470,7 +469,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     // If not, the key has been pressed.
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
-        if (keycode && !find_key_in_report(&prev_report, keycode)) {
+        if (keycode && !find_key_in_report(prev_report, keycode)) {
             const int key = menu_key(keycode);
             if (menu_input_active() && key != EOF) {
                 enqueue_menu_key(key);
@@ -478,7 +477,7 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
         }
     }
 
-    prev_report = *report;
+    *prev_report = *report;
 }
 
 // Reads one active-low key from a PET-format matrix.
@@ -510,17 +509,22 @@ bool keyboard_menu_requested(void) {
     if (!chord_only && input_hold_ready(&pet_menu_hold))
         pet_menu_pending = true;
     input_hold_update(&pet_menu_hold, chord_only);
-    return usb_menu_pending || input_hold_ready(&usb_menu_hold)
-        || pet_menu_pending || input_hold_ready(&pet_menu_hold);
+    for (unsigned int dev_addr = 0; dev_addr < USB_DEVICE_ADDRESS_COUNT; ++dev_addr) {
+        if (usb_menu_pending[dev_addr] || input_hold_ready(&usb_menu_holds[dev_addr]))
+            return true;
+    }
+    return pet_menu_pending || input_hold_ready(&pet_menu_hold);
 }
 
 // Refreshes the PET snapshot before suppressing any currently held chord.
 void keyboard_menu_consume(void) {
     (void) keyboard_menu_requested();
-    usb_menu_pending = false;
     pet_menu_pending = false;
-    input_hold_consume(&usb_menu_hold);
     input_hold_consume(&pet_menu_hold);
+    for (unsigned int dev_addr = 0; dev_addr < USB_DEVICE_ADDRESS_COUNT; ++dev_addr) {
+        usb_menu_pending[dev_addr] = false;
+        input_hold_consume(&usb_menu_holds[dev_addr]);
+    }
 }
 
 int keyboard_getch() {

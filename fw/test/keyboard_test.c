@@ -23,15 +23,19 @@ bool tuh_hid_set_report(uint8_t dev_addr, uint8_t idx, uint8_t report_id, uint8_
     (void) report;
     ck_assert_msg(expect_hid_output_report, "unexpected USB output report in keyboard input test");
     expect_hid_output_report = false;
-    ck_assert_uint_eq(dev_addr, 1);
+    ck_assert(dev_addr == 1 || dev_addr == 2);
     ck_assert_uint_eq(len, sizeof(uint8_t));
     return true;
 }
 
 // Delivers a real HID report without dispatching the PET matrix or polling menu input.
-static void report_key(uint8_t keycode, uint8_t modifiers) {
+static void report_key_from(uint8_t dev_addr, uint8_t keycode, uint8_t modifiers) {
     const hid_keyboard_report_t report = {.modifier = modifiers, .keycode = {keycode}};
-    process_kbd_report(1, &report);
+    process_kbd_report(dev_addr, &report);
+}
+
+static void report_key(uint8_t keycode, uint8_t modifiers) {
+    report_key_from(1, keycode, modifiers);
 }
 
 // Starts each report trace with an empty keyboard and firmware menu routing.
@@ -239,6 +243,29 @@ START_TEST(test_usb_menu_chord_removed_before_poll) {
 }
 END_TEST
 
+// Reports and removal from one keyboard do not cancel another keyboard's chord.
+START_TEST(test_usb_menu_chords_are_per_keyboard) {
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+    expect_hid_output_report = true;
+    usb_keyboard_added(2, 0);
+    ck_assert(!expect_hid_output_report);
+
+    const uint8_t both = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    report_key_from(1, 0, both);
+    mock_clock_advance(INPUT_LONG_PRESS_US / 2);
+    report_key_from(2, 0, 0);
+    mock_clock_advance(INPUT_LONG_PRESS_US / 2);
+    ck_assert(keyboard_menu_requested());
+
+    usb_keyboard_removed(2, 0);
+    ck_assert(keyboard_menu_requested());
+    keyboard_menu_consume();
+    usb_keyboard_removed(1, 0);
+}
+END_TEST
+
 // PET business and graphics keyboards require their own two physical Shift keys.
 START_TEST(test_pet_menu_chord) {
     system_state.term_input_dest = term_input_to_pet;
@@ -259,6 +286,7 @@ START_TEST(test_pet_menu_chord) {
     ck_assert(!keyboard_menu_requested());
     mock_clock_advance(INPUT_LONG_PRESS_US);
     ck_assert(keyboard_menu_requested());
+    keyboard_menu_consume();
 
     // Other physical keys cancel qualification even while Shift-lock stays down.
     const key_event_t typing = _i == 0 ? PET_KEY_T_N : PET_KEY_T_B;
@@ -462,6 +490,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_menu_chord_release_before_poll);
     tcase_add_test(core, test_usb_menu_chord_reset_before_poll);
     tcase_add_test(core, test_usb_menu_chord_removed_before_poll);
+    tcase_add_test(core, test_usb_menu_chords_are_per_keyboard);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
