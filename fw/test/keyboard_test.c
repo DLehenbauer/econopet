@@ -560,6 +560,33 @@ START_TEST(test_batched_shifted_reports_preserve_key_releases) {
 }
 END_TEST
 
+// A simultaneous Shift and unshifted key must not expose Shift on a held key first.
+START_TEST(test_unshift_mapping_precedes_simultaneous_modifier) {
+    usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
+    const usb_keymap_entry_t a = {.row = 0, .col = 0, .unshift = true};
+    const usb_keymap_entry_t b = {.row = 1, .col = 0};
+    const usb_keymap_entry_t shift = {.row = 2, .col = 0};
+    keymap[HID_KEY_A | 0x100] = a;
+    keymap[HID_KEY_B] = b;
+    keymap[HID_KEY_SHIFT_LEFT] = shift;
+    usb_keyboard_reset(&system_state);
+
+    const uint8_t held_b[] = {HID_KEY_B};
+    const uint8_t held_a_and_b[] = {HID_KEY_A, HID_KEY_B};
+    report_keys(0, held_b, count_of(held_b));
+    dispatch_all_key_events();
+    report_keys(KEYBOARD_MODIFIER_LEFTSHIFT, held_a_and_b, count_of(held_a_and_b));
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[b.col] & (1u << b.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    ck_assert_uint_eq(usb_key_matrix[a.col] & (1u << a.row), 0);
+
+    report_key(0, 0);
+    dispatch_all_key_events();
+}
+END_TEST
+
 // Repeated reports preserve keymap Shift overrides while a key remains held.
 START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
     usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
@@ -764,6 +791,7 @@ Suite* keyboard_suite(void) {
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
     tcase_add_test(core, test_batched_shifted_reports_preserve_key_releases);
+    tcase_add_test(core, test_unshift_mapping_precedes_simultaneous_modifier);
     tcase_add_test(core, test_keymap_shift_overrides_survive_unchanged_reports);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);

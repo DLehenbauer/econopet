@@ -439,14 +439,16 @@ static void clear_keyboard_state(keyboard_info_t* keyboard) {
     discard_menu_keys(keyboard->dev_addr, keyboard->instance);
     keyboard->used = false;
     keyboard->attached = false;
-    update_queued_modifiers(combined_modifiers());
+    const uint8_t modifiers = combined_modifiers();
 
     for (uint8_t i = 0; i < sizeof(previous_report.keycode); ++i) {
         const uint8_t keycode = previous_report.keycode[i];
         if (keycode && key_owned(keyboard, keycode) && !key_owned_elsewhere(keyboard, keycode))
-            usb_keyboard_enqueue_key_up(keycode, queued_report_modifiers);
+            usb_keyboard_enqueue_key_up(keycode, modifiers);
     }
 
+    // Apply held-key overrides before exposing a raw modifier-only transition.
+    update_queued_modifiers(modifiers);
     *keyboard = (keyboard_info_t) { 0 };
 }
 
@@ -624,7 +626,6 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
     input_hold_update(&keyboard->menu_hold, chord_only);
     keyboard->previous_report = *report;
     const uint8_t modifiers = combined_modifiers();
-    update_queued_modifiers(modifiers);
 
     // For each previously pressed key, check if the key still exists in the
     // new report.  If not, the key has been released.
@@ -651,6 +652,9 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
                 set_key_owned(keyboard, keycode, true);
             }
         }
+
+        // Apply this report's keymap overrides before queuing its raw modifier update.
+        update_queued_modifiers(modifiers);
     }
 }
 
