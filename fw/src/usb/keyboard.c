@@ -235,33 +235,34 @@ static keyboard_info_t* get_keyboard_state(uint8_t dev_addr, uint8_t instance) {
     fatal("Max supported USB keyboards is %d.", MAX_KEYBOARDS);
 }
 
+// Dispatches queued events when needed instead of dropping a key transition.
+static void ensure_key_buffer_space(void) {
+    while (((key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK) == key_buffer_next_read_index)
+        dispatch_key_events();
+}
+
 static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
-    uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-    if (new_write_index != key_buffer_next_read_index) {
-        KeyEvent keyEvent = {
-            .key = keycode,
-            .row = row,
-            .col = col,
-            .modifiers = modifiers,
-            .pressed = pressed,
-            .modifier_only = false,
-        };
-        key_buffer[key_buffer_next_write_index] = keyEvent;
-        key_buffer_next_write_index = new_write_index;
-    }
+    ensure_key_buffer_space();
+    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
+        .key = keycode,
+        .row = row,
+        .col = col,
+        .modifiers = modifiers,
+        .pressed = pressed,
+        .modifier_only = false,
+    };
+    key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
 // Queues a modifier transition even when a report contains no key changes.
 static void enqueue_modifier_event(uint8_t report_modifiers) {
-    uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-    if (new_write_index != key_buffer_next_read_index) {
-        key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-            .modifiers = apply_keymap_override(report_modifiers),
-            .modifier_only = true,
-        };
-        key_buffer_next_write_index = new_write_index;
-        queued_report_modifiers = report_modifiers;
-    }
+    ensure_key_buffer_space();
+    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
+        .modifiers = apply_keymap_override(report_modifiers),
+        .modifier_only = true,
+    };
+    key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+    queued_report_modifiers = report_modifiers;
 }
 
 // Combines modifiers held across all active keyboard interfaces.

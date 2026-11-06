@@ -40,6 +40,14 @@ static void report_key(uint8_t keycode, uint8_t modifiers) {
     report_key_from(1, 0, keycode, modifiers);
 }
 
+// Delivers a multi-key report without dispatching pending matrix events.
+static void report_keys(uint8_t modifiers, const uint8_t* keycodes, size_t keycode_count) {
+    hid_keyboard_report_t report = {.modifier = modifiers};
+    ck_assert_msg(keycode_count <= count_of(report.keycode), "too many keys in test report");
+    memcpy(report.keycode, keycodes, keycode_count);
+    process_kbd_report(1, 0, &report);
+}
+
 // Drains modifier groups so assertions observe every queued report transition.
 static void dispatch_all_key_events(void) {
     for (unsigned int i = 0; i < TEST_KEY_EVENT_QUEUE_CAPACITY; ++i)
@@ -477,6 +485,48 @@ START_TEST(test_implicit_shift_does_not_open_menu) {
 }
 END_TEST
 
+// Batched shifted reports cannot overflow the queue and lose key releases.
+START_TEST(test_batched_shifted_reports_preserve_key_releases) {
+    usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
+    const usb_keymap_entry_t a = {.row = 0, .col = 0};
+    const usb_keymap_entry_t shifted_a = {.row = 1, .col = 0};
+    const usb_keymap_entry_t b = {.row = 2, .col = 0};
+    const usb_keymap_entry_t shifted_b = {.row = 3, .col = 0};
+    const usb_keymap_entry_t shift = {.row = 4, .col = 0};
+    keymap[HID_KEY_A] = a;
+    keymap[HID_KEY_A | 0x100] = shifted_a;
+    keymap[HID_KEY_B] = b;
+    keymap[HID_KEY_B | 0x100] = shifted_b;
+    keymap[HID_KEY_SHIFT_LEFT] = shift;
+    usb_keyboard_reset(&system_state);
+
+    const uint8_t left_shift = KEYBOARD_MODIFIER_LEFTSHIFT;
+    const uint8_t held_a[] = {HID_KEY_A};
+    const uint8_t held_a_and_b[] = {HID_KEY_A, HID_KEY_B};
+    const uint8_t released[] = {0};
+    report_keys(left_shift, held_a, count_of(held_a));
+    for (unsigned int tap = 0; tap < 6; ++tap) {
+        report_keys(left_shift, held_a_and_b, count_of(held_a_and_b));
+        report_keys(left_shift, held_a, count_of(held_a));
+    }
+
+    report_keys(left_shift, held_a_and_b, count_of(held_a_and_b));
+    report_keys(left_shift, held_a, count_of(held_a));
+    report_keys(left_shift, released, count_of(released));
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[shifted_a.col] & (1u << shifted_a.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shifted_b.col] & (1u << shifted_b.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+
+    report_keys(0, released, count_of(released));
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[shifted_a.col] & (1u << shifted_a.row), 1u << shifted_a.row);
+    ck_assert_uint_eq(usb_key_matrix[shifted_b.col] & (1u << shifted_b.row), 1u << shifted_b.row);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+}
+END_TEST
+
 // Repeated reports preserve keymap Shift overrides while a key remains held.
 START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
     usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
@@ -679,6 +729,7 @@ Suite* keyboard_suite(void) {
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
+    tcase_add_test(core, test_batched_shifted_reports_preserve_key_releases);
     tcase_add_test(core, test_keymap_shift_overrides_survive_unchanged_reports);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);
