@@ -242,6 +242,12 @@ static void shrink_list_on_back(tui_controller_t* const controller, void* const 
     shrink_list_model(model->list);
 }
 
+static void pop_then_shrink_list(tui_controller_t* const controller, void* const context) {
+    mutable_list_context_t* const model = context;
+    tui_controller_pop(controller);
+    shrink_list_model(model->list);
+}
+
 // Callback model changes clamp stale selection and viewport before another render or activation.
 START_TEST(test_tui_normalizes_callback_mutations) {
     static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
@@ -292,6 +298,104 @@ START_TEST(test_tui_normalizes_callback_mutations) {
     ck_assert_uint_eq(component.list.first_visible, 0);
     tui_controller_render(&controller);
     ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
+}
+END_TEST
+
+// Callback navigation refreshes the resulting parent after mutations made on the way out.
+START_TEST(test_tui_refreshes_parent_after_callback_navigation) {
+    static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
+    tui_component_t parent_component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 2},
+        .list =
+            {
+                .labels = labels,
+                .count = count_of(labels),
+                .visible_rows = 2,
+            },
+    };
+    mutable_list_context_t model = {.list = &parent_component};
+    tui_component_t child_component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "RETURN", .on_activate = pop_then_shrink_list, .context = &model},
+    };
+    tui_screen_t parent = {.components = &parent_component, .component_count = 1};
+    tui_screen_t child = {.components = &child_component, .component_count = 1};
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &parent);
+    for (size_t i = 0; i < 4; i++) {
+        tui_controller_dispatch(&controller, tui_action_down);
+    }
+    ck_assert_uint_eq(parent_component.list.selected, 4);
+    ck_assert_uint_eq(parent_component.list.first_visible, 3);
+
+    tui_controller_push(&controller, &child);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(controller.screen_count, 1);
+    ck_assert_uint_eq(parent_component.list.count, 1);
+    ck_assert_uint_eq(parent_component.list.selected, 0);
+    ck_assert_uint_eq(parent_component.list.first_visible, 0);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
+}
+END_TEST
+
+typedef struct {
+    bool open;
+    size_t load_attempts;
+    size_t loads_after_close;
+} page_source_state_t;
+
+static bool load_closable_page(void* const context, size_t first, size_t rows) {
+    (void)first;
+    (void)rows;
+    page_source_state_t* const source = context;
+    source->load_attempts++;
+    if (!source->open) {
+        source->loads_after_close++;
+        return false;
+    }
+    return true;
+}
+
+static void close_page_source_and_dismiss(tui_controller_t* const controller, void* const context) {
+    page_source_state_t* const source = context;
+    source->open = false;
+    tui_controller_pop(controller);
+}
+
+// Dismissing the root skips refresh because its page source may be closed by the callback.
+START_TEST(test_tui_skips_refresh_after_root_dismissal) {
+    page_source_state_t source = {.open = true};
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 1},
+        .list =
+            {
+                .count = 1,
+                .visible_rows = 1,
+                .context = &source,
+                .load_page = load_closable_page,
+            },
+    };
+    tui_screen_t screen = {
+        .components = &component,
+        .component_count = 1,
+        .context = &source,
+        .on_back = close_page_source_and_dismiss,
+    };
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &screen);
+    ck_assert_uint_eq(source.load_attempts, 1);
+    tui_controller_dispatch(&controller, tui_action_back);
+    ck_assert(!tui_controller_is_active(&controller));
+    ck_assert_uint_eq(source.load_attempts, 1);
+    ck_assert_uint_eq(source.loads_after_close, 0);
 }
 END_TEST
 
@@ -437,6 +541,8 @@ Suite* tui_suite(void) {
     tcase_add_loop_test(test_case, test_tui_selection_remains_visible_when_clipped, 0, 2);
     tcase_add_test(test_case, test_tui_page_provider);
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
+    tcase_add_test(test_case, test_tui_refreshes_parent_after_callback_navigation);
+    tcase_add_test(test_case, test_tui_skips_refresh_after_root_dismissal);
     tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);
     tcase_add_test(test_case, test_tui_repaint_invalidation);
     suite_add_tcase(suite, test_case);

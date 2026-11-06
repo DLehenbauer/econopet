@@ -87,10 +87,9 @@ static void normalize_screen(tui_controller_t* const controller) {
     controller->focused_component = 0;
 }
 
-// Refreshes callback-mutated models unless the callback already navigated to a normalized screen.
-static void refresh_callback_screen(tui_controller_t* const controller, tui_screen_t* const previous_screen,
-                                    size_t previous_depth) {
-    if (controller->screen_count == previous_depth && active_screen(controller) == previous_screen) {
+// Normalizes the resulting screen after a callback, unless the callback dismissed the controller.
+static void refresh_active_screen(tui_controller_t* const controller) {
+    if (controller->active) {
         normalize_screen(controller);
     }
 }
@@ -325,27 +324,21 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
         case tui_action_activate:
             controller->dirty = true;
             if (component->kind == tui_component_list) {
-                if (component->list.count != 0 && component->list.page_valid
-                    && component->list.on_activate != NULL) {
-                    tui_screen_t* const previous_screen = active_screen(controller);
-                    const size_t previous_depth = controller->screen_count;
+                if (component->list.count != 0 && component->list.page_valid && component->list.on_activate != NULL) {
                     component->list.on_activate(controller, component->list.context, component->list.selected);
-                    refresh_callback_screen(controller, previous_screen, previous_depth);
+                    refresh_active_screen(controller);
                 }
             } else if (component->button.on_activate != NULL) {
-                tui_screen_t* const previous_screen = active_screen(controller);
-                const size_t previous_depth = controller->screen_count;
                 component->button.on_activate(controller, component->button.context);
-                refresh_callback_screen(controller, previous_screen, previous_depth);
+                refresh_active_screen(controller);
             }
             break;
         case tui_action_back:
             controller->dirty = true;
             if (active_screen(controller)->on_back != NULL) {
                 tui_screen_t* const screen = active_screen(controller);
-                const size_t previous_depth = controller->screen_count;
                 screen->on_back(controller, screen->context);
-                refresh_callback_screen(controller, screen, previous_depth);
+                refresh_active_screen(controller);
             } else tui_controller_pop(controller);
             break;
         case tui_action_none:
