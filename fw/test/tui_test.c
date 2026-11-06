@@ -345,6 +345,7 @@ END_TEST
 
 typedef struct {
     bool open;
+    bool dismiss_on_show;
     size_t load_attempts;
     size_t loads_after_close;
 } page_source_state_t;
@@ -364,6 +365,19 @@ static bool load_closable_page(void* const context, size_t first, size_t rows) {
 static void close_page_source_and_dismiss(tui_controller_t* const controller, void* const context) {
     page_source_state_t* const source = context;
     source->open = false;
+    tui_controller_pop(controller);
+}
+
+static void close_source_and_dismiss_on_show(tui_controller_t* const controller, void* const context) {
+    page_source_state_t* const source = context;
+    if (source->dismiss_on_show) {
+        source->open = false;
+        tui_controller_pop(controller);
+    }
+}
+
+static void pop_current_screen_on_show(tui_controller_t* const controller, void* const context) {
+    (void)context;
     tui_controller_pop(controller);
 }
 
@@ -393,6 +407,66 @@ START_TEST(test_tui_skips_refresh_after_root_dismissal) {
     tui_controller_init(&controller, &window, &screen);
     ck_assert_uint_eq(source.load_attempts, 1);
     tui_controller_dispatch(&controller, tui_action_back);
+    ck_assert(!tui_controller_is_active(&controller));
+    ck_assert_uint_eq(source.load_attempts, 1);
+    ck_assert_uint_eq(source.loads_after_close, 0);
+}
+END_TEST
+
+// Init, push, and pop skip normalization when on_show dismissed the controller.
+START_TEST(test_tui_skips_normalization_after_on_show_dismissal) {
+    page_source_state_t source = {.open = true, .dismiss_on_show = true};
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 1},
+        .list =
+            {
+                .count = 1,
+                .visible_rows = 1,
+                .context = &source,
+                .load_page = load_closable_page,
+            },
+    };
+    tui_screen_t root = {
+        .components = &component,
+        .component_count = 1,
+        .context = &source,
+        .on_show = close_source_and_dismiss_on_show,
+    };
+    tui_component_t child_component = {
+        .kind = tui_component_button,
+        .bounds = {1, 3, 38, 1},
+        .button = {.label = "CHILD"},
+    };
+    tui_screen_t passive_child = {.components = &child_component, .component_count = 1};
+    tui_screen_t dismissing_child = {
+        .components = &child_component,
+        .component_count = 1,
+        .on_show = pop_current_screen_on_show,
+    };
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &root);
+    ck_assert(!tui_controller_is_active(&controller));
+    ck_assert_uint_eq(source.load_attempts, 0);
+    ck_assert_uint_eq(source.loads_after_close, 0);
+
+    source = (page_source_state_t){.open = true};
+    tui_controller_init(&controller, &window, &root);
+    ck_assert_uint_eq(source.load_attempts, 1);
+    tui_controller_push(&controller, &passive_child);
+    source.dismiss_on_show = true;
+    tui_controller_pop(&controller);
+    ck_assert(!tui_controller_is_active(&controller));
+    ck_assert_uint_eq(source.load_attempts, 1);
+    ck_assert_uint_eq(source.loads_after_close, 0);
+
+    source = (page_source_state_t){.open = true};
+    tui_controller_init(&controller, &window, &root);
+    ck_assert_uint_eq(source.load_attempts, 1);
+    source.dismiss_on_show = true;
+    tui_controller_push(&controller, &dismissing_child);
     ck_assert(!tui_controller_is_active(&controller));
     ck_assert_uint_eq(source.load_attempts, 1);
     ck_assert_uint_eq(source.loads_after_close, 0);
@@ -543,6 +617,7 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
     tcase_add_test(test_case, test_tui_refreshes_parent_after_callback_navigation);
     tcase_add_test(test_case, test_tui_skips_refresh_after_root_dismissal);
+    tcase_add_test(test_case, test_tui_skips_normalization_after_on_show_dismissal);
     tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);
     tcase_add_test(test_case, test_tui_repaint_invalidation);
     suite_add_tcase(suite, test_case);

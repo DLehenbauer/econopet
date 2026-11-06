@@ -111,7 +111,7 @@ void tui_controller_init(tui_controller_t* const controller, const window_t* con
     if (initial_screen->on_show != NULL) {
         initial_screen->on_show(controller, initial_screen->context);
     }
-    normalize_screen(controller);
+    refresh_active_screen(controller);
 }
 
 void tui_controller_push(tui_controller_t* const controller, tui_screen_t* const screen) {
@@ -125,7 +125,7 @@ void tui_controller_push(tui_controller_t* const controller, tui_screen_t* const
     if (screen->on_show != NULL) {
         screen->on_show(controller, screen->context);
     }
-    normalize_screen(controller);
+    refresh_active_screen(controller);
 }
 
 void tui_controller_pop(tui_controller_t* const controller) {
@@ -143,7 +143,7 @@ void tui_controller_pop(tui_controller_t* const controller) {
     if (screen->on_show != NULL) {
         screen->on_show(controller, screen->context);
     }
-    normalize_screen(controller);
+    refresh_active_screen(controller);
 }
 
 bool tui_controller_is_active(const tui_controller_t* const controller) {
