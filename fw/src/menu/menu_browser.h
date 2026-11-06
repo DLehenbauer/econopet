@@ -14,6 +14,7 @@ typedef struct {
     bool directory;
 } menu_browser_entry_t;
 
+// Directory entries must remain stable between refreshes. Scans are not snapshots.
 typedef struct {
     char path[SD_PATH_MAX]; // Current directory path, rooted at MENU_BROWSER_ROOT.
     char error[MENU_BROWSER_ERROR_CAPACITY]; // Recoverable menu error; cleared by refresh.
@@ -23,14 +24,14 @@ typedef struct {
     size_t entry_count; // Number of entries stored in the page cache.
     size_t rows; // Requested row count for the cached page.
     bool cache_valid; // Whether the cached page and its metadata can be reused.
-    void (*service)(void); // Optional callback invoked during directory scans.
+    void (*service)(void); // Optional scan hook, must not mutate this browser or its directory.
 } menu_browser_t;
 
 // Recounts the current directory and invalidates its bounded page cache.
 bool menu_browser_refresh(menu_browser_t* browser);
 // Loads a sorted page of actual files and directories, without synthetic UI items.
 bool menu_browser_page(menu_browser_t* browser, size_t first, size_t rows);
-// Finds a full entry name with bounded storage, returning its sorted file index.
+// Finds a full name (including one borrowed from entries), returning its sorted index.
 bool menu_browser_find(menu_browser_t* browser, const char* name, bool directory, size_t* index);
 // Resolves a cached entry and rechecks its filesystem type before activation.
 bool menu_browser_resolve(menu_browser_t* browser, size_t index, char path[SD_PATH_MAX],

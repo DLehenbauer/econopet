@@ -7,3 +7,6 @@
 
 // Creates the standalone bounded filesystem browser suite.
 Suite* menu_browser_suite(void);
+
+// Creates the fork-isolated browser invariant suite.
+Suite* menu_browser_fatal_suite(void);

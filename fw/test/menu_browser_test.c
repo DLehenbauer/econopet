@@ -6,11 +6,13 @@
 
 #include <dirent.h>
 #include <limits.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "diag/log/log.h"
 #include "menu/menu_browser.h"
+#include "test_support.h"
 
 #define TEST_IMAGE_COUNT 65u
 
@@ -255,7 +257,7 @@ START_TEST(test_browser_long_names_and_overlong_paths) {
 }
 END_TEST
 
-// A changed directory invalidates the next page rather than publishing stale storage.
+// Directory mutation violates the browser's stable-listing contract.
 START_TEST(test_browser_directory_change) {
     for (size_t index = 0; index < MENU_BROWSER_PAGE_ROWS + 1; index++) {
         char name[32];
@@ -266,9 +268,62 @@ START_TEST(test_browser_directory_change) {
     ck_assert(menu_browser_refresh(&browser));
     ck_assert(menu_browser_page(&browser, 0, MENU_BROWSER_PAGE_ROWS));
     make_file("new-image.d64");
-    ck_assert(!menu_browser_page(&browser, MENU_BROWSER_PAGE_ROWS - 1, MENU_BROWSER_PAGE_ROWS));
-    ck_assert(!browser.cache_valid);
-    ck_assert_str_eq(browser.error, "Directory changed - reopen picker");
+    test_expect_fatal_message("browser directory count changed");
+    test_expect_fatal_callback(teardown);
+    menu_browser_page(&browser, MENU_BROWSER_PAGE_ROWS - 1, MENU_BROWSER_PAGE_ROWS);
+}
+END_TEST
+
+// Cached anchors must retain both their identity and rank in either scan direction.
+START_TEST(test_browser_renamed_cursor) {
+    for (size_t i = 0; i < TEST_IMAGE_COUNT; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "image%02zu.d64", i);
+        make_file(name);
+    }
+    const bool reverse = _i >= 2;
+    const bool replace_cursor = _i % 2 != 0;
+    menu_browser_t browser = {.path = MENU_BROWSER_ROOT};
+    ck_assert(menu_browser_refresh(&browser));
+    ck_assert(menu_browser_page(&browser, reverse ? 2 * MENU_BROWSER_PAGE_ROWS : 0,
+                                MENU_BROWSER_PAGE_ROWS));
+    char source[PATH_MAX], target[PATH_MAX];
+    const size_t cursor_index = reverse ? 2 * MENU_BROWSER_PAGE_ROWS : MENU_BROWSER_PAGE_ROWS - 1;
+    snprintf(source, sizeof(source), "%s/image%02zu.d64", directory_root,
+             replace_cursor ? cursor_index : TEST_IMAGE_COUNT - 1);
+    snprintf(target, sizeof(target), "%s/%s", directory_root,
+             replace_cursor ? "zzz.d64" : "aaa.d64");
+    ck_assert_int_eq(rename(source, target), 0);
+    test_expect_fatal_message("browser directory cursor changed");
+    test_expect_fatal_callback(teardown);
+    const size_t first = reverse ? MENU_BROWSER_PAGE_ROWS + 1 : MENU_BROWSER_PAGE_ROWS;
+    menu_browser_page(&browser, first, MENU_BROWSER_PAGE_ROWS);
+}
+END_TEST
+
+// A search can borrow a full filename from a page that the search itself replaces.
+START_TEST(test_browser_find_cached_name) {
+    for (size_t i = 0; i < TEST_IMAGE_COUNT; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "image%02zu.d64", i);
+        make_file(name);
+    }
+    char long_name[181];
+    memset(long_name, 'z', sizeof(long_name) - 5);
+    memcpy(long_name + sizeof(long_name) - 5, ".d64", 5);
+    make_file(long_name);
+    menu_browser_t browser = {.path = MENU_BROWSER_ROOT};
+    ck_assert(menu_browser_refresh(&browser));
+    const size_t first = _i == 0 ? MENU_BROWSER_PAGE_ROWS : TEST_IMAGE_COUNT;
+    ck_assert(menu_browser_page(&browser, first, MENU_BROWSER_PAGE_ROWS));
+    size_t index = 0;
+    ck_assert(menu_browser_find(&browser, browser.entries[0].name, false, &index));
+    ck_assert_uint_eq(index, first);
+    char path[SD_PATH_MAX];
+    bool directory;
+    ck_assert(menu_browser_resolve(&browser, index, path, &directory));
+    ck_assert_str_eq(path + strlen(MENU_BROWSER_ROOT) + 1,
+                     _i == 0 ? "image21.d64" : long_name);
 }
 END_TEST
 
@@ -345,11 +400,22 @@ Suite* menu_browser_suite(void) {
     tcase_add_loop_test(cases, test_browser_scan_cost_and_types, 0, 2);
     tcase_add_test(cases, test_browser_formats_and_sorting);
     tcase_add_test(cases, test_browser_long_names_and_overlong_paths);
-    tcase_add_test(cases, test_browser_directory_change);
+    tcase_add_loop_test(cases, test_browser_find_cached_name, 0, 2);
     tcase_add_test(cases, test_browser_replaced_entry);
     tcase_add_loop_test(cases, test_browser_filesystem_errors, 0, 2);
     tcase_add_test(cases, test_browser_empty_and_missing);
     tcase_add_loop_test(cases, test_browser_root_confinement, 0, count_of(invalid_paths));
+    suite_add_tcase(suite, cases);
+    return suite;
+}
+
+// Isolates fatal invariant checks and removes fixtures before the expected abort.
+Suite* menu_browser_fatal_suite(void) {
+    Suite* const suite = suite_create("menu_browser-fatal");
+    TCase* const cases = tcase_create("invariants");
+    tcase_add_checked_fixture(cases, setup, teardown);
+    tcase_add_test_raise_signal(cases, test_browser_directory_change, SIGABRT);
+    tcase_add_loop_test_raise_signal(cases, test_browser_renamed_cursor, SIGABRT, 0, 4);
     suite_add_tcase(suite, cases);
     return suite;
 }

@@ -85,15 +85,17 @@ static void insert_entry(menu_browser_t* browser, const menu_browser_entry_t* en
     if (browser->entry_count < limit) browser->entry_count++;
 }
 
-// Scans cooperatively, retaining only the nearest entries beyond an ordering cursor.
+// Retains the nearest entries and vets that an ordering cursor has not moved.
 static bool scan_entries(menu_browser_t* browser, const menu_browser_entry_t* boundary,
-                         size_t limit, bool reverse, size_t* total) {
+                         size_t boundary_index, size_t limit, bool reverse, size_t* total) {
     if (!safe_directory(browser)) return false;
     DIR* const dir = opendir(browser->path);
     if (dir == NULL) return browser_error(browser, "Cannot open directory");
     browser->entry_count = 0;
     *total = 0;
     bool ok = true;
+    bool boundary_found = false;
+    size_t before_boundary = 0;
     while (true) {
         errno = 0;
         const struct dirent* const entry = readdir(dir);
@@ -121,10 +123,17 @@ static bool scan_entries(menu_browser_t* browser, const menu_browser_entry_t* bo
         menu_browser_entry_t item = {.directory = directory};
         snprintf(item.name, sizeof(item.name), "%s", entry->d_name);
         const int order = boundary != NULL ? entry_compare(&item, boundary) : 0;
+        if (boundary != NULL) {
+            if (order < 0) before_boundary++;
+            if (order == 0) boundary_found = true;
+        }
         if (limit > 0 && (boundary == NULL || (reverse ? order <= 0 : order > 0)))
             insert_entry(browser, &item, limit, reverse);
     }
     if (closedir(dir) != 0) ok = browser_error(browser, "Cannot close directory");
+    if (ok && boundary != NULL)
+        vet(boundary_found && before_boundary == boundary_index,
+            "browser directory cursor changed during browsing");
     // Expose both scan directions in ascending display order.
     if (reverse) {
         for (size_t i = 0; i < browser->entry_count / 2; i++) {
@@ -141,7 +150,7 @@ bool menu_browser_refresh(menu_browser_t* browser) {
     browser->cache_valid = false;
     browser->count = 0;
     size_t total;
-    if (!scan_entries(browser, NULL, 0, false, &total)) return false;
+    if (!scan_entries(browser, NULL, 0, 0, false, &total)) return false;
     browser->count = total;
     return true;
 }
@@ -152,12 +161,14 @@ bool menu_browser_page(menu_browser_t* browser, size_t first, size_t rows) {
     menu_browser_entry_t cursor;
     bool have_cursor = false;
     bool reverse = false;
+    size_t cursor_index = 0;
     size_t skip = first;
 
     // Reuse a cached ordering anchor for adjacent forward or overlapping backward pages.
     if (browser->cache_valid && first > browser->first
         && first <= browser->first + browser->entry_count) {
         cursor = browser->entries[first - browser->first - 1];
+        cursor_index = first - 1;
         have_cursor = true;
         skip = 0;
     }
@@ -165,6 +176,7 @@ bool menu_browser_page(menu_browser_t* browser, size_t first, size_t rows) {
         && first + rows > browser->first
         && first + rows <= browser->first + browser->entry_count) {
         cursor = browser->entries[first + rows - browser->first - 1];
+        cursor_index = first + rows - 1;
         have_cursor = true;
         reverse = true;
         skip = 0;
@@ -173,18 +185,21 @@ bool menu_browser_page(menu_browser_t* browser, size_t first, size_t rows) {
     while (skip > 0) {
         const size_t chunk = MIN(skip, MENU_BROWSER_PAGE_ROWS);
         size_t total;
-        if (!scan_entries(browser, have_cursor ? &cursor : NULL, chunk, false, &total)) return false;
-        if (browser->entry_count != chunk)
-            return browser_error(browser, "Directory changed - reopen picker");
+        if (!scan_entries(browser, have_cursor ? &cursor : NULL, cursor_index,
+                          chunk, false, &total)) return false;
+        vet(total == browser->count, "browser directory count changed during browsing");
+        vet(browser->entry_count == chunk, "browser skip exceeds available directory entries");
         cursor = browser->entries[chunk - 1];
+        cursor_index = first - skip + chunk - 1;
         have_cursor = true;
         skip -= chunk;
     }
     size_t total;
-    if (!scan_entries(browser, have_cursor ? &cursor : NULL, rows, reverse, &total)) return false;
-    if (total != browser->count
-        || browser->entry_count != MIN(rows, total - MIN(total, first)))
-        return browser_error(browser, "Directory changed - reopen picker");
+    if (!scan_entries(browser, have_cursor ? &cursor : NULL, cursor_index,
+                      rows, reverse, &total)) return false;
+    vet(total == browser->count, "browser directory count changed during browsing");
+    vet(browser->entry_count == MIN(rows, total - MIN(total, first)),
+        "browser page does not match directory indexes");
     browser->first = first;
     browser->rows = rows;
     browser->cache_valid = true;
@@ -192,11 +207,16 @@ bool menu_browser_page(menu_browser_t* browser, size_t first, size_t rows) {
 }
 
 bool menu_browser_find(menu_browser_t* browser, const char* name, bool directory, size_t* index) {
+    // Paging replaces entries, so preserve names borrowed from the public cache.
+    char search_name[SD_PATH_MAX];
+    const size_t length = strnlen(name, sizeof(search_name));
+    if (length == sizeof(search_name)) return false;
+    memcpy(search_name, name, length + 1);
     for (size_t first = 0; first < browser->count; first += MENU_BROWSER_PAGE_ROWS) {
         if (!menu_browser_page(browser, first, MENU_BROWSER_PAGE_ROWS)) return false;
         for (size_t i = 0; i < browser->entry_count; i++) {
             if (browser->entries[i].directory == directory
-                && strcmp(browser->entries[i].name, name) == 0) {
+                && strcmp(browser->entries[i].name, search_name) == 0) {
                 *index = first + i;
                 return true;
             }
