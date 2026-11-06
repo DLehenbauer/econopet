@@ -276,14 +276,17 @@ START_TEST(test_usb_menu_chords_are_per_interface) {
     ck_assert(!expect_hid_output_report);
 
     const usb_keymap_entry_t key = system_state.usb_keymap_data[
-        pet_keyboard_model_graphics][usb_keymap_kind_symbolic][HID_KEY_A];
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A];
     report_key_from(1, 0, HID_KEY_A, 0);
     dispatch_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
-    report_key_from(1, 1, 0, 0);
+    report_key_from(1, 1, HID_KEY_A, 0);
     dispatch_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
     report_key_from(1, 0, 0, 0);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    report_key_from(1, 1, 0, 0);
     dispatch_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
 
@@ -297,6 +300,60 @@ START_TEST(test_usb_menu_chords_are_per_interface) {
     usb_keyboard_removed(1, 1);
     ck_assert(keyboard_menu_requested());
     keyboard_menu_consume();
+    usb_keyboard_removed(1, 0);
+}
+END_TEST
+
+// Modifier-only release and disconnect both release injected PET matrix keys.
+START_TEST(test_usb_keyboard_disconnect_releases_keys_and_modifiers) {
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+
+    const usb_keymap_entry_t key = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A];
+    const usb_keymap_entry_t shift = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_SHIFT_LEFT];
+    const uint8_t left_shift = KEYBOARD_MODIFIER_LEFTSHIFT;
+
+    report_key_from(1, 0, HID_KEY_A, left_shift);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+
+    report_key_from(1, 0, 0, left_shift);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+
+    report_key_from(1, 0, 0, 0);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+
+    report_key_from(1, 0, HID_KEY_A, left_shift);
+    dispatch_key_events();
+    usb_keyboard_removed(1, 0);
+    dispatch_key_events();
+    for (size_t i = 0; i < count_of(usb_key_matrix); ++i)
+        ck_assert_uint_eq(usb_key_matrix[i], 0xff);
+    ck_assert(!keyboard_menu_requested());
+}
+END_TEST
+
+// Removing one interface discards only its unread navigation events.
+START_TEST(test_menu_queue_removal_preserves_other_sources) {
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+    expect_hid_output_report = true;
+    usb_keyboard_added(2, 0);
+    ck_assert(!expect_hid_output_report);
+
+    report_key_from(1, 0, HID_KEY_ARROW_DOWN, 0);
+    report_key_from(2, 0, HID_KEY_ENTER, 0);
+    usb_keyboard_removed(2, 0);
+    ck_assert_int_eq(keyboard_getch(), KEY_DOWN);
+    ck_assert_int_eq(keyboard_getch(), EOF);
     usb_keyboard_removed(1, 0);
 }
 END_TEST
@@ -527,6 +584,8 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_menu_chord_removed_before_poll);
     tcase_add_test(core, test_usb_menu_chords_are_per_keyboard);
     tcase_add_test(core, test_usb_menu_chords_are_per_interface);
+    tcase_add_test(core, test_usb_keyboard_disconnect_releases_keys_and_modifiers);
+    tcase_add_test(core, test_menu_queue_removal_preserves_other_sources);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);

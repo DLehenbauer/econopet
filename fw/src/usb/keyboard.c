@@ -66,7 +66,14 @@ typedef struct {
     uint8_t col;            // PET keyboard column
     uint8_t modifiers;      // USB HID modifier flags (e.g. shift)
     bool pressed;           // true = key pressed, false = key released
+    bool modifier_only;     // Update PET modifiers without changing a key.
 } KeyEvent;
+
+typedef struct {
+    int key;
+    uint8_t dev_addr;
+    uint8_t instance;
+} MenuKeyEvent;
 
 #define KEY_BUFFER_LOG2_CAPACITY 4
 #define KEY_BUFFER_CAPACITY (1 << KEY_BUFFER_LOG2_CAPACITY)
@@ -75,9 +82,10 @@ typedef struct {
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
+static uint8_t queued_modifiers;
 
 // Preserve navigation press edges even when USB servicing receives press and release together.
-static int menu_key_buffer[KEY_BUFFER_CAPACITY];
+static MenuKeyEvent menu_key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t menu_key_write_index;
 static uint8_t menu_key_read_index;
 static bool menu_active;
@@ -113,12 +121,31 @@ static int menu_key(uint8_t keycode) {
 }
 
 // Buffers one menu press without merging repeated keys or reordering Back.
-static void enqueue_menu_key(int key) {
+static void enqueue_menu_key(int key, uint8_t dev_addr, uint8_t instance) {
     const uint8_t next = (menu_key_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
     if (next != menu_key_read_index) {
-        menu_key_buffer[menu_key_write_index] = key;
+        menu_key_buffer[menu_key_write_index] = (MenuKeyEvent) {
+            .key = key,
+            .dev_addr = dev_addr,
+            .instance = instance,
+        };
         menu_key_write_index = next;
     }
+}
+
+// Removes one interface's unread navigation while preserving the other sources.
+static void discard_menu_keys(uint8_t dev_addr, uint8_t instance) {
+    uint8_t read = menu_key_read_index;
+    uint8_t write = menu_key_read_index;
+    while (read != menu_key_write_index) {
+        const MenuKeyEvent event = menu_key_buffer[read];
+        read = (read + 1) & KEY_BUFFER_CAPACITY_MASK;
+        if (event.dev_addr != dev_addr || event.instance != instance) {
+            menu_key_buffer[write] = event;
+            write = (write + 1) & KEY_BUFFER_CAPACITY_MASK;
+        }
+    }
+    menu_key_write_index = write;
 }
 
 // Note that the theoretical maximum number of keyboards is actually 127.
@@ -177,10 +204,41 @@ static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t
             .col = col,
             .modifiers = modifiers,
             .pressed = pressed,
+            .modifier_only = false,
         };
         key_buffer[key_buffer_next_write_index] = keyEvent;
         key_buffer_next_write_index = new_write_index;
+        queued_modifiers = modifiers;
     }
+}
+
+// Queues a modifier transition even when a report contains no key changes.
+static void enqueue_modifier_event(uint8_t modifiers) {
+    uint8_t new_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+    if (new_write_index != key_buffer_next_read_index) {
+        key_buffer[key_buffer_next_write_index] = (KeyEvent) {
+            .modifiers = modifiers,
+            .modifier_only = true,
+        };
+        key_buffer_next_write_index = new_write_index;
+        queued_modifiers = modifiers;
+    }
+}
+
+// Combines modifiers held across all active keyboard interfaces.
+static uint8_t combined_modifiers(void) {
+    uint8_t modifiers = 0;
+    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
+        if (keyboard_states[i].used)
+            modifiers |= keyboard_states[i].previous_report.modifier;
+    }
+    return modifiers;
+}
+
+// Queues a modifier-only update when the combined USB state changes.
+static void update_queued_modifiers(uint8_t modifiers) {
+    if (modifiers != queued_modifiers)
+        enqueue_modifier_event(modifiers);
 }
 
 static bool peek_key_event(KeyEvent* keyEvent) {
@@ -318,11 +376,29 @@ void usb_keyboard_added(uint8_t dev_addr, uint8_t instance) {
     sync_leds(dev_addr);
 }
 
+static bool key_reported_elsewhere(const keyboard_info_t* source, uint8_t keycode);
+
+// Releases this interface's keys and discards only its unread menu navigation.
+static void clear_keyboard_state(keyboard_info_t* keyboard) {
+    const hid_keyboard_report_t previous_report = keyboard->previous_report;
+    discard_menu_keys(keyboard->dev_addr, keyboard->instance);
+    keyboard->used = false;
+    keyboard->attached = false;
+    update_queued_modifiers(combined_modifiers());
+
+    for (uint8_t i = 0; i < sizeof(previous_report.keycode); ++i) {
+        const uint8_t keycode = previous_report.keycode[i];
+        if (keycode && !key_reported_elsewhere(keyboard, keycode))
+            usb_keyboard_enqueue_key_up(keycode, queued_modifiers);
+    }
+
+    *keyboard = (keyboard_info_t) { 0 };
+}
+
 void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
     keyboard_info_t* const keyboard = find_keyboard_state(dev_addr, instance);
     if (keyboard && keyboard->attached) {
-        *keyboard = (keyboard_info_t) { 0 };
-        menu_key_read_index = menu_key_write_index = 0;
+        clear_keyboard_state(keyboard);
         return;
     }
 
@@ -333,7 +409,7 @@ void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
 void keyboard_source_removed(uint8_t dev_addr, uint8_t instance) {
     keyboard_info_t* const keyboard = find_keyboard_state(dev_addr, instance);
     if (keyboard && !keyboard->attached)
-        *keyboard = (keyboard_info_t) { 0 };
+        clear_keyboard_state(keyboard);
 }
 
 static void usb_keyboard_sync(system_state_t* system_state) {
@@ -430,23 +506,25 @@ void dispatch_key_events() {
     }
 
     do {
-        switch (keyEvent.key) {
-            case HID_KEY_CAPS_LOCK:
-                toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
-                break;
-            case HID_KEY_NUM_LOCK:
-                toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
-                break;
-            case HID_KEY_SCROLL_LOCK:
-                toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
-                break;
-            default:
-                if (keyEvent.pressed) {
-                    key_down(keyEvent.key, keyEvent.row, keyEvent.col);
-                } else {
-                    key_up(keyEvent.key, keyEvent.row, keyEvent.col);
-                }
-                break;
+        if (!keyEvent.modifier_only) {
+            switch (keyEvent.key) {
+                case HID_KEY_CAPS_LOCK:
+                    toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
+                    break;
+                case HID_KEY_NUM_LOCK:
+                    toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
+                    break;
+                case HID_KEY_SCROLL_LOCK:
+                    toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
+                    break;
+                default:
+                    if (keyEvent.pressed) {
+                        key_down(keyEvent.key, keyEvent.row, keyEvent.col);
+                    } else {
+                        key_up(keyEvent.key, keyEvent.row, keyEvent.col);
+                    }
+                    break;
+            }
         }
 
         dequeue_key_event();
@@ -466,23 +544,39 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
     return false;
 }
 
+// Checks whether another HID interface still reports this key as held.
+static bool key_reported_elsewhere(const keyboard_info_t* source, uint8_t keycode) {
+    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
+        const keyboard_info_t* const keyboard = &keyboard_states[i];
+        if (keyboard != source && keyboard->used
+            && find_key_in_report(&keyboard->previous_report, keycode))
+            return true;
+    }
+
+    return false;
+}
+
 void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_t const* report) {
     keyboard_info_t* const keyboard = get_keyboard_state(dev_addr, instance);
+    const hid_keyboard_report_t previous_report = keyboard->previous_report;
 
-    const uint8_t modifiers = report->modifier;
     const uint8_t shifts = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
-    bool chord_only = modifiers == shifts;
+    bool chord_only = report->modifier == shifts;
     for (size_t i = 0; i < count_of(report->keycode); ++i)
         chord_only &= report->keycode[i] == 0;
     if (!chord_only && input_hold_ready(&keyboard->menu_hold))
         keyboard->menu_pending = true;
     input_hold_update(&keyboard->menu_hold, chord_only);
+    keyboard->previous_report = *report;
+    const uint8_t modifiers = combined_modifiers();
+    update_queued_modifiers(modifiers);
 
     // For each previously pressed key, check if the key still exists in the
     // new report.  If not, the key has been released.
-    for (uint8_t i = 0; i < sizeof(keyboard->previous_report.keycode); i++) {
-        const uint8_t keycode = keyboard->previous_report.keycode[i];
-        if (keycode && !find_key_in_report(report, keycode)) {
+    for (uint8_t i = 0; i < sizeof(previous_report.keycode); i++) {
+        const uint8_t keycode = previous_report.keycode[i];
+        if (keycode && !find_key_in_report(report, keycode)
+            && !key_reported_elsewhere(keyboard, keycode)) {
             usb_keyboard_enqueue_key_up(keycode, modifiers);
         }
     }
@@ -491,15 +585,14 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
     // If not, the key has been pressed.
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
-        if (keycode && !find_key_in_report(&keyboard->previous_report, keycode)) {
+        if (keycode && !find_key_in_report(&previous_report, keycode)
+            && !key_reported_elsewhere(keyboard, keycode)) {
             const int key = menu_key(keycode);
             if (menu_input_active() && key != EOF) {
-                enqueue_menu_key(key);
+                enqueue_menu_key(key, dev_addr, instance);
             } else usb_keyboard_enqueue_key_down(keycode, modifiers);
         }
     }
-
-    keyboard->previous_report = *report;
 }
 
 // Reads one active-low key from a PET-format matrix.
@@ -555,7 +648,7 @@ void keyboard_menu_consume(void) {
 int keyboard_getch() {
     if (menu_input_active()) {
         if (menu_key_read_index != menu_key_write_index) {
-            const int key = menu_key_buffer[menu_key_read_index];
+            const int key = menu_key_buffer[menu_key_read_index].key;
             menu_key_read_index = (menu_key_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
             return key;
         }
