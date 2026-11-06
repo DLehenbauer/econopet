@@ -652,10 +652,10 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
                 set_key_owned(keyboard, keycode, true);
             }
         }
-
-        // Apply this report's keymap overrides before queuing its raw modifier update.
-        update_queued_modifiers(modifiers);
     }
+
+    // Apply this report's keymap overrides before queuing its raw modifier update.
+    update_queued_modifiers(modifiers);
 }
 
 // Reads one active-low key from a PET-format matrix.

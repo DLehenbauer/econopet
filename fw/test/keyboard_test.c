@@ -573,7 +573,9 @@ START_TEST(test_unshift_mapping_precedes_simultaneous_modifier) {
     usb_keyboard_reset(&system_state);
 
     const uint8_t held_b[] = {HID_KEY_B};
-    const uint8_t held_a_and_b[] = {HID_KEY_A, HID_KEY_B};
+    const uint8_t held_a_and_b[] = {
+        _i == 0 ? HID_KEY_A : HID_KEY_B, _i == 0 ? HID_KEY_B : HID_KEY_A
+    };
     report_keys(0, held_b, count_of(held_b));
     dispatch_all_key_events();
     report_keys(KEYBOARD_MODIFIER_LEFTSHIFT, held_a_and_b, count_of(held_a_and_b));
@@ -791,7 +793,7 @@ Suite* keyboard_suite(void) {
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
     tcase_add_test(core, test_batched_shifted_reports_preserve_key_releases);
-    tcase_add_test(core, test_unshift_mapping_precedes_simultaneous_modifier);
+    tcase_add_loop_test(core, test_unshift_mapping_precedes_simultaneous_modifier, 0, 2);
     tcase_add_test(core, test_keymap_shift_overrides_survive_unchanged_reports);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);
