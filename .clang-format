@@ -5,6 +5,7 @@ Language: Cpp
 
 IndentWidth: 4
 ColumnLimit: 120
+InsertBraces: true
 
 # Align pointers to the type (left)
 DerivePointerAlignment: false
