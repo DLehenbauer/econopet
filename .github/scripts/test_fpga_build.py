@@ -36,6 +36,11 @@ class FpgaBuildTests(unittest.TestCase):
         self.project_file = project / "EconoPET.xml"
         ET.register_namespace("efx", NAMESPACE)
         tree = ET.Element(f"{{{NAMESPACE}}}project", name="EconoPET", last_change="0")
+        design = ET.SubElement(tree, f"{{{NAMESPACE}}}design_info")
+        ET.SubElement(design, f"{{{NAMESPACE}}}design_file",
+                      name="external/core/rtl/core.v")
+        constraints = ET.SubElement(tree, f"{{{NAMESPACE}}}constraint_info")
+        ET.SubElement(constraints, f"{{{NAMESPACE}}}sdc_file", name="EconoPET.sdc")
         synthesis = ET.SubElement(tree, f"{{{NAMESPACE}}}synthesis")
         ET.SubElement(synthesis, f"{{{NAMESPACE}}}param", name="mode", value="speed")
         self.project_file.write_bytes(ET.tostring(tree))
@@ -43,6 +48,15 @@ class FpgaBuildTests(unittest.TestCase):
         external.mkdir(parents=True)
         self.external_file = external / "core.v"
         self.external_file.write_text("original")
+        self.supporting_files = [
+            project / "EconoPET.sdc",
+            project / "EconoPET.peri.xml",
+            project / "external/m6502/rtl/cpu_6502_instructions.vh",
+            project / "external/icesid/icesid/curve_6581.hex",
+        ]
+        for path in self.supporting_files:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("original")
         compiler = source / "efx.sh"
         compiler.write_text("""#!/usr/bin/env python3
 import pathlib
@@ -93,14 +107,94 @@ bitstream.write_text(str(count))
         self.run_command(*self.build_command)
         self.assertEqual(self.compile_count(), 2)
 
-    def test_nested_external_sources_invalidate_bitstream(self):
-        """Track edits and newly added sources below external core directories."""
+    def test_manifest_controls_synthesis_inputs(self):
+        """Track registered sources, not arbitrary files beside them."""
         self.external_file.write_text("changed")
         self.run_command(*self.build_command)
         self.assertEqual(self.compile_count(), 2)
-        self.external_file.with_name("new.v").write_text("new source")
+        new_source = self.external_file.with_name("new.v")
+        new_source.write_text("new source")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 2)
+
+        tree = ET.parse(self.project_file)
+        design = tree.find(f"./{{{NAMESPACE}}}design_info")
+        ET.SubElement(design, f"{{{NAMESPACE}}}design_file",
+                      name="external/core/rtl/new.v")
+        tree.write(self.project_file)
         self.run_command(*self.build_command)
         self.assertEqual(self.compile_count(), 3)
+        new_source.write_text("changed")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 4)
+
+        tree = ET.parse(self.project_file)
+        design = tree.find(f"./{{{NAMESPACE}}}design_info")
+        design.remove(design.findall(f"./{{{NAMESPACE}}}design_file")[1])
+        tree.write(self.project_file)
+        new_source.unlink()
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 5)
+
+    def test_supporting_inputs_invalidate_bitstream(self):
+        """Track constraints, peripheral configuration, headers, and curve data."""
+        for count, path in enumerate(self.supporting_files, start=2):
+            with self.subTest(path=path):
+                path.write_text("changed")
+                self.run_command(*self.build_command)
+                self.assertEqual(self.compile_count(), count)
+                self.run_command(*self.build_command)
+                self.assertEqual(self.compile_count(), count)
+
+    def test_missing_registered_input_fails(self):
+        """Reject missing manifest inputs instead of producing a stale bitstream."""
+        tree = ET.parse(self.project_file)
+        design = tree.find(f"./{{{NAMESPACE}}}design_info")
+        ET.SubElement(design, f"{{{NAMESPACE}}}design_file", name="missing.v")
+        tree.write(self.project_file)
+        result = subprocess.run(self.build_command, capture_output=True,
+                                text=True, timeout=60)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Missing FPGA input:", result.stdout + result.stderr)
+        self.assertIn("missing.v", result.stdout + result.stderr)
+        self.assertEqual(self.compile_count(), 1)
+
+    def test_external_virtualenv_does_not_affect_bitstream(self):
+        """Ignore local Python environments, including dangling interpreter links."""
+        environment = self.external_file.parent.parent / ".venv"
+        interpreter = environment / "bin/python"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.symlink_to(self.root / "missing-python")
+        configuration = environment / "pyvenv.cfg"
+        configuration.write_text("original")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
+
+        verification = (self.build / "CMakeFiles/VerifyGlobs.cmake").read_text()
+        self.assertNotIn("/.venv/", verification)
+        self.assertNotIn("GLOB_RECURSE", verification)
+
+        configuration.write_text("changed")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
+
+        interpreter.unlink()
+        configuration.unlink()
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
+
+    def test_unrelated_files_do_not_invalidate_bitstream(self):
+        """Ignore caches, installations, build artifacts, and simulation sources."""
+        project = self.project_file.parent
+        for directory in (".git", ".venv", "node_modules", "__pycache__",
+                          ".pytest_cache", "build", "sim_build", "obj_dir_mcu_klaus"):
+            path = project / "external/core" / directory / "unused.v"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("unused")
+        (project / "sim/unused.sv").write_text("unused simulation")
+        (project / "unused.sdc").write_text("unregistered constraint")
+        self.run_command(*self.build_command)
+        self.assertEqual(self.compile_count(), 1)
 
     def test_xml_serialization_and_cli_metadata_preserve_bitstream(self):
         """Ignore XML formatting and the exact metadata updated/pruned by efx_run."""

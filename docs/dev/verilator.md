@@ -1,8 +1,10 @@
 # Running testbenches under Verilator
 
-Native CMake targets compile testbenches through Verilator's `verilate()`
-integration. `./verilate.sh TEST_NAME [RAND_RESET]` runs a previously built
-testbench with the shared seed. Verilator 5.028+.
+A standalone simulator CMake project compiles testbenches through Verilator's
+`verilate()` integration. The root super-project orchestrates it without
+generating its C++ targets during root configuration.
+`./verilate.sh TEST_NAME [RAND_RESET]` runs a previously built testbench with
+the shared seed. Verilator 5.028+.
 
 Build generated models and the Verilator runtime with optimized
 `RelWithDebInfo` flags: Verilator `-O3`, C++ `-O3 -g -DNDEBUG`, and native CPU
@@ -36,20 +38,29 @@ Compilation and execution are separate stages. `cmake --build --preset all`
 includes the simulator models, so the existing CI build prepares them before
 running CTest without an additional CI step. To build only the Verilator models,
 use `cmake --build --preset gw-test` before a Verilator execution preset.
-It compiles every model, including boot benches. One Ninja scheduler controls
+It compiles every model, including boot benches. After the subproject has been
+configured, build an individual model with
+`cmake --build build/gw-test --target <name>_vl`.
+One Ninja scheduler controls
 compilation and linking across models without
-nested Make builds or per-model all-core worker pools. Use `--parallel N` or
-`CMAKE_BUILD_PARALLEL_LEVEL=N` to limit total build jobs on memory-constrained
-runners. Each executable links as soon as its own model objects are ready,
+nested Make builds or per-model all-core worker pools. Use
+`CMAKE_BUILD_PARALLEL_LEVEL=N` to limit simulator build jobs on memory-constrained
+runners. Set the environment variable when using root build presets so the
+nested build inherits the limit. Root `--parallel N` limits orchestration jobs,
+not the nested simulator's jobs. Other subprojects can build concurrently and
+do not share the simulator's job budget.
+Each executable links as soon as its own model objects are ready,
 without an all-model compilation barrier or a separate link pool.
-Initial Verilator generation happens during configuration, with subsequent
-generation and C++ rebuilds tracked by CMake's native dependencies.
+Initial Verilator generation happens during simulator subproject configuration
+when its build is requested, with subsequent generation and C++ rebuilds tracked
+by CMake's native dependencies. Firmware-only and bitstream-only builds do not
+configure the simulator.
 Compilation consumes the build stage's budget, not the CTest execution timeout.
 Verilator execution never builds models and has its own
 timeout (600 seconds for dual-simulator benches, 1800 for Verilator-only benches).
 If the build stage fails, stop rather than running potentially stale executables.
 
-`build/CMakeFiles/<name>_vl_model.dir/` caches the generated model and C++ objects.
+`build/gw-test/CMakeFiles/<name>_vl_model.dir/` caches the generated model and C++ objects.
 Executables are in `build/gw-test/bin/`. An unchanged rebuild does no compiler
 work, while a cold build stage pays the C++ build. That build dominates the short
 benches -- `wbp_mux_tb` is ~4s to compile and 2ms to simulate -- so Verilator

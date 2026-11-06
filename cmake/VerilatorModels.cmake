@@ -5,7 +5,6 @@ enable_language(CXX)
 find_package(verilator REQUIRED HINTS $ENV{VERILATOR_ROOT})
 
 # Use the Efinity source manifest, with packages before their consumers.
-set(GW_MODEL_DIR "${CMAKE_SOURCE_DIR}/gw/EconoPET")
 set(GW_MODEL_PROJECT "${GW_MODEL_DIR}/EconoPET.xml")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GW_MODEL_PROJECT}")
 file(STRINGS "${GW_MODEL_PROJECT}" GW_MODEL_ENTRIES
@@ -49,7 +48,7 @@ function(add_gateware_model NAME)
     add_executable(${EXECUTABLE_TARGET} EXCLUDE_FROM_ALL)
     target_link_libraries(${EXECUTABLE_TARGET} PRIVATE ${MODEL_TARGET})
     set_target_properties(${EXECUTABLE_TARGET} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/gw-test/bin"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
         INTERPROCEDURAL_OPTIMIZATION FALSE)
     add_dependencies(gateware_models ${EXECUTABLE_TARGET})
 endfunction()

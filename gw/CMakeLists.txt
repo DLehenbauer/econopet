@@ -35,27 +35,30 @@ endif()
 set(FPGA_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/project-config.sha256")
 file(GENERATE OUTPUT "${FPGA_PROJECT_CONFIG_FILE}" CONTENT "${FPGA_PROJECT_CONFIG_HASH}\n")
 
-file(GLOB_RECURSE FPGA_SRC_FILES CONFIGURE_DEPENDS
-    # Top-level project/config files
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${FPGA_PROJECT_CONFIG_SCRIPT}" "${FPGA_PROJECT_FILE}" --sources
+    OUTPUT_VARIABLE FPGA_PROJECT_SOURCES
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE FPGA_PROJECT_SOURCES_RESULT
+)
+if(NOT FPGA_PROJECT_SOURCES_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to read Efinity synthesis inputs.")
+endif()
+string(REPLACE "\n" ";" FPGA_PROJECT_SOURCES "${FPGA_PROJECT_SOURCES}")
+set(FPGA_SRC_FILES)
+foreach(f IN LISTS FPGA_PROJECT_SOURCES)
+    list(APPEND FPGA_SRC_FILES "${FPGA_PROJECT_DIR}/${f}")
+endforeach()
+
+# Efinity's design-file list omits included headers and memory initialization data.
+list(APPEND FPGA_SRC_FILES
     "${FPGA_PROJECT_DIR}/EconoPET.peri.xml"
-    "${FPGA_PROJECT_DIR}/*.sdc"
-
-    # HDL sources
-    "${FPGA_PROJECT_DIR}/src/*"
+    "${FPGA_PROJECT_DIR}/external/m6502/rtl/cpu_6502_instructions.vh"
+    "${FPGA_PROJECT_DIR}/external/icesid/icesid/curve_6581.hex"
 )
-
-# Append external source files to FPGA_SRC_FILES, ignoring .git directories from submodules.
-# First, we gather all files from the external directory:
-file(GLOB_RECURSE FPGA_EXTERNAL_SRC_FILES CONFIGURE_DEPENDS
-    "${FPGA_PROJECT_DIR}/external/*"
-)
-
-# Then append only those that are not in .git directories:
-foreach(f ${FPGA_EXTERNAL_SRC_FILES})
-    if(NOT f MATCHES "/\\.git(/|$)")
-        list(APPEND FPGA_SRC_FILES "${f}")
-    else()
-        message(VERBOSE "Ignoring: ${f}")
+foreach(f IN LISTS FPGA_SRC_FILES)
+    if(NOT EXISTS "${f}")
+        message(FATAL_ERROR "Missing FPGA input: ${f}")
     endif()
 endforeach()
 
