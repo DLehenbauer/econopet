@@ -39,6 +39,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/menu_runtime.c
+    ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
@@ -66,6 +67,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/keystate_test.c
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
+    ${TEST_DIR}/menu_browser_test.c
     ${TEST_SUPPORT_DIR}/test_support.c
     ${TEST_SUPPORT_DIR}/test_fatal.c
     ${TEST_SUPPORT_DIR}/d64_fixture.c
@@ -88,6 +90,8 @@ target_link_libraries(${PROJECT_NAME}
 # Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen -Wl,--wrap=time_us_64)
+target_link_options(${PROJECT_NAME} PRIVATE
+    -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")

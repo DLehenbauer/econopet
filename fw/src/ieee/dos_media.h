@@ -34,6 +34,7 @@ typedef enum {
     DOS_MEDIA_READ_ONLY,
     DOS_MEDIA_IO_ERROR,
     DOS_MEDIA_ID_EXHAUSTED,
+    DOS_MEDIA_BUSY,
 } dos_media_result_t;
 
 // Completes buffered writes using the diskimage_t context, without closing it.

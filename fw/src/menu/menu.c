@@ -192,13 +192,13 @@ void action_set_options(void* context, options_t* options) {
 
 }
 
+// Mounts a configured slot, ejecting an incompatible partner only on success.
 void action_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
     (void)context;
-
-    unsigned int slot = (device - 8) * 2 + drive;
-    if (!ieee_drive_mount(slot, filename)) {
-        fatal("IEEE device %lu drive %lu could not mount '%s'", device, drive, filename);
-    }
+    const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
+    const dos_media_result_t result = ieee_drive_try_mount(slot, filename);
+    vet(result == DOS_MEDIA_OK, "IEEE device %lu drive %lu could not mount '%s' (error %u)",
+        (unsigned long)device, (unsigned long)drive, filename, (unsigned int)result);
 }
 
 void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
