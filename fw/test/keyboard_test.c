@@ -14,6 +14,8 @@
 static system_state_t saved_state;
 static bool expect_hid_output_report;
 
+#define TEST_KEY_EVENT_QUEUE_CAPACITY 16
+
 // Rejects unexpected HID output except for the explicit attachment test.
 bool tuh_hid_set_report(uint8_t dev_addr, uint8_t idx, uint8_t report_id, uint8_t report_type,
                         void* report, uint16_t len) {
@@ -38,6 +40,12 @@ static void report_key(uint8_t keycode, uint8_t modifiers) {
     report_key_from(1, 0, keycode, modifiers);
 }
 
+// Drains modifier groups so assertions observe every queued report transition.
+static void dispatch_all_key_events(void) {
+    for (unsigned int i = 0; i < TEST_KEY_EVENT_QUEUE_CAPACITY; ++i)
+        dispatch_key_events();
+}
+
 // Starts each report trace with an empty keyboard and firmware menu routing.
 static void setup(void) {
     mock_reset();
@@ -50,7 +58,7 @@ static void setup(void) {
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));
     report_key(0, 0);
-    dispatch_key_events();
+    dispatch_all_key_events();
     usb_keyboard_reset(&system_state);
     (void) keyboard_menu_requested();
     keyboard_menu_set_active(true);
@@ -92,7 +100,7 @@ START_TEST(test_menu_batched_taps) {
             report_key(keys[i], KEYBOARD_MODIFIER_RIGHTSHIFT);
             report_key(0, 0);
         }
-        dispatch_key_events();
+        dispatch_all_key_events();
         for (size_t i = 0; i < count_of(expected); i++)
             ck_assert_int_eq(keyboard_getch(), expected[i]);
         ck_assert_int_eq(keyboard_getch(), EOF);
@@ -310,30 +318,33 @@ START_TEST(test_usb_keyboard_disconnect_releases_keys_and_modifiers) {
     usb_keyboard_added(1, 0);
     ck_assert(!expect_hid_output_report);
 
-    const usb_keymap_entry_t key = system_state.usb_keymap_data[
-        system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A];
-    const usb_keymap_entry_t shift = system_state.usb_keymap_data[
-        system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_SHIFT_LEFT];
+    usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
+    const usb_keymap_entry_t key = {.row = 0, .col = 0};
+    const usb_keymap_entry_t shift = {.row = 1, .col = 0};
+    keymap[HID_KEY_A] = key;
+    keymap[HID_KEY_A | 0x100] = key;
+    keymap[HID_KEY_SHIFT_LEFT] = shift;
     const uint8_t left_shift = KEYBOARD_MODIFIER_LEFTSHIFT;
 
     report_key_from(1, 0, HID_KEY_A, left_shift);
-    dispatch_key_events();
+    dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
 
     report_key_from(1, 0, 0, left_shift);
-    dispatch_key_events();
+    dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
 
     report_key_from(1, 0, 0, 0);
-    dispatch_key_events();
+    dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
 
     report_key_from(1, 0, HID_KEY_A, left_shift);
-    dispatch_key_events();
+    dispatch_all_key_events();
     usb_keyboard_removed(1, 0);
-    dispatch_key_events();
+    dispatch_all_key_events();
     for (size_t i = 0; i < count_of(usb_key_matrix); ++i)
         ck_assert_uint_eq(usb_key_matrix[i], 0xff);
     ck_assert(!keyboard_menu_requested());
@@ -355,6 +366,20 @@ START_TEST(test_menu_queue_removal_preserves_other_sources) {
     ck_assert_int_eq(keyboard_getch(), KEY_DOWN);
     ck_assert_int_eq(keyboard_getch(), EOF);
     usb_keyboard_removed(1, 0);
+}
+END_TEST
+
+// Identical held navigation keys still produce one menu press edge per interface.
+START_TEST(test_menu_press_edges_are_per_interface) {
+    report_key_from(1, 0, HID_KEY_ARROW_DOWN, 0);
+    report_key_from(2, 0, HID_KEY_ARROW_DOWN, 0);
+    report_key_from(1, 0, 0, 0);
+    report_key_from(2, 0, 0, 0);
+
+    ck_assert_int_eq(keyboard_getch(), KEY_DOWN);
+    ck_assert_int_eq(keyboard_getch(), KEY_DOWN);
+    ck_assert_int_eq(keyboard_getch(), EOF);
+    keyboard_source_removed(2, 0);
 }
 END_TEST
 
@@ -436,11 +461,11 @@ START_TEST(test_implicit_shift_does_not_open_menu) {
     };
     usb_keyboard_reset(&system_state);
     report_key(HID_KEY_A, KEYBOARD_MODIFIER_RIGHTSHIFT);
-    dispatch_key_events();
+    dispatch_all_key_events();
     memcpy(pet_key_matrix, usb_key_matrix, sizeof(pet_key_matrix));
     ck_assert(!keyboard_menu_requested());
     report_key(0, 0);
-    dispatch_key_events();
+    dispatch_all_key_events();
     ck_assert(!keyboard_menu_requested());
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));
     ck_assert(!keyboard_menu_requested());
@@ -586,6 +611,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_menu_chords_are_per_interface);
     tcase_add_test(core, test_usb_keyboard_disconnect_releases_keys_and_modifiers);
     tcase_add_test(core, test_menu_queue_removal_preserves_other_sources);
+    tcase_add_test(core, test_menu_press_edges_are_per_interface);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);

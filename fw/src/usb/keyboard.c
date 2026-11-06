@@ -585,12 +585,13 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
     // If not, the key has been pressed.
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
-        if (keycode && !find_key_in_report(&previous_report, keycode)
-            && !key_reported_elsewhere(keyboard, keycode)) {
+        if (keycode && !find_key_in_report(&previous_report, keycode)) {
             const int key = menu_key(keycode);
             if (menu_input_active() && key != EOF) {
                 enqueue_menu_key(key, dev_addr, instance);
-            } else usb_keyboard_enqueue_key_down(keycode, modifiers);
+            } else if (!key_reported_elsewhere(keyboard, keycode)) {
+                usb_keyboard_enqueue_key_down(keycode, modifiers);
+            }
         }
     }
 }
