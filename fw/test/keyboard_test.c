@@ -391,6 +391,39 @@ START_TEST(test_menu_press_edges_are_per_interface) {
 }
 END_TEST
 
+// Menu-only holds neither suppress runtime presses nor retain their releases.
+START_TEST(test_menu_held_key_does_not_own_runtime_key) {
+    usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
+    const usb_keymap_entry_t down = {.row = 0, .col = 0};
+    keymap[HID_KEY_ARROW_DOWN] = down;
+    usb_keyboard_reset(&system_state);
+
+    report_key_from(1, 0, HID_KEY_ARROW_DOWN, 0);
+    ck_assert_int_eq(keyboard_getch(), KEY_DOWN);
+    keyboard_menu_set_active(false);
+    report_key_from(2, 0, HID_KEY_ARROW_DOWN, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[down.col] & (1u << down.row), 0);
+
+    if (_i == 0) report_key_from(2, 0, 0, 0);
+    else keyboard_source_removed(2, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[down.col] & (1u << down.row), 1u << down.row);
+
+    report_key_from(2, 0, HID_KEY_ARROW_DOWN, 0);
+    dispatch_all_key_events();
+    if (_i == 0) report_key_from(1, 0, 0, 0);
+    else keyboard_source_removed(1, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[down.col] & (1u << down.row), 0);
+    report_key_from(2, 0, 0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[down.col] & (1u << down.row), 1u << down.row);
+    keyboard_source_removed(2, 0);
+}
+END_TEST
+
 // PET business and graphics keyboards require their own two physical Shift keys.
 START_TEST(test_pet_menu_chord) {
     system_state.term_input_dest = term_input_to_pet;
@@ -726,6 +759,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_usb_keyboard_disconnect_releases_keys_and_modifiers);
     tcase_add_test(core, test_menu_queue_removal_preserves_other_sources);
     tcase_add_test(core, test_menu_press_edges_are_per_interface);
+    tcase_add_loop_test(core, test_menu_held_key_does_not_own_runtime_key, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);

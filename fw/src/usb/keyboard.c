@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "keyboard.h"
 
+#include <limits.h>
+
 #include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
@@ -197,6 +199,7 @@ typedef struct {
     bool used;
     bool attached;
     hid_keyboard_report_t previous_report;
+    uint8_t injected_keys[KEYCODE_COUNT / CHAR_BIT];
     input_hold_t menu_hold;
     bool menu_pending;
 } keyboard_info_t;
@@ -413,7 +416,22 @@ void usb_keyboard_added(uint8_t dev_addr, uint8_t instance) {
     sync_leds(dev_addr);
 }
 
-static bool key_reported_elsewhere(const keyboard_info_t* source, uint8_t keycode);
+static bool key_owned_elsewhere(const keyboard_info_t* source, uint8_t keycode);
+
+// Tracks keys routed to the PET matrix independently of menu-only key holds.
+static bool key_owned(const keyboard_info_t* keyboard, uint8_t keycode) {
+    return (keyboard->injected_keys[keycode / CHAR_BIT] & (1u << (keycode % CHAR_BIT))) != 0;
+}
+
+// Updates ownership for one physical key press or release.
+static void set_key_owned(keyboard_info_t* keyboard, uint8_t keycode, bool owned) {
+    uint8_t* const byte = &keyboard->injected_keys[keycode / CHAR_BIT];
+    const uint8_t mask = 1u << (keycode % CHAR_BIT);
+    if (owned)
+        *byte |= mask;
+    else
+        *byte &= (uint8_t) ~mask;
+}
 
 // Releases this interface's keys and discards only its unread menu navigation.
 static void clear_keyboard_state(keyboard_info_t* keyboard) {
@@ -425,7 +443,7 @@ static void clear_keyboard_state(keyboard_info_t* keyboard) {
 
     for (uint8_t i = 0; i < sizeof(previous_report.keycode); ++i) {
         const uint8_t keycode = previous_report.keycode[i];
-        if (keycode && !key_reported_elsewhere(keyboard, keycode))
+        if (keycode && key_owned(keyboard, keycode) && !key_owned_elsewhere(keyboard, keycode))
             usb_keyboard_enqueue_key_up(keycode, queued_report_modifiers);
     }
 
@@ -581,12 +599,12 @@ static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keyc
     return false;
 }
 
-// Checks whether another HID interface still reports this key as held.
-static bool key_reported_elsewhere(const keyboard_info_t* source, uint8_t keycode) {
+// Checks whether another HID interface owns this PET matrix key.
+static bool key_owned_elsewhere(const keyboard_info_t* source, uint8_t keycode) {
     for (int i = 0; i < MAX_KEYBOARDS; ++i) {
         const keyboard_info_t* const keyboard = &keyboard_states[i];
         if (keyboard != source && keyboard->used
-            && find_key_in_report(&keyboard->previous_report, keycode))
+            && key_owned(keyboard, keycode))
             return true;
     }
 
@@ -612,9 +630,10 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
     // new report.  If not, the key has been released.
     for (uint8_t i = 0; i < sizeof(previous_report.keycode); i++) {
         const uint8_t keycode = previous_report.keycode[i];
-        if (keycode && !find_key_in_report(report, keycode)
-            && !key_reported_elsewhere(keyboard, keycode)) {
-            usb_keyboard_enqueue_key_up(keycode, modifiers);
+        if (keycode && !find_key_in_report(report, keycode) && key_owned(keyboard, keycode)) {
+            set_key_owned(keyboard, keycode, false);
+            if (!key_owned_elsewhere(keyboard, keycode))
+                usb_keyboard_enqueue_key_up(keycode, modifiers);
         }
     }
 
@@ -626,8 +645,10 @@ void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_
             const int key = menu_key(keycode);
             if (menu_input_active() && key != EOF) {
                 enqueue_menu_key(key, dev_addr, instance);
-            } else if (!key_reported_elsewhere(keyboard, keycode)) {
-                usb_keyboard_enqueue_key_down(keycode, modifiers);
+            } else {
+                if (!key_owned_elsewhere(keyboard, keycode))
+                    usb_keyboard_enqueue_key_down(keycode, modifiers);
+                set_key_owned(keyboard, keycode, true);
             }
         }
     }
