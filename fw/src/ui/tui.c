@@ -16,6 +16,7 @@ static tui_screen_t* active_screen(const tui_controller_t* const controller) {
 // Returns the current navigation target.
 static tui_component_t* focused_component(const tui_controller_t* const controller) {
     tui_screen_t* const screen = active_screen(controller);
+    assert(controller->has_focus);
     assert(controller->focused_component < screen->component_count);
     return &screen->components[controller->focused_component];
 }
@@ -49,9 +50,12 @@ static void list_clamp(tui_list_t* const list) {
     }
 }
 
-// Empty lists are skipped when moving between controls.
-static bool component_is_focusable(const tui_component_t* const component) {
-    return component->kind == tui_component_button || component->list.count != 0;
+// Controls without drawable bounds and lists without visible rows are skipped during navigation.
+static bool component_is_focusable(const tui_component_t* const component, const window_t* const window) {
+    if (component->bounds.width == 0 || component->bounds.x >= window->width || component->bounds.height == 0 ||
+        component->bounds.y >= window->height)
+        return false;
+    return component->kind == tui_component_button || (component->list.count != 0 && component->list.visible_rows != 0);
 }
 
 // Loads a borrowed label page outside the rendering path.
@@ -61,8 +65,8 @@ static void prepare_list(tui_list_t* const list) {
         || list->load_page(list->context, list->first_visible, list->visible_rows);
 }
 
-// Clamps all lists and retains focus when the current control is still available.
-static void normalize_screen(tui_controller_t* const controller) {
+// Clamps list state and retains focus without loading pages.
+static void normalize_screen_state(tui_controller_t* const controller) {
     tui_screen_t* const screen = active_screen(controller);
     for (size_t i = 0; i < screen->component_count; i++) {
         tui_component_t* const component = &screen->components[i];
@@ -70,21 +74,45 @@ static void normalize_screen(tui_controller_t* const controller) {
         const unsigned int available = top < controller->window->height
             ? controller->window->height - top : 0;
         if (component->kind == tui_component_list) {
+            const size_t old_first_visible = component->list.first_visible;
+            const size_t old_visible_rows = component->list.visible_rows;
             const size_t rows = MIN(component->bounds.height, available);
             component->list.visible_rows = MIN(component->list.visible_rows, rows);
-            prepare_list(&component->list);
+            list_clamp(&component->list);
+            if (component->list.load_page != NULL && (component->list.first_visible != old_first_visible ||
+                                                      component->list.visible_rows != old_visible_rows)) {
+                component->list.page_valid = false;
+                controller->pending_page_refresh = true;
+            }
         }
     }
 
-    if (controller->focused_component < screen->component_count
-        && component_is_focusable(&screen->components[controller->focused_component])) return;
+    if (controller->focused_component < screen->component_count &&
+        component_is_focusable(&screen->components[controller->focused_component], controller->window)) {
+        controller->has_focus = true;
+        return;
+    }
     for (size_t i = 0; i < screen->component_count; i++) {
-        if (component_is_focusable(&screen->components[i])) {
+        if (component_is_focusable(&screen->components[i], controller->window)) {
             controller->focused_component = i;
+            controller->has_focus = true;
             return;
         }
     }
     controller->focused_component = 0;
+    controller->has_focus = false;
+}
+
+// Normalizes the active screen and prepares all visible list pages outside rendering.
+static void normalize_screen(tui_controller_t* const controller) {
+    normalize_screen_state(controller);
+    tui_screen_t* const screen = active_screen(controller);
+    for (size_t i = 0; i < screen->component_count; i++) {
+        if (screen->components[i].kind == tui_component_list) {
+            prepare_list(&screen->components[i].list);
+        }
+    }
+    controller->pending_page_refresh = false;
 }
 
 // Normalizes the resulting screen after a callback, unless the callback dismissed the controller.
@@ -115,6 +143,7 @@ void tui_controller_init(tui_controller_t* const controller, const window_t* con
 }
 
 void tui_controller_push(tui_controller_t* const controller, tui_screen_t* const screen) {
+    vet(!controller->rendering, "cannot change TUI screens while rendering");
     vet(controller->screen_count < TUI_SCREEN_STACK_CAPACITY, "TUI screen stack overflow");
     vet(screen != NULL && screen->component_count > 0, "TUI screen has no components");
 
@@ -129,6 +158,7 @@ void tui_controller_push(tui_controller_t* const controller, tui_screen_t* const
 }
 
 void tui_controller_pop(tui_controller_t* const controller) {
+    vet(!controller->rendering, "cannot change TUI screens while rendering");
     assert(controller->screen_count > 0);
     controller->dirty = true;
 
@@ -170,6 +200,8 @@ static void paint_text(const window_t* const window, tui_rect_t bounds,
 static void render_list(const tui_controller_t* const controller, const tui_list_t* const list,
                         bool focused, tui_rect_t bounds) {
     const window_t* const window = controller->window;
+    if (list->first_visible >= list->count)
+        return;
     const size_t remaining = list->count - list->first_visible;
     const size_t visible = MIN(MIN(list->visible_rows, remaining), bounds.height);
 
@@ -196,15 +228,19 @@ static void render_button(const tui_controller_t* const controller, const tui_bu
 }
 
 void tui_controller_render(tui_controller_t* const controller) {
+    vet(!controller->rendering, "cannot render TUI recursively");
     const window_t* const window = controller->window;
     tui_screen_t* const screen = active_screen(controller);
 
     controller->dirty = false;
+    controller->rendering = true;
     window_fill(window, CH_SPACE);
     if (screen->on_paint != NULL) {
-        screen->on_paint(controller, screen->context);
+        screen->on_paint(window, screen->context);
     }
+    normalize_screen_state(controller);
     if (!controller->active || active_screen(controller) != screen) {
+        controller->rendering = false;
         if (controller->active)
             controller->dirty = true;
         return;
@@ -219,9 +255,10 @@ void tui_controller_render(tui_controller_t* const controller) {
             render_button(controller, &component->button, focused, component->bounds);
         }
     }
+    controller->rendering = false;
 }
 
-// Moves between nonempty lists and buttons with wraparound.
+// Moves between visible lists and buttons with wraparound.
 static void move_focus(tui_controller_t* const controller, int delta) {
     tui_screen_t* const screen = active_screen(controller);
     const size_t count = screen->component_count;
@@ -233,7 +270,7 @@ static void move_focus(tui_controller_t* const controller, int delta) {
         } else {
             controller->focused_component = (controller->focused_component + 1) % count;
         }
-        if (component_is_focusable(&screen->components[controller->focused_component])) {
+        if (component_is_focusable(&screen->components[controller->focused_component], controller->window)) {
             return;
         }
     }
@@ -284,7 +321,37 @@ static void list_page(tui_list_t* const list, int delta) {
 }
 
 void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t action) {
-    if (!controller->active || action == tui_action_none) {
+    vet(!controller->rendering, "cannot dispatch TUI actions while rendering");
+    if (!controller->active) {
+        return;
+    }
+
+    if (controller->pending_page_refresh) {
+        tui_screen_t* const screen = active_screen(controller);
+        for (size_t i = 0; i < screen->component_count; i++) {
+            tui_component_t* const pending = &screen->components[i];
+            if (pending->kind == tui_component_list && !pending->list.page_valid) {
+                prepare_list(&pending->list);
+                controller->dirty = true;
+            }
+        }
+        controller->pending_page_refresh = false;
+    }
+    if (action == tui_action_none) {
+        return;
+    }
+    if (action == tui_action_back) {
+        controller->dirty = true;
+        if (active_screen(controller)->on_back != NULL) {
+            tui_screen_t* const screen = active_screen(controller);
+            screen->on_back(controller, screen->context);
+            refresh_active_screen(controller);
+        } else {
+            tui_controller_pop(controller);
+        }
+        return;
+    }
+    if (!controller->has_focus) {
         return;
     }
 
@@ -339,12 +406,6 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
             }
             break;
         case tui_action_back:
-            controller->dirty = true;
-            if (active_screen(controller)->on_back != NULL) {
-                tui_screen_t* const screen = active_screen(controller);
-                screen->on_back(controller, screen->context);
-                refresh_active_screen(controller);
-            } else tui_controller_pop(controller);
             break;
         case tui_action_none:
             break;

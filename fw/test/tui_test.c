@@ -8,6 +8,12 @@
 #include "display/char_encoding.h"
 
 static uint8_t screen_buffer[40 * 25];
+static unsigned int button_activations;
+static unsigned int list_activations;
+
+static void count_button_activation(tui_controller_t* controller, void* context);
+// Counts list activation attempts for clipped-control coverage.
+static void count_list_activation(tui_controller_t* controller, void* context, size_t index);
 
 static window_t init_window(void) {
     return window_create(screen_buffer, 40, 25);
@@ -44,6 +50,52 @@ START_TEST(test_tui_list_navigation) {
     tui_controller_dispatch(&controller, tui_action_down);
     ck_assert_uint_eq(components[0].list.selected, 0);
     ck_assert_uint_eq(components[0].list.first_visible, 0);
+}
+END_TEST
+
+// Fully clipped lists cannot receive focus or activation, including when no control is visible.
+START_TEST(test_tui_ignores_fully_clipped_controls) {
+    tui_component_t components[] = {
+        {
+            .kind = tui_component_list,
+            .bounds = {1, 25, 38, 1},
+            .list =
+                {
+                    .labels = (const char* const[]){"ONE", "TWO"},
+                    .count = 2,
+                    .visible_rows = 1,
+                    .on_activate = count_list_activation,
+                },
+        },
+        {
+            .kind = tui_component_button,
+            .bounds = {1, 3, 38, 1},
+            .button = {.label = "VISIBLE", .on_activate = count_button_activation},
+        },
+    };
+    tui_screen_t screen = {.components = components, .component_count = count_of(components)};
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    list_activations = 0;
+    button_activations = 0;
+    tui_controller_init(&controller, &window, &screen);
+    ck_assert_uint_eq(components[0].list.visible_rows, 0);
+    ck_assert(controller.has_focus);
+    ck_assert_uint_eq(controller.focused_component, 1);
+    tui_controller_dispatch(&controller, tui_action_up);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(button_activations, 1);
+    ck_assert_uint_eq(list_activations, 0);
+
+    tui_component_t clipped_component = components[0];
+    tui_screen_t clipped_screen = {.components = &clipped_component, .component_count = 1};
+    tui_controller_init(&controller, &window, &clipped_screen);
+    ck_assert(!controller.has_focus);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(list_activations, 0);
+    tui_controller_dispatch(&controller, tui_action_back);
+    ck_assert(!tui_controller_is_active(&controller));
 }
 END_TEST
 
@@ -427,61 +479,85 @@ static void pop_current_screen_on_show(tui_controller_t* const controller, void*
     tui_controller_pop(controller);
 }
 
-static void pop_current_screen_on_paint(tui_controller_t* const controller, void* const context) {
-    (void)context;
-    tui_controller_pop(controller);
+typedef struct {
+    tui_component_t* list;
+    size_t load_attempts;
+    size_t loaded_first;
+    size_t activated;
+} paint_model_context_t;
+
+// Records page loads so rendering-time I/O can be distinguished from deferred refresh.
+static bool load_paint_model_page(void* const context, size_t first, size_t rows) {
+    (void)rows;
+    paint_model_context_t* const model = context;
+    model->load_attempts++;
+    model->loaded_first = first;
+    return true;
 }
 
-// Rendering stops when on_paint dismisses the root screen.
-START_TEST(test_tui_stops_render_after_on_paint_dismissal) {
+// Shrinks the test model while painting to exercise render-time index normalization.
+static void shrink_list_on_paint(const window_t* const window, void* const context) {
+    (void)window;
+    paint_model_context_t* const model = context;
+    shrink_list_model(model->list);
+}
+
+// Records which clamped item is activated after a paint-time model change.
+static void record_paint_model_activation(tui_controller_t* const controller, void* const context, size_t index) {
+    (void)controller;
+    paint_model_context_t* const model = context;
+    model->activated = index;
+}
+
+// Paint-time model changes clamp stale indices without loading pages during rendering.
+START_TEST(test_tui_normalizes_model_changes_during_paint) {
+    static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
     tui_component_t component = {
-        .kind = tui_component_button,
-        .bounds = {1, 3, 38, 1},
-        .button = {.label = "STALE"},
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 2},
+        .list =
+            {
+                .labels = labels,
+                .count = count_of(labels),
+                .visible_rows = 2,
+                .on_activate = record_paint_model_activation,
+                .load_page = load_paint_model_page,
+            },
     };
+    paint_model_context_t model = {.list = &component};
+    component.list.context = &model;
     tui_screen_t screen = {
         .components = &component,
         .component_count = 1,
-        .on_paint = pop_current_screen_on_paint,
+        .context = &model,
+        .on_paint = shrink_list_on_paint,
     };
     const window_t window = init_window();
     tui_controller_t controller;
 
     tui_controller_init(&controller, &window, &screen);
-    tui_controller_render(&controller);
-    ck_assert(!tui_controller_is_active(&controller));
-    ck_assert_uint_eq(screen_buffer[3 * 40 + 15], CH_SPACE);
-}
-END_TEST
+    for (size_t i = 0; i < 4; i++) {
+        tui_controller_dispatch(&controller, tui_action_down);
+    }
+    ck_assert_uint_eq(component.list.selected, 4);
+    ck_assert_uint_eq(component.list.first_visible, 3);
+    const size_t loads_before_render = model.load_attempts;
 
-// Rendering stops when on_paint switches to a different active screen.
-START_TEST(test_tui_stops_render_after_on_paint_changes_screen) {
-    tui_component_t parent_component = {
-        .kind = tui_component_button,
-        .bounds = {1, 3, 38, 1},
-        .button = {.label = "PARENT"},
-    };
-    tui_component_t child_component = {
-        .kind = tui_component_button,
-        .bounds = {1, 3, 38, 1},
-        .button = {.label = "STALE"},
-    };
-    tui_screen_t parent = {.components = &parent_component, .component_count = 1};
-    tui_screen_t child = {
-        .components = &child_component,
-        .component_count = 1,
-        .on_paint = pop_current_screen_on_paint,
-    };
-    const window_t window = init_window();
-    tui_controller_t controller;
-
-    tui_controller_init(&controller, &window, &parent);
-    tui_controller_push(&controller, &child);
     tui_controller_render(&controller);
-    ck_assert(tui_controller_is_active(&controller));
-    ck_assert_uint_eq(controller.screen_count, 1);
-    ck_assert(tui_controller_needs_render(&controller));
-    ck_assert_uint_eq(screen_buffer[3 * 40 + 15], CH_SPACE);
+    ck_assert_uint_eq(component.list.selected, 0);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    ck_assert(!component.list.page_valid);
+    ck_assert_uint_eq(model.load_attempts, loads_before_render);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], CH_SPACE);
+
+    tui_controller_dispatch(&controller, tui_action_none);
+    ck_assert(component.list.page_valid);
+    ck_assert_uint_eq(model.loaded_first, 0);
+    ck_assert_uint_eq(model.load_attempts, loads_before_render + 1);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(model.activated, 0);
 }
 END_TEST
 
@@ -614,7 +690,6 @@ START_TEST(test_tui_retries_invalid_page_on_navigation) {
 }
 END_TEST
 
-static unsigned int button_activations;
 static tui_screen_t second_screen;
 
 static void push_second_screen(tui_controller_t* const controller, void* const context) {
@@ -627,6 +702,13 @@ static void count_button_activation(tui_controller_t* const controller, void* co
     (void) controller;
     (void) context;
     button_activations++;
+}
+
+static void count_list_activation(tui_controller_t* const controller, void* const context, size_t index) {
+    (void)controller;
+    (void)context;
+    (void)index;
+    list_activations++;
 }
 
 START_TEST(test_tui_buttons_and_screen_stack) {
@@ -715,14 +797,14 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_overlapping_page_navigation);
     tcase_add_test(test_case, test_tui_buttons_and_screen_stack);
     tcase_add_test(test_case, test_tui_empty_list_focuses_button);
+    tcase_add_test(test_case, test_tui_ignores_fully_clipped_controls);
     tcase_add_test(test_case, test_tui_parent_focus_and_mixed_navigation);
     tcase_add_test(test_case, test_tui_positioned_render_is_bounded);
     tcase_add_loop_test(test_case, test_tui_selection_remains_visible_when_clipped, 0, 2);
     tcase_add_test(test_case, test_tui_page_provider);
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
     tcase_add_test(test_case, test_tui_refreshes_parent_after_callback_navigation);
-    tcase_add_test(test_case, test_tui_stops_render_after_on_paint_dismissal);
-    tcase_add_test(test_case, test_tui_stops_render_after_on_paint_changes_screen);
+    tcase_add_test(test_case, test_tui_normalizes_model_changes_during_paint);
     tcase_add_test(test_case, test_tui_skips_refresh_after_root_dismissal);
     tcase_add_test(test_case, test_tui_skips_normalization_after_on_show_dismissal);
     tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);
