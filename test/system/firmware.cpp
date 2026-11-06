@@ -159,7 +159,7 @@ void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name,
     fixture_paths_.emplace_back(path);
     test_register_binary_file(path, image.data(), image.size(), true);
     // Surface mount failure instead of leaving a success-shaped fixture.
-    if (!ieee_drive_mount(slot, name)) {
+    if (ieee_drive_try_mount(slot, name) != DOS_MEDIA_OK) {
         test_unregister_file(path);
         fixture_paths_.pop_back();
         throw board_.failure<std::runtime_error>("firmware mount", std::string("cannot mount ") + path);
