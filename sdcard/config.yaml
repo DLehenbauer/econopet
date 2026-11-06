@@ -2,7 +2,7 @@
 
 # Uncomment the following line to set the default configuration to load on power on.
 # The default is selected by `id` (not `name`) and must match one of the configurations
-# defined below.
+# defined below. Note: default must precede configs.
 #
 # The boot menu will still be accessible by long-pressing the "Menu" button after boot.
 #

@@ -3,6 +3,14 @@
 
 #pragma once
 
+#include <stdbool.h>
+
+// Shared filesystem fixture controls used by browser and menu integration tests.
+extern char directory_root[64];
+extern bool fail_readdir;
+extern bool unknown_entry_types;
+extern unsigned int directory_scans, metadata_reads;
+
 #include <check.h>
 
 // Creates the standalone bounded filesystem browser suite.

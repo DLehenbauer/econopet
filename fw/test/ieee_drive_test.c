@@ -463,10 +463,10 @@ START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
     test_expect_fatal_message("configuration setup actions did not finish");
     set_cpu(CPU_READY);
     if (_i % 3 == 0) {
-        load_config(&sink, 0);
+        load_config(&sink, 0, true);
     } else {
-        uint8_t buffer[40];
-        const window_t window = window_create(buffer, 40, 1);
+        uint8_t buffer[40 * 25];
+        const window_t window = window_create(buffer, 40, 25);
         mock_input_set_reader(select_invalid_config);
         menu_config_show(&window, &sink, _i % 3 == 1);
     }
@@ -512,7 +512,7 @@ START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
     ck_assert_uint_lt((size_t)length, sizeof(yaml));
     test_register_file("/config.yaml", yaml);
     set_cpu(CPU_READY);
-    load_config(&sink, 0);
+    load_config(&sink, 0, true);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_uint_eq(actions.copies, 1);
     ck_assert_uint_eq(actions.options, 1);

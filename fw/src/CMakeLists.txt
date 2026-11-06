@@ -53,6 +53,8 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/menu/menu_browser.c
     ${FW_SRC_DIR}/menu/menu_config.c
     ${FW_SRC_DIR}/menu/menu_runtime.c
+    ${FW_SRC_DIR}/menu/menu_screen.c
+    ${FW_SRC_DIR}/menu/menu_ui.c
     ${FW_SRC_DIR}/display/display.c
     ${FW_SRC_DIR}/display/window.c
     ${FW_SRC_DIR}/system_state.c

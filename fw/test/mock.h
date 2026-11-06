@@ -22,6 +22,8 @@ extern uint8_t mock_ram[MOCK_RAM_SIZE];
 void mock_reset(void);
 // Invokes the callback on status polls while the mocked CPU is running.
 void mock_cpu_set_run_callback(void (*callback)(void));
+// Selects the character-set status returned by the FPGA mock.
+void mock_set_text_mode_lower(bool lower);
 // Returns the last CPU selected through the driver mock.
 cpu_type_t mock_cpu_type(void);
 // Switches the firmware clock to deterministic time until mock_reset().
@@ -30,6 +32,10 @@ void mock_clock_set(uint64_t now);
 void mock_clock_advance(uint64_t delta);
 // Supplies menu input through a test reader, or restores EOF when NULL.
 void mock_input_set_reader(int (*reader)(void));
+// Returns the number of display presentations since the last reset.
+unsigned int mock_display_task_count(void);
+// Observes entry to the nonreturning RAM diagnostic.
+void mock_ram_test_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.

@@ -7,6 +7,7 @@
 #include <check.h>
 
 #include "driver.h"
+#include "fatal.h"
 #include "hardware_contract.h"
 #include "ieee/ieee_protocol.h"
 #include "input_controls.h"
@@ -21,8 +22,11 @@ static int (*input_reader)(void);
 static void (*cpu_run_callback)(void);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
+static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
+static unsigned int display_task_count;
+static void (*ram_test_handler)(void);
 
 uint64_t __real_time_us_64(void);
 
@@ -221,7 +225,8 @@ uint8_t spi_read_at(uint32_t addr) {
         if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
             cpu_run_callback();
         }
-        return system_state.bp_halted ? ECONOPET_REG_STATUS_BP_HALT_MASK : 0;
+        return (system_state.bp_halted ? ECONOPET_REG_STATUS_BP_HALT_MASK : 0)
+            | (text_mode_lower ? ECONOPET_REG_STATUS_TEXT_MODE_MASK : 0);
     }
     // Synthesize FIFO readiness and peek at the pending receive byte.
     if (mock_ieee_addr(addr)) {
@@ -345,6 +350,11 @@ void mock_cpu_set_run_callback(void (*callback)(void)) {
     cpu_run_callback = callback;
 }
 
+// Sets the character-set status returned by the FPGA mock.
+void mock_set_text_mode_lower(bool lower) {
+    text_mode_lower = lower;
+}
+
 // Record socket/soft-core routing independently of execution flags.
 void set_cpu_type(cpu_type_t cpu) {
     selected_cpu = cpu;
@@ -393,6 +403,9 @@ void mock_reset(void) {
     mock_cpu_state = CPU_RESET;
     input_reader = NULL;
     cpu_run_callback = NULL;
+    display_task_count = 0;
+    ram_test_handler = NULL;
+    text_mode_lower = true;
     selected_cpu = CPU_PHYS_6502;
     clock_overridden = false;
     clock_us = 0;
@@ -423,8 +436,16 @@ void display_window_show(const void* window) {
     fflush(stdout);
 }
 
-// Leaves display servicing inactive in host tests.
-void display_task(void) { }
+// Counts presentations without writing to hardware or a terminal.
+void display_task(void) { display_task_count++; }
+
+// Reports presentations since the last fixture reset.
+unsigned int mock_display_task_count(void) { return display_task_count; }
+
+// Avoids ANSI rendering in host tests.
+void display_term_begin(void) { fflush(stdout); }
+void display_term_end(void) { fflush(stdout); }
+void display_term_refresh(void) { }
 
 // ---------------------------------------------------------------------------
 // Input mocks
@@ -463,5 +484,12 @@ void pet_nmi() { }
 // Diagnostic mocks
 // ---------------------------------------------------------------------------
 
-// Leaves hardware RAM diagnostics inactive in host tests.
-void test_ram() { }
+// Installs an observer that must escape the nonreturning RAM diagnostic.
+void mock_ram_test_set_handler(void (*handler)(void)) { ram_test_handler = handler; }
+
+// Delegates the destructive hardware diagnostic to an explicit test observer.
+void test_ram(void) {
+    vet(ram_test_handler != NULL, "unexpected RAM diagnostic in host test");
+    ram_test_handler();
+    fatal("RAM diagnostic observer returned");
+}

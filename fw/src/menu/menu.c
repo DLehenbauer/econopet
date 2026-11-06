@@ -21,6 +21,7 @@
 #include "input.h"
 #include "input_controls.h"
 #include "menu_config.h"
+#include "menu_screen.h"
 #include "pet.h"
 #include "roms/checksum.h"
 #include "roms/roms.h"
@@ -263,6 +264,9 @@ void menu_enter(bool is_boot) {
 
     tape_deinit();
 
+    // Blank the displays before menu.rom changes the character set.
+    set_cpu(CPU_HALT);
+    menu_screen_clear();
     system_state.video_source = video_source_firmware;
     
     start_menu_rom(MENU_ROM_BOOT_NORMAL);

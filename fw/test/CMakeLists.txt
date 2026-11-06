@@ -40,6 +40,8 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/menu_runtime.c
     ${SRC_DIR}/menu/menu_browser.c
+    ${SRC_DIR}/menu/menu_screen.c
+    ${SRC_DIR}/menu/menu_ui.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/ui/tui.c
     ${SRC_DIR}/breakpoint.c
@@ -69,6 +71,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/log_test.c
     ${TEST_DIR}/main.c
     ${TEST_DIR}/menu_browser_test.c
+    ${TEST_DIR}/menu_ui_test.c
     ${TEST_SUPPORT_DIR}/test_support.c
     ${TEST_SUPPORT_DIR}/test_fatal.c
     ${TEST_SUPPORT_DIR}/d64_fixture.c

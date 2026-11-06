@@ -16,11 +16,12 @@
 
 #define TEST_IMAGE_COUNT 65u
 
-static char directory_root[64];
-static bool fail_readdir;
+char directory_root[64];
+bool fail_readdir;
 static bool fail_opendir;
-static bool unknown_entry_types;
-static unsigned int directory_scans, metadata_reads, service_count;
+bool unknown_entry_types;
+unsigned int directory_scans, metadata_reads;
+static unsigned int service_count;
 static const char* const invalid_paths[] = {
     "/disks/..", "/disks/.", "/disks//child", "/disks-other", "/tmp", "/disks/outside/child",
 };
