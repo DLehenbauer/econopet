@@ -1032,9 +1032,9 @@ START_TEST(test_config_text_capacity_preserves_existing_behavior) {
 }
 END_TEST
 
-// Verifies the menu matches its truncated default ID and boots the second entry.
+// Verifies the boot catalog preselects the same truncated default ID.
 START_TEST(test_menu_default_text_capacity) {
-    // Put the boundary-length default after a distinct, nondefault menu entry.
+    // Select the second menu entry using a boundary-length default ID before configs.
     const char id[] = "0123456789012345678901234567890123456789";
     const char* suffix = _i == 0 ? "" : "X";
     char yaml[TEST_OVERSIZED_YAML_CAPACITY];
@@ -1057,14 +1057,28 @@ START_TEST(test_menu_default_text_capacity) {
     ck_assert_uint_lt((size_t) written, sizeof(yaml));
     test_register_file("/config.yaml", yaml);
 
-    // Exercise production menu callbacks and confirm only the default setup runs.
-    const unsigned int width = CONFIG_TEXT_CAPACITY - 1;
-    const unsigned int height = 2;
-    uint8_t buffer[width * height];
-    const window_t window = window_create(buffer, width, height);
-    menu_config_show(&window, &setup_sink, true);
+    // Enumerating the dashboard must not execute setup or automatically boot.
+    const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
+    ck_assert_uint_eq(catalog.count, 2);
+    ck_assert_int_eq(catalog.default_index, TEST_CONFIG_SECOND);
+    ck_assert_uint_eq(test_ctx.set_options_count, 0);
+    load_config(&setup_sink, catalog.default_index, true);
     ck_assert_uint_eq(test_ctx.set_options_count, 1);
     ck_assert_uint_eq(test_ctx.last_columns, pet_display_columns_80);
+}
+END_TEST
+
+// Rejects late defaults explicitly rather than reparsing to resolve their indices.
+START_TEST(test_menu_rejects_default_after_configs) {
+    test_register_file("/config.yaml",
+        "configs:\n"
+        "  - id: first\n"
+        "    name: First\n"
+        "    setup: []\n"
+        "default: first\n");
+    test_expect_fatal_message("/config.yaml: default must appear before configs");
+    menu_config_enumerate(0, 0, NULL);
+    ck_abort_msg("late default was accepted");
 }
 END_TEST
 
@@ -1300,6 +1314,7 @@ Suite *config_parser_fatal_suite(void) {
     tcase_add_loop_test_raise_signal(tc, test_sd_dir_rejects_invalid_category,
                                     SIGABRT, 0, 2);
     // Require every invalid fixture to emit its diagnostic and abort.
+    tcase_add_test_raise_signal(tc, test_menu_rejects_default_after_configs, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_reports_semantic_location, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_reports_yaml_problem, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_error_replaces_oversized_message, SIGABRT);

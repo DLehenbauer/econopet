@@ -724,8 +724,9 @@ START_TEST(test_legacy_menu_control_dispatch) {
         .system_state = &system_state,
     };
     legacy_menu_key_index = 0;
+    mock_reset();
     mock_input_set_reader(legacy_menu_input);
-    menu_config_show(&window, &sink, false);
+    menu_config_show(&window, &sink, true);
     mock_input_set_reader(NULL);
     ck_assert_uint_eq(legacy_menu_key_index, count_of(legacy_menu_keys));
     ck_assert_uint_eq(columns, 80);
@@ -758,8 +759,9 @@ START_TEST(test_menu_hid_navigation_after_entry) {
     system_state.term_mode = term_mode_cli;
     keyboard_menu_set_active(false);
     menu_hid_input_index = 0;
+    mock_reset();
     mock_input_set_reader(menu_hid_input);
-    menu_config_show(&window, &sink, false);
+    menu_config_show(&window, &sink, true);
     mock_input_set_reader(NULL);
 
     ck_assert_uint_eq(menu_hid_input_index, count_of(menu_hid_keys));

@@ -16,11 +16,13 @@
 
 #define TEST_IMAGE_COUNT 65u
 
-static char directory_root[64];
-static bool fail_readdir;
+char directory_root[64];
+bool fail_readdir;
+bool fail_next_readdir;
 static bool fail_opendir;
-static bool unknown_entry_types;
-static unsigned int directory_scans, metadata_reads, service_count;
+bool unknown_entry_types;
+unsigned int directory_scans, metadata_reads;
+static unsigned int service_count;
 static const char* const invalid_paths[] = {
     "/disks/..", "/disks/.", "/disks//child", "/disks-other", "/tmp", "/disks/outside/child",
 };
@@ -62,7 +64,8 @@ int __wrap_lstat(const char* path, struct stat* status) {
 
 // Injects read failures or filesystem types that require metadata fallback.
 struct dirent* __wrap_readdir(DIR* dir) {
-    if (fail_readdir) {
+    if (fail_readdir || fail_next_readdir) {
+        fail_next_readdir = false;
         errno = EIO;
         return NULL;
     }
@@ -92,7 +95,7 @@ static void make_file(const char* relative) {
 // Initializes only the filesystem fixture, without menu or drive state.
 static void setup(void) {
     log_init();
-    fail_readdir = fail_opendir = unknown_entry_types = false;
+    fail_readdir = fail_next_readdir = fail_opendir = unknown_entry_types = false;
     directory_scans = metadata_reads = service_count = 0;
     snprintf(directory_root, sizeof(directory_root), "/tmp/econopet-browser-XXXXXX");
     ck_assert_ptr_nonnull(mkdtemp(directory_root));
@@ -127,7 +130,7 @@ static void remove_fixture_directory(const char* path) {
 static void teardown(void) {
     remove_fixture_directory(directory_root);
     directory_root[0] = '\0';
-    fail_readdir = fail_opendir = unknown_entry_types = false;
+    fail_readdir = fail_next_readdir = fail_opendir = unknown_entry_types = false;
 }
 
 // Pages, resolves, and finds full names without a TUI controller.

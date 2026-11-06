@@ -8,6 +8,7 @@
 #include "driver.h"
 #include "hw.h"
 #include "input_controls.h"
+#include "input_uart.h"
 #include "system_state.h"
 #include "term_inject.h"
 #include "ui/cli.h"
@@ -22,6 +23,7 @@
 static int input_buffer[INPUT_BUFFER_CAPACITY];
 static uint8_t input_buffer_head = 0;
 static uint8_t input_buffer_tail = 0;
+static input_uart_filter_t uart_filter;
 
 static void enqueue_key(int keycode) {
     uint8_t next_head = (input_buffer_head + 1) & INPUT_BUFFER_CAPACITY_MASK;
@@ -140,6 +142,12 @@ void input_task(void) {
     if (system_state.term_input_dest != term_input_ignore) {
         int ch = uart_getch();
         while (ch != EOF) {
+            const bool menu = system_state.term_input_dest == term_input_to_firmware
+                && system_state.term_mode != term_mode_cli;
+            if (!input_uart_accept(&uart_filter, ch, menu)) {
+                ch = uart_getch();
+                continue;
+            }
             if (system_state.term_input_dest == term_input_to_pet) {
                 // Remote mode: check for Ctrl+C to exit
                 if (ch == 0x03) {

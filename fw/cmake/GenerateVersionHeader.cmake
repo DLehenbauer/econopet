@@ -18,6 +18,9 @@ endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/GitVersion.cmake")
 
+# Capture the build date, not the configure date, for the menu's firmware label.
+string(TIMESTAMP FW_BUILD_DATE "%y%m%d")
+
 # Write via a temporary and only replace the header when it actually changes,
 # so that rebuilding at the same commit does not recompile everything that
 # includes it. Staying quiet in that case also keeps this off the build log.
