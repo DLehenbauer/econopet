@@ -5,6 +5,8 @@
 
 #include <stdbool.h>
 
+#include "ieee/dos_media.h"
+
 // IEEE-488 disk-drive emulation (devices 8 through 11, two drives each),
 // backed by Commodore disk images in /disks on the SD card. Slots 0-7 map to
 // (device - 8) * 2 + drive.
@@ -37,11 +39,15 @@ bool ieee_drive_unmount_all(void);
 void ieee_drive_abort(void);
 #endif
 
+// Borrows a slot's disks-relative name, or "" if empty. A successful mount,
+// unmount, or abort can invalidate the contents. Rejected mounts retain the name.
+const char* ieee_drive_filename(unsigned int slot);
+
 // Mounts a path relative to /disks into a slot (0-7), or removes it for NULL.
-// Returns false for unavailable/unsupported media, a type mismatch with the
-// other slot, or a busy bus, retaining the old unit. A full /disks/ path
-// exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
-bool ieee_drive_mount(unsigned int slot, const char* filename);
+// A successful mount ejects its partner if the image types differ.
+// Failure retains both live bindings. Busy transport or pending work returns DOS_MEDIA_BUSY.
+// A full /disks/ path exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
+dos_media_result_t ieee_drive_try_mount(unsigned int slot, const char* filename);
 
 // Services the fabric FIFOs; call every main-loop pass.
 void ieee_drive_task(void);

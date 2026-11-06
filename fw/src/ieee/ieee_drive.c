@@ -74,6 +74,7 @@ typedef struct {
 static dos_media_bank_t media;
 static dos_unit_t units[DOS_MEDIA_UNIT_COUNT];
 static FILE* files[DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT];
+static char filenames[DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT][SD_PATH_MAX];
 static bool listening[DOS_MEDIA_UNIT_COUNT];
 static native_queue_t data_queue, status_queue;
 static uint8_t addressed = NATIVE_UNIT_NONE, talker = NATIVE_UNIT_NONE, secondary;
@@ -589,7 +590,8 @@ static bool quiescent(void) {
 }
 
 // Opens a complete candidate without disturbing a live binding or channel.
-static bool open_candidate(const char* const filename, FILE** const file, dos_media_io_t* const replacement) {
+static dos_media_result_t open_candidate(const char* const filename, FILE** const file,
+                                         dos_media_io_t* const replacement) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
@@ -613,22 +615,26 @@ static bool open_candidate(const char* const filename, FILE** const file, dos_me
             candidate = fopen(path, "rb");
         }
         if (candidate == NULL) {
-            return false;
+            return DOS_MEDIA_IO_ERROR;
         }
         // Sector/BAM caches belong to DOS, not independently buffered FILE aliases.
         if (setvbuf(candidate, NULL, _IONBF, 0) != 0) {
             fclose(candidate);
-            return false;
+            return DOS_MEDIA_IO_ERROR;
         }
         if (fseek(candidate, 0, SEEK_END) != 0) {
             fclose(candidate);
-            return false;
+            return DOS_MEDIA_IO_ERROR;
         }
         const long size = ftell(candidate);
-        if (size < 0 || (unsigned long)size > UINT32_MAX ||
+        if (size < 0) {
+            fclose(candidate);
+            return DOS_MEDIA_IO_ERROR;
+        }
+        if ((unsigned long)size > UINT32_MAX ||
             !diskimage_open(&replacement->image, file_read, candidate, (uint32_t)size)) {
             fclose(candidate);
-            return false;
+            return DOS_MEDIA_UNSUPPORTED;
         }
         if (writable) {
             replacement->image.write = file_write;
@@ -636,7 +642,7 @@ static bool open_candidate(const char* const filename, FILE** const file, dos_me
         }
         *file = candidate;
     }
-    return true;
+    return DOS_MEDIA_OK;
 }
 
 // Retire unpublished storage on normal return or host SPI exception unwinding.
@@ -646,9 +652,15 @@ static void close_candidate(FILE** const file) {
     }
 }
 
-// Mount a disks-relative file or remove one slot for NULL, preserving peers.
+// Borrows the current slot's disks-relative name, or an empty string when ejected.
+const char* ieee_drive_filename(const unsigned int slot) {
+    vet(slot < count_of(files), "invalid IEEE disk slot");
+    return filenames[slot];
+}
+
+// Mount a disks-relative file, ejecting an incompatible partner, or remove one slot.
 // Reject invalid candidates or busy transport without replacing the live mount.
-bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
+dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* const filename) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
@@ -663,7 +675,7 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     // before asking the transport to pause. files owns the handles that media
     // descriptors borrow, so a failed proposal must close only the candidate.
     if (slot >= count_of(files)) {
-        return false;
+        return DOS_MEDIA_INVALID;
     }
     const unsigned int unit = slot / DOS_MEDIA_SLOTS_PER_UNIT;
     const unsigned int drive = slot % DOS_MEDIA_SLOTS_PER_UNIT;
@@ -671,27 +683,52 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     // compile C frames with -fexceptions, so SPI unwinding cannot leak a FILE.
     FILE* candidate __attribute__((cleanup(close_candidate))) = NULL;
     dos_media_io_t replacement;
-    if (!open_candidate(filename, &candidate, &replacement)) {
-        return false;
+    const dos_media_result_t opened = open_candidate(filename, &candidate, &replacement);
+    if (opened != DOS_MEDIA_OK) {
+        return opened;
     }
-    const dos_media_io_t pair[] = {
+
+    // Copy before publication so a caller can remount a name borrowed from this slot.
+    char name[SD_PATH_MAX] = {0};
+    snprintf(name, sizeof(name), "%s", filename != NULL ? filename : "");
+    dos_media_io_t pair[] = {
         drive == 0 ? replacement : media.units[unit].slots[0].io,
         drive == 1 ? replacement : media.units[unit].slots[1].io,
     };
-    dos_model_t model;
-    if (dos_media_validate_pair(pair, &model) != DOS_MEDIA_OK || !quiescent()) {
-        return false;
+
+    // Host mount policy: a new format replaces the unit's incompatible partner.
+    // Publish both changes together only after old writers successfully finalize.
+    const unsigned int partner = drive ^ 1u;
+    const bool eject_partner = replacement.image.type != diskimage_type_none
+        && pair[partner].image.type != diskimage_type_none
+        && pair[partner].image.type != replacement.image.type;
+    if (eject_partner) {
+        pair[partner] = (dos_media_io_t){0};
     }
+
+    dos_model_t model;
+    const dos_media_result_t validated = dos_media_validate_pair(pair, &model);
+    if (validated != DOS_MEDIA_OK) {
+        return validated;
+    }
+    if (!quiescent()) {
+        return DOS_MEDIA_BUSY;
+    }
+
     // Finalization can replace status even when rebinding subsequently fails.
     // Earlier persistence is not rolled back, but old FILE bindings stay owned.
     if (status_queue.remaining != 0 && status_queue.unit == unit) {
         discard_queue(true);
     }
-    if (dos_work_pending(&units[unit]) || !dos_finalize(&units[unit], &media) ||
-        dos_media_set_unit(&media, unit, pair) != DOS_MEDIA_OK) {
-        resume_tx();
-        return false;
+    dos_media_result_t result = DOS_MEDIA_BUSY;
+    if (!dos_work_pending(&units[unit])) {
+        result = dos_finalize(&units[unit], &media) ? dos_media_set_unit(&media, unit, pair) : DOS_MEDIA_IO_ERROR;
     }
+    if (result != DOS_MEDIA_OK) {
+        resume_tx();
+        return result;
+    }
+
     // Media publication succeeded and old unit references are now stale.
     // Temporarily withdraw this device from the fabric mask, preserving peers,
     // then discard its staged copies before resetting their native sources.
@@ -704,13 +741,22 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
         discard_queue(true);
     }
     // Close the retired slot handle only after successful binding replacement.
-    // Reset both drives' shared DOS state, but retain the unchanged partner's
-    // FILE and other units' DOS/input state. Clear bus selections of this unit.
+    // Retire an incompatible partner only after the complete pair was published.
+    // Compatible partners and other units retain their FILE ownership.
     if (files[slot] != NULL) {
         fclose(files[slot]);
     }
     files[slot] = candidate;
+    memcpy(filenames[slot], name, sizeof(name));
     candidate = NULL;
+    if (eject_partner) {
+        const unsigned int partner_slot = unit * DOS_MEDIA_SLOTS_PER_UNIT + partner;
+        if (files[partner_slot] != NULL) {
+            fclose(files[partner_slot]);
+        }
+        files[partner_slot] = NULL;
+        filenames[partner_slot][0] = '\0';
+    }
     dos_reset(&units[unit], model);
     listening[unit] = false;
     if (talker == unit) {
@@ -723,8 +769,8 @@ bool ieee_drive_mount(const unsigned int slot, const char* const filename) {
     control(0);
     resume_tx();
     log_info("IEEE mount u%u d%u rw%u %.24s", unit, drive, replacement.image.write != NULL,
-             filename != NULL ? filename : "(removed)");
-    return true;
+             name[0] != '\0' ? name : "(removed)");
+    return DOS_MEDIA_OK;
 }
 
 // Remove every mounted image after quiescence and successful media flushing.
@@ -764,6 +810,7 @@ bool ieee_drive_unmount_all(void) {
             fclose(files[slot]);
         }
         files[slot] = NULL;
+        filenames[slot][0] = '\0';
     }
     // Detached generations cannot finalize cached BAM references again.
     for (unsigned int unit = 0; unit < DOS_MEDIA_UNIT_COUNT; ++unit) {
@@ -794,6 +841,7 @@ void ieee_drive_abort(void) {
             fclose(files[slot]);
             files[slot] = NULL;
         }
+        filenames[slot][0] = '\0';
     }
 }
 #endif
