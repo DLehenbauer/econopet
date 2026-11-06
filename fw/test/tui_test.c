@@ -218,6 +218,120 @@ START_TEST(test_tui_page_provider) {
 }
 END_TEST
 
+typedef struct {
+    tui_component_t* list;
+    size_t activated;
+} mutable_list_context_t;
+
+static void shrink_list_model(tui_component_t* const list) {
+    static const char* const labels[] = {"ONLY"};
+    list->list.labels = labels;
+    list->list.count = count_of(labels);
+}
+
+static void shrink_list_on_activate(tui_controller_t* const controller, void* const context, size_t index) {
+    (void)controller;
+    mutable_list_context_t* const model = context;
+    model->activated = index;
+    shrink_list_model(model->list);
+}
+
+static void shrink_list_on_back(tui_controller_t* const controller, void* const context) {
+    (void)controller;
+    mutable_list_context_t* const model = context;
+    shrink_list_model(model->list);
+}
+
+// Callback model changes clamp stale selection and viewport before another render or activation.
+START_TEST(test_tui_normalizes_callback_mutations) {
+    static const char* const labels[] = {"ONE", "TWO", "THREE", "FOUR", "FIVE"};
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 2},
+        .list =
+            {
+                .labels = labels,
+                .count = count_of(labels),
+                .visible_rows = 2,
+                .on_activate = shrink_list_on_activate,
+            },
+    };
+    mutable_list_context_t model = {.list = &component};
+    component.list.context = &model;
+    tui_screen_t screen = {
+        .components = &component,
+        .component_count = 1,
+        .context = &model,
+        .on_back = shrink_list_on_back,
+    };
+    const window_t window = init_window();
+    tui_controller_t controller;
+
+    tui_controller_init(&controller, &window, &screen);
+    for (size_t i = 0; i < 4; i++) {
+        tui_controller_dispatch(&controller, tui_action_down);
+    }
+    ck_assert_uint_eq(component.list.selected, 4);
+    ck_assert_uint_eq(component.list.first_visible, 3);
+
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(model.activated, 4);
+    ck_assert_uint_eq(component.list.selected, 0);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(model.activated, 0);
+
+    component.list.labels = labels;
+    component.list.count = count_of(labels);
+    component.list.selected = 4;
+    component.list.first_visible = 3;
+    tui_controller_dispatch(&controller, tui_action_back);
+    ck_assert_uint_eq(component.list.selected, 0);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('O') ^ 0x80);
+}
+END_TEST
+
+// An invalid cached page is retried on navigation even when the selection and viewport stay put.
+START_TEST(test_tui_retries_invalid_page_on_navigation) {
+    tui_component_t component = {
+        .kind = tui_component_list,
+        .bounds = {1, 3, 38, 2},
+        .list =
+            {
+                .count = 1,
+                .visible_rows = 2,
+                .label_at = test_page_label,
+                .load_page = load_test_page,
+            },
+    };
+    tui_screen_t screen = {.components = &component, .component_count = 1};
+    const window_t window = init_window();
+    tui_controller_t controller;
+    page_loads = 0;
+    page_success = false;
+
+    tui_controller_init(&controller, &window, &screen);
+    ck_assert_uint_eq(page_loads, 1);
+    ck_assert(!component.list.page_valid);
+    tui_controller_render(&controller);
+    ck_assert(!tui_controller_needs_render(&controller));
+
+    page_success = true;
+    tui_controller_dispatch(&controller, tui_action_down);
+    ck_assert_uint_eq(component.list.selected, 0);
+    ck_assert_uint_eq(component.list.first_visible, 0);
+    ck_assert_uint_eq(page_loads, 2);
+    ck_assert(component.list.page_valid);
+    ck_assert(tui_controller_needs_render(&controller));
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[3 * 40 + 1], ascii_to_vrom('C') ^ 0x80);
+}
+END_TEST
+
 static unsigned int button_activations;
 static tui_screen_t second_screen;
 
@@ -322,6 +436,8 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_positioned_render_is_bounded);
     tcase_add_loop_test(test_case, test_tui_selection_remains_visible_when_clipped, 0, 2);
     tcase_add_test(test_case, test_tui_page_provider);
+    tcase_add_test(test_case, test_tui_normalizes_callback_mutations);
+    tcase_add_test(test_case, test_tui_retries_invalid_page_on_navigation);
     tcase_add_test(test_case, test_tui_repaint_invalidation);
     suite_add_tcase(suite, test_case);
     return suite;

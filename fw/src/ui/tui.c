@@ -87,6 +87,14 @@ static void normalize_screen(tui_controller_t* const controller) {
     controller->focused_component = 0;
 }
 
+// Refreshes callback-mutated models unless the callback already navigated to a normalized screen.
+static void refresh_callback_screen(tui_controller_t* const controller, tui_screen_t* const previous_screen,
+                                    size_t previous_depth) {
+    if (controller->screen_count == previous_depth && active_screen(controller) == previous_screen) {
+        normalize_screen(controller);
+    }
+}
+
 void tui_controller_init(tui_controller_t* const controller, const window_t* const window,
                          tui_screen_t* const initial_screen) {
     assert(window != NULL);
@@ -280,6 +288,7 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
     const size_t old_focus = controller->focused_component;
     const size_t old_selected = component->kind == tui_component_list ? component->list.selected : 0;
     const size_t old_first = component->kind == tui_component_list ? component->list.first_visible : 0;
+    const bool old_page_valid = component->kind == tui_component_list && component->list.page_valid;
     switch (action) {
         case tui_action_up:
             if (component->kind == tui_component_list && component->list.count > 0
@@ -318,17 +327,25 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
             if (component->kind == tui_component_list) {
                 if (component->list.count != 0 && component->list.page_valid
                     && component->list.on_activate != NULL) {
+                    tui_screen_t* const previous_screen = active_screen(controller);
+                    const size_t previous_depth = controller->screen_count;
                     component->list.on_activate(controller, component->list.context, component->list.selected);
+                    refresh_callback_screen(controller, previous_screen, previous_depth);
                 }
             } else if (component->button.on_activate != NULL) {
+                tui_screen_t* const previous_screen = active_screen(controller);
+                const size_t previous_depth = controller->screen_count;
                 component->button.on_activate(controller, component->button.context);
+                refresh_callback_screen(controller, previous_screen, previous_depth);
             }
             break;
         case tui_action_back:
             controller->dirty = true;
             if (active_screen(controller)->on_back != NULL) {
                 tui_screen_t* const screen = active_screen(controller);
+                const size_t previous_depth = controller->screen_count;
                 screen->on_back(controller, screen->context);
+                refresh_callback_screen(controller, screen, previous_depth);
             } else tui_controller_pop(controller);
             break;
         case tui_action_none:
@@ -338,12 +355,13 @@ void tui_controller_dispatch(tui_controller_t* const controller, tui_action_t ac
         tui_component_t* const target = focused_component(controller);
         if (target->kind == tui_component_list) {
             list_clamp(&target->list);
-            if (target != component || target->list.first_visible != old_first)
+            if (target != component || target->list.first_visible != old_first || !target->list.page_valid)
                 prepare_list(&target->list);
         }
-        if (controller->focused_component != old_focus
-            || (target->kind == tui_component_list
-                && (target->list.selected != old_selected || target->list.first_visible != old_first))) {
+        if (controller->focused_component != old_focus ||
+            (target->kind == tui_component_list &&
+             (target->list.selected != old_selected || target->list.first_visible != old_first ||
+              target->list.page_valid != old_page_valid))) {
             controller->dirty = true;
         }
     }
