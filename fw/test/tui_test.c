@@ -258,6 +258,28 @@ START_TEST(test_tui_positioned_render_is_bounded) {
 }
 END_TEST
 
+// Partially clipped buttons center and activate within their drawable width.
+START_TEST(test_tui_partially_clipped_button) {
+    const window_t window = window_create(screen_buffer, 6, 3);
+    tui_component_t component = {
+        .kind = tui_component_button,
+        .bounds = {4, 1, 10, 1},
+        .button = {.label = "GO", .on_activate = count_button_activation},
+    };
+    tui_screen_t screen = {.components = &component, .component_count = 1};
+    tui_controller_t controller;
+    button_activations = 0;
+
+    tui_controller_init(&controller, &window, &screen);
+    ck_assert(controller.has_focus);
+    tui_controller_render(&controller);
+    ck_assert_uint_eq(screen_buffer[1 * 6 + 4], ascii_to_vrom('[') ^ 0x80);
+    ck_assert_uint_eq(screen_buffer[1 * 6 + 5], ascii_to_vrom(' ') ^ 0x80);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(button_activations, 1);
+}
+END_TEST
+
 // Scrolling and page movement use the clipped viewport, not an oversized declaration.
 START_TEST(test_tui_selection_remains_visible_when_clipped) {
     uint8_t guarded[32];
@@ -311,7 +333,14 @@ START_TEST(test_tui_page_provider) {
     tui_component_t component = {
         .kind = tui_component_list,
         .bounds = {1, 3, 38, 2},
-        .list = {.count = 7, .visible_rows = 2, .load_page = load_test_page, .label_at = test_page_label}
+        .list =
+            {
+                .count = 7,
+                .visible_rows = 2,
+                .on_activate = count_list_activation,
+                .load_page = load_test_page,
+                .label_at = test_page_label,
+            },
     };
     tui_screen_t screen = {.components = &component, .component_count = 1};
     const window_t window = init_window();
@@ -329,8 +358,11 @@ START_TEST(test_tui_page_provider) {
     ck_assert_uint_eq(loaded_first, 1);
     ck_assert_uint_eq(page_loads, 2);
     page_success = false;
+    list_activations = 0;
     tui_controller_dispatch(&controller, tui_action_page_down);
     ck_assert(!component.list.page_valid);
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(list_activations, 0);
     tui_controller_render(&controller);
 }
 END_TEST
@@ -679,6 +711,7 @@ START_TEST(test_tui_retries_invalid_page_on_navigation) {
                 .visible_rows = 2,
                 .label_at = test_page_label,
                 .load_page = load_test_page,
+                .on_activate = count_list_activation,
             },
     };
     tui_screen_t screen = {.components = &component, .component_count = 1};
@@ -686,12 +719,15 @@ START_TEST(test_tui_retries_invalid_page_on_navigation) {
     tui_controller_t controller;
     page_loads = 0;
     page_success = false;
+    list_activations = 0;
 
     tui_controller_init(&controller, &window, &screen);
     ck_assert_uint_eq(page_loads, 1);
     ck_assert(!component.list.page_valid);
     tui_controller_render(&controller);
     ck_assert(!tui_controller_needs_render(&controller));
+    tui_controller_dispatch(&controller, tui_action_activate);
+    ck_assert_uint_eq(list_activations, 0);
 
     page_success = true;
     tui_controller_dispatch(&controller, tui_action_down);
@@ -815,6 +851,7 @@ Suite* tui_suite(void) {
     tcase_add_test(test_case, test_tui_allows_empty_clipped_list);
     tcase_add_test(test_case, test_tui_parent_focus_and_mixed_navigation);
     tcase_add_test(test_case, test_tui_positioned_render_is_bounded);
+    tcase_add_test(test_case, test_tui_partially_clipped_button);
     tcase_add_loop_test(test_case, test_tui_selection_remains_visible_when_clipped, 0, 2);
     tcase_add_test(test_case, test_tui_page_provider);
     tcase_add_test(test_case, test_tui_normalizes_callback_mutations);

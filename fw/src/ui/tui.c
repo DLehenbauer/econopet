@@ -237,12 +237,14 @@ static void render_list(const tui_controller_t* const controller, const tui_list
 // Paints a compact button centered in its rectangle.
 static void render_button(const tui_controller_t* const controller, const tui_button_t* const button,
                           bool focused, tui_rect_t bounds) {
-    if (bounds.height == 0) return;
     const window_t* const window = controller->window;
+    if (bounds.width == 0 || bounds.height == 0 || bounds.x >= window->width || bounds.y >= window->height)
+        return;
     char text[80];
     snprintf(text, sizeof(text), "[ %.*s ]", (int) sizeof(text) - 5, button->label);
-    const size_t length = MIN(strlen(text), bounds.width);
-    bounds.x += (bounds.width - length) / 2;
+    const unsigned int visible_width = MIN(bounds.width, window->width - bounds.x);
+    const size_t length = MIN(strlen(text), visible_width);
+    bounds.x += (visible_width - length) / 2;
     bounds.width = length;
     paint_text(window, bounds, bounds.y, text, focused);
 }
