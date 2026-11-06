@@ -82,7 +82,8 @@ typedef struct {
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
-static uint8_t queued_modifiers;
+// Tracks raw HID modifiers; key events may carry separate keymap overrides.
+static uint8_t queued_report_modifiers;
 
 // Preserve navigation press edges even when USB servicing receives press and release together.
 static MenuKeyEvent menu_key_buffer[KEY_BUFFER_CAPACITY];
@@ -208,7 +209,6 @@ static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t
         };
         key_buffer[key_buffer_next_write_index] = keyEvent;
         key_buffer_next_write_index = new_write_index;
-        queued_modifiers = modifiers;
     }
 }
 
@@ -221,7 +221,7 @@ static void enqueue_modifier_event(uint8_t modifiers) {
             .modifier_only = true,
         };
         key_buffer_next_write_index = new_write_index;
-        queued_modifiers = modifiers;
+        queued_report_modifiers = modifiers;
     }
 }
 
@@ -237,7 +237,7 @@ static uint8_t combined_modifiers(void) {
 
 // Queues a modifier-only update when the combined USB state changes.
 static void update_queued_modifiers(uint8_t modifiers) {
-    if (modifiers != queued_modifiers)
+    if (modifiers != queued_report_modifiers)
         enqueue_modifier_event(modifiers);
 }
 
@@ -389,7 +389,7 @@ static void clear_keyboard_state(keyboard_info_t* keyboard) {
     for (uint8_t i = 0; i < sizeof(previous_report.keycode); ++i) {
         const uint8_t keycode = previous_report.keycode[i];
         if (keycode && !key_reported_elsewhere(keyboard, keycode))
-            usb_keyboard_enqueue_key_up(keycode, queued_modifiers);
+            usb_keyboard_enqueue_key_up(keycode, queued_report_modifiers);
     }
 
     *keyboard = (keyboard_info_t) { 0 };

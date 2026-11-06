@@ -477,6 +477,50 @@ START_TEST(test_implicit_shift_does_not_open_menu) {
 }
 END_TEST
 
+// Repeated reports preserve keymap Shift overrides while a key remains held.
+START_TEST(test_keymap_shift_overrides_survive_unchanged_reports) {
+    usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
+        system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
+    const usb_keymap_entry_t key = {.row = 0, .col = 0};
+    const usb_keymap_entry_t shift = {.row = 1, .col = 0};
+    keymap[HID_KEY_A] = (usb_keymap_entry_t) {.row = key.row, .col = key.col, .shift = true};
+    keymap[HID_KEY_A | 0x100] =
+        (usb_keymap_entry_t) {.row = key.row, .col = key.col, .unshift = true};
+    keymap[HID_KEY_SHIFT_LEFT] = shift;
+    usb_keyboard_reset(&system_state);
+
+    report_key(HID_KEY_A, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+    report_key(HID_KEY_A, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+    report_key(0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+
+    const uint8_t left_shift = KEYBOARD_MODIFIER_LEFTSHIFT;
+    report_key(HID_KEY_A, left_shift);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    report_key(HID_KEY_A, left_shift);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+    report_key(0, left_shift);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 1u << key.row);
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 0);
+    report_key(0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[shift.col] & (1u << shift.row), 1u << shift.row);
+}
+END_TEST
+
 // Typing with Shift-lock restarts the hold instead of qualifying during a key press.
 START_TEST(test_typing_restarts_menu_hold) {
     system_state.term_input_dest = term_input_to_pet;
@@ -615,6 +659,7 @@ Suite* keyboard_suite(void) {
     tcase_add_loop_test(core, test_pet_menu_chord, 0, 2);
     tcase_add_loop_test(core, test_pet_menu_chord_release_before_poll, 0, 2);
     tcase_add_test(core, test_implicit_shift_does_not_open_menu);
+    tcase_add_test(core, test_keymap_shift_overrides_survive_unchanged_reports);
     tcase_add_test(core, test_typing_restarts_menu_hold);
     tcase_add_test(core, test_batched_menu_release_restarts_hold);
     tcase_add_test(core, test_legacy_menu_control_dispatch);
