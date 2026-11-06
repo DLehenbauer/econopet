@@ -596,7 +596,8 @@ module main (
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'active_cpu_addr' is in CRTC range
         .crtc_rs_i(active_cpu_addr[0]),     // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(active_cpu_we),          // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
-        .crtc_data_i(cpu_data_i),           // CPU -> CRTC
+        // Soft-core writes must not depend on the one-cycle pad-enable feedback path.
+        .crtc_data_i(cpu_soft ? active_cpu_dout : cpu_data_i),
         .crtc_data_o(crtc_dout),            // CRTC -> CPU
         .crtc_data_oe(crtc_oe),             // Asserted when CPU is reading from CRTC
 
@@ -1011,8 +1012,12 @@ module main (
     // Socketed CPU drives write data externally; cpu_driving_data_bus is soft-core only.
     wire phys_cpu_driving_data_bus = !cpu_soft && active_be && active_cpu_we;
 
-    wire [2:0] dbg_data_bus_drivers = {ram_driving_data_bus, io_driving_data_bus, fpga_driving_data_bus};
+    wire [3:0] dbg_data_bus_drivers = {
+        phys_cpu_driving_data_bus, ram_driving_data_bus,
+        io_driving_data_bus, fpga_driving_data_bus
+    };
     wire [1:0] dbg_ram_oe_we = {ram_oe_o, ram_we_o};
+    wire [2:0] dbg_io_selects = {pia1_cs_o, pia2_cs_o, via_cs_o};
 
     // PIA/VIA latch on PHI2's falling edge, and therefore require ADDR, DATA, and RW
     // to be held stable for a short time after PHI2 drops.
@@ -1057,7 +1062,11 @@ module main (
                || ((cpu_driving_data_bus || phys_cpu_driving_data_bus) && active_wr_en))
             else $fatal(1, "RAM_WE asserted but valid data not driven to bus");
 
-        assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {ram, io, fpga}=%b", dbg_data_bus_drivers);
+        assert(!io_ctl_bus_own || (!active_be && !cpu_be_o))
+            else $fatal(1, "I/O bridge owns the bus while a CPU is enabled");
+        assert($onehot0(dbg_io_selects))
+            else $fatal(1, "Multiple physical I/O devices selected");
+        assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {physical CPU, ram, io, fpga}=%b", dbg_data_bus_drivers);
         assert($onehot0(dbg_ram_oe_we)) else $fatal(1, "RAM must be reading or writing, not both: {ram_oe, ram_we}=%b", dbg_ram_oe_we);
     end
     // synthesis on

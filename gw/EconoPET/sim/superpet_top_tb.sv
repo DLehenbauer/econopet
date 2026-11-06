@@ -28,6 +28,13 @@ module superpet_top_tb;
     wire  [DATA_WIDTH-1:0]     bus_data;
     logic bus_we_n;
 
+    // Model the measured CRTC pad-feedback path exceeding one 15.625 ns cycle.
+    localparam time CRTC_FEEDBACK_DELAY = 25;
+    wire [DATA_WIDTH-1:0] delayed_crtc_data;
+    assign #(CRTC_FEEDBACK_DELAY) delayed_crtc_data = bus_data;
+    wire [DATA_WIDTH-1:0] cpu_input_data =
+        top.main.crtc_en && top.main.active_cpu_we ? delayed_crtc_data : bus_data;
+
     logic [DATA_WIDTH-1:0] bus_data_mux;
     logic                  bus_data_mux_oe;
 
@@ -99,7 +106,7 @@ module superpet_top_tb;
         .cpu_addr_i ({CPU_ADDR_WIDTH{1'b0}}),
         .cpu_addr_o (top_addr),
         .cpu_addr_oe(top_addr_oe),
-        .cpu_data_i (bus_data),
+        .cpu_data_i (cpu_input_data),
         .cpu_data_o (top_data),
         .cpu_data_oe(top_data_oe),
         .cpu_we_n_i (1'b1),      // Physical CPU off-bus in 6809 mode
@@ -368,6 +375,52 @@ module superpet_top_tb;
         `assert_equal(top.main.cpu6809_halted, 1'b0)
     endtask
 
+    // Exercise Waterloo geometry writes through the real core and arbiter with slow pad feedback.
+    task static crtc_feedback_test;
+        localparam logic [16:0] PROGRAM_ADDR = 17'h00400;
+        localparam logic [31:0] REGISTERS = {
+            8'(CRTC_R6_V_DISPLAYED), 8'(CRTC_R9_MAX_SCAN_LINE),
+            8'(CRTC_R12_START_ADDR_HI), 8'(CRTC_R13_START_ADDR_LO)};
+        localparam logic [31:0] VALUES = {8'd25, 8'd7, 8'h10, 8'h00};
+        logic [79:0] instruction;
+        logic [7:0] register_index, value;
+        logic [7:0] observed;
+
+        // Load immediate register-selection and data stores, then stop in a self-loop.
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        for (int r = 0; r < 4; r++) begin
+            register_index = REGISTERS[(3 - r) * 8 +: 8];
+            value = VALUES[(3 - r) * 8 +: 8];
+            instruction = {8'h86, register_index, 8'hb7, 8'he8, 8'h80,
+                           8'h86, value, 8'hb7, 8'he8, 8'h81};
+            for (int b = 0; b < 10; b++)
+                spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + r * 10 + b),
+                             instruction[(9 - b) * 8 +: 8]);
+        end
+        spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + 40), 8'h20);
+        spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + 41), 8'hfe);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0fffe), PROGRAM_ADDR[15:8]);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0ffff), PROGRAM_ADDR[7:0]);
+
+        // Poison each register before repeated resets so skipped writes cannot pass.
+        repeat (3) begin
+            spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+            for (int r = 0; r < 4; r++) begin
+                register_index = REGISTERS[(3 - r) * 8 +: 8];
+                value = VALUES[(3 - r) * 8 +: 8];
+                spi_write_at(common_pkg::wb_crtc_addr(register_index), ~value);
+            end
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            #200000;
+            for (int r = 0; r < 4; r++) begin
+                register_index = REGISTERS[(3 - r) * 8 +: 8];
+                value = VALUES[(3 - r) * 8 +: 8];
+                spi_read_at(common_pkg::wb_crtc_addr(register_index), observed);
+                `assert_equal(observed, value);
+            end
+        end
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -566,6 +619,7 @@ module superpet_top_tb;
         $display("[%t]   expansion RAM[$EFFC] = $%02x (expect $AA)", $time, mock_sram.mem[17'h1EFFC]);
         `assert_equal(mock_sram.mem[17'h1EFFC], 8'hAA);
 
+        crtc_feedback_test;
         $display("[%t] END SuperPET 6809 smoke test", $time);
     endtask
 

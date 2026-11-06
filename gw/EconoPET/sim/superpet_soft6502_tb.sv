@@ -20,6 +20,13 @@ module superpet_soft6502_tb;
     wire  [DATA_WIDTH-1:0]     bus_data;
     logic bus_we_n;
 
+    // Model the measured CRTC pad-feedback path exceeding one 15.625 ns cycle.
+    localparam time CRTC_FEEDBACK_DELAY = 25;
+    wire [DATA_WIDTH-1:0] delayed_crtc_data;
+    assign #(CRTC_FEEDBACK_DELAY) delayed_crtc_data = bus_data;
+    wire [DATA_WIDTH-1:0] cpu_input_data =
+        top.main.crtc_en && top.main.active_cpu_we ? delayed_crtc_data : bus_data;
+
     logic [DATA_WIDTH-1:0] bus_data_mux;
     logic                  bus_data_mux_oe;
     assign bus_data = bus_data_mux_oe ? bus_data_mux : {DATA_WIDTH{1'bz}};
@@ -62,7 +69,7 @@ module superpet_soft6502_tb;
         .cpu_addr_i (bus_addr),
         .cpu_addr_o (top_addr),
         .cpu_addr_oe(top_addr_oe),
-        .cpu_data_i (bus_data),
+        .cpu_data_i (cpu_input_data),
         .cpu_data_o (top_data),
         .cpu_data_oe(top_data_oe),
         .cpu_we_n_i (1'b1),
@@ -173,6 +180,53 @@ module superpet_soft6502_tb;
         spi1_driver.write_at(addr_i, data_i);
     endtask
 
+    // Exercise menu geometry writes through the real core and arbiter with slow pad feedback.
+    task static crtc_feedback_test;
+        localparam logic [16:0] PROGRAM_ADDR = 17'h00400;
+        localparam logic [31:0] REGISTERS = {
+            8'(CRTC_R6_V_DISPLAYED), 8'(CRTC_R9_MAX_SCAN_LINE),
+            8'(CRTC_R12_START_ADDR_HI), 8'(CRTC_R13_START_ADDR_LO)};
+        localparam logic [31:0] VALUES = {8'd25, 8'd7, 8'h10, 8'h00};
+        logic [79:0] instruction;
+        logic [7:0] register_index, value;
+        logic [7:0] observed;
+
+        // Load immediate register-selection and data stores, then stop in a self-loop.
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        for (int r = 0; r < 4; r++) begin
+            register_index = REGISTERS[(3 - r) * 8 +: 8];
+            value = VALUES[(3 - r) * 8 +: 8];
+            instruction = {8'ha9, register_index, 8'h8d, 8'h80, 8'he8,
+                           8'ha9, value, 8'h8d, 8'h81, 8'he8};
+            for (int b = 0; b < 10; b++)
+                spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + r * 10 + b),
+                             instruction[(9 - b) * 8 +: 8]);
+        end
+        spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + 40), 8'h4c);
+        spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + 41), 8'h28);
+        spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + 42), 8'h04);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0fffc), PROGRAM_ADDR[7:0]);
+        spi_write_at(common_pkg::wb_ram_addr(17'h0fffd), PROGRAM_ADDR[15:8]);
+
+        // Poison each register before repeated resets so skipped writes cannot pass.
+        repeat (3) begin
+            spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+            for (int r = 0; r < 4; r++) begin
+                register_index = REGISTERS[(3 - r) * 8 +: 8];
+                value = VALUES[(3 - r) * 8 +: 8];
+                spi_write_at(common_pkg::wb_crtc_addr(register_index), ~value);
+            end
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            #200000;
+            for (int r = 0; r < 4; r++) begin
+                register_index = REGISTERS[(3 - r) * 8 +: 8];
+                value = VALUES[(3 - r) * 8 +: 8];
+                spi_read_at(common_pkg::wb_crtc_addr(register_index), observed);
+                `assert_equal(observed, value);
+            end
+        end
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -223,6 +277,7 @@ module superpet_soft6502_tb;
         $display("[%t]   RAM[$0200] (SPI read) = $%02x (expect $42)", $time, dout);
         `assert_equal(dout, 8'h42);
 
+        crtc_feedback_test;
         $display("[%t] END soft-6502 smoke test", $time);
     endtask
 
