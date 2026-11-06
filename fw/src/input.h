@@ -19,20 +19,22 @@
 #define KEY_PGUP         1006
 #define KEY_PGDN         1007
 
-// Physical button actions
+// Button release before the time threshold, or a hold that reaches it.
 #define KEY_BTN_SHORT    1100
 #define KEY_BTN_LONG     1101
+// Qualified dual-Shift hold (runtime menu entry, ignored by menu navigation).
+#define KEY_SHIFT_SHIFT  1102
 
 // Initialize input subsystem
 void input_init(void);
 
 // Poll all input sources and dispatch based on system_state:
-// - Button -> firmware queue
+// - Button -> debounced control state
 // - USB/PET keyboards -> key matrix (always)
 // - UART -> PET keys or firmware queue (based on term_input_dest)
 void input_task(void);
 
 // Get next keycode for firmware (menu, etc).
 // Returns EOF if no input available.
-// Only returns events when term_input_dest == term_input_to_firmware.
+// Button/chord events are independent of terminal routing and SD activity.
 int input_getch(void);

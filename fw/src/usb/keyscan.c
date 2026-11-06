@@ -85,41 +85,53 @@ int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
         PET_KEY_DOWN_N,
         PET_KEY_RIGHT_N,
         PET_KEY_RETURN_N,
+        PET_KEY_RUNSTOP_N,
         PET_KEY_T_N,
+        PET_KEY_DELETE_N,
 
         // Business Keyboard
         PET_KEY_DOWN_B,
         PET_KEY_RIGHT_B,
         PET_KEY_RETURN_B,
+        PET_KEY_RUNSTOP_B,
         PET_KEY_T_B,
+        PET_KEY_DELETE_B,
     };
     
     static const int term_keys_unshifted[] = {
         // Graphics Keyboard
-        /*   PET_KEY_DOWN_N: */ KEY_DOWN, 
-        /*  PET_KEY_RIGHT_N: */ KEY_RIGHT, 
-        /* PET_KEY_RETURN_N: */ '\n',
-        /*      PET_KEY_T_N: */ 't',
+        /*    PET_KEY_DOWN_N: */ KEY_DOWN,
+        /*   PET_KEY_RIGHT_N: */ KEY_RIGHT,
+        /*  PET_KEY_RETURN_N: */ '\n',
+        /* PET_KEY_RUNSTOP_N: */ '\e',
+        /*       PET_KEY_T_N: */ 't',
+        /*  PET_KEY_DELETE_N: */ '\b',
 
         // Business Keyboard
-        /*   PET_KEY_DOWN_B: */ KEY_DOWN,
-        /*  PET_KEY_RIGHT_B: */ KEY_RIGHT,
-        /* PET_KEY_RETURN_B: */ '\n',
-        /*      PET_KEY_T_B: */ 't',
+        /*    PET_KEY_DOWN_B: */ KEY_DOWN,
+        /*   PET_KEY_RIGHT_B: */ KEY_RIGHT,
+        /*  PET_KEY_RETURN_B: */ '\n',
+        /* PET_KEY_RUNSTOP_B: */ '\e',
+        /*       PET_KEY_T_B: */ 't',
+        /*  PET_KEY_DELETE_B: */ '\b',
     };
     
     static const int term_keys_shifted[] = {
         // Graphics Keyboard
-        /*   PET_KEY_DOWN_N: */ KEY_UP,
-        /*  PET_KEY_RIGHT_N: */ KEY_LEFT,
-        /* PET_KEY_RETURN_N: */ '\n',
-        /*      PET_KEY_T_N: */ 'T',
+        /*    PET_KEY_DOWN_N: */ KEY_UP,
+        /*   PET_KEY_RIGHT_N: */ KEY_LEFT,
+        /*  PET_KEY_RETURN_N: */ '\n',
+        /* PET_KEY_RUNSTOP_N: */ '\e',
+        /*       PET_KEY_T_N: */ 'T',
+        /*  PET_KEY_DELETE_N: */ '\b',
 
         // Business Keyboard
-        /*   PET_KEY_DOWN_B: */ KEY_UP,
-        /*  PET_KEY_RIGHT_B: */ KEY_LEFT,
-        /* PET_KEY_RETURN_B: */ '\n',
-        /*      PET_KEY_T_B: */ 'T',
+        /*    PET_KEY_DOWN_B: */ KEY_UP,
+        /*   PET_KEY_RIGHT_B: */ KEY_LEFT,
+        /*  PET_KEY_RETURN_B: */ '\n',
+        /* PET_KEY_RUNSTOP_B: */ '\e',
+        /*       PET_KEY_T_B: */ 'T',
+        /*  PET_KEY_DELETE_B: */ '\b',
     };
     
     static_assert((count_of(pet_keys) == count_of(term_keys_unshifted))

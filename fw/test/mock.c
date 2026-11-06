@@ -9,6 +9,7 @@
 #include "driver.h"
 #include "hardware_contract.h"
 #include "ieee/ieee_protocol.h"
+#include "input_controls.h"
 #include "system_state.h"
 
 // ---------------------------------------------------------------------------
@@ -440,8 +441,12 @@ void mock_input_set_reader(int (*reader)(void)) {
 // Leaves hardware input polling inactive in host tests.
 void input_task(void) { }
 
-// Reads test-provided menu input, reporting EOF when no reader is installed.
+// Uses production gesture classification before test-provided keyboard/terminal input.
 int input_getch(void) {
+    const int control = input_controls_getch();
+    if (control != EOF) {
+        return control;
+    }
     return input_reader != NULL ? input_reader() : EOF;
 }
 

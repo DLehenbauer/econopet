@@ -14,10 +14,12 @@
 #include "global_test.h"
 #include "ieee_drive_test.h"
 #include "keyscan_test.h"
+#include "keyboard_test.h"
 #include "keystate_test.h"
 #include "log_test.h"
 #include "window_test.h"
 #include "petscii_test.h"
+#include "sd_activity_test.h"
 #include "tape_dir_test.h"
 #include "system_state_test.h"
 #include "test_support_test.h"
@@ -36,9 +38,11 @@ int run_suite() {
     srunner_add_suite(sr1, dos_suite());
     srunner_add_suite(sr1, ieee_drive_suite());
     srunner_add_suite(sr1, keyscan_suite());
+    srunner_add_suite(sr1, keyboard_suite());
     srunner_add_suite(sr1, keystate_suite());
     srunner_add_suite(sr1, log_suite());
     srunner_add_suite(sr1, petscii_suite());
+    srunner_add_suite(sr1, sd_activity_suite());
     srunner_add_suite(sr1, system_state_suite());
     srunner_add_suite(sr1, tape_dir_suite());
     srunner_set_fork_status(sr1, CK_NOFORK);

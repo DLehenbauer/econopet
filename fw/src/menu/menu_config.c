@@ -155,6 +155,8 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         }
 
         default:
+            // Note that KEY_SHIFT_SHIFT enters the menu, but does not activate
+            // a selection within the menu.
             break;
         }
     }

@@ -7,8 +7,10 @@
 #include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
+#include "input.h"
 #include "keyscan.h"
 #include "keystate.h"
+#include "input_controls.h"
 #include "usb.h"
 
 uint8_t usb_key_matrix[KEY_COL_COUNT] = {
@@ -73,6 +75,45 @@ typedef struct {
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
+
+// Preserve navigation press edges even when USB servicing receives press and release together.
+static int menu_key_buffer[KEY_BUFFER_CAPACITY];
+static uint8_t menu_key_write_index;
+static uint8_t menu_key_read_index;
+static input_hold_t usb_menu_hold;
+static input_hold_t pet_menu_hold;
+
+// Reports whether USB navigation belongs to the firmware's video menu.
+static bool menu_input_active(void) {
+    return system_state.term_input_dest == term_input_to_firmware
+        && system_state.term_mode == term_mode_video;
+}
+
+// Uses HID navigation keys directly, independent of PET keymaps and injected Shift.
+static int menu_key(uint8_t keycode) {
+    switch (keycode) {
+        case HID_KEY_ARROW_UP: return KEY_UP;
+        case HID_KEY_ARROW_DOWN: return KEY_DOWN;
+        case HID_KEY_ARROW_LEFT: return KEY_LEFT;
+        case HID_KEY_ARROW_RIGHT: return KEY_RIGHT;
+        case HID_KEY_PAGE_UP: return KEY_PGUP;
+        case HID_KEY_PAGE_DOWN: return KEY_PGDN;
+        case HID_KEY_ENTER:
+        case HID_KEY_KEYPAD_ENTER: return '\r';
+        case HID_KEY_ESCAPE: return '\e';
+        case HID_KEY_BACKSPACE: return '\b';
+        default: return EOF;
+    }
+}
+
+// Buffers one menu press without merging repeated keys or reordering Back.
+static void enqueue_menu_key(int key) {
+    const uint8_t next = (menu_key_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+    if (next != menu_key_read_index) {
+        menu_key_buffer[menu_key_write_index] = key;
+        menu_key_write_index = next;
+    }
+}
 
 // Note that the theoretical maximum number of keyboards is actually 127.
 #define MAX_KEYBOARDS 8
@@ -250,6 +291,8 @@ void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
         ) {
             // Remove keyboard from our list of attached keyboards.
             attached_keyboards[i].attached = false;
+            menu_key_read_index = menu_key_write_index = 0;
+            input_hold_update(&usb_menu_hold, false);
             return;
         }
     }
@@ -290,6 +333,8 @@ void usb_keyboard_reset(system_state_t* system_state) {
     use_symbolic_keymap = true;
     swap_keyboard_model = false;
     caps_lock_enabled = false;
+    menu_key_read_index = menu_key_write_index = 0;
+    keyboard_menu_consume();
 
     usb_keyboard_sync(system_state);
 }
@@ -395,6 +440,11 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     };
 
     const uint8_t modifiers = report->modifier;
+    const uint8_t shifts = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    bool chord_only = modifiers == shifts;
+    for (size_t i = 0; i < count_of(report->keycode); ++i)
+        chord_only &= report->keycode[i] == 0;
+    input_hold_update(&usb_menu_hold, chord_only);
 
     // For each previously pressed key, check if the key still exists in the
     // new report.  If not, the key has been released.
@@ -410,14 +460,63 @@ void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const* report) {
     for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
         const uint8_t keycode = report->keycode[i];
         if (keycode && !find_key_in_report(&prev_report, keycode)) {
-            usb_keyboard_enqueue_key_down(keycode, modifiers);
+            const int key = menu_key(keycode);
+            if (menu_input_active() && key != EOF) {
+                enqueue_menu_key(key);
+            } else usb_keyboard_enqueue_key_down(keycode, modifiers);
         }
     }
 
     prev_report = *report;
 }
 
+// Reads one active-low key from a PET-format matrix.
+static bool matrix_key_down(const uint8_t* matrix, key_event_t key) {
+    const uint8_t mask = 1u << PET_KEY_ROW(key);
+    const unsigned int col = PET_KEY_COL(key);
+    return (matrix[col] & mask) == 0;
+}
+
+bool keyboard_menu_requested(void) {
+    static bool pet_shifts_blocked;
+    const bool business = system_state.pet_keyboard_model == pet_keyboard_model_business;
+    const key_event_t left = business ? PET_KEY_LSHIFT_B : PET_KEY_LSHIFT_N;
+    const key_event_t right = business ? PET_KEY_RSHIFT_B : PET_KEY_RSHIFT_N;
+    const bool pet_left = matrix_key_down(pet_key_matrix, left);
+    const bool pet_right = matrix_key_down(pet_key_matrix, right);
+    // The snoop can retain injected shifts after USB release, until the CPU scans again.
+    if (matrix_key_down(usb_key_matrix, left) || matrix_key_down(usb_key_matrix, right))
+        pet_shifts_blocked = true;
+    else if (!pet_left && !pet_right)
+        pet_shifts_blocked = false;
+    bool chord_only = !pet_shifts_blocked && pet_left && pet_right;
+    for (unsigned int col = 0; col < KEY_COL_COUNT; ++col) {
+        uint8_t allowed = 0;
+        if (col == PET_KEY_COL(left)) allowed |= 1u << PET_KEY_ROW(left);
+        if (col == PET_KEY_COL(right)) allowed |= 1u << PET_KEY_ROW(right);
+        chord_only &= (uint8_t)(pet_key_matrix[col] | allowed) == UINT8_MAX;
+    }
+    input_hold_update(&pet_menu_hold, chord_only);
+    return input_hold_ready(&usb_menu_hold) || input_hold_ready(&pet_menu_hold);
+}
+
+// Refreshes the PET snapshot before suppressing any currently held chord.
+void keyboard_menu_consume(void) {
+    (void) keyboard_menu_requested();
+    input_hold_consume(&usb_menu_hold);
+    input_hold_consume(&pet_menu_hold);
+}
+
 int keyboard_getch() {
+    if (menu_input_active()) {
+        if (menu_key_read_index != menu_key_write_index) {
+            const int key = menu_key_buffer[menu_key_read_index];
+            menu_key_read_index = (menu_key_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
+            return key;
+        }
+        return keyscan_getch(pet_key_matrix);
+    }
+    menu_key_read_index = menu_key_write_index = 0;
     // If the USB keyboard matrix has pressed keys it takes precedence.  Otherwise, we fall
     // back to the PET keyboard matrix.  This is the same logic used by the FPGA when determining
     // when to intercept the reads from $E812.

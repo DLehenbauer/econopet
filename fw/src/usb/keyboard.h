@@ -17,6 +17,10 @@ extern uint8_t pet_key_matrix[KEY_COL_COUNT];
 
 uint8_t key_rc_to_i(uint8_t col, uint8_t row);
 int keyboard_getch();
+// Reports an eligible dual-Shift hold at the common menu long-press threshold.
+bool keyboard_menu_requested(void);
+// Suppresses held menu chords until release, including stale injected Shift state.
+void keyboard_menu_consume(void);
 
 // Enqueue synthesized key events (used by terminal injection)
 void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers);
