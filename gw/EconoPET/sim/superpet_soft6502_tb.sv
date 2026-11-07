@@ -39,6 +39,10 @@ module superpet_soft6502_tb;
     logic top_reset_n_oe;
     assign cpu_reset_n = top_reset_n_oe ? top_reset_n : manual_reset_n;
 
+    logic top_nmi_n;
+    logic top_nmi_n_oe;
+    wire cpu_nmi_n = top_nmi_n_oe ? top_nmi_n : 1'b1;
+
     logic cpu_be;
     logic cpu_clock;
     logic cpu_ready;
@@ -65,6 +69,10 @@ module superpet_soft6502_tb;
         .cpu_reset_n_i(cpu_reset_n),
         .cpu_reset_n_o(top_reset_n),
         .cpu_reset_n_oe(top_reset_n_oe),
+        .cpu_nmi_n_i(cpu_nmi_n),
+        .cpu_nmi_n_o(top_nmi_n),
+        .cpu_nmi_n_oe(top_nmi_n_oe),
+        .cpu_irq_n_i(1'b1),
         .cpu_clock_o(cpu_clock),
         .cpu_addr_i (bus_addr),
         .cpu_addr_o (top_addr),
@@ -227,6 +235,58 @@ module superpet_soft6502_tb;
         end
     endtask
 
+    // Verify SPI-triggered NMI reaches the real core and returns through RTI.
+    task static nmi_test;
+        localparam logic [16:0] PROGRAM_ADDR = 17'h00500;
+        localparam logic [16:0] HANDLER_ADDR = 17'h00600;
+        localparam logic [16:0] NMI_COUNT_ADDR = 17'h00210;
+        localparam logic [16:0] FOREGROUND_COUNT_ADDR = NMI_COUNT_ADDR + 1;
+        localparam logic [16:0] RESET_VECTOR_ADDR = 17'h0fffc;
+        localparam logic [16:0] NMI_VECTOR_ADDR = 17'h0fffa;
+        localparam time RUN_TIME = 200000;
+        localparam time RELEASE_TIME = 20000;
+        // LDX #$ff / TXS / INC $0211 / JMP $0503, and INC $0210 / RTI.
+        localparam logic [71:0] PROGRAM = {
+            8'ha2, 8'hff, 8'h9a, 8'hee, 8'h11, 8'h02, 8'h4c, 8'h03, 8'h05};
+        localparam logic [31:0] HANDLER = {8'hee, 8'h10, 8'h02, 8'h40};
+        logic [7:0] observed, foreground_before;
+
+        // Install vectors and initialize counters with the CPU held in reset.
+        spi_write_at(WB_CPU_ADDR, REG_CPU_RESET_MASK);
+        for (int b = 0; b < 9; b++)
+            spi_write_at(common_pkg::wb_ram_addr(PROGRAM_ADDR + b),
+                         PROGRAM[(8 - b) * 8 +: 8]);
+        for (int b = 0; b < 4; b++)
+            spi_write_at(common_pkg::wb_ram_addr(HANDLER_ADDR + b),
+                         HANDLER[(3 - b) * 8 +: 8]);
+        spi_write_at(common_pkg::wb_ram_addr(RESET_VECTOR_ADDR), PROGRAM_ADDR[7:0]);
+        spi_write_at(common_pkg::wb_ram_addr(RESET_VECTOR_ADDR + 1), PROGRAM_ADDR[15:8]);
+        spi_write_at(common_pkg::wb_ram_addr(NMI_VECTOR_ADDR), HANDLER_ADDR[7:0]);
+        spi_write_at(common_pkg::wb_ram_addr(NMI_VECTOR_ADDR + 1), HANDLER_ADDR[15:8]);
+        spi_write_at(common_pkg::wb_ram_addr(NMI_COUNT_ADDR), 8'h00);
+        spi_write_at(common_pkg::wb_ram_addr(FOREGROUND_COUNT_ADDR), 8'h00);
+        spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+        #(RUN_TIME);
+        spi_read_at(common_pkg::wb_ram_addr(NMI_COUNT_ADDR), observed);
+        `assert_equal(observed, 8'h00);
+
+        // Each assertion must invoke the handler once, even while NMI remains low.
+        for (int count = 1; count <= 2; count++) begin
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK | REG_CPU_NMI_MASK);
+            #(RUN_TIME);
+            spi_read_at(common_pkg::wb_ram_addr(NMI_COUNT_ADDR), observed);
+            `assert_equal(observed, 8'(count));
+            spi_read_at(common_pkg::wb_ram_addr(FOREGROUND_COUNT_ADDR), foreground_before);
+            #(RUN_TIME);
+            spi_read_at(common_pkg::wb_ram_addr(NMI_COUNT_ADDR), observed);
+            `assert_equal(observed, 8'(count));
+            spi_read_at(common_pkg::wb_ram_addr(FOREGROUND_COUNT_ADDR), observed);
+            `assert_compare(observed, !=, foreground_before);
+            spi_write_at(WB_CPU_ADDR, REG_CPU_READY_MASK);
+            #(RELEASE_TIME);
+        end
+    endtask
+
     task static run;
         logic [DATA_WIDTH-1:0] dout;
 
@@ -278,6 +338,7 @@ module superpet_soft6502_tb;
         `assert_equal(dout, 8'h42);
 
         crtc_feedback_test;
+        nmi_test;
         $display("[%t] END soft-6502 smoke test", $time);
     endtask
 

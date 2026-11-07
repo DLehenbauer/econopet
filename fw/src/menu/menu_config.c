@@ -156,7 +156,7 @@ static void menu_wait_for_charset(void) {
 // menu.rom. Reuses the applied configuration and browser state
 // between sessions, reinitializing on boot, first use, or an invalid saved index.
 // Auto-boots a configured default without input. Otherwise temporarily routes
-// terminal input and video to the firmware menu, pulses NMI,
+// terminal input and video to the firmware menu, pulses NMI only on boot,
 // and services input with demand-driven redraws until the controller exits.
 // Restores terminal routing before applying the selected machine and disks.
 // Returns with the CPU halted so menu_enter() can reset into the loaded machine.
@@ -184,13 +184,14 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     if (mode != term_mode_video) display_term_begin();
     keyboard_menu_set_active(true);
 
-    // Keep the screen blank until menu.rom has selected the menu character set.
+    // Show the menu as soon as the selected character set is ready.
     menu_wait_for_charset();
 
     // Keep menu.rom running while browsing configurations and changing live disks.
     menu_ui_begin(&menu, window, is_boot);
-    // Pulse NMI and keep input responsive, repainting only when the controller requests it.
-    pet_nmi();
+    // The power-on picker requests the diagnostic asynchronously. Runtime and auto-boot stay silent.
+    if (is_boot) pet_nmi();
+    // Keep input responsive, repainting only when the controller requests it.
     while (tui_controller_is_active(&menu.controller)) {
         if (tui_controller_needs_render(&menu.controller)) {
             tui_controller_render(&menu.controller);

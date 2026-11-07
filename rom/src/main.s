@@ -87,7 +87,10 @@ notes:
         .byte $A7, $A7, $EC, $EC, $00
 .endproc
 
+; Select lowercase before other initialization so firmware can display promptly.
 .proc init_io
+        LDA #$0E                    ; CA2 Graphic out=1 (Lower)
+        STA VIA_PCR
         ; After reset, PIA data direction registers default to input mode (all bits 0),
         ; and control registers have bit 2 set (DDR access mode enabled).
 
@@ -169,9 +172,6 @@ notes:
         ;         0 = active transition low
         ;         1 = active transition high
 
-        LDA #$0E                    ; 0000 1110
-        STA VIA_PCR                 ; CB2: in active low, CB1: Cass #2 Rd in active low, CA2 Graphic out=1 (Lower), CA1: active low
-
         LDY #$0E                    ; Start at the first byte of crtc_table
      foreach_in_crtc_table:
         LDA crtc_table,Y            ; Load the byte at crtc_table + Y
@@ -229,8 +229,7 @@ debounce:
         JMP keyscan
 .endproc
 
-; NMI handler that plays the happy boot tune. The firmware triggers this via NMI
-; after deciding to show the menu (rather than auto-booting a default config).
+; The firmware requests this diagnostic only for the power-on configuration picker.
 .proc nmi_happy
         ; Save processor state
         PHA             ; Save accumulator

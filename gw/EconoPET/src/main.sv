@@ -345,7 +345,7 @@ module main (
         .o_phi2(),
         .i_reset_n(!cpu_reset_i && cpu_is_soft6502),
         .i_rdy(cpu_ready_o),
-        .i_nmi_n(1'b1),
+        .i_nmi_n(!cpu_nmi_i && cpu_is_soft6502),
         .i_irq_n(!(cpu_irq_sync[1] || acia_irq)),   // PET IRQ + ACIA (shared bus line)
         .i_so_n(1'b1),
         .o_sync(m6502_sync),

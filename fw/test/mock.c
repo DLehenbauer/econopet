@@ -26,6 +26,7 @@ static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
 static unsigned int display_task_count;
+static unsigned int pet_nmi_count;
 static void (*ram_test_handler)(void);
 
 uint64_t __real_time_us_64(void);
@@ -404,6 +405,7 @@ void mock_reset(void) {
     input_reader = NULL;
     cpu_run_callback = NULL;
     display_task_count = 0;
+    pet_nmi_count = 0;
     ram_test_handler = NULL;
     text_mode_lower = true;
     selected_cpu = CPU_PHYS_6502;
@@ -477,8 +479,11 @@ int input_getch(void) {
 
 // Leaves character-ROM refresh inactive in host tests.
 void roms_refresh_char_rom() { }
-// Leaves PET NMI generation inactive in host tests.
-void pet_nmi() { }
+// Counts asynchronous NMI requests without emulating the ROM's tune.
+void pet_nmi(void) { pet_nmi_count++; }
+
+// Reports NMI requests since the last fixture reset.
+unsigned int mock_pet_nmi_count(void) { return pet_nmi_count; }
 
 // ---------------------------------------------------------------------------
 // Diagnostic mocks

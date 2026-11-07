@@ -638,6 +638,7 @@ static void select_menu_charset(void) {
     }
     if (++charset_observations == 3) {
         mock_set_text_mode_lower(true);
+        mock_cpu_set_run_callback(NULL);
     }
 }
 
@@ -663,7 +664,7 @@ START_TEST(test_charset_transition_blanks_both_displays) {
     ck_assert_uint_eq(spi_read_at(0x8800), 0x5a);
 
     system_state.video_text_mode = video_text_mode_graphics;
-    mock_set_text_mode_lower(false);
+    mock_set_text_mode_lower(_i != 0);
     charset_observations = 0;
     mock_cpu_set_run_callback(select_menu_charset);
     mock_input_set_reader(exit_after_menu_render);
@@ -671,7 +672,7 @@ START_TEST(test_charset_transition_blanks_both_displays) {
     set_cpu(CPU_READY);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     menu_config_show(&window, &setup_sink, true);
-    ck_assert_uint_eq(charset_observations, 3);
+    ck_assert_uint_eq(charset_observations, _i == 0 ? 3 : 1);
     ck_assert_uint_eq(setup_count, 1);
     mock_cpu_set_run_callback(NULL);
 }
@@ -703,6 +704,7 @@ START_TEST(test_boot_loop_waits_for_reset) {
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     menu_config_show(&window, &setup_sink, _i == 0);
     ck_assert_uint_eq(boot_keys, 4);
+    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 1 : 0);
     ck_assert_uint_eq(setup_count, 1);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_int_eq(system_state.term_mode, mode);
@@ -887,9 +889,12 @@ START_TEST(test_default_autoboot_and_reentry) {
     session_key_index = 0;
     prior_setup_count = setup_count;
     mock_input_set_reader(session_input);
+    // Auto-boot must not wait for menu.rom to select a character set.
+    if (_i == 0) mock_set_text_mode_lower(false);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     menu_config_show(&window, &setup_sink, true);
     ck_assert_uint_eq(session_key_index, _i == 0 ? 0 : 1);
+    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 0 : 1);
     ck_assert_uint_eq(mock_display_task_count(), _i == 0 ? 0 : 1);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_uint_eq(setup_count, 1);
@@ -897,7 +902,9 @@ START_TEST(test_default_autoboot_and_reentry) {
                      _i == 0 ? pet_display_columns_80 : pet_display_columns_40);
 
     // Reentry must remember the auto-booted configuration, not the first entry.
+    mock_set_text_mode_lower(true);
     run_session(select, count_of(select), false);
+    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 0 : 1);
     ck_assert_int_eq(system_state.pet_display_columns,
                      _i == 0 ? pet_display_columns_80 : pet_display_columns_40);
 }
@@ -1564,7 +1571,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_drive_label_suffixes);
     tcase_add_test(cases, test_on_demand_back_and_reentry);
     tcase_add_loop_test(cases, test_dashboard_exit_outcome, 0, 2);
-    tcase_add_test(cases, test_charset_transition_blanks_both_displays);
+    tcase_add_loop_test(cases, test_charset_transition_blanks_both_displays, 0, 2);
     tcase_add_loop_test(cases, test_boot_loop_waits_for_reset, 0, 2);
     tcase_add_test(cases, test_menu_loop_activates_held_button);
     tcase_add_test(cases, test_menu_loop_ignores_shift_chord);

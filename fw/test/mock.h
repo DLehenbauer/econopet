@@ -34,6 +34,8 @@ void mock_clock_advance(uint64_t delta);
 void mock_input_set_reader(int (*reader)(void));
 // Returns the number of display presentations since the last reset.
 unsigned int mock_display_task_count(void);
+// Returns the number of PET NMI requests since the last reset.
+unsigned int mock_pet_nmi_count(void);
 // Observes entry to the nonreturning RAM diagnostic.
 void mock_ram_test_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.
