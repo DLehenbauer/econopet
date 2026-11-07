@@ -58,17 +58,19 @@ TEST_P(KernalFixtureTest, ConfiguredRunSharesRelativeTimingVocabulary) {
     auto test = rom.program();
     const auto answer = test.byte("answer");
     unsigned calls = 0;
+    // Exercise scheduled stimulus with masked IRQ, not an NMI without a handler.
     const auto result =
         test.within(FixtureBudget)
             .after(
-                0, [](System& board) { board.set_external_interrupts(false, true); }, RunAnchor::CpuRelease)
+                0, [](System& board) { board.set_external_interrupts(true, false); }, RunAnchor::CpuRelease)
             .every(
                 5, MissedService::Reject, [&](System&, econopet::Cycles) { ++calls; }, RunAnchor::CpuRelease)
             .until([](const System&) { return true; })
             .run([&](auto& p) { p.lda(imm(0x42)).sta(answer); });
     EXPECT_EQ(result[answer], 0x42);
     EXPECT_GT(calls, 0);
-    EXPECT_FALSE(system.peek_stimulus().cpu_nmi_n_i);
+    EXPECT_FALSE(system.peek_stimulus().cpu_irq_n_i);
+    EXPECT_TRUE(system.peek_stimulus().cpu_nmi_n_i);
 }
 
 TEST_P(KernalFixtureTest, ExplicitSetupEmitsRealFileAndDeviceInstructions) {
