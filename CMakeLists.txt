@@ -252,6 +252,20 @@ if(BUILD_TESTS)
     )
 endif()
 
+# Check the separately built firmware image and SD bootloader flash contract.
+if(BUILD_FIRMWARE)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(
+        NAME firmware_flash_layout
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/fw/test/flash_layout_test.py"
+            --elf "${FIRMWARE_ELF}"
+            --firmware "${FIRMWARE_UF2}"
+            --bootloader "${CMAKE_SOURCE_DIR}/sdcard/bootloader.uf2"
+            --map "${FIRMWARE_ELF}.map"
+    )
+    set_tests_properties(firmware_flash_layout PROPERTIES LABELS "flash")
+endif()
+
 # Load standalone test registrations at CTest time, after build-time discovery.
 if(BUILD_SYSTEM_TESTS)
     configure_file(

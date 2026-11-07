@@ -11,6 +11,9 @@ set -e
 # Resolve the firmware path from the repository root, regardless of the caller.
 cd -- "$(dirname -- "$0")/.."
 
+# OpenOCD's program command erases the sectors addressed by the ELF, not the
+# whole chip. The ELF restores the stage 2 bootloader and excludes the reserved
+# stage 3 bootloader region.
 openocd_args=(
   -f interface/cmsis-dap.cfg
   -f target/rp2040.cfg

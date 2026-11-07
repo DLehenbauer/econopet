@@ -33,3 +33,6 @@
 	# Fork of floooh/chips providing MOS 6520, side-effect-free PIA/VIA peeks,
 	# and PET control/IRQ/timer fixes (see test/system/reference.md).
 	url = https://github.com/DLehenbauer/chips.git
+[submodule "econopet-pico-sdcard-bootloader"]
+	path = fw/external/pico-sdcard-bootloader
+	url = https://github.com/DLehenbauer/pico-sdcard-bootloader.git
