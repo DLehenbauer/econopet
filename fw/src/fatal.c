@@ -6,6 +6,84 @@
 
 #include "sd/sd.h"
 
+#if defined(PICO_RP2040) || defined(ECONOPET_TEST_FATAL_MORSE)
+#include "hardware/gpio.h"
+
+#define MORSE_DOT_US 100000u
+#define MORSE_DASH_UNITS 3u
+#define MORSE_REPEAT_GAP_UNITS 3u
+
+// Morse encoding for a fatal error. The caller supplies the diagnostic text.
+typedef struct {
+    char letter;
+    const char* pattern;
+} fatal_message_t;
+
+// Keep messages consistent with the diagnostic letter registry in fatal.h.
+static const fatal_message_t fatal_messages[FATAL_ERROR_COUNT] = {
+    [FATAL_ERROR_FPGA_CONFIG] = {
+        .letter = 'C',
+        .pattern = "-.-.",
+    },
+    [FATAL_ERROR_UNSPECIFIED] = {
+        .letter = 'E',
+        .pattern = ".",
+    },
+};
+
+// Emit one letter with the bootloader's dot, dash, and spacing durations.
+static void blink(const char* pattern) {
+    for (const char* symbol = pattern; *symbol != '\0'; ++symbol) {
+        gpio_put(PICO_DEFAULT_LED_PIN, true);
+        sleep_us((*symbol == '-' ? MORSE_DASH_UNITS : 1u) * MORSE_DOT_US);
+        gpio_put(PICO_DEFAULT_LED_PIN, false);
+        sleep_us(MORSE_DOT_US);
+    }
+    sleep_us(MORSE_REPEAT_GAP_UNITS * MORSE_DOT_US);
+}
+
+// Initialize serial diagnostics and report before any optional display access.
+static const fatal_message_t* fatal_begin(fatal_error_t error, const char* message) {
+    // Invalid codes must still reach the fatal loop, even without assertions.
+    if ((unsigned int)error >= FATAL_ERROR_COUNT) {
+        error = FATAL_ERROR_UNSPECIFIED;
+    }
+    const fatal_message_t* const entry = &fatal_messages[error];
+
+    // Restore UART settings for the current clocks, even before normal stdio setup.
+    // This build uses UART stdio. USB host initialization is separate.
+    stdio_init_all();
+
+    // Retain the serial diagnosis even when no display services are available.
+    fprintf(stdout, "Error (%c): %s\n", entry->letter, message);
+    fflush(stdout);
+
+    return entry;
+}
+
+// Halt with repeated serial and Morse diagnostics without accessing the display.
+static void __attribute__((noreturn)) fatal_repeat(
+    const fatal_message_t* entry, const char* message) {
+    // Separate the error from the boot/activity LED state before repeating it.
+    gpio_init(PICO_DEFAULT_LED_PIN);
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    gpio_put(PICO_DEFAULT_LED_PIN, false);
+    sleep_us(MORSE_REPEAT_GAP_UNITS * MORSE_DOT_US);
+    while (true) {
+        blink(entry->pattern);
+
+        // Resend during the dark gap so terminals connected later receive the details.
+        fprintf(stdout, "Error (%c): %s\n", entry->letter, message);
+        fflush(stdout);
+    }
+}
+
+void fatal_halt(fatal_error_t error, const char* message) {
+    const fatal_message_t* const entry = fatal_begin(error, message);
+    fatal_repeat(entry, message);
+}
+#endif
+
 // Host targets provide fatal() and vetted_malloc() through their existing mocks.
 #if defined(PICO_RP2040)
 #include "display/display.h"
@@ -19,7 +97,8 @@
 #define FATAL_MESSAGE_SIZE \
     (FATAL_COLUMNS * FATAL_ROWS - (sizeof(FATAL_PREFIX) - 1) + 1)
 
-static void __attribute__((noreturn)) fatal_no_alloc(const char* const message) {
+// Render fatal details without allocating storage. Core 1 keeps driving DVI.
+static void fatal_display_message(const char* const message) {
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);
@@ -33,13 +112,21 @@ static void __attribute__((noreturn)) fatal_no_alloc(const char* const message) 
     system_state.term_mode = term_mode_video;           // Also copy to the terminal
     system_state.video_text_mode = video_text_mode_lower;
     display_task();
+}
 
-    // Put core0 into an infinite low-power wait loop. Core 1 continues running
-    // to bit bang DVI video.
-    while (true) {
-        __wfi();
-        tight_loop_contents();
+// Funnel formatted errors and allocation failures through the same Morse endpoint.
+static void __attribute__((noreturn)) fatal_no_alloc(const char* message) {
+    static bool rendering;
+
+    // Recover serial output before rendering, then leave core 1 driving DVI.
+    const fatal_message_t* const entry = fatal_begin(FATAL_ERROR_UNSPECIFIED, message);
+
+    // A failure inside the renderer must reach Morse rather than recursively render.
+    if (!rendering) {
+        rendering = true;
+        fatal_display_message(message);
     }
+    fatal_repeat(entry, message);
 }
 
 void fatal(const char* const format, ...) {

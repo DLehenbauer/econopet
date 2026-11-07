@@ -3,6 +3,8 @@
 
 #include "pch.h"
 
+#include <inttypes.h>
+
 #include "breakpoint.h"
 #include "cpu.h"
 #include "diag/log/log.h"
@@ -11,6 +13,7 @@
 #include "display/dvi/dvi.h"
 #include "driver.h"
 #include "fatal.h"
+#include "fpga_image.h"
 #include "global.h"
 #include "hw.h"
 #include "ieee/ieee_drive.h"
@@ -46,11 +49,10 @@ void fpga_write_zeros(size_t count) {
     release_temp_buffer(&temp_buffer);
 }
 
-void fpga_read_bitstream_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
-    (void)offset;
+// Called by 'fpga_image_stream' to send the given chunk to the FPGA during configuration.
+static bool fpga_write_image_chunk(const uint8_t* data, size_t length, void* context) {
     (void)context;
-
-    spi_write_blocking(FPGA_SPI_INSTANCE, buffer, bytes_read);
+    return spi_write_blocking(FPGA_SPI_INSTANCE, data, length) == (int)length;
 }
 
 // An MCU reset stops the PWM clock source while the JTAG-configured FPGA
@@ -122,6 +124,13 @@ void fpga_init() {
         // state. (Initial CPU state per `register_file.sv`)
         set_cpu(CPU_RESET);
     } else {
+        fpga_image_t bitstream;
+        if (!fpga_image_read_header((const uint8_t*)ECONOPET_FPGA_ADDRESS, ECONOPET_FPGA_SIZE_BYTES, &bitstream)) {
+            // The FPGA and displays are not ready, so bypass fatal()'s display path.
+            fatal_halt(FATAL_ERROR_FPGA_CONFIG,
+                "fpga_init(): image header invalid.");
+        }
+
         // Create a clean CRESET_N pulse to initiate FPGA configuration.
         gpio_set_dir(FPGA_CRESET_GP, GPIO_OUT);
         gpio_put(FPGA_CRESET_GP, true);
@@ -147,12 +156,14 @@ void fpga_init() {
         gpio_put(FPGA_CRESET_GP, true);
         sleep_ms(1);  // t_CRESET_N = 320 ns
 
-        // Send bitstream to FPGA. To generate a '*.hex.bin' file, you must
-        // enable 'Generate SPI Raw Binary Configuration File' under ~File ~Edit
-        // Project ~Bitstream Generation.
-        char bitstream_path[SD_PATH_MAX];
-        sd_make_path(bitstream_path, SD_DIR_FPGA, "EconoPET.hex.bin");
-        sd_read_file(bitstream_path, fpga_read_bitstream_callback, NULL, SIZE_MAX);
+        // Check the CRC while sending the raw payload from flash through RAM.
+        if (!fpga_image_stream(&bitstream, fpga_write_image_chunk, NULL)) {
+            gpio_put(FPGA_CRESET_GP, false);
+            gpio_put(FPGA_SPI_CSN_GP, true);
+            // The FPGA is held in reset, so fatal() cannot safely use its display.
+            fatal_halt(FATAL_ERROR_FPGA_CONFIG,
+                "fpga_init(): CRC mismatch or transmission failed.");
+        }
 
         // To ensure successful configuration, the microprocessor must continue
         // to supply the configuration clock to the Trion FPGA for at least 100
@@ -174,23 +185,29 @@ void fpga_init() {
         // to low.
         fpga_write_zeros(/* count: */ 1);
 
-        log_info("FPGA configured");
+        log_info("FPGA configured (CRC: %08" PRIx32 ")", bitstream.crc);
     }
 
     // At this point, we expect the FPGA to have entered user mode and the SPI
     // interface to be ready for commands.  We verify this by reading back the
     // initial CPU state defined in `register_file.sv`.
     cpu_state_t cpu_state = get_cpu();
-    vet(cpu_state == CPU_RESET,
-        "fpga_init: initial CPU state must be CPU_RESET, got %u", (unsigned int) cpu_state);
+    if (cpu_state != CPU_RESET) {
+        // FPGA startup failed and displays are not initialized, so bypass fatal().
+        fatal_halt(FATAL_ERROR_FPGA_CONFIG,
+            "fpga_init(): initial CPU state must be CPU_RESET");
+    }
 
     // Perform a basic self-test by toggling the CPU_READY state while holding
     // the CPU in the RESET state.  Note that the CPU remains halted when
     // CPU_RESET is asserted.
     set_cpu(CPU_RESET | CPU_READY);
     cpu_state = get_cpu();
-    vet(cpu_state == (CPU_READY | CPU_RESET),
-        "fpga_init: failed to set CPU_READY, got %u", (unsigned int) cpu_state);
+    if (cpu_state != (CPU_READY | CPU_RESET)) {
+        // FPGA startup failed and displays are not initialized, so bypass fatal().
+        fatal_halt(FATAL_ERROR_FPGA_CONFIG,
+            "fpga_init(): could not set CPU_READY");
+    }
 
     // Finally, restore the original CPU state.
     set_cpu(CPU_RESET);
@@ -205,17 +222,18 @@ int main() {
     // We limit the work done before fpga_init() to tasks that are either very
     // fast or prerequisites for FPGA configuration.
 
-    // Turn on LED to signal that the RP2040 has booted.  'sd_init()' will install an
-    // activity handler that will blink the LED during sd card operations. If the SD
-    // card fails to mount, the LED will remain "stuck on" to indicate an error.
+    // Turn on LED to signal that the RP2040 has booted.  'sd_init()' will
+    // install an activity handler that will blink the LED during sd card
+    // operations. FPGA image failures blink a Morse error code. If the SD card
+    // fails to mount, the LED will remain "stuck on" to indicate an error.
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, true);
 
     log_init();     // Initialize logging subsystem early for boot diagnostics
     input_init();   // Begin charging debounce capacitor for menu button (if any)
-    sd_init();      // SD card is required to read the FPGA's bitstream file
     fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA
+    sd_init();      // Mount the SD card for configuration, ROMs, and disk images
 
     // We now are generating a valid video signal for the PET, so it's safe to proceed
     // with the rest of the initialization.

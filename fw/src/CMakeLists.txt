@@ -44,6 +44,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/char_encoding.c
     ${FW_SRC_DIR}/driver.c
     ${FW_SRC_DIR}/fatal.c
+    ${FW_SRC_DIR}/fpga_image.c
     ${FW_SRC_DIR}/global.c
     ${FW_SRC_DIR}/input.c
     ${FW_SRC_DIR}/input_controls.c
@@ -113,6 +114,9 @@ target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES})
+target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE
+    ECONOPET_FPGA_ADDRESS=${ECONOPET_FPGA_ADDRESS}
+    ECONOPET_FPGA_SIZE_BYTES=${ECONOPET_FPGA_SIZE_BYTES})
 
 # Not required for RP2040B2 silicon and conflicts with use of GPIO15 (FPGA_CLK)
 # (See https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf#errata-e5)

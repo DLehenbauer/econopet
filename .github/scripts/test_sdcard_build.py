@@ -5,10 +5,12 @@
 """Exercise SD-card staging across builds without reconfiguring."""
 
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 
 
@@ -25,6 +27,8 @@ class SdcardBuildTests(unittest.TestCase):
             source = root / "source"
             shutil.copytree(ROOT / "sdcard", source / "sdcard")
             shutil.copytree(ROOT / "cmake", source / "cmake")
+            (source / "tools").mkdir()
+            shutil.copyfile(ROOT / "tools/fpga_image.py", source / "tools/fpga_image.py")
             shutil.copyfile(ROOT / "NOTICE.md", source / "NOTICE.md")
             media = root / "media"
             for name in ("roms", "disks"):
@@ -34,7 +38,14 @@ class SdcardBuildTests(unittest.TestCase):
             roms.mkdir(parents=True)
             firmware = root / "firmware.uf2"
             fpga = root / "fpga.bin"
-            firmware.write_bytes(b"firmware")
+            bootloader = root / "custom-bootloader.uf2"
+            bootloader.write_bytes(b"old bootloader")
+            # Use a valid RP2040 UF2 with an application vector table.
+            payload = struct.pack("<II", 0x20042000, 0x100001c1) + bytes(248)
+            block = struct.pack("<8I", 0x0a324655, 0x9e5d5157, 0x2000,
+                                0x10000100, 256, 0, 1, 0xe48bff56)
+            firmware.write_bytes(block + payload + bytes(220) + struct.pack("<I", 0x0ab16f30))
+            original_firmware = firmware.read_bytes()
             fpga.write_bytes(b"fpga")
             assets = {
                 source / "sdcard/config.yaml": "config.yaml",
@@ -54,12 +65,14 @@ class SdcardBuildTests(unittest.TestCase):
             removed_rom.write_bytes(b"remove me")
             removed_keymap = source / "sdcard/ukm/removed.bin"
             removed_keymap.write_bytes(b"remove me")
-            subprocess.run(
-                ["cmake", "-S", str(source / "sdcard"), "-B", str(build / "sdcard"),
-                 "-G", "Ninja", f"-DECONOPET_MEDIA_DIR={media}",
-                 f"-DFIRMWARE_UF2={firmware}", f"-DFPGA_BITSTREAM={fpga}"],
-                check=True, capture_output=True,
-            )
+            configure = ["cmake", "-S", str(source / "sdcard"), "-B", str(build / "sdcard"),
+                         "-G", "Ninja", f"-DECONOPET_MEDIA_DIR={media}",
+                         f"-DFIRMWARE_UF2={firmware}", f"-DFPGA_BITSTREAM={fpga}"]
+            missing_bootloader = subprocess.run(configure, capture_output=True, text=True)
+            self.assertNotEqual(missing_bootloader.returncode, 0)
+            self.assertIn("BOOTLOADER_UF2 must be defined", missing_bootloader.stderr)
+            subprocess.run(configure + [f"-DBOOTLOADER_UF2={bootloader}"],
+                           check=True, capture_output=True)
             command = ["cmake", "--build", str(build / "sdcard")]
             subprocess.run(command, check=True, capture_output=True)
 
@@ -74,6 +87,11 @@ class SdcardBuildTests(unittest.TestCase):
             (roms / "menu.rom").write_bytes(b"not packaged")
             (media / "roms/edit.bin").write_bytes(b"bad")
             shutil.copystat(roms / "edit.bin", media / "roms/edit.bin")
+            fpga.write_bytes(b"updated fpga")
+            bootloader.write_bytes(b"updated bootloader")
+            stale_fpga = build / "sdcard/sdcard_root/fpga"
+            stale_fpga.mkdir()
+            (stale_fpga / "old.bin").write_bytes(b"stale")
             subprocess.run(command, check=True, capture_output=True)
 
             with zipfile.ZipFile(next((build / "sdcard").glob("*.zip"))) as archive:
@@ -86,8 +104,32 @@ class SdcardBuildTests(unittest.TestCase):
             self.assertNotIn("ukm/removed.bin", contents)
             self.assertEqual(contents["roms/late.bin"], b"late")
             self.assertNotIn("roms/menu.rom", contents)
-            self.assertEqual(contents["firmware.uf2"], b"firmware")
-            self.assertEqual(contents["fpga/EconoPET.hex.bin"], b"fpga")
+            self.assertFalse(any(name.startswith("fpga/") for name in contents))
+            self.assertEqual(firmware.read_bytes(), original_firmware)
+            self.assertEqual(contents["bootloader.uf2"], b"updated bootloader")
+            self.assertNotIn(bootloader.name, contents)
+
+            # Check every block against the existing bootloader's UF2 contract.
+            combined = contents["firmware.uf2"]
+            self.assertEqual(len(combined) % 512, 0)
+            count = len(combined) // 512
+            pages = {}
+            for number in range(count):
+                block = combined[number * 512:(number + 1) * 512]
+                magic0, magic1, flags, address, size, index, total, family = struct.unpack_from("<8I", block)
+                self.assertEqual((magic0, magic1, flags, size, index, total, family),
+                                 (0x0a324655, 0x9e5d5157, 0x2000, 256, number, count, 0xe48bff56))
+                self.assertEqual(struct.unpack_from("<I", block, 508)[0], 0x0ab16f30)
+                self.assertEqual(address % 256, 0)
+                self.assertTrue(0x10000000 <= address < 0x10ff0000)
+                self.assertNotIn(address, pages)
+                pages[address] = block[32:288]
+            self.assertEqual(pages[0x10000100], payload)
+            image = pages[0x10F3C000]
+            magic, version, length, crc = struct.unpack_from("<4sIII", image)
+            self.assertEqual((magic, version, length), (b"EFP1", 1, len(b"updated fpga")))
+            self.assertEqual(image[16:16 + length], b"updated fpga")
+            self.assertEqual(crc, zlib.crc32(b"updated fpga"))
 
 
 if __name__ == "__main__":

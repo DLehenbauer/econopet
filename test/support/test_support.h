@@ -19,7 +19,7 @@
 #endif
 
 // Leaves flash-resident declarations unchanged on the host.
-#define __in_flash(x) x
+#define __in_flash(x)
 // Leaves RAM-resident function names unchanged on the host.
 #define __not_in_flash_func(x) x
 typedef unsigned int uint;
@@ -44,6 +44,9 @@ uint64_t time_us_64(void);
 
 // Platform adapters provide the Pico SDK reset-pulse delay on host targets.
 void sleep_us(uint64_t us);
+
+// Platform adapters model the Pico SDK's stdio initialization for fatal reporting.
+bool stdio_init_all(void);
 
 // Returns host monotonic time using the Pico SDK time representation.
 absolute_time_t get_absolute_time(void);

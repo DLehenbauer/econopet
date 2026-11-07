@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 uint8_t mock_ram[MOCK_RAM_SIZE];
+static uint8_t mock_char_rom[1u << ECONOPET_BRAM_ADDR_WIDTH];
 static int (*input_reader)(void);
 static void (*cpu_run_callback)(void);
 static cpu_state_t mock_cpu_state;
@@ -262,6 +263,10 @@ uint8_t spi_read_at(uint32_t addr) {
             return mock_ieee.rx_count == 0 ? 0 : mock_ieee.rx[mock_ieee.rx_head].byte;
         }
     }
+    if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
+        addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
+        return mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR];
+    }
     // Enforce the address-space bound before accessing ordinary RAM.
     ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
     return mock_ram[addr];
@@ -308,6 +313,11 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
                 mock_ieee_enqueue_atn_end();
             }
         }
+        return 0;
+    }
+    if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
+        addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
+        mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR] = data;
         return 0;
     }
     // Preserve the existing no-op behavior for writes outside mocked RAM.
@@ -396,6 +406,7 @@ void bp_clear_halt(void) {
 void mock_reset(void) {
     // Restore the RAM fixture and empty all emulated IEEE queues.
     memset(mock_ram, 0xEA, sizeof(mock_ram));
+    memset(mock_char_rom, 0, sizeof(mock_char_rom));
     memset(&mock_ieee, 0, sizeof(mock_ieee));
     // Clear breakpoint observations and hold the CPU in reset.
     system_state.bp_halted = false;
@@ -477,8 +488,6 @@ int input_getch(void) {
 // ROM, PET, and IEEE mocks
 // ---------------------------------------------------------------------------
 
-// Leaves character-ROM refresh inactive in host tests.
-void roms_refresh_char_rom() { }
 // Counts asynchronous NMI requests without emulating the ROM's tune.
 void pet_nmi(void) { pet_nmi_count++; }
 
