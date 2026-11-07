@@ -13,7 +13,10 @@
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
-            // Change 'gpbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
+            // The ELF restores the stage 2 bootloader and excludes the stage 3 region.
+            // Use GDB's normal sector-based load, never a chip-wide erase.
+            //
+            // Change 'gdbPath' to "arm-none-eabi-gdb" if not using "gdb-multiarch".
             "gdbPath" : "gdb-multiarch",
             "device": "RP2040",
             "configFiles": [

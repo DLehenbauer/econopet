@@ -405,6 +405,28 @@ subsection 3.2.
       specifically excluded.
 ```
 
+## Pico SD-card bootloader
+
+**source:** <https://github.com/DLehenbauer/pico-sdcard-bootloader>
+
+The bootloader is licensed under the BSD Zero Clause License (0BSD).
+
+```text
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
+```
+
+The bootloader's modified stage-2 exit is separately licensed under
+BSD-3-Clause, as noted in its source file.
+
 ## 6502 KiCad Library
 
 **source:** <https://github.com/Alarm-Siren/6502-kicad-library>

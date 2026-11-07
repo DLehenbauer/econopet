@@ -90,6 +90,19 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/display/dvi/tmds_encode.S
 )
 
+# Use the SD bootloader's stage-2 exit so SWD sector programming restores the
+# stub that enters the installed stage-3 bootloader on reset.
+set(BOOTLOADER_DIR "${FW_EXTERNAL_DIR}/pico-sdcard-bootloader")
+if(NOT EXISTS "${BOOTLOADER_DIR}/src/boot2/boot2_helpers/exit_from_boot2.S")
+    message(FATAL_ERROR "Initialize the pico-sdcard-bootloader submodule before building firmware")
+endif()
+pico_clone_default_boot_stage2(econopet_boot_stage2)
+target_include_directories(econopet_boot_stage2 BEFORE PRIVATE "${BOOTLOADER_DIR}/src/boot2")
+target_compile_definitions(econopet_boot_stage2 PRIVATE
+    PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES}
+    BOOTLOADER_SIZE=${ECONOPET_BOOTLOADER_SIZE_BYTES})
+pico_set_boot_stage2(${FW_EXECUTABLE_NAME} econopet_boot_stage2)
+
 # Extend crystal oscillator startup time to improve cold power-on reliability. The CBM/PET
 # powers mainboard and monitor from the same transformer, potentially causing transient
 # voltage dips when the CRT and DC filter cap are fully discharged.
@@ -99,7 +112,7 @@ add_executable(${FW_EXECUTABLE_NAME}
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=8)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
-target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=16777216)
+target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES})
 
 # Not required for RP2040B2 silicon and conflicts with use of GPIO15 (FPGA_CLK)
 # (See https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf#errata-e5)
