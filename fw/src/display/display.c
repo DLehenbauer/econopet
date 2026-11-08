@@ -24,6 +24,10 @@ static const char* const term_echo_on = "\e[12h";
 static const uint screen_width  = 40;
 static const uint screen_height = 25;
 
+bool display_term_video_active(void) {
+    return system_state.terminal_session == terminal_session_remote;
+}
+
 void display_init(void) {
     video_init();
 }
@@ -91,8 +95,8 @@ void display_task(void) {
     
     // HDMI DVI core continuously reads video_char_buffer - no action needed
     
-    // Render to terminal if in video mode (not in CLI or log mode)
-    if (system_state.term_mode == term_mode_video) {
+    // Ordinary terminal rendering follows the user's session.
+    if (display_term_video_active()) {
         display_term_render();
     }
 }

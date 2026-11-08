@@ -88,6 +88,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
 #if defined(PICO_RP2040)
 #include "display/display.h"
 #include "display/window.h"
+#include "driver.h"
 #include "roms/roms.h"
 #include "system_state.h"
 
@@ -109,9 +110,11 @@ static void fatal_display_message(const char* const message) {
     window_puts(&window, pOut, message);
     
     system_state.video_source = video_source_firmware;  // Copy from `video_char_buffer` to $8000
-    system_state.term_mode = term_mode_video;           // Also copy to the terminal
     system_state.video_text_mode = video_text_mode_lower;
-    display_task();
+
+    // Present the final error directly on both displays before entering the fatal loop.
+    spi_write(0x8000, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
+    display_window_show(&window);
 }
 
 // Funnel formatted errors and allocation failures through the same Morse endpoint.

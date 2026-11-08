@@ -14,19 +14,23 @@
 #include "diag/log/log.h"
 #include "diskimage_test.h"
 #include "display/char_encoding.h"
+#include "display/display.h"
 #include "driver.h"
 #include "ieee/diskimage.h"
 #include "ieee/ieee_drive.h"
 #include "ieee/ieee_protocol.h"
-#include "input.h"
-#include "input_controls.h"
-#include "input_uart.h"
+#include "input/input.h"
+#include "input/input_controls.h"
+#include "input/input_uart.h"
+#include "input/input_routing.h"
 #include "menu/menu_config.h"
 #include "menu/menu_screen.h"
 #include "menu/menu_ui.h"
 #include "menu_browser_test.h"
 #include "mock.h"
+#include "pet.h"
 #include "test_support.h"
+#include "ui/cli.h"
 #include "usb/keyboard.h"
 #include "version.h"
 
@@ -626,8 +630,10 @@ START_TEST(test_dashboard_exit_outcome) {
 END_TEST
 
 static unsigned int boot_keys;
+static terminal_session_t expected_terminal_session;
 
 static unsigned int charset_observations;
+static unsigned int charset_ready_after;
 
 // Model menu.rom selecting lowercase after a few CPU status observations.
 static void select_menu_charset(void) {
@@ -636,19 +642,19 @@ static void select_menu_charset(void) {
         ck_assert_uint_eq(system_state.video_char_buffer[i], CH_SPACE);
         ck_assert_uint_eq(spi_read_at(0x8000 + i), CH_SPACE);
     }
-    if (++charset_observations == 3) {
+    if (++charset_observations == charset_ready_after) {
         mock_set_text_mode_lower(true);
         mock_cpu_set_run_callback(NULL);
     }
 }
 
 // Model a visible menu on both displays before the user exits.
-static int exit_after_menu_render(void) {
+static tui_action_t exit_after_menu_render(void) {
     ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
     ck_assert_uint_eq(mock_display_task_count(), 1);
     memset(system_state.video_char_buffer, 0x41, 0x800);
     spi_write(0x8000, system_state.video_char_buffer, 0x800);
-    return '\r';
+    return tui_action_activate;
 }
 
 // Both displays are blank before the character set changes and before config reload.
@@ -666,6 +672,7 @@ START_TEST(test_charset_transition_blanks_both_displays) {
     system_state.video_text_mode = video_text_mode_graphics;
     mock_set_text_mode_lower(_i != 0);
     charset_observations = 0;
+    charset_ready_after = _i == 0 ? 3 : 1;
     mock_cpu_set_run_callback(select_menu_charset);
     mock_input_set_reader(exit_after_menu_render);
     verify_blank_on_setup = true;
@@ -679,26 +686,25 @@ START_TEST(test_charset_transition_blanks_both_displays) {
 END_TEST
 
 // Exercises the real boot-menu loop while requiring the menu ROM to remain running.
-static int boot_input(void) {
+static tui_action_t boot_input(void) {
     ck_assert_int_eq(get_cpu(), CPU_READY);
     ck_assert_uint_eq(setup_count, 0);
-    ck_assert_int_eq(system_state.term_mode, term_mode_video);
-    ck_assert_int_eq(system_state.term_input_dest, term_input_to_firmware);
+    ck_assert_int_eq(system_state.terminal_session, expected_terminal_session);
     ck_assert_uint_lt(boot_keys, 4);
     ck_assert_uint_eq(mock_display_task_count(), 1);
     if (boot_keys++ < 3) {
-        return EOF;
+        return tui_action_none;
     }
-    return '\r';
+    return tui_action_activate;
 }
 
 // Boot selects directly, and on-demand Reset restores routing and the selected configuration.
 START_TEST(test_boot_loop_waits_for_reset) {
     test_unregister_file("/config.yaml");
     register_models(false);
-    const term_mode_t mode = _i == 0 ? term_mode_cli : term_mode_video;
-    system_state.term_mode = mode;
-    system_state.term_input_dest = term_input_to_pet;
+    const terminal_session_t session = _i == 0 ? terminal_session_cli : terminal_session_remote;
+    system_state.terminal_session = session;
+    expected_terminal_session = session;
     boot_keys = 0;
     mock_input_set_reader(boot_input);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
@@ -707,29 +713,223 @@ START_TEST(test_boot_loop_waits_for_reset) {
     ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 1 : 0);
     ck_assert_uint_eq(setup_count, 1);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
-    ck_assert_int_eq(system_state.term_mode, mode);
-    ck_assert_int_eq(system_state.term_input_dest, term_input_to_pet);
+    ck_assert_int_eq(system_state.terminal_session, session);
+}
+END_TEST
+
+// Sends a terminal byte stream through the production routing path.
+static void send_uart(const char* text) {
+    while (*text != '\0') {
+        input_uart_process((unsigned char)*text++);
+    }
+}
+
+// Ordinary rendering and UART routing follow the same authoritative session.
+START_TEST(test_terminal_session_rendering) {
+    cli_init();
+    ck_assert_int_eq(system_state.terminal_session, terminal_session_cli);
+    ck_assert(!display_term_video_active());
+    input_uart_process('a');
+    ck_assert_uint_eq(mock_term_inject_count(), 0);
+    cli_init();
+    send_uart("remote\r\n");
+    ck_assert_int_eq(system_state.terminal_session, terminal_session_remote);
+    ck_assert(display_term_video_active());
+    input_uart_process('a');
+    ck_assert_uint_eq(mock_term_inject_count(), 1);
+    input_uart_process(0x03);
+    ck_assert_int_eq(system_state.terminal_session, terminal_session_cli);
+    ck_assert(!display_term_video_active());
+    ck_assert_uint_eq(mock_term_begin_count(), 1);
+    ck_assert_uint_eq(mock_term_end_count(), 1);
+}
+END_TEST
+
+// Terminal aliases have one typed navigation meaning and ordinary typing has none.
+START_TEST(test_terminal_navigation_actions) {
+    const int keys[] = {KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END,
+        KEY_PGUP, KEY_PGDN, '\r', '\n', '\b', 0x7f, '\e', 't', EOF};
+    const tui_action_t expected[] = {tui_action_up, tui_action_down,
+        tui_action_page_up, tui_action_page_down, tui_action_none, tui_action_none,
+        tui_action_page_up, tui_action_page_down, tui_action_activate,
+        tui_action_activate, tui_action_back, tui_action_back, tui_action_back,
+        tui_action_none, tui_action_none};
+    static_assert(count_of(keys) == count_of(expected), "terminal navigation trace must be complete");
+    for (size_t i = 0; i < count_of(keys); ++i)
+        ck_assert_int_eq(input_menu_bind_terminal(keys[i]), expected[i]);
+}
+END_TEST
+
+// Exercises both mode changes while the real menu loop remains active.
+static tui_action_t switch_terminal_in_menu(void) {
+    ck_assert_uint_eq(mock_display_task_count(), 1);
+    if (expected_terminal_session == terminal_session_cli) {
+        ck_assert_int_eq(system_state.terminal_session, terminal_session_cli);
+        send_uart("remote\r\n");
+        ck_assert(cli_in_remote_mode());
+        ck_assert_uint_eq(mock_term_begin_count(), 1);
+        ck_assert_uint_eq(mock_term_refresh_count(), 1);
+        ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+        input_uart_process(KEY_DOWN);
+        ck_assert_int_eq(input_routing_navigation(), tui_action_down);
+    } else {
+        ck_assert(cli_in_remote_mode());
+        input_uart_process(KEY_DOWN);
+        input_uart_process(0x03);
+        ck_assert(!cli_in_remote_mode());
+        ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+        ck_assert_uint_eq(mock_term_end_count(), 1);
+        send_uart("log\r");
+    }
+    return tui_action_activate;
+}
+
+// The menu never overrides the user's mode, and mode changes survive menu exit.
+START_TEST(test_menu_preserves_user_terminal_mode) {
+    test_unregister_file("/config.yaml");
+    register_models(false);
+    cli_init();
+    expected_terminal_session = (_i & 1) == 0 ? terminal_session_cli : terminal_session_remote;
+    if (expected_terminal_session == terminal_session_remote) {
+        send_uart("remote\r\n");
+    }
+    mock_input_set_reader(switch_terminal_in_menu);
+    const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
+    menu_config_show(&window, &setup_sink, _i < 2);
+
+    ck_assert_int_eq(system_state.terminal_session,
+        expected_terminal_session == terminal_session_cli ? terminal_session_remote : terminal_session_cli);
+    ck_assert_int_eq(cli_in_remote_mode(), expected_terminal_session == terminal_session_cli);
+    ck_assert_uint_eq(mock_term_begin_count(), 1);
+    ck_assert_uint_eq(mock_term_end_count(), expected_terminal_session == terminal_session_remote ? 1 : 0);
+    if (cli_in_remote_mode()) {
+        input_uart_process('x');
+        ck_assert_uint_eq(mock_term_inject_count(), 1);
+        ck_assert_int_eq(mock_term_inject_last(), 'x');
+        cli_exit_remote();
+    }
+}
+END_TEST
+
+// Feeds remote navigation into the real boot-menu controller.
+static tui_action_t remote_boot_input(void) {
+    if (boot_keys++ == 0) {
+        send_uart("remote\r\n");
+        input_uart_process(KEY_DOWN);
+        send_uart("\r\n");
+    }
+    return tui_action_none;
+}
+
+START_TEST(test_remote_controls_boot_menu) {
+    test_unregister_file("/config.yaml");
+    register_models(false);
+    cli_init();
+    boot_keys = 0;
+    mock_input_set_reader(remote_boot_input);
+    const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
+    menu_config_show(&window, &setup_sink, true);
+    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
+    ck_assert(cli_in_remote_mode());
+    ck_assert_uint_eq(mock_term_inject_count(), 0);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+    cli_exit_remote();
+}
+END_TEST
+
+// Remote transitions do not write a CLI prompt to video, and Ctrl-C restores log access.
+START_TEST(test_uart_remote_cli_and_log) {
+    cli_init();
+    log_info("terminal routing test marker");
+    FILE* const output = tmpfile();
+    ck_assert_ptr_nonnull(output);
+    fflush(stdout);
+    const int saved_stdout = dup(STDOUT_FILENO);
+    ck_assert_int_ge(saved_stdout, 0);
+    ck_assert_int_ge(dup2(fileno(output), STDOUT_FILENO), 0);
+
+    input_routing_set_menu_active(true);
+    send_uart("remote\r\n");
+    fflush(stdout);
+    rewind(output);
+    char remote_text[2048] = {0};
+    const size_t remote_length = fread(remote_text, 1, sizeof(remote_text) - 1, output);
+    const tui_action_t after_remote = input_routing_navigation();
+    const unsigned int injected = mock_term_inject_count();
+
+    input_uart_process(KEY_UP);
+    const tui_action_t up = input_routing_navigation();
+    input_uart_process('\r');
+    input_uart_process('\n');
+    const tui_action_t enter = input_routing_navigation();
+    const tui_action_t after_enter = input_routing_navigation();
+    input_uart_process(0x03);
+    const bool remote_after_ctrl_c = cli_in_remote_mode();
+    send_uart("log\r");
+    fflush(stdout);
+    rewind(output);
+    char text[2048] = {0};
+    const size_t length = fread(text, 1, sizeof(text) - 1, output);
+    const int restored = dup2(saved_stdout, STDOUT_FILENO);
+    close(saved_stdout);
+    fclose(output);
+    input_routing_set_menu_active(false);
+    ck_assert_int_ge(restored, 0);
+    ck_assert_uint_gt(remote_length, 0);
+    ck_assert_ptr_null(strstr(remote_text, "econopet>"));
+    ck_assert_int_eq(after_remote, tui_action_none);
+    ck_assert_uint_eq(injected, 0);
+    ck_assert_int_eq(up, tui_action_up);
+    ck_assert_int_eq(enter, tui_action_activate);
+    ck_assert_int_eq(after_enter, tui_action_none);
+    ck_assert(!remote_after_ctrl_c);
+    ck_assert_uint_gt(length, 0);
+    ck_assert_ptr_nonnull(strstr(text, "terminal routing test marker"));
+    ck_assert_ptr_nonnull(strstr(text, "[exited remote mode]"));
+}
+END_TEST
+
+// CRLF and queued menu keys cannot leak to the PET across routing changes.
+START_TEST(test_uart_transition_boundaries) {
+    cli_init();
+    send_uart("remote\r\n");
+    ck_assert_uint_eq(mock_term_inject_count(), 0);
+    input_uart_process('x');
+    ck_assert_int_eq(mock_term_inject_last(), 'x');
+    input_routing_set_menu_active(true);
+    input_uart_process(KEY_DOWN);
+    input_routing_set_menu_active(false);
+    input_routing_set_menu_active(true);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+    input_uart_process('\r');
+    input_routing_set_menu_active(false);
+    input_uart_process('\n');
+    ck_assert_uint_eq(mock_term_inject_count(), 1);
+    cli_exit_remote();
 }
 END_TEST
 
 // Holds the physical button without returning a synthetic activation key.
-static int hold_menu_button(void) {
+static tui_action_t hold_menu_button(void) {
     ck_assert_uint_lt(boot_keys, 2);
     if (boot_keys++ == 0) {
         mock_clock_set(100000);
+        mock_input_button_level(true);
         input_button_update(true);
         mock_clock_advance(50000);
         input_button_update(true);
+        mock_input_button_level(false);
         input_button_update(false);
         mock_clock_advance(50000);
         input_button_update(false);
-        return EOF;
+        return tui_action_none;
     }
+    mock_input_button_level(true);
     input_button_update(true);
     mock_clock_advance(50000);
     input_button_update(true);
     mock_clock_advance(INPUT_LONG_PRESS_US);
-    return EOF;
+    return tui_action_none;
 }
 
 // The menu interprets a release as Down and a subsequent hold as activation.
@@ -739,7 +939,7 @@ START_TEST(test_menu_loop_activates_held_button) {
     input_button_update(false);
     mock_clock_advance(50000);
     input_button_update(false);
-    ck_assert_int_eq(input_controls_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_none);
     // Let the menu's charset-settle wait use real time before injecting the hold.
     mock_reset();
     test_unregister_file("/config.yaml");
@@ -751,15 +951,16 @@ START_TEST(test_menu_loop_activates_held_button) {
     ck_assert_uint_eq(boot_keys, 2);
     ck_assert_uint_eq(setup_count, 1);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
+    mock_input_button_level(false);
     input_button_update(false);
     mock_clock_advance(50000);
     input_button_update(false);
-    ck_assert_int_eq(input_controls_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_none);
 }
 END_TEST
 
 // Injects a qualified chord, then requires a separate Enter to choose the config.
-static int chord_then_enter(void) {
+static tui_action_t chord_then_enter(void) {
     ck_assert_uint_lt(boot_keys, 2);
     if (boot_keys++ == 0) {
         mock_clock_set(100000);
@@ -768,9 +969,9 @@ static int chord_then_enter(void) {
         };
         process_kbd_report(1, 0, &report);
         mock_clock_advance(INPUT_LONG_PRESS_US);
-        return EOF;
+        return tui_action_none;
     }
-    return '\r';
+    return tui_action_activate;
 }
 
 // Menu dispatch ignores the chord event and does not replay a held chord on exit.
@@ -790,7 +991,7 @@ START_TEST(test_menu_loop_ignores_shift_chord) {
     ck_assert_uint_eq(setup_count, 1);
     mock_input_set_reader(NULL);
     mock_clock_advance(INPUT_LONG_PRESS_US);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
     process_kbd_report(1, 0, &released);
 }
 END_TEST
@@ -800,10 +1001,13 @@ static size_t session_key_count, session_key_index;
 static unsigned int prior_setup_count;
 
 // Supplies one session's keys and rejects setup before its terminating choice.
-static int session_input(void) {
+static tui_action_t session_input(void) {
     ck_assert_uint_eq(setup_count, prior_setup_count);
+    // Cooperative disk scans may service input after the last key arrives but before dispatch.
+    if (session_key_index == session_key_count)
+        return tui_action_none;
     ck_assert_uint_lt(session_key_index, session_key_count);
-    return session_keys[session_key_index++];
+    return input_menu_bind_terminal(session_keys[session_key_index++]);
 }
 
 // Runs the production menu loop with a bounded input trace.
@@ -919,24 +1123,36 @@ static void observe_ram_test(void) {
     longjmp(ram_test_exit, 1);
 }
 
-// The terminal RAM-test shortcut reaches the diagnostic from the real session loop.
-START_TEST(test_ram_test_shortcut) {
+// Enter the diagnostic directly while the menu is polling CLI input.
+static tui_action_t request_ram_test_in_menu(void) {
+    send_uart("test   \r");
+    return tui_action_none;
+}
+
+// The CLI enters the existing nonreturning diagnostic synchronously.
+START_TEST(test_cli_memory_test) {
     test_unregister_file("/config.yaml");
     register_models(false);
-    const int keys[] = {_i == 0 ? 't' : 'T'};
-    session_keys = keys;
-    session_key_count = count_of(keys);
-    session_key_index = 0;
     prior_setup_count = setup_count;
-    mock_input_set_reader(session_input);
+    cli_init();
+    if (_i != 0) mock_input_set_reader(request_ram_test_in_menu);
     mock_ram_test_set_handler(observe_ram_test);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     if (setjmp(ram_test_exit) == 0) {
-        menu_config_show(&window, &setup_sink, true);
-        ck_abort_msg("RAM-test shortcut returned instead of entering the diagnostic");
+        if (_i == 0) send_uart("test\r");
+        else menu_config_show(&window, &setup_sink, true);
+        ck_abort_msg("CLI test returned instead of entering the diagnostic");
     }
-    ck_assert_uint_eq(session_key_index, 1);
     mock_ram_test_set_handler(NULL);
+}
+END_TEST
+
+// Invalid arguments produce normal CLI usage without requesting the diagnostic.
+START_TEST(test_cli_memory_test_arguments) {
+    cli_init();
+    send_uart("test invalid\r");
+    // An unexpected invocation would fail through the fixture's diagnostic stub.
+    ck_assert(!input_routing_menu_active());
 }
 END_TEST
 
@@ -1183,7 +1399,7 @@ START_TEST(test_disk_overlapping_pages) {
     char boundary[MENU_UI_WIDTH + 1];
     snprintf(boundary, sizeof(boundary), "%s", menu.labels[stride]);
     tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_down
-        : menu_ui_action_from_key(KEY_RIGHT));
+        : tui_action_page_down);
     ck_assert_uint_eq(list->first_visible, stride);
     ck_assert_uint_eq(list->selected, stride + 1);
     ck_assert_str_eq(menu.labels[0], boundary);
@@ -1192,7 +1408,7 @@ START_TEST(test_disk_overlapping_pages) {
 
     move_to(stride);
     tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_up
-        : menu_ui_action_from_key(KEY_LEFT));
+        : tui_action_page_up);
     ck_assert_uint_eq(list->first_visible, 0);
     ck_assert_uint_eq(list->selected, stride - 1);
     ck_assert_str_eq(menu.labels[stride], boundary);
@@ -1399,36 +1615,36 @@ START_TEST(test_uart_crlf_across_picker_transition) {
     ck_assert_uint_eq(menu.controller.screen_count, 2);
 
     input_uart_filter_t filter = {0};
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\r'));
-    if (input_uart_accept(&filter, '\n', true))
-        tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    if (input_uart_accept(&filter, '\n'))
+        tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert_uint_eq(menu.controller.screen_count, 3);
     ck_assert_str_eq(ieee_drive_filename(0), "disk.d64");
 
     // A separate keyboard Enter remains an independent activation.
-    tui_controller_dispatch(&menu.controller, menu_ui_action_from_key('\n'));
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert_uint_eq(menu.controller.screen_count, 2);
     ck_assert_str_eq(ieee_drive_filename(0), "");
 }
 END_TEST
 
-// Filtering spans UART polls and routing changes without altering non-menu input.
+// Filtering spans UART polls and routing changes with one Enter per CRLF pair.
 START_TEST(test_uart_line_endings) {
     input_uart_filter_t filter = {0};
-    ck_assert(input_uart_accept(&filter, '\n', true));
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    ck_assert(!input_uart_accept(&filter, '\n', true));
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    ck_assert(!input_uart_accept(&filter, '\n', true));
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    ck_assert(input_uart_accept(&filter, 'x', true));
-    ck_assert(input_uart_accept(&filter, '\n', true));
-    ck_assert(input_uart_accept(&filter, '\r', false));
-    ck_assert(input_uart_accept(&filter, '\n', false));
-    ck_assert(input_uart_accept(&filter, '\r', true));
-    ck_assert(!input_uart_accept(&filter, '\n', false));
+    ck_assert(input_uart_accept(&filter, '\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(!input_uart_accept(&filter, '\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(!input_uart_accept(&filter, '\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(input_uart_accept(&filter, 'x'));
+    ck_assert(input_uart_accept(&filter, '\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(!input_uart_accept(&filter, '\n'));
+    ck_assert(input_uart_accept(&filter, '\r'));
+    ck_assert(!input_uart_accept(&filter, '\n'));
 }
 END_TEST
 
@@ -1545,16 +1761,22 @@ END_TEST
 
 // Confirms PET, USB, and terminal keycodes share one navigation policy.
 START_TEST(test_menu_key_actions) {
-    ck_assert_int_eq(menu_ui_action_from_key('\b'), tui_action_back);
-    ck_assert_int_eq(menu_ui_action_from_key(0x7f), tui_action_back);
-    ck_assert_int_eq(menu_ui_action_from_key('\e'), tui_action_back);
-    ck_assert_int_eq(menu_ui_action_from_key('\r'), tui_action_activate);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_DOWN), tui_action_down);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_BTN_SHORT), tui_action_down);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_BTN_LONG), tui_action_activate);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_SHIFT_SHIFT), tui_action_none);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_LEFT), tui_action_page_up);
-    ck_assert_int_eq(menu_ui_action_from_key(KEY_RIGHT), tui_action_page_down);
+    ck_assert_int_eq(input_menu_bind_terminal('\b'), tui_action_back);
+    ck_assert_int_eq(input_menu_bind_terminal(0x7f), tui_action_back);
+    ck_assert_int_eq(input_menu_bind_terminal('\e'), tui_action_back);
+    ck_assert_int_eq(input_menu_bind_terminal('\r'), tui_action_activate);
+    ck_assert_int_eq(input_menu_bind_terminal(KEY_DOWN), tui_action_down);
+    input_routing_set_menu_active(true);
+    input_routing_gesture(INPUT_SOURCE_BUTTON, input_gesture_button_short);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_down);
+    input_routing_gesture(INPUT_SOURCE_BUTTON, input_gesture_button_long);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_activate);
+    input_routing_gesture(INPUT_SOURCE_PET, input_gesture_dual_shift);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+    ck_assert_int_eq(input_routing_pending_request().action, input_system_none);
+    input_routing_set_menu_active(false);
+    ck_assert_int_eq(input_menu_bind_terminal(KEY_LEFT), tui_action_page_up);
+    ck_assert_int_eq(input_menu_bind_terminal(KEY_RIGHT), tui_action_page_down);
 }
 END_TEST
 
@@ -1573,12 +1795,19 @@ Suite* menu_ui_suite(void) {
     tcase_add_loop_test(cases, test_dashboard_exit_outcome, 0, 2);
     tcase_add_loop_test(cases, test_charset_transition_blanks_both_displays, 0, 2);
     tcase_add_loop_test(cases, test_boot_loop_waits_for_reset, 0, 2);
+    tcase_add_loop_test(cases, test_menu_preserves_user_terminal_mode, 0, 4);
+    tcase_add_test(cases, test_terminal_session_rendering);
+    tcase_add_test(cases, test_terminal_navigation_actions);
+    tcase_add_test(cases, test_remote_controls_boot_menu);
+    tcase_add_test(cases, test_uart_remote_cli_and_log);
+    tcase_add_test(cases, test_uart_transition_boundaries);
     tcase_add_test(cases, test_menu_loop_activates_held_button);
     tcase_add_test(cases, test_menu_loop_ignores_shift_chord);
     tcase_add_test(cases, test_configuration_persists_across_sessions);
     tcase_add_test(cases, test_session_disk_policy);
     tcase_add_loop_test(cases, test_default_autoboot_and_reentry, 0, 2);
-    tcase_add_loop_test(cases, test_ram_test_shortcut, 0, 2);
+    tcase_add_loop_test(cases, test_cli_memory_test, 0, 2);
+    tcase_add_test(cases, test_cli_memory_test_arguments);
     tcase_add_test(cases, test_config_disk_policy_without_mount_callback);
     tcase_add_test(cases, test_config_without_mount_actions_clears_disks);
     tcase_add_test(cases, test_browser_without_ui);

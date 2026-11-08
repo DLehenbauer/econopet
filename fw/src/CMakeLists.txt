@@ -43,18 +43,21 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/cpu.c
     ${FW_SRC_DIR}/display/char_encoding.c
     ${FW_SRC_DIR}/driver.c
+    ${FW_SRC_DIR}/driver_sync.c
     ${FW_SRC_DIR}/fatal.c
     ${FW_SRC_DIR}/fpga_image.c
     ${FW_SRC_DIR}/global.c
-    ${FW_SRC_DIR}/input.c
-    ${FW_SRC_DIR}/input_controls.c
-    ${FW_SRC_DIR}/input_uart.c
+    ${FW_SRC_DIR}/input/input.c
+    ${FW_SRC_DIR}/input/input_actions.c
+    ${FW_SRC_DIR}/input/input_controls.c
+    ${FW_SRC_DIR}/input/input_routing.c
+    ${FW_SRC_DIR}/input/input_uart.c
+    ${FW_SRC_DIR}/input/keyboard_core.c
     ${FW_SRC_DIR}/main.c
     ${FW_SRC_DIR}/reset.c
     ${FW_SRC_DIR}/menu/menu.c
     ${FW_SRC_DIR}/menu/menu_browser.c
     ${FW_SRC_DIR}/menu/menu_config.c
-    ${FW_SRC_DIR}/menu/menu_runtime.c
     ${FW_SRC_DIR}/menu/menu_screen.c
     ${FW_SRC_DIR}/menu/menu_ui.c
     ${FW_SRC_DIR}/display/display.c
@@ -67,7 +70,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ieee/dos.c
     ${FW_SRC_DIR}/ieee/ieee_drive.c
     ${FW_SRC_DIR}/tape_dir.c
-    ${FW_SRC_DIR}/term_inject.c
+    ${FW_SRC_DIR}/input/term_inject.c
     ${FW_SRC_DIR}/pet.c
     ${FW_SRC_DIR}/roms/roms.c
     ${FW_SRC_DIR}/roms/checksum.c

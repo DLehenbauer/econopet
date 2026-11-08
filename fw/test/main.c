@@ -15,6 +15,7 @@
 #include "global_test.h"
 #include "fpga_image_test.h"
 #include "ieee_drive_test.h"
+#include "input_test.h"
 #include "keyscan_test.h"
 #include "keyboard_test.h"
 #include "keystate_test.h"
@@ -45,6 +46,7 @@ int run_suite() {
     srunner_add_suite(sr1, ieee_drive_suite());
     srunner_add_suite(sr1, keyscan_suite());
     srunner_add_suite(sr1, keyboard_suite());
+    srunner_add_suite(sr1, input_suite());
     srunner_add_suite(sr1, keystate_suite());
     srunner_add_suite(sr1, log_suite());
     srunner_add_suite(sr1, petscii_suite());

@@ -7,18 +7,9 @@
 #include <stddef.h>
 
 #include "display/window.h"
+#include "input/input_actions.h"
 
 #define TUI_SCREEN_STACK_CAPACITY 4
-
-typedef enum {
-    tui_action_none,
-    tui_action_up,
-    tui_action_down,
-    tui_action_page_up,
-    tui_action_page_down,
-    tui_action_activate,
-    tui_action_back,
-} tui_action_t;
 
 typedef struct tui_controller_s tui_controller_t;
 

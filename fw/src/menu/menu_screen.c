@@ -16,7 +16,7 @@
 void menu_screen_clear(void) {
     memset(system_state.video_char_buffer, CH_SPACE, MENU_CHARACTER_RAM_SIZE);
     spi_write(MENU_CHARACTER_RAM_ADDRESS, system_state.video_char_buffer, MENU_CHARACTER_RAM_SIZE);
-    if (system_state.term_mode == term_mode_video) {
+    if (display_term_video_active()) {
         display_term_refresh();
     }
 }

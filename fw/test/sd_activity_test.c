@@ -4,15 +4,21 @@
 #include "pch.h"
 #include "sd_activity_test.h"
 
+#include <setjmp.h>
+
 #include "hardware/gpio.h"
 
-#include "input.h"
-#include "input_controls.h"
+#include "input/input.h"
+#include "input/input_controls.h"
+#include "input/input_routing.h"
+#include "input/input_uart.h"
+#include "ieee/ieee_drive.h"
 #include "menu/menu.h"
 #include "mock.h"
 #include "pet.h"
 #include "sd/activity.h"
 #include "usb/keyboard.h"
+#include "ui/cli.h"
 
 #define BUTTON_DEBOUNCE_US 50000u
 
@@ -28,11 +34,31 @@ static unsigned int writes;
 static uint64_t operation_duration;
 static unsigned int resets;
 static unsigned int entries;
+static jmp_buf diagnostic_exit;
+static void (*drive_service_observer)(void);
+static unsigned int drive_services;
 
-// Observe runtime resets only after the required physical SD inactivity.
-void pet_reset(void) {
+void __real_ieee_drive_task(void);
+
+// Retain real drive servicing while optionally observing storage-wait progress.
+void __wrap_ieee_drive_task(void) {
+    __real_ieee_drive_task();
+    if (drive_service_observer != NULL)
+        drive_service_observer();
+}
+
+// Verify the runtime diagnostic begins only after storage is quiet and the CPU halted.
+static void observe_diagnostic(void) {
     ck_assert(sd_activity_quiet());
-    ++resets;
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    longjmp(diagnostic_exit, 1);
+}
+
+// Observe the real reset pulse only after the required physical SD inactivity.
+static void observe_reset(cpu_state_t state) {
+    ck_assert(sd_activity_quiet());
+    if (state == CPU_RESET)
+        ++resets;
 }
 
 // Observe runtime menu entry without running the interactive menu.
@@ -72,11 +98,12 @@ static int program_block(blockdevice_t* device, const void* buffer, bd_size_t ad
     return check_operation(device, buffer, addr, size);
 }
 
-// Advances through the production debounce interval without generating GPIO mocks.
+// Sample a physical GPIO level through production input and debounce orchestration.
 static void button_state(const bool pressed) {
-    input_button_update(pressed);
+    mock_input_button_level(pressed);
+    input_task();
     mock_clock_advance(BUTTON_DEBOUNCE_US);
-    input_button_update(pressed);
+    input_task();
 }
 
 // Supplies modifier-only USB input to the production gesture classifier.
@@ -90,29 +117,29 @@ static void shifts(const bool held) {
 // SD activity never changes gesture classification, even if release precedes polling.
 static void check_controls(blockdevice_t* device, uint8_t* buffer) {
     const system_state_t saved = system_state;
-    system_state.term_input_dest = term_input_to_pet;
+    system_state.terminal_session = terminal_session_remote;
     memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));
     shifts(false);
     button_state(false);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
 
     for (unsigned int source = 0; source < 2; ++source) {
         if (source == 0) shifts(true);
         else button_state(true);
         mock_clock_advance(INPUT_LONG_PRESS_US - 1);
-        ck_assert_int_eq(input_getch(), EOF);
+        ck_assert(mock_input_empty());
 
         // A slow failed operation does not delay a qualified gesture.
         operation_duration = INPUT_LONG_PRESS_US * 2;
         backend_result = BD_ERROR_DEVICE_ERROR;
         ck_assert_int_eq(device->program(device, buffer, expected_addr, expected_size), backend_result);
         ck_assert(!sd_activity_quiet());
-        ck_assert_int_eq(input_getch(), source == 0 ? KEY_SHIFT_SHIFT : KEY_BTN_LONG);
-        ck_assert_int_eq(input_getch(), EOF);
+        ck_assert_int_eq(mock_take_request().action, input_system_request_menu);
+        ck_assert(mock_input_empty());
         if (source == 0) shifts(false);
         else button_state(false);
-        ck_assert_int_eq(input_getch(), EOF);
+        ck_assert(mock_input_empty());
     }
 
     // Moving from keyboard to button cannot inherit the keyboard's elapsed hold.
@@ -121,64 +148,91 @@ static void check_controls(blockdevice_t* device, uint8_t* buffer) {
     shifts(false);
     button_state(true);
     mock_clock_advance(1);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
     mock_clock_advance(INPUT_LONG_PRESS_US - 1);
-    ck_assert_int_eq(input_getch(), KEY_BTN_LONG);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_menu);
     button_state(false);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
 
     // Short releases remain short despite recent SD activity.
     operation_duration = 0;
     button_state(true);
     ck_assert_int_eq(device->read(device, buffer, expected_addr, expected_size), backend_result);
     button_state(false);
-    ck_assert_int_eq(input_getch(), KEY_BTN_SHORT);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_reset);
+    ck_assert(mock_input_empty());
 
     // Classify at the threshold even if release is sampled before the next poll.
     button_state(true);
     mock_clock_advance(INPUT_LONG_PRESS_US - BUTTON_DEBOUNCE_US - 1);
     button_state(false);
-    ck_assert_int_eq(input_getch(), KEY_BTN_SHORT);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_reset);
     button_state(true);
     mock_clock_advance(INPUT_LONG_PRESS_US - BUTTON_DEBOUNCE_US);
     ck_assert_int_eq(device->read(device, buffer, expected_addr, expected_size), backend_result);
     button_state(false);
-    ck_assert_int_eq(input_getch(), KEY_BTN_LONG);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_menu);
+    ck_assert(mock_input_empty());
 
-    // Context changes discard pending releases and consume currently held controls.
+    // Transitions suppress held gestures, but preserve already-emitted machine intent.
     button_state(true);
     button_state(false);
     input_controls_consume();
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_reset);
+    ck_assert(mock_input_empty());
     button_state(true);
     input_controls_consume();
     mock_clock_advance(INPUT_LONG_PRESS_US);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
     button_state(false);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
 
     // Simultaneous qualified sources produce one event and consume both holds.
     shifts(true);
     button_state(true);
     mock_clock_advance(INPUT_LONG_PRESS_US);
-    ck_assert_int_eq(input_getch(), KEY_BTN_LONG);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert_int_eq(mock_take_request().action, input_system_request_menu);
+    ck_assert(mock_input_empty());
     button_state(false);
     mock_clock_advance(INPUT_LONG_PRESS_US);
-    ck_assert_int_eq(input_getch(), EOF);
+    ck_assert(mock_input_empty());
     shifts(false);
     system_state = saved;
 }
 
-// Runtime actions stay pending across release and new I/O without blocking drive servicing.
-static void check_deferred_actions(blockdevice_t* device, uint8_t* buffer) {
+// Restart inactivity from inside servicing, while the wait leaves the CPU running.
+static void observe_storage_wait(void) {
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+    ++drive_services;
+    if (drive_services == 2) {
+        operation_duration = 0;
+        ck_assert_int_eq(expected_device->read(expected_device, expected_buffer,
+            expected_addr, expected_size), backend_result);
+    }
+}
+
+// Runtime actions stay pending while ordinary input/drive iterations continue uninterrupted.
+static void check_storage_actions(blockdevice_t* device, uint8_t* buffer) {
+    input_routing_set_menu_active(false);
+    system_state.terminal_session = terminal_session_remote;
+    const usb_keymap_entry_t key = {.row = 2, .col = 2};
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A] = key;
+    keyboard_core_reset(&system_state);
     for (unsigned int source = 0; source < 3; ++source) {
         const unsigned int prior_resets = resets;
         const unsigned int prior_entries = entries;
+        set_cpu(CPU_READY);
+        const hid_keyboard_report_t pressed = {.keycode = {HID_KEY_A}};
+        const hid_keyboard_report_t released = {0};
+        mock_input_hid_report(2, 0, &pressed);
+        input_task();
+        ck_assert_uint_eq(mock_input_published_matrix()[key.col] & (1u << key.row), 0);
         if (source == 2) {
-            shifts(true);
+            const hid_keyboard_report_t chord = {
+                .modifier = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT,
+            };
+            mock_input_hid_report(1, 0, &chord);
+            input_task();
         } else {
             button_state(true);
         }
@@ -191,43 +245,88 @@ static void check_deferred_actions(blockdevice_t* device, uint8_t* buffer) {
         operation_duration = SD_ACTIVITY_QUIET_US * 2;
         backend_result = BD_ERROR_DEVICE_ERROR;
         ck_assert_int_eq(device->program(device, buffer, expected_addr, expected_size), backend_result);
-        menu_task();
+        input_task();
+        ck_assert_int_eq(input_routing_pending_request().action,
+            source == 0 ? input_system_request_reset : input_system_request_menu);
+        mock_cpu_set_state_observer(observe_reset);
+        drive_services = 0;
+        const uint64_t started = time_us_64();
+        pet_task();
+        ck_assert_uint_eq(time_us_64(), started);
+        ck_assert_uint_eq(drive_services, 0);
         ck_assert_uint_eq(resets, prior_resets);
         ck_assert_uint_eq(entries, prior_entries);
+        ck_assert_int_eq(get_cpu(), CPU_READY);
 
-        // Releasing a recognized hold must not cancel or turn menu entry into reset.
-        if (source == 2) shifts(false);
+        // Release USB and gesture holds while storage is busy. UART remains responsive.
+        mock_input_hid_report(2, 0, &released);
+        if (source == 2) mock_input_hid_report(1, 0, &released);
         else button_state(false);
-        menu_task();
-        ck_assert_uint_eq(resets, prior_resets);
-        ck_assert_uint_eq(entries, prior_entries);
+        input_task();
+        ck_assert_uint_eq(mock_input_published_matrix()[key.col], UINT8_MAX);
+        const uint8_t character = 'a';
+        mock_input_uart_bytes(&character, 1);
+        input_task();
+        ck_assert_uint_eq(mock_input_published_matrix()[key.col] & (1u << key.row), 0);
+        input_task();
+        input_task();
+        ck_assert_uint_eq(mock_input_published_matrix()[key.col], UINT8_MAX);
+        const uint8_t ctrl_c = 0x03;
+        mock_input_uart_bytes(&ctrl_c, 1);
+        input_task();
+        ck_assert_int_eq(system_state.terminal_session, terminal_session_cli);
+        ck_assert_int_eq(input_routing_pending_request().action,
+            source == 0 ? input_system_request_reset : input_system_request_menu);
+        system_state.terminal_session = terminal_session_remote;
 
-        // Later activity restarts the wait, including successful reads after failed writes.
-        mock_clock_advance(SD_ACTIVITY_QUIET_US - 1);
+        // Further I/O resets the quiet deadline without blocking input or consuming the request.
+        operation_duration = 0;
+        mock_clock_advance(SD_ACTIVITY_QUIET_US - 100000u);
+        ieee_drive_task();
         backend_result = BD_ERROR_OK;
         ck_assert_int_eq(device->read(device, buffer, expected_addr, expected_size), backend_result);
-        menu_task();
-        ck_assert_uint_eq(resets, prior_resets);
-        ck_assert_uint_eq(entries, prior_entries);
-        mock_clock_advance(SD_ACTIVITY_QUIET_US - 1);
-        menu_task();
+        for (unsigned int iteration = 0; iteration < 4; ++iteration) {
+            const uint64_t before = time_us_64();
+            const unsigned int publications = mock_input_publish_count();
+            const unsigned int usb_services = mock_input_usb_service_count();
+            const unsigned int button_samples = mock_input_button_sample_count();
+            input_task();
+            pet_task();
+            ck_assert_uint_eq(time_us_64(), before);
+            ck_assert_uint_eq(mock_input_publish_count(), publications + 1);
+            ck_assert_uint_eq(mock_input_usb_service_count(), usb_services + 1);
+            ck_assert_uint_eq(mock_input_button_sample_count(), button_samples + 1);
+            ck_assert_uint_eq(resets, prior_resets);
+            ck_assert_uint_eq(entries, prior_entries);
+            ck_assert_int_eq(get_cpu(), CPU_READY);
+            mock_clock_advance(100000u);
+        }
+        mock_clock_advance(SD_ACTIVITY_QUIET_US - 400000u - 1u);
+        pet_task();
         ck_assert_uint_eq(resets, prior_resets);
         ck_assert_uint_eq(entries, prior_entries);
         mock_clock_advance(1);
-        menu_task();
+        pet_task();
         ck_assert_uint_eq(resets, prior_resets + (source == 0));
         ck_assert_uint_eq(entries, prior_entries + (source != 0));
-        menu_task();
+        ck_assert_int_eq(input_routing_pending_request().action, input_system_none);
+        pet_task();
         ck_assert_uint_eq(resets, prior_resets + (source == 0));
         ck_assert_uint_eq(entries, prior_entries + (source != 0));
+        mock_cpu_set_state_observer(NULL);
     }
 
     // Already-quiet SD needs no additional delay for a new short press.
+    mock_cpu_set_state_observer(observe_reset);
     const unsigned int prior_resets = resets;
     button_state(true);
     button_state(false);
-    menu_task();
+    input_task();
+    const uint64_t started = time_us_64();
+    pet_task();
+    ck_assert_uint_lt(time_us_64() - started, 1000u);
     ck_assert_uint_eq(resets, prior_resets + 1);
+    mock_cpu_set_state_observer(NULL);
 }
 
 // Both successful and failed operations must preserve the backend result and clear the LED.
@@ -282,7 +381,24 @@ START_TEST(test_block_activity) {
     ck_assert_uint_eq(reads, 2);
     ck_assert_uint_eq(writes, 2);
     check_controls(&device, buffer);
-    check_deferred_actions(&device, buffer);
+    check_storage_actions(&device, buffer);
+
+    // CLI execution waits synchronously before halting and entering the diagnostic.
+    cli_init();
+    operation_duration = 0;
+    device.read(&device, buffer, expected_addr, expected_size);
+    set_cpu(CPU_READY);
+    drive_services = 0;
+    drive_service_observer = observe_storage_wait;
+    mock_ram_test_set_handler(observe_diagnostic);
+    if (setjmp(diagnostic_exit) == 0) {
+        const char* command = "test\r";
+        while (*command) cli_process_char(*command++);
+        ck_abort_msg("synchronous diagnostic did not run");
+    }
+    drive_service_observer = NULL;
+    ck_assert_uint_gt(drive_services, 2);
+    mock_ram_test_set_handler(NULL);
 }
 END_TEST
 

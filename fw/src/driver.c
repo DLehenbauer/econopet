@@ -688,48 +688,6 @@ void write_pet_model(const system_state_t* const system_state) {
     spi_write_at(ECONOPET_WB_VIDEO_ADDR, state);
 }
 
-/**
- * Synchronizes keyboard and video state between the RP2040 and FPGA.
- * 
- * This function is called periodically to maintain consistent state between
- * the RP2040 (which handles USB keyboard input and video output) and the
- * FPGA (which generates native PET video and injects USB keyboard input).
- * 
- * Operations performed:
- * 
- * 1. Write USB keyboard matrix to FPGA (ECONOPET_WB_KBD_BASE_ADDR)
- *    - RP2040 scans USB keyboard and updates usb_key_matrix[]
- *    - FPGA reads this to inject key presses when the CPU reads $E812.
- * 
- * 2. Read PET keyboard matrix from FPGA (ECONOPET_WB_KBD_BASE_ADDR)
- *    - Reads the current PET keyboard state as seen by the CPU.
- *    - This allows RP2040 to know which keys are pressed on the PET keyboard.
- * 
- * 3. Read CRTC registers from FPGA (ECONOPET_WB_CRTC_BASE_ADDR)
- *    - CRTC (cathode ray tube controller) registers control video timing
- *    - Used by the RP2040 to emulate CRTC when generating DVI/TMDS video
- * 
- * 4. Read status flags from the FPGA
- *    - Updates graphics mode and breakpoint halt
- */
-void sync_state() {
-    // Write USB keyboard matrix state to FPGA
-    spi_write(ECONOPET_WB_KBD_BASE_ADDR, usb_key_matrix, KEY_COL_COUNT);
-
-    // Read PET keyboard matrix from FPGA
-    spi_read(ECONOPET_WB_KBD_BASE_ADDR, KEY_COL_COUNT, pet_key_matrix);
-
-    // Read CRTC registers from FPGA
-    spi_read(ECONOPET_WB_CRTC_BASE_ADDR, CRTC_REG_COUNT, system_state.pet_crtc_registers);
-
-    // Read status register flags
-    uint8_t status = spi_read_at(ECONOPET_WB_STATUS_ADDR);
-    system_state.video_text_mode = (status & ECONOPET_REG_STATUS_TEXT_MODE_MASK) != 0
-        ? video_text_mode_lower
-        : video_text_mode_graphics;
-    system_state.bp_halted = (status & ECONOPET_REG_STATUS_BP_HALT_MASK) != 0;
-}
-
 uint16_t bp_hit_addr() {
     uint8_t lo = spi_read_at(ECONOPET_WB_BP_LO_ADDR);
     uint8_t hi = spi_read_at(ECONOPET_WB_BP_HI_ADDR);

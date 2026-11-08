@@ -17,7 +17,7 @@
 #include "global.h"
 #include "hw.h"
 #include "ieee/ieee_drive.h"
-#include "input.h"
+#include "input/input.h"
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
@@ -256,7 +256,7 @@ int main() {
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render
         input_task();       // Poll inputs, dispatch based on mode
         bp_task();          // Check for breakpoint hits and handle them
-        menu_task();        // Check for button events to enter menu
+        pet_task();         // Execute pending machine requests when storage is quiet
     }
 
     __builtin_unreachable();

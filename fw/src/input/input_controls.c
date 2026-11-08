@@ -2,10 +2,11 @@
 // https://github.com/dlehenbauer/econopet
 
 #include "pch.h"
-#include "input_controls.h"
+#include "input/input_controls.h"
 
-#include "input.h"
+#include "input/input_routing.h"
 #include "usb/keyboard.h"
+#include "usb/keyscan.h"
 
 #define BUTTON_DEBOUNCE_US 50000u
 
@@ -13,7 +14,6 @@
 static input_hold_t button = {.held = true, .blocked = true};
 static bool button_raw = true;
 static uint64_t button_changed;
-static int button_release = EOF;
 
 void input_hold_update(input_hold_t* const hold, const bool eligible) {
     if (!eligible) {
@@ -33,6 +33,15 @@ void input_hold_consume(input_hold_t* const hold) {
     hold->blocked = hold->held;
 }
 
+void input_chord_update(input_source_t source, input_hold_t* hold, bool both_shifts, bool other_key) {
+    // Preserve intent if the threshold was crossed before a release or contaminating key.
+    if ((!both_shifts || other_key) && input_hold_ready(hold))
+        input_routing_gesture(source, input_gesture_dual_shift);
+    input_hold_update(hold, both_shifts);
+    if (both_shifts && other_key)
+        input_hold_consume(hold);
+}
+
 void input_button_update(const bool pressed) {
     const uint64_t now = time_us_64();
     if (pressed != button_raw) {
@@ -42,23 +51,22 @@ void input_button_update(const bool pressed) {
     if (now - button_changed < BUTTON_DEBOUNCE_US || pressed == button.held)
         return;
     if (!pressed && !button.blocked)
-        button_release = input_hold_ready(&button) ? KEY_BTN_LONG : KEY_BTN_SHORT;
+        input_routing_gesture(INPUT_SOURCE_BUTTON,
+            input_hold_ready(&button) ? input_gesture_button_long : input_gesture_button_short);
     input_hold_update(&button, pressed);
 }
 
-int input_controls_getch(void) {
-    const bool chord = keyboard_menu_requested();
-    const bool long_press = input_hold_ready(&button);
-    const int key = long_press ? KEY_BTN_LONG : button_release;
-    if (key != EOF || chord) {
-        input_controls_consume();
-        return key != EOF ? key : KEY_SHIFT_SHIFT;
+void input_controls_poll(void) {
+    usb_keyboard_poll_gestures();
+    keyscan_poll_gestures();
+    if (input_hold_ready(&button)) {
+        input_routing_gesture(INPUT_SOURCE_BUTTON, input_gesture_button_long);
+        input_hold_consume(&button);
     }
-    return EOF;
 }
 
 void input_controls_consume(void) {
-    keyboard_menu_consume();
+    usb_keyboard_consume_gestures();
+    keyscan_consume_gestures();
     input_hold_consume(&button);
-    button_release = EOF;
 }
