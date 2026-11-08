@@ -42,6 +42,7 @@ configs:
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
+
   - id: pet-40xx-60hz
     name: "PET 40xx (40 Col 60 Hz)"
     setup:
@@ -75,6 +76,7 @@ configs:
           - action: "patch"
             address: 0xe73f
             hex: "16043a03393633dfb12f15134d205812b2100fb02c4e565ab30019ae2e424300b4db4f1155544551145049dc59525709b6c04c0d4a474441b53b4bdd4846539bb906deb7b0373431050e1db82d383532"
+
   - id: pet-80xx-50hz
     name: "CBM 80xx (80 Col 50 Hz)"
     setup:
@@ -115,6 +117,7 @@ configs:
         columns: 80
         video-ram-kb: 2
         tape: "2ef415f4c9cad1d4da"
+
   - id: pet-80xx-60hz
     name: "PET 80xx (80 Col 60 Hz)"
     setup:
@@ -149,6 +152,7 @@ configs:
         columns: 80
         video-ram-kb: 2
         tape: "2ef415f4c9cad1d4da"
+
   - id: pet-2001
     name: "PET 2001 (Upgraded ROMs)"
     setup:
@@ -203,6 +207,7 @@ configs:
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "eff3d6f3c9cad1d4da"
+        
   - id: pet-2001-rom1
     name: "PET 2001 (Original ROMs)"
     setup:
@@ -253,8 +258,87 @@ configs:
         video-ram-kb: 1
         tape: "e5f362f3e5e6eef1f9"
 
+  - id: superpet-6809-60hz
+    name: "SuperPET SP9000 (6809 60 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xa000
+            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+          - address: 0xc000
+            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+          - address: 0xe000
+            file: "/roms/waterloo-e000-ffff.970020-12.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same four graphics-keyboard tables as the 50 Hz Waterloo set.
+          - action: "patch"
+            address: 0xdf40
+            hex: "003d2e7f033c205bff2d30003eff5d40002b32ff3f2c6e767833310d3b6d62637a2a35ff3a6b6866733634ff6c6a6764612f38ff706979727739375e6f75746571040a09295c27242207015f2826252321"
+          - action: "patch"
+            address: 0xdf91
+            hex: "002d8b7f022c207bff3d8a002eff7d60003b82ff2f3c4e565883810d2b4d42435a3a85ff2a4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080c5f3836353331"
+          - action: "patch"
+            address: 0xdfe2
+            hex: "002b2e7f033c205bff3d30003eff7b27003a32ff3f2c6e767833310d3b6d62637a5f35ff2d6b6866733634ff6c6a6764612f38ff70697972773937606f75746571040a09285c2624400701ff2a5e252321"
+          - action: "patch"
+            address: 0xe033
+            hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
+      - if: "graphics"
+        then:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk-n.d80"
+        else:
+          - action: "mount"
+            file: "superpet/os9/os9-systemdisk-b.d80"
+      - action: "mount"
+        drive: 1
+        file: "superpet/Waterloo2-Languages.d80"
+      - action: "set"
+        cpu: "6809"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+
+  - id: superpet-6502-60hz
+    name: "SuperPET SP9000 (6502 60 Hz)"
+    setup:
+      - action: "load"
+        files:
+          - address: 0xb000
+            file: "/roms/basic-4-b000.901465-23.bin"
+          - address: 0xc000
+            file: "/roms/basic-4-c000.901465-20.bin"
+          - address: 0xd000
+            file: "/roms/basic-4-d000.901465-21.bin"
+          - address: 0xe000
+            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
+          - address: 0xf000
+            file: "/roms/kernal-4.901465-22.bin"
+          - address: 0x68000
+            file: "/roms/characters.901640-01.bin"
+      - if: "graphics"
+        then:
+          # Use the same graphics-keyboard adaptation as the 80-column PET.
+          - action: "patch"
+            address: 0xe545
+            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
+          - action: "patch"
+            address: 0xe6d1
+            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
+      - action: "set"
+        cpu: "6502"
+        machine: "superpet"
+        usb-keymap: "/ukm/us.bin"
+        columns: 80
+        video-ram-kb: 2
+        tape: "2ef415f4c9cad1d4da"
+
   - id: superpet-6809-50hz
-    name: "SuperPET 6809 (80 Col 50 Hz)"
+    name: "SuperPET MMF 9000 (6809 50 Hz)"
     setup:
       - action: "load"
         files:
@@ -305,53 +389,8 @@ configs:
         columns: 80
         video-ram-kb: 2
 
-  - id: superpet-6809-60hz
-    name: "SuperPET 6809 (80 Col 60 Hz)"
-    setup:
-      - action: "load"
-        files:
-          - address: 0xa000
-            file: "/roms/waterloo-a000-bfff.970018-12.bin"
-          - address: 0xc000
-            file: "/roms/waterloo-c000-dfff.970019-12.bin"
-          - address: 0xe000
-            file: "/roms/waterloo-e000-ffff.970020-12.bin"
-          - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
-      - if: "graphics"
-        then:
-          # Use the same four graphics-keyboard tables as the 50 Hz Waterloo set.
-          - action: "patch"
-            address: 0xdf40
-            hex: "003d2e7f033c205bff2d30003eff5d40002b32ff3f2c6e767833310d3b6d62637a2a35ff3a6b6866733634ff6c6a6764612f38ff706979727739375e6f75746571040a09295c27242207015f2826252321"
-          - action: "patch"
-            address: 0xdf91
-            hex: "002d8b7f022c207bff3d8a002eff7d60003b82ff2f3c4e565883810d2b4d42435a3a85ff2a4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080c5f3836353331"
-          - action: "patch"
-            address: 0xdfe2
-            hex: "002b2e7f033c205bff3d30003eff7b27003a32ff3f2c6e767833310d3b6d62637a5f35ff2d6b6866733634ff6c6a6764612f38ff70697972773937606f75746571040a09285c2624400701ff2a5e252321"
-          - action: "patch"
-            address: 0xe033
-            hex: "003d8b7f022c205dff2b8a002eff7d22003b82ff2f3c4e565883810d3a4d42435a2d85ff5f4b4846538684ff4c4a4744413f88ff504959525789877e4f55544551050b09397c373432080cff3836353331"
-      - if: "graphics"
-        then:
-          - action: "mount"
-            file: "superpet/os9/os9-systemdisk-n.d80"
-        else:
-          - action: "mount"
-            file: "superpet/os9/os9-systemdisk-b.d80"
-      - action: "mount"
-        drive: 1
-        file: "superpet/Waterloo2-Languages.d80"
-      - action: "set"
-        cpu: "6809"
-        machine: "superpet"
-        usb-keymap: "/ukm/us.bin"
-        columns: 80
-        video-ram-kb: 2
-
   - id: superpet-6502-50hz
-    name: "SuperPET 6502 (80 Col 50 Hz)"
+    name: "SuperPET MMF 9000 (6502 50 Hz)"
     setup:
       - action: "load"
         files:
@@ -381,40 +420,6 @@ configs:
             start-addr: 0xe000
             end-addr: 0xe7ff
             fix-addr: 0xe7ff
-      - action: "set"
-        cpu: "6502"
-        machine: "superpet"
-        usb-keymap: "/ukm/us.bin"
-        columns: 80
-        video-ram-kb: 2
-        tape: "2ef415f4c9cad1d4da"
-
-  - id: superpet-6502-60hz
-    name: "SuperPET 6502 (80 Col 60 Hz)"
-    setup:
-      - action: "load"
-        files:
-          - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
-          - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
-          - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
-          - address: 0xe000
-            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
-          - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
-          - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
-      - if: "graphics"
-        then:
-          # Use the same graphics-keyboard adaptation as the 80-column PET.
-          - action: "patch"
-            address: 0xe545
-            hex: "eaeaeaeaeaeaea46989013eaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaea"
-          - action: "patch"
-            address: 0xe6d1
-            hex: "3d2e10033c205b122d30003eff5d40002b32ff3f2c4e565833310d3b4d42435a2a35ff3a4b4846533634ff4c4a4744412f38ff504959525739375e4f55544551141109295c2724221d135f2826252321"
       - action: "set"
         cpu: "6502"
         machine: "superpet"
