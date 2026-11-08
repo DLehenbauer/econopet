@@ -4,6 +4,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "input/input_actions.h"
 
 typedef uint8_t key_event_t;
 
@@ -40,5 +41,14 @@ typedef uint8_t key_event_t;
 // Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
 extern const key_event_t key_event_none;
 
+/** Start a new physical snapshot context without replaying already-held keys. */
+void keyscan_reset(const uint8_t* matrix);
 key_event_t next_key_event(const uint8_t* matrix);
-int keyscan_getch(const uint8_t matrix[10]);
+/** Decode physical press edges into navigation for the selected PET layout. */
+tui_action_t keyscan_navigation(const uint8_t matrix[10]);
+/** Sample physical navigation into the router without choosing its destination. */
+void keyscan_sample(void);
+/** Emit qualified physical dual-Shift requests, rejecting injected snoop echoes. */
+void keyscan_poll_gestures(void);
+/** Baseline and suppress a currently held physical chord without emitting intent. */
+void keyscan_consume_gestures(void);

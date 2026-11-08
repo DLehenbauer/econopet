@@ -4,11 +4,21 @@
 #include "pch.h"
 #include "keyscan.h"
 
-#include "input.h"
-#include "keyboard.h"
+#include "input/input_controls.h"
+#include "input/input_routing.h"
+#include "input/keyboard_core.h"
 
 // Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
 const key_event_t key_event_none = PET_KEY_EVENT(false, 0x7, 0xF);
+static uint8_t previous[KEY_COL_COUNT] = {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+};
+static unsigned int r, c;
+
+void keyscan_reset(const uint8_t* matrix) {
+    memcpy(previous, matrix, sizeof(previous));
+    r = c = 0;
+}
 
 static void next_rc(unsigned int* row, unsigned int* col) {
     unsigned int r = *row;
@@ -26,14 +36,6 @@ static void next_rc(unsigned int* row, unsigned int* col) {
 // This function scans the given PET keyboard matrix and returns the next PET key event
 // or key_event_none if no key is pressed.
 key_event_t next_key_event(const uint8_t* matrix) {
-    static uint8_t previous[KEY_COL_COUNT] = {
-        0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0xff, 0xff
-    };
-
-    static unsigned int r = 0;
-    static unsigned int c = 0;
-
     unsigned int start_r = r;
     unsigned int start_c = c;
 
@@ -73,20 +75,18 @@ bool is_key_down(const uint8_t matrix[KEY_COL_COUNT], key_event_t event) {
 }
 
 int keyscan_is_shifted(const uint8_t matrix[KEY_COL_COUNT]) {
-    return is_key_down(matrix, PET_KEY_LSHIFT_N) ||
-           is_key_down(matrix, PET_KEY_LSHIFT_B) ||
-           is_key_down(matrix, PET_KEY_RSHIFT_N) ||
-           is_key_down(matrix, PET_KEY_RSHIFT_B);
+    const bool business = system_state.pet_keyboard_model == pet_keyboard_model_business;
+    return is_key_down(matrix, business ? PET_KEY_LSHIFT_B : PET_KEY_LSHIFT_N)
+        || is_key_down(matrix, business ? PET_KEY_RSHIFT_B : PET_KEY_RSHIFT_N);
 }
 
-int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
+tui_action_t keyscan_navigation(const uint8_t matrix[KEY_COL_COUNT]) {
     static const key_event_t pet_keys[] = {
         // Graphics Keyboard
         PET_KEY_DOWN_N,
         PET_KEY_RIGHT_N,
         PET_KEY_RETURN_N,
         PET_KEY_RUNSTOP_N,
-        PET_KEY_T_N,
         PET_KEY_DELETE_N,
 
         // Business Keyboard
@@ -94,64 +94,107 @@ int keyscan_getch(const uint8_t matrix[KEY_COL_COUNT]) {
         PET_KEY_RIGHT_B,
         PET_KEY_RETURN_B,
         PET_KEY_RUNSTOP_B,
-        PET_KEY_T_B,
         PET_KEY_DELETE_B,
     };
     
-    static const int term_keys_unshifted[] = {
+    static const tui_action_t navigation_unshifted[] = {
         // Graphics Keyboard
-        /*    PET_KEY_DOWN_N: */ KEY_DOWN,
-        /*   PET_KEY_RIGHT_N: */ KEY_RIGHT,
-        /*  PET_KEY_RETURN_N: */ '\n',
-        /* PET_KEY_RUNSTOP_N: */ '\e',
-        /*       PET_KEY_T_N: */ 't',
-        /*  PET_KEY_DELETE_N: */ '\b',
+        /*    PET_KEY_DOWN_N: */ tui_action_down,
+        /*   PET_KEY_RIGHT_N: */ tui_action_page_down,
+        /*  PET_KEY_RETURN_N: */ tui_action_activate,
+        /* PET_KEY_RUNSTOP_N: */ tui_action_back,
+        /*  PET_KEY_DELETE_N: */ tui_action_back,
 
         // Business Keyboard
-        /*    PET_KEY_DOWN_B: */ KEY_DOWN,
-        /*   PET_KEY_RIGHT_B: */ KEY_RIGHT,
-        /*  PET_KEY_RETURN_B: */ '\n',
-        /* PET_KEY_RUNSTOP_B: */ '\e',
-        /*       PET_KEY_T_B: */ 't',
-        /*  PET_KEY_DELETE_B: */ '\b',
+        /*    PET_KEY_DOWN_B: */ tui_action_down,
+        /*   PET_KEY_RIGHT_B: */ tui_action_page_down,
+        /*  PET_KEY_RETURN_B: */ tui_action_activate,
+        /* PET_KEY_RUNSTOP_B: */ tui_action_back,
+        /*  PET_KEY_DELETE_B: */ tui_action_back,
     };
     
-    static const int term_keys_shifted[] = {
+    static const tui_action_t navigation_shifted[] = {
         // Graphics Keyboard
-        /*    PET_KEY_DOWN_N: */ KEY_UP,
-        /*   PET_KEY_RIGHT_N: */ KEY_LEFT,
-        /*  PET_KEY_RETURN_N: */ '\n',
-        /* PET_KEY_RUNSTOP_N: */ '\e',
-        /*       PET_KEY_T_N: */ 'T',
-        /*  PET_KEY_DELETE_N: */ '\b',
+        /*    PET_KEY_DOWN_N: */ tui_action_up,
+        /*   PET_KEY_RIGHT_N: */ tui_action_page_up,
+        /*  PET_KEY_RETURN_N: */ tui_action_activate,
+        /* PET_KEY_RUNSTOP_N: */ tui_action_back,
+        /*  PET_KEY_DELETE_N: */ tui_action_back,
 
         // Business Keyboard
-        /*    PET_KEY_DOWN_B: */ KEY_UP,
-        /*   PET_KEY_RIGHT_B: */ KEY_LEFT,
-        /*  PET_KEY_RETURN_B: */ '\n',
-        /* PET_KEY_RUNSTOP_B: */ '\e',
-        /*       PET_KEY_T_B: */ 'T',
-        /*  PET_KEY_DELETE_B: */ '\b',
+        /*    PET_KEY_DOWN_B: */ tui_action_up,
+        /*   PET_KEY_RIGHT_B: */ tui_action_page_up,
+        /*  PET_KEY_RETURN_B: */ tui_action_activate,
+        /* PET_KEY_RUNSTOP_B: */ tui_action_back,
+        /*  PET_KEY_DELETE_B: */ tui_action_back,
     };
     
-    static_assert((count_of(pet_keys) == count_of(term_keys_unshifted))
-        && (count_of(pet_keys) == count_of(term_keys_shifted)),
+    static_assert((count_of(pet_keys) == count_of(navigation_unshifted))
+        && (count_of(pet_keys) == count_of(navigation_shifted)),
         "Key event arrays must be the same size");
     
     while (true) {
         key_event_t event = next_key_event(matrix);
         if (event == key_event_none) {
-            return EOF;
+            return tui_action_none;
         }
 
-        for (size_t i = 0; i < count_of(pet_keys); i++) {
+        // Decode only the configured layout, not unrelated keys at the other layout's positions.
+        const size_t keys_per_model = count_of(pet_keys) / 2;
+        const size_t first = system_state.pet_keyboard_model == pet_keyboard_model_business
+            ? keys_per_model : 0;
+        for (size_t i = first; i < first + keys_per_model; i++) {
             if (event == pet_keys[i]) {
-                return keyscan_is_shifted(matrix)
-                    ? term_keys_shifted[i]
-                    : term_keys_unshifted[i];
+                return keyscan_is_shifted(matrix) ? navigation_shifted[i] : navigation_unshifted[i];
             }
         }
     }
 
-    return EOF;
+    return tui_action_none;
+}
+
+static input_hold_t menu_hold;
+static bool injected_shifts_blocked;
+
+/** Reject snooped injected Shifts until the physical snapshot observes both released. */
+static bool physical_chord(bool* other_key) {
+    const bool business = system_state.pet_keyboard_model == pet_keyboard_model_business;
+    const key_event_t left = business ? PET_KEY_LSHIFT_B : PET_KEY_LSHIFT_N;
+    const key_event_t right = business ? PET_KEY_RSHIFT_B : PET_KEY_RSHIFT_N;
+    const bool pet_left = is_key_down(pet_key_matrix, left);
+    const bool pet_right = is_key_down(pet_key_matrix, right);
+    if (is_key_down(usb_key_matrix, left) || is_key_down(usb_key_matrix, right))
+        injected_shifts_blocked = true;
+    else if (!pet_left && !pet_right)
+        injected_shifts_blocked = false;
+    *other_key = false;
+    for (unsigned int col = 0; col < KEY_COL_COUNT; ++col) {
+        uint8_t allowed = 0;
+        if (col == PET_KEY_COL(left)) allowed |= 1u << PET_KEY_ROW(left);
+        if (col == PET_KEY_COL(right)) allowed |= 1u << PET_KEY_ROW(right);
+        *other_key |= (uint8_t)(pet_key_matrix[col] | allowed) != UINT8_MAX;
+    }
+    return !injected_shifts_blocked && pet_left && pet_right;
+}
+
+void keyscan_poll_gestures(void) {
+    bool other_key;
+    const bool both = physical_chord(&other_key);
+    input_chord_update(INPUT_SOURCE_PET, &menu_hold, both, other_key);
+    if (input_hold_ready(&menu_hold)) {
+        input_routing_gesture(INPUT_SOURCE_PET, input_gesture_dual_shift);
+        input_hold_consume(&menu_hold);
+    }
+}
+
+void keyscan_consume_gestures(void) {
+    bool other_key;
+    input_hold_update(&menu_hold, physical_chord(&other_key));
+    input_hold_consume(&menu_hold);
+}
+
+void keyscan_sample(void) {
+    tui_action_t action;
+    while ((action = keyscan_navigation(pet_key_matrix)) != tui_action_none)
+        (void)input_routing_submit(INPUT_SOURCE_PET, action);
 }

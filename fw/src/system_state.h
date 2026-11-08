@@ -65,17 +65,11 @@ typedef enum video_source_e {
     video_source_firmware,  // `video_char_buffer` mirrored to $8000
 } video_source_t;
 
-typedef enum term_mode_e {
-    term_mode_cli,          // Terminal shows CLI prompt, accepts commands
-    term_mode_log,          // Terminal shows log messages (legacy, for echo)
-    term_mode_video,        // Terminal mirrors video buffer
-} term_mode_t;
-
-typedef enum term_input_dest_e {
-    term_input_ignore,      // Discard terminal input
-    term_input_to_pet,      // Inject as PET keystrokes
-    term_input_to_firmware, // Route to firmware (menu, etc.)
-} term_input_dest_t;
+/** The user's terminal session determines both ordinary rendering and input routing. */
+typedef enum {
+    terminal_session_cli,
+    terminal_session_remote,
+} terminal_session_t;
 
 typedef enum video_text_mode_e {
     video_text_mode_graphics, // CA2 low: uppercase/graphics charset
@@ -129,8 +123,7 @@ typedef struct system_state_s {
 
     // I/O routing configuration
     video_source_t video_source;        // Where HDMI gets its video data
-    term_mode_t term_mode;              // What terminal output shows
-    term_input_dest_t term_input_dest;  // Where terminal input goes
+    terminal_session_t terminal_session;
 
     // Video character buffer (shared between PET, DVI output, and terminal)
     uint8_t video_char_buffer[PET_MAX_VIDEO_RAM_BYTES];

@@ -7,7 +7,7 @@
 #include "diag/log/log.h"
 #include "display/char_encoding.h"
 #include "fatal.h"
-#include "input.h"
+#include "input/input.h"
 #include "ieee/ieee_drive.h"
 #include "menu_config.h"
 #include "version.h"
@@ -498,26 +498,4 @@ void menu_ui_begin(menu_ui_t* menu, const window_t* window, bool is_boot) {
     menu->drive_controls[0].list.selected = 0;
     menu->drive_controls[0].list.first_visible = 0;
     tui_controller_init(&menu->controller, window, is_boot ? &menu->picker : &menu->dashboard);
-}
-
-tui_action_t menu_ui_action_from_key(int key) {
-    switch (key) {
-        case KEY_UP: return tui_action_up;
-        case KEY_DOWN: return tui_action_down;
-        case KEY_BTN_SHORT: return tui_action_down;
-        case KEY_LEFT: return tui_action_page_up;
-        case KEY_RIGHT: return tui_action_page_down;
-        case KEY_PGUP: return tui_action_page_up;
-        case KEY_PGDN: return tui_action_page_down;
-        case '\r':
-        case '\n': return tui_action_activate;
-        case KEY_BTN_LONG: return tui_action_activate;
-        case '\b':
-        case 0x7f:
-        case '\e': return tui_action_back;
-        default:
-            // Note that KEY_SHIFT_SHIFT is intentionally ignored
-            // inside the menu.
-            return tui_action_none;
-    }
 }

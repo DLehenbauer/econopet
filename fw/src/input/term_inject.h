@@ -25,3 +25,6 @@ bool term_inject_char(int ch);
  * sync_state() being called afterward to send the matrix to the FPGA.
  */
 void term_inject_task(void);
+
+/** Cancel paced characters only. The router also cancels this source's core ownership. */
+void term_inject_cancel(void);

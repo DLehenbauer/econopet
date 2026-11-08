@@ -18,8 +18,7 @@
 #include "filesystem/vfs.h"
 #include "global.h"
 #include "hw.h"
-#include "input.h"
-#include "input_controls.h"
+#include "input/input.h"
 #include "menu_config.h"
 #include "menu_screen.h"
 #include "pet.h"
@@ -257,9 +256,6 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
 }
 
 void menu_enter(bool is_boot) {
-    // Suppress held gestures and pending button releases, including on boot where
-    // entry bypasses input_getch()'s event consumption.
-    input_controls_consume();
     log_info("-- Enter Menu --");
 
     tape_deinit();

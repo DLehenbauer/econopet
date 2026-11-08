@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "display/window.h"
 
@@ -12,8 +13,11 @@
 void display_init(void);
 
 // Sync video between PET RAM and HDMI buffer based on system_state.video_source
-// Optionally render to terminal based on system_state.term_mode
+// Render to the terminal for a Remote session.
 void display_task(void);
+
+/** Report whether the video buffer belongs on the terminal. */
+bool display_term_video_active(void);
 
 // Terminal ANSI rendering control (for menu mode)
 void display_term_begin(void);   // Enter alternate screen, hide cursor

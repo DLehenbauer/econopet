@@ -4,730 +4,148 @@
 #include "pch.h"
 #include "keyboard.h"
 
-#include <limits.h>
-
-#include "diag/log/log.h"
-#include "driver.h"
 #include "fatal.h"
-#include "input.h"
+#include "input/input_controls.h"
+#include "input/input_routing.h"
 #include "keyscan.h"
-#include "keystate.h"
-#include "input_controls.h"
-#include "usb.h"
 
-uint8_t usb_key_matrix[KEY_COL_COUNT] = {
-    /* 0 */ 0xff,
-    /* 1 */ 0xff,
-    /* 2 */ 0xff,
-    /* 3 */ 0xff,
-    /* 4 */ 0xff,
-    /* 5 */ 0xff,
-    /* 6 */ 0xff,
-    /* 7 */ 0xff,
-    /* 8 */ 0xff,
-    /* 9 */ 0xff,
-};
-
-uint8_t pet_key_matrix[KEY_COL_COUNT] = {
-    /* 0 */ 0xff,
-    /* 1 */ 0xff,
-    /* 2 */ 0xff,
-    /* 3 */ 0xff,
-    /* 4 */ 0xff,
-    /* 5 */ 0xff,
-    /* 6 */ 0xff,
-    /* 7 */ 0xff,
-    /* 8 */ 0xff,
-    /* 9 */ 0xff,
-};
-
-// If true, use symbolic keyboard mapping: USB key events are mapped to PET keys
-// based on the symbol printed on the USB keyboard.
-//
-// If false, use physical keyboard mapping: USB key events are mapped to PET keys
-// based on the physical position of the key. This mode is useful for software or games
-// that expect the original PET keyboard layout, where the key's position is more
-// important than its label.
-static bool use_symbolic_keymap = true;
-
-// If true, the USB keyboard model is swapped (graphics <-> business) with
-// respect to the PET keyboard.
-static bool swap_keyboard_model = false;
-
-// State of the USB keyboard caps lock.
-static bool caps_lock_enabled = false;
-
-// The currently active USB keyboard model (graphics or business).
-static pet_keyboard_model_t active_keyboard_model = pet_keyboard_model_graphics;
-static usb_keymap_kind_t active_keymap_kind = usb_keymap_kind_symbolic;
-static const usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[pet_keyboard_model_graphics][usb_keymap_kind_symbolic];
-
-typedef struct {
-    uint8_t key;            // USB HID keycode
-    uint8_t row;            // PET keyboard row
-    uint8_t col;            // PET keyboard column
-    uint8_t modifiers;      // USB HID modifier flags (e.g. shift)
-    bool pressed;           // true = key pressed, false = key released
-    bool modifier_only;     // Update PET modifiers without changing a key.
-} KeyEvent;
-
-typedef struct {
-    int key;
-    uint8_t dev_addr;
-    uint8_t instance;
-} MenuKeyEvent;
-
-#define KEY_BUFFER_LOG2_CAPACITY 4
-#define KEY_BUFFER_CAPACITY (1 << KEY_BUFFER_LOG2_CAPACITY)
-#define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
-#define KEYCODE_COUNT (UINT8_MAX + 1u)
-
-typedef enum {
-    keymap_override_none,
-    keymap_override_shift,
-    keymap_override_unshift,
-} keymap_override_t;
-
-static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
-static uint8_t key_buffer_next_write_index = 0;
-static uint8_t key_buffer_next_read_index = 0;
-// Tracks raw HID modifiers; key events may carry separate keymap overrides.
-static uint8_t queued_report_modifiers;
-static keymap_override_t keymap_overrides[KEYCODE_COUNT];
-static uint8_t active_keymap_override_keys[KEYCODE_COUNT];
-static uint16_t active_keymap_override_count;
-
-// Preserve navigation press edges even when USB servicing receives press and release together.
-static MenuKeyEvent menu_key_buffer[KEY_BUFFER_CAPACITY];
-static uint8_t menu_key_write_index;
-static uint8_t menu_key_read_index;
-static bool menu_active;
-static input_hold_t pet_menu_hold;
-static bool pet_menu_pending;
-
-// Keeps the most recently pressed held-key override active until that key is released.
-static void set_keymap_override(uint8_t keycode, keymap_override_t override) {
-    for (size_t i = 0; i < active_keymap_override_count; ++i) {
-        if (active_keymap_override_keys[i] == keycode) {
-            for (size_t j = i + 1; j < active_keymap_override_count; ++j)
-                active_keymap_override_keys[j - 1] = active_keymap_override_keys[j];
-            --active_keymap_override_count;
-            break;
-        }
-    }
-
-    keymap_overrides[keycode] = override;
-    if (override != keymap_override_none)
-        active_keymap_override_keys[active_keymap_override_count++] = keycode;
-}
-
-// Applies the latest held-key override to raw HID modifiers.
-static uint8_t apply_keymap_override(uint8_t modifiers) {
-    if (active_keymap_override_count == 0)
-        return modifiers;
-
-    const uint8_t keycode = active_keymap_override_keys[active_keymap_override_count - 1];
-    if (keymap_overrides[keycode] == keymap_override_shift)
-        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
-    else if (keymap_overrides[keycode] == keymap_override_unshift)
-        modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
-    return modifiers;
-}
-
-// Reports whether USB navigation belongs to the active configuration menu.
-static bool menu_input_active(void) {
-    return menu_active;
-}
-
-// Starts or stops menu-specific USB navigation and discards stale key presses.
-void keyboard_menu_set_active(bool active) {
-    menu_key_read_index = menu_key_write_index = 0;
-    menu_active = active;
-}
-
-// Uses HID navigation keys directly, independent of PET keymaps and injected Shift.
-static int menu_key(uint8_t keycode) {
-    switch (keycode) {
-        case HID_KEY_ARROW_UP: return KEY_UP;
-        case HID_KEY_ARROW_DOWN: return KEY_DOWN;
-        case HID_KEY_ARROW_LEFT: return KEY_LEFT;
-        case HID_KEY_ARROW_RIGHT: return KEY_RIGHT;
-        case HID_KEY_PAGE_UP: return KEY_PGUP;
-        case HID_KEY_PAGE_DOWN: return KEY_PGDN;
-        case HID_KEY_ENTER:
-        case HID_KEY_KEYPAD_ENTER: return '\r';
-        case HID_KEY_ESCAPE: return '\e';
-        case HID_KEY_BACKSPACE: return '\b';
-        default: return EOF;
-    }
-}
-
-// Buffers one menu press without merging repeated keys or reordering Back.
-static void enqueue_menu_key(int key, uint8_t dev_addr, uint8_t instance) {
-    const uint8_t next = (menu_key_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-    if (next != menu_key_read_index) {
-        menu_key_buffer[menu_key_write_index] = (MenuKeyEvent) {
-            .key = key,
-            .dev_addr = dev_addr,
-            .instance = instance,
-        };
-        menu_key_write_index = next;
-    }
-}
-
-// Removes one interface's unread navigation while preserving the other sources.
-static void discard_menu_keys(uint8_t dev_addr, uint8_t instance) {
-    uint8_t read = menu_key_read_index;
-    uint8_t write = menu_key_read_index;
-    while (read != menu_key_write_index) {
-        const MenuKeyEvent event = menu_key_buffer[read];
-        read = (read + 1) & KEY_BUFFER_CAPACITY_MASK;
-        if (event.dev_addr != dev_addr || event.instance != instance) {
-            menu_key_buffer[write] = event;
-            write = (write + 1) & KEY_BUFFER_CAPACITY_MASK;
-        }
-    }
-    menu_key_write_index = write;
-}
-
-// Note that the theoretical maximum number of keyboards is actually 127.
 #define MAX_KEYBOARDS 8
 
+/** USB transport state is independent of routed runtime key ownership. */
 typedef struct {
-    uint8_t dev_addr;
-    uint8_t instance;
+    input_source_t source;
     bool used;
     bool attached;
     hid_keyboard_report_t previous_report;
-    uint8_t injected_keys[KEYCODE_COUNT / CHAR_BIT];
     input_hold_t menu_hold;
-    bool menu_pending;
 } keyboard_info_t;
 
-static keyboard_info_t keyboard_states[MAX_KEYBOARDS] = { 0 };
+static keyboard_info_t keyboards[MAX_KEYBOARDS];
 
-// Finds input state for one USB HID interface.
-static keyboard_info_t* find_keyboard_state(uint8_t dev_addr, uint8_t instance) {
-    for (int i = 0; i < MAX_KEYBOARDS; i++) {
-        keyboard_info_t* const keyboard = &keyboard_states[i];
-        if (keyboard->used && keyboard->dev_addr == dev_addr && keyboard->instance == instance)
-            return keyboard;
-    }
-
+/** Find the raw report history for one interface. */
+static keyboard_info_t* find_keyboard(uint8_t device, uint8_t instance) {
+    for (size_t i = 0; i < count_of(keyboards); ++i)
+        if (keyboards[i].used && keyboards[i].source.device == device
+            && keyboards[i].source.instance == instance)
+            return &keyboards[i];
     return NULL;
 }
 
-// Returns existing input state or allocates a slot for a new HID interface.
-static keyboard_info_t* get_keyboard_state(uint8_t dev_addr, uint8_t instance) {
-    keyboard_info_t* keyboard = find_keyboard_state(dev_addr, instance);
-    if (keyboard)
+/** Allocate history for boot and non-boot keyboard interfaces alike. */
+static keyboard_info_t* get_keyboard(uint8_t device, uint8_t instance) {
+    keyboard_info_t* keyboard = find_keyboard(device, instance);
+    if (keyboard != NULL)
         return keyboard;
-
-    for (int i = 0; i < MAX_KEYBOARDS; i++) {
-        keyboard = &keyboard_states[i];
-        if (!keyboard->used) {
-            *keyboard = (keyboard_info_t) {
-                .dev_addr = dev_addr,
-                .instance = instance,
-                .used = true,
-            };
-            return keyboard;
+    for (size_t i = 0; i < count_of(keyboards); ++i) {
+        if (!keyboards[i].used) {
+            keyboards[i] = (keyboard_info_t){.source = {device, instance}, .used = true};
+            return &keyboards[i];
         }
     }
-
     fatal("Max supported USB keyboards is %d.", MAX_KEYBOARDS);
 }
 
-// Dispatches queued events when needed instead of dropping a key transition.
-static void ensure_key_buffer_space(void) {
-    while (((key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK) == key_buffer_next_read_index)
-        dispatch_key_events();
-}
-
-static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
-    ensure_key_buffer_space();
-    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-        .key = keycode,
-        .row = row,
-        .col = col,
-        .modifiers = modifiers,
-        .pressed = pressed,
-        .modifier_only = false,
-    };
-    key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-}
-
-// Queues a modifier transition even when a report contains no key changes.
-static void enqueue_modifier_event(uint8_t report_modifiers) {
-    ensure_key_buffer_space();
-    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-        .modifiers = apply_keymap_override(report_modifiers),
-        .modifier_only = true,
-    };
-    key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-    queued_report_modifiers = report_modifiers;
-}
-
-// Combines modifiers held across all active keyboard interfaces.
-static uint8_t combined_modifiers(void) {
-    uint8_t modifiers = 0;
-    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
-        if (keyboard_states[i].used)
-            modifiers |= keyboard_states[i].previous_report.modifier;
-    }
-    return modifiers;
-}
-
-// Queues a modifier-only update when the combined USB state changes.
-static void update_queued_modifiers(uint8_t modifiers) {
-    if (modifiers != queued_report_modifiers)
-        enqueue_modifier_event(modifiers);
-}
-
-static bool peek_key_event(KeyEvent* keyEvent) {
-    *keyEvent = key_buffer[key_buffer_next_read_index];
-    return key_buffer_next_write_index != key_buffer_next_read_index;
-}
-
-static void dequeue_key_event() {
-    assert(key_buffer_next_write_index != key_buffer_next_read_index);
-    key_buffer_next_read_index = (key_buffer_next_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-}
-
-void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
-    KeyStateFlags keystate = keystate_reset(keycode);
-
-    if (!(keystate & KEYSTATE_PRESSED_FLAG)) {
-        log_debug("USB: Key up %d=(not found)", keycode);
-        return;
-    }
-
-    usb_keymap_entry_t keyInfo = s_keymap[
-        (keystate & KEYSTATE_SHIFTED_FLAG)
-            ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
-            : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
-
-    const uint8_t row = keyInfo.row;
-    const uint8_t col = keyInfo.col;
-
-    set_keymap_override(keycode, keymap_override_none);
-    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ false);
-}
-
-void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
-    bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
-
-    usb_keymap_entry_t keyInfo = s_keymap[
-        is_shifted
-            ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
-            : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
-
-    const uint8_t row = keyInfo.row;
-    const uint8_t col = keyInfo.col;
-
-    set_keymap_override(keycode, keyInfo.unshift
-        ? keymap_override_unshift
-        : keyInfo.shift ? keymap_override_shift : keymap_override_none);
-
-    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ true);
-
-    keystate_set(keycode, KEYSTATE_PRESSED_FLAG | (is_shifted ? KEYSTATE_SHIFTED_FLAG : 0));
-}
-
-static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
-    if (row > 7) {
-        log_debug("USB: Key down: %d=(undefined)", keycode);
-        return;
-    }
-
-    uint8_t rowMask = 1 << row;
-
-    if (usb_key_matrix[col] & rowMask) {
-        usb_key_matrix[col] &= ~rowMask;
-        log_debug("USB: Key down: %d=(%d,%d)", keycode, row, col);
-    }
-}
-
-static void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
-    if (row > 7) {
-        log_debug("USB: Key up: %d=(undefined)", keycode);
-        return;
-    }
-
-    uint8_t rowMask = 1 << row;
-
-    if (usb_key_matrix[col] & ~rowMask) {
-        usb_key_matrix[col] |= rowMask;
-        log_debug("USB: Key up: %d=(%d,%d)", keycode, row, col);
-    }
-}
-
-static const char* const usb_modifier_names[] = {
-    "CONTROL_LEFT",
-    "SHIFT_LEFT",
-    "ALT_LEFT",
-    "GUI_LEFT",
-    "CONTROL_RIGHT",
-    "SHIFT_RIGHT",
-    "ALT_RIGHT",
-    "GUI_RIGHT",
-};
-    
-static void modifier_down(uint8_t modifier_offset) {
-    log_debug("USB: Modifier down: %s", usb_modifier_names[modifier_offset]);
-    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
-    usb_keymap_entry_t keyInfo = s_keymap[keycode];
-    key_down(keycode, keyInfo.row, keyInfo.col);
-}
-
-static void modifier_up(uint8_t modifier_offset) {
-    log_debug("USB: Modifier up: %s", usb_modifier_names[modifier_offset]);
-    uint8_t keycode = HID_KEY_CONTROL_LEFT + modifier_offset;
-    usb_keymap_entry_t keyInfo = s_keymap[keycode];
-    key_up(keycode, keyInfo.row, keyInfo.col);
-}
-
-static void sync_leds(uint8_t dev_addr) {
-    static uint8_t led_report = 0;
-
-    led_report = 0;
-
-    if (caps_lock_enabled) {
-        led_report |= KEYBOARD_LED_CAPSLOCK;
-    }
-    if (active_keyboard_model == pet_keyboard_model_graphics) {
-        led_report |= KEYBOARD_LED_NUMLOCK;
-    }
-    if (active_keymap_kind == usb_keymap_kind_symbolic) {
-        led_report |= KEYBOARD_LED_SCROLLLOCK;
-    }
-
-    tuh_hid_set_report(dev_addr, 0, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report));
-}
-
-void usb_keyboard_added(uint8_t dev_addr, uint8_t instance) {
-    keyboard_info_t* const keyboard = get_keyboard_state(dev_addr, instance);
-    if (keyboard->attached)
-        fatal("USB (addr=%d, instance=%d) is already mounted.", dev_addr, instance);
-
-    keyboard->attached = true;
-
-    // Initialize LEDs for the newly attached keyboard.
-    sync_leds(dev_addr);
-}
-
-static bool key_owned_elsewhere(const keyboard_info_t* source, uint8_t keycode);
-
-// Tracks keys routed to the PET matrix independently of menu-only key holds.
-static bool key_owned(const keyboard_info_t* keyboard, uint8_t keycode) {
-    return (keyboard->injected_keys[keycode / CHAR_BIT] & (1u << (keycode % CHAR_BIT))) != 0;
-}
-
-// Updates ownership for one physical key press or release.
-static void set_key_owned(keyboard_info_t* keyboard, uint8_t keycode, bool owned) {
-    uint8_t* const byte = &keyboard->injected_keys[keycode / CHAR_BIT];
-    const uint8_t mask = 1u << (keycode % CHAR_BIT);
-    if (owned)
-        *byte |= mask;
-    else
-        *byte &= (uint8_t) ~mask;
-}
-
-// Releases this interface's keys and discards only its unread menu navigation.
-static void clear_keyboard_state(keyboard_info_t* keyboard) {
-    const hid_keyboard_report_t previous_report = keyboard->previous_report;
-    discard_menu_keys(keyboard->dev_addr, keyboard->instance);
-    keyboard->used = false;
-    keyboard->attached = false;
-    const uint8_t modifiers = combined_modifiers();
-
-    for (uint8_t i = 0; i < sizeof(previous_report.keycode); ++i) {
-        const uint8_t keycode = previous_report.keycode[i];
-        if (keycode && key_owned(keyboard, keycode) && !key_owned_elsewhere(keyboard, keycode))
-            usb_keyboard_enqueue_key_up(keycode, modifiers);
-    }
-
-    // Apply held-key overrides before exposing a raw modifier-only transition.
-    update_queued_modifiers(modifiers);
-    *keyboard = (keyboard_info_t) { 0 };
-}
-
-void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance) {
-    keyboard_info_t* const keyboard = find_keyboard_state(dev_addr, instance);
-    if (keyboard && keyboard->attached) {
-        clear_keyboard_state(keyboard);
-        return;
-    }
-
-    fatal("USB (addr=%d, instance=%d) not found on removal.", dev_addr, instance);
-}
-
-// Clears report and gesture state for a non-boot HID interface that was unmounted.
-void keyboard_source_removed(uint8_t dev_addr, uint8_t instance) {
-    keyboard_info_t* const keyboard = find_keyboard_state(dev_addr, instance);
-    if (keyboard && !keyboard->attached)
-        clear_keyboard_state(keyboard);
-}
-
-static void usb_keyboard_sync(system_state_t* system_state) {
-    // Get the PET keyboard model (graphics or business) as determined by the config
-    // DIP switch on the board.
-    const pet_keyboard_model_t pet_model = system_state->pet_keyboard_model;
-
-    // Determine the active USB keyboard model (graphics or business), taking into
-    // account the 'usb_swap_keyboard_model' setting.
-    active_keyboard_model = swap_keyboard_model
-        ? pet_model == pet_keyboard_model_graphics      // Swap models
-            ? pet_keyboard_model_business
-            : pet_keyboard_model_graphics
-        : pet_model;                                    // No swap
-
-    // Get the USB keymap kind (symbolic or positional).
-    active_keymap_kind = use_symbolic_keymap
-        ? usb_keymap_kind_symbolic
-        : usb_keymap_kind_positional;
-
-    // Update the current s_keymap pointer to point to the currently active model/kind.
-    s_keymap = system_state->usb_keymap_data[active_keyboard_model][active_keymap_kind];
-
-    // Synchronize the keyboard LEDs to match the currently active state.
-    for (int i = 0; i < MAX_KEYBOARDS; i++) {
-        if (keyboard_states[i].attached) {
-            sync_leds(keyboard_states[i].dev_addr);
-        }
-    }
-}
-
-void usb_keyboard_reset(system_state_t* system_state) {
-    use_symbolic_keymap = true;
-    swap_keyboard_model = false;
-    caps_lock_enabled = false;
-    menu_key_read_index = menu_key_write_index = 0;
-    keyboard_menu_consume();
-
-    usb_keyboard_sync(system_state);
-}
-
-static uint8_t get_modifiers(KeyEvent keyEvent) {
-    uint8_t modifiers = keyEvent.modifiers;
-
-    if (caps_lock_enabled) {
-        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
-    }
-
-    return modifiers;
-}
-
-// Generic lock toggle function for shift lock, num lock, and scroll lock
-static void toggle_lock(const KeyEvent* const keyEvent, bool* lock_flag, const char* lock_name) {
-    if (keyEvent->pressed) {
-        *lock_flag = !(*lock_flag);
-        log_debug("USB: %s %s", lock_name, *lock_flag ? "enabled" : "disabled");
-        usb_keyboard_sync(&system_state);
-    }
-}
-
-void dispatch_key_events() {
-    static uint8_t active_modifiers = 0;
-
-    KeyEvent keyEvent;
-
-    if (!peek_key_event(&keyEvent)) {
-        return;
-    }
-
-    {
-        // Synchronize modifier keys in the PET keyboard matrix with the USB HID keyboard state.
-        uint8_t new_modifiers = get_modifiers(keyEvent);
-
-        if (new_modifiers != active_modifiers) {
-            uint8_t old_modifiers = active_modifiers;
-            active_modifiers = new_modifiers;
-
-            for (uint8_t i = 0; i < 8; i++) {
-                uint8_t new_mod = new_modifiers & 0x01;
-                uint8_t old_mod = old_modifiers & 0x01;
-
-                if (new_mod) {
-                    if (!old_mod) {
-                        modifier_down(i);
-                    }
-                } else if (old_mod) {
-                    modifier_up(i);
-                }
-
-                new_modifiers >>= 1;
-                old_modifiers >>= 1;
-            }
-        }
-    }
-
-    do {
-        if (!keyEvent.modifier_only) {
-            switch (keyEvent.key) {
-                case HID_KEY_CAPS_LOCK:
-                    toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
-                    break;
-                case HID_KEY_NUM_LOCK:
-                    toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
-                    break;
-                case HID_KEY_SCROLL_LOCK:
-                    toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
-                    break;
-                default:
-                    if (keyEvent.pressed) {
-                        key_down(keyEvent.key, keyEvent.row, keyEvent.col);
-                    } else {
-                        key_up(keyEvent.key, keyEvent.row, keyEvent.col);
-                    }
-                    break;
-            }
-        }
-
-        dequeue_key_event();
-
-        // Continue updating the PET keyboard matrix as long as there are more events queued
-        // and the modifiers are consistent.
-    } while (peek_key_event(&keyEvent) && (get_modifiers(keyEvent) == active_modifiers));
-}
-
-static bool find_key_in_report(hid_keyboard_report_t const* report, uint8_t keycode) {
-    for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
-        if (report->keycode[i] == keycode) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-// Checks whether another HID interface owns this PET matrix key.
-static bool key_owned_elsewhere(const keyboard_info_t* source, uint8_t keycode) {
-    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
-        const keyboard_info_t* const keyboard = &keyboard_states[i];
-        if (keyboard != source && keyboard->used
-            && key_owned(keyboard, keycode))
-            return true;
-    }
-
-    return false;
-}
-
-void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_t const* report) {
-    keyboard_info_t* const keyboard = get_keyboard_state(dev_addr, instance);
-    const hid_keyboard_report_t previous_report = keyboard->previous_report;
-
-    const uint8_t shifts = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
-    bool chord_only = report->modifier == shifts;
+/** Recognize membership without turning repeated report observations into presses. */
+static bool report_has_key(const hid_keyboard_report_t* report, uint8_t keycode) {
     for (size_t i = 0; i < count_of(report->keycode); ++i)
-        chord_only &= report->keycode[i] == 0;
-    if (!chord_only && input_hold_ready(&keyboard->menu_hold))
-        keyboard->menu_pending = true;
-    input_hold_update(&keyboard->menu_hold, chord_only);
-    keyboard->previous_report = *report;
-    const uint8_t modifiers = combined_modifiers();
-
-    // For each previously pressed key, check if the key still exists in the
-    // new report.  If not, the key has been released.
-    for (uint8_t i = 0; i < sizeof(previous_report.keycode); i++) {
-        const uint8_t keycode = previous_report.keycode[i];
-        if (keycode && !find_key_in_report(report, keycode) && key_owned(keyboard, keycode)) {
-            set_key_owned(keyboard, keycode, false);
-            if (!key_owned_elsewhere(keyboard, keycode))
-                usb_keyboard_enqueue_key_up(keycode, modifiers);
-        }
-    }
-
-    // For each key in the new report, check if the key exists in the new report.
-    // If not, the key has been pressed.
-    for (uint8_t i = 0; i < sizeof(report->keycode); i++) {
-        const uint8_t keycode = report->keycode[i];
-        if (keycode && !find_key_in_report(&previous_report, keycode)) {
-            const int key = menu_key(keycode);
-            if (menu_input_active() && key != EOF) {
-                enqueue_menu_key(key, dev_addr, instance);
-            } else {
-                if (!key_owned_elsewhere(keyboard, keycode))
-                    usb_keyboard_enqueue_key_down(keycode, modifiers);
-                set_key_owned(keyboard, keycode, true);
-            }
-        }
-    }
-
-    // Apply this report's keymap overrides before queuing its raw modifier update.
-    update_queued_modifiers(modifiers);
-}
-
-// Reads one active-low key from a PET-format matrix.
-static bool matrix_key_down(const uint8_t* matrix, key_event_t key) {
-    const uint8_t mask = 1u << PET_KEY_ROW(key);
-    const unsigned int col = PET_KEY_COL(key);
-    return (matrix[col] & mask) == 0;
-}
-
-bool keyboard_menu_requested(void) {
-    static bool pet_shifts_blocked;
-    const bool business = system_state.pet_keyboard_model == pet_keyboard_model_business;
-    const key_event_t left = business ? PET_KEY_LSHIFT_B : PET_KEY_LSHIFT_N;
-    const key_event_t right = business ? PET_KEY_RSHIFT_B : PET_KEY_RSHIFT_N;
-    const bool pet_left = matrix_key_down(pet_key_matrix, left);
-    const bool pet_right = matrix_key_down(pet_key_matrix, right);
-    // The snoop can retain injected shifts after USB release, until the CPU scans again.
-    if (matrix_key_down(usb_key_matrix, left) || matrix_key_down(usb_key_matrix, right))
-        pet_shifts_blocked = true;
-    else if (!pet_left && !pet_right)
-        pet_shifts_blocked = false;
-    bool chord_only = !pet_shifts_blocked && pet_left && pet_right;
-    for (unsigned int col = 0; col < KEY_COL_COUNT; ++col) {
-        uint8_t allowed = 0;
-        if (col == PET_KEY_COL(left)) allowed |= 1u << PET_KEY_ROW(left);
-        if (col == PET_KEY_COL(right)) allowed |= 1u << PET_KEY_ROW(right);
-        chord_only &= (uint8_t)(pet_key_matrix[col] | allowed) == UINT8_MAX;
-    }
-    if (!chord_only && input_hold_ready(&pet_menu_hold))
-        pet_menu_pending = true;
-    input_hold_update(&pet_menu_hold, chord_only);
-    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
-        keyboard_info_t* const keyboard = &keyboard_states[i];
-        if (keyboard->used && (keyboard->menu_pending || input_hold_ready(&keyboard->menu_hold)))
+        if (report->keycode[i] == keycode)
             return true;
-    }
-    return pet_menu_pending || input_hold_ready(&pet_menu_hold);
+    return false;
 }
 
-// Refreshes the PET snapshot before suppressing any currently held chord.
-void keyboard_menu_consume(void) {
-    (void) keyboard_menu_requested();
-    pet_menu_pending = false;
-    input_hold_consume(&pet_menu_hold);
-    for (int i = 0; i < MAX_KEYBOARDS; ++i) {
-        if (keyboard_states[i].used) {
-            keyboard_states[i].menu_pending = false;
-            input_hold_consume(&keyboard_states[i].menu_hold);
+/** Reflect the shared core's mapping and lock settings on a USB keyboard. */
+static void sync_leds(input_source_t source) {
+    static uint8_t leds;
+    leds = (keyboard_core_caps_lock() ? KEYBOARD_LED_CAPSLOCK : 0)
+        | (keyboard_core_model() == pet_keyboard_model_graphics ? KEYBOARD_LED_NUMLOCK : 0)
+        | (keyboard_core_keymap_kind() == usb_keymap_kind_symbolic ? KEYBOARD_LED_SCROLLLOCK : 0);
+    tuh_hid_set_report(source.device, source.instance, 0, HID_REPORT_TYPE_OUTPUT, &leds, sizeof(leds));
+}
+
+/** Update attached transport LEDs after the core changes mapping settings. */
+static void sync_all_leds(void) {
+    for (size_t i = 0; i < count_of(keyboards); ++i)
+        if (keyboards[i].attached)
+            sync_leds(keyboards[i].source);
+}
+
+void usb_keyboard_added(uint8_t device, uint8_t instance) {
+    keyboard_info_t* const keyboard = get_keyboard(device, instance);
+    if (keyboard->attached)
+        fatal("USB (addr=%d, instance=%d) is already mounted.", device, instance);
+    keyboard->attached = true;
+    sync_leds(keyboard->source);
+}
+
+/** Cancel only this source's routed work before releasing its report history. */
+static void remove_keyboard(keyboard_info_t* keyboard) {
+    input_routing_cancel(keyboard->source);
+    *keyboard = (keyboard_info_t){0};
+}
+
+void usb_keyboard_removed(uint8_t device, uint8_t instance) {
+    keyboard_info_t* const keyboard = find_keyboard(device, instance);
+    if (keyboard == NULL || !keyboard->attached)
+        fatal("USB (addr=%d, instance=%d) not found on removal.", device, instance);
+    remove_keyboard(keyboard);
+}
+
+void keyboard_source_removed(uint8_t device, uint8_t instance) {
+    keyboard_info_t* const keyboard = find_keyboard(device, instance);
+    if (keyboard != NULL && !keyboard->attached)
+        remove_keyboard(keyboard);
+}
+
+void process_kbd_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report) {
+    keyboard_info_t* const keyboard = get_keyboard(device, instance);
+    const hid_keyboard_report_t previous = keyboard->previous_report;
+    const uint8_t shifts = KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT;
+    bool other_key = (report->modifier & (uint8_t)~shifts) != 0;
+    for (size_t i = 0; i < count_of(report->keycode); ++i)
+        other_key |= report->keycode[i] != 0;
+    input_chord_update(keyboard->source, &keyboard->menu_hold,
+        (report->modifier & shifts) == shifts, other_key);
+
+    // Retain raw state even when the router suppresses presses in the menu.
+    keyboard->previous_report = *report;
+    keyboard_edge_t edges[count_of(previous.keycode) + count_of(report->keycode)];
+    size_t edge_count = 0;
+    for (size_t i = 0; i < count_of(previous.keycode); ++i) {
+        const uint8_t keycode = previous.keycode[i];
+        if (keycode && !report_has_key(report, keycode))
+            edges[edge_count++] = (keyboard_edge_t){keycode, false};
+    }
+    for (size_t i = 0; i < count_of(report->keycode); ++i) {
+        const uint8_t keycode = report->keycode[i];
+        if (keycode && !report_has_key(&previous, keycode))
+            edges[edge_count++] = (keyboard_edge_t){keycode, true};
+    }
+    const keyboard_batch_t batch = {
+        .source = keyboard->source,
+        .modifiers_pressed = report->modifier & (uint8_t)~previous.modifier,
+        .modifiers_released = previous.modifier & (uint8_t)~report->modifier,
+        .edges = edges,
+        .edge_count = edge_count,
+    };
+    input_routing_keyboard(&batch);
+}
+
+void usb_keyboard_poll_gestures(void) {
+    for (size_t i = 0; i < count_of(keyboards); ++i) {
+        if (keyboards[i].used && input_hold_ready(&keyboards[i].menu_hold)) {
+            input_routing_gesture(keyboards[i].source, input_gesture_dual_shift);
+            input_hold_consume(&keyboards[i].menu_hold);
         }
     }
 }
 
-int keyboard_getch() {
-    if (menu_input_active()) {
-        if (menu_key_read_index != menu_key_write_index) {
-            const int key = menu_key_buffer[menu_key_read_index].key;
-            menu_key_read_index = (menu_key_read_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-            return key;
-        }
-        return keyscan_getch(pet_key_matrix);
-    }
-    menu_key_read_index = menu_key_write_index = 0;
-    // If the USB keyboard matrix has pressed keys it takes precedence.  Otherwise, we fall
-    // back to the PET keyboard matrix.  This is the same logic used by the FPGA when determining
-    // when to intercept the reads from $E812.
-    bool use_usb_keys = false;
-    
-    for (uint8_t i = 0; i < KEY_COL_COUNT; i++) {
-        use_usb_keys |= (usb_key_matrix[i] != 0xff);
-    }
+void usb_keyboard_consume_gestures(void) {
+    for (size_t i = 0; i < count_of(keyboards); ++i)
+        if (keyboards[i].used)
+            input_hold_consume(&keyboards[i].menu_hold);
+}
 
-    return keyscan_getch(use_usb_keys
-        ? usb_key_matrix
-        : pet_key_matrix);
+void dispatch_key_events(void) {
+    if (keyboard_core_dispatch())
+        sync_all_leds();
 }
