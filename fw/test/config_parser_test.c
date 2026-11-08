@@ -1089,7 +1089,6 @@ static const char* const expected_sd_prefixes[SD_DIR_COUNT] = {
     [SD_DIR_ROMS] = "/roms/",
     [SD_DIR_PRGS] = "/prgs/",
     [SD_DIR_UKM] = "/ukm/",
-    [SD_DIR_FPGA] = "/fpga/",
 };
 
 // Checks the SD layout independently of the production prefix lookup.

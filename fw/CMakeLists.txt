@@ -27,9 +27,8 @@ endif()
 # The SDK uses this CMake variable to size the linker flash region. Restrict it
 # to the application partition, while C code and stage 2 use the physical size.
 if(NOT PICO_PLATFORM STREQUAL "host")
-    set(ECONOPET_FLASH_SIZE_BYTES 16777216)
-    set(ECONOPET_BOOTLOADER_SIZE_BYTES 65536)
-    math(EXPR PICO_FLASH_SIZE_BYTES "${ECONOPET_FLASH_SIZE_BYTES} - ${ECONOPET_BOOTLOADER_SIZE_BYTES}")
+    include("${CMAKE_CURRENT_LIST_DIR}/../cmake/FlashLayout.cmake")
+    set(PICO_FLASH_SIZE_BYTES "${ECONOPET_FPGA_OFFSET}")
 endif()
 
 # Initialize Raspberry Pi Pico SDK (must be done before 'project()')

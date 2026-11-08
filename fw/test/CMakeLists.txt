@@ -33,6 +33,8 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/window.c
     ${SRC_DIR}/fatal.c
+    ${SRC_DIR}/fpga_image.c
+    ${SRC_DIR}/roms/roms.c
     ${SRC_DIR}/sd/path.c
     ${SRC_DIR}/sd/activity.c
     ${SRC_DIR}/input_controls.c
@@ -60,11 +62,13 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/cpu_test.c
     ${TEST_DIR}/crtc_test.c
+    ${TEST_DIR}/fatal_error_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/dos_media_test.c
     ${TEST_DIR}/dos_rel_test.c
     ${TEST_DIR}/dos_test.c
     ${TEST_DIR}/global_test.c
+    ${TEST_DIR}/fpga_image_test.c
     ${TEST_DIR}/ieee_drive_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keyboard_test.c
@@ -86,6 +90,12 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/window_test.c
 )
 
+# ROM boot-routing tests do not execute CPU instructions or inspect glyph content.
+foreach(header 901447_10 menu_rom)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/${header}.h"
+        CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
+endforeach()
+
 # Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}
     ${CHECK_LIBRARIES}
@@ -96,6 +106,10 @@ target_link_libraries(${PROJECT_NAME}
 # Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen -Wl,--wrap=time_us_64)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
+# Exercise the real Morse endpoint alongside the aborting host fatal() mock.
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_FATAL_MORSE)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.

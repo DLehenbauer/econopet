@@ -14,6 +14,29 @@ when adding headers or memory initialization files.
 Unregistered files, simulation-only sources, dependency installations, caches,
 and external core build outputs do not invalidate the bitstream.
 
+## Configuration and programming
+
+The RP2040 normally configures the FPGA over SPI at startup, reading the
+`EconoPET.hex.bin` bitstream from a reserved partition in the RP2040's external
+flash. [Image preparation](../../cmake/PrepareFpgaImage.cmake) wraps the bitstream
+in a header containing its image-format version, payload length and CRC-32.
+
+The combined `firmware.uf2` contains both RP2040 firmware and the FPGA image,
+so one UF2 update installs both. Their flash regions are defined in
+[FlashLayout.cmake](../../cmake/FlashLayout.cmake).
+
+To program the FPGA image into RP2040 flash over SWD:
+
+```sh
+cmake --build --preset prog-gw
+```
+
+This builds the gateware, programs and verifies its image, then resets the MCU
+to configure the FPGA.
+
+See [RP2040 flash updates](rp2040.md) for partitioning, first-time setup,
+recovery, and SD-card update behavior.
+
 ## Documentation
 
 * [T20 Datasheet](https://www.efinixinc.com/docs/trion20-ds-v5.10.pdf)

@@ -58,11 +58,12 @@ void start_menu_rom(menu_rom_boot_reason_t reason) {
     system_state_set_video_ram_mask(&system_state, pet_video_ram_mask_1kb);
     write_pet_model(&system_state);
 
-    // We need to load a USB keymap to allow the user to navigate the menu with USB.
-    // Menu is keymap agnostic (only uses cursor/enter keys), so any keymap will do.
-    char keymap_path[SD_PATH_MAX];
-    sd_make_path(keymap_path, SD_DIR_UKM, "us.bin");
-    read_keymap(keymap_path, &system_state);
+    // Only interactive menus need a keymap. Fatal rendering must not depend on SD access.
+    if (reason == MENU_ROM_BOOT_NORMAL) {
+        char keymap_path[SD_PATH_MAX];
+        sd_make_path(keymap_path, SD_DIR_UKM, "us.bin");
+        read_keymap(keymap_path, &system_state);
+    }
 
     spi_write(/* dest: */ MENU_ROM_START_ADDRESS, /* pSrc: */ rom_menu_ff00,  sizeof(rom_menu_ff00));   // Load menu ROM
     spi_write(/* dest: */ CHAR_ROM_SRAM_ADDRESS, /* pSrc: */ rom_chars_e800, sizeof(rom_chars_e800));   // Load character ROM
