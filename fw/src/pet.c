@@ -60,7 +60,7 @@ void pet_reset() {
 
     memset(system_state.video_char_buffer, 0x20, 0x800);            // Clear video character buffer
     memset(system_state.video_char_buffer + 0x800, 0x0f, 0x800);    // Set color buffer to white on black
-    memset(pet_key_matrix, 0xff, sizeof(pet_key_matrix));           // Clear keyboard matrix
+    // Keep the last physical observation for held-key suppression across the reset.
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));           // Clear USB keyboard matrix
     
     // Assert CPU 'reset' while execution remains suspended.

@@ -152,11 +152,13 @@ START_TEST(test_gesture_binding_table_and_priority) {
     }
     input_routing_set_menu_active(false);
     for (size_t button_first = 0; button_first < 2; ++button_first) {
+        input_routing_begin_cycle();
         if (button_first)
             input_routing_gesture(INPUT_SOURCE_BUTTON, input_gesture_button_short);
         input_routing_gesture(keyboard, input_gesture_dual_shift);
         if (!button_first)
             input_routing_gesture(INPUT_SOURCE_BUTTON, input_gesture_button_short);
+        input_routing_end_cycle();
         const input_system_request_t request = input_routing_take_request();
         ck_assert_int_eq(request.action, input_system_request_reset);
         ck_assert_uint_eq(request.source.device, INPUT_SOURCE_BUTTON.device);
@@ -259,6 +261,80 @@ START_TEST(test_core_backpressure_retains_led_sync) {
 }
 END_TEST
 
+// Cancellation retires unpublished typing without discarding another producer's queued tap.
+START_TEST(test_core_cancel_before_dispatch) {
+    input_routing_set_menu_active(false);
+    const input_source_t survivor = {4, 1};
+    const uint8_t shift = KEYBOARD_MODIFIER_LEFTSHIFT;
+    const uint8_t control = KEYBOARD_MODIFIER_RIGHTCTRL;
+    const uint8_t cancelled_key = _i == 3 ? HID_KEY_CAPS_LOCK : HID_KEY_A;
+    const usb_keymap_entry_t cancelled_cell = {.row = 2, .col = 3, .shift = _i == 1};
+    const usb_keymap_entry_t survivor_cell = {.row = 3, .col = 3};
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][cancelled_key] = cancelled_cell;
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][cancelled_key | 0x100] = cancelled_cell;
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_B] = survivor_cell;
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_B | 0x100] = survivor_cell;
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_SHIFT_LEFT]
+        = (usb_keymap_entry_t){.row = 1, .col = 3};
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_CONTROL_RIGHT]
+        = (usb_keymap_entry_t){.row = 0, .col = 3};
+    keyboard_core_reset(&system_state);
+    const keyboard_edge_t cancelled_press = {cancelled_key, true};
+    const uint8_t cancelled_modifiers = _i == 1 || _i == 3 ? 0 : shift;
+    const keyboard_batch_t cancelled = {
+        .source = INPUT_SOURCE_UART, .modifiers_pressed = cancelled_modifiers,
+        .edges = &cancelled_press, .edge_count = 1,
+    };
+    keyboard_core_submit(&cancelled);
+    if (_i == 2) {
+        const keyboard_edge_t release = {cancelled_key, false};
+        const keyboard_batch_t released = {
+            .source = INPUT_SOURCE_UART, .modifiers_released = cancelled_modifiers,
+            .edges = &release, .edge_count = 1,
+        };
+        keyboard_core_submit(&released);
+    }
+    const keyboard_edge_t press = {HID_KEY_B, true}, release = {HID_KEY_B, false};
+    const keyboard_batch_t survivor_press = {
+        .source = survivor, .modifiers_pressed = control, .edges = &press, .edge_count = 1,
+    };
+    const keyboard_batch_t survivor_release = {
+        .source = survivor, .modifiers_released = control, .edges = &release, .edge_count = 1,
+    };
+    keyboard_core_submit(&survivor_press);
+    keyboard_core_submit(&survivor_release);
+    keyboard_core_cancel(INPUT_SOURCE_UART);
+    dispatch_key_events();
+    ck_assert_uint_eq(usb_key_matrix[survivor_cell.col], UINT8_MAX & ~(1u << survivor_cell.row) & ~1u);
+    ck_assert(!keyboard_core_caps_lock());
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[survivor_cell.col], UINT8_MAX);
+}
+END_TEST
+
+// Cancellation releases the published cell, not a remapped press still waiting in the queue.
+START_TEST(test_cancel_uses_published_mapping) {
+    input_routing_set_menu_active(false);
+    const input_source_t source = {3, 1};
+    const usb_keymap_entry_t original = {.row = 2, .col = 3};
+    const usb_keymap_entry_t replacement = {.row = 3, .col = 4};
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A] = original;
+    keyboard_core_reset(&system_state);
+    const keyboard_edge_t down = {HID_KEY_A, true}, up = {HID_KEY_A, false};
+    const keyboard_batch_t press = {.source = source, .edges = &down, .edge_count = 1};
+    const keyboard_batch_t release = {.source = source, .edges = &up, .edge_count = 1};
+    keyboard_core_submit(&press);
+    dispatch_all_key_events();
+    keyboard_core_submit(&release);
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_A] = replacement;
+    keyboard_core_submit(&press);
+    keyboard_core_cancel(source);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[original.col], UINT8_MAX);
+    ck_assert_uint_eq(usb_key_matrix[replacement.col], UINT8_MAX);
+}
+END_TEST
+
 // The shared core accepts source edges directly, without USB attachment or reports.
 START_TEST(test_core_source_edges_without_reports) {
     input_routing_set_menu_active(false);
@@ -279,9 +355,11 @@ START_TEST(test_core_source_edges_without_reports) {
     };
     keyboard_core_submit(&first_batch);
     keyboard_core_submit(&second_batch);
-    dispatch_all_key_events();
-    ck_assert_uint_eq(usb_key_matrix[cell.col] & (1u << cell.row), 0);
-    ck_assert_uint_eq(usb_key_matrix[shift_cell.col] & (1u << shift_cell.row), 0);
+    if (_i != 0) {
+        dispatch_all_key_events();
+        ck_assert_uint_eq(usb_key_matrix[cell.col] & (1u << cell.row), 0);
+        ck_assert_uint_eq(usb_key_matrix[shift_cell.col] & (1u << shift_cell.row), 0);
+    }
 
     // Cancelling one source preserves the other source's saved key and modifier mapping.
     keyboard_core_cancel(first);
@@ -1413,7 +1491,9 @@ Suite* keyboard_suite(void) {
     TCase* const core = tcase_create("reports");
     tcase_add_checked_fixture(core, setup, teardown);
     tcase_add_test(core, test_menu_batched_taps);
-    tcase_add_test(core, test_core_source_edges_without_reports);
+    tcase_add_loop_test(core, test_core_source_edges_without_reports, 0, 2);
+    tcase_add_loop_test(core, test_core_cancel_before_dispatch, 0, 4);
+    tcase_add_test(core, test_cancel_uses_published_mapping);
     tcase_add_test(core, test_gesture_binding_table_and_priority);
     tcase_add_test(core, test_queue_reads_do_not_poll_or_dispatch);
     tcase_add_test(core, test_core_batch_orders_edges_internally);

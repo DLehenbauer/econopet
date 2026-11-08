@@ -10,6 +10,10 @@
 
 /** Reset routing and pending input at startup or in a host fixture. */
 void input_routing_init(void);
+/** Begin one acquisition cycle, allowing button priority only over its new requests. */
+void input_routing_begin_cycle(void);
+/** Seal emitted requests so later observations cannot replace pending intent. */
+void input_routing_end_cycle(void);
 /** Cancel routed input and held gestures without changing the active destination. */
 void input_routing_reset(void);
 /** Transfer input ownership and discard work from the previous context. */
@@ -28,7 +32,7 @@ void input_routing_keyboard(const keyboard_batch_t* batch);
 void input_routing_gesture(input_source_t source, input_gesture_t gesture);
 /** Read navigation only, independently of pending machine requests. */
 tui_action_t input_routing_navigation(void);
-/** Latch machine intent outside the navigation FIFO, with button priority. */
+/** Latch machine intent, applying button priority only within the current acquisition cycle. */
 void input_routing_request(input_system_request_t request);
 /** Observe durable machine intent without consuming it or navigation. */
 input_system_request_t input_routing_pending_request(void);

@@ -73,6 +73,11 @@ static void expire_escape(void) {
 /** Advance one byte, preserving the existing non-CSI Escape-prefix behavior. */
 static void decode_byte(uint8_t byte) {
     last_byte_time = time_us_64();
+    // A new prefix replaces an incomplete CSI even when its bytes were already buffered.
+    if (byte == UART_ESCAPE && decode_state == uart_decode_csi) {
+        decode_state = uart_decode_escape;
+        return;
+    }
     switch (decode_state) {
         case uart_decode_plain:
             if (byte == UART_ESCAPE)
@@ -107,10 +112,9 @@ static void decode_byte(uint8_t byte) {
 }
 
 void input_uart_task(void) {
-    // Timeout checks never wait, so USB, button, and matrix servicing continue between fragments.
-    expire_escape();
+    // Received suffixes take precedence over an idle timeout delayed by other servicing.
     while (uart_is_readable(uart_default)) {
         decode_byte((uint8_t)uart_getc(uart_default));
-        expire_escape();
     }
+    expire_escape();
 }

@@ -26,6 +26,7 @@ void input_init(void) {
 }
 
 void input_task(void) {
+    input_routing_begin_cycle();
     // Acquire and decode available UART bytes without waiting for an escape suffix.
     input_uart_task();
 
@@ -44,4 +45,5 @@ void input_task(void) {
     // Observe button gestures independently of navigation and storage readiness.
     input_button_update(!gpio_get(MENU_BTN_GP));
     input_controls_poll();
+    input_routing_end_cycle();
 }

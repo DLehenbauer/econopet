@@ -12,9 +12,12 @@
 #include "hardware/gpio.h"
 
 #include "fatal.h"
+#include "input/input.h"
+#include "input/input_routing.h"
 #include "mock.h"
 #include "roms/roms.h"
 #include "sd/activity.h"
+#include "usb/keyscan.h"
 
 static jmp_buf fatal_exit;
 static bool observing;
@@ -23,6 +26,7 @@ static bool led_initialized;
 static bool led_output;
 static bool halt_only_called;
 static bool observing_rom_boot;
+static pet_keyboard_model_t rom_keyboard_model = pet_keyboard_model_graphics;
 static unsigned int keymap_reads;
 static unsigned int model_reads;
 static unsigned int model_writes;
@@ -54,7 +58,7 @@ void read_pet_model(system_state_t* state) {
     ck_assert_ptr_eq(state, &system_state);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     state->pet_video_type = pet_video_type_fixed;
-    state->pet_keyboard_model = pet_keyboard_model_graphics;
+    state->pet_keyboard_model = rom_keyboard_model;
     ++model_reads;
 }
 
@@ -259,6 +263,40 @@ START_TEST(test_normal_rom_with_keymap) {
 }
 END_TEST
 
+// The real ROM reset and menu routing transition must retain held physical navigation.
+START_TEST(test_menu_rom_preserves_physical_holds) {
+    mock_reset();
+    mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
+    rom_keyboard_model = _i / 2 == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
+    system_state.pet_keyboard_model = rom_keyboard_model;
+    const bool business = rom_keyboard_model == pet_keyboard_model_business;
+    const key_event_t key = _i % 2 == 0
+        ? (business ? PET_KEY_DOWN_B : PET_KEY_DOWN_N)
+        : (business ? PET_KEY_RETURN_B : PET_KEY_RETURN_N);
+    uint8_t physical[KEY_COL_COUNT];
+    memset(physical, UINT8_MAX, sizeof(physical));
+    physical[PET_KEY_COL(key)] &= (uint8_t)~(1u << PET_KEY_ROW(key));
+    mock_input_pet_snapshot(physical);
+    input_task();
+    observing_rom_boot = true;
+    start_menu_rom(MENU_ROM_BOOT_NORMAL);
+    observing_rom_boot = false;
+    input_routing_set_menu_active(true);
+    input_task();
+    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+
+    // Only a genuinely observed release and repress can navigate the new menu.
+    physical[PET_KEY_COL(key)] |= 1u << PET_KEY_ROW(key);
+    mock_input_pet_snapshot(physical);
+    input_task();
+    physical[PET_KEY_COL(key)] &= (uint8_t)~(1u << PET_KEY_ROW(key));
+    mock_input_pet_snapshot(physical);
+    input_task();
+    ck_assert_int_eq(input_routing_navigation(), _i % 2 == 0 ? tui_action_down : tui_action_activate);
+    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+}
+END_TEST
+
 Suite* fatal_error_suite(void) {
     Suite* const suite = suite_create("Morse error diagnostics");
     TCase* const tests = tcase_create("fatal reporting");
@@ -268,6 +306,7 @@ Suite* fatal_error_suite(void) {
     tcase_add_test_raise_signal(tests, test_sd_startup_failure, SIGABRT);
     tcase_add_test(tests, test_error_rom_without_keymap);
     tcase_add_test(tests, test_normal_rom_with_keymap);
+    tcase_add_loop_test(tests, test_menu_rom_preserves_physical_holds, 0, 4);
     suite_add_tcase(suite, tests);
     return suite;
 }

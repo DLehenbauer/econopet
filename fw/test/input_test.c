@@ -166,6 +166,29 @@ START_TEST(test_incremental_escape_aliases) {
 }
 END_TEST
 
+// Buffered suffixes belong to their escape even when rendering delayed the next poll.
+START_TEST(test_buffered_escape_after_delayed_poll) {
+    static const struct {
+        const char* prefix;
+        const char* suffix;
+        tui_action_t action;
+    } cases[] = {
+        {"\x1b", "[A", tui_action_up},
+        {"\x1b[", "6~", tui_action_page_down},
+    };
+    input_routing_set_menu_active(true);
+    for (size_t i = 0; i < count_of(cases); ++i) {
+        uart_bytes(cases[i].prefix);
+        input_task();
+        mock_clock_advance(TEST_ESCAPE_TIMEOUT_US + 1u);
+        uart_bytes(cases[i].suffix);
+        input_task();
+        ck_assert_int_eq(input_routing_navigation(), cases[i].action);
+        ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+    }
+}
+END_TEST
+
 // An unfinished escape cannot postpone USB releases, button timing, or FPGA publication.
 START_TEST(test_escape_timeout_keeps_other_sources_serviced) {
     input_routing_set_menu_active(false);
@@ -254,6 +277,7 @@ Suite* input_suite(void) {
     tcase_add_test(task, test_production_observation_order_and_passive_reads);
     tcase_add_test(task, test_production_runtime_publication);
     tcase_add_test(task, test_incremental_escape_aliases);
+    tcase_add_test(task, test_buffered_escape_after_delayed_poll);
     tcase_add_test(task, test_escape_timeout_keeps_other_sources_serviced);
     tcase_add_test(task, test_escape_recovery);
     tcase_add_test(task, test_acquired_terminal_session_transitions);

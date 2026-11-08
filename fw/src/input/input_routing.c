@@ -28,10 +28,20 @@ static menu_input_t menu_queue[MENU_QUEUE_CAPACITY];
 static unsigned int head, tail;
 static bool menu_active;
 static input_system_request_t system_request;
+static bool request_replaceable;
 
 void input_routing_init(void) {
     system_request = (input_system_request_t){0};
+    request_replaceable = false;
     input_routing_set_menu_active(false);
+}
+
+void input_routing_begin_cycle(void) {
+    request_replaceable = system_request.action == input_system_none;
+}
+
+void input_routing_end_cycle(void) {
+    request_replaceable = false;
 }
 
 void input_routing_reset(void) {
@@ -140,7 +150,7 @@ void input_routing_request(input_system_request_t request) {
         return;
     // Simultaneous button/chord observations remain one machine request, not queued typing.
     if (system_request.action == input_system_none
-        || (request.source.device == INPUT_SOURCE_BUTTON.device
+        || (request_replaceable && request.source.device == INPUT_SOURCE_BUTTON.device
             && request.source.instance == INPUT_SOURCE_BUTTON.instance))
         system_request = request;
 }

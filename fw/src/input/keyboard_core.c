@@ -50,11 +50,22 @@ static pet_keyboard_model_t active_keyboard_model = pet_keyboard_model_graphics;
 static usb_keymap_kind_t active_keymap_kind = usb_keymap_kind_symbolic;
 static const usb_keymap_entry_t* s_keymap = system_state.usb_keymap_data[pet_keyboard_model_graphics][usb_keymap_kind_symbolic];
 
+// Eight USB interfaces plus the independently paced terminal producer.
+#define MAX_KEYBOARD_SOURCES 9
+
+typedef enum {
+    keymap_override_none,
+    keymap_override_shift,
+    keymap_override_unshift,
+} keymap_override_t;
+
 typedef struct {
+    uint8_t source;
     uint8_t key;            // Shared HID key vocabulary, independent of report transport.
     uint8_t row;            // PET keyboard row
     uint8_t col;            // PET keyboard column
-    uint8_t modifiers;      // Shared HID modifier flags (e.g. shift).
+    uint8_t source_modifiers[MAX_KEYBOARD_SOURCES];
+    keymap_override_t override;
     bool pressed;           // true = key pressed, false = key released
     bool modifier_only;     // Update PET modifiers without changing a key.
 } KeyEvent;
@@ -64,17 +75,9 @@ typedef struct {
 #define KEY_BUFFER_CAPACITY_MASK (KEY_BUFFER_CAPACITY - 1)
 #define KEYCODE_COUNT (UINT8_MAX + 1u)
 
-typedef enum {
-    keymap_override_none,
-    keymap_override_shift,
-    keymap_override_unshift,
-} keymap_override_t;
-
 static KeyEvent key_buffer[KEY_BUFFER_CAPACITY];
 static uint8_t key_buffer_next_write_index = 0;
 static uint8_t key_buffer_next_read_index = 0;
-// Tracks raw HID modifiers; key events may carry separate keymap overrides.
-static uint8_t queued_raw_modifiers;
 static keymap_override_t keymap_overrides[KEYCODE_COUNT];
 static uint8_t active_keymap_override_keys[KEYCODE_COUNT];
 static uint16_t active_keymap_override_count;
@@ -83,6 +86,7 @@ static bool pending_led_sync;
 static uint8_t active_modifiers;
 static uint16_t matrix_owners[KEY_COL_COUNT][KEY_ROW_COUNT];
 static usb_keymap_entry_t held_mapping[KEYCODE_COUNT];
+static usb_keymap_entry_t dispatched_mapping[KEYCODE_COUNT];
 
 // Keeps the most recently pressed held-key override active until that key is released.
 static void set_keymap_override(uint8_t keycode, keymap_override_t override) {
@@ -113,14 +117,13 @@ static uint8_t apply_keymap_override(uint8_t modifiers) {
     return modifiers;
 }
 
-// Eight USB interfaces plus the independently paced terminal producer.
-#define MAX_KEYBOARD_SOURCES 9
-
 typedef struct {
     input_source_t source;
     bool used;
     uint8_t injected_modifiers;
     uint8_t injected_keys[KEYCODE_COUNT / CHAR_BIT];
+    uint8_t dispatched_modifiers;
+    uint8_t dispatched_keys[KEYCODE_COUNT / CHAR_BIT];
 } keyboard_source_t;
 
 static keyboard_source_t keyboard_sources[MAX_KEYBOARD_SOURCES];
@@ -165,29 +168,19 @@ static void ensure_key_buffer_space(void) {
     }
 }
 
-/** Queue a mapped press or saved-location release for modifier-group dispatch. */
-static void enqueue_key_event(uint8_t keycode, uint8_t row, uint8_t col, uint8_t modifiers, bool pressed) {
+/** Retain producer identity and raw modifier observations until mapped delivery. */
+static void enqueue_key_event(const keyboard_source_t* source, KeyEvent event) {
     ensure_key_buffer_space();
-    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-        .key = keycode,
-        .row = row,
-        .col = col,
-        .modifiers = modifiers,
-        .pressed = pressed,
-        .modifier_only = false,
-    };
+    event.source = (uint8_t)(source - keyboard_sources);
+    for (size_t i = 0; i < MAX_KEYBOARD_SOURCES; ++i)
+        event.source_modifiers[i] = keyboard_sources[i].injected_modifiers;
+    key_buffer[key_buffer_next_write_index] = event;
     key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
 }
 
 // Queue a modifier transition even when a producer has no key edges.
-static void enqueue_modifier_event(uint8_t modifiers) {
-    ensure_key_buffer_space();
-    key_buffer[key_buffer_next_write_index] = (KeyEvent) {
-        .modifiers = apply_keymap_override(modifiers),
-        .modifier_only = true,
-    };
-    key_buffer_next_write_index = (key_buffer_next_write_index + 1) & KEY_BUFFER_CAPACITY_MASK;
-    queued_raw_modifiers = modifiers;
+static void enqueue_modifier_event(const keyboard_source_t* source) {
+    enqueue_key_event(source, (KeyEvent){.modifier_only = true});
 }
 
 // Combine modifiers held across all runtime input producers.
@@ -198,12 +191,6 @@ static uint8_t combined_modifiers(void) {
             modifiers |= keyboard_sources[i].injected_modifiers;
     }
     return modifiers;
-}
-
-// Queue a modifier-only update when the combined raw state changes.
-static void update_queued_modifiers(uint8_t modifiers) {
-    if (modifiers != queued_raw_modifiers)
-        enqueue_modifier_event(modifiers);
 }
 
 /** Inspect the next mapped event without consuming it. */
@@ -219,34 +206,33 @@ static void dequeue_key_event(void) {
 }
 
 /** Release the original mapped location after the last producer relinquishes a key. */
-static void enqueue_key_up(uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_up(const keyboard_source_t* source, uint8_t keycode) {
     const usb_keymap_entry_t keyInfo = held_mapping[keycode];
 
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
 
-    set_keymap_override(keycode, keymap_override_none);
-    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ false);
+    enqueue_key_event(source, (KeyEvent){.key = keycode, .row = row, .col = col});
 }
 
 /** Save the first owner's effective mapping and queue its press. */
-static void enqueue_key_down(uint8_t keycode, uint8_t modifiers) {
+static void enqueue_key_down(const keyboard_source_t* source, uint8_t keycode, bool first_owner) {
+    const uint8_t modifiers = combined_modifiers();
     bool is_shifted = (modifiers & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT)) != 0;
 
-    const usb_keymap_entry_t keyInfo = s_keymap[
-        is_shifted
-            ? keycode | 0x0100      // s_keymap[0x0000..0x00ff] = shifted keymap
-            : keycode];             // s_keymap[0x0100..0x01ff] = unshifted keymap
+    const usb_keymap_entry_t keyInfo = first_owner
+        ? s_keymap[is_shifted ? keycode | KEYCODE_COUNT : keycode]
+        : held_mapping[keycode];
 
     const uint8_t row = keyInfo.row;
     const uint8_t col = keyInfo.col;
     held_mapping[keycode] = keyInfo;
 
-    set_keymap_override(keycode, keyInfo.unshift
-        ? keymap_override_unshift
-        : keyInfo.shift ? keymap_override_shift : keymap_override_none);
-
-    enqueue_key_event(keycode, row, col, apply_keymap_override(modifiers), /* pressed: */ true);
+    enqueue_key_event(source, (KeyEvent){
+        .key = keycode, .row = row, .col = col, .pressed = true,
+        .override = keyInfo.unshift ? keymap_override_unshift
+            : keyInfo.shift ? keymap_override_shift : keymap_override_none,
+    });
 }
 
 /** Press a mapped cell only when its first logical key becomes active. */
@@ -325,24 +311,72 @@ static void set_key_owned(keyboard_source_t* keyboard, uint8_t keycode, bool own
         *byte &= (uint8_t) ~mask;
 }
 
+/** Observe delivered ownership independently of still-pending producer edges. */
+static bool key_dispatched(const keyboard_source_t* source, uint8_t keycode) {
+    return (source->dispatched_keys[keycode / CHAR_BIT] & (1u << (keycode % CHAR_BIT))) != 0;
+}
+
+/** Retain a delivered logical key until every published producer releases it. */
+static bool key_dispatched_elsewhere(const keyboard_source_t* source, uint8_t keycode) {
+    for (size_t i = 0; i < MAX_KEYBOARD_SOURCES; ++i)
+        if (&keyboard_sources[i] != source && key_dispatched(&keyboard_sources[i], keycode))
+            return true;
+    return false;
+}
+
+/** Apply the selected modifier group using saved modifier mappings on release. */
+static void publish_modifiers(uint8_t modifiers) {
+    const uint8_t changed = modifiers ^ active_modifiers;
+    active_modifiers = modifiers;
+    for (uint8_t i = 0; i < CHAR_BIT; ++i) {
+        const uint8_t mask = 1u << i;
+        if (changed & mask) {
+            if (modifiers & mask)
+                modifier_down(i);
+            else
+                modifier_up(i);
+        }
+    }
+}
+
 void keyboard_core_cancel(input_source_t source) {
     keyboard_source_t* const keyboard = find_keyboard_source(source);
     if (keyboard == NULL)
         return;
-    keyboard->injected_modifiers = 0;
-    const uint8_t modifiers = combined_modifiers();
+    const uint8_t source_index = (uint8_t)(keyboard - keyboard_sources);
 
-    for (unsigned int keycode = 1; keycode < KEYCODE_COUNT; ++keycode) {
-        if (key_owned(keyboard, keycode)) {
-            set_key_owned(keyboard, keycode, false);
-            if (!key_owned_elsewhere(keyboard, keycode))
-                enqueue_key_up(keycode, modifiers);
+    // Remove only this producer's pending edges and modifier contributions.
+    uint8_t write = key_buffer_next_read_index;
+    for (uint8_t read = write; read != key_buffer_next_write_index;
+         read = (read + 1) & KEY_BUFFER_CAPACITY_MASK) {
+        KeyEvent event = key_buffer[read];
+        if (event.source == source_index)
+            continue;
+        event.source_modifiers[source_index] = 0;
+        key_buffer[write] = event;
+        write = (write + 1) & KEY_BUFFER_CAPACITY_MASK;
+    }
+    key_buffer_next_write_index = write;
+
+    // Retire delivered ownership without publishing any cancelled queued press.
+    for (unsigned int keycode = 0; keycode < KEYCODE_COUNT; ++keycode) {
+        if (key_dispatched(keyboard, keycode) && !key_dispatched_elsewhere(keyboard, keycode)) {
+            if (keycode != HID_KEY_CAPS_LOCK && keycode != HID_KEY_NUM_LOCK
+                && keycode != HID_KEY_SCROLL_LOCK) {
+                const usb_keymap_entry_t mapping = dispatched_mapping[keycode];
+                key_up(keycode, mapping.row, mapping.col);
+            }
+            set_keymap_override(keycode, keymap_override_none);
         }
     }
-
-    // Apply held-key overrides before exposing a raw modifier-only transition.
-    update_queued_modifiers(modifiers);
     *keyboard = (keyboard_source_t) { 0 };
+    uint8_t modifiers = 0;
+    for (size_t i = 0; i < MAX_KEYBOARD_SOURCES; ++i)
+        modifiers |= keyboard_sources[i].dispatched_modifiers;
+    modifiers = apply_keymap_override(modifiers);
+    if (caps_lock_enabled)
+        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
+    publish_modifiers(modifiers);
 }
 
 /** Select the configured PET map after model or mapping-kind changes. */
@@ -382,7 +416,29 @@ usb_keymap_kind_t keyboard_core_keymap_kind(void) { return active_keymap_kind; }
 
 /** Apply Caps Lock to a queued event's arbitrated modifiers. */
 static uint8_t get_modifiers(KeyEvent keyEvent) {
-    uint8_t modifiers = keyEvent.modifiers;
+    uint8_t modifiers = 0;
+    for (size_t i = 0; i < MAX_KEYBOARD_SOURCES; ++i)
+        modifiers |= keyEvent.source_modifiers[i];
+
+    // Preview the next edge's override without mutating a group deferred to a later cycle.
+    const keyboard_source_t* source = &keyboard_sources[keyEvent.source];
+    const bool transition = !keyEvent.modifier_only
+        && !key_dispatched_elsewhere(source, keyEvent.key)
+        && key_dispatched(source, keyEvent.key) != keyEvent.pressed;
+    keymap_override_t override = keymap_override_none;
+    for (size_t i = active_keymap_override_count; i > 0; --i) {
+        const uint8_t key = active_keymap_override_keys[i - 1];
+        if (!transition || key != keyEvent.key) {
+            override = keymap_overrides[key];
+            break;
+        }
+    }
+    if (transition && keyEvent.pressed && keyEvent.override != keymap_override_none)
+        override = keyEvent.override;
+    if (override == keymap_override_shift)
+        modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
+    else if (override == keymap_override_unshift)
+        modifiers &= ~(KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
 
     if (caps_lock_enabled) {
         modifiers |= KEYBOARD_MODIFIER_LEFTSHIFT;
@@ -411,54 +467,48 @@ bool keyboard_core_dispatch(void) {
     bool keymap_changed = pending_led_sync;
     pending_led_sync = false;
 
-    {
-        // Synchronize matrix modifiers with the combined source-owned state.
-        uint8_t new_modifiers = get_modifiers(keyEvent);
-
-        if (new_modifiers != active_modifiers) {
-            uint8_t old_modifiers = active_modifiers;
-            active_modifiers = new_modifiers;
-
-            for (uint8_t i = 0; i < 8; i++) {
-                uint8_t new_mod = new_modifiers & 0x01;
-                uint8_t old_mod = old_modifiers & 0x01;
-
-                if (new_mod) {
-                    if (!old_mod) {
-                        modifier_down(i);
-                    }
-                } else if (old_mod) {
-                    modifier_up(i);
-                }
-
-                new_modifiers >>= 1;
-                old_modifiers >>= 1;
-            }
-        }
-    }
+    publish_modifiers(get_modifiers(keyEvent));
 
     do {
+        for (size_t i = 0; i < MAX_KEYBOARD_SOURCES; ++i)
+            keyboard_sources[i].dispatched_modifiers = keyEvent.source_modifiers[i];
         if (!keyEvent.modifier_only) {
-            switch (keyEvent.key) {
-                case HID_KEY_CAPS_LOCK:
-                    toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
-                    keymap_changed |= keyEvent.pressed;
-                    break;
-                case HID_KEY_NUM_LOCK:
-                    toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
-                    keymap_changed |= keyEvent.pressed;
-                    break;
-                case HID_KEY_SCROLL_LOCK:
-                    toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
-                    keymap_changed |= keyEvent.pressed;
-                    break;
-                default:
-                    if (keyEvent.pressed) {
-                        key_down(keyEvent.key, keyEvent.row, keyEvent.col);
-                    } else {
-                        key_up(keyEvent.key, keyEvent.row, keyEvent.col);
-                    }
-                    break;
+            keyboard_source_t* source = &keyboard_sources[keyEvent.source];
+            const bool owned = key_dispatched(source, keyEvent.key);
+            const bool transition = owned != keyEvent.pressed
+                && !key_dispatched_elsewhere(source, keyEvent.key);
+            uint8_t* const byte = &source->dispatched_keys[keyEvent.key / CHAR_BIT];
+            const uint8_t mask = 1u << (keyEvent.key % CHAR_BIT);
+            if (keyEvent.pressed)
+                *byte |= mask;
+            else
+                *byte &= (uint8_t)~mask;
+            if (transition) {
+                set_keymap_override(keyEvent.key, keyEvent.pressed ? keyEvent.override : keymap_override_none);
+                switch (keyEvent.key) {
+                    case HID_KEY_CAPS_LOCK:
+                        toggle_lock(&keyEvent, &caps_lock_enabled, "Caps Lock");
+                        keymap_changed |= keyEvent.pressed;
+                        break;
+                    case HID_KEY_NUM_LOCK:
+                        toggle_lock(&keyEvent, &swap_keyboard_model, "Num Lock");
+                        keymap_changed |= keyEvent.pressed;
+                        break;
+                    case HID_KEY_SCROLL_LOCK:
+                        toggle_lock(&keyEvent, &use_symbolic_keymap, "Scroll Lock");
+                        keymap_changed |= keyEvent.pressed;
+                        break;
+                    default:
+                        if (keyEvent.pressed) {
+                            dispatched_mapping[keyEvent.key] = (usb_keymap_entry_t){
+                                .row = keyEvent.row, .col = keyEvent.col,
+                            };
+                            key_down(keyEvent.key, keyEvent.row, keyEvent.col);
+                        } else {
+                            key_up(keyEvent.key, keyEvent.row, keyEvent.col);
+                        }
+                        break;
+                }
             }
         }
 
@@ -498,23 +548,22 @@ static void update_source_key(input_source_t source, uint8_t keycode, bool press
         return;
     if (keyboard == NULL)
         keyboard = get_keyboard_source(source);
-    const uint8_t modifiers = combined_modifiers();
     if (pressed) {
         if (key_owned(keyboard, keycode))
             return;
-        if (!key_owned_elsewhere(keyboard, keycode))
-            enqueue_key_down(keycode, modifiers);
+        enqueue_key_down(keyboard, keycode, !key_owned_elsewhere(keyboard, keycode));
         set_key_owned(keyboard, keycode, true);
     } else {
         set_key_owned(keyboard, keycode, false);
-        if (!key_owned_elsewhere(keyboard, keycode))
-            enqueue_key_up(keycode, modifiers);
+        enqueue_key_up(keyboard, keycode);
     }
 }
 
 void keyboard_core_submit(const keyboard_batch_t* batch) {
     vet(batch != NULL && (batch->edge_count == 0 || batch->edges != NULL),
         "invalid keyboard batch");
+    const keyboard_source_t* const before = find_keyboard_source(batch->source);
+    const uint8_t old_modifiers = before != NULL ? before->injected_modifiers : 0;
     update_source_modifiers(batch->source, batch->modifiers_pressed, batch->modifiers_released);
 
     // Release saved mappings before establishing this batch's new press overrides.
@@ -525,14 +574,16 @@ void keyboard_core_submit(const keyboard_batch_t* batch) {
         if (batch->edges[i].pressed)
             update_source_key(batch->source, batch->edges[i].keycode, true);
 
-    // Mapping overrides must precede any raw modifier-only transition.
-    update_queued_modifiers(combined_modifiers());
+    // Preserve modifier ownership changes even when another source holds the same raw bit.
+    const keyboard_source_t* const source = find_keyboard_source(batch->source);
+    if (source != NULL && source->injected_modifiers != old_modifiers)
+        enqueue_modifier_event(source);
 }
 
 void keyboard_core_cancel_all(void) {
     // Raw physical holds stay in the adapters, so cancellation never replays them.
     key_buffer_next_read_index = key_buffer_next_write_index = 0;
-    active_modifiers = queued_raw_modifiers = 0;
+    active_modifiers = 0;
     memset(matrix_owners, 0, sizeof(matrix_owners));
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));
     memset(keymap_overrides, 0, sizeof(keymap_overrides));

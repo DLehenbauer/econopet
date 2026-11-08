@@ -279,6 +279,18 @@ static void check_storage_actions(blockdevice_t* device, uint8_t* buffer) {
             source == 0 ? input_system_request_reset : input_system_request_menu);
         system_state.terminal_session = terminal_session_remote;
 
+        // A later button gesture cannot replace intent retained from an earlier observation.
+        button_state(true);
+        if (source == 0) {
+            mock_clock_advance(INPUT_LONG_PRESS_US);
+            operation_duration = 0;
+            ck_assert_int_eq(device->read(device, buffer, expected_addr, expected_size), backend_result);
+            input_task();
+        }
+        button_state(false);
+        ck_assert_int_eq(input_routing_pending_request().action,
+            source == 0 ? input_system_request_reset : input_system_request_menu);
+
         // Further I/O resets the quiet deadline without blocking input or consuming the request.
         operation_duration = 0;
         mock_clock_advance(SD_ACTIVITY_QUIET_US - 100000u);
