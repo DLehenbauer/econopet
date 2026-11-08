@@ -312,6 +312,74 @@ START_TEST(test_core_cancel_before_dispatch) {
 }
 END_TEST
 
+// Queued mapping locks affect later presses, whose resolved cells survive another map change.
+START_TEST(test_queued_lock_changes_mapping) {
+    input_routing_set_menu_active(false);
+    system_state.pet_keyboard_model = pet_keyboard_model_graphics;
+    const uint8_t lock = _i == 0 ? HID_KEY_SCROLL_LOCK : HID_KEY_NUM_LOCK;
+    const pet_keyboard_model_t model = _i == 0
+        ? pet_keyboard_model_graphics : pet_keyboard_model_business;
+    const usb_keymap_kind_t kind = _i == 0 ? usb_keymap_kind_positional : usb_keymap_kind_symbolic;
+    const usb_keymap_entry_t original = {.row = 2, .col = 3};
+    const usb_keymap_entry_t replacement = {.row = 3, .col = 4, .shift = true};
+    const usb_keymap_entry_t shift = {.row = 1, .col = 3};
+    system_state.usb_keymap_data[pet_keyboard_model_graphics][usb_keymap_kind_symbolic][HID_KEY_A] = original;
+    system_state.usb_keymap_data[model][kind][HID_KEY_A] = replacement;
+    system_state.usb_keymap_data[pet_keyboard_model_graphics][usb_keymap_kind_symbolic][HID_KEY_SHIFT_LEFT] = shift;
+    system_state.usb_keymap_data[model][kind][HID_KEY_SHIFT_LEFT] = shift;
+    keyboard_core_reset(&system_state);
+    const keyboard_edge_t lock_down = {lock, true}, lock_up = {lock, false};
+    const keyboard_edge_t down = {HID_KEY_A, true}, up = {HID_KEY_A, false};
+    const keyboard_batch_t toggle_on = {.source = INPUT_SOURCE_UART, .edges = &lock_down, .edge_count = 1};
+    const keyboard_batch_t toggle_off = {.source = INPUT_SOURCE_UART, .edges = &lock_up, .edge_count = 1};
+    const keyboard_batch_t press = {.source = INPUT_SOURCE_UART, .edges = &down, .edge_count = 1};
+    const keyboard_batch_t release = {.source = INPUT_SOURCE_UART, .edges = &up, .edge_count = 1};
+    keyboard_core_submit(&toggle_on);
+    keyboard_core_submit(&toggle_off);
+    keyboard_core_submit(&press);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[replacement.col] & (1u << replacement.row), 0);
+    ck_assert_uint_eq(usb_key_matrix[shift.col], UINT8_MAX & ~(1u << shift.row));
+    keyboard_core_submit(&toggle_on);
+    keyboard_core_submit(&toggle_off);
+    keyboard_core_submit(&release);
+    dispatch_all_key_events();
+    for (size_t i = 0; i < count_of(usb_key_matrix); ++i)
+        ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
+}
+END_TEST
+
+// A lone Caps Lock edge updates Shift Lock immediately, including while input stays idle.
+START_TEST(test_caps_lock_press_without_release) {
+    input_routing_set_menu_active(false);
+    const usb_keymap_entry_t shift = {.row = 1, .col = 3};
+    system_state.usb_keymap_data[system_state.pet_keyboard_model][usb_keymap_kind_symbolic][HID_KEY_SHIFT_LEFT] = shift;
+    keyboard_core_reset(&system_state);
+    expect_hid_output_report = true;
+    usb_keyboard_added(1, 0);
+    ck_assert(!expect_hid_output_report);
+    const hid_keyboard_report_t press = {.keycode = {HID_KEY_CAPS_LOCK}}, release = {0};
+    mock_input_hid_report(1, 0, &press);
+    expect_hid_output_report = true;
+    input_task();
+    ck_assert(!expect_hid_output_report);
+    ck_assert(keyboard_core_caps_lock());
+    for (size_t i = 0; i < 3; ++i) {
+        ck_assert_uint_eq(mock_input_published_matrix()[shift.col], UINT8_MAX & ~(1u << shift.row));
+        input_task();
+    }
+    mock_input_hid_report(1, 0, &release);
+    input_task();
+    mock_input_hid_report(1, 0, &press);
+    expect_hid_output_report = true;
+    input_task();
+    ck_assert(!expect_hid_output_report);
+    ck_assert(!keyboard_core_caps_lock());
+    ck_assert_uint_eq(mock_input_published_matrix()[shift.col], UINT8_MAX);
+    usb_keyboard_removed(1, 0);
+}
+END_TEST
+
 // Cancellation releases the published cell, not a remapped press still waiting in the queue.
 START_TEST(test_cancel_uses_published_mapping) {
     input_routing_set_menu_active(false);
@@ -1493,6 +1561,8 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_menu_batched_taps);
     tcase_add_loop_test(core, test_core_source_edges_without_reports, 0, 2);
     tcase_add_loop_test(core, test_core_cancel_before_dispatch, 0, 4);
+    tcase_add_loop_test(core, test_queued_lock_changes_mapping, 0, 2);
+    tcase_add_test(core, test_caps_lock_press_without_release);
     tcase_add_test(core, test_cancel_uses_published_mapping);
     tcase_add_test(core, test_gesture_binding_table_and_priority);
     tcase_add_test(core, test_queue_reads_do_not_poll_or_dispatch);
