@@ -89,8 +89,7 @@ static void __attribute__((noreturn)) fatal_repeat(
 
     while (true) {
         const uint64_t now_us = time_us_64();
-        if (last_log_dump_us == -FATAL_LOG_DUMP_INTERVAL_US ||
-            now_us - last_log_dump_us >= FATAL_LOG_DUMP_INTERVAL_US) {
+        if (now_us - last_log_dump_us >= FATAL_LOG_DUMP_INTERVAL_US) {
             log_dump(LOG_LEVEL_DEBUG);
             fprintf(stdout, "Error (%c): %s\r\n", entry->letter, message);
             fflush(stdout);

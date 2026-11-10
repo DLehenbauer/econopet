@@ -272,7 +272,7 @@ START_TEST(test_fatal_log_line_capacity) {
     char payload[LOG_MESSAGE_LENGTH];
     memset(payload, 'x', sizeof(payload) - 1);
     payload[sizeof(payload) - 1] = '\0';
-    mock_clock_set(UINT64_MAX - 1);
+    mock_clock_set(UINT64_MAX - FATAL_LOG_DUMP_TEST_ELAPSED_US);
     log_debug("%s", payload);
 
     // Capture only initial reporting, before Morse timing or repeat policy takes effect.
@@ -298,9 +298,9 @@ START_TEST(test_fatal_log_line_capacity) {
     char message[256] = {0};
     ck_assert_uint_lt(fread(message, 1, sizeof(message) - 1, output), sizeof(message) - 1);
     fclose(output);
-    const char* const line = strstr(message, "[18446744073709.551] D: ");
+    const char* const line = strstr(message, "[18446744073698.551] D: ");
     ck_assert_ptr_nonnull(line);
-    const char* const text = line + strlen("[18446744073709.551] D: ");
+    const char* const text = line + strlen("[18446744073698.551] D: ");
     ck_assert_int_eq(strncmp(text, payload, strlen(payload)), 0);
     ck_assert_int_eq(text[strlen(payload)], '\r');
     ck_assert_int_eq(text[strlen(payload) + 1], '\n');
