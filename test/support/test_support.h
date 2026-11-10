@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hardware/gpio.h"
+
 // Pico SDK declarations needed by firmware running in host tests.
 #ifndef count_of
 // Matches the Pico SDK array element count for builds without SDK headers.

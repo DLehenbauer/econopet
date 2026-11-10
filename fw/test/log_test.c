@@ -4,7 +4,7 @@
 #include "pch.h"
 #include "log_test.h"
 
-#include <signal.h>
+#include <unistd.h>
 
 #include "diag/log/log.h"
 
@@ -137,6 +137,47 @@ START_TEST(test_log_iterator_filtered) {
     ck_assert_ptr_null(entry);
 } END_TEST
 
+START_TEST(test_log_dump) {
+    log_init();
+    log_debug("Filtered");
+    log_info("Dump test");
+
+    FILE* const output = tmpfile();
+    ck_assert_ptr_nonnull(output);
+    fflush(stdout);
+    const int saved_stdout = dup(fileno(stdout));
+    ck_assert_int_ge(saved_stdout, 0);
+    ck_assert_int_ge(dup2(fileno(output), fileno(stdout)), 0);
+
+    const uint32_t displayed = log_dump(LOG_LEVEL_INFO);
+    ck_assert_uint_eq(displayed, 1);
+    fflush(stdout);
+    ck_assert_int_ge(dup2(saved_stdout, fileno(stdout)), 0);
+    close(saved_stdout);
+
+    log_iterator_t iter;
+    log_iter_init(&iter, LOG_LEVEL_INFO);
+    log_level_t level;
+    const log_entry_t* const entry = log_iter_next(&iter, &level);
+    ck_assert_ptr_nonnull(entry);
+    ck_assert_int_eq(level, LOG_LEVEL_INFO);
+
+    const uint64_t relative_us = entry->timestamp_us - log_boot_time();
+    char expected[LOG_MESSAGE_LENGTH + 64];
+    snprintf(
+        expected,
+        sizeof(expected),
+        "[%4" PRIu64 ".%03" PRIu32 "] I: Dump test\r\n",
+        relative_us / 1000000,
+        (uint32_t)((relative_us % 1000000) / 1000));
+
+    rewind(output);
+    char actual[sizeof(expected)];
+    ck_assert_ptr_nonnull(fgets(actual, sizeof(actual), output));
+    ck_assert_str_eq(actual, expected);
+    fclose(output);
+} END_TEST
+
 START_TEST(test_log_message_formatting) {
     log_init();
     
@@ -198,6 +239,7 @@ Suite *log_suite(void) {
     tcase_add_test(test_cases, test_log_wraparound);
     tcase_add_test(test_cases, test_log_iterator_chronological);
     tcase_add_test(test_cases, test_log_iterator_filtered);
+    tcase_add_test(test_cases, test_log_dump);
     tcase_add_test(test_cases, test_log_message_formatting);
     tcase_add_test(test_cases, test_log_message_truncation);
 

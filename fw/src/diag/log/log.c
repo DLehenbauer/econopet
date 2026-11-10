@@ -24,6 +24,12 @@ static log_entry_t warn_entries[LOG_WARN_ENTRIES];
 // Ring buffers for each level
 static log_ring_t log_rings[LOG_LEVEL_COUNT];
 
+static const char* const log_level_prefixes[LOG_LEVEL_COUNT] = {
+    "D",  // DEBUG
+    "I",  // INFO
+    "W"   // WARN
+};
+
 // Timestamp of log_init() call for relative time display
 static uint64_t log_boot_time_us = 0;
 
@@ -219,4 +225,33 @@ uint32_t log_entry_count(log_level_t min_level) {
     }
 
     return total;
+}
+
+uint32_t log_dump(log_level_t min_level) {
+    const uint64_t boot_time = log_boot_time();
+    log_iterator_t iter;
+    log_iter_init(&iter, min_level);
+
+    uint32_t displayed = 0;
+    const log_entry_t* entry;
+    log_level_t level;
+    while ((entry = log_iter_next(&iter, &level)) != NULL) {
+        const uint64_t relative_us = entry->timestamp_us - boot_time;
+        const uint64_t seconds = relative_us / 1000000;
+        const uint32_t millis = (uint32_t)((relative_us % 1000000) / 1000);
+        printf(
+            "[%4" PRIu64 ".%03" PRIu32 "] %s: %s\r\n",
+            seconds,
+            millis,
+            log_level_prefixes[level],
+            entry->message);
+
+        // Out of paranoia, flush the output after each log entry in case we
+        // crash while printing the log.
+        fflush(stdout);
+
+        displayed++;
+    }
+
+    return displayed;
 }

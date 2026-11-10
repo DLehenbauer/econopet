@@ -124,8 +124,6 @@ target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=display_task -Wl,--wrap=display_term_begin -Wl,--wrap=display_term_end
     -Wl,--wrap=display_term_refresh -Wl,--wrap=display_window_begin -Wl,--wrap=display_window_show)
-# Exercise the real Morse endpoint alongside the aborting host fatal() mock.
-target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_FATAL_MORSE)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.

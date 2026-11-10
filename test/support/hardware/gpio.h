@@ -19,5 +19,5 @@ void gpio_set_dir(unsigned int gpio, bool output);
 void gpio_pull_up(unsigned int gpio);
 bool gpio_get(unsigned int gpio);
 
-// Record GPIO writes in the SD activity tests.
+// Host firmware tests override this to record GPIO writes.
 void gpio_put(unsigned int gpio, bool value);
