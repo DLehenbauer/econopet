@@ -72,30 +72,37 @@
             "targets": ["fpga_project"]
         },
         {
+            "name": "reset",
+            "displayName": "Reset MCU",
+            "description": "Reset the MCU without reprogramming (over SWD)",
+            "configurePreset": "default",
+            "targets": ["reset"]
+        },
+        {
             "name": "prog-boot",
             "displayName": "Program Bootloader",
-            "description": "Build and program the bootloader over SWD, then reset the MCU",
+            "description": "Build and program the bootloader (over SWD)",
             "configurePreset": "default",
             "targets": ["prog-boot"]
         },
         {
             "name": "prog-fw",
             "displayName": "Program Firmware",
-            "description": "Build and program firmware over SWD, then reset the MCU",
+            "description": "Build and program firmware (over SWD)",
             "configurePreset": "default",
             "targets": ["prog-fw"]
         },
         {
             "name": "prog-gw",
             "displayName": "Program Gateware",
-            "description": "Build and program gateware over SWD, then reset the MCU",
+            "description": "Build and program gateware (over SWD)",
             "configurePreset": "default",
             "targets": ["prog-gw"]
         },
         {
             "name": "prog",
-            "displayName": "Program Bootloader, Firmware and Gateware",
-            "description": "Build all three images and program changed images over SWD, then reset the MCU",
+            "displayName": "Program Bootloader, Gateware, and Firmware",
+            "description": "Build and program bootloader, gateware, and firmware (over SWD)",
             "configurePreset": "default",
             "targets": ["prog"]
         },

@@ -44,6 +44,15 @@ set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
 # and runs the MCU even if no writes were needed.
 set(PROGRAM_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/Program.cmake")
 
+# Reset is an explicit-only operation with no image-building or programming dependencies.
+add_custom_target(reset
+    COMMAND openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg
+        -c "adapter speed 5000" -c "init" -c "poll off" -c "reset run" -c "shutdown"
+    COMMENT "Resetting MCU over SWD"
+    USES_TERMINAL
+    VERBATIM
+)
+
 # ============================================================================
 # Bootloader Subproject (RP2040 using Pico SDK)
 # ============================================================================
