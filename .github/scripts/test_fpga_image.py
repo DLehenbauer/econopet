@@ -344,6 +344,34 @@ class FpgaImageTests(unittest.TestCase):
                     self.assertNotEqual(failed.returncode, 0)
                     self.assertFalse(log.exists())
 
+    def test_reset_preset_without_building_or_programming(self):
+        """Reset on every invocation, leave flash untouched, and propagate probe failures."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = self.prepare_probe(root)
+            self.prepare_subprojects(root, env)
+            command = ["cmake", "--build", "--preset", "reset"]
+            for _ in range(2):
+                self.run_command(command, root, env)
+
+            self.assertFalse((root / "build.log").exists())
+            self.assertEqual(list((root / "flash").iterdir()), [])
+            self.assertEqual((root / "probe.events").read_text().splitlines(),
+                             ["reset run", "reset run"])
+            calls = [json.loads(line) for line in (root / "openocd.log").read_text().splitlines()]
+            self.assertEqual(len(calls), 2)
+            for call in calls:
+                self.assertIn("interface/cmsis-dap.cfg", call)
+                self.assertIn("target/rp2040.cfg", call)
+                self.assertEqual(self.program_commands(call),
+                                 ["adapter speed 5000", "init", "poll off", "reset run", "shutdown"])
+
+            failed = subprocess.run(command, cwd=root, env=dict(env, OPENOCD_FAIL="always"),
+                                    capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertEqual((root / "probe.events").read_text().splitlines(),
+                             ["reset run", "reset run"])
+
     def test_skip_matching_flash_and_restore_erased_firmware(self):
         """Skip matching board contents, detect corruption and recover bootloader erasure."""
         with tempfile.TemporaryDirectory(prefix="program test ") as directory:
