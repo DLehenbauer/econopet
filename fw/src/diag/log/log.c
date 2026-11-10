@@ -237,10 +237,10 @@ uint32_t log_dump(log_level_t min_level) {
     log_level_t level;
     while ((entry = log_iter_next(&iter, &level)) != NULL) {
         const uint64_t relative_us = entry->timestamp_us - boot_time;
-        const uint32_t seconds = (uint32_t)(relative_us / 1000000);
+        const uint64_t seconds = relative_us / 1000000;
         const uint32_t millis = (uint32_t)((relative_us % 1000000) / 1000);
         printf(
-            "[%4" PRIu32 ".%03" PRIu32 "] %s: %s\r\n",
+            "[%4" PRIu64 ".%03" PRIu32 "] %s: %s\r\n",
             seconds,
             millis,
             log_level_prefixes[level],
