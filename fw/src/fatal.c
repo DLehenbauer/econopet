@@ -4,14 +4,14 @@
 #include "pch.h"
 #include "fatal.h"
 
+#include "diag/log/log.h"
 #include "sd/sd.h"
 
-#if defined(PICO_RP2040) || defined(ECONOPET_TEST_FATAL_MORSE)
-#include "hardware/gpio.h"
-
-#define MORSE_DOT_US 100000u
+#define MORSE_DOT_US (100 * 1000u)
 #define MORSE_DASH_UNITS 3u
-#define MORSE_REPEAT_GAP_UNITS 3u
+#define MORSE_SYMBOL_GAP_UNITS 1u
+#define MORSE_WORD_GAP_UNITS 7u
+#define FATAL_LOG_DUMP_INTERVAL_US (UINT64_C(10) * 1000u * 1000u)
 
 // Morse encoding for a fatal error. The caller supplies the diagnostic text.
 typedef struct {
@@ -31,58 +31,79 @@ static const fatal_message_t fatal_messages[FATAL_ERROR_COUNT] = {
     },
 };
 
-// Emit one letter with the bootloader's dot, dash, and spacing durations.
+// Blink the status LED according to the given Morse pattern.
 static void blink(const char* pattern) {
+    // Each pattern is a complete fatal message, even when it is one letter.
+    // Separate complete messages from prior output by a full Morse word gap.
+    sleep_us((MORSE_WORD_GAP_UNITS - MORSE_SYMBOL_GAP_UNITS) * MORSE_DOT_US);
+
     for (const char* symbol = pattern; *symbol != '\0'; ++symbol) {
+        // Separate symbols within a letter by the symbol gap.
+        sleep_us(MORSE_SYMBOL_GAP_UNITS * MORSE_DOT_US);
+
+        // Determine the duration for the current symbol.
+        char ch = *symbol;
+        uint64_t time;
+
+        switch (ch) {
+            case '.':
+                time = MORSE_DOT_US;
+                break;
+            default:
+                assert(ch == '-');
+                time = MORSE_DASH_UNITS * MORSE_DOT_US;
+                break;
+        }
+
+        // Turn the LED on for the duration of the current symbol, then turn it
+        // off.  The symbol gap will be applied before the next symbol is
+        // applied at the beginning of the loop.
         gpio_put(PICO_DEFAULT_LED_PIN, true);
-        sleep_us((*symbol == '-' ? MORSE_DASH_UNITS : 1u) * MORSE_DOT_US);
+        sleep_us(time);
         gpio_put(PICO_DEFAULT_LED_PIN, false);
-        sleep_us(MORSE_DOT_US);
     }
-    sleep_us(MORSE_REPEAT_GAP_UNITS * MORSE_DOT_US);
 }
 
-// Initialize serial diagnostics and report before any optional display access.
-static const fatal_message_t* fatal_begin(fatal_error_t error, const char* message) {
+// Initialize serial and LED diagnostics before any optional display access.
+static const fatal_message_t* fatal_begin(fatal_error_t error) {
     // Invalid codes must still reach the fatal loop, even without assertions.
     if ((unsigned int)error >= FATAL_ERROR_COUNT) {
         error = FATAL_ERROR_UNSPECIFIED;
     }
     const fatal_message_t* const entry = &fatal_messages[error];
 
-    // Restore UART settings for the current clocks, even before normal stdio setup.
-    // This build uses UART stdio. USB host initialization is separate.
+    // Restore UART settings for the current clocks.
     stdio_init_all();
-
-    // Retain the serial diagnosis even when no display services are available.
-    fprintf(stdout, "Error (%c): %s\n", entry->letter, message);
-    fflush(stdout);
+    gpio_init(PICO_DEFAULT_LED_PIN);
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    gpio_put(PICO_DEFAULT_LED_PIN, false);
 
     return entry;
 }
 
-// Halt with repeated serial and Morse diagnostics without accessing the display.
+// Repeat Morse and periodically replay serial diagnostics without accessing the display.
 static void __attribute__((noreturn)) fatal_repeat(
     const fatal_message_t* entry, const char* message) {
-    // Separate the error from the boot/activity LED state before repeating it.
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-    gpio_put(PICO_DEFAULT_LED_PIN, false);
-    sleep_us(MORSE_REPEAT_GAP_UNITS * MORSE_DOT_US);
-    while (true) {
-        blink(entry->pattern);
+    // The sentinel makes the first loop iteration report immediately.
+    uint64_t last_log_dump_us = -FATAL_LOG_DUMP_INTERVAL_US;
 
-        // Resend during the dark gap so terminals connected later receive the details.
-        fprintf(stdout, "Error (%c): %s\n", entry->letter, message);
-        fflush(stdout);
+    while (true) {
+        const uint64_t now_us = time_us_64();
+        if (now_us - last_log_dump_us >= FATAL_LOG_DUMP_INTERVAL_US) {
+            log_dump(LOG_LEVEL_DEBUG);
+            fprintf(stdout, "Error (%c): %s\r\n", entry->letter, message);
+            fflush(stdout);
+            last_log_dump_us = now_us;
+        }
+
+        blink(entry->pattern);
     }
 }
 
 void fatal_halt(fatal_error_t error, const char* message) {
-    const fatal_message_t* const entry = fatal_begin(error, message);
+    const fatal_message_t* const entry = fatal_begin(error);
     fatal_repeat(entry, message);
 }
-#endif
 
 // Host targets provide fatal() and vetted_malloc() through their existing mocks.
 #if defined(PICO_RP2040)
@@ -122,7 +143,7 @@ static void __attribute__((noreturn)) fatal_no_alloc(const char* message) {
     static bool rendering;
 
     // Recover serial output before rendering, then leave core 1 driving DVI.
-    const fatal_message_t* const entry = fatal_begin(FATAL_ERROR_UNSPECIFIED, message);
+    const fatal_message_t* const entry = fatal_begin(FATAL_ERROR_UNSPECIFIED);
 
     // A failure inside the renderer must reach Morse rather than recursively render.
     if (!rendering) {

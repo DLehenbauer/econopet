@@ -14,30 +14,24 @@
  * errors and invariant violations share E, with details in the displayed
  * message.
  *
- * Reserve F, I, and W for bootloader fatal errors. Also reserve N: although
- * nonfatal, it repeats while the bootloader polls for firmware.
- *
- * | Letter | Owner      | Meaning |
- * | ------ | ---------- | --- |
- * |   C    | Firmware   | Configuring FPGA failed |
- * |   D    | Bootloader | Could not delete the update file (nonfatal) |
- * |   E    | Bootloader | Entering firmware (nonfatal) |
- * |   E    | Firmware   | Error (unspecified fatal error, including invariant violations) |
- * |   F    | Bootloader | Flash programming failed |
- * |   I    | Bootloader | Invalid UF2 |
- * |   N    | Bootloader | No firmware installed (nonfatal, repeated while polling) |
- * |   S    | Bootloader | Programming skipped (nonfatal) |
- * |   W    | Bootloader | Watchdog reset without valid firmware |
+ * Reserve F, I, and W for bootloader fatal errors. Also reserve N. Although
+ * nonfatal, N repeats while the bootloader polls for firmware.
  *
  * Transient bootloader status reports (e.g., blinking 'E' once to indicate
  * entering firmware) may share letters with firmware errors, since they are
  * distinguishable by the repetition pattern:
  *
- * | Letter | Owner      | Meaning |
- * | ------ | ---------- | --- |
- * |   D    | Bootloader | Could not delete the update file (nonfatal) |
- * |   E    | Bootloader | Entering firmware (nonfatal) |
- * |   S    | Bootloader | Programming skipped (nonfatal) |
+ * | Letter | Repeats | Owner      | Meaning |
+ * | ------ | ------- | ---------- | --- |
+ * |   C    | yes     | Firmware   | Configuring FPGA failed |
+ * |   D    | no      | Bootloader | Could not delete the update file (nonfatal) |
+ * |   E    | no      | Bootloader | Entering firmware (nonfatal) |
+ * |   E    | yes     | Firmware   | Error (unspecified fatal error, including invariant violations) |
+ * |   F    | yes     | Bootloader | Flash programming failed |
+ * |   I    | yes     | Bootloader | Invalid UF2 |
+ * |   N    | yes     | Bootloader | No firmware installed (nonfatal, but repeats while polling) |
+ * |   S    | no      | Bootloader | Programming skipped (nonfatal) |
+ * |   W    | yes     | Bootloader | Watchdog reset without valid firmware |
  */
 typedef enum {
     FATAL_ERROR_FPGA_CONFIG,  ///< C: FPGA configuration or its startup self-test failed.
@@ -61,8 +55,8 @@ void fatal(const char* const format, ...)
  *
  * Use directly for early-boot errors before the FPGA and displays are ready.
  * Initializes stdio once, then prints the caller's message and registered
- * letter. Resends and flushes the message after each Morse repetition so
- * terminals connected later receive the diagnosis.
+ * letter, followed by retained diagnostic logs.
+ *
  * Takes ownership of the activity LED. No display or SD card is required.
  * Uses the bootloader's 100 ms dot, 300 ms dash and spacing convention.
  *

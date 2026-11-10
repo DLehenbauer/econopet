@@ -132,3 +132,10 @@ const log_entry_t* log_iter_next(log_iterator_t* iter, log_level_t* out_level);
  * @return Total entry count
  */
 uint32_t log_entry_count(log_level_t min_level);
+
+/**
+ * Print log entries to stdout in chronological order.
+ * @param min_level Minimum log level to include
+ * @return Number of entries written
+ */
+uint32_t log_dump(log_level_t min_level);

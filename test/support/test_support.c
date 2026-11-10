@@ -218,6 +218,42 @@ absolute_time_t get_absolute_time(void) { return time_us_64(); }
 // Converts a host microsecond timestamp to Pico-compatible milliseconds.
 uint32_t to_ms_since_boot(absolute_time_t time) { return (uint32_t)(time / MICROSECONDS_PER_MILLISECOND); }
 
+// Fail if a host test reaches a real hardware delay without supplying its own mock.
+__attribute__((weak)) void sleep_us(uint64_t us) {
+    (void)us;
+    assert(false && "unexpected sleep_us call in host test");
+    abort();
+}
+
+// Fail if a host test initializes serial hardware without supplying its own mock.
+__attribute__((weak)) bool stdio_init_all(void) {
+    assert(false && "unexpected stdio_init_all call in host test");
+    abort();
+}
+
+// Fail if a host test initializes GPIO without supplying its own mock.
+__attribute__((weak)) void gpio_init(unsigned int gpio) {
+    (void)gpio;
+    assert(false && "unexpected gpio_init call in host test");
+    abort();
+}
+
+// Fail if a host test configures GPIO direction without supplying its own mock.
+__attribute__((weak)) void gpio_set_dir(unsigned int gpio, bool output) {
+    (void)gpio;
+    (void)output;
+    assert(false && "unexpected gpio_set_dir call in host test");
+    abort();
+}
+
+// Fail if a host test drives GPIO without supplying its own mock.
+__attribute__((weak)) void gpio_put(unsigned int gpio, bool value) {
+    (void)gpio;
+    (void)value;
+    assert(false && "unexpected gpio_put call in host test");
+    abort();
+}
+
 // Provides the firmware allocator with a Debug-only host allocation check.
 void* vetted_malloc(size_t size) {
     void* p = malloc(size);

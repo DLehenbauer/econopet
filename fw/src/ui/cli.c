@@ -45,13 +45,6 @@ static const cli_command_t commands[] = {
     { NULL, NULL, NULL }  // Sentinel
 };
 
-// Level name prefixes for log output
-static const char* const level_prefixes[] = {
-    "D",  // DEBUG
-    "I",  // INFO
-    "W"   // WARN
-};
-
 static void cmd_bp(const char* args) {
     (void)args;
 
@@ -95,34 +88,13 @@ static log_level_t parse_log_level(const char* str) {
 
 static void cmd_log(const char* args) {
     log_level_t min_level = parse_log_level(args);
-    
-    uint32_t count = log_entry_count(min_level);
-    if (count == 0) {
+
+    const uint32_t displayed = log_dump(min_level);
+    if (displayed == 0) {
         console_puts("(no log entries)\r\n");
         return;
     }
-    
-    // Get boot time for calculating relative timestamps
-    uint64_t boot_time = log_boot_time();
-    
-    log_iterator_t iter;
-    log_iter_init(&iter, min_level);
-    
-    const log_entry_t* entry;
-    log_level_t level;
-    uint32_t displayed = 0;
-    
-    while ((entry = log_iter_next(&iter, &level)) != NULL) {
-        // Calculate relative time from boot
-        uint64_t relative_us = entry->timestamp_us - boot_time;
-        uint32_t seconds = (uint32_t)(relative_us / 1000000);
-        uint32_t millis = (uint32_t)((relative_us % 1000000) / 1000);
-        
-        printf("[%4" PRIu32 ".%03" PRIu32 "] %s: %s\r\n", 
-               seconds, millis, level_prefixes[level], entry->message);
-        displayed++;
-    }
-    
+
     printf("(%" PRIu32 " entries)\r\n", displayed);
     fflush(stdout);
 }

@@ -11,6 +11,7 @@
 
 #include "hardware/gpio.h"
 
+#include "diag/log/log.h"
 #include "fatal.h"
 #include "input/input.h"
 #include "input/input_routing.h"
@@ -35,6 +36,7 @@ static size_t delay_count;
 static size_t delay_limit;
 static size_t pattern_delay_count;
 static off_t first_message_size;
+#define FATAL_LOG_DUMP_TEST_ELAPSED_US (11u * 1000u * 1000u)
 #define MORSE_CAPTURE_CAPACITY 19u
 static struct {
     bool on;
@@ -126,13 +128,23 @@ void __wrap_sleep_us(uint64_t us) {
         __real_sleep_us(us);
         return;
     }
+    mock_clock_advance(us);
+
+    // Let the next complete Morse cycle reach the periodic diagnostic replay.
+    if (delay_limit > 1 && delay_count == delay_limit - 2) {
+        mock_clock_advance(FATAL_LOG_DUMP_TEST_ELAPSED_US);
+    }
+
     // Check emitted bytes before the test's final flush can hide a missing flush.
-    if (delay_count == 0 || delay_count == 1 + pattern_delay_count) {
+    if (delay_count == 0 || delay_count == pattern_delay_count ||
+        delay_count == 2 * pattern_delay_count) {
         struct stat status;
         ck_assert_int_eq(fstat(fileno(stdout), &status), 0);
         if (delay_count == 0) {
             ck_assert_int_gt(status.st_size, 0);
             first_message_size = status.st_size;
+        } else if (delay_count == pattern_delay_count) {
+            ck_assert_int_eq(status.st_size, first_message_size);
         } else {
             ck_assert_int_eq(status.st_size, 2 * first_message_size);
         }
@@ -146,9 +158,17 @@ void __wrap_sleep_us(uint64_t us) {
     }
 }
 
-// Capture serial output and two Morse repetitions through the shared fatal endpoint.
-static void check_fatal_reporting(fatal_error_t error, const char* diagnosis,
-                                  const uint64_t* expected, size_t expected_count) {
+// Capture the initial and periodic reports across repeated Morse patterns.
+static void check_fatal_reporting(fatal_error_t error, const char* diagnosis, const uint64_t* expected,
+                                  size_t expected_count, bool with_history) {
+    // Isolate retained history and include every level in a deliberately mixed sequence.
+    mock_clock_set(0);
+    log_init();
+    if (with_history) {
+        log_info("startup context");
+        log_debug("ROM read context");
+        log_warn("timeout context");
+    }
     FILE* const output = tmpfile();
     ck_assert_ptr_nonnull(output);
     fflush(stdout);
@@ -159,7 +179,7 @@ static void check_fatal_reporting(fatal_error_t error, const char* diagnosis,
     delay_count = 0;
     stdio_init_count = 0;
     pattern_delay_count = expected_count;
-    delay_limit = 1 + 2 * expected_count;
+    delay_limit = 2 * expected_count + 1;
     ck_assert_uint_le(delay_limit, count_of(delays));
     led_on = true;
     led_initialized = false;
@@ -175,50 +195,115 @@ static void check_fatal_reporting(fatal_error_t error, const char* diagnosis,
     close(saved_stdout);
 
     rewind(output);
-    char message[256];
-    ck_assert_ptr_nonnull(fgets(message, sizeof(message), output));
+    char message[1024] = {0};
+    ck_assert_uint_lt(first_message_size, sizeof(message));
+    ck_assert_uint_eq(fread(message, 1, first_message_size, output), first_message_size);
     ck_assert_ptr_nonnull(strstr(message, diagnosis));
     ck_assert_ptr_nonnull(strstr(message, "test fatal details"));
-    char repeated_message[sizeof(message)];
-    ck_assert_ptr_nonnull(fgets(repeated_message, sizeof(repeated_message), output));
+    char repeated_message[sizeof(message)] = {0};
+    ck_assert_uint_eq(fread(repeated_message, 1, first_message_size, output), first_message_size);
     ck_assert_str_eq(repeated_message, message);
     ck_assert_int_eq(fgetc(output), EOF);
     fclose(output);
 
+    // A terminal connected after failure receives the same ordered startup context.
+    if (with_history) {
+        const char* info = strstr(message, "I: startup context");
+        const char* debug = strstr(message, "D: ROM read context");
+        const char* warn = strstr(message, "W: timeout context");
+        const char* error = strstr(message, diagnosis);
+        ck_assert_ptr_nonnull(info);
+        ck_assert_ptr_nonnull(debug);
+        ck_assert_ptr_nonnull(warn);
+        ck_assert_ptr_nonnull(error);
+        ck_assert(info < debug && debug < warn && warn < error);
+        ck_assert_uint_eq(log_entry_count(LOG_LEVEL_DEBUG), 3);
+    } else {
+        ck_assert_ptr_null(strstr(message, "Recent diagnostic log:"));
+    }
+
     ck_assert(!delays[0].on);
-    ck_assert_uint_eq(delays[0].duration, 300000);
+    ck_assert_uint_eq(delays[0].duration, 600000);
     for (size_t repeat = 0; repeat < 2; ++repeat) {
         for (size_t index = 0; index < expected_count; ++index) {
-            const size_t captured = 1 + repeat * expected_count + index;
-            ck_assert_int_eq(delays[captured].on, index < expected_count - 1 && index % 2 == 0);
+            const size_t captured = repeat * expected_count + index;
+            ck_assert_int_eq(delays[captured].on, index >= 2 && index % 2 == 0);
             ck_assert_uint_eq(delays[captured].duration, expected[index]);
         }
     }
+    ck_assert(!delays[2 * expected_count].on);
+    ck_assert_uint_eq(delays[2 * expected_count].duration, expected[0]);
 }
 
 // FPGA failures must report C without attempting to use an uninitialized display.
 START_TEST(test_fpga_error_reporting) {
     const uint64_t expected[] = {
-        300000, 100000, 100000, 100000, 300000, 100000, 100000, 100000, 300000,
+        600000, 100000, 300000, 100000, 100000, 100000, 300000, 100000, 100000,
     };
-    check_fatal_reporting(FATAL_ERROR_FPGA_CONFIG, "Error (C):",
-                          expected, count_of(expected));
+    check_fatal_reporting(FATAL_ERROR_FPGA_CONFIG, "Error (C):", expected, count_of(expected), false);
 }
 END_TEST
 
 // Repeated E is a fatal error, unlike the bootloader's single entering-firmware report.
 START_TEST(test_unspecified_error_reporting) {
-    const uint64_t expected[] = {100000, 100000, 300000};
-    check_fatal_reporting(FATAL_ERROR_UNSPECIFIED, "Error (E):",
-                          expected, count_of(expected));
+    const uint64_t expected[] = {600000, 100000, 100000};
+    check_fatal_reporting(FATAL_ERROR_UNSPECIFIED, "Error (E):", expected, count_of(expected), false);
 }
 END_TEST
 
 // An invalid registry code must still terminate with a recognizable Morse error.
 START_TEST(test_invalid_error_code) {
-    const uint64_t expected[] = {100000, 100000, 300000};
-    check_fatal_reporting((fatal_error_t)-1, "Error (E):",
-                          expected, count_of(expected));
+    const uint64_t expected[] = {600000, 100000, 100000};
+    check_fatal_reporting((fatal_error_t)-1, "Error (E):", expected, count_of(expected), false);
+}
+END_TEST
+
+// Replay all retained levels in each periodic report for late UART connections.
+START_TEST(test_fatal_replays_log_history) {
+    const uint64_t expected[] = {600000, 100000, 100000};
+    check_fatal_reporting(FATAL_ERROR_UNSPECIFIED, "Error (E):", expected, count_of(expected), true);
+}
+END_TEST
+
+// The longest retained message and a wide uptime must print without truncation.
+START_TEST(test_fatal_log_line_capacity) {
+    mock_clock_set(0);
+    log_init();
+    char payload[LOG_MESSAGE_LENGTH];
+    memset(payload, 'x', sizeof(payload) - 1);
+    payload[sizeof(payload) - 1] = '\0';
+    mock_clock_set(UINT64_MAX - 1);
+    log_debug("%s", payload);
+
+    // Capture only initial reporting, before Morse timing or repeat policy takes effect.
+    FILE* const output = tmpfile();
+    ck_assert_ptr_nonnull(output);
+    fflush(stdout);
+    const int saved_stdout = dup(fileno(stdout));
+    ck_assert_int_ge(saved_stdout, 0);
+    ck_assert_int_ge(dup2(fileno(output), fileno(stdout)), 0);
+    delay_count = stdio_init_count = 0;
+    delay_limit = 1;
+    observing = true;
+    if (setjmp(fatal_exit) == 0) {
+        __real_fatal_halt(FATAL_ERROR_UNSPECIFIED, "test fatal details");
+    }
+    observing = false;
+    fflush(stdout);
+    ck_assert_int_ge(dup2(saved_stdout, fileno(stdout)), 0);
+    close(saved_stdout);
+
+    // Include the newline in the comparison so a clipped message cannot pass.
+    rewind(output);
+    char message[256] = {0};
+    ck_assert_uint_lt(fread(message, 1, sizeof(message) - 1, output), sizeof(message) - 1);
+    fclose(output);
+    const char* const line = strstr(message, "[18446744073709.551] D: ");
+    ck_assert_ptr_nonnull(line);
+    const char* const text = line + strlen("[18446744073709.551] D: ");
+    ck_assert_int_eq(strncmp(text, payload, strlen(payload)), 0);
+    ck_assert_int_eq(text[strlen(payload)], '\r');
+    ck_assert_int_eq(text[strlen(payload) + 1], '\n');
 }
 END_TEST
 
@@ -303,10 +388,14 @@ Suite* fatal_error_suite(void) {
     tcase_add_test(tests, test_fpga_error_reporting);
     tcase_add_test(tests, test_unspecified_error_reporting);
     tcase_add_test(tests, test_invalid_error_code);
+    tcase_add_test(tests, test_fatal_replays_log_history);
     tcase_add_test_raise_signal(tests, test_sd_startup_failure, SIGABRT);
     tcase_add_test(tests, test_error_rom_without_keymap);
     tcase_add_test(tests, test_normal_rom_with_keymap);
     tcase_add_loop_test(tests, test_menu_rom_preserves_physical_holds, 0, 4);
     suite_add_tcase(suite, tests);
+    TCase* const formatting = tcase_create("fatal log formatting");
+    tcase_add_test(formatting, test_fatal_log_line_capacity);
+    suite_add_tcase(suite, formatting);
     return suite;
 }
