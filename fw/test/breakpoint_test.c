@@ -137,7 +137,10 @@ START_TEST(test_bp_task_restores_and_rearms) {
 } END_TEST
 
 static void observe_reset_release(cpu_state_t state) {
-    if (state == CPU_READY) {
+    if (state == CPU_RESET) {
+        ck_assert(system_state.bp_halted);
+        ck_assert(!mock_breakpoint_halt_was_cleared());
+    } else if (state == CPU_READY) {
         ck_assert_int_eq(get_cpu(), CPU_RESET);
         ck_assert(mock_breakpoint_halt_was_cleared());
         ck_assert(!system_state.bp_halted);
@@ -150,6 +153,7 @@ START_TEST(test_reset_clears_halt_but_preserves_breakpoint) {
 
     bp_set(0x0400, default_callback, NULL);
     system_state.bp_halted = true;
+    mock_breakpoint_reset_clear_observation();
     mock_cpu_set_state_observer(observe_reset_release);
 
     pet_reset();

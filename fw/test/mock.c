@@ -465,6 +465,11 @@ void bp_clear_halt(void) {
     system_state.bp_halted = false;
 }
 
+// Clear only the observed halt acknowledgement without changing fixture state.
+void mock_breakpoint_reset_clear_observation(void) {
+    mock_bp_cleared = false;
+}
+
 // ---------------------------------------------------------------------------
 // Test fixture helpers
 // ---------------------------------------------------------------------------

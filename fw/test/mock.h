@@ -78,6 +78,8 @@ void mock_ram_test_set_handler(void (*handler)(void));
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.
 bool mock_breakpoint_halt_was_cleared(void);
+/** Reset only the breakpoint-clear observation. */
+void mock_breakpoint_reset_clear_observation(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);
