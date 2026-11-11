@@ -66,9 +66,21 @@ Run the smallest relevant existing validation available, using actual targets
 and environment setup. Do not edit the worktree to reproduce a defect without
 permission. Disclose missing evidence and validation.
 
-Check that tests independently observe the contract rather than duplicate
-implementation assumptions or hide differences. Identify untested paths and
-states. A passing case establishes only what it measures.
+Require each added or changed test to justify its maintenance and runtime cost:
+name the production contract protected and a plausible regression it catches.
+Reject tautologies, expectations derived from the logic under test, and
+redundant cases without distinct protection. Establish production reachability
+from real callers and constraints, not arbitrary mock states. Reject tests
+covering only impossible scenarios, not rare inputs or reachable failures.
+
+Require independent contract observations that expose rather than mask
+differences. Identify untested paths and states. A passing case establishes
+only what it measures.
+
+Place regressions in the suite owning the protected code or contract, using
+its fixtures and conventions, not the feature suite that happened to expose
+the bug. Keep an integration regression there only for a distinct
+cross-component contract that focused tests cannot cover.
 
 On re-review, verify fixes and adjacent equivalent paths. Retain unresolved
 findings and distinguish new defects from previously missed unchanged code.
