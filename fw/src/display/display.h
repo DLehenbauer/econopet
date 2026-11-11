@@ -12,8 +12,9 @@
 // Initialize display subsystem
 void display_init(void);
 
-// Sync video between PET RAM and HDMI buffer based on system_state.video_source
-// Render to the terminal for a Remote session.
+// Sync video between PET RAM and the DVI display.  The transfer direction is
+// controlled by system_state.video_source.  Render to the terminal if it is
+// mirroring PET video.
 void display_task(void);
 
 /** Report whether the video buffer belongs on the terminal. */
