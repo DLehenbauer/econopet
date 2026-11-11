@@ -8,6 +8,7 @@
 #include "diag/log/log.h"
 #include "driver.h"
 #include "mock.h"
+#include "pet.h"
 #include "system_state.h"
 
 static void reset_breakpoint_test(void) {
@@ -133,6 +134,34 @@ START_TEST(test_bp_task_restores_and_rearms) {
 
     // The entry should still be in the table.
     ck_assert_int_eq(bp_count(), 1);
+} END_TEST
+
+static void observe_reset_release(cpu_state_t state) {
+    if (state == CPU_READY) {
+        ck_assert_int_eq(get_cpu(), CPU_RESET);
+        ck_assert(mock_breakpoint_halt_was_cleared());
+        ck_assert(!system_state.bp_halted);
+    }
+}
+
+START_TEST(test_reset_clears_halt_but_preserves_breakpoint) {
+    reset_breakpoint_test();
+    mock_ram[0x0400] = 0x4C;
+
+    bp_set(0x0400, default_callback, NULL);
+    system_state.bp_halted = true;
+    mock_cpu_set_state_observer(observe_reset_release);
+
+    pet_reset();
+
+    mock_cpu_set_state_observer(NULL);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+    ck_assert(mock_breakpoint_halt_was_cleared());
+    ck_assert(!system_state.bp_halted);
+    ck_assert_int_eq(bp_count(), 1);
+    ck_assert_uint_eq(bp_get(0)->addr, 0x0400);
+    ck_assert_uint_eq(bp_get(0)->original, 0x4C);
+    ck_assert_uint_eq(mock_ram[0x0400], 0xDB);
 } END_TEST
 
 START_TEST(test_bp_task_unknown_addr) {
@@ -342,6 +371,7 @@ Suite *breakpoint_suite(void) {
     tcase_add_test(tc, test_bp_remove_nonexistent_fails);
     tcase_add_test(tc, test_bp_remove_compacts_table);
     tcase_add_test(tc, test_bp_task_restores_and_rearms);
+    tcase_add_test(tc, test_reset_clears_halt_but_preserves_breakpoint);
     tcase_add_test(tc, test_bp_task_unknown_addr);
     tcase_add_test(tc, test_bp_set_saves_original);
     tcase_add_test(tc, test_bp_callback_auto_resume);

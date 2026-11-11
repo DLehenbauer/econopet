@@ -66,12 +66,24 @@ void pet_reset() {
     // Assert CPU 'reset' while execution remains suspended.
     set_cpu(CPU_RESET);
     sleep_us(4);
-    
+
+    // A breakpoint can latch after the last status poll but before a pending reset
+    // is serviced. Reset abandons the interrupted instruction, so its halt event
+    // must not remain latched and block the new reset-vector execution. Clearing
+    // the halt does not remove the breakpoint entry or its STP patch. If execution
+    // reaches that address after reset, the breakpoint fires again normally.
+    bp_clear_halt();
+
     // Finally, deassert CPU 'reset' and allow the CPU to execute instructions.
     set_cpu(CPU_READY);
 }
 
 void pet_nmi() {
+    // NMI preserves the interrupted CPU context, unlike reset. The caller must
+    // finish any pending breakpoint transaction before pulsing NMI. Clearing a
+    // halt here would leave STP at the saved PC, while pulsing NMI before the
+    // temporary patch, restore, and optional rearm complete could change the
+    // execution point for the entire breakpoint sequence.
     // Out of paranoia, deassert CPU 'NMI' to ensure the CPU observes a clean pulse.
     set_cpu(CPU_READY);
     sleep_us(4);
