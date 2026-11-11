@@ -40,6 +40,7 @@ static uint8_t physical_matrix[KEY_COL_COUNT];
 static uint8_t published_matrix[KEY_COL_COUNT];
 static uint8_t fpga_crtc[CRTC_REG_COUNT];
 static unsigned int matrix_publish_count;
+static unsigned int spi_read_count, spi_write_count;
 static unsigned int usb_service_count, hid_service_count, button_sample_count;
 
 #define MOCK_UART_LOG2_CAPACITY 8
@@ -317,8 +318,15 @@ uint8_t spi_read_at(uint32_t addr) {
     return mock_ram[addr];
 }
 
+// Report bulk reads independently of their per-byte register accesses.
+unsigned int mock_spi_read_count(void) { return spi_read_count; }
+
+// Report bulk writes independently of their per-byte register accesses.
+unsigned int mock_spi_write_count(void) { return spi_write_count; }
+
 // Reads consecutive mocked addresses into the caller's buffer.
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
+    ++spi_read_count;
     if (addr == ECONOPET_WB_KBD_BASE_ADDR) {
         ck_assert_uint_eq(byteLength, sizeof(physical_matrix));
         memcpy(pDest, physical_matrix, sizeof(physical_matrix));
@@ -384,6 +392,7 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
 
 // Writes the caller's bytes to consecutive mocked addresses.
 void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
+    ++spi_write_count;
     if (addr == ECONOPET_WB_KBD_BASE_ADDR) {
         ck_assert_uint_eq(byteLength, sizeof(published_matrix));
         memcpy(published_matrix, pSrc, sizeof(published_matrix));
@@ -487,6 +496,7 @@ void mock_reset(void) {
     memset(published_matrix, UINT8_MAX, sizeof(published_matrix));
     memset(fpga_crtc, 0, sizeof(fpga_crtc));
     matrix_publish_count = usb_service_count = hid_service_count = button_sample_count = 0;
+    spi_read_count = spi_write_count = 0;
     cpu_run_callback = NULL;
     cpu_state_observer = NULL;
     display_task_count = 0;

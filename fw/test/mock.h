@@ -22,6 +22,9 @@ extern uint8_t mock_ram[MOCK_RAM_SIZE];
 
 // Resets RAM, register FIFOs, CPU flags, breakpoint observations, and input.
 void mock_reset(void);
+// Count bulk SPI transactions since the last reset.
+unsigned int mock_spi_read_count(void);
+unsigned int mock_spi_write_count(void);
 // Invokes the callback on status polls while the mocked CPU is running.
 void mock_cpu_set_run_callback(void (*callback)(void));
 /** Observe real CPU control transitions while testing machine lifecycle sequencing. */

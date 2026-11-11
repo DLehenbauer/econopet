@@ -7,7 +7,12 @@
 #include "char_encoding.h"
 #include "driver.h"
 #include "dvi/dvi.h"
+#include "fatal.h"
 #include "system_state.h"
+
+#define VIDEO_RAM_ADDRESS 0x8000u
+#define VIDEO_RAM_UNIT_BYTES 0x400u
+#define VIDEO_COLOR_OFFSET (2u * VIDEO_RAM_UNIT_BYTES)
 
 // Terminal escape sequences
 static const char* const term_home = "\e[H";
@@ -80,22 +85,46 @@ void display_term_refresh(void) {
     display_term_render();
 }
 
-void display_task(void) {
-    // Local pointer to avoid repeated struct member access
-    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+// Synchronize one character or attribute span.
+static void display_sync_range(const video_source_t video_source, const size_t offset, const size_t length) {
+    assert(length > 0);
+    assert(offset < sizeof(system_state.video_char_buffer));
+    assert(length <= sizeof(system_state.video_char_buffer) - offset);
 
-    // Sync video buffer based on video source
-    if (system_state.video_source == video_source_pet) {
-        // Read PET video RAM into buffer (6502 drives display)
-        spi_read(0x8000, system_state.video_ram_bytes, video_char_buffer);
+    uint8_t* const buffer = system_state.video_char_buffer + offset;
+
+    if (video_source == video_source_pet) {
+        spi_read(VIDEO_RAM_ADDRESS + offset, length, buffer);
     } else {
-        // Write buffer to PET video RAM (firmware drives display)
-        spi_write(0x8000, video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
+        spi_write(VIDEO_RAM_ADDRESS + offset, buffer, length);
     }
-    
-    // HDMI DVI core continuously reads video_char_buffer - no action needed
-    
-    // Ordinary terminal rendering follows the user's session.
+}
+
+void display_task(void) {
+    const video_source_t video_source = system_state.video_source;
+    assert(video_source == video_source_pet || video_source == video_source_firmware);
+
+    const uint8_t mask = system_state.video_ram_mask;
+    assert(mask <= pet_video_ram_mask_4kb);
+
+    switch (mask) {
+    case pet_video_ram_mask_colourpet:
+        // The 40-column ColourPET has a 1KB gap between character and color RAM:
+        //
+        //      $8000-$83FF: character RAM
+        //      $8400-$87FF: (unmapped / wraps)
+        //      $8800-$8BFF: color RAM
+        //
+        // As an optimization, use separate transfers to skip the unmapped hole.
+        display_sync_range(video_source, 0, VIDEO_RAM_UNIT_BYTES);
+        display_sync_range(video_source, VIDEO_COLOR_OFFSET, VIDEO_RAM_UNIT_BYTES);
+        break;
+    default:
+        display_sync_range(video_source, 0, system_state.video_ram_bytes);
+        break;
+    }
+
+    // Also update the terminal if it is mirroring PET video.
     if (display_term_video_active()) {
         display_term_render();
     }

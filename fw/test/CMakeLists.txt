@@ -71,6 +71,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/cpu_test.c
     ${TEST_DIR}/crtc_test.c
+    ${TEST_DIR}/display_test.c
     ${TEST_DIR}/fatal_error_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/dos_media_test.c
