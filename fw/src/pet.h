@@ -24,4 +24,11 @@ void pet_wait_for_storage_idle(void);
 //       on the RP2040 to perform a hard reset instead.
 void pet_reset();
 
-void pet_nmi();
+/**
+ * Pulse the PET NMI line.
+ *
+ * The caller must first complete any pending breakpoint transaction through
+ * bp_task(). NMI preserves execution state and must not interleave with the
+ * breakpoint manager's temporary patch, resume, restore, and optional rearm.
+ */
+void pet_nmi(void);
