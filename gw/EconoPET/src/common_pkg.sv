@@ -93,7 +93,12 @@ package common_pkg;
     // 6502 too, as on real hardware. A 6809 enables it regardless.
     localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
 
-    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
+    // Register 6: Audio Control
+    localparam int unsigned REG_AUDIO = 6;
+    localparam int unsigned REG_AUDIO_ENABLE_BIT = 0;
+    localparam logic [DATA_WIDTH-1:0] REG_AUDIO_ENABLE_MASK = 1 << REG_AUDIO_ENABLE_BIT;
+
+    localparam int unsigned REG_COUNT                   = REG_AUDIO + 1'b1;
 
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_TEXT_MODE_MASK = 1 << REG_STATUS_TEXT_MODE_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_CRT_MASK = 1 << REG_STATUS_CRT_BIT;
@@ -150,6 +155,7 @@ package common_pkg;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_LO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_LO));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_HI_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_HI));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_CPU_SEL_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_CPU_SEL));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_AUDIO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_AUDIO));
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.

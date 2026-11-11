@@ -39,6 +39,7 @@ module audio (
 
     input  logic diag_i,        // PIA1 PA7 pin 9: (0 = sound off, 1 = sound on)
     input  logic via_cb2_i,     // VIA CB2 pin 19: shift register used for 1-bit sound
+    input  logic audio_enable_i, // Output-only mute, never resets SID or VIA
     output logic audio_l_o,     // Audio left  : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
     output logic audio_r_o      // Audio right : VIA CB2 mixed with SID output (1-bit ΔΣ-encoded)
 );
@@ -70,11 +71,12 @@ module audio (
     wire signed [15:0] cb2_out = via_cb2_i && diag_i ? 16'h800 : -16'h800;
 
     wire signed [15:0] mixed = sid_out + cb2_out;
+    wire signed [15:0] dac_sample = audio_enable_i ? mixed : 16'sd0;
 
     delta_sigma_dac dac (
         .clk_i  (sys_clock_i),
         .reset_i(reset_i),
-        .dac_i  (mixed),
+        .dac_i  (dac_sample),
         .dac_o  (audio_l_o)
     );
 

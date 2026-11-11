@@ -106,6 +106,7 @@
         <efx:sim_file name="sim/mock_bus.sv"/>
         <efx:sim_file name="sim/mock_system.sv"/>
         <efx:sim_file name="sim/address_decoding_tb.sv"/>
+        <efx:sim_file name="sim/audio_tb.sv"/>
         <efx:sim_file name="sim/memory_map_tb.sv"/>
         <efx:sim_file name="sim/cpu_data_mux_tb.sv"/>
         <efx:sim_file name="sim/open_bus_tb.sv"/>
