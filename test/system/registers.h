@@ -77,6 +77,7 @@ enum class SpiCommand : uint8_t {
     ReadNext = ECONOPET_SPI_CMD_READ_NEXT,
     ReadPrev = ECONOPET_SPI_CMD_READ_PREV,
     ReadSame = ECONOPET_SPI_CMD_READ_SAME,
+    ReadPop = ECONOPET_SPI_CMD_READ_POP,
     WriteAt = ECONOPET_SPI_CMD_WRITE_AT,
     WriteNext = ECONOPET_SPI_CMD_WRITE_NEXT,
     WritePrev = ECONOPET_SPI_CMD_WRITE_PREV,
@@ -119,6 +120,7 @@ constexpr uint8_t command_byte(SpiCommand command, econopet::WishboneAddress add
     case SpiCommand::ReadNext:
     case SpiCommand::ReadPrev:
     case SpiCommand::ReadSame:
+    case SpiCommand::ReadPop:
     case SpiCommand::WriteNext:
     case SpiCommand::WritePrev:
     case SpiCommand::WriteSame:
@@ -132,16 +134,17 @@ constexpr uint8_t command_byte(SpiCommand command, econopet::WishboneAddress add
 // Require exactly one supported command before the transport can mutate the board.
 inline void validate_command(econopet::ByteView bytes) {
     constexpr uint8_t OpcodeMask = ECONOPET_SPI_CMD_OPCODE_MASK;
-    constexpr uint8_t ReservedMask = ECONOPET_SPI_CMD_RESERVED_MASK;
+    constexpr uint8_t PopMask = ECONOPET_SPI_CMD_READ_POP;
     constexpr uint8_t AddressHighMask = ECONOPET_SPI_CMD_ADDRESS_HIGH_MASK;
     constexpr size_t AbsoluteReadSize = 3;
     constexpr size_t RelativeReadSize = 1;
     if (bytes.size() == 0)
         throw std::invalid_argument("empty FPGA SPI command");
     const auto command = static_cast<SpiCommand>(bytes[0] & OpcodeMask);
+    const bool pop = bytes[0] == ECONOPET_SPI_CMD_READ_POP;
     const bool absolute = command == SpiCommand::ReadAt || command == SpiCommand::WriteAt;
     const bool write = (bytes[0] & std::to_underlying(SpiCommand::WriteSame)) != 0;
-    if ((bytes[0] & ReservedMask) || (!absolute && (bytes[0] & AddressHighMask)))
+    if ((!pop && (bytes[0] & PopMask)) || (!absolute && (bytes[0] & AddressHighMask)))
         throw std::invalid_argument("FPGA SPI command contains reserved bits");
     const size_t expected = (absolute ? AbsoluteReadSize : RelativeReadSize) + (write ? 1 : 0);
     if (bytes.size() != expected)

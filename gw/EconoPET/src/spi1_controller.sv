@@ -88,6 +88,9 @@ module spi1_controller (
     // One cycle when the current command's bus cycle completes. Rearms both
     // FSMs so a held-low CS can stream back-to-back commands (burst FIFO fill).
     logic cmd_done;
+    wire pop_command = spi_strobe_pulse
+        && spi_state == READ_CMD
+        && spi_data_rx[SPI_CMD_POP_BIT];
 
     always_ff @(posedge wb_clock_i) begin
         if (spi_reset_pulse) begin
@@ -100,7 +103,9 @@ module spi1_controller (
                 READ_CMD: begin
                     wbc_we_o  <= spi_data_rx[SPI_CMD_WRITE_BIT];
 
-                    if ((spi_data_rx & SPI_CMD_MODE_MASK) == SPI_CMD_ABSOLUTE_MODE) begin
+                    if (spi_data_rx[SPI_CMD_POP_BIT]) begin
+                        spi_state <= READ_CMD;
+                    end else if ((spi_data_rx & SPI_CMD_MODE_MASK) == SPI_CMD_ABSOLUTE_MODE) begin
                         // If the incomming CMD reads target address as an argument, capture A16 from rx[0] now.
                         wbc_addr_o <= {spi_data_rx[WB_ADDR_WIDTH-16-1:0], 16'hxxxx};
                         spi_state  <= READ_ADDR_HI_ARG;
@@ -190,7 +195,7 @@ module spi1_controller (
                     // 'spi_stall_o' stays low between commands and the MCU can
                     // stream the next one in the same transaction. Bytes only
                     // strobe while CS is asserted, so no CS gate is needed.
-                    if (spi_strobe_pulse) begin
+                    if (spi_strobe_pulse && !pop_command) begin
                         wbc_state <= RECEIVING_CMD;
                     end
                 end

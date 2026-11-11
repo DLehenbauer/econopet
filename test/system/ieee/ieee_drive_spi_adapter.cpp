@@ -77,6 +77,12 @@ extern "C" uint8_t spi_read_at(uint32_t address) {
     return value;
 }
 
+// Return the pending read result without queuing another Wishbone transaction.
+extern "C" uint8_t spi_read_pop() {
+    const uint8_t bytes[] = {ECONOPET_SPI_CMD_READ_POP};
+    return command(bytes);
+}
+
 // Match production READ_AT followed by N separate READ_NEXT transactions.
 // A zero-length read still seeks, as in driver.c.
 extern "C" void spi_read(uint32_t address, size_t length, uint8_t* destination) {

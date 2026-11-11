@@ -96,6 +96,15 @@ uint8_t spi_read_at(uint32_t addr) {
     return spi_read_next();
 }
 
+uint8_t spi_read_pop(void) {
+    const uint8_t tx = ECONOPET_SPI_CMD_READ_POP;
+    uint8_t rx;
+    cmd_start();
+    spi_write_read_blocking(FPGA_SPI_INSTANCE, &tx, &rx, sizeof(rx));
+    cmd_end();
+    return rx;
+}
+
 /**
  * Retrieves the result of the previous read and queues a read of the next sequential address.
  * 
@@ -527,81 +536,6 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     }
 
     release_temp_buffer(&temp_buffer);
-}
-
-// Translates the PET's physical PIA/VIA range into its MCU Wishbone window.
-static uint32_t pet_io_addr(const uint16_t addr) {
-    // Restrict access to $E810-$E84F, excluding the unmapped $E800-$E80F
-    // hole (which the bridge acknowledges with $FF) and upper VIA mirrors.
-    // Reading $E87F would also prefetch Wishbone address 0x78080, outside
-    // the bridge window, and stall waiting for an acknowledgement.
-    vet(addr >= 0xE810 && addr <= 0xE84F,
-        "PET I/O address out of range: $%04X", addr);
-
-    return ECONOPET_WB_IO_BASE_ADDR | (addr & 0x7f);
-}
-
-/**
- * Reads a physical PET I/O register through the FPGA.
- *
- * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
- * already be halted so it cannot access the I/O bus concurrently. The PET
- * address is translated to the FPGA I/O window before the SPI read.
- *
- * @param addr PET I/O register address
- * @return The byte value read from the register
- */
-uint8_t pet_io_read(const uint16_t addr) {
-    // If the CPU is ready, it owns the bus and PET I/O access is not allowed.
-    vet(!(get_cpu() & CPU_READY),
-        "PET I/O access while CPU is ready: $%04X", addr);
-
-    return spi_read_at(pet_io_addr(addr));
-}
-
-/**
- * Writes a physical PET I/O register through the FPGA.
- *
- * The PET address must be in the PIA/VIA range $E810-$E84F. The CPU must
- * already be halted so it cannot access the I/O bus concurrently. The PET
- * address is translated to the FPGA I/O window before the SPI write.
- *
- * @param addr PET I/O register address
- * @param data Byte value to write to the register
- */
-void pet_io_write(const uint16_t addr, const uint8_t data) {
-    // If the CPU is ready, it owns the bus and PET I/O access is not allowed.
-    vet(!(get_cpu() & CPU_READY),
-        "PET I/O access while CPU is ready: $%04X", addr);
-
-    spi_write_at(pet_io_addr(addr), data);
-}
-
-/**
- * Controls the PET CPU state via the CPU control register.
- *
- * This function writes to ECONOPET_WB_CPU_ADDR, which controls three CPU signals:
- * - READY: CPU clock enable
- * - RESET: CPU reset signal
- * - NMI: Non-maskable interrupt
- *
- * These signals allow the RP2040 to control the CPU, enabling operations like
- * halting execution to modify memory, triggering resets, or injecting NMI
- * interrupts.
- *
- * @param state CPU control flags
- */
-void set_cpu(cpu_state_t state) {
-    spi_write_at(ECONOPET_WB_CPU_ADDR, (uint8_t)state);
-}
-
-/**
- * Reads the current CPU control state directly from the FPGA register.
- *
- * @return Current CPU control state.
- */
-cpu_state_t get_cpu(void) {
-    return (cpu_state_t)(spi_read_at(ECONOPET_WB_CPU_ADDR) & ECONOPET_REG_CPU_MASK);
 }
 
 // Select which CPU owns the bus (soft 6502 / soft 6809 / physical 6502). This

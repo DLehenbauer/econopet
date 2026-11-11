@@ -21,6 +21,7 @@ add_system_test_yaml()
 add_library(econopet_host_firmware STATIC
     firmware.cpp
     "${ECONOPET_ROOT}/fw/src/config/config.c"
+    "${ECONOPET_ROOT}/fw/src/driver_io.c"
     ieee/ieee_drive_spi_adapter.cpp
     ieee/ieee_drive_log_stub.c
     "${ECONOPET_ROOT}/fw/src/ieee/ieee_drive.c"

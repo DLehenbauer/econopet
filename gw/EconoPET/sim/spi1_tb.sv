@@ -36,6 +36,9 @@ module spi1_tb;
     logic                     stall = 1'b0;
     logic                     ack   = 1'b0;
 
+    // Count Wishbone bus cycles.
+    integer cycle_count = 0;
+
     spi1_controller spi1 (
         .wb_clock_i(clock),
         .wbc_addr_o(addr),
@@ -118,6 +121,16 @@ module spi1_tb;
         spi1_driver.read_same();
     endtask
 
+    task read_pop(
+        input logic [DATA_WIDTH-1:0] expected_result
+    );
+        integer prior_cycles;
+        prior_cycles = cycle_count;
+        spi1_driver.read_pop();
+        `assert_equal(spi1_driver.spi_data_o, expected_result)
+        `assert_equal(cycle_count, prior_cycles)
+    endtask
+
     // Burst variants: keep CS asserted across commands (one transaction).
     task write_at_hold(
         input logic [WB_ADDR_WIDTH-1:0] addr_i,
@@ -169,6 +182,7 @@ module spi1_tb;
     end
 
     always @(posedge cycle) begin
+        cycle_count++;
         $display("[%t]        (stall=%b, cycle=%b, ack=%b, addr=%x, we=%b, wr_data=%x)", $time,
                  spi_stall, cycle, ack, addr, we, wr_data);
 
@@ -220,7 +234,14 @@ module spi1_tb;
         write_same(8'h30);
         read_same();
 
-        $display("[%t] Test 5: Mixed operations", $time);
+        $display("[%t] Test 5: READ_POP does not start another bus cycle", $time);
+        rd_data = 8'hA5;
+        read_at(20'h01234);
+        read_pop(8'hA5);
+        read_same();
+        `assert_equal(expected_addr, 20'h01234)
+
+        $display("[%t] Test 6: Mixed operations", $time);
         write_at(20'h04000, 8'h40);
         read_next();
         write_prev(8'h50);
@@ -232,7 +253,7 @@ module spi1_tb;
         // fill path). Each command must produce its own bus cycle with the
         // correct address/data -- the WRITE_SAME commands must all target the
         // same address the WRITE_AT seeded (FIFO-style push).
-        $display("[%t] Test 6: Burst write (multi-command per CS)", $time);
+        $display("[%t] Test 7: Burst write (multi-command per CS)", $time);
         write_at_hold(20'h07000, 8'hB0);
         write_same_hold(8'hB1);
         write_same_hold(8'hB2);
@@ -243,7 +264,7 @@ module spi1_tb;
 
         // Long burst: firmware pushes a whole 254-byte record in one CS
         // transaction.
-        $display("[%t] Test 6b: Long burst (200 commands, one CS)", $time);
+        $display("[%t] Test 7b: Long burst (200 commands, one CS)", $time);
         write_at_hold(20'h08000, 8'h00);
         for (int i = 1; i < 200; i++) begin
             write_same_hold(i[7:0]);   // each must land at 0x08000 with data=i
@@ -252,7 +273,7 @@ module spi1_tb;
         `assert_equal(expected_addr, 20'h08000);
 
         // A normal single command must still work immediately after a burst.
-        $display("[%t] Test 7: Single command after burst", $time);
+        $display("[%t] Test 8: Single command after burst", $time);
         write_at(20'h07001, 8'hCC);
         read_at(20'h07000);
 
