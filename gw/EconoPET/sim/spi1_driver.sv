@@ -36,8 +36,13 @@ module spi1_driver(
                          ADDR_MODE_SEEK = 2'b10,
                          ADDR_MODE_DEC  = 2'b11;
 
-    function [7:0] cmd(input bit we, input bit [1:0] addr_mode, input logic [WB_ADDR_WIDTH-1:0] addr = 20'bx);
-        return { we, addr_mode, 1'bx, addr[WB_ADDR_WIDTH-1:16] };
+    function [7:0] cmd(
+        input bit we,
+        input bit [1:0] addr_mode,
+        input logic [WB_ADDR_WIDTH-1:0] addr = 20'bx,
+        input bit pop = 1'b0
+    );
+        return {we, addr_mode, pop, addr[WB_ADDR_WIDTH-1:16]};
     endfunction
 
     function [7:0] addr_hi(input logic [WB_ADDR_WIDTH-1:0] addr);
@@ -126,6 +131,14 @@ module spi1_driver(
         c = cmd(/* we: */ '0, ADDR_MODE_SAME, 20'bx);
 
         send('{c});
+    endtask
+
+    task read_pop();
+        $display("[%t]    spi1.read_pop()", $time);
+        spi_driver.send('{cmd(1'b0, ADDR_MODE_SAME, 20'bx, 1'b1)}, /* complete: */ 1'b0);
+        repeat (3) @(posedge clock_i);
+        spi_data_o = spi_rx_data;
+        spi_driver.complete;
     endtask
 
     task write_next(input [DATA_WIDTH-1:0] data_i);

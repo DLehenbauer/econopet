@@ -21,6 +21,7 @@ struct ProtocolCommand {
 // Specify wire bytes and sizes independently of the production masks and validator.
 constexpr std::array Protocol{
     ProtocolCommand{fpga::SpiCommand::ReadSame, 0x00, 0x00, 1},
+    ProtocolCommand{fpga::SpiCommand::ReadPop, 0x10, 0x10, 1},
     ProtocolCommand{fpga::SpiCommand::ReadNext, 0x20, 0x20, 1},
     ProtocolCommand{fpga::SpiCommand::ReadAt, 0x40, 0x4f, 3},
     ProtocolCommand{fpga::SpiCommand::ReadPrev, 0x60, 0x60, 1},
