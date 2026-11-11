@@ -56,12 +56,6 @@ create_generated_clock -name e6809 -source [get_ports {sys_clock_i}] \
 create_generated_clock -name q6809 -source [get_ports {sys_clock_i}] \
     -edges [arbiter_clock_edges 51 60] [get_nets {main/cpu6809_q}]
 
-# cpu_data_strobe_q is a one-cycle pulse that clocks soft_cpu_data_q at arbiter
-# cycle 56. Model that real launch clock so STA derives the five-cycle setup
-# and full-frame hold relationships without a data-path exception.
-create_generated_clock -name soft_cpu_data_capture -source [get_ports {sys_clock_i}] \
-    -edges [arbiter_clock_edges 56 57] [get_nets {main/cpu_data_strobe_q}]
-
 # Declare clock domains asynchronous (must list all groups explicitly).
 set_clock_groups -asynchronous \
     -group {sys_clock_i} \
@@ -271,12 +265,6 @@ set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
 set_multicycle_path -hold 1 -start \
     -from [get_clocks {sys_clock_i}] \
     -to [get_clocks {cpu_phi e6809 q6809}]
-
-# read_data_q updates only at the frame's data strobe, one cycle before this
-# capture edge -- a held level the insertion-delayed capture cannot race.
-set_multicycle_path -hold 1 -start \
-    -from [get_clocks {sys_clock_i}] \
-    -to [get_clocks {soft_cpu_data_capture}]
 
 # ============================================================================
 # Asynchronous / Quasi-Static Inputs

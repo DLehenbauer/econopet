@@ -301,9 +301,6 @@ module timing (
         if (CPU_ADDR_STROBE + 1 != 51 || CPU_WR_END + 1 != 60)
             $fatal(1, "EconoPET.sdc q6809 arbiter cycles {51 60} are stale: ADDR_STROBE+1=%0d WR_END+1=%0d",
                 CPU_ADDR_STROBE + 1, CPU_WR_END + 1);
-        if (CPU_DATA_STROBE + 1 != 56)
-            $fatal(1, "EconoPET.sdc soft_cpu_data_capture arbiter cycle 56 is stale: DATA_STROBE+1=%0d",
-                CPU_DATA_STROBE + 1);
     end
     // synthesis on
 endmodule

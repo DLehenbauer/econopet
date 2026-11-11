@@ -273,7 +273,7 @@ module superpet_top_tb;
             `assert_equal(cpu_reset_n, 1'b1)
             saved_registers = top.main.mc6809_regdata;
             saved_addr = top.main.mc6809_addr;
-            saved_data = top.main.soft_cpu_data_q;
+            saved_data = top.main.read_data_q;
             saved_counter = mock_sram.mem[17'h00200];
             repeat (128) begin
                 @(negedge sys_clock);
@@ -292,7 +292,7 @@ module superpet_top_tb;
             `assert_equal(result, 8'h10)
             `assert_exact_equal(top.main.mc6809_regdata, saved_registers)
             `assert_equal(top.main.mc6809_addr, saved_addr)
-            `assert_exact_equal(top.main.soft_cpu_data_q, saved_data)
+            `assert_exact_equal(top.main.read_data_q, saved_data)
             `assert_equal(mock_sram.mem[17'h00200], saved_counter)
 
             // READY resumes the loop rather than restarting it at the reset vector.
