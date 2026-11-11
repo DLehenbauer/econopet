@@ -38,6 +38,9 @@ module register_file_tb;
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
 
+    // Audio control register
+    logic audio_enable;
+
     register_file register_file (
         .wb_clock_i(clock),
         .wbp_addr_i(common_pkg::wb_reg_addr(addr)),
@@ -67,7 +70,10 @@ module register_file_tb;
         
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
-        .video_ram_mask_o(video_ram_mask)
+        .video_ram_mask_o(video_ram_mask),
+
+        // Audio control register
+        .audio_enable_o(audio_enable)
     );
 
     wb_driver wb (
@@ -138,6 +144,11 @@ module register_file_tb;
         `assert_equal(cpu_reset, 1'b1);
         `assert_equal(video_col_80_mode, 1'b0);
         `assert_equal(video_ram_mask, 2'b00);
+        `assert_equal(audio_enable, 1'b1);
+        test_reg(REG_AUDIO, 8'h00);
+        `assert_equal(audio_enable, 1'b0);
+        test_reg(REG_AUDIO, REG_AUDIO_ENABLE_MASK);
+        `assert_equal(audio_enable, 1'b1);
 
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b0, /* nmi: */ 1'b0);
         test_cpu_reg(/* reset: */ 1'b0, /* ready: */ 1'b1, /* nmi: */ 1'b0);

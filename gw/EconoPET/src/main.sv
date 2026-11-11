@@ -419,6 +419,9 @@ module main (
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
 
+    // Audio control register.
+    logic audio_enable;
+
     logic reg_cpu_ready;    // CPU ready control register from register file
     logic bp_halted;
     logic [CPU_ADDR_WIDTH-1:0] bp_addr;
@@ -455,8 +458,10 @@ module main (
 
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
+        .video_ram_mask_o(video_ram_mask),
 
-        .video_ram_mask_o(video_ram_mask)
+        // Audio control register
+        .audio_enable_o(audio_enable)
     );
 
     //
@@ -623,6 +628,7 @@ module main (
         .data_o(),                 // TODO: Read back from SID?
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
+        .audio_enable_i(audio_enable),
         .audio_l_o(audio_l_o),
         .audio_r_o(audio_r_o)
     );
