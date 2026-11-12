@@ -98,7 +98,13 @@ package common_pkg;
     localparam int unsigned REG_AUDIO_ENABLE_BIT = 0;
     localparam logic [DATA_WIDTH-1:0] REG_AUDIO_ENABLE_MASK = 1 << REG_AUDIO_ENABLE_BIT;
 
-    localparam int unsigned REG_COUNT                   = REG_AUDIO + 1'b1;
+    // Request is writable, acknowledgment reflects completed bus isolation.
+    localparam int unsigned REG_SUSPEND = 7;
+    localparam int unsigned REG_SUSPEND_REQUEST_BIT = 0;
+    localparam int unsigned REG_SUSPEND_ACK_BIT = 1;
+    localparam logic [DATA_WIDTH-1:0] REG_SUSPEND_REQUEST_MASK = 1 << REG_SUSPEND_REQUEST_BIT;
+    localparam logic [DATA_WIDTH-1:0] REG_SUSPEND_ACK_MASK = 1 << REG_SUSPEND_ACK_BIT;
+    localparam int unsigned REG_COUNT                   = REG_SUSPEND + 1'b1;
 
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_TEXT_MODE_MASK = 1 << REG_STATUS_TEXT_MODE_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_CRT_MASK = 1 << REG_STATUS_CRT_BIT;
@@ -123,13 +129,13 @@ package common_pkg;
     localparam bit CONFIG_KEYBOARD_GRAPHICS = 1'b1;
 
     // SPI command byte: direction, address mode, reserved bit, address high nibble.
-    localparam int unsigned SPI_CMD_WRITE_BIT = 7;
+    localparam int unsigned SPI_CMD_POP_BIT = 4;
     localparam int unsigned SPI_CMD_STEP_BIT = 5;
     localparam int unsigned SPI_CMD_DECREMENT_BIT = 6;
+    localparam int unsigned SPI_CMD_WRITE_BIT = 7;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_MODE_MASK = (1 << SPI_CMD_STEP_BIT) | (1 << SPI_CMD_DECREMENT_BIT);
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_ABSOLUTE_MODE = 1 << SPI_CMD_DECREMENT_BIT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_OPCODE_MASK = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_MODE_MASK;
-    localparam int unsigned SPI_CMD_POP_BIT = 4;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_POP_MASK = 1 << SPI_CMD_POP_BIT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_ADDRESS_HIGH_MASK = 8'h0f;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_AT = SPI_CMD_ABSOLUTE_MODE;
@@ -158,6 +164,7 @@ package common_pkg;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_HI_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_HI));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_CPU_SEL_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_CPU_SEL));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_AUDIO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_AUDIO));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_SUSPEND_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_SUSPEND));
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.

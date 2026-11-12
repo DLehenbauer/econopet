@@ -39,7 +39,9 @@ module register_file(
     output logic [11:10]              video_ram_mask_o,
 
     // Audio control register
-    output logic                      audio_enable_o
+    output logic                      audio_enable_o,
+    output logic                      suspend_request_o,
+    input  logic                      suspend_ack_i
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
@@ -70,6 +72,8 @@ module register_file(
 
         // Audio control register enabled at power on:
         register[REG_AUDIO] = REG_AUDIO_ENABLE_MASK;
+
+        register[REG_SUSPEND] = '0;
     end
 
     // This peripheral always completes WB operations in a single cycle.
@@ -81,7 +85,10 @@ module register_file(
         bp_clear_o   <= '0;
 
         if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
-            wbp_data_o <= register[reg_addr];
+            if (reg_addr == REG_SUSPEND[REG_ADDR_WIDTH-1:0])
+                wbp_data_o <= {6'b0, suspend_ack_i, suspend_request_o};
+            else
+                wbp_data_o <= register[reg_addr];
             if (wbp_we_i) begin
                 // Writing to REG_BP_CTL pulses bp_clear_o instead of storing
                 // the value (the register address is shared with REG_BP_ADDR_LO
@@ -123,4 +130,6 @@ module register_file(
     assign video_ram_mask_o    = register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT:REG_VIDEO_RAM_MASK_LO_BIT];
 
     assign audio_enable_o      = register[REG_AUDIO][REG_AUDIO_ENABLE_BIT];
+
+    assign suspend_request_o   = register[REG_SUSPEND][REG_SUSPEND_REQUEST_BIT];
 endmodule

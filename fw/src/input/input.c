@@ -12,6 +12,7 @@
 #include "input/input_controls.h"
 #include "input/input_routing.h"
 #include "input/input_uart.h"
+#include "input/pet_keyboard.h"
 #include "input/term_inject.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
@@ -39,6 +40,7 @@ void input_task(void) {
     dispatch_key_events();
 
     // Synchronize the runtime matrix and observe physical navigation edges.
+    pet_keyboard_task();
     sync_state();
     keyscan_sample();
 

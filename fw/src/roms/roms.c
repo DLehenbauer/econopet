@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "roms.h"
 
+#include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
 #include "hardware_contract.h"
@@ -23,8 +24,26 @@ const uint8_t* const p_video_font_400 = rom_chars_e800 + 0x400;
 
 #define CHAR_ROM_SRAM_ADDRESS ECONOPET_WB_BRAM_BASE_ADDR
 #define CHAR_ROM_SRAM_SIZE (1u << ECONOPET_BRAM_ADDR_WIDTH)
+#define MENU_ROM_TIMEOUT_US 10000000u
 
 static uint8_t custom_char_rom[CHAR_ROM_SRAM_SIZE];
+
+void menu_rom_wait(void (*service)(void)) {
+    const uint64_t start = time_us_64();
+    uint8_t marker;
+    while ((marker = spi_read_once(MENU_ROM_COMPLETION_ADDRESS)) != MENU_ROM_COMPLETION_VALUE) {
+        if (time_us_64() - start >= MENU_ROM_TIMEOUT_US) {
+            // Capture harmless SRAM/control observations before fatal rendering resets the CPU.
+            log_warn("ROM timeout: marker=%02X legacy=%02X", marker, spi_read_at(MENU_ROM_COMPLETION_ADDRESS));
+            log_warn("ROM CPU=%02X select=%02X status=%02X suspend=%02X", (unsigned int)get_cpu(),
+                     spi_read_at(ECONOPET_WB_CPU_SEL_ADDR), spi_read_at(ECONOPET_WB_STATUS_ADDR),
+                     spi_read_at(ECONOPET_WB_SUSPEND_ADDR));
+            log_warn("ROM breakpoint address=$%04X", bp_hit_addr());
+            fatal("diagnostic ROM did not complete (marker $%02X)", marker);
+        }
+        service();
+    }
+}
 
 void roms_refresh_char_rom(void) {
     spi_read(CHAR_ROM_SRAM_ADDRESS, sizeof(custom_char_rom), custom_char_rom);
@@ -42,7 +61,8 @@ const uint8_t* roms_get_char_rom(video_text_mode_t mode) {
 
 void start_menu_rom(menu_rom_boot_reason_t reason) {
     vet(reason < 2, "Menu ROM boot reason out of range: %d", reason);
-    
+    log_info("diagnostic ROM: %s", reason == MENU_ROM_BOOT_NORMAL ? "startup" : "fatal tune");
+
     // Suspended CPU while initializing ROMs.
     set_cpu(CPU_HALT);
 
@@ -74,5 +94,6 @@ void start_menu_rom(menu_rom_boot_reason_t reason) {
     spi_write_at(0xFFFC, reset_vector & 0xFF);         // Low byte
     spi_write_at(0xFFFD, (reset_vector >> 8) & 0xFF);  // High byte
 
+    spi_write_at(MENU_ROM_COMPLETION_ADDRESS, 0);
     pet_reset();
 }

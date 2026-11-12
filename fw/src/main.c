@@ -3,8 +3,6 @@
 
 #include "pch.h"
 
-#include <inttypes.h>
-
 #include "breakpoint.h"
 #include "cpu.h"
 #include "diag/log/log.h"

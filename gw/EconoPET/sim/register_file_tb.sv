@@ -40,6 +40,8 @@ module register_file_tb;
 
     // Audio control register
     logic audio_enable;
+    logic suspend_request;
+    logic suspend_ack = 1'b0;
 
     register_file register_file (
         .wb_clock_i(clock),
@@ -73,7 +75,9 @@ module register_file_tb;
         .video_ram_mask_o(video_ram_mask),
 
         // Audio control register
-        .audio_enable_o(audio_enable)
+        .audio_enable_o(audio_enable),
+        .suspend_request_o(suspend_request),
+        .suspend_ack_i(suspend_ack)
     );
 
     wb_driver wb (
@@ -102,6 +106,7 @@ module register_file_tb;
 
         // Register file copies updated status to BRAM on idle clock cycles.
         @(posedge clock);
+        @(negedge clock);
 
         wb.read(REG_STATUS, data);
 
@@ -145,6 +150,20 @@ module register_file_tb;
         `assert_equal(video_col_80_mode, 1'b0);
         `assert_equal(video_ram_mask, 2'b00);
         `assert_equal(audio_enable, 1'b1);
+        wb.write(REG_SUSPEND, REG_SUSPEND_REQUEST_MASK | REG_SUSPEND_ACK_MASK);
+        `assert_equal(suspend_request, 1'b1);
+        begin
+            byte data;
+            wb.read(REG_SUSPEND, data);
+            `assert_equal(data, REG_SUSPEND_REQUEST_MASK);
+            suspend_ack = 1'b1;
+            wb.read(REG_SUSPEND, data);
+            `assert_equal(data, REG_SUSPEND_REQUEST_MASK | REG_SUSPEND_ACK_MASK);
+            wb.write(REG_SUSPEND, 8'h00);
+            wb.read(REG_SUSPEND, data);
+            `assert_equal(data, REG_SUSPEND_ACK_MASK);
+        end
+        suspend_ack = 1'b0;
         test_reg(REG_AUDIO, 8'h00);
         `assert_equal(audio_enable, 1'b0);
         test_reg(REG_AUDIO, REG_AUDIO_ENABLE_MASK);
@@ -175,6 +194,7 @@ module register_file_tb;
         bp_halted = 1'b1;
         bp_addr   = 16'hBEEF;
         @(posedge clock);
+        @(negedge clock);
         begin
             byte data;
 
@@ -193,7 +213,7 @@ module register_file_tb;
         `assert_equal(bp_clear, 1'b0)
         wb.write(REG_BP_CTL, 8'h01);
         `assert_equal(bp_clear, 1'b1)
-        @(posedge clock);
+        @(negedge clock);
         `assert_equal(bp_clear, 1'b0)
 
         // Breakpoint: writing 0 to REG_BP_CTL does not pulse bp_clear
@@ -204,6 +224,7 @@ module register_file_tb;
         bp_halted = 1'b0;
         bp_addr   = 16'hCAFE;
         @(posedge clock);
+        @(negedge clock);
         begin
             byte data;
             wb.read(REG_BP_ADDR_LO, data);

@@ -695,6 +695,7 @@ static tui_action_t boot_input(void) {
     if (boot_keys++ < 3) {
         return tui_action_none;
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 
@@ -781,6 +782,7 @@ static tui_action_t switch_terminal_in_menu(void) {
         ck_assert_uint_eq(mock_term_end_count(), 1);
         send_uart("log\r");
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 
@@ -929,6 +931,7 @@ static tui_action_t hold_menu_button(void) {
     mock_clock_advance(50000);
     input_button_update(true);
     mock_clock_advance(INPUT_LONG_PRESS_US);
+    mock_input_set_reader(NULL);
     return tui_action_none;
 }
 
@@ -971,6 +974,7 @@ static tui_action_t chord_then_enter(void) {
         mock_clock_advance(INPUT_LONG_PRESS_US);
         return tui_action_none;
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 

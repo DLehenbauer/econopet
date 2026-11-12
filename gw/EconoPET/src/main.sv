@@ -169,6 +169,10 @@ module main (
     logic [0:0] grant;
     logic grant_valid;
     logic io_ctl_bus_reserve;
+    logic suspend_request;
+    logic suspend_hold = 1'b0;
+    logic suspend_ack;
+    logic bp_cpu_ready;
 
     // timing.sv's cpu_be_o drives internal RAM-address muxing (via
     // timing_cpu_be) and, in 6502 mode, the physical W65C02S's bus-enable.
@@ -213,9 +217,8 @@ module main (
         .grant_valid_o(grant_valid)
     );
     
-    // PIA1 has an isolated PHI2 clock to allow us to read the keyboard matrix
-    // without advancing the CPU or the VIA.  For now, we just tie it to the
-    // shared CPU clock.
+    // Rev-a clocks all physical I/O continuously, including during suspension.
+    // The separate PIA1 output follows shared PHI2 (no rev-b clock policy here).
     assign pia1_clock_o = cpu_clock_o;
 
     // Physical 6502 bus-enable. In 6809 mode the physical CPU stays socketed
@@ -224,7 +227,7 @@ module main (
     // window (timing_cpu_be) enables the physical CPU to own the bus. See
     // hw/rev-b/.../CPU.kicad_sch: "When the FPGA drives the bus, it deasserts
     // BE ... to place the CPU's Address, Data, and R/~W buffers in high-Z."
-    wire cpu_bus_be = timing_cpu_be && !io_ctl_bus_reserve;
+    wire cpu_bus_be = timing_cpu_be && !io_ctl_bus_reserve && !suspend_hold;
     assign cpu_be_o = cpu_soft ? 1'b0 : cpu_bus_be;
 
     //
@@ -243,6 +246,16 @@ module main (
     logic cpu6809_be, cpu6809_e, cpu6809_q;
     logic cpu6809_addr_strobe, cpu6809_hold_strobe, cpu6809_wr_en;
     logic cpu6809_halted;
+
+    // Both transitions occur after the complete guest cycle and its data hold.
+    // Raw slots/PHI2 continue, allowing the bridge to work while guest BE stays low.
+    always_ff @(posedge sys_clock_i) begin
+        if (!timing_cpu_be && !soft_cpu_clock && !cpu6809_e && !cpu6809_q &&
+            !io_ctl_bus_reserve)
+            suspend_hold <= suspend_request;
+    end
+    assign suspend_ack = suspend_hold && (!cpu_is_6809 || cpu6809_halted);
+    assign cpu_ready_o = bp_cpu_ready && !suspend_hold;
 
     // cpu_irq_i is asynchronous to sys_clock_i (wire-ORed by the real
     // PIA1/PIA2/VIA chips), so double-flop it before mc6809i's nIRQ.
@@ -263,7 +276,7 @@ module main (
 
     timing_6809 timing_6809 (
         .sys_clock_i(sys_clock_i),
-        .cpu_ready_i(reg_cpu_ready),
+        .cpu_ready_i(reg_cpu_ready && !suspend_hold),
         .cpu_reset_i(cpu_reset_i || !cpu_is_6809),
         .cpu_be_i(timing_cpu_be),
         .cpu_clock_i(cpu_clock_o),
@@ -365,13 +378,13 @@ module main (
     wire [    DATA_WIDTH-1:0] active_cpu_dout    = cpu_is_6809 ? mc6809_dout : m6502_dout;
     // Reset keeps E/Q clocking so the 6809 can sample nRESET. Bridge
     // reservations still block its bus access.
-    wire                      active_be          = cpu_is_6809 ? cpu6809_be && !io_ctl_bus_reserve
+    wire                      active_be          = cpu_is_6809 ? cpu6809_be && !io_ctl_bus_reserve && !suspend_hold
                                                                : cpu_bus_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe && !io_ctl_bus_reserve
-                                                               : cpu_addr_strobe;
+                                                               : cpu_addr_strobe && cpu_bus_be;
     wire                      active_data_strobe = cpu_active_data_strobe_q;
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en && !io_ctl_bus_reserve
-                                                               : cpu_wr_en;
+                                                               : cpu_wr_en && cpu_bus_be;
 
     wire cpu_wr_strobe = active_data_strobe && active_cpu_we;
 
@@ -461,7 +474,9 @@ module main (
         .video_ram_mask_o(video_ram_mask),
 
         // Audio control register
-        .audio_enable_o(audio_enable)
+        .audio_enable_o(audio_enable),
+        .suspend_request_o(suspend_request),
+        .suspend_ack_i(suspend_ack)
     );
 
     //
@@ -483,7 +498,7 @@ module main (
         .cpu_be_i(active_be),
         .cpu_ready_i(reg_cpu_ready),
         .clear_i(bp_clear),
-        .cpu_ready_o(cpu_ready_o),
+        .cpu_ready_o(bp_cpu_ready),
         .halted_o(bp_halted),
         .addr_o(bp_addr)
     );
@@ -666,6 +681,10 @@ module main (
 
     logic [DATA_WIDTH-1:0] io_dout;
     logic                  io_doe;
+    logic                  pia1_access = 1'b0;
+    logic [PIA_RS_WIDTH-1:0] pia1_access_rs;
+    logic                  pia1_access_we;
+    logic [DATA_WIDTH-1:0] pia1_access_data;
 
     keyboard keyboard (
         .wb_clock_i(sys_clock_i),
@@ -680,14 +699,16 @@ module main (
         .wbp_sel_i(kbd_wb_sel),
         
         .cpu_be_i(active_be),
-        .cpu_data_strobe_i(active_data_strobe),
-        .cpu_data_i(cpu_data_q),
         .cpu_data_o(io_dout),
         .cpu_data_oe(io_doe),
         .cpu_we_i(active_cpu_we),
 
         .pia1_cs_i(pia1_en),
-        .pia1_rs_i(active_cpu_addr[PIA_RS_WIDTH-1:0])
+        .pia1_rs_i(active_cpu_addr[PIA_RS_WIDTH-1:0]),
+        .pia1_access_i(pia1_access),
+        .pia1_access_rs_i(pia1_access_rs),
+        .pia1_access_we_i(pia1_access_we),
+        .pia1_access_data_i(pia1_access_data)
     );
 
     //
@@ -727,7 +748,7 @@ module main (
         .wbp_ack_o(io_ctl_wb_ack),
         .wbp_sel_i(io_wb_sel),
 
-        .cpu_ready_i(reg_cpu_ready),
+        .cpu_ready_i(reg_cpu_ready && !suspend_ack),
         .cpu_slot_be_i(timing_cpu_be),
         .cpu_data_strobe_i(cpu_data_strobe),
         .cpu_hold_strobe_i(cpu_hold_strobe),
@@ -744,6 +765,21 @@ module main (
         .pia2_cs_o(io_ctl_pia2_cs),
         .via_cs_o(io_ctl_via_cs)
     );
+
+    // Capture one executed PIA1 data phase, keeping owner metadata aligned with data.
+    // Observation includes bridge traffic, but USB injection remains CPU-only.
+    always_ff @(posedge sys_clock_i) begin
+        pia1_access <= cpu_data_strobe && ((active_be && pia1_en) || io_ctl_pia1_cs);
+        if (cpu_data_strobe) begin
+            pia1_access_rs <= io_ctl_bus_own ? io_ctl_addr[PIA_RS_WIDTH-1:0]
+                                           : active_cpu_addr[PIA_RS_WIDTH-1:0];
+            pia1_access_we <= io_ctl_bus_own ? io_ctl_we : active_cpu_we;
+            pia1_access_data <= io_ctl_bus_own && io_ctl_we ? io_ctl_dout
+                              : active_be && active_cpu_we && cpu_soft ? active_cpu_dout
+                              : active_be && !active_cpu_we && cpu_data_mux_oe ? cpu_data_mux_out
+                              : cpu_data_i;
+        end
+    end
 
     //
     // IEEE-488 drive emulation

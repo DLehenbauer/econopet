@@ -6,6 +6,8 @@
 #include "system_state.h"
 
 #define MENU_ROM_START_ADDRESS 0xFF00
+#define MENU_ROM_COMPLETION_ADDRESS 0x0200u
+#define MENU_ROM_COMPLETION_VALUE 0xa5u
 
 extern const uint8_t rom_chars_e800[0x800];
 extern const uint8_t* const p_video_font_000;
@@ -28,3 +30,5 @@ typedef enum {
 } menu_rom_boot_reason_t;
 
 void start_menu_rom(menu_rom_boot_reason_t reason);
+/** Service firmware until the diagnostic ROM finishes initialization or its tune. */
+void menu_rom_wait(void (*service)(void));

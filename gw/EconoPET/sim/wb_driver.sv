@@ -30,7 +30,9 @@ module wb_driver (
         wb_strobe_o <= 1'b1;
 
         while (wb_stall_i) @(posedge wb_clock_i);
-        @(posedge wb_clock_i) wb_strobe_o <= '0;
+        // Keep the request stable through the peripheral's sampling edge.
+        @(posedge wb_clock_i);
+        @(negedge wb_clock_i) wb_strobe_o = '0;
     endtask
 
     task wait_for_ack;

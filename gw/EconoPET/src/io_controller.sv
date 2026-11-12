@@ -93,8 +93,6 @@ module io_controller (
         unique case (state_q)
             IDLE: begin
                 if (wbp_sel_i && wbp_cycle_i && wbp_strobe_i) begin
-                    // The Wishbone arbiter only admits strobes outside CPU slots, so a
-                    // request cannot interrupt an in-progress guest bus cycle.
                     // synthesis off
                     assert (!cpu_ready_i) else $fatal(1, "Unsafe I/O request");
                     // synthesis on

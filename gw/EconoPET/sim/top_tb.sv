@@ -110,6 +110,13 @@ module top_tb;
 
         $display("[%t] Begin USB Keyboard Test", $time);
 
+        // Release physical PIA reset and initialize the keyboard port decoding.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+        mock_system.cpu_write(16'hE810 + PIA_CRA, 8'h00);
+        mock_system.cpu_write(16'hE810 + PIA_PORTA, 8'h0f);
+        mock_system.cpu_write(16'hE810 + PIA_CRA, 8'h04);
+        mock_system.cpu_write(16'hE810 + PIA_CRB, 8'h04);
+
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'b1011, col[3:0] };
             
@@ -185,10 +192,22 @@ module top_tb;
 
         // A physical key transition after the CPU is halted must be visible
         // through the same path used by the firmware's PIA1 matrix scan.
+        mock_system.spi_write_at(WB_SUSPEND_ADDR, REG_SUSPEND_REQUEST_MASK);
+        mock_system.spi_read_at(WB_SUSPEND_ADDR, dout);
+        `assert_equal(dout, REG_SUSPEND_REQUEST_MASK | REG_SUSPEND_ACK_MASK)
         mock_system.set_io_data(8'ha5);
         mock_system.spi_write_at(common_pkg::wb_io_addr(7'h10), 8'h09);
         mock_system.spi_read_at(common_pkg::wb_io_addr(7'h12), dout);
         `assert_equal(dout, 8'ha5)
+        mock_system.spi_read_at(common_pkg::wb_kbd_addr(9), dout);
+        `assert_equal(dout, 8'ha5)
+
+        // Bridge row selection also governs the next injected CPU read.
+        mock_system.spi_write_at(WB_SUSPEND_ADDR, 8'h00);
+        mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
+        `assert_equal(dout, 8'hb9)
+        mock_system.spi_read_at(common_pkg::wb_kbd_addr(9), dout);
+        `assert_equal(dout, 8'hb9)
         mock_system.set_io_data(8'h10);
 
         $display("[%t] End SPI/Physical I/O Test", $time);

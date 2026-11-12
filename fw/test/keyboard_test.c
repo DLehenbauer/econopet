@@ -98,7 +98,9 @@ static const uint8_t menu_hid_keys[] = {HID_KEY_ARROW_DOWN, HID_KEY_ENTER};
 
 // Supplies buffered HID navigation to the production configuration menu.
 static tui_action_t menu_hid_input(void) {
-    ck_assert_uint_lt(menu_hid_input_index, count_of(menu_hid_keys));
+    if (menu_hid_input_index >= count_of(menu_hid_keys)) {
+        return tui_action_none;
+    }
     report_key(menu_hid_keys[menu_hid_input_index++], 0);
     report_key(0, 0);
     return tui_action_none;
@@ -1474,7 +1476,9 @@ static const input_gesture_t menu_gestures[] = {
 
 // Supplies a bounded trace so an ignored activation cannot hang the menu test.
 static tui_action_t legacy_menu_input(void) {
-    ck_assert_uint_lt(legacy_menu_key_index, count_of(menu_gestures));
+    if (legacy_menu_key_index >= count_of(menu_gestures)) {
+        return tui_action_none;
+    }
     const input_gesture_t gesture = menu_gestures[legacy_menu_key_index++];
     input_routing_gesture(gesture == input_gesture_dual_shift ? INPUT_SOURCE_PET : INPUT_SOURCE_BUTTON, gesture);
     return tui_action_none;

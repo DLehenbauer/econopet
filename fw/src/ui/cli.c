@@ -11,6 +11,7 @@
 #include "display/display.h"
 #include "driver.h"
 #include "input/input_routing.h"
+#include "menu/menu_session.h"
 #include "pet.h"
 #include "reset.h"
 #include "system_state.h"
@@ -111,13 +112,21 @@ static void cmd_remote(const char* args) {
 
 static void cmd_reset(const char* args) {
     (void)args;
-    
+    if (menu_session_active()) {
+        console_puts("Close the menu before resetting the MCU.\r\n");
+        return;
+    }
+
     console_puts("Resetting...\r\n");
     system_reset();
 }
 
 // Finish active storage traffic before entering the continuous memory diagnostic.
 static void cmd_test(const char* args) {
+    if (menu_session_active()) {
+        console_puts("Close the menu before running memory diagnostics.\r\n");
+        return;
+    }
     while (*args == ' ') ++args;
     if (*args != '\0') {
         console_puts("Usage: test\r\n");

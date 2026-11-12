@@ -7,6 +7,7 @@
 #include "diag/log/log.h"
 #include "driver.h"
 #include "fatal.h"
+#include "menu/menu_session.h"
 
 #define STP_OPCODE 0xDB
 #define NOP_OPCODE 0xEA
@@ -86,6 +87,9 @@ bool bp_remove(uint16_t addr) {
 }
 
 void bp_task() {
+    if (menu_session_active()) {
+        return;
+    }
     if (!system_state.bp_halted) {
         return;
     }

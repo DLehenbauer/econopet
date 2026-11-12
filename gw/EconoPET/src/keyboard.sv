@@ -8,11 +8,9 @@ import common_pkg::*;
 //  1. Ingests USB keyboard matrix data from the MCU and injects it when the
 //     CPU reads PIA1 keyboard input.
 //
-//  2. Snoops the PET keyboard matrix during CPU scans via PIA1 reads so the
-//     observed matrix can later be fetched over Wishbone.
-//
-// Note that the snooped PET keyboard matrix is only updated when the CPU
-// is actively scanning the keyboard via PIA1 reads.
+//  2. Observes CPU and MCU bridge PIA1 scans so the last-read matrix can
+//     later be fetched over Wishbone. Bridge reads remain raw physical input,
+//     while CPU observations retain any USB injection.
 module keyboard(
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
@@ -28,14 +26,17 @@ module keyboard(
     input  logic                     wbp_sel_i,         // Wishbone peripheral select decoded from address
 
     input  logic                     cpu_be_i,          // CPU bus enable
-    input  logic                     cpu_data_strobe_i, // Strobe aligned with CPU data phase
     input  logic                     cpu_we_i,          // CPU write enable
-    input  logic [   DATA_WIDTH-1:0] cpu_data_i,        // Incoming data from system bus
     output logic [   DATA_WIDTH-1:0] cpu_data_o,        // Outgoing data to system bus when intercepting reads
     output logic                     cpu_data_oe,       // Output enable when when intercepting reads
 
     input  logic                     pia1_cs_i,         // PIA1 chip select (from address decoding)
-    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i          // PIA1 register select (cpu_addr[1:0])
+    input  logic [ PIA_RS_WIDTH-1:0] pia1_rs_i,          // PIA1 register select (cpu_addr[1:0])
+
+    input  logic                     pia1_access_i,     // Captured, executed PIA1 access from either owner
+    input  logic [ PIA_RS_WIDTH-1:0] pia1_access_rs_i,
+    input  logic                     pia1_access_we_i,
+    input  logic [   DATA_WIDTH-1:0] pia1_access_data_i
 );
     // PET keyboard matrix is all 1's when no keys are pressed.
     logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd = '1;
@@ -59,26 +60,35 @@ module keyboard(
         end
     end
 
-    // CPU writes to I/O registers are cached here.
-    logic [KBD_COL_WIDTH-1:0] selected_col      = '0;
+    localparam int PIA_DATA_SELECT_BIT = 2;
+    logic port_a_selected = 1'b0;
+    logic port_b_selected = 1'b0;
+    logic [KBD_COL_WIDTH-1:0] row_latch = '0;
+    logic [KBD_COL_WIDTH-1:0] row_direction = '0;
+    // Undriven row-select pins are pulled high on the physical keyboard.
+    wire [KBD_COL_WIDTH-1:0] selected_col = row_latch | ~row_direction;
+    wire valid_col = selected_col < KBD_COL_COUNT;
     logic [KBD_ROW_COUNT-1:0] selected_row_data = '1;
 
     always_ff @(posedge wb_clock_i) begin
-        // Cache the selected column so that PIA1_PORTB interception reads can
-        // avoid performing a usb_kbd array lookup.
-        selected_row_data <= usb_kbd[selected_col];
+        selected_row_data <= valid_col ? usb_kbd[selected_col] : '1;
 
-        if (pia1_cs_i && cpu_data_strobe_i) begin
-            if (cpu_we_i) begin
-                // CPU writes to PIA1_PORTA select the keyboard column to scan.
-                if (pia1_rs_i == PIA_PORTA) begin
-                    selected_col <= cpu_data_i[PIA1_PORTA_KEY_D_OUT:PIA1_PORTA_KEY_A_OUT];
-                end
-            end else begin
-                // Snoop CPU reads from PIA1_PORTB to capture PET keyboard state.
-                if (pia1_rs_i == PIA_PORTB) begin
-                    pet_kbd[selected_col] <= cpu_data_i;
-                end
+        // Both owners modify the same PIA. DDR accesses must not look like scans.
+        if (pia1_access_i) begin
+            if (pia1_access_we_i) begin
+                case (pia1_access_rs_i)
+                    PIA_CRA: port_a_selected <= pia1_access_data_i[PIA_DATA_SELECT_BIT];
+                    PIA_CRB: port_b_selected <= pia1_access_data_i[PIA_DATA_SELECT_BIT];
+                    PIA_PORTA: begin
+                        if (port_a_selected)
+                            row_latch <= pia1_access_data_i[KBD_COL_WIDTH-1:0];
+                        else
+                            row_direction <= pia1_access_data_i[KBD_COL_WIDTH-1:0];
+                    end
+                    default: /* do nothing */;
+                endcase
+            end else if (pia1_access_rs_i == PIA_PORTB && port_b_selected && valid_col) begin
+                pet_kbd[selected_col] <= pia1_access_data_i;
             end
         end
     end
@@ -86,7 +96,7 @@ module keyboard(
     always_ff @(posedge wb_clock_i) begin
         cpu_data_oe <= 1'b0;
 
-        if (cpu_be_i && !cpu_we_i) begin
+        if (cpu_be_i && !cpu_we_i && port_b_selected && valid_col) begin
             // Intercept CPU reads from select I/O registers.
             unique case (1'b1)
                 pia1_cs_i: begin

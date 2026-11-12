@@ -29,6 +29,10 @@ unsigned int mock_spi_write_count(void);
 void mock_cpu_set_run_callback(void (*callback)(void));
 /** Observe real CPU control transitions while testing machine lifecycle sequencing. */
 void mock_cpu_set_state_observer(void (*observer)(cpu_state_t state));
+/** Inject one failed hold acquisition so session ownership unwind can be tested. */
+void mock_cpu_fail_next_suspend(void);
+/** Authorize display setup only for an explicit runtime configuration-exit fixture. */
+void mock_allow_configuration_model_writes(bool enabled);
 // Selects the character-set status returned by the FPGA mock.
 void mock_set_text_mode_lower(bool lower);
 // Returns the last CPU selected through the driver mock.
@@ -45,7 +49,7 @@ void mock_input_uart_bytes(const uint8_t* bytes, size_t size);
 void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report);
 /** Supply the active-low button GPIO's next physical level. */
 void mock_input_button_level(bool pressed);
-/** Supply the next physical PET matrix read at the FPGA boundary. */
+/** Publish a freshly scanned physical PET matrix at the FPGA boundary. */
 void mock_input_pet_snapshot(const uint8_t matrix[KEY_COL_COUNT]);
 /** Supply CRTC bytes independently of the firmware's cached display state. */
 void mock_input_crtc_snapshot(const uint8_t registers[CRTC_REG_COUNT]);
@@ -81,8 +85,6 @@ void mock_ram_test_set_handler(void (*handler)(void));
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.
 bool mock_breakpoint_halt_was_cleared(void);
-/** Reset only the breakpoint-clear observation. */
-void mock_breakpoint_reset_clear_observation(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);

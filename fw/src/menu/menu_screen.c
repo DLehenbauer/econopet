@@ -8,14 +8,16 @@
 #include "display/window.h"
 #include "driver.h"
 #include "system_state.h"
+#include "menu_session.h"
 
 // Both 40- and 80-column displays address at most 2 KiB of character RAM.
 #define MENU_CHARACTER_RAM_ADDRESS 0x8000u
 #define MENU_CHARACTER_RAM_SIZE 0x800u
 
 void menu_screen_clear(void) {
-    memset(system_state.video_char_buffer, CH_SPACE, MENU_CHARACTER_RAM_SIZE);
-    spi_write(MENU_CHARACTER_RAM_ADDRESS, system_state.video_char_buffer, MENU_CHARACTER_RAM_SIZE);
+    const size_t bytes = menu_session_active() ? MENU_SCREEN_BYTES : MENU_CHARACTER_RAM_SIZE;
+    memset(system_state.video_char_buffer, CH_SPACE, bytes);
+    spi_write(MENU_CHARACTER_RAM_ADDRESS, system_state.video_char_buffer, bytes);
     if (display_term_video_active()) {
         display_term_refresh();
     }

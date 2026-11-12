@@ -6,6 +6,7 @@
 #include "config/config_setup.h"
 #include "config/config.h"
 #include "display/window.h"
+#include "menu_ui.h"
 
 typedef struct {
     size_t count;
@@ -24,3 +25,6 @@ void load_config(const setup_sink_t* setup_sink, int selected_config, bool apply
 
 // Runs the boot picker or on-demand hierarchy over menu.rom, then reloads its choices.
 void menu_config_show(const window_t* window, const setup_sink_t* setup_sink, bool is_boot);
+
+/** Run the hierarchy and return an explicit exit without resetting or applying configuration. */
+menu_result_t menu_config_run(const window_t* window, bool is_boot);

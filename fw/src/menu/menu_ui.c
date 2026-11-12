@@ -350,6 +350,7 @@ static void mount_disk(tui_controller_t* controller, menu_ui_t* menu, const char
 static void select_config(menu_ui_t* menu, int index) {
     menu->config_index = index;
     menu->config_changed = true;
+    menu->exit = MENU_EXIT_LOAD_CONFIG;
     memset(menu->slot_paths, 0, sizeof(menu->slot_paths));
 }
 
@@ -422,13 +423,15 @@ static void show_disks(tui_controller_t* controller, void* context, size_t index
 
 // Finishes choosing so the caller can load the selected configuration and reset.
 static void reset_machine(tui_controller_t* controller, void* context) {
-    (void) context;
+    menu_ui_t* const menu = context;
+    menu->exit = MENU_EXIT_RESET;
     controller->active = false;
 }
 
-// The ROM-based menu cannot resume. Back at its root reloads the last configuration.
+// Root Back restores the borrowed context without loading or resetting a machine.
 static void dashboard_back(tui_controller_t* controller, void* context) {
-    (void) context;
+    menu_ui_t* const menu = context;
+    menu->exit = MENU_EXIT_RESUME;
     controller->active = false;
 }
 
@@ -490,6 +493,7 @@ void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)
 }
 
 void menu_ui_begin(menu_ui_t* menu, const window_t* window, bool is_boot) {
+    menu->exit = MENU_EXIT_RESUME;
     menu->is_boot = is_boot;
     menu->choosing_model = is_boot;
     menu->picker_control.list.overlapping_pages = true;

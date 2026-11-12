@@ -14,6 +14,19 @@
 #define MENU_UI_PAGE_ROWS MENU_BROWSER_PAGE_ROWS
 #define MENU_UI_DRIVE_SLOT_COUNT (DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT)
 
+/** The session owner, not the UI, performs the selected machine transition. */
+typedef enum {
+    MENU_EXIT_RESUME,
+    MENU_EXIT_RESET,
+    MENU_EXIT_LOAD_CONFIG,
+} menu_exit_t;
+
+/** One explicit exit decision and its configuration index when loading a machine. */
+typedef struct {
+    menu_exit_t action;
+    int config_index;
+} menu_result_t;
+
 typedef struct {
     tui_controller_t controller;
     tui_screen_t dashboard, drives, picker;
@@ -21,6 +34,7 @@ typedef struct {
     int config_index;
     // The session owner applies the chosen configuration and clears this result.
     bool config_changed;
+    menu_exit_t exit;
     bool choosing_model;
     bool is_boot;
     unsigned int slot;

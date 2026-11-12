@@ -4,11 +4,38 @@
 #include "pch.h"
 #include "dvi.h"
 
+#include <stdatomic.h>
+
 #include "crtc.h"
 #include "pet.h"
 #include "roms/roms.h"
 #include "system_state.h"
 #include "tmds_encode.h"
+
+#define VIDEO_TRANSITION_TIMEOUT_US 100000u
+static atomic_bool transition_requested;
+static atomic_bool transition_acknowledged;
+static atomic_bool menu_attributes;
+static const uint8_t menu_colors[0x400] = {[0 ... 0x3ff] = 0x0f};
+
+/** Wait for the scanline consumer to observe the requested publication state. */
+static bool video_wait_transition(const bool requested) {
+    const uint64_t start = time_us_64();
+    atomic_store_explicit(&transition_requested, requested, memory_order_release);
+    while (atomic_load_explicit(&transition_acknowledged, memory_order_acquire) != requested) {
+        if (time_us_64() - start >= VIDEO_TRANSITION_TIMEOUT_US) {
+            return false;
+        }
+        tight_loop_contents();
+    }
+    return true;
+}
+
+bool video_transition_begin(void) { return video_wait_transition(true); }
+bool video_transition_end(void) { return video_wait_transition(false); }
+void video_set_menu_attributes(const bool enabled) {
+    atomic_store_explicit(&menu_attributes, enabled, memory_order_release);
+}
 
 // Define VIDEO_CORE1_LOOP to use a tight loop in core1_main() like the colour_terminal
 // demo, instead of using interrupt-driven scanline callbacks. This may be useful for
@@ -183,26 +210,28 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static const uint8_t* p_char_rom = rom_chars_e800;
 
     uint8_t* const video_char_buffer = system_state.video_char_buffer;
-    uint8_t* const colorbuf = video_char_buffer + 0x800;
+    const uint8_t* const colorbuf =
+        atomic_load_explicit(&menu_attributes, memory_order_acquire) ? menu_colors : video_char_buffer + 0x800;
 
     // For convenience, remap local `y` so that `y == 0` is the first visible scan line.
     // Because `y` is unsigned, the top blank area wraps around to a large integer.
+    // Full-height guest geometry may have no blank scanline.
+    const bool frame_boundary = y == 0;
     y -= geo.top_margin;
 
-    if (y >= geo.visible_scanlines) {
-        // Blank scan line - use blank scan lines to reload/recompute CRTC-dependent values.
-        crtc_calculate_geometry(
-            system_state.pet_crtc_registers,
-            system_state.pet_display_columns,
-            FRAME_WIDTH,
-            FRAME_HEIGHT,
-            FONT_WIDTH,
-            DVI_SYMBOLS_PER_WORD,
-            &geo
-        );
-
-        // Select graphics/text character ROM
-        p_char_rom = roms_get_char_rom(system_state.video_text_mode);
+    const bool requested = atomic_load_explicit(&transition_requested, memory_order_acquire);
+    const bool acknowledged = atomic_load_explicit(&transition_acknowledged, memory_order_relaxed);
+    if (y >= geo.visible_scanlines || requested || acknowledged) {
+        // Do not consume shared state while core 0 owns a transition.
+        if (requested && (acknowledged || frame_boundary || y >= geo.visible_scanlines)) {
+            atomic_store_explicit(&transition_acknowledged, true, memory_order_release);
+        } else if (!requested) {
+            // Reload geometry and font only after core 0 has published stable data.
+            crtc_calculate_geometry(system_state.pet_crtc_registers, system_state.pet_display_columns, FRAME_WIDTH,
+                                    FRAME_HEIGHT, FONT_WIDTH, DVI_SYMBOLS_PER_WORD, &geo);
+            p_char_rom = roms_get_char_rom(system_state.video_text_mode);
+            atomic_store_explicit(&transition_acknowledged, false, memory_order_release);
+        }
 
         uint32_t *tmdsbuf;
         queue_remove_blocking(&dvi0.q_tmds_free, &tmdsbuf);

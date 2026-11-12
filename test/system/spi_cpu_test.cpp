@@ -127,6 +127,48 @@ static_assert(std::is_same_v<decltype(std::declval<econopet::io::Pia6520&>().pee
 static_assert(std::is_same_v<decltype(std::declval<econopet::io::Via6522&>().peek_inputs()), econopet::io::Inputs>);
 } // namespace
 
+// Sweep request phases while bridge/video activity must not advance either paused core.
+TEST_F(SystemTest, SuspendRetainsSoftCpuExecutionAndIsolatesEveryIdleSlot) {
+    const WishboneAddress suspend{ECONOPET_WB_SUSPEND_ADDR};
+    for (const auto selection : {CPU_SOFT_6502, CPU_SOFT_6809}) {
+        const auto entry = selection == CPU_SOFT_6502 ? Entry6502 : Entry6809;
+        install_loop(system, selection, entry, Marker);
+        for (unsigned phase = 0; phase < 64; ++phase) {
+            system.cpu(selection).start(entry);
+            system.tick(128 + phase);
+            const auto control = system.cpu().read_control();
+            system.spi().write(suspend, ECONOPET_REG_SUSPEND_REQUEST_MASK);
+            ASSERT_EQ(system.spi().read(suspend), ECONOPET_REG_SUSPEND_REQUEST_MASK | ECONOPET_REG_SUSPEND_ACK_MASK);
+            const auto saved = system.snapshot();
+            system.poke(SramAddress{Result.value()}, 0);
+            unsigned phi2_edges = 0;
+            bool phi2 = saved.cpu_clock_o;
+            auto observer = system.observe([&](const System& board) {
+                const auto pins = board.snapshot();
+                EXPECT_FALSE(pins.cpu_be_o);
+                EXPECT_TRUE(pins.ram_we_n_o);
+                EXPECT_EQ(pins.soft6502_addr_o, saved.soft6502_addr_o);
+                EXPECT_EQ(pins.soft6809_addr_o, saved.soft6809_addr_o);
+                if (pins.cpu_clock_o != phi2) {
+                    ++phi2_edges;
+                }
+                phi2 = pins.cpu_clock_o;
+            });
+            system.spi().write(WishboneAddress{ECONOPET_WB_IO_BASE_ADDR + 0x11}, 0x04);
+            system.spi().read(WishboneAddress{ECONOPET_WB_IO_BASE_ADDR + 0x11});
+            system.tick(256);
+            observer.reset();
+            EXPECT_GT(phi2_edges, 0u);
+            EXPECT_EQ(system.peek(SramAddress{Result.value()}), 0);
+            EXPECT_EQ(system.cpu().read_control(), control);
+            system.spi().write(suspend, 0);
+            EXPECT_EQ(system.spi().read(suspend), 0);
+            system.tick(1024);
+            EXPECT_EQ(system.peek(SramAddress{Result.value()}), Marker);
+        }
+    }
+}
+
 // Temporary boards return owned identity and metadata rather than dangling views.
 TEST(SystemOwnership, TemporaryBoardAccessOwnsIdentityAndMetadata) {
     const auto& source = System{}.observation_source();

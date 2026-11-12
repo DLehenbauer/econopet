@@ -77,7 +77,7 @@ extern "C" uint8_t spi_read_at(uint32_t address) {
     return value;
 }
 
-// Return the pending read result without queuing another Wishbone transaction.
+// Return the pending read without queuing another Wishbone transaction.
 extern "C" uint8_t spi_read_pop() {
     const uint8_t bytes[] = {ECONOPET_SPI_CMD_READ_POP};
     return command(bytes);

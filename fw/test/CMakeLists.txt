@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/fpga_image.c
     ${SRC_DIR}/roms/roms.c
+    ${SRC_DIR}/roms/checksum.c
     ${SRC_DIR}/sd/path.c
     ${SRC_DIR}/sd/activity.c
     ${SRC_DIR}/input/input_controls.c
@@ -44,11 +45,14 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/input/input_actions.c
     ${SRC_DIR}/input/input_routing.c
     ${SRC_DIR}/input/input_uart.c
+    ${SRC_DIR}/input/pet_keyboard.c
     ${SRC_DIR}/input/keyboard_core.c
     ${SRC_DIR}/input/term_inject.c
     ${SRC_DIR}/pet.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
+    ${SRC_DIR}/menu/menu.c
+    ${SRC_DIR}/menu/menu_session.c
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/menu/menu_screen.c
     ${SRC_DIR}/menu/menu_ui.c
@@ -88,6 +92,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/main.c
     ${TEST_DIR}/menu_browser_test.c
     ${TEST_DIR}/menu_ui_test.c
+    ${TEST_DIR}/menu_session_test.c
     ${TEST_SUPPORT_DIR}/test_support.c
     ${TEST_SUPPORT_DIR}/test_fatal.c
     ${TEST_SUPPORT_DIR}/d64_fixture.c
@@ -118,7 +123,8 @@ target_link_libraries(${PROJECT_NAME}
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=fopen -Wl,--wrap=time_us_64 -Wl,--wrap=term_inject_char
-    -Wl,--wrap=pet_nmi -Wl,--wrap=ieee_drive_task)
+    -Wl,--wrap=pet_nmi -Wl,--wrap=ieee_drive_task
+    -Wl,--wrap=read_keymap -Wl,--wrap=menu_enter)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)

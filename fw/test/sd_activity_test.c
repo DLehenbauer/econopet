@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "sd_activity_test.h"
 
+#include "diag/log/log.h"
+
 #include <setjmp.h>
 
 #include "hardware/gpio.h"
@@ -61,8 +63,16 @@ static void observe_reset(cpu_state_t state) {
         ++resets;
 }
 
+static void observe_reset_release(cpu_state_t state) {
+    if (state == CPU_READY) {
+        ck_assert_int_eq(get_cpu(), CPU_RESET);
+        ck_assert(mock_breakpoint_halt_was_cleared());
+        ck_assert(!system_state.bp_halted);
+    }
+}
+
 // Observe runtime menu entry without running the interactive menu.
-void menu_enter(bool is_boot) {
+void __wrap_menu_enter(bool is_boot) {
     ck_assert(!is_boot);
     ck_assert(sd_activity_quiet());
     ++entries;
@@ -414,11 +424,27 @@ START_TEST(test_block_activity) {
 }
 END_TEST
 
+START_TEST(test_reset_clears_breakpoint_halt) {
+    mock_reset();
+    log_init();
+    system_state.bp_halted = true;
+    mock_cpu_set_state_observer(observe_reset_release);
+    pet_reset();
+    mock_cpu_set_state_observer(NULL);
+    ck_assert(mock_breakpoint_halt_was_cleared());
+    ck_assert(!system_state.bp_halted);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+}
+END_TEST
+
 // Register SD block activity checks.
 Suite* sd_activity_suite(void) {
     Suite* const suite = suite_create("SD activity");
     TCase* const checks = tcase_create("block operations");
+    TCase* const reset = tcase_create("reset lifecycle");
     tcase_add_test(checks, test_block_activity);
+    tcase_add_test(reset, test_reset_clears_breakpoint_halt);
     suite_add_tcase(suite, checks);
+    suite_add_tcase(suite, reset);
     return suite;
 }

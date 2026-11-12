@@ -63,6 +63,11 @@ cpu_state_t get_cpu(void);
 uint8_t pet_io_read(uint16_t addr);
 void pet_io_write(uint16_t addr, uint8_t data);
 
+/** Request or release bus suspension, waiting for acknowledgment with a bounded timeout. */
+bool cpu_suspend(bool requested);
+/** Return whether the dedicated hold has isolated guest execution and bus effects. */
+bool cpu_suspended(void);
+
 // In-fabric CPU select (REG_CPU_SEL). Switching does not reconfigure
 // the FPGA.
 typedef enum {

@@ -1,4 +1,10 @@
+; SPDX-License-Identifier: CC0-1.0
+; https://github.com/dlehenbauer/econopet
+
 .include  "pet.inc"
+
+DIAGNOSTIC_COMPLETION := $0200
+DIAGNOSTIC_DONE       := $A5
 
 .segment "CODE"
 
@@ -187,46 +193,22 @@ notes:
         .byte $00
 .endproc
 
-.proc keyscan    
-    start:
-        ; Original keyscan resets these on each interrupt.  Probably unnecessary.
-        LDA #$3C
-        STA PIA1_PACTL
-        LDA #$3D
-        STA PIA1_PBCTL
-        LDY #$09            ; Start on keyboard row 9
-
-    keyscan_loop:
-        STY PIA1_PORTA      ; Select row
-
-        ; Busy wait to give PIA1 an opportunity to detect new input.  The delay below is
-        ; approximately the same number of cycles that the original keyscan routine used
-        ; to check bits in the currently selected row.
-
-        LDX #$16            ; Load X
-    inner_loop:
-        DEX                 ; 2 cycles
-        BNE inner_loop      ; 3 cycles if taken, 2 cycles if not
-
-debounce:
-        LDA PIA1_PORTB      ; Read pressed keys in current row
-        CMP PIA1_PORTB      ; Compare with previous value
-        BNE debounce        ; If not equal, wait for stable state
-
-        DEY                 ; Move to next row (descending)
-        BMI start           ; If Y < 0, wrap around to row 9.
-        BPL keyscan_loop    ; Continue scanning
+.proc diagnostic_done
+        LDA #DIAGNOSTIC_DONE
+        STA DIAGNOSTIC_COMPLETION
+    idle:
+        JMP idle
 .endproc
 
 .proc reset_uhoh
         JSR init_io
         JSR play_uhoh_tune
-        JMP keyscan
+        JMP diagnostic_done
 .endproc
 
 .proc reset_silence
         JSR init_io
-        JMP keyscan
+        JMP diagnostic_done
 .endproc
 
 ; The firmware requests this diagnostic only for the power-on configuration picker.
@@ -239,6 +221,8 @@ debounce:
         PHA             ; Save Y register
 
         JSR play_happy_tune
+        LDA #DIAGNOSTIC_DONE
+        STA DIAGNOSTIC_COMPLETION
 
         ; Restore processor state
         PLA

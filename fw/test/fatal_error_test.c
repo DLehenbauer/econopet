@@ -64,9 +64,15 @@ void read_pet_model(system_state_t* state) {
     ++model_reads;
 }
 
-// Check the native display setup requested before starting either menu ROM entry.
+static bool observing_configuration;
+
+/** Permit the runtime fixture's explicit configuration exit to request native display setup. */
+void mock_allow_configuration_model_writes(bool enabled) { observing_configuration = enabled; }
+
+// Check the native display setup requested before diagnostics or explicit configuration activation.
 void write_pet_model(const system_state_t* state) {
-    ck_assert_msg(observing_rom_boot, "unexpected PET model write outside ROM boot tests");
+    ck_assert_msg(observing_rom_boot || observing_configuration,
+                  "unexpected PET model write outside boot/configuration tests");
     ck_assert_ptr_eq(state, &system_state);
     ck_assert_int_eq(state->pet_display_columns, pet_display_columns_40);
     ck_assert_uint_eq(state->video_ram_mask, pet_video_ram_mask_1kb);
@@ -74,7 +80,7 @@ void write_pet_model(const system_state_t* state) {
 }
 
 // Observe SD keymap requests without depending on a physical SD card.
-void read_keymap(const char* filename, system_state_t* state) {
+void __wrap_read_keymap(const char* filename, system_state_t* state) {
     ck_assert_msg(observing_rom_boot, "unexpected keymap read outside ROM boot tests");
     ck_assert_ptr_eq(state, &system_state);
     ck_assert_str_eq(filename, "/ukm/us.bin");
@@ -321,19 +327,35 @@ START_TEST(test_sd_startup_failure) {
 }
 END_TEST
 
-// Exercise the real ROM loader with mocked peripherals and synthetic ROM bytes.
+// Check the reset-to-run boundary before the mock records the new control flags.
+static void check_rom_reset_release(cpu_state_t state) {
+    if (state == CPU_READY) {
+        ck_assert_int_eq(get_cpu(), CPU_RESET);
+        ck_assert(mock_breakpoint_halt_was_cleared());
+        ck_assert(!system_state.bp_halted);
+    }
+}
+
+// Require diagnostic reset to release any retained probe/guest halt before execution.
 static void check_rom_boot(menu_rom_boot_reason_t reason, unsigned int expected_keymap_reads) {
     mock_reset();
     mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
+    // A prior guest or the physical-CPU probe may leave the independent FPGA halt latched.
+    system_state.bp_halted = true;
+    mock_cpu_set_state_observer(check_rom_reset_release);
     keymap_reads = model_reads = model_writes = 0;
     observing_rom_boot = true;
     start_menu_rom(reason);
+    mock_cpu_set_state_observer(NULL);
     observing_rom_boot = false;
 
     ck_assert_uint_eq(keymap_reads, expected_keymap_reads);
     ck_assert_uint_eq(model_reads, 1);
     ck_assert_uint_eq(model_writes, 1);
     ck_assert_int_eq(mock_cpu_type(), CPU_SOFT_6502);
+    ck_assert(mock_breakpoint_halt_was_cleared());
+    ck_assert(!system_state.bp_halted);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
 }
 
 // Fatal rendering must work without requesting any SD keymap.
@@ -345,6 +367,59 @@ END_TEST
 // Interactive menus must retain their existing USB keymap initialization.
 START_TEST(test_normal_rom_with_keymap) {
     check_rom_boot(MENU_ROM_BOOT_NORMAL, 1);
+}
+END_TEST
+
+static unsigned int rom_wait_services;
+
+/** Publish completion after servicing once, modeling the diagnostic CPU's store. */
+static void complete_diagnostic_rom(void) {
+    ++rom_wait_services;
+    spi_write_at(MENU_ROM_COMPLETION_ADDRESS, MENU_ROM_COMPLETION_VALUE);
+}
+
+/** Advance beyond the bounded diagnostic wait without touching its completion byte. */
+static void stall_diagnostic_rom(void) {
+    ++rom_wait_services;
+    mock_clock_advance(60000000u);
+}
+
+/** Verify timeout evidence is retained before fatal display initialization can replace it. */
+static void check_rom_timeout_log(void) {
+    ck_assert_uint_eq(rom_wait_services, 1);
+    log_iterator_t iter;
+    log_iter_init(&iter, LOG_LEVEL_WARN);
+    const log_entry_t* entry = log_iter_next(&iter, NULL);
+    ck_assert_ptr_nonnull(entry);
+    ck_assert_str_eq(entry->message, "ROM timeout: marker=00 legacy=00");
+    entry = log_iter_next(&iter, NULL);
+    ck_assert_ptr_nonnull(entry);
+    ck_assert_ptr_nonnull(strstr(entry->message, "ROM CPU="));
+    ck_assert_ptr_nonnull(strstr(entry->message, "suspend="));
+}
+
+// Service while diagnostics run, but accept a previously completed marker without servicing.
+START_TEST(test_rom_wait_completion) {
+    mock_reset();
+    rom_wait_services = 0;
+    spi_write_at(MENU_ROM_COMPLETION_ADDRESS, 0);
+    menu_rom_wait(complete_diagnostic_rom);
+    ck_assert_uint_eq(rom_wait_services, 1);
+    menu_rom_wait(complete_diagnostic_rom);
+    ck_assert_uint_eq(rom_wait_services, 1);
+}
+END_TEST
+
+// Record both read methods and CPU controls on a real timeout, not a successful mock boot.
+START_TEST(test_rom_wait_timeout_diagnostics) {
+    mock_reset();
+    mock_clock_set(time_us_64());
+    log_init();
+    rom_wait_services = 0;
+    spi_write_at(MENU_ROM_COMPLETION_ADDRESS, 0);
+    test_expect_fatal_message("diagnostic ROM did not complete (marker $00)");
+    test_expect_fatal_callback(check_rom_timeout_log);
+    menu_rom_wait(stall_diagnostic_rom);
 }
 END_TEST
 
@@ -392,6 +467,8 @@ Suite* fatal_error_suite(void) {
     tcase_add_test_raise_signal(tests, test_sd_startup_failure, SIGABRT);
     tcase_add_test(tests, test_error_rom_without_keymap);
     tcase_add_test(tests, test_normal_rom_with_keymap);
+    tcase_add_test(tests, test_rom_wait_completion);
+    tcase_add_test_raise_signal(tests, test_rom_wait_timeout_diagnostics, SIGABRT);
     tcase_add_loop_test(tests, test_menu_rom_preserves_physical_holds, 0, 4);
     suite_add_tcase(suite, tests);
     TCase* const formatting = tcase_create("fatal log formatting");

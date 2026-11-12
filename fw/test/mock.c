@@ -21,11 +21,14 @@
 #include "input/input_uart.h"
 #include "pet.h"
 #include "reset.h"
+#include "roms/roms.h"
 #include "system_state.h"
 #include "input/term_inject.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
 #include "usb/usb.h"
+#include "input/pet_keyboard.h"
+#include "display/dvi/dvi.h"
 
 // ---------------------------------------------------------------------------
 // Driver mocks
@@ -36,6 +39,7 @@ static uint8_t mock_char_rom[1u << ECONOPET_BRAM_ADDR_WIDTH];
 static tui_action_t (*input_reader)(void);
 static unsigned int input_reader_display_count;
 static bool button_pressed;
+static bool fail_next_suspend;
 static uint8_t physical_matrix[KEY_COL_COUNT];
 static uint8_t published_matrix[KEY_COL_COUNT];
 static uint8_t fpga_crtc[CRTC_REG_COUNT];
@@ -66,6 +70,10 @@ static void (*cpu_run_callback)(void);
 static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
+static bool suspended, display_transition, menu_attributes;
+static uint8_t audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
+static uint8_t video_control, via_pcr;
+static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
 static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
@@ -269,6 +277,21 @@ void mock_ieee_clear_status(void) {
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
 uint8_t spi_read_at(uint32_t addr) {
+    if (addr == ECONOPET_WB_CPU_SEL_ADDR) {
+        return selected_cpu;
+    }
+    if (addr == ECONOPET_WB_AUDIO_ADDR) {
+        return audio_control;
+    }
+    if (addr == ECONOPET_WB_VIDEO_ADDR) {
+        return video_control;
+    }
+    if (addr == ECONOPET_WB_SUSPEND_ADDR) {
+        return suspended ? ECONOPET_REG_SUSPEND_REQUEST_MASK | ECONOPET_REG_SUSPEND_ACK_MASK : 0;
+    }
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR && addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
+        return fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR];
+    }
     if (addr == ECONOPET_WB_STATUS_ADDR) {
         if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
             cpu_run_callback();
@@ -344,6 +367,22 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
 
 // Applies IEEE register side effects or writes RAM, returning the mock's zero reply.
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
+    if (addr == ECONOPET_WB_AUDIO_ADDR) {
+        audio_control = data;
+        return 0;
+    }
+    if (addr == ECONOPET_WB_VIDEO_ADDR) {
+        video_control = data;
+        return 0;
+    }
+    if (addr == ECONOPET_WB_SUSPEND_ADDR) {
+        suspended = (data & ECONOPET_REG_SUSPEND_REQUEST_MASK) != 0;
+        return 0;
+    }
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR && addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
+        fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR] = data;
+        return 0;
+    }
     // Apply FIFO flush/pop operations and capture outgoing bytes with EOI.
     if (mock_ieee_addr(addr)) {
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
@@ -421,6 +460,10 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
+// The register fixture has no transport pipeline or adjacent-read side effect.
+uint8_t spi_read_pop(void) { return 0; }
+uint8_t spi_read_once(uint32_t address) { return spi_read_at(address); }
+
 // Records CPU control flags for subsequent host-side reads.
 void set_cpu(cpu_state_t state) {
     if (cpu_state_observer != NULL)
@@ -446,6 +489,74 @@ void mock_set_text_mode_lower(bool lower) {
 void set_cpu_type(cpu_type_t cpu) {
     selected_cpu = cpu;
 }
+
+/** Record the independent SuperPET machine bit used by configuration activation. */
+void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
+    selected_cpu = (cpu_type_t)((uint8_t)cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
+}
+
+/** Model readable PIA direction/data selection and the separate hidden output latches. */
+uint8_t pet_io_read(const uint16_t address) {
+    ck_assert(suspended || !(mock_cpu_state & CPU_READY));
+    if (address == 0xe84c) {
+        return via_pcr;
+    }
+    ck_assert(address >= 0xe810 && address <= 0xe813);
+    const unsigned port = (address - 0xe810) / 2;
+    if (address & 1) {
+        return pia_control[port];
+    }
+    if (!(pia_control[port] & 4)) {
+        return pia_ddr[port];
+    }
+    const unsigned row = pia_output[0] & 15;
+    const uint8_t input = port == 0 || row >= KEY_COL_COUNT ? 0xff : physical_matrix[row];
+    return (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
+}
+
+/** Record physical PIA writes in the register selected by the current control byte. */
+void pet_io_write(const uint16_t address, const uint8_t data) {
+    ck_assert(suspended || !(mock_cpu_state & CPU_READY));
+    if (address == 0xe84c) {
+        via_pcr = data;
+        text_mode_lower = (data & 0x0e) == 0x0e;
+        return;
+    }
+    ck_assert(address >= 0xe810 && address <= 0xe813);
+    const unsigned port = (address - 0xe810) / 2;
+    if (address & 1) {
+        pia_control[port] = data & 0x3f;
+    } else if (pia_control[port] & 4) {
+        pia_output[port] = data;
+    } else {
+        pia_ddr[port] = data;
+    }
+}
+
+/** Complete mock suspension synchronously while retaining guest control flags. */
+bool cpu_suspend(const bool requested) {
+    if (requested && fail_next_suspend) {
+        fail_next_suspend = false;
+        return false;
+    }
+    suspended = requested;
+    return true;
+}
+void mock_cpu_fail_next_suspend(void) { fail_next_suspend = true; }
+bool cpu_suspended(void) { return suspended; }
+
+/** Model exclusive renderer publication ownership in fixtures without a DVI core. */
+bool video_transition_begin(void) {
+    ck_assert(!display_transition);
+    display_transition = true;
+    return true;
+}
+bool video_transition_end(void) {
+    ck_assert(display_transition);
+    display_transition = false;
+    return true;
+}
+void video_set_menu_attributes(const bool enabled) { menu_attributes = enabled; }
 
 cpu_type_t mock_cpu_type(void) {
     return selected_cpu;
@@ -474,17 +585,19 @@ void bp_clear_halt(void) {
     system_state.bp_halted = false;
 }
 
-// Clear only the observed halt acknowledgement without changing fixture state.
-void mock_breakpoint_reset_clear_observation(void) {
-    mock_bp_cleared = false;
-}
-
 // ---------------------------------------------------------------------------
 // Test fixture helpers
 // ---------------------------------------------------------------------------
 
 // Restores deterministic RAM contents and clears register/control observations.
 void mock_reset(void) {
+    pet_keyboard_end();
+    suspended = display_transition = menu_attributes = false;
+    audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
+    video_control = via_pcr = 0;
+    memset(pia_control, 0, sizeof(pia_control));
+    memset(pia_ddr, 0, sizeof(pia_ddr));
+    memset(pia_output, 0, sizeof(pia_output));
     // Restore the RAM fixture and empty all emulated IEEE queues.
     memset(mock_ram, 0xEA, sizeof(mock_ram));
     memset(mock_char_rom, 0, sizeof(mock_char_rom));
@@ -497,6 +610,7 @@ void mock_reset(void) {
     input_reader = NULL;
     uart_head = uart_tail = hid_head = hid_tail = 0;
     button_pressed = false;
+    fail_next_suspend = false;
     memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
     memset(published_matrix, UINT8_MAX, sizeof(published_matrix));
     memset(fpga_crtc, 0, sizeof(fpga_crtc));
@@ -711,7 +825,10 @@ void mock_consume_requests(void) {
 // ---------------------------------------------------------------------------
 
 // Counts asynchronous NMI requests without emulating the ROM's tune.
-void __wrap_pet_nmi(void) { pet_nmi_count++; }
+void __wrap_pet_nmi(void) {
+    pet_nmi_count++;
+    spi_write_at(MENU_ROM_COMPLETION_ADDRESS, MENU_ROM_COMPLETION_VALUE);
+}
 
 // Reports NMI requests since the last fixture reset.
 unsigned int mock_pet_nmi_count(void) { return pet_nmi_count; }

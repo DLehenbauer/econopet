@@ -418,8 +418,16 @@ static void expect_mount_failure_after_settings(void* context, uint32_t source, 
     test_expect_fatal_message("configured disk could not mount");
 }
 
-// Supplies one manual selection. A menu retry would violate the fatal policy.
-static tui_action_t select_invalid_config(void) { return tui_action_activate; }
+static bool invalid_config_runtime;
+static unsigned invalid_config_step;
+
+// Open Change Config from the runtime root, or activate the already-open boot picker.
+static tui_action_t select_invalid_config(void) {
+    if (invalid_config_runtime && invalid_config_step++ < 2) {
+        return tui_action_down;
+    }
+    return tui_action_activate;
+}
 
 // Missing images fail fatally after settings in direct, automatic, and manual loads.
 START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
@@ -467,6 +475,8 @@ START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
     } else {
         uint8_t buffer[40 * 25];
         const window_t window = window_create(buffer, 40, 25);
+        invalid_config_runtime = _i % 3 == 2;
+        invalid_config_step = 0;
         mock_input_set_reader(select_invalid_config);
         menu_config_show(&window, &sink, _i % 3 == 1);
     }

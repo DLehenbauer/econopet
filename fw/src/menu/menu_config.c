@@ -13,7 +13,9 @@
 #include "input/input.h"
 #include "input/input_controls.h"
 #include "input/input_routing.h"
+#include "input/pet_keyboard.h"
 #include "menu_screen.h"
+#include "menu_session.h"
 #include "menu_ui.h"
 #include "pet.h"
 #include "roms/roms.h"
@@ -22,6 +24,7 @@
 #define MENU_CHARSET_TIMEOUT_US 100000u
 // Allow at least one 60 Hz DVI frame for core 1 to select the new font.
 #define MENU_CHARSET_SETTLE_US 20000u
+#define MENU_INPUT_POLL_US 100u
 
 typedef struct {
     size_t first, capacity, count;
@@ -152,15 +155,10 @@ static void menu_wait_for_charset(void) {
     }
 }
 
-// Runs the boot picker or on-demand dashboard after menu_enter() starts
-// menu.rom. Reuses the applied configuration and browser state
-// between sessions, reinitializing on boot, first use, or an invalid saved index.
-// Auto-boots a configured default without input. Otherwise temporarily routes
-// remote input to the firmware menu, pulses NMI only on boot,
-// and services input with demand-driven redraws until the controller exits.
-// Leaves terminal mode unchanged when applying the selected machine and disks.
-// Returns with the CPU halted so menu_enter() can reset into the loaded machine.
-void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot) {
+// Return an explicit picker/dashboard exit without loading configuration or resetting.
+// Reuse catalog/browser state, preserve terminal ownership, and keep input/drives alive.
+// Boot defaults bypass painting and the tune. Runtime scanning requires an active session.
+menu_result_t menu_config_run(const window_t* const window, bool is_boot) {
     static menu_ui_t menu;
     static bool initialized;
     const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
@@ -171,21 +169,34 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
 
     // Boot directly into a configured default without input, painting, or the menu tune.
     if (is_boot && catalog.default_index >= 0) {
-        load_config(setup_sink, menu.config_index, true);
         menu.config_changed = false;
-        return;
+        return (menu_result_t){MENU_EXIT_LOAD_CONFIG, menu.config_index};
+    }
+
+    // Finish boot diagnostics before firmware takes the physical keyboard bus.
+    if (is_boot) {
+        log_info("diagnostic ROM: happy tune");
+        spi_write_at(MENU_ROM_COMPLETION_ADDRESS, 0);
+        pet_nmi();
+        menu_rom_wait(menu_service);
+        vet(cpu_suspend(true), "could not suspend boot diagnostics");
+        pet_keyboard_begin_boot();
     }
 
     // Route remote keys to the menu without taking ownership of the terminal.
+    while (pet_keyboard_active() && !pet_keyboard_ready()) {
+        menu_service();
+        sleep_us(MENU_INPUT_POLL_US);
+    }
     input_routing_set_menu_active(true);
 
     // Show the menu as soon as the selected character set is ready.
-    menu_wait_for_charset();
+    if (!menu_session_active()) {
+        menu_wait_for_charset();
+    }
 
-    // Keep menu.rom running while browsing configurations and changing live disks.
+    // Render the firmware UI without executing the diagnostic or guest CPU.
     menu_ui_begin(&menu, window, is_boot);
-    // Start menu.rom's tune only for the interactive boot picker.
-    if (is_boot) pet_nmi();
     // Keep input responsive, repainting only when the controller requests it.
     while (tui_controller_is_active(&menu.controller)) {
         if (tui_controller_needs_render(&menu.controller)) {
@@ -193,6 +204,11 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
             display_task();
         }
         menu_service();
+        const input_system_request_t request = input_routing_take_request();
+        if (request.action == input_system_request_reset) {
+            menu.exit = MENU_EXIT_RESET;
+            menu.controller.active = false;
+        }
         // Apply a burst in order before repainting, rather than transmitting a frame per key.
         tui_action_t action;
         while (tui_controller_is_active(&menu.controller)
@@ -201,15 +217,32 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         }
     }
 
-    // Do not replay held menu gestures or pending releases when returning to
-    // runtime.
+    // Suppress menu gestures and require fresh physical release before handing back the bus.
+    if (pet_keyboard_active()) {
+        pet_keyboard_wait_release_begin();
+    }
+    while (pet_keyboard_active() && !pet_keyboard_released()) {
+        menu_service();
+        sleep_us(MENU_INPUT_POLL_US);
+    }
     input_routing_set_menu_active(false);
+    menu.config_changed = false;
+    return (menu_result_t){menu.exit, menu.config_index};
+}
+
+// Apply the boot picker's configuration. Runtime ownership uses menu_config_run() directly.
+void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot) {
+    const menu_result_t result = menu_config_run(window, is_boot);
+    if (is_boot) {
+        pet_keyboard_end();
+        set_cpu(CPU_RESET);
+        vet(cpu_suspend(false), "could not release boot diagnostics");
+    }
 
     // Blank the menu before configuration reload changes the character ROM or
     // reset changes the charset.
     set_cpu(CPU_HALT);
     menu_screen_clear();
 
-    load_config(setup_sink, menu.config_index, menu.config_changed);
-    menu.config_changed = false;
+    load_config(setup_sink, result.config_index, result.action == MENU_EXIT_LOAD_CONFIG);
 }

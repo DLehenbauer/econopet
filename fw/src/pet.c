@@ -5,10 +5,12 @@
 #include "pet.h"
 
 #include "driver.h"
+#include "fatal.h"
 #include "ieee/ieee_drive.h"
 #include "input/input_routing.h"
 #include "input/keyboard_core.h"
 #include "menu/menu.h"
+#include "menu/menu_session.h"
 #include "sd/activity.h"
 #include "system_state.h"
 #include "usb/keyboard.h"
@@ -25,6 +27,9 @@ void pet_wait_for_storage_idle(void) {
 }
 
 void pet_task(void) {
+    if (menu_session_active()) {
+        return;
+    }
     if (input_routing_pending_request().action == input_system_none || !sd_activity_quiet())
         return;
     const input_system_request_t request = input_routing_take_request();
@@ -42,6 +47,7 @@ void pet_task(void) {
 //       /RESB pin low independently is unsupported, as firmware does not detect
 //       or recover from an independent fabric reset.
 void pet_reset() {
+    vet(!menu_session_active(), "reset while menu owns a resumable context");
     // Per the W65C02S datasheet (sections 3.10 - 3.11):
     //
     //  * The CPU requires a minimum of 2 clock cycles to reset.  The CPU clock is 1 MHz (1 us period).
@@ -79,6 +85,7 @@ void pet_reset() {
 }
 
 void pet_nmi() {
+    vet(!menu_session_active(), "NMI while menu owns a resumable context");
     // NMI preserves the interrupted CPU context, unlike reset. The caller must
     // finish any pending breakpoint transaction before pulsing NMI. Clearing a
     // halt here would leave STP at the saved PC, while pulsing NMI before the

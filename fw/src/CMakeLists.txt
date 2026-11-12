@@ -53,10 +53,12 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/input/input_controls.c
     ${FW_SRC_DIR}/input/input_routing.c
     ${FW_SRC_DIR}/input/input_uart.c
+    ${FW_SRC_DIR}/input/pet_keyboard.c
     ${FW_SRC_DIR}/input/keyboard_core.c
     ${FW_SRC_DIR}/main.c
     ${FW_SRC_DIR}/reset.c
     ${FW_SRC_DIR}/menu/menu.c
+    ${FW_SRC_DIR}/menu/menu_session.c
     ${FW_SRC_DIR}/menu/menu_browser.c
     ${FW_SRC_DIR}/menu/menu_config.c
     ${FW_SRC_DIR}/menu/menu_screen.c
