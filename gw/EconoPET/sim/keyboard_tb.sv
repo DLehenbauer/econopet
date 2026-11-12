@@ -28,6 +28,8 @@ module keyboard_tb;
     logic                      cpu_doe;
     logic                      cpu_we           = '0;
     logic                      cpu_data_strobe  = '0;
+    logic                      firmware_reset   = '0;
+    logic                      physical_reset   = '0;
 
     wire pia1_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he81;
     wire pia2_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he82;
@@ -36,6 +38,8 @@ module keyboard_tb;
     logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd;
 
     keyboard keyboard (
+        .reset_i(firmware_reset),
+        .physical_reset_i(physical_reset),
         .wb_clock_i(clock),
         .wbp_addr_i(common_pkg::wb_kbd_addr(addr)),
         .wbp_data_i(pico),
@@ -190,6 +194,67 @@ module keyboard_tb;
             `assert_equal(data_rd, { 4'h5, col[3:0] });
             wb.write(col, 8'hff);
         end
+
+        $display("[%t]   Firmware reset clears PET cache and wins over scans.", $time);
+        wb.write(3, 8'h7e);
+        cpu_select_col(3);
+
+        firmware_reset = 1'b1;
+        cpu_read_current_col(data);
+        `assert_equal(data, 8'h7e);
+        firmware_reset = 1'b0;
+
+        wb.read(0, data_rd);
+        `assert_equal(data_rd, 8'hff);
+        wb.read(3, data_rd);
+        `assert_equal(data_rd, 8'hff);
+        wb.read(KBD_COL_COUNT - 1, data_rd);
+        `assert_equal(data_rd, 8'hff);
+
+        // A later scan repopulates the cache without losing USB injection data.
+        cpu_read_current_col(data);
+        `assert_equal(data, 8'h7e);
+        wb.read(3, data_rd);
+        `assert_equal(data_rd, 8'h7e);
+
+        $display("[%t]   Physical reset clears multiple columns and can repeat.", $time);
+        wb.write(0, 8'hfe);
+        cpu_select_col(0);
+        cpu_read_current_col(data);
+        `assert_equal(data, 8'hfe);
+        wb.write(5, 8'hfd);
+        cpu_select_col(5);
+        cpu_read_current_col(data);
+        `assert_equal(data, 8'hfd);
+
+        @(negedge clock);
+        physical_reset = 1'b1;
+        @(negedge clock);
+        physical_reset = 1'b0;
+        repeat (2) @(posedge clock);
+
+        wb.read(0, data_rd);
+        `assert_equal(data_rd, 8'hff);
+        wb.read(3, data_rd);
+        `assert_equal(data_rd, 8'hff);
+        wb.read(5, data_rd);
+        `assert_equal(data_rd, 8'hff);
+
+        // A fresh scan after physical reset must be observed.
+        cpu_read_current_col(data);
+        `assert_equal(data, 8'hfd);
+        wb.read(5, data_rd);
+        `assert_equal(data_rd, 8'hfd);
+
+        // A second pulse after deassertion must clear the newly observed key.
+        @(negedge clock);
+        physical_reset = 1'b1;
+        @(negedge clock);
+        physical_reset = 1'b0;
+        repeat (2) @(posedge clock);
+
+        wb.read(5, data_rd);
+        `assert_equal(data_rd, 8'hff);
 
     endtask
 

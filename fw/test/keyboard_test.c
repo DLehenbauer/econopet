@@ -12,6 +12,7 @@
 #include "input/term_inject.h"
 #include "menu/menu_config.h"
 #include "mock.h"
+#include "pet.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
 
@@ -1129,6 +1130,62 @@ START_TEST(test_pet_menu_chord) {
 }
 END_TEST
 
+// Non-reset lifecycle boundaries do not require an extra release before a new chord.
+START_TEST(test_pet_menu_chord_after_routing_reset) {
+    system_state.pet_keyboard_model = _i == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
+    const key_event_t left = _i == 0 ? PET_KEY_LSHIFT_N : PET_KEY_LSHIFT_B;
+    const key_event_t right = _i == 0 ? PET_KEY_RSHIFT_N : PET_KEY_RSHIFT_B;
+
+    input_routing_init();
+    pet_key_matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
+    pet_key_matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));
+    ck_assert(!mock_menu_requested());
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    ck_assert(mock_menu_requested());
+
+    mock_consume_requests();
+    pet_key_matrix[PET_KEY_COL(left)] |= 1u << PET_KEY_ROW(left);
+    pet_key_matrix[PET_KEY_COL(right)] |= 1u << PET_KEY_ROW(right);
+    ck_assert(!mock_menu_requested());
+    input_routing_set_menu_active(true);
+    input_routing_set_menu_active(false);
+    pet_key_matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
+    pet_key_matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));
+    ck_assert(!mock_menu_requested());
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    ck_assert(mock_menu_requested());
+}
+END_TEST
+
+// A reset clears stale held Shifts so a later physical hold is a fresh chord.
+START_TEST(test_pet_menu_chord_cleared_across_reset) {
+    input_routing_set_menu_active(false);
+    system_state.pet_keyboard_model = _i == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
+    const key_event_t left = _i == 0 ? PET_KEY_LSHIFT_N : PET_KEY_LSHIFT_B;
+    const key_event_t right = _i == 0 ? PET_KEY_RSHIFT_N : PET_KEY_RSHIFT_B;
+    uint8_t matrix[KEY_COL_COUNT];
+    memset(matrix, UINT8_MAX, sizeof(matrix));
+    matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
+    matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));
+    mock_input_pet_snapshot(matrix);
+    input_task();
+
+    // Reset consumes the old observation, then clears the gateware cache to released.
+    pet_reset();
+    input_task();
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    input_task();
+    ck_assert_int_eq(input_routing_pending_request().action, input_system_none);
+
+    // A fresh, physically held chord after reset remains detectable.
+    mock_input_pet_snapshot(matrix);
+    input_task();
+    mock_clock_advance(INPUT_LONG_PRESS_US);
+    input_task();
+    ck_assert_int_eq(input_routing_take_request().action, input_system_request_menu);
+}
+END_TEST
+
 // A key already down when the PET chord starts also blocks it in both layouts.
 START_TEST(test_pet_menu_chord_with_key_already_down) {
     input_routing_set_menu_active(false);
@@ -1614,5 +1671,10 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_terminal_menu_aliases);
     tcase_add_loop_test(core, test_physical_layout_isolation, 0, 2);
     suite_add_tcase(suite, core);
+    TCase* const resets = tcase_create("reset");
+    tcase_add_checked_fixture(resets, setup, teardown);
+    tcase_add_loop_test(resets, test_pet_menu_chord_after_routing_reset, 0, 2);
+    tcase_add_loop_test(resets, test_pet_menu_chord_cleared_across_reset, 0, 2);
+    suite_add_tcase(suite, resets);
     return suite;
 }

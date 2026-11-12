@@ -426,6 +426,9 @@ void set_cpu(cpu_state_t state) {
     if (cpu_state_observer != NULL)
         cpu_state_observer(state);
     mock_cpu_state = state;
+    if (state & CPU_RESET) {
+        memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
+    }
 }
 
 void mock_cpu_set_state_observer(void (*observer)(cpu_state_t)) {
