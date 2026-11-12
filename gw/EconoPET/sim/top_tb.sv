@@ -110,6 +110,9 @@ module top_tb;
 
         $display("[%t] Begin USB Keyboard Test", $time);
 
+        // Release the power-on CPU reset before observing keyboard scans.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'b1011, col[3:0] };
             
@@ -126,6 +129,14 @@ module top_tb;
             mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
             $display("[%t]   Keyboard[%0d] -> %02x (WB)", $time, col, dout);
             `assert_equal(dout, value);
+
+            if (col == 0) begin
+                // Reset invalidates the retained observation before a later scan.
+                mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h02);
+                mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
+                `assert_equal(dout, 8'hff);
+                mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+            end
 
             // Keyboard interception should not interfere with RAM access.
             test_rw(common_pkg::wb_ram_addr(17'h0E810 + PIA_PORTA), ~value);
