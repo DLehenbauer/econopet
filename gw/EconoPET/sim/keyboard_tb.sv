@@ -28,6 +28,7 @@ module keyboard_tb;
     logic                      cpu_doe;
     logic                      cpu_we           = '0;
     logic                      cpu_data_strobe  = '0;
+    logic                      reset            = 1'b0;
 
     wire pia1_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he81;
     wire pia2_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he82;
@@ -36,6 +37,7 @@ module keyboard_tb;
     logic [KBD_COL_COUNT-1:0][KBD_ROW_COUNT-1:0] usb_kbd;
 
     keyboard keyboard (
+        .reset_i(reset),
         .wb_clock_i(clock),
         .wbp_addr_i(common_pkg::wb_kbd_addr(addr)),
         .wbp_data_i(pico),
@@ -189,6 +191,14 @@ module keyboard_tb;
             $display("[%t]     col %0d -> %2h (WB)", $time, col, data_rd);
             `assert_equal(data_rd, { 4'h5, col[3:0] });
             wb.write(col, 8'hff);
+        end
+
+        reset = 1'b1;
+        repeat (2) @(negedge clock);
+        reset = 1'b0;
+        for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
+            wb.read(col, data_rd);
+            `assert_equal(data_rd, 8'hff)
         end
 
     endtask

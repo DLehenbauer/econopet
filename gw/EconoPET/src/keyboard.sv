@@ -14,6 +14,7 @@ import common_pkg::*;
 // Note that the snooped PET keyboard matrix is only updated when the CPU
 // is actively scanning the keyboard via PIA1 reads.
 module keyboard(
+    input  logic                     reset_i,           // CPU reset clears retained observations
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                     wb_clock_i,        // Wishbone bus clock
@@ -68,7 +69,11 @@ module keyboard(
         // avoid performing a usb_kbd array lookup.
         selected_row_data <= usb_kbd[selected_col];
 
-        if (pia1_cs_i && cpu_data_strobe_i) begin
+        if (reset_i) begin
+            // Release cached keys on reset so firmware does not detect stale held
+            // keys (especially SHIFT-SHIFT) before editor ROM's keyscan resumes.
+            pet_kbd <= '1;
+        end else if (pia1_cs_i && cpu_data_strobe_i) begin
             if (cpu_we_i) begin
                 // CPU writes to PIA1_PORTA select the keyboard column to scan.
                 if (pia1_rs_i == PIA_PORTA) begin
