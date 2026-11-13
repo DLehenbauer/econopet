@@ -22,14 +22,18 @@ def write_csv(path, fieldnames, rows):
 
 directory = Path(__file__).parent
 bom_path = directory / "bom.csv"
-positions_path = directory / "positions.csv"
+positions_path = directory / "cpl.csv"
+
+# Replace previous outputs with the newly generated fabrication files.
+(directory / "gerber_bom.csv").replace(bom_path)
+(directory / "gerber_positions.csv").replace(positions_path)
 
 bom_fields, bom_rows = read_csv(bom_path)
 position_fields, position_rows = read_csv(positions_path)
 if "LCSC Part #" not in bom_fields or "Designator" not in bom_fields:
     raise ValueError("bom.csv is missing a required column")
 if "Designator" not in position_fields:
-    raise ValueError("positions.csv is missing the Designator column")
+    raise ValueError("cpl.csv is missing a required column")
 
 filtered_bom = [row for row in bom_rows if row["LCSC Part #"].strip()]
 bom_designators = {
