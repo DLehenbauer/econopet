@@ -6,15 +6,15 @@
 
 #include "config/config.h"
 #include "diag/log/log.h"
-#include "diag/mem.h"
 #include "display/display.h"
 #include "driver.h"
 #include "fatal.h"
 #include "ieee/ieee_drive.h"
-#include "input.h"
-#include "input_controls.h"
-#include "menu_ui.h"
+#include "input/input.h"
+#include "input/input_controls.h"
+#include "input/input_routing.h"
 #include "menu_screen.h"
+#include "menu_ui.h"
 #include "pet.h"
 #include "roms/roms.h"
 #include "usb/keyboard.h"
@@ -156,9 +156,9 @@ static void menu_wait_for_charset(void) {
 // menu.rom. Reuses the applied configuration and browser state
 // between sessions, reinitializing on boot, first use, or an invalid saved index.
 // Auto-boots a configured default without input. Otherwise temporarily routes
-// terminal input and video to the firmware menu, pulses NMI only on boot,
+// remote input to the firmware menu, pulses NMI only on boot,
 // and services input with demand-driven redraws until the controller exits.
-// Restores terminal routing before applying the selected machine and disks.
+// Leaves terminal mode unchanged when applying the selected machine and disks.
 // Returns with the CPU halted so menu_enter() can reset into the loaded machine.
 void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot) {
     static menu_ui_t menu;
@@ -176,20 +176,15 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         return;
     }
 
-    // Temporarily route terminal input and video through the firmware menu.
-    const term_mode_t mode = system_state.term_mode;
-    const term_input_dest_t input = system_state.term_input_dest;
-    system_state.term_mode = term_mode_video;
-    system_state.term_input_dest = term_input_to_firmware;
-    if (mode != term_mode_video) display_term_begin();
-    keyboard_menu_set_active(true);
+    // Route remote keys to the menu without taking ownership of the terminal.
+    input_routing_set_menu_active(true);
 
     // Show the menu as soon as the selected character set is ready.
     menu_wait_for_charset();
 
     // Keep menu.rom running while browsing configurations and changing live disks.
     menu_ui_begin(&menu, window, is_boot);
-    // The power-on picker requests the diagnostic asynchronously. Runtime and auto-boot stay silent.
+    // Start menu.rom's tune only for the interactive boot picker.
     if (is_boot) pet_nmi();
     // Keep input responsive, repainting only when the controller requests it.
     while (tui_controller_is_active(&menu.controller)) {
@@ -199,31 +194,22 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         }
         menu_service();
         // Apply a burst in order before repainting, rather than transmitting a frame per key.
-        int key;
-        while (tui_controller_is_active(&menu.controller) && (key = input_getch()) != EOF) {
-            if (key == 't' || key == 'T') {
-                set_cpu(CPU_HALT);
-                test_ram();
-            } else {
-                tui_controller_dispatch(&menu.controller, menu_ui_action_from_key(key));
-            }
+        tui_action_t action;
+        while (tui_controller_is_active(&menu.controller)
+            && (action = input_routing_navigation()) != tui_action_none) {
+            tui_controller_dispatch(&menu.controller, action);
         }
     }
 
     // Do not replay held menu gestures or pending releases when returning to
     // runtime.
-    keyboard_menu_set_active(false);
-    input_controls_consume();
+    input_routing_set_menu_active(false);
 
     // Blank the menu before configuration reload changes the character ROM or
     // reset changes the charset.
     set_cpu(CPU_HALT);
     menu_screen_clear();
 
-    // Leave terminal-menu routing before setup callbacks select the target machine.
-    if (mode != term_mode_video) display_term_end();
-    system_state.term_mode = mode;
-    system_state.term_input_dest = input;
     load_config(setup_sink, menu.config_index, menu.config_changed);
     menu.config_changed = false;
 }

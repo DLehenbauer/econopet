@@ -9,6 +9,8 @@
 
 #include "hardware_contract.h"
 #include "driver.h"
+#include "input/input_actions.h"
+#include "input/keyboard_core.h"
 #include "test_support.h"
 
 #define MOCK_RAM_SIZE (1u << ECONOPET_CPU_ADDR_WIDTH)
@@ -20,8 +22,13 @@ extern uint8_t mock_ram[MOCK_RAM_SIZE];
 
 // Resets RAM, register FIFOs, CPU flags, breakpoint observations, and input.
 void mock_reset(void);
+// Count bulk SPI transactions since the last reset.
+unsigned int mock_spi_read_count(void);
+unsigned int mock_spi_write_count(void);
 // Invokes the callback on status polls while the mocked CPU is running.
 void mock_cpu_set_run_callback(void (*callback)(void));
+/** Observe real CPU control transitions while testing machine lifecycle sequencing. */
+void mock_cpu_set_state_observer(void (*observer)(cpu_state_t state));
 // Selects the character-set status returned by the FPGA mock.
 void mock_set_text_mode_lower(bool lower);
 // Returns the last CPU selected through the driver mock.
@@ -30,10 +37,42 @@ cpu_type_t mock_cpu_type(void);
 void mock_clock_set(uint64_t now);
 // Advances the deterministic firmware clock without sleeping.
 void mock_clock_advance(uint64_t delta);
-// Supplies menu input through a test reader, or restores EOF when NULL.
-void mock_input_set_reader(int (*reader)(void));
+// Supplies component menu actions during USB servicing after the first render.
+void mock_input_set_reader(tui_action_t (*reader)(void));
+/** Queue bytes for the production UART adapter's SDK reads. */
+void mock_input_uart_bytes(const uint8_t* bytes, size_t size);
+/** Queue a report for delivery at the USB host boundary. */
+void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report);
+/** Supply the active-low button GPIO's next physical level. */
+void mock_input_button_level(bool pressed);
+/** Supply the next physical PET matrix read at the FPGA boundary. */
+void mock_input_pet_snapshot(const uint8_t matrix[KEY_COL_COUNT]);
+/** Supply CRTC bytes independently of the firmware's cached display state. */
+void mock_input_crtc_snapshot(const uint8_t registers[CRTC_REG_COUNT]);
+/** Inspect the most recently published runtime matrix, independent of physical input. */
+const uint8_t* mock_input_published_matrix(void);
+/** Count FPGA exchanges and individual hardware service calls. */
+unsigned int mock_input_publish_count(void);
+unsigned int mock_input_usb_service_count(void);
+unsigned int mock_input_hid_service_count(void);
+unsigned int mock_input_button_sample_count(void);
+/** Poll gesture adapters without consuming their latched request. */
+bool mock_menu_requested(void);
+/** Require both independent input groups to be empty, consuming observed input. */
+bool mock_input_empty(void);
+/** Consume machine requests and suppress current gesture holds in a fixture. */
+void mock_consume_requests(void);
+/** Explicitly poll fixture gestures, then read the request latch without application dispatch. */
+input_system_request_t mock_take_request(void);
 // Returns the number of display presentations since the last reset.
 unsigned int mock_display_task_count(void);
+// Reports terminal screen transitions and refreshes since the last reset.
+unsigned int mock_term_begin_count(void);
+unsigned int mock_term_end_count(void);
+unsigned int mock_term_refresh_count(void);
+// Reports PET keystrokes received from terminal routing.
+unsigned int mock_term_inject_count(void);
+int mock_term_inject_last(void);
 // Returns the number of PET NMI requests since the last reset.
 unsigned int mock_pet_nmi_count(void);
 // Observes entry to the nonreturning RAM diagnostic.
@@ -42,6 +81,8 @@ void mock_ram_test_set_handler(void (*handler)(void));
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.
 bool mock_breakpoint_halt_was_cleared(void);
+/** Reset only the breakpoint-clear observation. */
+void mock_breakpoint_reset_clear_observation(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);

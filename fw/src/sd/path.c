@@ -14,7 +14,6 @@ const char* sd_dir_prefix(sd_dir_t directory) {
         case SD_DIR_ROMS: return "/roms/";
         case SD_DIR_PRGS: return "/prgs/";
         case SD_DIR_UKM: return "/ukm/";
-        case SD_DIR_FPGA: return "/fpga/";
         default: fatal("invalid SD directory: %d", directory);
     }
 }

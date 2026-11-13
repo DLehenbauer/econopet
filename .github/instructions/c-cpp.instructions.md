@@ -63,10 +63,11 @@ review procedure.
 
 Include files in this order with blank lines between groups:
 
-1. `pch.h` (when the target uses a precompiled header), followed by the corresponding header for this source file (when one exists)
-2. Standard library headers `<...>` (alphabetized)
-3. External headers (alphabetized, using the dependency's include style)
-4. Project headers `"..."` (alphabetized)
+1. `pch.h` (when the target uses a precompiled header)
+2. Corresponding header for this source file (when one exists)
+3. Standard library headers not included by pch.h. Use `<...>` (alphabetized)
+4. External headers (alphabetized, using the dependency's include style)
+5. Project headers `"..."` (alphabetized)
 
 Do not add a precompiled header to targets that do not use one.
 
@@ -76,8 +77,8 @@ Do not add a precompiled header to targets that do not use one.
 #include "pch.h"
 #include "my_module.h"
 
-#include <stdbool.h>
-#include <stdint.h>
+#include <math.h>
+#include <time.h>
 
 #include "external/library.h"
 
@@ -88,9 +89,9 @@ Do not add a precompiled header to targets that do not use one.
 
 ```c
 #include "project/helper.h"
-#include <stdint.h>
-#include "pch.h"  // Wrong: pch.h must be first when used
-#include "my_module.h"
+#include "pch.h"        // Wrong: pch.h must be first when used
+#include <stdint.h>     // Wrong: stdint.h already included by pch.h
+#include "my_module.h"  // Wrong: module include immediately follows pch.h
 ```
 
 ## Include Paths

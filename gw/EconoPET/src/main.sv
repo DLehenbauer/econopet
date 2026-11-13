@@ -286,7 +286,6 @@ module main (
     // Both soft cores and the physical CPU share this captured-data boundary.
     // Video/WB keep the raw pins and raw strobe.
     logic [DATA_WIDTH-1:0] cpu_data_q = '0;
-    logic [DATA_WIDTH-1:0] soft_cpu_data_q = '0;
     logic                  cpu_data_strobe_q = 1'b0;
     logic                  cpu_active_data_strobe_q = 1'b0;
     logic [DATA_WIDTH-1:0] read_data_q = '0;
@@ -295,20 +294,16 @@ module main (
             cpu_data_q <= cpu_data_i;
             // Injected read data must not race its own pad round trip
             // (hardware-marginal; sim's ideal feedback hides it).
-            read_data_q <= cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
+            if (active_be)
+                read_data_q <= cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
         end
         cpu_data_strobe_q <= cpu_data_strobe;
         // Qualify at capture, giving falling-edge consumers a registered enable.
         cpu_active_data_strobe_q <= cpu_data_strobe && active_be;
     end
-    always_ff @(posedge cpu_data_strobe_q) begin
-        // Bridge traffic must not replace the paused core's pending read data.
-        if (!cpu_is_6809 || (!cpu6809_halted && !io_ctl_bus_reserve))
-            soft_cpu_data_q <= read_data_q;
-    end
 
     superpet_mc6809 mc6809 (
-        .data_i(soft_cpu_data_q),
+        .data_i(read_data_q),
         .data_o(mc6809_dout),
         .addr_o(mc6809_addr),
         .rnw_o(mc6809_rnw),
@@ -349,7 +344,7 @@ module main (
         .i_irq_n(!(cpu_irq_sync[1] || acia_irq)),   // PET IRQ + ACIA (shared bus line)
         .i_so_n(1'b1),
         .o_sync(m6502_sync),
-        .i_bus_data(soft_cpu_data_q),
+        .i_bus_data(read_data_q),
         .o_bus_data(m6502_dout),
         .o_bus_addr(m6502_addr),
         .o_rw(m6502_rw),
@@ -424,6 +419,9 @@ module main (
     logic video_col_80_mode;
     logic [11:10] video_ram_mask;
 
+    // Audio control register.
+    logic audio_enable;
+
     logic reg_cpu_ready;    // CPU ready control register from register file
     logic bp_halted;
     logic [CPU_ADDR_WIDTH-1:0] bp_addr;
@@ -460,8 +458,10 @@ module main (
 
         // Video control register
         .video_col_80_mode_o(video_col_80_mode),
+        .video_ram_mask_o(video_ram_mask),
 
-        .video_ram_mask_o(video_ram_mask)
+        // Audio control register
+        .audio_enable_o(audio_enable)
     );
 
     //
@@ -628,6 +628,7 @@ module main (
         .data_o(),                 // TODO: Read back from SID?
         .diag_i(diag_i),
         .via_cb2_i(via_cb2_i),
+        .audio_enable_i(audio_enable),
         .audio_l_o(audio_l_o),
         .audio_r_o(audio_r_o)
     );
@@ -667,6 +668,8 @@ module main (
     logic                  io_doe;
 
     keyboard keyboard (
+        .reset_i(cpu_reset_o),
+        .physical_reset_i(cpu_reset_i),
         .wb_clock_i(sys_clock_i),
         .wbp_addr_i(wb_addr),
         .wbp_data_i(wb_dout),

@@ -75,7 +75,7 @@
 
 // SPI command masks and opcode encodings (See common_pkg.sv for more details)
 #define ECONOPET_SPI_CMD_OPCODE_MASK 0xe0u
-#define ECONOPET_SPI_CMD_RESERVED_MASK 0x10u
+#define ECONOPET_SPI_CMD_READ_POP 0x10u
 #define ECONOPET_SPI_CMD_ADDRESS_HIGH_MASK 0x0fu
 #define ECONOPET_SPI_CMD_READ_AT 0x40u
 #define ECONOPET_SPI_CMD_READ_NEXT 0x20u

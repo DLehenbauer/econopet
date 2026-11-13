@@ -4,6 +4,7 @@
 #pragma once
 
 #include "config/config.h"
+#include "input/input_actions.h"
 #include "ieee/dos_media.h"
 #include "menu_browser.h"
 #include "ui/tui.h"
@@ -37,5 +38,3 @@ typedef struct {
 void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void));
 // Starts a session, retaining browser history and opening the boot picker or on-demand root.
 void menu_ui_begin(menu_ui_t* menu, const window_t* window, bool is_boot);
-// Converts PET/USB/terminal/menu-button input into shared navigation actions.
-tui_action_t menu_ui_action_from_key(int key);

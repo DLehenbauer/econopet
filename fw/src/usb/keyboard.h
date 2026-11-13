@@ -5,32 +5,19 @@
 
 #include <stdint.h>
 
-#include "system_state.h"
+#include "input/keyboard_core.h"
 
-// PET keyboard matrix is 8 rows by 10 columns where each row is represented by a bit in a byte.
-// The 'key_matrix' array is indexed by column and contains the row byte for that column.
-// A key is pressed when the corresponding bit is 0.
-#define KEY_COL_COUNT 10
-#define KEY_ROW_COUNT 8
-extern uint8_t usb_key_matrix[KEY_COL_COUNT];
-extern uint8_t pet_key_matrix[KEY_COL_COUNT];
-
-uint8_t key_rc_to_i(uint8_t col, uint8_t row);
-int keyboard_getch();
-// Enables HID navigation buffering while the configuration menu is active.
-void keyboard_menu_set_active(bool active);
-// Reports an eligible dual-Shift hold at the common menu long-press threshold.
-bool keyboard_menu_requested(void);
-// Suppresses held menu chords until release, including stale injected Shift state.
-void keyboard_menu_consume(void);
-
-// Enqueue synthesized key events (used by terminal injection)
-void usb_keyboard_enqueue_key_down(uint8_t keycode, uint8_t modifiers);
-void usb_keyboard_enqueue_key_up(uint8_t keycode, uint8_t modifiers);
-
-void usb_keyboard_reset(system_state_t* system_state);
+/** Attach a boot keyboard interface and initialize its LEDs. */
 void usb_keyboard_added(uint8_t dev_addr, uint8_t instance);
+/** Remove an attached interface and cancel only its owned input. */
 void usb_keyboard_removed(uint8_t dev_addr, uint8_t instance);
+/** Retire report state for an unmounted non-boot HID interface. */
 void keyboard_source_removed(uint8_t dev_addr, uint8_t instance);
+/** Decode raw HID edges and gestures for the shared router. */
 void process_kbd_report(uint8_t dev_addr, uint8_t instance, hid_keyboard_report_t const* report);
-void dispatch_key_events();
+/** Emit qualified USB menu requests independently of navigation. */
+void usb_keyboard_poll_gestures(void);
+/** Suppress currently held USB chords until release. */
+void usb_keyboard_consume_gestures(void);
+/** Dispatch a core modifier group and synchronize attached USB LEDs if needed. */
+void dispatch_key_events(void);

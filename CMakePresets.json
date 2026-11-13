@@ -25,9 +25,16 @@
         {
             "name": "all",
             "displayName": "Build All",
-            "description": "Build all subprojects (ROM, firmware, gateware and simulator models, firmware/system tests, SD card)",
+            "description": "Build all subprojects (bootloader, ROM, firmware, gateware and simulator models, firmware/system tests, SD card)",
             "configurePreset": "default",
             "targets": ["all_projects"]
+        },
+        {
+            "name": "boot",
+            "displayName": "Bootloader",
+            "description": "Build the EconoPET SD-card bootloader",
+            "configurePreset": "default",
+            "targets": ["bootloader_project"]
         },
         {
             "name": "fw",
@@ -63,6 +70,41 @@
             "description": "Build only the FPGA gateware",
             "configurePreset": "default",
             "targets": ["fpga_project"]
+        },
+        {
+            "name": "reset",
+            "displayName": "Reset MCU",
+            "description": "Reset the MCU without reprogramming (over SWD)",
+            "configurePreset": "default",
+            "targets": ["reset"]
+        },
+        {
+            "name": "prog-boot",
+            "displayName": "Program Bootloader",
+            "description": "Build and program the bootloader (over SWD)",
+            "configurePreset": "default",
+            "targets": ["prog-boot"]
+        },
+        {
+            "name": "prog-fw",
+            "displayName": "Program Firmware",
+            "description": "Build and program firmware (over SWD)",
+            "configurePreset": "default",
+            "targets": ["prog-fw"]
+        },
+        {
+            "name": "prog-gw",
+            "displayName": "Program Gateware",
+            "description": "Build and program gateware (over SWD)",
+            "configurePreset": "default",
+            "targets": ["prog-gw"]
+        },
+        {
+            "name": "prog",
+            "displayName": "Program Bootloader, Gateware, and Firmware",
+            "description": "Build and program bootloader, gateware, and firmware (over SWD)",
+            "configurePreset": "default",
+            "targets": ["prog"]
         },
         {
             "name": "sdcard",

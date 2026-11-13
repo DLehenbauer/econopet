@@ -34,12 +34,20 @@ cmake --preset default              # Do this first
 
 # Build
 cmake --build --preset all          # Build everything
+cmake --build --preset boot         # Build the EconoPET SD-card bootloader
 cmake --build --preset fw           # Build firmware only
 cmake --build --preset fw-test      # Build firmware tests only
 cmake --build --preset sys-test     # Build system integration tests
 cmake --build --preset gw           # Build gateware only
 cmake --build --preset rom          # Build ROMs only
 cmake --build --preset sdcard       # Build SD card package
+
+# Build and Program
+cmake --build --preset prog-boot    # Build and program bootloader (over SWD)
+cmake --build --preset prog-fw      # Build and program firmware (over SWD)
+cmake --build --preset prog-gw      # Build and program gateware (over SWD)
+cmake --build --preset prog         # Build and program bootloader, gateware, and firmware (over SWD)
+cmake --build --preset reset        # Reset the MCU without reprogramming (over SWD)
 
 # Test
 ctest --preset all --parallel       # Run all tests

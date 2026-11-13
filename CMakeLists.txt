@@ -30,6 +30,7 @@ message(STATUS "ECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}")
 option(BUILD_ROM "Build the 6502 ROM subproject" ON)
 option(BUILD_FPGA "Build the FPGA gateware subproject" ON)
 option(BUILD_FIRMWARE "Build the RP2040 firmware subproject" ON)
+option(BUILD_BOOTLOADER "Build the EconoPET SD-card bootloader" ON)
 option(BUILD_TESTS "Build the firmware unit tests" ON)
 option(BUILD_SYSTEM_TESTS "Build host, board, firmware integration and hardware contract tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
@@ -37,6 +38,63 @@ option(BUILD_PRGS "Build the test programs" ON)
 
 # Common build directory
 set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
+
+# Shared script for SWD programming that halts the MCU, compares image checksums
+# against flash, and programs images that have changed. On success, it resets
+# and runs the MCU even if no writes were needed.
+set(PROGRAM_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/Program.cmake")
+
+# Reset is an explicit-only operation with no image-building or programming dependencies.
+add_custom_target(reset
+    COMMAND openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg
+        -c "adapter speed 5000" -c "init" -c "poll off" -c "reset run" -c "shutdown"
+    COMMENT "Resetting MCU over SWD"
+    USES_TERMINAL
+    VERBATIM
+)
+
+# ============================================================================
+# Bootloader Subproject (RP2040 using Pico SDK)
+# ============================================================================
+set(BOOTLOADER_UF2 "" CACHE FILEPATH "External bootloader UF2 when BUILD_BOOTLOADER is disabled")
+set(BOOTLOADER_TEST_ARGS)
+if(BUILD_BOOTLOADER)
+    ExternalProject_Add(bootloader_project
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/fw/external/pico-sdcard-bootloader"
+        BINARY_DIR "${SUPER_BUILD_DIR}/boot"
+        CMAKE_ARGS
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DPICO_PLATFORM=rp2040
+            -DPICO_SDK_PATH=$ENV{PICO_SDK_PATH}
+            -DCMAKE_TOOLCHAIN_FILE=$ENV{PICO_SDK_PATH}/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+            "-DBOOTLOADER_CONFIG_FILE=${CMAKE_SOURCE_DIR}/boot/config.cmake"
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target bootloader
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS TRUE
+    )
+    set(BOOTLOADER_UF2 "${SUPER_BUILD_DIR}/boot/src/boot3/bootloader.uf2")
+    set(BOOTLOADER_ELF "${SUPER_BUILD_DIR}/boot/src/boot3/bootloader.elf")
+    set(BOOTLOADER_TEST_ARGS
+        --bootloader-elf "${BOOTLOADER_ELF}")
+
+    # Add the 'prog-boot' target to program the bootloader via SWD. Its bootloader
+    # dependency refreshes the ELF first and prevents programming if the build fails.
+    #
+    # Note: Programming is an explicit 'prog-*' target and is never part of
+    #       normal build or test targets such as 'all'.
+    add_custom_target(prog-boot
+        COMMAND "${CMAKE_COMMAND}" "-DBOOTLOADER_ELF=${BOOTLOADER_ELF}" -P "${PROGRAM_SCRIPT}"
+        DEPENDS bootloader_project
+        COMMENT "Programming and verifying bootloader over SWD"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
+if(BOOTLOADER_UF2)
+    list(APPEND BOOTLOADER_TEST_ARGS --bootloader "${BOOTLOADER_UF2}")
+endif()
 
 # ============================================================================
 # ROM Subproject (6502 Assembly using CC65)
@@ -70,6 +128,10 @@ if(BUILD_FPGA)
         BUILD_ALWAYS TRUE
     )
     set(FPGA_BITSTREAM ${SUPER_BUILD_DIR}/gw/outflow/EconoPET.hex.bin)
+    set(PROGRAM_FPGA_ARGS
+        "-DFPGA_BITSTREAM=${FPGA_BITSTREAM}"
+        "-DFPGA_IMAGE=${SUPER_BUILD_DIR}/gw/fpga.flash.bin"
+    )
 
     ExternalProject_Add(gateware_models
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/gw/simulator
@@ -81,6 +143,19 @@ if(BUILD_FPGA)
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target gateware_models
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
+    )
+
+    # Add the 'prog-gw' target to program gateware via SWD. Its gateware dependency
+    # refreshes the bitstream first and prevents programming if the build fails.
+    #
+    # Note: Programming is an explicit 'prog-*' target and is never part of
+    #       normal build or test targets such as 'all'.
+    add_custom_target(prog-gw
+        COMMAND "${CMAKE_COMMAND}" ${PROGRAM_FPGA_ARGS} -P "${PROGRAM_SCRIPT}"
+        DEPENDS fpga_project
+        COMMENT "Programming and verifying gateware over SWD"
+        USES_TERMINAL
+        VERBATIM
     )
 endif()
 
@@ -110,6 +185,43 @@ if(BUILD_FIRMWARE)
     )
     set(FIRMWARE_ELF ${SUPER_BUILD_DIR}/fw/src/firmware.elf)
     set(FIRMWARE_UF2 ${SUPER_BUILD_DIR}/fw/src/firmware.elf.uf2)
+    if(BUILD_ROM)
+        add_dependencies(firmware_project rom_project)
+    endif()
+
+    # Add the 'prog-fw' target to program firmware via SWD. Its firmware dependency
+    # refreshes the ELF first and prevents programming if the build fails.
+    #
+    # Note: Programming is an explicit 'prog-*' target and is never part of
+    #       normal build or test targets such as 'all'.
+    add_custom_target(prog-fw
+        COMMAND "${CMAKE_COMMAND}" "-DFIRMWARE_ELF=${FIRMWARE_ELF}" -P "${PROGRAM_SCRIPT}"
+        DEPENDS firmware_project
+        COMMENT "Programming and verifying firmware over SWD"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
+# ============================================================================
+# Combined bootloader, firmware and gateware SWD programming (explicit-only)
+# ============================================================================
+if(BUILD_BOOTLOADER AND BUILD_FIRMWARE AND BUILD_FPGA)
+    # Add the 'prog' target to program bootloader, firmware and gateware via
+    # SWD. Its dependencies refresh all three images first and prevent
+    # programming if any build fails.
+    #
+    # Note: Programming is an explicit 'prog' target and is never part of
+    #       normal build or test targets such as 'all'.
+    add_custom_target(prog
+        COMMAND "${CMAKE_COMMAND}" "-DBOOTLOADER_ELF=${BOOTLOADER_ELF}"
+            "-DFIRMWARE_ELF=${FIRMWARE_ELF}"
+            ${PROGRAM_FPGA_ARGS} -P "${PROGRAM_SCRIPT}"
+        DEPENDS bootloader_project firmware_project fpga_project
+        COMMENT "Programming and verifying bootloader, firmware and gateware over SWD"
+        USES_TERMINAL
+        VERBATIM
+    )
 endif()
 
 # ============================================================================
@@ -159,6 +271,9 @@ endif()
 # SD Card Package (depends on ROM, FPGA, and Firmware)
 # ============================================================================
 if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
+    if(NOT BOOTLOADER_UF2)
+        message(FATAL_ERROR "SD-card packaging requires BUILD_BOOTLOADER=ON or an explicit BOOTLOADER_UF2")
+    endif()
     ExternalProject_Add(sdcard_project
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/sdcard
         BINARY_DIR ${SUPER_BUILD_DIR}/sdcard
@@ -168,10 +283,14 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
             -DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}
             -DFIRMWARE_UF2=${FIRMWARE_UF2}
             -DFPGA_BITSTREAM=${FPGA_BITSTREAM}
+            "-DBOOTLOADER_UF2=${BOOTLOADER_UF2}"
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
     )
+    if(BUILD_BOOTLOADER)
+        add_dependencies(sdcard_project bootloader_project)
+    endif()
 endif()
 
 # ============================================================================
@@ -209,6 +328,7 @@ add_custom_target(all_projects
         $<$<BOOL:${BUILD_ROM}>:rom_project>
         $<$<BOOL:${BUILD_FPGA}>:fpga_project>
         $<$<BOOL:${BUILD_FIRMWARE}>:firmware_project>
+        $<$<BOOL:${BUILD_BOOTLOADER}>:bootloader_project>
         $<$<BOOL:${BUILD_TESTS}>:test_project>
         $<$<BOOL:${BUILD_SYSTEM_TESTS}>:system_test_project>
         $<$<BOOL:${BUILD_SDCARD}>:sdcard_project>
@@ -255,15 +375,31 @@ endif()
 # Check the separately built firmware image and SD bootloader flash contract.
 if(BUILD_FIRMWARE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    include("${CMAKE_SOURCE_DIR}/cmake/FlashLayout.cmake")
     add_test(
         NAME firmware_flash_layout
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/fw/test/flash_layout_test.py"
             --elf "${FIRMWARE_ELF}"
             --firmware "${FIRMWARE_UF2}"
-            --bootloader "${CMAKE_SOURCE_DIR}/sdcard/bootloader.uf2"
+            ${BOOTLOADER_TEST_ARGS}
             --map "${FIRMWARE_ELF}.map"
+            --fpga-address "${ECONOPET_FPGA_ADDRESS}"
     )
     set_tests_properties(firmware_flash_layout PROPERTIES LABELS "flash")
+    if(BUILD_SDCARD AND BUILD_FPGA)
+        add_test(
+            NAME sdcard_flash_layout
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/fw/test/flash_layout_test.py"
+                --elf "${FIRMWARE_ELF}"
+                --firmware "${FIRMWARE_UF2}"
+                ${BOOTLOADER_TEST_ARGS}
+                --map "${FIRMWARE_ELF}.map"
+                --fpga-address "${ECONOPET_FPGA_ADDRESS}"
+                --combined "${SUPER_BUILD_DIR}/sdcard/sdcard_root/firmware.uf2"
+                --fpga-image "${SUPER_BUILD_DIR}/sdcard/fpga.flash.bin"
+        )
+        set_tests_properties(sdcard_flash_layout PROPERTIES LABELS "flash")
+    endif()
 endif()
 
 # Load standalone test registrations at CTest time, after build-time discovery.

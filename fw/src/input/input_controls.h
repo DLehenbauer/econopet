@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "input/input_actions.h"
 
 #define INPUT_LONG_PRESS_US 500000u
 
@@ -23,10 +24,12 @@ void input_hold_update(input_hold_t* hold, bool eligible);
 bool input_hold_ready(const input_hold_t* hold);
 // Requires a held source to be released before it can qualify again.
 void input_hold_consume(input_hold_t* hold);
+/** Latch a qualified chord before release or contamination, blocking contaminated holds. */
+void input_chord_update(input_source_t source, input_hold_t* hold, bool both_shifts, bool other_key);
 
 // Samples the active-high physical button and debounces its state.
 void input_button_update(bool pressed);
-// Takes a button/chord event classified only by hold duration, or EOF if none is ready.
-int input_controls_getch(void);
-// Consumes currently held entry controls and discards pending button releases.
+/** Observe timed gestures and emit requests without consuming machine intent. */
+void input_controls_poll(void);
+// Suppress current holds without discarding already-emitted machine requests.
 void input_controls_consume(void);

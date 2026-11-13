@@ -16,6 +16,24 @@ module superpet_soft6502_tb;
     clock_gen #(SYS_CLOCK_MHZ) sys_clock_gen (.clock_o(sys_clock));
     initial sys_clock_gen.start;
 
+    // Model register and enable routes settling after their common source edge.
+    // The soft core must consume read data several cycles later.
+    localparam time CAPTURE_ROUTE_DELAY = 2;
+    logic [DATA_WIDTH-1:0] routed_read_data = '0;
+    logic routed_guest_strobe = 1'b0;
+    always @(posedge sys_clock) begin
+        if (top.main.cpu_data_strobe)
+            routed_read_data <= #(CAPTURE_ROUTE_DELAY)
+                top.main.cpu_data_mux_oe ? top.main.cpu_data_mux_out : cpu_input_data;
+        routed_guest_strobe <= #(CAPTURE_ROUTE_DELAY)
+            top.main.cpu_data_strobe && top.main.active_be;
+    end
+    // Reapply forces after delayed stimulus updates in both simulators.
+    always_comb begin
+        force top.main.read_data_q = routed_read_data;
+        force top.main.cpu_active_data_strobe_q = routed_guest_strobe;
+    end
+
     logic [CPU_ADDR_WIDTH-1:0] bus_addr;
     wire  [DATA_WIDTH-1:0]     bus_data;
     logic bus_we_n;

@@ -2,14 +2,12 @@
 // https://github.com/dlehenbauer/econopet
 
 #include "pch.h"
-#include "term_inject.h"
+#include "input/term_inject.h"
 
 #include "class/hid/hid.h"
 #include "diag/log/log.h"
-#include "input.h"
-#include "system_state.h"
-#include "tusb.h"
-#include "usb/keyboard.h"
+#include "input/input.h"
+#include "input/keyboard_core.h"
 
 // HID key entry: keycode + shift modifier state
 typedef struct {
@@ -167,9 +165,6 @@ static const hid_key_t ascii_to_hid[128] = {
     [0x7F] = {HID_KEY_DELETE, false},       // DEL
 };
 
-// HID keycodes for left shift (used for shifted characters)
-#define HID_KEY_SHIFT_LEFT  0xE1
-
 // Extended keycodes start at KEY_UP (1000) and are densely packed.
 // This table maps (keycode - KEY_UP) to HID keycodes.
 // Entry of {0, false} means no mapping available.
@@ -207,6 +202,7 @@ bool term_inject_char(int ch) {
     // Check if queue is full
     uint8_t next_head = (inject_queue_head + 1) % INJECT_QUEUE_SIZE;
     if (next_head == inject_queue_tail) {
+        log_warn("Terminal injection queue full");
         return false;  // Queue full
     }
     
@@ -259,8 +255,13 @@ void term_inject_task(void) {
             inject_keycode = entry.hid_keycode;
             inject_modifiers = entry.shifted ? KEYBOARD_MODIFIER_LEFTSHIFT : 0;
             
-            // Enqueue key-down event to USB keyboard queue
-            usb_keyboard_enqueue_key_down(inject_keycode, inject_modifiers);
+            // Runtime typing was already routed, so submit its paced press directly to the core.
+            const keyboard_edge_t edge = {inject_keycode, true};
+            const keyboard_batch_t batch = {
+                .source = INPUT_SOURCE_UART, .modifiers_pressed = inject_modifiers,
+                .edges = &edge, .edge_count = 1,
+            };
+            keyboard_core_submit(&batch);
             
             inject_state = INJECT_KEY_DOWN;
             log_debug("term_inject: enqueue key down HID=0x%02x (shift=%d)", 
@@ -273,12 +274,24 @@ void term_inject_task(void) {
             inject_state = INJECT_KEY_UP;
             break;
             
-        case INJECT_KEY_UP:
-            // Enqueue key-up event to USB keyboard queue
-            usb_keyboard_enqueue_key_up(inject_keycode, inject_modifiers);
+        case INJECT_KEY_UP: {
+            // Release only this producer, including its synthetic modifiers.
+            const keyboard_edge_t edge = {inject_keycode, false};
+            const keyboard_batch_t batch = {
+                .source = INPUT_SOURCE_UART, .modifiers_released = inject_modifiers,
+                .edges = &edge, .edge_count = 1,
+            };
+            keyboard_core_submit(&batch);
             
             log_debug("term_inject: enqueue key up");
             inject_state = INJECT_IDLE;
             break;
+        }
     }
+}
+
+void term_inject_cancel(void) {
+    // Discard paced work only. The router separately retires core ownership.
+    inject_queue_head = inject_queue_tail = 0;
+    inject_state = INJECT_IDLE;
 }

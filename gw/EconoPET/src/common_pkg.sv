@@ -93,7 +93,12 @@ package common_pkg;
     // 6502 too, as on real hardware. A 6809 enables it regardless.
     localparam int unsigned CPU_SEL_SUPERPET_IO_BIT     = 2;
 
-    localparam int unsigned REG_COUNT                   = REG_CPU_SEL + 1'b1;
+    // Register 6: Audio Control
+    localparam int unsigned REG_AUDIO = 6;
+    localparam int unsigned REG_AUDIO_ENABLE_BIT = 0;
+    localparam logic [DATA_WIDTH-1:0] REG_AUDIO_ENABLE_MASK = 1 << REG_AUDIO_ENABLE_BIT;
+
+    localparam int unsigned REG_COUNT                   = REG_AUDIO + 1'b1;
 
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_TEXT_MODE_MASK = 1 << REG_STATUS_TEXT_MODE_BIT;
     localparam logic [DATA_WIDTH-1:0] REG_STATUS_CRT_MASK = 1 << REG_STATUS_CRT_BIT;
@@ -124,12 +129,14 @@ package common_pkg;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_MODE_MASK = (1 << SPI_CMD_STEP_BIT) | (1 << SPI_CMD_DECREMENT_BIT);
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_ABSOLUTE_MODE = 1 << SPI_CMD_DECREMENT_BIT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_OPCODE_MASK = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_MODE_MASK;
-    localparam logic [DATA_WIDTH-1:0] SPI_CMD_RESERVED_MASK = 8'h10;
+    localparam int unsigned SPI_CMD_POP_BIT = 4;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_POP_MASK = 1 << SPI_CMD_POP_BIT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_ADDRESS_HIGH_MASK = 8'h0f;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_AT = SPI_CMD_ABSOLUTE_MODE;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_NEXT = 1 << SPI_CMD_STEP_BIT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_PREV = SPI_CMD_MODE_MASK;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_SAME = 8'h00;
+    localparam logic [DATA_WIDTH-1:0] SPI_CMD_READ_POP = SPI_CMD_POP_MASK;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_AT = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_AT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_NEXT = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_NEXT;
     localparam logic [DATA_WIDTH-1:0] SPI_CMD_WRITE_PREV = (1 << SPI_CMD_WRITE_BIT) | SPI_CMD_READ_PREV;
@@ -150,6 +157,7 @@ package common_pkg;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_LO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_LO));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_BP_HI_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_BP_ADDR_HI));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_CPU_SEL_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_CPU_SEL));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_AUDIO_ADDR = wb_reg_addr(REG_ADDR_WIDTH'(REG_AUDIO));
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.

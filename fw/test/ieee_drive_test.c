@@ -419,7 +419,7 @@ static void expect_mount_failure_after_settings(void* context, uint32_t source, 
 }
 
 // Supplies one manual selection. A menu retry would violate the fatal policy.
-static int select_invalid_config(void) { return '\r'; }
+static tui_action_t select_invalid_config(void) { return tui_action_activate; }
 
 // Missing images fail fatally after settings in direct, automatic, and manual loads.
 START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {

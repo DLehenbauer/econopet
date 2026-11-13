@@ -7,7 +7,11 @@
 #include "breakpoint.h"
 #include "console.h"
 #include "diag/log/log.h"
+#include "diag/mem.h"
 #include "display/display.h"
+#include "driver.h"
+#include "input/input_routing.h"
+#include "pet.h"
 #include "reset.h"
 #include "system_state.h"
 #include "version.h"
@@ -15,7 +19,6 @@
 // CLI state
 static char line_buffer[CONSOLE_LINE_MAX];
 static size_t line_length = 0;
-static bool in_remote_mode = false;
 
 // Forward declarations for command handlers
 static void cmd_bp(const char* args);
@@ -23,6 +26,7 @@ static void cmd_help(const char* args);
 static void cmd_log(const char* args);
 static void cmd_remote(const char* args);
 static void cmd_reset(const char* args);
+static void cmd_test(const char* args);
 
 // Command table
 typedef struct {
@@ -37,14 +41,8 @@ static const cli_command_t commands[] = {
     { "log",    "Show log [debug|info|warn]",                cmd_log },
     { "remote", "Remote control PET (Ctrl+C to exit)",       cmd_remote },
     { "reset",  "Reset the RP2040",                          cmd_reset },
+    { "test",   "Run the continuous memory self-test",       cmd_test },
     { NULL, NULL, NULL }  // Sentinel
-};
-
-// Level name prefixes for log output
-static const char* const level_prefixes[] = {
-    "D",  // DEBUG
-    "I",  // INFO
-    "W"   // WARN
 };
 
 static void cmd_bp(const char* args) {
@@ -90,34 +88,13 @@ static log_level_t parse_log_level(const char* str) {
 
 static void cmd_log(const char* args) {
     log_level_t min_level = parse_log_level(args);
-    
-    uint32_t count = log_entry_count(min_level);
-    if (count == 0) {
+
+    const uint32_t displayed = log_dump(min_level);
+    if (displayed == 0) {
         console_puts("(no log entries)\r\n");
         return;
     }
-    
-    // Get boot time for calculating relative timestamps
-    uint64_t boot_time = log_boot_time();
-    
-    log_iterator_t iter;
-    log_iter_init(&iter, min_level);
-    
-    const log_entry_t* entry;
-    log_level_t level;
-    uint32_t displayed = 0;
-    
-    while ((entry = log_iter_next(&iter, &level)) != NULL) {
-        // Calculate relative time from boot
-        uint64_t relative_us = entry->timestamp_us - boot_time;
-        uint32_t seconds = (uint32_t)(relative_us / 1000000);
-        uint32_t millis = (uint32_t)((relative_us % 1000000) / 1000);
-        
-        printf("[%4" PRIu32 ".%03" PRIu32 "] %s: %s\r\n", 
-               seconds, millis, level_prefixes[level], entry->message);
-        displayed++;
-    }
-    
+
     printf("(%" PRIu32 " entries)\r\n", displayed);
     fflush(stdout);
 }
@@ -127,9 +104,7 @@ static void cmd_remote(const char* args) {
     
     console_puts("[entering remote mode - Ctrl+C to exit]\r\n");
     
-    in_remote_mode = true;
-    system_state.term_mode = term_mode_video;
-    system_state.term_input_dest = term_input_to_pet;
+    system_state.terminal_session = terminal_session_remote;
     display_term_begin();
     display_term_refresh();  // Immediately render video buffer to terminal
 }
@@ -139,6 +114,18 @@ static void cmd_reset(const char* args) {
     
     console_puts("Resetting...\r\n");
     system_reset();
+}
+
+// Finish active storage traffic before entering the continuous memory diagnostic.
+static void cmd_test(const char* args) {
+    while (*args == ' ') ++args;
+    if (*args != '\0') {
+        console_puts("Usage: test\r\n");
+        return;
+    }
+    pet_wait_for_storage_idle();
+    set_cpu(CPU_HALT);
+    test_ram();
 }
 
 static void execute_command(const char* line) {
@@ -175,10 +162,9 @@ static void execute_command(const char* line) {
 
 void cli_init(void) {
     line_length = 0;
-    in_remote_mode = false;
+    input_routing_cancel(INPUT_SOURCE_UART);
 
-    system_state.term_mode = term_mode_cli;
-    system_state.term_input_dest = term_input_to_firmware;
+    system_state.terminal_session = terminal_session_cli;
 
     // Reset terminal to clean state using VT100/VT102 compatible sequences:
     // - Reset scroll region to full screen (DECSTBM with no args)
@@ -203,21 +189,22 @@ void cli_process_char(int ch) {
         // Line complete - execute command
         execute_command(line_buffer);
         line_length = 0;
-        console_prompt();
+        if (!cli_in_remote_mode()) {
+            console_prompt();
+        }
     }
 }
 
 bool cli_in_remote_mode(void) {
-    return in_remote_mode;
+    return system_state.terminal_session == terminal_session_remote;
 }
 
 void cli_exit_remote(void) {
-    if (in_remote_mode) {
-        in_remote_mode = false;
+    if (cli_in_remote_mode()) {
+        input_routing_cancel(INPUT_SOURCE_UART);
         display_term_end();
         
-        system_state.term_mode = term_mode_cli;
-        system_state.term_input_dest = term_input_to_firmware;
+        system_state.terminal_session = terminal_session_cli;
         
         console_puts("\r\n[exited remote mode]\r\n");
         console_prompt();

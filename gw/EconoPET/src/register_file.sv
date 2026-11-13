@@ -36,7 +36,10 @@ module register_file(
 
     // Video register
     output logic                      video_col_80_mode_o,
-    output logic [11:10]              video_ram_mask_o
+    output logic [11:10]              video_ram_mask_o,
+
+    // Audio control register
+    output logic                      audio_enable_o
 );
     logic [DATA_WIDTH-1:0] register[REG_COUNT-1:0];
 
@@ -64,6 +67,9 @@ module register_file(
         // Breakpoint registers at power on:
         register[REG_BP_CTL]     = '0;
         register[REG_BP_ADDR_HI] = '0;
+
+        // Audio control register enabled at power on:
+        register[REG_AUDIO] = REG_AUDIO_ENABLE_MASK;
     end
 
     // This peripheral always completes WB operations in a single cycle.
@@ -115,4 +121,6 @@ module register_file(
     
     assign video_col_80_mode_o = register[REG_VIDEO][REG_VIDEO_COL_80_BIT];
     assign video_ram_mask_o    = register[REG_VIDEO][REG_VIDEO_RAM_MASK_HI_BIT:REG_VIDEO_RAM_MASK_LO_BIT];
+
+    assign audio_enable_o      = register[REG_AUDIO][REG_AUDIO_ENABLE_BIT];
 endmodule

@@ -31,20 +31,31 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/cpu.c
     ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/display/char_encoding.c
+    ${SRC_DIR}/display/display.c
     ${SRC_DIR}/display/window.c
+    ${SRC_DIR}/driver_sync.c
     ${SRC_DIR}/fatal.c
+    ${SRC_DIR}/fpga_image.c
+    ${SRC_DIR}/roms/roms.c
     ${SRC_DIR}/sd/path.c
     ${SRC_DIR}/sd/activity.c
-    ${SRC_DIR}/input_controls.c
-    ${SRC_DIR}/input_uart.c
+    ${SRC_DIR}/input/input_controls.c
+    ${SRC_DIR}/input/input.c
+    ${SRC_DIR}/input/input_actions.c
+    ${SRC_DIR}/input/input_routing.c
+    ${SRC_DIR}/input/input_uart.c
+    ${SRC_DIR}/input/keyboard_core.c
+    ${SRC_DIR}/input/term_inject.c
+    ${SRC_DIR}/pet.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
-    ${SRC_DIR}/menu/menu_runtime.c
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/menu/menu_screen.c
     ${SRC_DIR}/menu/menu_ui.c
     ${SRC_DIR}/system_state.c
     ${SRC_DIR}/ui/tui.c
+    ${SRC_DIR}/ui/cli.c
+    ${SRC_DIR}/ui/console.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
@@ -60,12 +71,16 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/config_parser_test.c
     ${TEST_DIR}/cpu_test.c
     ${TEST_DIR}/crtc_test.c
+    ${TEST_DIR}/display_test.c
+    ${TEST_DIR}/fatal_error_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/dos_media_test.c
     ${TEST_DIR}/dos_rel_test.c
     ${TEST_DIR}/dos_test.c
     ${TEST_DIR}/global_test.c
+    ${TEST_DIR}/fpga_image_test.c
     ${TEST_DIR}/ieee_drive_test.c
+    ${TEST_DIR}/input_test.c
     ${TEST_DIR}/keyscan_test.c
     ${TEST_DIR}/keyboard_test.c
     ${TEST_DIR}/keystate_test.c
@@ -86,6 +101,12 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/window_test.c
 )
 
+# ROM boot-routing tests do not execute CPU instructions or inspect glyph content.
+foreach(header 901447_10 menu_rom)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/${header}.h"
+        CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
+endforeach()
+
 # Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}
     ${CHECK_LIBRARIES}
@@ -95,7 +116,15 @@ target_link_libraries(${PROJECT_NAME}
 
 # Route firmware fopen() calls through test_support.c so registered disk fixtures use
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
-target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fopen -Wl,--wrap=time_us_64)
+target_link_options(${PROJECT_NAME} PRIVATE
+    -Wl,--wrap=fopen -Wl,--wrap=time_us_64 -Wl,--wrap=term_inject_char
+    -Wl,--wrap=pet_nmi -Wl,--wrap=ieee_drive_task)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
+target_link_options(${PROJECT_NAME} PRIVATE
+    -Wl,--wrap=display_task -Wl,--wrap=display_term_begin -Wl,--wrap=display_term_end
+    -Wl,--wrap=display_term_refresh -Wl,--wrap=display_window_begin -Wl,--wrap=display_window_show)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.

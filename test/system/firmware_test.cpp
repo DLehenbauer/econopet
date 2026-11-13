@@ -60,6 +60,34 @@ class SpiCapture {
 };
 } // namespace
 
+// A firmware pipeline drain must select exactly one physical register, even at aliases/edges.
+TEST_F(FirmwareTest, SingleEffectReadNeverSelectsAnAdjacentPhysicalRegister) {
+    system.cpu(CPU_SOFT_6502).prepare();
+    const std::array<uint16_t, 5> registers{0xe811, 0xe813, 0xe84c, 0xe81f, 0xe87f};
+    for (const auto address : registers) {
+        std::vector<econopet::CpuAddress> accesses;
+        auto previous = system.snapshot();
+        auto observer = system.observe([&](const System& board) {
+            const auto current = board.snapshot();
+            if (previous.cpu_clock_o && !current.cpu_clock_o &&
+                (!previous.pia1_cs_n_o || !previous.pia2_cs_n_o || !previous.via_cs_n_o)) {
+                accesses.push_back(previous.cpu_addr_o);
+            }
+            previous = current;
+        });
+        const uint8_t offset = address & 0x7f;
+        const auto expected = offset < 0x20
+                                  ? system.io().pia1().peek(static_cast<econopet::io::PiaRegister>(offset & 3))
+                                  : system.io().via().peek(static_cast<econopet::io::ViaRegister>(offset & 15));
+        EXPECT_EQ(spi_read_once(ECONOPET_WB_IO_BASE_ADDR + offset), expected);
+        ASSERT_EQ(accesses.size(), 1u);
+        EXPECT_EQ(accesses.front(), econopet::CpuAddress{address});
+        EXPECT_TRUE(system.snapshot().spi_cs_ni);
+        EXPECT_FALSE(system.snapshot().spi_stall_o);
+        EXPECT_TRUE(system.snapshot().io_oe_n_o);
+    }
+}
+
 // Multiple scoped destinations can survive close without affecting a later session.
 TEST_F(FirmwareTest, ScopedTracesFirmwareRxOwnsStorageAndSessionRegistration) {
     firmware.mount(disk_fixture::D64::empty());

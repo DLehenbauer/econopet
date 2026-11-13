@@ -53,6 +53,7 @@ endmodule
             self.run_command("cmake", "-S", str(root), "-B", str(build),
                              "-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
                              f"-DECONOPET_MEDIA_DIR={root / 'media'}",
+                             "-DBUILD_BOOTLOADER=OFF",
                              "-DBUILD_ROM=OFF", "-DBUILD_FIRMWARE=OFF",
                              "-DBUILD_TESTS=OFF", "-DBUILD_SYSTEM_TESTS=OFF",
                              "-DBUILD_SDCARD=OFF", "-DBUILD_PRGS=OFF")

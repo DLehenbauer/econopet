@@ -21,7 +21,6 @@ typedef enum {
     SD_DIR_ROMS,
     SD_DIR_PRGS,
     SD_DIR_UKM,
-    SD_DIR_FPGA,
     SD_DIR_COUNT,
 } sd_dir_t;
 

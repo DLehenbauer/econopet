@@ -4,7 +4,8 @@
 #include "pch.h"
 #include "keyscan_test.h"
 #include "usb/keyscan.h"
-#include "input.h"
+#include "input/input.h"
+#include "system_state.h"
 
 // PET keyboard matrix dimensions (from keyboard.h, redefined here to avoid TinyUSB dependencies)
 #define KEY_COL_COUNT 10
@@ -60,13 +61,14 @@ void release_key(uint8_t matrix[KEY_COL_COUNT], key_event_t key) {
     matrix[col] |= (1 << row);
 }
 
-START_TEST(test_keyscan_getch) {
+START_TEST(test_keyscan_navigation) {
+    const pet_keyboard_model_t saved_model = system_state.pet_keyboard_model;
     uint8_t matrix[KEY_COL_COUNT] = {
         0xff, 0xff, 0xff, 0xff, 0xff,
         0xff, 0xff, 0xff, 0xff, 0xff
     };
 
-    ck_assert_int_eq(keyscan_getch(matrix), EOF);
+    ck_assert_int_eq(keyscan_navigation(matrix), tui_action_none);
 
     static const key_event_t pet_keys[] = {
         // Graphics
@@ -104,8 +106,10 @@ START_TEST(test_keyscan_getch) {
         "Key event arrays must be the same size");
     
     for (size_t i = 0; i < count_of(pet_keys); i++) {
+        system_state.pet_keyboard_model = i < count_of(pet_keys) / 2
+            ? pet_keyboard_model_graphics : pet_keyboard_model_business;
         press_key(matrix, pet_keys[i]);
-        ck_assert_int_eq(keyscan_getch(matrix), expected_keys_unshifted[i]);
+        ck_assert_int_eq(keyscan_navigation(matrix), input_menu_bind_terminal(expected_keys_unshifted[i]));
         release_key(matrix, pet_keys[i]);
     }
 
@@ -136,15 +140,21 @@ START_TEST(test_keyscan_getch) {
         "Key event arrays must be the same size");
 
     for (size_t i = 0; i < count_of(shift_keys); i++) {
+        system_state.pet_keyboard_model = i % 2 == 0
+            ? pet_keyboard_model_graphics : pet_keyboard_model_business;
         press_key(matrix, shift_keys[i]);
-        for (size_t j = 0; j < count_of(expected_keys_shifted); j++) {
+        const size_t first = i % 2 == 0 ? 0 : count_of(pet_keys) / 2;
+        for (size_t j = first; j < first + count_of(pet_keys) / 2; j++) {
             press_key(matrix, pet_keys[j]);
-            ck_assert_int_eq(keyscan_getch(matrix), expected_keys_shifted[j]);
+            ck_assert_int_eq(keyscan_navigation(matrix), input_menu_bind_terminal(expected_keys_shifted[j]));
             release_key(matrix, pet_keys[j]);
         }
 
         release_key(matrix, shift_keys[i]);
     }
+    memset(matrix, 0xff, sizeof(matrix));
+    keyscan_reset(matrix);
+    system_state.pet_keyboard_model = saved_model;
 }
 
 Suite *keyscan_suite(void) {
@@ -155,7 +165,7 @@ Suite *keyscan_suite(void) {
     tc_core = tcase_create("Core");
 
     tcase_add_test(tc_core, test_keyscan_next_key_event);
-    tcase_add_test(tc_core, test_keyscan_getch);
+    tcase_add_test(tc_core, test_keyscan_navigation);
     suite_add_tcase(s, tc_core);
 
     return s;

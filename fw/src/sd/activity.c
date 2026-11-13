@@ -43,9 +43,14 @@ static int activity_program(blockdevice_t* device, const void* buffer, bd_size_t
 
 // Install the LED activity hooks for the given pico-vfs device.
 void sd_activity_install(blockdevice_t* device) {
-    vet(device != NULL && device->read != NULL && device->program != NULL,
-        "sd activity requires a device with read and program callbacks");
-    vet(sd_read_block == NULL, "sd activity can only be installed once");
+    // sd_init() installs these hooks before display initialization, so bypass fatal().
+    if (device == NULL || device->read == NULL || device->program == NULL) {
+        fatal_halt(FATAL_ERROR_UNSPECIFIED,
+            "sd activity requires a device with read and program callbacks");
+    }
+    if (sd_read_block != NULL) {
+        fatal_halt(FATAL_ERROR_UNSPECIFIED, "sd activity can only be installed once");
+    }
 
     sd_read_block = device->read;
     sd_program_block = device->program;

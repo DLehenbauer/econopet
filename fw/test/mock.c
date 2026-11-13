@@ -6,26 +6,73 @@
 
 #include <check.h>
 
+#include "hardware/gpio.h"
+#include "hardware/uart.h"
+#include "tusb.h"
+
 #include "driver.h"
 #include "fatal.h"
 #include "hardware_contract.h"
+#include "hw.h"
 #include "ieee/ieee_protocol.h"
-#include "input_controls.h"
+#include "input/input_controls.h"
+#include "input/input.h"
+#include "input/input_routing.h"
+#include "input/input_uart.h"
+#include "pet.h"
+#include "reset.h"
 #include "system_state.h"
+#include "input/term_inject.h"
+#include "usb/keyboard.h"
+#include "usb/keyscan.h"
+#include "usb/usb.h"
 
 // ---------------------------------------------------------------------------
 // Driver mocks
 // ---------------------------------------------------------------------------
 
 uint8_t mock_ram[MOCK_RAM_SIZE];
-static int (*input_reader)(void);
+static uint8_t mock_char_rom[1u << ECONOPET_BRAM_ADDR_WIDTH];
+static tui_action_t (*input_reader)(void);
+static unsigned int input_reader_display_count;
+static bool button_pressed;
+static uint8_t physical_matrix[KEY_COL_COUNT];
+static uint8_t published_matrix[KEY_COL_COUNT];
+static uint8_t fpga_crtc[CRTC_REG_COUNT];
+static unsigned int matrix_publish_count;
+static unsigned int spi_read_count, spi_write_count;
+static unsigned int usb_service_count, hid_service_count, button_sample_count;
+
+#define MOCK_UART_LOG2_CAPACITY 8
+#define MOCK_UART_CAPACITY (1u << MOCK_UART_LOG2_CAPACITY)
+#define MOCK_UART_CAPACITY_MASK (MOCK_UART_CAPACITY - 1u)
+#define MOCK_HID_LOG2_CAPACITY 5
+#define MOCK_HID_CAPACITY (1u << MOCK_HID_LOG2_CAPACITY)
+#define MOCK_HID_CAPACITY_MASK (MOCK_HID_CAPACITY - 1u)
+
+static uint8_t uart_bytes[MOCK_UART_CAPACITY];
+static size_t uart_head, uart_tail;
+static struct {
+    uint8_t device, instance;
+    hid_keyboard_report_t report;
+} hid_reports[MOCK_HID_CAPACITY];
+static size_t hid_head, hid_tail;
+struct uart_inst {
+    uint8_t index;
+};
+static uart_inst_t mock_uart;
+uart_inst_t* const uart0 = &mock_uart;
 static void (*cpu_run_callback)(void);
+static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
 static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
 static unsigned int display_task_count;
+static unsigned int term_begin_count, term_end_count, term_refresh_count;
+static unsigned int term_inject_count;
+static int term_inject_last;
 static unsigned int pet_nmi_count;
 static void (*ram_test_handler)(void);
 
@@ -262,13 +309,34 @@ uint8_t spi_read_at(uint32_t addr) {
             return mock_ieee.rx_count == 0 ? 0 : mock_ieee.rx[mock_ieee.rx_head].byte;
         }
     }
+    if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
+        addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
+        return mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR];
+    }
     // Enforce the address-space bound before accessing ordinary RAM.
     ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
     return mock_ram[addr];
 }
 
+// Report bulk reads independently of their per-byte register accesses.
+unsigned int mock_spi_read_count(void) { return spi_read_count; }
+
+// Report bulk writes independently of their per-byte register accesses.
+unsigned int mock_spi_write_count(void) { return spi_write_count; }
+
 // Reads consecutive mocked addresses into the caller's buffer.
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
+    ++spi_read_count;
+    if (addr == ECONOPET_WB_KBD_BASE_ADDR) {
+        ck_assert_uint_eq(byteLength, sizeof(physical_matrix));
+        memcpy(pDest, physical_matrix, sizeof(physical_matrix));
+        return;
+    }
+    if (addr == ECONOPET_WB_CRTC_BASE_ADDR) {
+        ck_assert_uint_eq(byteLength, CRTC_REG_COUNT);
+        memcpy(pDest, fpga_crtc, byteLength);
+        return;
+    }
     for (size_t i = 0; i < byteLength; i++) {
         pDest[i] = spi_read_at(addr + i);
     }
@@ -310,6 +378,11 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
         }
         return 0;
     }
+    if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
+        addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
+        mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR] = data;
+        return 0;
+    }
     // Preserve the existing no-op behavior for writes outside mocked RAM.
     if (addr < MOCK_RAM_SIZE) {
         mock_ram[addr] = data;
@@ -319,6 +392,13 @@ uint8_t spi_write_at(uint32_t addr, uint8_t data) {
 
 // Writes the caller's bytes to consecutive mocked addresses.
 void spi_write(uint32_t addr, const uint8_t* pSrc, size_t byteLength) {
+    ++spi_write_count;
+    if (addr == ECONOPET_WB_KBD_BASE_ADDR) {
+        ck_assert_uint_eq(byteLength, sizeof(published_matrix));
+        memcpy(published_matrix, pSrc, sizeof(published_matrix));
+        ++matrix_publish_count;
+        return;
+    }
     for (size_t i = 0; i < byteLength; i++) {
         spi_write_at(addr + i, pSrc[i]);
     }
@@ -343,7 +423,16 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
 
 // Records CPU control flags for subsequent host-side reads.
 void set_cpu(cpu_state_t state) {
+    if (cpu_state_observer != NULL)
+        cpu_state_observer(state);
     mock_cpu_state = state;
+    if (state & CPU_RESET) {
+        memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
+    }
+}
+
+void mock_cpu_set_state_observer(void (*observer)(cpu_state_t)) {
+    cpu_state_observer = observer;
 }
 
 // Supplies CPU execution effects independently of the breakpoint probe.
@@ -388,6 +477,11 @@ void bp_clear_halt(void) {
     system_state.bp_halted = false;
 }
 
+// Clear only the observed halt acknowledgement without changing fixture state.
+void mock_breakpoint_reset_clear_observation(void) {
+    mock_bp_cleared = false;
+}
+
 // ---------------------------------------------------------------------------
 // Test fixture helpers
 // ---------------------------------------------------------------------------
@@ -396,6 +490,7 @@ void bp_clear_halt(void) {
 void mock_reset(void) {
     // Restore the RAM fixture and empty all emulated IEEE queues.
     memset(mock_ram, 0xEA, sizeof(mock_ram));
+    memset(mock_char_rom, 0, sizeof(mock_char_rom));
     memset(&mock_ieee, 0, sizeof(mock_ieee));
     // Clear breakpoint observations and hold the CPU in reset.
     system_state.bp_halted = false;
@@ -403,8 +498,20 @@ void mock_reset(void) {
     mock_bp_cleared = false;
     mock_cpu_state = CPU_RESET;
     input_reader = NULL;
+    uart_head = uart_tail = hid_head = hid_tail = 0;
+    button_pressed = false;
+    memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
+    memset(published_matrix, UINT8_MAX, sizeof(published_matrix));
+    memset(fpga_crtc, 0, sizeof(fpga_crtc));
+    matrix_publish_count = usb_service_count = hid_service_count = button_sample_count = 0;
+    spi_read_count = spi_write_count = 0;
     cpu_run_callback = NULL;
+    cpu_state_observer = NULL;
     display_task_count = 0;
+    term_begin_count = term_end_count = term_refresh_count = 0;
+    term_inject_count = 0;
+    term_inject_last = EOF;
+    input_init();
     pet_nmi_count = 0;
     ram_test_handler = NULL;
     text_mode_lower = true;
@@ -428,59 +535,186 @@ bool mock_breakpoint_halt_was_cleared(void) {
 // ---------------------------------------------------------------------------
 
 // Accepts a display window without rendering it in host tests.
-void display_window_begin(const void* window) {
+void __wrap_display_window_begin(const void* window) {
     (void)window;
 }
 
 // Flushes host output instead of presenting a hardware display window.
-void display_window_show(const void* window) {
+void __wrap_display_window_show(const void* window) {
     (void)window;
     fflush(stdout);
 }
 
 // Counts presentations without writing to hardware or a terminal.
-void display_task(void) { display_task_count++; }
+void __wrap_display_task(void) { display_task_count++; }
 
 // Reports presentations since the last fixture reset.
 unsigned int mock_display_task_count(void) { return display_task_count; }
 
 // Avoids ANSI rendering in host tests.
-void display_term_begin(void) { fflush(stdout); }
-void display_term_end(void) { fflush(stdout); }
-void display_term_refresh(void) { }
+void __wrap_display_term_begin(void) {
+    term_begin_count++;
+    fflush(stdout);
+}
+void __wrap_display_term_end(void) {
+    term_end_count++;
+    fflush(stdout);
+}
+void __wrap_display_term_refresh(void) { term_refresh_count++; }
+
+/** Reject hardware video startup in the host input fixture. */
+void video_init(void) { fatal("unexpected hardware video initialization in host test"); }
+
+unsigned int mock_term_begin_count(void) { return term_begin_count; }
+unsigned int mock_term_end_count(void) { return term_end_count; }
+unsigned int mock_term_refresh_count(void) { return term_refresh_count; }
+
+bool __real_term_inject_char(int ch);
+
+// Observe accepted runtime characters while retaining the real injection backend.
+bool __wrap_term_inject_char(int ch) {
+    const bool accepted = __real_term_inject_char(ch);
+    if (accepted) {
+        ++term_inject_count;
+        term_inject_last = ch;
+    }
+    return accepted;
+}
+
+unsigned int mock_term_inject_count(void) { return term_inject_count; }
+int mock_term_inject_last(void) { return term_inject_last; }
+
+void system_reset(void) { fatal("unexpected system reset in host test"); }
 
 // ---------------------------------------------------------------------------
 // Input mocks
 // ---------------------------------------------------------------------------
 
-// Leaves hardware input initialization inactive in host tests.
-void input_init(void) { }
-
-// Installs deterministic menu input without hardware polling.
-void mock_input_set_reader(int (*reader)(void)) {
+// Supplies component-level menu actions during USB servicing, never during a queue read.
+void mock_input_set_reader(tui_action_t (*reader)(void)) {
     input_reader = reader;
+    input_reader_display_count = display_task_count;
 }
 
-// Leaves hardware input polling inactive in host tests.
-void input_task(void) { }
-
-// Uses production gesture classification before test-provided keyboard/terminal input.
-int input_getch(void) {
-    const int control = input_controls_getch();
-    if (control != EOF) {
-        return control;
+void mock_input_uart_bytes(const uint8_t* bytes, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        const size_t next = (uart_head + 1u) & MOCK_UART_CAPACITY_MASK;
+        ck_assert_msg(next != uart_tail, "mock UART queue full");
+        uart_bytes[uart_head] = bytes[i];
+        uart_head = next;
     }
-    return input_reader != NULL ? input_reader() : EOF;
+}
+
+void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report) {
+    const size_t next = (hid_head + 1u) & MOCK_HID_CAPACITY_MASK;
+    ck_assert_msg(next != hid_tail, "mock HID queue full");
+    hid_reports[hid_head].device = device;
+    hid_reports[hid_head].instance = instance;
+    hid_reports[hid_head].report = *report;
+    hid_head = next;
+}
+
+void mock_input_button_level(bool pressed) { button_pressed = pressed; }
+
+void mock_input_pet_snapshot(const uint8_t matrix[KEY_COL_COUNT]) {
+    memcpy(physical_matrix, matrix, sizeof(physical_matrix));
+}
+
+void mock_input_crtc_snapshot(const uint8_t registers[CRTC_REG_COUNT]) {
+    memcpy(fpga_crtc, registers, sizeof(fpga_crtc));
+}
+
+const uint8_t* mock_input_published_matrix(void) { return published_matrix; }
+unsigned int mock_input_publish_count(void) { return matrix_publish_count; }
+unsigned int mock_input_usb_service_count(void) { return usb_service_count; }
+unsigned int mock_input_hid_service_count(void) { return hid_service_count; }
+unsigned int mock_input_button_sample_count(void) { return button_sample_count; }
+
+// Validate the production input initializer's menu-button hardware configuration.
+void __real_gpio_init(uint gpio);
+void __real_gpio_set_dir(uint gpio, bool out);
+
+void __wrap_gpio_init(uint gpio) {
+    if (gpio != MENU_BTN_GP)
+        __real_gpio_init(gpio);
+}
+void gpio_pull_up(uint gpio) { ck_assert_uint_eq(gpio, MENU_BTN_GP); }
+void __wrap_gpio_set_dir(uint gpio, bool out) {
+    if (gpio == MENU_BTN_GP)
+        ck_assert(!out);
+    else
+        __real_gpio_set_dir(gpio, out);
+}
+
+// Publish the active-low button level at the GPIO sampling boundary.
+bool gpio_get(uint gpio) {
+    ck_assert_uint_eq(gpio, MENU_BTN_GP);
+    ++button_sample_count;
+    return !button_pressed;
+}
+
+// Expose queued UART bytes through the SDK acquisition boundary.
+bool uart_is_readable(uart_inst_t* uart) {
+    ck_assert_ptr_eq(uart, uart_default);
+    return uart_tail != uart_head;
+}
+
+char uart_getc(uart_inst_t* uart) {
+    ck_assert_ptr_eq(uart, uart_default);
+    ck_assert_msg(uart_tail != uart_head, "UART read without available data");
+    const uint8_t byte = uart_bytes[uart_tail];
+    uart_tail = (uart_tail + 1u) & MOCK_UART_CAPACITY_MASK;
+    return (char)byte;
+}
+
+// Deliver reports during the real orchestrator's USB-host service call.
+void tuh_task_ext(uint32_t timeout_ms, bool in_isr) {
+    ck_assert_uint_eq(timeout_ms, UINT32_MAX);
+    ck_assert(!in_isr);
+    ++usb_service_count;
+    while (hid_tail != hid_head) {
+        process_kbd_report(hid_reports[hid_tail].device, hid_reports[hid_tail].instance,
+            &hid_reports[hid_tail].report);
+        hid_tail = (hid_tail + 1u) & MOCK_HID_CAPACITY_MASK;
+    }
+}
+
+// Component menu fixtures begin observations only after the menu's first render.
+void hid_app_task(void) {
+    ++hid_service_count;
+    if (input_reader != NULL && input_routing_menu_active()
+        && display_task_count > input_reader_display_count) {
+        (void)input_routing_submit(INPUT_SOURCE_PET, input_reader());
+    }
+}
+
+input_system_request_t mock_take_request(void) {
+    input_controls_poll();
+    return input_routing_take_request();
+}
+
+bool mock_menu_requested(void) {
+    input_controls_poll();
+    return input_routing_pending_request().action == input_system_request_menu;
+}
+
+bool mock_input_empty(void) {
+    const input_system_request_t request = mock_take_request();
+    const tui_action_t navigation = input_routing_navigation();
+    return request.action == input_system_none && navigation == tui_action_none;
+}
+
+void mock_consume_requests(void) {
+    (void)mock_take_request();
+    input_controls_consume();
 }
 
 // ---------------------------------------------------------------------------
 // ROM, PET, and IEEE mocks
 // ---------------------------------------------------------------------------
 
-// Leaves character-ROM refresh inactive in host tests.
-void roms_refresh_char_rom() { }
 // Counts asynchronous NMI requests without emulating the ROM's tune.
-void pet_nmi(void) { pet_nmi_count++; }
+void __wrap_pet_nmi(void) { pet_nmi_count++; }
 
 // Reports NMI requests since the last fixture reset.
 unsigned int mock_pet_nmi_count(void) { return pet_nmi_count; }

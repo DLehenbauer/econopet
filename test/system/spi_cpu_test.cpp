@@ -214,7 +214,6 @@ TEST_F(SystemTest, SpiCommandsValidateBeforeMutation) {
                                                     {0xc0, 0x12, 0x34, 0x5a, 0},
                                                     {0x20, 0},
                                                     {0xa0},
-                                                    {0x10},
                                                     {0x21},
                                                     {0xd0, 0x12, 0x34, 0x5a}};
     const auto start = system.time();
@@ -229,6 +228,8 @@ TEST_F(SystemTest, SpiCommandsValidateBeforeMutation) {
     EXPECT_FALSE(system.spi().peek_failed());
     const std::array<uint8_t, 1> same{fpga::command_byte(fpga::SpiCommand::ReadSame)};
     EXPECT_NO_THROW(system.spi().command(same));
+    const std::array<uint8_t, 1> pop{fpga::command_byte(fpga::SpiCommand::ReadPop)};
+    EXPECT_NO_THROW(system.spi().command(pop));
 }
 
 TEST_F(SystemTest, SpiReachesProductionRegistersAndBothSramBanksUnderReset) {
