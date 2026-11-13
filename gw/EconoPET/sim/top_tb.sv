@@ -53,6 +53,98 @@ module top_tb;
         fixture_audio_det = 1'b0;
     endtask
 
+    // Verify internal reset without pad feedback, plus externally asserted reset.
+    task static reset_feedback_test;
+        logic [DATA_WIDTH-1:0] saved_cpu;
+
+        mock_system.spi_read_at(common_pkg::wb_reg_addr(REG_CPU), saved_cpu);
+
+        // Hold pad feedback inactive to model an output that has not reached the pad.
+        force mock_system.top.cpu_reset_n_i = 1'b1;
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+        `assert_equal(mock_system.top.main.cpu_reset_i, 1'b0);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_RESET_MASK);
+        `assert_equal(mock_system.top.cpu_reset_n_oe, 1'b1);
+        `assert_equal(mock_system.top.main.cpu_reset_i, 1'b1);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+        `assert_equal(mock_system.top.main.cpu_reset_i, 1'b0);
+        release mock_system.top.cpu_reset_n_i;
+
+        // External reset must still work when the FPGA is not requesting reset.
+        mock_system.manual_reset_n = 1'b0;
+        #1;
+        `assert_equal(mock_system.top.main.cpu_reset_i, 1'b1);
+        mock_system.manual_reset_n = 1'b1;
+        #1;
+        `assert_equal(mock_system.top.main.cpu_reset_i, 1'b0);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), saved_cpu);
+    endtask
+
+    // Check push-pull bypass and released inputs with deliberately stale pad values.
+    task static bus_feedback_test;
+        force audio_fixture.top.cpu_addr_i = 16'h5aa5;
+        force audio_fixture.top.cpu_addr_o = 16'ha55a;
+        force audio_fixture.top.cpu_data_i = 8'h5a;
+        force audio_fixture.top.cpu_data_o = 8'ha5;
+        force audio_fixture.top.cpu_we_n_i = 1'b1;
+        force audio_fixture.top.cpu_we_o = 1'b1;
+
+        // Driven signals use the output value, including the registered data output.
+        force audio_fixture.top.cpu_addr_merged_oe = 1'b1;
+        force audio_fixture.top.cpu_data_merged_oe = 1'b1;
+        force audio_fixture.top.cpu_we_n_oe = 1'b1;
+        #1;
+        `assert_equal(audio_fixture.top.main.cpu_addr_i, 16'ha55a);
+        `assert_equal(audio_fixture.top.main.cpu_data_i, 8'ha5);
+        `assert_equal(audio_fixture.top.main.cpu_we_i, 1'b1);
+
+        // Releasing ownership immediately restores the external inputs.
+        force audio_fixture.top.cpu_addr_merged_oe = 1'b0;
+        force audio_fixture.top.cpu_data_merged_oe = 1'b0;
+        force audio_fixture.top.cpu_we_n_oe = 1'b0;
+        #1;
+        `assert_equal(audio_fixture.top.main.cpu_addr_i, 16'h5aa5);
+        `assert_equal(audio_fixture.top.main.cpu_data_i, 8'h5a);
+        `assert_equal(audio_fixture.top.main.cpu_we_i, 1'b0);
+
+        release audio_fixture.top.cpu_addr_i;
+        release audio_fixture.top.cpu_addr_o;
+        release audio_fixture.top.cpu_data_i;
+        release audio_fixture.top.cpu_data_o;
+        release audio_fixture.top.cpu_we_n_i;
+        release audio_fixture.top.cpu_we_o;
+        release audio_fixture.top.cpu_addr_merged_oe;
+        release audio_fixture.top.cpu_data_merged_oe;
+        release audio_fixture.top.cpu_we_n_oe;
+    endtask
+
+    // Check both interrupt sources without relying on simulated pad feedback.
+    task static interrupt_feedback_test;
+        force audio_fixture.top.cpu_irq_n_i = 1'b1;
+        force audio_fixture.top.cpu_nmi_n_i = 1'b1;
+        force audio_fixture.top.cpu_irq_o = 1'b1;
+        force audio_fixture.top.cpu_nmi_o = 1'b1;
+        #1;
+        `assert_equal(audio_fixture.top.main.cpu_irq_i, 1'b1);
+        `assert_equal(audio_fixture.top.main.cpu_nmi_i, 1'b1);
+        force audio_fixture.top.cpu_irq_o = 1'b0;
+        force audio_fixture.top.cpu_nmi_o = 1'b0;
+        #1;
+        `assert_equal(audio_fixture.top.main.cpu_irq_i, 1'b0);
+        `assert_equal(audio_fixture.top.main.cpu_nmi_i, 1'b0);
+
+        // External assertions remain visible when the FPGA releases the lines.
+        force audio_fixture.top.cpu_irq_n_i = 1'b0;
+        force audio_fixture.top.cpu_nmi_n_i = 1'b0;
+        #1;
+        `assert_equal(audio_fixture.top.main.cpu_irq_i, 1'b1);
+        `assert_equal(audio_fixture.top.main.cpu_nmi_i, 1'b1);
+        release audio_fixture.top.cpu_irq_n_i;
+        release audio_fixture.top.cpu_nmi_n_i;
+        release audio_fixture.top.cpu_irq_o;
+        release audio_fixture.top.cpu_nmi_o;
+    endtask
+
     task static test_rw(
         input logic [RAM_ADDR_WIDTH-1:0] addr_i,
         input logic [    DATA_WIDTH-1:0] data_i
@@ -605,6 +697,9 @@ module top_tb;
         mock_system.init;
         future_gpio_test;
         audio_detect_test;
+        reset_feedback_test;
+        bus_feedback_test;
+        interrupt_feedback_test;
         // mock_system.ram_fill(17'h08000, 17'h087ff, 8'd66);      // Fill VRAM with fine checkerboard pattern
 
         spi_ram_test;

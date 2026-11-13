@@ -284,18 +284,20 @@ module main (
     // later, after a peripheral may have released its read-data output.
     // Delay the consumer strobe so same-edge consumers see the new capture.
     // Both soft cores and the physical CPU share this captured-data boundary.
-    // Video/WB keep the raw pins and raw strobe.
+    // Video/WB keep the boundary-resolved bus data and raw strobe.
     logic [DATA_WIDTH-1:0] cpu_data_q = '0;
     logic                  cpu_data_strobe_q = 1'b0;
     logic                  cpu_active_data_strobe_q = 1'b0;
     logic [DATA_WIDTH-1:0] read_data_q = '0;
+
+    // Live peripheral reads precede the registered pad output by one system clock.
+    wire [DATA_WIDTH-1:0] cpu_read_data = cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
+
     always_ff @(posedge sys_clock_i) begin
         if (cpu_data_strobe) begin
             cpu_data_q <= cpu_data_i;
-            // Injected read data must not race its own pad round trip
-            // (hardware-marginal; sim's ideal feedback hides it).
             if (active_be)
-                read_data_q <= cpu_data_mux_oe ? cpu_data_mux_out : cpu_data_i;
+                read_data_q <= cpu_read_data;
         end
         cpu_data_strobe_q <= cpu_data_strobe;
         // Qualify at capture, giving falling-edge consumers a registered enable.
@@ -596,8 +598,7 @@ module main (
         .crtc_cs_i(crtc_en),                // Asserted by address decoding when 'active_cpu_addr' is in CRTC range
         .crtc_rs_i(active_cpu_addr[0]),     // Register select (0 = write address/read status, 1 = read addressed register)
         .crtc_we_i(active_cpu_we),          // Direction of data transfers (0 = reading from CRTC, 1 = writing to CRTC)
-        // Soft-core writes must not depend on the one-cycle pad-enable feedback path.
-        .crtc_data_i(cpu_soft ? active_cpu_dout : cpu_data_i),
+        .crtc_data_i(cpu_data_i),
         .crtc_data_o(crtc_dout),            // CRTC -> CPU
         .crtc_data_oe(crtc_oe),             // Asserted when CPU is reading from CRTC
 

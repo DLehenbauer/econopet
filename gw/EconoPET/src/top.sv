@@ -8,6 +8,7 @@
 //
 //  - Normalizing signals to be active high signals.
 //  - Combining OE signals into a single bus-wide OE signal.
+//  - Bypassing pad feedback while driving bidirectional signals.
 //  - Drive currently unused signals to a known state.
 module top #(
     parameter integer unsigned WB_ADDR_WIDTH = 20,
@@ -29,16 +30,16 @@ module top #(
     output logic cpu_ready_o,
 
     input  logic [CPU_ADDR_WIDTH-1:0] cpu_addr_i,
-    output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
+    output wire  [CPU_ADDR_WIDTH-1:0] cpu_addr_o,
     output logic [CPU_ADDR_WIDTH-1:0] cpu_addr_oe,
 
     input  logic [DATA_WIDTH-1:0] cpu_data_i,
-    output logic [DATA_WIDTH-1:0] cpu_data_o,
+    output wire  [DATA_WIDTH-1:0] cpu_data_o,
     output logic [DATA_WIDTH-1:0] cpu_data_oe,
 
     input  logic cpu_we_n_i,
     output logic cpu_we_n_o,
-    output logic cpu_we_n_oe,
+    output wire  cpu_we_n_oe,
 
     input  logic cpu_irq_n_i,
     output logic cpu_irq_n_o,
@@ -188,7 +189,7 @@ module top #(
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for cpu_addr_o[15:0].
-    logic cpu_addr_merged_oe;
+    wire cpu_addr_merged_oe;
 
     assign cpu_addr_oe = {
         cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe, cpu_addr_merged_oe,
@@ -199,7 +200,7 @@ module top #(
 
     // Efinity Interface Designer generates a separate output enable for each bus signal.
     // Create a combined logic signal to control OE for cpu_data_o[7:0].
-    logic cpu_data_merged_oe;
+    wire cpu_data_merged_oe;
 
     assign cpu_data_oe = {
         cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe, cpu_data_merged_oe,
@@ -225,25 +226,37 @@ module top #(
     logic via_cs_o;
     assign via_cs_n_o  = !via_cs_o;
 
-    logic cpu_we_o, cpu_we_i;
-    assign cpu_we_i    = !cpu_we_n_i;
+    // While driving push-pull outputs, read the internal signals instead of the
+    // pads. Sampling a pad on the same clock edge that changes its drive races
+    // the pad round-trip and can return stale feedback.
+    logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
+    logic [DATA_WIDTH-1:0] cpu_data;
+    assign cpu_addr = cpu_addr_merged_oe ? cpu_addr_o : cpu_addr_i;
+    assign cpu_data = cpu_data_merged_oe ? cpu_data_o : cpu_data_i;
+
+    wire cpu_we_o;
+    logic cpu_we_i;
+    assign cpu_we_i    = cpu_we_n_oe ? cpu_we_o : !cpu_we_n_i;  // Do not race pad round-trip.
     assign cpu_we_n_o  = !cpu_we_o;
 
     // RES, IRQ, and NMI are active-low open-drain wire-or signals.  For consistency
     // and simplicity we convert these to active-high outputs and handle OE here.
+    // Internal assertions bypass the pad, but external assertions still dominate.
     logic cpu_reset_i, cpu_reset_o;
-    assign cpu_reset_i    = !cpu_reset_n_i;
-    assign cpu_reset_n_o  = 0;          // Wire-or only driven when asserted.
+    assign cpu_reset_i    = cpu_reset_o || !cpu_reset_n_i;      // Do not race pad round-trip.
+    assign cpu_reset_n_o  = 0;                                  // Wire-or only driven when asserted.
     assign cpu_reset_n_oe = cpu_reset_o;
 
-    logic cpu_irq_i, cpu_irq_o;
-    assign cpu_irq_i    = !cpu_irq_n_i;
-    assign cpu_irq_n_o  = 0;            // Wire-or only driven when asserted.
+    logic cpu_irq_i;
+    wire cpu_irq_o;
+    assign cpu_irq_i    = cpu_irq_o || !cpu_irq_n_i;            // Do not race pad round-trip.
+    assign cpu_irq_n_o  = 0;                                    // Wire-or only driven when asserted.
     assign cpu_irq_n_oe = cpu_irq_o;
 
-    logic cpu_nmi_i, cpu_nmi_o;
-    assign cpu_nmi_i    = !cpu_nmi_n_i;
-    assign cpu_nmi_n_o  = 0;            // Wire-or only driven when asserted.
+    logic cpu_nmi_i;
+    wire cpu_nmi_o;
+    assign cpu_nmi_i    = cpu_nmi_o || !cpu_nmi_n_i;            // Do not race pad round-trip.
+    assign cpu_nmi_n_o  = 0;                                    // Wire-or only driven when asserted.
     assign cpu_nmi_n_oe = cpu_nmi_o;
 
     // Configure unused spare pins as inputs.
@@ -267,11 +280,11 @@ module top #(
         .cpu_nmi_o(cpu_nmi_o),
         .cpu_sync_i(cpu_sync_i),
 
-        .cpu_addr_i(cpu_addr_i),
+        .cpu_addr_i(cpu_addr),
         .cpu_addr_o(cpu_addr_o),
         .cpu_addr_oe(cpu_addr_merged_oe),
 
-        .cpu_data_i(cpu_data_i),
+        .cpu_data_i(cpu_data),
         .cpu_data_o(cpu_data_o),
         .cpu_data_oe(cpu_data_merged_oe),
 
