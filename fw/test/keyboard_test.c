@@ -666,11 +666,13 @@ START_TEST(test_terminal_usb_ownership) {
 }
 END_TEST
 
-// Different HID codes mapped to one cell preserve each other's ownership.
+static const uint8_t ownership_columns[] = {2, 10, ECONOPET_KBD_COL_COUNT - 1};
+
+// Different HID codes preserve shared cells in PET and boundary KeyEx columns.
 START_TEST(test_terminal_mapped_cell_ownership) {
     input_routing_set_menu_active(false);
     system_state.terminal_session = terminal_session_remote;
-    const usb_keymap_entry_t key = {.row = 2, .col = 2};
+    const usb_keymap_entry_t key = {.row = 2, .col = ownership_columns[_i / 2]};
     usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
         system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
     keymap[HID_KEY_A] = keymap[HID_KEY_B] = key;
@@ -678,10 +680,19 @@ START_TEST(test_terminal_mapped_cell_ownership) {
     report_key(HID_KEY_B, 0);
     input_uart_process('a');
     input_task();
-    input_routing_cancel(INPUT_SOURCE_UART);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
-    report_key(0, 0);
+
+    if (_i % 2 == 0)
+        input_routing_cancel(INPUT_SOURCE_UART);
+    else
+        report_key(0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    if (_i % 2 == 0)
+        report_key(0, 0);
+    else
+        input_routing_cancel(INPUT_SOURCE_UART);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col], UINT8_MAX);
 }
@@ -1661,7 +1672,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_shared_menu_capacity);
     tcase_add_test(core, test_menu_typing_and_transition);
     tcase_add_loop_test(core, test_terminal_usb_ownership, 0, 2);
-    tcase_add_test(core, test_terminal_mapped_cell_ownership);
+    tcase_add_loop_test(core, test_terminal_mapped_cell_ownership, 0, 2 * count_of(ownership_columns));
     tcase_add_test(core, test_release_uses_saved_mapping);
     tcase_add_test(core, test_cancel_runtime_injection);
     tcase_add_test(core, test_terminal_modifier_ownership);
