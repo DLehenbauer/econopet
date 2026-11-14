@@ -16,7 +16,7 @@
 #include "fatal.h"
 #include "global.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "tape_dir.h"
 
 // BASIC program start address (universal across all PET ROM versions). The

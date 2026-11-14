@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "hardware_contract.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #ifdef __cplusplus
 extern "C" {

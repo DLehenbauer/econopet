@@ -111,7 +111,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
 #include "display/window.h"
 #include "driver.h"
 #include "roms/roms.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #define FATAL_COLUMNS 40
 #define FATAL_ROWS    25

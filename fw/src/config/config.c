@@ -7,7 +7,7 @@
 #include "driver.h"
 #include "fatal.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 
 typedef struct parser_s {
     yaml_parser_t parser;

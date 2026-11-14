@@ -5,7 +5,7 @@
 #include "driver.h"
 
 #include "input/keyboard_core.h"
-#include "system_state.h"
+#include "system/state.h"
 
 /** Exchange input and video state each input iteration, using the driver's SPI boundary. */
 void sync_state(void) {

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "system_state.h"
+#include "system/state.h"
 
 #define MENU_ROM_START_ADDRESS 0xFF00
 

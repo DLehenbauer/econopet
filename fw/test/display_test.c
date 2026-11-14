@@ -5,7 +5,7 @@
 #include "display_test.h"
 
 #include "mock.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #define TEST_VIDEO_RAM_ADDRESS 0x8000u
 #define TEST_VIDEO_RAM_UNIT_BYTES 1024u

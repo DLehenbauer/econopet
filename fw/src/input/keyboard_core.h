@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "input/input_actions.h"
-#include "system_state.h"
+#include "system/state.h"
 
 // Active-low PET-format matrices, indexed by column with one bit per row.
 // PET uses columns 0-9. Columns A-F support KeyEx extensions.

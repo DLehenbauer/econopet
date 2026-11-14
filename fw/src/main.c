@@ -21,7 +21,7 @@
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "ui/cli.h"
 #include "usb/usb.h"
 

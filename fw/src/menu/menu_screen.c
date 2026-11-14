@@ -7,7 +7,7 @@
 #include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
-#include "system_state.h"
+#include "system/state.h"
 
 // Both 40- and 80-column displays address at most 2 KiB of character RAM.
 #define MENU_CHARACTER_RAM_ADDRESS 0x8000u

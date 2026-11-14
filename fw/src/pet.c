@@ -10,7 +10,7 @@
 #include "input/keyboard_core.h"
 #include "menu/menu.h"
 #include "sd/activity.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "usb/keyboard.h"
 
 #define STORAGE_IDLE_POLL_US 1000u

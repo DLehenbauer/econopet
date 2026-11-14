@@ -7,7 +7,7 @@
 #include "menu/menu.h"
 #include "pet.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "usb/keyboard.h"
 
 const uint8_t __in_flash(".rom_chars_e800") rom_chars_e800[] = {

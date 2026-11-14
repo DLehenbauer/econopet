@@ -2629,7 +2629,7 @@ to obtain elapsed cycles. Stream diagnostics include units.
 
 Use the production `cpu_type_t` from [`driver.h`](../../fw/src/driver.h) and
 `pet_video_type_t` and `pet_keyboard_model_t` from
-[`system_state.h`](../../fw/src/system_state.h) directly. Hardware CPU-selection
+[`system_state.h`](../../fw/src/system/state.h) directly. Hardware CPU-selection
 APIs must reject `CPU_AUTO`, which is firmware policy, and reserved values.
 USB keymap files use
 business-first, graphics-second model order and firmware indexes them directly

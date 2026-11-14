@@ -6,6 +6,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "system_state.h"
+#include "system/state.h"
 
 void video_init();
