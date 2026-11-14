@@ -29,3 +29,9 @@ void input_init(void);
 // - Physical PET snapshots -> decoded menu presses (runtime typing is hardware-owned)
 // - UART -> CLI or shared remote routing according to the selected terminal mode
 void input_task(void);
+
+/** Acquire a complete physical keyboard snapshot and route navigation to the menu. */
+void input_menu_begin(void (*service)(void));
+
+/** Require a fresh physical release, then retire menu input ownership. */
+void input_menu_end(void (*service)(void));
