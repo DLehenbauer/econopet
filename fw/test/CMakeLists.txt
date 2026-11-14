@@ -50,7 +50,6 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
     ${SRC_DIR}/menu/menu_browser.c
-    ${SRC_DIR}/menu/menu_screen.c
     ${SRC_DIR}/menu/menu_ui.c
     ${SRC_DIR}/system/state.c
     ${SRC_DIR}/ui/tui.c

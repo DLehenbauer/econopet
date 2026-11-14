@@ -13,7 +13,6 @@
 #include "input/input.h"
 #include "input/input_controls.h"
 #include "input/input_routing.h"
-#include "menu_screen.h"
 #include "menu_ui.h"
 #include "pet.h"
 #include "roms/roms.h"
@@ -208,7 +207,7 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
     // Blank the menu before configuration reload changes the character ROM or
     // reset changes the charset.
     set_cpu(CPU_HALT);
-    menu_screen_clear();
+    display_clear();
 
     load_config(setup_sink, menu.config_index, menu.config_changed);
     menu.config_changed = false;

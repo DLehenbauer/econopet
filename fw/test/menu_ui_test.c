@@ -24,7 +24,6 @@
 #include "input/input_uart.h"
 #include "input/input_routing.h"
 #include "menu/menu_config.h"
-#include "menu/menu_screen.h"
 #include "menu/menu_ui.h"
 #include "menu_browser_test.h"
 #include "mock.h"
@@ -665,7 +664,7 @@ START_TEST(test_charset_transition_blanks_both_displays) {
     memset(system_state.video_char_buffer + 0x800, 0x5a, 0x800);
     spi_write(0x8000, system_state.video_char_buffer, 0x1000);
     set_cpu(CPU_HALT);
-    menu_screen_clear();
+    display_clear();
     ck_assert_uint_eq(system_state.video_char_buffer[0x800], 0x5a);
     ck_assert_uint_eq(spi_read_at(0x8800), 0x5a);
 

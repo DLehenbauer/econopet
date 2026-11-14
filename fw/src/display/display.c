@@ -10,10 +10,6 @@
 #include "fatal.h"
 #include "system/state.h"
 
-#define VIDEO_RAM_ADDRESS 0x8000u
-#define VIDEO_RAM_UNIT_BYTES 0x400u
-#define VIDEO_COLOR_OFFSET (2u * VIDEO_RAM_UNIT_BYTES)
-
 // Terminal escape sequences
 static const char* const term_home = "\e[H";
 static const char* const term_reverse_off = "\e[m";
@@ -97,6 +93,14 @@ static void display_sync_range(const video_source_t video_source, const size_t o
         spi_read(VIDEO_RAM_ADDRESS + offset, length, buffer);
     } else {
         spi_write(VIDEO_RAM_ADDRESS + offset, buffer, length);
+    }
+}
+
+void display_clear(void) {
+    memset(system_state.video_char_buffer, CH_SPACE, VIDEO_PLANE_CAPACITY);
+    display_sync_range(video_source_firmware, 0, VIDEO_PLANE_CAPACITY);
+    if (display_term_video_active()) {
+        display_term_refresh();
     }
 }
 
