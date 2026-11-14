@@ -7,8 +7,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "display/window.h"
-
 /** PET address corresponding to the start of the shared video buffer. */
 #define VIDEO_RAM_ADDRESS 0x8000u
 /** Size in bytes of each character or color span in 40-column ColourPET mode. */
@@ -42,7 +40,3 @@ void display_clear(void);
 void display_term_begin(void);   // Enter alternate screen, hide cursor
 void display_term_end(void);     // Exit alternate screen, show cursor
 void display_term_refresh(void); // Immediately render video buffer to terminal
-
-// Window-based terminal display (for fatal/config error display)
-void display_window_begin(const window_t* window);   // Enter alternate screen, fill window
-void display_window_show(const window_t* window);    // Render window to terminal
