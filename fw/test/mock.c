@@ -36,8 +36,8 @@ static uint8_t mock_char_rom[1u << ECONOPET_BRAM_ADDR_WIDTH];
 static tui_action_t (*input_reader)(void);
 static unsigned int input_reader_display_count;
 static bool button_pressed;
-static uint8_t physical_matrix[KEY_COL_COUNT];
-static uint8_t published_matrix[KEY_COL_COUNT];
+static uint8_t physical_matrix[ECONOPET_KBD_COL_COUNT];
+static uint8_t published_matrix[ECONOPET_KBD_COL_COUNT];
 static uint8_t fpga_crtc[CRTC_REG_COUNT];
 static unsigned int matrix_publish_count;
 static unsigned int spi_read_count, spi_write_count;
@@ -616,7 +616,7 @@ void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_
 
 void mock_input_button_level(bool pressed) { button_pressed = pressed; }
 
-void mock_input_pet_snapshot(const uint8_t matrix[KEY_COL_COUNT]) {
+void mock_input_pet_snapshot(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]) {
     memcpy(physical_matrix, matrix, sizeof(physical_matrix));
 }
 

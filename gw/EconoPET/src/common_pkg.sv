@@ -407,9 +407,10 @@ package common_pkg;
     // PET
     //
 
-    // The PET keyboard matrix is 8 rows x 10 columns.
-    localparam int unsigned KBD_ROW_COUNT = 8;      // 0-7 (A-F,H-J)
-    localparam int unsigned KBD_COL_COUNT = 10;     // 0-9 (1-10)
+    // The CBM/PET keyboard has 10 columns, but KEY[A:D] (exposed by the KeyEx
+    // header) are capable of addressing 16 columns.
+    localparam int unsigned KBD_ROW_COUNT = 8;      // 0-7  (A-F,H,J)
+    localparam int unsigned KBD_COL_COUNT = 16;     // 0-15 (1-16)
     localparam int unsigned KBD_COL_WIDTH = $clog2(KBD_COL_COUNT);
     
     // PIA: Peripheral Interface Adapter

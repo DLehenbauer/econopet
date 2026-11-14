@@ -8,10 +8,13 @@
 #include "input/input_routing.h"
 #include "input/keyboard_core.h"
 
-// Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
+// Reserve matrix position 7/F as the no-event sentinel.  KeyEx extensions
+// should avoid mapping this key.
 const key_event_t key_event_none = PET_KEY_EVENT(false, 0x7, 0xF);
-static uint8_t previous[KEY_COL_COUNT] = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+
+static uint8_t previous[ECONOPET_KBD_COL_COUNT] = {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
 static unsigned int r, c;
 
@@ -24,9 +27,9 @@ static void next_rc(unsigned int* row, unsigned int* col) {
     unsigned int r = *row;
     unsigned int c = *col;
 
-    r = (r + 1) % 8;
+    r = (r + 1) % ECONOPET_KBD_ROW_COUNT;
     if (r == 0) {
-        c = (c + 1) % KEY_COL_COUNT;
+        c = (c + 1) % ECONOPET_KBD_COL_COUNT;
     }
 
     *row = r;
@@ -42,8 +45,8 @@ key_event_t next_key_event(const uint8_t* matrix) {
     key_event_t event = key_event_none;
 
     do {
-        assert(r < 8);
-        assert(c < KEY_COL_COUNT);
+        assert(r < ECONOPET_KBD_ROW_COUNT);
+        assert(c < ECONOPET_KBD_COL_COUNT);
 
         // Check if the bit is set in the current (row, column) position.
         const uint8_t mask = 1 << r;
@@ -64,7 +67,7 @@ key_event_t next_key_event(const uint8_t* matrix) {
     return event;
 }
 
-bool is_key_down(const uint8_t matrix[KEY_COL_COUNT], key_event_t event) {
+bool is_key_down(const uint8_t matrix[ECONOPET_KBD_COL_COUNT], key_event_t event) {
     assert(event != key_event_none);
  
     const unsigned int row = PET_KEY_ROW(event);
@@ -74,13 +77,13 @@ bool is_key_down(const uint8_t matrix[KEY_COL_COUNT], key_event_t event) {
     return (matrix[col] & mask) == 0;
 }
 
-int keyscan_is_shifted(const uint8_t matrix[KEY_COL_COUNT]) {
+int keyscan_is_shifted(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]) {
     const bool business = system_state.pet_keyboard_model == pet_keyboard_model_business;
     return is_key_down(matrix, business ? PET_KEY_LSHIFT_B : PET_KEY_LSHIFT_N)
         || is_key_down(matrix, business ? PET_KEY_RSHIFT_B : PET_KEY_RSHIFT_N);
 }
 
-tui_action_t keyscan_navigation(const uint8_t matrix[KEY_COL_COUNT]) {
+tui_action_t keyscan_navigation(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]) {
     static const key_event_t pet_keys[] = {
         // Graphics Keyboard
         PET_KEY_DOWN_N,
@@ -168,7 +171,7 @@ static bool physical_chord(bool* other_key) {
     else if (!pet_left && !pet_right)
         injected_shifts_blocked = false;
     *other_key = false;
-    for (unsigned int col = 0; col < KEY_COL_COUNT; ++col) {
+    for (unsigned int col = 0; col < ECONOPET_KBD_COL_COUNT; ++col) {
         uint8_t allowed = 0;
         if (col == PET_KEY_COL(left)) allowed |= 1u << PET_KEY_ROW(left);
         if (col == PET_KEY_COL(right)) allowed |= 1u << PET_KEY_ROW(right);

@@ -10,10 +10,9 @@
 #include "system_state.h"
 
 // Active-low PET-format matrices, indexed by column with one bit per row.
-#define KEY_COL_COUNT 10
-#define KEY_ROW_COUNT 8
-extern uint8_t usb_key_matrix[KEY_COL_COUNT];
-extern uint8_t pet_key_matrix[KEY_COL_COUNT];
+// PET uses columns 0-9. Columns A-F support KeyEx extensions.
+extern uint8_t usb_key_matrix[ECONOPET_KBD_COL_COUNT];
+extern uint8_t pet_key_matrix[ECONOPET_KBD_COL_COUNT];
 
 /** Apply modifier ownership, releases, presses, then the final modifier update as one batch. */
 void keyboard_core_submit(const keyboard_batch_t* batch);

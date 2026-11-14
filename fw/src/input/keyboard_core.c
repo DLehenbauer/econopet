@@ -9,7 +9,7 @@
 #include "diag/log/log.h"
 #include "fatal.h"
 
-uint8_t usb_key_matrix[KEY_COL_COUNT] = {
+uint8_t usb_key_matrix[ECONOPET_KBD_COL_COUNT] = {
     /* 0 */ 0xff,
     /* 1 */ 0xff,
     /* 2 */ 0xff,
@@ -20,9 +20,15 @@ uint8_t usb_key_matrix[KEY_COL_COUNT] = {
     /* 7 */ 0xff,
     /* 8 */ 0xff,
     /* 9 */ 0xff,
+    /* 10 */ 0xff,
+    /* 11 */ 0xff,
+    /* 12 */ 0xff,
+    /* 13 */ 0xff,
+    /* 14 */ 0xff,
+    /* 15 */ 0xff,
 };
 
-uint8_t pet_key_matrix[KEY_COL_COUNT] = {
+uint8_t pet_key_matrix[ECONOPET_KBD_COL_COUNT] = {
     /* 0 */ 0xff,
     /* 1 */ 0xff,
     /* 2 */ 0xff,
@@ -33,6 +39,12 @@ uint8_t pet_key_matrix[KEY_COL_COUNT] = {
     /* 7 */ 0xff,
     /* 8 */ 0xff,
     /* 9 */ 0xff,
+    /* 10 */ 0xff,
+    /* 11 */ 0xff,
+    /* 12 */ 0xff,
+    /* 13 */ 0xff,
+    /* 14 */ 0xff,
+    /* 15 */ 0xff,
 };
 
 // All injected producers share the configured symbolic or positional HID-to-PET map.
@@ -81,7 +93,7 @@ static uint16_t active_keymap_override_count;
 static bool pending_led_sync;
 
 static uint8_t active_modifiers;
-static uint16_t matrix_owners[KEY_COL_COUNT][KEY_ROW_COUNT];
+static uint16_t matrix_owners[ECONOPET_KBD_COL_COUNT][ECONOPET_KBD_ROW_COUNT];
 static usb_keymap_entry_t modifier_mapping[CHAR_BIT];
 static usb_keymap_entry_t dispatched_mapping[KEYCODE_COUNT];
 
@@ -215,7 +227,7 @@ static void dequeue_key_event(void) {
 
 /** Press a mapped cell only when its first logical key becomes active. */
 static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
-    if (row >= KEY_ROW_COUNT || col >= KEY_COL_COUNT) {
+    if (row >= ECONOPET_KBD_ROW_COUNT || col >= ECONOPET_KBD_COL_COUNT) {
         log_debug("Keyboard: Key down: %d=(undefined)", keycode);
         return;
     }
@@ -230,7 +242,7 @@ static void key_down(uint8_t keycode, uint8_t row, uint8_t col) {
 
 /** Release a mapped cell only when its final logical key becomes inactive. */
 static void key_up(uint8_t keycode, uint8_t row, uint8_t col) {
-    if (row >= KEY_ROW_COUNT || col >= KEY_COL_COUNT) {
+    if (row >= ECONOPET_KBD_ROW_COUNT || col >= ECONOPET_KBD_COL_COUNT) {
         log_debug("Keyboard: Key up: %d=(undefined)", keycode);
         return;
     }

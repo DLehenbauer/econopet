@@ -624,13 +624,13 @@ START_TEST(test_menu_typing_and_transition) {
     report_key(HID_KEY_T, KEYBOARD_MODIFIER_LEFTSHIFT);
     input_uart_process('t');
     dispatch_all_key_events();
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     ck_assert_int_eq(input_routing_navigation(), tui_action_none);
     input_routing_set_menu_active(false);
     report_key(HID_KEY_T, KEYBOARD_MODIFIER_LEFTSHIFT);
     dispatch_all_key_events();
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     report_key(0, 0);
 }
@@ -666,11 +666,13 @@ START_TEST(test_terminal_usb_ownership) {
 }
 END_TEST
 
-// Different HID codes mapped to one cell preserve each other's ownership.
+static const uint8_t ownership_columns[] = {2, 10, ECONOPET_KBD_COL_COUNT - 1};
+
+// Different HID codes preserve shared cells in PET and boundary KeyEx columns.
 START_TEST(test_terminal_mapped_cell_ownership) {
     input_routing_set_menu_active(false);
     system_state.terminal_session = terminal_session_remote;
-    const usb_keymap_entry_t key = {.row = 2, .col = 2};
+    const usb_keymap_entry_t key = {.row = 2, .col = ownership_columns[_i / 2]};
     usb_keymap_entry_t* const keymap = system_state.usb_keymap_data[
         system_state.pet_keyboard_model][usb_keymap_kind_symbolic];
     keymap[HID_KEY_A] = keymap[HID_KEY_B] = key;
@@ -678,10 +680,19 @@ START_TEST(test_terminal_mapped_cell_ownership) {
     report_key(HID_KEY_B, 0);
     input_uart_process('a');
     input_task();
-    input_routing_cancel(INPUT_SOURCE_UART);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
-    report_key(0, 0);
+
+    if (_i % 2 == 0)
+        input_routing_cancel(INPUT_SOURCE_UART);
+    else
+        report_key(0, 0);
+    dispatch_all_key_events();
+    ck_assert_uint_eq(usb_key_matrix[key.col] & (1u << key.row), 0);
+    if (_i % 2 == 0)
+        report_key(0, 0);
+    else
+        input_routing_cancel(INPUT_SOURCE_UART);
     dispatch_all_key_events();
     ck_assert_uint_eq(usb_key_matrix[key.col], UINT8_MAX);
 }
@@ -717,7 +728,7 @@ START_TEST(test_cancel_runtime_injection) {
     for (int i = 0; i < 8; ++i)
         input_task();
     ck_assert_int_eq(input_routing_navigation(), tui_action_none);
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     pet_key_matrix[PET_KEY_COL(physical)] |= 1u << PET_KEY_ROW(physical);
     keyscan_sample();
@@ -1163,7 +1174,7 @@ START_TEST(test_pet_menu_chord_cleared_across_reset) {
     system_state.pet_keyboard_model = _i == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
     const key_event_t left = _i == 0 ? PET_KEY_LSHIFT_N : PET_KEY_LSHIFT_B;
     const key_event_t right = _i == 0 ? PET_KEY_RSHIFT_N : PET_KEY_RSHIFT_B;
-    uint8_t matrix[KEY_COL_COUNT];
+    uint8_t matrix[ECONOPET_KBD_COL_COUNT];
     memset(matrix, UINT8_MAX, sizeof(matrix));
     matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
     matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));
@@ -1661,7 +1672,7 @@ Suite* keyboard_suite(void) {
     tcase_add_test(core, test_shared_menu_capacity);
     tcase_add_test(core, test_menu_typing_and_transition);
     tcase_add_loop_test(core, test_terminal_usb_ownership, 0, 2);
-    tcase_add_test(core, test_terminal_mapped_cell_ownership);
+    tcase_add_loop_test(core, test_terminal_mapped_cell_ownership, 0, 2 * count_of(ownership_columns));
     tcase_add_test(core, test_release_uses_saved_mapping);
     tcase_add_test(core, test_cancel_runtime_injection);
     tcase_add_test(core, test_terminal_modifier_ownership);

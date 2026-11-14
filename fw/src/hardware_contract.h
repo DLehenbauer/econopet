@@ -32,6 +32,10 @@
 #define ECONOPET_WB_IEEE_BASE_ADDR 0x70000u
 #define ECONOPET_WB_IO_BASE_ADDR 0x78000u
 
+// Keyboard matrix dimensions (See common_pkg.sv for more details)
+#define ECONOPET_KBD_ROW_COUNT 8u
+#define ECONOPET_KBD_COL_COUNT 16u
+
 // Register-file Wishbone byte addresses (See common_pkg.sv for more details)
 #define ECONOPET_WB_STATUS_ADDR 0x40000u
 #define ECONOPET_WB_CPU_ADDR 0x40001u
