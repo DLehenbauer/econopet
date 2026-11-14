@@ -218,13 +218,18 @@ module main (
     // shared CPU clock.
     assign pia1_clock_o = cpu_clock_o;
 
-    // Physical 6502 bus-enable. In 6809 mode the physical CPU stays socketed
-    // but off the bus (BE low -> its address/data/R-W buffers are high-Z) so
-    // the soft 6809 drives the shared bus instead. In 6502 mode the arbiter's
-    // window (timing_cpu_be) enables the physical CPU to own the bus. See
-    // hw/rev-b/.../CPU.kicad_sch: "When the FPGA drives the bus, it deasserts
-    // BE ... to place the CPU's Address, Data, and R/~W buffers in high-Z."
+    // cpu_bus_be describes physical bus ownership, independent of execution.
+    // The arbiter grants the socketed CPU an address/data window, but a pending
+    // I/O-controller reservation preempts that grant so the FPGA can borrow
+    // the slot. READY is intentionally absent: a stopped W65C02S must retain
+    // bus-buffer ownership until BE preempts it for an I/O bridge transaction.
+    //
+    // cpu_run_be instead describes an active guest access. It combines physical
+    // bus ownership with RDY and is used for all internal decode, strobes, and
+    // peripheral side effects. Thus READY stops execution without making the
+    // FPGA and physical CPU contend for address/R-W ownership.
     wire cpu_bus_be = timing_cpu_be && !io_ctl_bus_reserve;
+    wire cpu_run_be = cpu_bus_be && cpu_ready_o;
     assign cpu_be_o = cpu_soft ? 1'b0 : cpu_bus_be;
 
     //
@@ -366,12 +371,12 @@ module main (
     // Reset keeps E/Q clocking so the 6809 can sample nRESET. Bridge
     // reservations still block its bus access.
     wire                      active_be          = cpu_is_6809 ? cpu6809_be && !io_ctl_bus_reserve
-                                                               : cpu_bus_be;
+                                                               : cpu_run_be;
     wire                      active_addr_strobe = cpu_is_6809 ? cpu6809_addr_strobe && !io_ctl_bus_reserve
-                                                               : cpu_addr_strobe;
+                                                               : cpu_addr_strobe && cpu_run_be;
     wire                      active_data_strobe = cpu_active_data_strobe_q;
     wire                      active_wr_en       = cpu_is_6809 ? cpu6809_wr_en && !io_ctl_bus_reserve
-                                                               : cpu_wr_en;
+                                                               : cpu_wr_en && cpu_run_be;
 
     wire cpu_wr_strobe = active_data_strobe && active_cpu_we;
 
@@ -959,10 +964,11 @@ module main (
     assign ram_we_o  = (active_wr_en && active_cpu_we && ram_en && !is_readonly
                         && !superpet_wp) || ram_ctl_we;
 
-    // A soft core has no bus pins, so the FPGA drives the address during its
-    // window and during every WB<->RAM bridge slot. With the physical 6502
-    // selected, the FPGA drives only the bridge slots.
-    assign cpu_addr_oe = cpu_soft || !active_be;
+    // A soft core has no bus pins, so the FPGA always drives its address bus
+    // window and every WB<->RAM slot. With the physical 6502 selected, address
+    // ownership follows cpu_bus_be, not cpu_run_be: clearing READY pauses the
+    // CPU's effects but does not transfer its address-buffer ownership.
+    assign cpu_addr_oe = cpu_soft || !cpu_bus_be;
 
     // SRAM A12-A14 have no dedicated FPGA pins -- they are wired to the shared
     // bus. With the soft 6809 the FPGA drives the bus anyway, so 16-bank

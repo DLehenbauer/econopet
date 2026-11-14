@@ -91,6 +91,7 @@ module top_tb;
         bit   [    DATA_WIDTH-1:0] value;
 
         $display("[%t] Begin CPU/RAM Test", $time);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         for (i = 0; i < 10; i = i + 1) begin
             addr = $urandom();
@@ -110,8 +111,8 @@ module top_tb;
 
         $display("[%t] Begin USB Keyboard Test", $time);
 
-        // Release the power-on CPU reset before observing keyboard scans.
-        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+        // Release physical CPU reset.
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
             value = { 4'b1011, col[3:0] };
@@ -135,7 +136,8 @@ module top_tb;
                 mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h02);
                 mock_system.spi_read_at(common_pkg::wb_kbd_addr(col), dout);
                 `assert_equal(dout, 8'hff);
-                mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
+                mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
+                mock_system.cpu_write(16'hE810 + PIA_PORTA, value);
             end
 
             // Keyboard interception should not interfere with RAM access.
@@ -146,7 +148,6 @@ module top_tb;
             mock_system.cpu_read(16'hE810 + PIA_PORTB, dout);
             `assert_equal(dout, value);
         end
-
         $display("[%t] End USB Keyboard Test", $time);
     endtask
 
@@ -188,6 +189,7 @@ module top_tb;
         logic [DATA_WIDTH-1:0] dout;
 
         $display("[%t] Begin SPI/Physical I/O Test", $time);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), 8'h00);
 
         // mock_system's physical I/O model returns $10. This crosses a CPU
         // slot before the SPI controller regains its grant to receive ACK.
@@ -201,6 +203,7 @@ module top_tb;
         mock_system.spi_read_at(common_pkg::wb_io_addr(7'h12), dout);
         `assert_equal(dout, 8'ha5)
         mock_system.set_io_data(8'h10);
+        mock_system.spi_write_at(common_pkg::wb_reg_addr(REG_CPU), REG_CPU_READY_MASK);
 
         $display("[%t] End SPI/Physical I/O Test", $time);
     endtask
@@ -397,6 +400,16 @@ module top_tb;
         $display("[%t]   Captured address = $%02x%02x", $time, addr_hi, addr_lo);
         `assert_equal(addr_lo, 8'h7A);
         `assert_equal(addr_hi, 8'h02);
+
+        // RDY stops guest accesses, but BE remains with the physical CPU until
+        // an I/O-controller reservation preempts the next raw bus slot.
+        @(posedge mock_system.top.main.cpu_bus_be);
+        #1;
+        `assert_equal(mock_system.top.main.cpu_bus_be, 1'b1);
+        `assert_equal(mock_system.top.main.cpu_run_be, 1'b0);
+        `assert_equal(mock_system.top.main.active_be, 1'b0);
+        `assert_equal(mock_system.cpu_be, 1'b1);
+        `assert_equal(mock_system.top_addr_oe, 1'b0);
 
         // ---- Patch sequence: INC $DB / STP / DEC $DB / STP ----
         //

@@ -81,6 +81,7 @@ module mock_system (
 
         .cpu_be_o(cpu_be),
         .cpu_ready_o(cpu_ready_o),
+        .cpu_reset_n_i(cpu_reset_n_o),
         .cpu_reset_n_o(top_reset_n),
         .cpu_reset_n_oe(top_reset_n_oe),
         .cpu_clock_o(cpu_clock_o),
