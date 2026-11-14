@@ -8,7 +8,7 @@
 #include "driver.h"
 #include "dvi/dvi.h"
 #include "fatal.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #define VIDEO_RAM_ADDRESS 0x8000u
 #define VIDEO_RAM_UNIT_BYTES 0x400u

@@ -6,7 +6,7 @@
 
 #include "hardware_contract.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 
 // Check independent wire levels and enum encodings.
 START_TEST(test_configuration_pin_levels) {

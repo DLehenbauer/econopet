@@ -25,7 +25,7 @@
 #include "roms/checksum.h"
 #include "roms/roms.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "tape.h"
 #include "usb/keyboard.h"
 

@@ -6,7 +6,7 @@
 #include "input/keyboard_core.h"
 #include "usb/keyscan.h"
 #include "input/input.h"
-#include "system_state.h"
+#include "system/state.h"
 
 START_TEST(test_keyscan_next_key_event) {
     uint8_t matrix[ECONOPET_KBD_COL_COUNT] = {

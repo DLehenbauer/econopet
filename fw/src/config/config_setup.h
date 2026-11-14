@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "tape.h"
 
 typedef struct binary_s {

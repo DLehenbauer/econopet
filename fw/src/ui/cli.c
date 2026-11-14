@@ -13,7 +13,7 @@
 #include "input/input_routing.h"
 #include "pet.h"
 #include "reset.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "version.h"
 
 // CLI state

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "system_state.h"
+#include "system/state.h"
 
 /**
  * Display geometry calculated from CRTC registers.

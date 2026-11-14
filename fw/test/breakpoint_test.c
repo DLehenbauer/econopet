@@ -9,7 +9,7 @@
 #include "driver.h"
 #include "mock.h"
 #include "pet.h"
-#include "system_state.h"
+#include "system/state.h"
 
 static void reset_breakpoint_test(void) {
     // Breakpoint tests share a process, so remove entries left by the prior test

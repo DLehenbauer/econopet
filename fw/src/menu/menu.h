@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "system_state.h"
+#include "system/state.h"
 
 void menu_enter(bool is_boot);
 void read_keymap(const char* filename, system_state_t* config);

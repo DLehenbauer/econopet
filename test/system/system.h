@@ -32,7 +32,7 @@
 #include "io.h"
 #include "registers.h"
 #include "roms.h"
-#include "system_state.h"
+#include "system/state.h"
 
 namespace system_detail {
 template <class> struct IsReferenceWrapper : std::false_type {};

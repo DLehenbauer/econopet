@@ -19,7 +19,7 @@
 #include "menu/menu_config.h"
 #include "mock.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #define TEST_UNIT_COUNT 4u
 #define TEST_SLOTS_PER_UNIT 2u

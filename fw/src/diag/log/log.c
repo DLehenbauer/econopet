@@ -4,7 +4,7 @@
 #include "pch.h"
 #include "log.h"
 
-#include "system_state.h"
+#include "system/state.h"
 #include "version.h"
 
 // Ring buffer for a single log level

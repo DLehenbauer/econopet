@@ -2,7 +2,7 @@
 // https://github.com/dlehenbauer/econopet
 
 #include "pch.h"
-#include "system_state.h"
+#include "system/state.h"
 
 system_state_t system_state = {
     .pet_keyboard_model = pet_keyboard_model_graphics,

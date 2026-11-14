@@ -21,7 +21,7 @@
 #include "input/input_uart.h"
 #include "pet.h"
 #include "reset.h"
-#include "system_state.h"
+#include "system/state.h"
 #include "input/term_inject.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"

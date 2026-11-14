@@ -63,7 +63,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/menu/menu_ui.c
     ${FW_SRC_DIR}/display/display.c
     ${FW_SRC_DIR}/display/window.c
-    ${FW_SRC_DIR}/system_state.c
+    ${FW_SRC_DIR}/system/state.c
     ${FW_SRC_DIR}/tape.c
     ${FW_SRC_DIR}/ieee/diskimage.c
     ${FW_SRC_DIR}/ieee/dos_media.c

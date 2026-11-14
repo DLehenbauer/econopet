@@ -16,7 +16,7 @@
 #include "menu/menu_config.h"
 #include "mock.h"
 #include "sd/sd.h"
-#include "system_state.h"
+#include "system/state.h"
 
 #define TEST_CONFIG_FIRST 0
 #define TEST_CONFIG_SECOND 1

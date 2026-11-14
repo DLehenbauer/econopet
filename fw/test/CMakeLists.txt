@@ -52,7 +52,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/menu/menu_screen.c
     ${SRC_DIR}/menu/menu_ui.c
-    ${SRC_DIR}/system_state.c
+    ${SRC_DIR}/system/state.c
     ${SRC_DIR}/ui/tui.c
     ${SRC_DIR}/ui/cli.c
     ${SRC_DIR}/ui/console.c
