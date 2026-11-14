@@ -9,6 +9,21 @@
 
 #include "display/window.h"
 
+/** PET address corresponding to the start of the shared video buffer. */
+#define VIDEO_RAM_ADDRESS 0x8000u
+/** Size in bytes of each character or color span in 40-column ColourPET mode. */
+#define VIDEO_RAM_UNIT_BYTES 0x400u
+/** Maximum character or color plane size in bytes for 40- and 80-column rendering. */
+#define VIDEO_PLANE_CAPACITY 0x800u
+/** Byte offset of color attributes within the shared video buffer. */
+#define VIDEO_COLOR_OFFSET VIDEO_PLANE_CAPACITY
+/** Color attribute capacity in bytes, including 80-column rendering. */
+#define VIDEO_COLOR_CAPACITY VIDEO_PLANE_CAPACITY
+/** PET address of the color plane when color RAM is enabled. */
+#define VIDEO_COLOR_ADDRESS (VIDEO_RAM_ADDRESS + VIDEO_COLOR_OFFSET)
+/** White foreground (low nibble) on black background (high nibble). */
+#define VIDEO_DEFAULT_ATTRIBUTE 0x0fu
+
 // Initialize display subsystem
 void display_init(void);
 
@@ -19,6 +34,9 @@ void display_task(void);
 
 /** Report whether the video buffer belongs on the terminal. */
 bool display_term_video_active(void);
+
+/** Clear and upload the full character plane. The caller must halt the PET CPU. */
+void display_clear(void);
 
 // Terminal ANSI rendering control (for menu mode)
 void display_term_begin(void);   // Enter alternate screen, hide cursor

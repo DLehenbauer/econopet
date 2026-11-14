@@ -9,9 +9,6 @@
 #include "char_encoding.h"
 #include "dvi/dvi.h"
 
-// Character ROM offsets
-#define CH_SPACE 0x20 // ' ' (space)
-
 window_t window_create(uint8_t* start, unsigned int width, unsigned int height) {
     assert(start != NULL);
 
