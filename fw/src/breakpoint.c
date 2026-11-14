@@ -85,6 +85,59 @@ bool bp_remove(uint16_t addr) {
     return true;
 }
 
+// bp_set() requires a callback even though this synchronous path never invokes
+// bp_task(). Keep a callback that would not rearm if normal dispatch is
+// accidentally attempted while the temporary probe is installed.
+static bp_result_t bp_run_unused(uint16_t pc, void* context) {
+    (void)context;
+    return (bp_result_t){.pc = pc, .rearm = false};
+}
+
+bp_run_result_t bp_run_to(const uint16_t addr, const uint64_t timeout_us) {
+    // Refuse to disturb a running CPU or an existing breakpoint halt. Otherwise
+    // the probe could consume another owner's hit or leave an in-flight access
+    // unsafely paused.
+    const cpu_state_t cpu_state = get_cpu();
+    vet((cpu_state & CPU_RESET) || !(cpu_state & CPU_READY),
+        "bp_run_to: CPU must be reset or halted, got %u", (unsigned int)cpu_state);
+    vet(bp_find(addr) < 0, "bp_run_to: breakpoint already exists at $%04X", addr);
+    vet((spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_BP_HALT_MASK) == 0,
+        "bp_run_to: resolve existing CPU halt before running");
+
+    // Install a one-shot temporary breakpoint
+    bp_set(addr, bp_run_unused, NULL);
+    set_cpu(CPU_READY);
+
+    // Poll the FPGA directly instead of bp_task(): this helper owns completion
+    // and must not run callback resume/rearm policy for this or any other hit.
+    bp_run_result_t result = {.status = bp_run_timeout, .halt_address = 0};
+
+    // Start timing immediately before polling to exclude the variance from
+    // breakpoint setup and setting the CPU control register.
+    const uint64_t start = time_us_64();
+    do {
+        system_state.bp_halted =
+            (spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_BP_HALT_MASK) != 0;
+
+        if (system_state.bp_halted) {
+            result.halt_address = bp_hit_addr();
+            result.status = result.halt_address == addr
+                ? bp_run_reached
+                : bp_run_stopped_elsewhere;
+            break;
+        }
+    } while (time_us_64() - start < timeout_us);
+
+    // Restore a halted, clean state on every exit path. Holding the CPU before
+    // removing the breakpoint prevents the target instruction from executing
+    // during cleanup.
+    set_cpu(CPU_HALT);
+    bp_remove(addr);
+    bp_clear_halt();
+
+    return result;
+}
+
 void bp_task() {
     if (!system_state.bp_halted) {
         return;
