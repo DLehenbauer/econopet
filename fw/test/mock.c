@@ -19,6 +19,7 @@
 #include "input/input.h"
 #include "input/input_routing.h"
 #include "input/input_uart.h"
+#include "input/pet_keyboard.h"
 #include "pet.h"
 #include "reset.h"
 #include "system/state.h"
@@ -66,6 +67,8 @@ static void (*cpu_run_callback)(void);
 static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
+static uint8_t via_pcr;
+static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
 static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
@@ -450,6 +453,31 @@ void set_cpu_type(cpu_type_t cpu) {
     selected_cpu = cpu;
 }
 
+
+/** Model readable PIA direction/data selection and hidden output latches. */
+uint8_t pet_io_read(const uint16_t address) {
+    ck_assert(!(mock_cpu_state & CPU_READY));
+    if (address == 0xe84c) return via_pcr;
+    ck_assert(address >= 0xe810 && address <= 0xe813);
+    const unsigned port = (address - 0xe810) / 2;
+    if (address & 1) return pia_control[port];
+    if (!(pia_control[port] & 4)) return pia_ddr[port];
+    const unsigned row = pia_output[0] & 15;
+    const uint8_t input = port == 0 || row >= ECONOPET_KBD_COL_COUNT ? 0xff : physical_matrix[row];
+    return (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
+}
+
+/** Record physical PIA writes in the register selected by its control byte. */
+void pet_io_write(const uint16_t address, const uint8_t data) {
+    ck_assert(!(mock_cpu_state & CPU_READY));
+    if (address == 0xe84c) { via_pcr = data; return; }
+    ck_assert(address >= 0xe810 && address <= 0xe813);
+    const unsigned port = (address - 0xe810) / 2;
+    if (address & 1) pia_control[port] = data & 0x3f;
+    else if (pia_control[port] & 4) pia_output[port] = data;
+    else pia_ddr[port] = data;
+}
+
 cpu_type_t mock_cpu_type(void) {
     return selected_cpu;
 }
@@ -488,6 +516,11 @@ void mock_breakpoint_reset_clear_observation(void) {
 
 // Restores deterministic RAM contents and clears register/control observations.
 void mock_reset(void) {
+    pet_keyboard_end();
+    via_pcr = 0;
+    memset(pia_control, 0, sizeof(pia_control));
+    memset(pia_ddr, 0, sizeof(pia_ddr));
+    memset(pia_output, 0, sizeof(pia_output));
     // Restore the RAM fixture and empty all emulated IEEE queues.
     memset(mock_ram, 0xEA, sizeof(mock_ram));
     memset(mock_char_rom, 0, sizeof(mock_char_rom));

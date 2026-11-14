@@ -44,6 +44,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/input/input_actions.c
     ${SRC_DIR}/input/input_routing.c
     ${SRC_DIR}/input/input_uart.c
+    ${SRC_DIR}/input/pet_keyboard.c
     ${SRC_DIR}/input/keyboard_core.c
     ${SRC_DIR}/input/term_inject.c
     ${SRC_DIR}/pet.c
