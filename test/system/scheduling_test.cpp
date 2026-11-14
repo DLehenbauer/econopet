@@ -302,7 +302,8 @@ TEST_F(SystemTest, SchedulerBoundsActiveServiceAndStopsAfterFailure) {
 }
 
 TEST_F(SystemTest, SchedulerPreservesSuspendedHardwarePhaseAndRequiresResetRecovery) {
-    system.spi().write(fpga::Register::CpuControl, econopet::CpuControl{}.bits());
+    system.spi().write(fpga::Register::CpuControl,
+        econopet::CpuControl{econopet::CpuControlBit::Ready}.bits());
     Scheduler scheduler(system);
     unsigned applied = 0;
     scheduler.at(system.time(), [&](System& board) {

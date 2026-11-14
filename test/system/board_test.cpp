@@ -265,7 +265,8 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
     for (const bool writing : {true, false}) {
         SCOPED_TRACE(writing);
         System board;
-        ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits()));
+        ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR},
+            CpuControl{CpuControlBit::Ready}.bits()));
         unsigned observed = 0;
         const auto start = board.time();
         auto subscription = board.observe([&](const System& completed) {
@@ -339,7 +340,8 @@ TEST_F(SystemTest, ServiceCompletionRequiresClockRecoveryAfterCaughtPeripheralFa
     for (const auto recovery : {Recovery::None, Recovery::ResetAsserted, Recovery::Completed}) {
         SCOPED_TRACE(std::to_underlying(recovery));
         System board;
-        ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits()));
+        ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR},
+            CpuControl{CpuControlBit::Ready}.bits()));
         board.drive_physical_cpu({ViaShiftAddress, Marker, false});
         unsigned predicates = 0;
         bool caught = false;
@@ -459,6 +461,12 @@ TEST_F(SystemTest, PhysicalCpuStimulusWritesSramAndIoAndReleasesReadData) {
     write_fpga(system, WishboneAddress{ECONOPET_WB_CPU_ADDR}, CpuControl{}.bits());
     ASSERT_FALSE(system.snapshot().cpu_reset_active_o);
     system.poke(ResultBacking, 0);
+    // READY must suppress guest writes even while the physical CPU owns bus slots.
+    system.drive_physical_cpu({ResultAddress, Marker, false});
+    system.tick(ExecutionSlice);
+    EXPECT_EQ(system.peek(ResultBacking), 0);
+    write_fpga(system, WishboneAddress{ECONOPET_WB_CPU_ADDR},
+        CpuControl{CpuControlBit::Ready}.bits());
     bool observed_commit = false;
     auto subscription = system.observe([&](const System& observed) {
         if (observed.peek(ResultBacking) == Marker) observed_commit = true;
@@ -484,13 +492,11 @@ TEST_F(SystemTest, PhysicalCpuStimulusWritesSramAndIoAndReleasesReadData) {
     EXPECT_FALSE(system.time() < system.io().via().writes().last()->at);
     // Release CPU write data and wait for the read value on the resolved data bus.
     system.drive_physical_cpu({ResultAddress, std::nullopt, true});
-    bool presented = false;
-    for (unsigned slice = 0; slice < BusWaitSlices && !presented; ++slice) {
-        system.tick(ExecutionSlice);
-        const auto pins = system.snapshot();
-        presented = pins.cpu_be_o && pins.cpu_we_n_o && pins.cpu_data_i == Marker;
-    }
-    EXPECT_TRUE(presented);
+    // Sample every cycle so a fixed slice cannot repeatedly miss the CPU bus window.
+    ASSERT_NO_THROW(system.run_until([](const System& observed) {
+        const auto pins = observed.snapshot();
+        return pins.cpu_be_o && pins.cpu_we_n_o && pins.cpu_data_i == Marker;
+    }, Cycles{ExecutionSlice.value() * BusWaitSlices}, "physical CPU SRAM read"));
     EXPECT_TRUE(system.snapshot().stimulus.cpu.sync);
     EXPECT_FALSE(system.peek_stimulus().cpu.write_data.has_value());
     EXPECT_EQ(system.peek(ResultBacking), Marker);
