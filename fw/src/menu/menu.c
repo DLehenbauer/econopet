@@ -87,7 +87,7 @@ typedef struct action_context_s {
 void action_load(void* const context, const char* filename, uint32_t address) {
     (void) context;
 
-    log_debug("0x%04lx", address);
+    log_debug("0x%04" PRIx32, address);
     FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
     if (!file) {
         fatal("Failed to open file '%s'", filename);
@@ -109,7 +109,7 @@ void action_load(void* const context, const char* filename, uint32_t address) {
         }
     }
 
-    log_debug("-%04lx: %s ($%02x)", address - 1, filename, checksum);
+    log_debug("-%04" PRIx32 ": %s ($%02x)", address - 1, filename, checksum);
 
     release_temp_buffer(&temp_buffer);
     fclose(file);
@@ -118,14 +118,14 @@ void action_load(void* const context, const char* filename, uint32_t address) {
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
     (void) context;
 
-    log_debug("0x%04lx: patching %zu bytes", address, binary->size);
+    log_debug("0x%04" PRIx32 ": patching %zu bytes", address, binary->size);
     spi_write(address, binary->data, binary->size);
 }
 
 void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
     (void)context;
 
-    log_debug("0x%04lx: copying %lu bytes from 0x%04lx", source, length, destination);
+    log_debug("0x%04" PRIx32 ": copying %" PRIu32 " bytes from 0x%04" PRIx32, source, length, destination);
     uint8_t* temp_buffer = acquire_temp_buffer();
 
     if (destination > source) {
@@ -167,7 +167,7 @@ void action_set_options(void* context, options_t* options) {
 
     // Validate and set video RAM mask (must be 0-3)
     vet(options->video_ram_mask <= pet_video_ram_mask_4kb,
-        "Invalid video RAM mask in config (got %lu, expected 0-3)", options->video_ram_mask);
+        "Invalid video RAM mask in config (got %" PRIu32 ", expected 0-3)", options->video_ram_mask);
     system_state_set_video_ram_mask(ctx->system_state, (uint8_t) options->video_ram_mask);
 
     // Load USB keymap if specified
@@ -187,8 +187,7 @@ void action_set_options(void* context, options_t* options) {
     }
     set_cpu_type_machine(cpu, options->superpet_io || cpu == CPU_SOFT_6809);
 
-    log_debug("Set options: %lu columns, video RAM mask %lu",
-              options->columns, options->video_ram_mask);
+    log_debug("Set options: %" PRIu32 " columns, video RAM mask %" PRIu32, options->columns, options->video_ram_mask);
 
 }
 
@@ -246,8 +245,8 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
         uint8_t current_byte = spi_read_at(fix_addr);
         uint8_t adjusted_byte = checksum_fix(current_byte, actual_sum, expected);
 
-        log_debug("0x%04lx: fixing checksum for $%04lx-%04lx ($%02x -> $%02lx)", 
-            fix_addr, start_addr, end_addr, actual_sum, expected);
+        log_debug("0x%04" PRIx32 ": fixing checksum for $%04" PRIx32 "-%04" PRIx32 " ($%02x -> $%02" PRIx32 ")",
+                  fix_addr, start_addr, end_addr, actual_sum, expected);
 
         spi_write_at(fix_addr, adjusted_byte);
 
