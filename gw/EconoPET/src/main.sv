@@ -669,7 +669,6 @@ module main (
 
     keyboard keyboard (
         .reset_i(cpu_reset_o),
-        .physical_reset_i(cpu_reset_i),
         .wb_clock_i(sys_clock_i),
         .wbp_addr_i(wb_addr),
         .wbp_data_i(wb_dout),

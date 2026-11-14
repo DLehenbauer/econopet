@@ -23,13 +23,12 @@ module keyboard_tb;
 
     logic                      cpu_be           = '0;
     logic [CPU_ADDR_WIDTH-1:0] cpu_addr;
-    logic [    DATA_WIDTH-1:0] bus_dout;    // Data written by bus (written by CPU, etc.)
-    logic [    DATA_WIDTH-1:0] bus_din;     // Data read by bus (read by CPU, etc.)
+    logic [    DATA_WIDTH-1:0] cpu_dout;    // Data written by CPU
+    logic [    DATA_WIDTH-1:0] cpu_din;     // Data read by CPU
     logic                      cpu_doe;
     logic                      cpu_we           = '0;
     logic                      cpu_data_strobe  = '0;
     logic                      firmware_reset   = '0;
-    logic                      physical_reset   = '0;
 
     wire pia1_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he81;
     wire pia2_cs = cpu_addr[CPU_ADDR_WIDTH-1:4] == 12'he82;
@@ -39,7 +38,6 @@ module keyboard_tb;
 
     keyboard keyboard (
         .reset_i(firmware_reset),
-        .physical_reset_i(physical_reset),
         .wb_clock_i(clock),
         .wbp_addr_i(common_pkg::wb_kbd_addr(addr)),
         .wbp_data_i(pico),
@@ -53,8 +51,8 @@ module keyboard_tb;
 
         .cpu_be_i(cpu_be),
         .cpu_data_strobe_i(cpu_data_strobe),
-        .cpu_data_i(bus_dout),      // Data written by bus (written by CPU, etc.)
-        .cpu_data_o(bus_din),       // Data read by bus (read by CPU, etc.)
+        .cpu_data_i(cpu_dout),
+        .cpu_data_o(cpu_din),
         .cpu_data_oe(cpu_doe),
         .cpu_we_i(cpu_we),
         .pia1_cs_i(pia1_cs),
@@ -83,7 +81,7 @@ module keyboard_tb;
 
         cpu_be          = 1'b1;
         cpu_addr        = addr;
-        bus_dout        = data;     // Data written by bus (written by CPU, etc.)
+        cpu_dout        = data;
         cpu_we          = 1'b1;
         cpu_data_strobe = 1'b1;
         
@@ -113,11 +111,11 @@ module keyboard_tb;
         // The pet keyboard matrix should be updated with the intercepted usb key press (if any)
         // on the later data strobe.  If not intercepted, we assume no key press from PIA1 (0xFF).
         cpu_data_strobe = 1'b1;
-        bus_dout        = cpu_doe ? bus_din : 8'hff;    // Data written by bus (in this case FPGA or PIA1)
+        cpu_dout        = cpu_doe ? cpu_din : 8'hff;    // When CPU is driving, cpu_din is same as cpu_dout.
 
         @(negedge clock);
 
-        data            = bus_din;
+        data            = cpu_dout;
         cpu_data_strobe = 1'b0;
         cpu_be          = 1'b0;
 
@@ -156,6 +154,7 @@ module keyboard_tb;
         logic [DATA_WIDTH-1:0] data;
 
         wb.reset;
+        cpu_addr = '0;
 
         $display("[%t]   Keyboard cols must be initialized to 8'hFF at power on.", $time);
         for (col = 0; col < KBD_COL_COUNT; col = col + 1) begin
@@ -195,7 +194,7 @@ module keyboard_tb;
             wb.write(col, 8'hff);
         end
 
-        $display("[%t]   Firmware reset clears PET cache and wins over scans.", $time);
+        $display("[%t]   Firmware reset clears PET cache without suppressing USB injection.", $time);
         wb.write(3, 8'h7e);
         cpu_select_col(3);
 
@@ -216,45 +215,6 @@ module keyboard_tb;
         `assert_equal(data, 8'h7e);
         wb.read(3, data_rd);
         `assert_equal(data_rd, 8'h7e);
-
-        $display("[%t]   Physical reset clears multiple columns and can repeat.", $time);
-        wb.write(0, 8'hfe);
-        cpu_select_col(0);
-        cpu_read_current_col(data);
-        `assert_equal(data, 8'hfe);
-        wb.write(5, 8'hfd);
-        cpu_select_col(5);
-        cpu_read_current_col(data);
-        `assert_equal(data, 8'hfd);
-
-        @(negedge clock);
-        physical_reset = 1'b1;
-        @(negedge clock);
-        physical_reset = 1'b0;
-        repeat (2) @(posedge clock);
-
-        wb.read(0, data_rd);
-        `assert_equal(data_rd, 8'hff);
-        wb.read(3, data_rd);
-        `assert_equal(data_rd, 8'hff);
-        wb.read(5, data_rd);
-        `assert_equal(data_rd, 8'hff);
-
-        // A fresh scan after physical reset must be observed.
-        cpu_read_current_col(data);
-        `assert_equal(data, 8'hfd);
-        wb.read(5, data_rd);
-        `assert_equal(data_rd, 8'hfd);
-
-        // A second pulse after deassertion must clear the newly observed key.
-        @(negedge clock);
-        physical_reset = 1'b1;
-        @(negedge clock);
-        physical_reset = 1'b0;
-        repeat (2) @(posedge clock);
-
-        wb.read(5, data_rd);
-        `assert_equal(data_rd, 8'hff);
 
     endtask
 
