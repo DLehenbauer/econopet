@@ -29,10 +29,6 @@ START_TEST(test_keyscan_next_key_event) {
     
     for (int c = 0; c < ECONOPET_KBD_COL_COUNT; c++) {
         for (int r = 0; r < ECONOPET_KBD_ROW_COUNT; r++) {
-            if (c == 0x0f && r == 0x07) {
-                next_key_event(matrix);
-                continue;
-            }
             key_event_t expected = PET_KEY_EVENT(false, r, c);
             key_event_t actual = next_key_event(matrix);
             ck_assert_int_eq(actual, expected);
