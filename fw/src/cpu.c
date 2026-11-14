@@ -28,13 +28,6 @@
 static bool initialized;
 static bool present;
 
-// Stop at the loop and let cpu_init() validate execution after cleanup.
-static bp_result_t probe_complete(uint16_t pc, void* context) {
-    set_cpu(CPU_HALT);
-    *(bool*)context = true;
-    return (bp_result_t){.pc = pc, .rearm = false};
-}
-
 void cpu_init(void) {
     vet(!initialized, "cpu_init: already initialized");
     const cpu_state_t state = get_cpu();
@@ -43,14 +36,25 @@ void cpu_init(void) {
     // Isolate the socket path before installing a stack-independent SRAM probe.
     set_cpu(CPU_RESET);
     set_cpu_type(CPU_PHYS_6502);
+    // This stack-independent 6502 probe proves that the socketed processor can
+    // fetch instructions from SRAM and write results back over the physical
+    // bus.
+    //
+    // The reset vector enters at $0400, which first establishes known interrupt
+    // flags and jumps over the entry stub. The routine then stores the marker
+    // in scratch RAM and loops at $040A.
+    //
+    // Below, we use `bp_run_to()` to detect that the CPU has advanced to the
+    // loop, then check the marker to confirm that the preceding RAM write worked.
     const uint8_t program[] = {
-        // Enter the routine without relying on stack contents or inherited flags.
+        // Establish known flags, then enter the body without using the stack.
         OPCODE_SEI,
         OPCODE_CLD,
         OPCODE_JMP,
         PROBE_ROUTINE & 0xFFu,
         PROBE_ROUTINE >> 8,
-        // The store must execute before the final JMP is fetched as a breakpoint.
+        // Publish a value that proves execution reached the probe body and RAM
+        // writes worked before fetching the breakpointed loop instruction.
         OPCODE_LDA_IMMEDIATE,
         PROBE_MARKER,
         OPCODE_STA_ABSOLUTE,
@@ -60,50 +64,49 @@ void cpu_init(void) {
         PROBE_LOOP & 0xFFu,
         PROBE_LOOP >> 8,
     };
+
     static_assert(PROBE_START + sizeof(program) <= PROBE_RESULT, "Probe overlaps result");
     static_assert(PROBE_SENTINEL != PROBE_MARKER, "Probe must overwrite the sentinel");
+
+    // Copy program to SRAM and set the reset vector to the entry point.
     spi_write(PROBE_START, program, sizeof(program));
     spi_write_at(PROBE_RESULT, PROBE_SENTINEL);
     spi_write_at(RESET_VECTOR, PROBE_START & 0xFFu);
     spi_write_at(RESET_VECTOR + 1u, PROBE_START >> 8);
 
-    // Arm the probe while reset is asserted, discarding any retained FPGA halt.
-    bool hit = false;
+    // Allow a complete reset pulse before the temporary run.
     bp_clear_halt();
-    bp_set(PROBE_LOOP, probe_complete, &hit);
-
-    // Allow a complete reset pulse before waiting for a real instruction fetch.
     sleep_us(RESET_PULSE_US);
-    const uint64_t start = time_us_64();
-    set_cpu(CPU_READY);
-    do {
-        system_state.bp_halted = (spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_BP_HALT_MASK) != 0;
-        if (system_state.bp_halted) {
-            if (bp_hit_addr() == PROBE_LOOP) {
-                bp_task();
-            }
-            break;
-        }
-    } while (time_us_64() - start < PROBE_TIMEOUT_US);
 
-    // Timeout or an unrelated halt leaves our patch installed, unlike a valid hit.
+    // `bp_run_to()` will resume the CPU and wait for the CPU to reach JMP
+    // in the probe loop.
+    const bp_run_result_t result = bp_run_to(PROBE_LOOP, PROBE_TIMEOUT_US);
+
+    // We've either reached the probe loop or timed out. Put the CPU back in
+    // reset while we interpret the results.
     set_cpu(CPU_RESET);
-    if (!hit) {
-        bp_remove(PROBE_LOOP);
-    }
-    bp_clear_halt();
 
-    // Keep fatal rendering independent of an armed breakpoint or a running CPU.
-    if (hit) {
+    if (result.status == bp_run_reached) {
+        // CPU fetched the expected instruction. Check that it also wrote
+        // the marker to the expected address.
         const uint8_t marker = spi_read_at(PROBE_RESULT);
-        vet(marker == PROBE_MARKER, "cpu_init: probe marker mismatch ($%02X, expected $%02X)", marker, PROBE_MARKER);
+        vet(marker == PROBE_MARKER,
+            "cpu_init: probe marker mismatch ($%02X, expected $%02X)", marker, PROBE_MARKER);
+
+        present = true;
+    } else {
+        // Neither a timeout nor a halt elsewhere proves socketed execution.
+        // Preserve unrelated breakpoint state and fall back to the soft CPU.
+        vet(result.status == bp_run_timeout || result.status == bp_run_stopped_elsewhere,
+            "cpu_init: unexpected probe result (%d)", result.status);
+        present = false;
     }
 
-    // Leave initialization quiescent so the menu can replace the scratch image.
-    present = hit;
     set_cpu_type(present ? CPU_PHYS_6502 : CPU_SOFT_6502);
     initialized = true;
-    log_info("physical 6502: %s", present ? "detected" : "not populated (using soft CPU)");
+    log_info("physical 6502: %s", present ? "present" : "not populated (using soft CPU)");
+
+    // Note: We intentionally leave the CPU held in reset after probing.
 }
 
 bool physical_cpu_present(void) {

@@ -27,6 +27,22 @@ typedef struct {
 //   - rearm == false: remove the breakpoint (one-shot)
 typedef bp_result_t (*bp_callback_t)(uint16_t pc, void* context);
 
+typedef enum {
+    /** The CPU stopped at the requested address. */
+    bp_run_reached,
+    /** The CPU did not stop before the deadline. */
+    bp_run_timeout,
+    /** The CPU stopped at an address other than the requested target. */
+    bp_run_stopped_elsewhere,
+} bp_run_status_t;
+
+typedef struct {
+    /** Why the run ended. */
+    bp_run_status_t status;
+    /** Observed halt address, or zero when the run timed out. */
+    uint16_t halt_address;
+} bp_run_result_t;
+
 // A single breakpoint table entry.
 typedef struct bp_entry_s {
     uint16_t      addr;        // PET address where breakpoint is set
@@ -49,6 +65,13 @@ void bp_set(uint16_t addr, bp_callback_t callback, void* context);
 // removes the entry from the table. Returns true on success, false if no
 // breakpoint exists at 'addr'.
 bool bp_remove(uint16_t addr);
+
+/**
+ * Run a halted/reset CPU until it reaches addr, times out, or stops at another
+ * breakpoint. The temporary patch and halt are always cleared before return,
+ * and the CPU remains halted. The target instruction is not executed.
+ */
+bp_run_result_t bp_run_to(uint16_t addr, uint64_t timeout_us);
 
 // Check for breakpoint hits and handle them. Call this periodically from the
 // main loop.

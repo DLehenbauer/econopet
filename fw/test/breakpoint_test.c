@@ -30,6 +30,25 @@ static bp_result_t default_callback(uint16_t pc, void* context) {
     return (bp_result_t){ .pc = pc, .rearm = true };
 }
 
+static bool unrelated_callback_invoked;
+
+static bp_result_t unrelated_callback(uint16_t pc, void* context) {
+    (void)pc;
+    (void)context;
+    unrelated_callback_invoked = true;
+    return (bp_result_t){ .pc = pc, .rearm = true };
+}
+
+static uint16_t run_hit_address;
+static void hit_during_run(void) {
+    mock_breakpoint_set_hit_addr(run_hit_address);
+    system_state.bp_halted = true;
+}
+
+static void time_out_run(void) {
+    mock_clock_advance(1);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -95,6 +114,69 @@ START_TEST(test_bp_remove_nonexistent_fails) {
     reset_breakpoint_test();
     ck_assert(!bp_remove(0x0400));
 } END_TEST
+
+START_TEST(test_bp_run_to_reached_restores_patch_and_halts_cpu) {
+    reset_breakpoint_test();
+    const uint16_t addr = 0x0400;
+    mock_ram[addr] = 0x4c;
+    run_hit_address = addr;
+    mock_cpu_set_run_callback(hit_during_run);
+    set_cpu(CPU_HALT);
+
+    const bp_run_result_t result = bp_run_to(addr, 10);
+
+    ck_assert_int_eq(result.status, bp_run_reached);
+    ck_assert_uint_eq(result.halt_address, addr);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(bp_count(), 0);
+    ck_assert_uint_eq(mock_ram[addr], 0x4c);
+    ck_assert(!system_state.bp_halted);
+}
+END_TEST
+
+START_TEST(test_bp_run_to_timeout_restores_patch_and_halts_cpu) {
+    reset_breakpoint_test();
+    mock_clock_set(0);
+    const uint16_t addr = 0x0400;
+    mock_ram[addr] = 0xa9;
+    mock_cpu_set_run_callback(time_out_run);
+    set_cpu(CPU_HALT);
+
+    const bp_run_result_t result = bp_run_to(addr, 2);
+
+    ck_assert_int_eq(result.status, bp_run_timeout);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(bp_count(), 0);
+    ck_assert_uint_eq(mock_ram[addr], 0xa9);
+    ck_assert(!system_state.bp_halted);
+}
+END_TEST
+
+START_TEST(test_bp_run_to_unrelated_halt_preserves_other_breakpoint) {
+    reset_breakpoint_test();
+    const uint16_t target = 0x0400;
+    const uint16_t unrelated = 0x0600;
+    mock_ram[target] = 0x4c;
+    mock_ram[unrelated] = 0x60;
+    unrelated_callback_invoked = false;
+    bp_set(unrelated, unrelated_callback, NULL);
+    run_hit_address = unrelated;
+    mock_cpu_set_run_callback(hit_during_run);
+    set_cpu(CPU_HALT);
+
+    const bp_run_result_t result = bp_run_to(target, 10);
+
+    ck_assert_int_eq(result.status, bp_run_stopped_elsewhere);
+    ck_assert_uint_eq(result.halt_address, unrelated);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(bp_count(), 1);
+    ck_assert_uint_eq(bp_get(0)->addr, unrelated);
+    ck_assert_uint_eq(mock_ram[target], 0x4c);
+    ck_assert_uint_eq(mock_ram[unrelated], 0xdb);
+    ck_assert(!system_state.bp_halted);
+    ck_assert(!unrelated_callback_invoked);
+}
+END_TEST
 
 START_TEST(test_bp_remove_compacts_table) {
     reset_breakpoint_test();
@@ -373,6 +455,9 @@ Suite *breakpoint_suite(void) {
     tcase_add_test(tc, test_bp_set_patches_sram);
     tcase_add_test(tc, test_bp_remove_restores_sram);
     tcase_add_test(tc, test_bp_remove_nonexistent_fails);
+    tcase_add_test(tc, test_bp_run_to_reached_restores_patch_and_halts_cpu);
+    tcase_add_test(tc, test_bp_run_to_timeout_restores_patch_and_halts_cpu);
+    tcase_add_test(tc, test_bp_run_to_unrelated_halt_preserves_other_breakpoint);
     tcase_add_test(tc, test_bp_remove_compacts_table);
     tcase_add_test(tc, test_bp_task_restores_and_rearms);
     tcase_add_test(tc, test_reset_clears_halt_but_preserves_breakpoint);
