@@ -15,7 +15,6 @@ import common_pkg::*;
 // is actively scanning the keyboard via PIA1 reads.
 module keyboard(
     input  logic                     reset_i,           // Firmware CPU reset request
-    input  logic                     physical_reset_i,  // Observed physical CPU reset
     // Wishbone B4 peripheral
     // (See https://cdn.opencores.org/downloads/wbspec_b4.pdf)
     input  logic                     wb_clock_i,        // Wishbone bus clock
@@ -64,16 +63,15 @@ module keyboard(
     // CPU writes to I/O registers are cached here.
     logic [KBD_COL_WIDTH-1:0] selected_col      = '0;
     logic [KBD_ROW_COUNT-1:0] selected_row_data = '1;
-    logic physical_reset_q = 1'b0;
 
     always_ff @(posedge wb_clock_i) begin
         // Cache the selected column so that PIA1_PORTB interception reads can
         // avoid performing a usb_kbd array lookup.
         selected_row_data <= usb_kbd[selected_col];
 
-        physical_reset_q <= physical_reset_i;
-        if (reset_i || (physical_reset_i && !physical_reset_q)) begin
-            // Release cached keys when either reset source is asserted.
+        if (reset_i) begin
+            // Release cached PET keys on CPU reset so they do not appear stuck
+            // during the 2-3 seconds before CPU keyboard scanning resumes.
             pet_kbd <= '1;
         end else if (pia1_cs_i && cpu_data_strobe_i) begin
             if (cpu_we_i) begin
