@@ -5,7 +5,12 @@
 #include "fatal.h"
 
 #include "diag/log/log.h"
+#include "display/display.h"
+#include "display/window.h"
+#include "driver.h"
+#include "roms/roms.h"
 #include "sd/sd.h"
+#include "system/state.h"
 
 #define MORSE_DOT_US (100 * 1000u)
 #define MORSE_DASH_UNITS 3u
@@ -105,14 +110,6 @@ void fatal_halt(fatal_error_t error, const char* message) {
     fatal_repeat(entry, message);
 }
 
-// Host targets provide fatal() and vetted_malloc() through their existing mocks.
-#if defined(PICO_RP2040)
-#include "display/display.h"
-#include "display/window.h"
-#include "driver.h"
-#include "roms/roms.h"
-#include "system/state.h"
-
 #define FATAL_COLUMNS 40
 #define FATAL_ROWS    25
 #define FATAL_PREFIX  "E: "
@@ -120,7 +117,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
     (FATAL_COLUMNS * FATAL_ROWS - (sizeof(FATAL_PREFIX) - 1) + 1)
 
 // Render fatal details without allocating storage. Core 1 keeps driving DVI.
-static void fatal_display_message(const char* const message) {
+void fatal_display_message(const char* const message) {
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);
@@ -138,6 +135,8 @@ static void fatal_display_message(const char* const message) {
     spi_write(VIDEO_RAM_ADDRESS, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
 }
 
+// Host targets provide fatal() and vetted_malloc() through their existing mocks.
+#if defined(PICO_RP2040)
 // Funnel formatted errors and allocation failures through the same Morse endpoint.
 static void __attribute__((noreturn)) fatal_no_alloc(const char* message) {
     static bool rendering;

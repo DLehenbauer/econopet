@@ -12,6 +12,8 @@
 #include "hardware/gpio.h"
 
 #include "diag/log/log.h"
+#include "display/display.h"
+#include "display/window.h"
 #include "fatal.h"
 #include "input/input.h"
 #include "input/input_routing.h"
@@ -348,6 +350,64 @@ START_TEST(test_normal_rom_with_keymap) {
 }
 END_TEST
 
+// Fatal rendering preserves UART history and uploads the encoded screen without a later display task.
+START_TEST(test_fatal_display_preserves_uart) {
+    mock_reset();
+    mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
+    keymap_reads = model_reads = model_writes = 0;
+    memset(system_state.video_char_buffer, 0xa5, sizeof(system_state.video_char_buffer));
+
+    FILE* const output = tmpfile();
+    ck_assert_ptr_nonnull(output);
+    fflush(stdout);
+    const int saved_stdout = dup(fileno(stdout));
+    ck_assert_int_ge(saved_stdout, 0);
+    ck_assert_int_ge(dup2(fileno(output), fileno(stdout)), 0);
+    fputs("retained UART history\r\n", stdout);
+    fflush(stdout);
+
+    observing_rom_boot = true;
+    fatal_display_message("disk failed\nretry");
+    observing_rom_boot = false;
+    fflush(stdout);
+    ck_assert_int_ge(dup2(saved_stdout, fileno(stdout)), 0);
+    close(saved_stdout);
+
+    // Exact output excludes clearing, cursor movement and alternate-screen escapes.
+    rewind(output);
+    char uart[128] = {0};
+    ck_assert_uint_lt(fread(uart, 1, sizeof(uart) - 1, output), sizeof(uart) - 1);
+    ck_assert_str_eq(uart, "retained UART history\r\n");
+    fclose(output);
+
+    ck_assert_uint_eq(keymap_reads, 0);
+    ck_assert_uint_eq(model_reads, 1);
+    ck_assert_uint_eq(model_writes, 1);
+    ck_assert_uint_eq(mock_spi_write_count(), 3); // Menu ROM, character ROM, final screen.
+    ck_assert_int_eq(system_state.video_source, video_source_firmware);
+    ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
+    // Independent lower-case PET screen codes, with a reversed "E:" prefix.
+    const uint8_t first_row[] = {
+        0xc5, 0xba, CH_SPACE, 0x04, 0x09, 0x13, 0x0b, CH_SPACE, 0x06, 0x01, 0x09, 0x0c, 0x05, 0x04,
+    };
+    const uint8_t second_row[] = {0x12, 0x05, 0x14, 0x12, 0x19};
+    const size_t columns = pet_display_columns_40;
+    const size_t fatal_rows = 25;
+    const size_t screen_size = columns * fatal_rows;
+    for (size_t offset = 0; offset < screen_size; ++offset) {
+        const uint8_t expected = offset < sizeof(first_row) ? first_row[offset]
+            : offset >= columns && offset < columns + sizeof(second_row)
+                ? second_row[offset - columns] : CH_SPACE;
+        ck_assert_uint_eq(system_state.video_char_buffer[offset], expected);
+        ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + offset], expected);
+    }
+    ck_assert_int_eq(memcmp(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer,
+                           PET_MAX_VIDEO_RAM_BYTES), 0);
+    ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS - 1], 0xea);
+    ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + PET_MAX_VIDEO_RAM_BYTES], 0xea);
+}
+END_TEST
+
 // The real ROM reset and menu routing transition must retain held physical navigation.
 START_TEST(test_menu_rom_preserves_physical_holds) {
     mock_reset();
@@ -392,6 +452,7 @@ Suite* fatal_error_suite(void) {
     tcase_add_test_raise_signal(tests, test_sd_startup_failure, SIGABRT);
     tcase_add_test(tests, test_error_rom_without_keymap);
     tcase_add_test(tests, test_normal_rom_with_keymap);
+    tcase_add_test(tests, test_fatal_display_preserves_uart);
     tcase_add_loop_test(tests, test_menu_rom_preserves_physical_holds, 0, 4);
     suite_add_tcase(suite, tests);
     TCase* const formatting = tcase_create("fatal log formatting");
