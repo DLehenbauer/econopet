@@ -3,21 +3,19 @@
 
 #include "pch.h"
 #include "keyscan_test.h"
+#include "input/keyboard_core.h"
 #include "usb/keyscan.h"
 #include "input/input.h"
 #include "system_state.h"
 
-// PET keyboard matrix dimensions (from keyboard.h, redefined here to avoid TinyUSB dependencies)
-#define KEY_COL_COUNT 10
-
 START_TEST(test_keyscan_next_key_event) {
-    uint8_t matrix[KEY_COL_COUNT] = {
-        0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00
+    uint8_t matrix[ECONOPET_KBD_COL_COUNT] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
-    for (int c = 0; c < KEY_COL_COUNT; c++) {
-        for (int r = 0; r < 8; r++) {
+    for (int c = 0; c < ECONOPET_KBD_COL_COUNT; c++) {
+        for (int r = 0; r < ECONOPET_KBD_ROW_COUNT; r++) {
             key_event_t expected = PET_KEY_EVENT(true, r, c);
             key_event_t actual = next_key_event(matrix);
             ck_assert_int_eq(actual, expected);
@@ -29,8 +27,12 @@ START_TEST(test_keyscan_next_key_event) {
 
     memset(matrix, 0xFF, sizeof(matrix));
     
-    for (int c = 0; c < KEY_COL_COUNT; c++) {
-        for (int r = 0; r < 8; r++) {
+    for (int c = 0; c < ECONOPET_KBD_COL_COUNT; c++) {
+        for (int r = 0; r < ECONOPET_KBD_ROW_COUNT; r++) {
+            if (c == 0x0f && r == 0x07) {
+                next_key_event(matrix);
+                continue;
+            }
             key_event_t expected = PET_KEY_EVENT(false, r, c);
             key_event_t actual = next_key_event(matrix);
             ck_assert_int_eq(actual, expected);
@@ -41,31 +43,31 @@ START_TEST(test_keyscan_next_key_event) {
     ck_assert_int_eq(next_key_event(matrix), key_event_none);
 }
 
-void press_key(uint8_t matrix[KEY_COL_COUNT], key_event_t key) {
+void press_key(uint8_t matrix[ECONOPET_KBD_COL_COUNT], key_event_t key) {
     unsigned int row = PET_KEY_ROW(key);
     unsigned int col = PET_KEY_COL(key);
 
-    ck_assert_uint_lt(row, 8);
-    ck_assert_uint_lt(col, KEY_COL_COUNT);
+    ck_assert_uint_lt(row, ECONOPET_KBD_ROW_COUNT);
+    ck_assert_uint_lt(col, ECONOPET_KBD_COL_COUNT);
 
     matrix[col] &= ~(1 << row);
 }
 
-void release_key(uint8_t matrix[KEY_COL_COUNT], key_event_t key) {
+void release_key(uint8_t matrix[ECONOPET_KBD_COL_COUNT], key_event_t key) {
     unsigned int row = PET_KEY_ROW(key);
     unsigned int col = PET_KEY_COL(key);
 
-    ck_assert_uint_lt(row, 8);
-    ck_assert_uint_lt(col, KEY_COL_COUNT);
+    ck_assert_uint_lt(row, ECONOPET_KBD_ROW_COUNT);
+    ck_assert_uint_lt(col, ECONOPET_KBD_COL_COUNT);
 
     matrix[col] |= (1 << row);
 }
 
 START_TEST(test_keyscan_navigation) {
     const pet_keyboard_model_t saved_model = system_state.pet_keyboard_model;
-    uint8_t matrix[KEY_COL_COUNT] = {
-        0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0xff, 0xff
+    uint8_t matrix[ECONOPET_KBD_COL_COUNT] = {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
     };
 
     ck_assert_int_eq(keyscan_navigation(matrix), tui_action_none);

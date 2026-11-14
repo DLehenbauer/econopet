@@ -46,7 +46,7 @@ void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_
 /** Supply the active-low button GPIO's next physical level. */
 void mock_input_button_level(bool pressed);
 /** Supply the next physical PET matrix read at the FPGA boundary. */
-void mock_input_pet_snapshot(const uint8_t matrix[KEY_COL_COUNT]);
+void mock_input_pet_snapshot(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]);
 /** Supply CRTC bytes independently of the firmware's cached display state. */
 void mock_input_crtc_snapshot(const uint8_t registers[CRTC_REG_COUNT]);
 /** Inspect the most recently published runtime matrix, independent of physical input. */

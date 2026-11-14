@@ -64,7 +64,7 @@ START_TEST(test_production_observation_order_and_passive_reads) {
     input_routing_set_menu_active(true);
     uart_bytes("\x1b[A");
     hid_key(HID_KEY_ARROW_RIGHT, 0);
-    uint8_t physical[KEY_COL_COUNT];
+    uint8_t physical[ECONOPET_KBD_COL_COUNT];
     memset(physical, UINT8_MAX, sizeof(physical));
     const key_event_t enter = system_state.pet_keyboard_model == pet_keyboard_model_graphics
         ? PET_KEY_RETURN_N : PET_KEY_RETURN_B;

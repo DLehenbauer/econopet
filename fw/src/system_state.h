@@ -79,7 +79,7 @@ typedef enum video_text_mode_e {
 typedef struct __attribute__((packed)) usb_keymap_entry_s {
     // First byte contains PET keyboard matrix row/col packed as nibbles
     unsigned int row: 4;        // Rows   : 0-7 (F = undefined key mapping)
-    unsigned int col: 4;        // Column : 0-9
+    unsigned int col: 4;        // Column : 0-15
 
     // Second byte contains flags
     unsigned int reserved: 6;   // (Six reserved bits for future use)

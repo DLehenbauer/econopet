@@ -4,6 +4,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "hardware_contract.h"
 #include "input/input_actions.h"
 
 typedef uint8_t key_event_t;
@@ -38,14 +39,14 @@ typedef uint8_t key_event_t;
 #define PET_KEY_T_B         (PET_KEY_EVENT(true, 2, 5))
 #define PET_KEY_DELETE_B    (PET_KEY_EVENT(true, 7, 4))
 
-// Sentinel for "no key event". (Note that column '0xF' exceeds KEY_COL_COUNT)
+// Sentinel for "no key event". The 7/F release is reserved for this purpose.
 extern const key_event_t key_event_none;
 
 /** Start a new physical snapshot context without replaying already-held keys. */
 void keyscan_reset(const uint8_t* matrix);
 key_event_t next_key_event(const uint8_t* matrix);
 /** Decode physical press edges into navigation for the selected PET layout. */
-tui_action_t keyscan_navigation(const uint8_t matrix[10]);
+tui_action_t keyscan_navigation(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]);
 /** Sample physical navigation into the router without choosing its destination. */
 void keyscan_sample(void);
 /** Emit qualified physical dual-Shift requests, rejecting injected snoop echoes. */

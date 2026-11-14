@@ -624,13 +624,13 @@ START_TEST(test_menu_typing_and_transition) {
     report_key(HID_KEY_T, KEYBOARD_MODIFIER_LEFTSHIFT);
     input_uart_process('t');
     dispatch_all_key_events();
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     ck_assert_int_eq(input_routing_navigation(), tui_action_none);
     input_routing_set_menu_active(false);
     report_key(HID_KEY_T, KEYBOARD_MODIFIER_LEFTSHIFT);
     dispatch_all_key_events();
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     report_key(0, 0);
 }
@@ -717,7 +717,7 @@ START_TEST(test_cancel_runtime_injection) {
     for (int i = 0; i < 8; ++i)
         input_task();
     ck_assert_int_eq(input_routing_navigation(), tui_action_none);
-    for (size_t i = 0; i < KEY_COL_COUNT; ++i)
+    for (size_t i = 0; i < ECONOPET_KBD_COL_COUNT; ++i)
         ck_assert_uint_eq(usb_key_matrix[i], UINT8_MAX);
     pet_key_matrix[PET_KEY_COL(physical)] |= 1u << PET_KEY_ROW(physical);
     keyscan_sample();
@@ -1163,7 +1163,7 @@ START_TEST(test_pet_menu_chord_cleared_across_reset) {
     system_state.pet_keyboard_model = _i == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
     const key_event_t left = _i == 0 ? PET_KEY_LSHIFT_N : PET_KEY_LSHIFT_B;
     const key_event_t right = _i == 0 ? PET_KEY_RSHIFT_N : PET_KEY_RSHIFT_B;
-    uint8_t matrix[KEY_COL_COUNT];
+    uint8_t matrix[ECONOPET_KBD_COL_COUNT];
     memset(matrix, UINT8_MAX, sizeof(matrix));
     matrix[PET_KEY_COL(left)] &= ~(1u << PET_KEY_ROW(left));
     matrix[PET_KEY_COL(right)] &= ~(1u << PET_KEY_ROW(right));

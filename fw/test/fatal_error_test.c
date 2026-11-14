@@ -358,7 +358,7 @@ START_TEST(test_menu_rom_preserves_physical_holds) {
     const key_event_t key = _i % 2 == 0
         ? (business ? PET_KEY_DOWN_B : PET_KEY_DOWN_N)
         : (business ? PET_KEY_RETURN_B : PET_KEY_RETURN_N);
-    uint8_t physical[KEY_COL_COUNT];
+    uint8_t physical[ECONOPET_KBD_COL_COUNT];
     memset(physical, UINT8_MAX, sizeof(physical));
     physical[PET_KEY_COL(key)] &= (uint8_t)~(1u << PET_KEY_ROW(key));
     mock_input_pet_snapshot(physical);
