@@ -83,12 +83,15 @@ void pet_keyboard_task(void) {
 
     // Publish only complete matrices, never a mixture of different scan rounds.
     if (++scanner.row == ECONOPET_KBD_COL_COUNT) {
-        memcpy(pet_key_matrix, scanner.matrix, sizeof(scanner.matrix));
         scanner.row = 0;
-        scanner.ready = true;
-        scanner.released = !scanner.unstable;
-        for (size_t row = 0; row < ECONOPET_KBD_COL_COUNT; ++row) {
-            scanner.released &= scanner.matrix[row] == 0xff;
+        scanner.released = false;
+        if (!scanner.unstable) {
+            memcpy(pet_key_matrix, scanner.matrix, sizeof(scanner.matrix));
+            scanner.ready = true;
+            scanner.released = true;
+            for (size_t row = 0; row < ECONOPET_KBD_COL_COUNT; ++row) {
+                scanner.released &= scanner.matrix[row] == 0xff;
+            }
         }
         scanner.unstable = false;
     }

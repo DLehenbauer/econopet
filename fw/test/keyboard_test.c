@@ -119,6 +119,50 @@ START_TEST(test_physical_scanner_publishes_complete_matrix) {
 }
 END_TEST
 
+/** Noisy rounds preserve the published snapshot, both before and after acquisition. */
+START_TEST(test_physical_scanner_discards_noisy_round) {
+    uint8_t published[ECONOPET_KBD_COL_COUNT];
+    memset(published, 0xff, sizeof(published));
+    published[2] = 0xfd;
+    memcpy(pet_key_matrix, published, sizeof(published));
+    mock_input_pet_snapshot(published);
+    pet_keyboard_begin_boot();
+    if (_i) {
+        for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
+            pet_keyboard_task();
+            mock_clock_advance(200);
+        }
+        ck_assert(pet_keyboard_ready());
+    }
+
+    uint8_t matrix[ECONOPET_KBD_COL_COUNT];
+    memset(matrix, 0xff, sizeof(matrix));
+    matrix[3] = 0xf7;
+    pet_keyboard_task();
+    for (unsigned sample = 0; sample < 3; ++sample) {
+        matrix[0] = sample & 1 ? 0xff : 0xfe;
+        mock_input_pet_snapshot(matrix);
+        mock_clock_advance(200);
+        pet_keyboard_task();
+    }
+    for (unsigned step = 0; step < 3 * (ECONOPET_KBD_COL_COUNT - 1); ++step) {
+        pet_keyboard_task();
+        mock_clock_advance(200);
+    }
+    ck_assert_int_eq(pet_keyboard_ready(), _i != 0);
+    ck_assert(!pet_keyboard_released());
+    ck_assert_mem_eq(pet_key_matrix, published, sizeof(published));
+
+    for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
+        pet_keyboard_task();
+        mock_clock_advance(200);
+    }
+    ck_assert(pet_keyboard_ready());
+    ck_assert_mem_eq(pet_key_matrix, matrix, sizeof(matrix));
+    ck_assert(!pet_keyboard_released());
+}
+END_TEST
+
 /** Release waits for a fresh stable empty round after noisy samples. */
 START_TEST(test_physical_scanner_release_requires_fresh_stable_round) {
     pet_keyboard_begin_boot();
@@ -145,7 +189,7 @@ START_TEST(test_physical_scanner_release_requires_fresh_stable_round) {
         pet_keyboard_task();
         mock_clock_advance(200);
     }
-    ck_assert(pet_keyboard_ready());
+    ck_assert(!pet_keyboard_ready());
     ck_assert(!pet_keyboard_released());
     for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
         pet_keyboard_task();
@@ -1688,6 +1732,7 @@ Suite* keyboard_suite(void) {
     TCase* const core = tcase_create("reports");
     tcase_add_checked_fixture(core, setup, teardown);
     tcase_add_test(core, test_physical_scanner_publishes_complete_matrix);
+    tcase_add_loop_test(core, test_physical_scanner_discards_noisy_round, 0, 2);
     tcase_add_test(core, test_physical_scanner_release_requires_fresh_stable_round);
     tcase_add_test(core, test_menu_batched_taps);
     tcase_add_loop_test(core, test_core_source_edges_without_reports, 0, 2);
