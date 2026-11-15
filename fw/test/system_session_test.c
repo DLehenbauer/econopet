@@ -135,6 +135,21 @@ START_TEST(test_suspend_restores_borrowed_resources_and_control) {
 }
 END_TEST
 
+/** Guest reset clears both 80-column character halves and initializes DVI attributes. */
+START_TEST(test_guest_reset_clears_full_video_planes) {
+    system_state.pet_display_columns = pet_display_columns_80;
+    memset(system_state.video_char_buffer, 0xa5, sizeof(system_state.video_char_buffer));
+
+    system_reset_guest();
+
+    for (size_t i = 0; i < VIDEO_PLANE_CAPACITY; ++i)
+        ck_assert_uint_eq(system_state.video_char_buffer[i], CH_SPACE);
+    for (size_t i = 0; i < VIDEO_COLOR_CAPACITY; ++i)
+        ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + i],
+            VIDEO_DEFAULT_ATTRIBUTE);
+}
+END_TEST
+
 /** CLI reset and diagnostic commands irreversibly take diagnostic ownership. */
 START_TEST(test_terminal_actions_take_over_without_restoring_console) {
     const char* const commands[] = {"test\r", "reset\r"};
@@ -199,10 +214,27 @@ START_TEST(test_configuration_preserves_staged_get_until_unmount) {
     ck_assert_uint_eq(spi_read_at(counter), 1);
     ck_assert_uint_gt(
         status_source ? mock_ieee_status_count() : mock_ieee_data_count(), 0);
+    const size_t data_count = mock_ieee_data_count();
+    const size_t status_count = mock_ieee_status_count();
+    const size_t queued = status_source ? status_count : data_count;
+    uint8_t bytes[MOCK_IEEE_TX_CAPACITY];
+    bool eoi[MOCK_IEEE_TX_CAPACITY];
+    ck_assert_uint_le(queued, count_of(bytes));
+    for (size_t i = 0; i < queued; ++i) {
+        bytes[i] = status_source ? mock_ieee_status_byte(i) : mock_ieee_data_byte(i);
+        eoi[i] = status_source ? mock_ieee_status_eoi(i) : mock_ieee_data_eoi(i);
+    }
 
     set_cpu(CPU_READY);
     ck_assert(system_suspend());
     system_restore(false);
+    ck_assert_uint_eq(spi_read_at(counter), 1);
+    ck_assert_uint_eq(mock_ieee_data_count(), data_count);
+    ck_assert_uint_eq(mock_ieee_status_count(), status_count);
+    for (size_t i = 0; i < queued; ++i) {
+        ck_assert_uint_eq(status_source ? mock_ieee_status_byte(i) : mock_ieee_data_byte(i), bytes[i]);
+        ck_assert_int_eq(status_source ? mock_ieee_status_eoi(i) : mock_ieee_data_eoi(i), eoi[i]);
+    }
     test_register_file("/config.yaml", "configs:\n  - name: replacement\n");
     const setup_sink_t sink = {0};
     load_config(&sink, 0);
@@ -220,6 +252,7 @@ Suite* system_session_suite(void) {
     TCase* const test = tcase_create("ownership");
     tcase_add_checked_fixture(test, setup, teardown);
     tcase_add_loop_test(test, test_suspend_restores_borrowed_resources_and_control, 0, 3);
+    tcase_add_test(test, test_guest_reset_clears_full_video_planes);
     tcase_add_test(test, test_terminal_actions_take_over_without_restoring_console);
     tcase_add_test(test, test_restore_without_resume_retains_halt);
     tcase_add_loop_test(test, test_configuration_preserves_staged_get_until_unmount, 0, 2);

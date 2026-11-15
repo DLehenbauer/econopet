@@ -12,9 +12,15 @@
 #include "hardware/gpio.h"
 
 #include "diag/log/log.h"
+#include "display/display.h"
+#include "display/window.h"
+#include "driver.h"
 #include "fatal.h"
+#include "input/pet_keyboard.h"
 #include "mock.h"
 #include "sd/activity.h"
+#include "system/state.h"
+#include "system/system.h"
 
 static jmp_buf fatal_exit;
 static bool observing;
@@ -285,6 +291,67 @@ START_TEST(test_sd_startup_failure) {
 }
 END_TEST
 
+/** Fatal ROM execution must start with audio restored and console ownership retired. */
+static void check_fatal_rom_release(cpu_state_t state) {
+    if (state == CPU_READY) {
+        ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+        ck_assert(!pet_keyboard_active());
+        ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), ECONOPET_REG_AUDIO_ENABLE_MASK);
+    }
+}
+
+/** Render and upload fatal details without clearing UART, including from a muted console. */
+START_TEST(test_fatal_display_preserves_uart_and_recovers_console_audio) {
+    mock_reset();
+    system_reset_guest();
+    if (_i != 0) {
+        ck_assert(system_suspend());
+        ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), 0);
+    }
+    memset(system_state.video_char_buffer, 0xa5, sizeof(system_state.video_char_buffer));
+    FILE* const output = tmpfile();
+    ck_assert_ptr_nonnull(output);
+    fflush(stdout);
+    const int saved_stdout = dup(fileno(stdout));
+    ck_assert_int_ge(saved_stdout, 0);
+    ck_assert_int_ge(dup2(fileno(output), fileno(stdout)), 0);
+    fputs("retained UART history\r\n", stdout);
+    fflush(stdout);
+
+    mock_cpu_set_state_observer(check_fatal_rom_release);
+    fatal_display_message("disk failed\nretry");
+    mock_cpu_set_state_observer(NULL);
+    fflush(stdout);
+    ck_assert_int_ge(dup2(saved_stdout, fileno(stdout)), 0);
+    close(saved_stdout);
+
+    rewind(output);
+    char uart[128] = {0};
+    ck_assert_uint_lt(fread(uart, 1, sizeof(uart) - 1, output), sizeof(uart) - 1);
+    ck_assert_str_eq(uart, "retained UART history\r\n");
+    fclose(output);
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert(!pet_keyboard_active());
+    ck_assert_int_eq(system_state.video_source, video_source_firmware);
+    ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
+    const uint8_t first_row[] = {
+        0xc5, 0xba, CH_SPACE, 0x04, 0x09, 0x13, 0x0b, CH_SPACE, 0x06, 0x01, 0x09, 0x0c, 0x05, 0x04,
+    };
+    const uint8_t second_row[] = {0x12, 0x05, 0x14, 0x12, 0x19};
+    const size_t columns = pet_display_columns_40;
+    const size_t rows = 25;
+    for (size_t offset = 0; offset < columns * rows; ++offset) {
+        const uint8_t expected = offset < sizeof(first_row) ? first_row[offset]
+            : offset >= columns && offset < columns + sizeof(second_row)
+                ? second_row[offset - columns] : CH_SPACE;
+        ck_assert_uint_eq(system_state.video_char_buffer[offset], expected);
+        ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + offset], expected);
+    }
+    ck_assert_mem_eq(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer,
+        PET_MAX_VIDEO_RAM_BYTES);
+}
+END_TEST
+
 Suite* fatal_error_suite(void) {
     Suite* const suite = suite_create("Morse error diagnostics");
     TCase* const tests = tcase_create("fatal reporting");
@@ -297,5 +364,8 @@ Suite* fatal_error_suite(void) {
     TCase* const formatting = tcase_create("fatal log formatting");
     tcase_add_test(formatting, test_fatal_log_line_capacity);
     suite_add_tcase(suite, formatting);
+    TCase* const display = tcase_create("fatal display");
+    tcase_add_loop_test(display, test_fatal_display_preserves_uart_and_recovers_console_audio, 0, 2);
+    suite_add_tcase(suite, display);
     return suite;
 }

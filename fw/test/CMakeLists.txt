@@ -142,6 +142,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE "${EXTERNAL_DIR}/pico-vfs/inc
 target_include_directories(${PROJECT_NAME} PRIVATE "${PICO_SDK_PATH}/lib/tinyusb/src")
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_TINYUSB CFG_TUSB_MCU=OPT_MCU_NONE)
 
+# Exercise the physical fatal renderer with the linked ROM, display and SPI fixtures.
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_FATAL_DISPLAY)
+
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})
 

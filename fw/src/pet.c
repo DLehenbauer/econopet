@@ -59,7 +59,7 @@ void pet_reset() {
     keyboard_core_reset(&system_state);
     dispatch_key_events();
 
-    memset(system_state.video_char_buffer, 0x20, VIDEO_RAM_UNIT_BYTES);
+    memset(system_state.video_char_buffer, 0x20, VIDEO_PLANE_CAPACITY);
     memset(system_state.video_char_buffer + VIDEO_COLOR_OFFSET,
            VIDEO_DEFAULT_ATTRIBUTE, VIDEO_COLOR_CAPACITY);
     // Keep the last physical observation for held-key suppression across the reset.

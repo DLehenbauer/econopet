@@ -60,7 +60,7 @@ bool input_routing_menu_active(void) {
 void input_routing_set_menu_active(bool active) {
     // Transfer the destination and retire navigation and runtime ownership together.
     menu_active = active;
-    if (active) {
+    if (active && system_request.action == input_system_request_menu) {
         system_request = (input_system_request_t){0};
     }
     input_routing_reset();

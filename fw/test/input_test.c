@@ -10,6 +10,7 @@
 #include "input/input_controls.h"
 #include "input/input_routing.h"
 #include "input/keyboard_core.h"
+#include "input/pet_keyboard.h"
 #include "mock.h"
 #include "ui/cli.h"
 #include "usb/keyboard.h"
@@ -270,6 +271,35 @@ START_TEST(test_acquired_terminal_session_transitions) {
 }
 END_TEST
 
+static unsigned int menu_preparation_services;
+static input_system_action_t preparation_request;
+
+/** Deliver an independent gesture while the menu waits for its physical scanner. */
+static void service_menu_preparation(void) {
+    if (menu_preparation_services++ == 0) {
+        input_routing_gesture(INPUT_SOURCE_BUTTON, preparation_request == input_system_request_reset
+            ? input_gesture_button_short : input_gesture_button_long);
+    }
+    input_task();
+}
+
+/** Retire redundant menu requests without losing an independent pending reset. */
+START_TEST(test_menu_preparation_preserves_reset_request) {
+    preparation_request = _i == 0 ? input_system_request_reset : input_system_request_menu;
+    menu_preparation_services = 0;
+    pet_keyboard_begin_boot();
+    ck_assert(!pet_keyboard_ready());
+
+    input_menu_begin(service_menu_preparation);
+    ck_assert_uint_gt(menu_preparation_services, 0);
+    input_menu_end(service_menu_preparation);
+    pet_keyboard_end();
+
+    ck_assert_int_eq(input_routing_take_request().action,
+        _i == 0 ? input_system_request_reset : input_system_none);
+}
+END_TEST
+
 Suite* input_suite(void) {
     Suite* const suite = suite_create("input");
     TCase* const task = tcase_create("hardware-boundaries");
@@ -281,6 +311,7 @@ Suite* input_suite(void) {
     tcase_add_test(task, test_escape_timeout_keeps_other_sources_serviced);
     tcase_add_test(task, test_escape_recovery);
     tcase_add_test(task, test_acquired_terminal_session_transitions);
+    tcase_add_loop_test(task, test_menu_preparation_preserves_reset_request, 0, 2);
     suite_add_tcase(suite, task);
     return suite;
 }
