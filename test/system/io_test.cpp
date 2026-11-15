@@ -689,7 +689,7 @@ TEST(ExternalVia, UnsupportedModesFailBeforeChangingRegistersOrObservations) {
     // Reject each unsupported ACR bit independently.
     for (const auto mode : {ViaAcrBit::LatchA, ViaAcrBit::LatchB,
         ViaAcrBit::ShiftBit0, ViaAcrBit::ShiftBit1,
-        ViaAcrBit::ShiftBit2, ViaAcrBit::Timer1Pb7}) {
+        ViaAcrBit::Timer1Pb7}) {
         EXPECT_THROW(via.set_acr(mode, DeviceSetupTime), std::logic_error);
         EXPECT_EQ(via.state().acr, ViaControlReset);
     }
@@ -698,10 +698,9 @@ TEST(ExternalVia, UnsupportedModesFailBeforeChangingRegistersOrObservations) {
         EXPECT_THROW(write(via, ViaRegister::Pcr, mode, DeviceSetupTime), std::logic_error);
         EXPECT_EQ(via.state().pcr, ViaControlReset);
     }
-    // Reject shift accesses and out-of-range indices before recording writes.
-    EXPECT_THROW(write(via, ViaRegister::Shift, 0, DeviceSetupTime), std::logic_error);
-    EXPECT_THROW(via.peek(ViaRegister::Shift), std::logic_error);
-    EXPECT_THROW(read(via, ViaRegister::Shift, DeviceSetupTime), std::logic_error);
+    // Reject unsupported combinations and indices before recording writes.
+    EXPECT_THROW(via.set_acr(ViaAcrBit::ShiftBit2 | ViaAcrBit::Timer2CountPb6,
+        DeviceSetupTime), std::logic_error);
     const auto invalid = static_cast<ViaRegister>(ViaRegisterMask + 1);
     EXPECT_THROW(via.peek(invalid), std::out_of_range);
     EXPECT_THROW(write(via, invalid, 0, DeviceSetupTime), std::out_of_range);
@@ -710,14 +709,17 @@ TEST(ExternalVia, UnsupportedModesFailBeforeChangingRegistersOrObservations) {
 
 // Check the private rejection mask against the supported modes for every byte.
 TEST(ExternalVia, AcrValidationPreservesAllRegisterEncodings) {
-    constexpr uint8_t SupportedBits = (ViaAcrBit::Timer1Continuous | ViaAcrBit::Timer2CountPb6).bits();
+    constexpr uint8_t SupportedBits = (ViaAcrBit::Timer1Continuous
+        | ViaAcrBit::Timer2CountPb6 | ViaAcrBit::ShiftBit2).bits();
     for (unsigned value = 0; value <= MaximumRegisterValue; ++value) {
         SCOPED_TRACE(value);
         Via6522 via;
         const auto data = static_cast<uint8_t>(value);
         const auto before = model_values(via.state());
         // Unsupported bits must reject before the model or history advances.
-        if (data & ~SupportedBits) {
+        const bool serial_and_pulse = (data & std::to_underlying(ViaAcrBit::ShiftBit2))
+            && (data & std::to_underlying(ViaAcrBit::Timer2CountPb6));
+        if ((data & ~SupportedBits) || serial_and_pulse) {
             EXPECT_THROW(write(via, ViaRegister::Acr, data, DeviceSetupTime), std::logic_error);
             EXPECT_EQ(model_values(via.state()), before);
             EXPECT_EQ(via.writes().count(), 0);
@@ -727,6 +729,142 @@ TEST(ExternalVia, AcrValidationPreservesAllRegisterEncodings) {
             EXPECT_EQ(via.writes().count(), 1);
         }
     }
+}
+
+// SR accesses are acknowledged, peeks are pure, and reset retains SR data.
+TEST(ExternalVia, DisabledShiftRegisterAcceptsAccessesAndExternalInputWithoutSerialIrq) {
+    constexpr uint8_t Pattern = 0xb2;
+    constexpr std::array InputBits{true, false, true, true, false, false, true, false};
+    Via6522 via;
+    via.clock();
+    write(via, ViaRegister::Shift, Pattern, DeviceSetupTime);
+    const auto before = model_values(via.state());
+    for (unsigned repeat = 0; repeat < PeekRepetitions; ++repeat)
+        EXPECT_EQ(via.peek(ViaRegister::Shift), Pattern);
+    EXPECT_EQ(model_values(via.state()), before);
+    EXPECT_EQ(read(via, ViaRegister::Shift, DeviceSetupTime), Pattern);
+    write(via, ViaRegister::Shift, 0, DeviceSetupTime);
+    for (const bool bit : InputBits) {
+        via.inputs([&](auto& inputs) { inputs.cb1 = false; inputs.cb2 = bit; });
+        via.clock();
+        via.inputs([](auto& inputs) { inputs.cb1 = true; });
+        via.clock();
+    }
+    EXPECT_EQ(via.peek(ViaRegister::Shift), Pattern);
+    EXPECT_FALSE(via.interrupts().contains(ViaInterruptBit::Shift));
+    via.reset();
+    EXPECT_EQ(via.peek(ViaRegister::Shift), Pattern);
+    EXPECT_EQ(via.peek(ViaRegister::Acr), ViaControlReset);
+}
+
+// R6522 Figs. 20/25/31f: MSB-first rotation, N+2 clocks per half-bit, no SR IRQ.
+TEST(ExternalVia, FreeRunningSerialOutputRepeatsAtTimer2RateWithoutControlIrqs) {
+    constexpr uint8_t Pattern = 0xb2;
+    constexpr std::array ExpectedBits{true, false, true, true, false, false, true, false};
+    constexpr unsigned RepeatedBits = 2 * ExpectedBits.size();
+    for (const uint8_t load : {uint8_t{0}, uint8_t{3}, uint8_t{255}}) {
+        SCOPED_TRACE(unsigned(load));
+        Via6522 via;
+        via.clock();
+        via.set_interrupts(ViaInterruptBit::Shift | ViaInterruptBit::Cb1 | ViaInterruptBit::Cb2,
+            true, DeviceSetupTime);
+        write(via, ViaRegister::Pcr, ViaPcrBothLow, DeviceSetupTime);
+        write(via, ViaRegister::Shift, Pattern, DeviceSetupTime);
+        write(via, ViaRegister::Timer2Low, load, DeviceSetupTime);
+        write(via, ViaRegister::Timer2High, 0, DeviceSetupTime);
+        via.set_acr(ViaAcrBit::ShiftBit2, DeviceSetupTime);
+        for (unsigned wait = 0; wait < MaximumRegisterValue + TimerPipelineClocks && via.cb1(); ++wait)
+            via.clock();
+        ASSERT_FALSE(via.cb1());
+        const unsigned bit_period = 2 * (unsigned(load) + 2);
+        for (unsigned bit = 0; bit < RepeatedBits; ++bit) {
+            // External control levels and SR reads must not restart the serial clock.
+            via.inputs([&](auto& inputs) { inputs.cb1 = bit % 2; inputs.cb2 = bit % 2; });
+            (void)read(via, ViaRegister::Shift, DeviceSetupTime);
+            EXPECT_EQ(via.cb2(), ExpectedBits[bit % ExpectedBits.size()]);
+            const auto before = model_values(via.state());
+            (void)via.peek(ViaRegister::Shift);
+            EXPECT_EQ(model_values(via.state()), before);
+            for (unsigned cycle = 1; cycle < bit_period; ++cycle)
+                via.clock();
+            EXPECT_FALSE(via.cb1());
+            EXPECT_FALSE(via.irq());
+        }
+        EXPECT_EQ(via.peek(ViaRegister::Shift), Pattern);
+        EXPECT_FALSE(via.interrupts().contains(ViaInterruptBit::Shift));
+        EXPECT_FALSE(via.interrupts().contains(ViaInterruptBit::Cb1));
+        EXPECT_FALSE(via.interrupts().contains(ViaInterruptBit::Cb2));
+    }
+}
+
+// The serial divider reloads the low latch, but T2 still borrows and interrupts once.
+TEST(ExternalVia, SerialTimerRetainsTimer2OneShotInterruptAndLatchUpdates) {
+    constexpr uint8_t FirstLoad = 1;
+    constexpr uint8_t NextLoad = 5;
+    Via6522 via;
+    via.set_interrupts(ViaInterruptBit::Timer2, true, DeviceSetupTime);
+    write(via, ViaRegister::Timer2Low, FirstLoad, DeviceSetupTime);
+    write(via, ViaRegister::Timer2High, 0, DeviceSetupTime);
+    via.set_acr(ViaAcrBit::ShiftBit2, DeviceSetupTime);
+    for (unsigned cycle = 0; cycle < DeselectedTimerClocks && !via.irq(); ++cycle)
+        via.clock();
+    ASSERT_TRUE(via.irq());
+    EXPECT_EQ(via.peek(ViaRegister::Ifr),
+        (ViaInterruptBit::Summary | ViaInterruptBit::Timer2).bits());
+    EXPECT_EQ(via.peek(ViaRegister::Timer2High), MaximumRegisterValue);
+    // A low-latch write applies at the reload, without rearming the IRQ.
+    write(via, ViaRegister::Timer2Low, NextLoad, DeviceSetupTime);
+    (void)read(via, ViaRegister::Timer2Low, DeviceSetupTime);
+    EXPECT_FALSE(via.irq());
+    for (unsigned cycle = 0; cycle < IdleTimerClocks; ++cycle) {
+        via.clock();
+        EXPECT_FALSE(via.irq());
+    }
+    // Anchor at a serial edge, then check the new half-period independently.
+    const bool level = via.cb1();
+    for (unsigned cycle = 0; cycle < NextLoad + TimerPipelineClocks && via.cb1() == level; ++cycle)
+        via.clock();
+    ASSERT_NE(via.cb1(), level);
+    for (unsigned cycle = 1; cycle < NextLoad + TimerPipelineClocks; ++cycle) {
+        via.clock();
+        EXPECT_NE(via.cb1(), level);
+    }
+    via.clock();
+    EXPECT_EQ(via.cb1(), level);
+}
+
+// Invalid mode writes preserve pending work, while disabling/reset stops it.
+TEST(ExternalVia, SerialLifecyclePreservesPendingOutputOnRejectionAndStopsOnReset) {
+    constexpr uint8_t Pattern = 0x40;
+    Via6522 via;
+    via.clock();
+    write(via, ViaRegister::Shift, Pattern, DeviceSetupTime);
+    write(via, ViaRegister::Pcr, ViaPcrBothHigh, DeviceSetupTime);
+    write(via, ViaRegister::Timer2Low, 0, DeviceSetupTime);
+    write(via, ViaRegister::Timer2High, 0, DeviceSetupTime);
+    via.set_acr(ViaAcrBit::ShiftBit2, DeviceSetupTime);
+    for (unsigned cycle = 0; cycle < DeselectedTimerClocks && via.cb1(); ++cycle)
+        via.clock();
+    ASSERT_FALSE(via.cb1());
+    const auto before = model_values(via.state());
+    EXPECT_THROW(via.set_acr(ViaAcrBit::ShiftBit0, DeviceSetupTime), std::logic_error);
+    EXPECT_EQ(model_values(via.state()), before);
+    EXPECT_TRUE(via.cb2());
+    via.clock();
+    EXPECT_FALSE(via.cb2());
+    via.inputs([](auto& inputs) { inputs.cb1 = false; });
+    via.set_acr(ViaAcr{}, DeviceSetupTime);
+    EXPECT_TRUE(via.cb2());
+    write(via, ViaRegister::Shift, Pattern, DeviceSetupTime);
+    via.set_acr(ViaAcrBit::ShiftBit2, DeviceSetupTime);
+    via.reset();
+    const auto retained = via.peek(ViaRegister::Shift);
+    for (unsigned cycle = 0; cycle < IdleTimerClocks; ++cycle)
+        via.clock();
+    EXPECT_FALSE(via.cb1());
+    EXPECT_TRUE(via.cb2());
+    EXPECT_EQ(via.peek(ViaRegister::Shift), retained);
+    EXPECT_FALSE(via.irq());
 }
 
 // Check upstream PCR predicates against independent register encodings for every byte.
@@ -977,8 +1115,8 @@ TEST(ExternalBus, InvalidViaAccessPreservesAllDevicesAndRecovers) {
             std::to_underlying(ViaAcrBit::LatchA), true},
         BusSample{true, false, ChipSelect::Via, std::to_underlying(ViaRegister::Pcr), ViaPcrCa2Pulse, true},
         BusSample{true, false, ChipSelect::Via, std::to_underlying(ViaRegister::Pcr), ViaPcrCb2Pulse, true},
-        BusSample{true, false, ChipSelect::Via, std::to_underlying(ViaRegister::Shift), 0, true},
-        BusSample{true, false, ChipSelect::Via, std::to_underlying(ViaRegister::Shift), 0, false},
+        BusSample{true, false, ChipSelect::Via, std::to_underlying(ViaRegister::Acr),
+            std::to_underlying(ViaAcrBit::ShiftBit0), true},
         BusSample{true, false, ChipSelect::Via, ViaRegisterMask + 1, 0, true},
         BusSample{true, false, ChipSelect::Via, ViaRegisterMask + 1, 0, false},
     };
@@ -1057,7 +1195,7 @@ TEST(ExternalBus, InvalidViaAccessPreservesAllDevicesAndRecovers) {
 TEST(ExternalBus, ResetCancelsInvalidPendingAccess) {
     Io devices;
     const BusSample invalid{true, false, ChipSelect::Via,
-        std::to_underlying(ViaRegister::Shift), 0, true};
+        std::to_underlying(ViaRegister::Acr), std::to_underlying(ViaAcrBit::ShiftBit0), true};
     devices.sample(invalid, DeviceSetupTime);
     auto reset = invalid;
     reset.phi2 = false;

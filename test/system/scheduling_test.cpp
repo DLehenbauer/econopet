@@ -308,9 +308,9 @@ TEST_F(SystemTest, SchedulerPreservesSuspendedHardwarePhaseAndRequiresResetRecov
     unsigned applied = 0;
     scheduler.at(system.time(), [&](System& board) {
         ++applied;
-        const econopet::CpuAddress shift{pet::ViaPortB.value()
-            + std::to_underlying(econopet::io::ViaRegister::Shift)};
-        board.drive_physical_cpu({shift, uint8_t{0x42}, false});
+        const econopet::CpuAddress acr{pet::ViaPortB.value()
+            + std::to_underlying(econopet::io::ViaRegister::Acr)};
+        board.drive_physical_cpu({acr, std::to_underlying(econopet::io::ViaAcrBit::ShiftBit0), false});
     });
     EXPECT_THROW(system.tick(1000), std::logic_error);
     ASSERT_TRUE(system.clock_faulted());

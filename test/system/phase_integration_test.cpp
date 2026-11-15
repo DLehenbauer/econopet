@@ -578,7 +578,10 @@ TEST_F(SystemTest, PhaseEscapingFaultsRetainSpecificCausesBeforeObserverDispatch
     const auto check = [&](System& board, auto& test, Fault fault) {
         auto first = test.within(Budget).pause([&](auto& p) {
             p.pause("ready");
-            if (fault == Fault::Clock) p.lda(pet::ViaShift);
+            if (fault == Fault::Clock) {
+                const auto unsupported = std::to_underlying(econopet::io::ViaAcrBit::ShiftBit0);
+                p.lda(imm(unsupported)).sta(pet::ViaAcr);
+            }
         });
         const auto service = [&](System& active, Cycles remaining) {
             if (fault == Fault::Clock) {

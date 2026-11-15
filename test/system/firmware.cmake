@@ -56,6 +56,21 @@ target_compile_options(econopet_menu_firmware PRIVATE -fexceptions -ffunction-se
 target_link_libraries(econopet_menu_firmware PUBLIC econopet_host_firmware PRIVATE yaml)
 target_include_directories(econopet_menu_firmware PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_executable(econopet_menu_tests menu_session_test.cpp menu_platform.cpp framework/scheduler.cpp)
+# Execute the production diagnostic ROM rather than the session-only placeholder.
+find_program(CA65_EXECUTABLE ca65 REQUIRED)
+find_program(LD65_EXECUTABLE ld65 REQUIRED)
+set(MENU_BOOT_ROM "${CMAKE_CURRENT_BINARY_DIR}/roms/menu.rom")
+add_custom_command(OUTPUT "${MENU_BOOT_ROM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/roms"
+    COMMAND "${CA65_EXECUTABLE}" -t pet -g
+        -o "${CMAKE_CURRENT_BINARY_DIR}/roms/menu.o" "${ECONOPET_ROOT}/rom/src/main.s"
+    COMMAND "${LD65_EXECUTABLE}" -C "${ECONOPET_ROOT}/rom/src/pet.cfg"
+        -o "${MENU_BOOT_ROM}" "${CMAKE_CURRENT_BINARY_DIR}/roms/menu.o"
+    DEPENDS "${ECONOPET_ROOT}/rom/src/main.s" "${ECONOPET_ROOT}/rom/src/pet.cfg"
+    VERBATIM)
+add_custom_target(econopet_menu_boot_rom DEPENDS "${MENU_BOOT_ROM}")
+add_dependencies(econopet_menu_tests econopet_menu_boot_rom)
+target_compile_definitions(econopet_menu_tests PRIVATE ECONOPET_MENU_BOOT_ROM="${MENU_BOOT_ROM}")
 target_compile_features(econopet_menu_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_menu_tests PRIVATE econopet_menu_firmware GTest::gtest_main)
 # Unused boot/storage entry points are not host platform APIs.

@@ -1509,9 +1509,6 @@ class System {
         if (!dut_->pia2_cs_n_o)
             return io_.pia2().peek(static_cast<econopet::io::PiaRegister>(reg & econopet::io::PiaRegisterMask));
         if (!dut_->via_cs_n_o) {
-            // Reset cancels the unsupported shift read, not SRAM or supported device reads.
-            if (dut_->cpu_reset_active_o && reg == std::to_underlying(econopet::io::ViaRegister::Shift))
-                return econopet::io::PortAllHigh;
             try {
                 return io_.via().peek(static_cast<econopet::io::ViaRegister>(reg));
             } catch (const std::logic_error& error) {

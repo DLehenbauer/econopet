@@ -3,13 +3,48 @@
 
 #include "framework/firmware_test.h"
 
+#include <fstream>
+
 extern "C" {
 #include "display/display.h"
 #include "driver.h"
 #include "input/keyboard_core.h"
 #include "input/pet_keyboard.h"
+#include "roms/roms.h"
 #include "system/state.h"
 #include "system/system.h"
+}
+
+/** Run both assembled ROM entries and observe CPU-published completion through SPI. */
+TEST_F(FirmwareTest, AssembledDiagnosticRomCompletesBeforeBootDeadline) {
+    constexpr size_t RomBytes = 0x100;
+    constexpr unsigned JumpEntryBytes = 3;
+    constexpr econopet::Cycles BootBudget{128'000'000};
+    std::array<uint8_t, RomBytes> rom;
+    std::ifstream file(ECONOPET_MENU_BOOT_ROM, std::ios::binary);
+    ASSERT_TRUE(file.read(reinterpret_cast<char*>(rom.data()), rom.size()));
+    ASSERT_EQ(file.peek(), std::ifstream::traits_type::eof());
+
+    for (const auto reason : {MENU_ROM_BOOT_NORMAL, MENU_ROM_BOOT_ERROR}) {
+        SCOPED_TRACE(reason);
+        system.cpu(CPU_SOFT_6502).prepare();
+        spi_write(MENU_ROM_START_ADDRESS, rom.data(), rom.size());
+        spi_write_at(MENU_ROM_COMPLETION_ADDRESS, 0);
+        system.cpu(CPU_SOFT_6502).start(econopet::CpuAddress{
+            MENU_ROM_START_ADDRESS + JumpEntryBytes * static_cast<unsigned>(reason)});
+        uint8_t observed = 0;
+        const auto start = system.time();
+        system.execution().within(BootBudget)
+            .service([&](System&, econopet::Cycles) {
+                observed = spi_read_once(MENU_ROM_COMPLETION_ADDRESS);
+            })
+            .until([&](const System&) { return observed == MENU_ROM_COMPLETION_VALUE; })
+            .run("assembled diagnostic completion");
+        EXPECT_LT(system.time() - start, BootBudget);
+        EXPECT_EQ(system.peek(econopet::SramAddress{MENU_ROM_COMPLETION_ADDRESS}),
+            MENU_ROM_COMPLETION_VALUE);
+        EXPECT_NE(spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_TEXT_MODE_MASK, 0);
+    }
 }
 
 /** Run real session/scanner SPI against production top, SRAM, and physical chip models. */
