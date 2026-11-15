@@ -75,7 +75,7 @@ TEST_F(FirmwareTest, BackRestoresBorrowedBytesAndResumesAfterPhysicalScanning) {
         }
         EXPECT_EQ(system.io().via().writes().count(), via_writes);
         EXPECT_EQ(system.io().pia2().writes().count(), pia2_writes);
-        std::array<uint8_t, VIDEO_RAM_UNIT_BYTES> menu;
+        std::array<uint8_t, VIDEO_PLANE_CAPACITY> menu;
         menu.fill(0x20);
         spi_write(VIDEO_RAM_ADDRESS, menu.data(), menu.size());
         system_restore(true);

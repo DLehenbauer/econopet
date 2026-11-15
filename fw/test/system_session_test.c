@@ -155,6 +155,7 @@ START_TEST(test_suspend_restores_borrowed_resources_and_control) {
     ck_assert_uint_eq(get_cpu(), cpu & ~CPU_READY);
     ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), 0);
     __real_display_task();
+    display_clear();
     system_restore(true);
 
     ck_assert_int_eq(system_mode(), system_operation_guest);

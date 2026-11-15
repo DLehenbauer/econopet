@@ -21,7 +21,14 @@ typedef enum {
 void system_init(void);
 /** Return the committed operation mode. */
 system_operation_t system_mode(void);
-/** Borrow the guest's bounded resources for a firmware console, rejecting nested entry. */
+/**
+ * Borrow the guest's bounded resources for a firmware console, rejecting nested entry.
+ *
+ * This is not a peripheral snapshot. Shared rev-a clocks and external inputs keep
+ * running. PIA1 data reads acknowledge cassette/retrace flags, which are not
+ * reconstructed. Active cassette transfers are outside the resume guarantee.
+ * Unborrowed VIA/PIA2 interrupt state is left alone.
+ */
 bool system_suspend(void);
 /** Restore borrowed resources, optionally returning CPU control to the guest. */
 void system_restore(bool resume);
