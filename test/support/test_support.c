@@ -7,6 +7,7 @@
 #include "pch.h"
 #include "test_support.h"
 
+#include <strings.h>
 #include <time.h>
 
 #include "fatal.h"
@@ -23,6 +24,7 @@ typedef struct mem_file_s {
     size_t capacity;
     bool writable;
     bool fail_writes;
+    size_t open_calls;
     struct mem_file_s* owner;
     struct mem_file_s* next;
 } mem_file_t;
@@ -30,11 +32,25 @@ typedef struct mem_file_s {
 static mem_file_t* mem_files = NULL;
 static size_t open_cookie_count;
 
+typedef struct file_alias_s {
+    char alias[SD_PATH_MAX];
+    char path[SD_PATH_MAX];
+    struct file_alias_s* next;
+} file_alias_t;
+
+static file_alias_t* file_aliases;
+
 // Reports live stdio borrowers independently of registered backing ownership.
 size_t test_open_file_count(void) { return open_cookie_count; }
 
 // Finds a registered file without accessing the host filesystem.
 static mem_file_t* find_mem_file(const char* path) {
+    for (const file_alias_t* alias = file_aliases; alias != NULL; alias = alias->next) {
+        if (strcmp(alias->alias, path) == 0) {
+            path = alias->path;
+            break;
+        }
+    }
     for (mem_file_t* file = mem_files; file != NULL; file = file->next) {
         if (strcmp(file->path, path) == 0) {
             return file;
@@ -43,8 +59,46 @@ static mem_file_t* find_mem_file(const char* path) {
     return NULL;
 }
 
+// Supplies filesystem-resolved identities independently of the mount facade's matching.
+bool sd_resolve_path(char path[SD_PATH_MAX]) {
+    const mem_file_t* file = find_mem_file(path);
+    for (const mem_file_t* current = mem_files; file == NULL && current != NULL; current = current->next) {
+        if (strcasecmp(current->path, path) == 0) file = current;
+    }
+    if (file != NULL) {
+        strcpy(path, file->path);
+        return true;
+    }
+    char* const resolved = realpath(path, NULL);
+    if (resolved == NULL) return false;
+    const bool fits = strlen(resolved) < SD_PATH_MAX;
+    if (fits) strcpy(path, resolved);
+    free(resolved);
+    return fits;
+}
+
+// Models an alias returned by the backing filesystem, not by the mount algorithm.
+void test_register_file_alias(const char* alias, const char* path) {
+    assert(find_mem_file(path) != NULL);
+    vet_path_length(strlen(alias));
+    vet_path_length(strlen(path));
+    file_alias_t* const entry = malloc(sizeof(*entry));
+    assert(entry != NULL);
+    strcpy(entry->alias, alias);
+    strcpy(entry->path, path);
+    entry->next = file_aliases;
+    file_aliases = entry;
+}
+
 // Share duplicate detection with fixture owners before they claim a path.
 bool test_file_registered(const char* path) { return find_mem_file(path) != NULL; }
+
+// Observes transient duplicate opens even when the candidate is subsequently closed.
+size_t test_file_open_calls(const char* path) {
+    const mem_file_t* const file = find_mem_file(path);
+    assert(file != NULL);
+    return file->open_calls;
+}
 
 // Registers a read-only text fixture using the binary backing store.
 void test_register_file(const char* path, const char* content) {
@@ -66,6 +120,7 @@ void test_register_binary_file(const char* path, const void* data, size_t size, 
     file->capacity = size;
     file->writable = writable;
     file->fail_writes = false;
+    file->open_calls = 0;
     file->owner = file;
     file->content = malloc(file->capacity);
     memcpy(file->content, data, file->size);
@@ -84,6 +139,16 @@ void test_fail_file_writes(const char* path, bool fail) {
 
 // Unlinks and frees a registered fixture once its handles are closed.
 void test_unregister_file(const char* path) {
+    file_alias_t** alias = &file_aliases;
+    while (*alias != NULL) {
+        if (strcmp((*alias)->path, path) == 0) {
+            file_alias_t* const retired = *alias;
+            *alias = retired->next;
+            free(retired);
+        } else {
+            alias = &(*alias)->next;
+        }
+    }
     mem_file_t** pp = &mem_files;
     while (*pp) {
         if (strcmp((*pp)->path, path) == 0) {
@@ -99,6 +164,11 @@ void test_unregister_file(const char* path) {
 
 // Frees every registered fixture once its handles are closed.
 void test_clear_files(void) {
+    while (file_aliases != NULL) {
+        file_alias_t* const next = file_aliases->next;
+        free(file_aliases);
+        file_aliases = next;
+    }
     while (mem_files) {
         mem_file_t* next = mem_files->next;
         free(mem_files->content);
@@ -199,6 +269,7 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
     FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
     if (stream != NULL) {
         ++open_cookie_count;
+        ++file->open_calls;
     } else {
         free(cookie);
     }

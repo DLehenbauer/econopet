@@ -65,8 +65,14 @@ bool test_file_registered(const char* path);
 // Counts live cookie-backed FILE handles, including unregistered borrowers.
 size_t test_open_file_count(void);
 
+// Counts successful stdio opens of a registered fixture, including closed handles.
+size_t test_file_open_calls(const char* path);
+
 // Registers a mutable or read-only binary file for code that uses stdio.
 void test_register_binary_file(const char* path, const void* data, size_t size, bool writable);
+
+// Registers an explicit filesystem spelling for an existing fixture without copying its bytes.
+void test_register_file_alias(const char* alias, const char* path);
 
 // Toggle backing-store write failures for existing and future fixture handles.
 void test_fail_file_writes(const char* path, bool fail);

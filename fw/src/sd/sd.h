@@ -32,6 +32,10 @@ const char* sd_dir_prefix(sd_dir_t directory);
 // overlong full path is fatal, never silently truncated.
 void sd_make_path(char path[SD_PATH_MAX], sd_dir_t directory, const char* name);
 
+// Resolves an existing slash-delimited path to on-disk long names without opening a file.
+// Rejects alternate separators and invalid CP932 sequences. Failure may modify path.
+bool sd_resolve_path(char path[SD_PATH_MAX]);
+
 bool sd_init();
 
 FILE* sd_open(const char* path, const char* mode);

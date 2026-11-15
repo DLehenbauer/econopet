@@ -218,8 +218,7 @@ static void loader_options(void* context, options_t* options) {
 static void loader_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
     ++((loader_actions_t*)context)->mounts;
     const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
-    vet(ieee_drive_try_mount(slot, filename) == DOS_MEDIA_OK,
-        "configured disk could not mount");
+    vet(ieee_drive_try_mount(slot, filename, NULL) == DOS_MEDIA_OK, "configured disk could not mount");
 }
 
 static void configuration_loader_setup(void) {
@@ -250,7 +249,7 @@ static void mount_loader_image(unsigned int slot, diskimage_type_t type, const c
     sd_make_path(path, SD_DIR_DISKS, name);
     test_register_binary_file(path, image, sizes[type], false);
     free(image);
-    ck_assert_int_eq(ieee_drive_try_mount(slot, name), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
 }
 
 // Clears callback observations and restores graphics-keyboard/CRTC defaults.
@@ -1354,7 +1353,7 @@ START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
 }
 END_TEST
 
-/** Configuration unmounts first so either mount order replaces a complete pair. */
+/** Configuration clears old media, then the last mount of an image wins in either order. */
 START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
     mount_loader_image(0, diskimage_type_d64, "old.d64");
     mount_loader_image(1, diskimage_type_d64, "old-partner.d64");
@@ -1398,8 +1397,8 @@ START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
     ck_assert_uint_eq(actions.copies, 1);
     ck_assert_uint_eq(actions.options, 1);
     ck_assert_uint_eq(actions.mounts, 2);
-    ck_assert_str_eq(ieee_drive_filename(0), "next.d80");
-    ck_assert_str_eq(ieee_drive_filename(1), "next.d80");
+    ck_assert_str_eq(ieee_drive_filename(_i), "");
+    ck_assert_str_eq(ieee_drive_filename(1 - _i), "next.d80");
 }
 END_TEST
 

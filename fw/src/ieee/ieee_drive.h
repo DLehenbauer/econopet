@@ -39,15 +39,26 @@ bool ieee_drive_unmount_all(void);
 void ieee_drive_abort(void);
 #endif
 
-// Borrows a slot's disks-relative name, or "" if empty. A successful mount,
+// Borrows a slot's canonical disks-relative name, or "" if empty. A successful mount,
 // unmount, or abort can invalidate the contents. Rejected mounts retain the name.
 const char* ieee_drive_filename(unsigned int slot);
 
+// Successful host-mount effects for callers such as the Change Disk menu.
+typedef struct {
+    int moved_from_slot; // -1 when no image moved from another slot.
+    diskimage_type_t ejected_partner;
+} ieee_drive_mount_outcome_t;
+
 // Mounts a path relative to /disks into a slot (0-7), or removes it for NULL.
-// A successful mount ejects its partner if the image types differ.
-// Failure retains both live bindings. Busy transport or pending work returns DOS_MEDIA_BUSY.
+// A successful mount moves an already-mounted image and ejects an incompatible
+// destination partner. Failure retains all bindings in the affected units.
+// Busy transport or pending work returns DOS_MEDIA_BUSY.
+// Busy rejection does not finalize units or discard their staged output.
+// Moves and same-slot remounts reuse the existing storage handle.
+// Names are normalized and must remain inside /disks.
+// If non-NULL, outcome receives successful effects and is unchanged on failure.
 // A full /disks/ path exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
-dos_media_result_t ieee_drive_try_mount(unsigned int slot, const char* filename);
+dos_media_result_t ieee_drive_try_mount(unsigned int slot, const char* filename, ieee_drive_mount_outcome_t* outcome);
 
 // Services the fabric FIFOs; call every main-loop pass.
 void ieee_drive_task(void);

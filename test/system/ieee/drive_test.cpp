@@ -335,7 +335,7 @@ std::vector<uint8_t> copy_image(const int format) {
 
 // Every public media mutation must retain a busy source and ordered receive work.
 void reject_media_mutations() {
-    EXPECT_EQ(ieee_drive_try_mount(0, "next.img"), DOS_MEDIA_BUSY);
+    EXPECT_EQ(ieee_drive_try_mount(0, "next.img", nullptr), DOS_MEDIA_BUSY);
     EXPECT_FALSE(ieee_drive_unmount_all());
 }
 } // namespace
@@ -364,8 +364,8 @@ TEST_P(DriveWriteTest, OrdinaryWritesPersistBothDisksAndRetainInterruptedReadbac
         payload.insert(payload.end(), suffix.begin(), suffix.end());
     }
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "write0.d64"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "write1.d64"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "write0.d64", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "write1.d64", nullptr), DOS_MEDIA_OK);
     for (const auto& [name, expected] : std::vector<std::pair<std::string, std::vector<uint8_t>>>{
              {slot == 0 ? "0:F?L*,S,R" : selected + ",S,R", payload}, {peer + ",S,R", peer_payload}}) {
         open_file(system, controller, Input, name);
@@ -564,7 +564,7 @@ TEST_P(DriveLifecycleTest, RemountDiscardsOldSourcesAndReopensReplacement) {
     EXPECT_EQ(controller.receive(), data('0'));
     controller.command(Untalk);
     service_rx(system, firmware, "remount old status retained");
-    ASSERT_EQ(ieee_drive_try_mount(0, "next.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "next.img", nullptr), DOS_MEDIA_OK);
     EXPECT_EQ(receive_status(system, firmware, controller, Drive),
               format == 0 ? "73,CBM DOS V2,00,00\r" : "73,CBM DOS V2.7,00,00,0\r");
     controller.command(Talk(Drive));
@@ -581,6 +581,51 @@ TEST_P(DriveLifecycleTest, RemountDiscardsOldSourcesAndReopensReplacement) {
     receive_payload(system, firmware, controller, {data(0x91), data(0x92, Eoi::Last)});
     controller.command(Untalk);
     service_rx(system, firmware, "remount replacement UNTALK");
+}
+
+// A host move retires the old source's staged bytes without resetting an unrelated reader.
+TEST_P(DriveLifecycleTest, MovingImageRetiresSourceAndPreservesUnrelatedReader) {
+    constexpr Device Destination{DeviceAddress}, Source{9}, Other{10};
+    IeeeController controller(system);
+    const int format = GetParam();
+    firmware.mount(lifecycle_image(format, {0x41, 0x42}), "old.img");
+    firmware.mount(lifecycle_image(format, {0x91, 0x92}), "moving.img", 2);
+    firmware.mount(lifecycle_image(format, {0x61, 0x62, 0x63}), "unrelated.img", 4);
+    open_file(system, controller, Channel{DataChannel}, "BASIC,SEQ,R", Other);
+    service_rx(system, firmware, "move unrelated OPEN");
+    controller.command(Talk(Other));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "move unrelated TALK");
+    EXPECT_EQ(controller.receive(), data(0x61));
+    controller.command(Untalk);
+    service_rx(system, firmware, "move unrelated cursor retained");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,SEQ,R", Source);
+    service_rx(system, firmware, "move source OPEN");
+    controller.command(Talk(Source));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "move source TALK");
+    EXPECT_EQ(controller.receive(), data(0x91));
+    controller.command(Untalk);
+    service_rx(system, firmware, "move source suffix staged");
+
+    ASSERT_EQ(ieee_drive_try_mount(0, "moving.img", nullptr), DOS_MEDIA_OK);
+    EXPECT_STREQ(ieee_drive_filename(2), "");
+    EXPECT_STREQ(ieee_drive_filename(0), "moving.img");
+    EXPECT_STREQ(ieee_drive_filename(4), "unrelated.img");
+    open_file(system, controller, Channel{DataChannel}, "BASIC,SEQ,R", Destination);
+    service_rx(system, firmware, "moved destination OPEN");
+    controller.command(Talk(Destination));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "moved destination TALK");
+    receive_payload(system, firmware, controller, {data(0x91), data(0x92, Eoi::Last)});
+    controller.command(Untalk);
+    service_rx(system, firmware, "moved destination UNTALK");
+    controller.command(Talk(Other));
+    controller.command(Secondary(Channel{DataChannel}));
+    service_rx(system, firmware, "unrelated cursor after move");
+    receive_payload(system, firmware, controller, {data(0x62), data(0x63, Eoi::Last)});
+    controller.command(Untalk);
+    service_rx(system, firmware, "unrelated cursor after move UNTALK");
 }
 
 // The drive-reset API retires RX/FIFO/channel state but retains both file owners.
@@ -741,7 +786,7 @@ TEST_P(NativeDriveTest, NativeRelPublicCreatePositionCopyAndRemount) {
 
     // Reload actual backing bytes rather than relying on any resident REL page.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(slot, "public-rel.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(slot, "public-rel.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Reader, prefix + "COPY");
     service_rx(system, firmware, "REL copied remount OPEN");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive), "00, OK,00,00" + suffix);
@@ -798,7 +843,7 @@ TEST_P(NativeDriveTest, NativeRelOverflowCloseAllAndPersistedBytes) {
     controller.command(Untalk);
     service_rx(system, firmware, "REL closed source UNTALK");
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(slot, "rel-overflow.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(slot, "rel-overflow.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Reader, prefix + "REL");
     service_rx(system, firmware, "REL overflow persisted OPEN");
     controller.command(Talk(Drive));
@@ -938,8 +983,8 @@ TEST_P(DriveLifecycleTest, RenamePreservesBothDisksAndReopensPersistedName) {
                   std::string(expected) + (format == 0 ? "\r" : ",0\r"));
     }
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "rename0.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "rename1.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "rename0.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "rename1.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, First, "0:NEW,S,R");
     service_rx(system, firmware, "rename persisted OPEN");
     controller.command(Talk(Drive));
@@ -997,8 +1042,8 @@ TEST_P(DriveLifecycleTest, ScratchProtectsReadersAndPersistsSelectedDeletion) {
     controller.command(Untalk);
     service_rx(system, firmware, "scratch peer UNTALK");
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "scratch0.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "scratch1.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "scratch0.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "scratch1.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, First, "0:BASIC,S,R");
     service_rx(system, firmware, "scratch persisted missing OPEN");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive),
@@ -1060,8 +1105,8 @@ TEST_P(DriveLifecycleTest, CopyConcatenatesAcrossDisksAndPersistsAfterAppend) {
         service_rx(system, firmware, "copy retained UNTALK");
     }
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "copy0.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "copy1.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "copy0.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "copy1.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, First, "0:PERSIST,S,R");
     service_rx(system, firmware, "copy persisted OPEN");
     controller.command(Talk(Drive));
@@ -1164,8 +1209,8 @@ TEST_P(DriveLifecycleTest, CopyAllRetainsPeersAndPersistsEveryCompletedFile) {
 
     // Actual remount must expose all payloads and native singleton/EOI behavior.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "copy-all-target.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "copy-all-source.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "copy-all-target.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "copy-all-source.img", nullptr), DOS_MEDIA_OK);
     for (const auto name : {"0:PAGED,P,R", "1:PAGED,P,R"}) {
         open_file(system, controller, Reader, name);
         service_rx(system, firmware, "copy-all remounted paged OPEN");
@@ -1273,8 +1318,8 @@ TEST_P(DriveLifecycleTest, PatternCopyRetainsPeersAndPersistsOnlySelectedFiles) 
 
     // Remount both real backing files and read copied, recovered and preserved data.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "pattern-target.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "pattern-source.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "pattern-target.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "pattern-source.img", nullptr), DOS_MEDIA_OK);
     for (const auto filename : {"0:ONE,U,R", "0:AFTER,U,R", "1:ONE,U,R", "0:BASIC,S,R"}) {
         SCOPED_TRACE(filename);
         open_file(system, controller, Reader, filename);
@@ -1341,8 +1386,8 @@ TEST_P(DriveLifecycleTest, ValidateRebuildsMapsAndAbandonsOnlySelectedDisk) {
     controller.command(Untalk);
     service_rx(system, firmware, "validate retained UNTALK");
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "validate0.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "validate1.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "validate0.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "validate1.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, First, "0:UNCLOSED,S,R");
     service_rx(system, firmware, "validate removed splat OPEN");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive),
@@ -1387,7 +1432,7 @@ TEST_P(DriveLifecycleTest, QuickAndFullFormatPersistNativeHeadersAndFreeCounts) 
         EXPECT_EQ(receive_status(system, firmware, controller, Drive),
                   GetParam() == 0 ? "00, OK,00,00\r" : "00, OK,00,00,0\r");
         ASSERT_TRUE(ieee_drive_unmount_all());
-        ASSERT_EQ(ieee_drive_try_mount(0, name), DOS_MEDIA_OK);
+        ASSERT_EQ(ieee_drive_try_mount(0, name, nullptr), DOS_MEDIA_OK);
 
         // Independently encode the entire empty BASIC directory, including EOI.
         std::vector<uint8_t> listing(64);
@@ -1480,8 +1525,8 @@ TEST_P(DriveLifecycleTest, DuplicateCopiesRawSectorsWithoutResettingOtherUnits) 
 
     // Both persisted local images remain readable after their real handle teardown.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "duplicate-target.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "duplicate-source.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "duplicate-target.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "duplicate-source.img", nullptr), DOS_MEDIA_OK);
     for (const auto* const name : {"0:BASIC,S,R", "1:BASIC,S,R"}) {
         open_file(system, controller, Reader, name);
         service_rx(system, firmware, "duplicate remounted OPEN");
@@ -1627,7 +1672,7 @@ TEST_P(DriveLifecycleTest, DirectBufferWrapRetainsPeerAndSurvivesRepeatedEoi) {
     controller.command(Untalk);
     service_rx(system, firmware, "direct reuse UNTALK");
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "direct0.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "direct0.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Direct, "0:BASIC,S,R");
     service_rx(system, firmware, "direct persisted image OPEN");
     controller.command(Talk(Drive));
@@ -1888,7 +1933,7 @@ TEST_P(DriveLifecycleTest, BlockWritesPreserveStateAndPersistAfterRemount) {
 
     // Reopen the backing file and compare the entire destination, including unused tail bytes.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "block-write0.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "block-write0.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Direct, "#");
     service_rx(system, firmware, "block write remounted direct");
     open_file(system, controller, Command, "U1:2,0,1,1");
@@ -1960,7 +2005,7 @@ TEST_P(DriveLifecycleTest, BlockMapSuggestionsAndFreesPersistAfterRemount) {
     controller.command(Unlisten);
     service_rx(system, firmware, "block map direct CLOSE");
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "block-map0.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "block-map0.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Direct, "#");
     service_rx(system, firmware, "block map remounted direct");
     open_file(system, controller, Command, GetParam() == 0 ? "U1:2,0,18,0" : "U1:2,0,38,0");
@@ -2056,7 +2101,7 @@ TEST_P(DriveLifecycleTest, BlockWriteVersionsRejectForeignAndAcceptZero) {
 
         // Reload the backing file so RAM-only rejection cannot masquerade as persisted data.
         ASSERT_TRUE(ieee_drive_unmount_all());
-        ASSERT_EQ(ieee_drive_try_mount(0, path0.c_str()), DOS_MEDIA_OK);
+        ASSERT_EQ(ieee_drive_try_mount(0, path0.c_str(), nullptr), DOS_MEDIA_OK);
         open_file(system, controller, Direct, "#");
         service_rx(system, firmware, "version remounted direct");
         open_file(system, controller, Command, "U1:2,0,1,1");
@@ -2322,8 +2367,8 @@ TEST_P(DriveLifecycleTest, ReaderBlockReadsRetainSequentialEofAndIndependentSour
 
     // CLOSE and actual remount must neither write the borrowed page nor alter the file.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "reader-block-source.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "reader-block-target.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "reader-block-source.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "reader-block-target.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Reader, "0:BASIC,S,R");
     service_rx(system, firmware, "reader block remounted OPEN");
     read(Reader, {data(0), data(0x20), data(0), data(1)});
@@ -2429,8 +2474,8 @@ TEST_P(DriveLifecycleTest, ReaderBlockWritesPersistNativePagesWithoutGrantingLis
 
     // Reopen actual backing files and compare all persisted page bytes, including tails.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "reader-write-source.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "reader-write-target.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "reader-write-source.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "reader-write-target.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Reader, "#");
     service_rx(system, firmware, "reader write remounted direct");
     for (unsigned int sector = 0; sector < 5; ++sector) {
@@ -2561,8 +2606,8 @@ TEST_P(DriveLifecycleTest, UserInterruptRetainsSourcesWriterAndDirtyMap) {
         service_rx(system, firmware, "interrupt retained channel CLOSE");
     }
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "user-interrupt0.img"), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(1, "user-interrupt1.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "user-interrupt0.img", nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "user-interrupt1.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Reader, "1:IRQFILE,S,R");
     service_rx(system, firmware, "interrupt persisted writer OPEN");
     controller.command(Talk(Drive));
@@ -2684,7 +2729,7 @@ TEST_P(DriveLifecycleTest, WarmResetRetainsPagesAndDefersModelSpecificMapReload)
 
     // Reload actual backing media to distinguish a retained claim from abandoned RAM.
     ASSERT_TRUE(ieee_drive_unmount_all());
-    ASSERT_EQ(ieee_drive_try_mount(0, "warm-reset.img"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, "warm-reset.img", nullptr), DOS_MEDIA_OK);
     open_file(system, controller, Direct, "#");
     service_rx(system, firmware, "warm remounted direct");
     open_file(system, controller, Command, GetParam() == 0 ? "U1:2,0,18,0" : "U1:2,0,38,0");
@@ -2782,7 +2827,7 @@ TEST_F(FirmwareTest, NativeRejectedMountRetainsCursorBeforeSequentialReload) {
     EXPECT_EQ(controller.receive(), data(payload[0]));
     controller.command(Untalk);
     service_rx(system, firmware, "retained UNTALK");
-    EXPECT_EQ(ieee_drive_try_mount(0, "does-not-exist.d82"), DOS_MEDIA_IO_ERROR);
+    EXPECT_EQ(ieee_drive_try_mount(0, "does-not-exist.d82", nullptr), DOS_MEDIA_IO_ERROR);
     controller.command(Talk(Drive));
     controller.command(Secondary(Channel{DataChannel}));
     service_rx(system, firmware, "retained suffix");
@@ -2790,10 +2835,10 @@ TEST_F(FirmwareTest, NativeRejectedMountRetainsCursorBeforeSequentialReload) {
         EXPECT_EQ(controller.receive(), data(payload[index], index + 1 == payload.size() ? Eoi::Last : Eoi::More));
     controller.command(Untalk);
     service_rx(system, firmware, "retained suffix UNTALK");
-    ASSERT_EQ(ieee_drive_try_mount(1, "next.d80"), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(1, "next.d80", nullptr), DOS_MEDIA_OK);
     EXPECT_STREQ(ieee_drive_filename(0), "");
     EXPECT_STREQ(ieee_drive_filename(1), "next.d80");
-    EXPECT_STREQ(ieee_drive_filename(2), "next.d80");
+    EXPECT_STREQ(ieee_drive_filename(2), "");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive), "73,CBM DOS V2.7,00,00,0\r");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive), "00, OK,00,00,0\r");
     open_file(system, controller, Channel{DataChannel}, "1:BASIC,SEQ,R");
@@ -2820,7 +2865,7 @@ TEST_F(FirmwareTest, NativeUnitRemovalPreservesPeerGetCursorAndStatus) {
     EXPECT_EQ(controller.receive(), data(payload[0]));
     controller.command(Untalk);
     service_rx(system, firmware, "peer interrupted");
-    ASSERT_EQ(ieee_drive_try_mount(0, nullptr), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(0, nullptr, nullptr), DOS_MEDIA_OK);
     controller.command(Talk(Peer));
     controller.command(Secondary(Channel{DataChannel}));
     service_rx(system, firmware, "peer resumed");
@@ -3077,8 +3122,9 @@ TEST_P(DriveStatusTest, PreservesModelSpecificStatusAndUnitDriveIdentity) {
     const char* const name = d80 ? "status.d80" : "status.d64";
     IeeeController controller(system);
     firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(), name);
-    ASSERT_EQ(ieee_drive_try_mount(slot, name), DOS_MEDIA_OK);
-    ASSERT_EQ(ieee_drive_try_mount(peer_slot, name), DOS_MEDIA_OK);
+    ASSERT_EQ(ieee_drive_try_mount(slot, name, nullptr), DOS_MEDIA_OK);
+    firmware.mount(d80 ? std::vector<uint8_t>(DISKIMAGE_D80_SIZE) : D64::empty().bytes(),
+                   "peer-status.img", peer_slot);
     open_file(system, controller, Channel{DataChannel}, std::to_string(drive) + ":MISSING", device);
     service_rx(system, firmware, "selected-unit missing file");
     open_file(system, controller, Channel{DataChannel}, std::to_string(peer_drive) + ":MISSING", peer);

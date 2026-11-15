@@ -79,6 +79,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/sd/sd.c
     ${FW_SRC_DIR}/sd/activity.c
     ${FW_SRC_DIR}/sd/path.c
+    ${FW_SRC_DIR}/sd/resolve.c
     ${FW_SRC_DIR}/config/config.c
     ${FW_SRC_DIR}/diag/mem.c
     ${FW_SRC_DIR}/diag/log/log.c
@@ -119,6 +120,10 @@ target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_
 
 # Have the SDK install an MPU guard at each core's stack bottom.
 target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_USE_STACK_GUARDS=1)
+
+# Reserve all SCRATCH_Y for nested config/FatFs calls and interrupt headroom.
+# Core 1's DVI stack remains in the separate SCRATCH_X bank.
+target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_STACK_SIZE=0x1000)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES})

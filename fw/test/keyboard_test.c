@@ -895,7 +895,7 @@ START_TEST(test_menu_navigation_keys) {
         HID_KEY_ESCAPE, HID_KEY_BACKSPACE, HID_KEY_DELETE, HID_KEY_INSERT
     };
     const int expected[] = {
-        KEY_LEFT, KEY_PGUP, KEY_PGDN, '\r', '\e', '\b', EOF, EOF
+        KEY_LEFT, KEY_PGUP, KEY_PGDN, '\r', '\e', '\b', '\b', EOF
     };
     for (size_t i = 0; i < count_of(keys); i++) {
         report_key(keys[i], 0);

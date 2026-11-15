@@ -25,6 +25,7 @@
 #define TEST_FORMAT_COUNT 3u
 #define TEST_SERVICE_PASSES 8u
 #define TEST_COMMAND_LOG_LIMIT 8u
+#define TEST_FORMAT_SERVICE_PASSES (DISKIMAGE_D64_SIZE / DISKIMAGE_SECTOR_SIZE + TEST_SERVICE_PASSES)
 
 // Starts each facade case with isolated register and filesystem observations.
 static void setup(void) {
@@ -56,7 +57,7 @@ static void mount_image(const unsigned int slot, const unsigned int format, cons
     sd_make_path(path, SD_DIR_DISKS, name);
     test_register_binary_file(path, image, sizes[format], false);
     free(image);
-    ck_assert_int_eq(ieee_drive_try_mount(slot, name), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
 }
 
 // Supplies ordered ATN commands followed by their release checkpoint.
@@ -185,8 +186,8 @@ static void open_channel(const unsigned int device, const unsigned int channel, 
 static void open_file(const unsigned int device, const char* name) { open_channel(device, IEEE_LOAD_CHANNEL, name); }
 
 // Persist ordinary bytes through decoded LISTEN/RX, never direct DOS access.
-static void write_payload(const unsigned int count) {
-    commands(IEEE_CMD_LISTEN(8), IEEE_CMD_SECONDARY(2));
+static void write_payload(const unsigned int device, const unsigned int count) {
+    commands(IEEE_CMD_LISTEN(device), IEEE_CMD_SECONDARY(2));
     for (unsigned int index = 0; index < count; ++index)
         mock_ieee_enqueue_rx_eoi(false, (uint8_t)index, index + 1u == count);
     mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
@@ -202,7 +203,7 @@ static void mount_writable(void) {
     ck_assert_ptr_null(d64_fixture_empty(&layout, image, DISKIMAGE_D64_SIZE));
     test_register_binary_file("/disks/writable.d64", image, DISKIMAGE_D64_SIZE, true);
     free(image);
-    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64", NULL), DOS_MEDIA_OK);
 }
 
 // Failed CLOSE/mount/unmount/reset retain the FILE and write cursor until retry.
@@ -211,16 +212,16 @@ START_TEST(test_failed_write_survives_lifecycle_and_remounts_persisted_bytes) {
     mount_image(1, 0, "partner.d64");
     mount_image(2, 1, "peer.d80");
     open_channel(8, 2, "0:FILE,S,W");
-    write_payload(22);
+    write_payload(8, 22);
     test_fail_file_writes("/disks/writable.d64", true);
     commands(IEEE_CMD_LISTEN(8), IEEE_CMD_CLOSE(2));
     service();
     status(8, "25, WRITE ERROR,17,00\r");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64"), DOS_MEDIA_IO_ERROR);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64", NULL), DOS_MEDIA_IO_ERROR);
     const size_t open_files = test_open_file_count();
     // Neither replacing the dirty target nor ejecting it as a partner may lose it.
     for (unsigned int slot = 0; slot < TEST_SLOTS_PER_UNIT; ++slot) {
-        ck_assert_int_eq(ieee_drive_try_mount(slot, "peer.d80"), DOS_MEDIA_IO_ERROR);
+        ck_assert_int_eq(ieee_drive_try_mount(slot, "peer.d80", NULL), DOS_MEDIA_IO_ERROR);
         ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
         ck_assert_str_eq(ieee_drive_filename(1), "partner.d64");
         ck_assert_uint_eq(test_open_file_count(), open_files);
@@ -236,7 +237,7 @@ START_TEST(test_failed_write_survives_lifecycle_and_remounts_persisted_bytes) {
     service();
     status(8, "00, OK,00,00\r");
     ck_assert(ieee_drive_unmount_all());
-    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64", NULL), DOS_MEDIA_OK);
     open_channel(8, 2, "0:FILE,S,R");
     commands(IEEE_CMD_TALK(8), IEEE_CMD_SECONDARY(2));
     service();
@@ -295,7 +296,7 @@ START_TEST(test_invalid_image_preserves_mounted_unit) {
     ck_assert_str_eq(ieee_drive_filename(1), "");
     const uint8_t invalid[DISKIMAGE_SECTOR_SIZE] = {0};
     test_register_binary_file("/disks/invalid.img", invalid, sizeof(invalid), false);
-    ck_assert_int_eq(ieee_drive_try_mount(0, "invalid.img"), DOS_MEDIA_UNSUPPORTED);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "invalid.img", NULL), DOS_MEDIA_UNSUPPORTED);
     ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
     status(8, "73,CBM DOS V2,00,00\r");
     open_file(8, "BASIC,PRG,R");
@@ -311,16 +312,16 @@ START_TEST(test_busy_mount_retains_pair_until_retry) {
     const size_t open_files = test_open_file_count();
     mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
     mock_ieee_enqueue_atn_end();
-    ck_assert_int_eq(ieee_drive_try_mount(_i, "next.d80"), DOS_MEDIA_BUSY);
+    ck_assert_int_eq(ieee_drive_try_mount(_i, "next.d80", NULL), DOS_MEDIA_BUSY);
     ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
     ck_assert_str_eq(ieee_drive_filename(1), "partner.d64");
     ck_assert_uint_eq(test_open_file_count(), open_files);
     service();
-    ck_assert_int_eq(ieee_drive_try_mount(_i, "next.d80"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(_i, "next.d80", NULL), DOS_MEDIA_OK);
     ck_assert_str_eq(ieee_drive_filename(_i), "next.d80");
     ck_assert_str_eq(ieee_drive_filename(_i ^ 1), "");
-    ck_assert_str_eq(ieee_drive_filename(2), "next.d80");
-    ck_assert_uint_eq(test_open_file_count(), open_files - 1);
+    ck_assert_str_eq(ieee_drive_filename(2), "");
+    ck_assert_uint_eq(test_open_file_count(), open_files - 2);
 }
 END_TEST
 
@@ -332,12 +333,15 @@ START_TEST(test_mounted_filenames_follow_live_bindings) {
     name[0] = 'x';
     ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     const size_t open_files = test_open_file_count();
-    ck_assert_int_eq(ieee_drive_try_mount(0, ieee_drive_filename(0)), DOS_MEDIA_OK);
+    ieee_drive_mount_outcome_t outcome;
+    ck_assert_int_eq(ieee_drive_try_mount(0, ieee_drive_filename(0), &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, -1);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
     ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     ck_assert_uint_eq(test_open_file_count(), open_files);
     ieee_drive_reset();
     ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, NULL), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, NULL, NULL), DOS_MEDIA_OK);
     ck_assert_str_eq(ieee_drive_filename(0), "");
     ck_assert_str_eq(ieee_drive_filename(2), "peer.d64");
     ck_assert(ieee_drive_unmount_all());
@@ -355,7 +359,7 @@ START_TEST(test_mount_failure_preserves_filename_and_closes_candidate) {
     const uint8_t invalid[DISKIMAGE_SECTOR_SIZE] = {0};
     test_register_binary_file("/disks/invalid.d82", invalid, sizeof(invalid), false);
     const size_t open_files = test_open_file_count();
-    ck_assert_int_eq(ieee_drive_try_mount(0, _i == 0 ? "missing.d64" : "invalid.d82"),
+    ck_assert_int_eq(ieee_drive_try_mount(0, _i == 0 ? "missing.d64" : "invalid.d82", NULL),
                      _i == 0 ? DOS_MEDIA_IO_ERROR : DOS_MEDIA_UNSUPPORTED);
     ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     ck_assert_str_eq(ieee_drive_filename(1), "partner.d64");
@@ -391,18 +395,262 @@ START_TEST(test_mount_pair_policy) {
     mount_image(2, replacement, "candidate.img");
     const size_t open_files = test_open_file_count();
 
-    ck_assert_int_eq(ieee_drive_try_mount(slot, "candidate.img"), DOS_MEDIA_OK);
+    ieee_drive_mount_outcome_t outcome;
+    ck_assert_int_eq(ieee_drive_try_mount(slot, "candidate.img", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, 2);
+    ck_assert_int_eq(outcome.ejected_partner,
+                     existing == replacement ? diskimage_type_none : diskimage_type_d64 + existing);
     ck_assert_str_eq(ieee_drive_filename(slot), "candidate.img");
     ck_assert_str_eq(ieee_drive_filename(slot ^ 1u),
                      existing == replacement ? (slot == 0 ? "old1.img" : "old0.img") : "");
-    ck_assert_str_eq(ieee_drive_filename(2), "candidate.img");
-    ck_assert_uint_eq(test_open_file_count(), open_files - (existing != replacement));
+    ck_assert_str_eq(ieee_drive_filename(2), "");
+    ck_assert_uint_eq(test_open_file_count(), open_files - 1 - (existing != replacement));
 
     // Removing the new disk must not eject a compatible partner or another unit.
-    ck_assert_int_eq(ieee_drive_try_mount(slot, NULL), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(slot, NULL, &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, -1);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
     ck_assert_str_eq(ieee_drive_filename(slot ^ 1u),
                      existing == replacement ? (slot == 0 ? "old1.img" : "old0.img") : "");
-    ck_assert_str_eq(ieee_drive_filename(2), "candidate.img");
+    ck_assert_str_eq(ieee_drive_filename(2), "");
+}
+END_TEST
+
+// Moving either slot's image preserves both compatible partners and unrelated units.
+START_TEST(test_moving_image_keeps_one_mount) {
+    const unsigned int source = _i % 2 == 0 ? 6 : 4;
+    const unsigned int destination = 7;
+    const unsigned int format = (unsigned int)_i / 2;
+    mount_image(source, format, "moving.img");
+    if (source != (destination ^ 1u))
+        mount_image(source ^ 1u, format, "source-partner.img");
+    mount_image(destination, format, "old.img");
+    mount_image(0, format, "unrelated.img");
+    const size_t open_files = test_open_file_count();
+
+    ck_assert_int_eq(ieee_drive_try_mount(destination, ieee_drive_filename(source), NULL), DOS_MEDIA_OK);
+    ck_assert_str_eq(ieee_drive_filename(source), "");
+    ck_assert_str_eq(ieee_drive_filename(destination), "moving.img");
+    ck_assert_str_eq(ieee_drive_filename(0), "unrelated.img");
+    if (source != (destination ^ 1u))
+        ck_assert_str_eq(ieee_drive_filename(source ^ 1u), "source-partner.img");
+    ck_assert_uint_eq(test_open_file_count(), open_files - 1);
+    status(11, format == 0 ? "73,CBM DOS V2,00,00\r" : "73,CBM DOS V2.7,00,00,0\r");
+    open_file(11, "1:BASIC,PRG,R");
+    status(11, format == 0 ? "00, OK,00,00\r" : "00, OK,00,00,1\r");
+}
+END_TEST
+
+// Canonical paths identify one mount, stay inside /disks, and reuse storage across aliases.
+START_TEST(test_mounted_image_path_aliases) {
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/disks/folder/disk.d64", image, DISKIMAGE_D64_SIZE, false);
+    free(image);
+    ieee_drive_mount_outcome_t outcome;
+    ck_assert_int_eq(ieee_drive_try_mount(0, "./folder//child/../disk.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_str_eq(ieee_drive_filename(0), "folder/disk.d64");
+    ck_assert_int_eq(outcome.moved_from_slot, -1);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
+    mount_image(1, 0, "other.d64");
+    const char* const aliases[] = {"./FOLDER//child/../DISK.d64", "../disks/folder/disk.d64"};
+    for (size_t index = 0; index < count_of(aliases); ++index) {
+        ck_assert_int_eq(ieee_drive_try_mount(2, aliases[index], &outcome), DOS_MEDIA_OK);
+        ck_assert_int_eq(outcome.moved_from_slot, index == 0 ? 0 : -1);
+        ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
+        ck_assert_str_eq(ieee_drive_filename(0), "");
+    }
+    ck_assert_str_eq(ieee_drive_filename(2), "folder/disk.d64");
+    ck_assert_int_eq(ieee_drive_try_mount(3, "../disks/folder/disk.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, 2);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
+    ck_assert_str_eq(ieee_drive_filename(2), "");
+    ck_assert_str_eq(ieee_drive_filename(3), "folder/disk.d64");
+    const char* const invalid[] = {"../roms/disk.d64", "../disks-elsewhere/disk.d64", "..", ".", "folder/.."};
+    for (size_t index = 0; index < count_of(invalid); ++index) {
+        ck_assert_int_eq(ieee_drive_try_mount(0, invalid[index], &outcome), DOS_MEDIA_INVALID);
+        ck_assert_int_eq(outcome.moved_from_slot, 2);
+        ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
+        ck_assert_str_eq(ieee_drive_filename(0), "");
+        ck_assert_str_eq(ieee_drive_filename(3), "folder/disk.d64");
+    }
+    ck_assert_str_eq(ieee_drive_filename(1), "other.d64");
+    ck_assert_uint_eq(test_file_open_calls("/disks/folder/disk.d64"), 1);
+}
+END_TEST
+
+// Filesystem aliases must move one owner, including directory and leaf short names.
+START_TEST(test_filesystem_aliases_reuse_image_owner) {
+    mount_writable();
+    const char* const aliases[] = {
+        "/disks/writable.d64.",
+        "/disks/writable.d64 ",
+        "/disks/WRITAB~1.D64",
+        "/disks/ALIAS~1/WRITAB~1.D64",
+    };
+    for (size_t index = 0; index < count_of(aliases); ++index) {
+        test_register_file_alias(aliases[index], "/disks/writable.d64");
+        ieee_drive_mount_outcome_t outcome;
+        ck_assert_int_eq(ieee_drive_try_mount(index + 1, aliases[index] + strlen("/disks/"), &outcome), DOS_MEDIA_OK);
+        ck_assert_int_eq(outcome.moved_from_slot, index);
+        ck_assert_str_eq(ieee_drive_filename(index), "");
+        ck_assert_str_eq(ieee_drive_filename(index + 1), "writable.d64");
+        ck_assert_uint_eq(test_open_file_count(), 1);
+        ck_assert_uint_eq(test_file_open_calls("/disks/writable.d64"), 1);
+    }
+}
+END_TEST
+
+// Distinct CP932 characters can contain ASCII upper/lowercase trail bytes.
+START_TEST(test_cp932_image_names_remain_distinct) {
+    mount_image(0, 0, "\x81\x41.d64");
+    mount_image(1, 0, "\x81\x61.d64");
+    ck_assert_str_eq(ieee_drive_filename(0), "\x81\x41.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), "\x81\x61.d64");
+    ck_assert_uint_eq(test_open_file_count(), 2);
+}
+END_TEST
+
+// Backend path spellings must not turn a lexically contained request into outside storage.
+START_TEST(test_filesystem_alias_outside_disks_is_rejected) {
+    mount_writable();
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/roms/outside.d64", image, DISKIMAGE_D64_SIZE, true);
+    free(image);
+    test_register_file_alias("/disks/..\\roms\\outside.d64", "/roms/outside.d64");
+    ieee_drive_mount_outcome_t outcome = {.moved_from_slot = 7};
+    ck_assert_int_ne(ieee_drive_try_mount(0, "..\\roms\\outside.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, 7);
+    ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
+    ck_assert_uint_eq(test_file_open_calls("/roms/outside.d64"), 0);
+    ck_assert_uint_eq(test_open_file_count(), 1);
+}
+END_TEST
+
+// Full-drive moves and same-slot remounts must reuse the sole writable storage handle.
+START_TEST(test_writable_moves_reuse_storage_handle) {
+    mount_writable();
+    for (unsigned int slot = 1; slot < TEST_UNIT_COUNT * TEST_SLOTS_PER_UNIT; ++slot) {
+        char name[32];
+        snprintf(name, sizeof(name), "drive%u.d64", slot);
+        mount_image(slot, 0, name);
+    }
+    const size_t open_files = test_open_file_count();
+    const unsigned int destinations[] = {0, 1, 6};
+    unsigned int source = 0;
+    for (unsigned int index = 0; index < count_of(destinations); ++index) {
+        const unsigned int destination = destinations[index];
+        ck_assert_int_eq(ieee_drive_try_mount(destination, ieee_drive_filename(source), NULL), DOS_MEDIA_OK);
+        ck_assert_uint_eq(test_file_open_calls("/disks/writable.d64"), 1);
+        ck_assert_str_eq(ieee_drive_filename(destination), "writable.d64");
+        if (source != destination) ck_assert_str_eq(ieee_drive_filename(source), "");
+        ck_assert_uint_eq(test_open_file_count(), open_files - index);
+        source = destination;
+    }
+}
+END_TEST
+
+// Pending work in a later unit rejects moves and teardown before earlier status or writes change.
+START_TEST(test_busy_lifecycle_preserves_earlier_unit) {
+    mount_writable();
+    open_channel(8, 2, "0:FILE,S,W");
+    write_payload(8, 22);
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/disks/busy.d64", image, DISKIMAGE_D64_SIZE, true);
+    free(image);
+    ck_assert_int_eq(ieee_drive_try_mount(2, "busy.d64", NULL), DOS_MEDIA_OK);
+
+    // Leave an unconsumed suffix in the earlier unit's status FIFO.
+    commands(IEEE_CMD_TALK(8), IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL));
+    ieee_drive_task();
+    mock_ieee_consume_status(3);
+    commands(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    const size_t remaining = mock_ieee_status_count();
+    ck_assert_uint_gt(remaining, 0);
+    const uint8_t first = mock_ieee_status_byte(0);
+
+    // Dispatch the format on the last RX entry, leaving DOS busy but transport idle.
+    commands(IEEE_CMD_LISTEN(9), IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL));
+    const char* const format = "N:BUSY,ID";
+    for (size_t index = 0; index < strlen(format); ++index)
+        mock_ieee_enqueue_rx_eoi(false, (uint8_t)format[index], format[index + 1] == '\0');
+    mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+    ieee_drive_task();
+    ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK, 0);
+    ck_assert_int_eq(ieee_drive_try_mount(2, NULL, NULL), DOS_MEDIA_BUSY);
+    test_fail_file_writes("/disks/writable.d64", true);
+    const dos_media_result_t moved = _i == 0                    ? ieee_drive_try_mount(2, "writable.d64", NULL)
+                                     : ieee_drive_unmount_all() ? DOS_MEDIA_OK
+                                                                : DOS_MEDIA_BUSY;
+    test_fail_file_writes("/disks/writable.d64", false);
+    const size_t retained = mock_ieee_status_count();
+    const uint8_t retained_first = retained != 0 ? mock_ieee_status_byte(0) : 0;
+    ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
+    ck_assert_str_eq(ieee_drive_filename(2), "busy.d64");
+
+    // Complete the other unit's format before the fixture retires its storage.
+    dos_media_result_t result = DOS_MEDIA_BUSY;
+    for (unsigned int pass = 0; pass < TEST_FORMAT_SERVICE_PASSES && result == DOS_MEDIA_BUSY; ++pass) {
+        ieee_drive_task();
+        result = ieee_drive_try_mount(2, NULL, NULL);
+    }
+    ck_assert_int_eq(result, DOS_MEDIA_OK);
+    ck_assert_int_eq(moved, DOS_MEDIA_BUSY);
+    ck_assert_uint_eq(retained, remaining);
+    ck_assert_uint_eq(retained_first, first);
+    status(8, " OK,00,00\r");
+}
+END_TEST
+
+// A failed source writeback retains every binding, in either unit-finalization order.
+START_TEST(test_failed_image_move_preserves_source_until_retry) {
+    const unsigned int source = _i == 0 ? 0 : 2;
+    const unsigned int destination = source ^ 2u;
+    const unsigned int device = 8 + source / TEST_SLOTS_PER_UNIT;
+    mount_writable();
+    if (source != 0)
+        ck_assert_int_eq(ieee_drive_try_mount(source, "writable.d64", NULL), DOS_MEDIA_OK);
+    mount_image(source ^ 1u, 0, "source-partner.d64");
+    mount_image(destination, 1, "destination.d80");
+    mount_image(destination ^ 1u, 1, "destination-partner.d80");
+    open_channel(device, 2, "0:FILE,S,W");
+    write_payload(device, 22);
+    test_fail_file_writes("/disks/writable.d64", true);
+    const size_t open_files = test_open_file_count();
+    ieee_drive_mount_outcome_t outcome = {
+        .moved_from_slot = 7,
+        .ejected_partner = diskimage_type_d82,
+    };
+    ck_assert_int_eq(ieee_drive_try_mount(destination, "writable.d64", &outcome), DOS_MEDIA_IO_ERROR);
+    ck_assert_int_eq(outcome.moved_from_slot, 7);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_d82);
+    ck_assert_str_eq(ieee_drive_filename(source), "writable.d64");
+    ck_assert_str_eq(ieee_drive_filename(source ^ 1u), "source-partner.d64");
+    ck_assert_str_eq(ieee_drive_filename(destination), "destination.d80");
+    ck_assert_str_eq(ieee_drive_filename(destination ^ 1u), "destination-partner.d80");
+    ck_assert_uint_eq(test_open_file_count(), open_files);
+
+    test_fail_file_writes("/disks/writable.d64", false);
+    ck_assert_int_eq(ieee_drive_try_mount(destination, "writable.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, source);
+    ck_assert_int_eq(outcome.ejected_partner, diskimage_type_d80);
+    ck_assert_str_eq(ieee_drive_filename(source), "");
+    ck_assert_str_eq(ieee_drive_filename(source ^ 1u), "source-partner.d64");
+    ck_assert_str_eq(ieee_drive_filename(destination), "writable.d64");
+    ck_assert_str_eq(ieee_drive_filename(destination ^ 1u), "");
+    ck_assert_uint_eq(test_open_file_count(), open_files - 2);
+    const unsigned int target_device = 8 + destination / TEST_SLOTS_PER_UNIT;
+    open_channel(target_device, 2, "0:FILE,S,R");
+    commands(IEEE_CMD_TALK(target_device), IEEE_CMD_SECONDARY(2));
+    service();
+    ck_assert_uint_eq(mock_ieee_data_count(), 22);
+    for (unsigned int index = 0; index < 22; ++index) {
+        ck_assert_uint_eq(mock_ieee_data_byte(index), index);
+        ck_assert_int_eq(mock_ieee_data_eoi(index), index == 21);
+    }
+    mock_ieee_clear_data();
+    commands(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
+    service();
 }
 END_TEST
 
@@ -434,7 +682,7 @@ START_TEST(test_mount_rejects_overlong_path) {
     memset(name, 'a', length);
     name[length] = '\0';
     test_expect_fatal_message("SD path exceeds 255 characters (got 256)");
-    ieee_drive_try_mount(0, name);
+    ieee_drive_try_mount(0, name, NULL);
 }
 END_TEST
 
@@ -450,6 +698,12 @@ Suite* ieee_drive_suite(void) {
     tcase_add_test(test_case, test_invalid_image_preserves_mounted_unit);
     tcase_add_loop_test(test_case, test_mount_pair_policy, 0,
                        TEST_SLOTS_PER_UNIT * TEST_FORMAT_COUNT * TEST_FORMAT_COUNT);
+    tcase_add_loop_test(test_case, test_moving_image_keeps_one_mount, 0, 2 * TEST_FORMAT_COUNT);
+    tcase_add_test(test_case, test_mounted_image_path_aliases);
+    tcase_add_test(test_case, test_filesystem_aliases_reuse_image_owner);
+    tcase_add_test(test_case, test_cp932_image_names_remain_distinct);
+    tcase_add_test(test_case, test_filesystem_alias_outside_disks_is_rejected);
+    tcase_add_loop_test(test_case, test_failed_image_move_preserves_source_until_retry, 0, 2);
     tcase_add_loop_test(test_case, test_busy_mount_retains_pair_until_retry, 0, TEST_SLOTS_PER_UNIT);
     tcase_add_loop_test(test_case, test_mounted_filenames_follow_live_bindings, 0, TEST_FORMAT_COUNT);
     tcase_add_loop_test(test_case, test_mount_failure_preserves_filename_and_closes_candidate, 0, 2);
@@ -457,6 +711,8 @@ Suite* ieee_drive_suite(void) {
     tcase_add_test(test_case, test_failed_write_survives_lifecycle_and_remounts_persisted_bytes);
     tcase_add_test(test_case, test_mount_path_boundary);
     tcase_add_loop_test(test_case, test_unit_presence_controls_enabled_readback, 0, TEST_UNIT_COUNT);
+    tcase_add_test(test_case, test_writable_moves_reuse_storage_handle);
+    tcase_add_loop_test(test_case, test_busy_lifecycle_preserves_earlier_unit, 0, 2);
     suite_add_tcase(suite, test_case);
     return suite;
 }

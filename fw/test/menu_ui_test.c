@@ -67,7 +67,7 @@ static void set_options(void* context, options_t* options) {
 static void mount_option(void* context, uint32_t device, uint32_t drive, const char* name) {
     (void) context;
     const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
-    ck_assert_int_eq(ieee_drive_try_mount(slot, name), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
     snprintf(applied_names[slot], SD_PATH_MAX, "%s", name);
     mount_count++;
 }
@@ -227,9 +227,10 @@ static void move_to(size_t index) {
 START_TEST(test_dashboard_layout_and_navigation) {
     tui_controller_render(&menu.controller);
     expect_text(16, 0, "EconoPET", true);
-    expect_text(11, 11, "[     Reset     ]", true);
+    expect_text(11, 11, "[ Change Config ]", true);
     expect_text(11, 12, "[  Change Disk  ]", false);
-    expect_text(11, 13, "[ Change Config ]", false);
+    expect_text(11, 13, "[   Reset CPU   ]", false);
+    expect_text(11, 14, "[     Back      ]", false);
     expect_text(31, 21, "Firmware", false);
     expect_text(32, 22, "v" FW_BUILD_DATE, false);
     expect_text(0, 24, "Up", true);
@@ -242,43 +243,51 @@ START_TEST(test_dashboard_layout_and_navigation) {
     ck_assert_uint_eq(menu.controller.screen_count, 2);
     tui_controller_render(&menu.controller);
     expect_text(14, 0, "Change Disk", false);
-    expect_text(1, 3, " 8", false);
-    expect_text(4, 3, "0:", false);
-    expect_text(4, 4, "1:", false);
-    expect_text(1, 9, "11", false);
-    expect_text(16, 14, "[ Back ]", false);
-    ck_assert_uint_eq(guarded_screen[1 + 3 * MENU_UI_WIDTH + 3], 0x72);
-    ck_assert_uint_eq(guarded_screen[1 + 4 * MENU_UI_WIDTH + 3], 0x6d);
-    ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH], 0x70);
-    ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH + 39], 0x6e);
-    ck_assert_uint_eq(guarded_screen[1 + 12 * MENU_UI_WIDTH], 0x6d);
-    ck_assert_uint_eq(guarded_screen[1 + 12 * MENU_UI_WIDTH + 39], 0x7d);
-    expect_text(0, 20, "Note: Disk emulation is beta. Please use", false);
+    expect_text(1, 2, " 8", false);
+    expect_text(4, 2, "0:", false);
+    expect_text(4, 3, "1:", false);
+    expect_text(1, 8, "11", false);
+    expect_text(16, 12, "[ Back ]", false);
+    ck_assert_uint_eq(guarded_screen[1 + 2 * MENU_UI_WIDTH + 3], 0x72);
+    ck_assert_uint_eq(guarded_screen[1 + 3 * MENU_UI_WIDTH + 3], 0x6d);
+    ck_assert_uint_eq(guarded_screen[1], 0x70);
+    ck_assert_uint_eq(guarded_screen[1 + 39], 0x6e);
+    expect_text(13, 0, " Change Disk ", false);
+    ck_assert_uint_eq(guarded_screen[1 + 12], 0x40);
+    ck_assert_uint_eq(guarded_screen[1 + 26], 0x40);
+    ck_assert_uint_eq(guarded_screen[1 + 10 * MENU_UI_WIDTH], 0x6d);
+    ck_assert_uint_eq(guarded_screen[1 + 10 * MENU_UI_WIDTH + 39], 0x7d);
+    expect_text(0, 14, "                                        ", false);
+    expect_text(0, 16, "                                        ", false);
+    expect_text(0, 17, "                                        ", false);
+    expect_text(0, 20, "                                        ", false);
+    expect_text(0, 21, "Note: Disk emulation is beta. Please use", false);
     for (unsigned int col = 0; col < strlen("Note"); col++)
-        ck_assert_uint_eq(guarded_screen[1 + 21 * MENU_UI_WIDTH + col], 0x63);
-    expect_text(4, 21, "  ", false);
-    expect_text(6, 21, "backup images to avoid data loss.", false);
-    expect_text(6, 10, "(Empty)", false);
+        ck_assert_uint_eq(guarded_screen[1 + 22 * MENU_UI_WIDTH + col], 0x63);
+    expect_text(4, 22, "  ", false);
+    expect_text(6, 22, "backup images to avoid data loss.", false);
+    expect_text(0, 23, "                                        ", false);
+    expect_text(6, 9, "(Empty)", false);
     for (unsigned int index = 1; index < 8; index++) {
         tui_controller_dispatch(&menu.controller, tui_action_down);
         ck_assert_uint_eq(menu.drive_controls[0].list.selected, index);
     }
     tui_controller_render(&menu.controller);
     for (unsigned int col = 6; col < 39; col++)
-        ck_assert(guarded_screen[1 + 10 * MENU_UI_WIDTH + col] & 0x80);
+        ck_assert(guarded_screen[1 + 9 * MENU_UI_WIDTH + col] & 0x80);
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert_uint_eq(menu.controller.screen_count, 1);
     ck_assert_uint_eq(menu.controller.focused_component, 1);
     ck_assert(tui_controller_is_active(&menu.controller));
-    tui_controller_dispatch(&menu.controller, tui_action_down);
-    ck_assert_uint_eq(menu.controller.focused_component, 2);
+    tui_controller_dispatch(&menu.controller, tui_action_up);
+    ck_assert_uint_eq(menu.controller.focused_component, 0);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     tui_controller_render(&menu.controller);
     expect_text(11, 24, "Lt", true);
     expect_text(14, 24, "Rt", true);
     expect_text(22, 24, "RET", true);
     expect_text(32, 24, "DEL", true);
-    ck_assert_uint_eq(guarded_screen[1 + 4 * MENU_UI_WIDTH + 38], 0x61);
+    ck_assert_uint_eq(guarded_screen[1 + 3 * MENU_UI_WIDTH + 38], 0x61);
     tui_controller_dispatch(&menu.controller, tui_action_back);
     open_slot(0);
     tui_controller_render(&menu.controller);
@@ -289,7 +298,7 @@ END_TEST
 // Both ends of the drive list reach Back, which preserves live mounts like Backspace.
 START_TEST(test_drive_back_button) {
     register_disk("mounted.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "mounted.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "mounted.d64", NULL), DOS_MEDIA_OK);
     tui_controller_dispatch(&menu.controller, tui_action_down);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     if (_i == 0) {
@@ -300,8 +309,8 @@ START_TEST(test_drive_back_button) {
     }
     ck_assert_uint_eq(menu.controller.focused_component, 1);
     tui_controller_render(&menu.controller);
-    expect_text(16, 14, "[ Back ]", true);
-    expect_text(6, 3, "mounted.d64", false);
+    expect_text(16, 12, "[ Back ]", true);
+    expect_text(6, 2, "mounted.d64", false);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert_uint_eq(menu.controller.screen_count, 1);
     ck_assert_uint_eq(menu.controller.focused_component, 1);
@@ -340,18 +349,18 @@ START_TEST(test_configuration_overlapping_pages) {
     const window_t* const window = menu.controller.window;
     menu_ui_begin(&menu, window, menu_ui_root_picker);
     const size_t rows = menu.picker_control.list.visible_rows;
-    ck_assert_uint_eq(rows, 20);
+    ck_assert_uint_eq(rows, 21);
     move_to(rows - 1);
     tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_down : tui_action_page_down);
     ck_assert_uint_eq(menu.picker_control.list.first_visible, rows - 1);
     ck_assert_uint_eq(menu.picker_control.list.selected, rows);
-    ck_assert_str_eq(menu.labels[0], "Model 19");
-    ck_assert_str_eq(menu.labels[1], "Model 20");
+    ck_assert_str_eq(menu.labels[0], "Model 20");
+    ck_assert_str_eq(menu.labels[1], "Model 21");
     move_to(rows - 1);
     tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_up : tui_action_page_up);
     ck_assert_uint_eq(menu.picker_control.list.first_visible, 0);
     ck_assert_uint_eq(menu.picker_control.list.selected, rows - 2);
-    ck_assert_str_eq(menu.labels[rows - 1], "Model 19");
+    ck_assert_str_eq(menu.labels[rows - 1], "Model 20");
 }
 END_TEST
 
@@ -359,7 +368,7 @@ END_TEST
 START_TEST(test_picker_paging_artwork) {
     const bool config = _i < 2;
     const bool paged = _i % 2 != 0;
-    const size_t count = (config ? 20u : 21u) + (paged ? 1 : 0);
+    const size_t count = 21u + (paged ? 1 : 0);
     if (config) {
         char yaml[2048];
         size_t used = snprintf(yaml, sizeof(yaml), "configs:\n");
@@ -387,12 +396,15 @@ START_TEST(test_picker_paging_artwork) {
     tui_controller_render(&menu.controller);
     if (config) {
         expect_text(10, 0, "Select Configuration", false);
-        ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH], 0x70);
-        for (unsigned int col = 1; col < MENU_UI_WIDTH - 1; col++)
-            ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH + col], 0x40);
-        ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH + MENU_UI_WIDTH - 1], 0x6e);
-        expect_text(2, 3, "Config 0", true);
-        expect_text(2, 22, "Config 19", false);
+        ck_assert_uint_eq(guarded_screen[1], 0x70);
+        expect_text(9, 0, " Select Configuration ", false);
+        for (unsigned int col = 1; col < 9; col++)
+            ck_assert_uint_eq(guarded_screen[1 + col], 0x40);
+        for (unsigned int col = 31; col < MENU_UI_WIDTH - 1; col++)
+            ck_assert_uint_eq(guarded_screen[1 + col], 0x40);
+        ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH - 1], 0x6e);
+        expect_text(2, 2, "Config 0", true);
+        expect_text(2, 22, "Config 20", false);
     } else {
         ck_assert_uint_eq(guarded_screen[1], 0xe1);
         expect_text(1, 0, "/disks", true);
@@ -408,11 +420,11 @@ START_TEST(test_picker_paging_artwork) {
         expect_text(11, 24, "Lt", true);
         expect_text(14, 24, "Rt", true);
         expect_text(22, 24, "RET", true);
-        ck_assert_uint_eq(guarded_screen[1 + (config ? 2 : 1) * MENU_UI_WIDTH + 39], 0x71);
+        ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH + 39], 0x71);
     } else {
         expect_text(11, 24, "    ", false);
         expect_text(16, 24, "RET", true);
-        ck_assert_uint_eq(guarded_screen[1 + (config ? 2 : 1) * MENU_UI_WIDTH + 39], 0x5d);
+        ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH + 39], 0x5d);
     }
     expect_text(32, 24, "DEL", true);
 }
@@ -452,12 +464,12 @@ END_TEST
 START_TEST(test_drive_label_suffixes) {
     const char* const path = "superpet/a/very/long/directory/os9-systemdisk.d80";
     register_disk(path);
-    ck_assert_int_eq(ieee_drive_try_mount(0, path), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, path, NULL), DOS_MEDIA_OK);
     char boundary[34];
     memset(boundary, 'x', sizeof(boundary) - 1);
     boundary[sizeof(boundary) - 1] = '\0';
     register_disk(boundary);
-    ck_assert_int_eq(ieee_drive_try_mount(1, boundary), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(1, boundary, NULL), DOS_MEDIA_OK);
     menu.controller.focused_component = 1;
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     char expected[34];
@@ -466,8 +478,8 @@ START_TEST(test_drive_label_suffixes) {
     ck_assert_str_eq(menu.drive_labels[1], boundary);
     ck_assert_str_eq(ieee_drive_filename(0), path);
     tui_controller_render(&menu.controller);
-    expect_text(6, 3, expected, true);
-    expect_text(6, 4, boundary, false);
+    expect_text(6, 2, expected, true);
+    expect_text(6, 3, boundary, false);
 }
 END_TEST
 
@@ -477,7 +489,7 @@ START_TEST(test_on_demand_back_and_reentry) {
     make_file("replacement.d64");
     register_disk("replacement.d64");
     register_disk("original.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "original.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "original.d64", NULL), DOS_MEDIA_OK);
     open_slot(0);
     move_to(2);
     tui_controller_dispatch(&menu.controller, tui_action_back);
@@ -569,12 +581,12 @@ START_TEST(test_model_change_returns_load_decision) {
     make_file("old.d64");
     make_file("new.d64");
     register_disk("old.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
     open_slot(0);
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert_str_eq(menu.slot_paths[0], "/disks");
     tui_controller_dispatch(&menu.controller, tui_action_back);
-    menu.controller.focused_component = 2;
+    menu.controller.focused_component = 0;
     test_unregister_file("/config.yaml");
     test_register_file("/config.yaml",
         "configs:\n"
@@ -607,10 +619,21 @@ END_TEST
 
 // Reset and root Back return distinct non-destructive exit decisions.
 START_TEST(test_dashboard_exit_outcome) {
-    tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_activate : tui_action_back);
+    register_disk("live.d64");
+    ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64", NULL), DOS_MEDIA_OK);
+    if (_i < 3) {
+        const size_t steps = _i == 0 ? 2 : _i == 1 ? 1 : count_of(menu.controls) - 1;
+        for (size_t index = 0; index < steps; index++)
+            tui_controller_dispatch(&menu.controller, _i == 2 ? tui_action_down : tui_action_up);
+        tui_controller_render(&menu.controller);
+        expect_text(11, _i == 0 ? 13 : 14,
+                    _i == 0 ? "[   Reset CPU   ]" : "[     Back      ]", true);
+    }
+    tui_controller_dispatch(&menu.controller, _i < 3 ? tui_action_activate : tui_action_back);
     ck_assert(!tui_controller_is_active(&menu.controller));
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
+    ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     ck_assert_int_eq(menu.exit, _i == 0 ? MENU_EXIT_RESET : MENU_EXIT_RESUME);
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
@@ -618,6 +641,7 @@ START_TEST(test_dashboard_exit_outcome) {
 END_TEST
 
 static unsigned int boot_keys;
+static bool choose_reset;
 static terminal_session_t expected_terminal_session;
 static cpu_state_t expected_menu_cpu;
 
@@ -627,8 +651,9 @@ static tui_action_t boot_input(void) {
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(system_state.terminal_session, expected_terminal_session);
     ck_assert_uint_lt(boot_keys, 4);
-    ck_assert_uint_eq(mock_display_task_count(), 1);
+    ck_assert_uint_eq(mock_display_task_count(), choose_reset ? 1 + MIN(boot_keys, 2) : 1);
     if (boot_keys++ < 3) {
+        if (choose_reset && boot_keys <= 2) return tui_action_down;
         return tui_action_none;
     }
     mock_input_set_reader(NULL);
@@ -643,6 +668,7 @@ START_TEST(test_menu_loop_returns_root_decision) {
     system_state.terminal_session = session;
     expected_terminal_session = session;
     boot_keys = 0;
+    choose_reset = _i != 0;
     expected_menu_cpu = CPU_HALT;
     mock_input_set_reader(boot_input);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
@@ -700,6 +726,13 @@ START_TEST(test_terminal_navigation_actions) {
 }
 END_TEST
 
+// Completes runtime Reset CPU navigation after the terminal mode has changed.
+static tui_action_t finish_terminal_reset(void) {
+    if (boot_keys++ == 0) return tui_action_down;
+    mock_input_set_reader(NULL);
+    return tui_action_activate;
+}
+
 // Exercises both mode changes while the real menu loop remains active.
 static tui_action_t switch_terminal_in_menu(void) {
     ck_assert_uint_eq(mock_display_task_count(), 1);
@@ -721,8 +754,9 @@ static tui_action_t switch_terminal_in_menu(void) {
         ck_assert_uint_eq(mock_term_end_count(), 1);
         send_uart("log\r");
     }
-    mock_input_set_reader(NULL);
-    return tui_action_activate;
+    boot_keys = 0;
+    mock_input_set_reader(choose_reset ? finish_terminal_reset : NULL);
+    return choose_reset ? tui_action_down : tui_action_activate;
 }
 
 // The menu never overrides the user's mode, and mode changes survive menu exit.
@@ -731,6 +765,7 @@ START_TEST(test_menu_preserves_user_terminal_mode) {
     register_models(false);
     cli_init();
     expected_terminal_session = (_i & 1) == 0 ? terminal_session_cli : terminal_session_remote;
+    choose_reset = _i >= 2;
     if (expected_terminal_session == terminal_session_remote) {
         send_uart("remote\r\n");
     }
@@ -1007,12 +1042,12 @@ START_TEST(test_configuration_persists_across_sessions) {
     result = run_session(back, count_of(back), false);
     ck_assert_int_eq(result.action, MENU_EXIT_RESUME);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
-    const int change[] = {KEY_DOWN, KEY_DOWN, '\r', KEY_UP, '\r'};
+    const int change[] = {'\r', KEY_UP, '\r'};
     result = run_session(change, count_of(change), false);
     ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
     load_config(&setup_sink, result.config_index);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
-    const int reset[] = {'\r'};
+    const int reset[] = {KEY_DOWN, KEY_DOWN, '\r'};
     result = run_session(reset, count_of(reset), false);
     ck_assert_int_eq(result.action, MENU_EXIT_RESET);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
@@ -1146,9 +1181,10 @@ START_TEST(test_resume_exit_does_not_request_configuration_load) {
 }
 END_TEST
 
-// Mounting a different format ejects its partner in either slot without an error screen.
+// Mixed formats report the actual ejected type and slot only on the resulting chooser.
 START_TEST(test_mixed_disk_pair_ejects_partner) {
-    const unsigned int slot = (unsigned int)_i % DOS_MEDIA_SLOTS_PER_UNIT;
+    const unsigned int slot = (unsigned int)_i % DOS_MEDIA_SLOTS_PER_UNIT
+        + DOS_MEDIA_SLOTS_PER_UNIT * ((unsigned int)_i / 2u % DOS_MEDIA_UNIT_COUNT);
     const unsigned int formats = (unsigned int)_i / DOS_MEDIA_SLOTS_PER_UNIT;
     const diskimage_type_t existing = diskimage_type_d64 + formats / 2u;
     diskimage_type_t replacement = diskimage_type_d64 + formats % 2u;
@@ -1161,9 +1197,11 @@ START_TEST(test_mixed_disk_pair_ejects_partner) {
     make_file("candidate.d64");
     register_disk_type("candidate.d64", replacement);
     register_disk_type("peer.d64", existing);
-    ck_assert_int_eq(ieee_drive_try_mount(slot ^ 1u, "peer.d64"), DOS_MEDIA_OK);
-    if (formats % 2u != 0)
-        ck_assert_int_eq(ieee_drive_try_mount(slot, "peer.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(slot ^ 1u, "peer.d64", NULL), DOS_MEDIA_OK);
+    if (formats % 2u != 0) {
+        register_disk_type("other.d64", existing);
+        ck_assert_int_eq(ieee_drive_try_mount(slot, "other.d64", NULL), DOS_MEDIA_OK);
+    }
     const size_t open_files = test_open_file_count();
     open_slot(slot);
     move_to(MENU_UI_PAGE_ROWS + 1);
@@ -1176,6 +1214,116 @@ START_TEST(test_mixed_disk_pair_ejects_partner) {
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
     ck_assert_uint_eq(test_open_file_count(), open_files - (formats % 2u != 0 ? 1 : 0));
+    const char* const types[] = {"", "D64", "D80", "D82"};
+    const unsigned int partner = slot ^ 1u;
+    char notice[MENU_UI_WIDTH + 1];
+    snprintf(notice, sizeof(notice), "Ejected %s image from %u-%u", types[existing],
+             8 + partner / DOS_MEDIA_SLOTS_PER_UNIT, partner % DOS_MEDIA_SLOTS_PER_UNIT);
+    tui_controller_render(&menu.controller);
+    const unsigned int column = (MENU_UI_WIDTH - strlen(notice)) / 2;
+    expect_text(0, 14, "                                        ", false);
+    expect_text(column, 17, notice, true);
+    ck_assert_uint_eq(guarded_screen[1 + 17 * MENU_UI_WIDTH + column - 1], 0xe1);
+    ck_assert_uint_eq(guarded_screen[1 + 17 * MENU_UI_WIDTH + column + strlen(notice)], 0x61);
+    expect_text(0, 18, "Mixing D64/D80/D82 on same device is not", false);
+    expect_text(0, 19, "supported (implicitly ejects partner).", false);
+
+    // Reopening Change Disk from the dashboard starts without a stale result.
+    tui_controller_dispatch(&menu.controller, tui_action_back);
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 14, "                                        ", false);
+    expect_text(0, 17, "                                        ", false);
+    expect_text(0, 18, "                                        ", false);
+    expect_text(0, 19, "                                        ", false);
+
+    // Canceling the next browser visit must not resurrect the previous notice.
+    open_slot(slot);
+    tui_controller_dispatch(&menu.controller, tui_action_back);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 14, "                                        ", false);
+    expect_text(0, 16, "                                        ", false);
+    expect_text(0, 17, "                                        ", false);
+    expect_text(0, 18, "                                        ", false);
+    expect_text(0, 19, "                                        ", false);
+
+    // Replacing a compatible pair or explicitly ejecting never reports a partner loss.
+    register_disk_type("compatible.d64", replacement);
+    ck_assert_int_eq(ieee_drive_try_mount(partner, "compatible.d64", NULL), DOS_MEDIA_OK);
+    open_slot(slot);
+    move_to(MENU_UI_PAGE_ROWS + 1);
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 14, "                                        ", false);
+    expect_text(0, 17, "                                        ", false);
+    ck_assert_str_eq(ieee_drive_filename(partner), "compatible.d64");
+    open_slot(slot);
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 17, "                                        ", false);
+    ck_assert_str_eq(ieee_drive_filename(partner), "compatible.d64");
+}
+END_TEST
+
+// Move and ejection notices each precede their explanation and clear on a new browser visit.
+START_TEST(test_moved_disk_notice) {
+    const unsigned int source = _i == 0 ? 6 : 0;
+    const unsigned int destination = 7;
+    make_file("moving.d64");
+    register_disk("moving.d64");
+    ck_assert_int_eq(ieee_drive_try_mount(source, "moving.d64", NULL), DOS_MEDIA_OK);
+    if (_i != 0) {
+        register_disk_type("partner.d80", diskimage_type_d80);
+        ck_assert_int_eq(ieee_drive_try_mount(destination ^ 1u, "partner.d80", NULL), DOS_MEDIA_OK);
+    }
+    open_slot(destination);
+    move_to(1);
+    if (_i == 0) {
+        mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+        mock_ieee_enqueue_atn_end();
+        tui_controller_dispatch(&menu.controller, tui_action_activate);
+        ck_assert_uint_eq(menu.controller.screen_count, 3);
+        ck_assert_int_eq(menu.mount_outcome.moved_from_slot, -1);
+        ck_assert_int_eq(menu.mount_outcome.ejected_partner, diskimage_type_none);
+        ck_assert_str_eq(ieee_drive_filename(source), "moving.d64");
+        ieee_drive_task();
+    }
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    ck_assert_uint_eq(menu.controller.screen_count, 2);
+    ck_assert_str_eq(ieee_drive_filename(source), "");
+    ck_assert_str_eq(ieee_drive_filename(destination), "moving.d64");
+    tui_controller_render(&menu.controller);
+    const char* const notice = _i == 0 ? "Moved disk from 11-0 to 11-1" : "Moved disk from 8-0 to 11-1";
+    expect_text((MENU_UI_WIDTH - strlen(notice)) / 2, 14, notice, true);
+    expect_text(0, 15, "This image was already mounted.", false);
+    expect_text(0, 16, "A disk image can only be mounted once.", false);
+    if (_i != 0) {
+        const char* const ejection = "Ejected D80 image from 11-0";
+        expect_text((MENU_UI_WIDTH - strlen(ejection)) / 2, 17, ejection, true);
+        expect_text(0, 18, "Mixing D64/D80/D82 on same device is not", false);
+        expect_text(0, 19, "supported (implicitly ejects partner).", false);
+    } else {
+        expect_text(0, 17, "                                        ", false);
+        expect_text(0, 18, "                                        ", false);
+        expect_text(0, 19, "                                        ", false);
+    }
+    expect_text(0, 20, "                                        ", false);
+    expect_text(0, 21, "Note: Disk emulation is beta. Please use", false);
+    expect_text(0, 23, "                                        ", false);
+    open_slot(destination);
+    tui_controller_dispatch(&menu.controller, tui_action_back);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 14, "                                        ", false);
+    expect_text(0, 15, "                                        ", false);
+    expect_text(0, 16, "                                        ", false);
+    expect_text(0, 17, "                                        ", false);
+    expect_text(0, 18, "                                        ", false);
+    expect_text(0, 19, "                                        ", false);
+    open_slot(destination);
+    move_to(1);
+    tui_controller_dispatch(&menu.controller, tui_action_activate);
+    tui_controller_render(&menu.controller);
+    expect_text(0, 14, "                                        ", false);
 }
 END_TEST
 
@@ -1183,7 +1331,7 @@ END_TEST
 START_TEST(test_disk_probe_error_keeps_picker_open) {
     make_file("bad.d64");
     register_disk("previous.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "previous.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "previous.d64", NULL), DOS_MEDIA_OK);
     if (_i != 0) {
         const uint8_t bytes[DISKIMAGE_SECTOR_SIZE] = {0};
         test_register_binary_file("/disks/bad.d64", bytes, sizeof(bytes), true);
@@ -1206,7 +1354,7 @@ START_TEST(test_busy_disk_change_retries_without_losing_mount) {
     register_disk("old.d64");
     register_disk("new.d64");
     make_file("new.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
     open_slot(0);
     move_to(_i == 0 ? 0 : 1);
     const size_t open_files = test_open_file_count();
@@ -1398,13 +1546,17 @@ START_TEST(test_nested_browsing_mount_and_eject) {
     ck_assert_uint_eq(menu.controller.screen_count, 2);
     ck_assert_str_eq(ieee_drive_filename(3), "superpet/os9.d64");
     ck_assert_uint_eq(mount_count, 0);
-    open_slot(3);
+    // A fresh slot must derive its browser directory from the canonical mounted name.
+    ck_assert_int_eq(ieee_drive_try_mount(4, "./superpet//child/../os9.d64", NULL), DOS_MEDIA_OK);
+    ck_assert_str_eq(ieee_drive_filename(3), "");
+    ck_assert_str_eq(ieee_drive_filename(4), "superpet/os9.d64");
+    open_slot(4);
     ck_assert_str_eq(menu.browser.path, "/disks/superpet");
     ck_assert_uint_eq(menu.picker_control.list.selected, 0);
     ck_assert_uint_eq(menu.picker_control.list.first_visible, 0);
     move_to(0);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
-    ck_assert_str_eq(ieee_drive_filename(3), "");
+    ck_assert_str_eq(ieee_drive_filename(4), "");
     ck_assert(tui_controller_is_active(&menu.controller));
     ck_assert_uint_eq(mount_count, 0);
 }
@@ -1415,7 +1567,7 @@ START_TEST(test_disk_choice_is_immediate) {
     make_file("good.d64");
     make_file("other.d64");
     register_disk("good.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "good.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "good.d64", NULL), DOS_MEDIA_OK);
     register_disk("other.d64");
     open_slot(0);
     ck_assert_uint_eq(menu.picker_control.list.selected, 0);
@@ -1491,7 +1643,7 @@ END_TEST
 START_TEST(test_uart_crlf_across_picker_transition) {
     make_file("disk.d64");
     register_disk("disk.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "disk.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "disk.d64", NULL), DOS_MEDIA_OK);
     open_slot(0);
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert_uint_eq(menu.controller.screen_count, 2);
@@ -1606,8 +1758,8 @@ END_TEST
 START_TEST(test_model_paging_and_change) {
     make_file("old.d64");
     register_disk("old.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64"), DOS_MEDIA_OK);
-    menu.controller.focused_component = 2;
+    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
+    menu.controller.focused_component = 0;
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert(menu.choosing_model);
     ck_assert_uint_eq(menu.picker_control.list.count, TEST_MODEL_COUNT);
@@ -1628,7 +1780,7 @@ END_TEST
 
 // Back cancels configuration selection, but choosing even the current config exits for reset.
 START_TEST(test_model_cancel_and_current_selection) {
-    menu.controller.focused_component = 2;
+    menu.controller.focused_component = 0;
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     if (_i == 0) tui_controller_dispatch(&menu.controller, tui_action_back);
     else tui_controller_dispatch(&menu.controller, tui_action_activate);
@@ -1672,7 +1824,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_loop_test(cases, test_disk_page_counter, 0, 6);
     tcase_add_test(cases, test_drive_label_suffixes);
     tcase_add_test(cases, test_on_demand_back_and_reentry);
-    tcase_add_loop_test(cases, test_dashboard_exit_outcome, 0, 2);
+    tcase_add_loop_test(cases, test_dashboard_exit_outcome, 0, 4);
     tcase_add_loop_test(cases, test_menu_loop_returns_root_decision, 0, 2);
     tcase_add_loop_test(cases, test_menu_preserves_user_terminal_mode, 0, 4);
     tcase_add_test(cases, test_terminal_session_rendering);
@@ -1688,6 +1840,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_browser_without_ui);
     tcase_add_loop_test(cases, test_resume_exit_does_not_request_configuration_load, 0, 2);
     tcase_add_loop_test(cases, test_mixed_disk_pair_ejects_partner, 0, 12);
+    tcase_add_loop_test(cases, test_moved_disk_notice, 0, 2);
     tcase_add_loop_test(cases, test_disk_probe_error_keeps_picker_open, 0, 2);
     tcase_add_loop_test(cases, test_busy_disk_change_retries_without_losing_mount, 0, 2);
     tcase_add_test(cases, test_disk_paging_and_parent_focus);

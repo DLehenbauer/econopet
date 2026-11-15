@@ -4,8 +4,8 @@
 #pragma once
 
 #include "config/config.h"
+#include "ieee/ieee_drive.h"
 #include "input/input_actions.h"
-#include "ieee/dos_media.h"
 #include "menu_browser.h"
 #include "ui/tui.h"
 
@@ -35,13 +35,14 @@ typedef enum {
 typedef struct {
     tui_controller_t controller;
     tui_screen_t dashboard, drives, picker;
-    tui_component_t controls[3], drive_controls[2], picker_control;
+    tui_component_t controls[4], drive_controls[2], picker_control;
     int config_index;
     menu_exit_t exit;
     bool choosing_model;
     unsigned int slot;
     menu_browser_t browser;
     char error[MENU_UI_WIDTH + 1];
+    ieee_drive_mount_outcome_t mount_outcome;
     char drive_labels[MENU_UI_DRIVE_SLOT_COUNT][MENU_UI_WIDTH];
     const char* drive_label_ptrs[MENU_UI_DRIVE_SLOT_COUNT];
     char labels[MENU_UI_PAGE_ROWS][MENU_UI_WIDTH + 1];

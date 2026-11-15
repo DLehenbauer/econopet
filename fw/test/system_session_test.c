@@ -197,7 +197,7 @@ START_TEST(test_configuration_preserves_staged_get_until_unmount) {
     uint8_t* const image = diskimage_test_make_d64();
     test_register_binary_file("/disks/old.d64", image, DISKIMAGE_D64_SIZE, false);
     free(image);
-    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
     const bool status_source = _i != 0;
     if (!status_source) open_load_channel("BASIC,PRG,R");
     mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(8));

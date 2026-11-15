@@ -195,7 +195,7 @@ void action_set_options(void* context, options_t* options) {
 void action_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
     (void)context;
     const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
-    const dos_media_result_t result = ieee_drive_try_mount(slot, filename);
+    const dos_media_result_t result = ieee_drive_try_mount(slot, filename, NULL);
     vet(result == DOS_MEDIA_OK, "IEEE device %lu drive %lu could not mount '%s' (error %u)",
         (unsigned long)device, (unsigned long)drive, filename, (unsigned int)result);
 }
