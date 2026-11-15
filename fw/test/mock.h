@@ -37,6 +37,10 @@ cpu_type_t mock_cpu_type(void);
 void mock_clock_set(uint64_t now);
 // Advances the deterministic firmware clock without sleeping.
 void mock_clock_advance(uint64_t delta);
+// Returns clock observations to the host monotonic clock.
+void mock_clock_restore(void);
+/** Select the physical model reported by real register-backed discovery. */
+void mock_set_pet_model(pet_keyboard_model_t keyboard, pet_video_type_t video);
 // Supplies component menu actions during USB servicing after the first render.
 void mock_input_set_reader(tui_action_t (*reader)(void));
 /** Queue bytes for the production UART adapter's SDK reads. */
@@ -45,7 +49,7 @@ void mock_input_uart_bytes(const uint8_t* bytes, size_t size);
 void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report);
 /** Supply the active-low button GPIO's next physical level. */
 void mock_input_button_level(bool pressed);
-/** Supply the next physical PET matrix read at the FPGA boundary. */
+/** Publish a freshly scanned physical PET matrix at the FPGA boundary. */
 void mock_input_pet_snapshot(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]);
 /** Supply CRTC bytes independently of the firmware's cached display state. */
 void mock_input_crtc_snapshot(const uint8_t registers[CRTC_REG_COUNT]);
@@ -73,18 +77,14 @@ unsigned int mock_term_refresh_count(void);
 // Reports PET keystrokes received from terminal routing.
 unsigned int mock_term_inject_count(void);
 int mock_term_inject_last(void);
-// Returns the number of PET NMI requests since the last reset.
-unsigned int mock_pet_nmi_count(void);
 // Observes entry to the nonreturning RAM diagnostic.
 void mock_ram_test_set_handler(void (*handler)(void));
-/** Observe entry to the ownership-aware nonreturning MCU reset. */
+// Observes entry to the nonreturning MCU reset.
 void mock_system_reset_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.
 bool mock_breakpoint_halt_was_cleared(void);
-/** Reset only the breakpoint-clear observation. */
-void mock_breakpoint_reset_clear_observation(void);
 
 // Queues a receive byte with its IEEE command/data tag.
 void mock_ieee_enqueue_rx(bool atn, uint8_t byte);

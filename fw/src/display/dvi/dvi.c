@@ -5,6 +5,7 @@
 #include "dvi.h"
 
 #include "crtc.h"
+#include "display/display.h"
 #include "pet.h"
 #include "roms/roms.h"
 #include "system/state.h"
@@ -183,7 +184,7 @@ static inline void __not_in_flash_func(prepare_scanline)(uint16_t y) {
     static const uint8_t* p_char_rom = rom_chars_e800;
 
     uint8_t* const video_char_buffer = system_state.video_char_buffer;
-    uint8_t* const colorbuf = video_char_buffer + 0x800;
+    uint8_t* const colorbuf = video_char_buffer + VIDEO_COLOR_OFFSET;
 
     // For convenience, remap local `y` so that `y == 0` is the first visible scan line.
     // Because `y` is unsigned, the top blank area wraps around to a large integer.
@@ -340,7 +341,7 @@ void video_init() {
     queue_remove_blocking(&dvi0.q_tmds_free, &blank_tmdsbuf);
 
     uint8_t* const video_char_buffer = system_state.video_char_buffer;
-    uint8_t* const colorbuf = video_char_buffer + 0x800;
+    uint8_t* const colorbuf = video_char_buffer + VIDEO_COLOR_OFFSET;
     
     // Initialize the palette (using CGA palette for both fg and bg colors)
     set_palette(c128_palette, c128_palette);

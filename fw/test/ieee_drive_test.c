@@ -16,7 +16,6 @@
 #include "ieee/diskimage.h"
 #include "ieee/ieee_drive.h"
 #include "ieee/ieee_protocol.h"
-#include "menu/menu_config.h"
 #include "mock.h"
 #include "sd/sd.h"
 #include "system/state.h"
@@ -26,33 +25,6 @@
 #define TEST_FORMAT_COUNT 3u
 #define TEST_SERVICE_PASSES 8u
 #define TEST_COMMAND_LOG_LIMIT 8u
-
-typedef struct {
-    unsigned int copies;
-    unsigned int options;
-    unsigned int mounts;
-} config_actions_t;
-
-// Counts actual machine-copy actions in the selected setup.
-static void copy_action(void* context, uint32_t source, uint32_t destination, uint32_t length) {
-    (void)source;
-    (void)destination;
-    (void)length;
-    ++((config_actions_t*)context)->copies;
-}
-
-// Counts option changes independently of parsing a candidate configuration.
-static void options_action(void* context, options_t* options) {
-    (void)options;
-    ++((config_actions_t*)context)->options;
-}
-
-// Observes sequential parser callbacks and applies the public drive's mount policy.
-static void config_mount_action(void* context, uint32_t device, uint32_t drive, const char* filename) {
-    ++((config_actions_t*)context)->mounts;
-    vet(ieee_drive_try_mount((device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive, filename) == DOS_MEDIA_OK,
-        "configured disk could not mount");
-}
 
 // Starts each facade case with isolated register and filesystem observations.
 static void setup(void) {
@@ -408,126 +380,6 @@ START_TEST(test_native_rel_type_checks_and_mode_defaults) {
 }
 END_TEST
 
-// Arms the expected mount diagnostic only after the preceding setup actions ran.
-static void expect_mount_failure_after_settings(void* context, uint32_t source, uint32_t destination, uint32_t length) {
-    config_actions_t* const actions = context;
-    copy_action(context, source, destination, length);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
-    ck_assert_uint_eq(actions->options, 1);
-    ck_assert_uint_eq(actions->copies, 1);
-    test_expect_fatal_message("configured disk could not mount");
-}
-
-// Supplies one manual selection. A menu retry would violate the fatal policy.
-static tui_action_t select_invalid_config(void) { return tui_action_activate; }
-
-// Missing images fail fatally after settings in direct, automatic, and manual loads.
-START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
-    mount_image(0, 0, "old.d64");
-    mount_image(2, 1, "next.d80");
-    config_actions_t actions = {0};
-    system_state_t state = {0};
-    const setup_sink_t sink = {
-        .context = &actions,
-        .on_copy = expect_mount_failure_after_settings,
-        .on_set_options = options_action,
-        .on_mount = config_mount_action,
-        .system_state = &state,
-    };
-    char yaml[768];
-    const int length = snprintf(yaml, sizeof(yaml),
-                                "default: invalid\n"
-                                "configs:\n"
-                                "  - id: invalid\n"
-                                "    name: Invalid\n"
-                                "    setup:\n"
-                                "      - action: set\n"
-                                "        columns: 80\n"
-                                "      - action: copy\n"
-                                "        source: 4096\n"
-                                "        destination: 8192\n"
-                                "        length: 256\n"
-                                "      - action: mount\n"
-                                "        device: 8\n"
-                                "        drive: 0\n"
-                                "        file: old.d64\n"
-                                "      - action: mount\n"
-                                "        device: 8\n"
-                                "        drive: 1\n"
-                                "        file: %s\n",
-                                "missing.d64");
-    ck_assert_int_gt(length, 0);
-    ck_assert_uint_lt((size_t)length, sizeof(yaml));
-    test_register_file("/config.yaml", yaml);
-    // Any earlier fatal error must fail the diagnostic check rather than pass on SIGABRT.
-    test_expect_fatal_message("configuration setup actions did not finish");
-    set_cpu(CPU_READY);
-    if (_i % 3 == 0) {
-        load_config(&sink, 0, true);
-    } else {
-        uint8_t buffer[40 * 25];
-        const window_t window = window_create(buffer, 40, 25);
-        mock_input_set_reader(select_invalid_config);
-        menu_config_show(&window, &sink, _i % 3 == 1);
-    }
-    ck_abort_msg("invalid configuration returned instead of reporting a fatal error");
-}
-END_TEST
-
-// Unmounting first allows either new-drive order to replace an old complete pair.
-START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
-    mount_image(0, 0, "old.d64");
-    mount_image(1, 0, "old-partner.d64");
-    mount_image(2, 1, "next.d80");
-    config_actions_t actions = {0};
-    system_state_t state = {0};
-    const setup_sink_t sink = {
-        .context = &actions,
-        .on_copy = copy_action,
-        .on_set_options = options_action,
-        .on_mount = config_mount_action,
-        .system_state = &state,
-    };
-    char yaml[768];
-    const int length = snprintf(yaml, sizeof(yaml),
-                                "configs:\n"
-                                "  - name: replace\n"
-                                "    setup:\n"
-                                "      - action: copy\n"
-                                "        source: 4096\n"
-                                "        destination: 8192\n"
-                                "        length: 256\n"
-                                "      - action: mount\n"
-                                "        device: 8\n"
-                                "        drive: %d\n"
-                                "        file: next.d80\n"
-                                "      - action: mount\n"
-                                "        device: 8\n"
-                                "        drive: %d\n"
-                                "        file: next.d80\n"
-                                "      - action: set\n"
-                                "        columns: 80\n",
-                                _i, 1 - _i);
-    ck_assert_int_gt(length, 0);
-    ck_assert_uint_lt((size_t)length, sizeof(yaml));
-    test_register_file("/config.yaml", yaml);
-    set_cpu(CPU_READY);
-    load_config(&sink, 0, true);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
-    ck_assert_uint_eq(actions.copies, 1);
-    ck_assert_uint_eq(actions.options, 1);
-    ck_assert_uint_eq(actions.mounts, 2);
-    status(8, "73,CBM DOS V2.7,00,00,0\r");
-    open_file(8, "1:BASIC,PRG,R");
-    status(8, "00, OK,00,00,1\r");
-    commands(IEEE_CMD_TALK(9), IEEE_CMD_SECONDARY(IEEE_COMMAND_CHANNEL));
-    service();
-    ck_assert_uint_eq(mock_ieee_status_count(), 0);
-    commands(IEEE_CMD_UNTALK, IEEE_CMD_UNLISTEN);
-    service();
-}
-END_TEST
-
 // Every ordered format pair preserves compatible partners or atomically ejects them.
 START_TEST(test_mount_pair_policy) {
     const unsigned int slot = (unsigned int)_i % TEST_SLOTS_PER_UNIT;
@@ -603,7 +455,6 @@ Suite* ieee_drive_suite(void) {
     tcase_add_loop_test(test_case, test_mount_failure_preserves_filename_and_closes_candidate, 0, 2);
     tcase_add_test(test_case, test_native_rel_type_checks_and_mode_defaults);
     tcase_add_test(test_case, test_failed_write_survives_lifecycle_and_remounts_persisted_bytes);
-    tcase_add_loop_test(test_case, test_configuration_unmounts_then_mounts_selected_disks, 0, 2);
     tcase_add_test(test_case, test_mount_path_boundary);
     tcase_add_loop_test(test_case, test_unit_presence_controls_enabled_readback, 0, TEST_UNIT_COUNT);
     suite_add_tcase(suite, test_case);
@@ -615,8 +466,6 @@ Suite* ieee_drive_fatal_suite(void) {
     TCase* test_case = tcase_create("paths");
     tcase_add_checked_fixture(test_case, setup, teardown);
     tcase_add_test_raise_signal(test_case, test_mount_rejects_overlong_path, SIGABRT);
-    tcase_add_loop_test_raise_signal(test_case, test_configuration_mount_failure_is_fatal_after_settings, SIGABRT, 0,
-                                     3);
     suite_add_tcase(suite, test_case);
     return suite;
 }

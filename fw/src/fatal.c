@@ -108,6 +108,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
 // System-test host firmware uses only the display-independent diagnostics.
 #if defined(PICO_RP2040) || defined(ECONOPET_TEST_FATAL_DISPLAY)
 #include "display/display.h"
+#include "display/dvi/dvi.h"
 #include "display/window.h"
 #include "driver.h"
 #include "roms/roms.h"
@@ -123,10 +124,11 @@ void fatal_halt(fatal_error_t error, const char* message) {
 // Render fatal details without allocating storage. Core 1 keeps driving DVI.
 void fatal_display_message(const char* const message) {
     system_takeover();
+    spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);
-    // Prepare the physical displays without clearing UART diagnostic history.
+    // Prepare the physical displays without clearing the UART diagnostic history.
     window_fill(&window, CH_SPACE);
 
     uint8_t* const pOut = window_puts(&window, window.start, FATAL_PREFIX);

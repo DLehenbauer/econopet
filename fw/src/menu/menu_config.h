@@ -6,6 +6,7 @@
 #include "config/config_setup.h"
 #include "config/config.h"
 #include "display/window.h"
+#include "menu_ui.h"
 
 typedef struct {
     size_t count;
@@ -17,10 +18,8 @@ typedef struct {
 menu_config_catalog_t menu_config_enumerate(size_t first, size_t capacity,
                                            char names[][CONFIG_TEXT_CAPACITY]);
 
-// Reloads setup actions with the CPU halted. When apply_mounts is true, existing
-// disks are unmounted before YAML mounts are applied.
-// Otherwise all live disks are preserved.
-void load_config(const setup_sink_t* setup_sink, int selected_config, bool apply_mounts);
+/** Reload setup actions with the CPU halted, replacing all configured disk mounts. */
+void load_config(const setup_sink_t* setup_sink, int selected_config);
 
-// Runs the boot picker or on-demand hierarchy over menu.rom, then reloads its choices.
-void menu_config_show(const window_t* window, const setup_sink_t* setup_sink, bool is_boot);
+/** Run the interactive hierarchy, initializing catalog state when needed. */
+menu_result_t menu_config_run(const window_t* window, menu_ui_root_t root);

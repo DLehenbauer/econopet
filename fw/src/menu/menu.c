@@ -4,8 +4,6 @@
 #include "pch.h"
 #include "menu.h"
 
-#include <dirent.h>
-
 #include "cpu.h"
 #include "diag/log/log.h"
 #include "display/char_encoding.h"
@@ -13,11 +11,12 @@
 #include "display/dvi/dvi.h"
 #include "display/window.h"
 #include "driver.h"
-#include "ieee/ieee_drive.h"
 #include "fatal.h"
 #include "global.h"
 #include "hw.h"
+#include "ieee/ieee_drive.h"
 #include "input/input.h"
+#include "input/pet_keyboard.h"
 #include "menu_config.h"
 #include "pet.h"
 #include "roms/checksum.h"
@@ -34,8 +33,11 @@
 
 const uint screen_width  = 40;
 const uint screen_height = 25;
-
-#define CH_SPACE 0x20
+/** Service cooperative work while the owner prepares boot input. */
+static void menu_prepare_service(void) {
+    input_task();
+    ieee_drive_task();
+}
 
 #define CHUNK_SIZE 2048
 
@@ -187,7 +189,6 @@ void action_set_options(void* context, options_t* options) {
     set_cpu_type_machine(cpu, options->superpet_io || cpu == CPU_SOFT_6809);
 
     log_debug("Set options: %" PRIu32 " columns, video RAM mask %" PRIu32, options->columns, options->video_ram_mask);
-
 }
 
 // Mounts a configured slot, ejecting an incompatible partner only on success.
@@ -213,6 +214,13 @@ void read_keymap(const char* filename, system_state_t* config) {
 void action_set_keymap(void* context, const char* filename) {
     action_context_t* ctx = (action_context_t*) context;
     read_keymap(filename, ctx->system_state);
+}
+
+void menu_init(void) {
+    read_pet_model(&system_state);
+    char keymap_path[SD_PATH_MAX];
+    sd_make_path(keymap_path, SD_DIR_UKM, "us.bin");
+    read_keymap(keymap_path, &system_state);
 }
 
 static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
@@ -253,28 +261,10 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
     }
 }
 
-void menu_enter(bool is_boot) {
-    log_info("-- Enter Menu --");
-
-    tape_deinit();
-
-    // Blank the displays before menu.rom changes the character set.
-    set_cpu(CPU_HALT);
-    display_clear();
-    system_state.video_source = video_source_firmware;
-    
-    start_menu_rom(MENU_ROM_BOOT_NORMAL);
-
-    uint8_t* const video_char_buffer = system_state.video_char_buffer;
-    uint8_t* const colorbuf = video_char_buffer + 0x800;
-    memset(colorbuf, 0x0F, PET_MAX_VIDEO_RAM_BYTES - (colorbuf - video_char_buffer));
-    
-    const window_t window = window_create(video_char_buffer, screen_width, screen_height);
-
+static void apply_config(const int config_index) {
     action_context_t action_context = {
         .system_state = &system_state,
     };
-
     const setup_sink_t setup_sink = {
         .context = &action_context,
         .on_load = action_load,
@@ -286,9 +276,56 @@ void menu_enter(bool is_boot) {
         .system_state = &system_state,
     };
 
-    menu_config_show(&window, &setup_sink, is_boot);
-
+    tape_deinit();
+    load_config(&setup_sink, config_index);
+    spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
     system_reset_guest();
+}
+
+void menu_boot(void) {
+    log_info("-- Enter Boot Menu --");
+    const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
+    if (catalog.default_index >= 0) {
+        apply_config(catalog.default_index);
+        return;
+    }
+
+    tape_deinit();
+    display_clear();
+    start_menu_rom(MENU_ROM_BOOT_NORMAL);
+    menu_rom_wait(menu_prepare_service);
+    if (!system_suspend()) {
+        fatal("could not suspend boot system for menu");
+    }
+
+    const window_t window =
+        window_create(system_state.video_char_buffer, screen_width, screen_height);
+    const menu_result_t result = menu_config_run(&window, menu_ui_root_picker);
+    system_restore(false);
+    if (result.action == MENU_EXIT_LOAD_CONFIG) {
+        apply_config(result.config_index);
+    } else {
+        fatal("boot menu returned without selecting a configuration");
+    }
+}
+
+void menu_enter(void) {
+    log_info("-- Enter Menu --");
+    if (!system_suspend()) {
+        log_warn("menu entry unavailable");
+        return;
+    }
+
+    uint8_t* const video_char_buffer = system_state.video_char_buffer;
+    const window_t window = window_create(video_char_buffer, screen_width, screen_height);
+
+    const menu_result_t result = menu_config_run(&window, menu_ui_root_dashboard);
+    system_restore(result.action == MENU_EXIT_RESUME);
+    if (result.action == MENU_EXIT_LOAD_CONFIG) {
+        apply_config(result.config_index);
+    } else if (result.action == MENU_EXIT_RESET) {
+        system_reset_guest();
+    }
 
     log_info("-- Exit Menu --");
 }

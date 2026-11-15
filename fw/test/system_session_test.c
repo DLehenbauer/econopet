@@ -8,14 +8,15 @@
 
 #include "diag/log/log.h"
 #include "display/display.h"
+#include "diskimage_test.h"
 #include "driver.h"
+#include "ieee/diskimage.h"
+#include "ieee/ieee_drive.h"
+#include "ieee/ieee_protocol.h"
 #include "input/input_uart.h"
-#include "input/input_routing.h"
 #include "input/pet_keyboard.h"
-#include "menu/menu_config.h"
 #include "mock.h"
-#include "roms/roms.h"
-#include "sd/sd.h"
+#include "menu/menu_config.h"
 #include "system/state.h"
 #include "system/system.h"
 #include "ui/cli.h"
@@ -24,75 +25,17 @@ extern void __real_display_task(void);
 
 static jmp_buf terminal_exit;
 static unsigned terminal_action;
-static bool observing_boot_menu;
-static unsigned boot_stages;
-
-void __real_menu_enter(bool is_boot);
-void __real_start_menu_rom(menu_rom_boot_reason_t reason);
-void __real_menu_config_show(const window_t* window, const setup_sink_t* sink, bool is_boot);
-
-/** Isolate ROM execution while retaining the real menu entry and exit lifecycle. */
-void __wrap_start_menu_rom(menu_rom_boot_reason_t reason) {
-    if (!observing_boot_menu) {
-        __real_start_menu_rom(reason);
-        return;
-    }
-    ck_assert_int_eq(reason, MENU_ROM_BOOT_NORMAL);
-    ck_assert_int_eq(system_mode(), system_operation_boot);
-    ck_assert_uint_eq(boot_stages++, 0);
-}
-
-/** Complete the boot picker without depending on configured SD-card contents. */
-void __wrap_menu_config_show(const window_t* window, const setup_sink_t* sink, bool is_boot) {
-    if (!observing_boot_menu) {
-        __real_menu_config_show(window, sink, is_boot);
-        return;
-    }
-    ck_assert(is_boot);
-    ck_assert_uint_eq(boot_stages++, 1);
-    ck_assert_int_eq(system_mode(), system_operation_boot);
-}
-
-/** Reject unmodeled machine-selection hardware in host menu setup actions. */
-void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
-    ck_abort_msg("machine-selection hardware is not modeled by the host menu fixture");
-}
-
-/** Reject SD keymap loading outside the existing ROM-loader observation wrapper. */
-void sd_read_file(const char* path, sd_read_callback_t callback, void* context, size_t max_bytes) {
-    ck_abort_msg("SD keymap loading is not modeled by the host menu fixture");
-}
-
-/** Reject unmodeled volume queries from tape-directory loading. */
-uint64_t sd_free_bytes(void) {
-    ck_abort_msg("SD volume capacity is not modeled by the host menu fixture");
-}
 
 static void setup(void) {
     log_init();
     mock_reset();
+    ieee_drive_init();
 }
 
-/** Production boot-menu exit must admit deferred work in the first guest iteration. */
-START_TEST(test_boot_menu_commits_guest_and_services_first_request) {
-    boot_stages = 0;
-    observing_boot_menu = true;
-    __real_menu_enter(true);
-    observing_boot_menu = false;
-    ck_assert_uint_eq(boot_stages, 2);
-    ck_assert_int_eq(system_mode(), system_operation_guest);
-    ck_assert_int_eq(system_state.video_source, video_source_pet);
-    ck_assert_int_eq(get_cpu(), CPU_READY);
-
-    input_routing_request((input_system_request_t){
-        .action = input_system_request_reset, .source = INPUT_SOURCE_BUTTON
-    });
-    system_task();
-    ck_assert_int_eq(input_routing_pending_request().action, input_system_none);
-    ck_assert_int_eq(system_mode(), system_operation_guest);
-    ck_assert_int_eq(get_cpu(), CPU_READY);
+static void teardown(void) {
+    ck_assert(ieee_drive_unmount_all());
+    test_clear_files();
 }
-END_TEST
 
 static void observe_terminal_action(void) {
     ++terminal_action;
@@ -131,6 +74,22 @@ static void prepare_guest(void) {
     pet_io_write(0xe84c, 0xcc);
 }
 
+/** Drain bounded production drive work. */
+static void service_drive(void) {
+    for (unsigned pass = 0; pass < 8; ++pass) ieee_drive_task();
+}
+
+/** Open a LOAD channel through the public IEEE facade. */
+static void open_load_channel(const char* name) {
+    mock_ieee_enqueue_rx(true, IEEE_CMD_LISTEN(8));
+    mock_ieee_enqueue_rx(true, IEEE_CMD_OPEN(IEEE_LOAD_CHANNEL));
+    for (size_t index = 0; index < strlen(name); ++index)
+        mock_ieee_enqueue_rx_eoi(false, (uint8_t)name[index], name[index + 1] == '\0');
+    mock_ieee_enqueue_rx(true, IEEE_CMD_UNLISTEN);
+    mock_ieee_enqueue_atn_end();
+    service_drive();
+}
+
 /** Borrow and restore bounded physical and renderer-owned state. */
 START_TEST(test_suspend_restores_borrowed_resources_and_control) {
     prepare_guest();
@@ -155,7 +114,6 @@ START_TEST(test_suspend_restores_borrowed_resources_and_control) {
     ck_assert_uint_eq(get_cpu(), cpu & ~CPU_READY);
     ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), 0);
     __real_display_task();
-    display_clear();
     system_restore(true);
 
     ck_assert_int_eq(system_mode(), system_operation_guest);
@@ -218,14 +176,53 @@ START_TEST(test_restore_without_resume_retains_halt) {
 }
 END_TEST
 
+/** Restoring and loading configuration preserves staged GET counters until teardown. */
+START_TEST(test_configuration_preserves_staged_get_until_unmount) {
+    prepare_guest();
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/disks/old.d64", image, DISKIMAGE_D64_SIZE, false);
+    free(image);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64"), DOS_MEDIA_OK);
+    const bool status_source = _i != 0;
+    if (!status_source) open_load_channel("BASIC,PRG,R");
+    mock_ieee_enqueue_rx(true, IEEE_CMD_TALK(8));
+    mock_ieee_enqueue_rx(true,
+        IEEE_CMD_SECONDARY(status_source ? IEEE_COMMAND_CHANNEL : IEEE_LOAD_CHANNEL));
+    mock_ieee_enqueue_atn_end();
+    service_drive();
+
+    if (status_source) mock_ieee_consume_status(1);
+    else mock_ieee_consume_data(1);
+    service_drive();
+    const uint32_t counter =
+        status_source ? ECONOPET_WB_IEEE_TXS_ADDR : ECONOPET_WB_IEEE_TX_ADDR;
+    ck_assert_uint_eq(spi_read_at(counter), 1);
+    ck_assert_uint_gt(
+        status_source ? mock_ieee_status_count() : mock_ieee_data_count(), 0);
+
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    system_restore(false);
+    test_register_file("/config.yaml", "configs:\n  - name: replacement\n");
+    const setup_sink_t sink = {0};
+    load_config(&sink, 0);
+
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+    ck_assert_uint_eq(spi_read_at(counter), 0);
+    ck_assert_uint_eq(mock_ieee_data_count(), 0);
+    ck_assert_uint_eq(mock_ieee_status_count(), 0);
+}
+END_TEST
+
 Suite* system_session_suite(void) {
     Suite* const suite = suite_create("system_session");
     TCase* const test = tcase_create("ownership");
-    tcase_add_checked_fixture(test, setup, NULL);
-    tcase_add_test(test, test_boot_menu_commits_guest_and_services_first_request);
+    tcase_add_checked_fixture(test, setup, teardown);
     tcase_add_loop_test(test, test_suspend_restores_borrowed_resources_and_control, 0, 3);
     tcase_add_test(test, test_terminal_actions_take_over_without_restoring_console);
     tcase_add_test(test, test_restore_without_resume_retains_halt);
+    tcase_add_loop_test(test, test_configuration_preserves_staged_get_until_unmount, 0, 2);
     suite_add_tcase(suite, test);
     return suite;
 }

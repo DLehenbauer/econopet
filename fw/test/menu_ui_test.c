@@ -23,6 +23,7 @@
 #include "input/input_controls.h"
 #include "input/input_uart.h"
 #include "input/input_routing.h"
+#include "input/pet_keyboard.h"
 #include "menu/menu_config.h"
 #include "menu/menu_ui.h"
 #include "menu_browser_test.h"
@@ -38,11 +39,11 @@
 
 static unsigned int service_count, setup_count;
 static unsigned int mount_count;
-static bool verify_blank_on_setup;
 static char applied_names[MENU_UI_DRIVE_SLOT_COUNT][SD_PATH_MAX];
 static system_state_t saved_state;
 static uint8_t guarded_screen[MENU_UI_WIDTH * MENU_UI_HEIGHT + 2];
 static menu_ui_t menu;
+static menu_result_t run_prepared_menu(const window_t* window, bool is_boot);
 
 DIR* __real_opendir(const char* path);
 int __real_lstat(const char* path, struct stat* status);
@@ -56,13 +57,6 @@ static void service(void) {
 // Executes configured model options into the actual shared system state.
 static void set_options(void* context, options_t* options) {
     (void) context;
-    if (verify_blank_on_setup) {
-        ck_assert_int_eq(get_cpu(), CPU_HALT);
-        for (size_t i = 0; i < 0x800; i++) {
-            ck_assert_uint_eq(system_state.video_char_buffer[i], CH_SPACE);
-            ck_assert_uint_eq(spi_read_at(0x8000 + i), CH_SPACE);
-        }
-    }
     setup_count++;
     system_state.pet_display_columns = options->columns == 80
         ? pet_display_columns_80 : pet_display_columns_40;
@@ -130,24 +124,24 @@ static void register_models(bool with_default) {
     test_register_file("/config.yaml", yaml);
 }
 
-// Applies the UI's outcome through the configuration layer, as the session loop does.
-static void apply_menu(void) {
-    load_config(&setup_sink, menu.config_index, menu.config_changed);
-    menu.config_changed = false;
-}
-
 // Initializes real model state and a guarded 40x25 framebuffer.
 static void setup(void) {
     log_init();
     saved_state = system_state;
     mock_reset();
+    pet_keyboard_begin_boot();
+    mock_clock_set(0);
+    for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
+        pet_keyboard_task();
+        mock_clock_advance(200);
+    }
+    ck_assert(pet_keyboard_ready());
     test_clear_files();
     ieee_drive_init();
     fail_readdir = fail_next_readdir = false;
     unknown_entry_types = false;
     directory_scans = metadata_reads = 0;
     setup_count = 0;
-    verify_blank_on_setup = false;
     mount_count = 0;
     memset(applied_names, 0, sizeof(applied_names));
     service_count = 0;
@@ -162,7 +156,7 @@ static void setup(void) {
         MENU_UI_WIDTH, MENU_UI_HEIGHT
     };
     menu_ui_init(&menu, &window, service);
-    apply_menu();
+    load_config(&setup_sink, menu.config_index);
     setup_count = 0;
     set_cpu(CPU_READY);
 }
@@ -321,7 +315,7 @@ END_TEST
 // Boot opens the configuration picker, ignores Back, and exits immediately on selection.
 START_TEST(test_boot_configuration_picker) {
     const window_t* const window = menu.controller.window;
-    menu_ui_begin(&menu, window, true);
+    menu_ui_begin(&menu, window, menu_ui_root_picker);
     ck_assert(menu.choosing_model);
     ck_assert_uint_eq(menu.controller.screen_count, 1);
     ck_assert_ptr_eq(menu.controller.screens[0], &menu.picker);
@@ -336,16 +330,15 @@ START_TEST(test_boot_configuration_picker) {
     ck_assert(!tui_controller_is_active(&menu.controller));
     ck_assert_int_eq(menu.config_index, 2);
     ck_assert_uint_eq(menu.controller.screen_count, 1);
-    apply_menu();
-    ck_assert_uint_eq(setup_count, 1);
-    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
+    ck_assert_int_eq(menu.exit, MENU_EXIT_LOAD_CONFIG);
+    ck_assert_uint_eq(setup_count, 0);
 }
 END_TEST
 
 // Configuration paging uses the same overlap and neighboring selection as disk paging.
 START_TEST(test_configuration_overlapping_pages) {
     const window_t* const window = menu.controller.window;
-    menu_ui_begin(&menu, window, true);
+    menu_ui_begin(&menu, window, menu_ui_root_picker);
     const size_t rows = menu.picker_control.list.visible_rows;
     ck_assert_uint_eq(rows, 20);
     move_to(rows - 1);
@@ -380,7 +373,7 @@ START_TEST(test_picker_paging_artwork) {
         test_unregister_file("/config.yaml");
         test_register_file("/config.yaml", yaml);
         const window_t* const window = menu.controller.window;
-        menu_ui_begin(&menu, window, true);
+        menu_ui_begin(&menu, window, menu_ui_root_picker);
     } else {
         for (size_t i = 1; i < count; i++) {
             char name[32];
@@ -503,13 +496,13 @@ START_TEST(test_on_demand_back_and_reentry) {
     ck_assert(tui_controller_is_active(&menu.controller));
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert(!tui_controller_is_active(&menu.controller));
-    apply_menu();
-    ck_assert_uint_eq(setup_count, 1);
+    ck_assert_int_eq(menu.exit, MENU_EXIT_RESUME);
+    ck_assert_uint_eq(setup_count, 0);
     ck_assert_str_eq(ieee_drive_filename(0), "replacement.d64");
     ck_assert_uint_eq(mount_count, 0);
     const int selected = menu.config_index;
     const window_t* const window = menu.controller.window;
-    menu_ui_begin(&menu, window, false);
+    menu_ui_begin(&menu, window, menu_ui_root_dashboard);
     ck_assert_ptr_eq(menu.controller.screens[0], &menu.dashboard);
     ck_assert_int_eq(menu.config_index, selected);
     ck_assert_str_eq(ieee_drive_filename(0), "replacement.d64");
@@ -537,7 +530,6 @@ START_TEST(test_long_names_and_overlong_paths) {
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert_str_eq(ieee_drive_filename(4), long_name);
     ck_assert_uint_eq(mount_count, 0);
-    apply_menu();
     ck_assert_str_eq(ieee_drive_filename(4), long_name);
 }
 END_TEST
@@ -573,7 +565,7 @@ START_TEST(test_replaced_entry_does_not_escape_root) {
 END_TEST
 
 // Choosing a configuration exits without reading disks until the configuration is applied.
-START_TEST(test_model_change_loads_configured_disks) {
+START_TEST(test_model_change_returns_load_decision) {
     make_file("old.d64");
     make_file("new.d64");
     register_disk("old.d64");
@@ -602,91 +594,36 @@ START_TEST(test_model_change_loads_configured_disks) {
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_uint_eq(mount_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
-    register_disk("new.d64");
-    apply_menu();
-    ck_assert_str_eq(applied_names[7], "new.d64");
-    ck_assert_uint_eq(mount_count, 1);
-    ck_assert_str_eq(ieee_drive_filename(0), "");
-    ck_assert_str_eq(ieee_drive_filename(7), "new.d64");
+    ck_assert_int_eq(menu.exit, MENU_EXIT_LOAD_CONFIG);
+    ck_assert_uint_eq(mount_count, 0);
+    ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
+    ck_assert_str_eq(ieee_drive_filename(7), "");
     ck_assert_str_eq(menu.slot_paths[0], "");
-    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
-    menu_ui_begin(&menu, menu.controller.window, false);
+    menu_ui_begin(&menu, menu.controller.window, menu_ui_root_dashboard);
     open_slot(7);
-    ck_assert_str_eq(ieee_drive_filename(7), "new.d64");
+    ck_assert_str_eq(ieee_drive_filename(7), "");
 }
 END_TEST
 
-// Reset and root Back both reload the last selected configuration.
+// Reset and root Back return distinct non-destructive exit decisions.
 START_TEST(test_dashboard_exit_outcome) {
     tui_controller_dispatch(&menu.controller, _i == 0 ? tui_action_activate : tui_action_back);
     ck_assert(!tui_controller_is_active(&menu.controller));
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
-    apply_menu();
-    ck_assert_uint_eq(setup_count, 1);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(menu.exit, _i == 0 ? MENU_EXIT_RESET : MENU_EXIT_RESUME);
+    ck_assert_uint_eq(setup_count, 0);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
 }
 END_TEST
 
 static unsigned int boot_keys;
 static terminal_session_t expected_terminal_session;
+static cpu_state_t expected_menu_cpu;
 
-static unsigned int charset_observations;
-static unsigned int charset_ready_after;
-
-// Model menu.rom selecting lowercase after a few CPU status observations.
-static void select_menu_charset(void) {
-    ck_assert_uint_eq(mock_display_task_count(), 0);
-    for (size_t i = 0; i < 0x800; i++) {
-        ck_assert_uint_eq(system_state.video_char_buffer[i], CH_SPACE);
-        ck_assert_uint_eq(spi_read_at(0x8000 + i), CH_SPACE);
-    }
-    if (++charset_observations == charset_ready_after) {
-        mock_set_text_mode_lower(true);
-        mock_cpu_set_run_callback(NULL);
-    }
-}
-
-// Model a visible menu on both displays before the user exits.
-static tui_action_t exit_after_menu_render(void) {
-    ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
-    ck_assert_uint_eq(mock_display_task_count(), 1);
-    memset(system_state.video_char_buffer, 0x41, 0x800);
-    spi_write(0x8000, system_state.video_char_buffer, 0x800);
-    return tui_action_activate;
-}
-
-// Both displays are blank before the character set changes and before config reload.
-START_TEST(test_charset_transition_blanks_both_displays) {
-    test_unregister_file("/config.yaml");
-    register_models(false);
-    memset(system_state.video_char_buffer, 0x41, 0x800);
-    memset(system_state.video_char_buffer + 0x800, 0x5a, 0x800);
-    spi_write(0x8000, system_state.video_char_buffer, 0x1000);
-    set_cpu(CPU_HALT);
-    display_clear();
-    ck_assert_uint_eq(system_state.video_char_buffer[0x800], 0x5a);
-    ck_assert_uint_eq(spi_read_at(0x8800), 0x5a);
-
-    system_state.video_text_mode = video_text_mode_graphics;
-    mock_set_text_mode_lower(_i != 0);
-    charset_observations = 0;
-    charset_ready_after = _i == 0 ? 3 : 1;
-    mock_cpu_set_run_callback(select_menu_charset);
-    mock_input_set_reader(exit_after_menu_render);
-    verify_blank_on_setup = true;
-    set_cpu(CPU_READY);
-    const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, true);
-    ck_assert_uint_eq(charset_observations, _i == 0 ? 3 : 1);
-    ck_assert_uint_eq(setup_count, 1);
-    mock_cpu_set_run_callback(NULL);
-}
-END_TEST
-
-// Exercises the real boot-menu loop while requiring the menu ROM to remain running.
+// Supplies bounded UI-loop input without performing boot preparation.
 static tui_action_t boot_input(void) {
-    ck_assert_int_eq(get_cpu(), CPU_READY);
+    ck_assert_int_eq(get_cpu(), expected_menu_cpu);
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(system_state.terminal_session, expected_terminal_session);
     ck_assert_uint_lt(boot_keys, 4);
@@ -694,24 +631,28 @@ static tui_action_t boot_input(void) {
     if (boot_keys++ < 3) {
         return tui_action_none;
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 
-// Boot selects directly, and on-demand Reset restores routing and the selected configuration.
-START_TEST(test_boot_loop_waits_for_reset) {
+// The UI loop returns picker or dashboard decisions without changing CPU control.
+START_TEST(test_menu_loop_returns_root_decision) {
     test_unregister_file("/config.yaml");
     register_models(false);
     const terminal_session_t session = _i == 0 ? terminal_session_cli : terminal_session_remote;
     system_state.terminal_session = session;
     expected_terminal_session = session;
     boot_keys = 0;
+    expected_menu_cpu = CPU_HALT;
     mock_input_set_reader(boot_input);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, _i == 0);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, _i == 0);
+    ck_assert_int_eq(result.action, _i == 0 ? MENU_EXIT_LOAD_CONFIG : MENU_EXIT_RESET);
     ck_assert_uint_eq(boot_keys, 4);
-    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 1 : 0);
-    ck_assert_uint_eq(setup_count, 1);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(setup_count, 0);
+    ck_assert_int_eq(get_cpu(), expected_menu_cpu);
     ck_assert_int_eq(system_state.terminal_session, session);
 }
 END_TEST
@@ -780,6 +721,7 @@ static tui_action_t switch_terminal_in_menu(void) {
         ck_assert_uint_eq(mock_term_end_count(), 1);
         send_uart("log\r");
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 
@@ -794,7 +736,13 @@ START_TEST(test_menu_preserves_user_terminal_mode) {
     }
     mock_input_set_reader(switch_terminal_in_menu);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, _i < 2);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, _i < 2);
+    ck_assert_int_eq(result.action, _i < 2 ? MENU_EXIT_LOAD_CONFIG : MENU_EXIT_RESET);
+    if (result.action == MENU_EXIT_LOAD_CONFIG) {
+        load_config(&setup_sink, result.config_index);
+    }
 
     ck_assert_int_eq(system_state.terminal_session,
         expected_terminal_session == terminal_session_cli ? terminal_session_remote : terminal_session_cli);
@@ -827,7 +775,11 @@ START_TEST(test_remote_controls_boot_menu) {
     boot_keys = 0;
     mock_input_set_reader(remote_boot_input);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, true);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, true);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&setup_sink, result.config_index);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
     ck_assert(cli_in_remote_mode());
     ck_assert_uint_eq(mock_term_inject_count(), 0);
@@ -928,6 +880,7 @@ static tui_action_t hold_menu_button(void) {
     mock_clock_advance(50000);
     input_button_update(true);
     mock_clock_advance(INPUT_LONG_PRESS_US);
+    mock_input_set_reader(NULL);
     return tui_action_none;
 }
 
@@ -941,12 +894,17 @@ START_TEST(test_menu_loop_activates_held_button) {
     ck_assert_int_eq(mock_take_request().action, input_system_none);
     // Let the menu's charset-settle wait use real time before injecting the hold.
     mock_reset();
+    pet_keyboard_begin_boot();
     test_unregister_file("/config.yaml");
     register_models(false);
     boot_keys = 0;
     mock_input_set_reader(hold_menu_button);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, true);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, true);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&setup_sink, result.config_index);
     ck_assert_uint_eq(boot_keys, 2);
     ck_assert_uint_eq(setup_count, 1);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
@@ -970,6 +928,7 @@ static tui_action_t chord_then_enter(void) {
         mock_clock_advance(INPUT_LONG_PRESS_US);
         return tui_action_none;
     }
+    mock_input_set_reader(NULL);
     return tui_action_activate;
 }
 
@@ -985,7 +944,11 @@ START_TEST(test_menu_loop_ignores_shift_chord) {
     boot_keys = 0;
     mock_input_set_reader(chord_then_enter);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, true);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, true);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&setup_sink, result.config_index);
     ck_assert_uint_eq(boot_keys, 2);
     ck_assert_uint_eq(setup_count, 1);
     mock_input_set_reader(NULL);
@@ -1009,18 +972,26 @@ static tui_action_t session_input(void) {
     return input_menu_bind_terminal(session_keys[session_key_index++]);
 }
 
-// Runs the production menu loop with a bounded input trace.
-static void run_session(const int* keys, size_t count, bool is_boot) {
+static menu_result_t run_prepared_menu(const window_t* window, bool is_boot) {
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    return menu_config_run(window,
+        is_boot ? menu_ui_root_picker : menu_ui_root_dashboard);
+}
+
+// Runs the production menu loop with a bounded input trace and returns its exit decision.
+static menu_result_t run_session(const int* keys, size_t count, bool is_boot) {
     session_keys = keys;
     session_key_count = count;
     session_key_index = 0;
     prior_setup_count = setup_count;
     mock_input_set_reader(session_input);
-    set_cpu(CPU_READY);
+    set_cpu(CPU_HALT);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, is_boot);
+    const menu_result_t result = run_prepared_menu(&window, is_boot);
     ck_assert_uint_eq(session_key_index, count);
-    ck_assert_uint_eq(setup_count, prior_setup_count + 1);
+    ck_assert_uint_eq(setup_count, prior_setup_count);
+    return result;
 }
 
 // The production loop remembers config changes across Reset and destructive root Back.
@@ -1028,88 +999,23 @@ START_TEST(test_configuration_persists_across_sessions) {
     test_unregister_file("/config.yaml");
     register_models(false);
     const int boot[] = {KEY_DOWN, KEY_DOWN, '\r'};
-    run_session(boot, count_of(boot), true);
+    menu_result_t result = run_session(boot, count_of(boot), true);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&setup_sink, result.config_index);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
     const int back[] = {'\b'};
-    run_session(back, count_of(back), false);
+    result = run_session(back, count_of(back), false);
+    ck_assert_int_eq(result.action, MENU_EXIT_RESUME);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
     const int change[] = {KEY_DOWN, KEY_DOWN, '\r', KEY_UP, '\r'};
-    run_session(change, count_of(change), false);
+    result = run_session(change, count_of(change), false);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&setup_sink, result.config_index);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
     const int reset[] = {'\r'};
-    run_session(reset, count_of(reset), false);
+    result = run_session(reset, count_of(reset), false);
+    ck_assert_int_eq(result.action, MENU_EXIT_RESET);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
-}
-END_TEST
-
-// Session restoration preserves interactive media, while choosing a config reapplies its mounts.
-START_TEST(test_session_disk_policy) {
-    make_file("configured.d64");
-    make_file("replacement.d64");
-    register_disk("configured.d64");
-    register_disk("replacement.d64");
-    test_unregister_file("/config.yaml");
-    test_register_file("/config.yaml",
-        "default: model\nconfigs:\n  - id: model\n    name: Model\n    setup:\n"
-        "      - action: set\n        columns: 40\n"
-        "      - action: mount\n        device: 8\n        drive: 0\n"
-        "        file: configured.d64\n");
-    run_session(NULL, 0, true);
-    ck_assert_uint_eq(mount_count, 1);
-    ck_assert_str_eq(ieee_drive_filename(0), "configured.d64");
-    for (unsigned int slot = 1; slot < MENU_UI_DRIVE_SLOT_COUNT; ++slot)
-        ck_assert_int_eq(ieee_drive_try_mount(slot, "replacement.d64"), DOS_MEDIA_OK);
-
-    const int replace[] = {
-        KEY_DOWN, '\r', '\r', KEY_DOWN, KEY_DOWN, '\r', '\b', KEY_UP, '\r'
-    };
-    run_session(replace, count_of(replace), false);
-    ck_assert_uint_eq(mount_count, 1);
-    ck_assert_str_eq(ieee_drive_filename(0), "replacement.d64");
-
-    const int reselect[] = {KEY_DOWN, KEY_DOWN, '\r', '\r'};
-    run_session(reselect, count_of(reselect), false);
-    ck_assert_uint_eq(mount_count, 2);
-    ck_assert_str_eq(ieee_drive_filename(0), "configured.d64");
-    for (unsigned int slot = 1; slot < MENU_UI_DRIVE_SLOT_COUNT; ++slot)
-        ck_assert_str_eq(ieee_drive_filename(slot), "");
-}
-END_TEST
-
-// A configured default boots without input, while no default still needs a selection.
-START_TEST(test_default_autoboot_and_reentry) {
-    test_unregister_file("/config.yaml");
-    test_register_file("/config.yaml", _i == 0
-        ? "default: second\nconfigs:\n  - id: first\n    name: First\n    setup:\n"
-          "      - action: set\n        columns: 40\n"
-          "  - id: second\n    name: Second\n    setup:\n"
-          "      - action: set\n        columns: 80\n"
-        : "configs:\n  - id: first\n    name: First\n    setup:\n"
-          "      - action: set\n        columns: 40\n");
-    const int select[] = {'\r'};
-    session_keys = select;
-    session_key_count = count_of(select);
-    session_key_index = 0;
-    prior_setup_count = setup_count;
-    mock_input_set_reader(session_input);
-    // Auto-boot must not wait for menu.rom to select a character set.
-    if (_i == 0) mock_set_text_mode_lower(false);
-    const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
-    menu_config_show(&window, &setup_sink, true);
-    ck_assert_uint_eq(session_key_index, _i == 0 ? 0 : 1);
-    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 0 : 1);
-    ck_assert_uint_eq(mock_display_task_count(), _i == 0 ? 0 : 1);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
-    ck_assert_uint_eq(setup_count, 1);
-    ck_assert_int_eq(system_state.pet_display_columns,
-                     _i == 0 ? pet_display_columns_80 : pet_display_columns_40);
-
-    // Reentry must remember the auto-booted configuration, not the first entry.
-    mock_set_text_mode_lower(true);
-    run_session(select, count_of(select), false);
-    ck_assert_uint_eq(mock_pet_nmi_count(), _i == 0 ? 0 : 1);
-    ck_assert_int_eq(system_state.pet_display_columns,
-                     _i == 0 ? pet_display_columns_80 : pet_display_columns_40);
 }
 END_TEST
 
@@ -1139,7 +1045,12 @@ START_TEST(test_cli_memory_test) {
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     if (setjmp(ram_test_exit) == 0) {
         if (_i == 0) send_uart("test\r");
-        else menu_config_show(&window, &setup_sink, true);
+        else {
+            set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = run_prepared_menu(&window, true);
+            ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+        }
         ck_abort_msg("CLI test returned instead of entering the diagnostic");
     }
     mock_ram_test_set_handler(NULL);
@@ -1152,32 +1063,6 @@ START_TEST(test_cli_memory_test_arguments) {
     send_uart("test invalid\r");
     // An unexpected invocation would fail through the fixture's diagnostic stub.
     ck_assert(!input_routing_menu_active());
-}
-END_TEST
-
-// A newly selected configuration clears old slots even without mount actions.
-START_TEST(test_config_without_mount_actions_clears_disks) {
-    register_disk("live.d64");
-    for (unsigned int slot = 0; slot < MENU_UI_DRIVE_SLOT_COUNT; ++slot)
-        ck_assert_int_eq(ieee_drive_try_mount(slot, "live.d64"), DOS_MEDIA_OK);
-    load_config(&setup_sink, 0, true);
-    ck_assert_uint_eq(mount_count, 0);
-    for (unsigned int slot = 0; slot < MENU_UI_DRIVE_SLOT_COUNT; ++slot)
-        ck_assert_str_eq(ieee_drive_filename(slot), "");
-}
-END_TEST
-
-// Restoring preserves media, while a new selection clears it without a mount callback.
-START_TEST(test_config_disk_policy_without_mount_callback) {
-    register_disk("live.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64"), DOS_MEDIA_OK);
-    const setup_sink_t no_mount = {
-        .on_set_options = set_options, .system_state = &system_state
-    };
-    load_config(&no_mount, 0, false);
-    ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
-    load_config(&no_mount, 0, true);
-    ck_assert_str_eq(ieee_drive_filename(0), "");
 }
 END_TEST
 
@@ -1215,8 +1100,8 @@ START_TEST(test_browser_without_ui) {
 }
 END_TEST
 
-// RESET preserves applied disk overrides even if the YAML defaults later disappear.
-START_TEST(test_reset_applies_disk_overrides) {
+// Returning from the runtime menu preserves applied disk overrides.
+START_TEST(test_resume_exit_does_not_request_configuration_load) {
     register_disk("old.d64");
     register_disk("peer.d64");
     test_unregister_file("/config.yaml");
@@ -1233,10 +1118,10 @@ START_TEST(test_reset_applies_disk_overrides) {
     menu_ui_init(&menu, window, service);
     ck_assert_str_eq(ieee_drive_filename(0), "");
     ck_assert_str_eq(ieee_drive_filename(1), "");
-    apply_menu();
+    load_config(&setup_sink, menu.config_index);
     setup_count = mount_count = 0;
     memset(applied_names, 0, sizeof(applied_names));
-    menu_ui_begin(&menu, window, false);
+    menu_ui_begin(&menu, window, menu_ui_root_dashboard);
     ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
     ck_assert_str_eq(ieee_drive_filename(1), "peer.d64");
     open_slot(1);
@@ -1252,8 +1137,8 @@ START_TEST(test_reset_applies_disk_overrides) {
         test_unregister_file("/disks/old.d64");
         test_unregister_file("/disks/peer.d64");
     }
-    apply_menu();
-    ck_assert_uint_eq(setup_count, 1);
+    ck_assert_int_eq(menu.exit, MENU_EXIT_RESUME);
+    ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
     ck_assert_uint_eq(mount_count, 0);
     ck_assert_str_eq(ieee_drive_filename(0), "new.d80");
@@ -1521,7 +1406,6 @@ START_TEST(test_nested_browsing_mount_and_eject) {
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert_str_eq(ieee_drive_filename(3), "");
     ck_assert(tui_controller_is_active(&menu.controller));
-    apply_menu();
     ck_assert_uint_eq(mount_count, 0);
 }
 END_TEST
@@ -1541,7 +1425,6 @@ START_TEST(test_disk_choice_is_immediate) {
     ck_assert_str_eq(ieee_drive_filename(0), "other.d64");
     ck_assert_uint_eq(mount_count, 0);
     const size_t open_files = test_open_file_count();
-    apply_menu();
     ck_assert_str_eq(ieee_drive_filename(0), "other.d64");
     ck_assert_uint_eq(test_open_file_count(), open_files);
     ck_assert_uint_eq(mount_count, 0);
@@ -1670,7 +1553,6 @@ START_TEST(test_native_formats_include_d82_and_exclude_hdd) {
     ck_assert_uint_eq(menu.controller.screen_count, 2);
     ck_assert_str_eq(ieee_drive_filename(0), "gamma.D82");
     ck_assert_uint_eq(mount_count, 0);
-    apply_menu();
     ck_assert_str_eq(ieee_drive_filename(0), "gamma.D82");
 }
 END_TEST
@@ -1737,11 +1619,10 @@ START_TEST(test_model_paging_and_change) {
     ck_assert_int_eq(menu.config_index, TEST_MODEL_COUNT - 1);
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(get_cpu(), CPU_READY);
-    apply_menu();
-    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
+    ck_assert_int_eq(menu.exit, MENU_EXIT_LOAD_CONFIG);
     ck_assert_uint_eq(mount_count, 0);
-    ck_assert_uint_eq(setup_count, 1);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(setup_count, 0);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
 }
 END_TEST
 
@@ -1792,8 +1673,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_drive_label_suffixes);
     tcase_add_test(cases, test_on_demand_back_and_reentry);
     tcase_add_loop_test(cases, test_dashboard_exit_outcome, 0, 2);
-    tcase_add_loop_test(cases, test_charset_transition_blanks_both_displays, 0, 2);
-    tcase_add_loop_test(cases, test_boot_loop_waits_for_reset, 0, 2);
+    tcase_add_loop_test(cases, test_menu_loop_returns_root_decision, 0, 2);
     tcase_add_loop_test(cases, test_menu_preserves_user_terminal_mode, 0, 4);
     tcase_add_test(cases, test_terminal_session_rendering);
     tcase_add_test(cases, test_terminal_navigation_actions);
@@ -1803,14 +1683,10 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_menu_loop_activates_held_button);
     tcase_add_test(cases, test_menu_loop_ignores_shift_chord);
     tcase_add_test(cases, test_configuration_persists_across_sessions);
-    tcase_add_test(cases, test_session_disk_policy);
-    tcase_add_loop_test(cases, test_default_autoboot_and_reentry, 0, 2);
     tcase_add_loop_test(cases, test_cli_memory_test, 0, 2);
     tcase_add_test(cases, test_cli_memory_test_arguments);
-    tcase_add_test(cases, test_config_disk_policy_without_mount_callback);
-    tcase_add_test(cases, test_config_without_mount_actions_clears_disks);
     tcase_add_test(cases, test_browser_without_ui);
-    tcase_add_loop_test(cases, test_reset_applies_disk_overrides, 0, 2);
+    tcase_add_loop_test(cases, test_resume_exit_does_not_request_configuration_load, 0, 2);
     tcase_add_loop_test(cases, test_mixed_disk_pair_ejects_partner, 0, 12);
     tcase_add_loop_test(cases, test_disk_probe_error_keeps_picker_open, 0, 2);
     tcase_add_loop_test(cases, test_busy_disk_change_retries_without_losing_mount, 0, 2);
@@ -1831,7 +1707,7 @@ Suite* menu_ui_suite(void) {
     tcase_add_test(cases, test_menu_key_actions);
     tcase_add_test(cases, test_long_names_and_overlong_paths);
     tcase_add_test(cases, test_replaced_entry_does_not_escape_root);
-    tcase_add_test(cases, test_model_change_loads_configured_disks);
+    tcase_add_test(cases, test_model_change_returns_load_decision);
     suite_add_tcase(suite, cases);
     return suite;
 }

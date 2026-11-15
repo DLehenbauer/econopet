@@ -3,8 +3,6 @@
 
 #include "pch.h"
 
-#include <inttypes.h>
-
 #include "breakpoint.h"
 #include "cpu.h"
 #include "diag/log/log.h"
@@ -241,6 +239,7 @@ int main() {
     // with the rest of the initialization.
 
     display_init();     // Initialize firmware display subsystem
+    menu_init();
     usb_init();         // Initialize USB subsystem
     cli_init();         // Start CLI on UART serial
     bp_init();          // Initialize breakpoint subsystem
@@ -248,7 +247,7 @@ int main() {
     ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
 
     // Enter boot menu
-    menu_enter(/* is_boot: */ true);
+    menu_boot();
 
     // PET is configured and running.  Enter main loop to synchronize displays, service
     // input queues, and check for menu/reset button.

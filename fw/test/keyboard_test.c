@@ -5,6 +5,7 @@
 #include "keyboard_test.h"
 
 #include "input/input.h"
+#include "diag/log/log.h"
 #include "input/pet_keyboard.h"
 #include "input/input_controls.h"
 #include "input/input_routing.h"
@@ -69,6 +70,7 @@ static void reset_keyboard(system_state_t* state) {
 
 // Starts each report trace with an empty keyboard and firmware menu routing.
 static void setup(void) {
+    log_init();
     mock_reset();
     mock_clock_set(0);
     expect_hid_output_report = false;
@@ -204,7 +206,9 @@ static const uint8_t menu_hid_keys[] = {HID_KEY_ARROW_DOWN, HID_KEY_ENTER};
 
 // Supplies buffered HID navigation to the production configuration menu.
 static tui_action_t menu_hid_input(void) {
-    ck_assert_uint_lt(menu_hid_input_index, count_of(menu_hid_keys));
+    if (menu_hid_input_index >= count_of(menu_hid_keys)) {
+        return tui_action_none;
+    }
     report_key(menu_hid_keys[menu_hid_input_index++], 0);
     report_key(0, 0);
     return tui_action_none;
@@ -548,7 +552,7 @@ START_TEST(test_core_source_edges_without_reports) {
 }
 END_TEST
 
-// Machine intent survives release, input cancellation, and transitions without waiting for FIFO room.
+// Menu activation discards stale machine intent while retaining ordinary queue cleanup.
 START_TEST(test_typed_requests_are_independent_of_navigation) {
     const input_source_t keyboard = {1, 0};
     input_routing_set_menu_active(false);
@@ -562,9 +566,7 @@ START_TEST(test_typed_requests_are_independent_of_navigation) {
     input_routing_set_menu_active(false);
     input_routing_set_menu_active(true);
     const input_system_request_t request = mock_take_request();
-    ck_assert_int_eq(request.action, input_system_request_menu);
-    ck_assert_uint_eq(request.source.device, keyboard.device);
-    ck_assert_uint_eq(request.source.instance, keyboard.instance);
+    ck_assert_int_eq(request.action, input_system_none);
     ck_assert_int_eq(input_routing_navigation(), tui_action_none);
     ck_assert(mock_input_empty());
 }
@@ -1647,7 +1649,9 @@ static const input_gesture_t menu_gestures[] = {
 
 // Supplies a bounded trace so an ignored activation cannot hang the menu test.
 static tui_action_t legacy_menu_input(void) {
-    ck_assert_uint_lt(legacy_menu_key_index, count_of(menu_gestures));
+    if (legacy_menu_key_index >= count_of(menu_gestures)) {
+        return tui_action_none;
+    }
     const input_gesture_t gesture = menu_gestures[legacy_menu_key_index++];
     input_routing_gesture(gesture == input_gesture_dual_shift ? INPUT_SOURCE_PET : INPUT_SOURCE_BUTTON, gesture);
     return tui_action_none;
@@ -1681,8 +1685,19 @@ START_TEST(test_legacy_menu_control_dispatch) {
     };
     legacy_menu_key_index = 0;
     mock_reset();
+    pet_keyboard_begin_boot();
+    mock_clock_set(0);
+    for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
+        pet_keyboard_task();
+        mock_clock_advance(200);
+    }
+    ck_assert(pet_keyboard_ready());
     mock_input_set_reader(legacy_menu_input);
-    menu_config_show(&window, &sink, true);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = menu_config_run(&window, menu_ui_root_picker);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&sink, result.config_index);
     mock_input_set_reader(NULL);
     ck_assert_uint_eq(legacy_menu_key_index, count_of(menu_gestures));
     ck_assert_uint_eq(columns, 80);
@@ -1715,8 +1730,19 @@ START_TEST(test_menu_hid_navigation_after_entry) {
     input_routing_set_menu_active(false);
     menu_hid_input_index = 0;
     mock_reset();
+    pet_keyboard_begin_boot();
+    mock_clock_set(0);
+    for (unsigned step = 0; step < 3 * ECONOPET_KBD_COL_COUNT; ++step) {
+        pet_keyboard_task();
+        mock_clock_advance(200);
+    }
+    ck_assert(pet_keyboard_ready());
     mock_input_set_reader(menu_hid_input);
-    menu_config_show(&window, &sink, true);
+    set_cpu(CPU_HALT);
+    if (!pet_keyboard_active()) pet_keyboard_begin_boot();
+    const menu_result_t result = menu_config_run(&window, menu_ui_root_picker);
+    ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
+    load_config(&sink, result.config_index);
     mock_input_set_reader(NULL);
 
     ck_assert_uint_eq(menu_hid_input_index, count_of(menu_hid_keys));

@@ -4,10 +4,10 @@
 #pragma once
 
 /**
- * Performs a MCU reset using the watchdog timer.
+ * Performs an MCU reset using the watchdog timer.
  * 
  * This function uses the RP2040 watchdog to reset all cores and peripherals,
- * returning the system to a known state before running the firmware again.
+ * returning the MCU and peripherals to a known state before running the firmware again.
  * This function never returns.
  */
 void __attribute__((noreturn)) mcu_reset(void);

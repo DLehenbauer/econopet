@@ -3,4 +3,4 @@
 
 #pragma once
 
-void test_ram();
+void __attribute__((noreturn)) test_ram();

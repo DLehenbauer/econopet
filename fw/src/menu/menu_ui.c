@@ -321,7 +321,7 @@ static void change_directory(menu_ui_t* menu) {
 // Goes to the parent within /disks, or returns to the dashboard at the root.
 static void picker_back(tui_controller_t* controller, void* context) {
     menu_ui_t* const menu = context;
-    if (menu->choosing_model && menu->is_boot) return;
+    if (controller->screen_count == 1) return;
     if (menu->choosing_model || strcmp(menu->browser.path, MENU_BROWSER_ROOT) == 0) {
         if (!menu->choosing_model) remember_slot(menu);
         tui_controller_pop(controller);
@@ -349,7 +349,7 @@ static void mount_disk(tui_controller_t* controller, menu_ui_t* menu, const char
 // Records a configuration choice for the caller to apply after the menu exits.
 static void select_config(menu_ui_t* menu, int index) {
     menu->config_index = index;
-    menu->config_changed = true;
+    menu->exit = MENU_EXIT_LOAD_CONFIG;
     memset(menu->slot_paths, 0, sizeof(menu->slot_paths));
 }
 
@@ -422,13 +422,15 @@ static void show_disks(tui_controller_t* controller, void* context, size_t index
 
 // Finishes choosing so the caller can load the selected configuration and reset.
 static void reset_machine(tui_controller_t* controller, void* context) {
-    (void) context;
+    menu_ui_t* const menu = context;
+    menu->exit = MENU_EXIT_RESET;
     controller->active = false;
 }
 
-// The ROM-based menu cannot resume. Back at its root reloads the last configuration.
+// Root Back restores the borrowed context without loading or resetting a machine.
 static void dashboard_back(tui_controller_t* controller, void* context) {
-    (void) context;
+    menu_ui_t* const menu = context;
+    menu->exit = MENU_EXIT_RESUME;
     controller->active = false;
 }
 
@@ -443,7 +445,7 @@ void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)
         "menu dashboard requires a 40x25 window");
     *menu = (menu_ui_t) {.browser.service = service};
     const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
-    select_config(menu, catalog.default_index >= 0 ? catalog.default_index : 0);
+    menu->config_index = catalog.default_index >= 0 ? catalog.default_index : 0;
     menu->drive_controls[0] = (tui_component_t) {
         .kind = tui_component_list,
         .bounds = {MENU_DISK_LABEL_COLUMN, MENU_DISK_ROW, MENU_DISK_LABEL_WIDTH,
@@ -489,13 +491,14 @@ void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)
     tui_controller_init(&menu->controller, window, &menu->dashboard);
 }
 
-void menu_ui_begin(menu_ui_t* menu, const window_t* window, bool is_boot) {
-    menu->is_boot = is_boot;
-    menu->choosing_model = is_boot;
+void menu_ui_begin(menu_ui_t* menu, const window_t* window, const menu_ui_root_t root) {
+    const bool picker_root = root == menu_ui_root_picker;
+    menu->exit = MENU_EXIT_RESUME;
+    menu->choosing_model = picker_root;
     menu->picker_control.list.overlapping_pages = true;
     menu->picker_control.list.selected = menu->config_index;
     menu->picker_control.list.first_visible = 0;
     menu->drive_controls[0].list.selected = 0;
     menu->drive_controls[0].list.first_visible = 0;
-    tui_controller_init(&menu->controller, window, is_boot ? &menu->picker : &menu->dashboard);
+    tui_controller_init(&menu->controller, window, picker_root ? &menu->picker : &menu->dashboard);
 }

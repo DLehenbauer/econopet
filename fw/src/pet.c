@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "pet.h"
 
+#include "display/display.h"
 #include "driver.h"
 #include "ieee/ieee_drive.h"
 #include "input/input_routing.h"
@@ -32,7 +33,7 @@ void pet_task(void) {
     if (request.action == input_system_request_reset)
         pet_reset();
     else
-        menu_enter(false);
+        menu_enter();
 }
 
 // Performs a full PET reset, including CPU, IEEE-488 drive, and USB keyboard
@@ -58,8 +59,9 @@ void pet_reset() {
     keyboard_core_reset(&system_state);
     dispatch_key_events();
 
-    memset(system_state.video_char_buffer, 0x20, 0x800);            // Clear video character buffer
-    memset(system_state.video_char_buffer + 0x800, 0x0f, 0x800);    // Set color buffer to white on black
+    memset(system_state.video_char_buffer, 0x20, VIDEO_RAM_UNIT_BYTES);
+    memset(system_state.video_char_buffer + VIDEO_COLOR_OFFSET,
+           VIDEO_DEFAULT_ATTRIBUTE, VIDEO_COLOR_CAPACITY);
     // Keep the last physical observation for held-key suppression across the reset.
     memset(usb_key_matrix, 0xff, sizeof(usb_key_matrix));           // Clear USB keyboard matrix
     

@@ -11,10 +11,10 @@
 #include "display/display.h"
 #include "driver.h"
 #include "input/input_routing.h"
+#include "system/system.h"
 #include "pet.h"
 #include "reset.h"
 #include "system/state.h"
-#include "system/system.h"
 #include "version.h"
 
 // CLI state
@@ -112,7 +112,6 @@ static void cmd_remote(const char* args) {
 
 static void cmd_reset(const char* args) {
     (void)args;
-    
     system_reset();
 }
 

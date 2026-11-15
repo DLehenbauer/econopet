@@ -78,6 +78,7 @@ typedef enum {
 void set_cpu_type(cpu_type_t cpu);
 void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io);
 
+/** Exchange input and video state over SPI without advancing an owned keyboard scan. */
 void sync_state();
 
 uint16_t bp_hit_addr();

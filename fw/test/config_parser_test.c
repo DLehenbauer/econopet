@@ -11,8 +11,12 @@
 #include <string.h>
 
 #include "config/config.h"
+#include "diag/log/log.h"
+#include "diskimage_test.h"
 #include "fatal.h"
 #include "global.h"
+#include "ieee/diskimage.h"
+#include "ieee/ieee_drive.h"
 #include "menu/menu_config.h"
 #include "mock.h"
 #include "sd/sd.h"
@@ -74,6 +78,8 @@ static const char* mounted_image_root = NULL;
 
 // Global shared test state (sink structs with const members must be initialized statically)
 static system_state_t sys_state; // defaults applied in setup()
+static void setup(void);
+static void teardown(void);
 
 // Counts entries into configuration mappings.
 static void test_on_enter_config(void* context) {
@@ -192,6 +198,60 @@ static const config_sink_t config_sink = {
     .on_default = test_on_default,
     .setup = &setup_sink,
 };
+
+typedef struct {
+    unsigned int copies, options, mounts;
+} loader_actions_t;
+
+static void loader_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
+    (void)source;
+    (void)destination;
+    (void)length;
+    ++((loader_actions_t*)context)->copies;
+}
+
+static void loader_options(void* context, options_t* options) {
+    (void)options;
+    ++((loader_actions_t*)context)->options;
+}
+
+static void loader_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
+    ++((loader_actions_t*)context)->mounts;
+    const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
+    vet(ieee_drive_try_mount(slot, filename) == DOS_MEDIA_OK,
+        "configured disk could not mount");
+}
+
+static void configuration_loader_setup(void) {
+    setup();
+    mock_reset();
+    log_init();
+    ieee_drive_init();
+}
+
+static void configuration_loader_teardown(void) {
+    ieee_drive_unmount_all();
+    teardown();
+}
+
+static void mount_loader_image(unsigned int slot, diskimage_type_t type, const char* name) {
+    static const size_t sizes[] = {
+        0, DISKIMAGE_D64_SIZE, DISKIMAGE_D80_SIZE, DISKIMAGE_D82_SIZE
+    };
+    uint8_t* image = type == diskimage_type_d64 ? diskimage_test_make_d64() :
+        diskimage_test_make_d80();
+    if (type == diskimage_type_d82) {
+        uint8_t* const expanded = realloc(image, sizes[type]);
+        ck_assert_ptr_nonnull(expanded);
+        image = expanded;
+        memset(image + DISKIMAGE_D80_SIZE, 0, DISKIMAGE_D80_SIZE);
+    }
+    char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_DISKS, name);
+    test_register_binary_file(path, image, sizes[type], false);
+    free(image);
+    ck_assert_int_eq(ieee_drive_try_mount(slot, name), DOS_MEDIA_OK);
+}
 
 // Clears callback observations and restores graphics-keyboard/CRTC defaults.
 static void setup(void) {
@@ -1062,7 +1122,7 @@ START_TEST(test_menu_default_text_capacity) {
     ck_assert_uint_eq(catalog.count, 2);
     ck_assert_int_eq(catalog.default_index, TEST_CONFIG_SECOND);
     ck_assert_uint_eq(test_ctx.set_options_count, 0);
-    load_config(&setup_sink, catalog.default_index, true);
+    load_config(&setup_sink, catalog.default_index);
     ck_assert_uint_eq(test_ctx.set_options_count, 1);
     ck_assert_uint_eq(test_ctx.last_columns, pet_display_columns_80);
 }
@@ -1245,6 +1305,146 @@ START_TEST(test_vet_path_length_rejects_overlong_path) {
 }
 END_TEST
 
+static void expect_mount_failure_after_settings(
+    void* context, uint32_t source, uint32_t destination, uint32_t length) {
+    loader_actions_t* const actions = context;
+    loader_copy(context, source, destination, length);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(actions->options, 1);
+    ck_assert_uint_eq(actions->copies, 1);
+    test_expect_fatal_message("configured disk could not mount");
+}
+
+/** A loader failure follows completed option and copy actions without menu policy. */
+START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
+    mount_loader_image(0, diskimage_type_d64, "old.d64");
+    mount_loader_image(2, diskimage_type_d80, "next.d80");
+    loader_actions_t actions = {0};
+    system_state_t state = {0};
+    const setup_sink_t sink = {
+        .context = &actions,
+        .on_copy = expect_mount_failure_after_settings,
+        .on_set_options = loader_options,
+        .on_mount = loader_mount,
+        .system_state = &state,
+    };
+    test_register_file("/config.yaml",
+        "configs:\n"
+        "  - id: invalid\n"
+        "    name: Invalid\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n"
+        "      - action: copy\n"
+        "        source: 4096\n"
+        "        destination: 8192\n"
+        "        length: 256\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: 0\n"
+        "        file: old.d64\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: 1\n"
+        "        file: missing.d64\n");
+    test_expect_fatal_message("configuration setup actions did not finish");
+    set_cpu(CPU_READY);
+    load_config(&sink, 0);
+    ck_abort_msg("invalid configuration returned instead of reporting a fatal error");
+}
+END_TEST
+
+/** Configuration unmounts first so either mount order replaces a complete pair. */
+START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
+    mount_loader_image(0, diskimage_type_d64, "old.d64");
+    mount_loader_image(1, diskimage_type_d64, "old-partner.d64");
+    mount_loader_image(2, diskimage_type_d80, "next.d80");
+    loader_actions_t actions = {0};
+    system_state_t state = {0};
+    const setup_sink_t sink = {
+        .context = &actions,
+        .on_copy = loader_copy,
+        .on_set_options = loader_options,
+        .on_mount = loader_mount,
+        .system_state = &state,
+    };
+    char yaml[768];
+    const int length = snprintf(yaml, sizeof(yaml),
+        "configs:\n"
+        "  - name: replace\n"
+        "    setup:\n"
+        "      - action: copy\n"
+        "        source: 4096\n"
+        "        destination: 8192\n"
+        "        length: 256\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: %d\n"
+        "        file: next.d80\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: %d\n"
+        "        file: next.d80\n"
+        "      - action: set\n"
+        "        columns: 80\n",
+        _i, 1 - _i);
+    ck_assert_int_gt(length, 0);
+    ck_assert_uint_lt((size_t)length, sizeof(yaml));
+    test_register_file("/config.yaml", yaml);
+    set_cpu(CPU_READY);
+    load_config(&sink, 0);
+
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(actions.copies, 1);
+    ck_assert_uint_eq(actions.options, 1);
+    ck_assert_uint_eq(actions.mounts, 2);
+    ck_assert_str_eq(ieee_drive_filename(0), "next.d80");
+    ck_assert_str_eq(ieee_drive_filename(1), "next.d80");
+}
+END_TEST
+
+/** A loader always clears old media even when its selected setup has no mounts. */
+START_TEST(test_configuration_without_mount_actions_clears_disks) {
+    mount_loader_image(0, diskimage_type_d64, "live.d64");
+    mount_loader_image(1, diskimage_type_d64, "partner.d64");
+    loader_actions_t actions = {0};
+    system_state_t state = {0};
+    const setup_sink_t sink = {
+        .context = &actions,
+        .on_set_options = loader_options,
+        .on_mount = loader_mount,
+        .system_state = &state,
+    };
+    test_register_file("/config.yaml",
+        "configs:\n  - name: selected\n    setup:\n"
+        "      - action: set\n        columns: 40\n");
+
+    load_config(&sink, 0);
+
+    ck_assert_uint_eq(actions.mounts, 0);
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+    ck_assert_str_eq(ieee_drive_filename(1), "");
+}
+END_TEST
+
+/** Missing mount callbacks do not retain previously mounted media. */
+START_TEST(test_configuration_without_mount_callback_clears_disks) {
+    mount_loader_image(0, diskimage_type_d64, "live.d64");
+    const setup_sink_t sink = {
+        .context = &test_ctx,
+        .on_set_options = test_on_set_options,
+        .system_state = &system_state,
+    };
+    test_register_file("/config.yaml",
+        "configs:\n  - name: selected\n    setup:\n"
+        "      - action: set\n        columns: 40\n");
+
+    load_config(&sink, 0);
+
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+}
+END_TEST
+
 // Builds the successful parsing and shipped-configuration test suite.
 Suite *config_parser_suite(void) {
     // Create an isolated fixture-backed case for successful parses.
@@ -1289,6 +1489,13 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_default_after_configs);
     tcase_add_test(tc_core, test_parse_no_default);
     tcase_add_test(tc_core, test_validate_sdcard_config_yaml_default);
+
+    TCase* const loader = tcase_create("loader policy");
+    tcase_add_checked_fixture(loader, configuration_loader_setup, configuration_loader_teardown);
+    tcase_add_loop_test(loader, test_configuration_unmounts_then_mounts_selected_disks, 0, 2);
+    tcase_add_test(loader, test_configuration_without_mount_actions_clears_disks);
+    tcase_add_test(loader, test_configuration_without_mount_callback_clears_disks);
+    suite_add_tcase(s, loader);
     
     suite_add_tcase(s, tc_core);
 
@@ -1320,6 +1527,11 @@ Suite *config_parser_fatal_suite(void) {
     tcase_add_test_raise_signal(tc, test_parser_rejects_short_tape_before_allocation, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_rejects_long_tape_before_allocation, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_rejects_multiline_config_name, SIGABRT);
+    TCase* const loader = tcase_create("loader failure");
+    tcase_add_checked_fixture(loader, configuration_loader_setup, configuration_loader_teardown);
+    tcase_add_test_raise_signal(loader,
+        test_configuration_mount_failure_is_fatal_after_settings, SIGABRT);
+    suite_add_tcase(s, loader);
     suite_add_tcase(s, tc);
 
     return s;
