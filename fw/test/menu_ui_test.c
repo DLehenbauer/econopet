@@ -227,9 +227,9 @@ static void move_to(size_t index) {
 START_TEST(test_dashboard_layout_and_navigation) {
     tui_controller_render(&menu.controller);
     expect_text(16, 0, "EconoPET", true);
-    expect_text(11, 11, "[ Change Config ]", true);
+    expect_text(11, 11, "[     Reset     ]", true);
     expect_text(11, 12, "[  Change Disk  ]", false);
-    expect_text(11, 13, "[   Reset CPU   ]", false);
+    expect_text(11, 13, "[ Change Config ]", false);
     expect_text(11, 14, "[     Back      ]", false);
     expect_text(31, 21, "Firmware", false);
     expect_text(32, 22, "v" FW_BUILD_DATE, false);
@@ -279,8 +279,8 @@ START_TEST(test_dashboard_layout_and_navigation) {
     ck_assert_uint_eq(menu.controller.screen_count, 1);
     ck_assert_uint_eq(menu.controller.focused_component, 1);
     ck_assert(tui_controller_is_active(&menu.controller));
-    tui_controller_dispatch(&menu.controller, tui_action_up);
-    ck_assert_uint_eq(menu.controller.focused_component, 0);
+    tui_controller_dispatch(&menu.controller, tui_action_down);
+    ck_assert_uint_eq(menu.controller.focused_component, 2);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     tui_controller_render(&menu.controller);
     expect_text(11, 24, "Lt", true);
@@ -586,7 +586,7 @@ START_TEST(test_model_change_returns_load_decision) {
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert_str_eq(menu.slot_paths[0], "/disks");
     tui_controller_dispatch(&menu.controller, tui_action_back);
-    menu.controller.focused_component = 0;
+    menu.controller.focused_component = 2;
     test_unregister_file("/config.yaml");
     test_register_file("/config.yaml",
         "configs:\n"
@@ -622,12 +622,12 @@ START_TEST(test_dashboard_exit_outcome) {
     register_disk("live.d64");
     ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64", NULL), DOS_MEDIA_OK);
     if (_i < 3) {
-        const size_t steps = _i == 0 ? 2 : _i == 1 ? 1 : count_of(menu.controls) - 1;
+        const size_t steps = _i == 0 ? 0 : _i == 1 ? 1 : count_of(menu.controls) - 1;
         for (size_t index = 0; index < steps; index++)
             tui_controller_dispatch(&menu.controller, _i == 2 ? tui_action_down : tui_action_up);
         tui_controller_render(&menu.controller);
-        expect_text(11, _i == 0 ? 13 : 14,
-                    _i == 0 ? "[   Reset CPU   ]" : "[     Back      ]", true);
+        expect_text(11, _i == 0 ? 11 : 14,
+                    _i == 0 ? "[     Reset     ]" : "[     Back      ]", true);
     }
     tui_controller_dispatch(&menu.controller, _i < 3 ? tui_action_activate : tui_action_back);
     ck_assert(!tui_controller_is_active(&menu.controller));
@@ -641,7 +641,6 @@ START_TEST(test_dashboard_exit_outcome) {
 END_TEST
 
 static unsigned int boot_keys;
-static bool choose_reset;
 static terminal_session_t expected_terminal_session;
 static cpu_state_t expected_menu_cpu;
 
@@ -651,11 +650,8 @@ static tui_action_t boot_input(void) {
     ck_assert_uint_eq(setup_count, 0);
     ck_assert_int_eq(system_state.terminal_session, expected_terminal_session);
     ck_assert_uint_lt(boot_keys, 4);
-    ck_assert_uint_eq(mock_display_task_count(), choose_reset ? 1 + MIN(boot_keys, 2) : 1);
-    if (boot_keys++ < 3) {
-        if (choose_reset && boot_keys <= 2) return tui_action_down;
-        return tui_action_none;
-    }
+    ck_assert_uint_eq(mock_display_task_count(), 1);
+    if (boot_keys++ < 3) return tui_action_none;
     mock_input_set_reader(NULL);
     return tui_action_activate;
 }
@@ -668,7 +664,6 @@ START_TEST(test_menu_loop_returns_root_decision) {
     system_state.terminal_session = session;
     expected_terminal_session = session;
     boot_keys = 0;
-    choose_reset = _i != 0;
     expected_menu_cpu = CPU_HALT;
     mock_input_set_reader(boot_input);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
@@ -726,13 +721,6 @@ START_TEST(test_terminal_navigation_actions) {
 }
 END_TEST
 
-// Completes runtime Reset CPU navigation after the terminal mode has changed.
-static tui_action_t finish_terminal_reset(void) {
-    if (boot_keys++ == 0) return tui_action_down;
-    mock_input_set_reader(NULL);
-    return tui_action_activate;
-}
-
 // Exercises both mode changes while the real menu loop remains active.
 static tui_action_t switch_terminal_in_menu(void) {
     ck_assert_uint_eq(mock_display_task_count(), 1);
@@ -755,8 +743,8 @@ static tui_action_t switch_terminal_in_menu(void) {
         send_uart("log\r");
     }
     boot_keys = 0;
-    mock_input_set_reader(choose_reset ? finish_terminal_reset : NULL);
-    return choose_reset ? tui_action_down : tui_action_activate;
+    mock_input_set_reader(NULL);
+    return tui_action_activate;
 }
 
 // The menu never overrides the user's mode, and mode changes survive menu exit.
@@ -765,7 +753,6 @@ START_TEST(test_menu_preserves_user_terminal_mode) {
     register_models(false);
     cli_init();
     expected_terminal_session = (_i & 1) == 0 ? terminal_session_cli : terminal_session_remote;
-    choose_reset = _i >= 2;
     if (expected_terminal_session == terminal_session_remote) {
         send_uart("remote\r\n");
     }
@@ -1042,12 +1029,12 @@ START_TEST(test_configuration_persists_across_sessions) {
     result = run_session(back, count_of(back), false);
     ck_assert_int_eq(result.action, MENU_EXIT_RESUME);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
-    const int change[] = {'\r', KEY_UP, '\r'};
+    const int change[] = {KEY_DOWN, KEY_DOWN, '\r', KEY_UP, '\r'};
     result = run_session(change, count_of(change), false);
     ck_assert_int_eq(result.action, MENU_EXIT_LOAD_CONFIG);
     load_config(&setup_sink, result.config_index);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
-    const int reset[] = {KEY_DOWN, KEY_DOWN, '\r'};
+    const int reset[] = {'\r'};
     result = run_session(reset, count_of(reset), false);
     ck_assert_int_eq(result.action, MENU_EXIT_RESET);
     ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
@@ -1759,7 +1746,7 @@ START_TEST(test_model_paging_and_change) {
     make_file("old.d64");
     register_disk("old.d64");
     ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
-    menu.controller.focused_component = 0;
+    menu.controller.focused_component = 2;
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     ck_assert(menu.choosing_model);
     ck_assert_uint_eq(menu.picker_control.list.count, TEST_MODEL_COUNT);
@@ -1780,7 +1767,7 @@ END_TEST
 
 // Back cancels configuration selection, but choosing even the current config exits for reset.
 START_TEST(test_model_cancel_and_current_selection) {
-    menu.controller.focused_component = 0;
+    menu.controller.focused_component = 2;
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     if (_i == 0) tui_controller_dispatch(&menu.controller, tui_action_back);
     else tui_controller_dispatch(&menu.controller, tui_action_activate);

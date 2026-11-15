@@ -503,8 +503,8 @@ void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)
         .bounds = {0, MENU_BACK_ROW, MENU_UI_WIDTH, 1},
         .button = {.label = "Back", .on_activate = drives_back}
     };
-    const char* const labels[] = {"Change Config", " Change Disk ", "  Reset CPU  ", "    Back     "};
-    const tui_screen_fn actions[] = {show_models, show_drives, reset_machine, dashboard_back};
+    const char* const labels[] = {"    Reset    ", " Change Disk ", "Change Config", "    Back     "};
+    const tui_screen_fn actions[] = {reset_machine, show_drives, show_models, dashboard_back};
     for (size_t i = 0; i < count_of(menu->controls); i++)
         menu->controls[i] = (tui_component_t) {
             .kind = tui_component_button,

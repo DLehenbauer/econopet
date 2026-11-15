@@ -83,7 +83,7 @@ static unsigned exit_requests;
 static menu_exit_t desired_exit;
 static unsigned boot_rom_completions;
 
-/** Request root Back/reset, or activate Change Config and the already-selected entry. */
+/** Request root Back/reset, or open Change Config and activate the selected entry. */
 static tui_action_t request_exit(void) {
     ++exit_requests;
     if (!pet_keyboard_ready()) {
@@ -93,7 +93,7 @@ static tui_action_t request_exit(void) {
     if (desired_exit == MENU_EXIT_RESUME) {
         return tui_action_back;
     }
-    if (desired_exit == MENU_EXIT_RESET && exit_step++ < 2) {
+    if (desired_exit == MENU_EXIT_LOAD_CONFIG && exit_step++ < 2) {
         return tui_action_down;
     }
     return tui_action_activate;
