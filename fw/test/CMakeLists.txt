@@ -133,7 +133,7 @@ target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=display_task -Wl,--wrap=display_term_begin -Wl,--wrap=display_term_end
-    -Wl,--wrap=display_term_refresh -Wl,--wrap=display_window_begin -Wl,--wrap=display_window_show)
+    -Wl,--wrap=display_term_refresh)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.
@@ -144,6 +144,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE "${EXTERNAL_DIR}/pico-vfs/inc
 # Exercise report handling with TinyUSB's real HID definitions, without its hardware runtime.
 target_include_directories(${PROJECT_NAME} PRIVATE "${PICO_SDK_PATH}/lib/tinyusb/src")
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_TINYUSB CFG_TUSB_MCU=OPT_MCU_NONE)
+
+# Compile the physical fatal renderer only where ROM, window and SPI mocks are linked.
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_FATAL_DISPLAY)
 
 # Generate version header in build directory
 add_version_header(${PROJECT_NAME})

@@ -105,8 +105,8 @@ void fatal_halt(fatal_error_t error, const char* message) {
     fatal_repeat(entry, message);
 }
 
-// Host targets provide fatal() and vetted_malloc() through their existing mocks.
-#if defined(PICO_RP2040)
+// System-test host firmware uses only the display-independent diagnostics.
+#if defined(PICO_RP2040) || defined(ECONOPET_TEST_FATAL_DISPLAY)
 #include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
@@ -121,12 +121,13 @@ void fatal_halt(fatal_error_t error, const char* message) {
     (FATAL_COLUMNS * FATAL_ROWS - (sizeof(FATAL_PREFIX) - 1) + 1)
 
 // Render fatal details without allocating storage. Core 1 keeps driving DVI.
-static void fatal_display_message(const char* const message) {
+void fatal_display_message(const char* const message) {
     system_takeover();
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);
-    display_window_begin(&window);
+    // Prepare the physical displays without clearing UART diagnostic history.
+    window_fill(&window, CH_SPACE);
 
     uint8_t* const pOut = window_puts(&window, window.start, FATAL_PREFIX);
     window_reverse(&window, window.start, 2);
@@ -136,10 +137,12 @@ static void fatal_display_message(const char* const message) {
     system_state.video_text_mode = video_text_mode_lower;
 
     // Present the final error directly on both displays before entering the fatal loop.
-    spi_write(0x8000, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
-    display_window_show(&window);
+    spi_write(VIDEO_RAM_ADDRESS, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
 }
+#endif
 
+// Host targets provide fatal() and vetted_malloc() through their existing mocks.
+#if defined(PICO_RP2040)
 // Funnel formatted errors and allocation failures through the same Morse endpoint.
 static void __attribute__((noreturn)) fatal_no_alloc(const char* message) {
     static bool rendering;

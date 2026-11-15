@@ -9,6 +9,7 @@
 #include "dvi/dvi.h"
 #include "fatal.h"
 #include "system/state.h"
+#include "window.h"
 
 // Terminal escape sequences
 static const char* const term_home = "\e[H";
@@ -28,7 +29,6 @@ static const uint screen_height = 25;
 bool display_term_video_active(void) {
     return system_state.terminal_session == terminal_session_remote;
 }
-
 void display_init(void) {
     video_init();
 }
@@ -132,43 +132,4 @@ void display_task(void) {
     if (display_term_video_active()) {
         display_term_render();
     }
-}
-
-// Window-based terminal display for fatal/config error screens
-void display_window_begin(const window_t* window) {
-    fputs(term_enter_alternate, stdout);
-    fputs(term_echo_off, stdout);
-    fputs(term_cursor_off, stdout);
-    fputs(term_reverse_off, stdout);
-    fputs(term_clear_screen, stdout);
-    fflush(stdout);
-
-    window_fill(window, CH_SPACE);
-}
-
-// Render a window to the terminal
-void display_window_show(const window_t* window) {
-    bool reverse = false;
-
-    fputs(term_home, stdout);
-
-    const unsigned int cols = window->width;
-    const unsigned int rows = window->height;
-    uint8_t* char_buffer = window->start;
-
-    for (unsigned int r = 0; r < rows; r++) {
-        for (unsigned int c = 0; c < cols; c++) {
-            const char ch = *char_buffer++;
-
-            if (reverse != ((ch & 0x80) != 0)) {
-                reverse = !reverse;
-                fputs(reverse ? term_reverse_on : term_reverse_off, stdout);
-            }
-
-            fputs(vrom_to_term(ch), stdout);
-        }
-        fputs("\r\n", stdout);
-    }
-
-    fflush(stdout);
 }

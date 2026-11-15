@@ -66,6 +66,12 @@ void fatal(const char* const format, ...)
  */
 void fatal_halt(fatal_error_t error, const char* message) __attribute__((noreturn));
 
+/**
+ * Render fatal()'s details on the physical displays without writing to UART.
+ * Requires initialized FPGA/displays. Does not allocate or access the SD card.
+ */
+void fatal_display_message(const char* message);
+
 // Verifies a full SD-card path's byte length (excluding null, including directory
 // prefixes) is below SD_PATH_MAX. A failed check is fatal, never truncating.
 void vet_path_length(size_t length);
