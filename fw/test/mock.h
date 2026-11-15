@@ -77,6 +77,8 @@ int mock_term_inject_last(void);
 unsigned int mock_pet_nmi_count(void);
 // Observes entry to the nonreturning RAM diagnostic.
 void mock_ram_test_set_handler(void (*handler)(void));
+/** Observe entry to the ownership-aware nonreturning MCU reset. */
+void mock_system_reset_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.
 void mock_breakpoint_set_hit_addr(uint16_t addr);
 // Reports whether the breakpoint halt was cleared since reset.

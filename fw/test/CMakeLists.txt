@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/fatal.c
     ${SRC_DIR}/fpga_image.c
     ${SRC_DIR}/roms/roms.c
+    ${SRC_DIR}/roms/checksum.c
     ${SRC_DIR}/sd/path.c
     ${SRC_DIR}/sd/activity.c
     ${SRC_DIR}/input/input_controls.c
@@ -50,14 +51,17 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/pet.c
     ${SRC_DIR}/global.c
     ${SRC_DIR}/menu/menu_config.c
+    ${SRC_DIR}/menu/menu.c
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/menu/menu_ui.c
     ${SRC_DIR}/system/state.c
+    ${SRC_DIR}/system/system.c
     ${SRC_DIR}/ui/tui.c
     ${SRC_DIR}/ui/cli.c
     ${SRC_DIR}/ui/console.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
+    ${SRC_DIR}/tape.c
     ${SRC_DIR}/ieee/diskimage.c
     ${SRC_DIR}/ieee/dos_media.c
     ${SRC_DIR}/ieee/dos_rel.c
@@ -94,6 +98,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/system_state_test.c
+    ${TEST_DIR}/system_session_test.c
     ${TEST_DIR}/sd_activity_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/test_support_test.c
@@ -101,11 +106,13 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/window_test.c
 )
 
-# ROM boot-routing tests do not execute CPU instructions or inspect glyph content.
-foreach(header 901447_10 menu_rom)
-    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/${header}.h"
-        CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
-endforeach()
+# Host suspension copies the complete font, but does not inspect glyph content.
+string(REPEAT "0x00,\n" 2048 TEST_FONT_HEADER)
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h"
+    CONTENT "// SPDX-License-Identifier: CC0-1.0\n${TEST_FONT_HEADER}")
+# ROM boot-routing tests do not execute CPU instructions.
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h"
+    CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
 
 # Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}
@@ -119,6 +126,8 @@ target_link_libraries(${PROJECT_NAME}
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=fopen -Wl,--wrap=time_us_64 -Wl,--wrap=term_inject_char
     -Wl,--wrap=pet_nmi -Wl,--wrap=ieee_drive_task)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=menu_enter -Wl,--wrap=read_keymap)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=start_menu_rom -Wl,--wrap=menu_config_show)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)

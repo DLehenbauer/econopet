@@ -26,6 +26,7 @@
 #include "sd_activity_test.h"
 #include "tape_dir_test.h"
 #include "system_state_test.h"
+#include "system_session_test.h"
 #include "test_support_test.h"
 #include "tui_test.h"
 #include "menu_browser_test.h"
@@ -54,6 +55,7 @@ int run_suite() {
     srunner_add_suite(sr1, petscii_suite());
     srunner_add_suite(sr1, sd_activity_suite());
     srunner_add_suite(sr1, system_state_suite());
+    srunner_add_suite(sr1, system_session_suite());
     srunner_add_suite(sr1, tape_dir_suite());
     srunner_add_suite(sr1, tui_suite());
     srunner_add_suite(sr1, menu_browser_suite());

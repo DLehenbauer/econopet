@@ -62,7 +62,7 @@ static void observe_reset(cpu_state_t state) {
 }
 
 // Observe runtime menu entry without running the interactive menu.
-void menu_enter(bool is_boot) {
+void __wrap_menu_enter(bool is_boot) {
     ck_assert(!is_boot);
     ck_assert(sd_activity_quiet());
     ++entries;

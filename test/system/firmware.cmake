@@ -41,6 +41,31 @@ target_link_libraries(econopet_host_firmware PUBLIC
 # Firmware fopen reaches owned cookie-backed fixtures, not SPI mocks.
 target_link_options(econopet_host_firmware INTERFACE -Wl,--wrap=fopen)
 
+# Session tests need ROM-shaped arrays for host firmware, not private glyphs or menu code.
+string(REPEAT "0x00,\n" 2048 MENU_TEST_FONT_HEADER)
+string(REPEAT "0xea,\n" 256 MENU_TEST_ROM_HEADER)
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h" CONTENT "${MENU_TEST_FONT_HEADER}")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h" CONTENT "${MENU_TEST_ROM_HEADER}")
+add_library(econopet_menu_firmware STATIC
+    "${ECONOPET_ROOT}/fw/src/input/pet_keyboard.c"
+    "${ECONOPET_ROOT}/fw/src/driver_sync.c"
+    "${ECONOPET_ROOT}/fw/src/system/system.c"
+    "${ECONOPET_ROOT}/fw/src/system/state.c"
+    "${ECONOPET_ROOT}/fw/src/roms/roms.c")
+target_compile_options(econopet_menu_firmware PRIVATE -fexceptions -ffunction-sections)
+target_link_libraries(econopet_menu_firmware PUBLIC econopet_host_firmware PRIVATE yaml)
+target_include_directories(econopet_menu_firmware PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+add_executable(econopet_menu_tests menu_session_test.cpp menu_platform.cpp framework/scheduler.cpp)
+target_compile_features(econopet_menu_tests PRIVATE cxx_std_23)
+target_link_libraries(econopet_menu_tests PRIVATE econopet_menu_firmware GTest::gtest_main)
+# Unused boot/storage entry points are not host platform APIs.
+target_link_options(econopet_menu_tests PRIVATE -Wl,--gc-sections -Wl,--wrap=time_us_64)
+set_target_properties(econopet_menu_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
+gtest_discover_tests(econopet_menu_tests TEST_PREFIX "menu."
+    WORKING_DIRECTORY "${BOARD_RUNTIME_DIR}" DISCOVERY_TIMEOUT ${SYSTEM_DISCOVERY_TIMEOUT_SECONDS}
+    PROPERTIES LABELS "sys\\;system\\;board\\;firmware"
+        ${SYSTEM_TEST_ENV_PROPERTIES} TIMEOUT ${SYSTEM_TEST_TIMEOUT_SECONDS})
+
 # Replay external reference transactions without making private ROMs CTest inputs.
 add_executable(econopet_drive_reference ieee/reference_replay.cpp framework/scheduler.cpp)
 target_compile_features(econopet_drive_reference PRIVATE cxx_std_23)

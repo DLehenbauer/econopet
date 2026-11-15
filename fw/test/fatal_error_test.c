@@ -76,7 +76,7 @@ void write_pet_model(const system_state_t* state) {
 }
 
 // Observe SD keymap requests without depending on a physical SD card.
-void read_keymap(const char* filename, system_state_t* state) {
+void __wrap_read_keymap(const char* filename, system_state_t* state) {
     ck_assert_msg(observing_rom_boot, "unexpected keymap read outside ROM boot tests");
     ck_assert_ptr_eq(state, &system_state);
     ck_assert_str_eq(filename, "/ukm/us.bin");

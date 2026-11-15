@@ -14,6 +14,7 @@
 #include "pet.h"
 #include "reset.h"
 #include "system/state.h"
+#include "system/system.h"
 #include "version.h"
 
 // CLI state
@@ -112,7 +113,6 @@ static void cmd_remote(const char* args) {
 static void cmd_reset(const char* args) {
     (void)args;
     
-    console_puts("Resetting...\r\n");
     system_reset();
 }
 
@@ -123,9 +123,7 @@ static void cmd_test(const char* args) {
         console_puts("Usage: test\r\n");
         return;
     }
-    pet_wait_for_storage_idle();
-    set_cpu(CPU_HALT);
-    test_ram();
+    system_memory_diagnostic();
 }
 
 static void execute_command(const char* line) {

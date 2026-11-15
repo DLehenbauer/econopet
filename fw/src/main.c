@@ -22,6 +22,7 @@
 #include "pet.h"
 #include "sd/sd.h"
 #include "system/state.h"
+#include "system/system.h"
 #include "ui/cli.h"
 #include "usb/usb.h"
 
@@ -231,6 +232,7 @@ int main() {
     gpio_put(PICO_DEFAULT_LED_PIN, true);
 
     log_init();     // Initialize logging subsystem early for boot diagnostics
+    system_init();
     input_init();   // Begin charging debounce capacitor for menu button (if any)
     fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA
     sd_init();      // Mount the SD card for configuration, ROMs, and disk images
@@ -255,8 +257,7 @@ int main() {
         display_task();     // Sync video buffer, render to terminal if needed
         ieee_drive_task();  // Again after the loop's longest task: the FIFO must not sit empty across a display render
         input_task();       // Poll inputs, dispatch based on mode
-        bp_task();          // Check for breakpoint hits and handle them
-        pet_task();         // Execute pending machine requests when storage is quiet
+        system_task();
     }
 
     __builtin_unreachable();
