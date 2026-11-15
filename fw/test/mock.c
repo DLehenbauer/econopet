@@ -23,6 +23,7 @@
 #include "pet.h"
 #include "reset.h"
 #include "system/state.h"
+#include "system/system.h"
 #include "input/term_inject.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
@@ -67,6 +68,8 @@ static void (*cpu_run_callback)(void);
 static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
+static uint8_t audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
+static uint8_t video_control;
 static uint8_t via_pcr;
 static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
 static bool text_mode_lower = true;
@@ -78,6 +81,7 @@ static unsigned int term_inject_count;
 static int term_inject_last;
 static unsigned int pet_nmi_count;
 static void (*ram_test_handler)(void);
+static void (*system_reset_handler)(void);
 
 uint64_t __real_time_us_64(void);
 
@@ -272,6 +276,12 @@ void mock_ieee_clear_status(void) {
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
 uint8_t spi_read_at(uint32_t addr) {
+    if (addr == ECONOPET_WB_CPU_SEL_ADDR) return selected_cpu;
+    if (addr == ECONOPET_WB_AUDIO_ADDR) return audio_control;
+    if (addr == ECONOPET_WB_VIDEO_ADDR) return video_control;
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR &&
+        addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT)
+        return fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR];
     if (addr == ECONOPET_WB_STATUS_ADDR) {
         if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
             cpu_run_callback();
@@ -347,6 +357,13 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
 
 // Applies IEEE register side effects or writes RAM, returning the mock's zero reply.
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
+    if (addr == ECONOPET_WB_AUDIO_ADDR) { audio_control = data; return 0; }
+    if (addr == ECONOPET_WB_VIDEO_ADDR) { video_control = data; return 0; }
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR &&
+        addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
+        fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR] = data;
+        return 0;
+    }
     // Apply FIFO flush/pop operations and capture outgoing bytes with EOI.
     if (mock_ieee_addr(addr)) {
         if (addr == ECONOPET_WB_IEEE_CTRL_ADDR) {
@@ -516,6 +533,9 @@ void mock_breakpoint_reset_clear_observation(void) {
 
 // Restores deterministic RAM contents and clears register/control observations.
 void mock_reset(void) {
+    system_init();
+    audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
+    video_control = 0;
     pet_keyboard_end();
     via_pcr = 0;
     memset(pia_control, 0, sizeof(pia_control));
@@ -547,6 +567,7 @@ void mock_reset(void) {
     input_init();
     pet_nmi_count = 0;
     ram_test_handler = NULL;
+    system_reset_handler = NULL;
     text_mode_lower = true;
     selected_cpu = CPU_PHYS_6502;
     clock_overridden = false;
@@ -617,7 +638,11 @@ bool __wrap_term_inject_char(int ch) {
 unsigned int mock_term_inject_count(void) { return term_inject_count; }
 int mock_term_inject_last(void) { return term_inject_last; }
 
-void system_reset(void) { fatal("unexpected system reset in host test"); }
+void __attribute__((noreturn)) mcu_reset(void) {
+    vet(system_reset_handler != NULL, "unexpected system reset in host test");
+    system_reset_handler();
+    fatal("system reset observer returned");
+}
 
 // ---------------------------------------------------------------------------
 // Input mocks
@@ -758,6 +783,7 @@ unsigned int mock_pet_nmi_count(void) { return pet_nmi_count; }
 
 // Installs an observer that must escape the nonreturning RAM diagnostic.
 void mock_ram_test_set_handler(void (*handler)(void)) { ram_test_handler = handler; }
+void mock_system_reset_set_handler(void (*handler)(void)) { system_reset_handler = handler; }
 
 // Delegates the destructive hardware diagnostic to an explicit test observer.
 void test_ram(void) {

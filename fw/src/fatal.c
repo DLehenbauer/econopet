@@ -112,6 +112,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
 #include "driver.h"
 #include "roms/roms.h"
 #include "system/state.h"
+#include "system/system.h"
 
 #define FATAL_COLUMNS 40
 #define FATAL_ROWS    25
@@ -121,6 +122,7 @@ void fatal_halt(fatal_error_t error, const char* message) {
 
 // Render fatal details without allocating storage. Core 1 keeps driving DVI.
 static void fatal_display_message(const char* const message) {
+    system_takeover();
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
     const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);

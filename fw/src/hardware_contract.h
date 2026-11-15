@@ -44,6 +44,8 @@
 #define ECONOPET_WB_BP_LO_ADDR 0x40003u
 #define ECONOPET_WB_BP_HI_ADDR 0x40004u
 #define ECONOPET_WB_CPU_SEL_ADDR 0x40005u
+#define ECONOPET_WB_AUDIO_ADDR 0x40006u
+#define ECONOPET_REG_AUDIO_ENABLE_MASK 0x01u
 
 // Status register masks (See common_pkg.sv for more details)
 #define ECONOPET_REG_STATUS_TEXT_MODE_MASK 0x01u

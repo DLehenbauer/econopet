@@ -53,6 +53,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/menu/menu_browser.c
     ${SRC_DIR}/menu/menu_ui.c
     ${SRC_DIR}/system/state.c
+    ${SRC_DIR}/system/system.c
     ${SRC_DIR}/ui/tui.c
     ${SRC_DIR}/ui/cli.c
     ${SRC_DIR}/ui/console.c
@@ -94,6 +95,7 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
     ${TEST_DIR}/system_state_test.c
+    ${TEST_DIR}/system_session_test.c
     ${TEST_DIR}/sd_activity_test.c
     ${TEST_DIR}/tape_dir_test.c
     ${TEST_DIR}/test_support_test.c
