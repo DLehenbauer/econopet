@@ -5,12 +5,7 @@
 #include "fatal.h"
 
 #include "diag/log/log.h"
-#include "display/display.h"
-#include "display/window.h"
-#include "driver.h"
-#include "roms/roms.h"
 #include "sd/sd.h"
-#include "system/state.h"
 
 #define MORSE_DOT_US (100 * 1000u)
 #define MORSE_DASH_UNITS 3u
@@ -110,6 +105,14 @@ void fatal_halt(fatal_error_t error, const char* message) {
     fatal_repeat(entry, message);
 }
 
+// System-test host firmware uses only the display-independent diagnostics.
+#if defined(PICO_RP2040) || defined(ECONOPET_TEST_FATAL_DISPLAY)
+#include "display/display.h"
+#include "display/window.h"
+#include "driver.h"
+#include "roms/roms.h"
+#include "system/state.h"
+
 #define FATAL_COLUMNS 40
 #define FATAL_ROWS    25
 #define FATAL_PREFIX  "E: "
@@ -134,6 +137,7 @@ void fatal_display_message(const char* const message) {
     // Present the final error directly on both displays before entering the fatal loop.
     spi_write(VIDEO_RAM_ADDRESS, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
 }
+#endif
 
 // Host targets provide fatal() and vetted_malloc() through their existing mocks.
 #if defined(PICO_RP2040)
