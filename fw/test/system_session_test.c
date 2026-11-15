@@ -10,8 +10,12 @@
 #include "display/display.h"
 #include "driver.h"
 #include "input/input_uart.h"
+#include "input/input_routing.h"
 #include "input/pet_keyboard.h"
+#include "menu/menu_config.h"
 #include "mock.h"
+#include "roms/roms.h"
+#include "sd/sd.h"
 #include "system/state.h"
 #include "system/system.h"
 #include "ui/cli.h"
@@ -20,11 +24,75 @@ extern void __real_display_task(void);
 
 static jmp_buf terminal_exit;
 static unsigned terminal_action;
+static bool observing_boot_menu;
+static unsigned boot_stages;
+
+void __real_menu_enter(bool is_boot);
+void __real_start_menu_rom(menu_rom_boot_reason_t reason);
+void __real_menu_config_show(const window_t* window, const setup_sink_t* sink, bool is_boot);
+
+/** Isolate ROM execution while retaining the real menu entry and exit lifecycle. */
+void __wrap_start_menu_rom(menu_rom_boot_reason_t reason) {
+    if (!observing_boot_menu) {
+        __real_start_menu_rom(reason);
+        return;
+    }
+    ck_assert_int_eq(reason, MENU_ROM_BOOT_NORMAL);
+    ck_assert_int_eq(system_mode(), system_operation_boot);
+    ck_assert_uint_eq(boot_stages++, 0);
+}
+
+/** Complete the boot picker without depending on configured SD-card contents. */
+void __wrap_menu_config_show(const window_t* window, const setup_sink_t* sink, bool is_boot) {
+    if (!observing_boot_menu) {
+        __real_menu_config_show(window, sink, is_boot);
+        return;
+    }
+    ck_assert(is_boot);
+    ck_assert_uint_eq(boot_stages++, 1);
+    ck_assert_int_eq(system_mode(), system_operation_boot);
+}
+
+/** Reject unmodeled machine-selection hardware in host menu setup actions. */
+void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
+    ck_abort_msg("machine-selection hardware is not modeled by the host menu fixture");
+}
+
+/** Reject SD keymap loading outside the existing ROM-loader observation wrapper. */
+void sd_read_file(const char* path, sd_read_callback_t callback, void* context, size_t max_bytes) {
+    ck_abort_msg("SD keymap loading is not modeled by the host menu fixture");
+}
+
+/** Reject unmodeled volume queries from tape-directory loading. */
+uint64_t sd_free_bytes(void) {
+    ck_abort_msg("SD volume capacity is not modeled by the host menu fixture");
+}
 
 static void setup(void) {
     log_init();
     mock_reset();
 }
+
+/** Production boot-menu exit must admit deferred work in the first guest iteration. */
+START_TEST(test_boot_menu_commits_guest_and_services_first_request) {
+    boot_stages = 0;
+    observing_boot_menu = true;
+    __real_menu_enter(true);
+    observing_boot_menu = false;
+    ck_assert_uint_eq(boot_stages, 2);
+    ck_assert_int_eq(system_mode(), system_operation_guest);
+    ck_assert_int_eq(system_state.video_source, video_source_pet);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+
+    input_routing_request((input_system_request_t){
+        .action = input_system_request_reset, .source = INPUT_SOURCE_BUTTON
+    });
+    system_task();
+    ck_assert_int_eq(input_routing_pending_request().action, input_system_none);
+    ck_assert_int_eq(system_mode(), system_operation_guest);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+}
+END_TEST
 
 static void observe_terminal_action(void) {
     ++terminal_action;
@@ -153,6 +221,7 @@ Suite* system_session_suite(void) {
     Suite* const suite = suite_create("system_session");
     TCase* const test = tcase_create("ownership");
     tcase_add_checked_fixture(test, setup, NULL);
+    tcase_add_test(test, test_boot_menu_commits_guest_and_services_first_request);
     tcase_add_loop_test(test, test_suspend_restores_borrowed_resources_and_control, 0, 3);
     tcase_add_test(test, test_terminal_actions_take_over_without_restoring_console);
     tcase_add_test(test, test_restore_without_resume_retains_halt);

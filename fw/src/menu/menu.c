@@ -15,7 +15,6 @@
 #include "driver.h"
 #include "ieee/ieee_drive.h"
 #include "fatal.h"
-#include "filesystem/vfs.h"
 #include "global.h"
 #include "hw.h"
 #include "input/input.h"
@@ -25,6 +24,7 @@
 #include "roms/roms.h"
 #include "sd/sd.h"
 #include "system/state.h"
+#include "system/system.h"
 #include "tape.h"
 #include "usb/keyboard.h"
 
@@ -288,8 +288,7 @@ void menu_enter(bool is_boot) {
 
     menu_config_show(&window, &setup_sink, is_boot);
 
-    system_state.video_source = video_source_pet;
-    pet_reset();
+    system_reset_guest();
 
     log_info("-- Exit Menu --");
 }
