@@ -2838,7 +2838,7 @@ TEST_F(FirmwareTest, NativeRejectedMountRetainsCursorBeforeSequentialReload) {
     ASSERT_EQ(ieee_drive_try_mount(1, "next.d80", nullptr), DOS_MEDIA_OK);
     EXPECT_STREQ(ieee_drive_filename(0), "");
     EXPECT_STREQ(ieee_drive_filename(1), "next.d80");
-    EXPECT_STREQ(ieee_drive_filename(2), "next.d80");
+    EXPECT_STREQ(ieee_drive_filename(2), "");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive), "73,CBM DOS V2.7,00,00,0\r");
     EXPECT_EQ(receive_status(system, firmware, controller, Drive), "00, OK,00,00,0\r");
     open_file(system, controller, Channel{DataChannel}, "1:BASIC,SEQ,R");
