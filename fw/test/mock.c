@@ -567,17 +567,6 @@ bool mock_breakpoint_halt_was_cleared(void) {
 // Display mocks
 // ---------------------------------------------------------------------------
 
-// Accepts a display window without rendering it in host tests.
-void __wrap_display_window_begin(const void* window) {
-    (void)window;
-}
-
-// Flushes host output instead of presenting a hardware display window.
-void __wrap_display_window_show(const void* window) {
-    (void)window;
-    fflush(stdout);
-}
-
 // Counts presentations without writing to hardware or a terminal.
 void __wrap_display_task(void) { display_task_count++; }
 
