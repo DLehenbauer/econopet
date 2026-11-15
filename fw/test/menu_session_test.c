@@ -32,6 +32,9 @@ static unsigned tape_init_count, tape_deinit_count, reset_count;
 static void setup(void) {
     log_init();
     test_clear_files();
+    uint8_t keymap[sizeof(system_state.usb_keymap_data)];
+    memset(keymap, 0xff, sizeof(keymap));
+    test_register_binary_file("/ukm/us.bin", keymap, sizeof(keymap), false);
 }
 
 static void teardown(void) {
@@ -136,6 +139,7 @@ START_TEST(test_menu_init_discovers_model_and_default_keymap) {
     uint8_t keymap[sizeof(system_state.usb_keymap_data)];
     memset(keymap, 0xff, sizeof(keymap));
     keymap[0] = 0x12;
+    test_unregister_file("/ukm/us.bin");
     test_register_binary_file("/ukm/us.bin", keymap, sizeof(keymap), false);
 
     menu_init();
@@ -251,6 +255,50 @@ START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_ac
 }
 END_TEST
 
+/** Configuration activation replaces keymaps, while Resume and Reset preserve them. */
+START_TEST(test_configuration_keymap_defaults_do_not_leak_between_sessions) {
+    prepare_guest();
+    uint8_t default_keymap[sizeof(system_state.usb_keymap_data)];
+    uint8_t custom_keymap[sizeof(system_state.usb_keymap_data)];
+    memset(default_keymap, 0x12, sizeof(default_keymap));
+    memset(custom_keymap, 0x34, sizeof(custom_keymap));
+    test_unregister_file("/ukm/us.bin");
+    test_register_binary_file("/ukm/us.bin", default_keymap, sizeof(default_keymap), false);
+    test_register_binary_file("/ukm/custom.bin", custom_keymap, sizeof(custom_keymap), false);
+    test_register_file("/config.yaml",
+        "default: custom\nconfigs:\n"
+        "  - id: custom\n    name: Custom\n    setup:\n"
+        "      - action: set\n        cpu: 6502\n        usb-keymap: /ukm/custom.bin\n"
+        "      - action: set\n        cpu: 6502\n        columns: 40\n");
+    tape_change_expected = true;
+    menu_init();
+    menu_boot();
+    ck_assert_mem_eq(system_state.usb_keymap_data, custom_keymap, sizeof(custom_keymap));
+
+    tape_change_expected = false;
+    const menu_exit_t nondestructive_exits[] = {MENU_EXIT_RESUME, MENU_EXIT_RESET};
+    mock_input_set_reader(request_exit);
+    for (size_t i = 0; i < count_of(nondestructive_exits); ++i) {
+        desired_exit = nondestructive_exits[i];
+        __real_menu_enter();
+        ck_assert_mem_eq(system_state.usb_keymap_data, custom_keymap, sizeof(custom_keymap));
+    }
+
+    test_unregister_file("/config.yaml");
+    test_register_file("/config.yaml", _i == 0
+        ? "configs:\n  - name: Default\n    setup:\n"
+          "      - action: set\n        cpu: 6502\n        columns: 40\n"
+        : "configs:\n  - name: Default\n    setup: []\n");
+    tape_change_expected = true;
+    desired_exit = MENU_EXIT_LOAD_CONFIG;
+    exit_step = 0;
+    __real_menu_enter();
+    mock_input_set_reader(NULL);
+    tape_change_expected = false;
+    ck_assert_mem_eq(system_state.usb_keymap_data, default_keymap, sizeof(default_keymap));
+}
+END_TEST
+
 Suite* menu_session_suite(void) {
     Suite* const suite = suite_create("menu_session");
     TCase* const test = tcase_create("borrowing");
@@ -258,6 +306,7 @@ Suite* menu_session_suite(void) {
     tcase_add_test(test, test_menu_init_discovers_model_and_default_keymap);
     tcase_add_loop_test(test, test_boot_owner_prepares_rom_only_without_default, 0, 2);
     tcase_add_loop_test(test, test_runtime_owner_distinguishes_back_reset_and_same_configuration_activation, 0, 3);
+    tcase_add_loop_test(test, test_configuration_keymap_defaults_do_not_leak_between_sessions, 0, 2);
     suite_add_tcase(suite, test);
     return suite;
 }

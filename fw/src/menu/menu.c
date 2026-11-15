@@ -216,11 +216,16 @@ void action_set_keymap(void* context, const char* filename) {
     read_keymap(filename, ctx->system_state);
 }
 
-void menu_init(void) {
-    read_pet_model(&system_state);
+/** Start each configuration with the default before its ordered keymap overrides. */
+static void read_default_keymap(void) {
     char keymap_path[SD_PATH_MAX];
     sd_make_path(keymap_path, SD_DIR_UKM, "us.bin");
     read_keymap(keymap_path, &system_state);
+}
+
+void menu_init(void) {
+    read_pet_model(&system_state);
+    read_default_keymap();
 }
 
 static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
@@ -277,6 +282,7 @@ static void apply_config(const int config_index) {
     };
 
     tape_deinit();
+    read_default_keymap();
     load_config(&setup_sink, config_index);
     spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
     system_reset_guest();
