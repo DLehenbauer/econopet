@@ -117,6 +117,10 @@ pico_set_boot_stage2(${FW_EXECUTABLE_NAME} econopet_boot_stage2)
 # boards tolerate this. (See https://github.com/DLehenbauer/econopet/issues/3)
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=8)
 
+# Reserve all SCRATCH_Y for nested config/FatFs calls and interrupt headroom.
+# Core 1's DVI stack remains in the separate SCRATCH_X bank.
+target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_STACK_SIZE=0x1000)
+
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES})
 target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE

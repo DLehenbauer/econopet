@@ -12,14 +12,16 @@
 #include "menu_config.h"
 #include "version.h"
 
-#define MENU_DISK_TITLE_ROW 0u
-#define MENU_DISK_FRAME_TOP 1u
-#define MENU_DISK_FRAME_BOTTOM 12u
-#define MENU_DISK_ROW 3u
-#define MENU_DISK_WARNING_ROW 20u
+#define MENU_DISK_FRAME_TOP 0u
+#define MENU_DISK_FRAME_BOTTOM 10u
+#define MENU_DISK_ROW 2u
+#define MENU_DISK_MOVE_NOTICE_ROW 14u
+#define MENU_DISK_MOVE_EXPLANATION_ROW 15u
+#define MENU_DISK_EJECTION_NOTICE_ROW 17u
+#define MENU_DISK_EJECTION_EXPLANATION_ROW 18u
+#define MENU_DISK_WARNING_ROW 21u
 #define MENU_DISK_WARNING_UNDERLINE 0x63u
-#define MENU_CONFIG_FRAME_TOP 1u
-#define MENU_IMAGE_FRAME_TOP 0u
+#define MENU_PICKER_FRAME_TOP 0u
 #define MENU_PICKER_FRAME_BOTTOM 23u
 #define MENU_PICKER_TOP_PADDING 2u
 #define MENU_PICKER_POSITION_INSET 2u
@@ -28,7 +30,7 @@
 #define MENU_ACTION_ROW 11u
 #define MENU_BUTTON_COLUMN 11u
 #define MENU_BUTTON_WIDTH 17u
-#define MENU_BACK_ROW 14u
+#define MENU_BACK_ROW 12u
 #define MENU_BORDER_VERTICAL 0x5du
 #define MENU_BORDER_HORIZONTAL 0x40u
 #define MENU_FRAME_TOP_LEFT 0x70u
@@ -106,10 +108,28 @@ static void paint_dashboard(const window_t* window, const void* context) {
     paint_footer(window, false);
 }
 
-// Draws the drive chooser's frame, device/drive prefixes, and beta warning.
+// Draws a frame title with a space separating it from each horizontal border.
+static void paint_frame_title(const window_t* window, unsigned int row, const char* title) {
+    const unsigned int column = (MENU_UI_WIDTH - strlen(title)) / 2;
+    *window_xy(window, column - 1, row) = CH_SPACE;
+    text_at(window, column, row, MENU_UI_WIDTH - column, title);
+    *window_xy(window, column + strlen(title), row) = CH_SPACE;
+}
+
+// Centers a result banner using the mockup's reverse-video end caps.
+static void paint_notice(const window_t* window, unsigned int row, const char* text) {
+    const size_t length = strlen(text);
+    assert(length <= MENU_UI_WIDTH - 2);
+    const unsigned int column = (MENU_UI_WIDTH - length) / 2;
+    text_at(window, column, row, length, text);
+    window_reverse(window, window_xy(window, column, row), length);
+    *window_xy(window, column - 1, row) = MENU_BORDER_TOP_LEFT ^ 0x80;
+    *window_xy(window, column + length, row) = MENU_BORDER_TOP_LEFT;
+}
+
+// Draws the drive chooser with each result followed by its explanation.
 static void paint_drives(const window_t* window, const void* context) {
-    (void) context;
-    text_at(window, 14, MENU_DISK_TITLE_ROW, 11, "Change Disk");
+    const menu_ui_t* const menu = context;
     for (unsigned int row = MENU_DISK_FRAME_TOP; row <= MENU_DISK_FRAME_BOTTOM; row++) {
         *window_xy(window, 0, row) = MENU_BORDER_VERTICAL;
         *window_xy(window, MENU_UI_WIDTH - 1, row) = MENU_BORDER_VERTICAL;
@@ -118,6 +138,7 @@ static void paint_drives(const window_t* window, const void* context) {
                  MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
     *window_xy(window, 0, MENU_DISK_FRAME_TOP) = MENU_FRAME_TOP_LEFT;
     *window_xy(window, MENU_UI_WIDTH - 1, MENU_DISK_FRAME_TOP) = MENU_FRAME_TOP_RIGHT;
+    paint_frame_title(window, MENU_DISK_FRAME_TOP, "Change Disk");
     window_hline(window, window_xy(window, 1, MENU_DISK_FRAME_BOTTOM),
                  MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
     *window_xy(window, 0, MENU_DISK_FRAME_BOTTOM) = MENU_BORDER_BOTTOM_LEFT;
@@ -130,6 +151,34 @@ static void paint_drives(const window_t* window, const void* context) {
         text_at(window, 1, MENU_DISK_ROW + slot, MENU_DISK_LABEL_COLUMN - 1, prefix);
         *window_xy(window, 3, MENU_DISK_ROW + slot) = slot % DOS_MEDIA_SLOTS_PER_UNIT == 0
             ? MENU_DEVICE_DRIVE_TOP : MENU_DEVICE_DRIVE_BOTTOM;
+    }
+    char notice[MENU_UI_WIDTH + 1];
+    const int source = menu->mount_outcome.moved_from_slot;
+    if (source >= 0) {
+        const uint8_t source_device = 8 + (unsigned int)source / DOS_MEDIA_SLOTS_PER_UNIT;
+        const uint8_t destination_device = 8 + menu->slot / DOS_MEDIA_SLOTS_PER_UNIT;
+        snprintf(notice, sizeof(notice), "Moved disk from %u-%u to %u-%u", source_device,
+                 (unsigned int)source % DOS_MEDIA_SLOTS_PER_UNIT, destination_device,
+                 menu->slot % DOS_MEDIA_SLOTS_PER_UNIT);
+        paint_notice(window, MENU_DISK_MOVE_NOTICE_ROW, notice);
+        text_at(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW, MENU_UI_WIDTH, "This image was already mounted.");
+        text_at(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW + 1, MENU_UI_WIDTH, "A disk image can only be mounted once.");
+    }
+    if (menu->mount_outcome.ejected_partner != diskimage_type_none) {
+        static const char* const types[] = {
+            [diskimage_type_d64] = "D64",
+            [diskimage_type_d80] = "D80",
+            [diskimage_type_d82] = "D82",
+        };
+        const unsigned int partner = menu->slot ^ 1u;
+        const uint8_t device = 8 + partner / DOS_MEDIA_SLOTS_PER_UNIT;
+        snprintf(notice, sizeof(notice), "Ejected %s image from %u-%u", types[menu->mount_outcome.ejected_partner],
+                 device, partner % DOS_MEDIA_SLOTS_PER_UNIT);
+        paint_notice(window, MENU_DISK_EJECTION_NOTICE_ROW, notice);
+        text_at(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW, MENU_UI_WIDTH,
+                "Mixing D64/D80/D82 on same device is not");
+        text_at(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW + 1, MENU_UI_WIDTH,
+                "supported (implicitly ejects partner).");
     }
     text_at(window, 0, MENU_DISK_WARNING_ROW, MENU_UI_WIDTH,
             "Note: Disk emulation is beta. Please use");
@@ -165,11 +214,7 @@ static void paint_scrollbar(const menu_ui_t* menu, const window_t* window) {
 static void paint_picker(const window_t* window, const void* context) {
     const menu_ui_t* const menu = context;
     const tui_list_t* const list = &menu->picker_control.list;
-    const unsigned int top = menu->choosing_model ? MENU_CONFIG_FRAME_TOP : MENU_IMAGE_FRAME_TOP;
-    if (menu->choosing_model) {
-        const char* const title = "Select Configuration";
-        text_at(window, (MENU_UI_WIDTH - strlen(title)) / 2, 0, MENU_UI_WIDTH, title);
-    }
+    const unsigned int top = MENU_PICKER_FRAME_TOP;
     for (unsigned int row = top; row <= MENU_PICKER_FRAME_BOTTOM; row++) {
         *window_xy(window, 0, row) = MENU_BORDER_VERTICAL;
         *window_xy(window, MENU_UI_WIDTH - 1, row) = MENU_BORDER_VERTICAL;
@@ -178,6 +223,7 @@ static void paint_picker(const window_t* window, const void* context) {
         window_hline(window, window_xy(window, 1, top), MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
         *window_xy(window, 0, top) = MENU_FRAME_TOP_LEFT;
         *window_xy(window, MENU_UI_WIDTH - 1, top) = MENU_FRAME_TOP_RIGHT;
+        paint_frame_title(window, top, "Select Configuration");
     } else {
         text_at(window, 1, top, MENU_UI_WIDTH - 2, menu->browser.path);
         *window_xy(window, 0, top) = MENU_BORDER_TOP_LEFT;
@@ -277,10 +323,6 @@ static void refresh_picker(tui_controller_t* controller, void* context) {
     (void) controller;
     menu_ui_t* const menu = context;
     tui_list_t* const list = &menu->picker_control.list;
-    const unsigned int top = menu->choosing_model ? MENU_CONFIG_FRAME_TOP : MENU_IMAGE_FRAME_TOP;
-    menu->picker_control.bounds.y = top + MENU_PICKER_TOP_PADDING;
-    menu->picker_control.bounds.height = MENU_PICKER_FRAME_BOTTOM - menu->picker_control.bounds.y;
-    list->visible_rows = menu->picker_control.bounds.height;
     menu->error[0] = '\0';
     menu->browser.error[0] = '\0';
     if (menu->choosing_model) {
@@ -335,7 +377,7 @@ static void picker_back(tui_controller_t* controller, void* context) {
 
 // Applies a picker mount or eject, keeping failures recoverable without changing live media.
 static void mount_disk(tui_controller_t* controller, menu_ui_t* menu, const char* name) {
-    const dos_media_result_t result = ieee_drive_try_mount(menu->slot, name);
+    const dos_media_result_t result = ieee_drive_try_mount(menu->slot, name, &menu->mount_outcome);
     if (result != DOS_MEDIA_OK) {
         menu_error(menu, result == DOS_MEDIA_BUSY ? "Disk is busy - retry"
             : name == NULL ? "Cannot eject disk image"
@@ -393,12 +435,14 @@ static void show_models(tui_controller_t* controller, void* context) {
 // Opens the drive chooser showing the current mounts.
 static void show_drives(tui_controller_t* controller, void* context) {
     menu_ui_t* const menu = context;
+    menu->mount_outcome = (ieee_drive_mount_outcome_t){.moved_from_slot = -1};
     tui_controller_push(controller, &menu->drives);
 }
 
 // Opens the slot's directory at its beginning, without preselecting the mounted image.
 static void show_disks(tui_controller_t* controller, void* context, size_t index) {
     menu_ui_t* const menu = context;
+    menu->mount_outcome = (ieee_drive_mount_outcome_t){.moved_from_slot = -1};
     menu->choosing_model = false;
     menu->picker_control.list.overlapping_pages = true;
     menu->slot = index;
@@ -443,7 +487,7 @@ static void drives_back(tui_controller_t* controller, void* context) {
 void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)) {
     vet(window->width == MENU_UI_WIDTH && window->height == MENU_UI_HEIGHT,
         "menu dashboard requires a 40x25 window");
-    *menu = (menu_ui_t) {.browser.service = service};
+    *menu = (menu_ui_t){.browser.service = service, .mount_outcome.moved_from_slot = -1};
     const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
     menu->config_index = catalog.default_index >= 0 ? catalog.default_index : 0;
     menu->drive_controls[0] = (tui_component_t) {
@@ -459,21 +503,19 @@ void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void)
         .bounds = {0, MENU_BACK_ROW, MENU_UI_WIDTH, 1},
         .button = {.label = "Back", .on_activate = drives_back}
     };
-    const char* const labels[] = {"    Reset    ", " Change Disk ", "Change Config"};
-    const tui_screen_fn actions[] = {reset_machine, show_drives, show_models};
+    const char* const labels[] = {"Change Config", " Change Disk ", "  Reset CPU  ", "    Back     "};
+    const tui_screen_fn actions[] = {show_models, show_drives, reset_machine, dashboard_back};
     for (size_t i = 0; i < count_of(menu->controls); i++)
         menu->controls[i] = (tui_component_t) {
             .kind = tui_component_button,
             .bounds = {MENU_BUTTON_COLUMN, MENU_ACTION_ROW + i, MENU_BUTTON_WIDTH, 1},
             .button = {.label = labels[i], .on_activate = actions[i], .context = menu}
         };
-    menu->picker_control = (tui_component_t) {
+    menu->picker_control = (tui_component_t){
         .kind = tui_component_list,
-        .bounds = {2, MENU_CONFIG_FRAME_TOP + MENU_PICKER_TOP_PADDING,
-                   MENU_UI_WIDTH - 4, MENU_UI_PAGE_ROWS},
-        .list = {.visible_rows = MENU_UI_PAGE_ROWS, .on_activate = select_item,
-                 .context = menu, .label_at = page_label}
-    };
+        .bounds = {2, MENU_PICKER_FRAME_TOP + MENU_PICKER_TOP_PADDING, MENU_UI_WIDTH - 4, MENU_UI_PAGE_ROWS},
+        .list = {
+            .visible_rows = MENU_UI_PAGE_ROWS, .on_activate = select_item, .context = menu, .label_at = page_label}};
     menu->dashboard = (tui_screen_t) {
         .components = menu->controls, .component_count = count_of(menu->controls),
         .context = menu, .on_paint = paint_dashboard,

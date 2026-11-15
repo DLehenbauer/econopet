@@ -23,6 +23,7 @@ typedef struct mem_file_s {
     size_t capacity;
     bool writable;
     bool fail_writes;
+    size_t open_calls;
     struct mem_file_s* owner;
     struct mem_file_s* next;
 } mem_file_t;
@@ -46,6 +47,13 @@ static mem_file_t* find_mem_file(const char* path) {
 // Share duplicate detection with fixture owners before they claim a path.
 bool test_file_registered(const char* path) { return find_mem_file(path) != NULL; }
 
+// Observes transient duplicate opens even when the candidate is subsequently closed.
+size_t test_file_open_calls(const char* path) {
+    const mem_file_t* const file = find_mem_file(path);
+    assert(file != NULL);
+    return file->open_calls;
+}
+
 // Registers a read-only text fixture using the binary backing store.
 void test_register_file(const char* path, const char* content) {
     test_register_binary_file(path, content, strlen(content), false);
@@ -66,6 +74,7 @@ void test_register_binary_file(const char* path, const void* data, size_t size, 
     file->capacity = size;
     file->writable = writable;
     file->fail_writes = false;
+    file->open_calls = 0;
     file->owner = file;
     file->content = malloc(file->capacity);
     memcpy(file->content, data, file->size);
@@ -199,6 +208,7 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
     FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
     if (stream != NULL) {
         ++open_cookie_count;
+        ++file->open_calls;
     } else {
         free(cookie);
     }

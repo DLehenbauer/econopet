@@ -93,7 +93,7 @@ static tui_action_t request_exit(void) {
     if (desired_exit == MENU_EXIT_RESUME) {
         return tui_action_back;
     }
-    if (desired_exit == MENU_EXIT_LOAD_CONFIG && exit_step++ < 2) {
+    if (desired_exit == MENU_EXIT_RESET && exit_step++ < 2) {
         return tui_action_down;
     }
     return tui_action_activate;
@@ -206,7 +206,7 @@ START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_ac
     uint8_t* const image = diskimage_test_make_d64();
     test_register_binary_file("/disks/live.d64", image, DISKIMAGE_D64_SIZE, false);
     free(image);
-    ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64"), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64", NULL), DOS_MEDIA_OK);
     __real_menu_enter();
     mock_input_set_reader(NULL);
     mock_cpu_set_state_observer(NULL);

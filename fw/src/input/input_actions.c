@@ -34,7 +34,8 @@ tui_action_t input_menu_bind_hid(uint8_t keycode) {
         case HID_KEY_ENTER:
         case HID_KEY_KEYPAD_ENTER: return tui_action_activate;
         case HID_KEY_ESCAPE:
-        case HID_KEY_BACKSPACE: return tui_action_back;
+        case HID_KEY_BACKSPACE:
+        case HID_KEY_DELETE: return tui_action_back;
         default: return tui_action_none;
     }
 }
