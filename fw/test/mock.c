@@ -466,8 +466,12 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
-// The register fixture has no transport pipeline or adjacent-read side effect.
-uint8_t spi_read_pop(void) { return 0; }
+// Reject pending-result reads because this fixture has no transport pipeline.
+uint8_t spi_read_pop(void) {
+    fatal("spi_read_pop is unsupported by the register-only SPI fixture");
+}
+
+// Model an isolated register read without an adjacent-read side effect.
 uint8_t spi_read_once(uint32_t address) { return spi_read_at(address); }
 
 // Records CPU control flags for subsequent host-side reads.

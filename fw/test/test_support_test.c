@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <stdint.h>
 
+#include "driver.h"
 #include "fatal.h"
 #include "sd/sd.h"
 #include "test_support.h"
@@ -58,6 +59,13 @@ START_TEST(test_failed_allocation) {
 }
 END_TEST
 
+// Reject transport-pipeline reads that the register-only SPI fixture cannot model.
+START_TEST(test_spi_pop_requires_transport_model) {
+    test_expect_fatal_message("spi_read_pop is unsupported by the register-only SPI fixture");
+    spi_read_pop();
+}
+END_TEST
+
 // Register host fixture and allocation checks for the forked runner.
 Suite* test_support_suite(void) {
     Suite* const suite = suite_create("TestSupport");
@@ -71,5 +79,9 @@ Suite* test_support_suite(void) {
     TCase* const allocation = tcase_create("allocation");
     tcase_add_test_raise_signal(allocation, test_failed_allocation, SIGABRT);
     suite_add_tcase(suite, allocation);
+
+    TCase* const spi = tcase_create("spi");
+    tcase_add_test_raise_signal(spi, test_spi_pop_requires_transport_model, SIGABRT);
+    suite_add_tcase(suite, spi);
     return suite;
 }
