@@ -109,13 +109,13 @@ target_compile_definitions(econopet_boot_stage2 PRIVATE
     BOOTLOADER_SIZE=${ECONOPET_BOOTLOADER_SIZE_BYTES})
 pico_set_boot_stage2(${FW_EXECUTABLE_NAME} econopet_boot_stage2)
 
-# Extend crystal oscillator startup time to improve cold power-on reliability. The CBM/PET
-# powers mainboard and monitor from the same transformer, potentially causing transient
-# voltage dips when the CRT and DC filter cap are fully discharged.
+# On early EconoPET 40/8096 Rev. A boards, xosc requires a little extra time to stabilize
+# due to AMS1117-3.3 output-capacitor compensation not being implemented as intended.
+# (See https://github.com/DLehenbauer/econopet/issues/4)
 #
-# We increase the oscillator startup delay to the maximum (174) to help 40/8096 Rev A.
-# boards tolerate this. (See https://github.com/DLehenbauer/econopet/issues/3)
-target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=8)
+# On tested sample (45240-60), 8ms was intermittent and 16ms was reliable.
+# 64ms provides a large tolerance. (Maximum startup delay is 174 ms)
+target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
 
 # The W25Q128JV has 16 MiB of storage (65,536 programmable pages of 256 bytes each).
 target_compile_definitions(${FW_EXECUTABLE_NAME} PUBLIC PICO_FLASH_SIZE_BYTES=${ECONOPET_FLASH_SIZE_BYTES})
