@@ -692,10 +692,10 @@ static bool image_path(const char* const name, char path[SD_PATH_MAX]) {
     return true;
 }
 
-// Match canonical SD/FAT paths without treating equal bytes in different files as one disk.
+// Match resolved on-disk spellings exactly (CP932 trail bytes must not be case-folded).
 static int find_image(const char* const name) {
     for (unsigned int slot = 0; slot < count_of(files); ++slot) {
-        if (files[slot] != NULL && strcasecmp(name, filenames[slot]) == 0) {
+        if (files[slot] != NULL && strcmp(name, filenames[slot]) == 0) {
             return (int)slot;
         }
     }
@@ -725,6 +725,14 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
     // Serialized path scratch also snapshots names borrowed from a retiring slot.
     static char path[SD_PATH_MAX];
     if (filename != NULL && !image_path(filename, path)) {
+        return DOS_MEDIA_INVALID;
+    }
+    if (filename != NULL && !sd_resolve_path(path)) {
+        return DOS_MEDIA_IO_ERROR;
+    }
+    // Filesystem-resolved directory aliases must still remain inside /disks.
+    const char* const prefix = sd_dir_prefix(SD_DIR_DISKS);
+    if (filename != NULL && strncasecmp(path, prefix, strlen(prefix)) != 0) {
         return DOS_MEDIA_INVALID;
     }
     const char* const name = filename != NULL ? path + strlen(sd_dir_prefix(SD_DIR_DISKS)) : "";

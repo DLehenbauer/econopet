@@ -365,7 +365,11 @@ if(BUILD_TESTS)
         NAME firmware_tests
         COMMAND ${SUPER_BUILD_DIR}/test/test/firmware-test
     )
-    set_tests_properties(firmware_tests PROPERTIES
+    add_test(
+        NAME sd_path_tests
+        COMMAND ${SUPER_BUILD_DIR}/test/test/sd-path-test
+    )
+    set_tests_properties(firmware_tests sd_path_tests PROPERTIES
         LABELS "fw;unit"
         DEPENDS test_project
         ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard;${ECONOPET_TEST_ENV}"

@@ -478,6 +478,54 @@ START_TEST(test_mounted_image_path_aliases) {
 }
 END_TEST
 
+// Filesystem aliases must move one owner, including directory and leaf short names.
+START_TEST(test_filesystem_aliases_reuse_image_owner) {
+    mount_writable();
+    const char* const aliases[] = {
+        "/disks/writable.d64.",
+        "/disks/writable.d64 ",
+        "/disks/WRITAB~1.D64",
+        "/disks/ALIAS~1/WRITAB~1.D64",
+    };
+    for (size_t index = 0; index < count_of(aliases); ++index) {
+        test_register_file_alias(aliases[index], "/disks/writable.d64");
+        ieee_drive_mount_outcome_t outcome;
+        ck_assert_int_eq(ieee_drive_try_mount(index + 1, aliases[index] + strlen("/disks/"), &outcome), DOS_MEDIA_OK);
+        ck_assert_int_eq(outcome.moved_from_slot, index);
+        ck_assert_str_eq(ieee_drive_filename(index), "");
+        ck_assert_str_eq(ieee_drive_filename(index + 1), "writable.d64");
+        ck_assert_uint_eq(test_open_file_count(), 1);
+        ck_assert_uint_eq(test_file_open_calls("/disks/writable.d64"), 1);
+    }
+}
+END_TEST
+
+// Distinct CP932 characters can contain ASCII upper/lowercase trail bytes.
+START_TEST(test_cp932_image_names_remain_distinct) {
+    mount_image(0, 0, "\x81\x41.d64");
+    mount_image(1, 0, "\x81\x61.d64");
+    ck_assert_str_eq(ieee_drive_filename(0), "\x81\x41.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), "\x81\x61.d64");
+    ck_assert_uint_eq(test_open_file_count(), 2);
+}
+END_TEST
+
+// Backend path spellings must not turn a lexically contained request into outside storage.
+START_TEST(test_filesystem_alias_outside_disks_is_rejected) {
+    mount_writable();
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/roms/outside.d64", image, DISKIMAGE_D64_SIZE, true);
+    free(image);
+    test_register_file_alias("/disks/..\\roms\\outside.d64", "/roms/outside.d64");
+    ieee_drive_mount_outcome_t outcome = {.moved_from_slot = 7};
+    ck_assert_int_ne(ieee_drive_try_mount(0, "..\\roms\\outside.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(outcome.moved_from_slot, 7);
+    ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
+    ck_assert_uint_eq(test_file_open_calls("/roms/outside.d64"), 0);
+    ck_assert_uint_eq(test_open_file_count(), 1);
+}
+END_TEST
+
 // Full-drive moves and same-slot remounts must reuse the sole writable storage handle.
 START_TEST(test_writable_moves_reuse_storage_handle) {
     mount_writable();
@@ -652,6 +700,9 @@ Suite* ieee_drive_suite(void) {
                        TEST_SLOTS_PER_UNIT * TEST_FORMAT_COUNT * TEST_FORMAT_COUNT);
     tcase_add_loop_test(test_case, test_moving_image_keeps_one_mount, 0, 2 * TEST_FORMAT_COUNT);
     tcase_add_test(test_case, test_mounted_image_path_aliases);
+    tcase_add_test(test_case, test_filesystem_aliases_reuse_image_owner);
+    tcase_add_test(test_case, test_cp932_image_names_remain_distinct);
+    tcase_add_test(test_case, test_filesystem_alias_outside_disks_is_rejected);
     tcase_add_loop_test(test_case, test_failed_image_move_preserves_source_until_retry, 0, 2);
     tcase_add_loop_test(test_case, test_busy_mount_retains_pair_until_retry, 0, TEST_SLOTS_PER_UNIT);
     tcase_add_loop_test(test_case, test_mounted_filenames_follow_live_bindings, 0, TEST_FORMAT_COUNT);

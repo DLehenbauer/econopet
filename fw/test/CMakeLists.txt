@@ -167,3 +167,16 @@ add_test(
 set_tests_properties(firmware_tests PROPERTIES
     ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../../sdcard"
 )
+
+# Exercise filesystem identity with real FatFs, not the stdio fixture's alias table.
+set(FATFS_DIR "${EXTERNAL_DIR}/pico-vfs/vendor/ff15/source")
+add_executable(sd-path-test
+    sd_path_test.c
+    "${SRC_DIR}/sd/resolve.c"
+    "${FATFS_DIR}/ff.c"
+    "${FATFS_DIR}/ffunicode.c")
+target_include_directories(sd-path-test PRIVATE
+    "${TEST_SUPPORT_DIR}" "${SRC_DIR}" "${FATFS_DIR}"
+    "${EXTERNAL_DIR}/pico-vfs/include/filesystem/ChaN")
+target_link_libraries(sd-path-test PRIVATE ${CHECK_LIBRARIES} subunit m)
+add_test(NAME sd_path_tests COMMAND sd-path-test)
