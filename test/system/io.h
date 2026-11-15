@@ -286,9 +286,10 @@ private:
 };
 
 // MOS 6522: unlatched mixed GPIO, timed T1 one-shot/free-run, timed/PB6-counted
-// T2, IFR/IER, control-input IRQs and fixed/handshake C2 outputs.
-// Shift registers, port-input latching, PB7 timer output and C2 pulse outputs
-// are rejected explicitly. Reset changes registers, not inputs/faults/history.
+// T2, IFR/IER, control-input IRQs, fixed/handshake C2 outputs, and disabled/T2
+// free-running serial modes. Other shift modes, simultaneous serial/PB6 counting,
+// input latching, PB7 timer output and C2 pulse outputs are rejected explicitly.
+// Reset changes registers, not inputs/faults/history (SR data is retained).
 class Via6522 {
 public:
     using Register = ViaRegister;
@@ -310,7 +311,7 @@ public:
     // Commit detached level changes only after the callback succeeds.
     template<class Edit>
     void inputs(Edit&& edit) { inputs_.inputs(std::forward<Edit>(edit)); }
-    // Expose modeled registers, excluding the synthetic fault overlay.
+    // Expose underlying chip registers (SR storage and synthetic faults are adapter-owned).
     const m6522_t& state() const { return chip_; }
     // Inspect completed writes independently of chip reset.
     const Writes<Register>& writes() const { return writes_; }
@@ -332,6 +333,8 @@ public:
     bool irq() const;
     // Resolve CA2 from output mode or the externally driven input.
     bool ca2() const;
+    // Resolve CB1 from the serial clock or the externally driven input.
+    bool cb1() const;
     // Resolve CB2 from output mode or the externally driven input.
     bool cb2() const;
 
@@ -354,6 +357,11 @@ private:
     m6522_t chip_;
     Writes<Register> writes_;
     Timer1Fault timer1_fault_ = Timer1Fault::None;
+    uint8_t shift_ = 0;
+    bool shift_clock_ = true;
+    bool shift_output_ = true;
+    bool shift_pending_ = false;
+    bool timer2_reload_ = false;
 };
 
 // Physical chip selects at the FPGA boundary (bit 0: PIA1, 1: PIA2, 2: VIA).

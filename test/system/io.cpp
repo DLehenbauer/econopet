@@ -3,6 +3,7 @@
 #define CHIPS_IMPL
 #include "io.h"
 
+#include <bit>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -11,12 +12,13 @@ namespace econopet::io {
 namespace {
 
 constexpr uint8_t ViaAcrUnsupportedMask = (ViaAcrBit::LatchA | ViaAcrBit::LatchB
-    | ViaAcrBit::ShiftBit0 | ViaAcrBit::ShiftBit1 | ViaAcrBit::ShiftBit2
+    | ViaAcrBit::ShiftBit0 | ViaAcrBit::ShiftBit1
     | ViaAcrBit::Timer1Pb7).bits();
 
 // IFR/IER bit 7 is summary/enable selection, not a source interrupt.
 constexpr uint8_t ViaIerSet = std::to_underlying(ViaInterruptBit::Summary);
 constexpr uint8_t ViaIrqSources = std::to_underlying(ViaInterruptBit::All) & ~ViaIerSet;
+constexpr uint8_t ShiftMostSignificantBit = 0x80;
 
 static_assert(M6520_CA1 == M6522_CA1, "pins_for requires matching PIA/VIA CA1 encodings");
 static_assert(M6520_CA2 == M6522_CA2, "pins_for requires matching PIA/VIA CA2 encodings");
@@ -105,23 +107,28 @@ Via6522::Via6522() { m6522_init(&chip_); }
 // Initialize a fitted VIA with the owner's final context, without rebinding.
 Via6522::Via6522(detail::InputEditState& edits) : inputs_(edits) { m6522_init(&chip_); }
 // Reset registers while retaining adapter inputs, faults and observations.
-void Via6522::reset() { inputs_.require_mutable_device(); m6522_reset(&chip_); }
+void Via6522::reset() {
+    inputs_.require_mutable_device();
+    m6522_reset(&chip_);
+    shift_clock_ = true;
+    shift_output_ = true;
+    shift_pending_ = false;
+    timer2_reload_ = false;
+}
 // Present current driven levels to the chip model.
 uint64_t Via6522::input_pins() const { return pins_for(inputs_.peek_inputs()); }
 
 // Reject unsupported modes before the chip can mutate state or history.
 void Via6522::validate(const BusAccess& access) {
-    // Reject invalid indices and all shift-register accesses.
+    // Reject invalid indices before decoding register operations.
     if (std::to_underlying(access.reg) > ViaRegisterMask) throw std::out_of_range("6522 register must be in [0, 15]");
-    const std::string operation = access.write ? "write" : "read";
-    if (access.reg == Register::Shift) {
-        throw std::logic_error("unsupported 6522 shift-register " + operation);
-    }
     if (!access.write) return;
     // Reads are safe elsewhere, but mode writes must stay within model support.
-    if (access.reg == Register::Acr && (access.data & ViaAcrUnsupportedMask)) {
+    if (access.reg == Register::Acr && ((access.data & ViaAcrUnsupportedMask)
+        || ((access.data & std::to_underlying(ViaAcrBit::ShiftBit2))
+            && (access.data & std::to_underlying(ViaAcrBit::Timer2CountPb6))))) {
         throw std::logic_error("unsupported 6522 ACR mode " + std::to_string(access.data)
-            + " (port latching, shift register and PB7 timer output are not modeled)");
+            + " (only disabled/T2 free-running shift modes, without simultaneous PB6 counting, are modeled)");
     }
     if (access.reg == Register::Pcr) {
         m6522_t control{};
@@ -143,8 +150,58 @@ void Via6522::clock(std::optional<BusAccess> access) {
         pins |= M6522_CS1 | std::to_underlying(access->reg) | (access->write ? 0 : M6522_RW);
         M6522_SET_DATA(pins, access->data);
     }
+    // Serial outputs own CB1/CB2, so external edges cannot trigger control IRQs.
+    const bool free_running = access && access->write && access->reg == Register::Acr
+        ? (access->data & std::to_underlying(ViaAcrBit::ShiftBit2)) != 0
+        : M6522_ACR_SO_T2_RATE((&chip_));
+    if (free_running) {
+        pins &= ~(M6522_CB1 | M6522_CB2);
+        if (chip_.pb.c1_in) pins |= M6522_CB1;
+        if (chip_.pb.c2_in) pins |= M6522_CB2;
+    }
+    const bool previous_cb1 = chip_.pb.c1_in;
+    const auto previous_counter = chip_.t2.counter;
+    const bool timer_loaded = access && access->write && access->reg == Register::Timer2High;
+    const bool shift_written = access && access->write && access->reg == Register::Shift;
+    if (access && access->reg == Register::Shift) {
+        if (shift_written) shift_ = access->data;
+        chip_.intr.ifr &= ~M6522_IRQ_SR;
+    }
     // Advance the model before recording a successfully completed write.
     m6522_tick(&chip_, pins);
+    if (free_running) {
+        // Data follows a falling serial clock on the next falling PHI2 (R6522 Fig. 31f).
+        if (shift_pending_) {
+            shift_output_ = (shift_ & ShiftMostSignificantBit) != 0;
+            shift_ = std::rotl(shift_, 1);
+        }
+        shift_pending_ = false;
+        // T2's low byte reloads via $ff, while its high byte and one-shot IRQ still borrow.
+        if (timer2_reload_ && !timer_loaded) {
+            chip_.t2.counter = (chip_.t2.counter & ~PortAllHigh) | (chip_.t2.latch & PortAllHigh);
+            timer2_reload_ = false;
+        } else {
+            const bool underflow = !timer_loaded
+                && chip_.t2.counter == static_cast<uint16_t>(previous_counter - 1)
+                && (chip_.t2.counter & PortAllHigh) == PortAllHigh;
+            timer2_reload_ = underflow;
+            if (underflow) {
+                shift_clock_ = !shift_clock_;
+                shift_pending_ = !shift_clock_;
+            }
+        }
+        // Publish resolved serial pins without feeding them back into control IRQs.
+        chip_.pins &= ~(M6522_CB1 | M6522_CB2);
+        if (shift_clock_) chip_.pins |= M6522_CB1;
+        if (shift_output_) chip_.pins |= M6522_CB2;
+    } else {
+        // Disabled SR interrupts do not prevent external CB1 from shifting input.
+        if (!shift_written && !previous_cb1 && chip_.pb.c1_in)
+            shift_ = static_cast<uint8_t>((shift_ << 1) | chip_.pb.c2_in);
+        shift_clock_ = true;
+        shift_pending_ = false;
+        timer2_reload_ = false;
+    }
     if (access) writes_.record(*access);
 }
 
@@ -162,6 +219,7 @@ uint8_t Via6522::interrupt_flags() const {
 uint8_t Via6522::peek(Register reg) const {
     validate({reg, 0, false, CycleTime{Cycles{0}}});
     if (reg == Register::Ifr) return interrupt_flags();
+    if (reg == Register::Shift) return shift_;
     return m6522_peek(&chip_, input_pins() | std::to_underlying(reg));
 }
 
@@ -177,8 +235,15 @@ void Via6522::set_interrupts(ViaInterrupts sources, bool enabled, CycleTime at) 
 bool Via6522::irq() const { return (interrupt_flags() & M6522_IRQ_ANY) != 0; }
 // Resolve CA2 according to its configured direction.
 bool Via6522::ca2() const { return M6522_PCR_CA2_OUTPUT((&chip_)) ? chip_.pa.c2_out : inputs_.peek_inputs().ca2; }
-// Resolve CB2 according to its configured direction.
-bool Via6522::cb2() const { return M6522_PCR_CB2_OUTPUT((&chip_)) ? chip_.pb.c2_out : inputs_.peek_inputs().cb2; }
+// Resolve CB1 from the serial clock or externally driven input.
+bool Via6522::cb1() const {
+    return M6522_ACR_SO_T2_RATE((&chip_)) ? shift_clock_ : inputs_.peek_inputs().cb1;
+}
+// Serial output takes precedence over PCR's CB2 direction and output latch.
+bool Via6522::cb2() const {
+    if (M6522_ACR_SO_T2_RATE((&chip_))) return shift_output_;
+    return M6522_PCR_CB2_OUTPUT((&chip_)) ? chip_.pb.c2_out : inputs_.peek_inputs().cb2;
+}
 
 // Set only supported adversarial fault states, independent of normal timers.
 void Via6522::set_timer1_fault(Timer1Fault fault) {

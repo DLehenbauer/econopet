@@ -1398,8 +1398,6 @@ Remove invalid stimulus before releasing reset. A zero-cycle tick does not
 recover the clock.
 Reset does not override normal SRAM or FPGA bus resolution, so SPI memory
 inspection remains available while either reset driver holds the CPU.
-Only an unsupported VIA shift-register read canceled by reset is treated as
-undriven data instead of rejecting recovery.
 
 Use `drive_physical_cpu`, external reset/interrupt setters, and
 `raw_stimulus(callback)` for pin-level setup. Raw edits commit only after
@@ -1510,8 +1508,19 @@ PIA/VIA control and GPIO pin encodings must also match (checked at compile time)
 edge polarities, interrupt flags/enables, and fixed/handshake/pulse C2 outputs.
 `Via6522` models unlatched GPIO, T1 one-shot/free-running timers, timed or
 PB6-counted T2, IFR/IER, control-input interrupts, and fixed/handshake C2
-outputs. VIA shift-register accesses, input latching, PB7 timer output, and C2
-pulse-output modes throw before changing device state or write observations.
+outputs. The project-owned adapter also models SR storage, external input with
+SR interrupts disabled, and mode 4 (T2 free-running, MSB-first output on CB2).
+The serial clock toggles every `T2LL + 2` PHI2 cycles, with data updated one
+PHI2 after its falling edge. The byte recirculates without an SR interrupt.
+SR accesses do not restart an active divider, low-latch changes apply at reload,
+and reset disables shifting while retaining SR data. Serial outputs own CB1/CB2
+independently of PCR and external levels. T2 still borrows into its high byte
+and raises its one-shot interrupt. These contracts follow the
+[R6522 datasheet](https://archive.org/details/R6522_Versatile_Interface_Adapter_VIA_Data_Sheet),
+SR modes 0/4 and Figures 20, 25 and 31f.
+Other active shift modes, simultaneous serial/PB6 counting, input latching,
+PB7 timer output, and C2 pulse-output modes throw before changing device state
+or write observations.
 These are digital models, not analog loading or propagation-delay models.
 T2 pulse counting observes the resolved PB6 pin: DDR selects the external
 input or output latch. External transitions cannot count while PB6 is driven

@@ -19,15 +19,17 @@
 #include "input/input.h"
 #include "input/input_routing.h"
 #include "input/input_uart.h"
-#include "input/pet_keyboard.h"
 #include "pet.h"
 #include "reset.h"
+#include "roms/roms.h"
 #include "system/state.h"
 #include "system/system.h"
 #include "input/term_inject.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
 #include "usb/usb.h"
+#include "input/pet_keyboard.h"
+#include "display/dvi/dvi.h"
 
 // ---------------------------------------------------------------------------
 // Driver mocks
@@ -69,8 +71,7 @@ static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
 static uint8_t audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
-static uint8_t video_control;
-static uint8_t via_pcr;
+static uint8_t video_control, via_pcr;
 static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
 static bool text_mode_lower = true;
 static bool clock_overridden;
@@ -79,9 +80,10 @@ static unsigned int display_task_count;
 static unsigned int term_begin_count, term_end_count, term_refresh_count;
 static unsigned int term_inject_count;
 static int term_inject_last;
-static unsigned int pet_nmi_count;
 static void (*ram_test_handler)(void);
 static void (*system_reset_handler)(void);
+static pet_keyboard_model_t physical_keyboard_model;
+static pet_video_type_t physical_video_type;
 
 uint64_t __real_time_us_64(void);
 
@@ -98,6 +100,16 @@ void mock_clock_set(uint64_t now) {
 void mock_clock_advance(uint64_t delta) {
     ck_assert(clock_overridden);
     clock_us += delta;
+}
+
+void mock_clock_restore(void) {
+    clock_overridden = false;
+}
+
+void mock_set_pet_model(
+    const pet_keyboard_model_t keyboard, const pet_video_type_t video) {
+    physical_keyboard_model = keyboard;
+    physical_video_type = video;
 }
 
 // Model the probe's minimum reset pulse without delaying host tests.
@@ -276,17 +288,25 @@ void mock_ieee_clear_status(void) {
 
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
 uint8_t spi_read_at(uint32_t addr) {
-    if (addr == ECONOPET_WB_CPU_SEL_ADDR) return selected_cpu;
-    if (addr == ECONOPET_WB_AUDIO_ADDR) return audio_control;
-    if (addr == ECONOPET_WB_VIDEO_ADDR) return video_control;
-    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR &&
-        addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT)
+    if (addr == ECONOPET_WB_CPU_SEL_ADDR) {
+        return selected_cpu;
+    }
+    if (addr == ECONOPET_WB_AUDIO_ADDR) {
+        return audio_control;
+    }
+    if (addr == ECONOPET_WB_VIDEO_ADDR) {
+        return video_control;
+    }
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR && addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
         return fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR];
+    }
     if (addr == ECONOPET_WB_STATUS_ADDR) {
         if (mock_cpu_state == CPU_READY && !system_state.bp_halted && cpu_run_callback != NULL) {
             cpu_run_callback();
         }
         return (system_state.bp_halted ? ECONOPET_REG_STATUS_BP_HALT_MASK : 0)
+            | (physical_video_type == pet_video_type_fixed ? ECONOPET_REG_STATUS_CRT_MASK : 0)
+            | (physical_keyboard_model == pet_keyboard_model_graphics ? ECONOPET_REG_STATUS_KEYBOARD_MASK : 0)
             | (text_mode_lower ? ECONOPET_REG_STATUS_TEXT_MODE_MASK : 0);
     }
     // Synthesize FIFO readiness and peek at the pending receive byte.
@@ -357,10 +377,15 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
 
 // Applies IEEE register side effects or writes RAM, returning the mock's zero reply.
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
-    if (addr == ECONOPET_WB_AUDIO_ADDR) { audio_control = data; return 0; }
-    if (addr == ECONOPET_WB_VIDEO_ADDR) { video_control = data; return 0; }
-    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR &&
-        addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
+    if (addr == ECONOPET_WB_AUDIO_ADDR) {
+        audio_control = data;
+        return 0;
+    }
+    if (addr == ECONOPET_WB_VIDEO_ADDR) {
+        video_control = data;
+        return 0;
+    }
+    if (addr >= ECONOPET_WB_CRTC_BASE_ADDR && addr - ECONOPET_WB_CRTC_BASE_ADDR < CRTC_REG_COUNT) {
         fpga_crtc[addr - ECONOPET_WB_CRTC_BASE_ADDR] = data;
         return 0;
     }
@@ -441,6 +466,14 @@ void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
     (void)byteLength;
 }
 
+// Reject pending-result reads because this fixture has no transport pipeline.
+uint8_t spi_read_pop(void) {
+    fatal("spi_read_pop is unsupported by the register-only SPI fixture");
+}
+
+// Model an isolated register read without an adjacent-read side effect.
+uint8_t spi_read_once(uint32_t address) { return spi_read_at(address); }
+
 // Records CPU control flags for subsequent host-side reads.
 void set_cpu(cpu_state_t state) {
     if (cpu_state_observer != NULL)
@@ -448,6 +481,7 @@ void set_cpu(cpu_state_t state) {
     mock_cpu_state = state;
     if (state & CPU_RESET) {
         memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
+        mock_ieee_flush(false);
     }
 }
 
@@ -470,29 +504,47 @@ void set_cpu_type(cpu_type_t cpu) {
     selected_cpu = cpu;
 }
 
+/** Record the independent SuperPET machine bit used by configuration activation. */
+void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
+    selected_cpu = (cpu_type_t)((uint8_t)cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
+}
 
-/** Model readable PIA direction/data selection and hidden output latches. */
+/** Model readable PIA direction/data selection and the separate hidden output latches. */
 uint8_t pet_io_read(const uint16_t address) {
     ck_assert(!(mock_cpu_state & CPU_READY));
-    if (address == 0xe84c) return via_pcr;
+    if (address == 0xe84c) {
+        return via_pcr;
+    }
     ck_assert(address >= 0xe810 && address <= 0xe813);
     const unsigned port = (address - 0xe810) / 2;
-    if (address & 1) return pia_control[port];
-    if (!(pia_control[port] & 4)) return pia_ddr[port];
+    if (address & 1) {
+        return pia_control[port];
+    }
+    if (!(pia_control[port] & 4)) {
+        return pia_ddr[port];
+    }
     const unsigned row = pia_output[0] & 15;
     const uint8_t input = port == 0 || row >= ECONOPET_KBD_COL_COUNT ? 0xff : physical_matrix[row];
     return (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
 }
 
-/** Record physical PIA writes in the register selected by its control byte. */
+/** Record physical PIA writes in the register selected by the current control byte. */
 void pet_io_write(const uint16_t address, const uint8_t data) {
     ck_assert(!(mock_cpu_state & CPU_READY));
-    if (address == 0xe84c) { via_pcr = data; return; }
+    if (address == 0xe84c) {
+        via_pcr = data;
+        text_mode_lower = (data & 0x0e) == 0x0e;
+        return;
+    }
     ck_assert(address >= 0xe810 && address <= 0xe813);
     const unsigned port = (address - 0xe810) / 2;
-    if (address & 1) pia_control[port] = data & 0x3f;
-    else if (pia_control[port] & 4) pia_output[port] = data;
-    else pia_ddr[port] = data;
+    if (address & 1) {
+        pia_control[port] = data & 0x3f;
+    } else if (pia_control[port] & 4) {
+        pia_output[port] = data;
+    } else {
+        pia_ddr[port] = data;
+    }
 }
 
 cpu_type_t mock_cpu_type(void) {
@@ -522,11 +574,6 @@ void bp_clear_halt(void) {
     system_state.bp_halted = false;
 }
 
-// Clear only the observed halt acknowledgement without changing fixture state.
-void mock_breakpoint_reset_clear_observation(void) {
-    mock_bp_cleared = false;
-}
-
 // ---------------------------------------------------------------------------
 // Test fixture helpers
 // ---------------------------------------------------------------------------
@@ -534,10 +581,9 @@ void mock_breakpoint_reset_clear_observation(void) {
 // Restores deterministic RAM contents and clears register/control observations.
 void mock_reset(void) {
     system_init();
-    audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
-    video_control = 0;
     pet_keyboard_end();
-    via_pcr = 0;
+    audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
+    video_control = via_pcr = 0;
     memset(pia_control, 0, sizeof(pia_control));
     memset(pia_ddr, 0, sizeof(pia_ddr));
     memset(pia_output, 0, sizeof(pia_output));
@@ -565,13 +611,14 @@ void mock_reset(void) {
     term_inject_count = 0;
     term_inject_last = EOF;
     input_init();
-    pet_nmi_count = 0;
     ram_test_handler = NULL;
     system_reset_handler = NULL;
     text_mode_lower = true;
     selected_cpu = CPU_PHYS_6502;
     clock_overridden = false;
     clock_us = 0;
+    physical_keyboard_model = pet_keyboard_model_graphics;
+    physical_video_type = pet_video_type_fixed;
 }
 
 // Configures the address observed by breakpoint handling.
@@ -760,12 +807,6 @@ void mock_consume_requests(void) {
 // ROM, PET, and IEEE mocks
 // ---------------------------------------------------------------------------
 
-// Counts asynchronous NMI requests without emulating the ROM's tune.
-void __wrap_pet_nmi(void) { pet_nmi_count++; }
-
-// Reports NMI requests since the last fixture reset.
-unsigned int mock_pet_nmi_count(void) { return pet_nmi_count; }
-
 // ---------------------------------------------------------------------------
 // Diagnostic mocks
 // ---------------------------------------------------------------------------
@@ -775,7 +816,7 @@ void mock_ram_test_set_handler(void (*handler)(void)) { ram_test_handler = handl
 void mock_system_reset_set_handler(void (*handler)(void)) { system_reset_handler = handler; }
 
 // Delegates the destructive hardware diagnostic to an explicit test observer.
-void test_ram(void) {
+void __attribute__((noreturn)) test_ram(void) {
     vet(ram_test_handler != NULL, "unexpected RAM diagnostic in host test");
     ram_test_handler();
     fatal("RAM diagnostic observer returned");

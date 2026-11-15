@@ -18,16 +18,14 @@
 #include "roms/roms.h"
 #include "usb/keyboard.h"
 
-#define MENU_CHARSET_TIMEOUT_US 100000u
-// Allow at least one 60 Hz DVI frame for core 1 to select the new font.
-#define MENU_CHARSET_SETTLE_US 20000u
-
 typedef struct {
     size_t first, capacity, count;
     char (*names)[CONFIG_TEXT_CAPACITY];
     char default_id[CONFIG_TEXT_CAPACITY];
     int default_index;
 } catalog_context_t;
+
+static int active_config_index = -1;
 
 // Saves the default ID for the catalog callbacks to match against configuration
 // IDs. A default encountered after any catalog entry is fatal.
@@ -75,15 +73,12 @@ menu_config_catalog_t menu_config_enumerate(size_t first, size_t capacity,
 // Reloads the selected configuration with the PET halted. Prefills $9000-$FFFF
 // with each address's high byte to approximate an undriven bus, invokes setup
 // callbacks in YAML order, and reads back the character ROM for DVI rendering.
-// Applies mounts only for a newly selected configuration. The mount API ejects
-// incompatible partners. Skips mounts when restoring the live machine after menu.rom.
 // Returns with the CPU halted for the caller's subsequent reset.
-void load_config(const setup_sink_t* const setup_sink, int selected_config, bool apply_mounts) {
+void load_config(const setup_sink_t* const setup_sink, const int selected_config) {
     log_info("Loading config: %d", selected_config);
 
     set_cpu(CPU_HALT);
-    if (apply_mounts)
-        vet(ieee_drive_unmount_all(), "Failed to unmount IEEE disks");
+    vet(ieee_drive_unmount_all(), "Failed to unmount IEEE disks");
 
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
     // transferred on the data bus.  This has the effect of making it appear that unmapped
@@ -102,13 +97,13 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config, bool
         spi_fill(a << 8, a, 0x100);
     }
 
-    // Execute setup actions in YAML order, skipping mounts during restoration.
+    // Execute setup actions in YAML order.
     const setup_sink_t actions = {
         .context = setup_sink->context,
         .on_load = setup_sink->on_load,
         .on_patch = setup_sink->on_patch,
         .on_copy = setup_sink->on_copy,
-        .on_mount = apply_mounts ? setup_sink->on_mount : NULL,
+        .on_mount = setup_sink->on_mount,
         .on_set_options = setup_sink->on_set_options,
         .on_fix_checksum = setup_sink->on_fix_checksum,
         .system_state = setup_sink->system_state,
@@ -122,6 +117,7 @@ void load_config(const setup_sink_t* const setup_sink, int selected_config, bool
     };
 
     parse_config_file("/config.yaml", &sink, selected_config);
+    active_config_index = selected_config;
 
     // Read back the configured character ROM for local DVI rendering.
     roms_refresh_char_rom();
@@ -134,57 +130,28 @@ static void menu_service(void) {
     ieee_drive_task();
 }
 
-// Wait for menu.rom to select lowercase before presenting menu characters.
-static void menu_wait_for_charset(void) {
-    const uint64_t start = time_us_64();
-    while ((spi_read_at(ECONOPET_WB_STATUS_ADDR) & ECONOPET_REG_STATUS_TEXT_MODE_MASK) == 0) {
-        vet(time_us_64() - start < MENU_CHARSET_TIMEOUT_US,
-            "menu.rom did not select the lowercase character set");
-        menu_service();
-    }
-    system_state.video_text_mode = video_text_mode_lower;
 
-    // DVI selects its font during blank scanlines, not immediately on assignment.
-    const uint64_t selected = time_us_64();
-    while (time_us_64() - selected < MENU_CHARSET_SETTLE_US) {
-        menu_service();
-    }
-}
 
-// Runs the boot picker or on-demand dashboard after menu_enter() starts
-// menu.rom. Reuses the applied configuration and browser state
-// between sessions, reinitializing on boot, first use, or an invalid saved index.
-// Auto-boots a configured default without input. Otherwise temporarily routes
-// remote input to the firmware menu, pulses NMI only on boot,
-// and services input with demand-driven redraws until the controller exits.
-// Leaves terminal mode unchanged when applying the selected machine and disks.
-// Returns with the CPU halted so menu_enter() can reset into the loaded machine.
-void menu_config_show(const window_t* const window, const setup_sink_t* const setup_sink, bool is_boot) {
-    static menu_ui_t menu;
-    static bool initialized;
+// Return an explicit picker/dashboard exit without loading configuration or resetting.
+// Reuse catalog/browser state, preserve terminal ownership, and keep input/drives alive.
+// Boot defaults bypass painting and the tune. Runtime scanning requires an active session.
+static menu_ui_t menu;
+static bool initialized;
+
+menu_result_t menu_config_run(const window_t* const window, const menu_ui_root_t root) {
     const menu_config_catalog_t catalog = menu_config_enumerate(0, 0, NULL);
-    if (is_boot || !initialized || (size_t) menu.config_index >= catalog.count) {
+    if (root == menu_ui_root_picker || !initialized ||
+        (size_t)menu.config_index >= catalog.count) {
         menu_ui_init(&menu, window, menu_service);
         initialized = true;
+        if (root == menu_ui_root_dashboard &&
+            active_config_index >= 0 && (size_t)active_config_index < catalog.count) {
+            menu.config_index = active_config_index;
+        }
     }
 
-    // Boot directly into a configured default without input, painting, or the menu tune.
-    if (is_boot && catalog.default_index >= 0) {
-        load_config(setup_sink, menu.config_index, true);
-        menu.config_changed = false;
-        return;
-    }
-
-    // Route remote keys to the menu without taking ownership of the terminal.
-    input_routing_set_menu_active(true);
-
-    // Show the menu as soon as the selected character set is ready.
-    menu_wait_for_charset();
-
-    // Keep menu.rom running while browsing configurations and changing live disks.
-    menu_ui_begin(&menu, window, is_boot);
-    // Start menu.rom's tune only for the interactive boot picker.
-    if (is_boot) pet_nmi();
+    input_menu_begin(menu_service);
+    menu_ui_begin(&menu, window, root);
     // Keep input responsive, repainting only when the controller requests it.
     while (tui_controller_is_active(&menu.controller)) {
         if (tui_controller_needs_render(&menu.controller)) {
@@ -200,15 +167,6 @@ void menu_config_show(const window_t* const window, const setup_sink_t* const se
         }
     }
 
-    // Do not replay held menu gestures or pending releases when returning to
-    // runtime.
-    input_routing_set_menu_active(false);
-
-    // Blank the menu before configuration reload changes the character ROM or
-    // reset changes the charset.
-    set_cpu(CPU_HALT);
-    display_clear();
-
-    load_config(setup_sink, menu.config_index, menu.config_changed);
-    menu.config_changed = false;
+    input_menu_end(menu_service);
+    return (menu_result_t){menu.exit, menu.config_index};
 }

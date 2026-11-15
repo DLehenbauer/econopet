@@ -61,7 +61,6 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/ui/console.c
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
-    ${SRC_DIR}/tape.c
     ${SRC_DIR}/ieee/diskimage.c
     ${SRC_DIR}/ieee/dos_media.c
     ${SRC_DIR}/ieee/dos_rel.c
@@ -92,11 +91,13 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/main.c
     ${TEST_DIR}/menu_browser_test.c
     ${TEST_DIR}/menu_ui_test.c
+    ${TEST_DIR}/menu_session_test.c
     ${TEST_SUPPORT_DIR}/test_support.c
     ${TEST_SUPPORT_DIR}/test_fatal.c
     ${TEST_SUPPORT_DIR}/d64_fixture.c
     ${TEST_DIR}/mock.c
     ${TEST_DIR}/petscii_test.c
+    ${TEST_DIR}/roms_test.c
     ${TEST_DIR}/system_state_test.c
     ${TEST_DIR}/system_session_test.c
     ${TEST_DIR}/sd_activity_test.c
@@ -106,13 +107,11 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/window_test.c
 )
 
-# Host suspension copies the complete font, but does not inspect glyph content.
-string(REPEAT "0x00,\n" 2048 TEST_FONT_HEADER)
-file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h"
-    CONTENT "// SPDX-License-Identifier: CC0-1.0\n${TEST_FONT_HEADER}")
-# ROM boot-routing tests do not execute CPU instructions.
-file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h"
-    CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
+# ROM boot-routing tests do not execute CPU instructions or inspect glyph content.
+foreach(header 901447_10 menu_rom)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/${header}.h"
+        CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
+endforeach()
 
 # Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}
@@ -125,9 +124,7 @@ target_link_libraries(${PROJECT_NAME}
 # in-memory cookie-backed FILE handles, while other paths use the real fopen().
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=fopen -Wl,--wrap=time_us_64 -Wl,--wrap=term_inject_char
-    -Wl,--wrap=pet_nmi -Wl,--wrap=ieee_drive_task)
-target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=menu_enter -Wl,--wrap=read_keymap)
-target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=start_menu_rom -Wl,--wrap=menu_config_show)
+    -Wl,--wrap=ieee_drive_task -Wl,--wrap=menu_enter)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
@@ -145,7 +142,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE "${EXTERNAL_DIR}/pico-vfs/inc
 target_include_directories(${PROJECT_NAME} PRIVATE "${PICO_SDK_PATH}/lib/tinyusb/src")
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_TINYUSB CFG_TUSB_MCU=OPT_MCU_NONE)
 
-# Compile the physical fatal renderer only where ROM, window and SPI mocks are linked.
+# Exercise the physical fatal renderer with the linked ROM, display and SPI fixtures.
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECONOPET_TEST_FATAL_DISPLAY)
 
 # Generate version header in build directory

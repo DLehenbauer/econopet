@@ -429,12 +429,15 @@ TEST_F(SystemTest, ConfiguredProgramsSurfaceUnsupportedPeripheralAccess) {
     }, "unsupported 6522");
     EXPECT_EQ(writer.io().via().writes().count(), 0u);
     EXPECT_THROW(write.run([](auto&) {}), std::logic_error);
-    System reader(system.seed());
-    auto read = reader.program6809();
-    expect_failure<std::logic_error>(reader, "I/O", [&] {
-        read.within(Budget).run([](auto& p) { p.lda(pet::ViaShift); });
-    }, "shift-register read");
-    EXPECT_EQ(reader.io().via().writes().count(), 0u);
+    System mc_board(system.seed());
+    auto mc = mc_board.program6809();
+    expect_failure<std::logic_error>(mc_board, "I/O sample", [&] {
+        mc.within(Budget).run([](auto& p) {
+            const auto unsupported = std::to_underlying(econopet::io::ViaAcrBit::ShiftBit0);
+            p.lda(imm(unsupported)).sta(pet::ViaAcr);
+        });
+    }, "unsupported 6522");
+    EXPECT_EQ(mc_board.io().via().writes().count(), 0u);
 }
 
 // Forwarded polling work uses the same configuration budget, anchors and mandatory completion.

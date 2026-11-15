@@ -31,7 +31,8 @@ constexpr uint8_t Marker = 0x42;
 constexpr uint8_t OtherMarker = 0x5a;
 constexpr uint8_t DiagnosticPortMask = 1 << 7;
 constexpr uint8_t ViaPcrReset = 0;
-constexpr CpuAddress ViaShiftAddress{0xe840 + std::to_underlying(ViaRegister::Shift)};
+constexpr CpuAddress ViaAcrAddress{0xe840 + std::to_underlying(ViaRegister::Acr)};
+constexpr uint8_t UnsupportedViaMode = std::to_underlying(ViaAcrBit::ShiftBit0);
 constexpr CpuAddress ProgramAddress{0x0200};
 constexpr CpuAddress PhysicalProbeAddress{0x0500};
 constexpr CpuAddress ResetVector6502{0xfffc};
@@ -260,10 +261,10 @@ TEST_F(SystemTest, SnapshotsCanBeEditedAndReassignedWhilePolling) {
     EXPECT_TRUE(pins.stimulus.diag_i);
 }
 
-// Unsupported reads and writes retain their failure boundary and permit reset recovery.
+// Unsupported mode writes retain their failure boundary and permit reset recovery.
 TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
-    for (const bool writing : {true, false}) {
-        SCOPED_TRACE(writing);
+    for (const auto mode : {ViaAcrBit::ShiftBit0, ViaAcrBit::Timer1Pb7}) {
+        SCOPED_TRACE(std::to_underlying(mode));
         System board;
         ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR},
             CpuControl{CpuControlBit::Ready}.bits()));
@@ -275,8 +276,7 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
             EXPECT_EQ(completed.half_ticks() % HalfTicksPerCycle, 0);
             EXPECT_FALSE(completed.clock_faulted());
         });
-        board.drive_physical_cpu({ViaShiftAddress,
-            writing ? std::optional<uint8_t>{Marker} : std::nullopt, false});
+        board.drive_physical_cpu({ViaAcrAddress, std::to_underlying(mode), false});
         try {
             board.tick(ExecutionSlice);
             FAIL() << "unsupported VIA access completed";
@@ -292,7 +292,7 @@ TEST_F(SystemTest, RejectedPeripheralAccessSuspendsClockUntilExternalReset) {
         const auto stopped = board.half_ticks();
         const auto completed = board.time();
         EXPECT_EQ(completed, CycleTime{Cycles{stopped / HalfTicksPerCycle}});
-        if (writing) EXPECT_EQ(stopped % HalfTicksPerCycle, 1);
+        EXPECT_EQ(stopped % HalfTicksPerCycle, 1);
         const auto pins = board.snapshot();
         const auto writes = board.io().via().writes().count();
         const auto io_clocks = board.io().clock_count();
@@ -342,7 +342,7 @@ TEST_F(SystemTest, ServiceCompletionRequiresClockRecoveryAfterCaughtPeripheralFa
         System board;
         ASSERT_NO_FATAL_FAILURE(write_fpga(board, WishboneAddress{ECONOPET_WB_CPU_ADDR},
             CpuControl{CpuControlBit::Ready}.bits()));
-        board.drive_physical_cpu({ViaShiftAddress, Marker, false});
+        board.drive_physical_cpu({ViaAcrAddress, UnsupportedViaMode, false});
         unsigned predicates = 0;
         bool caught = false;
         uint64_t failure_time = 0;

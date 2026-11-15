@@ -14,13 +14,13 @@
 #include "diag/log/log.h"
 #include "display/display.h"
 #include "display/window.h"
+#include "driver.h"
 #include "fatal.h"
-#include "input/input.h"
-#include "input/input_routing.h"
+#include "input/pet_keyboard.h"
 #include "mock.h"
-#include "roms/roms.h"
 #include "sd/activity.h"
-#include "usb/keyscan.h"
+#include "system/state.h"
+#include "system/system.h"
 
 static jmp_buf fatal_exit;
 static bool observing;
@@ -28,11 +28,6 @@ static bool led_on;
 static bool led_initialized;
 static bool led_output;
 static bool halt_only_called;
-static bool observing_rom_boot;
-static pet_keyboard_model_t rom_keyboard_model = pet_keyboard_model_graphics;
-static unsigned int keymap_reads;
-static unsigned int model_reads;
-static unsigned int model_writes;
 static size_t stdio_init_count;
 static size_t delay_count;
 static size_t delay_limit;
@@ -54,33 +49,6 @@ void __wrap_fatal_halt(fatal_error_t error, const char* message) {
     (void)error;
     halt_only_called = true;
     fatal("%s", message);
-}
-
-// Supply known DIP-switch observations while the ROM loader holds the CPU halted.
-void read_pet_model(system_state_t* state) {
-    ck_assert_msg(observing_rom_boot, "unexpected PET model read outside ROM boot tests");
-    ck_assert_ptr_eq(state, &system_state);
-    ck_assert_int_eq(get_cpu(), CPU_HALT);
-    state->pet_video_type = pet_video_type_fixed;
-    state->pet_keyboard_model = rom_keyboard_model;
-    ++model_reads;
-}
-
-// Check the native display setup requested before starting either menu ROM entry.
-void write_pet_model(const system_state_t* state) {
-    ck_assert_msg(observing_rom_boot, "unexpected PET model write outside ROM boot tests");
-    ck_assert_ptr_eq(state, &system_state);
-    ck_assert_int_eq(state->pet_display_columns, pet_display_columns_40);
-    ck_assert_uint_eq(state->video_ram_mask, pet_video_ram_mask_1kb);
-    ++model_writes;
-}
-
-// Observe SD keymap requests without depending on a physical SD card.
-void __wrap_read_keymap(const char* filename, system_state_t* state) {
-    ck_assert_msg(observing_rom_boot, "unexpected keymap read outside ROM boot tests");
-    ck_assert_ptr_eq(state, &system_state);
-    ck_assert_str_eq(filename, "/ukm/us.bin");
-    ++keymap_reads;
 }
 
 // Model successful serial initialization once, before any fatal output is emitted.
@@ -323,40 +291,24 @@ START_TEST(test_sd_startup_failure) {
 }
 END_TEST
 
-// Exercise the real ROM loader with mocked peripherals and synthetic ROM bytes.
-static void check_rom_boot(menu_rom_boot_reason_t reason, unsigned int expected_keymap_reads) {
+/** Fatal ROM execution must start with audio restored and console ownership retired. */
+static void check_fatal_rom_release(cpu_state_t state) {
+    if (state == CPU_READY) {
+        ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+        ck_assert(!pet_keyboard_active());
+        ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), ECONOPET_REG_AUDIO_ENABLE_MASK);
+    }
+}
+
+/** Render and upload fatal details without clearing UART, including from a muted console. */
+START_TEST(test_fatal_display_preserves_uart_and_recovers_console_audio) {
     mock_reset();
-    mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
-    keymap_reads = model_reads = model_writes = 0;
-    observing_rom_boot = true;
-    start_menu_rom(reason);
-    observing_rom_boot = false;
-
-    ck_assert_uint_eq(keymap_reads, expected_keymap_reads);
-    ck_assert_uint_eq(model_reads, 1);
-    ck_assert_uint_eq(model_writes, 1);
-    ck_assert_int_eq(mock_cpu_type(), CPU_SOFT_6502);
-}
-
-// Fatal rendering must work without requesting any SD keymap.
-START_TEST(test_error_rom_without_keymap) {
-    check_rom_boot(MENU_ROM_BOOT_ERROR, 0);
-}
-END_TEST
-
-// Interactive menus must retain their existing USB keymap initialization.
-START_TEST(test_normal_rom_with_keymap) {
-    check_rom_boot(MENU_ROM_BOOT_NORMAL, 1);
-}
-END_TEST
-
-// Fatal rendering preserves UART history and uploads the encoded screen without a later display task.
-START_TEST(test_fatal_display_preserves_uart) {
-    mock_reset();
-    mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
-    keymap_reads = model_reads = model_writes = 0;
+    system_reset_guest();
+    if (_i != 0) {
+        ck_assert(system_suspend());
+        ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), 0);
+    }
     memset(system_state.video_char_buffer, 0xa5, sizeof(system_state.video_char_buffer));
-
     FILE* const output = tmpfile();
     ck_assert_ptr_nonnull(output);
     fflush(stdout);
@@ -366,79 +318,37 @@ START_TEST(test_fatal_display_preserves_uart) {
     fputs("retained UART history\r\n", stdout);
     fflush(stdout);
 
-    observing_rom_boot = true;
+    mock_cpu_set_state_observer(check_fatal_rom_release);
     fatal_display_message("disk failed\nretry");
-    observing_rom_boot = false;
+    mock_cpu_set_state_observer(NULL);
     fflush(stdout);
     ck_assert_int_ge(dup2(saved_stdout, fileno(stdout)), 0);
     close(saved_stdout);
 
-    // Exact output excludes clearing, cursor movement and alternate-screen escapes.
     rewind(output);
     char uart[128] = {0};
     ck_assert_uint_lt(fread(uart, 1, sizeof(uart) - 1, output), sizeof(uart) - 1);
     ck_assert_str_eq(uart, "retained UART history\r\n");
     fclose(output);
-
-    ck_assert_uint_eq(keymap_reads, 0);
-    ck_assert_uint_eq(model_reads, 1);
-    ck_assert_uint_eq(model_writes, 1);
-    ck_assert_uint_eq(mock_spi_write_count(), 3); // Menu ROM, character ROM, final screen.
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert(!pet_keyboard_active());
     ck_assert_int_eq(system_state.video_source, video_source_firmware);
     ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
-    // Independent lower-case PET screen codes, with a reversed "E:" prefix.
     const uint8_t first_row[] = {
         0xc5, 0xba, CH_SPACE, 0x04, 0x09, 0x13, 0x0b, CH_SPACE, 0x06, 0x01, 0x09, 0x0c, 0x05, 0x04,
     };
     const uint8_t second_row[] = {0x12, 0x05, 0x14, 0x12, 0x19};
     const size_t columns = pet_display_columns_40;
-    const size_t fatal_rows = 25;
-    const size_t screen_size = columns * fatal_rows;
-    for (size_t offset = 0; offset < screen_size; ++offset) {
+    const size_t rows = 25;
+    for (size_t offset = 0; offset < columns * rows; ++offset) {
         const uint8_t expected = offset < sizeof(first_row) ? first_row[offset]
             : offset >= columns && offset < columns + sizeof(second_row)
                 ? second_row[offset - columns] : CH_SPACE;
         ck_assert_uint_eq(system_state.video_char_buffer[offset], expected);
         ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + offset], expected);
     }
-    ck_assert_int_eq(memcmp(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer,
-                           PET_MAX_VIDEO_RAM_BYTES), 0);
-    ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS - 1], 0xea);
-    ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + PET_MAX_VIDEO_RAM_BYTES], 0xea);
-}
-END_TEST
-
-// The real ROM reset and menu routing transition must retain held physical navigation.
-START_TEST(test_menu_rom_preserves_physical_holds) {
-    mock_reset();
-    mock_clock_set(time_us_64() + SD_ACTIVITY_QUIET_US);
-    rom_keyboard_model = _i / 2 == 0 ? pet_keyboard_model_graphics : pet_keyboard_model_business;
-    system_state.pet_keyboard_model = rom_keyboard_model;
-    const bool business = rom_keyboard_model == pet_keyboard_model_business;
-    const key_event_t key = _i % 2 == 0
-        ? (business ? PET_KEY_DOWN_B : PET_KEY_DOWN_N)
-        : (business ? PET_KEY_RETURN_B : PET_KEY_RETURN_N);
-    uint8_t physical[ECONOPET_KBD_COL_COUNT];
-    memset(physical, UINT8_MAX, sizeof(physical));
-    physical[PET_KEY_COL(key)] &= (uint8_t)~(1u << PET_KEY_ROW(key));
-    mock_input_pet_snapshot(physical);
-    input_task();
-    observing_rom_boot = true;
-    start_menu_rom(MENU_ROM_BOOT_NORMAL);
-    observing_rom_boot = false;
-    input_routing_set_menu_active(true);
-    input_task();
-    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
-
-    // Only a genuinely observed release and repress can navigate the new menu.
-    physical[PET_KEY_COL(key)] |= 1u << PET_KEY_ROW(key);
-    mock_input_pet_snapshot(physical);
-    input_task();
-    physical[PET_KEY_COL(key)] &= (uint8_t)~(1u << PET_KEY_ROW(key));
-    mock_input_pet_snapshot(physical);
-    input_task();
-    ck_assert_int_eq(input_routing_navigation(), _i % 2 == 0 ? tui_action_down : tui_action_activate);
-    ck_assert_int_eq(input_routing_navigation(), tui_action_none);
+    ck_assert_mem_eq(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer,
+        PET_MAX_VIDEO_RAM_BYTES);
 }
 END_TEST
 
@@ -450,13 +360,12 @@ Suite* fatal_error_suite(void) {
     tcase_add_test(tests, test_invalid_error_code);
     tcase_add_test(tests, test_fatal_replays_log_history);
     tcase_add_test_raise_signal(tests, test_sd_startup_failure, SIGABRT);
-    tcase_add_test(tests, test_error_rom_without_keymap);
-    tcase_add_test(tests, test_normal_rom_with_keymap);
-    tcase_add_test(tests, test_fatal_display_preserves_uart);
-    tcase_add_loop_test(tests, test_menu_rom_preserves_physical_holds, 0, 4);
     suite_add_tcase(suite, tests);
     TCase* const formatting = tcase_create("fatal log formatting");
     tcase_add_test(formatting, test_fatal_log_line_capacity);
     suite_add_tcase(suite, formatting);
+    TCase* const display = tcase_create("fatal display");
+    tcase_add_loop_test(display, test_fatal_display_preserves_uart_and_recovers_console_audio, 0, 2);
+    suite_add_tcase(suite, display);
     return suite;
 }

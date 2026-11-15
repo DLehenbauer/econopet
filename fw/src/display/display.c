@@ -29,6 +29,7 @@ static const uint screen_height = 25;
 bool display_term_video_active(void) {
     return system_state.terminal_session == terminal_session_remote;
 }
+
 void display_init(void) {
     video_init();
 }

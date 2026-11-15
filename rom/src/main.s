@@ -1,11 +1,17 @@
+; SPDX-License-Identifier: CC0-1.0
+; https://github.com/dlehenbauer/econopet
+
 .include  "pet.inc"
+
+DIAGNOSTIC_COMPLETION := $0200
+DIAGNOSTIC_DONE       := $A5
 
 .segment "CODE"
 
 ; Jump table for reset vector at $FF00 - each entry is 3 bytes (JMP instruction).
 ; The firmware selects the boot tune by writing $FF00 + (entry * 3) to the reset vector.
 reset_vector_table:
-        JMP reset_silence       ; Entry 0: Normal boot ($FF00)
+        JMP reset_happy         ; Entry 0: Normal boot ($FF00)
         JMP reset_uhoh          ; Entry 1: Error boot ($FF03)
 
 ; PIA1 and PIA2 declarations haven't yet been picked up by Ubuntu 'cc65' package.
@@ -187,65 +193,26 @@ notes:
         .byte $00
 .endproc
 
-.proc keyscan    
-    start:
-        ; Original keyscan resets these on each interrupt.  Probably unnecessary.
-        LDA #$3C
-        STA PIA1_PACTL
-        LDA #$3D
-        STA PIA1_PBCTL
-        LDY #$09            ; Start on keyboard row 9
-
-    keyscan_loop:
-        STY PIA1_PORTA      ; Select row
-
-        ; Busy wait to give PIA1 an opportunity to detect new input.  The delay below is
-        ; approximately the same number of cycles that the original keyscan routine used
-        ; to check bits in the currently selected row.
-
-        LDX #$16            ; Load X
-    inner_loop:
-        DEX                 ; 2 cycles
-        BNE inner_loop      ; 3 cycles if taken, 2 cycles if not
-
-debounce:
-        LDA PIA1_PORTB      ; Read pressed keys in current row
-        CMP PIA1_PORTB      ; Compare with previous value
-        BNE debounce        ; If not equal, wait for stable state
-
-        DEY                 ; Move to next row (descending)
-        BMI start           ; If Y < 0, wrap around to row 9.
-        BPL keyscan_loop    ; Continue scanning
+.proc diagnostic_done
+        LDA #DIAGNOSTIC_DONE
+        STA DIAGNOSTIC_COMPLETION
+    idle:
+        JMP idle
 .endproc
 
 .proc reset_uhoh
         JSR init_io
         JSR play_uhoh_tune
-        JMP keyscan
+        JMP diagnostic_done
 .endproc
 
-.proc reset_silence
+.proc reset_happy
         JSR init_io
-        JMP keyscan
+        JSR play_happy_tune
+        JMP diagnostic_done
 .endproc
 
-; The firmware requests this diagnostic only for the power-on configuration picker.
-.proc nmi_happy
-        ; Save processor state
-        PHA             ; Save accumulator
-        TXA
-        PHA             ; Save X register
-        TYA
-        PHA             ; Save Y register
-
-        JSR play_happy_tune
-
-        ; Restore processor state
-        PLA
-        TAY             ; Restore Y register
-        PLA
-        TAX             ; Restore X register
-        PLA             ; Restore accumulator
+.proc nmi_handler
         RTI
 .endproc
 
@@ -256,6 +223,6 @@ debounce:
 .segment "VECTORS"      ; $FFFA-$FFFF
 
 vectors:
-    .word nmi_happy            ; NMI vector (low byte at $FFFA, high byte at $FFFB)
+    .word nmi_handler          ; NMI vector (low byte at $FFFA, high byte at $FFFB)
     .word reset_vector_table  ; Reset vector (low byte at $FFFC, high byte at $FFFD)
     .word irq_handler         ; IRQ/BRK vector (low byte at $FFFE, high byte at $FFFF)

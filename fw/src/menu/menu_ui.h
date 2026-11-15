@@ -14,15 +14,31 @@
 #define MENU_UI_PAGE_ROWS MENU_BROWSER_PAGE_ROWS
 #define MENU_UI_DRIVE_SLOT_COUNT (DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT)
 
+/** The session owner, not the UI, performs the selected machine transition. */
+typedef enum {
+    MENU_EXIT_RESUME,
+    MENU_EXIT_RESET,
+    MENU_EXIT_LOAD_CONFIG,
+} menu_exit_t;
+
+/** One explicit exit decision and its configuration index when loading a machine. */
+typedef struct {
+    menu_exit_t action;
+    int config_index;
+} menu_result_t;
+
+typedef enum {
+    menu_ui_root_dashboard,
+    menu_ui_root_picker,
+} menu_ui_root_t;
+
 typedef struct {
     tui_controller_t controller;
     tui_screen_t dashboard, drives, picker;
     tui_component_t controls[3], drive_controls[2], picker_control;
     int config_index;
-    // The session owner applies the chosen configuration and clears this result.
-    bool config_changed;
+    menu_exit_t exit;
     bool choosing_model;
-    bool is_boot;
     unsigned int slot;
     menu_browser_t browser;
     char error[MENU_UI_WIDTH + 1];
@@ -37,4 +53,4 @@ typedef struct {
 // The service callback keeps menu.rom's display and inputs moving during directory scans.
 void menu_ui_init(menu_ui_t* menu, const window_t* window, void (*service)(void));
 // Starts a session, retaining browser history and opening the boot picker or on-demand root.
-void menu_ui_begin(menu_ui_t* menu, const window_t* window, bool is_boot);
+void menu_ui_begin(menu_ui_t* menu, const window_t* window, menu_ui_root_t root);
