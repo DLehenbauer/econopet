@@ -74,26 +74,31 @@ The `set` action can configure these firmware options:
 | `tape` | ROM-specific bytes | Tells the firmware how to intercept `LOAD` commands for the virtual tape drive. |
 | `cpu` | `physical`, `6502`, `6809`, or `auto` | Selects which CPU drives the bus: the socketed 6502, the soft 6502, the soft 6809 (SuperPET), or auto-detect (physical if populated, else soft 6502). Defaults to `auto`. |
 
-Use the `mount` action to select the images inserted by a configuration.
-`device` is `8` through `11`, `drive` is `0` or `1`, and `file` is the image
-path relative to `/disk`. The path is opened directly; for example, use
-`example.d80` for `/disk/example.d80`:
+### Mounting disk images
+
+Add a `mount` action to a configuration's `setup` list to automatically mount an
+image when that configuration starts:
+
+- `device`: 8 through 11 (defaults to 8)
+- `drive`: 0 or 1 (defaults to 0)
+- `file`: image path relative to `/disk` (for example, `example.d80` for `/disk/example.d80`)
+
+This example mounts two images on device 8, one in each drive:
 
 ```yaml
-      # If not specified, the default device is 8 and the default drive is 0.
+      # Mount on device 8, drive 0 using the defaults.
       - action: "mount"
         file: "example1.d80"
-      # Available devices are 8 through 11.  Each device is a dual-drive unit
-      # with two drives: drive 0 and drive 1.
+      # Mount a second image on device 8, drive 1.
       - action: "mount"
         device: 8
         drive: 1
         file: "example2.d80"
 ```
 
-Mounting an image enables the virtual IEEE-488 drives. Selecting another
-configuration removes the images mounted by the previous configuration and
-disables emulation when no images remain.
+Mounting any image enables the virtual drives and disables access to devices
+connected to the physical IEEE-488 port. Eject all images to re-enable the port.
+See [disk/README.md](disk/README.md) for menu instructions.
 
 [^vram-3]: `video-ram-kb: 3` activates the experimental ColourPET 40-column mode.
 

@@ -8,17 +8,17 @@ For the user manual, firmware updates, and more, visit the [project page](https:
 2. Insert the microSD card into the EconoPET board.
 3. Power on. The firmware will update automatically.
 
-The SD-card layout uses lowercase singular directories:
-
-| Directory | Purpose |
-| --- | --- |
-| `/disk` | Mountable disk images. This is reserved as the future virtual-HDD root, but virtual-HDD and direct-file features are not implemented yet. |
-| `/rom` | System ROM assets |
-| `/prg` | Programs loaded through the virtual datasette |
-
 For detailed instructions, see the [user manual](https://dlehenbauer.github.io/econopet).
 
 ## Changelog
+
+### v0.3.0 (2026-11-16)
+
+- Virtual disk drive support (beta, see `/disk/README.md`)
+- SuperPET support (6809, ACIA, and MMU)
+- Hold *both* Shift keys to open the menu (same as holding the menu button)
+- Fixed horizontal timing for 9-inch CRTs ([#40](https://github.com/DLehenbauer/econopet/issues/40))
+- Fixed compatibility with older SD cards ([#32](https://github.com/DLehenbauer/econopet/issues/32))
 
 ### v0.2.0 (2026-02-22)
 
