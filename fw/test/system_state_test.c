@@ -7,6 +7,7 @@
 #include "hardware_contract.h"
 #include "sd/sd.h"
 #include "system/state.h"
+#include "usb/keymap.h"
 
 // Check independent wire levels and enum encodings.
 START_TEST(test_configuration_pin_levels) {
@@ -28,24 +29,10 @@ START_TEST(test_default_models) {
 }
 END_TEST
 
-// Load the shipped keymap directly and check independent PET matrix coordinates.
-START_TEST(test_packaged_keymap_model_order) {
-    const char* const root = getenv("ECONOPET_TEST_SDCARD_ROOT");
-    ck_assert_ptr_nonnull(root);
-    char path[SD_PATH_MAX];
-    const int length = snprintf(path, sizeof(path), "%s/ukm/us.bin", root);
-    ck_assert_int_ge(length, 0);
-    ck_assert_uint_lt((size_t)length, sizeof(path));
-
-    // Reject partial or extended files before interpreting the packed firmware array.
-    FILE* const file = fopen(path, "rb");
-    ck_assert_ptr_nonnull(file);
+// Restore the embedded keymap and check independent PET matrix coordinates.
+START_TEST(test_embedded_keymap_model_order) {
     system_state_t state = { 0 };
-    ck_assert_uint_eq(fread(state.usb_keymap_data, 1, sizeof(state.usb_keymap_data), file),
-        sizeof(state.usb_keymap_data));
-    ck_assert_int_eq(fgetc(file), EOF);
-    ck_assert_int_eq(ferror(file), 0);
-    ck_assert_int_eq(fclose(file), 0);
+    usb_keymap_reset(&state);
 
     // These keys distinguish both keyboard models and symbolic/positional tables.
     const size_t hid_backspace = 0x2a;
@@ -80,7 +67,7 @@ Suite* system_state_suite(void) {
     TCase* const model = tcase_create("configuration");
     tcase_add_test(model, test_configuration_pin_levels);
     tcase_add_test(model, test_default_models);
-    tcase_add_test(model, test_packaged_keymap_model_order);
+    tcase_add_test(model, test_embedded_keymap_model_order);
     suite_add_tcase(suite, model);
     return suite;
 }

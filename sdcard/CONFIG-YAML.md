@@ -55,7 +55,7 @@ firmware what kind of action to perform:
 
 SD paths have a capacity of 256 bytes including the terminating null, matching
 pico-vfs. The full path may contain at most 255 bytes, including any directory
-prefix. `load` files and `usb-keymap` values are complete paths. `mount` filenames
+prefix. `load` values are complete paths. `mount` filenames
 are relative to `/disk/`, leaving at most 249 bytes for the filename. Overlong
 paths are fatal errors, not truncated filenames.
 
@@ -71,7 +71,6 @@ The `set` action can configure these firmware options:
 | --- | --- | --- |
 | `columns` | `80` or `40` | Selects the screen width. |
 | `video-ram-kb` | `1`, `2`, `3`[^vram-3], `4`, or `8`[^vram-8] | Selects the amount of video RAM. |
-| `usb-keymap` | File name | Names the SD card file containing the USB HID code to PET keyboard matrix mapping. |
 | `tape` | ROM-specific bytes | Tells the firmware how to intercept `LOAD` commands for the virtual tape drive. |
 | `cpu` | `physical`, `6502`, `6809`, or `auto` | Selects which CPU drives the bus: the socketed 6502, the soft 6502, the soft 6809 (SuperPET), or auto-detect (physical if populated, else soft 6502). Defaults to `auto`. |
 
@@ -158,7 +157,6 @@ matters in YAML — line the new `- id:` up with the other `- id:` entries.
           - address: 0x68000
             file: "/rom/CHAR-ROM.bin"   # Custom character ROM
       - action: "set"
-        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "2ef415f4c9cad1d4da"
 ```

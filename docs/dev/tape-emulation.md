@@ -620,18 +620,17 @@ configs:
       - action: "load"
         # ... ROM files ...
       - action: "set"
-        usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
         tape: "2ef415f4c9cad1d4da"
 ```
 
 Pre-computed blobs for each ROM version:
 
-| ROM Version | Hex Blob (9 bytes)               |
-|-------------|----------------------------------|
-| ROM 4.0     | `2ef415f4c9cad1d4da`           |
-| ROM 2.0     | `eff3d6f3c9cad1d4da`           |
-| ROM 1.0     | `e5f362f3e5e6eef1f9`           |
+| ROM Version | Hex Blob (9 bytes)   |
+|-------------|----------------------|
+| ROM 4.0     | `2ef415f4c9cad1d4da` |
+| ROM 2.0     | `eff3d6f3c9cad1d4da` |
+| ROM 1.0     | `e5f362f3e5e6eef1f9` |
 
 When the `tape` key is present, the firmware casts the decoded bytes to
 `tape_config_t` and enables the virtual tape drive. When absent, the virtual

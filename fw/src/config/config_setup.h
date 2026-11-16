@@ -18,7 +18,6 @@ typedef struct binary_s {
 typedef struct options_s {
     uint32_t columns;               // Number of columns (default: 40)
     uint32_t video_ram_mask;        // Video RAM mask (0-3, default: 0 = 1KB)
-    char usb_keymap[SD_PATH_MAX];   // USB keymap file path (empty = use default)
     tape_config_t tape;             // Virtual tape config blob (all zeros = disabled)
     bool tape_enabled;              // True if 'tape' key was present in config.yaml
     uint8_t cpu;                    // cpu_type_t (driver.h); CPU_AUTO if the
