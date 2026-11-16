@@ -88,6 +88,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/ui/tui.c
     ${FW_SRC_DIR}/usb/hid_app.c
     ${FW_SRC_DIR}/usb/keyboard.c
+    ${FW_SRC_DIR}/usb/keymap.c
     ${FW_SRC_DIR}/usb/keyscan.c
     ${FW_SRC_DIR}/usb/keystate.c
     ${FW_SRC_DIR}/usb/msc_app.c
@@ -197,6 +198,12 @@ add_rom_header(${FW_EXECUTABLE_NAME}
 add_rom_header(${FW_EXECUTABLE_NAME}
     ${ECONOPET_ROM_BIN_DIR}/menu.rom
     ${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h
+)
+
+# Embed the built-in USB keyboard map in firmware flash.
+add_rom_header(${FW_EXECUTABLE_NAME}
+    ${FW_SRC_DIR}/usb/us.ukm
+    ${CMAKE_CURRENT_BINARY_DIR}/usb/us_keymap.h
 )
 
 # Generate version header in build directory

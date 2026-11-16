@@ -52,7 +52,6 @@ class SdcardBuildTests(unittest.TestCase):
                 source / "sdcard/README.md": "README.md",
                 source / "NOTICE.md": "NOTICE.md",
                 source / "sdcard/prg/README.md": "prg/README.md",
-                source / "sdcard/ukm/us.bin": "ukm/us.bin",
                 media / "rom/basic.bin": "rom/basic.bin",
                 media / "disk/test.d64": "disk/test.d64",
                 roms / "edit.bin": "rom/edit.bin",
@@ -63,8 +62,6 @@ class SdcardBuildTests(unittest.TestCase):
             stale.write_bytes(b"remove me")
             removed_rom = roms / "removed.bin"
             removed_rom.write_bytes(b"remove me")
-            removed_keymap = source / "sdcard/ukm/removed.bin"
-            removed_keymap.write_bytes(b"remove me")
             configure = ["cmake", "-S", str(source / "sdcard"), "-B", str(build / "sdcard"),
                          "-G", "Ninja", f"-DECONOPET_MEDIA_DIR={media}",
                          f"-DFIRMWARE_UF2={firmware}", f"-DFPGA_BITSTREAM={fpga}"]
@@ -82,7 +79,6 @@ class SdcardBuildTests(unittest.TestCase):
                 shutil.copystat(firmware, path)
             stale.unlink()
             removed_rom.unlink()
-            removed_keymap.unlink()
             (roms / "late.bin").write_bytes(b"late")
             (roms / "menu.rom").write_bytes(b"not packaged")
             (media / "rom/edit.bin").write_bytes(b"bad")
@@ -101,7 +97,6 @@ class SdcardBuildTests(unittest.TestCase):
                 self.assertEqual(contents[relative], b"new", relative)
             self.assertNotIn("disk/removed.d64", contents)
             self.assertNotIn("rom/removed.bin", contents)
-            self.assertNotIn("ukm/removed.bin", contents)
             self.assertEqual(contents["rom/late.bin"], b"late")
             self.assertNotIn("rom/menu.rom", contents)
             self.assertFalse(any(name.startswith("fpga/") for name in contents))

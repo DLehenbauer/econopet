@@ -29,7 +29,6 @@
 
 enum test_path_kind {
     TEST_PATH_LOAD,
-    TEST_PATH_KEYMAP,
     TEST_PATH_MOUNT,
     TEST_PATH_KIND_COUNT,
 };
@@ -64,7 +63,6 @@ typedef struct test_context_s {
     char last_mount_file[SD_PATH_MAX];
     uint32_t last_columns;
     uint32_t last_video_ram_mask;
-    char last_usb_keymap[sizeof(((options_t*) 0)->usb_keymap)];
     tape_config_t last_tape;
     bool last_tape_enabled;
     uint32_t last_checksum_start;
@@ -162,8 +160,6 @@ static void test_on_set_options(void* context, options_t* options) {
     ctx->set_options_count++;
     ctx->last_columns = options->columns;
     ctx->last_video_ram_mask = options->video_ram_mask;
-    strncpy(ctx->last_usb_keymap, options->usb_keymap, sizeof(ctx->last_usb_keymap) - 1);
-    ctx->last_usb_keymap[sizeof(ctx->last_usb_keymap) - 1] = '\0';
     ctx->last_tape = options->tape;
     ctx->last_tape_enabled = options->tape_enabled;
 }
@@ -526,26 +522,6 @@ START_TEST(test_parse_set_columns_and_video_ram) {
     ck_assert_int_eq(test_ctx.set_options_count, 1);
     ck_assert_int_eq(test_ctx.last_columns, pet_display_columns_80);
     ck_assert_int_eq(test_ctx.last_video_ram_mask, pet_video_ram_mask_2kb);
-}
-END_TEST
-
-// Test: Parse config with usb-keymap in set action
-START_TEST(test_parse_set_keymap_action) {
-    // Register a custom USB keyboard-map filename.
-    const char* yaml_content = 
-        "configs:\n"
-        "  - name: Set Keymap Test\n"
-        "    setup:\n"
-        "      - action: set\n"
-        "        usb-keymap: custom_keymap.bin\n";
-    
-    test_register_file("/config.yaml", yaml_content);
-    
-    // Execute the fixture and inspect the retained filename.
-    parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
-    
-    ck_assert_int_eq(test_ctx.set_options_count, 1);
-    ck_assert_str_eq(test_ctx.last_usb_keymap, "custom_keymap.bin");
 }
 END_TEST
 
@@ -1147,7 +1123,6 @@ static const char* const expected_sd_prefixes[SD_DIR_COUNT] = {
     [SD_DIR_DISK] = "/disk/",
     [SD_DIR_ROM] = "/rom/",
     [SD_DIR_PRG] = "/prg/",
-    [SD_DIR_UKM] = "/ukm/",
 };
 
 // Checks the SD layout independently of the production prefix lookup.
@@ -1219,13 +1194,6 @@ static void register_boundary_path(enum test_path_kind kind, bool oversized,
                      "          - file: '%s'\n"
                      "            address: 0xC000\n";
             break;
-        case TEST_PATH_KEYMAP:
-            format = "configs:\n"
-                     "  - name: Boundary\n"
-                     "    setup:\n"
-                     "      - action: set\n"
-                     "        usb-keymap: '%s'\n";
-            break;
         case TEST_PATH_MOUNT:
             format = "configs:\n"
                      "  - name: Boundary\n"
@@ -1250,7 +1218,6 @@ START_TEST(test_parse_maximum_sd_path) {
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
     switch (_i) {
         case TEST_PATH_LOAD: ck_assert_str_eq(test_ctx.last_load_file, path); break;
-        case TEST_PATH_KEYMAP: ck_assert_str_eq(test_ctx.last_usb_keymap, path); break;
         case TEST_PATH_MOUNT: ck_assert_str_eq(test_ctx.last_mount_file, path); break;
         default: ck_abort_msg("invalid boundary path kind");
     }
@@ -1475,7 +1442,6 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_set_video_ram_3kb);
     tcase_add_test(tc_core, test_parse_set_video_ram_4kb);
     tcase_add_test(tc_core, test_parse_set_columns_and_video_ram);
-    tcase_add_test(tc_core, test_parse_set_keymap_action);
     tcase_add_test(tc_core, test_parse_fix_checksum_action);
     tcase_add_test(tc_core, test_parse_multiple_configs_select_second);
     tcase_add_test(tc_core, test_parse_conditional_graphics);
