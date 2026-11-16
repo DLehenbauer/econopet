@@ -22,8 +22,8 @@ if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
 endif()
 message(STATUS "ECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}")
 
-# ROMs always live in the roms subdirectory of the media tree.
-set(ECONOPET_ROMS_DIR "${ECONOPET_MEDIA_DIR}/roms")
+# ROMs always live in the rom/ subdirectory of the media tree.
+set(ECONOPET_ROMS_DIR "${ECONOPET_MEDIA_DIR}/rom")
 message(STATUS "ECONOPET_ROMS_DIR=${ECONOPET_ROMS_DIR}")
 
 # Determine if we should build all subprojects or specific ones

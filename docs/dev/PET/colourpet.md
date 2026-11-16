@@ -20,7 +20,7 @@ Run `cmake --preset default`, then `cmake --build --preset rom`.
 The outputs are `build/rom/bin/colourpet-n40.bin` (graphics keyboard) and
 `build/rom/bin/colourpet-b40.bin` (business keyboard), both 40-column RGBI ROMs
 with the upper/graphics font selected at startup. SD card packaging includes
-these binaries under `roms/`.
+these binaries under `rom/`.
 
 ## Modes and Formats
 - **Digital mode (RGBI, 16 colours):**

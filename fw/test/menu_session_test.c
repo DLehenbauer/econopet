@@ -204,7 +204,7 @@ START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_ac
     mock_cpu_set_state_observer(observe_reset);
     mock_input_set_reader(request_exit);
     uint8_t* const image = diskimage_test_make_d64();
-    test_register_binary_file("/disks/live.d64", image, DISKIMAGE_D64_SIZE, false);
+    test_register_binary_file("/disk/live.d64", image, DISKIMAGE_D64_SIZE, false);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(0, "live.d64", NULL), DOS_MEDIA_OK);
     __real_menu_enter();

@@ -49,14 +49,14 @@ firmware what kind of action to perform:
 | `load` | Copies a list of binary files from the SD card to memory addresses. This is used to initialize ROMs. |
 | `patch` | Overwrites a range of bytes in memory with a hex string. This is used to overlay patches over ROMs. |
 | `copy` | Copies a range of bytes in memory from one address to another. This is also used for patching ROMs. |
-| `mount` | Inserts a disk image from `/disks` into an IEEE drive slot. |
+| `mount` | Inserts a disk image from `/disk` into an IEEE drive slot. |
 | `fix-checksum` | Modifies the byte at the target address so memory matches the desired Commodore checksum after patching. |
 | `set` | Configures firmware options. |
 
 SD paths have a capacity of 256 bytes including the terminating null, matching
 pico-vfs. The full path may contain at most 255 bytes, including any directory
 prefix. `load` files and `usb-keymap` values are complete paths. `mount` filenames
-are relative to `/disks/`, leaving at most 248 bytes for the filename. Overlong
+are relative to `/disk/`, leaving at most 249 bytes for the filename. Overlong
 paths are fatal errors, not truncated filenames.
 
 Setup lists may also contain `if` / `then` / `else` entries. These are used when
@@ -77,8 +77,8 @@ The `set` action can configure these firmware options:
 
 Use the `mount` action to select the images inserted by a configuration.
 `device` is `8` through `11`, `drive` is `0` or `1`, and `file` is the image
-path relative to `/disks`. The path is opened directly; for example, use
-`example.d80` for `/disks/example.d80`:
+path relative to `/disk`. The path is opened directly; for example, use
+`example.d80` for `/disk/example.d80`:
 
 ```yaml
       # If not specified, the default device is 8 and the default drive is 0.
@@ -120,10 +120,10 @@ Firmware updates overwrite `config.yaml`, so make a copy before editing:
 ### 2. Copy the custom character ROM onto the SD card
 
 Place the custom character ROM from the PETSCII Robots download onto the SD
-card under `/roms/`. For this example we'll assume the file is named:
+card under `/rom/`. For this example we'll assume the file is named:
 
 ```
-/roms/CHAR-ROM.bin
+/rom/CHAR-ROM.bin
 ```
 
 ### 3. Pick an existing configuration to base the new entry on
@@ -146,17 +146,17 @@ matters in YAML — line the new `- id:` up with the other `- id:` entries.
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/edit-4-40-n-60Hz.901499-01.bin"
+            file: "/rom/edit-4-40-n-60Hz.901499-01.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/CHAR-ROM.bin"   # Custom character ROM
+            file: "/rom/CHAR-ROM.bin"   # Custom character ROM
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1

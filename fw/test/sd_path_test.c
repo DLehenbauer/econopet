@@ -83,9 +83,9 @@ static void setup(void) {
     const MKFS_PARM options = {.fmt = FM_FAT | FM_SFD};
     ck_assert_int_eq(f_mkfs("", &options, work, sizeof(work)), FR_OK);
     ck_assert_int_eq(f_mount(&filesystem, "", 1), FR_OK);
-    ck_assert_int_eq(f_mkdir("/disks"), FR_OK);
-    ck_assert_int_eq(f_mkdir("/disks/Long Directory"), FR_OK);
-    ck_assert_int_eq(f_mkdir("/roms"), FR_OK);
+    ck_assert_int_eq(f_mkdir("/disk"), FR_OK);
+    ck_assert_int_eq(f_mkdir("/disk/Long Directory"), FR_OK);
+    ck_assert_int_eq(f_mkdir("/rom"), FR_OK);
 }
 
 // Releases the volume before the next case reformats its card.
@@ -100,15 +100,15 @@ static void create_file(const char* path) {
 
 // Directory aliases, leaf aliases, and trimmed suffixes resolve to the same stored spelling.
 START_TEST(test_resolves_fatfs_aliases) {
-    const char* const canonical = "/disks/Long Directory/Disk Image.d64";
+    const char* const canonical = "/disk/Long Directory/Disk Image.d64";
     create_file(canonical);
     FILINFO parent, leaf;
-    ck_assert_int_eq(f_stat("/disks/Long Directory", &parent), FR_OK);
+    ck_assert_int_eq(f_stat("/disk/Long Directory", &parent), FR_OK);
     ck_assert_int_eq(f_stat(canonical, &leaf), FR_OK);
     ck_assert_str_ne(parent.altname, "");
     ck_assert_str_ne(leaf.altname, "");
     char path[SD_PATH_MAX];
-    snprintf(path, sizeof(path), "/DISKS/%s/%s", parent.altname, leaf.altname);
+    snprintf(path, sizeof(path), "/DISK/%s/%s", parent.altname, leaf.altname);
     ck_assert(sd_resolve_path(path));
     ck_assert_str_eq(path, canonical);
     snprintf(path, sizeof(path), "%s. ", canonical);
@@ -119,9 +119,9 @@ END_TEST
 
 // FatFs accepts these spellings, but the slash-delimited host contract must reject them.
 START_TEST(test_rejects_alternate_separators_and_terminators) {
-    create_file("/roms/outside.d64");
-    create_file("/disks/disk.d64");
-    const char* const aliases[] = {"/disks/..\\roms\\outside.d64", "/disks\\disk.d64", "/disks/disk.d64\rignored"};
+    create_file("/rom/outside.d64");
+    create_file("/disk/disk.d64");
+    const char* const aliases[] = {"/disk/..\\rom\\outside.d64", "/disk\\disk.d64", "/disk/disk.d64\rignored"};
     for (size_t index = 0; index < count_of(aliases); ++index) {
         FILINFO info;
         ck_assert_int_eq(f_stat(aliases[index], &info), FR_OK);
@@ -134,7 +134,7 @@ END_TEST
 
 // A CP932 backslash trail is a filename byte, not an alternate directory separator.
 START_TEST(test_preserves_cp932_filename_bytes) {
-    const char* const canonical = "/disks/\x81\x5c.d64";
+    const char* const canonical = "/disk/\x81\x5c.d64";
     create_file(canonical);
     char path[SD_PATH_MAX];
     strcpy(path, canonical);
@@ -149,7 +149,7 @@ START_TEST(test_rejects_expanded_path_overflow) {
     memset(name, 'a', sizeof(name) - 1);
     name[sizeof(name) - 1] = '\0';
     char parent[SD_PATH_MAX];
-    snprintf(parent, sizeof(parent), "/disks/%s", name);
+    snprintf(parent, sizeof(parent), "/disk/%s", name);
     ck_assert_int_eq(f_mkdir(parent), FR_OK);
     FILINFO first;
     ck_assert_int_eq(f_stat(parent, &first), FR_OK);
@@ -162,7 +162,7 @@ START_TEST(test_rejects_expanded_path_overflow) {
     snprintf(filename, sizeof(filename), "%s/disk.d64", child);
     create_file(filename);
     char path[SD_PATH_MAX];
-    snprintf(path, sizeof(path), "/disks/%s/%s/disk.d64", first.altname, second.altname);
+    snprintf(path, sizeof(path), "/disk/%s/%s/disk.d64", first.altname, second.altname);
     ck_assert(!sd_resolve_path(path));
 }
 END_TEST

@@ -19,13 +19,13 @@ LOADING message and returns to the BASIC ready prompt.
    resumes the KERNAL (fall through to physical datasette). If the filename is
    `$`, the MCU generates a directory listing instead (see the Directory
    Listing section below)
-6. MCU searches `/sd/prgs/` for a matching `.prg` file
+6. MCU searches `/sd/prg/` for a matching `.prg` file
 7. If found:
    - MCU copies the PRG data into SRAM at the load address from the PRG file
    - MCU sets EAL/EAH to the end address
    - MCU saves the existing tape buffer contents (for later restoration)
    - MCU writes a stub to the tape buffer that prints
-     `FOUND "/SD/PRGS/FILENAME.PRG"` then jumps to the KERNAL's LD210
+     `FOUND "/SD/PRG/FILENAME.PRG"` then jumps to the KERNAL's LD210
      routine, which prints "READY.", sets VARTAB, relinks BASIC lines,
      clears variables, and enters the main loop
    - When the stub's `JMP LD210` fires a second breakpoint at LD210, the
@@ -147,7 +147,7 @@ filename[fnlen] = '\0';
 
 ### Step 2: Search SD Card
 
-Search `/sd/prgs/` for a file matching the requested name. Support the `*`
+Search `/sd/prg/` for a file matching the requested name. Support the `*`
 wildcard for prefix matching:
 
 - `LOAD "*"` or `LOAD ""` - fall through to physical datasette
@@ -240,7 +240,7 @@ are `JMP ld210` built at runtime from `cfg.ld210`. The message string
 starts at byte 16, for example:
 
 ```
-FOUND /PRGS/GAME.PRG\rLOADING
+FOUND /PRG/GAME.PRG\rLOADING
 ```
 
 The `\r` ($0D, carriage return) moves the cursor to the next line. LD210
@@ -321,7 +321,7 @@ static bp_result_t tape_load_callback(uint16_t pc, void* context) {
         bp_set(state.cfg.ld210, tape_ld210_callback, NULL);
 
         uint8_t buf[192];
-        tape_build_stub(buf, path);     // e.g. "/prgs/game.prg"
+        tape_build_stub(buf, path);     // e.g. "/prg/game.prg"
         uint8_t total = PRINT_LOOP_SIZE + JMP_SIZE + msg_len;
         spi_write(TAPE_BUFFER, buf, total);
         return (bp_result_t){ .pc = TAPE_BUFFER, .rearm = true };
@@ -389,7 +389,7 @@ bool match_filename(const char* pattern, uint8_t pattern_len,
 ## Directory Listing (`LOAD "$"`)
 
 `LOAD "$"` is special-cased to synthesize a directory listing of the loadable
-`.prg` files in `/sd/prgs/`. Listing the directory with `LOAD "$"` is a
+`.prg` files in `/sd/prg/`. Listing the directory with `LOAD "$"` is a
 convenience borrowed from Commodore DOS (the virtual tape drive does not
 otherwise emulate a disk drive). After the load completes, the user types `LIST`
 to view it.
@@ -564,7 +564,7 @@ void tape_deinit(void);     // Remove breakpoint
 
 ### Integration Tests
 
-1. **Basic load**: `LOAD "TEST"` loads `/sd/prgs/test.prg`
+1. **Basic load**: `LOAD "TEST"` loads `/sd/prg/test.prg`
 2. **Empty name**: `LOAD`, `LOAD ""`, and `LOAD "*"` falls through to physical datasette
 3. **Prefix match**: `LOAD "GA*"` loads "game.prg"
 4. **No match**: `LOAD "NOEXIST"` falls through to tape polling
@@ -573,7 +573,7 @@ void tape_deinit(void);     // Remove breakpoint
 
 ### Manual Testing
 
-1. Copy test PRG files to `/sd/prgs/`
+1. Copy test PRG files to `/sd/prg/`
 2. Boot PET, type `LOAD "filename"`
 3. Verify program loads and `LIST` shows correct line numbers
 4. Run program to verify execution
@@ -645,7 +645,7 @@ auto-detection. Custom or patched ROMs can supply their own blob.
 - Only supports `.prg` files (not `.tap` tape images)
 - No VERIFY support (would require different interception point)
 - No SAVE support (separate feature)
-- Single directory (`/sd/prgs/`) - no subdirectory navigation
+- Single directory (`/sd/prg/`) - no subdirectory navigation
 - `LOAD "$"` lists at most `MAX_DIR_ENTRIES` (144) files; only the plain `$`
   form is recognized (no `$0`, `$:pattern`, etc.)
 

@@ -148,7 +148,7 @@ static void test_on_mount(void* context, uint32_t device, uint32_t drive, const 
     if (mounted_image_root != NULL) {
         char image_path[PATH_MAX];
         snprintf(image_path, sizeof(image_path), "%s%s%s", mounted_image_root,
-                 sd_dir_prefix(SD_DIR_DISKS), filename);
+                 sd_dir_prefix(SD_DIR_DISK), filename);
         FILE* image = fopen(image_path, "rb");
         ck_assert_msg(image != NULL,
                       "Configured IEEE image '%s' is missing", image_path);
@@ -246,7 +246,7 @@ static void mount_loader_image(unsigned int slot, diskimage_type_t type, const c
         memset(image + DISKIMAGE_D80_SIZE, 0, DISKIMAGE_D80_SIZE);
     }
     char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, name);
+    sd_make_path(path, SD_DIR_DISK, name);
     test_register_binary_file(path, image, sizes[type], false);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
@@ -1144,9 +1144,9 @@ END_TEST
 static const char* const expected_sd_prefixes[SD_DIR_COUNT] = {
     [SD_DIR_NONE] = "",
     [SD_DIR_ROOT] = "/",
-    [SD_DIR_DISKS] = "/disks/",
-    [SD_DIR_ROMS] = "/roms/",
-    [SD_DIR_PRGS] = "/prgs/",
+    [SD_DIR_DISK] = "/disk/",
+    [SD_DIR_ROM] = "/rom/",
+    [SD_DIR_PRG] = "/prg/",
     [SD_DIR_UKM] = "/ukm/",
 };
 
@@ -1201,7 +1201,7 @@ END_TEST
 static void register_boundary_path(enum test_path_kind kind, bool oversized,
                                    char* path) {
     const sd_dir_t directory = kind == TEST_PATH_MOUNT
-        ? SD_DIR_DISKS : SD_DIR_NONE;
+        ? SD_DIR_DISK : SD_DIR_NONE;
     const size_t capacity = SD_PATH_MAX - strlen(sd_dir_prefix(directory));
     const size_t length = capacity - 1 + oversized;
     memset(path, 'a', length);

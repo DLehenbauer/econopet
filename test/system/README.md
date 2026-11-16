@@ -71,7 +71,7 @@ ctest --preset sys -N
 ```
 
 Set `ECONOPET_MEDIA_DIR` before configuring. ROM cases require legally
-supplied images under its `roms/` directory. Historical `DISABLED_` cases stay
+supplied images under its `rom/` directory. Historical `DISABLED_` cases stay
 excluded. Root CTest loads the separate system build's registrations at test
 discovery time, so individual `system.*`, `firmware.*`, and `board.*` cases share
 one scheduler with the other root tests. The `sys` preset selects these cases by

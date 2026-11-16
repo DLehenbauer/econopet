@@ -258,7 +258,7 @@ module mock_sram #(
         int file, status;
 
     `ifndef ECONOPET_ROMS_DIR
-        $fatal(1, "ECONOPET_ROMS_DIR not defined. Specify the ROM directory with -DECONOPET_ROMS_DIR=\"/path/to/roms\" on the Verilog compiler command line.");
+        $fatal(1, "ECONOPET_ROMS_DIR not defined. Specify the ROM directory with -DECONOPET_ROMS_DIR=\"/path/to/rom\" on the Verilog compiler command line.");
     `endif
         file = $fopen({ `ECONOPET_ROMS_DIR, "/", filename }, "rb");
         if (file == 0) begin

@@ -24,14 +24,14 @@ bool unknown_entry_types;
 unsigned int directory_scans, metadata_reads;
 static unsigned int service_count;
 static const char* const invalid_paths[] = {
-    "/disks/..", "/disks/.", "/disks//child", "/disks-other", "/tmp", "/disks/outside/child",
+    "/disk/..", "/disk/.", "/disk//child", "/disk-other", "/tmp", "/disk/outside/child",
 };
 
 DIR* __real_opendir(const char* path);
 int __real_lstat(const char* path, struct stat* status);
 struct dirent* __real_readdir(DIR* dir);
 
-// Redirects only /disks paths to this test's private temporary directory.
+// Redirects only /disk paths to this test's private temporary directory.
 static const char* fixture_path(const char* path, char output[PATH_MAX]) {
     const size_t root_length = strlen(MENU_BROWSER_ROOT);
     if (directory_root[0] == '\0' || strncmp(path, MENU_BROWSER_ROOT, root_length) != 0
@@ -154,7 +154,7 @@ START_TEST(test_browser_without_ui) {
     bool directory;
     ck_assert(menu_browser_resolve(&browser, index, path, &directory));
     ck_assert(!directory);
-    ck_assert_str_eq(path, "/disks/disk64.d64");
+    ck_assert_str_eq(path, "/disk/disk64.d64");
     ck_assert(menu_browser_find(&browser, "folder", true, &index));
     ck_assert(menu_browser_resolve(&browser, index, path, &directory));
     ck_assert(directory);

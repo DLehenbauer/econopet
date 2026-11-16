@@ -737,8 +737,8 @@ class System {
         require_mutable_access();
         const char* media = std::getenv("ECONOPET_MEDIA_DIR");
         if (!media || !*media)
-            throw failure<std::runtime_error>("ROM directory", "ECONOPET_MEDIA_DIR must contain roms/");
-        load_rom_set(set, std::filesystem::path(media) / "roms", overlap);
+            throw failure<std::runtime_error>("ROM directory", "ECONOPET_MEDIA_DIR must contain rom/");
+        load_rom_set(set, std::filesystem::path(media) / "rom", overlap);
     }
     // Commit revision metadata only after all declared images install successfully.
     void load_rom_set(RomSet set, const std::filesystem::path& directory,

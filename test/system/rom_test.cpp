@@ -244,10 +244,10 @@ TEST_F(SystemTest, RomMediaDirectoryResolvesOnlyWhenRequested) {
         EXPECT_EQ(sram_image(system), before);
         EXPECT_EQ(system.time(), start);
     }
-    std::filesystem::create_directory(first.directory / "roms");
-    std::filesystem::create_directory(second.directory / "roms");
-    first.write_set(System::RomSet::Upgrade, Marker, "roms");
-    second.write_set(System::RomSet::Rom4, OtherMarker, "roms");
+    std::filesystem::create_directory(first.directory / "rom");
+    std::filesystem::create_directory(second.directory / "rom");
+    first.write_set(System::RomSet::Upgrade, Marker, "rom");
+    second.write_set(System::RomSet::Rom4, OtherMarker, "rom");
     environment.set(first.directory.c_str());
     system.load_rom_set(System::RomSet::Upgrade);
     EXPECT_EQ(system.peek(SramAddress{0xc000}), Marker);

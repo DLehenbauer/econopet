@@ -8,7 +8,7 @@
 #include "ieee/dos_media.h"
 
 // IEEE-488 disk-drive emulation (devices 8 through 11, two drives each),
-// backed by Commodore disk images in /disks on the SD card. Slots 0-7 map to
+// backed by Commodore disk images in /disk on the SD card. Slots 0-7 map to
 // (device - 8) * 2 + drive.
 //
 // The FPGA (ieee.sv) runs the bus handshake and exposes byte FIFOs over
@@ -39,7 +39,7 @@ bool ieee_drive_unmount_all(void);
 void ieee_drive_abort(void);
 #endif
 
-// Borrows a slot's canonical disks-relative name, or "" if empty. A successful mount,
+// Borrows a slot's canonical disk/-relative name, or "" if empty. A successful mount,
 // unmount, or abort can invalidate the contents. Rejected mounts retain the name.
 const char* ieee_drive_filename(unsigned int slot);
 
@@ -49,15 +49,15 @@ typedef struct {
     diskimage_type_t ejected_partner;
 } ieee_drive_mount_outcome_t;
 
-// Mounts a path relative to /disks into a slot (0-7), or removes it for NULL.
+// Mounts a path relative to /disk into a slot (0-7), or removes it for NULL.
 // A successful mount moves an already-mounted image and ejects an incompatible
 // destination partner. Failure retains all bindings in the affected units.
 // Busy transport or pending work returns DOS_MEDIA_BUSY.
 // Busy rejection does not finalize units or discard their staged output.
 // Moves and same-slot remounts reuse the existing storage handle.
-// Names are normalized and must remain inside /disks.
+// Names are normalized and must remain inside /disk.
 // If non-NULL, outcome receives successful effects and is unchanged on failure.
-// A full /disks/ path exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
+// A full /disk/ path exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
 dos_media_result_t ieee_drive_try_mount(unsigned int slot, const char* filename, ieee_drive_mount_outcome_t* outcome);
 
 // Services the fabric FIFOs; call every main-loop pass.

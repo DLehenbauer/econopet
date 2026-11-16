@@ -181,7 +181,7 @@ TEST_F(SystemTest, DirtyWriterTeardownExceptionDetachesStorageWithoutSpi) {
             }
         }
         ASSERT_EQ(test_open_file_count(), 0u);
-        EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+        EXPECT_FALSE(test_file_registered("/disk/test.d64"));
         System other;
         FirmwareSession replacement(other);
         replacement.mount(D64::empty());

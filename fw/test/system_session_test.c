@@ -195,7 +195,7 @@ END_TEST
 START_TEST(test_configuration_preserves_staged_get_until_unmount) {
     prepare_guest();
     uint8_t* const image = diskimage_test_make_d64();
-    test_register_binary_file("/disks/old.d64", image, DISKIMAGE_D64_SIZE, false);
+    test_register_binary_file("/disk/old.d64", image, DISKIMAGE_D64_SIZE, false);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
     const bool status_source = _i != 0;

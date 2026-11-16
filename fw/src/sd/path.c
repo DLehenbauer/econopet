@@ -10,9 +10,9 @@ const char* sd_dir_prefix(sd_dir_t directory) {
     switch (directory) {
         case SD_DIR_NONE: return "";
         case SD_DIR_ROOT: return "/";
-        case SD_DIR_DISKS: return "/disks/";
-        case SD_DIR_ROMS: return "/roms/";
-        case SD_DIR_PRGS: return "/prgs/";
+        case SD_DIR_DISK: return "/disk/";
+        case SD_DIR_ROM: return "/rom/";
+        case SD_DIR_PRG: return "/prg/";
         case SD_DIR_UKM: return "/ukm/";
         default: fatal("invalid SD directory: %d", directory);
     }

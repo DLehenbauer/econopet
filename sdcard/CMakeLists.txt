@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.13.1)
 
 project(sdcard)
 
-# ECONOPET_MEDIA_DIR is required and contains roms/ and disks/.
+# ECONOPET_MEDIA_DIR is required and contains rom/ and disk/.
 if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
     if(DEFINED ENV{ECONOPET_MEDIA_DIR} AND NOT "$ENV{ECONOPET_MEDIA_DIR}" STREQUAL "")
         set(ECONOPET_MEDIA_DIR "$ENV{ECONOPET_MEDIA_DIR}")
@@ -14,7 +14,7 @@ if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
 endif()
 
 if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
-    message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks.")
+    message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set to the directory containing rom and disk.")
 endif()
 
 foreach(required_var FIRMWARE_UF2 FPGA_BITSTREAM BOOTLOADER_UF2)

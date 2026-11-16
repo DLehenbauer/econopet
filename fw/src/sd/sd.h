@@ -17,9 +17,9 @@
 typedef enum {
     SD_DIR_NONE,  // No prefix for an already complete path.
     SD_DIR_ROOT,
-    SD_DIR_DISKS,
-    SD_DIR_ROMS,
-    SD_DIR_PRGS,
+    SD_DIR_DISK,
+    SD_DIR_ROM,
+    SD_DIR_PRG,
     SD_DIR_UKM,
     SD_DIR_COUNT,
 } sd_dir_t;
