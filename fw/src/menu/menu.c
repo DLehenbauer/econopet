@@ -25,6 +25,7 @@
 #include "system/state.h"
 #include "system/system.h"
 #include "tape.h"
+#include "usb/keymap.h"
 #include "usb/keyboard.h"
 
 // When navigating the SD card's file system, this is the maximum number
@@ -171,11 +172,6 @@ void action_set_options(void* context, options_t* options) {
         "Invalid video RAM mask in config (got %" PRIu32 ", expected 0-3)", options->video_ram_mask);
     system_state_set_video_ram_mask(ctx->system_state, (uint8_t) options->video_ram_mask);
 
-    // Load USB keymap if specified
-    if (options->usb_keymap[0] != '\0') {
-        read_keymap(options->usb_keymap, ctx->system_state);
-    }
-
     write_pet_model(ctx->system_state);
 
     tape_init(options->tape_enabled ? &options->tape : NULL);
@@ -200,32 +196,9 @@ void action_mount(void* context, uint32_t device, uint32_t drive, const char* fi
         (unsigned long)device, (unsigned long)drive, filename, (unsigned int)result);
 }
 
-void read_keymap_callback(size_t offset, uint8_t* buffer, size_t bytes_read, void* context) {
-    memcpy(context + offset, buffer, bytes_read);
-}
-
-void read_keymap(const char* filename, system_state_t* config) {
-    // Read the keymap file and store it in the configuration.
-    void* keymap = (void*) config->usb_keymap_data[0];
-    sd_read_file(filename, read_keymap_callback, keymap, sizeof(config->usb_keymap_data));
-    log_debug("USB keymap: '%s'", filename);
-}
-
-void action_set_keymap(void* context, const char* filename) {
-    action_context_t* ctx = (action_context_t*) context;
-    read_keymap(filename, ctx->system_state);
-}
-
-/** Start each configuration with the default before its ordered keymap overrides. */
-static void read_default_keymap(void) {
-    char keymap_path[SD_PATH_MAX];
-    sd_make_path(keymap_path, SD_DIR_UKM, "us.bin");
-    read_keymap(keymap_path, &system_state);
-}
-
 void menu_init(void) {
     read_pet_model(&system_state);
-    read_default_keymap();
+    usb_keymap_reset(&system_state);
 }
 
 static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
@@ -282,7 +255,7 @@ static void apply_config(const int config_index) {
     };
 
     tape_deinit();
-    read_default_keymap();
+    usb_keymap_reset(&system_state);
     load_config(&setup_sink, config_index);
     spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
     system_reset_guest();

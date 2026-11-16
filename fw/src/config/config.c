@@ -586,19 +586,16 @@ static void parse_action_set(parser_t* parser, void* context, size_t context_siz
         .columns = 40,          // Default value
         .video_ram_mask =       // Default value (will be derived from video_ram_kb)
             pet_video_ram_mask_1kb,
-        .usb_keymap = { 0 },    // Default: empty (use default keymap)
         .tape_enabled = false,  // Default: disabled
         .tape = { 0 },
         .cpu = CPU_AUTO,        // Default: physical 6502 if populated, else soft
         .superpet_io = false,   // Default: stock PET machine
     };
-    path_context_t keymap_path = { &options.usb_keymap, SD_DIR_NONE };
     char machine_str[16] = { 0 };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "columns", parse_as_uint32, &options.columns, sizeof(options.columns) },
         { "video-ram-kb", parse_as_uint32, &video_ram_kb, sizeof(video_ram_kb) },
-        { "usb-keymap", parse_as_path, &keymap_path, sizeof(keymap_path) },
         { "tape", parse_as_fixed_hex, &tape_hex, sizeof(tape_hex) },
         { "cpu", parse_as_string, &cpu_str, sizeof(cpu_str) },
         { "machine", parse_as_string, &machine_str, sizeof(machine_str) },

@@ -20,7 +20,6 @@ typedef enum {
     SD_DIR_DISK,
     SD_DIR_ROM,
     SD_DIR_PRG,
-    SD_DIR_UKM,
     SD_DIR_COUNT,
 } sd_dir_t;
 

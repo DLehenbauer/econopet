@@ -68,6 +68,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/ieee/ieee_drive.c
     ${SRC_DIR}/usb/keyscan.c
     ${SRC_DIR}/usb/keyboard.c
+    ${SRC_DIR}/usb/keymap.c
     ${SRC_DIR}/usb/keystate.c
     ${TEST_DIR}/breakpoint_test.c
     ${TEST_DIR}/char_encoding_test.c
@@ -112,6 +113,12 @@ foreach(header 901447_10 menu_rom)
     file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/${header}.h"
         CONTENT "// SPDX-License-Identifier: CC0-1.0\n0x00,\n")
 endforeach()
+
+include(${FW_DIR}/cmake/AddRomHeader.cmake)
+add_rom_header(${PROJECT_NAME}
+    ${SRC_DIR}/usb/us.ukm
+    ${CMAKE_CURRENT_BINARY_DIR}/usb/us_keymap.h
+)
 
 # Link the host test dependencies before enabling fixture-backed stdio.
 target_link_libraries(${PROJECT_NAME}

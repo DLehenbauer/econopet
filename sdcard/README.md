@@ -15,7 +15,6 @@ The SD-card layout uses lowercase singular directories:
 | `/disk` | Mountable disk images. This is reserved as the future virtual-HDD root, but virtual-HDD and direct-file features are not implemented yet. |
 | `/rom` | System ROM assets |
 | `/prg` | Programs loaded through the virtual datasette |
-| `/ukm` | USB keymaps |
 
 For detailed instructions, see the [user manual](https://dlehenbauer.github.io/econopet).
 

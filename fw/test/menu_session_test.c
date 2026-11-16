@@ -22,6 +22,7 @@
 #include "system/state.h"
 #include "system/system.h"
 #include "tape.h"
+#include "usb/keymap.h"
 #include "usb/keyscan.h"
 
 extern void __real_display_task(void);
@@ -32,9 +33,6 @@ static unsigned tape_init_count, tape_deinit_count, reset_count;
 static void setup(void) {
     log_init();
     test_clear_files();
-    uint8_t keymap[sizeof(system_state.usb_keymap_data)];
-    memset(keymap, 0xff, sizeof(keymap));
-    test_register_binary_file("/ukm/us.bin", keymap, sizeof(keymap), false);
 }
 
 static void teardown(void) {
@@ -52,22 +50,6 @@ void tape_init(const tape_config_t* config) {
 void tape_deinit(void) {
     ck_assert(tape_change_expected);
     ++tape_deinit_count;
-}
-
-/** Read fixture-backed keymaps through the production callback contract. */
-void sd_read_file(const char* path, sd_read_callback_t callback, void* context, size_t max_bytes) {
-    FILE* const file = sd_open(path, "r");
-    ck_assert_ptr_nonnull(file);
-    uint8_t buffer[256];
-    size_t offset = 0;
-    size_t length;
-    while (offset < max_bytes &&
-           (length = fread(buffer, 1, MIN(sizeof(buffer), max_bytes - offset), file)) != 0) {
-        callback(offset, buffer, length, context);
-        offset += length;
-    }
-    ck_assert_uint_eq(ferror(file), 0);
-    ck_assert_int_eq(fclose(file), 0);
 }
 
 /** Count actual reset assertions without replacing the production reset lifecycle. */
@@ -132,22 +114,17 @@ static tui_action_t select_boot_configuration(void) {
     return pet_keyboard_ready() ? tui_action_activate : tui_action_none;
 }
 
-/** One-time startup discovers the physical model and fallback USB keymap. */
-START_TEST(test_menu_init_discovers_model_and_default_keymap) {
+/** One-time startup discovers the physical model and restores the embedded USB keymap. */
+START_TEST(test_menu_init_discovers_model_and_embedded_keymap) {
     prepare_guest();
     mock_set_pet_model(pet_keyboard_model_business, pet_video_type_crtc);
-    uint8_t keymap[sizeof(system_state.usb_keymap_data)];
-    memset(keymap, 0xff, sizeof(keymap));
-    keymap[0] = 0x12;
-    test_unregister_file("/ukm/us.bin");
-    test_register_binary_file("/ukm/us.bin", keymap, sizeof(keymap), false);
-
+    memset(system_state.usb_keymap_data, 0, sizeof(system_state.usb_keymap_data));
     menu_init();
 
     ck_assert_int_eq(system_state.pet_keyboard_model, pet_keyboard_model_business);
     ck_assert_int_eq(system_state.pet_video_type, pet_video_type_crtc);
-    ck_assert_uint_eq(system_state.usb_keymap_data[0][0][0].row, 2);
-    ck_assert_uint_eq(system_state.usb_keymap_data[0][0][0].col, 1);
+    ck_assert_uint_eq(system_state.usb_keymap_data[0][0][0x2a].row, 7);
+    ck_assert_uint_eq(system_state.usb_keymap_data[0][0][0x2a].col, 4);
 }
 END_TEST
 
@@ -255,25 +232,21 @@ START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_ac
 }
 END_TEST
 
-/** Configuration activation replaces keymaps, while Resume and Reset preserve them. */
-START_TEST(test_configuration_keymap_defaults_do_not_leak_between_sessions) {
+/** Configuration activation restores the embedded keymap, while Resume and Reset preserve it. */
+START_TEST(test_configuration_restores_embedded_keymap_between_sessions) {
     prepare_guest();
-    uint8_t default_keymap[sizeof(system_state.usb_keymap_data)];
-    uint8_t custom_keymap[sizeof(system_state.usb_keymap_data)];
-    memset(default_keymap, 0x12, sizeof(default_keymap));
-    memset(custom_keymap, 0x34, sizeof(custom_keymap));
-    test_unregister_file("/ukm/us.bin");
-    test_register_binary_file("/ukm/us.bin", default_keymap, sizeof(default_keymap), false);
-    test_register_binary_file("/ukm/custom.bin", custom_keymap, sizeof(custom_keymap), false);
+    system_state_t expected = {0};
+    usb_keymap_reset(&expected);
     test_register_file("/config.yaml",
         "default: custom\nconfigs:\n"
         "  - id: custom\n    name: Custom\n    setup:\n"
-        "      - action: set\n        cpu: 6502\n        usb-keymap: /ukm/custom.bin\n"
+        "      - action: set\n        cpu: 6502\n"
         "      - action: set\n        cpu: 6502\n        columns: 40\n");
     tape_change_expected = true;
     menu_init();
     menu_boot();
-    ck_assert_mem_eq(system_state.usb_keymap_data, custom_keymap, sizeof(custom_keymap));
+    ck_assert_mem_eq(system_state.usb_keymap_data, expected.usb_keymap_data,
+                     sizeof(expected.usb_keymap_data));
 
     tape_change_expected = false;
     const menu_exit_t nondestructive_exits[] = {MENU_EXIT_RESUME, MENU_EXIT_RESET};
@@ -281,7 +254,8 @@ START_TEST(test_configuration_keymap_defaults_do_not_leak_between_sessions) {
     for (size_t i = 0; i < count_of(nondestructive_exits); ++i) {
         desired_exit = nondestructive_exits[i];
         __real_menu_enter();
-        ck_assert_mem_eq(system_state.usb_keymap_data, custom_keymap, sizeof(custom_keymap));
+        ck_assert_mem_eq(system_state.usb_keymap_data, expected.usb_keymap_data,
+                         sizeof(expected.usb_keymap_data));
     }
 
     test_unregister_file("/config.yaml");
@@ -295,7 +269,8 @@ START_TEST(test_configuration_keymap_defaults_do_not_leak_between_sessions) {
     __real_menu_enter();
     mock_input_set_reader(NULL);
     tape_change_expected = false;
-    ck_assert_mem_eq(system_state.usb_keymap_data, default_keymap, sizeof(default_keymap));
+    ck_assert_mem_eq(system_state.usb_keymap_data, expected.usb_keymap_data,
+                     sizeof(expected.usb_keymap_data));
 }
 END_TEST
 
@@ -303,10 +278,10 @@ Suite* menu_session_suite(void) {
     Suite* const suite = suite_create("menu_session");
     TCase* const test = tcase_create("borrowing");
     tcase_add_checked_fixture(test, setup, teardown);
-    tcase_add_test(test, test_menu_init_discovers_model_and_default_keymap);
+    tcase_add_test(test, test_menu_init_discovers_model_and_embedded_keymap);
     tcase_add_loop_test(test, test_boot_owner_prepares_rom_only_without_default, 0, 2);
     tcase_add_loop_test(test, test_runtime_owner_distinguishes_back_reset_and_same_configuration_activation, 0, 3);
-    tcase_add_loop_test(test, test_configuration_keymap_defaults_do_not_leak_between_sessions, 0, 2);
+    tcase_add_loop_test(test, test_configuration_restores_embedded_keymap_between_sessions, 0, 2);
     suite_add_tcase(suite, test);
     return suite;
 }
