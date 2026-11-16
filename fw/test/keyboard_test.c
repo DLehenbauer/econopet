@@ -1666,7 +1666,7 @@ static void record_menu_columns(void* context, options_t* options) {
 // Chords do not activate selections, while button short/long retain Down/Activate.
 START_TEST(test_legacy_menu_control_dispatch) {
     test_register_file("/config.yaml",
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: First\n"
         "    setup:\n"
         "      - action: set\n"
@@ -1708,7 +1708,7 @@ END_TEST
 // The production menu buffers HID taps even with terminal routing left in CLI mode.
 START_TEST(test_menu_hid_navigation_after_entry) {
     test_register_file("/config.yaml",
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: First\n"
         "    setup:\n"
         "      - action: set\n"

@@ -235,7 +235,7 @@ START_TEST(test_configuration_preserves_staged_get_until_unmount) {
         ck_assert_uint_eq(status_source ? mock_ieee_status_byte(i) : mock_ieee_data_byte(i), bytes[i]);
         ck_assert_int_eq(status_source ? mock_ieee_status_eoi(i) : mock_ieee_data_eoi(i), eoi[i]);
     }
-    test_register_file("/config.yaml", "configs:\n  - name: replacement\n");
+    test_register_file("/config.yaml", "format-version: 1\nconfigs:\n  - name: replacement\n");
     const setup_sink_t sink = {0};
     load_config(&sink, 0);
 

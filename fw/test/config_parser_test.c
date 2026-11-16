@@ -271,7 +271,7 @@ static void teardown(void) {
 START_TEST(test_parse_minimal_config) {
     // Prepare the smallest valid configuration fixture.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Test Config\n"
         "    setup: []\n";
     
@@ -290,7 +290,7 @@ END_TEST
 START_TEST(test_parse_load_action) {
     // Register a single file-load action.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Load Test\n"
         "    setup:\n"
         "      - action: load\n"
@@ -313,7 +313,7 @@ END_TEST
 START_TEST(test_parse_mount_action) {
     // Register a mount action with explicit coordinates.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Mount Test\n"
         "    setup:\n"
         "      - action: mount\n"
@@ -337,7 +337,7 @@ END_TEST
 START_TEST(test_parse_mount_action_defaults) {
     // Register a mount action without device or drive fields.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Mount Defaults Test\n"
         "    setup:\n"
         "      - action: mount\n"
@@ -359,7 +359,7 @@ END_TEST
 START_TEST(test_parse_patch_action) {
     // Register a patch action containing a known binary payload.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Patch Test\n"
         "    setup:\n"
         "      - action: patch\n"
@@ -381,7 +381,7 @@ END_TEST
 START_TEST(test_parse_copy_action) {
     // Register a memory-copy action with distinct source and destination.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Copy Test\n"
         "    setup:\n"
         "      - action: copy\n"
@@ -405,7 +405,7 @@ END_TEST
 START_TEST(test_parse_set_action) {
     // Register display options with video RAM left unspecified.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Set Options Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -427,7 +427,7 @@ END_TEST
 START_TEST(test_parse_set_video_ram_1kb) {
     // Register the monochrome 40-column video RAM configuration.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Video RAM 1KB Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -447,7 +447,7 @@ END_TEST
 START_TEST(test_parse_set_video_ram_2kb) {
     // Register the monochrome 80-column video RAM configuration.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Video RAM 2KB Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -467,7 +467,7 @@ END_TEST
 START_TEST(test_parse_set_video_ram_3kb) {
     // Register the split character/color video RAM configuration.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Video RAM 3KB Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -487,7 +487,7 @@ END_TEST
 START_TEST(test_parse_set_video_ram_4kb) {
     // Register the full four-kilobyte video RAM configuration.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Video RAM 4KB Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -507,7 +507,7 @@ END_TEST
 START_TEST(test_parse_set_columns_and_video_ram) {
     // Register explicit column count and video RAM settings together.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Combined Options Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -529,7 +529,7 @@ END_TEST
 START_TEST(test_parse_fix_checksum_action) {
     // Register a checksum action with distinct range and fix addresses.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Checksum Test\n"
         "    setup:\n"
         "      - action: fix-checksum\n"
@@ -555,7 +555,7 @@ END_TEST
 START_TEST(test_parse_multiple_configs_select_second) {
     // Register three configurations with distinguishable display settings.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: First Config\n"
         "    setup:\n"
         "      - action: set\n"
@@ -587,7 +587,7 @@ END_TEST
 START_TEST(test_parse_conditional_graphics) {
     // Register alternate display settings for graphics and business keyboards.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Conditional Test\n"
         "    setup:\n"
         "      - if: graphics\n"
@@ -613,7 +613,7 @@ END_TEST
 START_TEST(test_parse_conditional_business) {
     // Register alternate display settings for graphics and business keyboards.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Conditional Test\n"
         "    setup:\n"
         "      - if: graphics\n"
@@ -640,7 +640,7 @@ END_TEST
 START_TEST(test_parse_multiple_load_files) {
     // Register a load action containing three separate files.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Multi Load Test\n"
         "    setup:\n"
         "      - action: load\n"
@@ -669,7 +669,7 @@ END_TEST
 START_TEST(test_enumerate_all_configs) {
     // Register two configurations with actions that enumeration must not execute.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Config A\n"
         "    setup:\n"
         "      - action: set\n"
@@ -768,7 +768,7 @@ END_TEST
 START_TEST(test_parse_set_tape) {
     // Register the ROM 4 tape blob with known code and zero-page addresses.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Tape Test\n"
         "    setup:\n"
         "      - action: set\n"
@@ -801,6 +801,7 @@ END_TEST
 START_TEST(test_parse_default_config) {
     // Register a default ID before the configuration list.
     const char* yaml_content = 
+        "format-version: 1\n"
         "default: second\n"
         "configs:\n"
         "  - id: first\n"
@@ -825,7 +826,7 @@ END_TEST
 START_TEST(test_parse_default_after_configs) {
     // Register a default ID after the configuration list.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - id: first\n"
         "    name: First Config\n"
         "    setup: []\n"
@@ -849,7 +850,7 @@ END_TEST
 START_TEST(test_parse_no_default) {
     // Register a configuration list with no default key.
     const char* yaml_content = 
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - id: test\n"
         "    name: Test Config\n"
         "    setup: []\n";
@@ -890,17 +891,70 @@ START_TEST(test_validate_sdcard_config_yaml_default) {
 }
 END_TEST
 
+// Verifies the required format header follows leading comments.
+START_TEST(test_parse_format_version_after_comment) {
+    test_register_file("/config.yaml",
+        "# The format header may follow comments.\n"
+        "format-version: 1\n"
+        "configs:\n"
+        "  - name: Versioned\n"
+        "    setup: []\n");
+
+    parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
+
+    ck_assert_int_eq(test_ctx.config_exit_count, 1);
+}
+END_TEST
+
+// Verifies legacy files identify their incompatibility with this firmware.
+START_TEST(test_parser_rejects_missing_format_version) {
+    test_register_file("/config.yaml",
+        "# A legacy file without a format header.\n"
+        "configs:\n"
+        "  - name: Legacy\n"
+        "    setup: []\n");
+    test_expect_fatal_message(
+        "config.yaml is incompatible with the installed firmware");
+
+    parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
+}
+END_TEST
+
+// Verifies the format header cannot be moved after another top-level entry.
+START_TEST(test_parser_rejects_late_format_version) {
+    test_register_file("/config.yaml",
+        "configs: []\n"
+        "format-version: 1\n");
+    test_expect_fatal_message(
+        "format-version must be the first entry");
+
+    parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
+}
+END_TEST
+
+// Verifies unsupported format values identify the installed firmware mismatch.
+START_TEST(test_parser_rejects_unknown_format_version) {
+    test_register_file("/config.yaml",
+        "format-version: 2\n"
+        "configs: []\n");
+    test_expect_fatal_message(
+        "expected format-version 1, found '2'");
+
+    parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
+}
+END_TEST
+
 // Verifies semantic failures report the offending scalar's line and column.
 START_TEST(test_parser_error_reports_semantic_location) {
     // Register an unknown action and require its exact semantic diagnostic.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Invalid Action\n"
         "    setup:\n"
         "      - action: invalid\n";
 
     test_register_file("/config.yaml", yaml_content);
-    test_expect_fatal_message("Line 4, Column 17:\nUnknown action 'invalid'");
+    test_expect_fatal_message("Line 5, Column 17:\nUnknown action 'invalid'");
 
     // Trigger the parser's fatal path under the suite's expected abort.
     parse_config_file("/config.yaml", &config_sink, TEST_CONFIG_FIRST);
@@ -911,13 +965,13 @@ END_TEST
 START_TEST(test_parser_error_reports_yaml_problem) {
     // Register an unterminated scalar and require libyaml's exact diagnostic.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: \"Malformed\n"
         "    setup: []\n";
 
     test_register_file("/config.yaml", yaml_content);
     test_expect_fatal_message(
-        "Line 4, Column 1:\nfound unexpected end of stream"
+        "Line 5, Column 1:\nfound unexpected end of stream"
     );
 
     // Trigger the parser's fatal path under the suite's expected abort.
@@ -936,7 +990,7 @@ START_TEST(test_parser_error_replaces_oversized_message) {
     const int written = snprintf(
         yaml_content,
         sizeof(yaml_content),
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Long Error\n"
         "    setup:\n"
         "      - action: set\n"
@@ -949,7 +1003,7 @@ START_TEST(test_parser_error_replaces_oversized_message) {
     // Require a bounded replacement diagnostic instead of the oversized key.
     test_register_file("/config.yaml", yaml_content);
     test_expect_fatal_message(
-        "Line 5, Column 9:\nerror details too long to display"
+        "Line 6, Column 9:\nerror details too long to display"
     );
 
     // Trigger the parser's fatal path under the suite's expected abort.
@@ -961,7 +1015,7 @@ END_TEST
 START_TEST(test_parser_rejects_short_tape_before_allocation) {
     // Register an undersized tape blob and require its length diagnostic.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Short Tape\n"
         "    setup:\n"
         "      - action: set\n"
@@ -979,7 +1033,7 @@ END_TEST
 START_TEST(test_parser_rejects_long_tape_before_allocation) {
     // Register an oversized tape blob and require its length diagnostic.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: Long Tape\n"
         "    setup:\n"
         "      - action: set\n"
@@ -997,7 +1051,7 @@ END_TEST
 START_TEST(test_parser_rejects_multiline_config_name) {
     // Register a multiline name and require the single-line diagnostic.
     const char* yaml_content =
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: \"First\\ncontinued\"\n"
         "    setup: []\n";
 
@@ -1033,6 +1087,7 @@ START_TEST(test_config_text_capacity_preserves_existing_behavior) {
     char yaml[TEST_OVERSIZED_YAML_CAPACITY];
     const int written = snprintf(
         yaml, sizeof(yaml),
+        "format-version: 1\n"
         "default: '%s%s'\n"
         "configs:\n"
         "  - id: '%s%s'\n"
@@ -1075,6 +1130,7 @@ START_TEST(test_menu_default_text_capacity) {
     char yaml[TEST_OVERSIZED_YAML_CAPACITY];
     const int written = snprintf(
         yaml, sizeof(yaml),
+        "format-version: 1\n"
         "default: '%s%s'\n"
         "configs:\n"
         "  - id: other\n"
@@ -1106,7 +1162,7 @@ END_TEST
 // Rejects late defaults explicitly rather than reparsing to resolve their indices.
 START_TEST(test_menu_rejects_default_after_configs) {
     test_register_file("/config.yaml",
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - id: first\n"
         "    name: First\n"
         "    setup: []\n"
@@ -1186,7 +1242,7 @@ static void register_boundary_path(enum test_path_kind kind, bool oversized,
     const char* format = NULL;
     switch (kind) {
         case TEST_PATH_LOAD:
-            format = "configs:\n"
+            format = "format-version: 1\nconfigs:\n"
                      "  - name: Boundary\n"
                      "    setup:\n"
                      "      - action: load\n"
@@ -1195,7 +1251,7 @@ static void register_boundary_path(enum test_path_kind kind, bool oversized,
                      "            address: 0xC000\n";
             break;
         case TEST_PATH_MOUNT:
-            format = "configs:\n"
+            format = "format-version: 1\nconfigs:\n"
                      "  - name: Boundary\n"
                      "    setup:\n"
                      "      - action: mount\n"
@@ -1295,7 +1351,7 @@ START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
         .system_state = &state,
     };
     test_register_file("/config.yaml",
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - id: invalid\n"
         "    name: Invalid\n"
         "    setup:\n"
@@ -1336,7 +1392,7 @@ START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
     };
     char yaml[768];
     const int length = snprintf(yaml, sizeof(yaml),
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - name: replace\n"
         "    setup:\n"
         "      - action: copy\n"
@@ -1382,7 +1438,7 @@ START_TEST(test_configuration_without_mount_actions_clears_disks) {
         .system_state = &state,
     };
     test_register_file("/config.yaml",
-        "configs:\n  - name: selected\n    setup:\n"
+        "format-version: 1\nconfigs:\n  - name: selected\n    setup:\n"
         "      - action: set\n        columns: 40\n");
 
     load_config(&sink, 0);
@@ -1402,7 +1458,7 @@ START_TEST(test_configuration_without_mount_callback_clears_disks) {
         .system_state = &system_state,
     };
     test_register_file("/config.yaml",
-        "configs:\n  - name: selected\n    setup:\n"
+        "format-version: 1\nconfigs:\n  - name: selected\n    setup:\n"
         "      - action: set\n        columns: 40\n");
 
     load_config(&sink, 0);
@@ -1454,6 +1510,7 @@ Suite *config_parser_suite(void) {
     tcase_add_test(tc_core, test_parse_default_after_configs);
     tcase_add_test(tc_core, test_parse_no_default);
     tcase_add_test(tc_core, test_validate_sdcard_config_yaml_default);
+    tcase_add_test(tc_core, test_parse_format_version_after_comment);
 
     TCase* const loader = tcase_create("loader policy");
     tcase_add_checked_fixture(loader, configuration_loader_setup, configuration_loader_teardown);
@@ -1492,6 +1549,9 @@ Suite *config_parser_fatal_suite(void) {
     tcase_add_test_raise_signal(tc, test_parser_rejects_short_tape_before_allocation, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_rejects_long_tape_before_allocation, SIGABRT);
     tcase_add_test_raise_signal(tc, test_parser_rejects_multiline_config_name, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_missing_format_version, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_late_format_version, SIGABRT);
+    tcase_add_test_raise_signal(tc, test_parser_rejects_unknown_format_version, SIGABRT);
     TCase* const loader = tcase_create("loader failure");
     tcase_add_checked_fixture(loader, configuration_loader_setup, configuration_loader_teardown);
     tcase_add_test_raise_signal(loader,

@@ -9,6 +9,11 @@
 // Enumerates configurations without executing their setup actions.
 #define CONFIG_ENUMERATE (-1)
 
+// Version of the top-level config.yaml format understood by this firmware.
+// Increment once for each release that contains a breaking change to the
+// config.yaml schema.
+#define CONFIG_FORMAT_VERSION 1
+
 // Stored configuration IDs and names hold 40 text bytes plus the terminating null.
 // The parser and menu retain the existing truncation behavior for longer strings.
 #define CONFIG_TEXT_CAPACITY 41

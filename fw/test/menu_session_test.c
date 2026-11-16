@@ -133,10 +133,10 @@ START_TEST(test_boot_owner_prepares_rom_only_without_default) {
     prepare_guest();
     tape_change_expected = true;
     test_register_file("/config.yaml", _i == 0
-        ? "default: selected\nconfigs:\n"
+        ? "format-version: 1\ndefault: selected\nconfigs:\n"
           "  - id: selected\n    name: Selected\n    setup:\n"
           "      - action: set\n        columns: 40\n        cpu: 6502\n"
-        : "configs:\n"
+        : "format-version: 1\nconfigs:\n"
           "  - id: selected\n    name: Selected\n    setup:\n"
           "      - action: set\n        columns: 40\n        cpu: 6502\n");
     boot_rom_completions = 0;
@@ -163,7 +163,7 @@ END_TEST
 START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_activation) {
     prepare_guest();
     test_unregister_file("/config.yaml");
-    test_register_file("/config.yaml", "configs:\n"
+    test_register_file("/config.yaml", "format-version: 1\nconfigs:\n"
                                        "  - name: Guest\n"
                                        "    setup:\n"
                                        "      - action: set\n"
@@ -238,7 +238,7 @@ START_TEST(test_configuration_restores_embedded_keymap_between_sessions) {
     system_state_t expected = {0};
     usb_keymap_reset(&expected);
     test_register_file("/config.yaml",
-        "default: custom\nconfigs:\n"
+        "format-version: 1\ndefault: custom\nconfigs:\n"
         "  - id: custom\n    name: Custom\n    setup:\n"
         "      - action: set\n        cpu: 6502\n"
         "      - action: set\n        cpu: 6502\n        columns: 40\n");
@@ -260,9 +260,9 @@ START_TEST(test_configuration_restores_embedded_keymap_between_sessions) {
 
     test_unregister_file("/config.yaml");
     test_register_file("/config.yaml", _i == 0
-        ? "configs:\n  - name: Default\n    setup:\n"
+        ? "format-version: 1\nconfigs:\n  - name: Default\n    setup:\n"
           "      - action: set\n        cpu: 6502\n        columns: 40\n"
-        : "configs:\n  - name: Default\n    setup: []\n");
+        : "format-version: 1\nconfigs:\n  - name: Default\n    setup: []\n");
     tape_change_expected = true;
     desired_exit = MENU_EXIT_LOAD_CONFIG;
     exit_step = 0;

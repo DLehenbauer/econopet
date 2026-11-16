@@ -110,7 +110,7 @@ static void register_disk_type(const char* relative, diskimage_type_t type) {
 // Installs more models than a screen can display, preserving source-order identity.
 static void register_models(bool with_default) {
     char yaml[8192];
-    size_t used = snprintf(yaml, sizeof(yaml), "%sconfigs:\n",
+    size_t used = snprintf(yaml, sizeof(yaml), "format-version: 1\n%sconfigs:\n",
                            with_default ? "default: model1\n" : "");
     for (unsigned int index = 0; index < TEST_MODEL_COUNT; index++) {
         const int length = snprintf(yaml + used, sizeof(yaml) - used,
@@ -371,7 +371,7 @@ START_TEST(test_picker_paging_artwork) {
     const size_t count = 21u + (paged ? 1 : 0);
     if (config) {
         char yaml[2048];
-        size_t used = snprintf(yaml, sizeof(yaml), "configs:\n");
+        size_t used = snprintf(yaml, sizeof(yaml), "format-version: 1\nconfigs:\n");
         for (size_t i = 0; i < count; i++) {
             const int length = snprintf(yaml + used, sizeof(yaml) - used,
                 "  - name: Config %zu\n    setup: []\n", i);
@@ -589,7 +589,7 @@ START_TEST(test_model_change_returns_load_decision) {
     menu.controller.focused_component = 2;
     test_unregister_file("/config.yaml");
     test_register_file("/config.yaml",
-        "configs:\n"
+        "format-version: 1\nconfigs:\n"
         "  - id: new\n    name: Replacement\n    setup:\n"
         "      - action: set\n        columns: 80\n"
         "      - action: mount\n        device: 11\n        drive: 1\n        file: new.d64\n"
@@ -1128,7 +1128,7 @@ START_TEST(test_resume_exit_does_not_request_configuration_load) {
     register_disk("peer.d64");
     test_unregister_file("/config.yaml");
     test_register_file("/config.yaml",
-        "configs:\n  - name: Configured\n    setup:\n"
+        "format-version: 1\nconfigs:\n  - name: Configured\n    setup:\n"
         "      - action: set\n        columns: 80\n"
         "      - action: mount\n        device: 8\n        drive: 0\n        file: old.d64\n"
         "      - action: mount\n        device: 8\n        drive: 1\n        file: peer.d64\n");

@@ -824,14 +824,51 @@ static void parse_default(parser_t* parser, void* context, size_t context_size) 
     }
 }
 
+// Verifies the config format before any version-dependent entries are parsed.
+static void parse_format_version(parser_t* parser) {
+    parse_next(parser);
+    if (parser->event.type != YAML_SCALAR_EVENT ||
+        strcmp(get_current_string(parser), "format-version") != 0) {
+        fatal_parse_error(
+            parser,
+            "config.yaml is incompatible with the installed firmware "
+            "(format-version must be the first entry)"
+        );
+    }
+
+    parse_next(parser);
+    if (parser->event.type != YAML_SCALAR_EVENT) {
+        fatal_parse_error(
+            parser,
+            "config.yaml is incompatible with the installed firmware "
+            "(expected scalar format-version %u)",
+            CONFIG_FORMAT_VERSION
+        );
+    }
+
+    const char* const version_text = get_current_string(parser);
+    char* end = NULL;
+    const unsigned long version = strtoul(version_text, &end, 0);
+    if (end == version_text || *end != '\0' || version != CONFIG_FORMAT_VERSION) {
+        fatal_parse_error(
+            parser,
+            "config.yaml is incompatible with the installed firmware "
+            "(expected format-version %u, found '%s')",
+            CONFIG_FORMAT_VERSION,
+            version_text
+        );
+    }
+}
+
 void parse_config_file(const char* filename, const config_sink_t* const sink, int target_index) {
     parser_t parser;
 
     init_parser(&parser, filename, sink, target_index);
 
     parse_expect_type(&parser, YAML_MAPPING_START_EVENT);
-    
-    parse_mapping(&parser, (const map_dispatch_entry_t[]) {
+    parse_format_version(&parser);
+
+    parse_mapping_continued(&parser, (const map_dispatch_entry_t[]) {
         { "configs", parse_config_list, NULL, 0 },
         { "default", parse_default, NULL, 0 },
         { "data", parse_skip, NULL, 0 },
