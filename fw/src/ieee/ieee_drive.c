@@ -892,11 +892,26 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
     // Restore the complete presence mask and resume any surviving peer talker.
     control(0);
     resume_tx();
+    const int moved_from_slot = source >= 0 && (unsigned int)source != slot ? source : -1;
+    if (moved_from_slot >= 0) {
+        log_warn("IEEE implicit eject: move %.16s %u-%u -> %u-%u",
+                 name[0] != '\0' ? name : "(removed)",
+                 (unsigned int)moved_from_slot / DOS_MEDIA_SLOTS_PER_UNIT,
+                 (unsigned int)moved_from_slot % DOS_MEDIA_SLOTS_PER_UNIT,
+                 unit,
+                 slot % DOS_MEDIA_SLOTS_PER_UNIT);
+    }
+    if (eject_partner) {
+        log_warn("IEEE implicit eject: partner %u-%u for %.16s",
+                 unit,
+                 partner % DOS_MEDIA_SLOTS_PER_UNIT,
+                 name[0] != '\0' ? name : "(removed)");
+    }
     log_info("IEEE mount u%u d%u rw%u %.24s", unit, slot % DOS_MEDIA_SLOTS_PER_UNIT, replacement.image.write != NULL,
              name[0] != '\0' ? name : "(removed)");
     if (outcome != NULL) {
         *outcome = (ieee_drive_mount_outcome_t){
-            .moved_from_slot = source >= 0 && (unsigned int)source != slot ? source : -1,
+            .moved_from_slot = moved_from_slot,
             .ejected_partner = eject_partner ? partner_type : diskimage_type_none,
         };
     }

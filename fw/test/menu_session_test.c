@@ -201,8 +201,7 @@ START_TEST(test_runtime_owner_distinguishes_back_reset_and_same_configuration_ac
         ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     } else {
         ck_assert_uint_gt(reset_count, 0);
-        ck_assert_str_eq(ieee_drive_filename(0),
-            desired_exit == MENU_EXIT_LOAD_CONFIG ? "" : "live.d64");
+        ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
     }
     ck_assert_uint_eq(tape_init_count, tape_change_expected ? 1 : 0);
     ck_assert_uint_eq(tape_deinit_count, tape_change_expected ? 1 : 0);

@@ -229,7 +229,7 @@ static void configuration_loader_teardown(void) {
     teardown();
 }
 
-static void mount_loader_image(unsigned int slot, diskimage_type_t type, const char* name) {
+static void register_loader_image(diskimage_type_t type, const char* name) {
     static const size_t sizes[] = {
         0, DISKIMAGE_D64_SIZE, DISKIMAGE_D80_SIZE, DISKIMAGE_D82_SIZE
     };
@@ -245,6 +245,10 @@ static void mount_loader_image(unsigned int slot, diskimage_type_t type, const c
     sd_make_path(path, SD_DIR_DISK, name);
     test_register_binary_file(path, image, sizes[type], false);
     free(image);
+}
+
+static void mount_loader_image(unsigned int slot, diskimage_type_t type, const char* name) {
+    register_loader_image(type, name);
     ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
 }
 
@@ -1376,11 +1380,12 @@ START_TEST(test_configuration_mount_failure_is_fatal_after_settings) {
 }
 END_TEST
 
-/** Configuration clears old media, then the last mount of an image wins in either order. */
-START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
+/** Configuration mounts apply normal partner-ejection policy to existing media. */
+START_TEST(test_configuration_mounts_eject_incompatible_partner) {
     mount_loader_image(0, diskimage_type_d64, "old.d64");
     mount_loader_image(1, diskimage_type_d64, "old-partner.d64");
-    mount_loader_image(2, diskimage_type_d80, "next.d80");
+    register_loader_image(diskimage_type_d80, "system.d80");
+    register_loader_image(diskimage_type_d80, "languages.d80");
     loader_actions_t actions = {0};
     system_state_t state = {0};
     const setup_sink_t sink = {
@@ -1401,15 +1406,14 @@ START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
         "        length: 256\n"
         "      - action: mount\n"
         "        device: 8\n"
-        "        drive: %d\n"
-        "        file: next.d80\n"
+        "        drive: 0\n"
+        "        file: system.d80\n"
         "      - action: mount\n"
         "        device: 8\n"
-        "        drive: %d\n"
-        "        file: next.d80\n"
+        "        drive: 1\n"
+        "        file: languages.d80\n"
         "      - action: set\n"
-        "        columns: 80\n",
-        _i, 1 - _i);
+        "        columns: 80\n");
     ck_assert_int_gt(length, 0);
     ck_assert_uint_lt((size_t)length, sizeof(yaml));
     test_register_file("/config.yaml", yaml);
@@ -1420,13 +1424,13 @@ START_TEST(test_configuration_unmounts_then_mounts_selected_disks) {
     ck_assert_uint_eq(actions.copies, 1);
     ck_assert_uint_eq(actions.options, 1);
     ck_assert_uint_eq(actions.mounts, 2);
-    ck_assert_str_eq(ieee_drive_filename(_i), "");
-    ck_assert_str_eq(ieee_drive_filename(1 - _i), "next.d80");
+    ck_assert_str_eq(ieee_drive_filename(0), "system.d80");
+    ck_assert_str_eq(ieee_drive_filename(1), "languages.d80");
 }
 END_TEST
 
-/** A loader always clears old media even when its selected setup has no mounts. */
-START_TEST(test_configuration_without_mount_actions_clears_disks) {
+/** A loader retains existing media when its selected setup has no mounts. */
+START_TEST(test_configuration_without_mount_actions_retains_disks) {
     mount_loader_image(0, diskimage_type_d64, "live.d64");
     mount_loader_image(1, diskimage_type_d64, "partner.d64");
     loader_actions_t actions = {0};
@@ -1444,13 +1448,13 @@ START_TEST(test_configuration_without_mount_actions_clears_disks) {
     load_config(&sink, 0);
 
     ck_assert_uint_eq(actions.mounts, 0);
-    ck_assert_str_eq(ieee_drive_filename(0), "");
-    ck_assert_str_eq(ieee_drive_filename(1), "");
+    ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), "partner.d64");
 }
 END_TEST
 
-/** Missing mount callbacks do not retain previously mounted media. */
-START_TEST(test_configuration_without_mount_callback_clears_disks) {
+/** A host without mount callbacks also retains previously mounted media. */
+START_TEST(test_configuration_without_mount_callback_retains_disks) {
     mount_loader_image(0, diskimage_type_d64, "live.d64");
     const setup_sink_t sink = {
         .context = &test_ctx,
@@ -1463,7 +1467,7 @@ START_TEST(test_configuration_without_mount_callback_clears_disks) {
 
     load_config(&sink, 0);
 
-    ck_assert_str_eq(ieee_drive_filename(0), "");
+    ck_assert_str_eq(ieee_drive_filename(0), "live.d64");
 }
 END_TEST
 
@@ -1514,9 +1518,9 @@ Suite *config_parser_suite(void) {
 
     TCase* const loader = tcase_create("loader policy");
     tcase_add_checked_fixture(loader, configuration_loader_setup, configuration_loader_teardown);
-    tcase_add_loop_test(loader, test_configuration_unmounts_then_mounts_selected_disks, 0, 2);
-    tcase_add_test(loader, test_configuration_without_mount_actions_clears_disks);
-    tcase_add_test(loader, test_configuration_without_mount_callback_clears_disks);
+    tcase_add_test(loader, test_configuration_mounts_eject_incompatible_partner);
+    tcase_add_test(loader, test_configuration_without_mount_actions_retains_disks);
+    tcase_add_test(loader, test_configuration_without_mount_callback_retains_disks);
     suite_add_tcase(s, loader);
     
     suite_add_tcase(s, tc_core);

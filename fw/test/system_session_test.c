@@ -191,8 +191,8 @@ START_TEST(test_restore_without_resume_retains_halt) {
 }
 END_TEST
 
-/** Restoring and loading configuration preserves staged GET counters until teardown. */
-START_TEST(test_configuration_preserves_staged_get_until_unmount) {
+/** Configuration keeps mounted media and its staged GET until explicit unmount. */
+START_TEST(test_configuration_preserves_mounted_media_until_unmount) {
     prepare_guest();
     uint8_t* const image = diskimage_test_make_d64();
     test_register_binary_file("/disk/old.d64", image, DISKIMAGE_D64_SIZE, false);
@@ -240,6 +240,12 @@ START_TEST(test_configuration_preserves_staged_get_until_unmount) {
     load_config(&sink, 0);
 
     ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
+    ck_assert_uint_eq(spi_read_at(counter), 1);
+    ck_assert_uint_eq(mock_ieee_data_count(), data_count);
+    ck_assert_uint_eq(mock_ieee_status_count(), status_count);
+
+    ck_assert(ieee_drive_unmount_all());
     ck_assert_str_eq(ieee_drive_filename(0), "");
     ck_assert_uint_eq(spi_read_at(counter), 0);
     ck_assert_uint_eq(mock_ieee_data_count(), 0);
@@ -255,7 +261,7 @@ Suite* system_session_suite(void) {
     tcase_add_test(test, test_guest_reset_clears_full_video_planes);
     tcase_add_test(test, test_terminal_actions_take_over_without_restoring_console);
     tcase_add_test(test, test_restore_without_resume_retains_halt);
-    tcase_add_loop_test(test, test_configuration_preserves_staged_get_until_unmount, 0, 2);
+    tcase_add_loop_test(test, test_configuration_preserves_mounted_media_until_unmount, 0, 2);
     suite_add_tcase(suite, test);
     return suite;
 }

@@ -405,6 +405,9 @@ START_TEST(test_mount_pair_policy) {
                      existing == replacement ? (slot == 0 ? "old1.img" : "old0.img") : "");
     ck_assert_str_eq(ieee_drive_filename(2), "");
     ck_assert_uint_eq(test_open_file_count(), open_files - 1 - (existing != replacement));
+    expect_status_log(LOG_LEVEL_WARN, "implicit eject: move candidate.img 1-0 ->");
+    if (existing != replacement)
+        expect_status_log(LOG_LEVEL_WARN, "implicit eject: partner 0-");
 
     // Removing the new disk must not eject a compatible partner or another unit.
     ck_assert_int_eq(ieee_drive_try_mount(slot, NULL, &outcome), DOS_MEDIA_OK);

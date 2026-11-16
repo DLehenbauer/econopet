@@ -70,15 +70,15 @@ menu_config_catalog_t menu_config_enumerate(size_t first, size_t capacity,
     return (menu_config_catalog_t) {context.count, context.default_index};
 }
 
-// Reloads the selected configuration with the PET halted. Prefills $9000-$FFFF
-// with each address's high byte to approximate an undriven bus, invokes setup
-// callbacks in YAML order, and reads back the character ROM for DVI rendering.
-// Returns with the CPU halted for the caller's subsequent reset.
+// Reloads the selected configuration with the PET halted. Mounted disks remain
+// attached unless setup mount actions move or eject them through the normal
+// media policy. Prefills $9000-$FFFF with each address's high byte to approximate
+// an undriven bus, invokes setup callbacks in YAML order, and reads back the
+// character ROM for DVI rendering. Returns with the CPU halted for reset.
 void load_config(const setup_sink_t* const setup_sink, const int selected_config) {
     log_info("Loading config: %d", selected_config);
 
     set_cpu(CPU_HALT);
-    vet(ieee_drive_unmount_all(), "Failed to unmount IEEE disks");
 
     // In later PET/CBM models, reading from an unmapped address holds the previous byte
     // transferred on the data bus.  This has the effect of making it appear that unmapped
