@@ -146,14 +146,14 @@ void FirmwareSession::mount(const std::vector<uint8_t>& image, const char* name,
     board_.require_spi_idle();
     if (!name || !*name)
         throw board_.failure<std::invalid_argument>("firmware mount", "fixture name is empty");
-    const auto prefix_length = std::strlen(sd_dir_prefix(SD_DIR_DISKS));
+    const auto prefix_length = std::strlen(sd_dir_prefix(SD_DIR_DISK));
     if (std::strlen(name) >= SD_PATH_MAX - prefix_length)
         throw board_.failure<std::out_of_range>("firmware mount", "fixture path exceeds SD_PATH_MAX");
     if (image.empty())
         throw board_.failure<std::invalid_argument>("firmware mount", "image is empty");
     // Expose a writable fixture at the same path production firmware will open.
     char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, name);
+    sd_make_path(path, SD_DIR_DISK, name);
     if (test_file_registered(path))
         throw board_.failure<std::invalid_argument>("firmware mount", "fixture name is already registered");
     fixture_paths_.emplace_back(path);

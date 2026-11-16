@@ -90,7 +90,7 @@ static void make_file(const char* relative) {
 // Adds a valid mountable image to the shared FILE fixture registry.
 static void register_disk(const char* relative) {
     char path[SD_PATH_MAX];
-    snprintf(path, sizeof(path), "/disks/%s", relative);
+    snprintf(path, sizeof(path), "/disk/%s", relative);
     uint8_t* const image = diskimage_test_make_d64();
     test_register_binary_file(path, image, DISKIMAGE_D64_SIZE, true);
     free(image);
@@ -100,7 +100,7 @@ static void register_disk(const char* relative) {
 static void register_disk_type(const char* relative, diskimage_type_t type) {
     static const size_t sizes[] = {0, DISKIMAGE_D64_SIZE, DISKIMAGE_D80_SIZE, DISKIMAGE_D82_SIZE};
     char path[SD_PATH_MAX];
-    snprintf(path, sizeof(path), "/disks/%s", relative);
+    snprintf(path, sizeof(path), "/disk/%s", relative);
     uint8_t* const bytes = calloc(1, sizes[type]);
     ck_assert_ptr_nonnull(bytes);
     test_register_binary_file(path, bytes, sizes[type], true);
@@ -407,7 +407,7 @@ START_TEST(test_picker_paging_artwork) {
         expect_text(2, 22, "Config 20", false);
     } else {
         ck_assert_uint_eq(guarded_screen[1], 0xe1);
-        expect_text(1, 0, "/disks", true);
+        expect_text(1, 0, "/disk", true);
         expect_text(7, 0, "                                ", true);
         ck_assert_uint_eq(guarded_screen[1 + MENU_UI_WIDTH - 1], 0xf6);
         expect_text(2, 2, "[Eject]", true);
@@ -584,7 +584,7 @@ START_TEST(test_model_change_returns_load_decision) {
     ck_assert_int_eq(ieee_drive_try_mount(0, "old.d64", NULL), DOS_MEDIA_OK);
     open_slot(0);
     tui_controller_dispatch(&menu.controller, tui_action_back);
-    ck_assert_str_eq(menu.slot_paths[0], "/disks");
+    ck_assert_str_eq(menu.slot_paths[0], "/disk");
     tui_controller_dispatch(&menu.controller, tui_action_back);
     menu.controller.focused_component = 2;
     test_unregister_file("/config.yaml");
@@ -1109,7 +1109,7 @@ START_TEST(test_browser_without_ui) {
     bool directory;
     ck_assert(menu_browser_resolve(&browser, index, path, &directory));
     ck_assert(!directory);
-    ck_assert_str_eq(path, "/disks/disk64.d64");
+    ck_assert_str_eq(path, "/disk/disk64.d64");
     ck_assert(menu_browser_find(&browser, "folder", true, &index));
     ck_assert(menu_browser_resolve(&browser, index, path, &directory));
     ck_assert(directory);
@@ -1133,7 +1133,7 @@ START_TEST(test_resume_exit_does_not_request_configuration_load) {
         "      - action: mount\n        device: 8\n        drive: 0\n        file: old.d64\n"
         "      - action: mount\n        device: 8\n        drive: 1\n        file: peer.d64\n");
     uint8_t* const image = diskimage_test_make_d80();
-    test_register_binary_file("/disks/new.d80", image, DISKIMAGE_D80_SIZE, true);
+    test_register_binary_file("/disk/new.d80", image, DISKIMAGE_D80_SIZE, true);
     free(image);
     make_file("new.d80");
     const window_t* const window = menu.controller.window;
@@ -1156,8 +1156,8 @@ START_TEST(test_resume_exit_does_not_request_configuration_load) {
     ck_assert_str_eq(ieee_drive_filename(1), "");
     ck_assert_uint_eq(mount_count, 0);
     if (_i != 0) {
-        test_unregister_file("/disks/old.d64");
-        test_unregister_file("/disks/peer.d64");
+        test_unregister_file("/disk/old.d64");
+        test_unregister_file("/disk/peer.d64");
     }
     ck_assert_int_eq(menu.exit, MENU_EXIT_RESUME);
     ck_assert_uint_eq(setup_count, 0);
@@ -1321,7 +1321,7 @@ START_TEST(test_disk_probe_error_keeps_picker_open) {
     ck_assert_int_eq(ieee_drive_try_mount(0, "previous.d64", NULL), DOS_MEDIA_OK);
     if (_i != 0) {
         const uint8_t bytes[DISKIMAGE_SECTOR_SIZE] = {0};
-        test_register_binary_file("/disks/bad.d64", bytes, sizeof(bytes), true);
+        test_register_binary_file("/disk/bad.d64", bytes, sizeof(bytes), true);
     }
     open_slot(0);
     move_to(1);
@@ -1520,12 +1520,12 @@ START_TEST(test_nested_browsing_mount_and_eject) {
     move_to(1);
     ck_assert_str_eq(menu.labels[1], "[superpet]");
     tui_controller_dispatch(&menu.controller, tui_action_activate);
-    ck_assert_str_eq(menu.browser.path, "/disks/superpet");
+    ck_assert_str_eq(menu.browser.path, "/disk/superpet");
     ck_assert_str_eq(menu.labels[0], "[Eject]");
     ck_assert_str_eq(menu.labels[1], "[..]");
     ck_assert_str_eq(menu.labels[2], "os9.d64");
     tui_controller_dispatch(&menu.controller, tui_action_back);
-    ck_assert_str_eq(menu.browser.path, "/disks");
+    ck_assert_str_eq(menu.browser.path, "/disk");
     ck_assert_uint_eq(menu.picker_control.list.selected, 1);
     tui_controller_dispatch(&menu.controller, tui_action_activate);
     move_to(2);
@@ -1538,7 +1538,7 @@ START_TEST(test_nested_browsing_mount_and_eject) {
     ck_assert_str_eq(ieee_drive_filename(3), "");
     ck_assert_str_eq(ieee_drive_filename(4), "superpet/os9.d64");
     open_slot(4);
-    ck_assert_str_eq(menu.browser.path, "/disks/superpet");
+    ck_assert_str_eq(menu.browser.path, "/disk/superpet");
     ck_assert_uint_eq(menu.picker_control.list.selected, 0);
     ck_assert_uint_eq(menu.picker_control.list.first_visible, 0);
     move_to(0);
@@ -1605,7 +1605,7 @@ START_TEST(test_transient_directory_scan_failure) {
         move_to(1);
         if (_i == 2) {
             tui_controller_dispatch(&menu.controller, tui_action_activate);
-            ck_assert_str_eq(menu.browser.path, "/disks/child");
+            ck_assert_str_eq(menu.browser.path, "/disk/child");
         }
         fail_next_readdir = true;
         tui_controller_dispatch(&menu.controller, _i == 1 ? tui_action_activate : tui_action_back);
@@ -1680,7 +1680,7 @@ START_TEST(test_native_formats_include_d82_and_exclude_hdd) {
     ck_assert_ptr_nonnull(expanded);
     image = expanded;
     memset(image + DISKIMAGE_D80_SIZE, 0, DISKIMAGE_D80_SIZE);
-    test_register_binary_file("/disks/gamma.D82", image, DISKIMAGE_D82_SIZE, true);
+    test_register_binary_file("/disk/gamma.D82", image, DISKIMAGE_D82_SIZE, true);
     free(image);
     open_slot(0);
     ck_assert_uint_eq(menu.picker_control.list.count, 4);
@@ -1735,7 +1735,7 @@ START_TEST(test_deep_directories_do_not_grow_screen_stack) {
         tui_controller_dispatch(&menu.controller, tui_action_back);
         ck_assert_uint_eq(menu.controller.screen_count, 3);
     }
-    ck_assert_str_eq(menu.browser.path, "/disks");
+    ck_assert_str_eq(menu.browser.path, "/disk");
     tui_controller_dispatch(&menu.controller, tui_action_back);
     ck_assert_uint_eq(menu.controller.screen_count, 2);
 }

@@ -360,7 +360,7 @@ static void change_directory(menu_ui_t* menu) {
     list->page_valid = list->load_page(menu, 0, list->visible_rows);
 }
 
-// Goes to the parent within /disks, or returns to the dashboard at the root.
+// Goes to the parent within /disk, or returns to the dashboard at the root.
 static void picker_back(tui_controller_t* controller, void* context) {
     menu_ui_t* const menu = context;
     if (controller->screen_count == 1) return;
@@ -418,7 +418,7 @@ static void select_item(tui_controller_t* controller, void* context, size_t inde
         snprintf(menu->browser.path, sizeof(menu->browser.path), "%s", path);
         change_directory(menu);
     } else {
-        mount_disk(controller, menu, path + strlen("/disks/"));
+        mount_disk(controller, menu, path + strlen(sd_dir_prefix(SD_DIR_DISK)));
     }
 }
 
@@ -454,8 +454,8 @@ static void show_disks(tui_controller_t* controller, void* context, size_t index
     else if (mounted[0] != '\0') {
         const char* const slash = strrchr(mounted, '/');
         if (slash != NULL) {
-            const int length = snprintf(menu->browser.path, sizeof(menu->browser.path), "/disks/%.*s",
-                                        (int) (slash - mounted), mounted);
+            const int length = snprintf(menu->browser.path, sizeof(menu->browser.path), "%s%.*s",
+                                        sd_dir_prefix(SD_DIR_DISK), (int) (slash - mounted), mounted);
             vet(length >= 0 && length < SD_PATH_MAX, "mounted menu path is too long");
         }
     }

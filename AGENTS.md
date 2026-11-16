@@ -99,5 +99,5 @@ Include the SPDX license header in all new source files (see `fw/src/main.c` for
 
 | Variable | Purpose |
 |----------|---------|
-| `ECONOPET_MEDIA_DIR` | Path to the directory containing `roms/` and `disks/` for the SD-card package |
+| `ECONOPET_MEDIA_DIR` | Path to the developer media root containing `rom/` and `disk/` for the SD-card package. |
 | `PICO_SDK_PATH` | Path to Raspberry Pi Pico SDK (typically `/opt/pico-sdk`). Read files here to understand Pico SDK APIs, even though it is outside the workspace. |

@@ -656,9 +656,9 @@ const char* ieee_drive_filename(const unsigned int slot) {
     return filenames[slot];
 }
 
-// Normalize a host path once and reject a result outside the disks directory.
+// Normalize a host path once and reject a result outside the disk/ directory.
 static bool image_path(const char* const name, char path[SD_PATH_MAX]) {
-    sd_make_path(path, SD_DIR_DISKS, name);
+    sd_make_path(path, SD_DIR_DISK, name);
     const char* next = path;
     size_t used = 0;
     while (*next != '\0') {
@@ -683,7 +683,7 @@ static bool image_path(const char* const name, char path[SD_PATH_MAX]) {
         }
     }
     path[used] = '\0';
-    const char* const prefix = sd_dir_prefix(SD_DIR_DISKS);
+    const char* const prefix = sd_dir_prefix(SD_DIR_DISK);
     const size_t prefix_length = strlen(prefix);
     if (strncasecmp(path, prefix, prefix_length) != 0) {
         return false;
@@ -702,7 +702,7 @@ static int find_image(const char* const name) {
     return -1;
 }
 
-// Mount a unique disks-relative file, ejecting an incompatible partner, or remove one slot.
+// Mount a unique disk/-relative file, ejecting an incompatible partner, or remove one slot.
 // Reject invalid candidates or busy transport without replacing the live mount.
 dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* const filename,
                                         ieee_drive_mount_outcome_t* const outcome) {
@@ -730,12 +730,12 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
     if (filename != NULL && !sd_resolve_path(path)) {
         return DOS_MEDIA_IO_ERROR;
     }
-    // Filesystem-resolved directory aliases must still remain inside /disks.
-    const char* const prefix = sd_dir_prefix(SD_DIR_DISKS);
+    // Filesystem-resolved directory aliases must still remain inside /disk.
+    const char* const prefix = sd_dir_prefix(SD_DIR_DISK);
     if (filename != NULL && strncasecmp(path, prefix, strlen(prefix)) != 0) {
         return DOS_MEDIA_INVALID;
     }
-    const char* const name = filename != NULL ? path + strlen(sd_dir_prefix(SD_DIR_DISKS)) : "";
+    const char* const name = filename != NULL ? path + strlen(sd_dir_prefix(SD_DIR_DISK)) : "";
     const unsigned int unit = slot / DOS_MEDIA_SLOTS_PER_UNIT;
     const int source = find_image(name);
     const unsigned int source_unit = source >= 0 ? (unsigned int)source / DOS_MEDIA_SLOTS_PER_UNIT : unit;

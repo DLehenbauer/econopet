@@ -54,7 +54,7 @@ static void mount_image(const unsigned int slot, const unsigned int format, cons
         memset(image + DISKIMAGE_D80_SIZE, 0, DISKIMAGE_D80_SIZE);
     }
     char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, name);
+    sd_make_path(path, SD_DIR_DISK, name);
     test_register_binary_file(path, image, sizes[format], false);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(slot, name, NULL), DOS_MEDIA_OK);
@@ -201,7 +201,7 @@ static void mount_writable(void) {
     ck_assert_ptr_nonnull(image);
     d64_fixture_layout_t layout;
     ck_assert_ptr_null(d64_fixture_empty(&layout, image, DISKIMAGE_D64_SIZE));
-    test_register_binary_file("/disks/writable.d64", image, DISKIMAGE_D64_SIZE, true);
+    test_register_binary_file("/disk/writable.d64", image, DISKIMAGE_D64_SIZE, true);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(0, "writable.d64", NULL), DOS_MEDIA_OK);
 }
@@ -213,7 +213,7 @@ START_TEST(test_failed_write_survives_lifecycle_and_remounts_persisted_bytes) {
     mount_image(2, 1, "peer.d80");
     open_channel(8, 2, "0:FILE,S,W");
     write_payload(8, 22);
-    test_fail_file_writes("/disks/writable.d64", true);
+    test_fail_file_writes("/disk/writable.d64", true);
     commands(IEEE_CMD_LISTEN(8), IEEE_CMD_CLOSE(2));
     service();
     status(8, "25, WRITE ERROR,17,00\r");
@@ -232,7 +232,7 @@ START_TEST(test_failed_write_survives_lifecycle_and_remounts_persisted_bytes) {
     ieee_drive_reset();
     status(8, "25, WRITE ERROR,17,00\r");
     status(9, "73,CBM DOS V2.7,00,00,0\r");
-    test_fail_file_writes("/disks/writable.d64", false);
+    test_fail_file_writes("/disk/writable.d64", false);
     commands(IEEE_CMD_LISTEN(8), IEEE_CMD_CLOSE(2));
     service();
     status(8, "00, OK,00,00\r");
@@ -295,7 +295,7 @@ START_TEST(test_invalid_image_preserves_mounted_unit) {
     ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
     ck_assert_str_eq(ieee_drive_filename(1), "");
     const uint8_t invalid[DISKIMAGE_SECTOR_SIZE] = {0};
-    test_register_binary_file("/disks/invalid.img", invalid, sizeof(invalid), false);
+    test_register_binary_file("/disk/invalid.img", invalid, sizeof(invalid), false);
     ck_assert_int_eq(ieee_drive_try_mount(0, "invalid.img", NULL), DOS_MEDIA_UNSUPPORTED);
     ck_assert_str_eq(ieee_drive_filename(0), "old.d64");
     status(8, "73,CBM DOS V2,00,00\r");
@@ -357,7 +357,7 @@ START_TEST(test_mount_failure_preserves_filename_and_closes_candidate) {
     mount_image(0, 0, "live.d64");
     mount_image(1, 0, "partner.d64");
     const uint8_t invalid[DISKIMAGE_SECTOR_SIZE] = {0};
-    test_register_binary_file("/disks/invalid.d82", invalid, sizeof(invalid), false);
+    test_register_binary_file("/disk/invalid.d82", invalid, sizeof(invalid), false);
     const size_t open_files = test_open_file_count();
     ck_assert_int_eq(ieee_drive_try_mount(0, _i == 0 ? "missing.d64" : "invalid.d82", NULL),
                      _i == 0 ? DOS_MEDIA_IO_ERROR : DOS_MEDIA_UNSUPPORTED);
@@ -441,10 +441,10 @@ START_TEST(test_moving_image_keeps_one_mount) {
 }
 END_TEST
 
-// Canonical paths identify one mount, stay inside /disks, and reuse storage across aliases.
+// Canonical paths identify one mount, stay inside /disk, and reuse storage across aliases.
 START_TEST(test_mounted_image_path_aliases) {
     uint8_t* const image = diskimage_test_make_d64();
-    test_register_binary_file("/disks/folder/disk.d64", image, DISKIMAGE_D64_SIZE, false);
+    test_register_binary_file("/disk/folder/disk.d64", image, DISKIMAGE_D64_SIZE, false);
     free(image);
     ieee_drive_mount_outcome_t outcome;
     ck_assert_int_eq(ieee_drive_try_mount(0, "./folder//child/../disk.d64", &outcome), DOS_MEDIA_OK);
@@ -452,7 +452,7 @@ START_TEST(test_mounted_image_path_aliases) {
     ck_assert_int_eq(outcome.moved_from_slot, -1);
     ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
     mount_image(1, 0, "other.d64");
-    const char* const aliases[] = {"./FOLDER//child/../DISK.d64", "../disks/folder/disk.d64"};
+    const char* const aliases[] = {"./FOLDER//child/../DISK.d64", "../disk/folder/disk.d64"};
     for (size_t index = 0; index < count_of(aliases); ++index) {
         ck_assert_int_eq(ieee_drive_try_mount(2, aliases[index], &outcome), DOS_MEDIA_OK);
         ck_assert_int_eq(outcome.moved_from_slot, index == 0 ? 0 : -1);
@@ -460,12 +460,12 @@ START_TEST(test_mounted_image_path_aliases) {
         ck_assert_str_eq(ieee_drive_filename(0), "");
     }
     ck_assert_str_eq(ieee_drive_filename(2), "folder/disk.d64");
-    ck_assert_int_eq(ieee_drive_try_mount(3, "../disks/folder/disk.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(3, "../disk/folder/disk.d64", &outcome), DOS_MEDIA_OK);
     ck_assert_int_eq(outcome.moved_from_slot, 2);
     ck_assert_int_eq(outcome.ejected_partner, diskimage_type_none);
     ck_assert_str_eq(ieee_drive_filename(2), "");
     ck_assert_str_eq(ieee_drive_filename(3), "folder/disk.d64");
-    const char* const invalid[] = {"../roms/disk.d64", "../disks-elsewhere/disk.d64", "..", ".", "folder/.."};
+    const char* const invalid[] = {"../rom/disk.d64", "../disk-elsewhere/disk.d64", "..", ".", "folder/.."};
     for (size_t index = 0; index < count_of(invalid); ++index) {
         ck_assert_int_eq(ieee_drive_try_mount(0, invalid[index], &outcome), DOS_MEDIA_INVALID);
         ck_assert_int_eq(outcome.moved_from_slot, 2);
@@ -474,7 +474,7 @@ START_TEST(test_mounted_image_path_aliases) {
         ck_assert_str_eq(ieee_drive_filename(3), "folder/disk.d64");
     }
     ck_assert_str_eq(ieee_drive_filename(1), "other.d64");
-    ck_assert_uint_eq(test_file_open_calls("/disks/folder/disk.d64"), 1);
+    ck_assert_uint_eq(test_file_open_calls("/disk/folder/disk.d64"), 1);
 }
 END_TEST
 
@@ -482,20 +482,20 @@ END_TEST
 START_TEST(test_filesystem_aliases_reuse_image_owner) {
     mount_writable();
     const char* const aliases[] = {
-        "/disks/writable.d64.",
-        "/disks/writable.d64 ",
-        "/disks/WRITAB~1.D64",
-        "/disks/ALIAS~1/WRITAB~1.D64",
+        "/disk/writable.d64.",
+        "/disk/writable.d64 ",
+        "/disk/WRITAB~1.D64",
+        "/disk/ALIAS~1/WRITAB~1.D64",
     };
     for (size_t index = 0; index < count_of(aliases); ++index) {
-        test_register_file_alias(aliases[index], "/disks/writable.d64");
+        test_register_file_alias(aliases[index], "/disk/writable.d64");
         ieee_drive_mount_outcome_t outcome;
-        ck_assert_int_eq(ieee_drive_try_mount(index + 1, aliases[index] + strlen("/disks/"), &outcome), DOS_MEDIA_OK);
+        ck_assert_int_eq(ieee_drive_try_mount(index + 1, aliases[index] + strlen("/disk/"), &outcome), DOS_MEDIA_OK);
         ck_assert_int_eq(outcome.moved_from_slot, index);
         ck_assert_str_eq(ieee_drive_filename(index), "");
         ck_assert_str_eq(ieee_drive_filename(index + 1), "writable.d64");
         ck_assert_uint_eq(test_open_file_count(), 1);
-        ck_assert_uint_eq(test_file_open_calls("/disks/writable.d64"), 1);
+        ck_assert_uint_eq(test_file_open_calls("/disk/writable.d64"), 1);
     }
 }
 END_TEST
@@ -514,14 +514,14 @@ END_TEST
 START_TEST(test_filesystem_alias_outside_disks_is_rejected) {
     mount_writable();
     uint8_t* const image = diskimage_test_make_d64();
-    test_register_binary_file("/roms/outside.d64", image, DISKIMAGE_D64_SIZE, true);
+    test_register_binary_file("/rom/outside.d64", image, DISKIMAGE_D64_SIZE, true);
     free(image);
-    test_register_file_alias("/disks/..\\roms\\outside.d64", "/roms/outside.d64");
+    test_register_file_alias("/disk/..\\rom\\outside.d64", "/rom/outside.d64");
     ieee_drive_mount_outcome_t outcome = {.moved_from_slot = 7};
-    ck_assert_int_ne(ieee_drive_try_mount(0, "..\\roms\\outside.d64", &outcome), DOS_MEDIA_OK);
+    ck_assert_int_ne(ieee_drive_try_mount(0, "..\\rom\\outside.d64", &outcome), DOS_MEDIA_OK);
     ck_assert_int_eq(outcome.moved_from_slot, 7);
     ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
-    ck_assert_uint_eq(test_file_open_calls("/roms/outside.d64"), 0);
+    ck_assert_uint_eq(test_file_open_calls("/rom/outside.d64"), 0);
     ck_assert_uint_eq(test_open_file_count(), 1);
 }
 END_TEST
@@ -540,7 +540,7 @@ START_TEST(test_writable_moves_reuse_storage_handle) {
     for (unsigned int index = 0; index < count_of(destinations); ++index) {
         const unsigned int destination = destinations[index];
         ck_assert_int_eq(ieee_drive_try_mount(destination, ieee_drive_filename(source), NULL), DOS_MEDIA_OK);
-        ck_assert_uint_eq(test_file_open_calls("/disks/writable.d64"), 1);
+        ck_assert_uint_eq(test_file_open_calls("/disk/writable.d64"), 1);
         ck_assert_str_eq(ieee_drive_filename(destination), "writable.d64");
         if (source != destination) ck_assert_str_eq(ieee_drive_filename(source), "");
         ck_assert_uint_eq(test_open_file_count(), open_files - index);
@@ -555,7 +555,7 @@ START_TEST(test_busy_lifecycle_preserves_earlier_unit) {
     open_channel(8, 2, "0:FILE,S,W");
     write_payload(8, 22);
     uint8_t* const image = diskimage_test_make_d64();
-    test_register_binary_file("/disks/busy.d64", image, DISKIMAGE_D64_SIZE, true);
+    test_register_binary_file("/disk/busy.d64", image, DISKIMAGE_D64_SIZE, true);
     free(image);
     ck_assert_int_eq(ieee_drive_try_mount(2, "busy.d64", NULL), DOS_MEDIA_OK);
 
@@ -578,11 +578,11 @@ START_TEST(test_busy_lifecycle_preserves_earlier_unit) {
     ieee_drive_task();
     ck_assert_uint_eq(spi_read_at(ECONOPET_WB_IEEE_STATUS_ADDR) & ECONOPET_IEEE_ST_RX_AVAIL_MASK, 0);
     ck_assert_int_eq(ieee_drive_try_mount(2, NULL, NULL), DOS_MEDIA_BUSY);
-    test_fail_file_writes("/disks/writable.d64", true);
+    test_fail_file_writes("/disk/writable.d64", true);
     const dos_media_result_t moved = _i == 0                    ? ieee_drive_try_mount(2, "writable.d64", NULL)
                                      : ieee_drive_unmount_all() ? DOS_MEDIA_OK
                                                                 : DOS_MEDIA_BUSY;
-    test_fail_file_writes("/disks/writable.d64", false);
+    test_fail_file_writes("/disk/writable.d64", false);
     const size_t retained = mock_ieee_status_count();
     const uint8_t retained_first = retained != 0 ? mock_ieee_status_byte(0) : 0;
     ck_assert_str_eq(ieee_drive_filename(0), "writable.d64");
@@ -615,7 +615,7 @@ START_TEST(test_failed_image_move_preserves_source_until_retry) {
     mount_image(destination ^ 1u, 1, "destination-partner.d80");
     open_channel(device, 2, "0:FILE,S,W");
     write_payload(device, 22);
-    test_fail_file_writes("/disks/writable.d64", true);
+    test_fail_file_writes("/disk/writable.d64", true);
     const size_t open_files = test_open_file_count();
     ieee_drive_mount_outcome_t outcome = {
         .moved_from_slot = 7,
@@ -630,7 +630,7 @@ START_TEST(test_failed_image_move_preserves_source_until_retry) {
     ck_assert_str_eq(ieee_drive_filename(destination ^ 1u), "destination-partner.d80");
     ck_assert_uint_eq(test_open_file_count(), open_files);
 
-    test_fail_file_writes("/disks/writable.d64", false);
+    test_fail_file_writes("/disk/writable.d64", false);
     ck_assert_int_eq(ieee_drive_try_mount(destination, "writable.d64", &outcome), DOS_MEDIA_OK);
     ck_assert_int_eq(outcome.moved_from_slot, source);
     ck_assert_int_eq(outcome.ejected_partner, diskimage_type_d80);
@@ -668,7 +668,7 @@ END_TEST
 // The last valid full SD path mounts without truncation.
 START_TEST(test_mount_path_boundary) {
     char name[SD_PATH_MAX];
-    const size_t length = SD_PATH_MAX - 1 - strlen(sd_dir_prefix(SD_DIR_DISKS));
+    const size_t length = SD_PATH_MAX - 1 - strlen(sd_dir_prefix(SD_DIR_DISK));
     memset(name, 'a', length);
     name[length] = '\0';
     mount_image(0, 0, name);
@@ -678,7 +678,7 @@ END_TEST
 // The public mount boundary rejects overlong paths before opening any file.
 START_TEST(test_mount_rejects_overlong_path) {
     char name[SD_PATH_MAX];
-    const size_t length = SD_PATH_MAX - strlen(sd_dir_prefix(SD_DIR_DISKS));
+    const size_t length = SD_PATH_MAX - strlen(sd_dir_prefix(SD_DIR_DISK));
     memset(name, 'a', length);
     name[length] = '\0';
     test_expect_fatal_message("SD path exceeds 255 characters (got 256)");

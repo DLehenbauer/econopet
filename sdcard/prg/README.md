@@ -1,6 +1,6 @@
 # High-Speed Virtual Datasette
 
-Place `.prg` files in this directory on the SD card to make them available
+Place `.prg` files in this directory (`/prg`) on the SD card to make them available
 for loading on the PET.
 
 ## Usage

@@ -58,10 +58,10 @@ typedef struct {
 static tape_state_t state;
 
 // Search the programs directory for a .prg file matching 'pattern'. On success, writes the
-// full path (e.g. "/prgs/game.prg") to 'path_out' and returns true.
+// full path (e.g. "/prg/game.prg") to 'path_out' and returns true.
 static bool find_prg_file(const uint8_t* pattern, uint8_t pattern_len,
                           char path_out[SD_PATH_MAX]) {
-    const char* prefix = sd_dir_prefix(SD_DIR_PRGS);
+    const char* prefix = sd_dir_prefix(SD_DIR_PRG);
     DIR* dir = opendir(prefix);
     if (dir == NULL) {
         log_warn("tape: cannot open %s", prefix);
@@ -86,7 +86,7 @@ static bool find_prg_file(const uint8_t* pattern, uint8_t pattern_len,
         }
 
         if (cbm_filename_match(pattern, pattern_len, name)) {
-            sd_make_path(path_out, SD_DIR_PRGS, name);
+            sd_make_path(path_out, SD_DIR_PRG, name);
             found = true;
             break;
         }
@@ -182,7 +182,7 @@ static int dir_entry_cmp(const void* a, const void* b) {
 // (with the ".prg" extension suppressed) and the block count derived from the
 // file size. Returns the number of entries collected (up to 'max').
 static int gather_dir_entries(tape_dir_entry_t* out, int max) {
-    const char* prefix = sd_dir_prefix(SD_DIR_PRGS);
+    const char* prefix = sd_dir_prefix(SD_DIR_PRG);
     DIR* dir = opendir(prefix);
     if (dir == NULL) {
         log_warn("tape: cannot open %s", prefix);
@@ -215,7 +215,7 @@ static int gather_dir_entries(tape_dir_entry_t* out, int max) {
         // Block count from the file size (rounded up, at least one block).
         uint16_t blocks = 1;
         char path[SD_PATH_MAX];
-        sd_make_path(path, SD_DIR_PRGS, name);
+        sd_make_path(path, SD_DIR_PRG, name);
         struct stat st;
         if (stat(path, &st) == 0) {
             blocks = tape_dir_blocks_from_bytes((uint64_t)st.st_size, true);
@@ -280,7 +280,7 @@ static bp_result_t tape_load_directory(uint16_t pc) {
     uint8_t stub_buf[TAPE_BUFFER_CAPACITY];
     char message[SD_PATH_MAX];
     const int n = snprintf(message, sizeof(message), "FOUND %s$",
-                           sd_dir_prefix(SD_DIR_PRGS));
+                           sd_dir_prefix(SD_DIR_PRG));
     vet(n >= 0 && (size_t) n < sizeof(message), "could not format tape directory message");
     size_t stub_len = tape_build_stub(stub_buf, message, graphics_charset);
     spi_write(TAPE_BUFFER, stub_buf, stub_len);

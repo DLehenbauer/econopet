@@ -10,24 +10,24 @@ endforeach()
 
 # Discard removed or renamed inputs as well as obsolete generated ROMs.
 file(REMOVE_RECURSE "${SDCARD_ROOT_DIR}")
-file(MAKE_DIRECTORY "${SDCARD_ROOT_DIR}/roms")
+file(MAKE_DIRECTORY "${SDCARD_ROOT_DIR}/rom")
 file(COPY
     "${CMAKE_CURRENT_LIST_DIR}/config.yaml"
     "${CMAKE_CURRENT_LIST_DIR}/README.md"
     "${CMAKE_CURRENT_LIST_DIR}/../NOTICE.md"
     "${CMAKE_CURRENT_LIST_DIR}/ukm"
-    "${ECONOPET_MEDIA_DIR}/roms"
-    "${ECONOPET_MEDIA_DIR}/disks"
+    "${ECONOPET_MEDIA_DIR}/rom"
+    "${ECONOPET_MEDIA_DIR}/disk"
     DESTINATION "${SDCARD_ROOT_DIR}")
 configure_file("${BOOTLOADER_UF2}" "${SDCARD_ROOT_DIR}/bootloader.uf2" COPYONLY)
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/prgs/README.md"
-    DESTINATION "${SDCARD_ROOT_DIR}/prgs")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/prg/README.md"
+    DESTINATION "${SDCARD_ROOT_DIR}/prg")
 
 # Generated ROMs override media copies. The embedded menu.rom is not an SD asset.
 file(GLOB rom_bin_files "${ROM_BIN_DIR}/*.bin")
 foreach(bin_file IN LISTS rom_bin_files)
     get_filename_component(bin_name "${bin_file}" NAME)
-    configure_file("${bin_file}" "${SDCARD_ROOT_DIR}/roms/${bin_name}" COPYONLY)
+    configure_file("${bin_file}" "${SDCARD_ROOT_DIR}/rom/${bin_name}" COPYONLY)
 endforeach()
 
 # Keep intermediate images beside the package root, outside the SD-card contents.

@@ -373,8 +373,8 @@ TEST_F(SystemTest, FirmwareInterruptedMountRetiresCandidateAndMountedFiles) {
     EXPECT_THROW(session.close(), std::logic_error);
     observation.reset();
     ASSERT_EQ(test_open_file_count(), 0u);
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
-    EXPECT_FALSE(test_file_registered("/disks/candidate.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/candidate.d64"));
     System other;
     EXPECT_NO_THROW(FirmwareSession next(other));
 }
@@ -395,7 +395,7 @@ TEST_F(SystemTest, FirmwareDetachedUnmountExceptionPreservesOriginalError) {
     }
     observation.reset();
     ASSERT_EQ(test_open_file_count(), 0u);
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     System other;
     EXPECT_NO_THROW(FirmwareSession next(other));
 }
@@ -437,7 +437,7 @@ TEST_F(SystemTest, FirmwareTestSessionReportsNonStandardDestructorFailure) {
         "firmware teardown failed: non-standard exception");
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     System other;
     EXPECT_NO_THROW({
         FirmwareTestSession next(other);
@@ -452,7 +452,7 @@ TEST_F(FirmwareTest, FirmwareFixtureReportsNonStandardExplicitTeardownFailure) {
     EXPECT_NONFATAL_FAILURE(TearDown(), "firmware teardown failed: non-standard exception");
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     EXPECT_NO_THROW(firmware.close());
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
@@ -466,7 +466,7 @@ TEST_F(FirmwareTest, FirmwareFixtureReportsOriginalStandardTeardownDiagnostic) {
     EXPECT_NONFATAL_FAILURE(TearDown(), "firmware teardown failed: explicit teardown observer failure");
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     EXPECT_NO_THROW(firmware.close());
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
@@ -502,7 +502,7 @@ TEST_F(SystemTest, FirmwareTeardownReporterRetainsOriginalExceptionAndFrozenTrac
             EXPECT_FALSE(standard);
             EXPECT_EQ(error.value, 42);
         }
-        EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+        EXPECT_FALSE(test_file_registered("/disk/test.d64"));
         const auto frozen_end = rx->capture().window().completed();
         FirmwareSession replacement(system);
         replacement.mount(disk_fixture::D64::empty());
@@ -528,7 +528,7 @@ TEST_F(SystemTest, FirmwareExplicitCloseRethrowsNonStandardFailureAfterCleanup) 
     }
     observation.reset();
     EXPECT_TRUE(system.spi().peek_failed());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     const auto at = system.time();
     EXPECT_NO_THROW(session.close());
     EXPECT_THROW(borrowed(system, 1), std::logic_error);
@@ -560,7 +560,7 @@ TEST_F(SystemTest, FirmwareNonStandardTeardownDuringUnwindPreservesOuterFailure)
         "firmware teardown failed: non-standard exception");
     observation.reset();
     EXPECT_TRUE(caught_outer);
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
 }
@@ -641,11 +641,11 @@ TEST_F(FirmwareTest, FirmwareRejectedFixtureTeardownRetainsOwnershipUntilRetry) 
     auto observation = system.observe([&](const System&) { TearDown(); });
     EXPECT_NONFATAL_FAILURE(system.tick(1), "callback cannot mutate or advance the board");
     observation.reset();
-    EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+    EXPECT_TRUE(test_file_registered("/disk/test.d64"));
     EXPECT_FALSE(system.spi().peek_failed());
     EXPECT_NO_THROW(firmware.service());
     EXPECT_NO_THROW(firmware.close());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     const auto frozen_end = rx.capture().window().completed();
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
@@ -657,16 +657,16 @@ TEST_F(FirmwareTest, FirmwareSelectedBusCloseRetainsOwnershipUntilRetry) {
     firmware.mount(disk_fixture::D64::empty());
     system.spi().transaction([&](auto&) {
         EXPECT_THROW(firmware.close(), std::logic_error);
-        EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+        EXPECT_TRUE(test_file_registered("/disk/test.d64"));
     });
     system.drive_spi(false, false, false);
     EXPECT_THROW(firmware.close(), std::logic_error);
-    EXPECT_TRUE(test_file_registered("/disks/test.d64"));
+    EXPECT_TRUE(test_file_registered("/disk/test.d64"));
     system.drive_spi(true, false, false);
     system.tick(1);
     EXPECT_NO_THROW(firmware.service());
     EXPECT_NO_THROW(firmware.close());
-    EXPECT_FALSE(test_file_registered("/disks/test.d64"));
+    EXPECT_FALSE(test_file_registered("/disk/test.d64"));
     System other;
     EXPECT_NO_THROW(FirmwareTestSession next(other));
 }
@@ -707,7 +707,7 @@ TEST_F(FirmwareTest, FirmwareMountValidationAndFailureRetainUsableSession) {
 
 // A shared-registry collision must not abort, advance the board or transfer file ownership.
 TEST_F(SystemTest, FirmwareMountRejectsSharedRegistryCollisionWithoutClaimingIt) {
-    constexpr const char* path = "/disks/test.d64";
+    constexpr const char* path = "/disk/test.d64";
     const uint8_t original[] = {0x5a, 0xa5};
     test_register_binary_file(path, original, sizeof(original), false);
     {

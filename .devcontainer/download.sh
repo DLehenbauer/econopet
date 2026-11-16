@@ -5,7 +5,7 @@
 # Download PET ROMs and SuperPET disks, then verify MD5 checksums.
 #
 # Upstream files are retained verbatim under downloads/. Installed media is
-# copied or extracted under media/roms and media/disks.
+# copied or extracted under media/rom and media/disk.
 #
 # Usage:
 #   .devcontainer/download.sh <install_dir>
@@ -28,7 +28,7 @@ readonly MEDIA_DIR="${INSTALL_DIR}/media"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly DOWNLOAD_TIMEOUT_SECONDS=30
 readonly DOWNLOAD_RETRIES=2
-mkdir -p "${DOWNLOAD_DIR}" "${MEDIA_DIR}/roms" "${MEDIA_DIR}/disks"
+mkdir -p "${DOWNLOAD_DIR}" "${MEDIA_DIR}/rom" "${MEDIA_DIR}/disk"
 
 # Each manifest row has five pipe-separated fields:
 #   primary URL | fallback URL | archive member | installed media path | installed-file MD5
@@ -37,43 +37,43 @@ mkdir -p "${DOWNLOAD_DIR}" "${MEDIA_DIR}/roms" "${MEDIA_DIR}/disks"
 # A path ending in "/-" keeps the source or archive-member basename. Checksums
 # cover the final extracted/copied media, not the downloaded file.
 readonly MEDIA_LIST="$(cat <<'EOF'
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-c000.901439-01.bin|-|-|roms/-|b45778bdc95d67ccb475008718f4466b
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-d000.901439-02.bin|-|-|roms/-|e13b5675386beb93e8397df891113f5b
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-e000.901439-03.bin|-|-|roms/-|ef9bd0e62dfc47eb463fef20d0344826
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-f000.901439-04.bin|-|-|roms/-|2d44afcab9713ad4d11118a9e7429a81
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-c800.901439-05.bin|-|-|roms/-|d03ee896c37ad1bd86773655948e1174
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-d800.901439-06.bin|-|-|roms/-|673b61a8fe11cd5d7e4003f81a2d8453
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-f800.901439-07.bin|-|-|roms/-|9e1357c33c0d5a4a89b263f0c3c317ff
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/characters-1.901447-08.bin|-|-|roms/-|29a82eb54e73ebc5673c718c489b174b
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-2-c000.901439-09.bin|-|-|roms/-|9eaf58aa938083ad74117a81ac460e37
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-2-c000.901465-01.bin|-|-|roms/-|6b13eb6a7e4a2e15f3fff18461ce9c0d
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-2-d000.901465-02.bin|-|-|roms/-|8b7779f1afe3a6542bd17f6b80917d67
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-2-b.901474-01.bin|-|-|roms/-|7f87889ca7ee2537f0c1993d35d0fb18
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-2-n.901447-24.bin|-|-|roms/-|cb8e8404c0b28eda10469792dfd1dbc2
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/kernal-2.901465-03.bin|-|-|roms/-|51a38bfef8f9e72cb64bf7d874b4c8c6
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/characters-2.901447-10.bin|-|-|roms/-|9880432e633b15998d58884ff34c4e70
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-b000.901465-19.bin|-|-|roms/-|34d6650acd5dc4a4049f0c189ab5eeb0
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-c000.901465-20.bin|-|-|roms/-|398217f35fa50417c7e84883a93a349b
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-d000.901465-21.bin|-|-|roms/-|ab780e94772dca756a0678a17b5bc3a2
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-b.901474-02.bin|-|-|roms/-|a09d11163a708b8dea90f1c5df33dca0
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-n.901447-29.bin|-|-|roms/-|6fe27b43ec550a04d30b2e45f07d51fb
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-50Hz.901498-01.bin|-|-|roms/-|b76d756e7ac8752ae0035f3ce5f1383c
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-60Hz.901499-01.bin|-|-|roms/-|2e86403fc2ac30e7af05b9e8607bef98
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-80-b-50Hz.901474-04-3681.bin|-|-|roms/-|3e646194de7458b05a06159afbdd9427
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-80-b-60Hz.901474-03.bin|-|-|roms/-|da56995be008c5f7db1094e81e5060aa
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/kernal-4.901465-22.bin|-|-|roms/-|16ec21443ea5431ab63d511061054e6f
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-b000.901465-23.bin|-|-|roms/-|43b3a9f5e1c762af0b3bb6cc71aafb84
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin|-|-|roms/-|84cb402449c6107b7d2b636cb28f0042
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin|-|-|roms/-|0f9bd7123d99892ce80f1e7e438c2194
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff.970020-12.bin|-|-|roms/-|a4ffd0a17cb675f0b45e9c085126e44c
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff-970034-12.bin|-|-|roms/-|c03098d26dbb1a23737d3286f264bc97
-https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/characters.901640-01.bin|-|-|roms/-|dd30641d9e6a221edd725d1e529dcbdb
-https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disks/superpet/os9/os9-systemdisk-b.d80|a772ba7ad5d2f6a635a092f80f80d45c
-https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-1.d64.gz|-|-|disks/superpet/-|0c32478f4636b8387b62da3dde1f2acb
-https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-2.d64.gz|-|-|disks/superpet/-|9c9db97f8f56ae408b098abab6db7a5b
-https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz|-|-|disks/superpet/-|0d062e32b06e0285fae2cc9800b97fc9
-https://github.com/sjgray/cbm-edit-rom/raw/refs/heads/master/binaries/ColourPET/VICE/colourpet-c1-80-b-60-esc-wedge-reboot-backarrow-VICE%20(2017-03-03).bin|-|-|roms/colourpet-c1-80-b-60.bin|34fc9984ea9710d513a79ecec9a7bdb1
-https://www.insanerocketry.com/personal/rom1diskmagic.zip|-|rom1diskmagic/rom1diskrom/rom1diskrom_v15.bin|roms/-|b13d678c248748a1440151b5f78fb385
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-c000.901439-01.bin|-|-|rom/-|b45778bdc95d67ccb475008718f4466b
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-d000.901439-02.bin|-|-|rom/-|e13b5675386beb93e8397df891113f5b
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-e000.901439-03.bin|-|-|rom/-|ef9bd0e62dfc47eb463fef20d0344826
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-f000.901439-04.bin|-|-|rom/-|2d44afcab9713ad4d11118a9e7429a81
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-c800.901439-05.bin|-|-|rom/-|d03ee896c37ad1bd86773655948e1174
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-d800.901439-06.bin|-|-|rom/-|673b61a8fe11cd5d7e4003f81a2d8453
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-1-f800.901439-07.bin|-|-|rom/-|9e1357c33c0d5a4a89b263f0c3c317ff
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/characters-1.901447-08.bin|-|-|rom/-|29a82eb54e73ebc5673c718c489b174b
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/rom-2-c000.901439-09.bin|-|-|rom/-|9eaf58aa938083ad74117a81ac460e37
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-2-c000.901465-01.bin|-|-|rom/-|6b13eb6a7e4a2e15f3fff18461ce9c0d
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-2-d000.901465-02.bin|-|-|rom/-|8b7779f1afe3a6542bd17f6b80917d67
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-2-b.901474-01.bin|-|-|rom/-|7f87889ca7ee2537f0c1993d35d0fb18
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-2-n.901447-24.bin|-|-|rom/-|cb8e8404c0b28eda10469792dfd1dbc2
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/kernal-2.901465-03.bin|-|-|rom/-|51a38bfef8f9e72cb64bf7d874b4c8c6
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/characters-2.901447-10.bin|-|-|rom/-|9880432e633b15998d58884ff34c4e70
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-b000.901465-19.bin|-|-|rom/-|34d6650acd5dc4a4049f0c189ab5eeb0
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-c000.901465-20.bin|-|-|rom/-|398217f35fa50417c7e84883a93a349b
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-d000.901465-21.bin|-|-|rom/-|ab780e94772dca756a0678a17b5bc3a2
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-b.901474-02.bin|-|-|rom/-|a09d11163a708b8dea90f1c5df33dca0
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-n.901447-29.bin|-|-|rom/-|6fe27b43ec550a04d30b2e45f07d51fb
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-50Hz.901498-01.bin|-|-|rom/-|b76d756e7ac8752ae0035f3ce5f1383c
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-40-n-60Hz.901499-01.bin|-|-|rom/-|2e86403fc2ac30e7af05b9e8607bef98
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-80-b-50Hz.901474-04-3681.bin|-|-|rom/-|3e646194de7458b05a06159afbdd9427
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/edit-4-80-b-60Hz.901474-03.bin|-|-|rom/-|da56995be008c5f7db1094e81e5060aa
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/kernal-4.901465-22.bin|-|-|rom/-|16ec21443ea5431ab63d511061054e6f
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/basic-4-b000.901465-23.bin|-|-|rom/-|43b3a9f5e1c762af0b3bb6cc71aafb84
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-a000-bfff.970018-12.bin|-|-|rom/-|84cb402449c6107b7d2b636cb28f0042
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-c000-dfff.970019-12.bin|-|-|rom/-|0f9bd7123d99892ce80f1e7e438c2194
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff.970020-12.bin|-|-|rom/-|a4ffd0a17cb675f0b45e9c085126e44c
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/waterloo-e000-ffff-970034-12.bin|-|-|rom/-|c03098d26dbb1a23737d3286f264bc97
+https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/pet/SuperPET/characters.901640-01.bin|-|-|rom/-|dd30641d9e6a221edd725d1e529dcbdb
+https://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|https://web.archive.org/web/20131106214937id_/http://mikenaberezny.com/wp-content/uploads/2009/11/os9-systemdisk.d80|-|disk/superpet/os9/os9-systemdisk-b.d80|a772ba7ad5d2f6a635a092f80f80d45c
+https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-1.d64.gz|-|-|disk/superpet/-|0c32478f4636b8387b62da3dde1f2acb
+https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/Waterloo2-Language-2.d64.gz|-|-|disk/superpet/-|9c9db97f8f56ae408b098abab6db7a5b
+https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz|-|-|disk/superpet/-|0d062e32b06e0285fae2cc9800b97fc9
+https://github.com/sjgray/cbm-edit-rom/raw/refs/heads/master/binaries/ColourPET/VICE/colourpet-c1-80-b-60-esc-wedge-reboot-backarrow-VICE%20(2017-03-03).bin|-|-|rom/colourpet-c1-80-b-60.bin|34fc9984ea9710d513a79ecec9a7bdb1
+https://www.insanerocketry.com/personal/rom1diskmagic.zip|-|rom1diskmagic/rom1diskrom/rom1diskrom_v15.bin|rom/-|b13d678c248748a1440151b5f78fb385
 EOF
 )"
 
@@ -233,14 +233,14 @@ install_media_list "${MEDIA_LIST}"
 
 # Retain the original system disk for business keyboards and generate a
 # separate graphics-keyboard version without changing the OS-9 REL container.
-readonly OS9_DISK_DIR="${MEDIA_DIR}/disks/superpet/os9"
+readonly OS9_DISK_DIR="${MEDIA_DIR}/disk/superpet/os9"
 python3 "${SCRIPT_DIR}/patch-os9-keyboard.py" \
   "${OS9_DISK_DIR}/os9-systemdisk-b.d80" \
   "${OS9_DISK_DIR}/os9-systemdisk-n.d80"
 
 # Waterloo2 was distributed as two D64s. Merge these into one D80, add the
 # memory-test programs, then remove the temporary source images.
-readonly WATERLOO_DISK_DIR="${MEDIA_DIR}/disks/superpet"
+readonly WATERLOO_DISK_DIR="${MEDIA_DIR}/disk/superpet"
 readonly WATERLOO_DISK_ONE="${WATERLOO_DISK_DIR}/Waterloo2-Language-1.d64"
 readonly WATERLOO_DISK_TWO="${WATERLOO_DISK_DIR}/Waterloo2-Language-2.d64"
 readonly WATERLOO_D80="${WATERLOO_DISK_DIR}/Waterloo2-Languages.d80"

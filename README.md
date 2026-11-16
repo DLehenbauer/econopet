@@ -61,8 +61,8 @@ Gateware benches run under both simulators. `gw` runs both quick suites;
 `gw-iv` and `gw-vl` run only Icarus or Verilator, respectively. Verilator is
 two-state and settles differently, so it catches races Icarus tolerates. Each
 suite takes under a minute. `ECONOPET_MEDIA_DIR` must point at the directory
-containing `roms/` and `disks/`; `top_tb` and the boot bench load real ROMs
-from its `roms/` subdirectory.
+containing `rom/` and `disk/`; `top_tb` and the boot bench load real ROMs
+from its `rom/` subdirectory.
 
 The [integration-test author guide](test/system/README.md) covers host, board
 and firmware fixtures, checked CPU programs, ROM calls, and cooperative phases.

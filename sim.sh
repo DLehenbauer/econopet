@@ -180,10 +180,10 @@ if [ -n "$UPDATE_ONLY" ]; then
 fi
 
 if [ -z "${ECONOPET_MEDIA_DIR:-}" ]; then
-    echo "Error: ECONOPET_MEDIA_DIR must be set to the directory containing roms and disks."
+    echo "Error: ECONOPET_MEDIA_DIR must be set to the directory containing rom and disk."
     exit 1
 fi
-ROMS_DIR="${ECONOPET_MEDIA_DIR}/roms"
+ROMS_DIR="${ECONOPET_MEDIA_DIR}/rom"
 
 # Lint is not a CTest simulation, but it uses the same generated file list.
 if [ -n "$LINT" ]; then

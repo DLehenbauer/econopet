@@ -77,8 +77,8 @@ fw/src/roms/menu_rom.h
 # SD card payloads
 #
 
-sdcard/roms/
-sdcard/disks/
+sdcard/rom/
+sdcard/disk/
 
 #
 # CC65

@@ -46,7 +46,7 @@ static bool safe_directory(menu_browser_t* browser) {
     if (strncmp(browser->path, MENU_BROWSER_ROOT, strlen(MENU_BROWSER_ROOT)) != 0
         || (browser->path[strlen(MENU_BROWSER_ROOT)] != '\0'
             && browser->path[strlen(MENU_BROWSER_ROOT)] != '/'))
-        return browser_error(browser, "Directory is outside /disks");
+        return browser_error(browser, "Directory is outside /disk");
     char prefix[SD_PATH_MAX];
     snprintf(prefix, sizeof(prefix), "%s", browser->path);
     char* component = prefix + 1;
@@ -243,7 +243,7 @@ bool menu_browser_parent(menu_browser_t* browser, char child[SD_PATH_MAX]) {
     if (strcmp(browser->path, MENU_BROWSER_ROOT) == 0) return false;
     char* const slash = strrchr(browser->path, '/');
     vet(slash != NULL && slash >= browser->path + strlen(MENU_BROWSER_ROOT),
-        "menu path escaped /disks");
+        "menu path escaped /disk");
     snprintf(child, SD_PATH_MAX, "%s", slash + 1);
     *slash = '\0';
     browser->cache_valid = false;

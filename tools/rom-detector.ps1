@@ -1,7 +1,7 @@
 # Scan a directory for ROM files
 param (
     [string] $Path = ".",
-    [string] $Destination = "./roms"
+    [string] $Destination = "./rom"
 )
 
 if (-Not ([System.Management.Automation.PSTypeName]'Win32Api').Type) {
@@ -120,7 +120,7 @@ Get-ChildItem -Path $Path -File | ForEach-Object {
             $part = $match.Part
             $destinationFile = Join-Path -Path $Destination -ChildPath "$part.bin"
 
-            # Copy the file to the 'roms/' directory
+            # Copy the file to the 'rom/' directory
             Copy-Item -Path $filePath -Destination $destinationFile -Force
 
             Write-Host "Part: $part"

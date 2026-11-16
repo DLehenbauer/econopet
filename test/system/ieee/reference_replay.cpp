@@ -71,7 +71,7 @@ std::ofstream output_file(const std::filesystem::path& path) {
 // Preserve all backing bytes before session teardown unregisters its writable file.
 void save_media(const char* name, size_t size, const std::filesystem::path& output) {
     char path[SD_PATH_MAX];
-    sd_make_path(path, SD_DIR_DISKS, name);
+    sd_make_path(path, SD_DIR_DISK, name);
     std::unique_ptr<std::FILE, int (*)(std::FILE*)> file(std::fopen(path, "rb"), &std::fclose);
     if (!file)
         throw std::runtime_error("cannot read mounted replay image");

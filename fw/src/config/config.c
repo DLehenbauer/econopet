@@ -535,7 +535,7 @@ static void parse_action_mount(parser_t* parser, void* context, size_t context_s
     uint32_t drive = 0;
 
     char filename[SD_PATH_MAX] = { 0 };
-    path_context_t image_path = { &filename, SD_DIR_DISKS };
+    path_context_t image_path = { &filename, SD_DIR_DISK };
 
     parse_mapping_continued(parser, (const map_dispatch_entry_t[]) {
         { "device", parse_as_uint32, &device, sizeof(device) },

@@ -7,7 +7,7 @@
 
 #define MENU_BROWSER_PAGE_ROWS 21u
 #define MENU_BROWSER_ERROR_CAPACITY 41u
-#define MENU_BROWSER_ROOT "/disks"
+#define MENU_BROWSER_ROOT "/disk"
 
 typedef struct {
     char name[SD_PATH_MAX];
@@ -36,5 +36,5 @@ bool menu_browser_find(menu_browser_t* browser, const char* name, bool directory
 // Resolves a cached entry and rechecks its filesystem type before activation.
 bool menu_browser_resolve(menu_browser_t* browser, size_t index, char path[SD_PATH_MAX],
                           bool* directory);
-// Moves to the parent within /disks and returns the child name, or false at root.
+// Moves to the parent within /disk and returns the child name, or false at root.
 bool menu_browser_parent(menu_browser_t* browser, char child[SD_PATH_MAX]);

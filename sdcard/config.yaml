@@ -15,17 +15,17 @@ configs:
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/edit-4-40-n-50Hz.901498-01.bin"
+            file: "/rom/edit-4-40-n-50Hz.901498-01.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/characters-2.901447-10.bin"
+            file: "/rom/characters-2.901447-10.bin"
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
@@ -49,17 +49,17 @@ configs:
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/edit-4-40-n-60Hz.901499-01.bin"
+            file: "/rom/edit-4-40-n-60Hz.901499-01.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/characters-2.901447-10.bin"
+            file: "/rom/characters-2.901447-10.bin"
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         video-ram-kb: 1
@@ -82,17 +82,17 @@ configs:
     setup:
       - action: "load"
         files:
-          - file: "/roms/basic-4-b000.901465-23.bin"
+          - file: "/rom/basic-4-b000.901465-23.bin"
             address: 0xb000
-          - file: "/roms/basic-4-c000.901465-20.bin"
+          - file: "/rom/basic-4-c000.901465-20.bin"
             address: 0xc000
-          - file: "/roms/basic-4-d000.901465-21.bin"
+          - file: "/rom/basic-4-d000.901465-21.bin"
             address: 0xd000
-          - file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
+          - file: "/rom/edit-4-80-b-50Hz.901474-04-3681.bin"
             address: 0xe000
-          - file: "/roms/kernal-4.901465-22.bin"
+          - file: "/rom/kernal-4.901465-22.bin"
             address: 0xf000
-          - file: "/roms/characters-2.901447-10.bin"
+          - file: "/rom/characters-2.901447-10.bin"
             address: 0x68000
       - if: "graphics"
         then:
@@ -123,17 +123,17 @@ configs:
     setup:
       - action: "load"
         files:
-          - file: "/roms/basic-4-b000.901465-23.bin"
+          - file: "/rom/basic-4-b000.901465-23.bin"
             address: 0xb000
-          - file: "/roms/basic-4-c000.901465-20.bin"
+          - file: "/rom/basic-4-c000.901465-20.bin"
             address: 0xc000
-          - file: "/roms/basic-4-d000.901465-21.bin"
+          - file: "/rom/basic-4-d000.901465-21.bin"
             address: 0xd000
-          - file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
+          - file: "/rom/edit-4-80-b-60Hz.901474-03.bin"
             address: 0xe000
-          - file: "/roms/kernal-4.901465-22.bin"
+          - file: "/rom/kernal-4.901465-22.bin"
             address: 0xf000
-          - file: "/roms/characters-2.901447-10.bin"
+          - file: "/rom/characters-2.901447-10.bin"
             address: 0x68000
       - if: "graphics"
         then:
@@ -159,20 +159,20 @@ configs:
       - action: "load"
         files:
           - address: 0xc000
-            file: "/roms/basic-2-c000.901465-01.bin"
+            file: "/rom/basic-2-c000.901465-01.bin"
           - address: 0xd000
-            file: "/roms/basic-2-d000.901465-02.bin"
+            file: "/rom/basic-2-d000.901465-02.bin"
           - address: 0xf000
-            file: "/roms/kernal-2.901465-03.bin"
+            file: "/rom/kernal-2.901465-03.bin"
           - address: 0x68000
-            file: "/roms/characters-2.901447-10.bin"
+            file: "/rom/characters-2.901447-10.bin"
       - if: "graphics"
         then:
           # Load editor ROM for graphics keyboard.
           - action: "load"
             files:
             - address: 0xe000
-              file: "/roms/edit-2-n.901447-24.bin"
+              file: "/rom/edit-2-n.901447-24.bin"
           # Upgrade ROMs for the graphics keyboard continued to delay screen updates until
           # the beam was outside the visible region to avoid "sparkle" artifacts.
           #
@@ -198,7 +198,7 @@ configs:
           - action: "load"
             files:
             - address: 0xe000
-              file: "/roms/edit-2-b.901474-01.bin"
+              file: "/rom/edit-2-b.901474-01.bin"
           # The 30xxB editor ROM initializes to lower case.  Patch it to upper case.
           - action: "patch"
             address: 0x0e221
@@ -214,23 +214,23 @@ configs:
       - action: "load"
         files:
           - address: 0xc000
-            file: "/roms/rom-1-c000.901439-01.bin"
+            file: "/rom/rom-1-c000.901439-01.bin"
           - address: 0xd000
-            file: "/roms/rom-1-d000.901439-02.bin"
+            file: "/rom/rom-1-d000.901439-02.bin"
           - address: 0xe000
-            file: "/roms/rom-1-e000.901439-03.bin"
+            file: "/rom/rom-1-e000.901439-03.bin"
           - address: 0xf000
-            # Instead of "/roms/901439-04.bin", we use a patched ROM for disk drive support:
+            # Instead of "/rom/901439-04.bin", we use a patched ROM for disk drive support:
             # https://hub.inktada.com/channel/rom1diskmagic
-            file: "/roms/rom1diskrom_v15.bin"
+            file: "/rom/rom1diskrom_v15.bin"
           - address: 0xc800
-            file: "/roms/rom-1-c800.901439-05.bin"
+            file: "/rom/rom-1-c800.901439-05.bin"
           - address: 0xd800
-            file: "/roms/rom-1-d800.901439-06.bin"
+            file: "/rom/rom-1-d800.901439-06.bin"
           - address: 0xf800
-            file: "/roms/rom-1-f800.901439-07.bin"
+            file: "/rom/rom-1-f800.901439-07.bin"
           - address: 0x68000
-            file: "/roms/characters-1.901447-08.bin"
+            file: "/rom/characters-1.901447-08.bin"
       - if: "graphics"
         else:
           # Commodore never produced an edit ROM for the business keyboard for the original ROM set.
@@ -264,13 +264,13 @@ configs:
       - action: "load"
         files:
           - address: 0xa000
-            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+            file: "/rom/waterloo-a000-bfff.970018-12.bin"
           - address: 0xc000
-            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+            file: "/rom/waterloo-c000-dfff.970019-12.bin"
           - address: 0xe000
-            file: "/roms/waterloo-e000-ffff.970020-12.bin"
+            file: "/rom/waterloo-e000-ffff.970020-12.bin"
           - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
+            file: "/rom/characters.901640-01.bin"
       - if: "graphics"
         then:
           # Use the same four graphics-keyboard tables as the 50 Hz Waterloo set.
@@ -309,17 +309,17 @@ configs:
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/edit-4-80-b-60Hz.901474-03.bin"
+            file: "/rom/edit-4-80-b-60Hz.901474-03.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
+            file: "/rom/characters.901640-01.bin"
       - if: "graphics"
         then:
           # Use the same graphics-keyboard adaptation as the 80-column PET.
@@ -343,13 +343,13 @@ configs:
       - action: "load"
         files:
           - address: 0xa000
-            file: "/roms/waterloo-a000-bfff.970018-12.bin"
+            file: "/rom/waterloo-a000-bfff.970018-12.bin"
           - address: 0xc000
-            file: "/roms/waterloo-c000-dfff.970019-12.bin"
+            file: "/rom/waterloo-c000-dfff.970019-12.bin"
           - address: 0xe000
-            file: "/roms/waterloo-e000-ffff-970034-12.bin"
+            file: "/rom/waterloo-e000-ffff-970034-12.bin"
           - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
+            file: "/rom/characters.901640-01.bin"
       - if: "graphics"
         then:
           # All SuperPETs had a business keyboard. This patch replaces the four
@@ -395,17 +395,17 @@ configs:
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xe000
-            file: "/roms/edit-4-80-b-50Hz.901474-04-3681.bin"
+            file: "/rom/edit-4-80-b-50Hz.901474-04-3681.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/characters.901640-01.bin"
+            file: "/rom/characters.901640-01.bin"
       - if: "graphics"
         then:
           # Use the same graphics-keyboard adaptation as the 80-column PET.
@@ -434,26 +434,26 @@ configs:
       - action: "load"
         files:
           - address: 0xb000
-            file: "/roms/basic-4-b000.901465-23.bin"
+            file: "/rom/basic-4-b000.901465-23.bin"
           - address: 0xc000
-            file: "/roms/basic-4-c000.901465-20.bin"
+            file: "/rom/basic-4-c000.901465-20.bin"
           - address: 0xd000
-            file: "/roms/basic-4-d000.901465-21.bin"
+            file: "/rom/basic-4-d000.901465-21.bin"
           - address: 0xf000
-            file: "/roms/kernal-4.901465-22.bin"
+            file: "/rom/kernal-4.901465-22.bin"
           - address: 0x68000
-            file: "/roms/characters-2.901447-10.bin"
+            file: "/rom/characters-2.901447-10.bin"
       - if: "graphics"
         then:
           - action: "load"
             files:
               - address: 0xe000
-                file: "/roms/colourpet-n40.bin"
+                file: "/rom/colourpet-n40.bin"
         else:
           - action: "load"
             files:
               - address: 0xe000
-                file: "/roms/colourpet-b40.bin"
+                file: "/rom/colourpet-b40.bin"
       - action: "set"
         usb-keymap: "/ukm/us.bin"
         columns: 40

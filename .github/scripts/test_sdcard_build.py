@@ -31,7 +31,7 @@ class SdcardBuildTests(unittest.TestCase):
             shutil.copyfile(ROOT / "tools/fpga_image.py", source / "tools/fpga_image.py")
             shutil.copyfile(ROOT / "NOTICE.md", source / "NOTICE.md")
             media = root / "media"
-            for name in ("roms", "disks"):
+            for name in ("rom", "disk"):
                 (media / name).mkdir(parents=True)
             build = root / "build"
             roms = build / "rom" / "bin"
@@ -51,15 +51,15 @@ class SdcardBuildTests(unittest.TestCase):
                 source / "sdcard/config.yaml": "config.yaml",
                 source / "sdcard/README.md": "README.md",
                 source / "NOTICE.md": "NOTICE.md",
-                source / "sdcard/prgs/README.md": "prgs/README.md",
+                source / "sdcard/prg/README.md": "prg/README.md",
                 source / "sdcard/ukm/us.bin": "ukm/us.bin",
-                media / "roms/basic.bin": "roms/basic.bin",
-                media / "disks/test.d64": "disks/test.d64",
-                roms / "edit.bin": "roms/edit.bin",
+                media / "rom/basic.bin": "rom/basic.bin",
+                media / "disk/test.d64": "disk/test.d64",
+                roms / "edit.bin": "rom/edit.bin",
             }
             for path in assets:
                 path.write_bytes(b"old")
-            stale = media / "disks/removed.d64"
+            stale = media / "disk/removed.d64"
             stale.write_bytes(b"remove me")
             removed_rom = roms / "removed.bin"
             removed_rom.write_bytes(b"remove me")
@@ -85,8 +85,8 @@ class SdcardBuildTests(unittest.TestCase):
             removed_keymap.unlink()
             (roms / "late.bin").write_bytes(b"late")
             (roms / "menu.rom").write_bytes(b"not packaged")
-            (media / "roms/edit.bin").write_bytes(b"bad")
-            shutil.copystat(roms / "edit.bin", media / "roms/edit.bin")
+            (media / "rom/edit.bin").write_bytes(b"bad")
+            shutil.copystat(roms / "edit.bin", media / "rom/edit.bin")
             fpga.write_bytes(b"updated fpga")
             bootloader.write_bytes(b"updated bootloader")
             stale_fpga = build / "sdcard/sdcard_root/fpga"
@@ -99,11 +99,11 @@ class SdcardBuildTests(unittest.TestCase):
                             for name in archive.namelist() if not name.endswith("/")}
             for relative in assets.values():
                 self.assertEqual(contents[relative], b"new", relative)
-            self.assertNotIn("disks/removed.d64", contents)
-            self.assertNotIn("roms/removed.bin", contents)
+            self.assertNotIn("disk/removed.d64", contents)
+            self.assertNotIn("rom/removed.bin", contents)
             self.assertNotIn("ukm/removed.bin", contents)
-            self.assertEqual(contents["roms/late.bin"], b"late")
-            self.assertNotIn("roms/menu.rom", contents)
+            self.assertEqual(contents["rom/late.bin"], b"late")
+            self.assertNotIn("rom/menu.rom", contents)
             self.assertFalse(any(name.startswith("fpga/") for name in contents))
             self.assertEqual(firmware.read_bytes(), original_firmware)
             self.assertEqual(contents["bootloader.uf2"], b"updated bootloader")

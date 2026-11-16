@@ -62,7 +62,7 @@ This prevents dangling process-global bindings without forcing unsafe drive
 cleanup inside observation, input-edit, stimulus, or selected-SPI callbacks.
 
 `mount()` copies bytes from a vector or checked D64 into drive slot zero using
-the production `/disks/` path helper and mount implementation. Names must be
+the production `/disk/` path helper and mount implementation. Names must be
 nonempty, fit `SD_PATH_MAX`, and not already be registered. The shared registry
 is checked before the session records ownership, so collisions with another
 fixture report a recoverable mount error without replacing or deleting that
@@ -1027,7 +1027,7 @@ FIFO drains check byte/ATN records independently of passive DAV-edge wire
 traces, which additionally check EOI. Neither observation substitutes for
 executing a Commodore drive ROM.
 
-Set `ECONOPET_MEDIA_DIR` to a media directory containing `roms/`. The complete
+Set `ECONOPET_MEDIA_DIR` to a media directory containing `rom/`. The complete
 `Upgrade` and `Rom4` manifests in [`roms.h`](roms.h) select the corrected
 `901465-03` KERNAL and `901465-22` KERNAL, with editors `901447-24` and
 `901447-29`. ROM 4 command transport also uses `901465-21`. The
@@ -1766,7 +1766,7 @@ allowed, and all physical SRAM banks are available.
 
 ```cpp
 system.load_rom("custom.bin", econopet::SramAddress{0xc000}, 4096);
-system.load_rom_set(System::RomSet::Upgrade, "/local/media/roms",
+system.load_rom_set(System::RomSet::Upgrade, "/local/media/rom",
                     System::FixtureOverlap::Replace);
 ```
 
@@ -1774,7 +1774,7 @@ Supported complete manifests and revision entry metadata are declared in
 [`roms.h`](roms.h). Each immutable descriptor binds metadata to static image
 arrays. `images(set)` returns a read-only span with static lifetime rather
 than allocating a container. The directory-free `load_rom_set(set)` resolves
-`$ECONOPET_MEDIA_DIR/roms` only when called, never during test discovery.
+`$ECONOPET_MEDIA_DIR/rom` only when called, never during test discovery.
 Synthetic loader tests require no ROM media. Pure manifest and complete
 routine-entry checks in [`rom_catalog_test.cpp`](rom_catalog_test.cpp) run in
 the host target with `BUILD_BOARD_TESTS=OFF`, without Verilator. Both supported
@@ -1872,7 +1872,7 @@ Use `WaterlooBudget` for native setup (one million system cycles). The ROM's
 128-byte hook-clear loop alone exceeds the former 100000-cycle fixture budget.
 
 Set `ECONOPET_MEDIA_DIR` to a local directory containing the catalog's exact
-`roms/` files before running ROM fixture tests. Media is never read during
+`rom/` files before running ROM fixture tests. Media is never read during
 GoogleTest discovery. Host tests and firmware-session tests need no ROM media.
 The fixture tests execute both supported PET editors, Waterloo's hook clear and
 IEEEInit, and native Waterloo UNTALK. The latter verifies native hook dispatch

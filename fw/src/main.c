@@ -244,7 +244,7 @@ int main() {
     cli_init();         // Start CLI on UART serial
     bp_init();          // Initialize breakpoint subsystem
     cpu_init();         // Detect the physical CPU before loading configuration
-    ieee_drive_init();  // Mount /disks images, enable IEEE-488 drive emulation
+    ieee_drive_init();  // Mount /disk images, enable IEEE-488 drive emulation
 
     // Enter boot menu
     menu_boot();
