@@ -177,7 +177,9 @@ void test_clear_files(void) {
     }
 }
 
-// Opens registered text fixtures for firmware SD-card reads.
+FILE* __wrap_fopen(const char* path, const char* mode);
+
+// Opens tracked independent readers for registered configuration fixtures.
 FILE* sd_open(const char* path, const char* mode) {
     vet_path_length(strlen(path));
     assert(path[0] == '/');
@@ -185,7 +187,7 @@ FILE* sd_open(const char* path, const char* mode) {
     mem_file_t* mem_file = find_mem_file(path);
     if (mem_file != NULL) {
         if (strcmp(mode, "r") == 0) {
-            return fmemopen(mem_file->content, mem_file->size, "r");
+            return __wrap_fopen(path, mode);
         }
         fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
         exit(EXIT_FAILURE);

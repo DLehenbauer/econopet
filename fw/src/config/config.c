@@ -254,6 +254,10 @@ static void push_parser(parser_t* parser) {
     parser_t* saved_parser = vetted_malloc(sizeof(parser_t));
     memcpy(/* dest: */ saved_parser, /* src: */ parser, sizeof(parser_t));
     init_parser(parser, saved_parser->filename, saved_parser->sink, saved_parser->target_index);
+
+    // Reopening an alias changes the reader, not the selected configuration.
+    parser->current_index = saved_parser->current_index;
+    parser->executing = saved_parser->executing;
     parser->previous = saved_parser;
 }
 
@@ -262,8 +266,11 @@ static void pop_parser(parser_t* parser) {
 
     parser_t* previous_parser = parser->previous;
     vet_parser(parser, previous_parser != NULL, "pop_parser with empty stack");
+
+    // A configuration mapping inside an alias can advance the catalog index.
+    previous_parser->current_index = parser->current_index;
     parser->previous = NULL;
-    
+
     parser->depth = 0;
     deinit_parser(parser);
     memcpy(/* dest: */ parser, /* src: */ previous_parser, sizeof(parser_t));
