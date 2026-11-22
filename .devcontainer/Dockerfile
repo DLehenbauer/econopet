@@ -109,6 +109,12 @@ ENV EFINITY_HOME="/opt/efinity/${EFINITY_MAJOR_MINOR}"
 #   python3
 #   python3-pip
 #   python3-venv
+#
+# PDF inspection for AI agents (text extraction, rendering, and AES support):
+#
+#   poppler-utils
+#   python3-pypdf
+#   python3-cryptography
 
 # Use unattended mode for 'apt'
 ARG DEBIAN_FRONTEND="noninteractive"
@@ -168,8 +174,11 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     minicom \
     ninja-build \
     pkg-config \
+    poppler-utils \
     python3 \
+    python3-cryptography \
     python3-pip \
+    python3-pypdf \
     python3-venv \
     texinfo \
     universal-ctags \
@@ -179,6 +188,10 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 
 # Fail build if CMake is not installed correctly.
 RUN cmake --version
+
+# Use the distro Python for APT-installed PDF libraries.
+RUN pdftotext -v && \
+    /usr/bin/python3 -c "from pypdf import PdfReader; from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes"
 
 # Fix warnings from Cortex-Debug extension
 # (See https://forums.raspberrypi.com/viewtopic.php?t=333146)
