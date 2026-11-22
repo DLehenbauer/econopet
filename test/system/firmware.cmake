@@ -47,6 +47,9 @@ string(REPEAT "0xea,\n" 256 MENU_TEST_ROM_HEADER)
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h" CONTENT "${MENU_TEST_FONT_HEADER}")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h" CONTENT "${MENU_TEST_ROM_HEADER}")
 add_library(econopet_menu_firmware STATIC
+    "${ECONOPET_ROOT}/fw/src/display/char_encoding.c"
+    "${ECONOPET_ROOT}/fw/src/display/display.c"
+    "${ECONOPET_ROOT}/fw/src/display/window.c"
     "${ECONOPET_ROOT}/fw/src/input/pet_keyboard.c"
     "${ECONOPET_ROOT}/fw/src/driver_sync.c"
     "${ECONOPET_ROOT}/fw/src/system/system.c"

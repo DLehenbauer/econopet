@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC0-1.0
+// https://github.com/dlehenbauer/econopet
+
 #include "pch.h"
 #include "roms.h"
 
@@ -11,7 +14,7 @@
 #include "system/state.h"
 #include "usb/keyboard.h"
 
-const uint8_t __in_flash(".rom_chars_e800") rom_chars_e800[] = {
+const uint8_t __in_flash(".rom_chars_e800") rom_chars_e800[0x800] = {
     #include "roms/901447_10.h"
 };
 
@@ -45,6 +48,13 @@ void menu_rom_wait(void (*service)(void)) {
 
 void roms_refresh_char_rom(void) {
     spi_read(CHAR_ROM_SRAM_ADDRESS, sizeof(custom_char_rom), custom_char_rom);
+}
+
+void roms_use_builtin_char_rom(void) {
+    _Static_assert(sizeof(rom_chars_e800) <= sizeof(custom_char_rom),
+                   "built-in character ROM exceeds SRAM font buffer");
+    memset(custom_char_rom, 0, sizeof(custom_char_rom));
+    memcpy(custom_char_rom, rom_chars_e800, sizeof(rom_chars_e800));
 }
 
 const uint8_t* roms_get_char_rom(video_text_mode_t mode) {

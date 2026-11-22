@@ -31,6 +31,7 @@ typedef struct mem_file_s {
 
 static mem_file_t* mem_files = NULL;
 static size_t open_cookie_count;
+static size_t peak_open_cookie_count;
 
 typedef struct file_alias_s {
     char alias[SD_PATH_MAX];
@@ -42,6 +43,9 @@ static file_alias_t* file_aliases;
 
 // Reports live stdio borrowers independently of registered backing ownership.
 size_t test_open_file_count(void) { return open_cookie_count; }
+
+// Observes candidate overlap independently of the facade's final owner count.
+size_t test_peak_open_file_count(void) { return peak_open_cookie_count; }
 
 // Finds a registered file without accessing the host filesystem.
 static mem_file_t* find_mem_file(const char* path) {
@@ -164,6 +168,7 @@ void test_unregister_file(const char* path) {
 
 // Frees every registered fixture once its handles are closed.
 void test_clear_files(void) {
+    peak_open_cookie_count = open_cookie_count;
     while (file_aliases != NULL) {
         file_alias_t* const next = file_aliases->next;
         free(file_aliases);
@@ -177,7 +182,9 @@ void test_clear_files(void) {
     }
 }
 
-// Opens registered text fixtures for firmware SD-card reads.
+FILE* __wrap_fopen(const char* path, const char* mode);
+
+// Opens tracked independent readers for registered configuration fixtures.
 FILE* sd_open(const char* path, const char* mode) {
     vet_path_length(strlen(path));
     assert(path[0] == '/');
@@ -185,7 +192,7 @@ FILE* sd_open(const char* path, const char* mode) {
     mem_file_t* mem_file = find_mem_file(path);
     if (mem_file != NULL) {
         if (strcmp(mode, "r") == 0) {
-            return fmemopen(mem_file->content, mem_file->size, "r");
+            return __wrap_fopen(path, mode);
         }
         fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
         exit(EXIT_FAILURE);
@@ -269,6 +276,8 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
     FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
     if (stream != NULL) {
         ++open_cookie_count;
+        if (open_cookie_count > peak_open_cookie_count)
+            peak_open_cookie_count = open_cookie_count;
         ++file->open_calls;
     } else {
         free(cookie);

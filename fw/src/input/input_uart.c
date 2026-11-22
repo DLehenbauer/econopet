@@ -118,3 +118,11 @@ void input_uart_task(void) {
     }
     expire_escape();
 }
+
+bool input_uart_take_key(void) {
+    while (uart_is_readable(uart_default)) {
+        if (input_uart_accept(&uart_filter, (unsigned char)uart_getc(uart_default)))
+            return true;
+    }
+    return false;
+}

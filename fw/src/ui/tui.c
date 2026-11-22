@@ -220,13 +220,10 @@ bool tui_controller_needs_render(const tui_controller_t* const controller) {
 // Draws a clipped row of text and optionally reverses its entire selection range.
 static void paint_text(const window_t* const window, tui_rect_t bounds,
                        unsigned int row, const char* text, bool reversed) {
-    if (bounds.x >= window->width || row >= window->height) return;
+    if (bounds.x >= window->width || row >= window->height || bounds.width == 0) return;
     const unsigned int width = MIN(bounds.width, window->width - bounds.x);
-    uint8_t* const start = window_xy(window, bounds.x, row);
-    for (unsigned int x = 0; x < width && text[x] != '\0'; x++) {
-        start[x] = ascii_to_vrom((uint8_t) text[x]);
-    }
-    if (reversed) window_reverse(window, start, width);
+    window_text(window, bounds.x, row, width, text);
+    if (reversed) window_reverse_at(window, bounds.x, row, width);
 }
 
 // Paints cached labels within the list rectangle.
@@ -270,7 +267,7 @@ void tui_controller_render(tui_controller_t* const controller) {
 
     controller->dirty = false;
     controller->rendering = true;
-    window_fill(window, CH_SPACE);
+    window_fill(window, VROM_SPACE);
     if (screen->on_paint != NULL) {
         screen->on_paint(window, screen->context);
     }

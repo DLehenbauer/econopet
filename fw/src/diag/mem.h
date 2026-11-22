@@ -3,4 +3,7 @@
 
 #pragma once
 
-void __attribute__((noreturn)) test_ram();
+#include "diag/diag.h"
+
+/** Extended March C- plan covering FPGA-attached SRAM and BRAM. */
+extern const diag_plan_t diag_plan_memory;

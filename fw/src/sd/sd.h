@@ -8,6 +8,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+struct blockdevice;
+struct filesystem;
+
 // SD-card path capacity in bytes, including the terminating null. Match the
 // pinned pico-vfs's 256-byte buffers: 255 single-byte path characters plus the
 // null. Directory prefixes count toward this limit. Keep it separate from the
@@ -36,6 +39,21 @@ void sd_make_path(char path[SD_PATH_MAX], sd_dir_t directory, const char* name);
 bool sd_resolve_path(char path[SD_PATH_MAX]);
 
 bool sd_init();
+
+/** Return the retained root block device, or NULL before initialization. */
+struct blockdevice* sd_blockdevice(void);
+
+/** Return the retained FAT filesystem, or NULL before initialization. */
+struct filesystem* sd_fat_filesystem(void);
+
+/** Report whether the retained FAT filesystem is mounted at the SD root. */
+bool sd_is_mounted(void);
+
+/** Mount the retained FAT filesystem at the SD root if needed. */
+bool sd_mount_root(void);
+
+/** Unmount the retained FAT filesystem from the SD root if needed. */
+bool sd_unmount_root(void);
 
 FILE* sd_open(const char* path, const char* mode);
 

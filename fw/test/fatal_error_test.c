@@ -12,6 +12,7 @@
 #include "hardware/gpio.h"
 
 #include "diag/log/log.h"
+#include "display/char_encoding.h"
 #include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
@@ -309,6 +310,9 @@ START_TEST(test_fatal_display_preserves_uart_and_recovers_console_audio) {
         ck_assert_uint_eq(spi_read_at(ECONOPET_WB_AUDIO_ADDR), 0);
     }
     memset(system_state.video_char_buffer, 0xa5, sizeof(system_state.video_char_buffer));
+    memset(mock_ram + VIDEO_RAM_ADDRESS, 0x5a, PET_MAX_VIDEO_RAM_BYTES);
+    memset(system_state.pet_crtc_registers, 0xff, sizeof(system_state.pet_crtc_registers));
+    system_state.pet_display_columns = pet_display_columns_80;
     FILE* const output = tmpfile();
     ck_assert_ptr_nonnull(output);
     fflush(stdout);
@@ -334,8 +338,14 @@ START_TEST(test_fatal_display_preserves_uart_and_recovers_console_audio) {
     ck_assert(!pet_keyboard_active());
     ck_assert_int_eq(system_state.video_source, video_source_firmware);
     ck_assert_int_eq(system_state.video_text_mode, video_text_mode_lower);
+    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_40);
+    ck_assert_uint_eq(system_state.pet_crtc_registers[CRTC_R1_H_DISPLAYED], DISPLAY_COLS_40);
+    ck_assert_uint_eq(system_state.pet_crtc_registers[CRTC_R6_V_DISPLAYED], DISPLAY_ROWS);
+    ck_assert_uint_eq(system_state.pet_crtc_registers[CRTC_R12_START_ADDR_HI], 0x10);
+    for (size_t i = 0; i < VIDEO_COLOR_CAPACITY; ++i)
+        ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + i], VIDEO_DEFAULT_ATTRIBUTE);
     const uint8_t first_row[] = {
-        0xc5, 0xba, CH_SPACE, 0x04, 0x09, 0x13, 0x0b, CH_SPACE, 0x06, 0x01, 0x09, 0x0c, 0x05, 0x04,
+        0xc5, 0xba, VROM_SPACE, 0x04, 0x09, 0x13, 0x0b, VROM_SPACE, 0x06, 0x01, 0x09, 0x0c, 0x05, 0x04,
     };
     const uint8_t second_row[] = {0x12, 0x05, 0x14, 0x12, 0x19};
     const size_t columns = pet_display_columns_40;
@@ -343,12 +353,13 @@ START_TEST(test_fatal_display_preserves_uart_and_recovers_console_audio) {
     for (size_t offset = 0; offset < columns * rows; ++offset) {
         const uint8_t expected = offset < sizeof(first_row) ? first_row[offset]
             : offset >= columns && offset < columns + sizeof(second_row)
-                ? second_row[offset - columns] : CH_SPACE;
+                ? second_row[offset - columns] : VROM_SPACE;
         ck_assert_uint_eq(system_state.video_char_buffer[offset], expected);
         ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + offset], expected);
     }
-    ck_assert_mem_eq(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer,
-        PET_MAX_VIDEO_RAM_BYTES);
+    ck_assert_mem_eq(mock_ram + VIDEO_RAM_ADDRESS, system_state.video_char_buffer, VIDEO_RAM_UNIT_BYTES);
+    for (size_t i = VIDEO_RAM_UNIT_BYTES; i < PET_MAX_VIDEO_RAM_BYTES; ++i)
+        ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS + i], 0x5a);
 }
 END_TEST
 

@@ -65,6 +65,9 @@ bool test_file_registered(const char* path);
 // Counts live cookie-backed FILE handles, including unregistered borrowers.
 size_t test_open_file_count(void);
 
+// Reports peak live cookie-backed handles since fixture storage was last cleared.
+size_t test_peak_open_file_count(void);
+
 // Counts successful stdio opens of a registered fixture, including closed handles.
 size_t test_file_open_calls(const char* path);
 

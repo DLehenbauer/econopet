@@ -32,8 +32,6 @@
 // of we will display to the user/cache in memory.
 #define MAX_FILE_SLOTS 25
 
-const uint screen_width  = 40;
-const uint screen_height = 25;
 /** Service cooperative work while the owner prepares boot input. */
 static void menu_prepare_service(void) {
     input_task();
@@ -277,8 +275,7 @@ void menu_boot(void) {
         fatal("could not suspend boot system for menu");
     }
 
-    const window_t window =
-        window_create(system_state.video_char_buffer, screen_width, screen_height);
+    const window_t window = display_window();
     const menu_result_t result = menu_config_run(&window, menu_ui_root_picker);
     system_restore(false);
     if (result.action == MENU_EXIT_LOAD_CONFIG) {
@@ -295,8 +292,7 @@ void menu_enter(void) {
         return;
     }
 
-    uint8_t* const video_char_buffer = system_state.video_char_buffer;
-    const window_t window = window_create(video_char_buffer, screen_width, screen_height);
+    const window_t window = display_window();
 
     const menu_result_t result = menu_config_run(&window, menu_ui_root_dashboard);
     system_restore(result.action == MENU_EXIT_RESUME);

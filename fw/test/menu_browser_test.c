@@ -5,16 +5,24 @@
 #include "menu_browser_test.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <setjmp.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "diag/log/log.h"
 #include "menu/menu_browser.h"
+#include "mock.h"
+#include "system/system.h"
 #include "test_support.h"
+#include "ui/cli.h"
 
 #define TEST_IMAGE_COUNT 65u
+#define TEST_SERVICE_FILE_COUNT 8u
+#define TEST_SERVICE_FILE_BYTES 2048u
+#define TEST_SERVICE_STRIDE 137u
 
 char directory_root[64];
 bool fail_readdir;
@@ -23,6 +31,10 @@ static bool fail_opendir;
 bool unknown_entry_types;
 unsigned int directory_scans, metadata_reads;
 static unsigned int service_count;
+static FILE* service_files[TEST_SERVICE_FILE_COUNT];
+static size_t service_reads[TEST_SERVICE_FILE_COUNT];
+static int last_dir_fd;
+static jmp_buf scan_escape;
 static const char* const invalid_paths[] = {
     "/disk/..", "/disk/.", "/disk//child", "/disk-other", "/tmp", "/disk/outside/child",
 };
@@ -52,7 +64,9 @@ DIR* __wrap_opendir(const char* path) {
         errno = EACCES;
         return NULL;
     }
-    return __real_opendir(fixture_path(path, output));
+    DIR* const dir = __real_opendir(fixture_path(path, output));
+    if (dir != NULL) last_dir_fd = dirfd(dir);
+    return dir;
 }
 
 // Preserves real filesystem type and symlink behavior in browser tests.
@@ -76,9 +90,23 @@ struct dirent* __wrap_readdir(DIR* dir) {
     return entry;
 }
 
-// Confirms cooperative scanning invokes the caller's service hook.
+// Generates independently identifiable bytes for each retained service reader.
+static uint8_t service_byte(size_t file, size_t offset) {
+    return (uint8_t)(file * 37u + offset * 13u);
+}
+
+// Interleaves permitted file I/O without changing the browser's directory membership.
 static void service(void) {
     service_count++;
+    if (service_files[0] == NULL) return;
+    const size_t index = service_count % count_of(service_files);
+    const size_t offset = service_count * TEST_SERVICE_STRIDE % TEST_SERVICE_FILE_BYTES;
+    ck_assert_int_eq(fseek(service_files[index], (long)offset, SEEK_SET), 0);
+    uint8_t byte;
+    ck_assert_uint_eq(fread(&byte, 1, 1, service_files[index]), 1);
+    ck_assert_uint_eq(byte, service_byte(index, offset));
+    ck_assert_int_eq(ftell(service_files[index]), offset + 1);
+    service_reads[index]++;
 }
 
 // Creates a filename visible to libc directory scans.
@@ -97,6 +125,9 @@ static void setup(void) {
     log_init();
     fail_readdir = fail_next_readdir = fail_opendir = unknown_entry_types = false;
     directory_scans = metadata_reads = service_count = 0;
+    last_dir_fd = -1;
+    memset(service_files, 0, sizeof(service_files));
+    memset(service_reads, 0, sizeof(service_reads));
     snprintf(directory_root, sizeof(directory_root), "/tmp/econopet-browser-XXXXXX");
     ck_assert_ptr_nonnull(mkdtemp(directory_root));
 }
@@ -128,10 +159,94 @@ static void remove_fixture_directory(const char* path) {
 
 // Cleans up the private directory without following host symlinks.
 static void teardown(void) {
+    ck_assert(menu_browser_abandon_scan());
+    for (size_t index = 0; index < count_of(service_files); ++index) {
+        if (service_files[index] != NULL)
+            ck_assert_int_eq(fclose(service_files[index]), 0);
+        service_files[index] = NULL;
+    }
     remove_fixture_directory(directory_root);
     directory_root[0] = '\0';
     fail_readdir = fail_next_readdir = fail_opendir = unknown_entry_types = false;
 }
+
+/** Terminate a scan as a nonreturning diagnostic does before unmounting storage. */
+static void abandon_scan_service(void) {
+    ck_assert_int_ge(last_dir_fd, 0);
+    ck_assert(menu_browser_abandon_scan());
+    errno = 0;
+    ck_assert_int_eq(fcntl(last_dir_fd, F_GETFD), -1);
+    ck_assert_int_eq(errno, EBADF);
+    longjmp(scan_escape, 1);
+}
+
+/** An interrupted browser releases its live directory before card retirement. */
+START_TEST(test_browser_abandon_scan) {
+    make_file("disk.d64");
+    menu_browser_t browser = {.path = MENU_BROWSER_ROOT, .service = abandon_scan_service};
+    if (setjmp(scan_escape) == 0) {
+        menu_browser_refresh(&browser);
+        ck_abort_msg("scan service did not abandon its caller");
+    }
+    browser.service = NULL;
+    ck_assert(menu_browser_refresh(&browser));
+    ck_assert_uint_eq(browser.count, 1);
+}
+END_TEST
+
+/** Check the real diagnostic takeover closes the scan before releasing storage. */
+static bool prepare_diagnostic_during_scan(void) {
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_int_ne(fcntl(last_dir_fd, F_GETFD), -1);
+    ck_assert(menu_browser_abandon_scan());
+    ck_assert_int_eq(fcntl(last_dir_fd, F_GETFD), -1);
+    ck_assert_int_eq(errno, EBADF);
+    return true;
+}
+
+/** Send an abort key while the diagnostic owns the nested menu call stack. */
+static void abort_diagnostic_sleep(uint64_t us) {
+    (void)us;
+    mock_input_uart_bytes((const uint8_t*)" ", 1);
+}
+
+/** Observe reset without ever returning to the interrupted scan. */
+static void reset_during_scan(void) {
+    longjmp(scan_escape, 1);
+}
+
+/** Issue the real CLI command from a browser scan service callback. */
+static void start_diagnostic_during_scan(void) {
+    const char* command = "test sd\r";
+    while (*command != '\0') cli_process_char(*command++);
+    ck_abort_msg("diagnostic returned to the interrupted scan");
+}
+
+/** A menu command retires an open scan before prompting and resets on abort. */
+START_TEST(test_browser_diagnostic_takeover) {
+    const system_state_t saved = system_state;
+    make_file("disk.d64");
+    mock_reset();
+    system_reset_guest();
+    ck_assert(system_suspend());
+    mock_clock_set(0);
+    mock_sd_prepare_set_handler(prepare_diagnostic_during_scan);
+    mock_sleep_set_handler(abort_diagnostic_sleep);
+    mock_system_reset_set_handler(reset_during_scan);
+    cli_init();
+    menu_browser_t browser = {.path = MENU_BROWSER_ROOT, .service = start_diagnostic_during_scan};
+    if (setjmp(scan_escape) == 0) {
+        menu_browser_refresh(&browser);
+        ck_abort_msg("diagnostic did not reset");
+    }
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    mock_sd_prepare_set_handler(NULL);
+    mock_sleep_set_handler(NULL);
+    mock_system_reset_set_handler(NULL);
+    mock_clock_restore();
+    system_state = saved;
+}
+END_TEST
 
 // Pages, resolves, and finds full names without a TUI controller.
 START_TEST(test_browser_without_ui) {
@@ -214,6 +329,48 @@ START_TEST(test_browser_scan_cost_and_types) {
         ck_assert(menu_browser_page(&browser, first, MENU_BROWSER_PAGE_ROWS));
         ck_assert_uint_eq(directory_scans, 1);
     }
+}
+END_TEST
+
+// Nonadjacent pages preserve all sorted identities while servicing independent readers.
+START_TEST(test_nonadjacent_pages_with_retained_readers) {
+    for (size_t index = 0; index < TEST_IMAGE_COUNT; ++index) {
+        char name[32];
+        snprintf(name, sizeof(name), "disk%02zu.d64", TEST_IMAGE_COUNT - index - 1);
+        make_file(name);
+    }
+    make_file("ignored.txt");
+    for (size_t index = 0; index < count_of(service_files); ++index) {
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/disk%02zu.d64", directory_root, index);
+        FILE* const fixture = fopen(path, "wb");
+        ck_assert_ptr_nonnull(fixture);
+        uint8_t bytes[TEST_SERVICE_FILE_BYTES];
+        for (size_t offset = 0; offset < sizeof(bytes); ++offset)
+            bytes[offset] = service_byte(index, offset);
+        ck_assert_uint_eq(fwrite(bytes, 1, sizeof(bytes), fixture), sizeof(bytes));
+        ck_assert_int_eq(fclose(fixture), 0);
+        service_files[index] = fopen(path, "r+b");
+        ck_assert_ptr_nonnull(service_files[index]);
+        ck_assert_int_eq(setvbuf(service_files[index], NULL, _IONBF, 0), 0);
+    }
+    menu_browser_t browser = {.path = MENU_BROWSER_ROOT, .service = service};
+    ck_assert(menu_browser_refresh(&browser));
+    ck_assert_uint_eq(browser.count, TEST_IMAGE_COUNT);
+    static const size_t first_rows[] = {0, 63, 4, 42, 21, 64, 0};
+    for (size_t page = 0; page < count_of(first_rows); ++page) {
+        const size_t first = first_rows[page];
+        ck_assert(menu_browser_page(&browser, first, MENU_BROWSER_PAGE_ROWS));
+        ck_assert_uint_eq(browser.entry_count, MIN(MENU_BROWSER_PAGE_ROWS, TEST_IMAGE_COUNT - first));
+        for (size_t row = 0; row < browser.entry_count; ++row) {
+            char expected[32];
+            snprintf(expected, sizeof(expected), "disk%02zu.d64", first + row);
+            ck_assert_str_eq(browser.entries[row].name, expected);
+            ck_assert(!browser.entries[row].directory);
+        }
+    }
+    for (size_t index = 0; index < count_of(service_reads); ++index)
+        ck_assert_uint_gt(service_reads[index], 0);
 }
 END_TEST
 
@@ -400,6 +557,9 @@ Suite* menu_browser_suite(void) {
     TCase* const cases = tcase_create("filesystem");
     tcase_add_checked_fixture(cases, setup, teardown);
     tcase_add_test(cases, test_browser_without_ui);
+    tcase_add_test(cases, test_browser_abandon_scan);
+    tcase_add_test(cases, test_browser_diagnostic_takeover);
+    tcase_add_test(cases, test_nonadjacent_pages_with_retained_readers);
     tcase_add_loop_test(cases, test_browser_scan_cost_and_types, 0, 2);
     tcase_add_test(cases, test_browser_formats_and_sorting);
     tcase_add_test(cases, test_browser_long_names_and_overlong_paths);

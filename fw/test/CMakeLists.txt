@@ -30,6 +30,10 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/cbm/petscii.c
     ${SRC_DIR}/cpu.c
     ${SRC_DIR}/diag/log/log.c
+    ${SRC_DIR}/diag/diag.c
+    ${SRC_DIR}/diag/mem.c
+    ${SRC_DIR}/diag/sd_confirm.c
+    ${SRC_DIR}/diag/runner.c
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/display.c
     ${SRC_DIR}/display/window.c
@@ -76,6 +80,8 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/cpu_test.c
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/display_test.c
+    ${TEST_DIR}/diag_test.c
+    ${TEST_DIR}/diag_sd_stub.c
     ${TEST_DIR}/fatal_error_test.c
     ${TEST_DIR}/diskimage_test.c
     ${TEST_DIR}/dos_media_test.c
@@ -135,6 +141,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=diag_loop)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=display_task -Wl,--wrap=display_term_begin -Wl,--wrap=display_term_end
     -Wl,--wrap=display_term_refresh)
@@ -187,3 +194,41 @@ target_include_directories(sd-path-test PRIVATE
     "${EXTERNAL_DIR}/pico-vfs/include/filesystem/ChaN")
 target_link_libraries(sd-path-test PRIVATE ${CHECK_LIBRARIES} subunit m)
 add_test(NAME sd_path_tests COMMAND sd-path-test)
+
+add_executable(sd-diag-test
+    sd_diag_test.c
+    sd_diag_mock.c
+    "${SRC_DIR}/diag/diag.c"
+    "${SRC_DIR}/diag/sd.c"
+    "${SRC_DIR}/sd/sd.c"
+    "${SRC_DIR}/sd/path.c"
+    "${SRC_DIR}/sd/resolve.c"
+    "${SRC_DIR}/display/char_encoding.c"
+    "${SRC_DIR}/display/display.c"
+    "${SRC_DIR}/display/window.c"
+    "${SRC_DIR}/system/state.c"
+    "${SRC_DIR}/global.c"
+    "${TEST_SUPPORT_DIR}/test_fatal.c"
+    "${EXTERNAL_DIR}/pico-vfs/src/blockdevice/heap.c"
+    "${EXTERNAL_DIR}/pico-vfs/src/filesystem/fat.c"
+    "${FATFS_DIR}/ff.c"
+    "${FATFS_DIR}/ffsystem.c"
+    "${FATFS_DIR}/ffunicode.c")
+# Keep fake SDK declarations and storage interposition exclusive to the host fixture.
+target_include_directories(sd-diag-test PRIVATE
+    "${TEST_DIR}/sd_diag_mocks"
+    "${TEST_SUPPORT_DIR}" "${TEST_DIR}" "${SRC_DIR}"
+    "${FATFS_DIR}"
+    "${EXTERNAL_DIR}/pico-vfs/include"
+    "${EXTERNAL_DIR}/pico-vfs/include/filesystem/ChaN")
+target_compile_options(sd-diag-test PRIVATE -fno-omit-frame-pointer)
+target_link_options(sd-diag-test PRIVATE
+    -Wl,--wrap=calloc
+    -Wl,--wrap=sd_blockdevice -Wl,--wrap=sd_fat_filesystem
+    -Wl,--wrap=sd_mount_root -Wl,--wrap=sd_unmount_root
+    -Wl,--wrap=open -Wl,--wrap=close -Wl,--wrap=read -Wl,--wrap=write
+    -Wl,--wrap=lseek -Wl,--wrap=fstat -Wl,--wrap=stat
+    -Wl,--wrap=mkdir -Wl,--wrap=rename -Wl,--wrap=unlink -Wl,--wrap=rmdir
+    -Wl,--wrap=remove -Wl,--wrap=fopen)
+target_link_libraries(sd-diag-test PRIVATE ${CHECK_LIBRARIES} subunit m)
+add_test(NAME sd_diag_tests COMMAND sd-diag-test)

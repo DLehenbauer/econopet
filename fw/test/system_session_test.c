@@ -7,6 +7,7 @@
 #include <setjmp.h>
 
 #include "diag/log/log.h"
+#include "display/char_encoding.h"
 #include "display/display.h"
 #include "diskimage_test.h"
 #include "driver.h"
@@ -42,6 +43,14 @@ static void observe_terminal_action(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert(!pet_keyboard_active());
     longjmp(terminal_exit, 1);
+}
+
+/** Inspect real diagnostic initialization before escaping its terminal loop. */
+static void observe_diagnostic(diag_session_t* session) {
+    ck_assert_ptr_eq(session->plan, diag_find_plan("memory"));
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(system_state.pet_display_columns, pet_display_columns_80);
+    observe_terminal_action();
 }
 
 /** Feed a complete CLI command synchronously. */
@@ -143,7 +152,7 @@ START_TEST(test_guest_reset_clears_full_video_planes) {
     system_reset_guest();
 
     for (size_t i = 0; i < VIDEO_PLANE_CAPACITY; ++i)
-        ck_assert_uint_eq(system_state.video_char_buffer[i], CH_SPACE);
+        ck_assert_uint_eq(system_state.video_char_buffer[i], VROM_SPACE);
     for (size_t i = 0; i < VIDEO_COLOR_CAPACITY; ++i)
         ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + i],
             VIDEO_DEFAULT_ATTRIBUTE);
@@ -152,7 +161,7 @@ END_TEST
 
 /** CLI reset and diagnostic commands irreversibly take diagnostic ownership. */
 START_TEST(test_terminal_actions_take_over_without_restoring_console) {
-    const char* const commands[] = {"test\r", "reset\r"};
+    const char* const commands[] = {"test memory\r", "reset\r"};
     for (unsigned phase = 0; phase < count_of(commands); ++phase) {
         prepare_guest();
         cli_init();
@@ -169,10 +178,10 @@ START_TEST(test_terminal_actions_take_over_without_restoring_console) {
             ck_assert(pet_keyboard_ready());
             pet_keyboard_wait_release_begin();
         }
-        if (phase == 0) mock_ram_test_set_handler(observe_terminal_action);
+        if (phase == 0) mock_diag_loop_set_handler(observe_diagnostic);
         else mock_system_reset_set_handler(observe_terminal_action);
         expect_terminal_action(commands[phase]);
-        mock_ram_test_set_handler(NULL);
+        mock_diag_loop_set_handler(NULL);
         mock_system_reset_set_handler(NULL);
         ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     }

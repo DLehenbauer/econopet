@@ -456,6 +456,33 @@ START_TEST(test_bam_rejects_unconfigured_and_invalid_units) {
 }
 END_TEST
 
+// A partial failed read is not retried or redirected, and the same binding remains usable.
+START_TEST(test_failed_read_retains_reference_without_retry) {
+    storage_t storage = {.value = 0x5a, .fail_read = true};
+    storage_t peer = {.value = 0xa5};
+    const dos_media_io_t media = make_media(&storage, (unsigned int)_i);
+    const dos_media_io_t other = make_media(&peer, (unsigned int)_i);
+    dos_media_bank_t bank = {0};
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 0, &media), DOS_MEDIA_OK);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 1, 0, &other), DOS_MEDIA_OK);
+    const dos_media_ref_t reference = mounted_reference(&bank, 0, 0);
+    uint8_t sector[DISKIMAGE_SECTOR_SIZE] = {0};
+    ck_assert_int_eq(dos_media_read(&bank, reference, 1, 0, sector), DOS_MEDIA_IO_ERROR);
+    ck_assert_uint_eq(storage.reads, 1);
+    ck_assert_uint_eq(peer.reads, 0);
+    ck_assert_uint_eq(bank.units[0].slots[0].identity, reference.identity);
+    ck_assert(!bank.units[0].slots[0].dirty);
+    for (size_t index = 0; index < sizeof(sector); ++index)
+        ck_assert_uint_eq(sector[index], 0x5a);
+    storage.fail_read = false;
+    storage.value = 0x3c;
+    ck_assert_int_eq(dos_media_read(&bank, reference, 1, 0, sector), DOS_MEDIA_OK);
+    ck_assert_uint_eq(storage.reads, 2);
+    for (size_t index = 0; index < sizeof(sector); ++index)
+        ck_assert_uint_eq(sector[index], 0x3c);
+}
+END_TEST
+
 // Registers standalone media-foundation tests, independent of the legacy DOS.
 Suite* dos_media_suite(void) {
     Suite* const suite = suite_create("dos_media");
@@ -476,6 +503,7 @@ Suite* dos_media_suite(void) {
     tcase_add_test(core, test_invalid_api_inputs_preserve_outputs);
     tcase_add_loop_test(core, test_model_bam_access_is_bounded_and_media_bound, 0, 3);
     tcase_add_test(core, test_bam_rejects_unconfigured_and_invalid_units);
+    tcase_add_loop_test(core, test_failed_read_retains_reference_without_retry, 0, count_of(image_sizes));
     suite_add_tcase(suite, core);
     return suite;
 }

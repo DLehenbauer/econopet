@@ -81,7 +81,11 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/sd/path.c
     ${FW_SRC_DIR}/sd/resolve.c
     ${FW_SRC_DIR}/config/config.c
+    ${FW_SRC_DIR}/diag/diag.c
     ${FW_SRC_DIR}/diag/mem.c
+    ${FW_SRC_DIR}/diag/sd.c
+    ${FW_SRC_DIR}/diag/sd_confirm.c
+    ${FW_SRC_DIR}/diag/runner.c
     ${FW_SRC_DIR}/diag/log/log.c
     ${FW_SRC_DIR}/ui/cli.c
     ${FW_SRC_DIR}/ui/console.c
