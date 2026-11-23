@@ -36,6 +36,9 @@ static bool fail_device_creation;
 static bool fail_filesystem_creation;
 static bool led_on;
 static unsigned int activity_completions;
+static unsigned int initialization_calls;
+static unsigned int fail_initialization_call;
+static int (*card_init)(blockdevice_t*);
 static int (*fat_unmount)(filesystem_t*);
 
 /** Observe CS initialization before the output direction and level are set. */
@@ -68,10 +71,23 @@ void gpio_put(unsigned int gpio, bool value) {
     cs_state = CS_DEASSERTED;
 }
 
-/** Accept only the expected warning from an unformatted card. */
+/** Accept expected device initialization and FAT validation warnings. */
 void log_warn(const char* format, ...) {
-    ck_assert_str_eq(format, "fs_mount error: %s");
+    ck_assert(strcmp(format, "fs_mount error: %s") == 0 || strcmp(format, "sd init error: %d") == 0);
     ++warnings;
+}
+
+/** Model SD reinitialization failures without erasing the heap card's persistent bytes. */
+static int observe_init(blockdevice_t* device) {
+    ++initialization_calls;
+    if (initialization_calls == fail_initialization_call) {
+        device->is_initialized = false;
+        return -EIO;
+    }
+
+    // The heap was allocated at construction, and card contents survive failed initialization.
+    device->is_initialized = true;
+    return card_init(device);
 }
 
 /** Supply the heap card after checking the actual board setup and SPI settings. */
@@ -115,6 +131,15 @@ int fs_mount(const char* path, filesystem_t* filesystem, blockdevice_t* device) 
     ck_assert_str_eq(path, "/");
     ck_assert_ptr_eq(filesystem, sd_fat_filesystem());
     ck_assert_ptr_eq(device, card);
+
+    // Match the VFS preflight before allowing FAT to reserve a logical drive.
+    if (!device->is_initialized) {
+        const int result = device->init(device);
+        if (result != BD_ERROR_OK) {
+            errno = -result;
+            return -1;
+        }
+    }
     ++mount_calls;
     const int result = filesystem->mount(filesystem, device, false);
     errno = result < 0 ? -result : 0;
@@ -134,6 +159,8 @@ int fs_unmount(const char* path) {
 static void setup(void) {
     card = blockdevice_heap_create(TEST_CARD_BYTES);
     ck_assert_ptr_nonnull(card);
+    card_init = card->init;
+    card->init = observe_init;
     ck_assert_ptr_null(sd_blockdevice());
     ck_assert_ptr_null(sd_fat_filesystem());
     ck_assert(!sd_is_mounted());
@@ -176,6 +203,49 @@ START_TEST(test_init_reuses_root) {
     ck_assert_uint_eq(filesystem_creations, 1);
     ck_assert_uint_eq(mount_calls, 2);
     ck_assert_uint_eq(warnings, 0);
+}
+END_TEST
+
+/** Failed reinitialization during FAT mounting must release every reserved drive slot. */
+START_TEST(test_init_recovers_mount_initialization_failure) {
+    format_card();
+    for (unsigned int attempt = 0; attempt <= FF_VOLUMES; ++attempt) {
+        // Fail FAT's initialization, not the preceding VFS preflight on retry.
+        fail_initialization_call = initialization_calls + (card->is_initialized ? 1u : 2u);
+        ck_assert(!sd_init());
+        ck_assert(!sd_is_mounted());
+        ck_assert(!card->is_initialized);
+        ck_assert_uint_eq(unmount_calls, attempt + 1);
+    }
+
+    fail_initialization_call = 0;
+    ck_assert(sd_init());
+    ck_assert(sd_is_mounted());
+    ck_assert_uint_eq(device_creations, 1);
+    ck_assert_uint_eq(filesystem_creations, 1);
+    FATFS* filesystem = NULL;
+    DWORD free_clusters;
+    ck_assert_int_eq(f_getfree("0:", &free_clusters, &filesystem), FR_OK);
+    ck_assert_ptr_nonnull(filesystem);
+    ck_assert_uint_gt(free_clusters, 0);
+}
+END_TEST
+
+/** Initialization failure before FAT registration needs no rollback and remains retryable. */
+START_TEST(test_init_retries_before_registration) {
+    format_card();
+    card->is_initialized = false;
+    fail_initialization_call = initialization_calls + 1;
+    ck_assert(!sd_init());
+    ck_assert(!sd_is_mounted());
+    ck_assert_uint_eq(mount_calls, 0);
+    ck_assert_uint_eq(unmount_calls, 0);
+
+    fail_initialization_call = 0;
+    ck_assert(sd_init());
+    ck_assert(sd_is_mounted());
+    ck_assert_uint_eq(mount_calls, 1);
+    ck_assert_uint_eq(unmount_calls, 0);
 }
 END_TEST
 
@@ -236,6 +306,8 @@ int main(void) {
     tcase_add_checked_fixture(root, setup, teardown);
     tcase_add_test(root, test_init_reuses_root);
     tcase_add_test(root, test_init_recovers_unformatted_card);
+    tcase_add_test(root, test_init_recovers_mount_initialization_failure);
+    tcase_add_test(root, test_init_retries_before_registration);
     tcase_add_test(root, test_init_retries_device_creation);
     tcase_add_test(root, test_init_retries_filesystem_creation);
     suite_add_tcase(suite, root);

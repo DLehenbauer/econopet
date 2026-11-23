@@ -67,15 +67,30 @@ bool sd_is_mounted(void) {
 }
 
 bool sd_mount_root(void) {
-    if (root_mounted) return true;
-    if (root_sd == NULL || root_fat == NULL) return false;
+    if (root_mounted) {
+        return true;
+    }
+    if (root_sd == NULL || root_fat == NULL) {
+        return false;
+    }
+
+    // Complete VFS preflight here so initialization failures precede FAT registration.
+    if (!root_sd->is_initialized) {
+        const int error = root_sd->init(root_sd);
+        if (error != BD_ERROR_OK) {
+            log_warn("sd init error: %d", error);
+            return false;
+        }
+    }
+
     root_mounted = fs_mount(sd_dir_prefix(SD_DIR_ROOT), root_fat, root_sd) == 0;
     if (!root_mounted) {
         log_warn("fs_mount error: %s", strerror(errno));
         // pico-vfs registers the FatFs drive before mount validation completes.
-        // Retire that partial registration so a wiped card can be mounted later.
-        if (root_sd->is_initialized && root_fat->unmount(root_fat) != 0)
+        // Retire it even if validation's reinitialization clears the device state.
+        if (root_fat->unmount(root_fat) != 0) {
             log_warn("fs_mount rollback error: %s", strerror(errno));
+        }
     }
     return root_mounted;
 }
