@@ -5,6 +5,7 @@
 #include "pet_keyboard.h"
 
 #include "driver.h"
+#include "fatal.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
 
@@ -16,6 +17,9 @@
 #define BOOT_RETRACE_ENABLE 0x01u
 #define PIA_DATA_SELECT 0x04u
 #define ROW_MASK 0x0fu
+#define PIA_PROBE_RESET_US 4u
+#define PIA_PROBE_DDR_SELECT 0x00u
+#define PIA_PROBE_PORT_SELECT PIA_DATA_SELECT
 // Conservative initial dwell, to be confirmed on fitted rev-a keyboards.
 #define ROW_SETTLE_US 100u
 #define STABLE_RETRIES 3u
@@ -26,6 +30,35 @@ static struct {
     uint8_t matrix[ECONOPET_KBD_COL_COUNT];
     uint64_t deadline;
 } scanner;
+
+bool pet_keyboard_probe_boot(void) {
+    vet(get_cpu() == CPU_RESET, "PIA1 boot probe requires a halted CPU in reset");
+
+    // Release the shared peripheral reset without allowing the CPU to run.
+    set_cpu(CPU_HALT);
+    sleep_us(PIA_PROBE_RESET_US);
+
+    // Select four keyboard row outputs, leaving the other port pins as inputs.
+    pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_DDR_SELECT);
+    pet_io_write(PIA1_ORA_ADDR, ROW_MASK);
+    pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
+
+    bool responsive = true;
+    for (uint8_t row = 0; row < ECONOPET_KBD_COL_COUNT; ++row) {
+        pet_io_write(PIA1_ORA_ADDR, row);
+        // Change the data bus before reading so a floating bus cannot simply
+        // echo the preceding row-select write.
+        pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
+        if ((pet_io_read(PIA1_ORA_ADDR) & ROW_MASK) != row) {
+            responsive = false;
+            break;
+        }
+    }
+
+    // Restore reset on both paths before any normal guest initialization.
+    set_cpu(CPU_RESET);
+    return responsive;
+}
 
 void pet_keyboard_sync(void) {
     if (scanner.active) {

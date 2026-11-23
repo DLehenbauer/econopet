@@ -31,7 +31,7 @@
 #define DIAG_MINUTES_PER_HOUR 60u
 #define DIAG_ELAPSED_SIZE 24u
 
-static const diag_plan_t* const plans[] = {&diag_plan_memory, &diag_plan_sd};
+static const diag_plan_t* const plans[] = {&diag_plan_memory, &diag_plan_bup, &diag_plan_sd};
 static diag_session_t* active_session;
 
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_PLANE_CAPACITY, "diagnostic character plane too small");

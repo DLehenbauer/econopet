@@ -6,8 +6,10 @@
 
 #include <inttypes.h>
 
+#include "display/display.h"
 #include "driver.h"
 #include "hardware_contract.h"
+#include "input/pet_keyboard.h"
 #include "pet.h"
 
 #define SRAM_ADDR_MIN ECONOPET_WB_RAM_BASE_ADDR
@@ -177,3 +179,24 @@ const diag_plan_t diag_plan_memory = {
     .suites = memory_suites,
     .suite_count = count_of(memory_suites),
 };
+
+const diag_plan_t diag_plan_bup = {
+    .name = "bup",
+    .description = "Bring-up diagnostics for a surface-mount-only board",
+    .confirm = NULL,
+    .prepare = memory_prepare,
+    .suites = memory_suites,
+    .suite_count = count_of(memory_suites),
+};
+
+void bup_boot_check(void) {
+    if (pet_keyboard_probe_boot()) {
+        return;
+    }
+
+    // Report before starting video, so UART remains useful if display startup fails.
+    puts("PIA1 unresponsive: starting destructive bup diagnostics");
+    fflush(stdout);
+    display_init();
+    diag_run_plan(&diag_plan_bup);
+}

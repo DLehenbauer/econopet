@@ -463,6 +463,15 @@ static const diag_case_t memory_cases[] = {
 static const diag_suite_t memory_suites[] = {
     { "Memory host fixture", memory_cases, count_of(memory_cases), NULL },
 };
+const diag_plan_t diag_plan_bup = {
+    .name = "bup",
+    .description = "Host fixture",
+    .confirm = NULL,
+    .prepare = NULL,
+    .suites = memory_suites,
+    .suite_count = count_of(memory_suites),
+};
+
 const diag_plan_t diag_plan_memory = {
     .name = "memory",
     .description = "Host fixture",

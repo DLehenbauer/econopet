@@ -37,6 +37,7 @@ static bool swap_prepare_result;
 static unsigned swap_prepare_calls;
 static bool reset_observed;
 static unsigned prompt_step;
+static unsigned boot_video_calls;
 typedef enum {
     PROMPT_ABORT,
     PROMPT_ESCAPE_ABORT,
@@ -108,6 +109,28 @@ static void observe_sd_launch(diag_session_t* launched) {
     longjmp(diagnostic_escape, 1);
 }
 
+/** Record video startup before the automatic diagnostic owns the display. */
+static void observe_boot_video(void) { ++boot_video_calls; }
+
+/** Stop at the real bring-up loop boundary without running the destructive cases. */
+static void observe_bup_launch(diag_session_t* launched) {
+    ck_assert_ptr_eq(launched->plan, &diag_plan_bup);
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(boot_video_calls, 1);
+    diagnostic_observed = true;
+    longjmp(diagnostic_escape, 1);
+}
+
+/** Observe CLI launch without executing the destructive plan. */
+static void observe_cli_bup_launch(diag_session_t* launched) {
+    ck_assert_ptr_eq(launched->plan, &diag_plan_bup);
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    diagnostic_observed = true;
+    longjmp(diagnostic_escape, 1);
+}
+
 /** Reset shared diagnostic and hardware fixtures without leaking CK_NOFORK state. */
 static void setup(void) {
     saved_state = system_state;
@@ -124,6 +147,7 @@ static void setup(void) {
     swap_prepare_calls = 0;
     reset_observed = false;
     prompt_step = 0;
+    boot_video_calls = 0;
     mock_sd_prepare_set_handler(observe_swap_prepare);
     mock_system_reset_set_handler(observe_reset);
     capture = NULL;
@@ -142,10 +166,26 @@ static void teardown(void) {
     mock_sd_prepare_set_handler(NULL);
     mock_sleep_set_handler(NULL);
     mock_system_reset_set_handler(NULL);
+    mock_video_init_set_handler(NULL);
     mock_spi_clear_fault();
     mock_clock_restore();
     system_state = saved_state;
 }
+
+/** The boot check preserves normal startup or launches bup without menu input. */
+START_TEST(test_bup_boot_routing) {
+    mock_video_init_set_handler(observe_boot_video);
+    mock_diag_loop_set_handler(observe_bup_launch);
+    mock_pia1_fault(_i != 0, 0);
+    if (setjmp(diagnostic_escape) == 0) bup_boot_check();
+    ck_assert_int_eq(diagnostic_observed, _i != 0);
+    ck_assert_uint_eq(boot_video_calls, _i != 0 ? 1 : 0);
+    if (_i == 0) {
+        ck_assert_int_eq(system_mode(), system_operation_boot);
+        ck_assert_int_eq(get_cpu(), CPU_RESET);
+    }
+}
+END_TEST
 
 /** Capture production UART printf output through the existing host stdio adapter. */
 static void capture_begin(void) {
@@ -174,6 +214,15 @@ static void capture_end(char* out, size_t size) {
 static void feed_cli(const char* text) {
     while (*text != '\0') cli_process_char(*text++);
 }
+
+/** The new CLI name starts the bring-up plan without changing memory's command. */
+START_TEST(test_cli_bup_launch) {
+    cli_init();
+    mock_diag_loop_set_handler(observe_cli_bup_launch);
+    if (setjmp(diagnostic_escape) == 0) feed_cli("test bup\r");
+    ck_assert(diagnostic_observed);
+}
+END_TEST
 
 /** Assert ASCII text at an exact coordinate after canonical VROM conversion. */
 static void check_text(unsigned col, unsigned row, const char* text) {
@@ -511,6 +560,7 @@ START_TEST(test_cli_usage_preserves_ownership) {
     ck_assert_uint_eq(mock_spi_access_count(), accesses);
     ck_assert_ptr_nonnull(strstr(output, "Usage: test <plan>"));
     ck_assert_ptr_nonnull(strstr(output, "memory"));
+    ck_assert_ptr_nonnull(strstr(output, "bup"));
     ck_assert_ptr_nonnull(strstr(output, "econopet>"));
     system_restore(false);
 }
@@ -664,13 +714,23 @@ START_TEST(test_cli_sd_from_menu) {
 }
 END_TEST
 
-/** The real memory plan covers all 128 KiB plus BRAM without changing local glyphs. */
-START_TEST(test_memory_plan_passes) {
-    diag_session_init(&session, &diag_plan_memory);
+/** Both plans run the complete memory test without changing local glyphs. */
+START_TEST(test_memory_and_bup_plans_pass) {
+    diag_session_init(&session, _i == 0 ? &diag_plan_memory : &diag_plan_bup);
     ck_assert(diag_run_iteration(&session));
     ck_assert_int_eq(session.active_status, DIAG_STATUS_PASS);
     ck_assert_mem_eq(roms_get_char_rom(video_text_mode_lower), rom_chars_e800 + 0x400, 0x400);
     ck_assert_uint_eq(mock_ram[MOCK_RAM_SIZE - 1], 0);
+}
+END_TEST
+
+/** Bring-up also reports failures in either of its current memory suites. */
+START_TEST(test_bup_plan_detects_memory_faults) {
+    const uint32_t address = _i == 0 ? 0x12345u : ECONOPET_WB_BRAM_BASE_ADDR + 0x1abu;
+    mock_spi_inject_fault(address, _i == 0 ? 0x08 : 0, _i == 0 ? 0 : 0x80);
+    diag_session_init(&session, &diag_plan_bup);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_ptr_nonnull(strstr(session.failure_detail, _i == 0 ? "$12345" : "$681AB"));
 }
 END_TEST
 
@@ -725,7 +785,9 @@ Suite* diag_suite(void) {
     tcase_add_test(tests, test_scrolling_failure_visible);
     tcase_add_test(tests, test_uart_summaries_and_elapsed);
     tcase_add_test(tests, test_first_failure_retained);
+    tcase_add_loop_test(tests, test_bup_boot_routing, 0, 2);
     tcase_add_test(tests, test_cli_usage_preserves_ownership);
+    tcase_add_test(tests, test_cli_bup_launch);
     tcase_add_test(tests, test_cli_sd_prompt_cancel);
     tcase_add_test(tests, test_cli_sd_escape_aborts);
     tcase_add_test(tests, test_cli_sd_countdown_abort);
@@ -734,8 +796,9 @@ Suite* diag_suite(void) {
     tcase_add_test(tests, test_cli_sd_initially_absent);
     tcase_add_test(tests, test_cli_sd_removal_during_countdown);
     tcase_add_test(tests, test_cli_sd_from_menu);
-    tcase_add_test(tests, test_memory_plan_passes);
+    tcase_add_loop_test(tests, test_memory_and_bup_plans_pass, 0, 2);
     tcase_add_loop_test(tests, test_memory_plan_detects_faults, 0, 2);
+    tcase_add_loop_test(tests, test_bup_plan_detects_memory_faults, 0, 2);
     suite_add_tcase(suite, tests);
     return suite;
 }

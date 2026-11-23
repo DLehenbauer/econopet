@@ -77,6 +77,10 @@ static cpu_type_t selected_cpu;
 static uint8_t audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
 static uint8_t video_control, via_pcr;
 static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
+static bool pia1_absent;
+static uint8_t pia1_stuck_low, pia1_bus;
+static uint16_t pia1_rows;
+static void (*video_init_handler)(void);
 static bool text_mode_lower = true;
 static bool clock_overridden;
 static uint64_t clock_us;
@@ -579,6 +583,9 @@ void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
 /** Model readable PIA direction/data selection and the separate hidden output latches. */
 uint8_t pet_io_read(const uint16_t address) {
     ck_assert(!(mock_cpu_state & CPU_READY));
+    if (address >= 0xe810 && address <= 0xe813 && pia1_absent) {
+        return pia1_bus;
+    }
     if (address == 0xe84c) {
         return via_pcr;
     }
@@ -592,12 +599,17 @@ uint8_t pet_io_read(const uint16_t address) {
     }
     const unsigned row = pia_output[0] & 15;
     const uint8_t input = port == 0 || row >= ECONOPET_KBD_COL_COUNT ? 0xff : physical_matrix[row];
-    return (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
+    const uint8_t value = (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
+    return port == 0 ? value & (uint8_t)~pia1_stuck_low : value;
 }
 
 /** Record physical PIA writes in the register selected by the current control byte. */
 void pet_io_write(const uint16_t address, const uint8_t data) {
     ck_assert(!(mock_cpu_state & CPU_READY));
+    if (address >= 0xe810 && address <= 0xe813) {
+        pia1_bus = data;
+        if (pia1_absent) return;
+    }
     if (address == 0xe84c) {
         via_pcr = data;
         text_mode_lower = (data & 0x0e) == 0x0e;
@@ -609,10 +621,21 @@ void pet_io_write(const uint16_t address, const uint8_t data) {
         pia_control[port] = data & 0x3f;
     } else if (pia_control[port] & 4) {
         pia_output[port] = data;
+        if (port == 0 && (data & 0x0f) < ECONOPET_KBD_COL_COUNT)
+            pia1_rows |= (uint16_t)(1u << (data & 0x0f));
     } else {
         pia_ddr[port] = data;
     }
 }
+
+void mock_pia1_fault(bool absent, uint8_t stuck_low) {
+    pia1_absent = absent;
+    pia1_stuck_low = stuck_low;
+    pia1_bus = 0xff;
+    pia1_rows = 0;
+}
+
+uint16_t mock_pia1_rows_written(void) { return pia1_rows; }
 
 cpu_type_t mock_cpu_type(void) {
     return selected_cpu;
@@ -654,6 +677,8 @@ void mock_reset(void) {
     memset(pia_control, 0, sizeof(pia_control));
     memset(pia_ddr, 0, sizeof(pia_ddr));
     memset(pia_output, 0, sizeof(pia_output));
+    mock_pia1_fault(false, 0);
+    video_init_handler = NULL;
     // Restore the RAM fixture and empty all emulated IEEE queues.
     memset(mock_ram, 0xEA, sizeof(mock_ram));
     memset(mock_char_rom, 0, sizeof(mock_char_rom));
@@ -725,8 +750,13 @@ void __wrap_display_term_end(void) {
 }
 void __wrap_display_term_refresh(void) { term_refresh_count++; }
 
-/** Reject hardware video startup in the host input fixture. */
-void video_init(void) { fatal("unexpected hardware video initialization in host test"); }
+void mock_video_init_set_handler(void (*handler)(void)) { video_init_handler = handler; }
+
+/** Reject hardware video startup unless the fixture observes it explicitly. */
+void video_init(void) {
+    vet(video_init_handler != NULL, "unexpected hardware video initialization in host test");
+    video_init_handler();
+}
 
 unsigned int mock_term_begin_count(void) { return term_begin_count; }
 unsigned int mock_term_end_count(void) { return term_end_count; }

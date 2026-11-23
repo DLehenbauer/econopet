@@ -229,11 +229,12 @@ int main() {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
     gpio_put(PICO_DEFAULT_LED_PIN, true);
 
-    log_init();     // Initialize logging subsystem early for boot diagnostics
+    log_init();         // Initialize logging subsystem early for boot diagnostics
     system_init();
-    input_init();   // Begin charging debounce capacitor for menu button (if any)
-    fpga_init();    // Setup sys_clock, FPGA_SPI, and configure FPGA
-    sd_init();      // Mount the SD card for configuration, ROMs, and disk images
+    input_init();       // Begin charging debounce capacitor for menu button (if any)
+    fpga_init();        // Setup sys_clock, FPGA_SPI, and configure FPGA
+    bup_boot_check();   // Run bring-up diagnostics if PIA1 not detected
+    sd_init();          // Mount the SD card for configuration, ROMs, and disk images
 
     // We now are generating a valid video signal for the PET, so it's safe to proceed
     // with the rest of the initialization.

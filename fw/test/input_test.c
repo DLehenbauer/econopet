@@ -274,6 +274,23 @@ END_TEST
 static unsigned int menu_preparation_services;
 static input_system_action_t preparation_request;
 
+/** A complete probe samples all row values and restores shared reset. */
+START_TEST(test_pia1_boot_probe_present) {
+    mock_pia1_fault(false, 0);
+    ck_assert(pet_keyboard_probe_boot());
+    ck_assert_uint_eq(mock_pia1_rows_written(), (1u << ECONOPET_KBD_COL_COUNT) - 1u);
+    ck_assert_int_eq(get_cpu(), CPU_RESET);
+}
+END_TEST
+
+/** A retained write bus and a broken row-select pin must not pass the probe. */
+START_TEST(test_pia1_boot_probe_unresponsive) {
+    mock_pia1_fault(_i == 0, _i == 0 ? 0 : 0x08);
+    ck_assert(!pet_keyboard_probe_boot());
+    ck_assert_int_eq(get_cpu(), CPU_RESET);
+}
+END_TEST
+
 /** Deliver an independent gesture while the menu waits for its physical scanner. */
 static void service_menu_preparation(void) {
     if (menu_preparation_services++ == 0) {
@@ -311,6 +328,8 @@ Suite* input_suite(void) {
     tcase_add_test(task, test_escape_timeout_keeps_other_sources_serviced);
     tcase_add_test(task, test_escape_recovery);
     tcase_add_test(task, test_acquired_terminal_session_transitions);
+    tcase_add_test(task, test_pia1_boot_probe_present);
+    tcase_add_loop_test(task, test_pia1_boot_probe_unresponsive, 0, 2);
     tcase_add_loop_test(task, test_menu_preparation_preserves_reset_request, 0, 2);
     suite_add_tcase(suite, task);
     return suite;
