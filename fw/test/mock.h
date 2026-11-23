@@ -36,6 +36,12 @@ void mock_spi_clear_fault(void);
 void mock_cpu_set_run_callback(void (*callback)(void));
 /** Observe real CPU control transitions while testing machine lifecycle sequencing. */
 void mock_cpu_set_state_observer(void (*observer)(cpu_state_t state));
+/** Model an absent PIA1's retained data bus or row outputs stuck low. */
+void mock_pia1_fault(bool absent, uint8_t stuck_low);
+/** Return the set of row-select values written while PIA1 port A was selected. */
+uint16_t mock_pia1_rows_written(void);
+/** Allow a fixture to observe otherwise unsupported hardware video initialization. */
+void mock_video_init_set_handler(void (*handler)(void));
 // Selects the character-set status returned by the FPGA mock.
 void mock_set_text_mode_lower(bool lower);
 // Returns the last CPU selected through the driver mock.

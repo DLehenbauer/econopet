@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/** Detect if PIA1 is present by writing/reading keyboard col-select pins. */
+bool pet_keyboard_probe_boot(void);
 /** Acquire the runtime matrix unless direct scanning owns it. */
 void pet_keyboard_sync(void);
 /** Begin direct menu scanning after PIA1 is configured, retaining unrelated ORA bits. */
