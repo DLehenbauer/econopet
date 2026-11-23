@@ -44,7 +44,5 @@ void system_reset_guest(void);
 void system_takeover(void);
 /** Take over system operation and reset the RP2040 through its watchdog. */
 void __attribute__((noreturn)) system_reset(void);
-/** Take over system operation and enter the non-returning memory diagnostic. */
-void __attribute__((noreturn)) system_memory_diagnostic(void);
 /** Run tasks admitted only while the guest is active. */
 void system_task(void);

@@ -151,10 +151,8 @@ static void setup(void) {
     register_models(true);
     set_cpu(CPU_READY);
     memset(guarded_screen, 0xa5, sizeof(guarded_screen));
-    static const window_t window = {
-        guarded_screen + 1, guarded_screen + sizeof(guarded_screen) - 1,
-        MENU_UI_WIDTH, MENU_UI_HEIGHT
-    };
+    static window_t window;
+    window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     menu_ui_init(&menu, &window, service);
     load_config(&setup_sink, menu.config_index);
     setup_count = 0;
@@ -1044,7 +1042,8 @@ END_TEST
 static jmp_buf ram_test_exit;
 
 // Stops the nonreturning RAM diagnostic after observing the CPU halt.
-static void observe_ram_test(void) {
+static void observe_ram_test(diag_session_t* session) {
+    ck_assert_ptr_eq(session->plan, diag_find_plan("memory"));
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_uint_eq(setup_count, 0);
     longjmp(ram_test_exit, 1);
@@ -1052,7 +1051,7 @@ static void observe_ram_test(void) {
 
 // Enter the diagnostic directly while the menu is polling CLI input.
 static tui_action_t request_ram_test_in_menu(void) {
-    send_uart("test   \r");
+    send_uart("test memory   \r");
     return tui_action_none;
 }
 
@@ -1063,10 +1062,10 @@ START_TEST(test_cli_memory_test) {
     prior_setup_count = setup_count;
     cli_init();
     if (_i != 0) mock_input_set_reader(request_ram_test_in_menu);
-    mock_ram_test_set_handler(observe_ram_test);
+    mock_diag_loop_set_handler(observe_ram_test);
     const window_t window = window_create(guarded_screen + 1, MENU_UI_WIDTH, MENU_UI_HEIGHT);
     if (setjmp(ram_test_exit) == 0) {
-        if (_i == 0) send_uart("test\r");
+        if (_i == 0) send_uart("test memory\r");
         else {
             set_cpu(CPU_HALT);
     if (!pet_keyboard_active()) pet_keyboard_begin_boot();
@@ -1075,7 +1074,7 @@ START_TEST(test_cli_memory_test) {
         }
         ck_abort_msg("CLI test returned instead of entering the diagnostic");
     }
-    mock_ram_test_set_handler(NULL);
+    mock_diag_loop_set_handler(NULL);
 }
 END_TEST
 

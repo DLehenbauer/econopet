@@ -7,7 +7,7 @@
 #include "breakpoint.h"
 #include "console.h"
 #include "diag/log/log.h"
-#include "diag/mem.h"
+#include "diag/diag.h"
 #include "display/display.h"
 #include "driver.h"
 #include "input/input_routing.h"
@@ -15,11 +15,13 @@
 #include "pet.h"
 #include "reset.h"
 #include "system/state.h"
+#include "ui/terminal.h"
 #include "version.h"
 
 // CLI state
 static char line_buffer[CONSOLE_LINE_MAX];
 static size_t line_length = 0;
+static bool ignore_next_lf;
 
 // Forward declarations for command handlers
 static void cmd_bp(const char* args);
@@ -42,7 +44,7 @@ static const cli_command_t commands[] = {
     { "log",    "Show log [debug|info|warn]",                cmd_log },
     { "remote", "Remote control PET (Ctrl+C to exit)",       cmd_remote },
     { "reset",  "Reset the RP2040",                          cmd_reset },
-    { "test",   "Run the continuous memory self-test",       cmd_test },
+    { "test",   "Run diagnostic plan (test <plan>)",         cmd_test },
     { NULL, NULL, NULL }  // Sentinel
 };
 
@@ -115,14 +117,28 @@ static void cmd_reset(const char* args) {
     system_reset();
 }
 
-// Finish active storage traffic before entering the continuous memory diagnostic.
+// Dispatch one diagnostic plan or list available plans without taking ownership.
 static void cmd_test(const char* args) {
     while (*args == ' ') ++args;
-    if (*args != '\0') {
-        console_puts("Usage: test\r\n");
-        return;
+    size_t length = strlen(args);
+    while (length != 0 && args[length - 1] == ' ') --length;
+    char name[CONSOLE_LINE_MAX];
+    memcpy(name, args, length);
+    name[length] = '\0';
+    const diag_plan_t* const plan = diag_find_plan(name);
+    if (plan != NULL) {
+        if (plan->confirm != NULL) plan->confirm();
+        diag_run_plan(plan);
     }
-    system_memory_diagnostic();
+
+    if (length != 0) printf("Unrecognized test name '%s'\r\n", name);
+    console_puts("Usage: test <plan>\r\n\r\nAvailable tests:\r\n");
+    size_t count;
+    const diag_plan_t* const* const plans = diag_plans(&count);
+    for (size_t index = 0; index < count; ++index) {
+        printf("  %-8s - %s\r\n", plans[index]->name, plans[index]->description);
+    }
+    fflush(stdout);
 }
 
 static void execute_command(const char* line) {
@@ -159,36 +175,36 @@ static void execute_command(const char* line) {
 
 void cli_init(void) {
     line_length = 0;
+    ignore_next_lf = false;
     input_routing_cancel(INPUT_SOURCE_UART);
 
     system_state.terminal_session = terminal_session_cli;
 
-    // Reset terminal to clean state using VT100/VT102 compatible sequences:
-    // - Reset scroll region to full screen (DECSTBM with no args)
-    // - Reset character attributes (SGR 0)
-    // - Enable auto-wrap mode (DECAWM)
-    printf("\e[r");        // Reset scroll region to full screen
-    printf("\e[m");        // Reset character attributes
-    printf("\e[?7h");      // Enable line wrap (DECAWM)
+    // Restore default attributes before clearing so blank cells match the banner background.
+    fputs(TERM_CLI_RESET, stdout);
+    fputs(TERM_CLEAR_SCREEN, stdout);
     fflush(stdout);
     
     // Print welcome banner and initial prompt
     printf("\r\n");
-    printf("EconoPET Firmware v%s (%s%s)\r\n", FW_VERSION_STRING, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
-    printf("Type 'help' for available commands.\r\n");
+    printf("EconoPET Firmware v%s\r\n(Build: %s Commit: %s%s)\r\n", FW_VERSION_STRING, FW_BUILD_DATE, FW_GIT_HASH, FW_GIT_DIRTY ? "-dirty" : "");
+    printf("\r\nType 'help' for available commands.\r\n");
     printf("\r\n");
-    printf("econopet> ");
-    fflush(stdout);
+    console_prompt();
 }
 
 void cli_process_char(int ch) {
+    if (ignore_next_lf) {
+        ignore_next_lf = false;
+        if (ch == '\n') return;
+    }
+
     if (console_process_char(ch, line_buffer, &line_length, CONSOLE_LINE_MAX)) {
-        // Line complete - execute command
+        // A completed CR command must consume the following LF without treating it as input.
+        ignore_next_lf = ch == '\r';
         execute_command(line_buffer);
         line_length = 0;
-        if (!cli_in_remote_mode()) {
-            console_prompt();
-        }
+        if (!cli_in_remote_mode()) console_prompt();
     }
 }
 
@@ -202,6 +218,7 @@ void cli_exit_remote(void) {
         display_term_end();
         
         system_state.terminal_session = terminal_session_cli;
+        ignore_next_lf = false;
         
         console_puts("\r\n[exited remote mode]\r\n");
         console_prompt();

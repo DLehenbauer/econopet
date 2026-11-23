@@ -38,3 +38,6 @@ bool menu_browser_resolve(menu_browser_t* browser, size_t index, char path[SD_PA
                           bool* directory);
 // Moves to the parent within /disk and returns the child name, or false at root.
 bool menu_browser_parent(menu_browser_t* browser, char child[SD_PATH_MAX]);
+
+/** Close an interrupted scan before a nonreturning diagnostic retires the SD root. */
+bool menu_browser_abandon_scan(void);

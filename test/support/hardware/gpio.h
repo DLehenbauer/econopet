@@ -12,12 +12,22 @@
 #define GPIO_OUT 1
 #define GPIO_IN 0
 
-// Fatal diagnostics configure the activity LED before taking ownership.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Configure GPIO through a fixture override, otherwise fail explicitly.
 void gpio_init(unsigned int gpio);
+// Set GPIO direction through a fixture override, otherwise fail explicitly.
 void gpio_set_dir(unsigned int gpio, bool output);
-// Configure and sample the input fixture's menu-button GPIO.
+// Configure a pull-up through a fixture override, otherwise fail explicitly.
 void gpio_pull_up(unsigned int gpio);
+// Sample a fixture-owned input, otherwise fail explicitly.
 bool gpio_get(unsigned int gpio);
 
-// Host firmware tests override this to record GPIO writes.
+// Drive a fixture-owned output, otherwise fail explicitly.
 void gpio_put(unsigned int gpio, bool value);
+
+#ifdef __cplusplus
+}
+#endif

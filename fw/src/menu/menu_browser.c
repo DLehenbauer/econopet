@@ -11,6 +11,15 @@
 #include "diag/log/log.h"
 #include "fatal.h"
 
+static DIR* active_scan;
+
+bool menu_browser_abandon_scan(void) {
+    if (active_scan == NULL) return true;
+    DIR* const dir = active_scan;
+    active_scan = NULL;
+    return closedir(dir) == 0;
+}
+
 // Records a recoverable filesystem error for the menu to display.
 static bool browser_error(menu_browser_t* browser, const char* message) {
     snprintf(browser->error, sizeof(browser->error), "%s", message);
@@ -89,8 +98,10 @@ static void insert_entry(menu_browser_t* browser, const menu_browser_entry_t* en
 static bool scan_entries(menu_browser_t* browser, const menu_browser_entry_t* boundary,
                          size_t boundary_index, size_t limit, bool reverse, size_t* total) {
     if (!safe_directory(browser)) return false;
+    vet(active_scan == NULL, "overlapping menu browser scans");
     DIR* const dir = opendir(browser->path);
     if (dir == NULL) return browser_error(browser, "Cannot open directory");
+    active_scan = dir;
     browser->entry_count = 0;
     *total = 0;
     bool ok = true;
@@ -130,6 +141,7 @@ static bool scan_entries(menu_browser_t* browser, const menu_browser_entry_t* bo
         if (limit > 0 && (boundary == NULL || (reverse ? order <= 0 : order > 0)))
             insert_entry(browser, &item, limit, reverse);
     }
+    active_scan = NULL;
     if (closedir(dir) != 0) ok = browser_error(browser, "Cannot close directory");
     if (ok && boundary != NULL)
         vet(boundary_found && before_boundary == boundary_index,

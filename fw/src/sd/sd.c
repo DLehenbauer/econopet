@@ -4,11 +4,9 @@
 #include "pch.h"
 #include "sd.h"
 
-#include "blockdevice/flash.h"
 #include "blockdevice/sd.h"
+#undef PATH_MAX
 #include "filesystem/fat.h"
-#include "filesystem/filesystem.h"
-#include "filesystem/littlefs.h"
 #include "filesystem/vfs.h"
 
 #include "ff.h"
@@ -27,32 +25,68 @@ _Static_assert(SD_PATH_MAX == PATH_MAX,
 _Static_assert(FF_MAX_SS != FF_MIN_SS,
                "FatFs must use a variable sector size so FATFS::ssize exists");
 
+static blockdevice_t* root_sd;
+static filesystem_t* root_fat;
+static bool root_mounted;
+
 bool sd_init() {
-    // Deassert SD CS
-    gpio_init(SD_CSN_GP);
-    gpio_set_dir(SD_CSN_GP, GPIO_OUT);
-    gpio_put(SD_CSN_GP, true);
+    if (root_sd == NULL) {
+        // Deassert SD CS before constructing the SPI-backed block device.
+        gpio_init(SD_CSN_GP);
+        gpio_set_dir(SD_CSN_GP, GPIO_OUT);
+        gpio_put(SD_CSN_GP, true);
 
-    blockdevice_t* sd = blockdevice_sd_create(
-        SD_SPI_INSTANCE,
-        /* tx: */ SD_CMD_GP,
-        /* rx: */ SD_DAT_GP,
-        SD_CLK_GP,
-        SD_CSN_GP,
-        SD_SPI_MHZ * MHZ,
-        /* enable_crc: */ false);
+        root_sd = blockdevice_sd_create(
+            SD_SPI_INSTANCE,
+            SD_CMD_GP,
+            SD_DAT_GP,
+            SD_CLK_GP,
+            SD_CSN_GP,
+            SD_SPI_MHZ * MHZ,
+            SD_SPI_ENABLE_CRC);
+        if (root_sd != NULL) {
+            // Install the singleton activity wrapper before exposing the retained device.
+            sd_activity_install(root_sd);
+        }
+    }
+    if (root_fat == NULL) root_fat = filesystem_fat_create();
 
-    // Hook physical reads/writes to show activity on the LED and track the last
-    // completion time for SD activity monitoring.
-    sd_activity_install(sd);
+    return sd_mount_root();
+}
 
-    filesystem_t* fat = filesystem_fat_create();
+struct blockdevice* sd_blockdevice(void) {
+    return root_sd;
+}
 
-    if (fs_mount(sd_dir_prefix(SD_DIR_ROOT), fat, sd) == -1) {
+struct filesystem* sd_fat_filesystem(void) {
+    return root_fat;
+}
+
+bool sd_is_mounted(void) {
+    return root_mounted;
+}
+
+bool sd_mount_root(void) {
+    if (root_mounted) return true;
+    if (root_sd == NULL || root_fat == NULL) return false;
+    root_mounted = fs_mount(sd_dir_prefix(SD_DIR_ROOT), root_fat, root_sd) == 0;
+    if (!root_mounted) {
         log_warn("fs_mount error: %s", strerror(errno));
+        // pico-vfs registers the FatFs drive before mount validation completes.
+        // Retire that partial registration so a wiped card can be mounted later.
+        if (root_sd->is_initialized && root_fat->unmount(root_fat) != 0)
+            log_warn("fs_mount rollback error: %s", strerror(errno));
+    }
+    return root_mounted;
+}
+
+bool sd_unmount_root(void) {
+    if (!root_mounted) return true;
+    if (fs_unmount(sd_dir_prefix(SD_DIR_ROOT)) != 0) {
+        log_warn("fs_unmount error: %s", strerror(errno));
         return false;
     }
-
+    root_mounted = false;
     return true;
 }
 

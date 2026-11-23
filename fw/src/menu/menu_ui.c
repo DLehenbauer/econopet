@@ -20,7 +20,6 @@
 #define MENU_DISK_EJECTION_NOTICE_ROW 17u
 #define MENU_DISK_EJECTION_EXPLANATION_ROW 18u
 #define MENU_DISK_WARNING_ROW 21u
-#define MENU_DISK_WARNING_UNDERLINE 0x63u
 #define MENU_PICKER_FRAME_TOP 0u
 #define MENU_PICKER_FRAME_BOTTOM 23u
 #define MENU_PICKER_TOP_PADDING 2u
@@ -31,36 +30,13 @@
 #define MENU_BUTTON_COLUMN 11u
 #define MENU_BUTTON_WIDTH 17u
 #define MENU_BACK_ROW 12u
-#define MENU_BORDER_VERTICAL 0x5du
-#define MENU_BORDER_HORIZONTAL 0x40u
-#define MENU_FRAME_TOP_LEFT 0x70u
-#define MENU_FRAME_TOP_RIGHT 0x6eu
-#define MENU_BORDER_TOP_LEFT 0x61u
-#define MENU_BORDER_TOP_RIGHT 0x76u
-#define MENU_BORDER_BOTTOM_LEFT 0x6du
-#define MENU_BORDER_BOTTOM_RIGHT 0x7du
-#define MENU_SCROLLBAR_TOP 0x71u
-#define MENU_SCROLLBAR_BOTTOM 0x72u
-#define MENU_SCROLLBAR_TRACK 0x66u
-#define MENU_SCROLLBAR_THUMB 0xa0u
-#define MENU_DEVICE_DRIVE_TOP 0x72u
-#define MENU_DEVICE_DRIVE_BOTTOM 0x6du
-#define MENU_DISK_SELECTION_RIGHT 0x74u
 
 // Counts the synthetic Eject and optional parent entries before files.
 static size_t special_count(const menu_ui_t* menu);
 
-// Writes clipped text without treating normal display clipping as a path error.
-static void text_at(const window_t* window, unsigned int x, unsigned int y,
-                    unsigned int width, const char* text) {
-    const size_t length = MIN(strlen(text), width);
-    for (size_t i = 0; i < length; i++)
-        *window_xy(window, x + i, y) = ascii_to_vrom((uint8_t) text[i]);
-}
-
 // Uses the updated mockup's dashboard and paging legends.
 static void paint_footer(const window_t* window, bool picker) {
-    text_at(window, 0, 24, MENU_UI_WIDTH, picker
+    window_text(window, 0, 24, MENU_UI_WIDTH, picker
         ? "Up/Dn:Move Lt/Rt:Page RET:Selct DEL:Back"
         : "Up/Dn:Move      RET:Select      DEL:Back");
     window_reverse(window, window_xy(window, 0, 24), 2);
@@ -101,19 +77,11 @@ static void refresh_drives(tui_controller_t* controller, void* context) {
 // Paints the on-demand root and the firmware's actual build date.
 static void paint_dashboard(const window_t* window, const void* context) {
     (void) context;
-    text_at(window, (MENU_UI_WIDTH - strlen("EconoPET")) / 2, 0, MENU_UI_WIDTH, "EconoPET");
+    window_text(window, (MENU_UI_WIDTH - strlen("EconoPET")) / 2, 0, MENU_UI_WIDTH, "EconoPET");
     window_reverse(window, window->start, MENU_UI_WIDTH);
-    text_at(window, 31, 21, 9, "Firmware");
-    text_at(window, 32, 22, 8, "v" FW_BUILD_DATE);
+    window_text(window, 31, 21, 9, "Firmware");
+    window_text(window, 32, 22, 8, "v" FW_BUILD_DATE);
     paint_footer(window, false);
-}
-
-// Draws a frame title with a space separating it from each horizontal border.
-static void paint_frame_title(const window_t* window, unsigned int row, const char* title) {
-    const unsigned int column = (MENU_UI_WIDTH - strlen(title)) / 2;
-    *window_xy(window, column - 1, row) = CH_SPACE;
-    text_at(window, column, row, MENU_UI_WIDTH - column, title);
-    *window_xy(window, column + strlen(title), row) = CH_SPACE;
 }
 
 // Centers a result banner using the mockup's reverse-video end caps.
@@ -121,36 +89,25 @@ static void paint_notice(const window_t* window, unsigned int row, const char* t
     const size_t length = strlen(text);
     assert(length <= MENU_UI_WIDTH - 2);
     const unsigned int column = (MENU_UI_WIDTH - length) / 2;
-    text_at(window, column, row, length, text);
+    window_text(window, column, row, length, text);
     window_reverse(window, window_xy(window, column, row), length);
-    *window_xy(window, column - 1, row) = MENU_BORDER_TOP_LEFT ^ 0x80;
-    *window_xy(window, column + length, row) = MENU_BORDER_TOP_LEFT;
+    window_put(window, column - 1, row, VROM_EDGE_LEFT | VROM_REVERSE_MASK);
+    window_put(window, column + length, row, VROM_EDGE_LEFT);
 }
 
 // Draws the drive chooser with each result followed by its explanation.
 static void paint_drives(const window_t* window, const void* context) {
     const menu_ui_t* const menu = context;
-    for (unsigned int row = MENU_DISK_FRAME_TOP; row <= MENU_DISK_FRAME_BOTTOM; row++) {
-        *window_xy(window, 0, row) = MENU_BORDER_VERTICAL;
-        *window_xy(window, MENU_UI_WIDTH - 1, row) = MENU_BORDER_VERTICAL;
-    }
-    window_hline(window, window_xy(window, 1, MENU_DISK_FRAME_TOP),
-                 MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
-    *window_xy(window, 0, MENU_DISK_FRAME_TOP) = MENU_FRAME_TOP_LEFT;
-    *window_xy(window, MENU_UI_WIDTH - 1, MENU_DISK_FRAME_TOP) = MENU_FRAME_TOP_RIGHT;
-    paint_frame_title(window, MENU_DISK_FRAME_TOP, "Change Disk");
-    window_hline(window, window_xy(window, 1, MENU_DISK_FRAME_BOTTOM),
-                 MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
-    *window_xy(window, 0, MENU_DISK_FRAME_BOTTOM) = MENU_BORDER_BOTTOM_LEFT;
-    *window_xy(window, MENU_UI_WIDTH - 1, MENU_DISK_FRAME_BOTTOM) = MENU_BORDER_BOTTOM_RIGHT;
+    window_frame(window, 0, MENU_DISK_FRAME_TOP, MENU_UI_WIDTH,
+                 MENU_DISK_FRAME_BOTTOM - MENU_DISK_FRAME_TOP + 1u, "Change Disk");
     for (unsigned int slot = 0; slot < MENU_UI_DRIVE_SLOT_COUNT; slot++) {
         char prefix[MENU_DISK_LABEL_COLUMN];
         if (slot % DOS_MEDIA_SLOTS_PER_UNIT == 0)
             snprintf(prefix, sizeof(prefix), "%2u:0:", 8 + slot / DOS_MEDIA_SLOTS_PER_UNIT);
         else snprintf(prefix, sizeof(prefix), "  :1:");
-        text_at(window, 1, MENU_DISK_ROW + slot, MENU_DISK_LABEL_COLUMN - 1, prefix);
-        *window_xy(window, 3, MENU_DISK_ROW + slot) = slot % DOS_MEDIA_SLOTS_PER_UNIT == 0
-            ? MENU_DEVICE_DRIVE_TOP : MENU_DEVICE_DRIVE_BOTTOM;
+        window_text(window, 1, MENU_DISK_ROW + slot, MENU_DISK_LABEL_COLUMN - 1, prefix);
+        window_put(window, 3, MENU_DISK_ROW + slot, slot % DOS_MEDIA_SLOTS_PER_UNIT == 0
+                   ? VROM_TEE_DOWN : VROM_CORNER_BOTTOM_LEFT);
     }
     char notice[MENU_UI_WIDTH + 1];
     const int source = menu->mount_outcome.moved_from_slot;
@@ -161,8 +118,8 @@ static void paint_drives(const window_t* window, const void* context) {
                  (unsigned int)source % DOS_MEDIA_SLOTS_PER_UNIT, destination_device,
                  menu->slot % DOS_MEDIA_SLOTS_PER_UNIT);
         paint_notice(window, MENU_DISK_MOVE_NOTICE_ROW, notice);
-        text_at(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW, MENU_UI_WIDTH, "This image was already mounted.");
-        text_at(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW + 1, MENU_UI_WIDTH, "A disk image can only be mounted once.");
+        window_text(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW, MENU_UI_WIDTH, "This image was already mounted.");
+        window_text(window, 0, MENU_DISK_MOVE_EXPLANATION_ROW + 1, MENU_UI_WIDTH, "A disk image can only be mounted once.");
     }
     if (menu->mount_outcome.ejected_partner != diskimage_type_none) {
         static const char* const types[] = {
@@ -175,16 +132,16 @@ static void paint_drives(const window_t* window, const void* context) {
         snprintf(notice, sizeof(notice), "Ejected %s image from %u-%u", types[menu->mount_outcome.ejected_partner],
                  device, partner % DOS_MEDIA_SLOTS_PER_UNIT);
         paint_notice(window, MENU_DISK_EJECTION_NOTICE_ROW, notice);
-        text_at(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW, MENU_UI_WIDTH,
+        window_text(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW, MENU_UI_WIDTH,
                 "Mixing D64/D80/D82 on same device is not");
-        text_at(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW + 1, MENU_UI_WIDTH,
+        window_text(window, 0, MENU_DISK_EJECTION_EXPLANATION_ROW + 1, MENU_UI_WIDTH,
                 "supported (implicitly ejects partner).");
     }
-    text_at(window, 0, MENU_DISK_WARNING_ROW, MENU_UI_WIDTH,
+    window_text(window, 0, MENU_DISK_WARNING_ROW, MENU_UI_WIDTH,
             "Note: Disk emulation is beta. Please use");
     window_hline(window, window_xy(window, 0, MENU_DISK_WARNING_ROW + 1),
-                 strlen("Note"), MENU_DISK_WARNING_UNDERLINE);
-    text_at(window, 6, MENU_DISK_WARNING_ROW + 1, MENU_UI_WIDTH - 6,
+                 strlen("Note"), VROM_UNDERLINE);
+    window_text(window, 6, MENU_DISK_WARNING_ROW + 1, MENU_UI_WIDTH - 6,
             "backup images to avoid data loss.");
     paint_footer(window, false);
 }
@@ -202,12 +159,10 @@ static void paint_scrollbar(const menu_ui_t* menu, const window_t* window) {
         const size_t last = list->count - list->visible_rows;
         thumb_first = (track_rows - thumb_rows) * MIN(list->first_visible, last) / last;
     }
-    *window_xy(window, MENU_UI_WIDTH - 1, top - 1) = MENU_SCROLLBAR_TOP;
-    *window_xy(window, MENU_UI_WIDTH - 1, top + track_rows) = MENU_SCROLLBAR_BOTTOM;
-    for (size_t row = 0; row < track_rows; row++)
-        *window_xy(window, MENU_UI_WIDTH - 1, top + row) =
-            row >= thumb_first && row - thumb_first < thumb_rows
-                ? MENU_SCROLLBAR_THUMB : MENU_SCROLLBAR_TRACK;
+    window_put(window, MENU_UI_WIDTH - 1, top - 1, VROM_CAP_TOP);
+    window_put(window, MENU_UI_WIDTH - 1, top + track_rows, VROM_TEE_DOWN);
+    window_vline_at(window, MENU_UI_WIDTH - 1, top, track_rows, VROM_SHADE);
+    window_vline_at(window, MENU_UI_WIDTH - 1, top + thumb_first, thumb_rows, VROM_REVERSE_SPACE);
 }
 
 // Paints the picker frame, path, scroll position, and explicit error message.
@@ -215,38 +170,28 @@ static void paint_picker(const window_t* window, const void* context) {
     const menu_ui_t* const menu = context;
     const tui_list_t* const list = &menu->picker_control.list;
     const unsigned int top = MENU_PICKER_FRAME_TOP;
-    for (unsigned int row = top; row <= MENU_PICKER_FRAME_BOTTOM; row++) {
-        *window_xy(window, 0, row) = MENU_BORDER_VERTICAL;
-        *window_xy(window, MENU_UI_WIDTH - 1, row) = MENU_BORDER_VERTICAL;
-    }
-    if (menu->choosing_model) {
-        window_hline(window, window_xy(window, 1, top), MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
-        *window_xy(window, 0, top) = MENU_FRAME_TOP_LEFT;
-        *window_xy(window, MENU_UI_WIDTH - 1, top) = MENU_FRAME_TOP_RIGHT;
-        paint_frame_title(window, top, "Select Configuration");
-    } else {
-        text_at(window, 1, top, MENU_UI_WIDTH - 2, menu->browser.path);
-        *window_xy(window, 0, top) = MENU_BORDER_TOP_LEFT;
-        *window_xy(window, MENU_UI_WIDTH - 1, top) = MENU_BORDER_TOP_RIGHT;
+    window_frame(window, 0, top, MENU_UI_WIDTH, MENU_PICKER_FRAME_BOTTOM - top + 1u,
+                 menu->choosing_model ? "Select Configuration" : NULL);
+    if (!menu->choosing_model) {
+        window_fill_row(window, top, VROM_SPACE);
+        window_text(window, 1, top, MENU_UI_WIDTH - 2, menu->browser.path);
+        window_put(window, 0, top, VROM_EDGE_LEFT);
+        window_put(window, MENU_UI_WIDTH - 1, top, VROM_EDGE_RIGHT);
         window_reverse(window, window_xy(window, 0, top), MENU_UI_WIDTH);
     }
-    window_hline(window, window_xy(window, 1, MENU_PICKER_FRAME_BOTTOM),
-                 MENU_UI_WIDTH - 2, MENU_BORDER_HORIZONTAL);
-    *window_xy(window, 0, MENU_PICKER_FRAME_BOTTOM) = MENU_BORDER_BOTTOM_LEFT;
-    *window_xy(window, MENU_UI_WIDTH - 1, MENU_PICKER_FRAME_BOTTOM) = MENU_BORDER_BOTTOM_RIGHT;
     if (list->count > list->visible_rows)
         paint_scrollbar(menu, window);
     if (list->count != 0 && list->page_valid) {
         const size_t row = menu->picker_control.bounds.y + list->selected - list->first_visible;
-        *window_xy(window, 1, row) = MENU_BORDER_TOP_LEFT ^ 0x80;
-        *window_xy(window, MENU_UI_WIDTH - 2, row) = menu->choosing_model
-            ? MENU_BORDER_TOP_LEFT : MENU_DISK_SELECTION_RIGHT;
+        window_put(window, 1, row, VROM_EDGE_LEFT | VROM_REVERSE_MASK);
+        window_put(window, MENU_UI_WIDTH - 2, row, menu->choosing_model
+                   ? VROM_EDGE_LEFT : VROM_LINE_RIGHT);
     }
     const char* const error = menu->browser.error[0] != '\0' ? menu->browser.error : menu->error;
     if (error[0] != '\0')
-        text_at(window, 1, top + 1, MENU_UI_WIDTH - 2, error);
+        window_text(window, 1, top + 1, MENU_UI_WIDTH - 2, error);
     else if (!menu->choosing_model && list->count == special_count(menu))
-        text_at(window, 1, top + 1, MENU_UI_WIDTH - 2, "No images or directories");
+        window_text(window, 1, top + 1, MENU_UI_WIDTH - 2, "No images or directories");
     if (!menu->choosing_model && list->count != 0 && list->page_valid) {
         // Adjacent pages share one entry, so each new page adds one fewer row.
         const size_t stride = list->visible_rows - 1;
@@ -254,13 +199,13 @@ static void paint_picker(const window_t* window, const void* context) {
             : 1 + (list->count - list->visible_rows + stride - 1) / stride;
         char position[MENU_UI_WIDTH];
         snprintf(position, sizeof(position), "(%zu/%zu)", list->first_visible / stride + 1, pages);
-        text_at(window, MENU_UI_WIDTH - strlen(position) - MENU_PICKER_POSITION_INSET,
+        window_text(window, MENU_UI_WIDTH - strlen(position) - MENU_PICKER_POSITION_INSET,
                 MENU_PICKER_FRAME_BOTTOM, strlen(position), position);
     } else if (menu->choosing_model && error[0] == '\0' && list->count > list->visible_rows) {
         char position[MENU_UI_WIDTH];
         snprintf(position, sizeof(position), "%zu / %zu",
                  list->selected + 1, list->count);
-        text_at(window, MENU_UI_WIDTH - strlen(position) - 1,
+        window_text(window, MENU_UI_WIDTH - strlen(position) - 1,
                 MENU_PICKER_FRAME_BOTTOM, strlen(position), position);
     }
     paint_footer(window, list->count > list->visible_rows);

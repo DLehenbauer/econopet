@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "char_encoding.h"
 
+#include "ui/terminal.h"
+
 /**
  * ASCII to PET Video ROM offset mapping table.
  * 
@@ -41,8 +43,10 @@ const char* const vrom_to_term_map[128] = {
     /* 10 */         "p", "q",  "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "\\",         "]",         "^", "<",
     /* 20 */         " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+",  ",",         "-",         ".", "/",
     /* 30 */         "0", "1",  "2", "3", "4", "5", "6", "7", "8", "9", ":", ";",  "<",         "=",         ">", "?",
-    /* 40 */ "\e(0q\e(B", "A",  "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",  "L",         "M",         "N", "O",
-    /* 50 */         "P", "Q",  "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "_",  "_", "\e(0x\e(B",         "_", "_",
-    /* 60 */         "_", "_",  "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",  "_", "\e(0m\e(B", "\e(0k\e(B", "_",
-    /* 70 */ "\e(0l\e(B", "_",  "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",  "_", "\e(0j\e(B",         "_", "_"
+    /* 40 */ TERM_CHARSET_LINE_DRAWING "q" TERM_CHARSET_ASCII, "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+    /* 50 */ "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "_", "_", TERM_CHARSET_LINE_DRAWING "x" TERM_CHARSET_ASCII, "_", "_",
+    /* 60 */ "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",
+             TERM_CHARSET_LINE_DRAWING "m" TERM_CHARSET_ASCII, TERM_CHARSET_LINE_DRAWING "k" TERM_CHARSET_ASCII, "_",
+    /* 70 */ TERM_CHARSET_LINE_DRAWING "l" TERM_CHARSET_ASCII, "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",
+             TERM_CHARSET_LINE_DRAWING "j" TERM_CHARSET_ASCII, "_", "_"
 };

@@ -18,5 +18,8 @@ void input_uart_init(void);
 // Acquire available UART bytes and advance incremental decoding without waiting.
 void input_uart_task(void);
 
+/** Consume the next raw key during terminal takeover, filtering a pending CRLF. */
+bool input_uart_take_key(void);
+
 // Normalize decoded UART input and submit it to the router for destination selection.
 void input_uart_process(int key);

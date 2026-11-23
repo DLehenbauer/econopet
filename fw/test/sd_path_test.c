@@ -67,12 +67,6 @@ DRESULT disk_ioctl(BYTE drive, BYTE command, void* output) {
     }
 }
 
-// Supplies the heap used by the production configuration's dynamic LFN buffers.
-void* ff_memalloc(UINT size) { return malloc(size); }
-
-// Releases FatFs's temporary LFN storage.
-void ff_memfree(void* allocation) { free(allocation); }
-
 // Uses the earliest valid FAT date for deterministic directory metadata.
 DWORD get_fattime(void) { return (1u << FAT_DATE_MONTH_SHIFT) | (1u << FAT_DATE_DAY_SHIFT); }
 
@@ -114,6 +108,49 @@ START_TEST(test_resolves_fatfs_aliases) {
     snprintf(path, sizeof(path), "%s. ", canonical);
     ck_assert(sd_resolve_path(path));
     ck_assert_str_eq(path, canonical);
+}
+END_TEST
+
+// The longest supported full path expands from an alias without losing its last byte.
+START_TEST(test_resolves_maximum_full_path) {
+    static const char prefix[] = "/disk/Long Directory/";
+    const size_t length = SD_PATH_MAX - sizeof(prefix);
+    char name[SD_PATH_MAX];
+    memset(name, 'a', length);
+    memcpy(name + length - strlen(".d64"), ".d64", sizeof(".d64"));
+    char canonical[SD_PATH_MAX];
+    memcpy(canonical, prefix, sizeof(prefix) - 1);
+    memcpy(canonical + sizeof(prefix) - 1, name, length + 1);
+    ck_assert_uint_eq(strlen(canonical), SD_PATH_MAX - 1);
+    create_file(canonical);
+    FILINFO info;
+    ck_assert_int_eq(f_stat(canonical, &info), FR_OK);
+    char path[SD_PATH_MAX];
+    snprintf(path, sizeof(path), "%s%s", prefix, info.altname);
+    ck_assert(sd_resolve_path(path));
+    ck_assert_str_eq(path, canonical);
+}
+END_TEST
+
+// Missing components and malformed CP932 do not become aliases of a valid sibling.
+START_TEST(test_failed_resolution_then_valid_lookup) {
+    static const char* const invalid[] = {
+        "/disk/Missing Directory/image.d64",
+        "/disk/Long Directory/missing.d64",
+        "/disk/Long Directory/image.d64/child",
+        "/disk/\x81",
+        "/disk/\x81\x30.d64",
+    };
+    static const char canonical[] = "/disk/Long Directory/Image.d64";
+    create_file(canonical);
+    for (size_t index = 0; index < count_of(invalid); ++index) {
+        char path[SD_PATH_MAX];
+        strcpy(path, invalid[index]);
+        ck_assert(!sd_resolve_path(path));
+        strcpy(path, "/DISK/long directory/IMAGE.D64");
+        ck_assert(sd_resolve_path(path));
+        ck_assert_str_eq(path, canonical);
+    }
 }
 END_TEST
 
@@ -173,6 +210,8 @@ int main(void) {
     TCase* const cases = tcase_create("FatFs");
     tcase_add_checked_fixture(cases, setup, teardown);
     tcase_add_test(cases, test_resolves_fatfs_aliases);
+    tcase_add_test(cases, test_resolves_maximum_full_path);
+    tcase_add_test(cases, test_failed_resolution_then_valid_lookup);
     tcase_add_test(cases, test_rejects_alternate_separators_and_terminators);
     tcase_add_test(cases, test_preserves_cp932_filename_bytes);
     tcase_add_test(cases, test_rejects_expanded_path_overflow);

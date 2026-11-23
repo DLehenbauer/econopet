@@ -8,12 +8,13 @@
 #include <stdint.h>
 
 #include "hardware_contract.h"
+#include "diag/diag.h"
 #include "driver.h"
 #include "input/input_actions.h"
 #include "input/keyboard_core.h"
 #include "test_support.h"
 
-#define MOCK_RAM_SIZE (1u << ECONOPET_CPU_ADDR_WIDTH)
+#define MOCK_RAM_SIZE (1u << ECONOPET_RAM_ADDR_WIDTH)
 #define MOCK_IEEE_RX_CAPACITY 32
 #define MOCK_IEEE_TX_CAPACITY 1024
 #define MOCK_IEEE_TXS_CAPACITY 32
@@ -25,6 +26,12 @@ void mock_reset(void);
 // Count bulk SPI transactions since the last reset.
 unsigned int mock_spi_read_count(void);
 unsigned int mock_spi_write_count(void);
+/** Count all per-address SPI accesses, including non-bulk register transactions. */
+unsigned int mock_spi_access_count(void);
+/** Inject stuck-high and stuck-low bits at one SRAM or BRAM read address. */
+void mock_spi_inject_fault(uint32_t addr, uint8_t stuck_one_mask, uint8_t stuck_zero_mask);
+/** Remove the selected read fault. */
+void mock_spi_clear_fault(void);
 // Invokes the callback on status polls while the mocked CPU is running.
 void mock_cpu_set_run_callback(void (*callback)(void));
 /** Observe real CPU control transitions while testing machine lifecycle sequencing. */
@@ -39,6 +46,8 @@ void mock_clock_set(uint64_t now);
 void mock_clock_advance(uint64_t delta);
 // Returns clock observations to the host monotonic clock.
 void mock_clock_restore(void);
+/** Observe simulated sleeps while driving a nonreturning terminal interaction. */
+void mock_sleep_set_handler(void (*handler)(uint64_t us));
 /** Select the physical model reported by real register-backed discovery. */
 void mock_set_pet_model(pet_keyboard_model_t keyboard, pet_video_type_t video);
 // Supplies component menu actions during USB servicing after the first render.
@@ -49,6 +58,10 @@ void mock_input_uart_bytes(const uint8_t* bytes, size_t size);
 void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_report_t* report);
 /** Supply the active-low button GPIO's next physical level. */
 void mock_input_button_level(bool pressed);
+/** Supply the active-low SD socket detect level. */
+void mock_sd_card_present(bool present);
+/** Supply the SD takeover result to the framework-only fixture. */
+void mock_sd_prepare_set_handler(bool (*handler)(void));
 /** Publish a freshly scanned physical PET matrix at the FPGA boundary. */
 void mock_input_pet_snapshot(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]);
 /** Supply CRTC bytes independently of the firmware's cached display state. */
@@ -77,8 +90,8 @@ unsigned int mock_term_refresh_count(void);
 // Reports PET keystrokes received from terminal routing.
 unsigned int mock_term_inject_count(void);
 int mock_term_inject_last(void);
-// Observes entry to the nonreturning RAM diagnostic.
-void mock_ram_test_set_handler(void (*handler)(void));
+/** Observe entry after real diagnostic ownership, preparation, and display initialization. */
+void mock_diag_loop_set_handler(void (*handler)(diag_session_t* session));
 // Observes entry to the nonreturning MCU reset.
 void mock_system_reset_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.

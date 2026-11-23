@@ -1,285 +1,36 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
-// Must precede pch.h to expose GNU fopencookie().
-#define _GNU_SOURCE
-
 #include "pch.h"
 #include "test_support.h"
 
-#include <strings.h>
 #include <time.h>
 
+#include "hardware/spi.h"
+#include "hardware/uart.h"
+#include "pico/mutex.h"
+
 #include "fatal.h"
+#include "sd/activity.h"
 #include "sd/sd.h"
 
 #define MICROSECONDS_PER_SECOND 1000000
 #define NANOSECONDS_PER_MICROSECOND 1000
 #define MICROSECONDS_PER_MILLISECOND 1000
 
-typedef struct mem_file_s {
-    char path[SD_PATH_MAX];
-    uint8_t* content;
-    size_t size;
-    size_t capacity;
-    bool writable;
-    bool fail_writes;
-    size_t open_calls;
-    struct mem_file_s* owner;
-    struct mem_file_s* next;
-} mem_file_t;
+spi_inst_t test_spi[2] = {{.index = 0}, {.index = 1}};
 
-static mem_file_t* mem_files = NULL;
-static size_t open_cookie_count;
-
-typedef struct file_alias_s {
-    char alias[SD_PATH_MAX];
-    char path[SD_PATH_MAX];
-    struct file_alias_s* next;
-} file_alias_t;
-
-static file_alias_t* file_aliases;
-
-// Reports live stdio borrowers independently of registered backing ownership.
-size_t test_open_file_count(void) { return open_cookie_count; }
-
-// Finds a registered file without accessing the host filesystem.
-static mem_file_t* find_mem_file(const char* path) {
-    for (const file_alias_t* alias = file_aliases; alias != NULL; alias = alias->next) {
-        if (strcmp(alias->alias, path) == 0) {
-            path = alias->path;
-            break;
-        }
-    }
-    for (mem_file_t* file = mem_files; file != NULL; file = file->next) {
-        if (strcmp(file->path, path) == 0) {
-            return file;
-        }
-    }
-    return NULL;
-}
-
-// Supplies filesystem-resolved identities independently of the mount facade's matching.
-bool sd_resolve_path(char path[SD_PATH_MAX]) {
-    const mem_file_t* file = find_mem_file(path);
-    for (const mem_file_t* current = mem_files; file == NULL && current != NULL; current = current->next) {
-        if (strcasecmp(current->path, path) == 0) file = current;
-    }
-    if (file != NULL) {
-        strcpy(path, file->path);
-        return true;
-    }
-    char* const resolved = realpath(path, NULL);
-    if (resolved == NULL) return false;
-    const bool fits = strlen(resolved) < SD_PATH_MAX;
-    if (fits) strcpy(path, resolved);
-    free(resolved);
-    return fits;
-}
-
-// Models an alias returned by the backing filesystem, not by the mount algorithm.
-void test_register_file_alias(const char* alias, const char* path) {
-    assert(find_mem_file(path) != NULL);
-    vet_path_length(strlen(alias));
-    vet_path_length(strlen(path));
-    file_alias_t* const entry = malloc(sizeof(*entry));
-    assert(entry != NULL);
-    strcpy(entry->alias, alias);
-    strcpy(entry->path, path);
-    entry->next = file_aliases;
-    file_aliases = entry;
-}
-
-// Share duplicate detection with fixture owners before they claim a path.
-bool test_file_registered(const char* path) { return find_mem_file(path) != NULL; }
-
-// Observes transient duplicate opens even when the candidate is subsequently closed.
-size_t test_file_open_calls(const char* path) {
-    const mem_file_t* const file = find_mem_file(path);
-    assert(file != NULL);
-    return file->open_calls;
-}
-
-// Registers a read-only text fixture using the binary backing store.
-void test_register_file(const char* path, const char* content) {
-    test_register_binary_file(path, content, strlen(content), false);
-}
-
-// Copies fixture bytes into a uniquely named, optionally writable backing store.
-void test_register_binary_file(const char* path, const void* data, size_t size, bool writable) {
-    // Check fixture identity before allocating its metadata and content.
-    assert(path[0] == '/');
-    vet_path_length(strlen(path));
-    assert(!test_file_registered(path));
-
-    mem_file_t* file = malloc(sizeof(mem_file_t));
-    strncpy(file->path, path, sizeof(file->path) - 1);
-    file->path[sizeof(file->path) - 1] = '\0';
-
-    file->size = size;
-    file->capacity = size;
-    file->writable = writable;
-    file->fail_writes = false;
-    file->open_calls = 0;
-    file->owner = file;
-    file->content = malloc(file->capacity);
-    memcpy(file->content, data, file->size);
-
-    // Publish the fully initialized fixture to subsequent open calls.
-    file->next = mem_files;
-    mem_files = file;
-}
-
-// Share fault state with already-open cookies without changing their offsets.
-void test_fail_file_writes(const char* path, bool fail) {
-    mem_file_t* file = find_mem_file(path);
-    assert(file != NULL);
-    file->fail_writes = fail;
-}
-
-// Unlinks and frees a registered fixture once its handles are closed.
-void test_unregister_file(const char* path) {
-    file_alias_t** alias = &file_aliases;
-    while (*alias != NULL) {
-        if (strcmp((*alias)->path, path) == 0) {
-            file_alias_t* const retired = *alias;
-            *alias = retired->next;
-            free(retired);
-        } else {
-            alias = &(*alias)->next;
-        }
-    }
-    mem_file_t** pp = &mem_files;
-    while (*pp) {
-        if (strcmp((*pp)->path, path) == 0) {
-            mem_file_t* to_free = *pp;
-            *pp = to_free->next;
-            free(to_free->content);
-            free(to_free);
-            return;
-        }
-        pp = &(*pp)->next;
-    }
-}
-
-// Frees every registered fixture once its handles are closed.
-void test_clear_files(void) {
-    while (file_aliases != NULL) {
-        file_alias_t* const next = file_aliases->next;
-        free(file_aliases);
-        file_aliases = next;
-    }
-    while (mem_files) {
-        mem_file_t* next = mem_files->next;
-        free(mem_files->content);
-        free(mem_files);
-        mem_files = next;
-    }
-}
-
-// Opens registered text fixtures for firmware SD-card reads.
-FILE* sd_open(const char* path, const char* mode) {
-    vet_path_length(strlen(path));
-    assert(path[0] == '/');
-
-    mem_file_t* mem_file = find_mem_file(path);
-    if (mem_file != NULL) {
-        if (strcmp(mode, "r") == 0) {
-            return fmemopen(mem_file->content, mem_file->size, "r");
-        }
-        fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
-        exit(EXIT_FAILURE);
-    }
-
-    fprintf(stderr, "FATAL: File '%s' not registered in test file system.\n", path);
-    fprintf(stderr, "Use test_register_file() to register files for testing.\n");
-    exit(EXIT_FAILURE);
-}
-
-// Reads a cookie-backed fixture and advances its per-handle offset.
-static ssize_t test_file_read(void* cookie, char* buffer, size_t size) {
-    mem_file_t* file = cookie;
-    size_t* pos = (size_t*)(file + 1);
-    size_t remaining = file->size - *pos;
-    if (size > remaining)
-        size = remaining;
-    memcpy(buffer, file->content + *pos, size);
-    *pos += size;
-    return (ssize_t)size;
-}
-
-// Writes within the registered capacity of a mutable fixture.
-static ssize_t test_file_write(void* cookie, const char* buffer, size_t size) {
-    mem_file_t* file = cookie;
-    size_t* pos = (size_t*)(file + 1);
-    if (!file->writable || file->owner->fail_writes || *pos > file->capacity || size > file->capacity - *pos)
-        return -1;
-    memcpy(file->content + *pos, buffer, size);
-    *pos += size;
-    if (*pos > file->size)
-        file->size = *pos;
-    return (ssize_t)size;
-}
-
-// Resolves stdio seeks within a registered fixture.
-static int test_file_seek(void* cookie, off64_t* offset, int whence) {
-    mem_file_t* file = cookie;
-    size_t* pos = (size_t*)(file + 1);
-    int64_t target = *offset;
-    if (whence == SEEK_CUR)
-        target += (int64_t)*pos;
-    if (whence == SEEK_END)
-        target += (int64_t)file->size;
-    if (target < 0 || (uint64_t)target > file->size)
-        return -1;
-    *pos = (size_t)target;
-    *offset = target;
-    return 0;
-}
-
-// Releases the handle without removing its registered backing file.
-static int test_file_close(void* cookie) {
-    --open_cookie_count;
-    free(cookie);
-    return 0;
-}
-
-extern FILE* __real_fopen(const char* path, const char* mode);
-
-// Wraps registered fixtures, delegating other paths to the real host fopen().
-FILE* __wrap_fopen(const char* path, const char* mode) {
-    // Delegate host paths and reject updates to read-only fixtures.
-    mem_file_t* file = find_mem_file(path);
-    if (file == NULL)
-        return __real_fopen(path, mode);
-    if (strchr(mode, '+') != NULL && !file->writable)
-        return NULL;
-
-    // Give each handle its own metadata snapshot and cursor.
-    mem_file_t* cookie = malloc(sizeof(*cookie) + sizeof(size_t));
-    *cookie = *file;
-    *(size_t*)(cookie + 1) = 0;
-    // Bind stdio operations to the registered backing bytes.
-    cookie_io_functions_t io = {
-        .read = test_file_read,
-        .write = test_file_write,
-        .seek = test_file_seek,
-        .close = test_file_close,
-    };
-    FILE* const stream = fopencookie(cookie, strchr(mode, '+') != NULL ? "r+" : "r", io);
-    if (stream != NULL) {
-        ++open_cookie_count;
-        ++file->open_calls;
-    } else {
-        free(cookie);
-    }
-    return stream;
-}
+struct uart_inst {
+    unsigned int index;
+};
+static uart_inst_t test_uart;
+uart_inst_t* const uart0 = &test_uart;
 
 // Returns monotonic host time in the microsecond units expected by Pico code.
 uint64_t time_us_64(void) {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    const int result = clock_gettime(CLOCK_MONOTONIC, &ts);
+    assert(result == 0 && "host monotonic clock unavailable");
     return (uint64_t)ts.tv_sec * MICROSECONDS_PER_SECOND + (uint64_t)ts.tv_nsec / NANOSECONDS_PER_MICROSECOND;
 }
 
@@ -317,6 +68,20 @@ __attribute__((weak)) void gpio_set_dir(unsigned int gpio, bool output) {
     abort();
 }
 
+// Fail if a host test enables an input pull-up without supplying its own mock.
+__attribute__((weak)) void gpio_pull_up(unsigned int gpio) {
+    (void)gpio;
+    assert(false && "unexpected gpio_pull_up call in host test");
+    abort();
+}
+
+// Fail if a host test samples GPIO without supplying its own mock.
+__attribute__((weak)) bool gpio_get(unsigned int gpio) {
+    (void)gpio;
+    assert(false && "unexpected gpio_get call in host test");
+    abort();
+}
+
 // Fail if a host test drives GPIO without supplying its own mock.
 __attribute__((weak)) void gpio_put(unsigned int gpio, bool value) {
     (void)gpio;
@@ -325,9 +90,83 @@ __attribute__((weak)) void gpio_put(unsigned int gpio, bool value) {
     abort();
 }
 
+// Fail if a host test polls UART without supplying a byte source.
+__attribute__((weak)) bool uart_is_readable(uart_inst_t* uart) {
+    (void)uart;
+    assert(false && "unexpected uart_is_readable call in host test");
+    abort();
+}
+
+// Fail if a host test reads UART without supplying a byte source.
+__attribute__((weak)) char uart_getc(uart_inst_t* uart) {
+    (void)uart;
+    assert(false && "unexpected uart_getc call in host test");
+    abort();
+}
+
+// Fail unless the fixture links the production activity wrapper or models installation.
+__attribute__((weak)) void sd_activity_install(blockdevice_t* device) {
+    (void)device;
+    assert(false && "unexpected sd_activity_install call in host test");
+    abort();
+}
+
+// Forward fatal paths for targets using test_fatal.c instead of the hardware renderer.
+__attribute__((weak)) void fatal_halt(fatal_error_t error, const char* message) {
+    (void)error;
+    fatal("%s", message);
+}
+
+// Preserve the path contract when the target does not link the production fatal renderer.
+__attribute__((weak)) void vet_path_length(size_t length) {
+    vet(length < SD_PATH_MAX, "SD path exceeds %u characters (got %zu)", (unsigned int)(SD_PATH_MAX - 1), length);
+}
+
 // Provides the firmware allocator with a Debug-only host allocation check.
 void* vetted_malloc(size_t size) {
     void* p = malloc(size);
     assert(p != NULL);
     return p;
+}
+
+// Initialize ownership tracking for a single-threaded host mutex.
+void mutex_init(mutex_t* mutex) {
+    assert(mutex != NULL);
+    mutex->initialized = true;
+    mutex->locked = false;
+}
+
+// Reject contention rather than pretending to block in a single-threaded fixture.
+void mutex_enter_blocking(mutex_t* mutex) {
+    assert(mutex != NULL && mutex->initialized && "host mutex is not initialized");
+    assert(!mutex->locked && "contended mutex in single-threaded host fixture");
+    mutex->locked = true;
+}
+
+// Require every unlock to retire one active owner.
+void mutex_exit(mutex_t* mutex) {
+    assert(mutex != NULL && mutex->initialized && "host mutex is not initialized");
+    assert(mutex->locked && "host mutex unlock without an owner");
+    mutex->locked = false;
+}
+
+// Initialize nested ownership tracking for a single-threaded host mutex.
+void recursive_mutex_init(recursive_mutex_t* mutex) {
+    assert(mutex != NULL);
+    mutex->initialized = true;
+    mutex->depth = 0;
+}
+
+// Retain each nested acquisition until its corresponding unlock.
+void recursive_mutex_enter_blocking(recursive_mutex_t* mutex) {
+    assert(mutex != NULL && mutex->initialized && "host recursive mutex is not initialized");
+    assert(mutex->depth < UINT_MAX && "host recursive mutex depth overflow");
+    ++mutex->depth;
+}
+
+// Reject unmatched unlocks instead of hiding a broken caller's lock balance.
+void recursive_mutex_exit(recursive_mutex_t* mutex) {
+    assert(mutex != NULL && mutex->initialized && "host recursive mutex is not initialized");
+    assert(mutex->depth != 0 && "host recursive mutex unlock without an owner");
+    --mutex->depth;
 }

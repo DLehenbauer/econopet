@@ -50,7 +50,8 @@ void __wrap_ieee_drive_task(void) {
 }
 
 // Verify the runtime diagnostic begins only after storage is quiet and the CPU halted.
-static void observe_diagnostic(void) {
+static void observe_diagnostic(diag_session_t* session) {
+    ck_assert_ptr_eq(session->plan, diag_find_plan("memory"));
     ck_assert(sd_activity_quiet());
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     longjmp(diagnostic_exit, 1);
@@ -403,15 +404,15 @@ START_TEST(test_block_activity) {
     set_cpu(CPU_READY);
     drive_services = 0;
     drive_service_observer = observe_storage_wait;
-    mock_ram_test_set_handler(observe_diagnostic);
+    mock_diag_loop_set_handler(observe_diagnostic);
     if (setjmp(diagnostic_exit) == 0) {
-        const char* command = "test\r";
+        const char* command = "test memory\r";
         while (*command) cli_process_char(*command++);
         ck_abort_msg("synchronous diagnostic did not run");
     }
     drive_service_observer = NULL;
     ck_assert_uint_gt(drive_services, 2);
-    mock_ram_test_set_handler(NULL);
+    mock_diag_loop_set_handler(NULL);
 }
 END_TEST
 

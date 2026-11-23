@@ -48,6 +48,7 @@ static const uint8_t c128_palette[16] = {
     0xB6, // 14: Light Gray
     0xFF  // 15: White
 };
+_Static_assert(count_of(c128_palette) == DISPLAY_COLOR_COUNT, "DVI palette out of sync");
 
 // Color buffer: one byte per character position
 // High nibble (bits 7:4) = background palette index (0-15)
