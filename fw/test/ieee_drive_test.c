@@ -689,10 +689,56 @@ START_TEST(test_mount_rejects_overlong_path) {
 }
 END_TEST
 
+// Eight retained owners overlap a ninth candidate, while rejection and moves retain identity.
+START_TEST(test_full_owner_population_and_candidate_overlap) {
+    char names[TEST_UNIT_COUNT * TEST_SLOTS_PER_UNIT][32];
+    for (unsigned int slot = 0; slot < count_of(names); ++slot) {
+        snprintf(names[slot], sizeof(names[slot]), "owner%u.d64", slot);
+        mount_image(slot, 0, names[slot]);
+    }
+    ck_assert_uint_eq(test_open_file_count(), count_of(names));
+    const uint8_t invalid[DISKIMAGE_SECTOR_SIZE] = {0};
+    test_register_binary_file("/disk/invalid.d64", invalid, sizeof(invalid), false);
+    for (unsigned int attempt = 0; attempt < 16; ++attempt) {
+        ck_assert_int_eq(ieee_drive_try_mount(0, "invalid.d64", NULL), DOS_MEDIA_UNSUPPORTED);
+        ck_assert_int_eq(ieee_drive_try_mount(0, "missing.d64", NULL), DOS_MEDIA_IO_ERROR);
+        ck_assert_uint_eq(test_open_file_count(), count_of(names));
+        for (unsigned int slot = 0; slot < count_of(names); ++slot)
+            ck_assert_str_eq(ieee_drive_filename(slot), names[slot]);
+    }
+    ck_assert_uint_eq(test_peak_open_file_count(), count_of(names) + 1);
+
+    // Rejection must retain usable native readers, not just their published names.
+    for (unsigned int slot = 0; slot < count_of(names); ++slot) {
+        const unsigned int device = 8u + slot / TEST_SLOTS_PER_UNIT;
+        char selection[sizeof("0:BASIC,PRG,R")];
+        snprintf(selection, sizeof(selection), "%u:BASIC,PRG,R", slot % TEST_SLOTS_PER_UNIT);
+        open_file(device, selection);
+        status(device, "00, OK,00,00\r");
+        commands(IEEE_CMD_LISTEN(device), IEEE_CMD_CLOSE(IEEE_LOAD_CHANNEL));
+        service();
+    }
+    mount_image(0, 0, "replacement.d64");
+    ck_assert_uint_eq(test_open_file_count(), count_of(names));
+    ck_assert_str_eq(ieee_drive_filename(0), "replacement.d64");
+    for (unsigned int slot = 1; slot < count_of(names); ++slot)
+        ck_assert_str_eq(ieee_drive_filename(slot), names[slot]);
+    const size_t opens = test_file_open_calls("/disk/replacement.d64");
+    ck_assert_int_eq(ieee_drive_try_mount(0, "replacement.d64", NULL), DOS_MEDIA_OK);
+    ck_assert_int_eq(ieee_drive_try_mount(2, "replacement.d64", NULL), DOS_MEDIA_OK);
+    ck_assert_uint_eq(test_file_open_calls("/disk/replacement.d64"), opens);
+    ck_assert_uint_eq(test_open_file_count(), count_of(names) - 1);
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+    ck_assert_str_eq(ieee_drive_filename(2), "replacement.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), names[1]);
+}
+END_TEST
+
 Suite* ieee_drive_suite(void) {
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("replacement");
     tcase_add_checked_fixture(test_case, setup, teardown);
+    tcase_add_test(test_case, test_full_owner_population_and_candidate_overlap);
     tcase_add_loop_test(test_case, test_sole_engine_reads_all_models_units_and_slots, 0,
                         TEST_UNIT_COUNT * TEST_SLOTS_PER_UNIT * TEST_FORMAT_COUNT);
     tcase_add_test(test_case, test_status_diagnostics_observe_partial_and_complete_gets);

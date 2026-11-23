@@ -7,6 +7,8 @@
 #include <signal.h>
 #include <stdint.h>
 
+#include "pico/mutex.h"
+
 #include "driver.h"
 #include "fatal.h"
 #include "sd/sd.h"
@@ -31,6 +33,48 @@ START_TEST(test_file_registry_membership) {
     test_clear_files();
     ck_assert(!test_file_registered(path));
     ck_assert(!test_file_registered(other));
+}
+END_TEST
+
+// A missing unlock must not be hidden by a no-op synchronization shim.
+START_TEST(test_mutex_rejects_recursive_lock) {
+    mutex_t mutex;
+    mutex_init(&mutex);
+    mutex_enter_blocking(&mutex);
+    mutex_enter_blocking(&mutex);
+}
+END_TEST
+
+// Reusing a mutex is valid, but unlocking an unowned mutex is not.
+START_TEST(test_mutex_rejects_unbalanced_unlock) {
+    mutex_t mutex;
+    mutex_init(&mutex);
+    mutex_enter_blocking(&mutex);
+    mutex_exit(&mutex);
+    mutex_enter_blocking(&mutex);
+    mutex_exit(&mutex);
+    mutex_exit(&mutex);
+}
+END_TEST
+
+// Recursive acquisitions remain valid until every nesting level is released.
+START_TEST(test_recursive_mutex_allows_nested_locks) {
+    auto_init_recursive_mutex(mutex);
+    recursive_mutex_enter_blocking(&mutex);
+    recursive_mutex_enter_blocking(&mutex);
+    recursive_mutex_exit(&mutex);
+    recursive_mutex_exit(&mutex);
+}
+END_TEST
+
+// Static recursive locks retain each nesting level and reject one extra unlock.
+START_TEST(test_recursive_mutex_rejects_unbalanced_unlock) {
+    auto_init_recursive_mutex(mutex);
+    recursive_mutex_enter_blocking(&mutex);
+    recursive_mutex_enter_blocking(&mutex);
+    recursive_mutex_exit(&mutex);
+    recursive_mutex_exit(&mutex);
+    recursive_mutex_exit(&mutex);
 }
 END_TEST
 
@@ -83,5 +127,12 @@ Suite* test_support_suite(void) {
     TCase* const spi = tcase_create("spi");
     tcase_add_test_raise_signal(spi, test_spi_pop_requires_transport_model, SIGABRT);
     suite_add_tcase(suite, spi);
+
+    TCase* const mutexes = tcase_create("mutexes");
+    tcase_add_test_raise_signal(mutexes, test_mutex_rejects_recursive_lock, SIGABRT);
+    tcase_add_test_raise_signal(mutexes, test_mutex_rejects_unbalanced_unlock, SIGABRT);
+    tcase_add_test(mutexes, test_recursive_mutex_allows_nested_locks);
+    tcase_add_test_raise_signal(mutexes, test_recursive_mutex_rejects_unbalanced_unlock, SIGABRT);
+    suite_add_tcase(suite, mutexes);
     return suite;
 }

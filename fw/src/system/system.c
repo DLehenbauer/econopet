@@ -5,7 +5,6 @@
 #include "system/system.h"
 
 #include "breakpoint.h"
-#include "diag/mem.h"
 #include "display/display.h"
 #include "display/window.h"
 #include "driver.h"
@@ -27,12 +26,11 @@
 #define VIA_CA2_MASK 0x0eu
 #define VIA_CA2_HIGH 0x0eu
 #define CONSOLE_SCREEN_BYTES VIDEO_PLANE_CAPACITY
-#define CONSOLE_COLOR_BYTES VIDEO_RAM_UNIT_BYTES
+#define CONSOLE_COLOR_BYTES VIDEO_COLOR_CAPACITY
 #define CONSOLE_FONT_BYTES 0x800u
 
 // Only initialized CRTC fields used for console geometry are borrowed.
 static const uint8_t crtc_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 12, 13};
-static const uint8_t console_crtc[] = {0x31, 0x28, 0x29, 0x0f, 0x31, 0, 0x19, 0x25, 7, 0x10, 0};
 
 typedef enum {
     CONSOLE_BORROW_INACTIVE,
@@ -44,7 +42,7 @@ static system_operation_t mode = system_operation_boot;
 static struct {
     console_borrow_state_t state;
     uint8_t screen[CONSOLE_SCREEN_BYTES], colors[CONSOLE_COLOR_BYTES], font[CONSOLE_FONT_BYTES];
-    uint8_t physical_colors[CONSOLE_COLOR_BYTES];
+    uint8_t physical_colors[VIDEO_RAM_UNIT_BYTES];
     uint8_t crtc[sizeof(crtc_indices)], host_crtc[CRTC_REG_COUNT];
     uint8_t cra, crb, ddra, ddrb, ora, pcr, video, audio, cpu, selection;
     video_source_t source;
@@ -152,21 +150,7 @@ bool system_suspend(void) {
     // Install the console policy only after the complete snapshot is valid.
     setup_pia();
     pet_io_write(VIA_PCR, (console_borrow.pcr & ~VIA_CA2_MASK) | VIA_CA2_HIGH);
-    spi_write(ECONOPET_WB_BRAM_BASE_ADDR, rom_chars_e800, CONSOLE_FONT_BYTES);
-    roms_refresh_char_rom();
-    spi_write_at(ECONOPET_WB_VIDEO_ADDR, 0);
-    for (size_t index = 0; index < sizeof(crtc_indices); ++index) {
-        spi_write_at(ECONOPET_WB_CRTC_BASE_ADDR + crtc_indices[index],
-                     console_crtc[index]);
-        system_state.pet_crtc_registers[crtc_indices[index]] = console_crtc[index];
-    }
-    system_state.pet_display_columns = pet_display_columns_40;
-    system_state_set_video_ram_mask(&system_state, pet_video_ram_mask_1kb);
-    system_state.video_text_mode = video_text_mode_lower;
-    system_state.video_source = video_source_firmware;
-    memset(system_state.video_char_buffer, CH_SPACE, CONSOLE_SCREEN_BYTES);
-    memset(system_state.video_char_buffer + VIDEO_COLOR_OFFSET,
-           VIDEO_DEFAULT_ATTRIBUTE, CONSOLE_COLOR_BYTES);
+    (void)display_init_firmware(pet_display_columns_40, VIDEO_DEFAULT_ATTRIBUTE);
     pet_keyboard_begin(console_borrow.ora);
     console_borrow.state = CONSOLE_BORROW_ACTIVE;
     mode = system_operation_console;
@@ -238,14 +222,6 @@ void system_takeover(void) {
 void __attribute__((noreturn)) system_reset(void) {
     system_takeover();
     mcu_reset();
-    __builtin_unreachable();
-}
-
-void __attribute__((noreturn)) system_memory_diagnostic(void) {
-    system_takeover();
-    pet_wait_for_storage_idle();
-    set_cpu(CPU_HALT);
-    test_ram();
     __builtin_unreachable();
 }
 

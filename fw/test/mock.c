@@ -40,11 +40,20 @@ static uint8_t mock_char_rom[1u << ECONOPET_BRAM_ADDR_WIDTH];
 static tui_action_t (*input_reader)(void);
 static unsigned int input_reader_display_count;
 static bool button_pressed;
+static bool sd_card_present;
 static uint8_t physical_matrix[ECONOPET_KBD_COL_COUNT];
 static uint8_t published_matrix[ECONOPET_KBD_COL_COUNT];
 static uint8_t fpga_crtc[CRTC_REG_COUNT];
 static unsigned int matrix_publish_count;
 static unsigned int spi_read_count, spi_write_count;
+static unsigned int spi_access_count;
+#define MOCK_SPI_ADDR_MASK ((1u << ECONOPET_WB_ADDR_WIDTH) - 1u)
+#define MOCK_SPI_WRITE_REPLY UINT8_MAX
+static uint32_t spi_cursor_addr;
+static uint8_t spi_latched_rx;
+static bool fault_enabled;
+static uint32_t fault_addr;
+static uint8_t fault_stuck_one, fault_stuck_zero;
 static unsigned int usb_service_count, hid_service_count, button_sample_count;
 
 #define MOCK_UART_LOG2_CAPACITY 8
@@ -61,11 +70,6 @@ static struct {
     hid_keyboard_report_t report;
 } hid_reports[MOCK_HID_CAPACITY];
 static size_t hid_head, hid_tail;
-struct uart_inst {
-    uint8_t index;
-};
-static uart_inst_t mock_uart;
-uart_inst_t* const uart0 = &mock_uart;
 static void (*cpu_run_callback)(void);
 static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
@@ -80,8 +84,9 @@ static unsigned int display_task_count;
 static unsigned int term_begin_count, term_end_count, term_refresh_count;
 static unsigned int term_inject_count;
 static int term_inject_last;
-static void (*ram_test_handler)(void);
+static void (*diag_loop_handler)(diag_session_t*);
 static void (*system_reset_handler)(void);
+static void (*sleep_handler)(uint64_t);
 static pet_keyboard_model_t physical_keyboard_model;
 static pet_video_type_t physical_video_type;
 
@@ -106,6 +111,10 @@ void mock_clock_restore(void) {
     clock_overridden = false;
 }
 
+void mock_sleep_set_handler(void (*handler)(uint64_t us)) {
+    sleep_handler = handler;
+}
+
 void mock_set_pet_model(
     const pet_keyboard_model_t keyboard, const pet_video_type_t video) {
     physical_keyboard_model = keyboard;
@@ -117,6 +126,7 @@ void sleep_us(uint64_t us) {
     if (clock_overridden) {
         clock_us += us;
     }
+    if (sleep_handler != NULL) sleep_handler(us);
 }
 
 typedef struct {
@@ -286,8 +296,15 @@ void mock_ieee_clear_status(void) {
     mock_ieee_consume_status(mock_ieee.status_count);
 }
 
+/** Apply the configured stuck-bit read fault without changing stored memory. */
+static uint8_t fault_read(uint32_t addr, uint8_t value) {
+    return fault_enabled && addr == fault_addr ?
+        (uint8_t)((value | fault_stuck_one) & ~fault_stuck_zero) : value;
+}
+
 // Reads an IEEE register without popping RX, or reads the mocked PET RAM.
-uint8_t spi_read_at(uint32_t addr) {
+static uint8_t spi_read_at_raw(uint32_t addr) {
+    ++spi_access_count;
     if (addr == ECONOPET_WB_CPU_SEL_ADDR) {
         return selected_cpu;
     }
@@ -344,12 +361,30 @@ uint8_t spi_read_at(uint32_t addr) {
     }
     if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
         addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
-        return mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR];
+        return fault_read(addr, mock_char_rom[addr - ECONOPET_WB_BRAM_BASE_ADDR]);
     }
     // Enforce the address-space bound before accessing ordinary RAM.
     ck_assert_uint_lt(addr, MOCK_RAM_SIZE);
-    return mock_ram[addr];
+    return fault_read(addr, mock_ram[addr]);
 }
+
+/** Preserve isolated register reads while recording their last address and result. */
+uint8_t spi_read_at(uint32_t addr) {
+    spi_cursor_addr = addr & MOCK_SPI_ADDR_MASK;
+    spi_latched_rx = spi_read_at_raw(spi_cursor_addr);
+    return spi_latched_rx;
+}
+
+unsigned int mock_spi_access_count(void) { return spi_access_count; }
+
+void mock_spi_inject_fault(uint32_t addr, uint8_t stuck_one_mask, uint8_t stuck_zero_mask) {
+    fault_enabled = true;
+    fault_addr = addr;
+    fault_stuck_one = stuck_one_mask;
+    fault_stuck_zero = stuck_zero_mask;
+}
+
+void mock_spi_clear_fault(void) { fault_enabled = false; }
 
 // Report bulk reads independently of their per-byte register accesses.
 unsigned int mock_spi_read_count(void) { return spi_read_count; }
@@ -377,6 +412,9 @@ void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
 
 // Applies IEEE register side effects or writes RAM, returning the mock's zero reply.
 uint8_t spi_write_at(uint32_t addr, uint8_t data) {
+    ++spi_access_count;
+    spi_cursor_addr = addr & MOCK_SPI_ADDR_MASK;
+    spi_latched_rx = MOCK_SPI_WRITE_REPLY;
     if (addr == ECONOPET_WB_AUDIO_ADDR) {
         audio_control = data;
         return 0;
@@ -454,19 +492,48 @@ void spi_write_same_block(uint32_t addr, const uint8_t* pSrc, size_t byteLength)
     for (size_t i = 0; i < byteLength; i++) spi_write_at(addr, pSrc[i]);
 }
 
-// Preserves the legacy zero reply for unused sequential SPI reads.
-uint8_t spi_read_next(void) { return 0; }
-// Preserves the legacy zero reply for unused reverse SPI reads.
-uint8_t spi_read_prev(void) { return 0; }
-
-// Ignores RAM fills in this legacy host mock.
-void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
-    (void)addr;
-    (void)byte;
-    (void)byteLength;
+/** Queue the first memory read without returning its value. */
+void spi_read_seek(uint32_t addr) {
+    spi_cursor_addr = addr & MOCK_SPI_ADDR_MASK;
+    spi_latched_rx = spi_read_at_raw(spi_cursor_addr);
 }
 
-// Reject pending-result reads because this fixture has no transport pipeline.
+/** Return the old RX latch and queue another read at the current address. */
+uint8_t spi_read_same(void) {
+    const uint8_t prev = spi_latched_rx;
+    spi_latched_rx = spi_read_at_raw(spi_cursor_addr);
+    return prev;
+}
+
+/** Return the old RX latch and advance the read cursor. */
+uint8_t spi_read_next(void) {
+    const uint8_t prev = spi_latched_rx;
+    spi_cursor_addr = (spi_cursor_addr + 1u) & MOCK_SPI_ADDR_MASK;
+    spi_latched_rx = spi_read_at_raw(spi_cursor_addr);
+    return prev;
+}
+
+/** Return the old RX latch and retreat the read cursor. */
+uint8_t spi_read_prev(void) {
+    const uint8_t prev = spi_latched_rx;
+    spi_cursor_addr = (spi_cursor_addr - 1u) & MOCK_SPI_ADDR_MASK;
+    spi_latched_rx = spi_read_at_raw(spi_cursor_addr);
+    return prev;
+}
+
+/** Write to the current address and replace the RX latch with an undefined write reply. */
+uint8_t spi_write_same(uint8_t data) {
+    const uint8_t prev = spi_latched_rx;
+    spi_write_at(spi_cursor_addr, data);
+    return prev;
+}
+
+// Fill memory with the same per-address writes used by the driver.
+void spi_fill(uint32_t addr, uint8_t byte, size_t byteLength) {
+    for (size_t index = 0; index < byteLength; ++index) spi_write_at(addr + index, byte);
+}
+
+// Keep transport-pop commands unsupported by the memory-only pipeline fixture.
 uint8_t spi_read_pop(void) {
     fatal("spi_read_pop is unsupported by the register-only SPI fixture");
 }
@@ -599,11 +666,16 @@ void mock_reset(void) {
     input_reader = NULL;
     uart_head = uart_tail = hid_head = hid_tail = 0;
     button_pressed = false;
+    sd_card_present = true;
     memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
     memset(published_matrix, UINT8_MAX, sizeof(published_matrix));
     memset(fpga_crtc, 0, sizeof(fpga_crtc));
     matrix_publish_count = usb_service_count = hid_service_count = button_sample_count = 0;
     spi_read_count = spi_write_count = 0;
+    spi_access_count = 0;
+    spi_cursor_addr = 0;
+    spi_latched_rx = 0;
+    fault_enabled = false;
     cpu_run_callback = NULL;
     cpu_state_observer = NULL;
     display_task_count = 0;
@@ -611,8 +683,9 @@ void mock_reset(void) {
     term_inject_count = 0;
     term_inject_last = EOF;
     input_init();
-    ram_test_handler = NULL;
+    diag_loop_handler = NULL;
     system_reset_handler = NULL;
+    sleep_handler = NULL;
     text_mode_lower = true;
     selected_cpu = CPU_PHYS_6502;
     clock_overridden = false;
@@ -709,6 +782,7 @@ void mock_input_hid_report(uint8_t device, uint8_t instance, const hid_keyboard_
 }
 
 void mock_input_button_level(bool pressed) { button_pressed = pressed; }
+void mock_sd_card_present(bool present) { sd_card_present = present; }
 
 void mock_input_pet_snapshot(const uint8_t matrix[ECONOPET_KBD_COL_COUNT]) {
     memcpy(physical_matrix, matrix, sizeof(physical_matrix));
@@ -729,12 +803,12 @@ void __real_gpio_init(uint gpio);
 void __real_gpio_set_dir(uint gpio, bool out);
 
 void __wrap_gpio_init(uint gpio) {
-    if (gpio != MENU_BTN_GP)
+    if (gpio != MENU_BTN_GP && gpio != SD_DETECT)
         __real_gpio_init(gpio);
 }
-void gpio_pull_up(uint gpio) { ck_assert_uint_eq(gpio, MENU_BTN_GP); }
+void gpio_pull_up(uint gpio) { ck_assert(gpio == MENU_BTN_GP || gpio == SD_DETECT); }
 void __wrap_gpio_set_dir(uint gpio, bool out) {
-    if (gpio == MENU_BTN_GP)
+    if (gpio == MENU_BTN_GP || gpio == SD_DETECT)
         ck_assert(!out);
     else
         __real_gpio_set_dir(gpio, out);
@@ -742,6 +816,7 @@ void __wrap_gpio_set_dir(uint gpio, bool out) {
 
 // Publish the active-low button level at the GPIO sampling boundary.
 bool gpio_get(uint gpio) {
+    if (gpio == SD_DETECT) return !sd_card_present;
     ck_assert_uint_eq(gpio, MENU_BTN_GP);
     ++button_sample_count;
     return !button_pressed;
@@ -811,13 +886,17 @@ void mock_consume_requests(void) {
 // Diagnostic mocks
 // ---------------------------------------------------------------------------
 
-// Installs an observer that must escape the nonreturning RAM diagnostic.
-void mock_ram_test_set_handler(void (*handler)(void)) { ram_test_handler = handler; }
+// Installs an observer that must escape the nonreturning diagnostic loop.
+void mock_diag_loop_set_handler(void (*handler)(diag_session_t*)) { diag_loop_handler = handler; }
 void mock_system_reset_set_handler(void (*handler)(void)) { system_reset_handler = handler; }
 
-// Delegates the destructive hardware diagnostic to an explicit test observer.
-void __attribute__((noreturn)) test_ram(void) {
-    vet(ram_test_handler != NULL, "unexpected RAM diagnostic in host test");
-    ram_test_handler();
-    fatal("RAM diagnostic observer returned");
+void __real_diag_loop(diag_session_t* session) __attribute__((noreturn));
+
+/** Allow lifecycle tests to escape after initialization, otherwise execute the real loop. */
+void __attribute__((noreturn)) __wrap_diag_loop(diag_session_t* session) {
+    if (diag_loop_handler != NULL) {
+        diag_loop_handler(session);
+        fatal("diagnostic observer returned");
+    }
+    __real_diag_loop(session);
 }

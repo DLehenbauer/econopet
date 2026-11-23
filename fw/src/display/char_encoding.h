@@ -15,9 +15,28 @@
  *
  * These tables are used by:
  * - window.c: For rendering ASCII text to the character buffer
- * - menu.c: For screen display functions
- * - term.c: For terminal output to VT-100 compatible terminals
+ * - menu_ui.c and diag.c: For shared display glyphs
+ * - display.c: For terminal output to VT-100 compatible terminals
  */
+
+/** PET VROM reverse-video bit and shared screen glyphs. */
+#define VROM_REVERSE_MASK 0x80u
+#define VROM_SPACE 0x20u
+#define VROM_REVERSE_SPACE (VROM_SPACE | VROM_REVERSE_MASK)
+#define VROM_HLINE 0x40u
+#define VROM_VLINE 0x5du
+#define VROM_CORNER_TOP_LEFT 0x70u
+#define VROM_CORNER_TOP_RIGHT 0x6eu
+#define VROM_CORNER_BOTTOM_LEFT 0x6du
+#define VROM_CORNER_BOTTOM_RIGHT 0x7du
+#define VROM_EDGE_LEFT 0x61u
+#define VROM_UNDERLINE 0x63u
+#define VROM_SHADE 0x66u
+#define VROM_CAP_TOP 0x71u
+#define VROM_TEE_DOWN 0x72u
+#define VROM_LINE_RIGHT 0x74u
+#define VROM_EDGE_RIGHT 0x76u
+#define VROM_CHECKMARK 0x7au
 
 /**
  * Maps ASCII characters (0x00-0x7F) to PET Video ROM offsets.
@@ -58,5 +77,5 @@ static inline uint8_t ascii_to_vrom(uint8_t ascii) {
  * @return Pointer to terminal string representation
  */
 static inline const char* vrom_to_term(uint8_t vrom) {
-    return vrom_to_term_map[vrom & 0x7F];
+    return vrom_to_term_map[vrom & (uint8_t)~VROM_REVERSE_MASK];
 }

@@ -254,6 +254,9 @@ static void push_parser(parser_t* parser) {
     parser_t* saved_parser = vetted_malloc(sizeof(parser_t));
     memcpy(/* dest: */ saved_parser, /* src: */ parser, sizeof(parser_t));
     init_parser(parser, saved_parser->filename, saved_parser->sink, saved_parser->target_index);
+    // Reopening an alias changes the reader, not the selected configuration.
+    parser->current_index = saved_parser->current_index;
+    parser->executing = saved_parser->executing;
     parser->previous = saved_parser;
 }
 

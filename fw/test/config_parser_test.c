@@ -26,6 +26,8 @@
 #define TEST_CONFIG_SECOND 1
 #define TEST_OVERSIZED_KEY_CAPACITY 951
 #define TEST_OVERSIZED_YAML_CAPACITY 1100
+#define TEST_CATALOG_PAGE_SIZE 4u
+#define TEST_CATALOG_COUNT (3u * TEST_CATALOG_PAGE_SIZE + 1u)
 
 enum test_path_kind {
     TEST_PATH_LOAD,
@@ -692,6 +694,111 @@ START_TEST(test_enumerate_all_configs) {
     ck_assert_int_eq(test_ctx.config_enter_count, 2);
     ck_assert_int_eq(test_ctx.config_exit_count, 2);
     ck_assert_int_eq(test_ctx.set_options_count, 0);
+}
+END_TEST
+
+typedef struct {
+    uint32_t addresses[3];
+    size_t count;
+    size_t peak_readers;
+    bool valid;
+} alias_capture_t;
+
+// Records selected action order while observing the real parser's live readers.
+static void capture_alias_load(void* context, const char* filename, uint32_t address) {
+    alias_capture_t* const capture = context;
+    capture->valid &= strcmp(filename, "shared.bin") == 0;
+    if (capture->count >= count_of(capture->addresses)) {
+        capture->valid = false;
+        return;
+    }
+    capture->addresses[capture->count++] = address;
+    if (test_open_file_count() > capture->peak_readers)
+        capture->peak_readers = test_open_file_count();
+}
+
+// Aliases keep independent cursors, restore selection state, and retire every reader.
+START_TEST(test_alias_readers_restore_selected_actions) {
+    test_register_file("/config.yaml",
+        "format-version: 1\n"
+        "configs:\n"
+        "  - id: common\n"
+        "    name: Common\n"
+        "    setup:\n"
+        "      - &load\n"
+        "        action: load\n"
+        "        files: [{file: shared.bin, address: 0x1000}]\n"
+        "  - id: shared\n"
+        "    name: Shared\n"
+        "    setup: &steps\n"
+        "      - *load\n"
+        "      - action: load\n"
+        "        files: [{file: shared.bin, address: 0x2000}]\n"
+        "  - id: first\n"
+        "    name: First\n"
+        "    setup: *steps\n"
+        "  - id: second\n"
+        "    name: Second\n"
+        "    setup:\n"
+        "      - action: load\n"
+        "        files: [{file: shared.bin, address: 0x3000}]\n"
+        "      - *load\n"
+        "      - action: load\n"
+        "        files: [{file: shared.bin, address: 0x4000}]\n");
+    static const uint32_t expected[][3] = {
+        {0x1000, 0x2000}, {0x3000, 0x1000, 0x4000},
+    };
+    for (unsigned int pass = 0; pass < 3; ++pass) {
+        for (int selected = 0; selected < 2; ++selected) {
+            alias_capture_t capture = {.valid = true};
+            const setup_sink_t actions = {
+                .context = &capture, .on_load = capture_alias_load, .system_state = &sys_state,
+            };
+            const config_sink_t sink = {.setup = &actions};
+            parse_config_file("/config.yaml", &sink, selected + 2);
+            const size_t count = selected == 0 ? 2u : 3u;
+            ck_assert(capture.valid);
+            ck_assert_uint_eq(capture.count, count);
+            ck_assert_mem_eq(capture.addresses, expected[selected], count * sizeof(uint32_t));
+            ck_assert_uint_ge(capture.peak_readers, selected == 0 ? 3u : 2u);
+            ck_assert_uint_eq(test_open_file_count(), 0);
+        }
+    }
+}
+END_TEST
+
+// Catalog pages retain exact identities/defaults and stay within the supplied capacity.
+START_TEST(test_catalog_multiple_pages) {
+    char yaml[TEST_CATALOG_COUNT * 128u];
+    int used = snprintf(yaml, sizeof(yaml), "format-version: 1\ndefault: model11\nconfigs:\n");
+    ck_assert_int_gt(used, 0);
+    for (size_t index = 0; index < TEST_CATALOG_COUNT; ++index) {
+        const int written = snprintf(yaml + used, sizeof(yaml) - (size_t)used,
+            "  - id: model%02zu\n    name: Model %02zu\n    setup: []\n", index, index);
+        ck_assert_int_gt(written, 0);
+        ck_assert_uint_lt((size_t)written, sizeof(yaml) - (size_t)used);
+        used += written;
+    }
+    test_register_file("/config.yaml", yaml);
+    struct {
+        char names[TEST_CATALOG_PAGE_SIZE][CONFIG_TEXT_CAPACITY];
+        uint8_t guard[8];
+    } page;
+    for (size_t first = 0; first < TEST_CATALOG_COUNT; first += TEST_CATALOG_PAGE_SIZE) {
+        memset(&page, 0x5a, sizeof(page));
+        const menu_config_catalog_t catalog =
+            menu_config_enumerate(first, TEST_CATALOG_PAGE_SIZE, page.names);
+        ck_assert_uint_eq(catalog.count, TEST_CATALOG_COUNT);
+        ck_assert_int_eq(catalog.default_index, 11);
+        for (size_t row = 0; row < MIN(TEST_CATALOG_PAGE_SIZE, TEST_CATALOG_COUNT - first); ++row) {
+            char expected[CONFIG_TEXT_CAPACITY];
+            snprintf(expected, sizeof(expected), "Model %02zu", first + row);
+            ck_assert_str_eq(page.names[row], expected);
+        }
+        for (size_t index = 0; index < sizeof(page.guard); ++index)
+            ck_assert_uint_eq(page.guard[index], 0x5a);
+        ck_assert_uint_eq(test_open_file_count(), 0);
+    }
 }
 END_TEST
 
@@ -1491,6 +1598,8 @@ Suite *config_parser_suite(void) {
     
     // Register action, selection, conditional, and shipped-config coverage.
     tcase_add_test(tc_core, test_parse_minimal_config);
+    tcase_add_test(tc_core, test_alias_readers_restore_selected_actions);
+    tcase_add_test(tc_core, test_catalog_multiple_pages);
     tcase_add_test(tc_core, test_parse_load_action);
     tcase_add_test(tc_core, test_parse_mount_action);
     tcase_add_test(tc_core, test_parse_mount_action_defaults);

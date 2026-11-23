@@ -4,13 +4,14 @@
 #pragma once
 
 #include "config/config.h"
+#include "display/display.h"
 #include "ieee/ieee_drive.h"
 #include "input/input_actions.h"
 #include "menu_browser.h"
 #include "ui/tui.h"
 
-#define MENU_UI_WIDTH 40u
-#define MENU_UI_HEIGHT 25u
+#define MENU_UI_WIDTH DISPLAY_COLS_40
+#define MENU_UI_HEIGHT DISPLAY_ROWS
 #define MENU_UI_PAGE_ROWS MENU_BROWSER_PAGE_ROWS
 #define MENU_UI_DRIVE_SLOT_COUNT (DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT)
 

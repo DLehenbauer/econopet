@@ -10,6 +10,7 @@
 #include "fatal_error_test.h"
 #include "diskimage_test.h"
 #include "display_test.h"
+#include "diag_test.h"
 #include "dos_media_test.h"
 #include "dos_rel_test.h"
 #include "dos_test.h"
@@ -43,6 +44,7 @@ int run_suite() {
     srunner_add_suite(sr1, config_parser_suite());
     srunner_add_suite(sr1, crtc_suite());
     srunner_add_suite(sr1, display_suite());
+    srunner_add_suite(sr1, diag_suite());
     srunner_add_suite(sr1, diskimage_suite());
     srunner_add_suite(sr1, dos_media_suite());
     srunner_add_suite(sr1, dos_rel_suite());
@@ -73,6 +75,7 @@ int run_suite() {
     SRunner* sr2 = srunner_create(breakpoint_fatal_suite());
     srunner_add_suite(sr2, cpu_suite());
     srunner_add_suite(sr2, fatal_error_suite());
+    srunner_add_suite(sr2, diag_fatal_suite());
     srunner_add_suite(sr2, config_parser_fatal_suite());
     srunner_add_suite(sr2, ieee_drive_fatal_suite());
     srunner_add_suite(sr2, global_suite());

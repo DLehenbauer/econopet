@@ -8,23 +8,77 @@
 #include "driver.h"
 #include "dvi/dvi.h"
 #include "fatal.h"
+#include "roms/roms.h"
 #include "system/state.h"
+#include "ui/terminal.h"
 #include "window.h"
 
-// Terminal escape sequences
-static const char* const term_home = "\e[H";
-static const char* const term_reverse_off = "\e[m";
-static const char* const term_reverse_on = "\e[7m";
-static const char* const term_cursor_off = "\e[?25l";
-static const char* const term_cursor_on = "\e[?25h";
-static const char* const term_enter_alternate = "\e[?1049h";
-static const char* const term_exit_alternate = "\e[?1049l";
-static const char* const term_clear_screen = "\e[2J\e[H";
-static const char* const term_echo_off = "\e[12l";
-static const char* const term_echo_on = "\e[12h";
+/** Canonical firmware CRTC state (R1 is 40 in both column modes). */
+static const uint8_t firmware_crtc[CRTC_REG_COUNT] = {
+    [CRTC_R0_H_TOTAL] = 0x31,
+    [CRTC_R1_H_DISPLAYED] = DISPLAY_COLS_40,
+    [CRTC_R2_H_SYNC_POS] = 0x29,
+    [CRTC_R3_SYNC_WIDTH] = 0x0f,
+    [CRTC_R4_V_TOTAL] = 0x31,
+    [CRTC_R5_V_ADJUST] = 0,
+    [CRTC_R6_V_DISPLAYED] = DISPLAY_ROWS,
+    [CRTC_R7_V_SYNC_POS] = 0x25,
+    [CRTC_R9_MAX_SCAN_LINE] = 0x07,
+    [CRTC_R12_START_ADDR_HI] = 0x10,
+    [CRTC_R13_START_ADDR_LO] = 0,
+};
 
-static const uint screen_width  = 40;
-static const uint screen_height = 25;
+static const uint8_t firmware_crtc_indices[] = {
+    CRTC_R0_H_TOTAL,
+    CRTC_R1_H_DISPLAYED,
+    CRTC_R2_H_SYNC_POS,
+    CRTC_R3_SYNC_WIDTH,
+    CRTC_R4_V_TOTAL,
+    CRTC_R5_V_ADJUST,
+    CRTC_R6_V_DISPLAYED,
+    CRTC_R7_V_SYNC_POS,
+    CRTC_R9_MAX_SCAN_LINE,
+    CRTC_R12_START_ADDR_HI,
+    CRTC_R13_START_ADDR_LO,
+};
+
+window_t display_window(void) {
+    assert(system_state.pet_display_columns == pet_display_columns_40 ||
+           system_state.pet_display_columns == pet_display_columns_80);
+    return window_create_color(system_state.video_char_buffer,
+                               system_state.video_char_buffer + VIDEO_COLOR_OFFSET,
+                               system_state.pet_display_columns, DISPLAY_ROWS, VIDEO_DEFAULT_ATTRIBUTE);
+}
+
+window_t display_init_local(pet_display_columns_t columns, uint8_t attr) {
+    vet(columns == pet_display_columns_40 || columns == pet_display_columns_80,
+        "invalid display columns: %d", (int)columns);
+    // Reset the local renderer without relying on FPGA access.
+    roms_use_builtin_char_rom();
+    memcpy(system_state.pet_crtc_registers, firmware_crtc, sizeof(firmware_crtc));
+    system_state.pet_display_columns = columns;
+    system_state.video_text_mode = video_text_mode_lower;
+    memset(system_state.video_char_buffer, VROM_SPACE, VIDEO_PLANE_CAPACITY);
+    memset(system_state.video_char_buffer + VIDEO_COLOR_OFFSET, attr, VIDEO_COLOR_CAPACITY);
+    return window_create_color(system_state.video_char_buffer,
+                               system_state.video_char_buffer + VIDEO_COLOR_OFFSET,
+                               columns, DISPLAY_ROWS, attr);
+}
+
+window_t display_init_firmware(pet_display_columns_t columns, uint8_t attr) {
+    const window_t window = display_init_local(columns, attr);
+    // Program only CRTC registers initialized by the FPGA.
+    system_state.video_source = video_source_firmware;
+    system_state_set_video_ram_mask(&system_state, columns == pet_display_columns_80
+                                    ? pet_video_ram_mask_2kb : pet_video_ram_mask_1kb);
+    spi_write(ECONOPET_WB_BRAM_BASE_ADDR, rom_chars_e800, sizeof(rom_chars_e800));
+    write_pet_model(&system_state);
+    for (size_t i = 0; i < sizeof(firmware_crtc_indices); ++i) {
+        const uint8_t index = firmware_crtc_indices[i];
+        spi_write_at(ECONOPET_WB_CRTC_BASE_ADDR + index, firmware_crtc[index]);
+    }
+    return window;
+}
 
 bool display_term_video_active(void) {
     return system_state.terminal_session == terminal_session_remote;
@@ -35,19 +89,17 @@ void display_init(void) {
 }
 
 void display_term_begin(void) {
-    fputs(term_enter_alternate, stdout);
-    fputs(term_echo_off, stdout);
-    fputs(term_cursor_off, stdout);
-    fputs(term_reverse_off, stdout);
-    fputs(term_clear_screen, stdout);
+    fputs(TERM_ALTERNATE_ENTER, stdout);
+    fputs(TERM_ECHO_OFF, stdout);
+    fputs(TERM_CURSOR_HIDE, stdout);
+    fputs(TERM_ATTRIBUTES_RESET, stdout);
+    fputs(TERM_CLEAR_SCREEN, stdout);
     fflush(stdout);
 }
 
 void display_term_end(void) {
-    fputs(term_reverse_off, stdout);
-    fputs(term_cursor_on, stdout);
-    fputs(term_echo_on, stdout);
-    fputs(term_exit_alternate, stdout);
+    // Preserve the cursor restored from the primary screen when leaving remote mode.
+    fputs(TERM_ALTERNATE_EXIT TERM_CLI_PROMPT_NORMALIZE, stdout);
     fflush(stdout);
 }
 
@@ -55,19 +107,20 @@ void display_term_end(void) {
 static void display_term_render(void) {
     bool reverse = false;
 
-    fputs(term_home, stdout);
+    fputs(TERM_HOME, stdout);
 
-    const unsigned int cols = screen_width;
-    const unsigned int rows = screen_height;
+    const unsigned int cols = system_state.pet_display_columns;
+    const unsigned int rows = DISPLAY_ROWS;
+    assert(cols == DISPLAY_COLS_40 || cols == DISPLAY_COLS_80);
     uint8_t* char_buffer = system_state.video_char_buffer;
 
     for (unsigned int r = 0; r < rows; r++) {
         for (unsigned int c = 0; c < cols; c++) {
-            const char ch = *char_buffer++;
+            const uint8_t ch = *char_buffer++;
 
-            if (reverse != ((ch & 0x80) != 0)) {
+            if (reverse != ((ch & VROM_REVERSE_MASK) != 0)) {
                 reverse = !reverse;
-                fputs(reverse ? term_reverse_on : term_reverse_off, stdout);
+                fputs(reverse ? TERM_REVERSE_ON : TERM_ATTRIBUTES_RESET, stdout);
             }
 
             fputs(vrom_to_term(ch), stdout);
@@ -98,14 +151,14 @@ static void display_sync_range(const video_source_t video_source, const size_t o
 }
 
 void display_clear(void) {
-    memset(system_state.video_char_buffer, CH_SPACE, VIDEO_PLANE_CAPACITY);
+    memset(system_state.video_char_buffer, VROM_SPACE, VIDEO_PLANE_CAPACITY);
     display_sync_range(video_source_firmware, 0, VIDEO_PLANE_CAPACITY);
     if (display_term_video_active()) {
         display_term_refresh();
     }
 }
 
-void display_task(void) {
+void display_flush(void) {
     const video_source_t video_source = system_state.video_source;
     assert(video_source == video_source_pet || video_source == video_source_firmware);
 
@@ -133,4 +186,8 @@ void display_task(void) {
     if (display_term_video_active()) {
         display_term_render();
     }
+}
+
+void display_task(void) {
+    display_flush();
 }

@@ -41,6 +41,10 @@ typedef struct hid_keyboard_report_s {
 } hid_keyboard_report_t;
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Returns host monotonic time in microseconds.
 uint64_t time_us_64(void);
 
@@ -65,6 +69,9 @@ bool test_file_registered(const char* path);
 // Counts live cookie-backed FILE handles, including unregistered borrowers.
 size_t test_open_file_count(void);
 
+// Reports peak live cookie-backed handles since fixture storage was last cleared.
+size_t test_peak_open_file_count(void);
+
 // Counts successful stdio opens of a registered fixture, including closed handles.
 size_t test_file_open_calls(const char* path);
 
@@ -88,3 +95,7 @@ void test_expect_fatal_message(const char* substring);
 
 // Inspect cleanup state before the next host fatal error aborts.
 void test_expect_fatal_callback(void (*callback)(void));
+
+#ifdef __cplusplus
+}
+#endif

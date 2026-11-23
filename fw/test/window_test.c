@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <signal.h>
 
+#include "display/char_encoding.h"
 #include "display/window.h"
 
 #define WIDTH 5
@@ -177,6 +178,71 @@ START_TEST(test_window_excessive_length) {
 }
 END_TEST
 
+/** Check color writes, clipping, reverse video, and zero-length edge runs. */
+START_TEST(test_color_canvas_and_clipping) {
+    uint8_t chars[BUFFER_SIZE + 2], colors[BUFFER_SIZE + 2];
+    memset(chars, 0xee, sizeof(chars));
+    memset(colors, 0xee, sizeof(colors));
+    const window_t window = window_create_color(chars + 1, colors + 1, WIDTH, HEIGHT, 0x12);
+    const window_t styled = window_with_attr(&window, 0x34);
+    window_fill(&window, VROM_SPACE);
+    window_fill_row(&styled, 1, VROM_HLINE);
+    window_put(&styled, 0, 0, VROM_SHADE);
+    window_hline(&styled, window_xy(&styled, 1, 0), 2, VROM_HLINE);
+    window_vline_at(&styled, 4, 0, HEIGHT, VROM_VLINE);
+    window_text(&styled, 3, 1, 9, "ABC");
+    window_printf(&styled, 1, 2, 2, "%s", "XYZ");
+    window_puts(&styled, window_xy(&styled, 0, 2), "Q");
+    window_hline_at(&styled, WIDTH, 0, 0, VROM_SPACE);
+    window_vline_at(&styled, 0, HEIGHT, 0, VROM_SPACE);
+    window_text(&styled, WIDTH, 0, 1, "X");
+    window_text(&styled, 0, HEIGHT, 1, "X");
+    window_text(&styled, 0, 0, 0, "X");
+    ck_assert_uint_eq(chars[1 + WIDTH + 3], ascii_to_vrom('A'));
+    ck_assert_uint_eq(chars[1 + WIDTH + 4], ascii_to_vrom('B'));
+    ck_assert_uint_eq(chars[1 + 2 * WIDTH], ascii_to_vrom('Q'));
+    ck_assert_uint_eq(chars[1 + 2 * WIDTH + 1], ascii_to_vrom('X'));
+    ck_assert_uint_eq(chars[1 + 2 * WIDTH + 2], ascii_to_vrom('Y'));
+    ck_assert_uint_eq(chars[1 + 2 * WIDTH + 3], VROM_SPACE);
+    ck_assert_uint_eq(colors[1 + 0], 0x34);
+    ck_assert_uint_eq(colors[1 + 1], 0x34);
+    ck_assert_uint_eq(colors[1 + WIDTH], 0x34);
+    ck_assert_uint_eq(colors[1 + 2 * WIDTH + 4], 0x34);
+    ck_assert_uint_eq(colors[1 + 2 * WIDTH], 0x34);
+    ck_assert_uint_eq(colors[1 + 2 * WIDTH + 1], 0x34);
+    ck_assert_uint_eq(colors[1 + WIDTH + 4], 0x34);
+    ck_assert_uint_eq(colors[1 + 2 * WIDTH + 3], 0x12);
+    window_reverse_at(&styled, 3, 1, 10);
+    window_reverse(&styled, window_xy(&styled, 0, 0), 1);
+    ck_assert_uint_eq(chars[1 + WIDTH + 3], ascii_to_vrom('A') ^ VROM_REVERSE_MASK);
+    ck_assert_uint_eq(colors[1 + WIDTH + 3], 0x34);
+    ck_assert_uint_eq(colors[1], 0x34);
+    ck_assert_uint_eq(chars[0], 0xee);
+    ck_assert_uint_eq(chars[sizeof(chars) - 1], 0xee);
+    ck_assert_uint_eq(colors[0], 0xee);
+    ck_assert_uint_eq(colors[sizeof(colors) - 1], 0xee);
+}
+END_TEST
+
+/** Frame borders and the title use the active attribute. */
+START_TEST(test_colored_frame) {
+    uint8_t chars[10 * 4], colors[10 * 4];
+    const window_t window = window_create_color(chars, colors, 10, 4, 0x67);
+    window_fill(&window, VROM_SPACE);
+    window_frame(&window, 0, 0, 10, 4, "Hi");
+    ck_assert_uint_eq(chars[0], VROM_CORNER_TOP_LEFT);
+    ck_assert_uint_eq(chars[9], VROM_CORNER_TOP_RIGHT);
+    ck_assert_uint_eq(chars[10], VROM_VLINE);
+    ck_assert_uint_eq(chars[30], VROM_CORNER_BOTTOM_LEFT);
+    ck_assert_uint_eq(chars[39], VROM_CORNER_BOTTOM_RIGHT);
+    ck_assert_uint_eq(chars[3], VROM_SPACE);
+    ck_assert_uint_eq(chars[4], ascii_to_vrom('H'));
+    ck_assert_uint_eq(chars[5], ascii_to_vrom('i'));
+    ck_assert_uint_eq(chars[6], VROM_SPACE);
+    for (size_t i = 0; i < sizeof(colors); ++i) ck_assert_uint_eq(colors[i], 0x67);
+}
+END_TEST
+
 Suite *window_suite(void) {
     Suite* s = suite_create("Window");
 
@@ -194,6 +260,8 @@ Suite *window_suite(void) {
     tcase_add_test(test_cases, test_window_puts_handles_newlines);
     tcase_add_test(test_cases, test_window_puts_ignores_carriage_returns);
     tcase_add_test(test_cases, test_window_puts_newline_after_full_row_does_not_skip_row);
+    tcase_add_test(test_cases, test_color_canvas_and_clipping);
+    tcase_add_test(test_cases, test_colored_frame);
 
     suite_add_tcase(s, test_cases);
 

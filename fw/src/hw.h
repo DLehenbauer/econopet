@@ -38,6 +38,13 @@
 #define FPGA_SPI_SDO_GP SPI0_SDO_GP
 #define FPGA_SPI_SDI_GP SPI0_SDI_GP
 
+// Pulsing CRESET initiates FPGA configuration.  After the CRESET signal is deasserted,
+// the MCU uploads the FPGA binary via SPI0 (Mode 3).
+#define FPGA_CRESET_GP 26
+
+// PWM output used to generate the PLL input for FPGA.
+#define FPGA_CLK_GP 15
+
 // SPI1 is used to communicate with the SD card.  The SPI1 bus is also connected to
 // the FPGA and could be used as a second communication channel in the future.  There
 // are separate CSN signals for the SD card and FPGA.
@@ -46,14 +53,12 @@
 #define SD_CMD_GP SPI1_SDO_GP
 #define SD_DAT_GP SPI1_SDI_GP
 #define SD_CSN_GP 9
+
+// Active low. Use internal pull-up.
 #define SD_DETECT 8
 
-// Pulsing CRESET initiates FPGA configuration.  After the CRESET signal is deasserted,
-// the MCU uploads the FPGA binary via SPI0 (Mode 3).
-#define FPGA_CRESET_GP 26
-
-// PWM output used to generate the PLL input for FPGA.
-#define FPGA_CLK_GP 15
+// Enable or disable CRC checking the SD card.
+#define SD_SPI_ENABLE_CRC false
 
 // Menu button (active low / requires enabling pull-up)
 #define MENU_BTN_GP 27

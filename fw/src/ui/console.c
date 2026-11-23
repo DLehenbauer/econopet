@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "console.h"
 
+#include "ui/terminal.h"
+
 // Control characters
 #define CTRL_C      0x03
 #define BACKSPACE   0x08
@@ -21,7 +23,7 @@ void console_puts(const char* str) {
 }
 
 void console_prompt(void) {
-    console_puts("econopet> ");
+    console_puts(TERM_CLI_PROMPT_NORMALIZE "econopet> ");
 }
 
 void console_newline(void) {

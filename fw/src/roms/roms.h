@@ -16,6 +16,9 @@ extern const uint8_t* const p_video_font_400;
 // Refresh the HDMI renderer's character ROM from FPGA SRAM.
 void roms_refresh_char_rom(void);
 
+/** Load built-in flash glyphs into the HDMI renderer's SRAM font without SPI access. */
+void roms_use_builtin_char_rom(void);
+
 // 1KB glyph table for the HDMI renderer.
 const uint8_t* roms_get_char_rom(video_text_mode_t mode);
 

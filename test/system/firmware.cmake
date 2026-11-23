@@ -31,9 +31,11 @@ add_library(econopet_host_firmware STATIC
     "${ECONOPET_ROOT}/fw/src/cbm/filename.c"
     "${ECONOPET_ROOT}/fw/src/fatal.c"
     "${ECONOPET_ROOT}/fw/src/sd/path.c"
-    "${ECONOPET_ROOT}/test/support/test_support.c")
+    "${ECONOPET_ROOT}/test/support/test_support.c"
+    "${ECONOPET_ROOT}/test/support/test_files.c")
 target_compile_features(econopet_host_firmware PUBLIC cxx_std_23 PRIVATE c_std_11)
 target_include_directories(econopet_host_firmware PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
+target_include_directories(econopet_host_firmware PRIVATE "${ECONOPET_ROOT}/fw/external/pico-vfs/include")
 # C frames must unwind when a C++ simulator callback or deadline throws.
 target_compile_options(econopet_host_firmware PRIVATE $<$<COMPILE_LANGUAGE:C>:-fexceptions>)
 target_link_libraries(econopet_host_firmware PUBLIC
@@ -47,6 +49,9 @@ string(REPEAT "0xea,\n" 256 MENU_TEST_ROM_HEADER)
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/901447_10.h" CONTENT "${MENU_TEST_FONT_HEADER}")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/roms/menu_rom.h" CONTENT "${MENU_TEST_ROM_HEADER}")
 add_library(econopet_menu_firmware STATIC
+    "${ECONOPET_ROOT}/fw/src/display/char_encoding.c"
+    "${ECONOPET_ROOT}/fw/src/display/display.c"
+    "${ECONOPET_ROOT}/fw/src/display/window.c"
     "${ECONOPET_ROOT}/fw/src/input/pet_keyboard.c"
     "${ECONOPET_ROOT}/fw/src/driver_sync.c"
     "${ECONOPET_ROOT}/fw/src/system/system.c"

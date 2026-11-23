@@ -115,11 +115,9 @@ void fatal_halt(fatal_error_t error, const char* message) {
 #include "system/state.h"
 #include "system/system.h"
 
-#define FATAL_COLUMNS 40
-#define FATAL_ROWS    25
 #define FATAL_PREFIX  "E: "
 #define FATAL_MESSAGE_SIZE \
-    (FATAL_COLUMNS * FATAL_ROWS - (sizeof(FATAL_PREFIX) - 1) + 1)
+    (DISPLAY_COLS_40 * DISPLAY_ROWS - (sizeof(FATAL_PREFIX) - 1) + 1)
 
 // Render fatal details without allocating storage. Core 1 keeps driving DVI.
 void fatal_display_message(const char* const message) {
@@ -127,19 +125,16 @@ void fatal_display_message(const char* const message) {
     spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
     start_menu_rom(MENU_ROM_BOOT_ERROR);
 
-    const window_t window = window_create(system_state.video_char_buffer, FATAL_COLUMNS, FATAL_ROWS);
-    // Prepare the physical displays without clearing the UART diagnostic history.
-    window_fill(&window, CH_SPACE);
+    // Reset local geometry, font, and colors.
+    const window_t window = display_init_local(pet_display_columns_40, VIDEO_DEFAULT_ATTRIBUTE);
+    system_state.video_source = video_source_firmware;
+    system_state_set_video_ram_mask(&system_state, pet_video_ram_mask_1kb);
 
     uint8_t* const pOut = window_puts(&window, window.start, FATAL_PREFIX);
-    window_reverse(&window, window.start, 2);
+    window_reverse_at(&window, 0, 0, 2);
     window_puts(&window, pOut, message);
-    
-    system_state.video_source = video_source_firmware;  // Copy from `video_char_buffer` to $8000
-    system_state.video_text_mode = video_text_mode_lower;
-
     // Present the final error directly on both displays before entering the fatal loop.
-    spi_write(VIDEO_RAM_ADDRESS, system_state.video_char_buffer, PET_MAX_VIDEO_RAM_BYTES);
+    display_flush();
 }
 #endif
 
