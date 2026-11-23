@@ -21,7 +21,7 @@
   * [System Burn-In V2007TT](https://www.zimmers.net/anonftp/pub/cbm/pet/utilities/cbm_technician_disk.d80.gz) - Run '80sysburn1039' or '80xx memory test' -- For 80 col
 * memory tests
   * [sp9000](https://www.zimmers.net/anonftp/pub/cbm/pet/utilities/cbm_technician_disk.d80.gz) - Run 'sp9000' -- SuperPET banked memory
-  * SuperPET Memmory Tests: [testram9000.d80.gz](https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz)
+  * SuperPET Memory Tests: [testram9000.d80.gz](https://www.zimmers.net/anonftp/pub/cbm/pet/SuperPET/os9/testram9000.d80.gz)
 * Diagnostic Clip
   * [Andre's PET Diagnostic Site](https://6502.org/users/andre/petindex/diag/index.html)
   * [diagnostics.txt](https://www.zimmers.net/anonftp/pub/cbm/schematics/computers/pet/diagnostics.txt)
