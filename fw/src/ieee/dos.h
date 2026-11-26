@@ -239,6 +239,8 @@ typedef struct {
     bool default_drive;
     bool tried_other;
     bool pending;
+    /** True for an initial LOAD "*" (PRGTRK == 0) so directory lookup matches only PRG entries. */
+    bool first_program;
 } dos_open_work_t;
 
 // Decode OPEN's bounded command page before lookup. Supply all 59 command

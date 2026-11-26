@@ -675,6 +675,37 @@ static void free_channel(dos_unit_t* const unit, const uint8_t channel) {
     *state = (dos_channel_t){0};
 }
 
+/**
+ * Release open data channels whose active buffer page last ran a job on drive.
+ *
+ * Models INITDR's CLDCHN sweep across secondary addresses below the command channel.
+ */
+static void free_drive_channels(dos_unit_t* const unit, const uint8_t drive) {
+    // ROM sources:
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst3
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/getact
+    // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/getact
+    //
+    // INITDR begins with CLDCHN, which checks GETACT's active-page LSTJOB
+    // drive bit for channels below the command channel and calls FRECHN.
+    // Sweep secondary addresses 14 down to 0 and free channels bound to the initialized drive.
+    for (uint8_t candidate = IEEE_COMMAND_CHANNEL; candidate-- > IEEE_LOAD_CHANNEL;) {
+        const uint8_t owner = dos_find_channel(unit, candidate);
+        if (owner != DOS_UNUSED) {
+            const dos_channel_t* const state = &unit->channels[owner];
+            if (state->buffers[state->active] < DOS_BUFFER_COUNT) {
+                const uint16_t page = (uint16_t)(1u << state->buffers[state->active]);
+                if (((unit->buffer_drives & page) != 0) == (drive != 0)) {
+                    free_channel(unit, owner);
+                }
+            }
+        }
+    }
+}
+
 // Select CLSALL's highest remaining data secondary, or one explicit owner.
 static uint8_t close_channel(const dos_unit_t* const unit, const uint8_t secondary) {
     // ROM sources:
@@ -6493,15 +6524,36 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         return;
     }
 
-    // ROM open:OP40 makes SA 0/1 LOAD/SAVE with a PRG default. Apply that
-    // default for LOAD/SAVE and infer other ordinary types from the match.
-    uint8_t drive = unit->selected_drive;
-    dos_open_work_t parsed = {0};
+    // ROM parsex:PARSXQ runs OKERR with the prior DRVNUM before entering OPEN.
+    // LOADIR (SA 0 '$') returns via RTS without ENDCMD, leaving that status
+    // until GETERC's terminal CR formats ERRTS0 with the newly selected DRVNUM.
+    dos_status(unit, model, DOS_STATUS_OK, 0, 0);
+
+    // ROM open:OP02 reloads the retained program link before PRSCLN/CKTM
+    // inspect any suffix. When PRGTRK is zero, OP0415 instead resets DRVNUM
+    // and LSTDRV to drive 0, sets PRG TYPFLG, and runs INITDR before OP042.
+    const bool load_star = secondary == IEEE_LOAD_CHANNEL && length != 0 && input[0] == '*';
+    const bool last_program = load_star && unit->last_program_track != 0;
+    const bool first_program = load_star && !last_program;
+    if (first_program) {
+        unit->selected_drive = 0;
+        unit->last_drive = 0;
+        free_drive_channels(unit, 0);
+        unit->bam[0] = (dos_bam_t){0};
+        unit->free_blocks[0] = 0;
+        unit->free_blocks_valid[0] = false;
+    }
+
+    // ROM open:OP40 makes SA 0/1 LOAD/SAVE with a PRG default. Omitted drives
+    // in ONEDRV/ALLDRS, OP04/SIMPRS, and LOADIR default from LSTDRV.
+    uint8_t drive = unit->last_drive;
+    dos_open_work_t parsed = {.first_program = first_program};
     const bool directory = length != 0 && input[0] == '$';
     if (directory) {
-        parsed.default_drive = length == 1 || (input[1] != '0' && input[1] != '1' && input[1] != ':');
+        parsed.default_drive = secondary == IEEE_LOAD_CHANNEL &&
+                               (length == 1 || (input[1] != '0' && input[1] != '1' && input[1] != ':'));
     }
-    if (!directory && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
+    if (!directory && !last_program && (length == 0 || !dos_open_parse(input, length, &drive, &parsed))) {
         dos_status(unit, model, length == 0 ? DOS_STATUS_INVALID_NAME : DOS_STATUS_SYNTAX, 0, 0);
         return;
     }
@@ -6514,8 +6566,6 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     if (directory && length > 1 && (input[1] == '0' || input[1] == '1')) {
         drive = input[1] - '0';
     }
-    const bool last_program =
-        secondary == IEEE_LOAD_CHANNEL && length != 0 && input[0] == '*' && unit->last_program_track != 0;
     if (last_program) {
         drive = unit->last_program_drive;
     }
@@ -6537,7 +6587,12 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
     }
     if (directory) {
         if (open_directory(unit, media, reference, secondary, input, length)) {
-            command_end(unit, model);
+            // LOADIR (SA 0) updates LSTDRV and returns via RTS without ENDCMD, preserving PARSXQ's OKERR status.
+            if (secondary == IEEE_LOAD_CHANNEL) {
+                unit->last_drive = unit->selected_drive;
+            } else {
+                command_end(unit, model);
+            }
         }
         return;
     }
@@ -8045,6 +8100,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     uint8_t found_root_track = 0, found_root_sector = 0, found_record_size = 0;
     uint16_t found_blocks = 0;
+    bool matched = false;
     const uint8_t searched_track = work->track, searched_sector = work->sector;
 
     // Bound directory visits by image size as a corruption safeguard, not a
@@ -8085,7 +8141,10 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                     work->empty_sector = searched_sector;
                     work->empty_entry = (uint8_t)entry;
                 }
-            } else if (name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
+            } else if ((!work->first_program ||
+                        (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
+                       name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
+                // Record the first matching directory entry (filtering to PRG on initial LOAD "*") and stop scanning.
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
                 found_track = file[DOS_DIRECTORY_TRACK_OFFSET];
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
@@ -8094,6 +8153,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                 found_root_track = file[DOS_DIRECTORY_SIDE_TRACK];
                 found_root_sector = file[DOS_DIRECTORY_SIDE_SECTOR];
                 found_record_size = file[DOS_DIRECTORY_RECORD_SIZE];
+                matched = true;
                 break;
             }
         }
@@ -8106,10 +8166,11 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM SR40/NXTBUF follow the directory link until its track is zero.
     // Yield at a live link, otherwise return the scratch buffer before any
     // GETRCH-style allocation so lookup does not permanently cost a buffer.
-    if (!failed && found_track == 0 && work->track != 0) {
+    // FFST returns a zero-track name match to OP90, not another search pass.
+    if (!failed && !matched && work->track != 0) {
         return;
     }
-    if (!failed && found_track == 0 && work->default_drive) {
+    if (!failed && !matched && work->default_drive) {
         unsigned int next_drive = reference.slot;
         bool retry = false;
         if (!work->tried_other) {

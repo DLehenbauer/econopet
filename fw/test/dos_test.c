@@ -1604,6 +1604,87 @@ START_TEST(test_dual_drive_writers_and_directory_selection) {
 }
 END_TEST
 
+// LOADIR (SA 0 '$') keeps PARSXQ's prior-DRVNUM OKERR status while updating
+// DRVNUM/LSTDRV, whereas OP04 (nonzero SA '$') finishes through ENDCMD.
+START_TEST(test_directory_open_status_distinguishes_loadir_from_raw_chain) {
+    const unsigned int format = (unsigned int)_i;
+    const bool d80_status = format != 0;
+    image_t first, second;
+    dos_media_bank_t bank = {0}, other = {0};
+    mount_blank(&bank, &first, format);
+    mount_blank(&other, &second, format);
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, &other.units[0].slots[0].io), DOS_MEDIA_OK);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+
+    // Prior command on drive 1 leaves DRVNUM=1, LSTDRV=1, and an unconsumed error.
+    unit.selected_drive = 1;
+    unit.last_drive = 1;
+    dos_status(&unit, model, DOS_STATUS_NOT_FOUND, 0, 0);
+
+    // SA 0 "$0": PARSXQ's OKERR formats prior DRVNUM (1); LOADIR sets DRVNUM=0,
+    // LSTDRV=0 and returns via RTS without ENDCMD.
+    uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,1\r" : "00, OK,00,00\r");
+
+    // Consuming CR through GETERC runs ERRTS0 with the updated DRVNUM (0),
+    // and CLOSE 0 (CLS05) leaves that status intact.
+    dos_status_get(&unit, model, unit.status_length);
+    ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+    uint8_t listing[64];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, channel, listing, sizeof(listing)), sizeof(listing));
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+
+    // SA 2 "$1": OP04 enters ENDCMD, immediately publishing the newly selected drive (1).
+    channel = open_name(&unit, &bank, 2, "$1");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,1\r" : "00, OK,00,00\r");
+    ck_assert(dos_close(&unit, &bank, model, 2));
+
+    // Omitted-drive LOADIR ("$") defaults from LSTDRV (1) even if DRVNUM was 0
+    // after a failed operation, while OKERR still reflects prior DRVNUM (0).
+    unit.selected_drive = 0;
+    unit.last_drive = 1;
+    dos_status(&unit, model, DOS_STATUS_SYNTAX, 0, 0);
+    channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
+    ck_assert_uint_ne(channel, DOS_UNUSED);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+
+    // Unmounted drive 1: OP04 ("$" with LSTDRV=1) does not fall back to drive 0,
+    // and LOADIR ("$1") reports 74 on drive 1 without changing LSTDRV (0).
+    ck_assert_int_eq(dos_media_set_slot(&bank, 0, 1, NULL), DOS_MEDIA_OK);
+    unit.selected_drive = 0;
+    unit.last_drive = 1;
+    ck_assert_uint_eq(open_name(&unit, &bank, 2, "$"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_READY);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_str_eq(unit.status, d80_status ? "74,DRIVE NOT READY,00,00,1\r" : "74,DRIVE NOT READY,00,00\r");
+
+    unit.selected_drive = 0;
+    unit.last_drive = 0;
+    ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$1"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_READY);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert_str_eq(unit.status, d80_status ? "74,DRIVE NOT READY,00,00,1\r" : "74,DRIVE NOT READY,00,00\r");
+
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // USRINT preserves channels/cursors and does not perform ENDCMD's LSTDRV update.
 START_TEST(test_user_zero_retains_native_resources_and_stale_selector) {
     image_t image;
@@ -1858,6 +1939,8 @@ START_TEST(test_command_termination_unknown_and_execution_rejection) {
         send_command(&unit, &bank, rejected[index], false);
         ck_assert_uint_eq(unit.status_code, DOS_STATUS_SYNTAX);
     }
+    send_command(&unit, &bank, "&MISSING", false);
+    ck_assert_uint_eq(unit.status_code, model == DOS_MODEL_4040 ? DOS_STATUS_INVALID_COMMAND : DOS_STATUS_SYNTAX);
     send_command(&unit, &bank, "?", false);
     ck_assert_uint_eq(unit.status_code, DOS_STATUS_INVALID_COMMAND);
     ck_assert_uint_eq(image.reads + image.writes + image.flushes, 0);
@@ -6683,6 +6766,203 @@ START_TEST(test_record_rejects_missing_and_nonrelative_channels) {
 }
 END_TEST
 
+// Mounts a second formatted image into unit 0 drive 1 for dual-drive OPEN tests.
+static void mount_peer_blank(dos_media_bank_t* const bank, image_t* const peer, const unsigned int format) {
+    dos_media_bank_t scratch = {0};
+    mount_blank(&scratch, peer, format);
+    ck_assert_int_eq(dos_media_set_slot(bank, 0, 1, &scratch.units[0].slots[0].io), DOS_MEDIA_OK);
+}
+
+// Writes and closes a fixture file with explicit type through public DOS channels.
+static void create_typed_file(dos_unit_t* const unit, dos_media_bank_t* const bank, const unsigned int drive,
+                              const char* const name, const char type_code, const uint8_t first,
+                              const unsigned int count) {
+    char spec[32];
+    snprintf(spec, sizeof(spec), "%u:%s,%c,W", drive, name, type_code);
+    ck_assert_uint_ne(open_name(unit, bank, 2, spec), DOS_UNUSED);
+    put_bytes(unit, bank, 2, first, count);
+    ck_assert(dos_close(unit, bank, bank->units[0].model, 2));
+}
+
+// OP0415 resets an initial unprefixed LOAD "*" to drive 0 and PRG TYPFLG before CKTM/OP110.
+START_TEST(test_initial_load_star_resets_drive_and_filters_programs) {
+    static const char* const names[] = {"*", "*,P", "*,P,R", "*,S"};
+    const unsigned int format = (unsigned int)_i / count_of(names);
+    const unsigned int variant = (unsigned int)_i % count_of(names);
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "SKIPSEQ", 'S', 0x10, 3);
+    create_typed_file(&unit, &bank, 0, "SKIPUSR", 'U', 0x20, 3);
+    create_typed_file(&unit, &bank, 0, "BOOTPRG", 'P', 0x30, 5);
+    create_typed_file(&unit, &bank, 1, "DRIVE1", 'P', 0x60, 4);
+    // Reset clears PRGTRK while leaving both disks populated; select drive 1 via non-LOAD channel.
+    dos_reset(&unit, model);
+    const uint8_t peer = open_name(&unit, &bank, 3, "1:DRIVE1,P,R");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_program_track, 0);
+
+    const uint8_t channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, names[variant]);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    if (variant == 3u) {
+        // FFST filtered by TYPFLG=PRG skipped SKIPSEQ and matched BOOTPRG, so OP110 reports 64 vs TYPE=SEQ.
+        ck_assert_uint_eq(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_TYPE_MISMATCH);
+        ck_assert_uint_eq(unit.last_program_track, 0);
+    } else {
+        ck_assert_uint_ne(channel, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        ck_assert_uint_eq(unit.channels[channel].media.slot, 0);
+        ck_assert_uint_ne(unit.last_program_track, 0);
+        expect_bytes(&unit, &bank, channel, 5, 0x30);
+        ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    }
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OP0415 resets drive 0 and invalidates its cached BAM before OP049/OP05 syntax-checks "*,0:BAD".
+START_TEST(test_failed_initial_load_star_resets_drive_before_parsing) {
+    const unsigned int format = (unsigned int)_i;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "CACHE0", 'S', 0x20, 4);
+    create_typed_file(&unit, &bank, 1, "DRIVE1", 'S', 0x60, 4);
+    unit.last_program_track = 0;
+    ck_assert(unit.bam[0].buffer.resident);
+    ck_assert_uint_ne(open_name(&unit, &bank, 3, "1:DRIVE1,S,R"), DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert_uint_eq(unit.last_drive, 1);
+
+    ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*,0:BAD"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_SYNTAX);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    ck_assert(!unit.bam[0].buffer.resident);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OP02 reopens a retained program directly without parsing trailing ",S,W" or "=BAD" bytes.
+START_TEST(test_retained_load_star_bypasses_ignored_parameters) {
+    static const char* const names[] = {"*", "*,S,W", "*=BAD"};
+    const unsigned int format = (unsigned int)_i / count_of(names);
+    const unsigned int variant = (unsigned int)_i % count_of(names);
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "BOOT0", 'P', 0x10, 4);
+    create_typed_file(&unit, &bank, 1, "RETAIN1", 'P', 0x50, 6);
+
+    const uint8_t initial = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "1:RETAIN1");
+    ck_assert_uint_ne(initial, DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.last_program_drive, 1);
+    ck_assert_uint_ne(unit.last_program_track, 0);
+
+    // Move LSTDRV back to drive 0 via an ordinary channel; retained LOAD "*" still uses PRGDRV=1.
+    const uint8_t peer = open_name(&unit, &bank, 3, "0:BOOT0,P,R");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert_uint_eq(unit.last_drive, 0);
+
+    const unsigned int writes = second.writes;
+    const uint8_t reopened = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, names[variant]);
+    ck_assert_uint_ne(reopened, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(unit.channels[reopened].media.slot, 1);
+    ck_assert_uint_eq(second.writes, writes);
+    expect_bytes(&unit, &bank, reopened, 6, 0x50);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// OP0415 INITDR releases open drive-0 channels while preserving drive-1 channels.
+START_TEST(test_initial_load_star_releases_active_drive_owners) {
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool writer_on_zero = (unsigned int)_i % 2u;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "BOOT0", 'P', 0x30, 5);
+    create_typed_file(&unit, &bank, 1, "PEER1", 'S', 0x70, 4);
+    dos_reset(&unit, model);
+
+    const uint8_t d0 = open_name(&unit, &bank, 2, writer_on_zero ? "0:UNCLOSED,S,W" : "0:BOOT0,P,R");
+    ck_assert_uint_ne(d0, DOS_UNUSED);
+    if (writer_on_zero) {
+        put_bytes(&unit, &bank, 2, 0x90, 3);
+    }
+    const uint8_t d1 = open_name(&unit, &bank, 3, "1:PEER1,S,R");
+    ck_assert_uint_ne(d1, DOS_UNUSED);
+
+    const uint8_t load = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*");
+    ck_assert_uint_ne(load, DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), d1);
+    expect_bytes(&unit, &bank, d1, 4, 0x70);
+    expect_bytes(&unit, &bank, load, 5, 0x30);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// FFST/FFRE mark a zero-track directory match as terminal rather than scanning later entries.
+START_TEST(test_open_zero_track_match_stops_search) {
+    static const char* const names[] = {"0:TARGET", "0:T*", "*"};
+    const unsigned int format = (unsigned int)_i / count_of(names);
+    const unsigned int variant = (unsigned int)_i % count_of(names);
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "TARGET", 'P', 0x40, 4);
+    create_typed_file(&unit, &bank, 0, "TAIL", 'P', 0x80, 4);
+    dos_reset(&unit, model);
+
+    // Zero the first entry's starting track in the raw directory sector while keeping TAIL intact.
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    uint8_t* const dir = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    dir[3] = 0;
+    dir[4] = 0;
+
+    ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, names[variant]), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
 // Register direct DOS tests independently of SPI and fabric mocks.
 Suite* dos_suite(void) {
     Suite* const suite = suite_create("dos");
@@ -6820,6 +7100,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_filtered_directory_rel_type_stays_a_directory, 0, 3);
     tcase_add_loop_test(core, test_open_native_wildcard_boundaries, 0, 2 * count_of(native_open_wildcard_cases));
     tcase_add_loop_test(core, test_dual_drive_writers_and_directory_selection, 0, 3);
+    tcase_add_loop_test(core, test_directory_open_status_distinguishes_loadir_from_raw_chain, 0, 3);
     tcase_add_loop_test(core, test_allocation_bam_write_failure_preserves_peer_and_retries, 1, 3);
     tcase_add_loop_test(core, test_bam_count_mismatch_is_not_persisted_as_success, 0, 3);
     tcase_add_loop_test(core, test_user_zero_retains_native_resources_and_stale_selector, 0, 3);
@@ -6838,6 +7119,11 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_rename_unclosed_writer_survives_close_without_restoring_old_name, 0, 3);
     tcase_add_loop_test(core, test_rename_default_drive_and_absent_source, 0, 6);
     tcase_add_loop_test(core, test_rename_shared_resource_exhaustion_and_recovery, 0, 3);
+    tcase_add_loop_test(core, test_initial_load_star_resets_drive_and_filters_programs, 0, 12);
+    tcase_add_loop_test(core, test_failed_initial_load_star_resets_drive_before_parsing, 0, 3);
+    tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 9);
+    tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 6);
+    tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }
