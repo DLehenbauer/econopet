@@ -44,7 +44,7 @@ static const cli_command_t commands[] = {
     { "log",    "Show log [debug|info|warn]",                cmd_log },
     { "remote", "Remote control PET (Ctrl+C to exit)",       cmd_remote },
     { "reset",  "Reset the RP2040",                          cmd_reset },
-    { "test",   "Run diagnostic plan (test <plan>)",         cmd_test },
+    { "test",   "Run diagnostic plan (test <plan> [count])", cmd_test },
     { NULL, NULL, NULL }  // Sentinel
 };
 
@@ -117,28 +117,83 @@ static void cmd_reset(const char* args) {
     system_reset();
 }
 
-// Dispatch one diagnostic plan or list available plans without taking ownership.
-static void cmd_test(const char* args) {
-    while (*args == ' ') ++args;
-    size_t length = strlen(args);
-    while (length != 0 && args[length - 1] == ' ') --length;
-    char name[CONSOLE_LINE_MAX];
-    memcpy(name, args, length);
-    name[length] = '\0';
-    const diag_plan_t* const plan = diag_find_plan(name);
-    if (plan != NULL) {
-        if (plan->confirm != NULL) plan->confirm();
-        diag_run_plan(plan);
+/**
+ * Parse an optional CLI cycle count token in [1, 255], treating empty text as 1
+ * and -1 as the maximum 255-cycle soak count.
+ */
+static bool parse_cycle_count(const char* text, uint8_t* count_out) {
+    // Default an omitted count token to a single diagnostic cycle.
+    if (*text == '\0') {
+        *count_out = 1;
+        return true;
     }
 
-    if (length != 0) printf("Unrecognized test name '%s'\r\n", name);
-    console_puts("Usage: test <plan>\r\n\r\nAvailable tests:\r\n");
+    // Parse a base-10 integer and reject empty digits, overflow, or trailing characters.
+    errno = 0;
+    char* end = NULL;
+    const long parsed = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+
+    // Accept 1..255 directly and map -1 to 255 cycles.
+    if (parsed == -1 || (parsed >= 1 && parsed <= UINT8_MAX)) {
+        *count_out = (uint8_t)parsed;
+        return true;
+    }
+    return false;
+}
+
+/** Print CLI usage for the 'test' command and list all registered diagnostic plans. */
+static void print_test_usage(void) {
+    // Emit command syntax followed by each registered plan's name and one-line summary.
+    console_puts("Usage: test <plan> [count]\r\n\r\nAvailable tests:\r\n");
     size_t count;
     const diag_plan_t* const* const plans = diag_plans(&count);
     for (size_t index = 0; index < count; ++index) {
         printf("  %-8s - %s\r\n", plans[index]->name, plans[index]->description);
     }
     fflush(stdout);
+}
+
+/**
+ * Validate 'test <plan> [count]' arguments before taking system ownership,
+ * printing usage on invalid input without disturbing the running guest.
+ */
+static void cmd_test(const char* args) {
+    // Copy the bounded console arguments once and trim trailing spaces in place.
+    char tokens[CONSOLE_LINE_MAX];
+    snprintf(tokens, sizeof(tokens), "%s", args);
+    size_t length = strlen(tokens);
+    while (length != 0 && tokens[length - 1] == ' ') tokens[--length] = '\0';
+
+    // Split the plan token from the optional count, retaining extra tokens for count validation.
+    char* name = tokens;
+    while (*name == ' ') ++name;
+    char* count_arg = name;
+    while (*count_arg != '\0' && *count_arg != ' ') ++count_arg;
+    if (*count_arg != '\0') *count_arg++ = '\0';
+    while (*count_arg == ' ') ++count_arg;
+
+    // Look up the requested plan before taking irreversible diagnostic ownership.
+    const diag_plan_t* const plan = *name != '\0' ? diag_find_plan(name) : NULL;
+    if (plan == NULL) {
+        if (*name != '\0') printf("Unrecognized test name '%s'\r\n", name);
+        print_test_usage();
+        return;
+    }
+
+    // Validate the optional cycle count before running confirmation or hardware takeover.
+    uint8_t max_cycles = 1;
+    if (!parse_cycle_count(count_arg, &max_cycles)) {
+        printf("Invalid cycle count '%s' (expected 1-255 or -1)\r\n", count_arg);
+        print_test_usage();
+        return;
+    }
+
+    // Hand off to the plan's interactive confirmation gate if present, otherwise launch directly.
+    if (plan->confirm != NULL) plan->confirm(max_cycles);
+    diag_run_plan(plan, max_cycles);
 }
 
 static void execute_command(const char* line) {

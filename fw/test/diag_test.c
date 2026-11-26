@@ -8,10 +8,12 @@
 #include <setjmp.h>
 #include <unistd.h>
 
+#include "cpu.h"
 #include "diag/diag.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
 #include "diag/sd.h"
+#include "diag/target.h"
 #include "display/char_encoding.h"
 #include "display/display.h"
 #include "display/dvi/crtc.h"
@@ -36,6 +38,8 @@ static bool diagnostic_observed;
 static bool swap_prepare_result;
 static unsigned swap_prepare_calls;
 static bool reset_observed;
+static bool complete_observed;
+static uint8_t observed_max_cycles;
 static unsigned prompt_step;
 static unsigned boot_video_calls;
 typedef enum {
@@ -118,6 +122,7 @@ static void observe_bup_launch(diag_session_t* launched) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_uint_eq(boot_video_calls, 1);
+    ck_assert_uint_eq(launched->max_cycles, UINT8_MAX);
     diagnostic_observed = true;
     longjmp(diagnostic_escape, 1);
 }
@@ -127,7 +132,14 @@ static void observe_cli_bup_launch(diag_session_t* launched) {
     ck_assert_ptr_eq(launched->plan, &diag_plan_bup);
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
+    observed_max_cycles = launched->max_cycles;
     diagnostic_observed = true;
+    longjmp(diagnostic_escape, 1);
+}
+
+/** Escape the finite-pass completion halt endpoint. */
+static void observe_complete_halt(void) {
+    complete_observed = true;
     longjmp(diagnostic_escape, 1);
 }
 
@@ -146,6 +158,8 @@ static void setup(void) {
     swap_prepare_result = true;
     swap_prepare_calls = 0;
     reset_observed = false;
+    complete_observed = false;
+    observed_max_cycles = 0;
     prompt_step = 0;
     boot_video_calls = 0;
     mock_sd_prepare_set_handler(observe_swap_prepare);
@@ -163,6 +177,8 @@ static void teardown(void) {
     }
     if (capture != NULL) fclose(capture);
     mock_diag_loop_set_handler(NULL);
+    mock_diag_complete_set_handler(NULL);
+    mock_spi_read_set_observer(NULL);
     mock_sd_prepare_set_handler(NULL);
     mock_sleep_set_handler(NULL);
     mock_system_reset_set_handler(NULL);
@@ -282,8 +298,8 @@ static const diag_case_t cases[] = {
     { "First", ordered_case }, { "Second", ordered_case },
 };
 static const diag_suite_t suites[] = {
-    { "Suite A", cases, count_of(cases), &contexts[0] },
-    { "Suite B", cases, count_of(cases), &contexts[1] },
+    DIAG_SUITE("Suite A", cases, &contexts[0]),
+    DIAG_SUITE("Suite B", cases, &contexts[1]),
 };
 static const diag_plan_t plan = {
     .name = "synthetic",
@@ -397,9 +413,11 @@ static void long_running_case(const void* context) {
 
 /** Long cases can yield display updates without returning or touching SPI. */
 START_TEST(test_live_elapsed_refresh) {
-    const diag_case_t test = { "Long case", long_running_case };
-    const diag_suite_t suite = { "Live", &test, 1, NULL };
-    const diag_plan_t live_plan = { "live", "Fixture", NULL, NULL, &suite, 1 };
+    const diag_case_t tests_arr[] = { { "Long case", long_running_case } };
+    const diag_suite_t suite = DIAG_SUITE("Live", tests_arr, NULL);
+    const diag_plan_t live_plan = {
+        .name = "live", .description = "Fixture", .suites = &suite, .suite_count = 1
+    };
     const unsigned accesses = mock_spi_access_count();
     diag_session_init(&session, &live_plan);
     ck_assert(diag_run_iteration(&session));
@@ -419,14 +437,14 @@ static void partial_cycle_case(const void* context) {
 
 /** Only completed cases contribute to the cycle bar, including on failure. */
 START_TEST(test_cycle_progress_on_failure) {
-    const diag_case_t first = { "First", partial_cycle_case };
-    const diag_case_t second = { "Second", partial_cycle_case };
+    const diag_case_t first[] = { { "First", partial_cycle_case } };
+    const diag_case_t second[] = { { "Second", partial_cycle_case } };
     const diag_suite_t cycle_suites[] = {
-        { "First suite", &first, 1, NULL },
-        { "Second suite", &second, 1, &session },
+        DIAG_SUITE("First suite", first, NULL),
+        DIAG_SUITE("Second suite", second, &session),
     };
     const diag_plan_t cycle_plan = {
-        "cycle", "Fixture", NULL, NULL, cycle_suites, count_of(cycle_suites)
+        .name = "cycle", .description = "Fixture", .suites = cycle_suites, .suite_count = count_of(cycle_suites)
     };
     diag_session_init(&session, &cycle_plan);
     ck_assert(!diag_run_iteration(&session));
@@ -439,9 +457,11 @@ END_TEST
 
 /** Large cycle numbers remain readable without colliding with the progress bar. */
 START_TEST(test_large_cycle_number) {
-    const diag_case_t test = { "Case", partial_cycle_case };
-    const diag_suite_t suite = { "Suite", &test, 1, NULL };
-    const diag_plan_t cycle_plan = { "cycle", "Fixture", NULL, NULL, &suite, 1 };
+    const diag_case_t test_arr[] = { { "Case", partial_cycle_case } };
+    const diag_suite_t suite = DIAG_SUITE("Suite", test_arr, NULL);
+    const diag_plan_t cycle_plan = {
+        .name = "cycle", .description = "Fixture", .suites = &suite, .suite_count = 1
+    };
     diag_session_init(&session, &cycle_plan);
     session.iteration = UINT64_MAX - 1;
     ck_assert(diag_run_iteration(&session));
@@ -470,11 +490,11 @@ START_TEST(test_scrolling_failure_visible) {
     }
     second_cases[count_of(second_cases) - 1].name = "Last visible";
     const diag_suite_t suites[] = {
-        { "First large suite", first_cases, count_of(first_cases), NULL },
-        { "Second large suite", second_cases, count_of(second_cases), NULL },
+        DIAG_SUITE("First large suite", first_cases, NULL),
+        DIAG_SUITE("Second large suite", second_cases, NULL),
     };
     const diag_plan_t large_plan = {
-        "large", "Fixture", NULL, NULL, suites, count_of(suites)
+        .name = "large", .description = "Fixture", .suites = suites, .suite_count = count_of(suites)
     };
     diag_session_init(&session, &large_plan);
     ck_assert(!diag_run_iteration(&session));
@@ -542,10 +562,13 @@ START_TEST(test_first_failure_retained) {
 }
 END_TEST
 
-/** Missing, unknown, and extra plan arguments return to the CLI without destructive takeover. */
+/** Missing, unknown, and invalid count arguments return to the CLI without destructive takeover. */
 START_TEST(test_cli_usage_preserves_ownership) {
     char output[4096];
-    const char* const commands[] = { "test\r", "test   \r", "test bogus\r", "test memory extra\r" };
+    const char* const commands[] = {
+        "test\r", "test   \r", "test bogus\r", "test memory extra\r",
+        "test memory 0\r", "test memory -2\r", "test memory 256\r", "test memory 2 extra\r",
+    };
     system_reset_guest();
     set_cpu(CPU_HALT);
     ck_assert(system_suspend());
@@ -558,11 +581,35 @@ START_TEST(test_cli_usage_preserves_ownership) {
     }
     capture_end(output, sizeof(output));
     ck_assert_uint_eq(mock_spi_access_count(), accesses);
-    ck_assert_ptr_nonnull(strstr(output, "Usage: test <plan>"));
+    ck_assert_ptr_nonnull(strstr(output, "Usage: test <plan> [count]"));
+    ck_assert_ptr_nonnull(strstr(output, "Invalid cycle count"));
     ck_assert_ptr_nonnull(strstr(output, "memory"));
     ck_assert_ptr_nonnull(strstr(output, "bup"));
     ck_assert_ptr_nonnull(strstr(output, "econopet>"));
     system_restore(false);
+}
+END_TEST
+
+/** CLI cycle counts default to 1, accept 1..255, and convert -1 to 255. */
+START_TEST(test_cli_cycle_counts) {
+    static const struct {
+        const char* cmd;
+        uint8_t expected;
+    } cases_table[] = {
+        {"test bup\r", 1u},
+        {"test bup 7\r", 7u},
+        {"test bup 255\r", 255u},
+        {"test bup -1\r", 255u},
+        {"test   bup   7   \r", 7u},
+        {"test   bup   \r", 1u},
+    };
+
+    // Intercept diag_loop() and verify that CLI parsing populates launched->max_cycles.
+    cli_init();
+    mock_diag_loop_set_handler(observe_cli_bup_launch);
+    if (setjmp(diagnostic_escape) == 0) feed_cli(cases_table[_i].cmd);
+    ck_assert(diagnostic_observed);
+    ck_assert_uint_eq(observed_max_cycles, cases_table[_i].expected);
 }
 END_TEST
 
@@ -746,28 +793,250 @@ START_TEST(test_memory_plan_detects_faults) {
 }
 END_TEST
 
-/** Verify the failure screen has not been replaced at the terminal fatal boundary. */
+static unsigned custom_begin_cycles;
+static uint8_t last_begin_cycle_arg;
+static unsigned custom_cleanup_calls;
+static unsigned generated_runs;
+
+/** Record each 1-based begin_cycle invocation ordinal. */
+static void record_begin_cycle(uint8_t cycle) {
+    ++custom_begin_cycles;
+    last_begin_cycle_arg = cycle;
+}
+
+/** Count plan->cleanup() invocations at the end of diag_loop(). */
+static void record_cleanup(void) {
+    ++custom_cleanup_calls;
+}
+
+/** Format a synthetic generated case name into caller scratch storage. */
+static const char* generated_case_name(const diag_suite_t* suite, size_t index, char* buf, size_t size) {
+    (void)suite;
+    snprintf(buf, size, "Gen #%zu", index + 1u);
+    return buf;
+}
+
+/** Execute one synthetic generated case, failing index 1 when inject_failure is set. */
+static void generated_run_case(const diag_suite_t* suite, size_t index) {
+    (void)suite;
+    ++generated_runs;
+    diag_check(!inject_failure || index != 1u, "gen fail %zu", index);
+}
+
+/** Finite diag_loop runs begin_cycle per iteration, renders generated cases, cleans up, and halts cleanly. */
+START_TEST(test_finite_loop_and_generated_callbacks) {
+    // Configure a 3-case generated suite with begin_cycle and cleanup hooks.
+    custom_begin_cycles = 0;
+    last_begin_cycle_arg = 0;
+    custom_cleanup_calls = 0;
+    generated_runs = 0;
+    const diag_suite_t gen_suite = {
+        .name = "Generated Suite",
+        .case_count = 3,
+        .case_name = generated_case_name,
+        .run_case = generated_run_case,
+    };
+    const diag_plan_t gen_plan = {
+        .name = "gen",
+        .description = "Generated fixture",
+        .begin_cycle = record_begin_cycle,
+        .cleanup = record_cleanup,
+        .suites = &gen_suite,
+        .suite_count = 1,
+    };
+
+    // Run 2 cycles through diag_run_plan() and escape at diag_complete_halt().
+    char output[1024];
+    mock_diag_complete_set_handler(observe_complete_halt);
+    capture_begin();
+    if (setjmp(diagnostic_escape) == 0) {
+        diag_run_plan(&gen_plan, 2);
+    }
+    capture_end(output, sizeof(output));
+
+    // Verify lifecycle call counts, UART completion output, and the rendered completion banner.
+    ck_assert(complete_observed);
+    ck_assert_uint_eq(custom_begin_cycles, 2);
+    ck_assert_uint_eq(last_begin_cycle_arg, 2);
+    ck_assert_uint_eq(generated_runs, 6);
+    ck_assert_uint_eq(custom_cleanup_calls, 1);
+    ck_assert_ptr_nonnull(strstr(output, "DIAG COMPLETE [gen] 2 cycle(s) passed"));
+    check_text(3, 18, "Gen #3");
+    check_text(76, 18, "OK");
+    check_text(30, 19, " All Cycles Completed ");
+    ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + 19 * DIAG_COLS],
+                      DISPLAY_ATTR(DISPLAY_COLOR_DARK_MAGENTA, DISPLAY_COLOR_BLACK));
+    ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + 19 * DIAG_COLS + 30],
+                      DISPLAY_ATTR(DISPLAY_COLOR_MAGENTA, DISPLAY_COLOR_BLACK));
+    ck_assert_uint_eq(system_state.video_char_buffer[19 * DIAG_COLS],
+                      system_state.video_char_buffer[20 * DIAG_COLS + 1]);
+    check_banner(DIAG_COLS - (sizeof("Completed: 2 | Time: 00:00:00 ") - 1), "Completed: 2");
+}
+END_TEST
+
+#define TEST_SEQLOCK_PHASE 5u
+#define TEST_SEQLOCK_SLOT 2u
+
+static unsigned seqlock_reads;
+
+/** Publish a consistent snapshot on the third burst after odd or changing even samples. */
+static void advance_seqlock_writer(uint32_t addr) {
+    // Ignore unrelated SPI reads and commit an even SEQ=2 update on the third mailbox burst.
+    if (addr != TARGET_DIAG_MAILBOX_ADDR) {
+        return;
+    }
+    ++seqlock_reads;
+    if (seqlock_reads == 2u && (mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] & 1u) == 0u) {
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = 4u;
+    }
+    if (seqlock_reads == 3u) {
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = TEST_SEQLOCK_PHASE;
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = TEST_SEQLOCK_SLOT;
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 1u;
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = 2u;
+    }
+}
+
+/** Poll a target case inside an armed diagnostic session. */
+static void run_target_case(const diag_suite_t* suite, size_t index) {
+    const diag_target_runner_t* const runner = suite->context;
+    diag_target_await_case(runner, index);
+}
+
+/** Mailbox acquisition retries odd or differing snapshots and returns the verified data directly. */
+START_TEST(test_mailbox_seqlock_retries_until_even_match) {
+    // Seed uncommitted coordinates with either an odd SEQ or an even but changing snapshot.
+    seqlock_reads = 0;
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = 0xeeu;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = 0xeeu;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = _i == 0 ? 1u : 2u;
+
+    // Observe the exact read returned by acquisition, without unrelated session or CPU setup.
+    diag_target_snapshot_t snap = {0};
+    mock_spi_read_set_observer(advance_seqlock_writer);
+    ck_assert(diag_target_read_mailbox(&snap));
+    mock_spi_read_set_observer(NULL);
+
+    ck_assert_uint_eq(seqlock_reads, 4u);
+    ck_assert_uint_eq(snap.seq, 2u);
+    ck_assert_uint_eq(snap.completed, 1u);
+    ck_assert_uint_eq(snap.phase, TEST_SEQLOCK_PHASE);
+    ck_assert_uint_eq(snap.slot, TEST_SEQLOCK_SLOT);
+}
+END_TEST
+
+/** Keep every even mailbox burst different so acquisition must exhaust its retry budget. */
+static void change_even_mailbox(uint32_t addr) {
+    if (addr == TARGET_DIAG_MAILBOX_ADDR) {
+        ++seqlock_reads;
+        ck_assert_uint_lt(seqlock_reads, 100u);
+        mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] += 2u;
+    }
+}
+
+/** Neither persistent odd SEQ nor unmatched even snapshots may overwrite the caller's output. */
+START_TEST(test_mailbox_retry_exhaustion_preserves_output) {
+    // Publish apparently successful counters but never allow a consistent committed snapshot.
+    seqlock_reads = 0;
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 1u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = _i == 0 ? 1u : 2u;
+    diag_target_snapshot_t snap = {
+        .state = TARGET_DIAG_STATE_RUNNING,
+        .completed = 0u,
+        .phase = TARGET_DIAG_PHASE_NONE,
+    };
+
+    // Exhaust retries directly, using a changing even writer for the alternate scenario.
+    if (_i != 0) mock_spi_read_set_observer(change_even_mailbox);
+    ck_assert(!diag_target_read_mailbox(&snap));
+    mock_spi_read_set_observer(NULL);
+    ck_assert_uint_eq(snap.state, TARGET_DIAG_STATE_RUNNING);
+    ck_assert_uint_eq(snap.completed, 0u);
+    ck_assert_uint_eq(snap.phase, TARGET_DIAG_PHASE_NONE);
+}
+END_TEST
+
+/** Advance the polling clock while publishing only unmatched even snapshots. */
+static void stall_mailbox_acquisition(uint32_t addr) {
+    change_even_mailbox(addr);
+    if (addr == TARGET_DIAG_MAILBOX_ADDR) mock_clock_advance(1000u);
+}
+
+/** Polling times out instead of accepting a PASSED state from an unverified final sample. */
+START_TEST(test_target_poll_rejects_unverified_completion) {
+    // Seed valid magic and successful counters so an unverified snapshot would falsely pass.
+    seqlock_reads = 0;
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 1u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = 2u;
+    const diag_target_runner_t runner = {
+        .total_cases = 1u,
+        .case_timeout_us = 1000u,
+    };
+    const diag_suite_t target_suite = {
+        .name = "Target",
+        .case_count = 1u,
+        .context = &runner,
+        .case_name = generated_case_name,
+        .run_case = run_target_case,
+    };
+    const diag_plan_t target_plan = {
+        .name = "target",
+        .description = "Unverified completion fixture",
+        .suites = &target_suite,
+        .suite_count = 1u,
+    };
+
+    // Poll through the real runner and require a timeout without trusting any sampled fields.
+    diag_session_init(&session, &target_plan);
+    mock_spi_read_set_observer(stall_mailbox_acquisition);
+    ck_assert(!diag_run_iteration(&session));
+    mock_spi_read_set_observer(NULL);
+    ck_assert_str_eq(session.failure_detail, "target timeout waiting for case 1 (no consistent mailbox snapshot)");
+}
+END_TEST
+
+/** Verify the failure screen and cleanup hook run before the terminal fatal boundary. */
 static void check_terminal_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_eq(custom_cleanup_calls, 1);
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     check_text(74, 19, "FAIL");
     check_text(9, 22, "expected $55, got $54");
 }
 
-/** The unwrapped infinite loop must reach the existing display-independent fatal endpoint. */
+/** The unwrapped loop runs cleanup before reaching the display-independent fatal endpoint. */
 START_TEST(test_terminal_loop_halts) {
+    custom_cleanup_calls = 0;
     inject_failure = true;
+    const diag_plan_t cleanup_plan = {
+        .name = "synthetic",
+        .description = "Fixture plan",
+        .cleanup = record_cleanup,
+        .suites = suites,
+        .suite_count = count_of(suites),
+    };
     test_expect_fatal_message("DIAG FAIL [synthetic] iter 1 (00:00:00) Suite A / Second: expected $55, got $54");
     test_expect_fatal_callback(check_terminal_failure);
-    diag_run_plan(&plan);
+    diag_run_plan(&cleanup_plan, 1);
 }
 END_TEST
 
 /** Reject empty suites before executing callbacks. */
 START_TEST(test_invalid_plan_structure) {
-    const diag_suite_t invalid_suite = { "Empty", NULL, 0, NULL };
-    const diag_plan_t invalid_plan = { "invalid", "Fixture", NULL, NULL, &invalid_suite, 1 };
+    const diag_suite_t invalid_suite = { "Empty", NULL, 0, NULL, NULL, NULL };
+    const diag_plan_t invalid_plan = { .name = "invalid", .description = "Fixture", .suites = &invalid_suite, .suite_count = 1 };
     test_expect_fatal_message("invalid diagnostic suite");
     diag_session_init(&session, &invalid_plan);
 }
@@ -788,6 +1057,11 @@ Suite* diag_suite(void) {
     tcase_add_loop_test(tests, test_bup_boot_routing, 0, 2);
     tcase_add_test(tests, test_cli_usage_preserves_ownership);
     tcase_add_test(tests, test_cli_bup_launch);
+    tcase_add_loop_test(tests, test_cli_cycle_counts, 0, 6);
+    tcase_add_test(tests, test_finite_loop_and_generated_callbacks);
+    tcase_add_loop_test(tests, test_mailbox_seqlock_retries_until_even_match, 0, 2);
+    tcase_add_loop_test(tests, test_mailbox_retry_exhaustion_preserves_output, 0, 2);
+    tcase_add_test(tests, test_target_poll_rejects_unverified_completion);
     tcase_add_test(tests, test_cli_sd_prompt_cancel);
     tcase_add_test(tests, test_cli_sd_escape_aborts);
     tcase_add_test(tests, test_cli_sd_countdown_abort);

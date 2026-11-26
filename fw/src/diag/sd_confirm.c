@@ -42,7 +42,8 @@ static void wait_for_card_level(bool wanted_level) {
     }
 }
 
-void diag_sd_confirm(void) {
+/** Walk the operator through removing the boot card, inserting a sacrificial card, and launching max_cycles. */
+void diag_sd_confirm(uint8_t max_cycles) {
     console_puts("Stopping the guest and releasing its SD card...\r\n");
 
     system_takeover();
@@ -80,7 +81,7 @@ void diag_sd_confirm(void) {
         }
         if (elapsed_us >= (uint64_t)SD_CONFIRM_COUNTDOWN_SECONDS * SD_CONFIRM_US_PER_SECOND) {
             console_puts(" 0\r\n");
-            diag_run_plan(&diag_plan_sd);
+            diag_run_plan(&diag_plan_sd, max_cycles);
         }
         sleep_us(SD_CONFIRM_POLL_US);
     }

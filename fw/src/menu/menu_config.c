@@ -70,6 +70,49 @@ menu_config_catalog_t menu_config_enumerate(size_t first, size_t capacity,
     return (menu_config_catalog_t) {context.count, context.default_index};
 }
 
+/** Parser accumulator tracking the zero-based catalog index of a requested configuration ID. */
+typedef struct {
+    /** Exact configuration ID string being searched for. */
+    const char* target_id;
+    /** Number of configuration entries visited so far. */
+    size_t count;
+    /** Zero-based index of the first matching entry, or -1 until matched. */
+    int found_index;
+} find_id_context_t;
+
+/** Record the zero-based index when a /config.yaml entry matches ctx->target_id. */
+static void find_id_config(void* context, const char* id, const char* name) {
+    // Capture the first matching entry's ordinal and advance the catalog counter.
+    (void)name;
+    find_id_context_t* const ctx = context;
+    vet(ctx->count < INT_MAX, "too many model configurations");
+    if (ctx->found_index < 0 && strcmp(id, ctx->target_id) == 0) {
+        ctx->found_index = (int)ctx->count;
+    }
+    ctx->count++;
+}
+
+/** Enumerate /config.yaml and return the zero-based index of id, or -1 when missing. */
+int menu_config_find_id(const char* const id) {
+    // Reject NULL or empty IDs before opening /config.yaml.
+    if (id == NULL || id[0] == '\0') {
+        return -1;
+    }
+
+    // Stream /config.yaml in enumeration mode and return the matched index (or -1).
+    find_id_context_t context = {
+        .target_id = id,
+        .count = 0,
+        .found_index = -1,
+    };
+    const config_sink_t sink = {
+        .context = &context,
+        .on_exit_config = find_id_config,
+    };
+    parse_config_file("/config.yaml", &sink, CONFIG_ENUMERATE);
+    return context.found_index;
+}
+
 // Reloads the selected configuration with the PET halted. Mounted disks remain
 // attached unless setup mount actions move or eject them through the normal
 // media policy. Prefills $9000-$FFFF with each address's high byte to approximate

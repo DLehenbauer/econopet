@@ -18,6 +18,9 @@ typedef struct {
 menu_config_catalog_t menu_config_enumerate(size_t first, size_t capacity,
                                            char names[][CONFIG_TEXT_CAPACITY]);
 
+/** Return the zero-based configuration index for an exact ID in /config.yaml, or -1 if absent. */
+int menu_config_find_id(const char* id);
+
 /** Reload setup actions with the CPU halted, replacing all configured disk mounts. */
 void load_config(const setup_sink_t* setup_sink, int selected_config);
 

@@ -734,6 +734,51 @@ START_TEST(test_full_owner_population_and_candidate_overlap) {
 }
 END_TEST
 
+/** User mounts stay inside /disk, while scratch mounts stay inside /test and coexist cleanly. */
+START_TEST(test_scratch_mount_confinement_and_coexistence) {
+    // Register fixture images under /test/tmp, /rom, and /disk.
+    uint8_t* const scratch = diskimage_test_make_d64();
+    test_register_binary_file("/test/tmp/u8d0.d64", scratch, DISKIMAGE_D64_SIZE, true);
+    test_register_binary_file("/rom/escaped.d64", scratch, DISKIMAGE_D64_SIZE, false);
+    free(scratch);
+    mount_image(0, 0, "u8d0.d64");
+
+    // Reject root-anchored paths in user mount calls even when the target exists on the SD card.
+    ck_assert_int_eq(ieee_drive_try_mount(1, "/test/tmp/u8d0.d64", NULL), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_try_mount(1, "/rom/escaped.d64", NULL), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_try_mount(1, "/disk/u8d0.d64", NULL), DOS_MEDIA_INVALID);
+
+    // Reject NULL, relative, /disk/, ".." traversal, or bare-directory paths in scratch mount calls.
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, NULL), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "u8d0.d64"), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/disk/u8d0.d64"), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/../disk/u8d0.d64"), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/"), DOS_MEDIA_INVALID);
+
+    // Confirm a valid /test/tmp scratch image mounts cleanly alongside a same-basename /disk/ user image.
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/tmp/u8d0.d64"), DOS_MEDIA_OK);
+    ck_assert_str_eq(ieee_drive_filename(0), "u8d0.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), "/test/tmp/u8d0.d64");
+    ck_assert_uint_eq(test_open_file_count(), 2);
+
+    // Reject aliases resolved outside /test/ without disturbing either mounted owner.
+    test_register_file_alias("/test/escaped.d64", "/rom/escaped.d64");
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/escaped.d64"), DOS_MEDIA_INVALID);
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/missing.d64"), DOS_MEDIA_IO_ERROR);
+    ck_assert_str_eq(ieee_drive_filename(1), "/test/tmp/u8d0.d64");
+    ck_assert_uint_eq(test_open_file_count(), 2);
+
+    // Resolve scratch aliases to the same full-path identity and reuse the existing FILE owner.
+    test_register_file_alias("/test/SHORT.D64", "/test/tmp/u8d0.d64");
+    const size_t opened = test_file_open_calls("/test/tmp/u8d0.d64");
+    ck_assert_int_eq(ieee_drive_mount_scratch(1, "/test/SHORT.D64"), DOS_MEDIA_OK);
+    ck_assert_str_eq(ieee_drive_filename(0), "u8d0.d64");
+    ck_assert_str_eq(ieee_drive_filename(1), "/test/tmp/u8d0.d64");
+    ck_assert_uint_eq(test_open_file_count(), 2);
+    ck_assert_uint_eq(test_file_open_calls("/test/tmp/u8d0.d64"), opened);
+}
+END_TEST
+
 Suite* ieee_drive_suite(void) {
     Suite* suite = suite_create("ieee_drive");
     TCase* test_case = tcase_create("replacement");
@@ -749,6 +794,7 @@ Suite* ieee_drive_suite(void) {
                        TEST_SLOTS_PER_UNIT * TEST_FORMAT_COUNT * TEST_FORMAT_COUNT);
     tcase_add_loop_test(test_case, test_moving_image_keeps_one_mount, 0, 2 * TEST_FORMAT_COUNT);
     tcase_add_test(test_case, test_mounted_image_path_aliases);
+    tcase_add_test(test_case, test_scratch_mount_confinement_and_coexistence);
     tcase_add_test(test_case, test_filesystem_aliases_reuse_image_owner);
     tcase_add_test(test_case, test_cp932_image_names_remain_distinct);
     tcase_add_test(test_case, test_filesystem_alias_outside_disks_is_rejected);

@@ -89,6 +89,8 @@ static unsigned int term_begin_count, term_end_count, term_refresh_count;
 static unsigned int term_inject_count;
 static int term_inject_last;
 static void (*diag_loop_handler)(diag_session_t*);
+static void (*diag_complete_handler)(void);
+static void (*spi_read_observer)(uint32_t);
 static void (*system_reset_handler)(void);
 static void (*sleep_handler)(uint64_t);
 static pet_keyboard_model_t physical_keyboard_model;
@@ -426,9 +428,15 @@ unsigned int mock_spi_read_count(void) { return spi_read_count; }
 // Report bulk writes independently of their per-byte register accesses.
 unsigned int mock_spi_write_count(void) { return spi_write_count; }
 
+/** Install an optional callback notified before each bulk spi_read() burst. */
+void mock_spi_read_set_observer(void (*observer)(uint32_t addr)) { spi_read_observer = observer; }
+
 // Reads consecutive mocked addresses into the caller's buffer.
 void spi_read(uint32_t addr, size_t byteLength, uint8_t* pDest) {
     ++spi_read_count;
+    if (spi_read_observer != NULL) {
+        spi_read_observer(addr);
+    }
     if (addr == ECONOPET_WB_KBD_BASE_ADDR) {
         ck_assert_uint_eq(byteLength, sizeof(physical_matrix));
         memcpy(pDest, physical_matrix, sizeof(physical_matrix));
@@ -799,6 +807,8 @@ void mock_reset(void) {
     term_inject_last = EOF;
     input_init();
     diag_loop_handler = NULL;
+    diag_complete_handler = NULL;
+    spi_read_observer = NULL;
     system_reset_handler = NULL;
     sleep_handler = NULL;
     text_mode_lower = true;
@@ -1008,6 +1018,9 @@ void mock_consume_requests(void) {
 
 // Installs an observer that must escape the nonreturning diagnostic loop.
 void mock_diag_loop_set_handler(void (*handler)(diag_session_t*)) { diag_loop_handler = handler; }
+
+/** Install an observer that escapes the finite-pass diagnostic completion halt. */
+void mock_diag_complete_set_handler(void (*handler)(void)) { diag_complete_handler = handler; }
 void mock_system_reset_set_handler(void (*handler)(void)) { system_reset_handler = handler; }
 
 void __real_diag_loop(diag_session_t* session) __attribute__((noreturn));
@@ -1019,4 +1032,11 @@ void __attribute__((noreturn)) __wrap_diag_loop(diag_session_t* session) {
         fatal("diagnostic observer returned");
     }
     __real_diag_loop(session);
+}
+
+/** Escape the finite-pass diagnostic halt endpoint in host tests. */
+void __attribute__((noreturn)) __wrap_diag_complete_halt(void) {
+    vet(diag_complete_handler != NULL, "unexpected diag_complete_halt in host test");
+    diag_complete_handler();
+    fatal("diag_complete_halt observer returned");
 }

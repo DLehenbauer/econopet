@@ -4,6 +4,8 @@
 #include "pch.h"
 #include "menu_session_test.h"
 
+#include "breakpoint.h"
+#include "cpu.h"
 #include "diag/log/log.h"
 #include "display/display.h"
 #include "driver.h"
@@ -273,6 +275,64 @@ START_TEST(test_configuration_restores_embedded_keymap_between_sessions) {
 }
 END_TEST
 
+/** Advance simulated time during cpu_init() so the absent-physical-CPU probe times out cleanly. */
+static void advance_cpu_init_timeout(void) {
+    mock_clock_advance(1000u);
+}
+
+/** menu_apply_diag_config skips mount: actions, forces stock 6502 + tape off, and keeps diagnostic mode. */
+START_TEST(test_diag_config_preserves_mode_and_ignores_mounts) {
+    // Initialize breakpoint and CPU probing with no physical 6502 present.
+    prepare_guest();
+    bp_init();
+    set_cpu(CPU_RESET);
+    mock_cpu_set_run_callback(advance_cpu_init_timeout);
+    cpu_init();
+    mock_cpu_set_run_callback(NULL);
+
+    // Pre-mount a diagnostic scratch disk and select a conflicting 6809 SuperPET state.
+    uint8_t* const scratch = diskimage_test_make_d64();
+    test_register_binary_file("/test/tmp/u8d0.d64", scratch, DISKIMAGE_D64_SIZE, true);
+    free(scratch);
+    ck_assert_int_eq(ieee_drive_mount_scratch(0, "/test/tmp/u8d0.d64"), DOS_MEDIA_OK);
+
+    set_cpu_type_machine(CPU_SOFT_6809, true);
+    reset_count = tape_init_count = tape_deinit_count = 0;
+    tape_change_expected = true;
+    mock_cpu_set_state_observer(observe_reset);
+
+    // Apply a YAML configuration containing virtual tape, 6809 SuperPET options, and a user disk mount.
+    test_register_file("/config.yaml",
+        "format-version: 1\n"
+        "configs:\n"
+        "  - id: 8032\n"
+        "    name: Custom 8032\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n"
+        "        tape: \"2ef415f4c9cad1d4da\"\n"
+        "        cpu: 6809\n"
+        "        machine: superpet\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: 0\n"
+        "        file: missing-user-disk.d64\n");
+    system_takeover();
+    ck_assert(menu_apply_diag_config("8032"));
+    mock_cpu_set_state_observer(NULL);
+    tape_change_expected = false;
+
+    // Confirm diagnostic mode, halted soft 6502, disabled tape, and preserved scratch mount.
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_gt(reset_count, 0);
+    ck_assert_uint_eq(tape_deinit_count, 1);
+    ck_assert_uint_eq(tape_init_count, 1);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(spi_read_at(ECONOPET_WB_CPU_SEL_ADDR), CPU_SOFT_6502);
+    ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
+}
+END_TEST
+
 Suite* menu_session_suite(void) {
     Suite* const suite = suite_create("menu_session");
     TCase* const test = tcase_create("borrowing");
@@ -281,6 +341,16 @@ Suite* menu_session_suite(void) {
     tcase_add_loop_test(test, test_boot_owner_prepares_rom_only_without_default, 0, 2);
     tcase_add_loop_test(test, test_runtime_owner_distinguishes_back_reset_and_same_configuration_activation, 0, 3);
     tcase_add_loop_test(test, test_configuration_restores_embedded_keymap_between_sessions, 0, 2);
+    suite_add_tcase(suite, test);
+    return suite;
+}
+
+/** Build the isolated fork-runner suite for menu session tests that call one-time cpu_init(). */
+Suite* menu_session_fatal_suite(void) {
+    Suite* const suite = suite_create("menu_session_fatal");
+    TCase* const test = tcase_create("isolated");
+    tcase_add_checked_fixture(test, setup, teardown);
+    tcase_add_test(test, test_diag_config_preserves_mode_and_ignores_mounts);
     suite_add_tcase(suite, test);
     return suite;
 }

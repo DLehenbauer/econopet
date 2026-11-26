@@ -38,46 +38,63 @@ static void menu_prepare_service(void) {
     ieee_drive_task();
 }
 
-#define CHUNK_SIZE 2048
-
-void load_prg(const char *filename) {
-    FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
-    if (!file) {
-        perror("Failed to open file");
-        return;
+/**
+ * Stream a 2-byte-prefixed .prg file into PET base SRAM and update BASIC end pointers.
+ *
+ * Rejects unreadable or empty files and refuses to overwrite video or ROM space at $8000+.
+ */
+bool load_prg(const char* filename) {
+    // Open the .prg image for binary reading on the mounted SD card.
+    FILE* const file = fopen(filename, "rb");
+    if (file == NULL) {
+        return false;
     }
 
-    // First two bytes contain the destination address
-    uint16_t dest;
-    if (fread(&dest, 1, sizeof(dest), file) != sizeof(dest)) {
-        return;
+    // Read the 2-byte little-endian load address header.
+    uint8_t header[2];
+    if (fread(header, 1, sizeof(header), file) != sizeof(header)) {
+        fclose(file);
+        return false;
     }
+    uint32_t dest = (uint32_t)header[0] | ((uint32_t)header[1] << 8);
 
-    // Read remaining bytes to the destination address.
-    uint8_t buffer[CHUNK_SIZE];
+    // Stream the program body into PET SRAM via the shared scratch buffer, enforcing the $8000 ceiling.
+    uint8_t* buffer = acquire_temp_buffer();
     size_t bytes_read;
     size_t total_bytes = 0;
+    bool ok = true;
 
-    while ((bytes_read = fread(buffer, 1, CHUNK_SIZE, file)) > 0) {
-        spi_write(dest, buffer, bytes_read);
-        dest += bytes_read;
-        total_bytes += bytes_read;
-
-        // Check for read errors (other than EOF)
-        if (bytes_read < CHUNK_SIZE && ferror(file)) {
-            perror("Error reading file");
+    while ((bytes_read = fread(buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
+        if (dest + bytes_read > VIDEO_RAM_ADDRESS) {
+            ok = false;
             break;
         }
+        spi_write(dest, buffer, bytes_read);
+        dest += (uint32_t)bytes_read;
+        total_bytes += bytes_read;
+    }
+    if (ferror(file) != 0 || total_bytes == 0) {
+        ok = false;
     }
 
-    fclose(file);  // Close the file
+    // Release temporary storage and close the file before touching zero-page state on error.
+    release_temp_buffer(&buffer);
+    if (fclose(file) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        return false;
+    }
 
-    // TODO: Review fixup of BASIC pointers
-    uint16_t size = total_bytes + 0x3FF;
-    spi_write_at(0xc9, size & 0xFF);
-    spi_write_at(0x2a, size & 0xFF);
-    spi_write_at(0xca, size >> 8);
-    spi_write_at(0x2b, size >> 8);
+    // Advance BASIC VARTAB/ARYTAB/STREND ($2A..$2F) and KERNAL EAL/EAH ($C9..$CA) past the loaded bytes.
+    const uint16_t end_addr = (uint16_t)dest;
+    for (uint16_t zp = 0x2au; zp <= 0x2fu; zp += 2u) {
+        spi_write_at(zp, (uint8_t)(end_addr & 0xffu));
+        spi_write_at(zp + 1u, (uint8_t)(end_addr >> 8));
+    }
+    spi_write_at(0xc9u, (uint8_t)(end_addr & 0xffu));
+    spi_write_at(0xcau, (uint8_t)(end_addr >> 8));
+    return true;
 }
 
 typedef struct action_context_s {
@@ -237,7 +254,29 @@ void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, 
     }
 }
 
-static void apply_config(const int config_index) {
+/**
+ * Sanitize YAML set-action options for a diagnostic target run so virtual tape,
+ * 6809 selection, and SuperPET I/O cannot interfere with 6502 target control.
+ */
+static void action_set_diag_options(void* const context, options_t* const options) {
+    // Copy the parsed options and force stock 6502 PET behavior with virtual tape disabled.
+    options_t sanitized = *options;
+    sanitized.tape_enabled = false;
+    sanitized.cpu = CPU_AUTO;
+    sanitized.superpet_io = false;
+    action_set_options(context, &sanitized);
+}
+
+/** Configuration setup policy, separate from the owner's final reset transition. */
+typedef enum {
+    CONFIG_PREPARE_GUEST,
+    CONFIG_PREPARE_DIAGNOSTIC,
+} config_prepare_policy_t;
+
+/** Load shared configuration actions with the selected mount and target-CPU policy. */
+static void prepare_config(const int index, const config_prepare_policy_t policy) {
+    // Bind common setup actions while isolating diagnostic mounts and option sanitization.
+    const bool diagnostic = policy == CONFIG_PREPARE_DIAGNOSTIC;
     action_context_t action_context = {
         .system_state = &system_state,
     };
@@ -246,17 +285,47 @@ static void apply_config(const int config_index) {
         .on_load = action_load,
         .on_patch = action_patch,
         .on_copy = action_copy,
-        .on_mount = action_mount,
-        .on_set_options = action_set_options,
+        .on_mount = diagnostic ? NULL : action_mount,
+        .on_set_options = diagnostic ? action_set_diag_options : action_set_options,
         .on_fix_checksum = action_fix_checksum,
         .system_state = &system_state,
     };
 
+    // Reset shared input state and establish diagnostic CPU selection before profile actions run.
     tape_deinit();
     usb_keymap_reset(&system_state);
-    load_config(&setup_sink, config_index);
+    if (diagnostic) {
+        set_cpu(CPU_HALT);
+        set_cpu_type_machine(physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502, false);
+    }
+    load_config(&setup_sink, index);
     spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
+}
+
+/** Prepare the selected normal configuration and transition its owner back to the guest. */
+static void apply_config(const int config_index) {
+    prepare_config(config_index, CONFIG_PREPARE_GUEST);
     system_reset_guest();
+}
+
+/**
+ * Load a /config.yaml profile by ID for a diagnostic target without user mounts
+ * or guest-mode transition, leaving the 6502 reset and halted.
+ */
+bool menu_apply_diag_config(const char* const id) {
+    // Resolve the configuration's zero-based catalog index before mutating hardware state.
+    const int index = menu_config_find_id(id);
+    if (index < 0) {
+        return false;
+    }
+
+    // Load shared actions without replacing scratch mounts or accepting non-6502 options.
+    prepare_config(index, CONFIG_PREPARE_DIAGNOSTIC);
+
+    // Pulse PET hardware reset (parking IEEE pins if enabled) and hold the CPU halted in diagnostic mode.
+    pet_reset();
+    set_cpu(CPU_HALT);
+    return true;
 }
 
 void menu_boot(void) {

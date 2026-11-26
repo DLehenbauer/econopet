@@ -3,6 +3,12 @@
 
 #include "diskimage.h"
 
+#if defined(PICO_RP2040)
+#include "pico/platform.h"
+#else
+#include "test_support.h"
+#endif
+
 _Static_assert(DISKIMAGE_DIRECTORY_ENTRY_SIZE* DISKIMAGE_DIRECTORY_ENTRIES_PER_SECTOR == DISKIMAGE_SECTOR_SIZE,
                "directory entries must fill one disk sector");
 
@@ -52,11 +58,11 @@ bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned
     switch (type) {
     case diskimage_type_d64:
         zones = d64_zones;
-        count = sizeof(d64_zones) / sizeof(d64_zones[0]);
+        count = count_of(d64_zones);
         break;
     case diskimage_type_d80:
         zones = d80_zones;
-        count = sizeof(d80_zones) / sizeof(d80_zones[0]);
+        count = count_of(d80_zones);
         break;
     case diskimage_type_d82:
         if (track > DISKIMAGE_D82_TRACK_COUNT) {
@@ -68,7 +74,7 @@ bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned
             track -= DISKIMAGE_D80_TRACK_COUNT;
         }
         zones = d80_zones;
-        count = sizeof(d80_zones) / sizeof(d80_zones[0]);
+        count = count_of(d80_zones);
         break;
     default:
         return false;
@@ -114,6 +120,21 @@ bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned
     // No callback runs and no sector contents or file EOF rules are inspected.
     *offset = preceding * DISKIMAGE_SECTOR_SIZE;
     return true;
+}
+
+/** Return the exact raw byte size of a supported disk container, or 0 for unsupported types. */
+uint32_t diskimage_size(diskimage_type_t type) {
+    // Map each supported raw container format to its fixed byte capacity.
+    switch (type) {
+    case diskimage_type_d64:
+        return DISKIMAGE_D64_SIZE;
+    case diskimage_type_d80:
+        return DISKIMAGE_D80_SIZE;
+    case diskimage_type_d82:
+        return DISKIMAGE_D82_SIZE;
+    default:
+        return 0;
+    }
 }
 
 // Initialize a caller-owned descriptor and detect an exact raw D64/D80/D82 size.

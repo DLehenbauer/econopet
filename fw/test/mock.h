@@ -26,6 +26,8 @@ void mock_reset(void);
 // Count bulk SPI transactions since the last reset.
 unsigned int mock_spi_read_count(void);
 unsigned int mock_spi_write_count(void);
+/** Observe bulk SPI reads in host tests (for example, simulated target mailbox progress). */
+void mock_spi_read_set_observer(void (*observer)(uint32_t addr));
 /** Count all per-address SPI accesses, including non-bulk register transactions. */
 unsigned int mock_spi_access_count(void);
 /** Inject stuck-high and stuck-low bits at one SRAM or BRAM read address. */
@@ -100,6 +102,8 @@ unsigned int mock_term_inject_count(void);
 int mock_term_inject_last(void);
 /** Observe entry after real diagnostic ownership, preparation, and display initialization. */
 void mock_diag_loop_set_handler(void (*handler)(diag_session_t* session));
+/** Observe entry to the finite-pass diagnostic halt endpoint. */
+void mock_diag_complete_set_handler(void (*handler)(void));
 // Observes entry to the nonreturning MCU reset.
 void mock_system_reset_set_handler(void (*handler)(void));
 // Sets the address returned by the mocked breakpoint register.

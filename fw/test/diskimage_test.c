@@ -5,11 +5,14 @@
 #include "diskimage_test.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "d64_fixture.h"
 #include "ieee/diskimage.h"
+#include "ieee/diskimage_file.h"
 
 uint32_t diskimage_test_d64_offset(unsigned int track, unsigned int sector) {
     size_t offset;
@@ -162,6 +165,46 @@ START_TEST(test_disk_geometry_rejects_invalid_inputs) {
 }
 END_TEST
 
+/** Shared blank-disk creation writes exact zero-filled containers and rejects bad inputs. */
+START_TEST(test_diskimage_size_and_create_file) {
+    // Verify container byte sizes and reject NULL, empty, or unreachable output paths.
+    ck_assert_uint_eq(diskimage_size(diskimage_type_none), 0);
+    ck_assert_uint_eq(diskimage_size(diskimage_type_d64), DISKIMAGE_D64_SIZE);
+    ck_assert_uint_eq(diskimage_size(diskimage_type_d80), DISKIMAGE_D80_SIZE);
+    ck_assert_uint_eq(diskimage_size(diskimage_type_d82), DISKIMAGE_D82_SIZE);
+    ck_assert(!diskimage_create_file(NULL, diskimage_type_d64));
+    ck_assert(!diskimage_create_file("", diskimage_type_d64));
+    ck_assert(!diskimage_create_file("/nonexistent_dir_xyz/blank.d64", diskimage_type_d64));
+
+    // Create a temporary directory and write a blank D80 container (after rejecting type_none).
+    char dir_template[] = "/tmp/econopet-diskimage-XXXXXX";
+    const char* const dir = mkdtemp(dir_template);
+    ck_assert_ptr_nonnull(dir);
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/blank.d80", dir);
+    ck_assert(!diskimage_create_file(path, diskimage_type_none));
+    ck_assert(diskimage_create_file(path, diskimage_type_d80));
+
+    // Confirm the created file has the exact D80 byte size and contains only zero bytes.
+    FILE* const file = fopen(path, "rb");
+    ck_assert_ptr_nonnull(file);
+    ck_assert_int_eq(fseek(file, 0, SEEK_END), 0);
+    ck_assert_int_eq(ftell(file), (long)DISKIMAGE_D80_SIZE);
+    rewind(file);
+    uint8_t buf[1024];
+    size_t read_bytes;
+    while ((read_bytes = fread(buf, 1, sizeof(buf), file)) > 0) {
+        for (size_t i = 0; i < read_bytes; ++i) {
+            ck_assert_uint_eq(buf[i], 0);
+        }
+    }
+    fclose(file);
+    ck_assert_int_eq(remove(path), 0);
+    ck_assert_int_eq(rmdir(dir), 0);
+}
+END_TEST
+
 Suite* diskimage_suite(void) {
     Suite* suite = suite_create("diskimage");
     TCase* test_case = tcase_create("geometry");
@@ -169,6 +212,7 @@ Suite* diskimage_suite(void) {
     tcase_add_test(test_case, test_disk_geometry_matches_rom_zones);
     tcase_add_test(test_case, test_d82_geometry_covers_two_exact_native_sides);
     tcase_add_test(test_case, test_disk_geometry_rejects_invalid_inputs);
+    tcase_add_test(test_case, test_diskimage_size_and_create_file);
     suite_add_tcase(suite, test_case);
     return suite;
 }

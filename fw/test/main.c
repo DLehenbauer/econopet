@@ -82,6 +82,7 @@ int run_suite() {
     srunner_add_suite(sr2, log_fatal_suite());
     srunner_add_suite(sr2, menu_browser_fatal_suite());
     srunner_add_suite(sr2, menu_ui_fatal_suite());
+    srunner_add_suite(sr2, menu_session_fatal_suite());
     srunner_add_suite(sr2, roms_fatal_suite());
     srunner_add_suite(sr2, test_support_suite());
     srunner_add_suite(sr2, tui_fatal_suite());

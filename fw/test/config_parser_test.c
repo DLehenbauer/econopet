@@ -852,8 +852,10 @@ START_TEST(test_validate_sdcard_config_yaml) {
     parse_config_file("/config.yaml", &config_sink, CONFIG_ENUMERATE);
     
     int num_configs = test_ctx.config_exit_count;
-    ck_assert_int_eq(num_configs, 11);  // Six PET, four SuperPET, and one ColourPET configuration.
-    
+    ck_assert_int_eq(num_configs, 11);
+    ck_assert_int_eq(menu_config_find_id("pet-80xx-60hz"), 3);
+    ck_assert_int_eq(menu_config_find_id("missing-id"), -1);
+
     // Load each configuration and require all referenced disk images to exist.
     mounted_image_root = media_root;
     for (int i = 0; i < num_configs; i++) {

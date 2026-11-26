@@ -461,7 +461,7 @@ static const diag_case_t memory_cases[] = {
     { "Host fixture", memory_case },
 };
 static const diag_suite_t memory_suites[] = {
-    { "Memory host fixture", memory_cases, count_of(memory_cases), NULL },
+    DIAG_SUITE("Memory host fixture", memory_cases, NULL),
 };
 const diag_plan_t diag_plan_bup = {
     .name = "bup",
@@ -482,7 +482,14 @@ const diag_plan_t diag_plan_memory = {
 };
 
 /** Confirmation is exercised by the CLI fixture, not by storage-only case execution. */
-void diag_sd_confirm(void) {
+void diag_sd_confirm(uint8_t max_cycles) {
+    (void)max_cycles;
     ck_abort_msg("unexpected SD confirmation in storage fixture");
+    abort();
+}
+
+/** Finite completion halt is exercised by the diagnostic framework fixture. */
+void diag_complete_halt(void) {
+    ck_abort_msg("unexpected diag_complete_halt in storage fixture");
     abort();
 }

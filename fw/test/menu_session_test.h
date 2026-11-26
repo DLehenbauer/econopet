@@ -6,3 +6,6 @@
 
 /** Exercise bounded snapshot, readable PIA restoration, and scanner ownership. */
 Suite* menu_session_suite(void);
+
+/** Exercise menu session paths that require one-time CPU startup isolation. */
+Suite* menu_session_fatal_suite(void);
