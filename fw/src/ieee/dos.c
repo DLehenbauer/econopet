@@ -8817,7 +8817,6 @@ static bool directory_lookahead_step(dos_unit_t* const unit, dos_media_bank_t* c
                             ? DOS_UNUSED
                             : cursor->entry + DISKIMAGE_DIRECTORY_ENTRY_SIZE;
         if (directory_entry_matches(unit, channel, cursor->slot, entry)) {
-            source->resident = false;
             *complete = true;
             return true;
         }
@@ -8837,11 +8836,26 @@ static bool directory_lookahead_step(dos_unit_t* const unit, dos_media_bank_t* c
     return true;
 }
 
+// Check whether lookahead left the channel's next directory sector cached.
+static bool directory_snapshot_cache_matches_channel(const dos_unit_t* const unit,
+                                                     const dos_channel_t* const channel,
+                                                     const dos_directory_cursor_t* const cursor) {
+    const dos_buffer_t* const source = &unit->buffers[channel->buffers[1]];
+    const uint16_t source_bit = (uint16_t)(1u << channel->buffers[1]);
+    const bool source_slot_matches =
+        ((unit->buffer_drives & source_bit) != 0) == (channel->media.slot != 0);
+    return channel->directory == DOS_DIRECTORY_ENTRIES && cursor->phase == DOS_DIRECTORY_ENTRIES &&
+           cursor->identity == channel->media.identity && cursor->slot == channel->media.slot &&
+           cursor->track == channel->directory_track && cursor->sector == channel->directory_sector &&
+           source->resident && source->track == cursor->track && source->sector == cursor->sector &&
+           source_slot_matches;
+}
+
 // Publish the buffered rows and LSTDRV after STDIR's bounded initial work completes.
 static void directory_snapshot_finish(dos_unit_t* const unit, dos_channel_t* const channel,
-                                     const bool looked_ahead) {
+                                     const bool preserve_source) {
     dos_directory_work_t* const work = &unit->directory_work;
-    if (looked_ahead) {
+    if (!preserve_source) {
         unit->buffers[channel->buffers[1]].resident = false;
     }
     channel->singleton = (uint8_t)(DOS_DIRECTORY_PREFILL_FLAG | work->rows);
@@ -8898,7 +8912,7 @@ static void directory_snapshot_work(dos_unit_t* const unit, dos_media_bank_t* co
             return;
         }
         if (channel->line_eoi || channel->directory == DOS_DIRECTORY_END) {
-            directory_snapshot_finish(unit, channel, false);
+            directory_snapshot_finish(unit, channel, true);
         }
         return;
     }
@@ -8907,7 +8921,8 @@ static void directory_snapshot_work(dos_unit_t* const unit, dos_media_bank_t* co
     if (!directory_lookahead_step(unit, media, channel, &work->lookahead, &complete)) {
         directory_snapshot_abort(unit);
     } else if (complete) {
-        directory_snapshot_finish(unit, channel, true);
+        const bool preserve_source = directory_snapshot_cache_matches_channel(unit, channel, &work->lookahead);
+        directory_snapshot_finish(unit, channel, preserve_source);
     }
 }
 

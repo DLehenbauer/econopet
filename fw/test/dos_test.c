@@ -7235,6 +7235,54 @@ START_TEST(test_directory_initial_lookahead_reads_only_the_required_peer_sector)
 }
 END_TEST
 
+// Lookahead must preserve a resident sector containing the next listing row.
+START_TEST(test_directory_lookahead_preserves_cached_next_entry) {
+    const unsigned int format = (unsigned int)_i;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (unsigned int index = 0; index < 7u; ++index) {
+        char name[16];
+        snprintf(name, sizeof(name), "D0_%u", index);
+        create_typed_file(&unit, &bank, 0, name, 'P', (uint8_t)(0x20u + index * 4u), 4);
+    }
+    create_typed_file(&unit, &bank, 0, "EIGHTH", 'P', 0x3c, 4);
+    dos_reset(&unit, model);
+
+    const unsigned int reads = image.reads;
+    image.fail_read = reads + 3u;
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_eq(image.reads, reads + 2u);
+
+    const unsigned int initial_fill_bytes = 256u;
+    const unsigned int directory_row_bytes = 32u;
+    uint8_t row[DOS_STAGE_CAPACITY];
+    unsigned int consumed = 0;
+    while (consumed < initial_fill_bytes) {
+        bool eoi = false;
+        const unsigned int count = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+        ck_assert_uint_gt(count, 0);
+        dos_get(&unit, &bank, listing, count);
+        consumed += count;
+    }
+    bool eoi = false;
+    const unsigned int count = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+    ck_assert_uint_eq(count, directory_row_bytes);
+    ck_assert_mem_eq(row + 8u, "EIGHTH", 6);
+    ck_assert_uint_eq(image.reads, reads + 2u);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    dos_get(&unit, &bank, listing, count);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
 // TALK on an earlier directory must not overwrite LSTDRV from an interleaved OPEN.
 START_TEST(test_directory_talk_preserves_interleaved_drive_selection) {
     const unsigned int format = (unsigned int)_i + 1u;
@@ -7581,6 +7629,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_filtered_directory_initial_fill_yields_between_sectors, 0, 3);
     tcase_add_loop_test(core, test_filtered_directory_self_link_fails_without_looping, 0, 3);
     tcase_add_loop_test(core, test_directory_initial_lookahead_reads_only_the_required_peer_sector, 0, 4);
+    tcase_add_loop_test(core, test_directory_lookahead_preserves_cached_next_entry, 0, 3);
     tcase_add_loop_test(core, test_directory_talk_preserves_interleaved_drive_selection, 0, 2);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);
