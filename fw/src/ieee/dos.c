@@ -8836,19 +8836,33 @@ static bool directory_lookahead_step(dos_unit_t* const unit, dos_media_bank_t* c
     return true;
 }
 
-// Check whether lookahead left the channel's next directory sector cached.
-static bool directory_snapshot_cache_matches_channel(const dos_unit_t* const unit,
-                                                     const dos_channel_t* const channel,
-                                                     const dos_directory_cursor_t* const cursor) {
+// Commit same-drive lookahead progress so the next row does not repeat the search.
+static bool directory_snapshot_commit_lookahead(dos_unit_t* const unit, dos_channel_t* const channel,
+                                                const dos_directory_cursor_t* const cursor) {
+    if (channel->directory != DOS_DIRECTORY_ENTRIES || cursor->phase != DOS_DIRECTORY_ENTRIES ||
+        cursor->identity != channel->media.identity || cursor->slot != channel->media.slot) {
+        return false;
+    }
+
+    channel->directory_track = cursor->track;
+    channel->directory_sector = cursor->sector;
+    channel->traversed = cursor->traversed;
+    channel->both_drives = cursor->both_drives;
+    if (cursor->track == 0) {
+        channel->directory_entry = cursor->entry;
+        channel->directory = DOS_DIRECTORY_FOOTER;
+        return false;
+    }
+    channel->directory_entry =
+        cursor->entry == DOS_UNUSED ? DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE
+                                    : cursor->entry - DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+
     const dos_buffer_t* const source = &unit->buffers[channel->buffers[1]];
     const uint16_t source_bit = (uint16_t)(1u << channel->buffers[1]);
     const bool source_slot_matches =
         ((unit->buffer_drives & source_bit) != 0) == (channel->media.slot != 0);
-    return channel->directory == DOS_DIRECTORY_ENTRIES && cursor->phase == DOS_DIRECTORY_ENTRIES &&
-           cursor->identity == channel->media.identity && cursor->slot == channel->media.slot &&
-           cursor->track == channel->directory_track && cursor->sector == channel->directory_sector &&
-           source->resident && source->track == cursor->track && source->sector == cursor->sector &&
-           source_slot_matches;
+    return source->resident && source->track == channel->directory_track &&
+           source->sector == channel->directory_sector && source_slot_matches;
 }
 
 // Publish the buffered rows and LSTDRV after STDIR's bounded initial work completes.
@@ -8921,7 +8935,7 @@ static void directory_snapshot_work(dos_unit_t* const unit, dos_media_bank_t* co
     if (!directory_lookahead_step(unit, media, channel, &work->lookahead, &complete)) {
         directory_snapshot_abort(unit);
     } else if (complete) {
-        const bool preserve_source = directory_snapshot_cache_matches_channel(unit, channel, &work->lookahead);
+        const bool preserve_source = directory_snapshot_commit_lookahead(unit, channel, &work->lookahead);
         directory_snapshot_finish(unit, channel, preserve_source);
     }
 }
