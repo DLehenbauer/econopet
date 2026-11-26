@@ -38,6 +38,8 @@ void mock_cpu_set_run_callback(void (*callback)(void));
 void mock_cpu_set_state_observer(void (*observer)(cpu_state_t state));
 /** Model an absent PIA1's retained data bus or row outputs stuck low. */
 void mock_pia1_fault(bool absent, uint8_t stuck_low);
+/** Simulate one running-CPU I/O write, snooped by IEEE and gated against external CS claims. */
+void mock_cpu_io_write(uint16_t address, uint8_t data);
 /** Return the set of row-select values written while PIA1 port A was selected. */
 uint16_t mock_pia1_rows_written(void);
 /** Allow a fixture to observe otherwise unsupported hardware video initialization. */

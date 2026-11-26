@@ -150,12 +150,15 @@ constexpr uint8_t ViaExternalIdle = pet::Ndac | pet::NrfdInput | pet::Dav;
 system.io().via().inputs([](auto& inputs) { inputs.port_b = ViaExternalIdle; });
 
 auto test = rom.program();
-test.within(WaterlooBudget).run([&](auto& p) {
+const auto cra = test.byte("pia2_cra");
+const auto captured = test.within(WaterlooBudget).run([&](auto& p) {
     rom.init_ieee(p);
-    p.jsr(rom.entry(WaterlooRoutine::AtnDown));
+    p.jsr(rom.entry(WaterlooRoutine::AtnDown)).lda(pet::Pia2ControlA).sta(cra);
 });
 EXPECT_EQ(system.ieee().peek_via_orb() & ViaIdle, pet::Nrfd);
-EXPECT_NE(system.io().pia2().state().pa.cr & M6520_CR_C2_MODE, 0);
+EXPECT_NE(captured[cra] & M6520_CR_C2_MODE, 0);
+EXPECT_EQ(system.io().pia2().state().pa.cr & M6520_CR_C2_MODE, 0);
+require_drained_sequence(system, {}, ByteBudget, "Waterloo ATNDown metadata");
 ```
 
 Include [ieee/fixture.h](ieee/fixture.h). Commodore uses

@@ -26,6 +26,14 @@ enum class Register : uint32_t {
     IeeeSecondaryAddress = ECONOPET_WB_IEEE_SA_ADDR,
     IeeeTxStatus = ECONOPET_WB_IEEE_TXS_ADDR,
     IeeeTxStatusLast = ECONOPET_WB_IEEE_TXS_LAST_ADDR,
+    IeeePia2Ora = ECONOPET_WB_IEEE_PIA2_ORA_ADDR,
+    IeeePia2DdrA = ECONOPET_WB_IEEE_PIA2_DDRA_ADDR,
+    IeeePia2ControlA = ECONOPET_WB_IEEE_PIA2_CRA_ADDR,
+    IeeePia2Orb = ECONOPET_WB_IEEE_PIA2_ORB_ADDR,
+    IeeePia2DdrB = ECONOPET_WB_IEEE_PIA2_DDRB_ADDR,
+    IeeePia2ControlB = ECONOPET_WB_IEEE_PIA2_CRB_ADDR,
+    IeeeViaOrb = ECONOPET_WB_IEEE_VIA_ORB_ADDR,
+    IeeeViaDdrB = ECONOPET_WB_IEEE_VIA_DDRB_ADDR,
 };
 enum class StatusBit : uint8_t {
     Text = ECONOPET_REG_STATUS_TEXT_MODE_MASK,
@@ -106,6 +114,14 @@ constexpr econopet::WishboneAddress address(Register reg) {
     case Register::IeeeSecondaryAddress:
     case Register::IeeeTxStatus:
     case Register::IeeeTxStatusLast:
+    case Register::IeeePia2Ora:
+    case Register::IeeePia2DdrA:
+    case Register::IeeePia2ControlA:
+    case Register::IeeePia2Orb:
+    case Register::IeeePia2DdrB:
+    case Register::IeeePia2ControlB:
+    case Register::IeeeViaOrb:
+    case Register::IeeeViaDdrB:
         return econopet::WishboneAddress{std::to_underlying(reg)};
     }
     throw std::invalid_argument("unsupported FPGA register");

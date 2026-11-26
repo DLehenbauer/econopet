@@ -100,9 +100,8 @@ struct IeeeBusLevels {
     uint8_t byte;
 };
 
-// Resolve device, fitted GPIO and external levels without double-counting CPU snoops.
-inline IeeeBusLevels ieee_bus_levels(const System& board) {
-    const auto pins = board.snapshot();
+/** Observe only fitted GPIO and external inputs, regardless of virtual-drive enablement. */
+inline IeeeBusLevels physical_ieee_bus_levels(const System& board) {
     const auto& io = board.io();
     const auto pia1_inputs = io.pia1().peek_inputs();
     const auto pia2_inputs = io.pia2().peek_inputs();
@@ -113,10 +112,23 @@ inline IeeeBusLevels ieee_bus_levels(const System& board) {
     const auto& via_port = io.via().state().pb;
     const auto via_outputs = static_cast<uint8_t>(via_port.outr | ~via_port.ddr);
     return {
-        pins.ieee_device_dav_no && io.pia2().cb2() && (via_inputs.port_b & pet::Dav) != 0,
+        io.pia2().cb2() && (via_inputs.port_b & pet::Dav) != 0,
         pia2_inputs.ca1 && (via_outputs & pet::Atn) != 0,
-        pins.ieee_device_eoi_no && io.pia1().ca2() && (pia1_inputs.port_a & pet::EoiInput) != 0,
-        static_cast<uint8_t>(~(pins.ieee_device_dio_o & pia2_outputs & pia2_inputs.port_a))};
+        io.pia1().ca2() && (pia1_inputs.port_a & pet::EoiInput) != 0,
+        static_cast<uint8_t>(~(pia2_outputs & pia2_inputs.port_a))};
+}
+
+/** Resolve the guest-visible bus, keeping physical-only observations independently available. */
+inline IeeeBusLevels ieee_bus_levels(const System& board) {
+    const auto pins = board.snapshot();
+    if (pins.ieee_enabled_o) {
+        return {
+            pins.ieee_bus_dav_no,
+            pins.ieee_bus_atn_no,
+            pins.ieee_bus_eoi_no,
+            static_cast<uint8_t>(~pins.ieee_bus_dio_o)};
+    }
+    return physical_ieee_bus_levels(board);
 }
 
 struct AvLevels {

@@ -47,6 +47,7 @@ TEST_F(WaterlooRomIeee, waterloo_ieee_init_case) {
     // Require the initializer's return and exact idle VIA output state.
     test.within(WaterlooBudget).run([&](auto& p) { p.jsr(rom.entry(WaterlooRoutine::IeeeInit)); });
     EXPECT_EQ(system.ieee().peek_via_orb(), ViaIdle);
+    require_drained_sequence(system, {}, ByteBudget, "Waterloo IEEEInit metadata");
 }
 
 // Verifies Waterloo's ATNDown_ VIA polarity after ROM initialization.
@@ -55,12 +56,15 @@ TEST_F(WaterlooRomIeee, waterloo_atn_down_case) {
     system.io().via().inputs([](auto& inputs) { inputs.port_b = ViaExternalIdle; });
 
     auto test = rom.program();
-    test.within(WaterlooBudget).run([&](auto& p) {
+    const auto cra = test.byte("pia2_cra");
+    const auto captured = test.within(WaterlooBudget).run([&](auto& p) {
         rom.init_ieee(p);
-        p.jsr(rom.entry(WaterlooRoutine::AtnDown));
+        p.jsr(rom.entry(WaterlooRoutine::AtnDown)).lda(pet::Pia2ControlA).sta(cra);
     });
     EXPECT_EQ(system.ieee().peek_via_orb() & ViaIdle, pet::Nrfd);
-    EXPECT_NE(system.io().pia2().state().pa.cr & M6520_CR_C2_MODE, 0);
+    EXPECT_NE(captured[cra] & M6520_CR_C2_MODE, 0);
+    EXPECT_EQ(system.io().pia2().state().pa.cr & M6520_CR_C2_MODE, 0);
+    require_drained_sequence(system, {}, ByteBudget, "Waterloo ATNDown metadata");
 }
 
 // Verifies Waterloo's ATNUp_ precondition and VIA polarity after ROM initialization.
@@ -100,6 +104,7 @@ TEST_F(WaterlooRomIeee, waterloo_eoi_cases) {
     });
     EXPECT_EQ(execution[intermediate], 0x56);
     EXPECT_NE(system.io().pia1().state().pa.cr & M6520_CR_C2_MODE, 0);
+    require_drained_sequence(system, {}, ByteBudget, "Waterloo EOI metadata");
 }
 
 // Verifies a Waterloo ROM termination entry's command byte and ATN flag.

@@ -39,6 +39,9 @@ bool ieee_drive_unmount_all(void);
 void ieee_drive_abort(void);
 #endif
 
+/** Return true when any virtual IEEE-488 unit (devices 8 through 11) has mounted media. */
+bool ieee_drive_enabled(void);
+
 // Borrows a slot's canonical disk/-relative name, or "" if empty. A successful mount,
 // unmount, or abort can invalidate the contents. Rejected mounts retain the name.
 const char* ieee_drive_filename(unsigned int slot);

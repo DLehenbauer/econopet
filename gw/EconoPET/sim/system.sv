@@ -155,6 +155,7 @@ module system (
     output logic [15:0] soft6809_addr_o,
 
     // Passive production IEEE controller, FIFO, and wire evidence.
+    output logic ieee_enabled_o,          // active-high virtual IEEE interception enable
     output logic [7:0] ieee_via_orb_o,
     output logic [7:0] ieee_pia2_pb_out_o,
     output logic ieee_cpu_nrfd_no,
@@ -180,6 +181,7 @@ module system (
         && !top.main.ram_wb_stall && !top.main.ram_ctl_we && !top.main.ram_ctl_oe;
     assign soft6502_addr_o = top.main.m6502_addr;
     assign soft6809_addr_o = top.main.mc6809_addr;
+    assign ieee_enabled_o = top.main.ieee.enable;
     assign ieee_via_orb_o = top.main.ieee.via_orb;
     assign ieee_pia2_pb_out_o = top.main.ieee.pia2_pb_out;
     assign ieee_cpu_nrfd_no = top.main.ieee.cpu_nrfd_n;

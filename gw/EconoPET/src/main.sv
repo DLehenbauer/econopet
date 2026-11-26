@@ -759,9 +759,12 @@ module main (
     logic [DATA_WIDTH-1:0] ieee_wb_din;
     logic                  ieee_wb_stall;
     logic                  ieee_wb_ack;
-
     logic [DATA_WIDTH-1:0] ieee_dout;
     logic                  ieee_doe;
+    // Per-chip external chip-select suppression claims from ieee.sv.
+    logic                  ieee_claim_pia1;
+    logic                  ieee_claim_pia2;
+    logic                  ieee_claim_via;
 
     ieee ieee (
         .wb_clock_i(sys_clock_i),
@@ -789,6 +792,9 @@ module main (
         .pia2_cs_i(pia2_en),
         .via_cs_i(via_en),
         .rs_i(active_cpu_addr[VIA_RS_WIDTH-1:0]),
+        .claim_pia1_o(ieee_claim_pia1),
+        .claim_pia2_o(ieee_claim_pia2),
+        .claim_via_o(ieee_claim_via),
 
         .diag_i(diag_i),
         .vert_i(vert_drive_o)
@@ -952,14 +958,21 @@ module main (
     wire cpu_rd_en = active_be && !active_cpu_we;
     wire external_bus_we = io_ctl_bus_own ? io_ctl_we : active_cpu_we;
 
-    // A fabric peripheral claiming the bus (IEEE/ACIA/dongle data_oe) must also
+    // A fabric peripheral claiming the bus (IEEE/ACIA/dongle) must also
     // suppress the external I/O chip selects, or the FPGA and a real
-    // PIA/VIA drive the data bus in the same cycle. io_doe (the keyboard
-    // intercept) only shadows PIA1, so pia2/via omit it.
-    assign io_oe_o   = (io_en   && active_be && !io_doe && !ieee_doe && !acia_doe && !dongle_doe) || io_ctl_oe;
-    assign pia1_cs_o = (pia1_en && active_be && !io_doe && !ieee_doe && !acia_doe && !dongle_doe) || io_ctl_pia1_cs;
-    assign pia2_cs_o = (pia2_en && active_be && !ieee_doe && !acia_doe && !dongle_doe) || io_ctl_pia2_cs;
-    assign via_cs_o  = ( via_en && active_be && !ieee_doe && !acia_doe && !dongle_doe) || io_ctl_via_cs;
+    // PIA/VIA drive the data bus in the same cycle (and suppressed IEEE
+    // direction writes would reach physical PIA2/VIA). Pre-combine the
+    // sys_clock_i-registered device/claim terms so late-arriving active_be
+    // traverses only one LUT to each output pad.
+    (* syn_keep = "true" *) wire ext_pia1_sel = pia1_en && !io_doe && !ieee_claim_pia1 && !acia_doe && !dongle_doe;
+    (* syn_keep = "true" *) wire ext_pia2_sel = pia2_en && !ieee_claim_pia2 && !acia_doe && !dongle_doe;
+    (* syn_keep = "true" *) wire ext_via_sel  =  via_en && !ieee_claim_via  && !acia_doe && !dongle_doe;
+    (* syn_keep = "true" *) wire ext_io_sel   = ext_pia1_sel || ext_pia2_sel || ext_via_sel;
+
+    assign io_oe_o   = (active_be && ext_io_sel)   || io_ctl_oe;
+    assign pia1_cs_o = (active_be && ext_pia1_sel) || io_ctl_pia1_cs;
+    assign pia2_cs_o = (active_be && ext_pia2_sel) || io_ctl_pia2_cs;
+    assign via_cs_o  = (active_be && ext_via_sel)  || io_ctl_via_cs;
 
     assign ram_oe_o  = (cpu_rd_en && ram_en) || ram_ctl_oe;
     assign ram_we_o  = (active_wr_en && active_cpu_we && ram_en && !is_readonly
@@ -1073,6 +1086,9 @@ module main (
 
         assert(!io_ctl_bus_own || (!active_be && !cpu_be_o))
             else $fatal(1, "I/O bridge owns the bus while a CPU is enabled");
+        assert(!ieee_doe || !active_be || active_cpu_we
+               || (pia1_en && ieee_claim_pia1) || (pia2_en && ieee_claim_pia2) || (via_en && ieee_claim_via))
+            else $fatal(1, "ieee_doe asserted without matching chip-select claim");
         assert($onehot0(dbg_io_selects))
             else $fatal(1, "Multiple physical I/O devices selected");
         assert($onehot0(dbg_data_bus_drivers)) else $fatal(1, "Multiple drivers on CPU data bus: {physical CPU, ram, io, fpga}=%b", dbg_data_bus_drivers);

@@ -407,14 +407,14 @@ TEST_F(SystemTest, IeeeTransactionsReceivePreservesByteOrderAndFinalWireEoi) {
     EXPECT_EQ(controller.receive(), data('X'));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
-    EXPECT_FALSE(system.io().pia2().ca2());
+    EXPECT_TRUE(system.io().pia2().ca2());
     // Unrelated SPI clocks must not start another byte while the acceptor is busy.
     EXPECT_TRUE(system.ieee().read_status().contains(fpga::IeeeStatusBit::Talking));
     EXPECT_THAT(wire.records(), ElementsAre(command(Talk(Device{8})), command(Secondary(Channel{0})), data('X')));
     EXPECT_EQ(controller.receive(), data('Y', Eoi::Last));
     EXPECT_FALSE(system.ieee().peek_nrfd_released());
     EXPECT_FALSE(system.ieee().peek_ndac_released());
-    EXPECT_FALSE(system.io().pia2().ca2());
+    EXPECT_TRUE(system.io().pia2().ca2());
     EXPECT_TRUE(sampled_data);
     EXPECT_FALSE(sampled_while_ready);
     EXPECT_THAT(attention_edges, ElementsAre(true));
@@ -576,7 +576,10 @@ TEST_F(SystemTest, IeeeTransactionsQuietIntervalDetectsLaterCpuTransfer) {
     const auto code = scenario.reserve("delayed DAV", test_asm::RegionKind::Code, econopet::CpuAddress{0x0300}, 0x100);
     scenario.reserve("vectors", test_asm::RegionKind::Vectors, econopet::CpuAddress{0xfffa}, 6);
     test_asm::mos6502::Program program(scenario, code);
+    program.lda(test_asm::imm(econopet::io::PiaDdrAccess.bits())).sta(pet::Pia2ControlB);
+    program.lda(test_asm::imm(DioOutputs)).sta(pet::Pia2PortB);
     program.lda(test_asm::imm(PiaC2High.bits())).sta(pet::Pia2ControlB);
+    program.lda(test_asm::imm(pet::Atn | pet::Nrfd)).sta(pet::ViaDdrB);
     program.lda(test_asm::imm(static_cast<uint8_t>(BusReleased & ~pet::Atn))).sta(pet::ViaPortB);
     program.lda(test_asm::imm(static_cast<uint8_t>(~Unlisten.byte()))).sta(pet::Pia2PortB);
     // LDX #255, DEX, BNE -3 is an explicit fixed-length timing delay.
@@ -800,6 +803,119 @@ TEST_F(SystemTest, IeeeWireTraceDeviceDataIgnoresInputModeControllerLatch) {
     controller.write(pet::ViaPortB, BusReleased);
     system.run_until([&](const System&) { return !wire.records().empty(); }, ByteBudget, "device DAV assertion");
     EXPECT_THAT(wire.records(), ElementsAre(data('X', Eoi::Last)));
+}
+
+// Physical IEEE outputs stay idle and external IEEE chatter is ignored while virtual drives run,
+// without blocking physical cassette or keyboard accesses on shared VIA/PIA1 ports.
+TEST_F(SystemTest, PhysicalIeeePortIsolatedWhilePreservingCassetteAndKeyboard) {
+    using econopet::io::PiaRegister;
+    using econopet::io::ViaRegister;
+
+    // Mirror system_park_ieee_io() before enabling virtual drives, then run CINT-style port init.
+    auto& pia1 = system.io().pia1();
+    auto& pia2 = system.io().pia2();
+    auto& via = system.io().via();
+    const auto setup = system.time();
+    write(via, ViaRegister::PortB, 0x1e, setup);
+    write(via, ViaRegister::DdrB, 0x18, setup);
+    pia2.set_control(PiaRegister::ControlA, econopet::io::PiaDdrAccess, setup);
+    write(pia2, PiaRegister::PortA, 0x00, setup);
+    pia2.set_control(PiaRegister::ControlA, econopet::io::PiaPortAccess, setup);
+    pia2.set_control(PiaRegister::ControlB, econopet::io::PiaDdrAccess, setup);
+    write(pia2, PiaRegister::PortB, 0x00, setup);
+    pia2.set_control(PiaRegister::ControlB, econopet::io::PiaPortAccess, setup);
+    pia1.set_control(PiaRegister::ControlA, econopet::io::PiaDdrAccess, setup);
+    write(pia1, PiaRegister::PortA, 0x0f, setup);
+    pia1.set_control(PiaRegister::ControlA, PiaC2High, setup);
+
+    system.ieee().write_control(fpga::IeeeControlBit::AllEmulatedUnits);
+    IeeeController controller(system);
+
+    // Clamp every external physical IEEE input low (simulating a conflicting SD2PET / unpowered drive).
+    pia1.inputs([](auto& inputs) { inputs.port_a = static_cast<uint8_t>(0xffu & ~pet::EoiInput & ~0x10u); });
+    pia2.inputs([](auto& inputs) {
+        inputs.port_a = 0x00;
+        inputs.ca1 = false;
+        inputs.cb1 = false;
+    });
+    via.inputs([](auto& inputs) {
+        inputs.port_b = static_cast<uint8_t>(0xffu & ~(pet::Dav | pet::NrfdInput | pet::Ndac));
+    });
+
+    bool physical_ieee_driven = false;
+    // The virtual bus is released, but the physical connector still sees the clamps.
+    const auto physical_bus = test_observation::physical_ieee_bus_levels(system);
+    const auto virtual_bus = test_observation::ieee_bus_levels(system);
+    EXPECT_FALSE(physical_bus.dav_released);
+    EXPECT_FALSE(physical_bus.atn_released);
+    EXPECT_FALSE(physical_bus.eoi_released);
+    EXPECT_EQ(physical_bus.byte, 0xffu);
+    EXPECT_TRUE(virtual_bus.dav_released);
+    EXPECT_TRUE(virtual_bus.atn_released);
+    EXPECT_TRUE(virtual_bus.eoi_released);
+    EXPECT_EQ(virtual_bus.byte, 0x00u);
+    auto monitor = system.observe([&](const System& board) {
+        const auto& io = board.io();
+        const auto& p2b = io.pia2().state().pb;
+        const auto& vpb = io.via().state().pb;
+        const uint8_t phys_dio = static_cast<uint8_t>(p2b.outr | ~p2b.ddr);
+        const uint8_t phys_via = static_cast<uint8_t>(vpb.outr | ~vpb.ddr);
+        if (phys_dio != 0xffu || !io.pia2().ca2() || !io.pia2().cb2() ||
+            (phys_via & (pet::Atn | pet::Nrfd)) != (pet::Atn | pet::Nrfd)) {
+            physical_ieee_driven = true;
+        }
+    });
+
+    // Exercise ATN addressing, payload send, and multi-byte TALK receive (reproducing TEST 11 EOI_IN).
+    controller.command(Listen(Device{8}));
+    controller.command(Open(Channel{15}));
+    controller.data('I');
+    controller.data('0', Eoi::Last);
+    controller.command(Unlisten);
+    require_drained_sequence(
+        system,
+        {command(Listen(Device{8})), command(Open(Channel{15})), data('I'), data('0', Eoi::Last), command(Unlisten)},
+        ByteBudget, "isolated listen");
+
+    controller.write(pet::Pia1PortA, 0x09u);
+    controller.command(Talk(Device{8}));
+    controller.command(Secondary(Channel{15}));
+    const std::string status = "00, OK,00,00\r";
+    for (size_t i = 0; i + 1 < status.size(); ++i)
+        system.spi().write(fpga::Register::IeeeTxStatus, static_cast<uint8_t>(status[i]));
+    system.spi().write(fpga::Register::IeeeTxStatusLast, static_cast<uint8_t>(status.back()));
+
+    for (size_t i = 0; i < status.size(); ++i) {
+        const Eoi expected_eoi = (i + 1 == status.size()) ? Eoi::Last : Eoi::More;
+        EXPECT_EQ(controller.receive(), data(static_cast<uint8_t>(status[i]), expected_eoi));
+        if (i == 0) {
+            // Between bytes while talking == true (DAV and EOI both released), $E810 passes through
+            // to physical PIA1 so IRQ keyboard/cassette polling observes PA4=0 and keyboard row 9.
+            EXPECT_EQ(controller.read(pet::Pia1PortA) & 0x3fu, 0x29u);
+        }
+    }
+    controller.command(Untalk);
+    EXPECT_FALSE(physical_ieee_driven);
+    // Physical PIA2 stayed completely suppressed (including Port B data latches), while Wishbone
+    // shadows captured the guest's CINT/controller writes for glitch-free unmount restoration.
+    EXPECT_EQ(pia2.state().pa.ddr, 0x00u);
+    EXPECT_EQ(pia2.state().pb.ddr, 0x00u);
+    EXPECT_EQ(pia2.state().pb.outr, 0x00u);
+    EXPECT_EQ(system.spi().read(fpga::Register::IeeePia2DdrB), 0xffu);
+    EXPECT_EQ(system.spi().read(fpga::Register::IeeePia2ControlB) & 0x3cu, PiaC2High.bits());
+    EXPECT_EQ(system.spi().read(fpga::Register::IeeeViaDdrB), 0x06u);
+
+    // Shared VIA ORB cassette bits (PB4=~CASS2_MOTOR, PB3=CASS_WRITE) and PIA1 cassette/keyboard still work.
+    controller.write(pet::ViaPortB, 0x06);
+    EXPECT_EQ(via.state().pb.outr & 0x18u, 0x00u);
+    EXPECT_EQ(via.state().pb.ddr & (pet::Atn | pet::Nrfd), 0x00u);
+    EXPECT_EQ(system.spi().read(fpga::Register::IeeeViaOrb), 0x06u);
+    controller.write(pet::Pia1ControlA, static_cast<uint8_t>(PiaC2High.bits() | 0x01u));
+    EXPECT_NE(pia1.state().pa.cr & 0x01u, 0u);
+    controller.write(pet::Pia1PortA, 0x05u);
+    EXPECT_EQ(pia1.state().pa.outr & 0x0fu, 0x05u);
+    // Idle $E810 read hits physical PIA1, observing Cassette #1 switch low on PA4 (~0x10).
+    EXPECT_EQ(controller.read(pet::Pia1PortA) & 0x3fu, 0x25u);
 }
 
 } // namespace

@@ -103,6 +103,12 @@ static uint8_t present_units(void) {
     return mask;
 }
 
+/** Return true when at least one virtual IEEE-488 unit (8 through 11) is active. */
+bool ieee_drive_enabled(void) {
+    // Any non-zero unit bitmask enables fabric IEEE bus interception in control().
+    return present_units() != 0;
+}
+
 // Every native CTRL write selects the mounted emulated units, or disables
 // emulation when none are present. Flush requests preserve that selection.
 static void control(const uint8_t flags) {

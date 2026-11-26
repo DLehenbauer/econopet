@@ -6,20 +6,15 @@
 
 #include "driver.h"
 #include "fatal.h"
+#include "hardware_contract.h"
 #include "usb/keyboard.h"
 #include "usb/keyscan.h"
 
-#define PIA1_ORA_ADDR 0xe810u
-#define PIA1_CRA_ADDR 0xe811u
-#define PIA1_ORB_ADDR 0xe812u
-#define PIA1_CRB_ADDR 0xe813u
-#define BOOT_PIA_CONTROL 0x3cu
+#define BOOT_PIA_CONTROL ECONOPET_PIA_CONTROL_C2_HIGH
 #define BOOT_RETRACE_ENABLE 0x01u
-#define PIA_DATA_SELECT 0x04u
-#define ROW_MASK 0x0fu
 #define PIA_PROBE_RESET_US 4u
 #define PIA_PROBE_DDR_SELECT 0x00u
-#define PIA_PROBE_PORT_SELECT PIA_DATA_SELECT
+#define PIA_PROBE_PORT_SELECT ECONOPET_PIA_CONTROL_DATA_SELECT_MASK
 // Conservative initial dwell, to be confirmed on fitted rev-a keyboards.
 #define ROW_SETTLE_US 100u
 #define STABLE_RETRIES 3u
@@ -39,17 +34,17 @@ bool pet_keyboard_probe_boot(void) {
     sleep_us(PIA_PROBE_RESET_US);
 
     // Select four keyboard row outputs, leaving the other port pins as inputs.
-    pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_DDR_SELECT);
-    pet_io_write(PIA1_ORA_ADDR, ROW_MASK);
-    pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
+    pet_io_write(ECONOPET_PIA1_CRA_ADDR, PIA_PROBE_DDR_SELECT);
+    pet_io_write(ECONOPET_PIA1_PORTA_ADDR, ECONOPET_PIA1_PORTA_KEY_MASK);
+    pet_io_write(ECONOPET_PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
 
     bool responsive = true;
     for (uint8_t row = 0; row < ECONOPET_KBD_COL_COUNT; ++row) {
-        pet_io_write(PIA1_ORA_ADDR, row);
+        pet_io_write(ECONOPET_PIA1_PORTA_ADDR, row);
         // Change the data bus before reading so a floating bus cannot simply
         // echo the preceding row-select write.
-        pet_io_write(PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
-        if ((pet_io_read(PIA1_ORA_ADDR) & ROW_MASK) != row) {
+        pet_io_write(ECONOPET_PIA1_CRA_ADDR, PIA_PROBE_PORT_SELECT);
+        if ((pet_io_read(ECONOPET_PIA1_PORTA_ADDR) & ECONOPET_PIA1_PORTA_KEY_MASK) != row) {
             responsive = false;
             break;
         }
@@ -69,18 +64,18 @@ void pet_keyboard_sync(void) {
 }
 
 void pet_keyboard_begin(const uint8_t saved_ora) {
-    scanner = (typeof(scanner)){.active = true, .base = saved_ora & ~ROW_MASK};
+    scanner = (typeof(scanner)){.active = true, .base = saved_ora & ~ECONOPET_PIA1_PORTA_KEY_MASK};
     memset(scanner.matrix, 0xff, sizeof(scanner.matrix));
 }
 
 void pet_keyboard_begin_boot(void) {
-    pet_io_write(PIA1_CRA_ADDR, BOOT_PIA_CONTROL & ~PIA_DATA_SELECT);
-    pet_io_write(PIA1_ORA_ADDR, ROW_MASK);
-    pet_io_write(PIA1_CRB_ADDR, BOOT_PIA_CONTROL & ~PIA_DATA_SELECT);
-    pet_io_write(PIA1_ORB_ADDR, 0);
-    pet_io_write(PIA1_CRA_ADDR, BOOT_PIA_CONTROL);
-    pet_io_write(PIA1_CRB_ADDR, BOOT_PIA_CONTROL | BOOT_RETRACE_ENABLE);
-    pet_keyboard_begin(pet_io_read(PIA1_ORA_ADDR));
+    pet_io_write(ECONOPET_PIA1_CRA_ADDR, BOOT_PIA_CONTROL & ~ECONOPET_PIA_CONTROL_DATA_SELECT_MASK);
+    pet_io_write(ECONOPET_PIA1_PORTA_ADDR, ECONOPET_PIA1_PORTA_KEY_MASK);
+    pet_io_write(ECONOPET_PIA1_CRB_ADDR, BOOT_PIA_CONTROL & ~ECONOPET_PIA_CONTROL_DATA_SELECT_MASK);
+    pet_io_write(ECONOPET_PIA1_PORTB_ADDR, 0);
+    pet_io_write(ECONOPET_PIA1_CRA_ADDR, BOOT_PIA_CONTROL);
+    pet_io_write(ECONOPET_PIA1_CRB_ADDR, BOOT_PIA_CONTROL | BOOT_RETRACE_ENABLE);
+    pet_keyboard_begin(pet_io_read(ECONOPET_PIA1_PORTA_ADDR));
 }
 
 void pet_keyboard_task(void) {
@@ -89,7 +84,7 @@ void pet_keyboard_task(void) {
     }
     // Select one physical row without changing unrelated observable port-A outputs.
     if (!scanner.selected) {
-        pet_io_write(PIA1_ORA_ADDR, scanner.base | scanner.row);
+        pet_io_write(ECONOPET_PIA1_PORTA_ADDR, scanner.base | scanner.row);
         scanner.selected = true;
         scanner.deadline = time_us_64() + ROW_SETTLE_US;
         return;
@@ -99,7 +94,7 @@ void pet_keyboard_task(void) {
     }
 
     // Require two matching samples and bound unstable-row retries.
-    const uint8_t sample = pet_io_read(PIA1_ORB_ADDR);
+    const uint8_t sample = pet_io_read(ECONOPET_PIA1_PORTB_ADDR);
     if (!scanner.sampled || sample != scanner.previous) {
         scanner.previous = sample;
         scanner.sampled = true;

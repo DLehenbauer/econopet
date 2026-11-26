@@ -262,6 +262,127 @@ START_TEST(test_configuration_preserves_mounted_media_until_unmount) {
 }
 END_TEST
 
+/** Park VIA/PIA2 IEEE pins when virtual drives are mounted and restore snooped guest state on unmount. */
+START_TEST(test_ieee_io_isolation_across_reset_and_menu_mounts) {
+    uint8_t* const image = diskimage_test_make_d64();
+    test_register_binary_file("/disk/iso.d64", image, DISKIMAGE_D64_SIZE, false);
+    free(image);
+
+    // Reset with mounted media parks VIA DDRB at 0x00 and PIA2 directions as inputs.
+    ck_assert_int_eq(ieee_drive_try_mount(0, "iso.d64", NULL), DOS_MEDIA_OK);
+    system_reset_guest();
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe821), 0x04u);
+    ck_assert_uint_eq(pet_io_read(0xe823), 0x04u);
+    pet_io_write(0xe821, 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe820), 0x00u);
+    pet_io_write(0xe821, 0x04u);
+    pet_io_write(0xe823, 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe822), 0x00u);
+    pet_io_write(0xe823, 0x04u);
+
+    // Unmounting before the guest writes PIA2/VIA restores hardware 0x00 reset latches (not 0xFF).
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    ck_assert(ieee_drive_unmount_all());
+    system_restore(true);
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x00u);
+    pet_io_write(0xe842, 0xffu);
+    ck_assert_uint_eq(pet_io_read(0xe840), 0x00u);
+    pet_io_write(0xe823, 0x04u);
+    pet_io_write(0xe823, 0x00u);
+    pet_io_write(0xe822, 0xffu);
+    pet_io_write(0xe823, 0x04u);
+    ck_assert_uint_eq(pet_io_read(0xe822), 0x00u);
+
+    // Reset again with mounted media before simulating KERNAL CINT + guest IEEE/user-port writes.
+    ck_assert_int_eq(ieee_drive_try_mount(0, "iso.d64", NULL), DOS_MEDIA_OK);
+    system_reset_guest();
+    set_cpu(CPU_HALT);
+
+    // Simulate KERNAL CINT + guest IEEE/user-port writes snooped by ieee.sv while isolated.
+    mock_cpu_io_write(0xe821, 0x00u);
+    mock_cpu_io_write(0xe820, 0x5au);
+    mock_cpu_io_write(0xe821, 0x3cu);
+    mock_cpu_io_write(0xe820, 0xc3u);
+    mock_cpu_io_write(0xe823, 0x00u);
+    mock_cpu_io_write(0xe822, 0xffu);
+    mock_cpu_io_write(0xe823, 0x34u);
+    mock_cpu_io_write(0xe822, 0xa5u);
+    mock_cpu_io_write(0xe840, 0x14u);
+    mock_cpu_io_write(0xe842, 0x9eu);
+
+    // Lazy system_task() synchronization forwards non-IEEE VIA DDRB bits (0x98) before any menu entry.
+    set_cpu(CPU_READY);
+    system_task();
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x98u);
+
+    // Unmounting all virtual drives in the menu restores exact snooped guest PIA2/VIA state.
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    ck_assert(ieee_drive_unmount_all());
+    system_restore(true);
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe840), (uint8_t)((0xffu & ~0x9eu) | 0x14u));
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x9eu);
+    ck_assert_uint_eq(pet_io_read(0xe821), 0x3cu);
+    ck_assert_uint_eq(pet_io_read(0xe820), (uint8_t)((0xffu & ~0x5au) | (0xc3u & 0x5au)));
+    pet_io_write(0xe821, 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe820), 0x5au);
+    pet_io_write(0xe821, 0x3cu);
+    ck_assert_uint_eq(pet_io_read(0xe823), 0x34u);
+    ck_assert_uint_eq(pet_io_read(0xe822), 0xa5u);
+    pet_io_write(0xe823, 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe822), 0xffu);
+    pet_io_write(0xe823, 0x34u);
+
+    // Hot-mounting a virtual drive in the menu parks VIA PB2:1 and PIA2 while preserving
+    // guest non-IEEE VIA DDRB bits (e.g. PB7), PIA1, and active-low VIA cassette outputs.
+    prepare_guest();
+    mock_cpu_io_write(0xe840, 0x86u);
+    mock_cpu_io_write(0xe842, 0x9eu);
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    ck_assert_int_eq(ieee_drive_try_mount(0, "iso.d64", NULL), DOS_MEDIA_OK);
+    system_restore(true);
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe840) & 0x18u, 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x98u);
+    ck_assert_uint_eq(pet_io_read(0xe821), 0x04u);
+    ck_assert_uint_eq(pet_io_read(0xe823), 0x04u);
+    ck_assert_uint_eq(pet_io_read(0xe811), 0x3cu);
+    ck_assert_uint_eq(pet_io_read(0xe813), 0x34u);
+    ck_assert_uint_eq(pet_io_read(0xe84c), 0xccu);
+
+    // Waterloo IEEEInit uses DDRB/ORB = $06. Neither cold reset + system_task()
+    // nor menu hot-mount may turn its input-configured cassette pins into low-driving outputs.
+    system_reset_guest();
+    mock_cpu_io_write(0xe842, 0x06u);
+    mock_cpu_io_write(0xe840, 0x06u);
+    system_task();
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe840) & 0x18u, 0x18u);
+
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    ck_assert(ieee_drive_unmount_all());
+    system_restore(true);
+    mock_cpu_io_write(0xe840, 0x06u);
+    mock_cpu_io_write(0xe842, 0x06u);
+    set_cpu(CPU_READY);
+    ck_assert(system_suspend());
+    ck_assert_int_eq(ieee_drive_try_mount(0, "iso.d64", NULL), DOS_MEDIA_OK);
+    system_restore(true);
+    set_cpu(CPU_HALT);
+    ck_assert_uint_eq(pet_io_read(0xe842), 0x00u);
+    ck_assert_uint_eq(pet_io_read(0xe840) & 0x18u, 0x18u);
+}
+END_TEST
+
 Suite* system_session_suite(void) {
     Suite* const suite = suite_create("system_session");
     TCase* const test = tcase_create("ownership");
@@ -271,6 +392,7 @@ Suite* system_session_suite(void) {
     tcase_add_test(test, test_terminal_actions_take_over_without_restoring_console);
     tcase_add_test(test, test_restore_without_resume_retains_halt);
     tcase_add_loop_test(test, test_configuration_preserves_mounted_media_until_unmount, 0, 2);
+    tcase_add_test(test, test_ieee_io_isolation_across_reset_and_menu_mounts);
     suite_add_tcase(suite, test);
     return suite;
 }

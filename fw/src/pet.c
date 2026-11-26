@@ -13,6 +13,7 @@
 #include "menu/menu.h"
 #include "sd/activity.h"
 #include "system/state.h"
+#include "system/system.h"
 #include "usb/keyboard.h"
 
 #define STORAGE_IDLE_POLL_US 1000u
@@ -69,6 +70,15 @@ void pet_reset() {
     // Assert CPU 'reset' while execution remains suspended.
     set_cpu(CPU_RESET);
     sleep_us(4);
+
+    // When virtual IEEE drives are mounted, deassert peripheral RESB while holding
+    // the CPU halted so physical VIA/PIA2 IEEE pins can be pre-charged high and
+    // parked as inputs before the guest begins execution.
+    if (ieee_drive_enabled()) {
+        set_cpu(CPU_HALT);
+        sleep_us(4);
+        system_park_ieee_io();
+    }
 
     // A breakpoint can latch after the last status poll but before a pending reset
     // is serviced. Reset abandons the interrupted instruction, so its halt event

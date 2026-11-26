@@ -36,6 +36,38 @@
 #define ECONOPET_KBD_ROW_COUNT 8u
 #define ECONOPET_KBD_COL_COUNT 16u
 
+// Physical PET CPU byte addresses (not the MCU's IEEE snoop registers).
+#define ECONOPET_PIA1_PORTA_ADDR 0xe810u
+#define ECONOPET_PIA1_CRA_ADDR 0xe811u
+#define ECONOPET_PIA1_PORTB_ADDR 0xe812u
+#define ECONOPET_PIA1_CRB_ADDR 0xe813u
+#define ECONOPET_PIA2_PORTA_ADDR 0xe820u
+#define ECONOPET_PIA2_CRA_ADDR 0xe821u
+#define ECONOPET_PIA2_PORTB_ADDR 0xe822u
+#define ECONOPET_PIA2_CRB_ADDR 0xe823u
+#define ECONOPET_VIA_PORTB_ADDR 0xe840u
+#define ECONOPET_VIA_DDRB_ADDR 0xe842u
+#define ECONOPET_VIA_PCR_ADDR 0xe84cu
+
+// PIA control fields and complete port-data/manual-C2 control bytes.
+#define ECONOPET_PIA_CONTROL_WRITABLE_MASK 0x3fu
+#define ECONOPET_PIA_CONTROL_DATA_SELECT_MASK 0x04u
+#define ECONOPET_PIA_CONTROL_C2_LOW 0x34u
+#define ECONOPET_PIA_CONTROL_C2_HIGH 0x3cu
+#define ECONOPET_PIA1_PORTA_KEY_MASK 0x0fu
+
+// Physical VIA Port B pin masks and PCR CA2 control field.
+#define ECONOPET_VIA_PORTB_CASS_OUT_MASK 0x18u
+#define ECONOPET_VIA_PORTB_IEEE_OUT_MASK 0x06u
+#define ECONOPET_VIA_PORTB_ATN_OUT_MASK 0x04u
+#define ECONOPET_VIA_PORTB_NRFD_OUT_MASK 0x02u
+#define ECONOPET_VIA_PORTB_NDAC_IN_MASK 0x01u
+#define ECONOPET_VIA_PORTB_NRFD_IN_MASK 0x40u
+#define ECONOPET_VIA_PORTB_DAV_IN_MASK 0x80u
+#define ECONOPET_VIA_PORTB_IEEE_IN_MASK 0xc1u
+#define ECONOPET_VIA_PCR_CA2_MASK 0x0eu
+#define ECONOPET_VIA_PCR_CA2_HIGH 0x0eu
+
 // Register-file Wishbone byte addresses (See common_pkg.sv for more details)
 #define ECONOPET_WB_STATUS_ADDR 0x40000u
 #define ECONOPET_WB_CPU_ADDR 0x40001u
@@ -95,7 +127,15 @@
 // IEEE register indices and count (See common_pkg.sv for more details)
 #define ECONOPET_IEEE_REG_CTRL 0u
 #define ECONOPET_IEEE_REG_TXS_LAST 7u
-#define ECONOPET_IEEE_REG_COUNT 8u
+#define ECONOPET_IEEE_REG_PIA2_ORA 8u
+#define ECONOPET_IEEE_REG_PIA2_DDRA 9u
+#define ECONOPET_IEEE_REG_PIA2_CRA 10u
+#define ECONOPET_IEEE_REG_PIA2_ORB 11u
+#define ECONOPET_IEEE_REG_PIA2_DDRB 12u
+#define ECONOPET_IEEE_REG_PIA2_CRB 13u
+#define ECONOPET_IEEE_REG_VIA_ORB 14u
+#define ECONOPET_IEEE_REG_VIA_DDRB 15u
+#define ECONOPET_IEEE_REG_COUNT 16u
 
 // IEEE Wishbone byte addresses (See common_pkg.sv for more details)
 #define ECONOPET_WB_IEEE_CTRL_ADDR 0x70000u
@@ -106,6 +146,14 @@
 #define ECONOPET_WB_IEEE_SA_ADDR 0x70005u
 #define ECONOPET_WB_IEEE_TXS_ADDR 0x70006u
 #define ECONOPET_WB_IEEE_TXS_LAST_ADDR 0x70007u
+#define ECONOPET_WB_IEEE_PIA2_ORA_ADDR 0x70008u
+#define ECONOPET_WB_IEEE_PIA2_DDRA_ADDR 0x70009u
+#define ECONOPET_WB_IEEE_PIA2_CRA_ADDR 0x7000au
+#define ECONOPET_WB_IEEE_PIA2_ORB_ADDR 0x7000bu
+#define ECONOPET_WB_IEEE_PIA2_DDRB_ADDR 0x7000cu
+#define ECONOPET_WB_IEEE_PIA2_CRB_ADDR 0x7000du
+#define ECONOPET_WB_IEEE_VIA_ORB_ADDR 0x7000eu
+#define ECONOPET_WB_IEEE_VIA_DDRB_ADDR 0x7000fu
 
 // IEEE control-write masks (See common_pkg.sv for more details).
 // Bit 0 is reserved and ignored. FIFO flushes are one-shot requests.
