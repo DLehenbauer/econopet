@@ -121,6 +121,10 @@ _Static_assert(DOS_FILE_CHANNEL_COUNT + 2 == DOS_CHANNEL_COUNT, "command and err
 #define DOS_BAM_TRACKS_PER_PART 50u
 #define DOS_BAM_PART_INTERLEAVE 3u
 #define DOS_DIRECTORY_LINE_SIZE 32u
+#define DOS_DIRECTORY_INITIAL_FILL_SIZE 256u
+#define DOS_DIRECTORY_INITIAL_FILL_ROWS (DOS_DIRECTORY_INITIAL_FILL_SIZE / DOS_DIRECTORY_LINE_SIZE)
+#define DOS_DIRECTORY_INITIAL_FILL_COUNT_MASK 0x0fu
+#define DOS_DIRECTORY_HEADER_WRITTEN_MASK 0x80u
 #define DOS_DIRECTORY_NAME_SIZE 27u
 #define DOS_DIRECTORY_PATTERN_SIZE (DISKIMAGE_FILENAME_SIZE + 1u)
 #define DOS_HEADER_NAME_4040 144u
@@ -6318,6 +6322,7 @@ static bool open_directory(dos_unit_t* const unit, dos_media_bank_t* const media
     channel->directory_track = directory_track(model);
     channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;
     channel->position = 0;
+    channel->directory_initial_fill = 0;
     // LOADIR/TC35/ALLDRS retain bounded comma-separated patterns and '=type'.
     uint8_t* const patterns = unit->buffers[extra].bytes;
     memset(patterns, DISKIMAGE_FILENAME_PADDING, DOS_FILENAME_COUNT * DOS_DIRECTORY_PATTERN_SIZE);
@@ -8117,7 +8122,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     }
     const dos_model_t model = media->units[work->media.unit].model;
     const uint8_t secondary = work->secondary, type = work->type;
-    const dos_media_ref_t reference = work->media;
+    dos_media_ref_t reference = work->media;
     auto_initialize(unit, reference.slot);
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     uint8_t found_root_track = 0, found_root_sector = 0, found_record_size = 0;
@@ -8127,7 +8132,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
         wildcard |= work->name[index] == '*' || work->name[index] == '?';
     }
     bool matched = work->zero_track_match;
-    const uint8_t searched_track = work->track, searched_sector = work->sector;
+    uint8_t searched_track = work->track, searched_sector = work->sector;
 
     // Bound directory visits by image size as a corruption safeguard, not a
     // native ROM timeout. Read one sector into the job's retained scratch.
@@ -8170,6 +8175,20 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             } else if (!matched && name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 const uint8_t candidate_type = file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK;
                 if (work->first_program && candidate_type != DISKIMAGE_FTYPE_PRG) {
+                    dos_open_candidate_t candidate = {0};
+                    candidate.media = reference;
+                    candidate.blocks = file[DOS_DIRECTORY_BLOCKS_LOW] |
+                                       ((uint16_t)file[DOS_DIRECTORY_BLOCKS_HIGH] << 8u);
+                    candidate.track = file[DOS_DIRECTORY_TRACK_OFFSET];
+                    candidate.sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
+                    candidate.type = file[DOS_DIRECTORY_TYPE_OFFSET];
+                    candidate.entry = (uint8_t)entry;
+                    candidate.directory_track = searched_track;
+                    candidate.directory_sector = searched_sector;
+                    candidate.root_track = file[DOS_DIRECTORY_SIDE_TRACK];
+                    candidate.root_sector = file[DOS_DIRECTORY_SIDE_SECTOR];
+                    candidate.record_size = file[DOS_DIRECTORY_RECORD_SIZE];
+                    memcpy(unit->buffers[work->scratch_second].bytes, &candidate, sizeof(candidate));
                     work->first_program_candidate = true;
                     continue;
                 }
@@ -8240,6 +8259,23 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             return;
         }
     }
+    if (!failed && found_track == 0 && work->first_program_candidate) {
+        dos_open_candidate_t candidate;
+        memcpy(&candidate, unit->buffers[work->scratch_second].bytes, sizeof(candidate));
+        reference = candidate.media;
+        work->media = reference;
+        unit->selected_drive = reference.slot;
+        found_track = candidate.track;
+        found_sector = candidate.sector;
+        found_type = candidate.type;
+        found_entry = candidate.entry;
+        found_blocks = candidate.blocks;
+        found_root_track = candidate.root_track;
+        found_root_sector = candidate.root_sector;
+        found_record_size = candidate.record_size;
+        searched_track = candidate.directory_track;
+        searched_sector = candidate.directory_sector;
+    }
     work->pending = false;
     dos_status_code_t error = DOS_STATUS_OK;
     if (found_track == 0 && work->type == DISKIMAGE_FTYPE_REL && work->record_parameter && secondary >= 2) {
@@ -8251,8 +8287,6 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // become generic 23 with zero track/sector, not full controller recovery.
     if (failed) {
         error = DOS_STATUS_READ_ERROR;
-    } else if (found_track == 0 && work->first_program_candidate) {
-        error = DOS_STATUS_TYPE_MISMATCH;
     } else if (found_track == 0 && work->access != DOS_ACCESS_WRITE) {
         error = DOS_STATUS_NOT_FOUND;
     }
@@ -8544,6 +8578,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
     // STDIR/DIR1/DIR3 wrap those fields as BASIC lines. C retains one row
     // at a time and yields between directory sectors rather than filling a
     // ROM listing buffer across several entries.
+    const bool header_line = channel->directory == DOS_DIRECTORY_HEADER;
     const dos_model_t model = media->units[channel->media.unit].model;
     uint8_t* const line = unit->buffers[channel->buffers[0]].bytes;
     dos_buffer_t* const source = &unit->buffers[channel->buffers[1]];
@@ -8571,11 +8606,11 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
         name[1] = name[18] = '"';
         name[19] = ' ';
         number = channel->media.slot;
-        if (channel->singleton == 0) {
+        if ((channel->directory_initial_fill & DOS_DIRECTORY_HEADER_WRITTEN_MASK) == 0) {
             line[0] = 1;
             line[1] = 4;
             prefix = 2;
-            channel->singleton = 1;
+            channel->directory_initial_fill |= DOS_DIRECTORY_HEADER_WRITTEN_MASK;
         }
         channel->directory = DOS_DIRECTORY_ENTRIES;
     } else if (channel->directory == DOS_DIRECTORY_ENTRIES) {
@@ -8670,6 +8705,16 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
     memset(line + prefix + 4u + name_length, 0, DOS_DIRECTORY_LINE_SIZE - prefix - 4u - name_length);
     channel->position = 0;
     channel->line_length = DOS_DIRECTORY_LINE_SIZE;
+    uint8_t initial_fill_rows = channel->directory_initial_fill & DOS_DIRECTORY_INITIAL_FILL_COUNT_MASK;
+    // LOADIR snapshots LSTDRV after STDIR's initial 256-byte fill, not later refills.
+    if (header_line && initial_fill_rows < DOS_DIRECTORY_INITIAL_FILL_ROWS) {
+        unit->last_drive = channel->media.slot;
+    }
+    if (initial_fill_rows < DOS_DIRECTORY_INITIAL_FILL_ROWS) {
+        ++initial_fill_rows;
+        channel->directory_initial_fill =
+            (channel->directory_initial_fill & (uint8_t)~DOS_DIRECTORY_INITIAL_FILL_COUNT_MASK) | initial_fill_rows;
+    }
     return true;
 }
 

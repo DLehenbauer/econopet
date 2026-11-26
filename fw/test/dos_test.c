@@ -6836,10 +6836,11 @@ START_TEST(test_initial_load_star_resets_drive_and_filters_programs) {
 }
 END_TEST
 
-// Initial LOAD "*" retains type-mismatch candidates until a later PRG match or search exhaustion.
-START_TEST(test_initial_load_star_preserves_candidate_across_drive_search) {
-    const unsigned int format = (unsigned int)_i / 2u;
-    const bool peer_program = (unsigned int)_i % 2u != 0;
+// Initial LOAD "*" retains the last rejected candidate across search yields.
+START_TEST(test_initial_load_star_retains_candidate_across_search_yields) {
+    static const char* const names[] = {"*", "*", "*,S", "*", "*", "*,S"};
+    const unsigned int format = (unsigned int)_i / count_of(names);
+    const unsigned int variant = (unsigned int)_i % count_of(names);
     image_t first, second;
     dos_media_bank_t bank = {0};
     mount_blank(&bank, &first, format);
@@ -6847,22 +6848,38 @@ START_TEST(test_initial_load_star_preserves_candidate_across_drive_search) {
     const dos_model_t model = bank.units[0].model;
     dos_unit_t unit;
     dos_reset(&unit, model);
-    create_typed_file(&unit, &bank, 0, "ONLYSEQ", 'S', 0x10, 3);
-    if (peer_program) {
+    if (variant != 2u) {
+        create_typed_file(&unit, &bank, 0, variant == 3u ? "UNCLSD" : "ONLYSEQ", 'S', 0x10, 4);
+    }
+    if (variant == 1u) {
         create_typed_file(&unit, &bank, 1, "PEERPRG", 'P', 0x60, 4);
+    } else if (variant == 2u) {
+        create_typed_file(&unit, &bank, 1, "PEERSEQ", 'S', 0x70, 4);
+    } else if (variant == 4u) {
+        uint8_t* const directory = sector_bytes(&first, bank.units[0].slots[0].io.image.type,
+                                                format == 0 ? 18u : 39u, 1);
+        directory[DISKIMAGE_SECTOR_LINK_SIZE + 1u] = 0;
+    } else if (variant == 3u) {
+        uint8_t* const directory = sector_bytes(&first, bank.units[0].slots[0].io.image.type,
+                                                format == 0 ? 18u : 39u, 1);
+        directory[DISKIMAGE_SECTOR_LINK_SIZE] &= 0x7fu;
     }
     dos_reset(&unit, model);
     ck_assert_uint_eq(unit.last_program_track, 0);
 
-    const uint8_t load = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*");
-    if (peer_program) {
+    const uint8_t load = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, names[variant]);
+    if (variant == 1u || variant == 2u || variant == 5u) {
         ck_assert_uint_ne(load, DOS_UNUSED);
-        ck_assert_uint_eq(unit.channels[load].media.slot, 1);
-        expect_bytes(&unit, &bank, load, 4, 0x60);
+        const uint8_t expected_slot = variant == 1u || variant == 2u ? 1u : 0u;
+        const uint8_t expected_byte = variant == 1u ? 0x60u : variant == 2u ? 0x70u : 0x10u;
+        ck_assert_uint_eq(unit.channels[load].media.slot, expected_slot);
+        expect_bytes(&unit, &bank, load, 4, expected_byte);
         ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
     } else {
         ck_assert_uint_eq(load, DOS_UNUSED);
-        ck_assert_uint_eq(unit.status_code, DOS_STATUS_TYPE_MISMATCH);
+        ck_assert_uint_eq(unit.status_code, variant == 0u ? DOS_STATUS_TYPE_MISMATCH
+                                           : variant == 3u ? DOS_STATUS_FILE_OPEN
+                                                           : DOS_STATUS_NOT_FOUND);
         ck_assert_uint_eq(unit.buffer_use, 0);
     }
 
@@ -7023,9 +7040,12 @@ START_TEST(test_initial_load_star_releases_modified_rel_owner_safely) {
 }
 END_TEST
 
-// LOAD directory's initial fill snapshots LSTDRV despite later peer and sector refills.
-START_TEST(test_unprefixed_load_keeps_initial_drive_after_long_dual_drive_directory) {
-    const unsigned int format = (unsigned int)_i;
+// LOAD directory snapshots LSTDRV at the initial fill, but not during later refills.
+START_TEST(test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory) {
+    static const unsigned int drive_zero_file_counts[] = {1u, 5u, 6u, 10u};
+    const unsigned int format = (unsigned int)_i / count_of(drive_zero_file_counts);
+    const unsigned int listing_case = (unsigned int)_i % count_of(drive_zero_file_counts);
+    const unsigned int drive_zero_file_count = drive_zero_file_counts[listing_case];
     image_t first, second;
     dos_media_bank_t bank = {0};
     mount_blank(&bank, &first, format);
@@ -7034,8 +7054,8 @@ START_TEST(test_unprefixed_load_keeps_initial_drive_after_long_dual_drive_direct
     dos_unit_t unit;
     dos_reset(&unit, model);
     create_typed_file(&unit, &bank, 0, "SAME", 'P', 0x20, 4);
-    for (unsigned int index = 0; index < 9u; ++index) {
-        char name[16];
+    for (unsigned int index = 1; index < drive_zero_file_count; ++index) {
+        char name[20];
         snprintf(name, sizeof(name), "DRIVE0_%u", index);
         create_typed_file(&unit, &bank, 0, name, 'P', (uint8_t)(0x30u + index * 4u), 4);
     }
@@ -7051,15 +7071,16 @@ START_TEST(test_unprefixed_load_keeps_initial_drive_after_long_dual_drive_direct
     ck_assert_uint_eq(unit.last_drive, 0);
     uint8_t rows[1024];
     const unsigned int row_bytes = directory_bytes(&unit, &bank, listing, rows, sizeof(rows));
-    ck_assert_uint_gt(row_bytes, 256u);
+    ck_assert_uint_eq(row_bytes, (drive_zero_file_count + 5u) * 32u);
     ck_assert_uint_eq(unit.channels[listing].media.slot, 1);
     ck_assert_uint_eq(unit.selected_drive, 1);
-    ck_assert_uint_eq(unit.last_drive, 0);
+    const uint8_t expected_drive = listing_case < 2u ? 1u : 0u;
+    ck_assert_uint_eq(unit.last_drive, expected_drive);
 
     const uint8_t program = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "SAME");
     ck_assert_uint_ne(program, DOS_UNUSED);
-    ck_assert_uint_eq(unit.channels[program].media.slot, 0);
-    expect_bytes(&unit, &bank, program, 4, 0x20);
+    ck_assert_uint_eq(unit.channels[program].media.slot, expected_drive);
+    expect_bytes(&unit, &bank, program, 4, expected_drive == 0 ? 0x20 : 0x70);
     ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
     finish_open(&unit, &bank);
     free(first.bytes);
@@ -7367,12 +7388,12 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_rename_default_drive_and_absent_source, 0, 6);
     tcase_add_loop_test(core, test_rename_shared_resource_exhaustion_and_recovery, 0, 3);
     tcase_add_loop_test(core, test_initial_load_star_resets_drive_and_filters_programs, 0, 12);
-    tcase_add_loop_test(core, test_initial_load_star_preserves_candidate_across_drive_search, 0, 6);
+    tcase_add_loop_test(core, test_initial_load_star_retains_candidate_across_search_yields, 0, 18);
     tcase_add_loop_test(core, test_failed_initial_load_star_resets_drive_before_parsing, 0, 6);
     tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 9);
     tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 6);
     tcase_add_loop_test(core, test_initial_load_star_releases_modified_rel_owner_safely, 0, 2);
-    tcase_add_loop_test(core, test_unprefixed_load_keeps_initial_drive_after_long_dual_drive_directory, 0, 3);
+    tcase_add_loop_test(core, test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory, 0, 12);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);
     tcase_add_loop_test(core, test_reopen_unclosed_zero_track_file_reuses_directory_entry, 0, 3);

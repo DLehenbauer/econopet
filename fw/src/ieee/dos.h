@@ -18,6 +18,20 @@
 #define DOS_FILENAME_COUNT 5u
 #define DOS_UNUSED 0xffu
 
+typedef struct {
+    dos_media_ref_t media;
+    uint16_t blocks;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t type;
+    uint8_t entry;
+    uint8_t directory_track;
+    uint8_t directory_sector;
+    uint8_t root_track;
+    uint8_t root_sector;
+    uint8_t record_size;
+} dos_open_candidate_t;
+
 // Bound speculative byte traversal so preview cannot evict an unread buffer.
 #define DOS_STAGE_CAPACITY 64u
 
@@ -176,6 +190,7 @@ typedef struct {
             uint16_t position;
             union {
                 uint8_t singleton;
+                uint8_t directory_initial_fill;
                 uint8_t direct_last;
                 uint8_t read_last;
             };
@@ -241,7 +256,7 @@ typedef struct {
     bool pending;
     /** True for an initial LOAD "*" (PRGTRK == 0) to prefer PRG entries. */
     bool first_program;
-    /** A non-PRG initial LOAD "*" candidate remains reportable after search exhaustion. */
+    /** Candidate data is retained in the reserved second lookup buffer. */
     bool first_program_candidate;
     /** A zero-track write match remains terminal while lookup searches for a free directory slot. */
     bool zero_track_match;
