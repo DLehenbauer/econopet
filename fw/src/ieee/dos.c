@@ -8363,9 +8363,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
             work->empty_sector = searched_sector;
             work->empty_entry = found_entry;
         }
-        if (work->type == 0) {
-            work->type = file_type;
-        }
+        // OP40 defaults an omitted type for a zero-track match to SEQ.
         found_track = 0;
     }
     const bool relative = (found_track == 0 ? work->type : file_type) == DISKIMAGE_FTYPE_REL;

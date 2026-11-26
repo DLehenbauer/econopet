@@ -7520,7 +7520,7 @@ START_TEST(test_zero_track_write_preserves_directory_successor) {
 }
 END_TEST
 
-// Reopening an abandoned file replaces its zero-track entry instead of hiding a duplicate.
+// Reopening an abandoned zero-track entry without a type uses the native SEQ default.
 START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
     const unsigned int format = (unsigned int)_i;
     image_t image;
@@ -7534,7 +7534,7 @@ START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
         create_typed_file(&unit, &bank, 0, fillers[index], 'P', (uint8_t)(0x20u + index * 4u), 4);
     }
 
-    const uint8_t abandoned = open_name(&unit, &bank, 2, "0:BROKEN,S,W");
+    const uint8_t abandoned = open_name(&unit, &bank, 2, "0:BROKEN,P,W");
     ck_assert_uint_ne(abandoned, DOS_UNUSED);
 
     const uint8_t tail_writer = open_name(&unit, &bank, 3, "0:TAIL,P,W");
@@ -7560,7 +7560,7 @@ START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
     // Model an interrupted writer whose directory entry retains an unclosed zero-track state.
     dos_reset(&unit, model);
 
-    const uint8_t reopened = open_name(&unit, &bank, 2, "0:BROKEN,S,W");
+    const uint8_t reopened = open_name(&unit, &bank, 2, "0:BROKEN,W");
     ck_assert_uint_ne(reopened, DOS_UNUSED);
     put_bytes(&unit, &bank, 2, 0x90, 2);
     ck_assert(dos_close(&unit, &bank, model, 2));
