@@ -239,10 +239,14 @@ typedef struct {
     bool default_drive;
     bool tried_other;
     bool pending;
-    /** True for an initial LOAD "*" (PRGTRK == 0) so directory lookup matches only PRG entries. */
+    /** True for an initial LOAD "*" (PRGTRK == 0) to prefer PRG entries. */
     bool first_program;
+    /** A non-PRG initial LOAD "*" candidate remains reportable after search exhaustion. */
+    bool first_program_candidate;
     /** A zero-track write match remains terminal while lookup searches for a free directory slot. */
     bool zero_track_match;
+    /** A zero-track match is an unclosed writer that must be deleted before reuse. */
+    bool zero_track_unclosed;
 } dos_open_work_t;
 
 // Decode OPEN's bounded command page before lookup. Supply all 59 command

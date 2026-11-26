@@ -8122,6 +8122,10 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     uint8_t found_root_track = 0, found_root_sector = 0, found_record_size = 0;
     uint16_t found_blocks = 0;
+    bool wildcard = false;
+    for (unsigned int index = 0; index < sizeof(work->name); ++index) {
+        wildcard |= work->name[index] == '*' || work->name[index] == '?';
+    }
     bool matched = work->zero_track_match;
     const uint8_t searched_track = work->track, searched_sector = work->sector;
 
@@ -8163,10 +8167,14 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                     work->empty_sector = searched_sector;
                     work->empty_entry = (uint8_t)entry;
                 }
-            } else if (!matched && (!work->first_program ||
-                        (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
-                       name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
-                // Record the first matching directory entry (filtering to PRG on initial LOAD "*") and stop scanning.
+            } else if (!matched && name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
+                const uint8_t candidate_type = file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK;
+                if (work->first_program && candidate_type != DISKIMAGE_FTYPE_PRG) {
+                    work->first_program_candidate = true;
+                    continue;
+                }
+                work->first_program_candidate = false;
+                // Record the first eligible match and stop scanning.
                 found_type = file[DOS_DIRECTORY_TYPE_OFFSET];
                 found_track = file[DOS_DIRECTORY_TRACK_OFFSET];
                 found_sector = file[DOS_DIRECTORY_SECTOR_OFFSET];
@@ -8181,7 +8189,15 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                     (work->type == DISKIMAGE_FTYPE_REL && work->record_parameter && secondary >= 2);
                 if (found_track == 0 && write_match) {
                     work->zero_track_match = true;
-                    if (work->empty_track == 0) {
+                    work->zero_track_unclosed =
+                        !(found_type & DOS_FILE_CLOSED_MASK) && write_match && !wildcard;
+                    if (work->zero_track_unclosed) {
+                        if (work->empty_track == 0) {
+                            work->empty_track = searched_track;
+                            work->empty_sector = searched_sector;
+                            work->empty_entry = found_entry;
+                        }
+                    } else if (work->empty_track == 0) {
                         continue;
                     }
                 }
@@ -8235,6 +8251,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // become generic 23 with zero track/sector, not full controller recovery.
     if (failed) {
         error = DOS_STATUS_READ_ERROR;
+    } else if (found_track == 0 && work->first_program_candidate) {
+        error = DOS_STATUS_TYPE_MISMATCH;
     } else if (found_track == 0 && work->access != DOS_ACCESS_WRITE) {
         error = DOS_STATUS_NOT_FOUND;
     }
@@ -8242,12 +8260,8 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // ROM open:OP110/OP115 compare the requested file type and report 64.
     // A zero C type means infer it from the match.
     const uint8_t file_type = found_type & DOS_FILE_TYPE_MASK;
-    bool wildcard = false;
-    for (unsigned int index = 0; index < sizeof(work->name); ++index) {
-        wildcard |= work->name[index] == '*' || work->name[index] == '?';
-    }
-    const bool unclosed_write =
-        found_track != 0 && !(found_type & DOS_FILE_CLOSED_MASK) && work->access == DOS_ACCESS_WRITE && !wildcard;
+    const bool unclosed_write = (found_track != 0 || work->zero_track_unclosed) &&
+                                !(found_type & DOS_FILE_CLOSED_MASK) && work->access == DOS_ACCESS_WRITE && !wildcard;
     if (found_track != 0) {
         if (work->access == DOS_ACCESS_WRITE && !work->replace && !unclosed_write) {
             error = DOS_STATUS_FILE_EXISTS;
@@ -8630,7 +8644,6 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             // without repeating the load address or ending the stream.
             channel->media = other;
             unit->selected_drive = other.slot;
-            unit->last_drive = other.slot;
             channel->both_drives = false;
             channel->directory = DOS_DIRECTORY_HEADER;
             channel->directory_track = directory_track(model);
