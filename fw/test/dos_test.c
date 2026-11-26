@@ -7332,6 +7332,73 @@ START_TEST(test_directory_lookahead_preserves_progress_across_sector_boundary) {
 }
 END_TEST
 
+// Initial lookahead must preserve both drive cursors and cached sectors through TALK.
+START_TEST(test_dual_drive_lookahead_does_not_reread_exhausted_directory_sector) {
+    const unsigned int format = 1u + (unsigned int)_i;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (unsigned int index = 0; index < 7u; ++index) {
+        char name[16];
+        snprintf(name, sizeof(name), "D0_%u", index);
+        create_typed_file(&unit, &bank, 0, name, 'P', (uint8_t)(0x20u + index * 4u), 4);
+    }
+    create_typed_file(&unit, &bank, 1, "PEER", 'P', 0x70, 4);
+    dos_reset(&unit, model);
+
+    const unsigned int reads = first.reads;
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    const unsigned int reads_after_open = first.reads;
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const diskimage_type_t peer_type = bank.units[0].slots[1].io.image.type;
+    ck_assert(diskimage_sector_offset(type, 39, 1, &first.fail_read_offset));
+    ck_assert(diskimage_sector_offset(peer_type, 39, 1, &second.fail_read_offset));
+    first.fail_read_at_offset = true;
+    second.fail_read_at_offset = true;
+
+    const unsigned int initial_fill_bytes = 256u;
+    uint8_t row[DOS_STAGE_CAPACITY];
+    unsigned int consumed = 0;
+    while (consumed < initial_fill_bytes) {
+        bool eoi = false;
+        const unsigned int count = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+        ck_assert_uint_gt(count, 0);
+        dos_get(&unit, &bank, listing, count);
+        consumed += count;
+    }
+    bool eoi = false;
+    const unsigned int count = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+    ck_assert_uint_eq(count, DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    ck_assert_uint_ne(first.last_failed_read_offset, first.fail_read_offset);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert_uint_ne(reads_after_open, reads);
+    dos_get(&unit, &bank, listing, count);
+
+    const unsigned int peer_reads_after_open = second.reads;
+    const unsigned int header = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+    ck_assert_uint_eq(header, DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    ck_assert_uint_eq(second.reads, peer_reads_after_open + 1u);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    dos_get(&unit, &bank, listing, header);
+
+    const unsigned int entry = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+    ck_assert_uint_eq(entry, DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    ck_assert_mem_eq(row + 8u, "PEER", 4);
+    ck_assert_uint_ne(second.last_failed_read_offset, second.fail_read_offset);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // TALK on an earlier directory must not overwrite LSTDRV from an interleaved OPEN.
 START_TEST(test_directory_talk_preserves_interleaved_drive_selection) {
     const unsigned int format = (unsigned int)_i + 1u;
@@ -7680,6 +7747,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_directory_initial_lookahead_reads_only_the_required_peer_sector, 0, 4);
     tcase_add_loop_test(core, test_directory_lookahead_preserves_cached_next_entry, 0, 3);
     tcase_add_loop_test(core, test_directory_lookahead_preserves_progress_across_sector_boundary, 0, 3);
+    tcase_add_loop_test(core, test_dual_drive_lookahead_does_not_reread_exhausted_directory_sector, 0, 2);
     tcase_add_loop_test(core, test_directory_talk_preserves_interleaved_drive_selection, 0, 2);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);

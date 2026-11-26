@@ -221,7 +221,13 @@ typedef struct {
             uint8_t old_sector;
             uint8_t next_track;
             uint8_t next_sector;
-            uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+            union {
+                uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+                struct {
+                    dos_directory_cursor_t directory_resume;
+                    bool directory_resume_pending;
+                };
+            };
             union {
                 uint8_t line_length;
                 uint8_t direct_byte;

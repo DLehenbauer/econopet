@@ -8601,6 +8601,15 @@ static bool directory_entry_matches(const dos_unit_t* const unit, const dos_chan
     return false;
 }
 
+// Check whether the channel source page contains a directory sector for one drive.
+static bool directory_source_matches(const dos_unit_t* const unit, const dos_channel_t* const channel,
+                                     const uint8_t slot, const uint8_t track, const uint8_t sector) {
+    const dos_buffer_t* const source = &unit->buffers[channel->buffers[1]];
+    const uint16_t source_bit = (uint16_t)(1u << channel->buffers[1]);
+    return source->resident && source->track == track && source->sector == sector &&
+           (((unit->buffer_drives & source_bit) != 0) == (slot != 0));
+}
+
 // Prepare one directory row at the requested offset, retaining any unconsumed row.
 static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* const media,
                                    dos_channel_t* const channel, const unsigned int line_offset) {
@@ -8624,16 +8633,16 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
         // NEWDIR quotes the disk name and substitutes header $A0 padding.
         // Only the first drive header carries the BASIC load address $0401.
         const uint8_t track = directory_track(model);
+        uint8_t header[DISKIMAGE_SECTOR_SIZE];
         if (!storage_error(unit, media, channel->media,
-                           read_sector(unit, media, channel->media, track, 0, source->bytes), false, track, 0)) {
+                           read_sector(unit, media, channel->media, track, 0, header), false, track, 0)) {
             channel->ready = false;
             return false;
         }
-        source->resident = false;
         memset(name, ' ', sizeof(name));
         const unsigned int offset = model == DOS_MODEL_4040 ? DOS_HEADER_NAME_4040 : DOS_HEADER_NAME_8050;
         for (unsigned int index = 0; index < 23u; ++index) {
-            const uint8_t byte = source->bytes[offset + index];
+            const uint8_t byte = header[offset + index];
             name[index + 2u] = byte == DISKIMAGE_FILENAME_PADDING ? (index == 22u ? '1' : ' ') : byte;
         }
         name[0] = 0x12;
@@ -8646,7 +8655,11 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             prefix = 2;
             channel->singleton = 1;
         }
-        channel->directory = DOS_DIRECTORY_ENTRIES;
+        channel->directory = channel->directory_track == 0 ? DOS_DIRECTORY_FOOTER : DOS_DIRECTORY_ENTRIES;
+        if (!directory_source_matches(unit, channel, channel->media.slot, channel->directory_track,
+                                      channel->directory_sector)) {
+            source->resident = false;
+        }
     } else if (channel->directory == DOS_DIRECTORY_ENTRIES) {
         // Retain the directory sector while scanning its slots. Pattern
         // drive/type filtering corresponds to lookup's COMPAR/FNDFIL work.
@@ -8719,11 +8732,26 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             unit->selected_drive = other.slot;
             channel->both_drives = false;
             channel->directory = DOS_DIRECTORY_HEADER;
-            channel->directory_track = directory_track(model);
-            channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;
-            channel->directory_entry = 0;
-            channel->traversed = 0;
-            source->resident = false;
+            const dos_directory_cursor_t* const resume = &channel->directory_resume;
+            const bool resume_matches =
+                channel->directory_resume_pending && resume->identity == other.identity &&
+                resume->slot == other.slot && resume->phase == DOS_DIRECTORY_ENTRIES;
+            if (resume_matches) {
+                channel->directory_track = resume->track;
+                channel->directory_sector = resume->sector;
+                channel->directory_entry = resume->entry;
+                channel->traversed = resume->traversed;
+                if (!directory_source_matches(unit, channel, other.slot, resume->track, resume->sector)) {
+                    source->resident = false;
+                }
+            } else {
+                channel->directory_track = directory_track(model);
+                channel->directory_sector = DOS_DIRECTORY_FIRST_SECTOR;
+                channel->directory_entry = 0;
+                channel->traversed = 0;
+                source->resident = false;
+            }
+            channel->directory_resume_pending = false;
         } else {
             // DIR3 terminates the BASIC listing with zero bytes and EOI.
             channel->directory = DOS_DIRECTORY_END;
@@ -8839,30 +8867,46 @@ static bool directory_lookahead_step(dos_unit_t* const unit, dos_media_bank_t* c
 // Commit same-drive lookahead progress so the next row does not repeat the search.
 static bool directory_snapshot_commit_lookahead(dos_unit_t* const unit, dos_channel_t* const channel,
                                                 const dos_directory_cursor_t* const cursor) {
-    if (channel->directory != DOS_DIRECTORY_ENTRIES || cursor->phase != DOS_DIRECTORY_ENTRIES ||
-        cursor->identity != channel->media.identity || cursor->slot != channel->media.slot) {
+    if (cursor->phase != DOS_DIRECTORY_ENTRIES) {
         return false;
     }
 
-    channel->directory_track = cursor->track;
-    channel->directory_sector = cursor->sector;
-    channel->traversed = cursor->traversed;
-    channel->both_drives = cursor->both_drives;
-    if (cursor->track == 0) {
-        channel->directory_entry = cursor->entry;
+    if ((channel->directory == DOS_DIRECTORY_ENTRIES || channel->directory == DOS_DIRECTORY_HEADER) &&
+        cursor->identity == channel->media.identity && cursor->slot == channel->media.slot) {
+        channel->directory_track = cursor->track;
+        channel->directory_sector = cursor->sector;
+        channel->traversed = cursor->traversed;
+        channel->both_drives = cursor->both_drives;
+        if (cursor->track == 0) {
+            channel->directory_entry = cursor->entry;
+            if (channel->directory == DOS_DIRECTORY_ENTRIES) {
+                channel->directory = DOS_DIRECTORY_FOOTER;
+            }
+            return false;
+        }
+        channel->directory_entry =
+            cursor->entry == DOS_UNUSED ? DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE
+                                        : cursor->entry - DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        return directory_source_matches(unit, channel, channel->media.slot, cursor->track, cursor->sector);
+    }
+
+    if (channel->directory == DOS_DIRECTORY_ENTRIES && channel->both_drives &&
+        cursor->slot == (channel->media.slot ^ 1u)) {
+        channel->directory_resume = *cursor;
+        if (cursor->track != 0) {
+            channel->directory_resume.entry =
+                cursor->entry == DOS_UNUSED ? DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE
+                                            : cursor->entry - DISKIMAGE_DIRECTORY_ENTRY_SIZE;
+        }
+        channel->directory_resume_pending = true;
+        channel->directory_track = 0;
+        channel->directory_sector = 0;
+        channel->directory_entry = 0;
         channel->directory = DOS_DIRECTORY_FOOTER;
-        return false;
+        return directory_source_matches(unit, channel, cursor->slot, cursor->track, cursor->sector);
     }
-    channel->directory_entry =
-        cursor->entry == DOS_UNUSED ? DISKIMAGE_SECTOR_SIZE - DISKIMAGE_DIRECTORY_ENTRY_SIZE
-                                    : cursor->entry - DISKIMAGE_DIRECTORY_ENTRY_SIZE;
 
-    const dos_buffer_t* const source = &unit->buffers[channel->buffers[1]];
-    const uint16_t source_bit = (uint16_t)(1u << channel->buffers[1]);
-    const bool source_slot_matches =
-        ((unit->buffer_drives & source_bit) != 0) == (channel->media.slot != 0);
-    return source->resident && source->track == channel->directory_track &&
-           source->sector == channel->directory_sector && source_slot_matches;
+    return false;
 }
 
 // Publish the buffered rows and LSTDRV after STDIR's bounded initial work completes.
