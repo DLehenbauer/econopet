@@ -7520,9 +7520,9 @@ START_TEST(test_zero_track_write_preserves_directory_successor) {
 }
 END_TEST
 
-// Reopening an abandoned zero-track entry without a type uses the native SEQ default.
-START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
-    const unsigned int format = (unsigned int)_i;
+// OP40 defaults zero-track matches to SEQ but preserves nonzero-track file types.
+START_TEST(test_reopen_unclosed_entry_uses_native_type_default) {
+    const unsigned int format = (unsigned int)_i % 3u, scenario = (unsigned int)_i / 3u;
     image_t image;
     dos_media_bank_t bank = {0};
     mount_blank(&bank, &image, format);
@@ -7534,7 +7534,8 @@ START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
         create_typed_file(&unit, &bank, 0, fillers[index], 'P', (uint8_t)(0x20u + index * 4u), 4);
     }
 
-    const uint8_t abandoned = open_name(&unit, &bank, 2, "0:BROKEN,P,W");
+    const char* const abandoned_name = scenario == 2 ? "0:BROKEN,U,W" : "0:BROKEN,P,W";
+    const uint8_t abandoned = open_name(&unit, &bank, 2, abandoned_name);
     ck_assert_uint_ne(abandoned, DOS_UNUSED);
 
     const uint8_t tail_writer = open_name(&unit, &bank, 3, "0:TAIL,P,W");
@@ -7551,7 +7552,9 @@ START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
     for (unsigned int entry = 0; entry < DISKIMAGE_SECTOR_SIZE; entry += DISKIMAGE_DIRECTORY_ENTRY_SIZE) {
         if (memcmp(directory + entry + name_offset, "BROKEN", 6) == 0) {
             ck_assert_uint_ne(directory[entry + track_offset], 0);
-            directory[entry + track_offset] = 0;
+            if (scenario == 0) {
+                directory[entry + track_offset] = 0;
+            }
             found_unclosed = true;
             break;
         }
@@ -7566,8 +7569,13 @@ START_TEST(test_reopen_unclosed_zero_track_file_reuses_directory_entry) {
     ck_assert(dos_close(&unit, &bank, model, 2));
     finish_open(&unit, &bank);
 
-    const uint8_t reader = open_name(&unit, &bank, 4, "0:BROKEN,S,R");
+    const char* const reader_name =
+        scenario == 0 ? "0:BROKEN,S,R" : scenario == 1 ? "0:BROKEN,P,R" : "0:BROKEN,U,R";
+    const uint8_t reader = open_name(&unit, &bank, 4, reader_name);
     ck_assert_uint_ne(reader, DOS_UNUSED);
+    ck_assert_uint_eq(unit.channels[reader].file_type,
+                      scenario == 0 ? DISKIMAGE_FTYPE_SEQ
+                                    : scenario == 1 ? DISKIMAGE_FTYPE_PRG : DISKIMAGE_FTYPE_USR);
     expect_bytes(&unit, &bank, reader, 2, 0x90);
     ck_assert(dos_close(&unit, &bank, model, 4));
     const uint8_t tail = open_name(&unit, &bank, 5, "0:TAIL");
@@ -7751,7 +7759,7 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_directory_talk_preserves_interleaved_drive_selection, 0, 2);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);
-    tcase_add_loop_test(core, test_reopen_unclosed_zero_track_file_reuses_directory_entry, 0, 3);
+    tcase_add_loop_test(core, test_reopen_unclosed_entry_uses_native_type_default, 0, 9);
     suite_add_tcase(suite, core);
     return suite;
 }
