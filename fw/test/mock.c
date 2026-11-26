@@ -75,8 +75,8 @@ static void (*cpu_state_observer)(cpu_state_t);
 static cpu_state_t mock_cpu_state;
 static cpu_type_t selected_cpu;
 static uint8_t audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
-static uint8_t video_control, via_pcr;
-static uint8_t pia_control[2], pia_ddr[2], pia_output[2];
+static uint8_t video_control, via_orb, via_ddrb, via_pcr;
+static uint8_t pia_control[4], pia_ddr[4], pia_output[4];
 static bool pia1_absent;
 static uint8_t pia1_stuck_low, pia1_bus;
 static uint16_t pia1_rows;
@@ -157,7 +157,28 @@ static struct {
     size_t status_count;
     size_t status_repeat_after;
     uint8_t tx_owner;
+    uint8_t pia2_ora;
+    uint8_t pia2_ddra;
+    uint8_t pia2_cra;
+    uint8_t pia2_orb;
+    uint8_t pia2_ddrb;
+    uint8_t pia2_crb;
+    uint8_t via_orb;
+    uint8_t via_ddrb;
 } mock_ieee;
+
+/** Reset snooped guest PIA2 and VIA shadow registers to ieee.sv's IFC reset defaults. */
+static void mock_ieee_reset_io_shadows(void) {
+    // Match ieee.sv's initial and IFC values (all W65C21N/W65C22N latches, directions, and control cleared to 0).
+    mock_ieee.pia2_ora = 0;
+    mock_ieee.pia2_ddra = 0;
+    mock_ieee.pia2_cra = 0;
+    mock_ieee.pia2_orb = 0;
+    mock_ieee.pia2_ddrb = 0;
+    mock_ieee.pia2_crb = 0;
+    mock_ieee.via_orb = 0;
+    mock_ieee.via_ddrb = 0;
+}
 
 // Identifies addresses belonging to the emulated FPGA IEEE register block.
 static bool mock_ieee_addr(uint32_t addr) {
@@ -362,6 +383,15 @@ static uint8_t spi_read_at_raw(uint32_t addr) {
         if (addr == ECONOPET_WB_IEEE_RX_ADDR) {
             return mock_ieee.rx_count == 0 ? 0 : mock_ieee.rx[mock_ieee.rx_head].byte;
         }
+        if (addr == ECONOPET_WB_IEEE_PIA2_ORA_ADDR) return mock_ieee.pia2_ora;
+        if (addr == ECONOPET_WB_IEEE_PIA2_DDRA_ADDR) return mock_ieee.pia2_ddra;
+        if (addr == ECONOPET_WB_IEEE_PIA2_CRA_ADDR) return mock_ieee.pia2_cra & 0x3fu;
+        if (addr == ECONOPET_WB_IEEE_PIA2_ORB_ADDR) return mock_ieee.pia2_orb;
+        if (addr == ECONOPET_WB_IEEE_PIA2_DDRB_ADDR) return mock_ieee.pia2_ddrb;
+        if (addr == ECONOPET_WB_IEEE_PIA2_CRB_ADDR) return mock_ieee.pia2_crb & 0x3fu;
+        if (addr == ECONOPET_WB_IEEE_VIA_ORB_ADDR) return mock_ieee.via_orb;
+        if (addr == ECONOPET_WB_IEEE_VIA_DDRB_ADDR) return mock_ieee.via_ddrb;
+        return 0;
     }
     if (addr >= ECONOPET_WB_BRAM_BASE_ADDR &&
         addr - ECONOPET_WB_BRAM_BASE_ADDR < sizeof(mock_char_rom)) {
@@ -553,6 +583,7 @@ void set_cpu(cpu_state_t state) {
     if (state & CPU_RESET) {
         memset(physical_matrix, UINT8_MAX, sizeof(physical_matrix));
         mock_ieee_flush(false);
+        mock_ieee_reset_io_shadows();
     }
 }
 
@@ -580,17 +611,25 @@ void set_cpu_type_machine(cpu_type_t cpu, bool superpet_io) {
     selected_cpu = (cpu_type_t)((uint8_t)cpu | (superpet_io ? ECONOPET_CPU_SEL_SUPERPET_IO_MASK : 0));
 }
 
-/** Model readable PIA direction/data selection and the separate hidden output latches. */
+/** Model readable PIA/VIA direction/data selection and the separate hidden output latches. */
 uint8_t pet_io_read(const uint16_t address) {
     ck_assert(!(mock_cpu_state & CPU_READY));
     if (address >= 0xe810 && address <= 0xe813 && pia1_absent) {
         return pia1_bus;
     }
+    if (address == 0xe840) {
+        return (0xffu & ~via_ddrb) | (via_orb & via_ddrb);
+    }
+    if (address == 0xe842) {
+        return via_ddrb;
+    }
     if (address == 0xe84c) {
         return via_pcr;
     }
-    ck_assert(address >= 0xe810 && address <= 0xe813);
-    const unsigned port = (address - 0xe810) / 2;
+    const bool is_pia1 = address >= 0xe810 && address <= 0xe813;
+    const bool is_pia2 = address >= 0xe820 && address <= 0xe823;
+    ck_assert(is_pia1 || is_pia2);
+    const unsigned port = (is_pia1 ? (address - 0xe810) : (address - 0xe820 + 4)) / 2;
     if (address & 1) {
         return pia_control[port];
     }
@@ -598,25 +637,35 @@ uint8_t pet_io_read(const uint16_t address) {
         return pia_ddr[port];
     }
     const unsigned row = pia_output[0] & 15;
-    const uint8_t input = port == 0 || row >= ECONOPET_KBD_COL_COUNT ? 0xff : physical_matrix[row];
+    const uint8_t input = port != 1 || row >= ECONOPET_KBD_COL_COUNT ? 0xff : physical_matrix[row];
     const uint8_t value = (input & ~pia_ddr[port]) | (pia_output[port] & pia_ddr[port]);
     return port == 0 ? value & (uint8_t)~pia1_stuck_low : value;
 }
 
-/** Record physical PIA writes in the register selected by the current control byte. */
+/** Record physical PIA/VIA writes in the register selected by the current control byte. */
 void pet_io_write(const uint16_t address, const uint8_t data) {
     ck_assert(!(mock_cpu_state & CPU_READY));
     if (address >= 0xe810 && address <= 0xe813) {
         pia1_bus = data;
         if (pia1_absent) return;
     }
+    if (address == 0xe840) {
+        via_orb = data;
+        return;
+    }
+    if (address == 0xe842) {
+        via_ddrb = data;
+        return;
+    }
     if (address == 0xe84c) {
         via_pcr = data;
         text_mode_lower = (data & 0x0e) == 0x0e;
         return;
     }
-    ck_assert(address >= 0xe810 && address <= 0xe813);
-    const unsigned port = (address - 0xe810) / 2;
+    const bool is_pia1 = address >= 0xe810 && address <= 0xe813;
+    const bool is_pia2 = address >= 0xe820 && address <= 0xe823;
+    ck_assert(is_pia1 || is_pia2);
+    const unsigned port = (is_pia1 ? (address - 0xe810) : (address - 0xe820 + 4)) / 2;
     if (address & 1) {
         pia_control[port] = data & 0x3f;
     } else if (pia_control[port] & 4) {
@@ -626,6 +675,46 @@ void pet_io_write(const uint16_t address, const uint8_t data) {
     } else {
         pia_ddr[port] = data;
     }
+}
+
+/**
+ * Simulate one running-CPU I/O write, updating ieee.sv's snooped guest shadows
+ * and suppressing physical PIA2 and VIA DDRB writes when virtual drives are enabled.
+ */
+void mock_cpu_io_write(const uint16_t address, const uint8_t data) {
+    // Snoop PIA2 and VIA writes into mock_ieee, dropping suppressed external writes when enabled.
+    const bool enabled = (mock_ieee.ctrl & ECONOPET_IEEE_CTRL_UNIT_MASK) != 0;
+    const bool is_pia2 = address >= 0xe820 && address <= 0xe823;
+    if (is_pia2) {
+        switch (address & 3u) {
+            case 0u:
+                if (mock_ieee.pia2_cra & 4u) mock_ieee.pia2_ora = data;
+                else mock_ieee.pia2_ddra = data;
+                break;
+            case 1u:
+                mock_ieee.pia2_cra = data;
+                break;
+            case 2u:
+                if (mock_ieee.pia2_crb & 4u) mock_ieee.pia2_orb = data;
+                else mock_ieee.pia2_ddrb = data;
+                break;
+            case 3u:
+                mock_ieee.pia2_crb = data;
+                break;
+        }
+        if (enabled) return;
+    } else if (address == 0xe840) {
+        mock_ieee.via_orb = data;
+    } else if (address == 0xe842) {
+        mock_ieee.via_ddrb = data;
+        if (enabled) return;
+    }
+
+    // Forward unsuppressed writes to the physical PIA/VIA model without tripping pet_io_write's halt check.
+    const cpu_state_t saved_state = mock_cpu_state;
+    mock_cpu_state &= (cpu_state_t)~CPU_READY;
+    pet_io_write(address, data);
+    mock_cpu_state = saved_state;
 }
 
 void mock_pia1_fault(bool absent, uint8_t stuck_low) {
@@ -673,7 +762,7 @@ void mock_reset(void) {
     system_init();
     pet_keyboard_end();
     audio_control = ECONOPET_REG_AUDIO_ENABLE_MASK;
-    video_control = via_pcr = 0;
+    video_control = via_orb = via_ddrb = via_pcr = 0;
     memset(pia_control, 0, sizeof(pia_control));
     memset(pia_ddr, 0, sizeof(pia_ddr));
     memset(pia_output, 0, sizeof(pia_output));
@@ -683,6 +772,7 @@ void mock_reset(void) {
     memset(mock_ram, 0xEA, sizeof(mock_ram));
     memset(mock_char_rom, 0, sizeof(mock_char_rom));
     memset(&mock_ieee, 0, sizeof(mock_ieee));
+    mock_ieee_reset_io_shadows();
     // Clear breakpoint observations and hold the CPU in reset.
     system_state.bp_halted = false;
     mock_bp_addr = 0;

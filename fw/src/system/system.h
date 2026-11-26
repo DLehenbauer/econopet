@@ -35,6 +35,17 @@ void system_restore(bool resume);
 /** Reset into the guest after the caller has completed destructive teardown. */
 void system_reset_guest(void);
 /**
+ * Park physical VIA and PIA2 IEEE output pins as inputs while the CPU is
+ * halted (pre-charging IEEE output latches high first and leaving non-IEEE
+ * VIA directions at their 0x00 reset state until guest DDRB writes sync).
+ */
+void system_park_ieee_io(void);
+/**
+ * Lazily forward non-IEEE guest VIA DDRB updates snooped in $7000F to physical
+ * VIA when virtual IEEE emulation is active in guest mode.
+ */
+void system_sync_ieee_io(void);
+/**
  * Irreversibly abandon normal operation and any resumable guest context.
  *
  * Publishes diagnostic ownership before console teardown begins. The caller must

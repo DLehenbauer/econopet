@@ -79,7 +79,7 @@ target_compile_definitions(econopet_menu_tests PRIVATE ECONOPET_MENU_BOOT_ROM="$
 target_compile_features(econopet_menu_tests PRIVATE cxx_std_23)
 target_link_libraries(econopet_menu_tests PRIVATE econopet_menu_firmware GTest::gtest_main)
 # Unused boot/storage entry points are not host platform APIs.
-target_link_options(econopet_menu_tests PRIVATE -Wl,--gc-sections -Wl,--wrap=time_us_64)
+target_link_options(econopet_menu_tests PRIVATE -Wl,--gc-sections -Wl,--wrap=time_us_64 -Wl,--wrap=sleep_us)
 set_target_properties(econopet_menu_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
 gtest_discover_tests(econopet_menu_tests TEST_PREFIX "menu."
     WORKING_DIRECTORY "${BOARD_RUNTIME_DIR}" DISCOVERY_TIMEOUT ${SYSTEM_DISCOVERY_TIMEOUT_SECONDS}

@@ -50,7 +50,44 @@ VIA  | E840    | IRB      |  7  | PB7   | DAV (In)
 REN is held permanently low by the PET
 IFC is tied to RESB
 
-### Virtual drive reset and status
+### Virtual drive reset, physical bus isolation, and status
+
+When any virtual IEEE-488 unit (8-11) has mounted media, EconoPET isolates the
+external IEEE-488 connector while preserving physical cassette and keyboard I/O:
+
+- While the CPU is halted during `pet_reset()` (after `RESB`/`IFC` has already
+  reset external peripherals) or menu `system_restore()` (where firmware first
+  issues a bounded `ATN` + `UNLISTEN` `$3F` / `UNTALK` `$5F` sequence and waits
+  for external `DAV`, `NRFD`, and `NDAC` to release), firmware pre-charges high
+  and configures physical `VIA` `PB2:1` (`ATN_OUT`, `NRFD_OUT`) and `PIA2`
+  (`DIO_OUT`, `NDAC_OUT`, `DAV_OUT`) as inputs over the I/O bridge, keeping the
+  external `SN74LS07` open-collector drivers held off.
+  `PIA1 CRA` (`$E811`) continues to pass through so keyboard row selection and
+  cassette #1 read IRQs work normally (with external peripherals unaddressed and
+  `ATN`/`DAV` held released, any `EOI_OUT` transitions on `PIA1 CA2` are ignored
+  by IEEE-488 listeners). Ejecting all virtual drives in the menu restores
+  physical `PIA2` and `VIA` registers from `ieee.sv`'s snooped guest shadow
+  registers (`$70008` through `$7000F`) so external IEEE-488 peripherals resume
+  without rebooting. Reset parking leaves physical `VIA DDRB` at `$00` (so
+  guests like SuperPET Waterloo 6809 that leave `PB4:3` as inputs never
+  energize Cassette #2's active-low motor), and `system_task()` + menu
+  restoration lazily synchronize any non-IEEE guest `VIA DDRB` changes (such as
+  PET `CINT` enabling `PB4:3` cassette outputs) from `$7000F` while keeping
+  `PB2:1` parked as inputs.
+  Retirement allows 100 us after DAV release for interrupt-driven acceptors to
+  assert NRFD/NDAC. All retirement waits remain bounded and best-effort, so an
+  unpowered peripheral cannot block a virtual mount.
+- In gateware (`ieee.sv` and `main.sv`), external `PIA2` chip-selects (`$E820`
+  through `$E823`) and `VIA DDRB` (`$E842`) writes are suppressed while `VIA
+  ORB` (`$E840`) and `PIA1` writes pass through untouched. Virtual IEEE inputs
+  are injected on `$E820-$E823`, `$E840`, `$E842`, and `$E810` (while `DAV` or
+  `EOI` is actively asserted). Injected `$E810` reads retain the cassette switch
+  bits (`PA5:4`) from the last unclaimed physical `ORA` read (initially both
+  released), while physical `PIA1` chip-selects (including live switch changes
+  and `IRQA1` clearing in `CRA[7]`) take effect on unclaimed idle and inter-byte
+  `$E810` reads rather than during an active `DAV`/`EOI` assertion window
+  (concurrent physical cassette tape reads during active virtual IEEE transfers
+  are not supported).
 
 Firmware-initiated PET resets reset DOS/channel state and flush the FPGA's IEEE
 FIFOs before releasing the CPU, without ejecting mounted images. This is the

@@ -5,32 +5,25 @@ import common_pkg::*;
 
 // IEEE-488 disk-drive emulation (devices 8 through 11).
 //
-// Sits between the soft CPU and the physical PIA2/VIA the same way
-// keyboard.sv sits in front of PIA1: it SNOOPS the CPU's writes to the
-// IEEE-related I/O registers and, when enabled, INJECTS the CPU's reads of
-// the IEEE status/input registers so that an emulated drive appears on the
-// otherwise-empty bus. Disabled it is fully passive (physical devices are
-// untouched). Selecting any emulated unit enables interception, which replaces
-// the CPU's view of the bus, so ALL physical
-// IEEE devices are masked -- enable only with nothing on the connector. The byte-level handshake (acceptor and talker roles)
-// runs here in fabric -- IEEE-488 is flow-controlled, so the MCU can
-// service the FIFOs over Wishbone/SPI at its own rate while the CPU
-// blocks in its handshake loops.
+// Sits between the selected CPU and the physical PIA1/PIA2/VIA the same way
+// keyboard.sv sits in front of PIA1: it snoops CPU writes to the IEEE-related
+// I/O registers and, when enabled, suppresses direction/control writes that
+// would enable external IEEE drivers while injecting virtual IEEE reads.
+// Firmware parks VIA PB2:1 (ATN/NRFD) and PIA2 (DIO/NDAC/DAV) as inputs over
+// the I/O bridge while halted, so ORA/ORB data writes still reach the physical
+// chips for cassette and latch tracking without driving the external connector.
+// Disabled it is fully passive (physical devices are untouched).
 //
-// PET IEEE-488 register map (per the Waterloo kernel):
-//   PIA2 $E820 PA  = DIO in            (inject while our talker drives data)
-//   PIA2 $E821 CRA = CA2 -> NDAC out   (snoop: bits[5:4]==11 -> level=bit3)
-//   PIA2 $E822 PB  = DIO out           (snoop; complement = byte value)
-//   PIA2 $E823 CRB = CB2 -> DAV out    (snoop)
-//   VIA  $E840 PB  = bit0 NDAC in, bit1 NRFD out, bit2 ATN out,
-//                    bit6 NRFD in, bit7 DAV in   (inject full composed byte)
-//   PIA1 $E810 PA  = bit6 EOI in       (inject only while asserting EOI)
+// PET IEEE-488 register map:
+//   PIA2 $E820 PA/DDRA = DIO in        (snoop and suppress write, inject bus_dio or DDRA read)
+//   PIA2 $E821 CRA     = CA2 -> NDAC   (snoop and suppress write, inject CRA[5:0] read)
+//   PIA2 $E822 PB/DDRB = DIO out       (snoop and suppress write, inject cpu_dio or DDRB read)
+//   PIA2 $E823 CRB     = CB2 -> DAV    (snoop and suppress write, inject CRB[5:0] read)
+//   VIA  $E840 PB      = bit0 NDAC in, bit1 NRFD out, bit2 ATN out,
+//                        bit6 NRFD in, bit7 DAV in (ORB write passes through, inject read)
+//   VIA  $E842 DDRB    = Port B dirs   (snoop and suppress write, inject DDRB read)
+//   PIA1 $E810 PA      = bit6 EOI in   (inject only while DAV or EOI is asserted)
 //
-// The Waterloo load sequence this must serve:
-//   LISTEN 8, OPEN ch ($Fx), name "1:<file>,PRG", UNLISTEN,
-//   TALK 8 ch15 -> CR-terminated status string, UNTALK,
-//   TALK 8 ch0  -> file data (EOI on last byte), UNTALK,
-//   TALK ch15 status re-check, CLOSE, final status read.
 module ieee (
     input  logic wb_clock_i,
     input  logic ifc_i,
@@ -46,7 +39,7 @@ module ieee (
     output logic                     wbp_ack_o,
     input  logic                     wbp_sel_i,
 
-    // CPU bus snoop/inject (soft 6809 side)
+    // CPU bus snoop/inject
     input  logic                     cpu_be_i,
     input  logic                     cpu_addr_strobe_i,
     input  logic                     cpu_data_strobe_i,
@@ -59,6 +52,9 @@ module ieee (
     input  logic                     pia2_cs_i,
     input  logic                     via_cs_i,
     input  logic [ VIA_RS_WIDTH-1:0] rs_i,          // cpu_addr[3:0]
+    output logic                     claim_pia1_o,  // suppress external PIA1 CS and /IO_OE on claimed cycle
+    output logic                     claim_pia2_o,  // suppress external PIA2 CS and /IO_OE on claimed cycle
+    output logic                     claim_via_o,   // suppress external VIA CS and /IO_OE on claimed cycle
 
     input  logic                     diag_i,        // PIA1 PA7 (physical pin)
     input  logic                     vert_i         // vertical drive, for VIA PB5
@@ -74,18 +70,25 @@ module ieee (
     // ------------------------------------------------------------------
     // Snooped CPU-side IEEE line states (all _n: 1 = released)
     // ------------------------------------------------------------------
-    logic [7:0] pia2_pb_out = 8'hFF;   // DIO out register (active-low)
+    logic [7:0] pia2_ora    = 8'h00;   // snooped guest PIA2 ORA (DIO in output latch)
+    logic [7:0] pia2_ddra   = 8'h00;   // snooped guest PIA2 DDRA
+    logic [7:0] pia2_pb_out = 8'h00;   // snooped guest PIA2 ORB (active-low DIO out latch)
+    logic [7:0] pia2_ddrb   = 8'h00;   // snooped guest PIA2 DDRB
     logic [7:0] pia2_cra    = 8'h00;
     logic [7:0] pia2_crb    = 8'h00;
-    logic [7:0] via_orb     = 8'hFF;
+    logic [7:0] via_orb     = 8'h00;   // snooped guest VIA ORB
+    logic [7:0] via_ddrb    = 8'h00;   // snooped guest VIA DDRB
     logic [3:0] pia1_pa_out = 4'h0;    // keyboard column select (for $E810 compose)
     logic [7:0] pia1_cra = 8'h00;
+    logic [1:0] cassette_sense = 2'b11;
 
+    // Pins configured as inputs (DDR bit == 0) float high on the open-collector IEEE bus.
+    wire [7:0] cpu_dio = pia2_pb_out | ~pia2_ddrb;
     wire cpu_eoi_n  = (pia1_cra[5:4] == 2'b11) ? pia1_cra[3] : 1'b1;
     wire cpu_ndac_n = (pia2_cra[5:4] == 2'b11) ? pia2_cra[3] : 1'b1;
     wire cpu_dav_n  = (pia2_crb[5:4] == 2'b11) ? pia2_crb[3] : 1'b1;
-    wire cpu_atn_n  = via_orb[2];
-    wire cpu_nrfd_n = via_orb[1];
+    wire cpu_atn_n  = via_orb[2] | ~via_ddrb[2];
+    wire cpu_nrfd_n = via_orb[1] | ~via_ddrb[1];
 
     // Per-bus-cycle snapshot of the decode: the CPU changes ADDR/RnW at
     // E's falling edge while the bus-enable tail is still live, so live
@@ -115,10 +118,12 @@ module ieee (
             snap_dly   <= '0;
             snap_valid <= 1'b0;
         end else begin
-            snap_dly <= {snap_dly[1:0], cpu_addr_strobe_i};
-            // BE fall ends the cycle -- a stale snapshot must not inject into the next.
+            // Gate snap_dly and snap_valid with cpu_be_i so MCU io_ctl bridge cycles
+            // (when cpu_be_i == 0) never overwrite the snooped guest I/O shadows.
+            snap_dly <= {snap_dly[1:0], cpu_addr_strobe_i && cpu_be_i};
+            // BE fall ends the cycle (a stale snapshot must not inject into the next).
             if (cpu_addr_strobe_i || !cpu_be_i) snap_valid <= 1'b0;
-            if (snap_dly[2]) begin
+            if (snap_dly[2] && cpu_be_i) begin
                 snap_valid <= 1'b1;
                 snap_pia1  <= pia1_cs_i;
                 snap_pia2  <= pia2_cs_i;
@@ -130,27 +135,43 @@ module ieee (
     end
 
     wire [PIA_RS_WIDTH-1:0] pia_rs = snap_rs[PIA_RS_WIDTH-1:0];
-    wire cpu_wr = cpu_data_strobe_i && snap_we;
+    wire cpu_wr = cpu_data_strobe_i && snap_valid && snap_we;
 
+    // Retain physical cassette switches during injected reads. Only an unclaimed
+    // guest ORA read observes the pins (not DDR/control reads or our own injection).
+    always_ff @(posedge wb_clock_i) begin
+        if (ifc_i) cassette_sense <= 2'b11;
+        else if (cpu_data_strobe_i && cpu_be_i && snap_valid && !snap_we &&
+                 snap_pia1 && pia_rs == 2'd0 && pia1_cra[2] && !claim_pia1_o)
+            cassette_sense <= cpu_data_i[5:4];
+    end
+
+    // Snoop guest CPU writes (even while disabled) so firmware can park or restore physical PIA2/VIA cleanly.
     always_ff @(posedge wb_clock_i) begin
         if (ifc_i) begin
-            pia2_pb_out <= 8'hFF;
+            pia2_ora    <= 8'h00;
+            pia2_ddra   <= 8'h00;
+            pia2_pb_out <= 8'h00;
+            pia2_ddrb   <= 8'h00;
             pia2_cra    <= 8'h00;
             pia2_crb    <= 8'h00;
-            via_orb     <= 8'hFF;
+            via_orb     <= 8'h00;
+            via_ddrb    <= 8'h00;
             pia1_pa_out <= 4'h0;
             pia1_cra    <= 8'h00;
         end else if (cpu_wr) begin
             if (snap_pia2) begin
                 unique case (pia_rs)
+                    2'd0: if (pia2_cra[2]) pia2_ora <= cpu_data_i; else pia2_ddra <= cpu_data_i;
                     2'd1: pia2_cra <= cpu_data_i;
-                    2'd2: if (pia2_crb[2]) pia2_pb_out <= cpu_data_i;  // else DDRB
+                    2'd2: if (pia2_crb[2]) pia2_pb_out <= cpu_data_i; else pia2_ddrb <= cpu_data_i;
                     2'd3: pia2_crb <= cpu_data_i;
                     default: ;
                 endcase
             end
-            if (snap_via && snap_rs == 4'd0) via_orb <= cpu_data_i;
-            if (snap_pia1 && pia_rs == 2'd0) pia1_pa_out <= cpu_data_i[3:0];
+            if (snap_via && snap_rs == 4'd0) via_orb  <= cpu_data_i;
+            if (snap_via && snap_rs == 4'd2) via_ddrb <= cpu_data_i;
+            if (snap_pia1 && pia_rs == 2'd0 && pia1_cra[2]) pia1_pa_out <= cpu_data_i[3:0];
             if (snap_pia1 && pia_rs == 2'd1) pia1_cra <= cpu_data_i;
         end
     end
@@ -168,7 +189,7 @@ module ieee (
     wire bus_ndac_n = cpu_ndac_n & dev_ndac_n;
     wire bus_nrfd_n = cpu_nrfd_n & dev_nrfd_n;
     wire bus_eoi_n = cpu_eoi_n & dev_eoi_n;
-    wire [7:0] bus_dio = pia2_pb_out & dev_dio;
+    wire [7:0] bus_dio = cpu_dio & dev_dio;
 
     // ------------------------------------------------------------------
     // FIFOs
@@ -228,9 +249,9 @@ module ieee (
     // DEV_ADDR must be divisible by four so the group is a single mask match.
     localparam logic [4:0] DEV_ADDR = 5'd8;
     localparam int UNIT_COUNT = 4;
-    wire own_address = (~pia2_pb_out & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00}
+    wire [1:0] primary_unit = ~cpu_dio[1:0];
+    wire own_address = (~cpu_dio & 8'h1C) == {3'b0, DEV_ADDR[4:2], 2'b00}
         && unit_mask[primary_unit];
-    wire [1:0] primary_unit = ~pia2_pb_out[1:0];
 
     logic [UNIT_COUNT-1:0] listen_units = '0;
     wire listening = |(listen_units & unit_mask);
@@ -379,7 +400,7 @@ module ieee (
                     // a byte, instead of ACKing a command we silently drop.)
                     if (atn_active) begin
                         // Command byte: update protocol state and forward to MCU.
-                        priority casez (~pia2_pb_out)
+                        priority casez (~cpu_dio)
                             8'h3F: begin                                     // UNLISTEN
                                 listen_units <= '0;
                                 addressed <= 1'b0;
@@ -408,38 +429,38 @@ module ieee (
                                 end
                             end
                             8'b011?_????: if (addressed && unit_mask[addressed_unit]) begin
-                                sa <= ~pia2_pb_out;                           // secondary (data)
-                                unit_sa[addressed_unit] <= ~pia2_pb_out;
+                                sa <= ~cpu_dio;                               // secondary (data)
+                                unit_sa[addressed_unit] <= ~cpu_dio;
                                 // Fresh status per request: the kernel re-reads
                                 // channel 15 often; stale unread status bytes
                                 // must not misalign the next read.
                                 if (talking && talk_unit == addressed_unit
-                                    && (~pia2_pb_out & 8'h0F) == 8'h0F)
+                                    && (~cpu_dio & 8'h0F) == 8'h0F)
                                     txs_flush <= 1'b1;
                             end
                             8'b1110_????: if (addressed && unit_mask[addressed_unit]
                                 && listen_units[addressed_unit]) begin
-                                sa <= ~pia2_pb_out;                           // CLOSE
-                                unit_sa[addressed_unit] <= ~pia2_pb_out;
+                                sa <= ~cpu_dio;                               // CLOSE
+                                unit_sa[addressed_unit] <= ~cpu_dio;
                                 // Discard queued file data in fabric, before
                                 // the MCU even sees the command -- but only
                                 // for real data channels. Firmware handles
                                 // ch15 OPEN/CLOSE lifetimes without discarding
                                 // an unrelated unit's selected response.
-                                if ((~pia2_pb_out & 8'h0F) != 8'h0F)
+                                if ((~cpu_dio & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             8'b1111_????: if (addressed && unit_mask[addressed_unit]
                                 && listen_units[addressed_unit]) begin
-                                sa <= ~pia2_pb_out;                           // OPEN
-                                unit_sa[addressed_unit] <= ~pia2_pb_out;
-                                if ((~pia2_pb_out & 8'h0F) != 8'h0F)
+                                sa <= ~cpu_dio;                               // OPEN
+                                unit_sa[addressed_unit] <= ~cpu_dio;
+                                if ((~cpu_dio & 8'h0F) != 8'h0F)
                                     tx_flush <= 1'b1;
                             end
                             default: ;
                         endcase
                         rx_push <= 1'b1;
-                        rx_push_data <= {2'b0, !cpu_eoi_n, 1'b1, ~pia2_pb_out};
+                        rx_push_data <= {2'b0, !cpu_eoi_n, 1'b1, ~cpu_dio};
                     end else begin
                         rx_push <= 1'b1;
                         rx_push_data <= {2'b0, !bus_eoi_n, 1'b0, ~bus_dio};
@@ -689,6 +710,15 @@ module ieee (
                         txs_push_data <= {1'b1, wbp_data_i};
                     end
                 end
+                // Expose snooped guest PIA2/VIA registers (masking PIA IRQ flag bits 7:6) for unmount restoration.
+                IEEE_REG_PIA2_ORA:  wbp_data_o <= pia2_ora;
+                IEEE_REG_PIA2_DDRA: wbp_data_o <= pia2_ddra;
+                IEEE_REG_PIA2_CRA:  wbp_data_o <= {2'b00, pia2_cra[5:0]};
+                IEEE_REG_PIA2_ORB:  wbp_data_o <= pia2_pb_out;
+                IEEE_REG_PIA2_DDRB: wbp_data_o <= pia2_ddrb;
+                IEEE_REG_PIA2_CRB:  wbp_data_o <= {2'b00, pia2_crb[5:0]};
+                IEEE_REG_VIA_ORB:   wbp_data_o <= via_orb;
+                IEEE_REG_VIA_DDRB:  wbp_data_o <= via_ddrb;
                 default: wbp_data_o <= 8'h00;
             endcase
         end
@@ -747,25 +777,50 @@ module ieee (
     // ------------------------------------------------------------------
     // CPU read injection
     // ------------------------------------------------------------------
-    wire dev_driving_dio = !dev_dav_n;   // we present data during our DAV
-
     wire [7:0] via_pb_composed = {
-        bus_dav_n,          // PB7: DAV in
-        bus_nrfd_n,         // PB6: NRFD in
-        !vert_i,            // PB5: vertical retrace
-        via_orb[4],         // PB4: cassette #2 motor (readback)
-        via_orb[3],         // PB3: cassette write (readback)
-        via_orb[2],         // PB2: ATN out (readback)
-        via_orb[1],         // PB1: NRFD out (readback)
-        bus_ndac_n          // PB0: NDAC in
+        bus_dav_n,                              // PB7: DAV in
+        bus_nrfd_n,                             // PB6: NRFD in
+        !vert_i,                                // PB5: vertical retrace
+        via_ddrb[4] ? via_orb[4] : 1'b1,        // PB4: cassette #2 motor (readback)
+        via_ddrb[3] ? via_orb[3] : 1'b1,        // PB3: cassette write (readback)
+        cpu_atn_n,                              // PB2: ATN out (readback)
+        cpu_nrfd_n,                             // PB1: buffer input, not the shared NRFD wire
+        bus_ndac_n                              // PB0: NDAC in
     };
 
     wire [7:0] pia1_pa_composed = {
         diag_i,             // PA7: diagnostic sense (physical pin)
-        dev_eoi_n,          // PA6: EOI in
-        2'b11,              // PA5/PA4: cassette switch sense (none present)
+        bus_eoi_n,          // PA6: EOI in
+        cassette_sense,     // PA5/PA4: last physical cassette switch observation
         pia1_pa_out         // PA3-0: keyboard column select (readback)
     };
+
+    // Compose PIA2 Port A readback from output-configured ORA bits and input-configured virtual DIO bits.
+    wire [7:0] pia2_pa_composed = (pia2_ora & pia2_ddra) | (bus_dio & ~pia2_ddra);
+
+    // Register per-chip external chip-select claims on both cpu_addr_strobe_i
+    // (one clock before rising PHI2, matching typical tBVD setup) and snap_dly[0]
+    // (at rising PHI2, covering worst-case 30 ns W65C02S tBVD plus pad/fabric
+    // routing alongside address_decoding.sv), then hold steady across PHI2 and
+    // any late-BE address tail:
+    //   - PIA2 claims every cycle ($E820..$E823) so DDR/control/latch writes stay off physical PIA2.
+    //   - VIA claims $E842 (DDRB read/write) and $E840 reads, letting $E840 writes reach physical cassette I/O.
+    //   - PIA1 claims $E810 ORA reads only while DAV or EOI is low, leaving idle reads on physical PIA1.
+    wire [PIA_RS_WIDTH-1:0] addr_pia_rs = rs_i[PIA_RS_WIDTH-1:0];
+    wire pia1_read_claim = pia1_cra[2] && addr_pia_rs == 2'd0 && (!bus_dav_n || !bus_eoi_n);
+    wire via_claim_reg   = rs_i == 4'd2 || (!cpu_we_i && rs_i == 4'd0);
+
+    always_ff @(posedge wb_clock_i) begin
+        if (ifc_i || !cpu_be_i || !enable) begin
+            claim_pia1_o <= 1'b0;
+            claim_pia2_o <= 1'b0;
+            claim_via_o  <= 1'b0;
+        end else if (cpu_addr_strobe_i || snap_dly[0]) begin
+            claim_pia1_o <= !cpu_we_i && pia1_read_claim;
+            claim_pia2_o <= 1'b1;
+            claim_via_o  <= via_claim_reg;
+        end
+    end
 
     always_ff @(posedge wb_clock_i) begin
         if (ifc_i) begin
@@ -776,17 +831,22 @@ module ieee (
 
             if (cpu_addr_strobe_i) cpu_data_oe <= 1'b0;
             if (enable && cpu_be_i && snap_valid && !snap_we) begin
-                if (snap_pia2 && pia_rs == 2'd0) begin
-                    // $E820 DIO in: inject only while our talker drives data;
-                    // otherwise the (empty) physical bus reads $FF anyway.
-                    cpu_data_o  <= bus_dio;
-                    cpu_data_oe <= dev_driving_dio;
-                end else if (snap_via && snap_rs == 4'd0) begin
-                    // $E840: full composed port B.
-                    cpu_data_o  <= via_pb_composed;
+                if (snap_pia2 && claim_pia2_o) begin
+                    // Serve all four PIA2 addresses from the internal virtual-bus and shadow model.
+                    unique case (pia_rs)
+                        2'd0: cpu_data_o <= pia2_cra[2] ? pia2_pa_composed : pia2_ddra;
+                        2'd1: cpu_data_o <= {2'b00, pia2_cra[5:0]};
+                        2'd2: cpu_data_o <= pia2_crb[2] ? cpu_dio : pia2_ddrb;
+                        2'd3: cpu_data_o <= {2'b00, pia2_crb[5:0]};
+                        default: ;
+                    endcase
                     cpu_data_oe <= 1'b1;
-                end else if (snap_pia1 && pia_rs == 2'd0 && !dev_eoi_n) begin
-                    // $E810: only while asserting EOI (bit 6 low).
+                end else if (snap_via && claim_via_o) begin
+                    // Serve composed VIA Port B ($E840) or snooped VIA DDRB ($E842).
+                    cpu_data_o  <= (snap_rs == 4'd0) ? via_pb_composed : via_ddrb;
+                    cpu_data_oe <= 1'b1;
+                end else if (snap_pia1 && claim_pia1_o) begin
+                    // Serve composed PIA1 Port A ($E810) while DAV or EOI is asserted.
                     cpu_data_o  <= pia1_pa_composed;
                     cpu_data_oe <= 1'b1;
                 end

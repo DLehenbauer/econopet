@@ -37,6 +37,7 @@ module ieee_tb;
     logic [DATA_WIDTH-1:0] cpu_data = '0;
     logic [DATA_WIDTH-1:0] dut_data;
     logic dut_doe;
+    logic dut_claim_pia1, dut_claim_pia2, dut_claim_via;
     logic pia1_cs = 0, pia2_cs = 0, via_cs = 0;
     logic [VIA_RS_WIDTH-1:0] rs = '0;
 
@@ -65,6 +66,9 @@ module ieee_tb;
         .pia2_cs_i(pia2_cs),
         .via_cs_i(via_cs),
         .rs_i(rs),
+        .claim_pia1_o(dut_claim_pia1),
+        .claim_pia2_o(dut_claim_pia2),
+        .claim_via_o(dut_claim_via),
 
         .diag_i(1'b1),
         .vert_i(1'b1)
@@ -103,22 +107,36 @@ module ieee_tb;
     // ------------------------------------------------------------------
     // CPU-side helpers (register-level bus cycles)
     // ------------------------------------------------------------------
-    task automatic cpu_write(input logic p1, input logic p2, input logic v,
-                             input logic [3:0] r, input logic [7:0] val);
+    // Start a CPU-owned peripheral bus cycle up to registered chip-select
+    // assertion so callers can inspect mid-cycle claim/DOE outputs at exact
+    // sys_clock offsets before completing the strobe via cpu_cycle_end.
+    task automatic cpu_cycle_begin(input logic p1, input logic p2, input logic v,
+                                   input logic we, input logic [3:0] r,
+                                   input logic [7:0] val);
         // All bus signals driven with NBA (<=): the DUT's FFs sample on the
         // same posedges this task wakes on, so blocking drives race the
         // sampling (a 1-clock strobe can be cleared before some FFs see it).
-        // On real hardware these are FF outputs -- NBA models that.
+        // Present unsettled rs/cpu_we while cpu_addr_strobe is high (worst-case
+        // physical W65C02S tBVD + pad/fabric delay arrives one clock past the
+        // strobe), then settle rs/cpu_we and registered chip-selects on the
+        // following two clocks.
         @(posedge sys_clock);
-        rs <= r; cpu_data <= val; cpu_we <= 1; cpu_be <= 1;
+        rs <= ~r;
+        if (we) cpu_data <= val;
+        cpu_we <= ~we;
+        cpu_be <= 1;
         cpu_addr_strobe <= 1;
         @(posedge sys_clock);
         cpu_addr_strobe <= 0;
-        // Chip-selects settle after the strobe on real hardware (the decode
-        // is registered off an address that is itself a clock behind the
-        // strobe) -- model that so a too-early snapshot in the DUT fails.
+        rs <= r;
+        cpu_we <= we;
+        @(posedge sys_clock);
         pia1_cs <= p1; pia2_cs <= p2; via_cs <= v;
-        repeat (4) @(posedge sys_clock);
+    endtask
+
+    // Pulse cpu_data_strobe, release CPU bus ownership and chip-selects, and
+    // wait the configured inter-cycle tail.
+    task automatic cpu_cycle_end;
         cpu_data_strobe <= 1;
         @(posedge sys_clock);
         cpu_data_strobe <= 0;
@@ -127,27 +145,36 @@ module ieee_tb;
         repeat (g_tail) @(posedge sys_clock);
     endtask
 
+    task automatic cpu_write(input logic p1, input logic p2, input logic v,
+                             input logic [3:0] r, input logic [7:0] val);
+        cpu_cycle_begin(p1, p2, v, 1'b1, r, val);
+        repeat (3) @(posedge sys_clock);
+        cpu_cycle_end;
+    endtask
+
     // Read returns injected value when the DUT drives, else 8'hFF (open bus).
     task automatic cpu_read(input logic p1, input logic p2, input logic v,
                             input logic [3:0] r, output logic [7:0] val);
-        @(posedge sys_clock);
-        rs <= r; cpu_we <= 0; cpu_be <= 1;
-        cpu_addr_strobe <= 1;
-        @(posedge sys_clock);
-        cpu_addr_strobe <= 0;
-        pia1_cs <= p1; pia2_cs <= p2; via_cs <= v;   // CS settles after strobe
-        repeat (5) @(posedge sys_clock);
+        cpu_cycle_begin(p1, p2, v, 1'b0, r, 8'h00);
+        repeat (4) @(posedge sys_clock);
         val = dut_doe ? dut_data : 8'hFF;
-        cpu_data_strobe <= 1;      // the CPU's read of this register
-        @(posedge sys_clock);
-        cpu_data_strobe <= 0;
-        @(posedge sys_clock);
-        cpu_be <= 0; pia1_cs <= 0; pia2_cs <= 0; via_cs <= 0;
-        repeat (g_tail) @(posedge sys_clock);
+        cpu_cycle_end;
     endtask
 
     // Controller-side IEEE line manipulation (mirrors kernel usage)
     logic [7:0] orb_shadow = 8'hFF;
+
+    // Mirror PET CINT post-reset initialization of PIA1, PIA2, and VIA.
+    task automatic ctl_init_ports;
+        orb_shadow = 8'hFF;
+        cpu_write(0, 0, 1, 4'd0, 8'hFF);   // VIA ORB: released
+        cpu_write(0, 0, 1, 4'd2, 8'h1E);   // VIA DDRB: PB4:1 outputs
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);   // PIA2 DDRB: all outputs (CRB[2]==0)
+        cpu_write(0, 1, 0, 4'd1, 8'h3C);   // PIA2 CRA: CA2 high, ORA selected
+        cpu_write(0, 1, 0, 4'd3, 8'h3C);   // PIA2 CRB: CB2 high, ORB selected
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);   // PIA2 ORB: DIO released
+        cpu_write(1, 0, 0, 4'd1, 8'h3C);   // PIA1 CRA: CA2 high, ORA selected
+    endtask
 
     task automatic ctl_atn(input logic asserted);
         orb_shadow[2] = !asserted;
@@ -815,6 +842,191 @@ module ieee_tb;
         mcu_drain_rx;
     endtask
 
+    // Verify per-cycle CS claim suppression, Wishbone guest shadow readback, and narrow $E810 claim.
+    task automatic check_physical_port_isolation;
+        logic [7:0] d, pa;
+        logic eoi;
+
+        // Snoop guest CPU writes to PIA2 and VIA while virtual units are disabled.
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_FLUSH_MASK);
+        cpu_write(0, 1, 0, 4'd1, 8'h00);
+        cpu_write(0, 1, 0, 4'd0, 8'h5A);
+        cpu_write(0, 1, 0, 4'd1, 8'h3C);
+        cpu_write(0, 1, 0, 4'd0, 8'hC3);
+        cpu_write(0, 1, 0, 4'd3, 8'h00);
+        cpu_write(0, 1, 0, 4'd2, 8'hF0);
+        cpu_write(0, 1, 0, 4'd3, 8'h34);
+        cpu_write(0, 1, 0, 4'd2, 8'hA5);
+        cpu_write(0, 0, 1, 4'd2, 8'h1E);
+        cpu_write(0, 0, 1, 4'd0, 8'h16);
+
+        // Drive an MCU io_ctl write with cpu_be == 0 and confirm it leaves the guest shadows intact.
+        @(posedge sys_clock);
+        rs <= 4'd2; cpu_data <= 8'h00; cpu_we <= 1; cpu_be <= 0; cpu_addr_strobe <= 1;
+        @(posedge sys_clock);
+        cpu_addr_strobe <= 0; via_cs <= 1;
+        repeat (3) @(posedge sys_clock);
+        cpu_data_strobe <= 1;
+        @(posedge sys_clock);
+        cpu_data_strobe <= 0; via_cs <= 0; cpu_we <= 0;
+        repeat (g_tail) @(posedge sys_clock);
+
+        // Read back all eight snooped guest shadow registers over Wishbone.
+        mcu_read(IEEE_REG_PIA2_DDRA, d); `assert_equal(d, 8'h5A);
+        mcu_read(IEEE_REG_PIA2_ORA, d);  `assert_equal(d, 8'hC3);
+        mcu_read(IEEE_REG_PIA2_CRA, d);  `assert_equal(d, 8'h3C);
+        mcu_read(IEEE_REG_PIA2_DDRB, d); `assert_equal(d, 8'hF0);
+        mcu_read(IEEE_REG_PIA2_ORB, d);  `assert_equal(d, 8'hA5);
+        mcu_read(IEEE_REG_PIA2_CRB, d);  `assert_equal(d, 8'h34);
+        mcu_read(IEEE_REG_VIA_DDRB, d);  `assert_equal(d, 8'h1E);
+        mcu_read(IEEE_REG_VIA_ORB, d);   `assert_equal(d, 8'h16);
+
+        // Pulse IFC, enable virtual units, and run CINT-equivalent port initialization.
+        ifc = 1'b1;
+        repeat (2) @(posedge sys_clock);
+        ifc = 1'b0;
+        repeat (2) @(posedge sys_clock);
+        mcu_write(IEEE_REG_CTRL, IEEE_CTRL_UNIT_MASK | IEEE_CTRL_FLUSH_MASK);
+
+        // Reset clears PIA2/VIA ORB latches to 8'h00 while DDRB == 8'h00 keeps bus lines released,
+        // allowing open-collector DDRB writes to pull lines low without first writing ORB = 8'h00.
+        mcu_read(IEEE_REG_PIA2_ORB, d);
+        `assert_equal(d, 8'h00);
+        mcu_read(IEEE_REG_VIA_ORB, d);
+        `assert_equal(d, 8'h00);
+        cpu_read(0, 0, 1, 4'd0, d);
+        `assert_equal(d[6], 1'b1);
+        `assert_equal(d[2:1], 2'b11);
+        cpu_write(0, 0, 1, 4'd2, 8'h06);
+        cpu_read(0, 0, 1, 4'd0, d);
+        `assert_equal(d[6], 1'b0);
+        `assert_equal(d[2:1], 2'b00);
+
+        ctl_init_ports;
+
+        // An acceptor holding NRFD low is visible at PB6, not at input-configured PB1.
+        ctl_atn(1);
+        ctl_dio(8'h28);
+        ctl_dav(1);
+        ctl_wait(8'h01, 8'h01);
+        cpu_write(0, 0, 1, 4'd2, 8'h1C);
+        cpu_read(0, 0, 1, 4'd0, d);
+        `assert_equal(d[6], 1'b0);
+        `assert_equal(d[1], 1'b1);
+        ctl_dav(0);
+        ctl_dio(8'h00);
+        ctl_atn(0);
+        mcu_drain_rx;
+
+        // DDRB writes claim CS without driving cpu_data_oe and read back from shadow.
+        cpu_cycle_begin(0, 0, 1, 1'b1, 4'd2, 8'h1E);
+        @(posedge sys_clock);
+        `assert_equal(dut_claim_via, 1'b1);
+        `assert_equal(dut_doe, 1'b0);
+        repeat (2) @(posedge sys_clock);
+        cpu_cycle_end;
+        cpu_read(0, 0, 1, 4'd2, d);
+        `assert_equal(d, 8'h1E);
+
+        // Verify VIA $E840 (ORB) writes pass through unclaimed so physical cassette outputs still toggle.
+        cpu_cycle_begin(0, 0, 1, 1'b1, 4'd0, 8'h16);
+        @(posedge sys_clock);
+        `assert_equal(dut_claim_via, 1'b0);
+        repeat (2) @(posedge sys_clock);
+        cpu_cycle_end;
+        orb_shadow = 8'h16;
+
+        // Verify unclaimed VIA $E841 (ORA) reads neither claim CS nor assert dut_doe.
+        cpu_cycle_begin(0, 0, 1, 1'b0, 4'd1, 8'h00);
+        repeat (2) @(posedge sys_clock);
+        `assert_equal(dut_claim_via, 1'b0);
+        `assert_equal(dut_doe, 1'b0);
+        cpu_cycle_end;
+
+        // Verify all PIA2 cycles ($E820..$E823) claim external CS while updating internal and Wishbone shadows.
+        cpu_cycle_begin(0, 1, 0, 1'b1, 4'd1, 8'h3C);
+        @(posedge sys_clock);
+        `assert_equal(dut_claim_pia2, 1'b1);
+        repeat (2) @(posedge sys_clock);
+        cpu_cycle_end;
+
+        cpu_cycle_begin(0, 1, 0, 1'b1, 4'd2, 8'hA5);
+        @(posedge sys_clock);
+        `assert_equal(dut_claim_pia2, 1'b1);
+        repeat (2) @(posedge sys_clock);
+        cpu_cycle_end;
+        cpu_read(0, 1, 0, 4'd2, d);
+        `assert_equal(d, 8'hA5);
+        mcu_read(IEEE_REG_PIA2_ORB, d);
+        `assert_equal(d, 8'hA5);
+        cpu_write(0, 1, 0, 4'd2, 8'hFF);
+
+        // Verify PIA1 $E811 control reads and idle $E810 reads pass through unclaimed to physical PIA1.
+        cpu_cycle_begin(1, 0, 0, 1'b0, 4'd1, 8'h00);
+        repeat (2) @(posedge sys_clock);
+        `assert_equal(dut_claim_pia1, 1'b0);
+        `assert_equal(dut_doe, 1'b0);
+        cpu_cycle_end;
+
+        cpu_cycle_begin(1, 0, 0, 1'b0, 4'd0, 8'h00);
+        repeat (4) @(posedge sys_clock);
+        `assert_equal(dut_claim_pia1, 1'b0);
+        `assert_equal(dut_doe, 1'b0);
+        cpu_data <= 8'hEF; // Physical PA5:4 = 10 (cassette #1 switch closed).
+        cpu_cycle_end;
+
+        // Address device 8 to talk on channel 15 and verify active DAV claims $E810 and injects EOI_IN high.
+        ctl_atn(1); ctl_send(8'h48); ctl_send(8'h6F); ctl_atn(0);
+        mcu_write(IEEE_REG_TXS, "A");
+        mcu_write(IEEE_REG_TXS_LAST, "B");
+        ctl_ndac(1); ctl_nrfd(0);
+        ctl_wait(8'h80, 8'h00);
+        ctl_nrfd(1);
+        cpu_cycle_begin(1, 0, 0, 1'b0, 4'd0, 8'h00);
+        repeat (4) @(posedge sys_clock);
+        `assert_equal(dut_claim_pia1, 1'b1);
+        `assert_equal(dut_doe, 1'b1);
+        pa = dut_data;
+        `assert_equal(pa[6], 1'b1);
+        `assert_equal(pa[5:4], 2'b10);
+        cpu_data <= 8'hFF; // Claimed reads must not overwrite the physical observation.
+        cpu_cycle_end;
+        cpu_read(1, 0, 0, 4'd0, pa);
+        `assert_equal(pa[5:4], 2'b10);
+        ctl_ndac(0);
+        ctl_wait(8'h80, 8'h80);
+        ctl_ndac(1);
+
+        // Verify the inter-byte gap while talking == 1 (DAV_n == 1 and EOI_n == 1) passes $E810 through again.
+        cpu_cycle_begin(1, 0, 0, 1'b0, 4'd0, 8'h00);
+        repeat (4) @(posedge sys_clock);
+        `assert_equal(dut_claim_pia1, 1'b0);
+        `assert_equal(dut_doe, 1'b0);
+        cpu_data <= 8'hDF; // Physical PA5:4 = 01 (switch states have changed).
+        cpu_cycle_end;
+
+        // DDR reads and writes are not physical switch observations.
+        cpu_write(1, 0, 0, 4'd1, 8'h38);
+        cpu_read(1, 0, 0, 4'd0, pa);
+        cpu_write(1, 0, 0, 4'd1, 8'h3C);
+        cpu_write(1, 0, 0, 4'd0, 8'h00);
+        ctl_nrfd(0);
+        ctl_wait(8'h80, 8'h00);
+        ctl_nrfd(1);
+        cpu_read(1, 0, 0, 4'd0, pa);
+        `assert_equal(pa[5:4], 2'b01);
+        `assert_equal(pa[6], 1'b0);
+
+        // Receive the final byte with EOI, send UNTALK, and restore controller ports.
+        ctl_recv(d, eoi);
+        `assert_equal(d, "B");
+        `assert_equal(eoi, 1'b1);
+        ctl_atn(1); ctl_send(8'h5F); ctl_atn(0);
+        mcu_drain_rx;
+        ctl_init_ports;
+        $display("[%t]   physical port isolation claims verified", $time);
+    endtask
+
     // Check the host-only selection contract, independently of native ROM commands.
     task automatic check_emulated_unit_selection;
         logic [7:0] d;
@@ -1023,6 +1235,7 @@ module ieee_tb;
         repeat (2) @(posedge sys_clock);
         ifc = 1'b0;
         repeat (2) @(posedge sys_clock);
+        ctl_init_ports;
 
         check_emulated_unit_selection;
 
@@ -1563,10 +1776,7 @@ module ieee_tb;
         `assert_equal(st[0], 1'b0);        // no phantom command after IFC
 
         // The PET reinitializes its PIA/VIA after RES before its first command.
-        cpu_write(0, 1, 0, 4'd1, 8'h3C);
-        cpu_write(0, 1, 0, 4'd3, 8'h3C);
-        cpu_write(0, 1, 0, 4'd2, 8'hFF);
-        cpu_write(0, 0, 1, 4'd0, 8'hFF);
+        ctl_init_ports;
         ctl_atn(1);
         ctl_send(8'h28);                   // first post-IFC command
         ctl_atn(0);
@@ -1587,6 +1797,7 @@ module ieee_tb;
 
         check_coincident_unit_selection;
         check_coincident_secondary_withdrawal;
+        check_physical_port_isolation;
 
         $display("[%t] END IEEE drive emulation test", $time);
     endtask

@@ -161,20 +161,29 @@ package common_pkg;
 
     // IEEE register indices and count.
     // Reads have no side effects because SPI pipelining can prefetch adjacent registers.
-    // STATUS ignores writes. TX/TXS read their modulo-256 GET prefetch counts.
+    // STATUS and guest I/O shadow registers (8-15) ignore writes.
+    // TX/TXS read their modulo-256 GET prefetch counts.
     // SA writes bind either source to {valid, pause, unit[1:0], channel[3:0]}.
     // TX_LAST/TXS_LAST read as zero. FIFO writes are ignored when full.
     // RX pops and TX/TXS pushes are suppressed during IFC.
-    localparam int unsigned IEEE_REG_ADDR_WIDTH = 3;
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_CTRL = 0;     // Asymmetric control writes and read-back flags below.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_STATUS = 1;   // Read-only FIFO and bus status.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_RX = 2;       // Read peeks at the head byte, any write pops if nonempty.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;       // Read prefetch count, write data byte.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX_LAST = 4;  // Write enqueues a data-channel byte with EOI.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;       // Read secondary, write TX source owner.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;      // Read prefetch count, write status-channel (15) byte.
-    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS_LAST = 7; // Write enqueues a status-channel byte with EOI.
-    localparam int unsigned IEEE_REG_COUNT = (IEEE_REG_TXS_LAST + 1);
+    localparam int unsigned IEEE_REG_ADDR_WIDTH = 4;
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_CTRL = 0;       // Asymmetric control writes and read-back flags below.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_STATUS = 1;     // Read-only FIFO and bus status.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_RX = 2;         // Read peeks at the head byte, any write pops if nonempty.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX = 3;         // Read prefetch count, write data byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TX_LAST = 4;    // Write enqueues a data-channel byte with EOI.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_SA = 5;         // Read secondary, write TX source owner.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS = 6;        // Read prefetch count, write status-channel (15) byte.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_TXS_LAST = 7;   // Write enqueues a status-channel byte with EOI.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_ORA = 8;   // Read-only snooped guest PIA2 ORA.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_DDRA = 9;  // Read-only snooped guest PIA2 DDRA.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_CRA = 10;  // Read-only snooped guest PIA2 CRA[5:0].
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_ORB = 11;  // Read-only snooped guest PIA2 ORB.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_DDRB = 12; // Read-only snooped guest PIA2 DDRB.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_PIA2_CRB = 13;  // Read-only snooped guest PIA2 CRB[5:0].
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_VIA_ORB = 14;   // Read-only snooped guest VIA ORB.
+    localparam logic [IEEE_REG_ADDR_WIDTH-1:0] IEEE_REG_VIA_DDRB = 15;  // Read-only snooped guest VIA DDRB.
+    localparam int unsigned IEEE_REG_COUNT = 32'(IEEE_REG_VIA_DDRB) + 1;
 
     // Map an IEEE register index into the Wishbone byte address space.
     function logic[WB_ADDR_WIDTH-1:0] wb_ieee_addr(input logic[IEEE_REG_ADDR_WIDTH-1:0] register);
@@ -190,6 +199,14 @@ package common_pkg;
     localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_SA_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_SA));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TXS_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TXS));
     localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_TXS_LAST_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_TXS_LAST));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_ORA_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_ORA));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_DDRA_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_DDRA));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_CRA_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_CRA));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_ORB_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_ORB));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_DDRB_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_DDRB));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_PIA2_CRB_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_PIA2_CRB));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_VIA_ORB_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_VIA_ORB));
+    localparam logic [WB_ADDR_WIDTH-1:0] WB_IEEE_VIA_DDRB_ADDR = wb_ieee_addr(IEEE_REG_ADDR_WIDTH'(IEEE_REG_VIA_DDRB));
 
     // IEEE control-write bit indices and masks.
     // Bit 0 is reserved and ignored. FIFO flushes are one-shot requests,
@@ -425,6 +442,24 @@ package common_pkg;
                                          PIA_PORTB = 2,     // DDRB/PIBB: Data Direction / Peripheral Interface Buffer for Port B
                                          PIA_CRB   = 3;     // CRB: Control Register B.  (Bit 2 selects 0=DDRB or 1=PIBB.)
 
+    // Physical PET CPU addresses, not the MCU's IEEE snoop registers.
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA1_BASE_ADDR = 16'he810;
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA2_BASE_ADDR = 16'he820;
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA1_PORTA_ADDR = PIA1_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_PORTA);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA1_CRA_ADDR = PIA1_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_CRA);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA1_PORTB_ADDR = PIA1_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_PORTB);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA1_CRB_ADDR = PIA1_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_CRB);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA2_PORTA_ADDR = PIA2_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_PORTA);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA2_CRA_ADDR = PIA2_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_CRA);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA2_PORTB_ADDR = PIA2_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_PORTB);
+    localparam logic [CPU_ADDR_WIDTH-1:0] PIA2_CRB_ADDR = PIA2_BASE_ADDR + CPU_ADDR_WIDTH'(PIA_CRB);
+
+    localparam logic [DATA_WIDTH-1:0] PIA_CONTROL_WRITABLE_MASK = 8'h3f;
+    localparam logic [DATA_WIDTH-1:0] PIA_CONTROL_DATA_SELECT_MASK = 8'h04;
+    // Complete control bytes selecting port data and manual C2 output low/high.
+    localparam logic [DATA_WIDTH-1:0] PIA_CONTROL_C2_LOW = 8'h30 | PIA_CONTROL_DATA_SELECT_MASK;
+    localparam logic [DATA_WIDTH-1:0] PIA_CONTROL_C2_HIGH = PIA_CONTROL_C2_LOW | 8'h08;
+
     // PIA1 Port A bit assignments
     localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_PORTA_KEY_A_OUT       = 0, // Key A..D selects column (0-9) for keyboard scan
                                          PIA1_PORTA_KEY_D_OUT       = 3,
@@ -432,6 +467,9 @@ package common_pkg;
                                          PIA1_PORTA_CASS2_SWITCH_IN = 5, // Cassette #2 switch (0 = Closed, 1 = Open)
                                          PIA1_PORTA_EOI_IN          = 6, // IEEE-488: (0 = last byte from device, 1 = device has more data)
                                          PIA1_PORTA_DIAG_OUT        = 7; // Diagnostic sense (0 = TIM, 1 = BASIC)
+
+    localparam logic [DATA_WIDTH-1:0] PIA1_PORTA_KEY_MASK =
+        ((1 << (PIA1_PORTA_KEY_D_OUT + 1)) - 1) & ~((1 << PIA1_PORTA_KEY_A_OUT) - 1);
 
     localparam bit [BIT_INDEX_WIDTH-1:0] PIA1_CRA_EOI_OUT           = 3; // IEEE-488: (0 = last byte from PET, 1 = PET has more data)
 
@@ -467,6 +505,13 @@ package common_pkg;
                VIA_IER   = 4'hE,    // IER: Interrupt Enable Register 
                VIA_ORA   = 4'hF;    // IRA/ORA: Same as Reg 1 except no "Handshake"
 
+    localparam logic [CPU_ADDR_WIDTH-1:0] VIA_BASE_ADDR = 16'he840;
+    localparam logic [CPU_ADDR_WIDTH-1:0] VIA_PORTB_ADDR = VIA_BASE_ADDR + CPU_ADDR_WIDTH'(VIA_PORTB);
+    localparam logic [CPU_ADDR_WIDTH-1:0] VIA_DDRB_ADDR = VIA_BASE_ADDR + CPU_ADDR_WIDTH'(VIA_DDRB);
+    localparam logic [CPU_ADDR_WIDTH-1:0] VIA_PCR_ADDR = VIA_BASE_ADDR + CPU_ADDR_WIDTH'(VIA_PCR);
+    localparam logic [DATA_WIDTH-1:0] VIA_PCR_CA2_MASK = 8'h0e;
+    localparam logic [DATA_WIDTH-1:0] VIA_PCR_CA2_HIGH = 8'h0e; // Manual CA2 output high.
+
     // VIA Port B bit assignments
     localparam bit [BIT_INDEX_WIDTH-1:0] VIA_PORTB_NDAC_IN         = 0,    // IEEE-488: (0 = Device has not accepted data, 1 = Device has accepted data)
                                          VIA_PORTB_NRFD_OUT        = 1,    // IEEE-488: (0 = PET not ready for data, 1 = PET ready for data)
@@ -476,6 +521,18 @@ package common_pkg;
                                          VIA_PORTB_VERT_RETRACE_IN = 5,    // Vertical Retrace Detect
                                          VIA_PORTB_NRFD_IN         = 6,    // IEEE-488: (0 = Device not ready for data, 1 = Device ready for data)
                                          VIA_PORTB_DAV_IN          = 7;    // IEEE-488: (0 = DIO1-8 is valid, 1 = DIO1-8 is not valid)
+
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_ATN_OUT_MASK = 1 << VIA_PORTB_ATN_OUT;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_NRFD_OUT_MASK = 1 << VIA_PORTB_NRFD_OUT;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_NDAC_IN_MASK = 1 << VIA_PORTB_NDAC_IN;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_NRFD_IN_MASK = 1 << VIA_PORTB_NRFD_IN;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_DAV_IN_MASK = 1 << VIA_PORTB_DAV_IN;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_CASS_OUT_MASK =
+        (1 << VIA_PORTB_CASS2_MOTOR_OUT) | (1 << VIA_PORTB_CASS_WRITE_OUT);
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_IEEE_OUT_MASK =
+        VIA_PORTB_ATN_OUT_MASK | VIA_PORTB_NRFD_OUT_MASK;
+    localparam logic [DATA_WIDTH-1:0] VIA_PORTB_IEEE_IN_MASK =
+        VIA_PORTB_DAV_IN_MASK | VIA_PORTB_NRFD_IN_MASK | VIA_PORTB_NDAC_IN_MASK;
 
     // CRTC (MOS6545) registers
     // https://ia600203.us.archive.org/5/items/crtc6545/crtc6545.pdf
