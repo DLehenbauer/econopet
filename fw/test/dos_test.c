@@ -1649,15 +1649,15 @@ START_TEST(test_directory_open_status_distinguishes_loadir_from_raw_chain) {
     ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,1\r" : "00, OK,00,00\r");
     ck_assert(dos_close(&unit, &bank, model, 2));
 
-    // Omitted-drive LOADIR ("$") defaults from LSTDRV (1) even if DRVNUM was 0
-    // after a failed operation, while OKERR still reflects prior DRVNUM (0).
+    // Omitted-drive LOADIR starts from LSTDRV (1), then the initial STDIR fill
+    // and GETNAM lookahead reach the empty peer and leave DRVNUM/LSTDRV at 0.
     unit.selected_drive = 0;
     unit.last_drive = 1;
     dos_status(&unit, model, DOS_STATUS_SYNTAX, 0, 0);
     channel = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
     ck_assert_uint_ne(channel, DOS_UNUSED);
-    ck_assert_uint_eq(unit.selected_drive, 1);
-    ck_assert_uint_eq(unit.last_drive, 1);
+    ck_assert_uint_eq(unit.selected_drive, 0);
+    ck_assert_uint_eq(unit.last_drive, 0);
     ck_assert_str_eq(unit.status, d80_status ? "00, OK,00,00,0\r" : "00, OK,00,00\r");
     ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
 
@@ -6839,6 +6839,14 @@ END_TEST
 // Initial LOAD "*" retains the last rejected candidate across search yields.
 START_TEST(test_initial_load_star_retains_candidate_across_search_yields) {
     static const char* const names[] = {"*", "*", "*,S", "*", "*", "*,S"};
+    static const char* const status_4040[] = {
+        "64, FILE TYPE MISMATCH,00,00\r", "", "", "60, WRITE FILE OPEN,00,00\r",
+        "62, FILE NOT FOUND,00,00\r",   "62, FILE NOT FOUND,00,00\r",
+    };
+    static const char* const status_27[] = {
+        "64, FILE TYPE MISMATCH,00,00,1\r", "", "", "60, WRITE FILE OPEN,00,00,1\r",
+        "62, FILE NOT FOUND,00,00,1\r",   "62, FILE NOT FOUND,00,00,1\r",
+    };
     const unsigned int format = (unsigned int)_i / count_of(names);
     const unsigned int variant = (unsigned int)_i % count_of(names);
     image_t first, second;
@@ -6880,6 +6888,10 @@ START_TEST(test_initial_load_star_retains_candidate_across_search_yields) {
         ck_assert_uint_eq(unit.status_code, variant == 0u ? DOS_STATUS_TYPE_MISMATCH
                                            : variant == 3u ? DOS_STATUS_FILE_OPEN
                                                            : DOS_STATUS_NOT_FOUND);
+        ck_assert_str_eq(unit.status, format == 0 ? status_4040[variant] : status_27[variant]);
+        if (format != 0) {
+            ck_assert_uint_eq(unit.selected_drive, 1);
+        }
         ck_assert_uint_eq(unit.buffer_use, 0);
     }
 
@@ -7040,9 +7052,9 @@ START_TEST(test_initial_load_star_releases_modified_rel_owner_safely) {
 }
 END_TEST
 
-// LOAD directory snapshots LSTDRV at the initial fill, but not during later refills.
+// LOAD directory snapshots LSTDRV after STDIR's initial fill and GETNAM lookahead.
 START_TEST(test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory) {
-    static const unsigned int drive_zero_file_counts[] = {1u, 5u, 6u, 10u};
+    static const unsigned int drive_zero_file_counts[] = {1u, 5u, 6u, 7u, 10u};
     const unsigned int format = (unsigned int)_i / count_of(drive_zero_file_counts);
     const unsigned int listing_case = (unsigned int)_i % count_of(drive_zero_file_counts);
     const unsigned int drive_zero_file_count = drive_zero_file_counts[listing_case];
@@ -7067,14 +7079,13 @@ START_TEST(test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directo
 
     const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
     ck_assert_uint_ne(listing, DOS_UNUSED);
-    ck_assert(unit.channels[listing].both_drives);
-    ck_assert_uint_eq(unit.last_drive, 0);
+    const uint8_t expected_drive = drive_zero_file_count <= 7u ? 1u : 0u;
+    ck_assert_uint_eq(unit.last_drive, expected_drive);
     uint8_t rows[1024];
     const unsigned int row_bytes = directory_bytes(&unit, &bank, listing, rows, sizeof(rows));
     ck_assert_uint_eq(row_bytes, (drive_zero_file_count + 5u) * 32u);
     ck_assert_uint_eq(unit.channels[listing].media.slot, 1);
     ck_assert_uint_eq(unit.selected_drive, 1);
-    const uint8_t expected_drive = listing_case < 2u ? 1u : 0u;
     ck_assert_uint_eq(unit.last_drive, expected_drive);
 
     const uint8_t program = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "SAME");
@@ -7083,6 +7094,43 @@ START_TEST(test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directo
     expect_bytes(&unit, &bank, program, 4, expected_drive == 0 ? 0x20 : 0x70);
     ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
     finish_open(&unit, &bank);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// TALK on an earlier directory must not overwrite LSTDRV from an interleaved OPEN.
+START_TEST(test_directory_talk_preserves_interleaved_drive_selection) {
+    const unsigned int format = (unsigned int)_i + 1u;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "SAME", 'P', 0x20, 4);
+    create_typed_file(&unit, &bank, 1, "SAME", 'P', 0x70, 4);
+    dos_reset(&unit, model);
+
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert_uint_eq(unit.last_drive, 0);
+    const uint8_t peer = open_name(&unit, &bank, 3, "1:SAME,P,R");
+    ck_assert_uint_ne(peer, DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    ck_assert_uint_eq(unit.last_drive, 1);
+
+    uint8_t rows[256];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, rows, sizeof(rows)), 96);
+    ck_assert_uint_eq(unit.last_drive, 1);
+    const uint8_t program = open_name(&unit, &bank, 2, "SAME,P,R");
+    ck_assert_uint_ne(program, DOS_UNUSED);
+    ck_assert_uint_eq(unit.channels[program].media.slot, 1);
+    expect_bytes(&unit, &bank, program, 4, 0x70);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    ck_assert_uint_eq(unit.buffer_use, 0);
     free(first.bytes);
     free(second.bytes);
 }
@@ -7393,7 +7441,8 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 9);
     tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 6);
     tcase_add_loop_test(core, test_initial_load_star_releases_modified_rel_owner_safely, 0, 2);
-    tcase_add_loop_test(core, test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory, 0, 12);
+    tcase_add_loop_test(core, test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory, 0, 15);
+    tcase_add_loop_test(core, test_directory_talk_preserves_interleaved_drive_selection, 0, 2);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);
     tcase_add_loop_test(core, test_reopen_unclosed_zero_track_file_reuses_directory_entry, 0, 3);

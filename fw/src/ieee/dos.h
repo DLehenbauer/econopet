@@ -190,7 +190,6 @@ typedef struct {
             uint16_t position;
             union {
                 uint8_t singleton;
-                uint8_t directory_initial_fill;
                 uint8_t direct_last;
                 uint8_t read_last;
             };
