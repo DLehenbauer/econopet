@@ -17,6 +17,9 @@ typedef struct {
     unsigned int flushes;
     unsigned int fail_write;
     unsigned int fail_read;
+    uint32_t fail_read_offset;
+    uint32_t last_failed_read_offset;
+    bool fail_read_at_offset;
     bool fail_flush;
 } image_t;
 
@@ -113,7 +116,9 @@ static void mount_blank(dos_media_bank_t* const bank, image_t* const image, cons
 static bool read_image(void* const context, const uint32_t offset, void* const output, const size_t length) {
     image_t* const image = context;
     ++image->reads;
-    if (image->reads == image->fail_read) {
+    if (image->reads == image->fail_read ||
+        (image->fail_read_at_offset && offset == image->fail_read_offset)) {
+        image->last_failed_read_offset = offset;
         memset(output, 0xaa, length / 2u);
         return false;
     }
@@ -7099,6 +7104,137 @@ START_TEST(test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directo
 }
 END_TEST
 
+// A filtered LOAD yields after each unmatched directory sector.
+START_TEST(test_filtered_directory_initial_fill_yields_between_sectors) {
+    const unsigned int format = (unsigned int)_i;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "ONLYSEQ", 'S', 0x10, 3);
+    dos_reset(&unit, model);
+
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t track = format == 0 ? 18u : 39u;
+    uint8_t* const first = sector_bytes(&image, type, track, 1);
+    first[0] = track;
+    first[1] = 2;
+    uint8_t* const second = sector_bytes(&image, type, track, 2);
+    second[0] = track;
+    second[1] = 3;
+    uint8_t* const third = sector_bytes(&image, type, track, 3);
+    third[0] = 0;
+    third[1] = 0xff;
+
+    static const char request[] = "$0:*=P";
+    const unsigned int reads = image.reads;
+    dos_open(&unit, &bank, 0, IEEE_LOAD_CHANNEL, (const uint8_t*)request, sizeof(request) - 1u);
+    ck_assert(dos_work_pending(&unit));
+    ck_assert_uint_eq(image.reads, reads);
+    for (unsigned int step = 0; step < 3u; ++step) {
+        const unsigned int before = image.reads;
+        dos_work(&unit, &bank);
+        ck_assert_uint_eq(image.reads, before + 1u);
+        ck_assert(dos_work_pending(&unit));
+    }
+
+    const uint8_t listing = dos_find_channel(&unit, IEEE_LOAD_CHANNEL);
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    finish_open(&unit, &bank);
+    uint8_t rows[64];
+    ck_assert_uint_eq(directory_bytes(&unit, &bank, listing, rows, sizeof(rows)), sizeof(rows));
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// A filtered self-link reports corruption instead of rescanning its resident sector.
+START_TEST(test_filtered_directory_self_link_fails_without_looping) {
+    const unsigned int format = (unsigned int)_i;
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "ONLYSEQ", 'S', 0x10, 3);
+    dos_reset(&unit, model);
+
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const uint8_t track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&image, type, track, 1);
+    directory[0] = track;
+    directory[1] = 1;
+    const unsigned int reads = image.reads;
+
+    ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$0:*=P"), DOS_UNUSED);
+    ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+    ck_assert_uint_eq(image.reads, reads + 2u);
+    ck_assert(!dos_work_pending(&unit));
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert_uint_eq(unit.directory_internal, 0);
+    free(image.bytes);
+}
+END_TEST
+
+// The initial lookahead searches peer entries without reading the peer header.
+START_TEST(test_directory_initial_lookahead_reads_only_the_required_peer_sector) {
+    const unsigned int format = 1u + (unsigned int)_i / 2u;
+    const unsigned int drive_zero_files = (unsigned int)_i % 2u == 0 ? 6u : 7u;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (unsigned int index = 0; index < drive_zero_files; ++index) {
+        char name[16];
+        snprintf(name, sizeof(name), "D0_%u", index);
+        create_typed_file(&unit, &bank, 0, name, 'P', (uint8_t)(0x20u + index * 4u), 4);
+    }
+    create_typed_file(&unit, &bank, 1, "PEER", 'P', 0x70, 4);
+    dos_reset(&unit, model);
+
+    const diskimage_type_t peer_type = bank.units[0].slots[1].io.image.type;
+    const uint8_t failed_sector = drive_zero_files == 6u ? 0u : 1u;
+    ck_assert(diskimage_sector_offset(peer_type, 39, failed_sector, &second.fail_read_offset));
+    second.fail_read_at_offset = true;
+
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
+    if (drive_zero_files == 6u) {
+        ck_assert_uint_ne(listing, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_OK);
+        const unsigned int initial_fill_bytes = 256u;
+        uint8_t row[DOS_STAGE_CAPACITY];
+        unsigned int consumed = 0;
+        while (consumed < initial_fill_bytes) {
+            bool eoi = false;
+            const unsigned int count = dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi);
+            ck_assert_uint_gt(count, 0);
+            dos_get(&unit, &bank, listing, count);
+            consumed += count;
+        }
+        bool eoi = false;
+        ck_assert_uint_eq(dos_stage(&unit, &bank, listing, row, sizeof(row), &eoi), 0);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert_uint_eq(second.last_failed_read_offset, second.fail_read_offset);
+        ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    } else {
+        ck_assert_uint_eq(listing, DOS_UNUSED);
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert_uint_eq(second.last_failed_read_offset, second.fail_read_offset);
+    }
+    ck_assert_uint_eq(unit.buffer_use, 0);
+    ck_assert(!dos_work_pending(&unit));
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // TALK on an earlier directory must not overwrite LSTDRV from an interleaved OPEN.
 START_TEST(test_directory_talk_preserves_interleaved_drive_selection) {
     const unsigned int format = (unsigned int)_i + 1u;
@@ -7442,6 +7578,9 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 6);
     tcase_add_loop_test(core, test_initial_load_star_releases_modified_rel_owner_safely, 0, 2);
     tcase_add_loop_test(core, test_unprefixed_load_uses_initial_fill_drive_after_dual_drive_directory, 0, 15);
+    tcase_add_loop_test(core, test_filtered_directory_initial_fill_yields_between_sectors, 0, 3);
+    tcase_add_loop_test(core, test_filtered_directory_self_link_fails_without_looping, 0, 3);
+    tcase_add_loop_test(core, test_directory_initial_lookahead_reads_only_the_required_peer_sector, 0, 4);
     tcase_add_loop_test(core, test_directory_talk_preserves_interleaved_drive_selection, 0, 2);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
     tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);

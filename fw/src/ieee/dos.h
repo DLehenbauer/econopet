@@ -95,6 +95,30 @@ typedef enum {
 } dos_directory_phase_t;
 
 typedef enum {
+    DOS_DIRECTORY_WORK_IDLE,
+    DOS_DIRECTORY_WORK_FILL,
+    DOS_DIRECTORY_WORK_LOOKAHEAD,
+} dos_directory_work_phase_t;
+
+typedef struct {
+    uint32_t identity;
+    uint16_t traversed;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t entry;
+    uint8_t phase;
+    uint8_t slot;
+    bool both_drives;
+} dos_directory_cursor_t;
+
+typedef struct {
+    uint8_t phase;
+    uint8_t channel;
+    uint8_t rows;
+    dos_directory_cursor_t lookahead;
+} dos_directory_work_t;
+
+typedef enum {
     DOS_CLOSE_DATA,
     DOS_CLOSE_DIRECTORY,
     DOS_CLOSE_OLD_CHAIN,
@@ -507,6 +531,7 @@ typedef struct {
     };
     dos_input_t input;
     dos_bam_t bam[DOS_MEDIA_SLOTS_PER_UNIT];
+    dos_directory_work_t directory_work;
     uint8_t directory_internal;
     // Host-only durability for NXDRBK after REL's native MAPOUT.
     uint8_t rel_directory_bam;
