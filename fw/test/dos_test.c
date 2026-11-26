@@ -4325,16 +4325,22 @@ START_TEST(test_rel_scratch_and_validate_native_chains) {
 END_TEST
 
 // Exercise public binary OPEN without treating a record-size byte as a C string.
-static uint8_t open_rel(dos_unit_t* const unit, dos_media_bank_t* const bank, const uint8_t size) {
-    const uint8_t name[] = {'0', ':', 'R', 'E', 'L', ',', 'L', ',', size};
-    dos_input_address(unit, bank, bank->units[0].model, IEEE_CMD_OPEN(2), true);
+static uint8_t open_rel_on_drive(dos_unit_t* const unit, dos_media_bank_t* const bank, const uint8_t drive,
+                                 const uint8_t secondary, const uint8_t size) {
+    const uint8_t name[] = {(uint8_t)('0' + drive), ':', 'R', 'E', 'L', ',', 'L', ',', size};
+    dos_input_address(unit, bank, bank->units[0].model, IEEE_CMD_OPEN(secondary), true);
     for (unsigned int index = 0; index < sizeof(name); ++index) {
         dos_input_put(unit, name[index], index + 1u == sizeof(name));
     }
     ck_assert(dos_input_ready(unit));
     dos_input_dispatch(unit, bank, 0);
     finish_open(unit, bank);
-    return dos_find_channel(unit, 2);
+    return dos_find_channel(unit, secondary);
+}
+
+// Opens a drive-0 REL file on LOAD channel 2.
+static uint8_t open_rel(dos_unit_t* const unit, dos_media_bank_t* const bank, const uint8_t size) {
+    return open_rel_on_drive(unit, bank, 0, 2, size);
 }
 
 // Corrupt zero-size entries use a bounded host rejection, not the native creation loop.
@@ -6830,9 +6836,10 @@ START_TEST(test_initial_load_star_resets_drive_and_filters_programs) {
 }
 END_TEST
 
-// OP0415 resets drive 0 and invalidates its cached BAM before OP049/OP05 syntax-checks "*,0:BAD".
+// OP0415 runs INITDR before OP049/OP05 syntax-checks "*,0:BAD".
 START_TEST(test_failed_initial_load_star_resets_drive_before_parsing) {
-    const unsigned int format = (unsigned int)_i;
+    const unsigned int format = (unsigned int)_i / 2u;
+    const bool fail_initialize = (unsigned int)_i % 2u;
     image_t first, second;
     dos_media_bank_t bank = {0};
     mount_blank(&bank, &first, format);
@@ -6848,11 +6855,19 @@ START_TEST(test_failed_initial_load_star_resets_drive_before_parsing) {
     ck_assert(dos_close(&unit, &bank, model, 3));
     ck_assert_uint_eq(unit.last_drive, 1);
 
+    const unsigned int reads = first.reads;
+    first.fail_read = fail_initialize ? reads + 1u : 0;
     ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*,0:BAD"), DOS_UNUSED);
-    ck_assert_uint_eq(unit.status_code, DOS_STATUS_SYNTAX);
     ck_assert_uint_eq(unit.selected_drive, 0);
     ck_assert_uint_eq(unit.last_drive, 0);
-    ck_assert(!unit.bam[0].buffer.resident);
+    ck_assert_uint_gt(first.reads, reads);
+    if (fail_initialize) {
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_READ_ERROR);
+        ck_assert(!unit.bam[0].buffer.resident);
+    } else {
+        ck_assert_uint_eq(unit.status_code, DOS_STATUS_SYNTAX);
+        ck_assert(unit.bam[0].buffer.resident);
+    }
     free(first.bytes);
     free(second.bytes);
 }
@@ -6860,7 +6875,7 @@ END_TEST
 
 // OP02 reopens a retained program directly without parsing trailing ",S,W" or "=BAD" bytes.
 START_TEST(test_retained_load_star_bypasses_ignored_parameters) {
-    static const char* const names[] = {"*", "*,S,W", "*=BAD"};
+    static const char* const names[] = {"*", "*,S,W", "*,0:BAD"};
     const unsigned int format = (unsigned int)_i / count_of(names);
     const unsigned int variant = (unsigned int)_i % count_of(names);
     image_t first, second;
@@ -6935,30 +6950,162 @@ START_TEST(test_initial_load_star_releases_active_drive_owners) {
 }
 END_TEST
 
+// INITDR selects REL data pages from the record cursor, not the aliased write flags.
+START_TEST(test_initial_load_star_releases_modified_rel_owner_safely) {
+    const unsigned int format = (unsigned int)_i + 1u;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "BOOT0", 'P', 0x30, 5);
+
+    const uint8_t drive_zero = open_rel_on_drive(&unit, &bank, 0, 2, 13);
+    const uint8_t drive_one = open_rel_on_drive(&unit, &bank, 1, 3, 13);
+    ck_assert_uint_ne(drive_zero, DOS_UNUSED);
+    ck_assert_uint_ne(drive_one, DOS_UNUSED);
+    for (uint8_t secondary = 2; secondary <= 3; ++secondary) {
+        dos_input_address(&unit, &bank, model, IEEE_CMD_SECONDARY(secondary), true);
+        dos_listen_put(&unit, &bank, 'A', false);
+        finish_open(&unit, &bank);
+        const uint8_t owner = dos_find_channel(&unit, secondary);
+        ck_assert_uint_eq(unit.channels[owner].rel.record.active, 0);
+        ck_assert_uint_eq(unit.channels[owner].rel_write, 5u);
+    }
+    const dos_channel_t saved_peer = unit.channels[drive_one];
+
+    const uint8_t program = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "*");
+    ck_assert_uint_ne(program, DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 2), DOS_UNUSED);
+    ck_assert_uint_eq(dos_find_channel(&unit, 3), drive_one);
+    ck_assert_mem_eq(&unit.channels[drive_one], &saved_peer, sizeof(saved_peer));
+    ck_assert_uint_eq(unit.channels[program].media.slot, 0);
+
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
+// LOAD directory iteration leaves the peer as LSTDRV for the next omitted-drive OPEN.
+START_TEST(test_unprefixed_load_uses_peer_after_dual_drive_directory) {
+    const unsigned int format = (unsigned int)_i;
+    image_t first, second;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &first, format);
+    mount_peer_blank(&bank, &second, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    create_typed_file(&unit, &bank, 0, "SAME", 'P', 0x20, 4);
+    create_typed_file(&unit, &bank, 1, "SAME", 'P', 0x70, 4);
+    dos_reset(&unit, model);
+    dos_media_ref_t peer_reference;
+    ck_assert_int_eq(dos_media_reference(&bank, 0, 1, &peer_reference), DOS_MEDIA_OK);
+    ck_assert_uint_eq(peer_reference.slot, 1);
+
+    const uint8_t listing = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "$");
+    ck_assert_uint_ne(listing, DOS_UNUSED);
+    ck_assert(unit.channels[listing].both_drives);
+    uint8_t rows[1024];
+    const unsigned int row_bytes = directory_bytes(&unit, &bank, listing, rows, sizeof(rows));
+    ck_assert_uint_eq(row_bytes, 192u);
+    ck_assert_uint_eq(unit.channels[listing].media.slot, 1);
+    ck_assert_uint_eq(unit.selected_drive, 1);
+    ck_assert_uint_eq(unit.last_drive, 1);
+
+    const uint8_t program = open_name(&unit, &bank, IEEE_LOAD_CHANNEL, "SAME");
+    ck_assert_uint_ne(program, DOS_UNUSED);
+    ck_assert_uint_eq(unit.channels[program].media.slot, 1);
+    expect_bytes(&unit, &bank, program, 4, 0x70);
+    ck_assert(dos_close(&unit, &bank, model, IEEE_LOAD_CHANNEL));
+    finish_open(&unit, &bank);
+    free(first.bytes);
+    free(second.bytes);
+}
+END_TEST
+
 // FFST/FFRE mark a zero-track directory match as terminal rather than scanning later entries.
 START_TEST(test_open_zero_track_match_stops_search) {
     static const char* const names[] = {"0:TARGET", "0:T*", "*"};
     const unsigned int format = (unsigned int)_i / count_of(names);
     const unsigned int variant = (unsigned int)_i % count_of(names);
-    image_t image;
+    image_t image, peer;
     dos_media_bank_t bank = {0};
     mount_blank(&bank, &image, format);
+    mount_peer_blank(&bank, &peer, format);
     const dos_model_t model = bank.units[0].model;
     dos_unit_t unit;
     dos_reset(&unit, model);
     create_typed_file(&unit, &bank, 0, "TARGET", 'P', 0x40, 4);
-    create_typed_file(&unit, &bank, 0, "TAIL", 'P', 0x80, 4);
+    if (variant < 2u) {
+        static const char* const filler[] = {"FILL1", "FILL2", "FILL3", "FILL4", "FILL5", "FILL6", "FILL7"};
+        for (unsigned int index = 0; index < count_of(filler); ++index) {
+            create_typed_file(&unit, &bank, 0, filler[index], 'P', (uint8_t)(0x50u + index * 4u), 4);
+        }
+        create_typed_file(&unit, &bank, 0, "TAIL", 'P', 0x80, 4);
+    } else {
+        create_typed_file(&unit, &bank, 1, "PEER", 'P', 0x90, 4);
+    }
     dos_reset(&unit, model);
 
-    // Zero the first entry's starting track in the raw directory sector while keeping TAIL intact.
+    // Keep a matching entry in a linked sector (or peer) to distinguish terminal matches.
     const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
-    uint8_t* const dir = sector_bytes(&image, type, format == 0 ? 18 : 39, 1);
+    const unsigned int directory_track = format == 0 ? 18u : 39u;
+    uint8_t* const dir = sector_bytes(&image, type, directory_track, 1);
+    if (variant < 2u) {
+        ck_assert_uint_ne(dir[0], 0);
+        uint8_t* const successor = sector_bytes(&image, type, dir[0], dir[1]);
+        memcpy(successor + DISKIMAGE_DIRECTORY_ENTRY_SIZE, dir, DISKIMAGE_DIRECTORY_ENTRY_SIZE);
+    }
     dir[3] = 0;
     dir[4] = 0;
 
     ck_assert_uint_eq(open_name(&unit, &bank, IEEE_LOAD_CHANNEL, names[variant]), DOS_UNUSED);
     ck_assert_uint_eq(unit.status_code, DOS_STATUS_NOT_FOUND);
     ck_assert_uint_eq(unit.buffer_use, 0);
+    free(image.bytes);
+    free(peer.bytes);
+}
+END_TEST
+
+// A zero-track write match must not replace the live successor while finding a free slot.
+START_TEST(test_zero_track_write_preserves_directory_successor) {
+    const unsigned int format = (unsigned int)_i;
+    static const char* const first_page[] = {"BROKEN", "FILE1", "FILE2", "FILE3", "FILE4", "FILE5", "FILE6", "FILE7"};
+    image_t image;
+    dos_media_bank_t bank = {0};
+    mount_blank(&bank, &image, format);
+    const dos_model_t model = bank.units[0].model;
+    dos_unit_t unit;
+    dos_reset(&unit, model);
+    for (unsigned int index = 0; index < count_of(first_page); ++index) {
+        create_typed_file(&unit, &bank, 0, first_page[index], 'P', (uint8_t)(0x20u + index * 4u), 4);
+    }
+    create_typed_file(&unit, &bank, 0, "TAIL", 'P', 0x80, 4);
+    dos_reset(&unit, model);
+
+    const diskimage_type_t type = bank.units[0].slots[0].io.image.type;
+    const unsigned int directory_track = format == 0 ? 18u : 39u;
+    uint8_t* const directory = sector_bytes(&image, type, directory_track, 1);
+    const uint8_t successor_track = directory[0], successor_sector = directory[1];
+    ck_assert_uint_ne(successor_track, 0);
+    directory[3] = 0;
+    directory[4] = 0;
+
+    const uint8_t writer = open_name(&unit, &bank, 2, "0:BROKEN,S,W");
+    ck_assert_uint_ne(writer, DOS_UNUSED);
+    ck_assert(dos_close(&unit, &bank, model, 2));
+    finish_open(&unit, &bank);
+    ck_assert_uint_eq(directory[0], successor_track);
+    ck_assert_uint_eq(directory[1], successor_sector);
+
+    const uint8_t tail = open_name(&unit, &bank, 3, "0:TAIL");
+    ck_assert_uint_ne(tail, DOS_UNUSED);
+    expect_bytes(&unit, &bank, tail, 4, 0x80);
+    ck_assert(dos_close(&unit, &bank, model, 3));
+    finish_open(&unit, &bank);
     free(image.bytes);
 }
 END_TEST
@@ -7120,10 +7267,13 @@ Suite* dos_suite(void) {
     tcase_add_loop_test(core, test_rename_default_drive_and_absent_source, 0, 6);
     tcase_add_loop_test(core, test_rename_shared_resource_exhaustion_and_recovery, 0, 3);
     tcase_add_loop_test(core, test_initial_load_star_resets_drive_and_filters_programs, 0, 12);
-    tcase_add_loop_test(core, test_failed_initial_load_star_resets_drive_before_parsing, 0, 3);
+    tcase_add_loop_test(core, test_failed_initial_load_star_resets_drive_before_parsing, 0, 6);
     tcase_add_loop_test(core, test_retained_load_star_bypasses_ignored_parameters, 0, 9);
     tcase_add_loop_test(core, test_initial_load_star_releases_active_drive_owners, 0, 6);
+    tcase_add_loop_test(core, test_initial_load_star_releases_modified_rel_owner_safely, 0, 2);
+    tcase_add_loop_test(core, test_unprefixed_load_uses_peer_after_dual_drive_directory, 0, 3);
     tcase_add_loop_test(core, test_open_zero_track_match_stops_search, 0, 9);
+    tcase_add_loop_test(core, test_zero_track_write_preserves_directory_successor, 0, 3);
     suite_add_tcase(suite, core);
     return suite;
 }

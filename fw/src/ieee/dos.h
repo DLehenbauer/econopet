@@ -241,6 +241,8 @@ typedef struct {
     bool pending;
     /** True for an initial LOAD "*" (PRGTRK == 0) so directory lookup matches only PRG entries. */
     bool first_program;
+    /** A zero-track write match remains terminal while lookup searches for a free directory slot. */
+    bool zero_track_match;
 } dos_open_work_t;
 
 // Decode OPEN's bounded command page before lookup. Supply all 59 command

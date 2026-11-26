@@ -696,8 +696,9 @@ static void free_drive_channels(dos_unit_t* const unit, const uint8_t drive) {
         const uint8_t owner = dos_find_channel(unit, candidate);
         if (owner != DOS_UNUSED) {
             const dos_channel_t* const state = &unit->channels[owner];
-            if (state->buffers[state->active] < DOS_BUFFER_COUNT) {
-                const uint16_t page = (uint16_t)(1u << state->buffers[state->active]);
+            const uint8_t active = state->file_type == DISKIMAGE_FTYPE_REL ? state->rel.record.active : state->active;
+            if (active < DOS_CHANNEL_BUFFER_COUNT && state->buffers[active] < DOS_BUFFER_COUNT) {
+                const uint16_t page = (uint16_t)(1u << state->buffers[active]);
                 if (((unit->buffer_drives & page) != 0) == (drive != 0)) {
                     free_channel(unit, owner);
                 }
@@ -3065,8 +3066,10 @@ static void initialize_work(dos_unit_t* const unit, dos_media_bank_t* const medi
     //
     // INITDR calls CLDCHN/FRECHN, not writable CLOSE. 4040 then reads its
     // single BAM, while DOS 2.7 reads the directory header and NF05/NF10
-    // sums free counts through SETMAP. C schedules these reads cooperatively,
-    // without emulating physical seek/trial jobs or controller disk-ID state.
+    // sums free counts through SETMAP. The scheduler normally yields between
+    // reads. Initial LOAD "*" drains one-drive initialization here so media
+    // errors still precede suffix parsing. Neither path emulates physical
+    // seek/trial jobs or controller disk-ID state.
     dos_initialize_work_t* const work = &unit->initialize;
 
     // The caller supplies the slot mask and first-drive order. Finish that
@@ -6542,6 +6545,25 @@ void dos_open(dos_unit_t* const unit, dos_media_bank_t* const media, const unsig
         unit->bam[0] = (dos_bam_t){0};
         unit->free_blocks[0] = 0;
         unit->free_blocks_valid[0] = false;
+
+        dos_media_ref_t reference;
+        if (dos_media_reference(media, index, 0, &reference) != DOS_MEDIA_OK) {
+            dos_status(unit, model, DOS_STATUS_NOT_READY, 0, 0);
+            return;
+        }
+        unit->initialize = (dos_initialize_work_t){
+            .first_drive = 0,
+            .slots = 1u,
+            .started = true,
+            .pending = true,
+        };
+        unit->initialize.media[0] = reference;
+        while (unit->initialize.pending) {
+            initialize_work(unit, media);
+        }
+        if (unit->status_code != DOS_STATUS_OK) {
+            return;
+        }
     }
 
     // ROM open:OP40 makes SA 0/1 LOAD/SAVE with a PRG default. Omitted drives
@@ -8100,7 +8122,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     uint8_t found_track = 0, found_sector = 0, found_type = 0, found_entry = 0;
     uint8_t found_root_track = 0, found_root_sector = 0, found_record_size = 0;
     uint16_t found_blocks = 0;
-    bool matched = false;
+    bool matched = work->zero_track_match;
     const uint8_t searched_track = work->track, searched_sector = work->sector;
 
     // Bound directory visits by image size as a corruption safeguard, not a
@@ -8141,7 +8163,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                     work->empty_sector = searched_sector;
                     work->empty_entry = (uint8_t)entry;
                 }
-            } else if ((!work->first_program ||
+            } else if (!matched && (!work->first_program ||
                         (file[DOS_DIRECTORY_TYPE_OFFSET] & DOS_FILE_TYPE_MASK) == DISKIMAGE_FTYPE_PRG) &&
                        name_matches(work->name, file + DOS_DIRECTORY_NAME_OFFSET)) {
                 // Record the first matching directory entry (filtering to PRG on initial LOAD "*") and stop scanning.
@@ -8154,6 +8176,15 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
                 found_root_sector = file[DOS_DIRECTORY_SIDE_SECTOR];
                 found_record_size = file[DOS_DIRECTORY_RECORD_SIZE];
                 matched = true;
+                const bool write_match =
+                    work->access == DOS_ACCESS_WRITE ||
+                    (work->type == DISKIMAGE_FTYPE_REL && work->record_parameter && secondary >= 2);
+                if (found_track == 0 && write_match) {
+                    work->zero_track_match = true;
+                    if (work->empty_track == 0) {
+                        continue;
+                    }
+                }
                 break;
             }
         }
@@ -8167,7 +8198,7 @@ void dos_work(dos_unit_t* const unit, dos_media_bank_t* const media) {
     // Yield at a live link, otherwise return the scratch buffer before any
     // GETRCH-style allocation so lookup does not permanently cost a buffer.
     // FFST returns a zero-track name match to OP90, not another search pass.
-    if (!failed && !matched && work->track != 0) {
+    if (!failed && (!matched || (work->zero_track_match && work->empty_track == 0)) && work->track != 0) {
         return;
     }
     if (!failed && !matched && work->default_drive) {
@@ -8599,6 +8630,7 @@ static bool prepare_directory_line(dos_unit_t* const unit, dos_media_bank_t* con
             // without repeating the load address or ending the stream.
             channel->media = other;
             unit->selected_drive = other.slot;
+            unit->last_drive = other.slot;
             channel->both_drives = false;
             channel->directory = DOS_DIRECTORY_HEADER;
             channel->directory_track = directory_track(model);
