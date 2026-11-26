@@ -293,7 +293,8 @@ module main (
     logic [DATA_WIDTH-1:0] cpu_data_q = '0;
     logic                  cpu_data_strobe_q = 1'b0;
     logic                  cpu_active_data_strobe_q = 1'b0;
-    logic [DATA_WIDTH-1:0] read_data_q = '0;
+    // Preserve cell names for EconoPET.sdc's multicycle crossing to soft CPUs.
+    (* syn_preserve = "true" *) logic [DATA_WIDTH-1:0] read_data_q = '0;
     always_ff @(posedge sys_clock_i) begin
         if (cpu_data_strobe) begin
             cpu_data_q <= cpu_data_i;

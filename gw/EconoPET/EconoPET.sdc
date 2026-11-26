@@ -257,13 +257,24 @@ set_max_delay -from [get_clocks {e6809}] -to [get_clocks {sys_clock_i}] 40.0
 set_max_delay -from [get_clocks {q6809}] -to [get_clocks {sys_clock_i}] 40.0
 
 # The generated CPU clocks trail sys_clock_i by their extra insertion delay, so
-# hold checks fail on an artifact: everything entering a core is a held level or
-# a synchronizer head (the one cycle-exact crossing, bus data, launches from
-# soft_cpu_data_capture instead), so capturing one edge late is equivalent. One
-# blanket waiver -- per-endpoint -from patterns die silently on synth renames.
+# hold checks fail on an artifact: control inputs entering a core are held
+# levels or synchronizer heads, so capturing one edge late is equivalent. Use a
+# blanket clock-pair waiver so synthesis renames cannot drop an endpoint rule.
 # (RESET is async-by-design, covered by the cpu_reset_n_i port false path.)
 set_multicycle_path -hold 1 -start \
     -from [get_clocks {sys_clock_i}] \
+    -to [get_clocks {cpu_phi e6809 q6809}]
+
+# read_data_q (preserved via syn_preserve in main.sv) updates only when
+# cpu_data_strobe pulses at arbiter cycle 56, then holds for the entire 64-cycle
+# frame. The earliest soft-CPU capture edges fall at cycle 60 (q6809, 4 cycles),
+# cycle 61 (cpu_phi, 5 cycles), and cycle 62 (e6809, 6 cycles). Model the
+# conservative 4-cycle setup budget and matching -15.625 ns hold offset.
+set_multicycle_path -setup 4 -start \
+    -from [get_cells {main/read_data_q*}] \
+    -to [get_clocks {cpu_phi e6809 q6809}]
+set_multicycle_path -hold 3 -start \
+    -from [get_cells {main/read_data_q*}] \
     -to [get_clocks {cpu_phi e6809 q6809}]
 
 # ============================================================================
