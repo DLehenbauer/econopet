@@ -18,6 +18,20 @@
 #define DOS_FILENAME_COUNT 5u
 #define DOS_UNUSED 0xffu
 
+typedef struct {
+    dos_media_ref_t media;
+    uint16_t blocks;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t type;
+    uint8_t entry;
+    uint8_t directory_track;
+    uint8_t directory_sector;
+    uint8_t root_track;
+    uint8_t root_sector;
+    uint8_t record_size;
+} dos_open_candidate_t;
+
 // Bound speculative byte traversal so preview cannot evict an unread buffer.
 #define DOS_STAGE_CAPACITY 64u
 
@@ -79,6 +93,30 @@ typedef enum {
     DOS_DIRECTORY_FOOTER,
     DOS_DIRECTORY_END,
 } dos_directory_phase_t;
+
+typedef enum {
+    DOS_DIRECTORY_WORK_IDLE,
+    DOS_DIRECTORY_WORK_FILL,
+    DOS_DIRECTORY_WORK_LOOKAHEAD,
+} dos_directory_work_phase_t;
+
+typedef struct {
+    uint32_t identity;
+    uint16_t traversed;
+    uint8_t track;
+    uint8_t sector;
+    uint8_t entry;
+    uint8_t phase;
+    uint8_t slot;
+    bool both_drives;
+} dos_directory_cursor_t;
+
+typedef struct {
+    uint8_t phase;
+    uint8_t channel;
+    uint8_t rows;
+    dos_directory_cursor_t lookahead;
+} dos_directory_work_t;
 
 typedef enum {
     DOS_CLOSE_DATA,
@@ -183,7 +221,13 @@ typedef struct {
             uint8_t old_sector;
             uint8_t next_track;
             uint8_t next_sector;
-            uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+            union {
+                uint8_t pattern[DISKIMAGE_FILENAME_SIZE];
+                struct {
+                    dos_directory_cursor_t directory_resume;
+                    bool directory_resume_pending;
+                };
+            };
             union {
                 uint8_t line_length;
                 uint8_t direct_byte;
@@ -239,6 +283,14 @@ typedef struct {
     bool default_drive;
     bool tried_other;
     bool pending;
+    /** True for an initial LOAD "*" (PRGTRK == 0) to prefer PRG entries. */
+    bool first_program;
+    /** Candidate data is retained in the reserved second lookup buffer. */
+    bool first_program_candidate;
+    /** A zero-track write match remains terminal while lookup searches for a free directory slot. */
+    bool zero_track_match;
+    /** A zero-track match is an unclosed writer that must be deleted before reuse. */
+    bool zero_track_unclosed;
 } dos_open_work_t;
 
 // Decode OPEN's bounded command page before lookup. Supply all 59 command
@@ -485,6 +537,7 @@ typedef struct {
     };
     dos_input_t input;
     dos_bam_t bam[DOS_MEDIA_SLOTS_PER_UNIT];
+    dos_directory_work_t directory_work;
     uint8_t directory_internal;
     // Host-only durability for NXDRBK after REL's native MAPOUT.
     uint8_t rel_directory_bam;
