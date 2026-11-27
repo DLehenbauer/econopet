@@ -183,9 +183,16 @@ base-RAM program (no `$FFF0` banking), with assembly stream send/receive/EOI
 helpers and in-place screen progress updates, and is checked to load entirely
 below `$7FF0` (reserving `$7FF0-$7FFF` for the target diagnostic mailbox).
 
-IEEE handshakes have finite software-loop deadlines (~0.8s default per edge at
-1 MHz, with a longer deadline around format, validate, duplicate and side-sector
-growth). Their real-machine timing still requires hardware qualification.
+IEEE handshakes use finite software-loop budgets, not wall-clock timers.
+`SHORT_BUDGET = 12` executes 12 rounds of 65,536 VIA polls. In the current
+linked program, an uninterrupted 1 MHz 6502 reaches timeout reporting after
+approximately 14.95 seconds per stalled edge. `FORMAT_BUDGET = 180` extends
+that to approximately 224.32 seconds around format, validate, duplicate and
+side-sector growth. These durations include polling instructions and loop
+overhead, not just the number of polls. Interrupt servicing and CPU clock
+changes affect elapsed time, and failure-screen rendering adds time afterward.
+The existing runtime budgets are unchanged. Real-machine timing and any
+shorter budgets still require hardware qualification.
 
 ## Evidence boundary
 
@@ -212,7 +219,10 @@ callback and `LD210` buffer restore (`tape_callback_test.cpp`), and focused
 linked-PRG IEEE transport/stream EOI, `UNTALK` pending-byte cancellation,
 missing-talker timeout release, and initial format startup with committed
 mailbox completion
-(`drive_prg_transport_test.cpp`). Full DOS command/media matrix vetting of
+(`drive_prg_transport_test.cpp`).
+The focused missing-talker fixture shortens the countdown to exercise failure
+reporting and bus release, not to qualify the unmodified timeout duration.
+Full DOS command/media matrix vetting of
 `drive-test.prg` runs in seconds under `xpet -console -warp` (`vet_vice.py`)
 prior to execution on physical EconoPET hardware. Physical write protection,
 damaged media, power-loss durability, and electrical-edge timing require
