@@ -440,13 +440,30 @@ TEST_F(FirmwareTest, DrivePrgStartsAndEntersFirstFormat) {
     // Initialize MEMSIZ ($8000), run CINT ($E000), and jump into CC65 STARTUP ($040D) until check #1 completes.
     auto wire = system.trace_ieee();
     start_prg(system, {});
+
+    // Pause during the first real mailbox publication so the completion wait must handle an in-flight update.
     system.execution()
         .within(30'000'000)
-        .every(8000, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .every(1000, ServiceTiming::AfterSlice, firmware.service_adapter())
+        .until([](const System& board) {
+            return board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)}) == TARGET_DIAG_STATE_FAILED ||
+                   (board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)}) & 1u) != 0;
+        })
+        .run("Drive Test first format publication");
+    ASSERT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)}), TARGET_DIAG_STATE_RUNNING);
+    ASSERT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)}), 0);
+    ASSERT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)}), 1);
+
+    // Poll each cycle without drive service while the target finishes its SRAM-only commit.
+    system.execution()
+        .within(100'000)
+        .service([](System& board, econopet::Cycles) { board.tick(1); })
         .until([&](const System& board) {
             const auto state = board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)});
             const auto completed = board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)});
-            return state == TARGET_DIAG_STATE_FAILED || (state == TARGET_DIAG_STATE_RUNNING && completed >= 1);
+            const auto seq = board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)});
+            return state == TARGET_DIAG_STATE_FAILED ||
+                   (state == TARGET_DIAG_STATE_RUNNING && completed >= 1 && (seq & 1u) == 0);
         })
         .run("Drive Test first format");
 

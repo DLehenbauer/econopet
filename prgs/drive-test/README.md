@@ -210,7 +210,8 @@ without establishing exact cursor behavior (see `docs/dev/drive-direct-block-res
 Production FPGA/firmware simulations exercise the production virtual-tape
 callback and `LD210` buffer restore (`tape_callback_test.cpp`), and focused
 linked-PRG IEEE transport/stream EOI, `UNTALK` pending-byte cancellation,
-missing-talker timeout release, and initial format startup
+missing-talker timeout release, and initial format startup with committed
+mailbox completion
 (`drive_prg_transport_test.cpp`). Full DOS command/media matrix vetting of
 `drive-test.prg` runs in seconds under `xpet -console -warp` (`vet_vice.py`)
 prior to execution on physical EconoPET hardware. Physical write protection,
