@@ -23,6 +23,7 @@ FIND_LIBRARY(CHECK_LIBRARIES NAMES check)
 set(SRC_DIR ${FW_DIR}/src)
 set(TEST_DIR ${FW_DIR}/test)
 get_filename_component(TEST_SUPPORT_DIR "${FW_DIR}/../test/support" ABSOLUTE)
+get_filename_component(PRGS_DIR "${FW_DIR}/../prgs" ABSOLUTE)
 
 add_executable(${PROJECT_NAME}
     ${SRC_DIR}/config/config.c
@@ -34,6 +35,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/diag/mem.c
     ${SRC_DIR}/diag/sd_confirm.c
     ${SRC_DIR}/diag/runner.c
+    ${SRC_DIR}/diag/target.c
     ${SRC_DIR}/display/char_encoding.c
     ${SRC_DIR}/display/display.c
     ${SRC_DIR}/display/window.c
@@ -66,6 +68,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/breakpoint.c
     ${SRC_DIR}/tape_dir.c
     ${SRC_DIR}/ieee/diskimage.c
+    ${SRC_DIR}/ieee/diskimage_file.c
     ${SRC_DIR}/ieee/dos_media.c
     ${SRC_DIR}/ieee/dos_rel.c
     ${SRC_DIR}/ieee/dos.c
@@ -142,7 +145,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_put -Wl,--wrap=sleep_us)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=gpio_init -Wl,--wrap=gpio_set_dir)
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=fatal_halt)
-target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=diag_loop)
+target_link_options(${PROJECT_NAME} PRIVATE -Wl,--wrap=diag_loop -Wl,--wrap=diag_complete_halt)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=display_task -Wl,--wrap=display_term_begin -Wl,--wrap=display_term_end
     -Wl,--wrap=display_term_refresh)
@@ -150,7 +153,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
-target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}")
+target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}" "${PRGS_DIR}" "${PRGS_DIR}/include")
 target_include_directories(${PROJECT_NAME} PRIVATE "${EXTERNAL_DIR}/pico-vfs/include")
 
 # Exercise report handling with TinyUSB's real HID definitions, without its hardware runtime.

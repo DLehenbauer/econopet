@@ -37,14 +37,28 @@ static diag_session_t* active_session;
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_PLANE_CAPACITY, "diagnostic character plane too small");
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_COLOR_CAPACITY, "diagnostic color plane too small");
 
+/** Return the static name for index from a table-backed suite, ignoring scratch storage. */
+const char* diag_table_case_name(const diag_suite_t* suite, size_t index, char* buf, size_t size) {
+    // Table-backed suites store string literals directly in suite->cases, so caller scratch is unused.
+    (void)buf;
+    (void)size;
+    return suite->cases[index].name;
+}
+
+/** Invoke the static callback for index with the suite's shared context pointer. */
+void diag_table_run_case(const diag_suite_t* suite, size_t index) {
+    // Dispatch the indexed entry from the static case table with the suite's borrowed context.
+    suite->cases[index].run(suite->context);
+}
+
 const diag_plan_t* const* diag_plans(size_t* count_out) {
-    *count_out = sizeof(plans) / sizeof(plans[0]);
+    *count_out = count_of(plans);
     return plans;
 }
 
 const diag_plan_t* diag_find_plan(const char* name) {
     if (name != NULL) {
-        for (size_t index = 0; index < sizeof(plans) / sizeof(plans[0]); ++index) {
+        for (size_t index = 0; index < count_of(plans); ++index) {
             if (strcmp(plans[index]->name, name) == 0) {
                 return plans[index];
             }
@@ -85,14 +99,24 @@ static void render_suite_row(const window_t* window, unsigned row, const char* s
     window_text(&suite_win, 1, row, DIAG_COLS - 2, suite_name);
 }
 
+/** Draw one centered magenta divider banner over a full-width horizontal rule at row. */
+static void render_divider_row(const window_t* window, unsigned row, const char* text) {
+    // Build distinct color views so the rule stays dim while the centered title stands out.
+    const window_t divider = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_DARK_MAGENTA, DISPLAY_COLOR_BLACK));
+    const window_t text_win = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_MAGENTA, DISPLAY_COLOR_BLACK));
+    const unsigned length = (unsigned)strlen(text);
+
+    // Fill the entire interior width with a horizontal line, then overwrite the centered label.
+    window_fill_row(&divider, row, VROM_HLINE);
+    window_text(&text_win, (DIAG_COLS - length) / 2 + 1, row, length, text);
+}
+
 /** Draw one cycle divider at a backward-derived viewport row. */
 static void render_cycle_row(const window_t* window, unsigned row, uint64_t cycle_number) {
-    const window_t divider = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_DARK_MAGENTA, DISPLAY_COLOR_BLACK));
-    const window_t cycle_win = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_MAGENTA, DISPLAY_COLOR_BLACK));
-    window_fill_row(&divider, row, VROM_HLINE);
+    // Format the 1-based cycle label and render it as a centered divider row.
     char cycle[DIAG_COLS + 1];
     snprintf(cycle, sizeof(cycle), " Begin Cycle #%" PRIu64 " ", cycle_number);
-    window_text(&cycle_win, (DIAG_COLS - (unsigned)strlen(cycle)) / 2 + 1, row, (unsigned)strlen(cycle), cycle);
+    render_divider_row(window, row, cycle);
 }
 
 /** Reconstruct only the visible 19-row history from the active cursor. */
@@ -110,9 +134,18 @@ static void render_body(const diag_session_t* session) {
     size_t case_index = session->active_case_index;
     bool is_active = true;
     int row = (int)DIAG_BODY_LAST_ROW;
+
+    // Reserve the bottom viewport row for a completion banner once all requested cycles pass.
+    if (session->completed) {
+        render_divider_row(window, (unsigned)row--, " All Cycles Completed ");
+    }
+
+    // Walk backward from the active case, resolving each static or generated case name on demand.
+    char name_buf[DIAG_CASE_NAME_MAX];
     while (row >= (int)DIAG_BODY_FIRST_ROW) {
         const diag_suite_t* const suite = &session->plan->suites[suite_index];
-        render_case_row(window, (unsigned)row, suite->cases[case_index].name,
+        const char* const case_name = suite->case_name(suite, case_index, name_buf, sizeof(name_buf));
+        render_case_row(window, (unsigned)row, case_name,
                         is_active ? session->active_status : DIAG_STATUS_PASS);
         is_active = false;
         --row;
@@ -193,13 +226,18 @@ static void render(const diag_session_t* session) {
     }
     window_frame(&border, 0, DIAG_DIVIDER_ROW, DIAG_COLS, DIAG_FOOTER_ROW - DIAG_DIVIDER_ROW + 1, NULL);
     const diag_suite_t* const suite = &session->plan->suites[session->active_suite_index];
+
+    // Show the recorded failure detail on error, or resolve the active case's display label.
+    char active_name_buf[DIAG_CASE_NAME_MAX];
+    const char* const active_case_name =
+        failed ? session->failure_detail
+               : suite->case_name(suite, session->active_case_index, active_name_buf, sizeof(active_name_buf));
     window_text(normal, 2, DIAG_LOCATION_ROW, 5, "Suite");
     window_text(&border, 7, DIAG_LOCATION_ROW, 1, ":");
     window_text(&suite_win, 9, DIAG_LOCATION_ROW, DIAG_COLS - 10, suite->name);
     window_text(normal, 3, DIAG_DETAIL_ROW, 4, failed ? "FAIL" : "Case");
     window_text(&border, 7, DIAG_DETAIL_ROW, 1, ":");
-    window_text(&case_win, 9, DIAG_DETAIL_ROW, DIAG_COLS - 10,
-                failed ? session->failure_detail : suite->cases[session->active_case_index].name);
+    window_text(&case_win, 9, DIAG_DETAIL_ROW, DIAG_COLS - 10, active_case_name);
     char cycle_number[DIAG_ELAPSED_SIZE];
     snprintf(cycle_number, sizeof(cycle_number), "%" PRIu64, session->iteration);
     const unsigned cycle_width = (unsigned)strlen(cycle_number);
@@ -232,21 +270,28 @@ static void render(const diag_session_t* session) {
 }
 
 void diag_session_init(diag_session_t* session, const diag_plan_t* plan) {
+    // Validate plan and suite callback invariants up front, checking static tables when used.
     vet(session != NULL && plan != NULL && plan->name != NULL && plan->suites != NULL && plan->suite_count != 0,
         "invalid diagnostic plan");
     size_t items = 0;
     for (size_t s = 0; s < plan->suite_count; ++s) {
         const diag_suite_t* const suite = &plan->suites[s];
-        vet(suite->name != NULL && suite->cases != NULL && suite->case_count != 0 &&
+        vet(suite->name != NULL && suite->case_count != 0 && suite->case_name != NULL && suite->run_case != NULL &&
                 suite->case_count <= SIZE_MAX - items,
             "invalid diagnostic suite");
-        for (size_t c = 0; c < suite->case_count; ++c) {
-            vet(suite->cases[c].name != NULL && suite->cases[c].run != NULL, "invalid diagnostic case");
+        if (suite->case_name == diag_table_case_name || suite->run_case == diag_table_run_case) {
+            vet(suite->cases != NULL, "missing diagnostic case table");
+            for (size_t c = 0; c < suite->case_count; ++c) {
+                vet(suite->cases[c].name != NULL && suite->cases[c].run != NULL, "invalid diagnostic case");
+            }
         }
         items += suite->case_count;
     }
+
+    // Reset session state to a single-cycle default and initialize the 80-column diagnostic viewport.
     memset(session, 0, sizeof(*session));
     session->plan = plan;
+    session->max_cycles = 1;
     session->start_time_us = time_us_64();
     session->last_display_refresh_us = session->start_time_us;
     session->window =
@@ -271,16 +316,48 @@ void diag_case_progress(size_t completed, size_t total) {
     render(active_session);
 }
 
-/** Keep the jump boundary separate from loops so longjmp cannot clobber their locals. */
-static bool run_case(diag_session_t* session, const diag_suite_t* suite, const diag_case_t* test) {
+/**
+ * Invoke the plan's optional per-cycle hook inside its own setjmp frame so
+ * diag_fail() can abort setup without clobbering caller loop variables.
+ */
+static bool run_begin_cycle(diag_session_t* session, uint8_t cycle) {
+    // Succeed immediately when the plan requires no per-cycle trigger.
+    if (session->plan->begin_cycle == NULL) {
+        return true;
+    }
+
+    // Disarm the failure jump buffer if begin_cycle unwinds via diag_fail().
     if (setjmp(session->fail_jmp) != 0) {
         session->jmp_armed = false;
         active_session = NULL;
         return false;
     }
+
+    // Arm the active session around the hook so deferred setup checks can call diag_fail().
     session->jmp_armed = true;
     active_session = session;
-    test->run(suite->context);
+    session->plan->begin_cycle(cycle);
+    session->jmp_armed = false;
+    active_session = NULL;
+    return true;
+}
+
+/**
+ * Execute one suite case inside an isolated setjmp frame so longjmp cannot
+ * clobber the outer suite and case loop indices.
+ */
+static bool run_case(diag_session_t* session, const diag_suite_t* suite, size_t case_index) {
+    // Disarm the failure jump buffer when the case or a helper unwinds via diag_fail().
+    if (setjmp(session->fail_jmp) != 0) {
+        session->jmp_armed = false;
+        active_session = NULL;
+        return false;
+    }
+
+    // Arm the active session around the suite's case runner and disarm on normal return.
+    session->jmp_armed = true;
+    active_session = session;
+    suite->run_case(suite, case_index);
     session->jmp_armed = false;
     active_session = NULL;
     return true;
@@ -295,12 +372,49 @@ void diag_fail(const char* format, ...) {
     longjmp(active_session->fail_jmp, 1);
 }
 
+/**
+ * Latch DIAG_STATUS_FAIL on the session, format the one-line UART failure
+ * summary for (suite, case_index), and render the failed viewport.
+ */
+static bool report_iteration_failure(diag_session_t* session, const diag_suite_t* suite, size_t case_index) {
+    // Transition the active cursor to FAIL and resolve elapsed time plus the case's display name.
+    session->active_status = DIAG_STATUS_FAIL;
+    char elapsed[DIAG_ELAPSED_SIZE];
+    char name_buf[DIAG_CASE_NAME_MAX];
+    diag_format_elapsed(time_us_64() - session->start_time_us, elapsed, sizeof(elapsed));
+    const char* const case_name = suite->case_name(suite, case_index, name_buf, sizeof(name_buf));
+
+    // Format the terminal failure summary, update the HDMI screen, and emit the UART report.
+    snprintf(session->failure_summary, sizeof(session->failure_summary),
+             "DIAG FAIL [%s] iter %" PRIu64 " (%s) %s / %s: %s", session->plan->name, session->iteration, elapsed,
+             suite->name, case_name, session->failure_detail);
+    render(session);
+    printf("%s\r\n", session->failure_summary);
+    fflush(stdout);
+    return false;
+}
+
 bool diag_run_iteration(diag_session_t* session) {
     vet(active_session == NULL, "nested diagnostic iteration");
     if (session->active_status == DIAG_STATUS_FAIL) {
         return false;
     }
+
+    // Advance the cycle counter, prime the cursor at the first case, and run per-cycle setup.
     ++session->iteration;
+    session->completed = false;
+    session->active_suite_index = 0;
+    session->active_case_index = 0;
+    session->active_status = DIAG_STATUS_RUN;
+    session->case_progress = 0;
+    if (session->plan->begin_cycle != NULL) {
+        render(session);
+    }
+    if (!run_begin_cycle(session, (uint8_t)session->iteration)) {
+        return report_iteration_failure(session, &session->plan->suites[0], 0);
+    }
+
+    // Execute every case in every suite, stopping immediately on the first failure.
     for (size_t s = 0; s < session->plan->suite_count; ++s) {
         const diag_suite_t* const suite = &session->plan->suites[s];
         for (size_t c = 0; c < suite->case_count; ++c) {
@@ -309,24 +423,14 @@ bool diag_run_iteration(diag_session_t* session) {
             session->active_status = DIAG_STATUS_RUN;
             session->case_progress = 0;
             render(session);
-            if (!run_case(session, suite, &suite->cases[c])) {
-                session->active_status = DIAG_STATUS_FAIL;
-                char elapsed[DIAG_ELAPSED_SIZE];
-                diag_format_elapsed(time_us_64() - session->start_time_us, elapsed, sizeof(elapsed));
-                snprintf(session->failure_summary, sizeof(session->failure_summary),
-                         "DIAG FAIL [%s] iter %" PRIu64 " (%s) %s / %s: %s", session->plan->name, session->iteration,
-                         elapsed, suite->name, suite->cases[c].name, session->failure_detail);
-                render(session);
-                printf("%s\r\n", session->failure_summary);
-                fflush(stdout);
-                return false;
+            if (!run_case(session, suite, c)) {
+                return report_iteration_failure(session, suite, c);
             }
             session->active_status = DIAG_STATUS_PASS;
             session->case_progress = DIAG_PROGRESS_SCALE;
             render(session);
         }
     }
-    render(session);
     const uint64_t now = time_us_64();
     if (session->iteration == 1 || now - session->last_uart_summary_us >= DIAG_US_PER_SECOND) {
         char elapsed[DIAG_ELAPSED_SIZE];
@@ -338,8 +442,35 @@ bool diag_run_iteration(diag_session_t* session) {
     return true;
 }
 
+/** Run up to session->max_cycles iterations, clean up plan resources, and halt on pass or fail. */
 void diag_loop(diag_session_t* session) {
-    while (diag_run_iteration(session)) {
+    // Run iterations until max_cycles complete or an iteration fails.
+    vet(session->max_cycles != 0, "diagnostic cycle count must be non-zero");
+    bool passed = session->active_status != DIAG_STATUS_FAIL;
+    while (passed && session->iteration < session->max_cycles) {
+        if (!diag_run_iteration(session)) {
+            passed = false;
+            break;
+        }
     }
-    fatal_halt(FATAL_ERROR_UNSPECIFIED, session->failure_summary);
+
+    // Release temporary plan resources (such as mounted scratch media) before halting.
+    if (session->plan->cleanup != NULL) {
+        session->plan->cleanup();
+    }
+
+    // Escalate failures to the Morse/UART fatal endpoint while keeping the failure screen visible.
+    if (!passed) {
+        fatal_halt(FATAL_ERROR_UNSPECIFIED, session->failure_summary);
+    }
+
+    // Render the final completion divider, emit the UART completion line, and park Core 0.
+    session->completed = true;
+    render(session);
+    char elapsed[DIAG_ELAPSED_SIZE];
+    diag_format_elapsed(time_us_64() - session->start_time_us, elapsed, sizeof(elapsed));
+    printf("DIAG COMPLETE [%s] %" PRIu64 " cycle(s) passed (%s)\r\n",
+           session->plan->name, session->iteration, elapsed);
+    fflush(stdout);
+    diag_complete_halt();
 }

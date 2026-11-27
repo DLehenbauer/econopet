@@ -662,9 +662,12 @@ const char* ieee_drive_filename(const unsigned int slot) {
     return filenames[slot];
 }
 
-// Normalize a host path once and reject a result outside the disk/ directory.
-static bool image_path(const char* const name, char path[SD_PATH_MAX]) {
-    sd_make_path(path, SD_DIR_DISK, name);
+/**
+ * Collapse redundant slashes, ".", and ".." components in path in place,
+ * returning true only if at least one child component remains inside prefix.
+ */
+static bool normalize_under_prefix(char path[SD_PATH_MAX], const char* const prefix) {
+    // Walk slash-delimited components, discarding "." and popping the previous segment on "..".
     const char* next = path;
     size_t used = 0;
     while (*next != '\0') {
@@ -689,11 +692,14 @@ static bool image_path(const char* const name, char path[SD_PATH_MAX]) {
         }
     }
     path[used] = '\0';
-    const char* const prefix = sd_dir_prefix(SD_DIR_DISK);
+
+    // Require path to start with prefix (case-insensitively on FAT) and retain a non-empty child name.
     const size_t prefix_length = strlen(prefix);
-    if (strncasecmp(path, prefix, prefix_length) != 0) {
+    if (strncasecmp(path, prefix, prefix_length) != 0 || path[prefix_length] == '\0') {
         return false;
     }
+
+    // Rewrite the leading directory characters with prefix's canonical spelling.
     memcpy(path, prefix, prefix_length);
     return true;
 }
@@ -708,10 +714,15 @@ static int find_image(const char* const name) {
     return -1;
 }
 
-// Mount a unique disk/-relative file, ejecting an incompatible partner, or remove one slot.
-// Reject invalid candidates or busy transport without replacing the live mount.
-dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* const filename,
-                                        ieee_drive_mount_outcome_t* const outcome) {
+/**
+ * Rebind one slot to an already-validated SD path (or NULL to eject) in one transaction.
+ *
+ * Reuses an existing FILE owner when name is already mounted, flushes retiring
+ * writers, ejects an incompatible partner geometry on the same unit, and
+ * updates the FPGA's enabled-unit mask.
+ */
+static dos_media_result_t mount_resolved(const unsigned int slot, const char* const resolved_path,
+                                         const char* const name, ieee_drive_mount_outcome_t* const outcome) {
     // ROM sources:
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_4040/tst2
     // https://github.com/mist64/cbmsrc/blob/01bd60f162ef92212ef0cb67546ae8f42be34168/DOS_8250/tst2
@@ -725,25 +736,8 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
     // Validate the complete proposal before asking the transport to pause.
     // files owns the handles that media descriptors borrow. An existing image
     // must retain its one FILE owner, since FatFs forbids duplicate writable opens.
-    if (slot >= count_of(files)) {
-        return DOS_MEDIA_INVALID;
-    }
-    // Serialized path scratch also snapshots names borrowed from a retiring slot.
-    static char path[SD_PATH_MAX];
-    if (filename != NULL && !image_path(filename, path)) {
-        return DOS_MEDIA_INVALID;
-    }
-    if (filename != NULL && !sd_resolve_path(path)) {
-        return DOS_MEDIA_IO_ERROR;
-    }
-    // Filesystem-resolved directory aliases must still remain inside /disk.
-    const char* const prefix = sd_dir_prefix(SD_DIR_DISK);
-    if (filename != NULL && strncasecmp(path, prefix, strlen(prefix)) != 0) {
-        return DOS_MEDIA_INVALID;
-    }
-    const char* const name = filename != NULL ? path + strlen(sd_dir_prefix(SD_DIR_DISK)) : "";
     const unsigned int unit = slot / DOS_MEDIA_SLOTS_PER_UNIT;
-    const int source = find_image(name);
+    const int source = resolved_path != NULL ? find_image(name) : -1;
     const unsigned int source_unit = source >= 0 ? (unsigned int)source / DOS_MEDIA_SLOTS_PER_UNIT : unit;
     const bool cross_unit = source_unit != unit;
     // Both supported GCC toolchains honor cleanup on return. Host tests also
@@ -753,7 +747,7 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
     if (source >= 0) {
         replacement = media.units[source / DOS_MEDIA_SLOTS_PER_UNIT].slots[source % DOS_MEDIA_SLOTS_PER_UNIT].io;
     } else {
-        const dos_media_result_t opened = open_candidate(filename != NULL ? path : NULL, &candidate, &replacement);
+        const dos_media_result_t opened = open_candidate(resolved_path, &candidate, &replacement);
         if (opened != DOS_MEDIA_OK) {
             return opened;
         }
@@ -922,6 +916,78 @@ dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* con
         };
     }
     return DOS_MEDIA_OK;
+}
+
+/** Normalize and resolve a mount path, retaining confinement and canonical prefix casing. */
+static dos_media_result_t resolve_under_prefix(char path[SD_PATH_MAX], const char* const prefix) {
+    // Reject traversal outside the allowed directory before resolving filesystem aliases.
+    if (!normalize_under_prefix(path, prefix)) {
+        return DOS_MEDIA_INVALID;
+    }
+    if (!sd_resolve_path(path)) {
+        return DOS_MEDIA_IO_ERROR;
+    }
+
+    // Recheck confinement after alias resolution and canonicalize the leading directory.
+    const size_t prefix_length = strlen(prefix);
+    if (strncasecmp(path, prefix, prefix_length) != 0 || path[prefix_length] == '\0') {
+        return DOS_MEDIA_INVALID;
+    }
+    memcpy(path, prefix, prefix_length);
+    return DOS_MEDIA_OK;
+}
+
+/**
+ * Mount a unique /disk/-relative image on slot, ejecting an incompatible partner,
+ * or eject slot when filename is NULL.
+ */
+dos_media_result_t ieee_drive_try_mount(const unsigned int slot, const char* const filename,
+                                        ieee_drive_mount_outcome_t* const outcome) {
+    // Reject out-of-range slots, handle NULL as an eject, and forbid root-anchored user paths.
+    if (slot >= count_of(files)) {
+        return DOS_MEDIA_INVALID;
+    }
+    if (filename == NULL) {
+        return mount_resolved(slot, NULL, "", outcome);
+    }
+    if (filename[0] == '/') {
+        return DOS_MEDIA_INVALID;
+    }
+
+    // Build and normalize the candidate path under /disk/ before touching the filesystem.
+    // Serialized path scratch also snapshots names borrowed from a retiring slot.
+    static char path[SD_PATH_MAX];
+    const char* const prefix = sd_dir_prefix(SD_DIR_DISK);
+    const size_t prefix_length = strlen(prefix);
+    sd_make_path(path, SD_DIR_DISK, filename);
+    const dos_media_result_t resolved = resolve_under_prefix(path, prefix);
+    if (resolved != DOS_MEDIA_OK) {
+        return resolved;
+    }
+
+    // Commit the mount using the /disk/-relative suffix as the canonical slot identity.
+    return mount_resolved(slot, path, path + prefix_length, outcome);
+}
+
+/** Mount a root-anchored diagnostic scratch image inside /test/ without broadening user mounts. */
+dos_media_result_t ieee_drive_mount_scratch(const unsigned int slot, const char* const scratch_path) {
+    static const char scratch_prefix[] = "/test/";
+
+    // Require a valid slot index and an explicit root-anchored path.
+    if (slot >= count_of(files) || scratch_path == NULL || scratch_path[0] != '/') {
+        return DOS_MEDIA_INVALID;
+    }
+
+    // Copy and normalize the path in place, rejecting any ".." traversal out of /test/.
+    static char path[SD_PATH_MAX];
+    sd_make_path(path, SD_DIR_NONE, scratch_path);
+    const dos_media_result_t resolved = resolve_under_prefix(path, scratch_prefix);
+    if (resolved != DOS_MEDIA_OK) {
+        return resolved;
+    }
+
+    // Retain the full scratch path as the slot identity, unlike /disk/-relative user mounts.
+    return mount_resolved(slot, path, path, NULL);
 }
 
 // Remove every mounted image after quiescence and successful media flushing.

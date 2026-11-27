@@ -4,7 +4,10 @@
 #include "pch.h"
 #include "menu_session_test.h"
 
+#include "breakpoint.h"
+#include "cpu.h"
 #include "diag/log/log.h"
+#include "diag/target.h"
 #include "display/display.h"
 #include "driver.h"
 #include "diskimage_test.h"
@@ -273,6 +276,246 @@ START_TEST(test_configuration_restores_embedded_keymap_between_sessions) {
 }
 END_TEST
 
+/** Advance simulated time during cpu_init() so the absent-physical-CPU probe times out cleanly. */
+static void advance_cpu_init_timeout(void) {
+    mock_clock_advance(1000u);
+}
+
+/** Initialize the one-time CPU probe with no physical 6502 in an isolated test process. */
+static void prepare_diag_cpu(void) {
+    prepare_guest();
+    bp_init();
+    set_cpu(CPU_RESET);
+    mock_cpu_set_run_callback(advance_cpu_init_timeout);
+    cpu_init();
+    mock_cpu_set_run_callback(NULL);
+}
+
+/** menu_apply_diag_config skips mount: actions, forces stock 6502 + tape off, and keeps diagnostic mode. */
+START_TEST(test_diag_config_preserves_mode_and_ignores_mounts) {
+    // Initialize breakpoint and CPU probing with no physical 6502 present.
+    prepare_diag_cpu();
+
+    // Pre-mount a diagnostic scratch disk and select a conflicting 6809 SuperPET state.
+    uint8_t* const scratch = diskimage_test_make_d64();
+    test_register_binary_file("/test/tmp/u8d0.d64", scratch, DISKIMAGE_D64_SIZE, true);
+    free(scratch);
+    ck_assert_int_eq(ieee_drive_mount_scratch(0, "/test/tmp/u8d0.d64"), DOS_MEDIA_OK);
+
+    set_cpu_type_machine(CPU_SOFT_6809, true);
+    reset_count = tape_init_count = tape_deinit_count = 0;
+    tape_change_expected = true;
+    mock_cpu_set_state_observer(observe_reset);
+
+    // Apply a YAML configuration containing virtual tape, 6809 SuperPET options, and a user disk mount.
+    test_register_file("/config.yaml",
+        "format-version: 1\n"
+        "configs:\n"
+        "  - id: 8032\n"
+        "    name: Custom 8032\n"
+        "    setup:\n"
+        "      - action: set\n"
+        "        columns: 80\n"
+        "        tape: \"2ef415f4c9cad1d4da\"\n"
+        "        cpu: 6809\n"
+        "        machine: superpet\n"
+        "      - action: mount\n"
+        "        device: 8\n"
+        "        drive: 0\n"
+        "        file: missing-user-disk.d64\n");
+    system_takeover();
+    ck_assert(menu_apply_diag_config("8032"));
+    mock_cpu_set_state_observer(NULL);
+    tape_change_expected = false;
+
+    // Confirm diagnostic mode, halted soft 6502, disabled tape, and preserved scratch mount.
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_gt(reset_count, 0);
+    ck_assert_uint_eq(tape_deinit_count, 1);
+    ck_assert_uint_eq(tape_init_count, 1);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_int_eq(spi_read_at(ECONOPET_WB_CPU_SEL_ADDR), CPU_SOFT_6502);
+    ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
+}
+END_TEST
+
+/** A valid PRG decodes its address little-endian and publishes the exclusive BASIC end. */
+START_TEST(test_load_prg_valid_and_ram_boundary) {
+    prepare_guest();
+    const uint16_t start = _i == 0 ? 0x1234u : VIDEO_RAM_ADDRESS - 3u;
+    const uint8_t prg[] = {(uint8_t)start, (uint8_t)(start >> 8), 0x55u, 0xaau, 0x42u};
+    test_register_binary_file("/test/valid.prg", prg, sizeof(prg), false);
+    ck_assert(load_prg("/test/valid.prg"));
+    ck_assert_mem_eq(mock_ram + start, prg + 2, sizeof(prg) - 2u);
+    const uint16_t end = start + sizeof(prg) - 2u;
+    for (uint16_t addr = 0x2au; addr <= 0x2fu; addr += 2u) {
+        ck_assert_uint_eq(mock_ram[addr], (uint8_t)end);
+        ck_assert_uint_eq(mock_ram[addr + 1u], end >> 8);
+    }
+    ck_assert_uint_eq(mock_ram[0xc9u], (uint8_t)end);
+    ck_assert_uint_eq(mock_ram[0xcau], end >> 8);
+    ck_assert_uint_eq(test_open_file_count(), 0u);
+}
+END_TEST
+
+/** Rejected PRGs do not publish BASIC end pointers or overwrite video RAM. */
+START_TEST(test_load_prg_rejects_invalid_files) {
+    prepare_guest();
+    const uint8_t prg[] = {0xffu, 0x7fu, 0x55u, 0xaau};
+    uint8_t invalid[sizeof(prg)];
+    memcpy(invalid, prg, sizeof(prg));
+    const size_t sizes[] = {0u, 1u, 2u, sizeof(prg), sizeof(prg)};
+    if (_i == 4) {
+        invalid[0] = 0u;
+        invalid[1] = 0x80u;
+    }
+    memset(mock_ram + 0x2au, 0x5au, 6u);
+    memset(mock_ram + 0xc9u, 0x5au, 2u);
+    mock_ram[VIDEO_RAM_ADDRESS] = 0x5au;
+    test_register_binary_file("/test/invalid.prg", invalid, sizes[_i], false);
+    ck_assert(!load_prg("/test/invalid.prg"));
+    for (uint16_t addr = 0x2au; addr <= 0x2fu; ++addr) {
+        ck_assert_uint_eq(mock_ram[addr], 0x5au);
+    }
+    ck_assert_uint_eq(mock_ram[0xc9u], 0x5au);
+    ck_assert_uint_eq(mock_ram[0xcau], 0x5au);
+    ck_assert_uint_eq(mock_ram[VIDEO_RAM_ADDRESS], 0x5au);
+    ck_assert_uint_eq(test_open_file_count(), 0u);
+}
+END_TEST
+
+/** A caller-reserved SRAM ceiling protects the mailbox without rejecting the last available byte. */
+START_TEST(test_load_prg_reserved_ceiling) {
+    prepare_guest();
+    const uint16_t start = TARGET_DIAG_MAILBOX_ADDR - 1u;
+    const uint8_t prg[] = {(uint8_t)start, (uint8_t)(start >> 8), 0x55u, 0xaau};
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0x5au, TARGET_DIAG_MAILBOX_SIZE);
+    memset(mock_ram + 0x2au, 0x5au, 6u);
+    test_register_binary_file("/test/bounded.prg", prg, _i == 0 ? 3u : 4u, false);
+    ck_assert_int_eq(load_prg_bounded("/test/bounded.prg", TARGET_DIAG_MAILBOX_ADDR), _i == 0);
+    for (uint16_t addr = TARGET_DIAG_MAILBOX_ADDR;
+         addr < TARGET_DIAG_MAILBOX_ADDR + TARGET_DIAG_MAILBOX_SIZE; ++addr) {
+        ck_assert_uint_eq(mock_ram[addr], 0x5au);
+    }
+    if (_i != 0) {
+        for (uint16_t addr = 0x2au; addr <= 0x2fu; ++addr) {
+            ck_assert_uint_eq(mock_ram[addr], 0x5au);
+        }
+    }
+    ck_assert_uint_eq(test_open_file_count(), 0u);
+}
+END_TEST
+
+static uint16_t target_ready_address;
+static bool target_boot_timeout;
+static bool target_small_ram;
+static unsigned target_ready_releases;
+
+/** Model ROM startup reaching the expected READY entry, or taking longer than its budget. */
+static void reach_target_ready(void) {
+    if (bp_count() == 0) return;
+    ck_assert_uint_eq(bp_get(0)->addr, target_ready_address);
+    if (target_boot_timeout) {
+        mock_clock_advance(2000000u);
+        return;
+    }
+    mock_ram[0x34u] = 0u;
+    mock_ram[0x35u] = target_small_ram ? 0x40u : 0x80u;
+    mock_ram[0x30u] = 0u;
+    mock_ram[0x31u] = 0x80u;
+    mock_ram[0x32u] = 0x55u;
+    mock_ram[0x33u] = 0xaau;
+    mock_breakpoint_set_hit_addr(target_ready_address);
+    system_state.bp_halted = true;
+}
+
+/** Count CPU releases after staging, requiring the first-cycle mailbox to be armed first. */
+static void observe_target_release(cpu_state_t state) {
+    if (state != CPU_READY) return;
+    ++target_ready_releases;
+    ck_assert_uint_eq(mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)], TARGET_DIAG_STATE_RUNNING);
+    ck_assert_uint_eq(mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)], TARGET_DIAG_HOST_ATTACHED);
+}
+
+/** Staging selects the loaded ROM, reserves its mailbox, queues RUN, and distinguishes cycle retriggers. */
+START_TEST(test_target_prepare_and_cycles) {
+    prepare_diag_cpu();
+    tape_change_expected = true;
+    target_ready_address = _i == 1 ? 0xc389u : 0xb3ffu;
+    target_boot_timeout = _i == 3;
+    target_small_ram = _i == 5;
+    // These entry bytes come from media ROMs 901465-01 and 901465-23 (also 901465-19).
+    const char* const signature = _i == 1 ? "460da997a0c2201c" : "a912a0b3201dbb20";
+    char config[512];
+    snprintf(config, sizeof(config),
+        "format-version: 1\nconfigs:\n  - id: custom\n    name: Custom\n    setup:\n"
+        "      - action: set\n        columns: 40\n        cpu: 6502\n"
+        "      - action: patch\n        address: %u\n        hex: \"%s\"\n",
+        target_ready_address, _i == 2 ? "0000000000000000" : signature);
+    test_register_file("/config.yaml", config);
+    const uint16_t load_address = _i == 6 ? TARGET_DIAG_MAILBOX_ADDR : 0x0401u;
+    const uint8_t prg[] = {(uint8_t)load_address, (uint8_t)(load_address >> 8), 0x00u, 0x00u, 0x42u};
+    if (_i != 4) test_register_binary_file("/test/target.prg", prg, sizeof(prg), false);
+    mock_cpu_set_run_callback(reach_target_ready);
+    system_takeover();
+    char error[DIAG_MESSAGE_MAX] = {0};
+    const bool prepared = diag_target_prepare_pet_prg("custom", "/test/target.prg", error, sizeof(error));
+    mock_cpu_set_run_callback(NULL);
+    tape_change_expected = false;
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(bp_count(), 0u);
+    ck_assert(!system_state.bp_halted);
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    if (_i >= 2) {
+        ck_assert(!prepared);
+        ck_assert_ptr_nonnull(strstr(error, _i == 2 ? "unsupported" : _i == 3 ? "READY" :
+                                           _i == 5 ? "requires 32 KiB" : "failed to load"));
+        ck_assert_uint_ne(mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)], TARGET_DIAG_HOST_ATTACHED);
+        return;
+    }
+    ck_assert(prepared);
+    ck_assert_mem_eq(mock_ram + 0x0401u, prg + 2, sizeof(prg) - 2u);
+    ck_assert_uint_eq(mock_ram[0x009eu], 4u);
+    ck_assert_mem_eq(mock_ram + 0x026fu, "RUN\r", 4u);
+    ck_assert_uint_eq(mock_ram[0x34u] | ((uint16_t)mock_ram[0x35u] << 8), TARGET_DIAG_MAILBOX_ADDR);
+    ck_assert_uint_eq(mock_ram[0x30u] | ((uint16_t)mock_ram[0x31u] << 8), TARGET_DIAG_MAILBOX_ADDR);
+    ck_assert_uint_eq(mock_ram[0x32u], 0x55u);
+    ck_assert_uint_eq(mock_ram[0x33u], 0xaau);
+    ck_assert_uint_eq(mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)], TARGET_DIAG_HOST_ATTACHED);
+
+    // Replay SENDP's TBUFF,X stores for CONCAT with two maximum-length filenames.
+    // KERNAL_PET_4.0_REC/dos.write builds 57 bytes at $0353, through the old mailbox.
+    static const char concat[] = "C0:ABCDEFGHIJKLMNOP=0:ABCDEFGHIJKLMNOP,0:QRSTUVWXYZABCDEF";
+    memcpy(mock_ram + 0x0353u, concat, sizeof(concat) - 1u);
+    diag_target_snapshot_t snap;
+    ck_assert(diag_target_read_mailbox(&snap));
+    ck_assert_uint_eq(snap.host_control, TARGET_DIAG_HOST_ATTACHED);
+    ck_assert_uint_eq(snap.state, TARGET_DIAG_STATE_IDLE);
+    ck_assert_uint_eq(snap.completed, 0u);
+
+    target_ready_releases = 0u;
+    mock_cpu_set_state_observer(observe_target_release);
+    diag_target_begin_cycle(1u);
+    ck_assert_uint_eq(target_ready_releases, 1u);
+    ck_assert_int_eq(get_cpu(), CPU_READY);
+    // A completed target is spinning while the host resets counters and publishes RUNNING last.
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 0xffu;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = 1u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = 2u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = 3u;
+    diag_target_begin_cycle(2u);
+    mock_cpu_set_state_observer(NULL);
+    ck_assert_uint_eq(target_ready_releases, 1u);
+    ck_assert(diag_target_read_mailbox(&snap));
+    ck_assert_uint_eq(snap.completed, 0u);
+    ck_assert_uint_eq(snap.phase, TARGET_DIAG_PHASE_NONE);
+    ck_assert_uint_eq(snap.slot, TARGET_DIAG_SLOT_NONE);
+    ck_assert_uint_eq(snap.state, TARGET_DIAG_STATE_RUNNING);
+    ck_assert_uint_eq(snap.host_control, TARGET_DIAG_HOST_ATTACHED);
+}
+END_TEST
+
 Suite* menu_session_suite(void) {
     Suite* const suite = suite_create("menu_session");
     TCase* const test = tcase_create("borrowing");
@@ -281,6 +524,20 @@ Suite* menu_session_suite(void) {
     tcase_add_loop_test(test, test_boot_owner_prepares_rom_only_without_default, 0, 2);
     tcase_add_loop_test(test, test_runtime_owner_distinguishes_back_reset_and_same_configuration_activation, 0, 3);
     tcase_add_loop_test(test, test_configuration_restores_embedded_keymap_between_sessions, 0, 2);
+    tcase_add_loop_test(test, test_load_prg_valid_and_ram_boundary, 0, 2);
+    tcase_add_loop_test(test, test_load_prg_rejects_invalid_files, 0, 5);
+    tcase_add_loop_test(test, test_load_prg_reserved_ceiling, 0, 2);
+    suite_add_tcase(suite, test);
+    return suite;
+}
+
+/** Build the isolated fork-runner suite for menu session tests that call one-time cpu_init(). */
+Suite* menu_session_fatal_suite(void) {
+    Suite* const suite = suite_create("menu_session_fatal");
+    TCase* const test = tcase_create("isolated");
+    tcase_add_checked_fixture(test, setup, teardown);
+    tcase_add_test(test, test_diag_config_preserves_mode_and_ignores_mounts);
+    tcase_add_loop_test(test, test_target_prepare_and_cycles, 0, 7);
     suite_add_tcase(suite, test);
     return suite;
 }

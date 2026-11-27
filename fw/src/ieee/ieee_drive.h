@@ -58,10 +58,18 @@ typedef struct {
 // Busy transport or pending work returns DOS_MEDIA_BUSY.
 // Busy rejection does not finalize units or discard their staged output.
 // Moves and same-slot remounts reuse the existing storage handle.
-// Names are normalized and must remain inside /disk.
+// Relative names are normalized and must remain inside /disk.
 // If non-NULL, outcome receives successful effects and is unchanged on failure.
 // A full /disk/ path exceeding SD_PATH_MAX (sd/sd.h), including the terminating null, is fatal.
 dos_media_result_t ieee_drive_try_mount(unsigned int slot, const char* filename, ieee_drive_mount_outcome_t* outcome);
+
+/**
+ * Mount a root-anchored diagnostic scratch image inside /test/ into slot (0 through 7).
+ *
+ * Rejects NULL, relative paths, and any path that escapes or equals /test/
+ * before or after filesystem alias resolution, keeping user mounts confined to /disk/.
+ */
+dos_media_result_t ieee_drive_mount_scratch(unsigned int slot, const char* path);
 
 // Services the fabric FIFOs; call every main-loop pass.
 void ieee_drive_task(void);

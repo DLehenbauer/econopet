@@ -1385,11 +1385,11 @@ static const diag_case_t stdio_cases[] = {
 };
 
 static const diag_suite_t sd_suites[] = {
-    {"Block Device (Init & Modes)", block_init_cases, count_of(block_init_cases), NULL},
-    {"Block Device (Sector I/O)", block_io_cases, count_of(block_io_cases), NULL},
-    {"FAT Filesystem (FatFs)", fat_cases, count_of(fat_cases), NULL},
-    {"VFS & POSIX I/O", vfs_cases, count_of(vfs_cases), NULL},
-    {"Standard I/O & Workloads", stdio_cases, count_of(stdio_cases), NULL},
+    DIAG_SUITE("Block Device (Init & Modes)", block_init_cases, NULL),
+    DIAG_SUITE("Block Device (Sector I/O)", block_io_cases, NULL),
+    DIAG_SUITE("FAT Filesystem (FatFs)", fat_cases, NULL),
+    DIAG_SUITE("VFS & POSIX I/O", vfs_cases, NULL),
+    DIAG_SUITE("Standard I/O & Workloads", stdio_cases, NULL),
 };
 
 const diag_plan_t diag_plan_sd = {

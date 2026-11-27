@@ -32,6 +32,7 @@ set(BUILD_TESTING ON CACHE BOOL "Enable testing for the rest of the project" FOR
 
 # Include source files
 set(FW_SRC_DIR ${FW_DIR}/src)
+get_filename_component(PRGS_DIR "${FW_DIR}/../prgs" ABSOLUTE)
 
 # 'picotool' requires that the executable name ends with '.elf' extension
 set(FW_EXECUTABLE_NAME "${PROJECT_NAME}.elf")
@@ -67,6 +68,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/system/system.c
     ${FW_SRC_DIR}/tape.c
     ${FW_SRC_DIR}/ieee/diskimage.c
+    ${FW_SRC_DIR}/ieee/diskimage_file.c
     ${FW_SRC_DIR}/ieee/dos_media.c
     ieee/dos_rel.c
     ieee/dos.c
@@ -86,6 +88,7 @@ add_executable(${FW_EXECUTABLE_NAME}
     ${FW_SRC_DIR}/diag/sd.c
     ${FW_SRC_DIR}/diag/sd_confirm.c
     ${FW_SRC_DIR}/diag/runner.c
+    ${FW_SRC_DIR}/diag/target.c
     ${FW_SRC_DIR}/diag/log/log.c
     ${FW_SRC_DIR}/ui/cli.c
     ${FW_SRC_DIR}/ui/console.c
@@ -140,8 +143,9 @@ target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE
 # (See https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf#errata-e5)
 #target_compile_definitions(${FW_EXECUTABLE_NAME} PRIVATE PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1)
 
-# Expose tusb_config.h to TinyUSB
+# Expose tusb_config.h to TinyUSB and shared target diagnostic headers
 target_include_directories(${FW_EXECUTABLE_NAME} PUBLIC ${FW_SRC_DIR})
+target_include_directories(${FW_EXECUTABLE_NAME} PRIVATE "${PRGS_DIR}" "${PRGS_DIR}/include")
 
 target_precompile_headers(${FW_EXECUTABLE_NAME} PRIVATE ${FW_SRC_DIR}/pch.h)
 

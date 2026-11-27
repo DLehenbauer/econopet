@@ -76,6 +76,9 @@ bool diskimage_track_sectors(diskimage_type_t type, unsigned int track, unsigned
 bool diskimage_sector_offset(diskimage_type_t type, unsigned int track, unsigned int sector,
     uint32_t* offset);
 
+/** Return the exact raw byte size of a supported disk container, or 0 for unsupported types. */
+uint32_t diskimage_size(diskimage_type_t type);
+
 // Detects the image type from 'size'. Returns false if the size matches no
 // supported container.
 bool diskimage_open(diskimage_t* img, diskimage_read_fn read, void* ctx, uint32_t size);

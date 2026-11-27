@@ -28,7 +28,7 @@ static const diag_case_t cases[] = {
     { "Host fixture", stub_case },
 };
 static const diag_suite_t suites[] = {
-    { "SD host fixture", cases, count_of(cases), NULL },
+    DIAG_SUITE("SD host fixture", cases, NULL),
 };
 
 const diag_plan_t diag_plan_sd = {

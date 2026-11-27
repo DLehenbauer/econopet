@@ -167,8 +167,8 @@ static const diag_case_t march_c_cases[] = {
 static const mem_region_t sram_region = {SRAM_ADDR_MIN, SRAM_ADDR_MAX};
 static const mem_region_t bram_region = {BRAM_ADDR_MIN, BRAM_ADDR_MAX};
 static const diag_suite_t memory_suites[] = {
-    {"SRAM ($00000-$1FFFF)", march_c_cases, count_of(march_c_cases), &sram_region},
-    {"BRAM ($68000-$68FFF)", march_c_cases, count_of(march_c_cases), &bram_region},
+    DIAG_SUITE("SRAM ($00000-$1FFFF)", march_c_cases, &sram_region),
+    DIAG_SUITE("BRAM ($68000-$68FFF)", march_c_cases, &bram_region),
 };
 
 const diag_plan_t diag_plan_memory = {
@@ -198,5 +198,5 @@ void bup_boot_check(void) {
     puts("PIA1 unresponsive: starting destructive bup diagnostics");
     fflush(stdout);
     display_init();
-    diag_run_plan(&diag_plan_bup);
+    diag_run_plan(&diag_plan_bup, UINT8_MAX);
 }
