@@ -47,6 +47,9 @@ static unsigned boot_video_calls;
 static bool cleanup_should_fail;
 
 #define DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US UINT64_C(300000000)
+#define TEST_PROGRESS_BAR_COL 52u
+#define TEST_PROGRESS_BAR_WIDTH 20u
+#define TEST_PROGRESS_PERCENT_COL 73u
 typedef enum {
     PROMPT_ABORT,
     PROMPT_ESCAPE_ABORT,
@@ -155,6 +158,7 @@ static void setup(void) {
     mock_reset();
     ieee_drive_init();
     mock_clock_set(0);
+    memset(&session, 0, sizeof(session));
     memset(calls, 0, sizeof(calls));
     next_call = 0;
     inject_failure = false;
@@ -260,14 +264,46 @@ static void check_banner(unsigned col, const char* text) {
                           ascii_to_vrom((uint8_t)text[i]) | 0x80);
 }
 
-/** Check the cycle bar's filled and empty glyphs and their colors. */
-static void check_progress(unsigned filled) {
-    for (unsigned index = 0; index < 44; ++index) {
-        const unsigned offset = 23 * DIAG_COLS + 34 + index;
-        ck_assert_uint_eq(system_state.video_char_buffer[offset], index < filled ? 0xa0 : 0x66);
+/** Check a status bar, its colors, percentage, and surrounding frame. */
+static void check_progress(unsigned row, unsigned filled, display_color_t color, const char* percent) {
+    for (unsigned index = 0; index < TEST_PROGRESS_BAR_WIDTH; ++index) {
+        const unsigned offset = row * DIAG_COLS + TEST_PROGRESS_BAR_COL + index;
+        ck_assert_uint_eq(system_state.video_char_buffer[offset],
+                          index < filled ? VROM_PROGRESS_FILLED : VROM_PROGRESS_EMPTY);
         ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + offset],
-                          DISPLAY_ATTR(index < filled ? DISPLAY_COLOR_LIGHT_BLUE : DISPLAY_COLOR_BLUE,
-                                    DISPLAY_COLOR_BLACK));
+                          DISPLAY_ATTR(index < filled ? color : DISPLAY_COLOR_MEDIUM_GRAY, DISPLAY_COLOR_BLACK));
+    }
+    check_text(TEST_PROGRESS_PERCENT_COL, row, percent);
+    for (unsigned col = TEST_PROGRESS_PERCENT_COL; col < TEST_PROGRESS_PERCENT_COL + 5u; ++col) {
+        ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + row * DIAG_COLS + col],
+                          DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
+    }
+    ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS + 51], VROM_SPACE);
+    ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS + 72], VROM_SPACE);
+    ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS + 78], VROM_SPACE);
+    ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS + 79], VROM_VLINE);
+}
+
+/** Check the entire cleared failure box, including wrapped detail and frame borders. */
+static void check_failure(const char* context, const char* detail) {
+    char expected[3u * (DIAG_COLS - 2u) + 1u];
+    const int written = snprintf(expected, count_of(expected), "FAIL [%s]: %s", context, detail);
+    ck_assert_int_ge(written, 0);
+    ck_assert_uint_lt((size_t)written, count_of(expected));
+    for (unsigned index = 0; index < count_of(expected) - 1u; ++index) {
+        const unsigned row = 21u + index / (DIAG_COLS - 2u);
+        const unsigned col = 1u + index % (DIAG_COLS - 2u);
+        const unsigned offset = row * DIAG_COLS + col;
+        const bool occupied = index < (unsigned)written;
+        ck_assert_uint_eq(system_state.video_char_buffer[offset],
+                          occupied ? ascii_to_vrom((uint8_t)expected[index]) : VROM_SPACE);
+        ck_assert_uint_eq(
+            system_state.video_char_buffer[VIDEO_COLOR_OFFSET + offset],
+            DISPLAY_ATTR(occupied ? DISPLAY_COLOR_LIGHT_RED : DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
+    }
+    for (unsigned row = 21; row <= 23; ++row) {
+        ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS], VROM_VLINE);
+        ck_assert_uint_eq(system_state.video_char_buffer[row * DIAG_COLS + 79], VROM_VLINE);
     }
 }
 
@@ -284,17 +320,20 @@ static void ordered_case(const void* context) {
     ++next_call;
     check_text(3, 19, index % 2 ? "Second" : "First");
     check_text(75, 19, "RUN");
-    check_progress((unsigned)((index * 44) / 4));
+    check_progress(22, index >= 2 ? 10 : 0, DISPLAY_COLOR_LIGHT_CYAN, index >= 2 ? "50.0%" : " 0.0%");
+    check_progress(23, index % 2 ? 10 : 0, DISPLAY_COLOR_YELLOW, index % 2 ? "50.0%" : " 0.0%");
     if (next_call == 5) {
         check_text(1, 14, "Suite B");
         check_text(3, 16, "Second");
         check_text(76, 16, "OK");
         check_text(33, 17, " Begin Cycle #2 ");
         check_text(1, 18, "Suite A");
-        char elapsed[32], heading[80];
-        diag_format_elapsed(time_us_64() - session.start_time_us, elapsed, sizeof(elapsed));
-        snprintf(heading, sizeof(heading), "Completed: 1 | Time: %s ", elapsed);
-        check_banner(DIAG_COLS - (unsigned)strlen(heading), "Completed: 1");
+        char cycle[24];
+        snprintf(cycle, sizeof(cycle), "2 of %u", (unsigned)session.max_cycles);
+        check_text(9, 21, cycle);
+        if (session.max_cycles == 2u) {
+            check_progress(21, 10, DISPLAY_COLOR_MAGENTA, "50.0%");
+        }
     }
     if (index == 1) nested_check();
 }
@@ -324,9 +363,16 @@ START_TEST(test_iterations_and_isolated_display) {
     roms_refresh_char_rom();
     const unsigned accesses = mock_spi_access_count();
 
-    diag_session_init(&session, &plan);
-    check_progress(0);
+    diag_session_init(&session, &plan, 2u);
+    check_text(2, 21, "Cycle: 0 of 2");
+    check_progress(21, 0, DISPLAY_COLOR_MAGENTA, " 0.0%");
+    check_progress(22, 0, DISPLAY_COLOR_LIGHT_CYAN, " 0.0%");
+    check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
     ck_assert(diag_run_iteration(&session));
+    check_text(2, 21, "Cycle: 1 of 2");
+    check_progress(21, 10, DISPLAY_COLOR_MAGENTA, "50.0%");
+    check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
     mock_clock_advance(UINT64_C(3661000000));
     ck_assert(diag_run_iteration(&session));
     ck_assert_uint_eq(mock_spi_access_count(), accesses);
@@ -346,15 +392,20 @@ START_TEST(test_iterations_and_isolated_display) {
     check_text(3, 19, "Second");
     check_text(76, 19, "OK");
     check_banner(0, " EconoPET Synthetic Diagnostic");
-    check_banner(DIAG_COLS - (sizeof("Completed: 2 | Time: 01:01:01 ") - 1), "Completed: 2");
+    const unsigned timer_col = DIAG_COLS - (sizeof("| Time: 01:01:01 ") - 1);
+    for (unsigned col = sizeof(" EconoPET Synthetic Diagnostic") - 1; col < timer_col; ++col) {
+        ck_assert_uint_eq(system_state.video_char_buffer[col], VROM_REVERSE_SPACE);
+    }
+    ck_assert_uint_eq(system_state.video_char_buffer[timer_col], VROM_VLINE | VROM_REVERSE_MASK);
     check_banner(DIAG_COLS - (sizeof("Time: 01:01:01 ") - 1), "Time: 01:01:01 ");
-    check_text(2, 21, "Suite:");
-    check_text(9, 21, "Suite B");
-    check_text(3, 22, "Case:");
-    check_text(9, 22, "Second");
-    check_text(2, 23, "Cycle: 2");
-    check_text(24, 23, "Progress:");
-    check_progress(44);
+    check_text(2, 21, "Cycle: 2 of 2");
+    check_text(2, 22, "Suite:");
+    check_text(9, 22, "Suite B");
+    check_text(3, 23, "Case:");
+    check_text(9, 23, "Second");
+    check_progress(21, 20, DISPLAY_COLOR_MAGENTA, " 100%");
+    check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + 19 * DIAG_COLS + 76],
@@ -384,7 +435,7 @@ START_TEST(test_iterations_and_isolated_display) {
     ck_assert_uint_eq(geometry.vram_start, 0);
     ck_assert_uint_eq(geometry.invert_mask, 0);
     ck_assert_uint_eq(geometry.vram_mask, VIDEO_PLANE_CAPACITY - 1);
-    diag_session_init(&session, &plan);
+    diag_session_init(&session, &plan, 1u);
     check_text(1, 9, "       ");
     check_text(3, 19, "      ");
 }
@@ -408,11 +459,12 @@ static void long_running_case(const void* context) {
     (void)context;
     mock_clock_advance(1000000);
     diag_refresh();
-    check_banner(DIAG_COLS - (sizeof("Completed: 0 | Time: 00:00:01 ") - 1), "Completed: 0");
     check_banner(DIAG_COLS - (sizeof("Time: 00:00:01 ") - 1), "Time: 00:00:01 ");
     check_text(3, 19, "Long case");
     check_text(75, 19, "RUN");
-    check_progress(0);
+    check_progress(21, 0, DISPLAY_COLOR_MAGENTA, " 0.0%");
+    check_progress(22, 0, DISPLAY_COLOR_LIGHT_CYAN, " 0.0%");
+    check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET + 19 * DIAG_COLS + 75],
                       DISPLAY_ATTR(DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK));
 }
@@ -425,26 +477,30 @@ START_TEST(test_live_elapsed_refresh) {
         .name = "live", .description = "Fixture", .suites = &suite, .suite_count = 1
     };
     const unsigned accesses = mock_spi_access_count();
-    diag_session_init(&session, &live_plan);
+    diag_session_init(&session, &live_plan, 1u);
     ck_assert(diag_run_iteration(&session));
-    check_progress(44);
+    check_progress(21, 20, DISPLAY_COLOR_MAGENTA, " 100%");
+    check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
     ck_assert_uint_eq(mock_spi_access_count(), accesses);
 }
 END_TEST
 
 /** Complete one case and refresh before failing the second case. */
-static void partial_cycle_case(const void* context) {
+static void fail_second_suite_case(const void* context) {
     if (context == NULL) return;
     mock_clock_advance(1000000);
     diag_refresh();
-    check_progress(22);
-    diag_fail("partial case failure");
+    check_progress(21, 0, DISPLAY_COLOR_MAGENTA, " 0.0%");
+    check_progress(22, 10, DISPLAY_COLOR_LIGHT_CYAN, "50.0%");
+    check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
+    diag_fail("second suite failure");
 }
 
-/** Only completed cases contribute to the cycle bar, including on failure. */
-START_TEST(test_cycle_progress_on_failure) {
-    const diag_case_t first[] = { { "First", partial_cycle_case } };
-    const diag_case_t second[] = { { "Second", partial_cycle_case } };
+/** Mid-run refreshes show completed suites before a failure replaces the status box. */
+START_TEST(test_status_progress_on_failure) {
+    const diag_case_t first[] = {{"First", fail_second_suite_case}};
+    const diag_case_t second[] = {{"Second", fail_second_suite_case}};
     const diag_suite_t cycle_suites[] = {
         DIAG_SUITE("First suite", first, NULL),
         DIAG_SUITE("Second suite", second, &session),
@@ -452,63 +508,186 @@ START_TEST(test_cycle_progress_on_failure) {
     const diag_plan_t cycle_plan = {
         .name = "cycle", .description = "Fixture", .suites = cycle_suites, .suite_count = count_of(cycle_suites)
     };
-    diag_session_init(&session, &cycle_plan);
+    diag_session_init(&session, &cycle_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
-    check_text(2, 23, "Cycle: 1");
-    check_progress(22);
-    check_banner(DIAG_COLS - (sizeof("Completed: 0 | Time: 00:00:01 ") - 1), "Completed: 0");
-    check_text(9, 22, "partial case failure");
+    check_failure("Cycle 1 of 1, Second suite", "second suite failure");
+    check_banner(DIAG_COLS - (sizeof("Time: 00:00:01 ") - 1), "Time: 00:00:01 ");
 }
 END_TEST
 
-/** Large cycle numbers remain readable without colliding with the progress bar. */
-START_TEST(test_large_cycle_number) {
-    const diag_case_t test_arr[] = { { "Case", partial_cycle_case } };
+/** Maximum 3-digit cycle budgets render cleanly through the final iteration. */
+START_TEST(test_max_cycle_budget) {
+    const diag_case_t test_arr[] = {{"Case", fail_second_suite_case}};
     const diag_suite_t suite = DIAG_SUITE("Suite", test_arr, NULL);
     const diag_plan_t cycle_plan = {
         .name = "cycle", .description = "Fixture", .suites = &suite, .suite_count = 1
     };
-    diag_session_init(&session, &cycle_plan);
-    session.iteration = UINT64_MAX - 1;
-    ck_assert(diag_run_iteration(&session));
-    check_text(9, 23, "18446744073709551615");
-    check_text(30, 23, "Progress:");
-    for (unsigned col = 40; col < 78; ++col)
-        ck_assert_uint_eq(system_state.video_char_buffer[23 * DIAG_COLS + col], 0xa0);
-    check_banner(DIAG_COLS - (sizeof("Completed: 18446744073709551615 | Time: 00:00:00 ") - 1),
-                 "Completed: 18446744073709551615");
+    diag_session_init(&session, &cycle_plan, UINT8_MAX);
+    for (unsigned cycle = 0; cycle < UINT8_MAX; ++cycle) {
+        ck_assert(diag_run_iteration(&session));
+    }
+    check_text(9, 21, "255 of 255");
+    check_progress(21, 20, DISPLAY_COLOR_MAGENTA, " 100%");
+    check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
 }
 END_TEST
 
-/** Fail the last case after advancing beyond the first display viewport. */
-static void scroll_case(const void* context) {
+/** Check independent cycle, suite, and case counts while running uneven suites. */
+static void uneven_case(const void* context) {
     (void)context;
+    if (session.active_suite_index == 0) {
+        static const unsigned cycle_fill[] = {0, 6, 13};
+        static const char* const cycle_percent[] = {" 0.0%", "33.3%", "66.6%"};
+        ck_assert_uint_le(session.iteration, count_of(cycle_fill));
+        const size_t cycle = (size_t)session.iteration - 1u;
+        check_progress(21, cycle_fill[cycle], DISPLAY_COLOR_MAGENTA, cycle_percent[cycle]);
+        check_progress(22, 0, DISPLAY_COLOR_LIGHT_CYAN, " 0.0%");
+        check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
+    } else {
+        static const unsigned case_fill[] = {0, 6, 13};
+        static const char* const case_percent[] = {" 0.0%", "33.3%", "66.6%"};
+        const size_t index = session.active_case_index;
+        ck_assert_uint_lt(index, count_of(case_fill));
+        check_progress(22, 10, DISPLAY_COLOR_LIGHT_CYAN, "50.0%");
+        check_progress(23, case_fill[index], DISPLAY_COLOR_YELLOW, case_percent[index]);
+    }
+}
+
+/** Unequal suite sizes do not weight the suite bar, and each cycle resets its lower bars. */
+START_TEST(test_uneven_suite_progress) {
+    const diag_case_t short_cases[] = {{"One", uneven_case}};
+    const diag_case_t long_cases[] = {{"One", uneven_case}, {"Two", uneven_case}, {"Three", uneven_case}};
+    const diag_suite_t uneven_suites[] = {
+        DIAG_SUITE("Short", short_cases, NULL),
+        DIAG_SUITE("Long", long_cases, NULL),
+    };
+    const diag_plan_t uneven_plan = {
+        .name = "uneven", .description = "Fixture", .suites = uneven_suites, .suite_count = count_of(uneven_suites)};
+    static const unsigned cycle_fill[] = {6, 13, 20};
+    static const char* const cycle_percent[] = {"33.3%", "66.6%", " 100%"};
+    diag_session_init(&session, &uneven_plan, 3u);
+    for (size_t cycle = 0; cycle < count_of(cycle_fill); ++cycle) {
+        ck_assert(diag_run_iteration(&session));
+        check_progress(21, cycle_fill[cycle], DISPLAY_COLOR_MAGENTA, cycle_percent[cycle]);
+        check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+        check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
+    }
+}
+END_TEST
+
+/** Name each generated precision fixture case without allocating a case table. */
+static const char* precision_case_name(const diag_suite_t* suite, size_t index, char* buf, size_t size) {
+    (void)suite;
+    (void)index;
+    (void)buf;
+    (void)size;
+    return "Precision";
+}
+
+/** Check tenths and the exact 5% bar threshold during a large generated suite. */
+static void precision_run_case(const diag_suite_t* suite, size_t index) {
+    (void)suite;
+    switch (index) {
+    case 0:
+        check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
+        break;
+    case 2:
+        check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.1%");
+        break;
+    case 99:
+        check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 4.9%");
+        break;
+    case 100:
+        check_progress(23, 1, DISPLAY_COLOR_YELLOW, " 5.0%");
+        break;
+    case 1114:
+        check_progress(23, 11, DISPLAY_COLOR_YELLOW, "55.7%");
+        break;
+    case 1999:
+        check_progress(23, 19, DISPLAY_COLOR_YELLOW, "99.9%");
+        break;
+    }
+}
+
+/** Percentages retain one decimal until the last case actually passes. */
+START_TEST(test_progress_precision) {
+    const diag_suite_t precision_suite = {
+        .name = "Precision",
+        .case_count = 2000u,
+        .case_name = precision_case_name,
+        .run_case = precision_run_case,
+    };
+    const diag_plan_t precision_plan = {
+        .name = "precision", .description = "Fixture", .suites = &precision_suite, .suite_count = 1u};
+    diag_session_init(&session, &precision_plan, 1u);
+    ck_assert(diag_run_iteration(&session));
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
+}
+END_TEST
+
+static const char long_status[] = "012345678901234567890123456789012345678901234567890123456789";
+static const char long_suite_status[] = "012345678901234567890123456789012345678901234567890123456789"
+                                        "012345678901234567890123456789012345678901234567890123456789";
+static const char clipped_context[] = "Cycle 1 of 1, 0123456789012345678901234567890123456789012345678901";
+static const char clipped_status[] = "012345678901234567890123456789012345678901";
+static char long_failure[DIAG_MESSAGE_MAX];
+
+/** Verify long names leave the progress bars intact before recording a long failure. */
+static void long_status_case(const void* context) {
+    (void)context;
+    check_text(9, 22, clipped_status);
+    check_text(9, 23, clipped_status);
+    check_progress(22, 0, DISPLAY_COLOR_LIGHT_CYAN, " 0.0%");
+    check_progress(23, 0, DISPLAY_COLOR_YELLOW, " 0.0%");
+    diag_fail("%s", long_failure);
+}
+
+/** Long names preserve the bars, and maximum-length failures use the whole cleared box. */
+START_TEST(test_long_status_values) {
+    const diag_case_t long_cases[] = {{long_status, long_status_case}};
+    const diag_suite_t long_suite = DIAG_SUITE(long_suite_status, long_cases, NULL);
+    const diag_plan_t long_plan = {.name = "long", .description = "Fixture", .suites = &long_suite, .suite_count = 1u};
+    for (size_t index = 0; index < count_of(long_failure) - 1u; ++index) {
+        long_failure[index] = (char)('0' + index % 10u);
+    }
+    long_failure[count_of(long_failure) - 1u] = '\0';
+    diag_session_init(&session, &long_plan, 1u);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_str_eq(session.failure_detail, long_failure);
+    check_failure(clipped_context, long_failure);
+}
+END_TEST
+
+/** Fail at the configured global call ordinal after scrolling past the viewport. */
+static void scroll_case(const void* context) {
+    const unsigned fail_at = *(const unsigned*)context;
     ++scroll_calls;
-    diag_check(scroll_calls != 64u, "late failure");
+    diag_check(scroll_calls != fail_at, "late failure");
 }
 
 /** The full supported case capacity scrolls the failing item into view. */
 START_TEST(test_scrolling_failure_visible) {
+    const unsigned fail_at = 64u;
     diag_case_t first_cases[32u], second_cases[32u];
     for (size_t index = 0; index < count_of(first_cases); ++index) {
         first_cases[index] = (diag_case_t) { "Earlier", scroll_case };
         second_cases[index] = (diag_case_t) { "Earlier", scroll_case };
     }
     second_cases[count_of(second_cases) - 1].name = "Last visible";
-    const diag_suite_t suites[] = {
-        DIAG_SUITE("First large suite", first_cases, NULL),
-        DIAG_SUITE("Second large suite", second_cases, NULL),
+    const diag_suite_t large_suites[] = {
+        DIAG_SUITE("First large suite", first_cases, &fail_at),
+        DIAG_SUITE("Second large suite", second_cases, &fail_at),
     };
     const diag_plan_t large_plan = {
-        .name = "large", .description = "Fixture", .suites = suites, .suite_count = count_of(suites)
+        .name = "large", .description = "Fixture", .suites = large_suites, .suite_count = count_of(large_suites)
     };
-    diag_session_init(&session, &large_plan);
+    diag_session_init(&session, &large_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_uint_eq(scroll_calls, count_of(first_cases) + count_of(second_cases));
     check_text(74, 19, "FAIL");
     check_text(3, 19, "Last visible");
-    check_text(9, 22, "late failure");
-    check_progress(43);
+    check_failure("Cycle 1 of 1, Second large suite", "late failure");
 }
 END_TEST
 
@@ -521,7 +700,7 @@ START_TEST(test_uart_summaries_and_elapsed) {
     ck_assert_str_eq(elapsed, "01:01:01");
     diag_format_elapsed(UINT64_C(450000000000), elapsed, sizeof(elapsed));
     ck_assert_str_eq(elapsed, "125:00:00");
-    diag_session_init(&session, &plan);
+    diag_session_init(&session, &plan, 3u);
     capture_begin();
     ck_assert(diag_run_iteration(&session));
     mock_clock_advance(100000);
@@ -538,7 +717,7 @@ END_TEST
 /** Failure freezes the case and prevents later suites or repeat iterations from executing. */
 START_TEST(test_first_failure_retained) {
     char output[1024];
-    diag_session_init(&session, &plan);
+    diag_session_init(&session, &plan, 1u);
     inject_failure = true;
     capture_begin();
     ck_assert(!diag_run_iteration(&session));
@@ -555,8 +734,7 @@ START_TEST(test_first_failure_retained) {
     ck_assert_ptr_nonnull(strstr(output, session.failure_detail));
     check_text(74, 19, "FAIL");
     check_text(3, 19, "Second");
-    check_text(9, 22, session.failure_detail);
-    check_progress(11);
+    check_failure("Cycle 1 of 1, Suite A", session.failure_detail);
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     uint8_t screen[DIAG_COLS * DIAG_ROWS];
@@ -565,6 +743,34 @@ START_TEST(test_first_failure_retained) {
     ck_assert(!diag_run_iteration(&session));
     ck_assert_uint_eq(next_call, 2);
     ck_assert_mem_eq(screen, system_state.video_char_buffer, sizeof(screen));
+}
+END_TEST
+
+/** Multi-cycle failures retain cycle attribution in the status box even after the cycle banner scrolls off. */
+START_TEST(test_failure_in_second_cycle) {
+    const unsigned fail_at = 128u;
+    diag_case_t first_cases[32u], second_cases[32u];
+    for (size_t index = 0; index < count_of(first_cases); ++index) {
+        first_cases[index] = (diag_case_t){"Earlier", scroll_case};
+        second_cases[index] = (diag_case_t){"Earlier", scroll_case};
+    }
+    second_cases[count_of(second_cases) - 1].name = "Last visible";
+    const diag_suite_t large_suites[] = {
+        DIAG_SUITE("First large suite", first_cases, &fail_at),
+        DIAG_SUITE("Second large suite", second_cases, &fail_at),
+    };
+    const diag_plan_t large_plan = {
+        .name = "large", .description = "Fixture", .suites = large_suites, .suite_count = count_of(large_suites),
+    };
+    diag_session_init(&session, &large_plan, 2u);
+    ck_assert(diag_run_iteration(&session));
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_uint_eq(session.iteration, 2u);
+    check_text(3, 1, "Earlier");
+    check_text(76, 1, "OK");
+    check_text(3, 19, "Last visible");
+    check_text(74, 19, "FAIL");
+    check_failure("Cycle 2 of 2, Second large suite", "late failure");
 }
 END_TEST
 
@@ -770,7 +976,7 @@ END_TEST
 
 /** Both plans run the complete memory test without changing local glyphs. */
 START_TEST(test_memory_and_bup_plans_pass) {
-    diag_session_init(&session, _i == 0 ? &diag_plan_memory : &diag_plan_bup);
+    diag_session_init(&session, _i == 0 ? &diag_plan_memory : &diag_plan_bup, 1u);
     ck_assert(diag_run_iteration(&session));
     ck_assert_int_eq(session.active_status, DIAG_STATUS_PASS);
     ck_assert_mem_eq(roms_get_char_rom(video_text_mode_lower), rom_chars_e800 + 0x400, 0x400);
@@ -782,7 +988,7 @@ END_TEST
 START_TEST(test_bup_plan_detects_memory_faults) {
     const uint32_t address = _i == 0 ? 0x12345u : ECONOPET_WB_BRAM_BASE_ADDR + 0x1abu;
     mock_spi_inject_fault(address, _i == 0 ? 0x08 : 0, _i == 0 ? 0 : 0x80);
-    diag_session_init(&session, &diag_plan_bup);
+    diag_session_init(&session, &diag_plan_bup, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_ptr_nonnull(strstr(session.failure_detail, _i == 0 ? "$12345" : "$681AB"));
 }
@@ -792,7 +998,7 @@ END_TEST
 START_TEST(test_memory_plan_detects_faults) {
     const uint32_t address = _i == 0 ? 0x12345u : ECONOPET_WB_BRAM_BASE_ADDR + 0x1abu;
     mock_spi_inject_fault(address, _i == 0 ? 0x08 : 0, _i == 0 ? 0 : 0x80);
-    diag_session_init(&session, &diag_plan_memory);
+    diag_session_init(&session, &diag_plan_memory, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_uint_eq(session.active_suite_index, (unsigned)_i);
     ck_assert_uint_eq(session.active_case_index, 1);
@@ -822,6 +1028,7 @@ static bool record_prepare(char* error_out, size_t error_size) {
 static void record_begin_cycle(uint8_t cycle) {
     ++custom_begin_cycles;
     last_begin_cycle_arg = cycle;
+    check_text(9, 21, cycle == 1u ? "1 of 2" : "2 of 2");
 }
 
 /** Count plan cleanup and optionally report a fixture teardown failure. */
@@ -898,7 +1105,11 @@ START_TEST(test_finite_loop_and_generated_callbacks) {
                       DISPLAY_ATTR(DISPLAY_COLOR_MAGENTA, DISPLAY_COLOR_BLACK));
     ck_assert_uint_eq(system_state.video_char_buffer[19 * DIAG_COLS],
                       system_state.video_char_buffer[20 * DIAG_COLS + 1]);
-    check_banner(DIAG_COLS - (sizeof("Completed: 2 | Time: 00:00:00 ") - 1), "Completed: 2");
+    check_banner(DIAG_COLS - (sizeof("Time: 00:00:00 ") - 1), "Time: 00:00:00 ");
+    check_text(9, 21, "2 of 2");
+    check_progress(21, 20, DISPLAY_COLOR_MAGENTA, " 100%");
+    check_progress(22, 20, DISPLAY_COLOR_LIGHT_CYAN, " 100%");
+    check_progress(23, 20, DISPLAY_COLOR_YELLOW, " 100%");
 }
 END_TEST
 
@@ -909,9 +1120,7 @@ static void check_terminal_prepare_failure(void) {
     ck_assert_uint_eq(custom_cleanup_calls, 1);
     ck_assert_uint_eq(custom_begin_cycles, 0);
     ck_assert_uint_eq(generated_runs, 0);
-    check_text(2, 21, "Stage");
-    check_text(9, 21, "Preparation");
-    check_text(9, 22, "fixture setup failed");
+    check_failure("Preparation", "fixture setup failed");
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
 }
@@ -1069,7 +1278,7 @@ START_TEST(test_target_poll_rejects_unverified_completion) {
     };
 
     // Poll through the real runner and require a timeout without trusting any sampled fields.
-    diag_session_init(&session, &target_plan);
+    diag_session_init(&session, &target_plan, 1u);
     mock_spi_read_set_observer(stall_mailbox_acquisition);
     ck_assert(!diag_run_iteration(&session));
     mock_spi_read_set_observer(NULL);
@@ -1113,7 +1322,7 @@ START_TEST(test_target_poll_rejects_regressing_progress) {
         .suites = &target_suite,
         .suite_count = 1u,
     };
-    diag_session_init(&session, &target_plan);
+    diag_session_init(&session, &target_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_str_eq(session.failure_detail, "target check count regressed from 1 to 0");
 }
@@ -1164,7 +1373,7 @@ START_TEST(test_target_poll_retains_progress_between_cases) {
         .suites = &target_suite,
         .suite_count = 1u,
     };
-    diag_session_init(&session, &target_plan);
+    diag_session_init(&session, &target_plan, 2u);
     if (target_restart_between_cases) {
         ck_assert(!diag_run_iteration(&session));
         ck_assert_str_eq(session.failure_detail, "target check count regressed from 1 to 0");
@@ -1243,7 +1452,7 @@ START_TEST(test_target_failure_attribution_and_catalog_validation) {
         "detail 7 at +2: expected $55, got $54",
         "target check count mismatch (expected 2, got 3)",
     };
-    diag_session_init(&session, &target_plan);
+    diag_session_init(&session, &target_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_str_eq(session.failure_detail, failures[_i]);
     ck_assert_uint_eq(session.active_case_index, _i == 0 ? 1u : 0u);
@@ -1308,13 +1517,13 @@ START_TEST(test_drive_catalog_and_target_mailbox) {
         .suites = diag_plan_drive.suites,
         .suite_count = diag_plan_drive.suite_count,
     };
-    diag_session_init(&session, &mailbox_plan);
+    diag_session_init(&session, &mailbox_plan, 1u);
     ck_assert(diag_run_iteration(&session));
     ck_assert_int_eq(session.active_status, DIAG_STATUS_PASS);
 
     // Simulate Test #43 (ordinal 42: Single-Drive Smoke index 34 = Empty Directory U9/D0) failing.
     diag_target_begin_cycle(1u);
-    diag_session_init(&session, &mailbox_plan);
+    diag_session_init(&session, &mailbox_plan, 1u);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 42u;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = 0u;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_FAILED;
@@ -1334,7 +1543,7 @@ START_TEST(test_drive_catalog_and_target_mailbox) {
 
     // Detect mailbox (phase, slot) drift and surplus completion counts.
     diag_target_begin_cycle(1u);
-    diag_session_init(&session, &mailbox_plan);
+    diag_session_init(&session, &mailbox_plan, 1u);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 42u;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = 0u;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_FAILED;
@@ -1344,7 +1553,7 @@ START_TEST(test_drive_catalog_and_target_mailbox) {
     ck_assert_ptr_nonnull(strstr(session.failure_detail, "mailbox drift at check #43"));
 
     diag_target_begin_cycle(1u);
-    diag_session_init(&session, &mailbox_plan);
+    diag_session_init(&session, &mailbox_plan, 1u);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)((DT_TOTAL_CASES + 1u) & 0xffu);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)((DT_TOTAL_CASES + 1u) >> 8);
@@ -1382,7 +1591,7 @@ START_TEST(test_drive_cross_copy_source_failure) {
         .suites = &diag_plan_drive.suites[3],
         .suite_count = 1,
     };
-    diag_session_init(&session, &copy_plan);
+    diag_session_init(&session, &copy_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
     ck_assert_ptr_nonnull(
         strstr(session.failure_detail, scenario == 0 ? dt_detail_hdmi_names[DT_ERR_COPY_SOURCE] : "mailbox drift"));
@@ -1447,7 +1656,7 @@ START_TEST(test_drive_suite_boundaries) {
         .suites = &boundary_suite,
         .suite_count = 1,
     };
-    diag_session_init(&session, &boundary_plan);
+    diag_session_init(&session, &boundary_plan, 1u);
     mock_spi_read_set_observer(advance_suite_boundary);
     ck_assert(diag_run_iteration(&session));
     mock_spi_read_set_observer(NULL);
@@ -1504,7 +1713,7 @@ START_TEST(test_drive_d82_duplicate_timeout_budget) {
         .suite_count = 1,
     };
     const uint64_t started = time_us_64();
-    diag_session_init(&session, &dup_only_plan);
+    diag_session_init(&session, &dup_only_plan, 1u);
     ck_assert(!diag_run_iteration(&session));
     mock_spi_read_set_observer(NULL);
     ck_assert_uint_ge(time_us_64() - started, DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US);
@@ -1516,24 +1725,22 @@ END_TEST
 
 /** Verify the failure screen and cleanup hook run before the terminal fatal boundary. */
 static void check_terminal_failure(void) {
+    char context[32];
+    snprintf(context, sizeof(context), "Cycle 1 of %u, Suite A", session.max_cycles != 0 ? session.max_cycles : 1u);
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert_uint_eq(custom_cleanup_calls, 1);
     ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     check_text(74, 19, "FAIL");
-    check_text(9, 22, "expected $55, got $54");
+    check_failure(context, "expected $55, got $54");
 }
 
 /** Verify cleanup failure is visible on the terminal failure screen. */
 static void check_terminal_cleanup_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert_uint_eq(custom_cleanup_calls, 1);
-    check_banner(50, "Completed: 1");
     check_text(76, 19, "OK");
-    check_text(2, 21, "Stage");
-    check_text(9, 21, "Cleanup");
-    check_text(3, 22, "FAIL");
-    check_text(9, 22, "fixture cleanup failed");
+    check_failure("Cleanup", "fixture cleanup failed");
 }
 
 /** The unwrapped loop runs cleanup before reaching the display-independent fatal endpoint. */
@@ -1584,8 +1791,7 @@ START_TEST(test_terminal_loop_preserves_prior_failure) {
         .suite_count = count_of(suites),
     };
     system_takeover();
-    diag_session_init(&session, &cleanup_plan);
-    session.max_cycles = _i == 0 ? 1u : 2u;
+    diag_session_init(&session, &cleanup_plan, _i == 0 ? 1u : 2u);
     ck_assert(!diag_run_iteration(&session));
     test_expect_fatal_message("DIAG FAIL [synthetic] iter 1");
     test_expect_fatal_callback(check_terminal_failure);
@@ -1595,12 +1801,24 @@ START_TEST(test_terminal_loop_preserves_prior_failure) {
 }
 END_TEST
 
-/** Reject empty suites before executing callbacks. */
+/** Reject invalid suite definitions, zero cycle counts, and iterations beyond max_cycles. */
 START_TEST(test_invalid_plan_structure) {
-    const diag_suite_t invalid_suite = { "Empty", NULL, 0, NULL, NULL, NULL };
-    const diag_plan_t invalid_plan = { .name = "invalid", .description = "Fixture", .suites = &invalid_suite, .suite_count = 1 };
-    test_expect_fatal_message("invalid diagnostic suite");
-    diag_session_init(&session, &invalid_plan);
+    if (_i == 0) {
+        const diag_suite_t invalid_suite = {"Empty", NULL, 0, NULL, NULL, NULL};
+        const diag_plan_t invalid_plan = {
+            .name = "invalid", .description = "Fixture", .suites = &invalid_suite, .suite_count = 1
+        };
+        test_expect_fatal_message("invalid diagnostic suite");
+        diag_session_init(&session, &invalid_plan, 1u);
+    } else if (_i == 1) {
+        test_expect_fatal_message("diagnostic cycle count must be non-zero");
+        diag_session_init(&session, &plan, 0u);
+    } else {
+        diag_session_init(&session, &plan, 1u);
+        ck_assert(diag_run_iteration(&session));
+        test_expect_fatal_message("diagnostic cycle budget exceeded");
+        (void)diag_run_iteration(&session);
+    }
 }
 END_TEST
 
@@ -1611,11 +1829,15 @@ Suite* diag_suite(void) {
     tcase_add_checked_fixture(tests, setup, teardown);
     tcase_add_test(tests, test_iterations_and_isolated_display);
     tcase_add_test(tests, test_live_elapsed_refresh);
-    tcase_add_test(tests, test_cycle_progress_on_failure);
-    tcase_add_test(tests, test_large_cycle_number);
+    tcase_add_test(tests, test_status_progress_on_failure);
+    tcase_add_test(tests, test_max_cycle_budget);
+    tcase_add_test(tests, test_uneven_suite_progress);
+    tcase_add_test(tests, test_progress_precision);
+    tcase_add_test(tests, test_long_status_values);
     tcase_add_test(tests, test_scrolling_failure_visible);
     tcase_add_test(tests, test_uart_summaries_and_elapsed);
     tcase_add_test(tests, test_first_failure_retained);
+    tcase_add_test(tests, test_failure_in_second_cycle);
     tcase_add_loop_test(tests, test_bup_boot_routing, 0, 2);
     tcase_add_test(tests, test_cli_usage_preserves_ownership);
     tcase_add_test(tests, test_cli_bup_launch);
@@ -1656,7 +1878,7 @@ Suite* diag_fatal_suite(void) {
     tcase_add_test_raise_signal(tests, test_terminal_prepare_failure, SIGABRT);
     tcase_add_loop_test_raise_signal(tests, test_terminal_loop_preserves_prior_failure, SIGABRT, 0, 2);
     tcase_add_test_raise_signal(tests, test_cli_sd_prepare_failure, SIGABRT);
-    tcase_add_test_raise_signal(tests, test_invalid_plan_structure, SIGABRT);
+    tcase_add_loop_test_raise_signal(tests, test_invalid_plan_structure, SIGABRT, 0, 3);
     suite_add_tcase(suite, tests);
     return suite;
 }

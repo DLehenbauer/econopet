@@ -37,9 +37,8 @@ void diag_run_plan(const diag_plan_t* plan, uint8_t max_cycles) {
     vet(system_mode() == system_operation_diagnostic,
         "diagnostic preparation left diagnostic mode");
 
-    // Initialize the diagnostic session, configure the requested cycle budget, and enter the loop.
-    diag_session_init(&session, plan);
-    session.max_cycles = max_cycles;
+    // Initialize the diagnostic session with the requested cycle budget and enter the loop.
+    diag_session_init(&session, plan, max_cycles);
     if (!prepared) {
         diag_report_prepare_failure(&session, prepare_error);
     } else {

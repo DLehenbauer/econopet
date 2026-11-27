@@ -471,13 +471,11 @@ static void case_multiblock_sizes(const void* context) {
     const uint64_t base = window_base(device);
     const size_t sizes[] = {8u, SD_DIAG_MAX_TRANSFER_SECTORS};
     const uint64_t offsets[] = {16, 25};
-    size_t completed = 0;
-    const size_t total = count_of(sizes) * count_of(offsets);
     for (size_t size_index = 0; size_index < count_of(sizes); ++size_index) {
         for (size_t offset_index = 0; offset_index < count_of(offsets); ++offset_index) {
             const uint64_t lba = base + offsets[offset_index];
             program_verify_patterns(device, lba, sizes[size_index]);
-            diag_case_progress(++completed, total);
+            diag_refresh();
         }
     }
 }
@@ -504,20 +502,16 @@ static void case_sweep(const void* context) {
     begin_case();
     blockdevice_t* const device = sd_blockdevice();
     const uint64_t base = window_base(device) + SD_DIAG_RESERVED_LBAS;
-    const size_t total_progress = SD_DIAG_SWEEP_SECTORS * 2u;
-    size_t completed = 0;
     for (uint64_t lba = base; lba < base + SD_DIAG_SWEEP_SECTORS; lba += SD_DIAG_MAX_TRANSFER_SECTORS) {
         fill_sectors(ensure_workspace()->tx_buf, ensure_workspace()->cycle_counter, lba, SD_DIAG_MAX_TRANSFER_SECTORS);
         diag_check(device->program(device, ensure_workspace()->tx_buf, lba * SD_DIAG_SECTOR_SIZE,
                                    sizeof(ensure_workspace()->tx_buf)) == BD_ERROR_OK,
                    "sweep write LBA %" PRIu64 " failed", lba);
-        completed += SD_DIAG_MAX_TRANSFER_SECTORS;
-        diag_case_progress(completed, total_progress);
+        diag_refresh();
     }
     for (uint64_t lba = base; lba < base + SD_DIAG_SWEEP_SECTORS; lba += SD_DIAG_MAX_TRANSFER_SECTORS) {
         read_verify_patterns(device, lba, SD_DIAG_MAX_TRANSFER_SECTORS);
-        completed += SD_DIAG_MAX_TRANSFER_SECTORS;
-        diag_case_progress(completed, total_progress);
+        diag_refresh();
     }
 }
 
@@ -1193,7 +1187,7 @@ static void check_image_size(FILE* file, size_t image) {
 }
 
 /** Verify every image byte after clean transport/root reconstruction. */
-static void verify_image(FILE* file, size_t image, size_t cluster, size_t* verified, size_t total) {
+static void verify_image(FILE* file, size_t image, size_t cluster) {
     sd_diag_workspace_t* const state = ensure_workspace();
     check_image_size(file, image);
     diag_check(fseek(file, 0, SEEK_SET) == 0, "image %zu verification seek failed", image);
@@ -1207,12 +1201,7 @@ static void verify_image(FILE* file, size_t image, size_t cluster, size_t* verif
         }
         diag_check(memcmp(state->rx_buf, state->guard_after, length) == 0, "image %zu remount bytes at %zu mismatch",
                    image, offset);
-        *verified += length;
-        if (offset % sizeof(state->tx_buf) == 0 || *verified == total) {
-            diag_case_progress(total + *verified, 2u * total);
-        } else {
-            diag_refresh();
-        }
+        diag_refresh();
     }
     diag_check(fgetc(file) == EOF && feof(file) && !ferror(file), "image %zu verification EOF mismatch", image);
 }
@@ -1226,17 +1215,14 @@ static void case_images(const void* context) {
     DWORD free_clusters;
     diag_check(f_getfree("", &free_clusters, &volume) == FR_OK, "image cluster query failed");
     const size_t cluster = volume->csize * SD_DIAG_SECTOR_SIZE;
-    size_t total = 0;
-
     // Create fixed-size tagged containers, not native DOS-format fixtures.
     for (size_t image = 0; image < SD_DIAG_IMAGE_FILES; ++image) {
-        total += image_bytes(image);
         image_path(state->path_a, image);
         state->open_files[0] = fopen(state->path_a, "wb");
         diag_check(state->open_files[0] != NULL, "image %zu create failed", image);
         write_file_pattern(state->open_files[0], image_bytes(image), image_key(image));
         close_diag_stream(0);
-        diag_case_progress(image + 1u, 2u * SD_DIAG_IMAGE_FILES);
+        diag_refresh();
     }
     for (size_t image = 0; image < SD_DIAG_IMAGE_OWNERS; ++image) {
         image_path(state->path_a, image);
@@ -1326,12 +1312,11 @@ static void case_images(const void* context) {
     diag_check(device->deinit(device) == 0 && device->init(device) == 0,
                "image persistence transport reconstruction failed");
     diag_check(sd_mount_root(), "image persistence root remount failed");
-    size_t verified = 0;
     for (size_t image = 0; image < SD_DIAG_IMAGE_FILES; ++image) {
         image_path(state->path_a, image);
         state->open_files[0] = fopen(state->path_a, "rb");
         diag_check(state->open_files[0] != NULL, "image %zu verification open failed", image);
-        verify_image(state->open_files[0], image, cluster, &verified, total);
+        verify_image(state->open_files[0], image, cluster);
         close_diag_stream(0);
         image_path(state->path_a, image);
         diag_check(remove(state->path_a) == 0, "image %zu cleanup failed", image);

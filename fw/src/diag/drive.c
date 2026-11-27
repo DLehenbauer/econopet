@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "diag/drive.h"
 
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -17,6 +18,7 @@
 #include "menu/menu.h"
 #include "menu/menu_browser.h"
 #include "pet.h"
+#include "sd/sd.h"
 
 /** Standard 32K 80-column PET ROM 4 configuration ID required by drive-test.prg. */
 #define DRIVE_DIAG_CONFIG_ID "pet-80xx-60hz"
@@ -27,7 +29,7 @@
 /** Root SD-card directory reserved for diagnostic assets and scratch storage. */
 #define DRIVE_DIAG_ROOT_DIR "/test"
 
-/** Ephemeral SD-card directory holding the eight scratch disk images during a run. */
+/** Disposable SD-card tree, purged before and after each drive diagnostic run. */
 #define DRIVE_DIAG_TMP_DIR "/test/tmp"
 
 /**
@@ -133,28 +135,74 @@ static diskimage_type_t slot_image_type(const uint8_t geom) {
     }
 }
 
-/** Remove temporary scratch images and their directory, preserving the first filesystem error. */
+/** Purge the disposable scratch tree without recursion or retaining directory handles across mutations. */
 static bool remove_scratch_files(char* const error_out, const size_t error_size) {
-    bool ok = true;
-
-    // Remove files only after their mounted owners have been detached.
-    for (size_t slot = 0; slot < DT_SLOT_COUNT; ++slot) {
-        if (remove(scratch_paths[slot]) != 0 && errno != ENOENT) {
-            if (ok) {
-                snprintf(error_out, error_size, "could not remove '%s' (errno %d)", scratch_paths[slot], errno);
+    // FatFs maps a missing ancestor to ENOTDIR, so inspect parents before their children.
+    const char* const directories[] = {DRIVE_DIAG_ROOT_DIR, DRIVE_DIAG_TMP_DIR};
+    for (size_t index = 0; index < count_of(directories); ++index) {
+        struct stat info;
+        if (stat(directories[index], &info) != 0) {
+            if (errno == ENOENT) {
+                return true;
             }
+            snprintf(error_out, error_size, "could not inspect '%s' (errno %d)", directories[index], errno);
+            return false;
+        }
+        if (!S_ISDIR(info.st_mode)) {
+            snprintf(error_out, error_size, "'%s' is not a directory", directories[index]);
+            return false;
+        }
+    }
+    // Reopen after each mutation so traversal needs only one bounded path and one directory handle.
+    char path[SD_PATH_MAX] = DRIVE_DIAG_TMP_DIR;
+    while (true) {
+        DIR* const directory = opendir(path);
+        if (directory == NULL) {
+            snprintf(error_out, error_size, "could not open '%s' (errno %d)", path, errno);
+            return false;
+        }
+        const struct dirent* entry;
+        do {
+            errno = 0;
+            entry = readdir(directory);
+        } while (entry != NULL && (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0));
+
+        // Copy the selected entry before closing its owner, preserving the first error.
+        bool ok = true;
+        const bool has_child = entry != NULL;
+        const bool descend = has_child && entry->d_type == DT_DIR;
+        if (has_child) {
+            const size_t length = strlen(path);
+            const int added = snprintf(path + length, sizeof(path) - length, "/%s", entry->d_name);
+            if (added < 0 || (size_t)added >= sizeof(path) - length) {
+                snprintf(error_out, error_size, "scratch path exceeds %u bytes", (unsigned)sizeof(path) - 1u);
+                ok = false;
+            }
+        } else if (errno != 0) {
+            snprintf(error_out, error_size, "could not read '%s' (errno %d)", path, errno);
             ok = false;
         }
-    }
-
-    // Retain a non-empty or otherwise inaccessible directory and report failed teardown.
-    if (rmdir(DRIVE_DIAG_TMP_DIR) != 0 && errno != ENOENT) {
-        if (ok) {
-            snprintf(error_out, error_size, "could not remove '%s' (errno %d)", DRIVE_DIAG_TMP_DIR, errno);
+        if (closedir(directory) != 0 && ok) {
+            snprintf(error_out, error_size, "could not close scratch directory (errno %d)", errno);
+            ok = false;
         }
-        ok = false;
+        if (!ok) {
+            return false;
+        }
+
+        // Descend only into directories reported by FAT, then remove each emptied directory on ascent.
+        if (descend) {
+            continue;
+        }
+        if ((has_child ? remove(path) : rmdir(path)) != 0) {
+            snprintf(error_out, error_size, "could not remove '%s' (errno %d)", path, errno);
+            return false;
+        }
+        if (!has_child && strcmp(path, DRIVE_DIAG_TMP_DIR) == 0) {
+            return true;
+        }
+        *strrchr(path, '/') = '\0';
     }
-    return ok;
 }
 
 /** Ensure a directory exists on the mounted SD filesystem. */
@@ -219,7 +267,7 @@ static bool drive_prepare(char* const error_out, const size_t error_size) {
         return false;
     }
 
-    // Remove stale scratch containers before loading the new profile.
+    // Purge all stale scratch contents before loading the new profile.
     if (!remove_scratch_files(error_out, error_size)) {
         return false;
     }

@@ -255,7 +255,7 @@ static void setup(void) {
     sd_diag_mock_capture_workspace();
     char error[DIAG_MESSAGE_MAX] = "";
     ck_assert(diag_plan_sd.prepare(error, sizeof(error)));
-    diag_session_init(&session, &diag_plan_sd);
+    diag_session_init(&session, &diag_plan_sd, 2u);
     ck_assert(builtin_font);
 }
 
@@ -314,11 +314,11 @@ START_TEST(test_two_complete_cycles) {
     ck_assert_uint_eq(sd_diag_mock_peak_handles(),
                       DOS_MEDIA_UNIT_COUNT * DOS_MEDIA_SLOTS_PER_UNIT + 1u);
     ck_assert_uint_eq(sd_diag_mock_open_handles(), 0);
-    char banner[DIAG_COLS + 1] = { 0 };
-    for (size_t column = 0; column < DIAG_COLS; ++column)
-        banner[column] = (char)system_state.video_char_buffer[column];
-    const uint8_t completed_two = ascii_to_vrom((uint8_t)'2') | 0x80;
-    ck_assert_ptr_nonnull(memchr(banner, completed_two, sizeof(banner)));
+    const char* const cycle = "2 of 2";
+    for (size_t index = 0; cycle[index] != '\0'; ++index) {
+        ck_assert_uint_eq(system_state.video_char_buffer[21 * DIAG_COLS + 9 + index],
+                          ascii_to_vrom((uint8_t)cycle[index]));
+    }
 
     // Golden cycle-two samples catch misplaced sectors and reads past the TX buffer.
     static const uint8_t expected[][8] = {

@@ -389,7 +389,11 @@ if(BUILD_TESTS)
         NAME sd_init_tests
         COMMAND ${SUPER_BUILD_DIR}/test/test/sd-init-test
     )
-    set_tests_properties(firmware_tests sd_path_tests sd_diag_tests sd_init_tests PROPERTIES
+    add_test(
+        NAME diag_drive_tests
+        COMMAND ${SUPER_BUILD_DIR}/test/test/diag-drive-test
+    )
+    set_tests_properties(firmware_tests sd_path_tests sd_diag_tests sd_init_tests diag_drive_tests PROPERTIES
         LABELS "fw;unit"
         DEPENDS test_project
         ENVIRONMENT "ECONOPET_TEST_SDCARD_ROOT=${CMAKE_SOURCE_DIR}/sdcard;${ECONOPET_TEST_ENV}"

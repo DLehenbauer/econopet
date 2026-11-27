@@ -30,13 +30,14 @@
 #define VROM_CORNER_BOTTOM_LEFT 0x6du
 #define VROM_CORNER_BOTTOM_RIGHT 0x7du
 #define VROM_EDGE_LEFT 0x61u
+#define VROM_PROGRESS_FILLED 0x62u
+#define VROM_PROGRESS_EMPTY 0x68u
 #define VROM_UNDERLINE 0x63u
 #define VROM_SHADE 0x66u
 #define VROM_CAP_TOP 0x71u
 #define VROM_TEE_DOWN 0x72u
 #define VROM_LINE_RIGHT 0x74u
 #define VROM_EDGE_RIGHT 0x76u
-#define VROM_CHECKMARK 0x7au
 
 /**
  * Maps ASCII characters (0x00-0x7F) to PET Video ROM offsets.

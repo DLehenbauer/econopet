@@ -14,7 +14,6 @@
 #define DIAG_ROWS DISPLAY_ROWS
 #define DIAG_MESSAGE_MAX 160u
 #define DIAG_SUMMARY_MAX 320u
-#define DIAG_PROGRESS_SCALE 1000u
 /** Scratch buffer capacity (including terminating NUL) for formatting dynamic case names. */
 #define DIAG_CASE_NAME_MAX 80u
 
@@ -108,13 +107,13 @@ typedef struct {
     uint64_t start_time_us;
     uint64_t last_uart_summary_us;
     uint64_t last_display_refresh_us;
-    uint64_t iteration;
-    /** Maximum number of cycles to execute in diag_loop() (1..255, defaults to 1). */
+    /** Current 1-based cycle index, or 0 before the first iteration starts. */
+    uint8_t iteration;
+    /** Maximum number of cycles to execute in diag_loop() (1..255). */
     uint8_t max_cycles;
     size_t active_suite_index;
     size_t active_case_index;
     diag_status_t active_status;
-    uint16_t case_progress;
     /** True when plan cleanup failed after all executed cases passed. */
     bool cleanup_failed;
     /** True after all max_cycles iterations pass and the completion banner is rendered. */
@@ -131,8 +130,8 @@ const diag_plan_t* diag_find_plan(const char* name);
 /** Borrow the registered plans and their count for CLI usage. */
 const diag_plan_t* const* diag_plans(size_t* count_out);
 
-/** Configure the local display, initialize iteration state, and render the initial screen. */
-void diag_session_init(diag_session_t* session, const diag_plan_t* plan);
+/** Configure the display and render the initial screen with the requested non-zero cycle budget. */
+void diag_session_init(diag_session_t* session, const diag_plan_t* plan, uint8_t max_cycles);
 
 /** Retain and display a preparation failure before any iteration starts. */
 void diag_report_prepare_failure(diag_session_t* session, const char* error);
@@ -142,9 +141,6 @@ bool diag_run_iteration(diag_session_t* session);
 
 /** Refresh elapsed time at most once per second from a long-running case on Core 0. */
 void diag_refresh(void);
-
-/** Update the active case progress and render it immediately. */
-void diag_case_progress(size_t completed, size_t total);
 
 /**
  * Execute up to session->max_cycles iterations, run plan->cleanup() if provided,
