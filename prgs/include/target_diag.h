@@ -4,14 +4,17 @@
 #pragma once
 
 /*
- * Shared target-CPU diagnostic mailbox in low SRAM ($0380-$038F, inside PET
- * Cassette #2 buffer $033A-$03F9 and unused by PET ROMs, virtual tape, and
- * 6809 low RAM). Explicit byte offsets keep 6502, 6809, and ARM layouts
- * identical without compiler-specific packing or endianness assumptions.
+ * Shared target-CPU diagnostic mailbox at the top of base SRAM ($7FF0-$7FFF).
+ * This is outside the PET ROM's low-memory workspaces (including BASIC 4's
+ * DOS command buffer at $0353-$03F9). Target programs must reserve this region
+ * in their linker layout, including their software stack. The host bounds PRG
+ * loading below it and lowers BASIC MEMSIZ/FRETOP before RUN. Standalone targets
+ * must reserve the region themselves before allocating BASIC strings.
+ * Explicit offsets keep 6502, 6809, and ARM layouts identical.
  */
 
-/** Base address of the 16-byte target diagnostic mailbox in PET low SRAM ($0380..$038F). */
-#define TARGET_DIAG_MAILBOX_ADDR      0x0380u
+/** Base address of the reserved 16-byte target diagnostic mailbox ($7FF0..$7FFF). */
+#define TARGET_DIAG_MAILBOX_ADDR      0x7ff0u
 /** First mailbox magic byte ('T'), written once the target program initializes the mailbox. */
 #define TARGET_DIAG_MAGIC_0           0x54u
 /** Second mailbox magic byte ('D'), written once the target program initializes the mailbox. */

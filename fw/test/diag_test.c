@@ -1006,6 +1006,47 @@ START_TEST(test_target_poll_rejects_unverified_completion) {
 }
 END_TEST
 
+static unsigned regression_polls;
+
+/** Model a faulty target restarting its completed counter without completing another check. */
+static void regress_target_progress(void) {
+    ++regression_polls;
+    ck_assert_msg(regression_polls < 20u, "regressing target renewed its deadline indefinitely");
+    mock_clock_advance(100u);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = regression_polls & 1u;
+}
+
+/** A counter regression must not let a finite run poll indefinitely. */
+START_TEST(test_target_poll_rejects_regressing_progress) {
+    regression_polls = 0;
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_RUNNING;
+    const diag_target_runner_t runner = {
+        .total_cases = 3u,
+        .case_timeout_us = 1000u,
+        .service = regress_target_progress,
+    };
+    const diag_suite_t target_suite = {
+        .name = "Target",
+        .case_count = 2u,
+        .context = &runner,
+        .case_name = generated_case_name,
+        .run_case = run_target_case,
+    };
+    const diag_plan_t target_plan = {
+        .name = "target",
+        .description = "Regressing progress fixture",
+        .suites = &target_suite,
+        .suite_count = 1u,
+    };
+    diag_session_init(&session, &target_plan);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_str_eq(session.failure_detail, "target check count regressed from 1 to 0");
+}
+END_TEST
+
 /** Verify the failure screen and cleanup hook run before the terminal fatal boundary. */
 static void check_terminal_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
@@ -1073,6 +1114,7 @@ Suite* diag_suite(void) {
     tcase_add_loop_test(tests, test_memory_and_bup_plans_pass, 0, 2);
     tcase_add_loop_test(tests, test_memory_plan_detects_faults, 0, 2);
     tcase_add_loop_test(tests, test_bup_plan_detects_memory_faults, 0, 2);
+    tcase_add_test(tests, test_target_poll_rejects_regressing_progress);
     suite_add_tcase(suite, tests);
     return suite;
 }

@@ -10,8 +10,9 @@
 #include "menu/menu.h"
 #include "tape.h"
 
-/** Entry point of PET BASIC 4.0's warm READY prompt loop. */
-#define PET_BASIC4_READY_ADDR 0xb3ffu
+/** BASIC 2/4 memory ceiling and string-allocation top (little-endian zero-page pointers). */
+#define PET_BASIC_MEMSIZ_ADDR 0x0034u
+#define PET_BASIC_FRETOP_ADDR 0x0032u
 
 /** Maximum time in microseconds allowed for the PET ROM to reach BASIC READY after reset. */
 #define PET_BOOT_TIMEOUT_US UINT64_C(2000000)
@@ -28,6 +29,27 @@
  * Allows ~320us of 31.25 MHz SPI bursts to outlast a ~30us 1 MHz 6502 seqlock update.
  */
 #define TARGET_SNAPSHOT_RETRY_LIMIT 64u
+
+/** Identify a supported BASIC READY entry from the ROM actually loaded, not its configuration ID. */
+static bool target_ready_address(uint16_t* const out) {
+    // READY instruction signatures from PET ROMs 901465-01 and 901465-19/23.
+    static const struct {
+        uint16_t address;
+        uint8_t signature[8];
+    } entries[] = {
+        {0xc389u, {0x46u, 0x0du, 0xa9u, 0x97u, 0xa0u, 0xc2u, 0x20u, 0x1cu}},
+        {0xb3ffu, {0xa9u, 0x12u, 0xa0u, 0xb3u, 0x20u, 0x1du, 0xbbu, 0x20u}},
+    };
+    for (size_t i = 0; i < count_of(entries); ++i) {
+        uint8_t actual[sizeof(entries[i].signature)];
+        spi_read(entries[i].address, sizeof(actual), actual);
+        if (memcmp(actual, entries[i].signature, sizeof(actual)) == 0) {
+            *out = entries[i].address;
+            return true;
+        }
+    }
+    return false;
+}
 
 /** Decode a consistent mailbox snapshot, leaving *out unchanged if acquisition fails. */
 bool diag_target_read_mailbox(diag_target_snapshot_t* const out) {
@@ -78,19 +100,39 @@ bool diag_target_prepare_pet_prg(const char* const config_id, const char* const 
         return false;
     }
 
-    // Run KERNAL and BASIC cold start to READY ($B3FF) so zero page, PIA/VIA, and MEMSIZ are initialized.
-    const bp_run_result_t boot = bp_run_to(PET_BASIC4_READY_ADDR, PET_BOOT_TIMEOUT_US);
+    // Reject unknown ROMs before starting the CPU, then boot to this revision's READY entry.
+    uint16_t ready;
+    if (!target_ready_address(&ready)) {
+        snprintf(error_out, error_size, "unsupported PET BASIC ROM (expected BASIC 2 or 4)");
+        return false;
+    }
+    const bp_run_result_t boot = bp_run_to(ready, PET_BOOT_TIMEOUT_US);
     if (boot.status != bp_run_reached) {
         snprintf(error_out, error_size, "PET failed to reach BASIC READY (status %d, PC $%04X)",
                  (int)boot.status, (unsigned)boot.halt_address);
         return false;
     }
 
-    // Stream the target .prg directly into SRAM while the CPU remains halted at READY.
-    if (!load_prg(prg_path)) {
+    // Require the mailbox to be backed by detected RAM, without enlarging BASIC's memory ceiling.
+    const uint16_t memsiz = (uint16_t)spi_read_at(PET_BASIC_MEMSIZ_ADDR) |
+                           ((uint16_t)spi_read_at(PET_BASIC_MEMSIZ_ADDR + 1u) << 8);
+    if (memsiz < TARGET_DIAG_MAILBOX_ADDR + TARGET_DIAG_MAILBOX_SIZE) {
+        snprintf(error_out, error_size, "target diagnostic requires 32 KiB base RAM (MEMSIZ $%04X)",
+                 (unsigned)memsiz);
+        return false;
+    }
+
+    // Stream the target .prg without overwriting the mailbox while the CPU remains halted at READY.
+    if (!load_prg_bounded(prg_path, TARGET_DIAG_MAILBOX_ADDR)) {
         snprintf(error_out, error_size, "failed to load '%s'", prg_path);
         return false;
     }
+
+    // Keep BASIC strings below the mailbox now and after RUN's CLR resets FRETOP from MEMSIZ.
+    spi_write_at(PET_BASIC_MEMSIZ_ADDR, (uint8_t)TARGET_DIAG_MAILBOX_ADDR);
+    spi_write_at(PET_BASIC_MEMSIZ_ADDR + 1u, (uint8_t)(TARGET_DIAG_MAILBOX_ADDR >> 8));
+    spi_write_at(PET_BASIC_FRETOP_ADDR, (uint8_t)TARGET_DIAG_MAILBOX_ADDR);
+    spi_write_at(PET_BASIC_FRETOP_ADDR + 1u, (uint8_t)(TARGET_DIAG_MAILBOX_ADDR >> 8));
 
     // Zero the mailbox and mark HOST_ATTACHED so the target spins for multi-cycle re-triggers instead of exiting.
     uint8_t mailbox[TARGET_DIAG_MAILBOX_SIZE] = {0};
@@ -140,8 +182,12 @@ void diag_target_await_case(const diag_target_runner_t* const runner, const size
         const bool acquired = diag_target_read_mailbox(&snap);
         if (acquired &&
             snap.magic0 == TARGET_DIAG_MAGIC_0 && snap.magic1 == TARGET_DIAG_MAGIC_1) {
-            // Extend the inactivity deadline whenever the target initializes or advances completed checks.
-            if (!initialized || snap.completed != last_completed) {
+            // A restart or corrupt count is not progress and must not prolong the finite run.
+            if (initialized && snap.completed < last_completed) {
+                diag_fail("target check count regressed from %u to %u",
+                          (unsigned)last_completed, (unsigned)snap.completed);
+            }
+            if (!initialized || snap.completed > last_completed) {
                 initialized = true;
                 last_completed = snap.completed;
                 deadline_us = time_us_64() + runner->case_timeout_us;

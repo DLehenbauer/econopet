@@ -10,9 +10,9 @@
 #include "target_diag.h"
 
 /**
- * Tear-free snapshot of the 16-byte target-CPU diagnostic mailbox at $0380.
+ * Tear-free snapshot of the reserved 16-byte target-CPU diagnostic mailbox.
  *
- * The running target CPU updates this region in PET low SRAM using an odd/even
+ * The running target CPU updates this region in PET base SRAM using an odd/even
  * seqlock counter in seq so the MCU can poll progress and failure coordinates
  * over SPI without halting the target CPU.
  */
@@ -25,7 +25,7 @@ typedef struct {
     uint8_t host_control;
     /** Current target execution state (TARGET_DIAG_STATE_*). */
     uint8_t state;
-    /** Count of checks completed in the active cycle (0..total_cases). */
+    /** Monotonically increasing count of checks completed in the active cycle (0..total_cases). */
     uint16_t completed;
     /** Plan-specific failure category ID (valid when state == TARGET_DIAG_STATE_FAILED). */
     uint8_t detail_id;
@@ -74,11 +74,14 @@ typedef struct {
 bool diag_target_read_mailbox(diag_target_snapshot_t* out);
 
 /**
- * Boot a PET configuration to BASIC READY, load a .prg into SRAM, queue "RUN\r",
- * and leave the target CPU halted ready for cycle 1.
+ * Boot a PET BASIC 2/4 configuration to READY, load a .prg below the reserved
+ * mailbox, lower BASIC's memory ceiling, queue "RUN\r", and leave the CPU halted.
+ * The target's linker must keep program data and its software stack below the
+ * mailbox as well. Requires the ROM to detect the full 32 KiB base RAM.
  *
  * Writes a descriptive message to error_out[error_size] and returns false if
- * the configuration is missing, BASIC fails to boot, or the .prg cannot load.
+ * the configuration/ROM is unsupported, BASIC fails to boot, RAM is insufficient,
+ * or the .prg cannot load without overlapping the mailbox.
  */
 bool diag_target_prepare_pet_prg(const char* config_id, const char* prg_path, char* error_out, size_t error_size);
 

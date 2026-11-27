@@ -41,9 +41,10 @@ static void menu_prepare_service(void) {
 /**
  * Stream a 2-byte-prefixed .prg file into PET base SRAM and update BASIC end pointers.
  *
- * Rejects unreadable or empty files and refuses to overwrite video or ROM space at $8000+.
+ * Rejects unreadable or empty files and refuses to overwrite the caller's reserved SRAM.
  */
-bool load_prg(const char* filename) {
+bool load_prg_bounded(const char* filename, const uint16_t end_limit) {
+    vet(end_limit <= VIDEO_RAM_ADDRESS, "PRG load limit must not exceed base SRAM");
     // Open the .prg image for binary reading on the mounted SD card.
     FILE* const file = fopen(filename, "rb");
     if (file == NULL) {
@@ -58,14 +59,14 @@ bool load_prg(const char* filename) {
     }
     uint32_t dest = (uint32_t)header[0] | ((uint32_t)header[1] << 8);
 
-    // Stream the program body into PET SRAM via the shared scratch buffer, enforcing the $8000 ceiling.
+    // Stream the program body into PET SRAM without crossing the exclusive destination ceiling.
     uint8_t* buffer = acquire_temp_buffer();
     size_t bytes_read;
     size_t total_bytes = 0;
     bool ok = true;
 
     while ((bytes_read = fread(buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
-        if (dest + bytes_read > VIDEO_RAM_ADDRESS) {
+        if (dest + bytes_read > end_limit) {
             ok = false;
             break;
         }
@@ -95,6 +96,11 @@ bool load_prg(const char* filename) {
     spi_write_at(0xc9u, (uint8_t)(end_addr & 0xffu));
     spi_write_at(0xcau, (uint8_t)(end_addr >> 8));
     return true;
+}
+
+/** Load an ordinary PRG with the full base SRAM available below video RAM. */
+bool load_prg(const char* filename) {
+    return load_prg_bounded(filename, VIDEO_RAM_ADDRESS);
 }
 
 typedef struct action_context_s {
