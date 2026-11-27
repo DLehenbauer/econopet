@@ -446,8 +446,8 @@ bool diag_run_iteration(diag_session_t* session) {
 void diag_loop(diag_session_t* session) {
     // Run iterations until max_cycles complete or an iteration fails.
     vet(session->max_cycles != 0, "diagnostic cycle count must be non-zero");
-    bool passed = true;
-    while (session->iteration < session->max_cycles) {
+    bool passed = session->active_status != DIAG_STATUS_FAIL;
+    while (passed && session->iteration < session->max_cycles) {
         if (!diag_run_iteration(session)) {
             passed = false;
             break;

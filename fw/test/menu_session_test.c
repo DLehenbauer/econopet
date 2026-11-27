@@ -421,8 +421,10 @@ static void reach_target_ready(void) {
     }
     mock_ram[0x34u] = 0u;
     mock_ram[0x35u] = target_small_ram ? 0x40u : 0x80u;
-    mock_ram[0x32u] = 0u;
-    mock_ram[0x33u] = 0x80u;
+    mock_ram[0x30u] = 0u;
+    mock_ram[0x31u] = 0x80u;
+    mock_ram[0x32u] = 0x55u;
+    mock_ram[0x33u] = 0xaau;
     mock_breakpoint_set_hit_addr(target_ready_address);
     system_state.bp_halted = true;
 }
@@ -476,7 +478,9 @@ START_TEST(test_target_prepare_and_cycles) {
     ck_assert_uint_eq(mock_ram[0x009eu], 4u);
     ck_assert_mem_eq(mock_ram + 0x026fu, "RUN\r", 4u);
     ck_assert_uint_eq(mock_ram[0x34u] | ((uint16_t)mock_ram[0x35u] << 8), TARGET_DIAG_MAILBOX_ADDR);
-    ck_assert_uint_eq(mock_ram[0x32u] | ((uint16_t)mock_ram[0x33u] << 8), TARGET_DIAG_MAILBOX_ADDR);
+    ck_assert_uint_eq(mock_ram[0x30u] | ((uint16_t)mock_ram[0x31u] << 8), TARGET_DIAG_MAILBOX_ADDR);
+    ck_assert_uint_eq(mock_ram[0x32u], 0x55u);
+    ck_assert_uint_eq(mock_ram[0x33u], 0xaau);
     ck_assert_uint_eq(mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)], TARGET_DIAG_HOST_ATTACHED);
 
     // Replay SENDP's TBUFF,X stores for CONCAT with two maximum-length filenames.

@@ -88,13 +88,15 @@ bool diag_target_prepare_pet_prg(const char* config_id, const char* prg_path, ch
 /**
  * Arm and trigger 1-based target diagnostic iteration 'cycle'.
  *
- * Resets the mailbox's per-cycle completion count and state to RUNNING, releasing
- * the halted CPU on cycle 1 and waking the target's spin loop on later cycles.
+ * Resets host progress history and the mailbox's per-cycle completion count and
+ * state to RUNNING, releasing the halted CPU on cycle 1 and waking the target's
+ * spin loop on later cycles. Required before the first await of each cycle.
  */
 void diag_target_begin_cycle(uint8_t cycle);
 
 /**
  * Service hardware and poll the target mailbox until 0-based case_ordinal
  * completes, calling diag_fail() on target failure, mailbox drift, or timeout.
+ * Progress history spans calls within the cycle armed by diag_target_begin_cycle().
  */
 void diag_target_await_case(const diag_target_runner_t* runner, size_t case_ordinal);

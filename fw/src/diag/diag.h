@@ -140,6 +140,7 @@ void diag_case_progress(size_t completed, size_t total);
 /**
  * Execute up to session->max_cycles iterations, run plan->cleanup() if provided,
  * and halt via fatal_halt() on failure or diag_complete_halt() on completion.
+ * A failure already retained by diag_run_iteration() remains terminal.
  */
 void diag_loop(diag_session_t* session) __attribute__((noreturn));
 

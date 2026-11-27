@@ -972,6 +972,7 @@ static void stall_mailbox_acquisition(uint32_t addr) {
 /** Polling times out instead of accepting a PASSED state from an unverified final sample. */
 START_TEST(test_target_poll_rejects_unverified_completion) {
     // Seed valid magic and successful counters so an unverified snapshot would falsely pass.
+    diag_target_begin_cycle(1u);
     seqlock_reads = 0;
     memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
@@ -1018,6 +1019,7 @@ static void regress_target_progress(void) {
 
 /** A counter regression must not let a finite run poll indefinitely. */
 START_TEST(test_target_poll_rejects_regressing_progress) {
+    diag_target_begin_cycle(1u);
     regression_polls = 0;
     memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
@@ -1047,6 +1049,63 @@ START_TEST(test_target_poll_rejects_regressing_progress) {
 }
 END_TEST
 
+static bool target_restart_between_cases;
+
+/** Publish progress, optionally restarting between await calls before publishing final success. */
+static void restart_between_target_cases(void) {
+    ++regression_polls;
+    ck_assert_uint_le(regression_polls, 3u);
+    mock_clock_advance(100u);
+    const uint8_t completed = regression_polls == 1u ? 1u :
+                              regression_polls == 2u && target_restart_between_cases ? 0u : 2u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = completed;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] =
+        completed == 2u ? TARGET_DIAG_STATE_PASSED : TARGET_DIAG_STATE_RUNNING;
+}
+
+/** Arm a fresh target cycle and restart the fixture's target progress script. */
+static void begin_target_progress_cycle(uint8_t cycle) {
+    regression_polls = 0u;
+    diag_target_begin_cycle(cycle);
+}
+
+/** Progress history spans case awaits, rather than accepting a restarted target as a new baseline. */
+START_TEST(test_target_poll_retains_progress_between_cases) {
+    target_restart_between_cases = _i == 0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    const diag_target_runner_t runner = {
+        .total_cases = 2u,
+        .case_timeout_us = 1000u,
+        .service = restart_between_target_cases,
+    };
+    const diag_suite_t target_suite = {
+        .name = "Target",
+        .case_count = 2u,
+        .context = &runner,
+        .case_name = generated_case_name,
+        .run_case = run_target_case,
+    };
+    const diag_plan_t target_plan = {
+        .name = "target",
+        .description = "Cross-case restart fixture",
+        .begin_cycle = begin_target_progress_cycle,
+        .suites = &target_suite,
+        .suite_count = 1u,
+    };
+    diag_session_init(&session, &target_plan);
+    if (target_restart_between_cases) {
+        ck_assert(!diag_run_iteration(&session));
+        ck_assert_str_eq(session.failure_detail, "target check count regressed from 1 to 0");
+        ck_assert_uint_eq(session.active_case_index, 1u);
+    } else {
+        ck_assert(diag_run_iteration(&session));
+        ck_assert(diag_run_iteration(&session));
+        ck_assert_uint_eq(session.iteration, 2u);
+    }
+}
+END_TEST
+
 /** Verify the failure screen and cleanup hook run before the terminal fatal boundary. */
 static void check_terminal_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
@@ -1071,6 +1130,29 @@ START_TEST(test_terminal_loop_halts) {
     test_expect_fatal_message("DIAG FAIL [synthetic] iter 1 (00:00:00) Suite A / Second: expected $55, got $54");
     test_expect_fatal_callback(check_terminal_failure);
     diag_run_plan(&cleanup_plan, 1);
+}
+END_TEST
+
+/** Handing a failed session to the terminal loop preserves its failure even when its budget is exhausted. */
+START_TEST(test_terminal_loop_preserves_prior_failure) {
+    custom_cleanup_calls = 0;
+    inject_failure = true;
+    const diag_plan_t cleanup_plan = {
+        .name = "synthetic",
+        .description = "Fixture plan",
+        .cleanup = record_cleanup,
+        .suites = suites,
+        .suite_count = count_of(suites),
+    };
+    system_takeover();
+    diag_session_init(&session, &cleanup_plan);
+    session.max_cycles = _i == 0 ? 1u : 2u;
+    ck_assert(!diag_run_iteration(&session));
+    test_expect_fatal_message("DIAG FAIL [synthetic] iter 1");
+    test_expect_fatal_callback(check_terminal_failure);
+    mock_diag_complete_set_handler(observe_complete_halt);
+    if (setjmp(diagnostic_escape) == 0) diag_loop(&session);
+    ck_abort_msg("failed session reached the successful completion halt");
 }
 END_TEST
 
@@ -1115,6 +1197,7 @@ Suite* diag_suite(void) {
     tcase_add_loop_test(tests, test_memory_plan_detects_faults, 0, 2);
     tcase_add_loop_test(tests, test_bup_plan_detects_memory_faults, 0, 2);
     tcase_add_test(tests, test_target_poll_rejects_regressing_progress);
+    tcase_add_loop_test(tests, test_target_poll_retains_progress_between_cases, 0, 2);
     suite_add_tcase(suite, tests);
     return suite;
 }
@@ -1125,6 +1208,7 @@ Suite* diag_fatal_suite(void) {
     TCase* const tests = tcase_create("terminal");
     tcase_add_checked_fixture(tests, setup, teardown);
     tcase_add_test_raise_signal(tests, test_terminal_loop_halts, SIGABRT);
+    tcase_add_loop_test_raise_signal(tests, test_terminal_loop_preserves_prior_failure, SIGABRT, 0, 2);
     tcase_add_test_raise_signal(tests, test_cli_sd_prepare_failure, SIGABRT);
     tcase_add_test_raise_signal(tests, test_invalid_plan_structure, SIGABRT);
     suite_add_tcase(suite, tests);

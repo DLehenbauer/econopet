@@ -12,7 +12,7 @@
 
 /** BASIC 2/4 memory ceiling and string-allocation top (little-endian zero-page pointers). */
 #define PET_BASIC_MEMSIZ_ADDR 0x0034u
-#define PET_BASIC_FRETOP_ADDR 0x0032u
+#define PET_BASIC_FRETOP_ADDR 0x0030u
 
 /** Maximum time in microseconds allowed for the PET ROM to reach BASIC READY after reset. */
 #define PET_BOOT_TIMEOUT_US UINT64_C(2000000)
@@ -29,6 +29,10 @@
  * Allows ~320us of 31.25 MHz SPI bursts to outlast a ~30us 1 MHz 6502 seqlock update.
  */
 #define TARGET_SNAPSHOT_RETRY_LIMIT 64u
+
+/** Progress history for the single target mailbox, shared by all awaits in its active cycle. */
+static uint16_t cycle_completed;
+static bool cycle_initialized;
 
 /** Identify a supported BASIC READY entry from the ROM actually loaded, not its configuration ID. */
 static bool target_ready_address(uint16_t* const out) {
@@ -150,6 +154,9 @@ bool diag_target_prepare_pet_prg(const char* const config_id, const char* const 
 
 /** Reset per-cycle mailbox counters and start or wake the target CPU for 1-based iteration 'cycle'. */
 void diag_target_begin_cycle(const uint8_t cycle) {
+    cycle_completed = 0;
+    cycle_initialized = false;
+
     // Clear the prior cycle's completion count and coordinates before switching state back to RUNNING.
     spi_write_at(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO), 0);
     spi_write_at(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI), 0);
@@ -167,8 +174,6 @@ void diag_target_begin_cycle(const uint8_t cycle) {
 void diag_target_await_case(const diag_target_runner_t* const runner, const size_t case_ordinal) {
     // Initialize the per-case inactivity deadline before entering the polling loop.
     uint64_t deadline_us = time_us_64() + runner->case_timeout_us;
-    uint16_t last_completed = 0;
-    bool initialized = false;
 
     while (true) {
         // Service emulated peripherals and refresh the HDMI elapsed-time header once per second.
@@ -183,13 +188,13 @@ void diag_target_await_case(const diag_target_runner_t* const runner, const size
         if (acquired &&
             snap.magic0 == TARGET_DIAG_MAGIC_0 && snap.magic1 == TARGET_DIAG_MAGIC_1) {
             // A restart or corrupt count is not progress and must not prolong the finite run.
-            if (initialized && snap.completed < last_completed) {
+            if (cycle_initialized && snap.completed < cycle_completed) {
                 diag_fail("target check count regressed from %u to %u",
-                          (unsigned)last_completed, (unsigned)snap.completed);
+                          (unsigned)cycle_completed, (unsigned)snap.completed);
             }
-            if (!initialized || snap.completed > last_completed) {
-                initialized = true;
-                last_completed = snap.completed;
+            if (!cycle_initialized || snap.completed > cycle_completed) {
+                cycle_initialized = true;
+                cycle_completed = snap.completed;
                 deadline_us = time_us_64() + runner->case_timeout_us;
             }
 
