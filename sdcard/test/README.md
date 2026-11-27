@@ -1,15 +1,13 @@
 # EconoPET Diagnostics
 
-The `/test` directory is not intended for end-user operation. It contains files
-for hardware diagnostics used by people building, bringing up, or repairing
-EconoPET boards.
+The `/test` directory contains files for hardware diagnostics used by people
+building, bringing up, or repairing EconoPET boards.
 
-> &#x26A0;&#xFE0F; **Warning:** Some diagnostics are destructive and can erase disks or SD cards.
-> They are intended to run in a test environment prepared by the firmware. For
-> example, the drive diagnostic program formats all disks in all drives.
+> &#x26A0;&#xFE0F; **Warning:** Some diagnostics are destructive and can erase
+> floppy disks or SD cards.
 
-Leave this directory intact when copying the firmware package to a microSD
-card.
+These tests are intended to run in a test environment prepared by the firmware.
+Leave this directory intact when copying the firmware package to a microSD card.
 
 ## Accessing diagnostics
 

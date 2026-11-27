@@ -12,13 +12,14 @@ For detailed instructions, see the [user manual](https://dlehenbauer.github.io/e
 
 ## Changelog
 
-### v0.3.0 (2026-11-16)
+### v0.3.0 (2026-11-27)
 
-- Virtual disk drive support (beta, see `/disk/README.md`)
-- SuperPET support (6809, ACIA, and MMU)
-- Hold *both* Shift keys to open the menu (same as holding the menu button)
+- Added SuperPET support (6809, ACIA, and MMU)
+- Beta support for D64/D80/D82 disk images (see `/disk/README.md`)
+- Enter menu by holding *both* Shift keys (holding MENU button still works too)
 - Fixed horizontal timing for 9-inch CRTs ([#40](https://github.com/DLehenbauer/econopet/issues/40))
 - Fixed compatibility with older SD cards ([#32](https://github.com/DLehenbauer/econopet/issues/32))
+- Built-in diagnostics for board builders (see `/test/README.md`)
 
 ### v0.2.0 (2026-02-22)
 
