@@ -124,6 +124,12 @@ class SdcardBuildTests(unittest.TestCase):
             self.assertIn("Required PRG file is missing",
                           missing_asset.stdout + missing_asset.stderr)
 
+            # The staged RUN program must start at BASIC's actual $0401 program pointer.
+            drive_prg.write_bytes(b"\x01\x08\x60")
+            wrong_start = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(wrong_start.returncode, 0)
+            self.assertIn("PRG must load at 1025", wrong_start.stdout + wrong_start.stderr)
+
             # A PRG whose last byte reaches $7FEF (32751) fits below the $7FF0 mailbox, while $7FF0 (32752) fails.
             drive_prg.write_bytes(b"\x01\x04" + bytes(0x7FF0 - 0x0401))
             exact_fit = subprocess.run(command, capture_output=True, text=True)
@@ -165,6 +171,33 @@ class SdcardBuildTests(unittest.TestCase):
                 self.assertIn(str(conflicting_rom), output)
                 self.assertEqual((stale_fpga / "old.bin").read_bytes(), b"stale")
             conflicting_rom.unlink()
+
+            # FAT32 treats generated and media ROM names as equal regardless of letter case.
+            case_conflict = media / "rom/EDIT.BIN"
+            case_conflict.write_bytes(b"case conflict")
+            case_variant = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(case_variant.returncode, 0)
+            self.assertIn("ROM filename conflict", case_variant.stdout + case_variant.stderr)
+            self.assertIn(str(case_conflict), case_variant.stdout + case_variant.stderr)
+            self.assertEqual((stale_fpga / "old.bin").read_bytes(), b"stale")
+            case_conflict.unlink()
+
+            # Case variants within either source tree also collide on FAT32.
+            media_case_conflict = media / "rom/BASIC.BIN"
+            media_case_conflict.write_bytes(b"media case conflict")
+            media_case_variant = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(media_case_variant.returncode, 0)
+            self.assertIn("ROM filename conflict", media_case_variant.stdout + media_case_variant.stderr)
+            self.assertEqual((stale_fpga / "old.bin").read_bytes(), b"stale")
+            media_case_conflict.unlink()
+
+            generated_case_conflict = roms / "EDIT.bin"
+            generated_case_conflict.write_bytes(b"generated case conflict")
+            generated_case_variant = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(generated_case_variant.returncode, 0)
+            self.assertIn("ROM filename conflict", generated_case_variant.stdout + generated_case_variant.stderr)
+            self.assertEqual((stale_fpga / "old.bin").read_bytes(), b"stale")
+            generated_case_conflict.unlink()
 
             packaged = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(packaged.returncode, 0, packaged.stdout + packaged.stderr)

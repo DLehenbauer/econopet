@@ -13,16 +13,24 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ValidatePrg.cmake")
 
 # PRGs started with RUN must load at the PET's BASIC start address ($0401).
 # Diagnostic programs must reside below the mailbox address at $7FF0.
-validate_prg("${DRIVE_TEST_PRG}" 0x0401 0x7FF0)
+validate_prg("${DRIVE_TEST_PRG}" 0x0401 0x7FF0 0x0401)
 
-# Reject generated/media filename collisions before replacing the previous package root.
+# Reject FAT-incompatible ROM filename collisions before replacing the previous package root.
 file(GLOB rom_bin_files "${ROM_BIN_DIR}/*.bin")
-foreach(bin_file IN LISTS rom_bin_files)
-    get_filename_component(bin_name "${bin_file}" NAME)
-    set(media_rom "${ECONOPET_MEDIA_DIR}/rom/${bin_name}")
-    if(EXISTS "${media_rom}" OR IS_SYMLINK "${media_rom}")
-        message(FATAL_ERROR "ROM filename conflict: ${bin_file} and ${media_rom}")
-    endif()
+file(GLOB media_rom_files "${ECONOPET_MEDIA_DIR}/rom/*")
+set(rom_files ${rom_bin_files} ${media_rom_files})
+foreach(rom_file IN LISTS rom_files)
+    get_filename_component(rom_name "${rom_file}" NAME)
+    string(TOLOWER "${rom_name}" rom_name_lower)
+    foreach(other_rom_file IN LISTS rom_files)
+        if(NOT "${rom_file}" STREQUAL "${other_rom_file}")
+            get_filename_component(other_rom_name "${other_rom_file}" NAME)
+            string(TOLOWER "${other_rom_name}" other_rom_name_lower)
+            if("${rom_name_lower}" STREQUAL "${other_rom_name_lower}")
+                message(FATAL_ERROR "ROM filename conflict: ${rom_file} and ${other_rom_file}")
+            endif()
+        endif()
+    endforeach()
 endforeach()
 
 # Discard removed or renamed inputs as well as obsolete generated ROMs.

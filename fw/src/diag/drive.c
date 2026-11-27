@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: CC0-1.0
 // https://github.com/dlehenbauer/econopet
 
-#include "diag/drive.h"
 #include "pch.h"
+#include "diag/drive.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -132,20 +132,38 @@ static diskimage_type_t slot_image_type(const uint8_t geom) {
     }
 }
 
-/** Remove all temporary scratch disk files and the /test/tmp directory if empty. */
-static void remove_scratch_files(void) {
-    // Unlink each slot's scratch image and remove /test/tmp on a best-effort basis.
+/** Remove temporary scratch images and their directory, preserving the first filesystem error. */
+static bool remove_scratch_files(char* const error_out, const size_t error_size) {
+    bool ok = true;
+
+    // Remove files only after their mounted owners have been detached.
     for (size_t slot = 0; slot < DT_SLOT_COUNT; ++slot) {
-        (void)remove(scratch_paths[slot]);
+        if (remove(scratch_paths[slot]) != 0 && errno != ENOENT) {
+            if (ok) {
+                snprintf(error_out, error_size, "could not remove '%s' (errno %d)", scratch_paths[slot], errno);
+            }
+            ok = false;
+        }
     }
-    (void)rmdir(DRIVE_DIAG_TMP_DIR);
+
+    // Retain a non-empty or otherwise inaccessible directory and report failed teardown.
+    if (rmdir(DRIVE_DIAG_TMP_DIR) != 0 && errno != ENOENT) {
+        if (ok) {
+            snprintf(error_out, error_size, "could not remove '%s' (errno %d)", DRIVE_DIAG_TMP_DIR, errno);
+        }
+        ok = false;
+    }
+    return ok;
 }
 
 /** Ensure a directory exists on the mounted SD filesystem. */
 static bool ensure_dir(const char* const path) {
-    // Create the directory if absent, then confirm an existing entry is actually a directory.
-    if (mkdir(path, 0777) == 0 || errno == EEXIST) {
+    // Create the directory if absent, then validate an existing entry's type.
+    if (mkdir(path, 0777) == 0) {
         return true;
+    }
+    if (errno != EEXIST) {
+        return false;
     }
     struct stat info;
     return stat(path, &info) == 0 && S_ISDIR(info.st_mode);
@@ -191,15 +209,24 @@ static bool drive_prepare(char* const error_out, const size_t error_size) {
     // Drain any prior guest disk activity and release mounted user media first.
     pet_wait_for_storage_idle();
     set_cpu(CPU_HALT);
-    (void)menu_browser_abandon_scan();
+    if (!menu_browser_abandon_scan()) {
+        snprintf(error_out, error_size, "could not close the active disk scan");
+        return false;
+    }
     if (!ieee_drive_unmount_all()) {
         snprintf(error_out, error_size, "could not unmount existing IEEE disks");
         return false;
     }
 
     // Recreate clean zero-filled scratch containers under /test/tmp.
-    remove_scratch_files();
-    if (!ensure_dir(DRIVE_DIAG_ROOT_DIR) || !ensure_dir(DRIVE_DIAG_TMP_DIR)) {
+    if (!remove_scratch_files(error_out, error_size)) {
+        return false;
+    }
+    if (!ensure_dir(DRIVE_DIAG_ROOT_DIR)) {
+        snprintf(error_out, error_size, "could not create '%s' (errno %d)", DRIVE_DIAG_ROOT_DIR, errno);
+        return false;
+    }
+    if (!ensure_dir(DRIVE_DIAG_TMP_DIR)) {
         snprintf(error_out, error_size, "could not create '%s' (errno %d)", DRIVE_DIAG_TMP_DIR, errno);
         return false;
     }
@@ -233,12 +260,15 @@ static bool drive_prepare(char* const error_out, const size_t error_size) {
     return true;
 }
 
-/** Halt the target CPU while keeping its display intact, then unmount and delete /test/tmp. */
-static void drive_cleanup(void) {
-    // Stop the 6502 before unmounting and deleting the temporary scratch images.
+/** Halt the target, then unmount and delete scratch images only after confirmed detachment. */
+static bool drive_cleanup(char* const error_out, const size_t error_size) {
+    // Stop the 6502 before asking the IEEE facade to detach its mounted owners.
     set_cpu(CPU_HALT);
-    (void)ieee_drive_unmount_all();
-    remove_scratch_files();
+    if (!ieee_drive_unmount_all()) {
+        snprintf(error_out, error_size, "could not unmount diagnostic IEEE disks; scratch files were retained");
+        return false;
+    }
+    return remove_scratch_files(error_out, error_size);
 }
 
 /** Decode a (suite_index, case_index) pair into *out matching run_pass() in drive-test.c. */

@@ -2,6 +2,7 @@
 # https://github.com/dlehenbauer/econopet
 
 # Require a PRG header and nonempty payload loading in [min_address, end_address).
+# An optional fourth argument requires an exact load address.
 # Bounds accept decimal or hexadecimal values within the 16-bit address space.
 # This checks the loaded bytes, not a BASIC launcher or linker-only segments such as BSS.
 function(validate_prg prg_file min_address end_address)
@@ -30,6 +31,15 @@ function(validate_prg prg_file min_address end_address)
     math(EXPR load_address "0x${load_address_high}${load_address_low}")
     math(EXPR load_end "${load_address} + ${prg_size} - ${header_size}")
     math(EXPR last_byte "${load_end} - 1")
+
+    # Enforce an exact entry address for assets whose launcher depends on it.
+    if(ARGC GREATER 3)
+        math(EXPR required_load_address "${ARGV3}")
+        if(NOT load_address EQUAL required_load_address)
+            message(FATAL_ERROR
+                "PRG must load at ${required_load_address}: ${prg_file} loads at ${load_address}")
+        endif()
+    endif()
 
     # Reject both low-address intrusion and payloads extending past the allowed window.
     if(load_address LESS min_load_address OR load_end GREATER load_limit)

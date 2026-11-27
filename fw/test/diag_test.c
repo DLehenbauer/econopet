@@ -44,6 +44,9 @@ static bool complete_observed;
 static uint8_t observed_max_cycles;
 static unsigned prompt_step;
 static unsigned boot_video_calls;
+static bool cleanup_should_fail;
+
+#define DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US UINT64_C(300000000)
 typedef enum {
     PROMPT_ABORT,
     PROMPT_ESCAPE_ABORT,
@@ -162,6 +165,7 @@ static void setup(void) {
     reset_observed = false;
     complete_observed = false;
     observed_max_cycles = 0;
+    cleanup_should_fail = false;
     prompt_step = 0;
     boot_video_calls = 0;
     mock_sd_prepare_set_handler(observe_swap_prepare);
@@ -820,9 +824,14 @@ static void record_begin_cycle(uint8_t cycle) {
     last_begin_cycle_arg = cycle;
 }
 
-/** Count plan->cleanup() invocations at the end of diag_loop(). */
-static void record_cleanup(void) {
+/** Count plan cleanup and optionally report a fixture teardown failure. */
+static bool record_cleanup(char* const error_out, const size_t error_size) {
     ++custom_cleanup_calls;
+    if (cleanup_should_fail) {
+        snprintf(error_out, error_size, "fixture cleanup failed");
+        return false;
+    }
+    return true;
 }
 
 /** Format a synthetic generated case name into caller scratch storage. */
@@ -1494,9 +1503,11 @@ START_TEST(test_drive_d82_duplicate_timeout_budget) {
         .suites = dup_suite,
         .suite_count = 1,
     };
+    const uint64_t started = time_us_64();
     diag_session_init(&session, &dup_only_plan);
     ck_assert(!diag_run_iteration(&session));
     mock_spi_read_set_observer(NULL);
+    ck_assert_uint_ge(time_us_64() - started, DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US);
     ck_assert_uint_gt(slow_duplicate_reads, 6u);
     ck_assert_ptr_nonnull(strstr(session.failure_summary, "Duplicate Disk"));
     ck_assert_ptr_nonnull(strstr(session.failure_detail, "target timeout waiting for case"));
@@ -1511,6 +1522,14 @@ static void check_terminal_failure(void) {
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     check_text(74, 19, "FAIL");
     check_text(9, 22, "expected $55, got $54");
+}
+
+/** Verify cleanup failure is visible on the terminal failure screen. */
+static void check_terminal_cleanup_failure(void) {
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_eq(custom_cleanup_calls, 1);
+    check_text(74, 19, "FAIL");
+    check_text(9, 22, "fixture cleanup failed");
 }
 
 /** The unwrapped loop runs cleanup before reaching the display-independent fatal endpoint. */
@@ -1530,9 +1549,28 @@ START_TEST(test_terminal_loop_halts) {
 }
 END_TEST
 
+/** A passing diagnostic must fail visibly when its resource cleanup fails. */
+START_TEST(test_terminal_loop_reports_cleanup_failure) {
+    custom_cleanup_calls = 0;
+    cleanup_should_fail = true;
+    inject_failure = false;
+    const diag_plan_t cleanup_plan = {
+        .name = "synthetic",
+        .description = "Fixture plan",
+        .cleanup = record_cleanup,
+        .suites = suites,
+        .suite_count = count_of(suites),
+    };
+    test_expect_fatal_message("DIAG FAIL [synthetic] cleanup: fixture cleanup failed");
+    test_expect_fatal_callback(check_terminal_cleanup_failure);
+    diag_run_plan(&cleanup_plan, 1);
+}
+END_TEST
+
 /** Handing a failed session to the terminal loop preserves its failure even when its budget is exhausted. */
 START_TEST(test_terminal_loop_preserves_prior_failure) {
     custom_cleanup_calls = 0;
+    cleanup_should_fail = true;
     inject_failure = true;
     const diag_plan_t cleanup_plan = {
         .name = "synthetic",
@@ -1610,6 +1648,7 @@ Suite* diag_fatal_suite(void) {
     TCase* const tests = tcase_create("terminal");
     tcase_add_checked_fixture(tests, setup, teardown);
     tcase_add_test_raise_signal(tests, test_terminal_loop_halts, SIGABRT);
+    tcase_add_test_raise_signal(tests, test_terminal_loop_reports_cleanup_failure, SIGABRT);
     tcase_add_test_raise_signal(tests, test_terminal_prepare_failure, SIGABRT);
     tcase_add_loop_test_raise_signal(tests, test_terminal_loop_preserves_prior_failure, SIGABRT, 0, 2);
     tcase_add_test_raise_signal(tests, test_cli_sd_prepare_failure, SIGABRT);

@@ -470,7 +470,22 @@ void diag_loop(diag_session_t* session) {
 
     // Release temporary plan resources (such as mounted scratch media) before halting.
     if (session->plan->cleanup != NULL) {
-        session->plan->cleanup();
+        char cleanup_error[DIAG_MESSAGE_MAX] = "";
+        if (!session->plan->cleanup(cleanup_error, sizeof(cleanup_error))) {
+            const char* const detail = cleanup_error[0] != '\0' ? cleanup_error : "diagnostic cleanup failed";
+            if (passed) {
+                session->active_status = DIAG_STATUS_FAIL;
+                snprintf(session->failure_detail, sizeof(session->failure_detail), "%s", detail);
+                snprintf(session->failure_summary, sizeof(session->failure_summary),
+                         "DIAG FAIL [%s] cleanup: %s", session->plan->name, detail);
+                render(session);
+                printf("%s\r\n", session->failure_summary);
+            } else {
+                printf("DIAG CLEANUP FAIL [%s]: %s\r\n", session->plan->name, detail);
+            }
+            fflush(stdout);
+            passed = false;
+        }
     }
 
     // Escalate failures to the Morse/UART fatal endpoint while keeping the failure screen visible.

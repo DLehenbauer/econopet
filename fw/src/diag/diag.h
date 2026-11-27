@@ -93,8 +93,8 @@ typedef struct {
     bool (*prepare)(char* error_out, size_t error_size);
     /** Optional per-cycle hook run before suite 0 on 1-based iteration 'cycle' (may call diag_fail()). */
     void (*begin_cycle)(uint8_t cycle);
-    /** Optional teardown run once when diag_loop() exits, before fatal_halt() or diag_complete_halt(). */
-    void (*cleanup)(void);
+    /** Optional teardown run once when diag_loop() exits; false reports failure before either halt endpoint. */
+    bool (*cleanup)(char* error_out, size_t error_size);
     /** Non-empty array of suites executed in order on each cycle. */
     const diag_suite_t* suites;
     /** Number of entries in suites. */
