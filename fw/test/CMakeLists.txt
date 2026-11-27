@@ -32,6 +32,7 @@ add_executable(${PROJECT_NAME}
     ${SRC_DIR}/cpu.c
     ${SRC_DIR}/diag/log/log.c
     ${SRC_DIR}/diag/diag.c
+    ${SRC_DIR}/diag/drive.c
     ${SRC_DIR}/diag/mem.c
     ${SRC_DIR}/diag/sd_confirm.c
     ${SRC_DIR}/diag/runner.c

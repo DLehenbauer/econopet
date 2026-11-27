@@ -2,9 +2,26 @@
 # https://github.com/dlehenbauer/econopet
 
 # Refresh package inputs at build time, rather than only on child configuration.
-foreach(required_var SDCARD_ROOT_DIR ECONOPET_MEDIA_DIR ROM_BIN_DIR FIRMWARE_UF2 FPGA_BITSTREAM BOOTLOADER_UF2)
+foreach(required_var SDCARD_ROOT_DIR ECONOPET_MEDIA_DIR ROM_BIN_DIR FIRMWARE_UF2 FPGA_BITSTREAM BOOTLOADER_UF2 DRIVE_TEST_PRG)
     if(NOT DEFINED ${required_var} OR "${${required_var}}" STREQUAL "")
         message(FATAL_ERROR "${required_var} must be defined.")
+    endif()
+endforeach()
+
+# Sanity-check *.prgs files shipping on the SD card.
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ValidatePrg.cmake")
+
+# PRGs started with RUN must load at the PET's BASIC start address ($0401).
+# Diagnostic programs must reside below the mailbox address at $7FF0.
+validate_prg("${DRIVE_TEST_PRG}" 0x0401 0x7FF0)
+
+# Reject generated/media filename collisions before replacing the previous package root.
+file(GLOB rom_bin_files "${ROM_BIN_DIR}/*.bin")
+foreach(bin_file IN LISTS rom_bin_files)
+    get_filename_component(bin_name "${bin_file}" NAME)
+    set(media_rom "${ECONOPET_MEDIA_DIR}/rom/${bin_name}")
+    if(EXISTS "${media_rom}" OR IS_SYMLINK "${media_rom}")
+        message(FATAL_ERROR "ROM filename conflict: ${bin_file} and ${media_rom}")
     endif()
 endforeach()
 
@@ -21,9 +38,14 @@ file(COPY
 configure_file("${BOOTLOADER_UF2}" "${SDCARD_ROOT_DIR}/bootloader.uf2" COPYONLY)
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/prg/README.md"
     DESTINATION "${SDCARD_ROOT_DIR}/prg")
+file(MAKE_DIRECTORY "${SDCARD_ROOT_DIR}/disk")
+file(MAKE_DIRECTORY "${SDCARD_ROOT_DIR}/test")
+file(COPY
+    "${CMAKE_CURRENT_LIST_DIR}/test/README.md"
+    DESTINATION "${SDCARD_ROOT_DIR}/test")
+configure_file("${DRIVE_TEST_PRG}" "${SDCARD_ROOT_DIR}/test/drive-test.prg" COPYONLY)
 
-# Generated ROMs override media copies. The embedded menu.rom is not an SD asset.
-file(GLOB rom_bin_files "${ROM_BIN_DIR}/*.bin")
+# Add generated ROMs to the package. The embedded menu.rom is not an SD asset.
 foreach(bin_file IN LISTS rom_bin_files)
     get_filename_component(bin_name "${bin_file}" NAME)
     configure_file("${bin_file}" "${SDCARD_ROOT_DIR}/rom/${bin_name}" COPYONLY)

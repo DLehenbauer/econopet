@@ -85,8 +85,12 @@ typedef struct {
     const char* description;
     /** Optional interactive confirmation gate that forwards max_cycles to diag_run_plan() or resets on abort. */
     void (*confirm)(uint8_t max_cycles) __attribute__((noreturn));
-    /** Optional one-time hardware and media setup run after system_takeover() and before session init. */
-    void (*prepare)(void);
+    /**
+     * Optional setup after system_takeover() and before session init.
+     * Return false with error_out[error_size] populated on recoverable failure.
+     * The runner initializes the display, reports the error, and runs cleanup without starting cases.
+     */
+    bool (*prepare)(char* error_out, size_t error_size);
     /** Optional per-cycle hook run before suite 0 on 1-based iteration 'cycle' (may call diag_fail()). */
     void (*begin_cycle)(uint8_t cycle);
     /** Optional teardown run once when diag_loop() exits, before fatal_halt() or diag_complete_halt(). */
@@ -128,6 +132,9 @@ const diag_plan_t* const* diag_plans(size_t* count_out);
 /** Configure the local display, initialize iteration state, and render the initial screen. */
 void diag_session_init(diag_session_t* session, const diag_plan_t* plan);
 
+/** Retain and display a preparation failure before any iteration starts. */
+void diag_report_prepare_failure(diag_session_t* session, const char* error);
+
 /** Run one iteration, retaining and reporting the first failure. No hardware preparation. */
 bool diag_run_iteration(diag_session_t* session);
 
@@ -140,7 +147,7 @@ void diag_case_progress(size_t completed, size_t total);
 /**
  * Execute up to session->max_cycles iterations, run plan->cleanup() if provided,
  * and halt via fatal_halt() on failure or diag_complete_halt() on completion.
- * A failure already retained by diag_run_iteration() remains terminal.
+ * A retained preparation or iteration failure remains terminal.
  */
 void diag_loop(diag_session_t* session) __attribute__((noreturn));
 

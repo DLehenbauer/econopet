@@ -17,7 +17,7 @@ if(NOT DEFINED ECONOPET_MEDIA_DIR OR "${ECONOPET_MEDIA_DIR}" STREQUAL "")
     message(FATAL_ERROR "ECONOPET_MEDIA_DIR must be set to the directory containing rom and disk.")
 endif()
 
-foreach(required_var FIRMWARE_UF2 FPGA_BITSTREAM BOOTLOADER_UF2)
+foreach(required_var FIRMWARE_UF2 FPGA_BITSTREAM BOOTLOADER_UF2 DRIVE_TEST_PRG)
     if(NOT DEFINED ${required_var} OR "${${required_var}}" STREQUAL "")
         message(FATAL_ERROR "${required_var} must be defined.")
     endif()
@@ -33,6 +33,7 @@ add_custom_target(sdcard ALL
             "-DFIRMWARE_UF2=${FIRMWARE_UF2}"
             "-DFPGA_BITSTREAM=${FPGA_BITSTREAM}"
             "-DBOOTLOADER_UF2=${BOOTLOADER_UF2}"
+            "-DDRIVE_TEST_PRG=${DRIVE_TEST_PRG}"
             -P "${CMAKE_CURRENT_LIST_DIR}/Stage.cmake"
     COMMAND ${CMAKE_COMMAND}
             "-DSDCARD_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/sdcard_root"
