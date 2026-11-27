@@ -6,6 +6,7 @@
 
 #include "breakpoint.h"
 #include "cpu.h"
+#include "diag/diag.h"
 #include "diag/log/log.h"
 #include "diag/target.h"
 #include "display/display.h"
@@ -324,7 +325,8 @@ START_TEST(test_diag_config_preserves_mode_and_ignores_mounts) {
         "        drive: 0\n"
         "        file: missing-user-disk.d64\n");
     system_takeover();
-    ck_assert(menu_apply_diag_config("8032"));
+    char error[DIAG_MESSAGE_MAX] = "";
+    ck_assert(menu_apply_diag_config("8032", error, sizeof(error)));
     mock_cpu_set_state_observer(NULL);
     tape_change_expected = false;
 
@@ -335,6 +337,47 @@ START_TEST(test_diag_config_preserves_mode_and_ignores_mounts) {
     ck_assert_uint_eq(tape_init_count, 1);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_int_eq(spi_read_at(ECONOPET_WB_CPU_SEL_ADDR), CPU_SOFT_6502);
+    ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
+}
+END_TEST
+
+/** Return a missing profile ROM as a diagnostic preparation error without resetting or unmounting. */
+START_TEST(test_diag_config_reports_missing_rom) {
+    prepare_diag_cpu();
+
+    uint8_t* const scratch = diskimage_test_make_d64();
+    test_register_binary_file("/test/tmp/u8d0.d64", scratch, DISKIMAGE_D64_SIZE, true);
+    free(scratch);
+    ck_assert_int_eq(ieee_drive_mount_scratch(0, "/test/tmp/u8d0.d64"), DOS_MEDIA_OK);
+    test_register_file("/rom/missing.bin", "placeholder");
+    test_fail_file_opens("/rom/missing.bin", true);
+    test_register_file("/config.yaml",
+        "format-version: 1\n"
+        "configs:\n"
+        "  - id: custom\n"
+        "    name: Custom\n"
+        "    setup:\n"
+        "      - action: load\n"
+        "        files:\n"
+        "          - file: /rom/missing.bin\n"
+        "            address: 0xb000\n"
+        "      - action: set\n"
+        "        columns: 40\n");
+
+    tape_change_expected = true;
+    system_takeover();
+    char error[DIAG_MESSAGE_MAX] = "";
+    reset_count = tape_init_count = 0;
+    mock_cpu_set_state_observer(observe_reset);
+    ck_assert(!menu_apply_diag_config("custom", error, sizeof(error)));
+    mock_cpu_set_state_observer(NULL);
+    tape_change_expected = false;
+
+    ck_assert_ptr_nonnull(strstr(error, "Failed to open file '/rom/missing.bin'"));
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(reset_count, 0);
+    ck_assert_uint_eq(tape_init_count, 0);
     ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
 }
 END_TEST
@@ -537,6 +580,7 @@ Suite* menu_session_fatal_suite(void) {
     TCase* const test = tcase_create("isolated");
     tcase_add_checked_fixture(test, setup, teardown);
     tcase_add_test(test, test_diag_config_preserves_mode_and_ignores_mounts);
+    tcase_add_test(test, test_diag_config_reports_missing_rom);
     tcase_add_loop_test(test, test_target_prepare_and_cycles, 0, 7);
     suite_add_tcase(suite, test);
     return suite;

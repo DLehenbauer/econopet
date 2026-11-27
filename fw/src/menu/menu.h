@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include "system/state.h"
 
 void menu_init(void);
@@ -12,11 +14,12 @@ void menu_enter(void);
 /**
  * Apply the named /config.yaml profile for a diagnostic target without mounting
  * user disks, enabling virtual tape, or switching out of diagnostic ownership.
+ * Returns false with error_out set when the profile or a ROM cannot be loaded.
  *
  * Resets the PET with the stock physical or soft 6502 selected and leaves the
- * CPU halted ready for target preparation, returning false if id is not found.
+ * CPU halted ready for target preparation, returning false if setup fails.
  */
-bool menu_apply_diag_config(const char* id);
+bool menu_apply_diag_config(const char* id, char* error_out, size_t error_size);
 
 /**
  * Stream a 2-byte little-endian load-address-prefixed .prg file into PET SRAM

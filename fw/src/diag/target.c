@@ -99,8 +99,7 @@ bool diag_target_read_mailbox(diag_target_snapshot_t* const out) {
 bool diag_target_prepare_pet_prg(const char* const config_id, const char* const prg_path,
                                  char* const error_out, const size_t error_size) {
     // Load the requested ROM/model configuration without user mounts or guest-mode takeover.
-    if (!menu_apply_diag_config(config_id)) {
-        snprintf(error_out, error_size, "missing config '%s' in /config.yaml", config_id);
+    if (!menu_apply_diag_config(config_id, error_out, error_size)) {
         return false;
     }
 

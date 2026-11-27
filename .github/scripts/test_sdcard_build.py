@@ -20,6 +20,20 @@ ROOT = Path(__file__).resolve().parents[2]
 class SdcardBuildTests(unittest.TestCase):
     """Build packages with small stand-ins for firmware, gateware, and media."""
 
+    def test_unused_sdcard_target_does_not_require_drive_test_prg(self):
+        """Allow host-only configuration when no SD-card package target can be created."""
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory) / "build"
+            result = subprocess.run(
+                ["cmake", "-S", str(ROOT), "-B", str(build), "-G", "Ninja",
+                 f"-DECONOPET_MEDIA_DIR={Path(directory) / 'media'}",
+                 "-DBUILD_ROM=OFF", "-DBUILD_FPGA=OFF", "-DBUILD_FIRMWARE=OFF",
+                 "-DBUILD_BOOTLOADER=OFF", "-DBUILD_TESTS=OFF", "-DBUILD_SYSTEM_TESTS=OFF",
+                 "-DBUILD_PRGS=OFF", "-DBUILD_SDCARD=ON"],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_prg_validation_accepts_custom_bounds_and_rejects_malformed_files(self):
         """Validate generic PRGs independently of Drive Test's base-RAM window."""
         with tempfile.TemporaryDirectory() as directory:

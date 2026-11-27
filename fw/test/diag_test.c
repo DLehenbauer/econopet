@@ -1528,7 +1528,11 @@ static void check_terminal_failure(void) {
 static void check_terminal_cleanup_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
     ck_assert_uint_eq(custom_cleanup_calls, 1);
-    check_text(74, 19, "FAIL");
+    check_banner(50, "Completed: 1");
+    check_text(76, 19, "OK");
+    check_text(2, 21, "Stage");
+    check_text(9, 21, "Cleanup");
+    check_text(3, 22, "FAIL");
     check_text(9, 22, "fixture cleanup failed");
 }
 

@@ -115,6 +115,8 @@ typedef struct {
     size_t active_case_index;
     diag_status_t active_status;
     uint16_t case_progress;
+    /** True when plan cleanup failed after all executed cases passed. */
+    bool cleanup_failed;
     /** True after all max_cycles iterations pass and the completion banner is rendered. */
     bool completed;
     jmp_buf fail_jmp;

@@ -84,6 +84,9 @@ void test_register_file_alias(const char* alias, const char* path);
 // Toggle backing-store write failures for existing and future fixture handles.
 void test_fail_file_writes(const char* path, bool fail);
 
+// Toggle open failures for an existing fixture.
+void test_fail_file_opens(const char* path, bool fail);
+
 // Removes one registered file after all of its handles have been closed.
 void test_unregister_file(const char* path);
 

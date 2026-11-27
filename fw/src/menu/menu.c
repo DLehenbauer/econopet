@@ -105,48 +105,90 @@ bool load_prg(const char* filename) {
 
 typedef struct action_context_s {
     system_state_t* system_state;
+    bool diagnostic;
+    bool load_failed;
+    char* error_out;
+    size_t error_size;
 } action_context_t;
 
-void action_load(void* const context, const char* filename, uint32_t address) {
-    (void) context;
+typedef enum {
+    action_load_success,
+    action_load_open_failed,
+    action_load_read_failed,
+} action_load_result_t;
 
-    log_debug("0x%04" PRIx32, address);
-    FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
-    if (!file) {
-        fatal("Failed to open file '%s'", filename);
+/** Return whether a prior diagnostic ROM load failure should suppress later setup actions. */
+static bool action_context_should_skip(const action_context_t* const context) {
+    return context->diagnostic && context->load_failed;
+}
+
+/** Stream one configuration ROM into PET memory and report recoverable file errors. */
+static action_load_result_t load_config_file(const char* const filename, uint32_t address, uint8_t* const checksum_out) {
+    FILE* const file = sd_open(filename, "rb");
+    if (file == NULL) {
+        return action_load_open_failed;
     }
 
-    // Read remaining bytes to the destination address.
     uint8_t* temp_buffer = acquire_temp_buffer();
     size_t bytes_read;
     uint8_t checksum = 0;
-
     while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
         checksum_add(temp_buffer, bytes_read, &checksum);
         spi_write(address, temp_buffer, bytes_read);
         address += bytes_read;
+    }
+    const bool read_failed = ferror(file) != 0;
+    release_temp_buffer(&temp_buffer);
+    const bool close_failed = fclose(file) != 0;
+    if (read_failed || close_failed) {
+        return action_load_read_failed;
+    }
 
-        // Check for read errors (other than EOF)
-        if (bytes_read < TEMP_BUFFER_SIZE && ferror(file)) {
-            fatal("Failed to read file '%s'", filename);
+    *checksum_out = checksum;
+    return action_load_success;
+}
+
+void action_load(void* const context, const char* filename, uint32_t address) {
+    action_context_t* const action_context = context;
+    if (action_context_should_skip(action_context)) {
+        return;
+    }
+
+    log_debug("0x%04" PRIx32, address);
+    uint8_t checksum;
+    const action_load_result_t result = load_config_file(filename, address, &checksum);
+    if (result != action_load_success) {
+        if (action_context->diagnostic) {
+            action_context->load_failed = true;
+            if (result == action_load_open_failed) {
+                snprintf(action_context->error_out, action_context->error_size, "Failed to open file '%s'", filename);
+            } else {
+                snprintf(action_context->error_out, action_context->error_size, "Failed to read file '%s'", filename);
+            }
+            return;
         }
+        if (result == action_load_open_failed) {
+            fatal("Failed to open file '%s'", filename);
+        }
+        fatal("Failed to read file '%s'", filename);
     }
 
     log_debug("-%04" PRIx32 ": %s ($%02x)", address - 1, filename, checksum);
-
-    release_temp_buffer(&temp_buffer);
-    fclose(file);
 }
 
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
-    (void) context;
+    if (action_context_should_skip(context)) {
+        return;
+    }
 
     log_debug("0x%04" PRIx32 ": patching %zu bytes", address, binary->size);
     spi_write(address, binary->data, binary->size);
 }
 
 void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t length) {
-    (void)context;
+    if (action_context_should_skip(context)) {
+        return;
+    }
 
     log_debug("0x%04" PRIx32 ": copying %" PRIu32 " bytes from 0x%04" PRIx32, source, length, destination);
     uint8_t* temp_buffer = acquire_temp_buffer();
@@ -172,7 +214,10 @@ void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t 
 }
 
 void action_set_options(void* context, options_t* options) {
-    action_context_t* ctx = (action_context_t*) context;
+    action_context_t* const ctx = context;
+    if (action_context_should_skip(ctx)) {
+        return;
+    }
 
     switch (options->columns) {
         case 40:
@@ -210,7 +255,9 @@ void action_set_options(void* context, options_t* options) {
 
 // Mounts a configured slot, ejecting an incompatible partner only on success.
 void action_mount(void* context, uint32_t device, uint32_t drive, const char* filename) {
-    (void)context;
+    if (action_context_should_skip(context)) {
+        return;
+    }
     const unsigned int slot = (device - 8) * DOS_MEDIA_SLOTS_PER_UNIT + drive;
     const dos_media_result_t result = ieee_drive_try_mount(slot, filename, NULL);
     vet(result == DOS_MEDIA_OK, "IEEE device %lu drive %lu could not mount '%s' (error %u)",
@@ -243,7 +290,9 @@ static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
 }
 
 void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t expected) {
-    (void) context;
+    if (action_context_should_skip(context)) {
+        return;
+    }
 
     uint8_t actual_sum = checksum_ram(start_addr, end_addr + 1);
 
@@ -280,11 +329,15 @@ typedef enum {
 } config_prepare_policy_t;
 
 /** Load shared configuration actions with the selected mount and target-CPU policy. */
-static void prepare_config(const int index, const config_prepare_policy_t policy) {
+static bool prepare_config(const int index, const config_prepare_policy_t policy, char* const error_out,
+                           const size_t error_size) {
     // Bind common setup actions while isolating diagnostic mounts and option sanitization.
     const bool diagnostic = policy == CONFIG_PREPARE_DIAGNOSTIC;
     action_context_t action_context = {
         .system_state = &system_state,
+        .diagnostic = diagnostic,
+        .error_out = error_out,
+        .error_size = error_size,
     };
     const setup_sink_t setup_sink = {
         .context = &action_context,
@@ -305,12 +358,16 @@ static void prepare_config(const int index, const config_prepare_policy_t policy
         set_cpu_type_machine(physical_cpu_present() ? CPU_PHYS_6502 : CPU_SOFT_6502, false);
     }
     load_config(&setup_sink, index);
+    if (action_context.load_failed) {
+        return false;
+    }
     spi_write_at(ECONOPET_WB_AUDIO_ADDR, ECONOPET_REG_AUDIO_ENABLE_MASK);
+    return true;
 }
 
 /** Prepare the selected normal configuration and transition its owner back to the guest. */
 static void apply_config(const int config_index) {
-    prepare_config(config_index, CONFIG_PREPARE_GUEST);
+    (void)prepare_config(config_index, CONFIG_PREPARE_GUEST, NULL, 0);
     system_reset_guest();
 }
 
@@ -318,15 +375,21 @@ static void apply_config(const int config_index) {
  * Load a /config.yaml profile by ID for a diagnostic target without user mounts
  * or guest-mode transition, leaving the 6502 reset and halted.
  */
-bool menu_apply_diag_config(const char* const id) {
+bool menu_apply_diag_config(const char* const id, char* const error_out, const size_t error_size) {
+    vet(error_out != NULL && error_size != 0, "diagnostic config error buffer is required");
+    error_out[0] = '\0';
+
     // Resolve the configuration's zero-based catalog index before mutating hardware state.
     const int index = menu_config_find_id(id);
     if (index < 0) {
+        snprintf(error_out, error_size, "missing config '%s' in /config.yaml", id);
         return false;
     }
 
     // Load shared actions without replacing scratch mounts or accepting non-6502 options.
-    prepare_config(index, CONFIG_PREPARE_DIAGNOSTIC);
+    if (!prepare_config(index, CONFIG_PREPARE_DIAGNOSTIC, error_out, error_size)) {
+        return false;
+    }
 
     // Pulse PET hardware reset (parking IEEE pins if enabled) and hold the CPU halted in diagnostic mode.
     pet_reset();
