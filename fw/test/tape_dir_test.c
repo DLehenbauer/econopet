@@ -522,7 +522,7 @@ START_TEST(test_roundtrip_remapped_punctuation) {
     char filename[64];
     uint8_t pattern[TAPE_DIR_MAX_NAME + 1];
 
-    for (size_t k = 0; k < sizeof(bases) / sizeof(bases[0]); k++) {
+    for (size_t k = 0; k < count_of(bases); k++) {
         snprintf(filename, sizeof(filename), "%s.prg", bases[k]);
         for (int gfx = 0; gfx <= 1; gfx++) {
             uint8_t plen = listing_roundtrip_pattern(bases[k], gfx != 0, pattern);

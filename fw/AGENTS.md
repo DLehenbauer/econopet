@@ -15,7 +15,9 @@ Also follow the [general C/C++ guidelines](../.github/instructions/c-cpp.instruc
 
 ## Platform Abstraction
 
-Use `PICO_PLATFORM` for conditional compilation between real hardware and host testing.
+- Prefer [test_support](../test/support/) fakes/mocks over host-test `#if` branches to exercise production code paths
+- Select hardware/test implementations with CMake `PICO_PLATFORM`. Use C `PICO_RP2040` conditionals only when test-support implementations cannot reasonably replace them
+- Use `count_of(array)` instead of `sizeof(array) / sizeof(array[0])`
 
 ## Code Review Checklist
 

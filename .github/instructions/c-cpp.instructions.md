@@ -110,3 +110,9 @@ Do not add a precompiled header to targets that do not use one.
 - Use enums for natural categories such as states, selections, and opcodes.
   Use `constexpr`, `const`, or `#define` for other constants. Do not group
   unrelated constants in an enum.
+
+## Array Element Counts
+
+- In C firmware and host-test code, use `count_of(array)` instead of
+  `sizeof(array) / sizeof(array[0])` or `sizeof(array)`.
+- In C++ code, use `std::size(array)` or `.size()`

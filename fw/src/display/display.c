@@ -73,7 +73,7 @@ window_t display_init_firmware(pet_display_columns_t columns, uint8_t attr) {
                                     ? pet_video_ram_mask_2kb : pet_video_ram_mask_1kb);
     spi_write(ECONOPET_WB_BRAM_BASE_ADDR, rom_chars_e800, sizeof(rom_chars_e800));
     write_pet_model(&system_state);
-    for (size_t i = 0; i < sizeof(firmware_crtc_indices); ++i) {
+    for (size_t i = 0; i < count_of(firmware_crtc_indices); ++i) {
         const uint8_t index = firmware_crtc_indices[i];
         spi_write_at(ECONOPET_WB_CRTC_BASE_ADDR + index, firmware_crtc[index]);
     }
