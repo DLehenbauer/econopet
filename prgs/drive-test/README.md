@@ -69,6 +69,13 @@ ROM 4 and unmodified true-drive 4040 DOS 2.0r2, 8050 DOS 2.7, and 8250 DOS 2.7
 ROMs across units 8-11) via `python3 prgs/drive-test/vet_vice.py --download-roms`.
 On-board EconoPET hardware qualification remains the primary target test pass.
 
+Standalone `LOAD`/`RUN` rejects stale mailbox attachment flags and returns to
+BASIC after one pass. A fresh MCU launch is identified by cleared magic bytes,
+`HOST_ATTACHED`, and `STATE_RUNNING` armed before CPU release. Publishing the
+target magic consumes that launch, while subsequent MCU cycles wake the
+existing program without re-entering startup. VICE vetting seeds a prior
+attached pass and requires the standalone run to return to BASIC READY.
+
 ## Command coverage
 
 The selected ROMs dispatch `I`, `V`, `D`, `M`, `B`, `U`, `P`, `C`, `R`, `S`
@@ -141,9 +148,11 @@ The linked-PRG D64 concatenation fixture passed the SEQ and mixed-type cases
 and a corrupt-source fail-stop control. Formatted D64, D80 and D82
 production-path fixtures passed cross-drive COPY in both directions and the
 concatenation cases. The REL-growth fixture passed on D64, D80 and D82, and
-the prepared D64 side-sector-boundary fixture passed. Organic growth from
-record 1 to 121 and the D80/D82 side-sector boundaries remain unverified.
-Original-ROM and hardware runs remain open.
+the prepared D64 side-sector-boundary fixture passed. Those focused
+production-path fixtures do not cover organic growth from record 1 to 121
+on all three geometries. The full VICE run covers that growth and the first
+side-sector boundary on D64, D80 and D82 using the selected original ROMs.
+Physical original-drive and EconoPET hardware qualification remain open.
 
 The geometry cases use D64 17/20, 19/18, 24/18, 25/17, 30/17,
 31/16, and 35/16; D80 39/28, 40/26, 53/26, 54/24, 64/24, 65/22,
@@ -161,12 +170,13 @@ and its [D64 base](https://github.com/mamedev/mame/blob/master/src/lib/formats/d
 and [8050](https://github.com/mamedev/mame/blob/master/src/lib/formats/d80_dsk.cpp)
 formats corroborate first-side geometry, and its
 [8250 format](https://github.com/mamedev/mame/blob/master/src/lib/formats/d82_dsk.cpp)
-uses two heads. Selected-ROM execution and second-side hardware evidence remain
-outstanding. The new complete geometry fixtures have not yet completed: a
-three-geometry production-path run was stopped after more than 20 minutes.
-Their dedicated simulator cases are temporarily disabled, while the
-geometry phase remains enabled in the tape-loaded program. The separate
-D64 raw-block and alias regression passed.
+uses two heads. The full VICE run covers the selected geometry boundaries,
+including both D82 sides, using the selected original ROMs. Second-side
+physical hardware evidence remains outstanding. The complete production-path
+geometry fixtures have not yet completed: a three-geometry run was stopped
+after more than 20 minutes. Those dedicated simulator cases are temporarily
+disabled, while the geometry phase remains enabled in the PRG and its VICE
+run. The separate D64 raw-block and alias regression passed.
 
 The partial PRG uses the CC65 PET target (`-Os -Cl`) as an ordinary 32K
 base-RAM program (no `$FFF0` banking), with assembly stream send/receive/EOI
@@ -191,8 +201,9 @@ Directory and BAM expectations follow `lstdir`, `trnsfr`, `new`, `map`,
 and `rename`, while typed file opens follow `open:CKTM` and `romtbl:TPLST` in
 both selected DOS source trees. The 4040 revision overlays are in
 `tools/drive-roms/drive-emulation-roms.json`. The transport follows the PET
-ROM 4 IEEE handshake sequence. These expectations still need execution
-against the selected original drive ROMs and supported EconoPET hardware.
+ROM 4 IEEE handshake sequence. The full VICE run executes these implemented
+checks against the selected original drive ROMs. Execution on supported
+EconoPET hardware remains outstanding.
 VICE's block-command handlers corroborate the counted and raw operations
 without establishing exact cursor behavior (see `docs/dev/drive-direct-block-reset.md`).
 

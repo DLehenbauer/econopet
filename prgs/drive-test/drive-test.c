@@ -1807,7 +1807,15 @@ static void run_pass(void) {
 
 /** Initialize the $7FF0 diagnostic mailbox, configure IEEE I/O, and run standalone or MCU-triggered passes. */
 int main(void) {
-    /* Publish RUNNING state and magic bytes in $7FF0 while preserving HOST_CONTROL set by the MCU. */
+    /* Consume only a fresh host launch: the MCU clears magic, marks attached, then arms RUNNING before release. */
+    POKE(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL),
+         PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)) == 0 &&
+         PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)) == 0 &&
+         PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)) == TARGET_DIAG_STATE_RUNNING &&
+         PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)) == TARGET_DIAG_HOST_ATTACHED
+             ? TARGET_DIAG_HOST_ATTACHED : TARGET_DIAG_HOST_STANDALONE);
+
+    /* Publish RUNNING state and magic bytes after rejecting arbitrary RAM and prior-run attachment flags. */
     mailbox_seq = 0;
     POKE(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ), 0);
     POKE(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO), 0);
@@ -1822,7 +1830,7 @@ int main(void) {
     /* Run passes: return to BASIC READY in standalone mode, or wait for MCU STATE_RUNNING re-triggers. */
     for (;;) {
         run_pass();
-        if (PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)) == TARGET_DIAG_HOST_STANDALONE) {
+        if (PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)) != TARGET_DIAG_HOST_ATTACHED) {
             return 0;
         }
         while (PEEK(TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)) == TARGET_DIAG_STATE_PASSED) {

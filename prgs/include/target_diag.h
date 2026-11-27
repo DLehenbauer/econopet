@@ -31,7 +31,12 @@
 
 /** Host control value (0) indicating standalone execution (for example in VICE) that exits after one pass. */
 #define TARGET_DIAG_HOST_STANDALONE   0u
-/** Host control value (1) indicating an attached MCU runner that may re-trigger multiple passes. */
+/**
+ * Attached MCU runner that may re-trigger multiple passes. At initial startup,
+ * targets accept this only with cleared magic and STATE_RUNNING armed by the
+ * host before CPU release. Publishing target magic consumes that launch, so a
+ * later standalone RUN must not inherit the prior attachment flag.
+ */
 #define TARGET_DIAG_HOST_ATTACHED     1u
 
 /** Sentinel phase byte when no check has completed or failed in the active cycle. */

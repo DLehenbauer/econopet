@@ -104,7 +104,77 @@ void install_prg(System& system) {
         system.poke(SramAddress{bss + i}, 0);
     }
 }
+
+/** Enter the real CC65 startup with 32K RAM and the supplied pre-launch mailbox. */
+void start_prg(System& system, const std::array<uint8_t, TARGET_DIAG_MAILBOX_SIZE>& mailbox) {
+    system.cpu().assert_reset();
+    system.load_rom_set(test_rom::Set::Rom4);
+    install_prg(system);
+    for (size_t i = 0; i < mailbox.size(); ++i) {
+        system.poke(SramAddress{TARGET_DIAG_MAILBOX_ADDR + i}, mailbox[i]);
+    }
+    system.poke(SramAddress{0x34}, 0x00);
+    system.poke(SramAddress{0x35}, 0x80);
+
+    // Initialize the editor through CINT and enter the linked STARTUP rather than bypassing constructors.
+    constexpr uint16_t Startup = 0x040d;
+    constexpr std::array<uint8_t, 6> startup{0x20, 0x00, 0xe0, 0x4c, static_cast<uint8_t>(Startup),
+                                           static_cast<uint8_t>(Startup >> 8)};
+    for (size_t i = 0; i < startup.size(); ++i) {
+        system.poke(SramAddress{0x0300 + i}, startup[i]);
+    }
+    system.cpu(CPU_SOFT_6502).start(CpuAddress{0x0300});
+}
+
+/** Pre-launch mailbox signature and independently expected attachment mode. */
+struct StartupMailboxCase {
+    const char* name;
+    uint8_t magic0;
+    uint8_t magic1;
+    uint8_t host_control;
+    uint8_t state;
+    uint8_t expected_host_control;
+};
+
+/** Observe mailbox classification before the destructive drive checks begin. */
+class DrivePrgStartupTest : public FirmwareTest, public ::testing::WithParamInterface<StartupMailboxCase> {};
 } // namespace
+
+/** Preserve attachment only for an unconsumed host launch, not arbitrary RAM or a prior diagnostic. */
+TEST_P(DrivePrgStartupTest, IdentifiesFreshHostLaunch) {
+    const auto& input = GetParam();
+    std::array<uint8_t, TARGET_DIAG_MAILBOX_SIZE> mailbox{};
+    mailbox[TARGET_DIAG_OFF_MAGIC0] = input.magic0;
+    mailbox[TARGET_DIAG_OFF_MAGIC1] = input.magic1;
+    mailbox[TARGET_DIAG_OFF_HOST_CONTROL] = input.host_control;
+    mailbox[TARGET_DIAG_OFF_STATE] = input.state;
+    mailbox[TARGET_DIAG_OFF_PHASE] = TARGET_DIAG_PHASE_NONE;
+    mailbox[TARGET_DIAG_OFF_SLOT] = TARGET_DIAG_SLOT_NONE;
+    start_prg(system, mailbox);
+
+    // Stop when main has published its initialized mailbox, before any drive service is required.
+    system.execution()
+        .within(5'000'000)
+        .until([](const System& board) {
+            return board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)}) == TARGET_DIAG_MAGIC_0 &&
+                   board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)}) == TARGET_DIAG_MAGIC_1 &&
+                   board.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)}) == TARGET_DIAG_STATE_RUNNING;
+        })
+        .run("Drive Test startup mailbox classification");
+    EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)}), input.expected_host_control);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Mailboxes, DrivePrgStartupTest,
+    ::testing::Values(
+        StartupMailboxCase{"DirtyRam", 0xa5, 0xa5, 0x7e, 0xa5, TARGET_DIAG_HOST_STANDALONE},
+        StartupMailboxCase{"PreviousPass", TARGET_DIAG_MAGIC_0, TARGET_DIAG_MAGIC_1, TARGET_DIAG_HOST_ATTACHED,
+                           TARGET_DIAG_STATE_PASSED, TARGET_DIAG_HOST_STANDALONE},
+        StartupMailboxCase{"PreviousFailure", TARGET_DIAG_MAGIC_0, TARGET_DIAG_MAGIC_1, TARGET_DIAG_HOST_ATTACHED,
+                           TARGET_DIAG_STATE_FAILED, TARGET_DIAG_HOST_STANDALONE},
+        StartupMailboxCase{"FreshHost", 0, 0, TARGET_DIAG_HOST_ATTACHED, TARGET_DIAG_STATE_RUNNING,
+                           TARGET_DIAG_HOST_ATTACHED}),
+    [](const ::testing::TestParamInfo<StartupMailboxCase>& info) { return info.param.name; });
 
 /** Exercise the linked PET-side transport and stream helpers against production firmware and FPGA I/O. */
 TEST_F(FirmwareTest, DrivePrgTransportStreamsSequentialFileWithExactEoi) {
@@ -369,19 +439,7 @@ TEST_F(FirmwareTest, DrivePrgStartsAndEntersFirstFormat) {
 
     // Initialize MEMSIZ ($8000), run CINT ($E000), and jump into CC65 STARTUP ($040D) until check #1 completes.
     auto wire = system.trace_ieee();
-    system.cpu().assert_reset();
-    system.load_rom_set(test_rom::Set::Rom4);
-    install_prg(system);
-    for (unsigned i = 0; i < TARGET_DIAG_MAILBOX_SIZE; ++i) {
-        system.poke(SramAddress{Mailbox + i}, 0);
-    }
-    system.poke(SramAddress{0x34}, 0x00);
-    system.poke(SramAddress{0x35}, 0x80);
-    constexpr std::array<uint8_t, 6> startup{0x20, 0x00, 0xe0, 0x4c, 0x0d, 0x04};
-    for (size_t i = 0; i < startup.size(); ++i) {
-        system.poke(SramAddress{0x0300 + i}, startup[i]);
-    }
-    system.cpu(CPU_SOFT_6502).start(CpuAddress{0x0300});
+    start_prg(system, {});
     system.execution()
         .within(30'000'000)
         .every(8000, ServiceTiming::AfterSlice, firmware.service_adapter())
@@ -399,6 +457,7 @@ TEST_F(FirmwareTest, DrivePrgStartsAndEntersFirstFormat) {
     EXPECT_EQ(system.peek(SramAddress{0x31}), static_cast<uint8_t>(Mailbox >> 8));
     EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)}), TARGET_DIAG_MAGIC_0);
     EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)}), TARGET_DIAG_MAGIC_1);
+    EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_HOST_CONTROL)}), TARGET_DIAG_HOST_STANDALONE);
     EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)}), TARGET_DIAG_STATE_RUNNING);
     EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)}), 1);
     EXPECT_EQ(system.peek(SramAddress{TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)}) & 1u, 0u);

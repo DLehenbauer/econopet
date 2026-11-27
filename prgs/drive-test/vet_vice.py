@@ -31,6 +31,8 @@ KEY_BUFFER = 0x026F
 PRG_LOAD_ADDRESS = 0x0401
 MAILBOX_ADDR = 0x7FF0
 MAILBOX_SIZE = 16
+HOST_STANDALONE = 0
+HOST_ATTACHED = 1
 STATE_PASSED = 2
 STATE_FAILED = 3
 EXPECTED_CASES = 468
@@ -140,10 +142,14 @@ def write_monitor_scripts(
         encoding="ascii",
     )
 
-    # Script 2 (run.mon): at BASIC READY, clear the mailbox, load the PRG, arm pass/fail breakpoints, and type RUN.
+    # Seed a prior attached pass so standalone LOAD/RUN must reject stale attachment and return to BASIC READY.
+    prior_mailbox = (
+        b"TD" + bytes((HOST_ATTACHED, STATE_PASSED))
+        + EXPECTED_CASES.to_bytes(2, "little") + bytes(MAILBOX_SIZE - 6)
+    )
     run.write_text(
         "delete\n"
-        f"> ${MAILBOX_ADDR:04x} 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n"
+        f"> ${MAILBOX_ADDR:04x} {prior_mailbox.hex(' ')}\n"
         f'load "{prg_path}" 0\n'
         f"> ${BASIC_VARTAB:04x} {prg_end & 0xff:02x} {(prg_end >> 8) & 0xff:02x}\n"
         f"break ${fail_halt_addr:04x}\n"
@@ -326,6 +332,7 @@ def run_vice(args: argparse.Namespace) -> int:
         if (
             result["magic0"] != ord("T")
             or result["magic1"] != ord("D")
+            or result["host_control"] != HOST_STANDALONE
             or result["state"] != STATE_PASSED
             or result["completed"] != EXPECTED_CASES
         ):
