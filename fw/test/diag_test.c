@@ -1072,6 +1072,7 @@ static void begin_target_progress_cycle(uint8_t cycle) {
 /** Progress history spans case awaits, rather than accepting a restarted target as a new baseline. */
 START_TEST(test_target_poll_retains_progress_between_cases) {
     target_restart_between_cases = _i == 0;
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
     mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
     const diag_target_runner_t runner = {
@@ -1103,6 +1104,81 @@ START_TEST(test_target_poll_retains_progress_between_cases) {
         ck_assert(diag_run_iteration(&session));
         ck_assert_uint_eq(session.iteration, 2u);
     }
+}
+END_TEST
+
+static uint16_t target_catalog_ordinal;
+static unsigned target_failure_formats;
+
+/** Validate fixed catalog coordinates and record which target check the host validates. */
+static bool verify_target_catalog(const diag_target_snapshot_t* snap, uint16_t ordinal,
+                                  char* out, size_t out_size) {
+    target_catalog_ordinal = ordinal;
+    if (snap->phase != TEST_SEQLOCK_PHASE || snap->slot != TEST_SEQLOCK_SLOT) {
+        snprintf(out, out_size, "target catalog drift");
+        return false;
+    }
+    return true;
+}
+
+/** Exercise the plan-specific failure formatter using independently seeded mismatch bytes. */
+static void format_target_fixture_failure(const diag_target_snapshot_t* snap, char* out, size_t out_size) {
+    ++target_failure_formats;
+    ck_assert_uint_eq(snap->expected, 0x55u);
+    ck_assert_uint_eq(snap->actual, 0x54u);
+    snprintf(out, out_size, "target fixture mismatch");
+}
+
+/** Attribute failure to the uncompleted case and reject drift or inconsistent terminal counts. */
+START_TEST(test_target_failure_attribution_and_catalog_validation) {
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    diag_target_begin_cycle(1u);
+    target_catalog_ordinal = UINT16_MAX;
+    target_failure_formats = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] =
+        _i == 2 ? TARGET_DIAG_STATE_PASSED :
+        _i == 1 || _i == 4 ? TARGET_DIAG_STATE_RUNNING : TARGET_DIAG_STATE_FAILED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = _i == 3 ? 0u : _i == 4 ? 3u : 1u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = TEST_SEQLOCK_PHASE;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = _i == 1 ? TEST_SEQLOCK_SLOT + 1u : TEST_SEQLOCK_SLOT;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_DETAIL_ID)] = 7u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_EXPECTED)] = 0x55u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_ACTUAL)] = 0x54u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_OFFSET_LO)] = 2u;
+    const diag_target_runner_t runner = {
+        .total_cases = 2u,
+        .case_timeout_us = 1000u,
+        .verify_snapshot = verify_target_catalog,
+        .format_failure = _i == 3 ? NULL : format_target_fixture_failure,
+    };
+    const diag_suite_t target_suite = {
+        .name = "Target",
+        .case_count = 2u,
+        .context = &runner,
+        .case_name = generated_case_name,
+        .run_case = run_target_case,
+    };
+    const diag_plan_t target_plan = {
+        .name = "target",
+        .description = "Failure attribution and catalog fixture",
+        .suites = &target_suite,
+        .suite_count = 1u,
+    };
+    const char* const failures[] = {
+        "target fixture mismatch",
+        "target catalog drift",
+        "target check count mismatch (expected 2, got 1)",
+        "detail 7 at +2: expected $55, got $54",
+        "target check count mismatch (expected 2, got 3)",
+    };
+    diag_session_init(&session, &target_plan);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_str_eq(session.failure_detail, failures[_i]);
+    ck_assert_uint_eq(session.active_case_index, _i == 0 ? 1u : 0u);
+    ck_assert_uint_eq(target_failure_formats, _i == 0 ? 1u : 0u);
+    ck_assert_uint_eq(target_catalog_ordinal, _i == 0 ? 1u : _i == 2 || _i == 4 ? UINT16_MAX : 0u);
 }
 END_TEST
 
@@ -1198,6 +1274,7 @@ Suite* diag_suite(void) {
     tcase_add_loop_test(tests, test_bup_plan_detects_memory_faults, 0, 2);
     tcase_add_test(tests, test_target_poll_rejects_regressing_progress);
     tcase_add_loop_test(tests, test_target_poll_retains_progress_between_cases, 0, 2);
+    tcase_add_loop_test(tests, test_target_failure_attribution_and_catalog_validation, 0, 5);
     suite_add_tcase(suite, tests);
     return suite;
 }
