@@ -138,7 +138,7 @@ void test_fail_file_writes(const char* path, bool fail) {
     file->fail_writes = fail;
 }
 
-// Toggle open failures for an existing fixture without changing its bytes or identity.
+// Inject fopen failures for an existing fixture without changing its bytes or identity.
 void test_fail_file_opens(const char* path, bool fail) {
     mem_file_t* file = find_mem_file(path);
     assert(file != NULL);
@@ -189,16 +189,13 @@ void test_clear_files(void) {
 FILE* __wrap_fopen(const char* path, const char* mode);
 
 // Opens tracked independent readers for registered configuration fixtures.
-FILE* sd_open(const char* path, const char* mode) {
+FILE* sd_try_open(const char* path, const char* mode) {
     vet_path_length(strlen(path));
     assert(path[0] == '/');
 
     mem_file_t* mem_file = find_mem_file(path);
     if (mem_file != NULL) {
-        if (mem_file->fail_opens) {
-            return NULL;
-        }
-        if (strcmp(mode, "r") == 0) {
+        if (strcmp(mode, "r") == 0 || strcmp(mode, "rb") == 0) {
             return __wrap_fopen(path, mode);
         }
         fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
@@ -208,6 +205,16 @@ FILE* sd_open(const char* path, const char* mode) {
     fprintf(stderr, "FATAL: File '%s' not registered in test file system.\n", path);
     fprintf(stderr, "Use test_register_file() to register files for testing.\n");
     exit(EXIT_FAILURE);
+}
+
+// Mirrors the production required-file opener for registered test fixtures.
+FILE* sd_open(const char* path, const char* mode) {
+    FILE* const file = sd_try_open(path, mode);
+    if (file == NULL) {
+        fprintf(stderr, "FATAL: file not found '%s'\n", path);
+        exit(EXIT_FAILURE);
+    }
+    return file;
 }
 
 // Reads a cookie-backed fixture and advances its per-handle offset.
@@ -266,6 +273,8 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
     mem_file_t* file = find_mem_file(path);
     if (file == NULL)
         return __real_fopen(path, mode);
+    if (file->fail_opens)
+        return NULL;
     if (strchr(mode, '+') != NULL && !file->writable)
         return NULL;
 

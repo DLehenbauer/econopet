@@ -123,8 +123,9 @@ static bool action_context_should_skip(const action_context_t* const context) {
 }
 
 /** Stream one configuration ROM into PET memory and report recoverable file errors. */
-static action_load_result_t load_config_file(const char* const filename, uint32_t address, uint8_t* const checksum_out) {
-    FILE* const file = sd_open(filename, "rb");
+static action_load_result_t load_config_file(const char* const filename, uint32_t address,
+                                             uint8_t* const checksum_out, const bool diagnostic) {
+    FILE* const file = diagnostic ? sd_try_open(filename, "rb") : sd_open(filename, "rb");
     if (file == NULL) {
         return action_load_open_failed;
     }
@@ -156,7 +157,7 @@ void action_load(void* const context, const char* filename, uint32_t address) {
 
     log_debug("0x%04" PRIx32, address);
     uint8_t checksum;
-    const action_load_result_t result = load_config_file(filename, address, &checksum);
+    const action_load_result_t result = load_config_file(filename, address, &checksum, action_context->diagnostic);
     if (result != action_load_success) {
         if (action_context->diagnostic) {
             action_context->load_failed = true;

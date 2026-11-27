@@ -105,13 +105,17 @@ bool sd_unmount_root(void) {
     return true;
 }
 
-FILE* sd_open(const char* path, const char* mode) {
+FILE* sd_try_open(const char* path, const char* mode) {
     vet_path_length(strlen(path));
     if (path[0] != '/') {
         fatal("path must start with '/', but got '%s'", path);
     }
 
-    FILE* file = fopen(path, mode);
+    return fopen(path, mode);
+}
+
+FILE* sd_open(const char* path, const char* mode) {
+    FILE* file = sd_try_open(path, mode);
     if (!file) {
         fatal("file not found '%s'", path);
     }
