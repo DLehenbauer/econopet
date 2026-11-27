@@ -149,9 +149,12 @@ static void march_step_r0(const void* context) {
 }
 
 /** Finish storage traffic before destructive SRAM and BRAM testing. */
-static void memory_prepare(void) {
+static bool memory_prepare(char* error_out, size_t error_size) {
+    (void)error_out;
+    (void)error_size;
     pet_wait_for_storage_idle();
     set_cpu(CPU_HALT);
+    return true;
 }
 
 // Extended March C-, retaining the original six elements and per-bit ordering.

@@ -35,9 +35,16 @@ option(BUILD_TESTS "Build the firmware unit tests" ON)
 option(BUILD_SYSTEM_TESTS "Build host, board, firmware integration and hardware contract tests" ON)
 option(BUILD_SDCARD "Build the SD card package" ON)
 option(BUILD_PRGS "Build the test programs" ON)
-
-# Common build directory
 set(SUPER_BUILD_DIR ${CMAKE_BINARY_DIR})
+set(DRIVE_TEST_PRG "" CACHE FILEPATH "Prebuilt Drive Test PRG binary")
+if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
+    if(BUILD_PRGS)
+        set(DRIVE_TEST_PRG "${SUPER_BUILD_DIR}/prgs/drive-test/bin/drive-test.prg")
+    elseif(NOT DRIVE_TEST_PRG)
+        message(FATAL_ERROR
+            "SD-card packaging requires BUILD_PRGS=ON or DRIVE_TEST_PRG pointing to a prebuilt drive-test.prg")
+    endif()
+endif()
 
 # Shared script for SWD programming that halts the MCU, compares image checksums
 # against flash, and programs images that have changed. On success, it resets
@@ -281,6 +288,7 @@ if(BUILD_SDCARD AND BUILD_FIRMWARE AND BUILD_FPGA)
         CMAKE_ARGS
             -G Ninja
             -DECONOPET_MEDIA_DIR=${ECONOPET_MEDIA_DIR}
+            "-DDRIVE_TEST_PRG=${DRIVE_TEST_PRG}"
             -DFIRMWARE_UF2=${FIRMWARE_UF2}
             -DFPGA_BITSTREAM=${FPGA_BITSTREAM}
             "-DBOOTLOADER_UF2=${BOOTLOADER_UF2}"
@@ -306,6 +314,10 @@ if(BUILD_PRGS)
         INSTALL_COMMAND ""
         BUILD_ALWAYS TRUE
     )
+endif()
+
+if(BUILD_SDCARD AND BUILD_PRGS AND TARGET sdcard_project)
+    add_dependencies(sdcard_project prgs_project)
 endif()
 
 # ============================================================================

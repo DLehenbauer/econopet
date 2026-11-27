@@ -1351,7 +1351,12 @@ bool diag_sd_prepare_swap(void) {
 }
 
 /** Allocate workspace after the replacement card has survived the countdown. */
-static void sd_prepare(void) { ensure_workspace(); }
+static bool sd_prepare(char* error_out, size_t error_size) {
+    (void)error_out;
+    (void)error_size;
+    ensure_workspace();
+    return true;
+}
 
 static const diag_case_t block_init_cases[] = {
     {"Init & Geometry", case_init_geometry},

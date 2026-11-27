@@ -18,6 +18,7 @@ typedef struct mem_file_s {
     size_t size;
     size_t capacity;
     bool writable;
+    bool fail_opens;
     bool fail_writes;
     size_t open_calls;
     struct mem_file_s* owner;
@@ -118,6 +119,7 @@ void test_register_binary_file(const char* path, const void* data, size_t size, 
     file->size = size;
     file->capacity = size;
     file->writable = writable;
+    file->fail_opens = false;
     file->fail_writes = false;
     file->open_calls = 0;
     file->owner = file;
@@ -134,6 +136,13 @@ void test_fail_file_writes(const char* path, bool fail) {
     mem_file_t* file = find_mem_file(path);
     assert(file != NULL);
     file->fail_writes = fail;
+}
+
+// Inject fopen failures for an existing fixture without changing its bytes or identity.
+void test_fail_file_opens(const char* path, bool fail) {
+    mem_file_t* file = find_mem_file(path);
+    assert(file != NULL);
+    file->fail_opens = fail;
 }
 
 // Unlinks and frees a registered fixture once its handles are closed.
@@ -186,8 +195,12 @@ FILE* sd_open(const char* path, const char* mode) {
 
     mem_file_t* mem_file = find_mem_file(path);
     if (mem_file != NULL) {
-        if (strcmp(mode, "r") == 0) {
-            return __wrap_fopen(path, mode);
+        if (strcmp(mode, "r") == 0 || strcmp(mode, "rb") == 0) {
+            FILE* const file = __wrap_fopen(path, mode);
+            if (file == NULL) {
+                fatal("file not found '%s'", path);
+            }
+            return file;
         }
         fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
         exit(EXIT_FAILURE);
@@ -254,6 +267,8 @@ FILE* __wrap_fopen(const char* path, const char* mode) {
     mem_file_t* file = find_mem_file(path);
     if (file == NULL)
         return __real_fopen(path, mode);
+    if (file->fail_opens)
+        return NULL;
     if (strchr(mode, '+') != NULL && !file->writable)
         return NULL;
 

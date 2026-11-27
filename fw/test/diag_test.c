@@ -10,6 +10,7 @@
 
 #include "cpu.h"
 #include "diag/diag.h"
+#include "diag/drive.h"
 #include "diag/log/log.h"
 #include "diag/mem.h"
 #include "diag/sd.h"
@@ -17,6 +18,7 @@
 #include "display/char_encoding.h"
 #include "display/display.h"
 #include "display/dvi/crtc.h"
+#include "drive-test/drive_test_catalog.h"
 #include "ieee/ieee_drive.h"
 #include "input/input_uart.h"
 #include "menu/menu_browser.h"
@@ -42,6 +44,9 @@ static bool complete_observed;
 static uint8_t observed_max_cycles;
 static unsigned prompt_step;
 static unsigned boot_video_calls;
+static bool cleanup_should_fail;
+
+#define DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US UINT64_C(300000000)
 typedef enum {
     PROMPT_ABORT,
     PROMPT_ESCAPE_ABORT,
@@ -160,6 +165,7 @@ static void setup(void) {
     reset_observed = false;
     complete_observed = false;
     observed_max_cycles = 0;
+    cleanup_should_fail = false;
     prompt_step = 0;
     boot_video_calls = 0;
     mock_sd_prepare_set_handler(observe_swap_prepare);
@@ -585,6 +591,7 @@ START_TEST(test_cli_usage_preserves_ownership) {
     ck_assert_ptr_nonnull(strstr(output, "Invalid cycle count"));
     ck_assert_ptr_nonnull(strstr(output, "memory"));
     ck_assert_ptr_nonnull(strstr(output, "bup"));
+    ck_assert_ptr_nonnull(strstr(output, "drive"));
     ck_assert_ptr_nonnull(strstr(output, "econopet>"));
     system_restore(false);
 }
@@ -797,6 +804,19 @@ static unsigned custom_begin_cycles;
 static uint8_t last_begin_cycle_arg;
 static unsigned custom_cleanup_calls;
 static unsigned generated_runs;
+static unsigned custom_prepare_calls;
+
+/** Simulate configuration loading that changes display state before the runner initializes its viewport. */
+static bool record_prepare(char* error_out, size_t error_size) {
+    ++custom_prepare_calls;
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    display_init_local(pet_display_columns_40, DISPLAY_ATTR(DISPLAY_COLOR_BLACK, DISPLAY_COLOR_BLACK));
+    if (inject_failure) {
+        snprintf(error_out, error_size, "fixture setup failed");
+        return false;
+    }
+    return true;
+}
 
 /** Record each 1-based begin_cycle invocation ordinal. */
 static void record_begin_cycle(uint8_t cycle) {
@@ -804,9 +824,14 @@ static void record_begin_cycle(uint8_t cycle) {
     last_begin_cycle_arg = cycle;
 }
 
-/** Count plan->cleanup() invocations at the end of diag_loop(). */
-static void record_cleanup(void) {
+/** Count plan cleanup and optionally report a fixture teardown failure. */
+static bool record_cleanup(char* const error_out, const size_t error_size) {
     ++custom_cleanup_calls;
+    if (cleanup_should_fail) {
+        snprintf(error_out, error_size, "fixture cleanup failed");
+        return false;
+    }
+    return true;
 }
 
 /** Format a synthetic generated case name into caller scratch storage. */
@@ -830,6 +855,7 @@ START_TEST(test_finite_loop_and_generated_callbacks) {
     last_begin_cycle_arg = 0;
     custom_cleanup_calls = 0;
     generated_runs = 0;
+    custom_prepare_calls = 0;
     const diag_suite_t gen_suite = {
         .name = "Generated Suite",
         .case_count = 3,
@@ -839,6 +865,7 @@ START_TEST(test_finite_loop_and_generated_callbacks) {
     const diag_plan_t gen_plan = {
         .name = "gen",
         .description = "Generated fixture",
+        .prepare = record_prepare,
         .begin_cycle = record_begin_cycle,
         .cleanup = record_cleanup,
         .suites = &gen_suite,
@@ -856,6 +883,7 @@ START_TEST(test_finite_loop_and_generated_callbacks) {
 
     // Verify lifecycle call counts, UART completion output, and the rendered completion banner.
     ck_assert(complete_observed);
+    ck_assert_uint_eq(custom_prepare_calls, 1);
     ck_assert_uint_eq(custom_begin_cycles, 2);
     ck_assert_uint_eq(last_begin_cycle_arg, 2);
     ck_assert_uint_eq(generated_runs, 6);
@@ -871,6 +899,48 @@ START_TEST(test_finite_loop_and_generated_callbacks) {
     ck_assert_uint_eq(system_state.video_char_buffer[19 * DIAG_COLS],
                       system_state.video_char_buffer[20 * DIAG_COLS + 1]);
     check_banner(DIAG_COLS - (sizeof("Completed: 2 | Time: 00:00:00 ") - 1), "Completed: 2");
+}
+END_TEST
+
+/** Verify setup errors get their own display attribution and release partial resources before fatal halt. */
+static void check_terminal_prepare_failure(void) {
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_eq(custom_prepare_calls, 1);
+    ck_assert_uint_eq(custom_cleanup_calls, 1);
+    ck_assert_uint_eq(custom_begin_cycles, 0);
+    ck_assert_uint_eq(generated_runs, 0);
+    check_text(2, 21, "Stage");
+    check_text(9, 21, "Preparation");
+    check_text(9, 22, "fixture setup failed");
+    ck_assert_uint_eq(system_state.video_char_buffer[VIDEO_COLOR_OFFSET],
+                      DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
+}
+
+/** A failed prepare result skips all cycle/case callbacks but still initializes the display and cleans up. */
+START_TEST(test_terminal_prepare_failure) {
+    custom_prepare_calls = 0;
+    custom_cleanup_calls = 0;
+    custom_begin_cycles = 0;
+    generated_runs = 0;
+    inject_failure = true;
+    const diag_suite_t gen_suite = {
+        .name = "Generated Suite",
+        .case_count = 1,
+        .case_name = generated_case_name,
+        .run_case = generated_run_case,
+    };
+    const diag_plan_t gen_plan = {
+        .name = "gen",
+        .description = "Preparation failure fixture",
+        .prepare = record_prepare,
+        .begin_cycle = record_begin_cycle,
+        .cleanup = record_cleanup,
+        .suites = &gen_suite,
+        .suite_count = 1,
+    };
+    test_expect_fatal_message("DIAG FAIL [gen] preparation: fixture setup failed");
+    test_expect_fatal_callback(check_terminal_prepare_failure);
+    diag_run_plan(&gen_plan, 2);
 }
 END_TEST
 
@@ -1182,6 +1252,268 @@ START_TEST(test_target_failure_attribution_and_catalog_validation) {
 }
 END_TEST
 
+/** Shared drive catalog resolves all 468 cases and polls the $7FF0 mailbox cleanly. */
+START_TEST(test_drive_catalog_and_target_mailbox) {
+    // Walk every suite and case in diag_plan_drive, verifying valid coordinates and bounded labels.
+    size_t total = 0;
+    char name[DIAG_CASE_NAME_MAX];
+    for (size_t s = 0; s < diag_plan_drive.suite_count; ++s) {
+        const diag_suite_t* const suite = &diag_plan_drive.suites[s];
+        for (size_t c = 0; c < suite->case_count; ++c) {
+            diag_drive_case_t desc;
+            diag_drive_resolve_case(s, c, &desc);
+            ck_assert_uint_lt(desc.phase, DT_PHASE_COUNT);
+            ck_assert_uint_lt(desc.slot, DT_SLOT_COUNT);
+            const char* const formatted = suite->case_name(suite, c, name, sizeof(name));
+            ck_assert_ptr_nonnull(formatted);
+            ck_assert_uint_gt(strlen(formatted), 0);
+            ck_assert_uint_lt(strlen(formatted), DIAG_COLS - 10u);
+            ++total;
+        }
+    }
+    ck_assert_uint_eq(total, DT_TOTAL_CASES);
+
+    // Spot-check representative generated case coordinates across suites.
+    diag_drive_case_t desc;
+    diag_drive_resolve_case(1, 34, &desc); // Slot 2 (U9/D0), step 0 (Empty Directory)
+    ck_assert_uint_eq(desc.phase, DT_PHASE_EMPTY_DIR);
+    ck_assert_uint_eq(desc.device, 9);
+    ck_assert_uint_eq(desc.drive, 0);
+
+    diag_drive_resolve_case(7, DT_SUITE_MAINT_COUNT - 1u, &desc); // Final D82 zone retention
+    ck_assert_uint_eq(desc.phase, DT_PHASE_GEOM_RET);
+    ck_assert_uint_eq(desc.device, 10);
+    ck_assert_uint_eq(desc.track, 154);
+    ck_assert_uint_eq(desc.sector, 22);
+
+    diag_drive_case_t final_desc;
+    diag_drive_resolve_case(8, diag_plan_drive.suites[8].case_count - 1u, &final_desc);
+    diag_drive_case_t fail_desc;
+    diag_drive_resolve_case(1, 34, &fail_desc);
+
+    // Exercise a passing 468-case pass through the $7FF0 mailbox.
+    diag_target_begin_cycle(1u);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)(DT_TOTAL_CASES & 0xffu);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(DT_TOTAL_CASES >> 8);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = final_desc.phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = final_desc.slot;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = 0u;
+
+    const diag_plan_t mailbox_plan = {
+        .name = "drive",
+        .description = diag_plan_drive.description,
+        .suites = diag_plan_drive.suites,
+        .suite_count = diag_plan_drive.suite_count,
+    };
+    diag_session_init(&session, &mailbox_plan);
+    ck_assert(diag_run_iteration(&session));
+    ck_assert_int_eq(session.active_status, DIAG_STATUS_PASS);
+
+    // Simulate Test #43 (ordinal 42: Single-Drive Smoke index 34 = Empty Directory U9/D0) failing.
+    diag_target_begin_cycle(1u);
+    diag_session_init(&session, &mailbox_plan);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 42u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_FAILED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = fail_desc.phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = fail_desc.slot;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_DETAIL_ID)] = DT_ERR_STATUS_BYTE;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_EXPECTED)] = 0x31u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_ACTUAL)] = 0x30u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_AUX0)] = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_AUX1)] = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_OFFSET_LO)] = 13u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_OFFSET_HI)] = 0u;
+
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_ptr_nonnull(strstr(session.failure_summary, "Empty Directory (U9/D0 8050)"));
+    ck_assert_str_eq(session.failure_detail, "status byte at +13: expected $31, got $30");
+
+    // Detect mailbox (phase, slot) drift and surplus completion counts.
+    diag_target_begin_cycle(1u);
+    diag_session_init(&session, &mailbox_plan);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = 42u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = 0u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_FAILED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = fail_desc.phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = (uint8_t)(fail_desc.slot ^ 1u);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_ptr_nonnull(strstr(session.failure_detail, "mailbox drift at check #43"));
+
+    diag_target_begin_cycle(1u);
+    diag_session_init(&session, &mailbox_plan);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_PASSED;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)((DT_TOTAL_CASES + 1u) & 0xffu);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)((DT_TOTAL_CASES + 1u) >> 8);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = final_desc.phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = final_desc.slot;
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_ptr_nonnull(strstr(session.failure_detail, "target check count mismatch (expected 468, got 469)"));
+}
+END_TEST
+
+static unsigned slow_duplicate_reads;
+
+/** Cross-copy source errors survive validation, but success and unrelated slots/phases remain strict. */
+START_TEST(test_drive_cross_copy_source_failure) {
+    const unsigned scenario = (unsigned)_i % 4u;
+    const unsigned source = (unsigned)_i / 4u;
+    const uint16_t copy_ordinal = DT_SUITE_FORMAT_COUNT + DT_SUITE_SMOKE_COUNT + DT_SUITE_ISOLATION_COUNT + source;
+    diag_target_begin_cycle(1u);
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] =
+        scenario == 1 ? TARGET_DIAG_STATE_RUNNING : TARGET_DIAG_STATE_FAILED;
+    const uint16_t completed = copy_ordinal + (scenario == 1 ? 1u : 0u);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)completed;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(completed >> 8);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = scenario == 3 ? DT_PHASE_CROSS_CONCAT : DT_PHASE_CROSS_COPY;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = scenario == 2 ? 2u : (uint8_t)source;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_DETAIL_ID)] = DT_ERR_COPY_SOURCE;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_EXPECTED)] = 0x55u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_ACTUAL)] = 0x54u;
+
+    const diag_plan_t copy_plan = {
+        .name = "drive",
+        .suites = &diag_plan_drive.suites[3],
+        .suite_count = 1,
+    };
+    diag_session_init(&session, &copy_plan);
+    ck_assert(!diag_run_iteration(&session));
+    ck_assert_ptr_nonnull(
+        strstr(session.failure_detail, scenario == 0 ? dt_detail_hdmi_names[DT_ERR_COPY_SOURCE] : "mailbox drift"));
+}
+END_TEST
+
+/** Independently specified suite boundaries from the target's run_pass() execution order. */
+static const struct {
+    uint16_t ordinal;
+    uint8_t phase;
+    uint8_t slot;
+} suite_first_cases[] = {
+    {0, DT_PHASE_FULL_FORMAT, 0},  {8, DT_PHASE_EMPTY_DIR, 0},      {144, DT_PHASE_UNIT_ISO, 0},
+    {164, DT_PHASE_CROSS_COPY, 1}, {208, DT_PHASE_MULTI_SEQ, 0},    {216, DT_PHASE_REL_2B, 0},
+    {273, DT_PHASE_RAW_BLOCK, 0},  {281, DT_PHASE_SEQ_BOUNDARY, 0}, {444, DT_PHASE_DUP_SEED, 0},
+};
+
+static size_t boundary_suite_index;
+static unsigned boundary_reads;
+
+/** Hold the target at a suite boundary for one poll, then complete its first check. */
+static void advance_suite_boundary(uint32_t addr) {
+    if (addr != TARGET_DIAG_MAILBOX_ADDR) {
+        return;
+    }
+    ++boundary_reads;
+    ck_assert_uint_le(boundary_reads, 4u);
+    if (boundary_reads <= 2u) {
+        return;
+    }
+    const uint16_t completed = suite_first_cases[boundary_suite_index].ordinal + 1u;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)completed;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(completed >> 8);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = suite_first_cases[boundary_suite_index].phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = suite_first_cases[boundary_suite_index].slot;
+}
+
+/** Derived offsets wait for the exact target check and decode every first/preceding-last boundary. */
+START_TEST(test_drive_suite_boundaries) {
+    boundary_suite_index = (size_t)_i;
+    boundary_reads = 0;
+    diag_target_begin_cycle(1u);
+    memset(mock_ram + TARGET_DIAG_MAILBOX_ADDR, 0, TARGET_DIAG_MAILBOX_SIZE);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_RUNNING;
+    const uint16_t completed = suite_first_cases[boundary_suite_index].ordinal;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)completed;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(completed >> 8);
+    // Last case coordinates are independent of the decoder and suite counts under test.
+    static const uint8_t preceding_phases[] = {
+        TARGET_DIAG_PHASE_NONE, DT_PHASE_FULL_FORMAT,   DT_PHASE_USR_STREAM, DT_PHASE_DRIVE_ISO, DT_PHASE_CONCAT_PEER,
+        DT_PHASE_MULTI_SEQ,     DT_PHASE_REL_SIDE_NEXT, DT_PHASE_RAW_BLOCK,  DT_PHASE_GEOM_RET,
+    };
+    static const uint8_t preceding_slots[] = {TARGET_DIAG_SLOT_NONE, 7, 7, 7, 7, 7, 4, 7, 4};
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = preceding_phases[boundary_suite_index];
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = preceding_slots[boundary_suite_index];
+    diag_suite_t boundary_suite = diag_plan_drive.suites[boundary_suite_index];
+    boundary_suite.case_count = 1;
+    const diag_plan_t boundary_plan = {
+        .name = "drive",
+        .suites = &boundary_suite,
+        .suite_count = 1,
+    };
+    diag_session_init(&session, &boundary_plan);
+    mock_spi_read_set_observer(advance_suite_boundary);
+    ck_assert(diag_run_iteration(&session));
+    mock_spi_read_set_observer(NULL);
+    ck_assert_uint_eq(boundary_reads, 4u);
+}
+END_TEST
+
+/** Simulate a 60-second duplicate step completing well past 30s, then stalling past 240s. */
+static void advance_slow_d82_duplicate(uint32_t addr) {
+    if (addr != TARGET_DIAG_MAILBOX_ADDR) {
+        return;
+    }
+    ++slow_duplicate_reads;
+
+    // Advance 20s per 2-burst mailbox poll, completing the first duplicate case at 60s.
+    if ((slow_duplicate_reads % 2u) == 0u) {
+        mock_clock_advance(UINT64_C(20000000));
+        if (slow_duplicate_reads == 6u) {
+            const uint16_t dup_first = (uint16_t)(DT_TOTAL_CASES - DT_SUITE_DUPLICATE_COUNT + 1u);
+            diag_drive_case_t dup0_desc;
+            diag_drive_resolve_case(8, 0, &dup0_desc);
+            mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = dup0_desc.phase;
+            mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = dup0_desc.slot;
+            mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)(dup_first & 0xffu);
+            mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(dup_first >> 8);
+        }
+    }
+}
+
+/** Long-running 8250 D82 duplicate cases (>30s) succeed within the 240s backstop, while >240s stalls fail. */
+START_TEST(test_drive_d82_duplicate_timeout_budget) {
+    // Seed the mailbox at the end of suite 7 so suite 8 begins waiting on the first duplicate step.
+    const uint16_t dup_base = (uint16_t)(DT_TOTAL_CASES - DT_SUITE_DUPLICATE_COUNT);
+    diag_drive_case_t prev_desc;
+    diag_drive_resolve_case(7, DT_SUITE_MAINT_COUNT - 1u, &prev_desc);
+    diag_target_begin_cycle(1u);
+    slow_duplicate_reads = 0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC0)] = TARGET_DIAG_MAGIC_0;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_MAGIC1)] = TARGET_DIAG_MAGIC_1;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_STATE)] = TARGET_DIAG_STATE_RUNNING;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_LO)] = (uint8_t)(dup_base & 0xffu);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_COMPLETED_HI)] = (uint8_t)(dup_base >> 8);
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_PHASE)] = prev_desc.phase;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SLOT)] = prev_desc.slot;
+    mock_ram[TARGET_DIAG_ADDR(TARGET_DIAG_OFF_SEQ)] = 0u;
+
+    // Confirm case 0 passes after 60s and case 1 ("Duplicate Disk") times out only after 240s.
+    mock_spi_read_set_observer(advance_slow_d82_duplicate);
+    const diag_suite_t* const dup_suite = &diag_plan_drive.suites[8];
+    const diag_plan_t dup_only_plan = {
+        .name = "drive",
+        .description = diag_plan_drive.description,
+        .suites = dup_suite,
+        .suite_count = 1,
+    };
+    const uint64_t started = time_us_64();
+    diag_session_init(&session, &dup_only_plan);
+    ck_assert(!diag_run_iteration(&session));
+    mock_spi_read_set_observer(NULL);
+    ck_assert_uint_ge(time_us_64() - started, DRIVE_TEST_MIN_TIMEOUT_ELAPSED_US);
+    ck_assert_uint_gt(slow_duplicate_reads, 6u);
+    ck_assert_ptr_nonnull(strstr(session.failure_summary, "Duplicate Disk"));
+    ck_assert_ptr_nonnull(strstr(session.failure_detail, "target timeout waiting for case"));
+}
+END_TEST
+
 /** Verify the failure screen and cleanup hook run before the terminal fatal boundary. */
 static void check_terminal_failure(void) {
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
@@ -1190,6 +1522,18 @@ static void check_terminal_failure(void) {
                       DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_GRAY, DISPLAY_COLOR_BLACK));
     check_text(74, 19, "FAIL");
     check_text(9, 22, "expected $55, got $54");
+}
+
+/** Verify cleanup failure is visible on the terminal failure screen. */
+static void check_terminal_cleanup_failure(void) {
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_uint_eq(custom_cleanup_calls, 1);
+    check_banner(50, "Completed: 1");
+    check_text(76, 19, "OK");
+    check_text(2, 21, "Stage");
+    check_text(9, 21, "Cleanup");
+    check_text(3, 22, "FAIL");
+    check_text(9, 22, "fixture cleanup failed");
 }
 
 /** The unwrapped loop runs cleanup before reaching the display-independent fatal endpoint. */
@@ -1209,9 +1553,28 @@ START_TEST(test_terminal_loop_halts) {
 }
 END_TEST
 
+/** A passing diagnostic must fail visibly when its resource cleanup fails. */
+START_TEST(test_terminal_loop_reports_cleanup_failure) {
+    custom_cleanup_calls = 0;
+    cleanup_should_fail = true;
+    inject_failure = false;
+    const diag_plan_t cleanup_plan = {
+        .name = "synthetic",
+        .description = "Fixture plan",
+        .cleanup = record_cleanup,
+        .suites = suites,
+        .suite_count = count_of(suites),
+    };
+    test_expect_fatal_message("DIAG FAIL [synthetic] cleanup: fixture cleanup failed");
+    test_expect_fatal_callback(check_terminal_cleanup_failure);
+    diag_run_plan(&cleanup_plan, 1);
+}
+END_TEST
+
 /** Handing a failed session to the terminal loop preserves its failure even when its budget is exhausted. */
 START_TEST(test_terminal_loop_preserves_prior_failure) {
     custom_cleanup_calls = 0;
+    cleanup_should_fail = true;
     inject_failure = true;
     const diag_plan_t cleanup_plan = {
         .name = "synthetic",
@@ -1261,6 +1624,10 @@ Suite* diag_suite(void) {
     tcase_add_loop_test(tests, test_mailbox_seqlock_retries_until_even_match, 0, 2);
     tcase_add_loop_test(tests, test_mailbox_retry_exhaustion_preserves_output, 0, 2);
     tcase_add_test(tests, test_target_poll_rejects_unverified_completion);
+    tcase_add_test(tests, test_drive_catalog_and_target_mailbox);
+    tcase_add_loop_test(tests, test_drive_cross_copy_source_failure, 0, 8);
+    tcase_add_loop_test(tests, test_drive_suite_boundaries, 0, count_of(suite_first_cases));
+    tcase_add_test(tests, test_drive_d82_duplicate_timeout_budget);
     tcase_add_test(tests, test_cli_sd_prompt_cancel);
     tcase_add_test(tests, test_cli_sd_escape_aborts);
     tcase_add_test(tests, test_cli_sd_countdown_abort);
@@ -1285,6 +1652,8 @@ Suite* diag_fatal_suite(void) {
     TCase* const tests = tcase_create("terminal");
     tcase_add_checked_fixture(tests, setup, teardown);
     tcase_add_test_raise_signal(tests, test_terminal_loop_halts, SIGABRT);
+    tcase_add_test_raise_signal(tests, test_terminal_loop_reports_cleanup_failure, SIGABRT);
+    tcase_add_test_raise_signal(tests, test_terminal_prepare_failure, SIGABRT);
     tcase_add_loop_test_raise_signal(tests, test_terminal_loop_preserves_prior_failure, SIGABRT, 0, 2);
     tcase_add_test_raise_signal(tests, test_cli_sd_prepare_failure, SIGABRT);
     tcase_add_test_raise_signal(tests, test_invalid_plan_structure, SIGABRT);

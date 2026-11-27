@@ -253,7 +253,8 @@ static void setup(void) {
     ck_assert(storage_idle && cpu_halted && images_unmounted);
     ck_assert(!device.is_initialized);
     sd_diag_mock_capture_workspace();
-    diag_plan_sd.prepare();
+    char error[DIAG_MESSAGE_MAX] = "";
+    ck_assert(diag_plan_sd.prepare(error, sizeof(error)));
     diag_session_init(&session, &diag_plan_sd);
     ck_assert(builtin_font);
 }
@@ -474,6 +475,16 @@ const diag_plan_t diag_plan_bup = {
 
 const diag_plan_t diag_plan_memory = {
     .name = "memory",
+    .description = "Host fixture",
+    .confirm = NULL,
+    .prepare = NULL,
+    .suites = memory_suites,
+    .suite_count = count_of(memory_suites),
+};
+
+/** Stub drive plan satisfying diag.c's plan registry inside the standalone SD test binary. */
+const diag_plan_t diag_plan_drive = {
+    .name = "drive",
     .description = "Host fixture",
     .confirm = NULL,
     .prepare = NULL,

@@ -55,6 +55,7 @@ bool sd_mount_root(void);
 /** Unmount the retained FAT filesystem from the SD root if needed. */
 bool sd_unmount_root(void);
 
+/** Open a required file, halting on invalid paths or filesystem failure. */
 FILE* sd_open(const char* path, const char* mode);
 
 size_t sd_read(const char* filename, FILE* file, uint8_t* dest, size_t size);

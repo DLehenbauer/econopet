@@ -74,16 +74,18 @@ typedef struct {
 bool diag_target_read_mailbox(diag_target_snapshot_t* out);
 
 /**
- * Boot a PET BASIC 2/4 configuration to READY, load a .prg below the reserved
- * mailbox, lower BASIC's memory ceiling, queue "RUN\r", and leave the CPU halted.
+ * Reset and boot an already-loaded PET BASIC 2/4 configuration to READY, load a
+ * .prg below the reserved mailbox, lower BASIC's memory ceiling, queue "RUN\r",
+ * and leave the CPU halted.
  * The target's linker must keep program data and its software stack below the
  * mailbox as well. Requires the ROM to detect the full 32 KiB base RAM.
+ * Apply the diagnostic profile and mount its media before calling this function.
  *
  * Writes a descriptive message to error_out[error_size] and returns false if
  * the configuration/ROM is unsupported, BASIC fails to boot, RAM is insufficient,
  * or the .prg cannot load without overlapping the mailbox.
  */
-bool diag_target_prepare_pet_prg(const char* config_id, const char* prg_path, char* error_out, size_t error_size);
+bool diag_target_prepare_pet_prg(const char* prg_path, char* error_out, size_t error_size);
 
 /**
  * Arm and trigger 1-based target diagnostic iteration 'cycle'.

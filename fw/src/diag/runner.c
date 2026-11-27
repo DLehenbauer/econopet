@@ -29,20 +29,23 @@ void diag_complete_halt(void) {
  */
 void diag_run_plan(const diag_plan_t* plan, uint8_t max_cycles) {
     static diag_session_t session;
+    char prepare_error[DIAG_MESSAGE_MAX] = "";
 
     // Claim irreversible diagnostic ownership and run optional hardware/media preparation.
     system_takeover();
-    if (plan->prepare != NULL) {
-        plan->prepare();
-    }
+    const bool prepared = plan->prepare == NULL || plan->prepare(prepare_error, sizeof(prepare_error));
     vet(system_mode() == system_operation_diagnostic,
         "diagnostic preparation left diagnostic mode");
 
     // Initialize the diagnostic session, configure the requested cycle budget, and enter the loop.
     diag_session_init(&session, plan);
     session.max_cycles = max_cycles;
-    printf("DIAG: starting plan '%s' (%zu suite(s), %u cycle(s))\r\n",
-           plan->name, plan->suite_count, (unsigned)max_cycles);
-    fflush(stdout);
+    if (!prepared) {
+        diag_report_prepare_failure(&session, prepare_error);
+    } else {
+        printf("DIAG: starting plan '%s' (%zu suite(s), %u cycle(s))\r\n", plan->name, plan->suite_count,
+               (unsigned)max_cycles);
+        fflush(stdout);
+    }
     diag_loop(&session);
 }

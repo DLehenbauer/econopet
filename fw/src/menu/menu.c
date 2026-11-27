@@ -107,39 +107,32 @@ typedef struct action_context_s {
     system_state_t* system_state;
 } action_context_t;
 
+/** Stream a required configuration ROM into PET memory, halting on file errors. */
 void action_load(void* const context, const char* filename, uint32_t address) {
-    (void) context;
-
+    (void)context;
     log_debug("0x%04" PRIx32, address);
-    FILE *file = sd_open(filename, "rb"); // Open file in binary read mode
-    if (!file) {
-        fatal("Failed to open file '%s'", filename);
-    }
+    FILE* const file = sd_open(filename, "rb");
 
-    // Read remaining bytes to the destination address.
     uint8_t* temp_buffer = acquire_temp_buffer();
     size_t bytes_read;
     uint8_t checksum = 0;
-
     while ((bytes_read = fread(temp_buffer, 1, TEMP_BUFFER_SIZE, file)) > 0) {
         checksum_add(temp_buffer, bytes_read, &checksum);
         spi_write(address, temp_buffer, bytes_read);
         address += bytes_read;
-
-        // Check for read errors (other than EOF)
-        if (bytes_read < TEMP_BUFFER_SIZE && ferror(file)) {
-            fatal("Failed to read file '%s'", filename);
-        }
+    }
+    const bool read_failed = ferror(file) != 0;
+    release_temp_buffer(&temp_buffer);
+    const bool close_failed = fclose(file) != 0;
+    if (read_failed || close_failed) {
+        fatal("Failed to read file '%s'", filename);
     }
 
     log_debug("-%04" PRIx32 ": %s ($%02x)", address - 1, filename, checksum);
-
-    release_temp_buffer(&temp_buffer);
-    fclose(file);
 }
 
 void action_patch(void* context, uint32_t address, const binary_t* binary) {
-    (void) context;
+    (void)context;
 
     log_debug("0x%04" PRIx32 ": patching %zu bytes", address, binary->size);
     spi_write(address, binary->data, binary->size);
@@ -172,7 +165,7 @@ void action_copy(void* context, uint32_t source, uint32_t destination, uint32_t 
 }
 
 void action_set_options(void* context, options_t* options) {
-    action_context_t* ctx = (action_context_t*) context;
+    action_context_t* const ctx = context;
 
     switch (options->columns) {
         case 40:
@@ -243,7 +236,7 @@ static uint8_t checksum_ram(uint32_t start_addr, uint32_t end_addr) {
 }
 
 void action_fix_checksum(void* context, uint32_t start_addr, uint32_t end_addr, uint32_t fix_addr, uint32_t expected) {
-    (void) context;
+    (void)context;
 
     uint8_t actual_sum = checksum_ram(start_addr, end_addr + 1);
 
@@ -316,7 +309,7 @@ static void apply_config(const int config_index) {
 
 /**
  * Load a /config.yaml profile by ID for a diagnostic target without user mounts
- * or guest-mode transition, leaving the 6502 reset and halted.
+ * or guest-mode transition, leaving the 6502 halted until target preparation resets it.
  */
 bool menu_apply_diag_config(const char* const id) {
     // Resolve the configuration's zero-based catalog index before mutating hardware state.
@@ -327,10 +320,6 @@ bool menu_apply_diag_config(const char* const id) {
 
     // Load shared actions without replacing scratch mounts or accepting non-6502 options.
     prepare_config(index, CONFIG_PREPARE_DIAGNOSTIC);
-
-    // Pulse PET hardware reset (parking IEEE pins if enabled) and hold the CPU halted in diagnostic mode.
-    pet_reset();
-    set_cpu(CPU_HALT);
     return true;
 }
 

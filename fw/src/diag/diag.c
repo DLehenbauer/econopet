@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <limits.h>
 
+#include "diag/drive.h"
 #include "diag/sd.h"
 #include "display/char_encoding.h"
 #include "display/display.h"
@@ -31,7 +32,7 @@
 #define DIAG_MINUTES_PER_HOUR 60u
 #define DIAG_ELAPSED_SIZE 24u
 
-static const diag_plan_t* const plans[] = {&diag_plan_memory, &diag_plan_bup, &diag_plan_sd};
+static const diag_plan_t* const plans[] = {&diag_plan_memory, &diag_plan_bup, &diag_plan_sd, &diag_plan_drive};
 static diag_session_t* active_session;
 
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_PLANE_CAPACITY, "diagnostic character plane too small");
@@ -196,7 +197,10 @@ static void render(const diag_session_t* session) {
     const window_t* const normal = &session->window;
     const window_t border = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_MEDIUM_GRAY, DISPLAY_COLOR_BLACK));
     const window_t suite_win = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_CYAN, DISPLAY_COLOR_BLACK));
-    const bool failed = session->active_status == DIAG_STATUS_FAIL;
+    const bool cleanup_failed = session->cleanup_failed;
+    const bool failed = session->active_status == DIAG_STATUS_FAIL || cleanup_failed;
+    const bool preparation_failed = session->active_status == DIAG_STATUS_FAIL && session->iteration == 0;
+    const bool stage_failed = preparation_failed || cleanup_failed;
     const window_t case_win = window_with_attr(
         normal, DISPLAY_ATTR(failed ? DISPLAY_COLOR_LIGHT_RED : DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK));
     char elapsed[DIAG_ELAPSED_SIZE], progress[DIAG_COLS + 1];
@@ -232,9 +236,10 @@ static void render(const diag_session_t* session) {
     const char* const active_case_name =
         failed ? session->failure_detail
                : suite->case_name(suite, session->active_case_index, active_name_buf, sizeof(active_name_buf));
-    window_text(normal, 2, DIAG_LOCATION_ROW, 5, "Suite");
+    window_text(normal, 2, DIAG_LOCATION_ROW, 5, stage_failed ? "Stage" : "Suite");
     window_text(&border, 7, DIAG_LOCATION_ROW, 1, ":");
-    window_text(&suite_win, 9, DIAG_LOCATION_ROW, DIAG_COLS - 10, suite->name);
+    window_text(&suite_win, 9, DIAG_LOCATION_ROW, DIAG_COLS - 10,
+                preparation_failed ? "Preparation" : cleanup_failed ? "Cleanup" : suite->name);
     window_text(normal, 3, DIAG_DETAIL_ROW, 4, failed ? "FAIL" : "Case");
     window_text(&border, 7, DIAG_DETAIL_ROW, 1, ":");
     window_text(&case_win, 9, DIAG_DETAIL_ROW, DIAG_COLS - 10, active_case_name);
@@ -394,6 +399,18 @@ static bool report_iteration_failure(diag_session_t* session, const diag_suite_t
     return false;
 }
 
+void diag_report_prepare_failure(diag_session_t* session, const char* error) {
+    vet(session->iteration == 0 && active_session == NULL, "preparation failure after diagnostic start");
+    session->active_status = DIAG_STATUS_FAIL;
+    snprintf(session->failure_detail, sizeof(session->failure_detail), "%s",
+             error[0] != '\0' ? error : "diagnostic preparation failed");
+    snprintf(session->failure_summary, sizeof(session->failure_summary), "DIAG FAIL [%s] preparation: %s",
+             session->plan->name, session->failure_detail);
+    render(session);
+    printf("%s\r\n", session->failure_summary);
+    fflush(stdout);
+}
+
 bool diag_run_iteration(diag_session_t* session) {
     vet(active_session == NULL, "nested diagnostic iteration");
     if (session->active_status == DIAG_STATUS_FAIL) {
@@ -456,7 +473,22 @@ void diag_loop(diag_session_t* session) {
 
     // Release temporary plan resources (such as mounted scratch media) before halting.
     if (session->plan->cleanup != NULL) {
-        session->plan->cleanup();
+        char cleanup_error[DIAG_MESSAGE_MAX] = "";
+        if (!session->plan->cleanup(cleanup_error, sizeof(cleanup_error))) {
+            const char* const detail = cleanup_error[0] != '\0' ? cleanup_error : "diagnostic cleanup failed";
+            if (passed) {
+                session->cleanup_failed = true;
+                snprintf(session->failure_detail, sizeof(session->failure_detail), "%s", detail);
+                snprintf(session->failure_summary, sizeof(session->failure_summary),
+                         "DIAG FAIL [%s] cleanup: %s", session->plan->name, detail);
+                render(session);
+                printf("%s\r\n", session->failure_summary);
+            } else {
+                printf("DIAG CLEANUP FAIL [%s]: %s\r\n", session->plan->name, detail);
+            }
+            fflush(stdout);
+            passed = false;
+        }
     }
 
     // Escalate failures to the Morse/UART fatal endpoint while keeping the failure screen visible.

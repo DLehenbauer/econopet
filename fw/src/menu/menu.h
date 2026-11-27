@@ -12,9 +12,10 @@ void menu_enter(void);
 /**
  * Apply the named /config.yaml profile for a diagnostic target without mounting
  * user disks, enabling virtual tape, or switching out of diagnostic ownership.
+ * Returns false if the profile ID is absent. Required ROM file errors are fatal.
  *
- * Resets the PET with the stock physical or soft 6502 selected and leaves the
- * CPU halted ready for target preparation, returning false if id is not found.
+ * Selects the stock physical or soft 6502 and leaves it halted without resetting.
+ * The caller must reset the PET after mounting any diagnostic media.
  */
 bool menu_apply_diag_config(const char* id);
 

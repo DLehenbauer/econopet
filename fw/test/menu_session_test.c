@@ -4,8 +4,11 @@
 #include "pch.h"
 #include "menu_session_test.h"
 
+#include <signal.h>
+
 #include "breakpoint.h"
 #include "cpu.h"
+#include "diag/diag.h"
 #include "diag/log/log.h"
 #include "diag/target.h"
 #include "display/display.h"
@@ -330,12 +333,51 @@ START_TEST(test_diag_config_preserves_mode_and_ignores_mounts) {
 
     // Confirm diagnostic mode, halted soft 6502, disabled tape, and preserved scratch mount.
     ck_assert_int_eq(system_mode(), system_operation_diagnostic);
-    ck_assert_uint_gt(reset_count, 0);
+    ck_assert_uint_eq(reset_count, 0);
     ck_assert_uint_eq(tape_deinit_count, 1);
     ck_assert_uint_eq(tape_init_count, 1);
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_int_eq(spi_read_at(ECONOPET_WB_CPU_SEL_ADDR), CPU_SOFT_6502);
     ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
+}
+END_TEST
+
+/** A required-ROM fatal leaves the CPU halted without resetting or allocating media. */
+static void check_missing_rom_fatal(void) {
+    ck_assert_int_eq(system_mode(), system_operation_diagnostic);
+    ck_assert_int_eq(get_cpu(), CPU_HALT);
+    ck_assert_uint_eq(reset_count, 0);
+    ck_assert_uint_eq(tape_init_count, 0);
+    ck_assert_str_eq(ieee_drive_filename(0), "");
+}
+
+/** Preserve required-ROM fatal behavior through the real configuration load path. */
+START_TEST(test_diag_config_missing_rom_is_fatal) {
+    prepare_diag_cpu();
+
+    test_register_file("/rom/missing.bin", "placeholder");
+    test_fail_file_opens("/rom/missing.bin", true);
+    test_register_file("/config.yaml",
+        "format-version: 1\n"
+        "configs:\n"
+        "  - id: custom\n"
+        "    name: Custom\n"
+        "    setup:\n"
+        "      - action: load\n"
+        "        files:\n"
+        "          - file: /rom/missing.bin\n"
+        "            address: 0xb000\n"
+        "      - action: set\n"
+        "        columns: 40\n");
+
+    tape_change_expected = true;
+    system_takeover();
+    reset_count = tape_init_count = 0;
+    mock_cpu_set_state_observer(observe_reset);
+    test_expect_fatal_message("file not found '/rom/missing.bin'");
+    test_expect_fatal_callback(check_missing_rom_fatal);
+    menu_apply_diag_config("custom");
+    ck_abort_msg("missing required ROM did not halt");
 }
 END_TEST
 
@@ -458,10 +500,23 @@ START_TEST(test_target_prepare_and_cycles) {
     if (_i != 4) test_register_binary_file("/test/target.prg", prg, sizeof(prg), false);
     mock_cpu_set_run_callback(reach_target_ready);
     system_takeover();
+    reset_count = 0;
+    mock_cpu_set_state_observer(observe_reset);
+    ck_assert(menu_apply_diag_config("custom"));
+    ck_assert_uint_eq(reset_count, 0);
+
+    // Mount only after profile loading, then exercise target reset with live scratch media.
+    uint8_t* const scratch = diskimage_test_make_d64();
+    test_register_binary_file("/test/tmp/u8d0.d64", scratch, DISKIMAGE_D64_SIZE, true);
+    free(scratch);
+    ck_assert_int_eq(ieee_drive_mount_scratch(0, "/test/tmp/u8d0.d64"), DOS_MEDIA_OK);
     char error[DIAG_MESSAGE_MAX] = {0};
-    const bool prepared = diag_target_prepare_pet_prg("custom", "/test/target.prg", error, sizeof(error));
+    const bool prepared = diag_target_prepare_pet_prg("/test/target.prg", error, sizeof(error));
+    mock_cpu_set_state_observer(NULL);
     mock_cpu_set_run_callback(NULL);
     tape_change_expected = false;
+    ck_assert_uint_gt(reset_count, 0);
+    ck_assert_str_eq(ieee_drive_filename(0), "/test/tmp/u8d0.d64");
     ck_assert_int_eq(get_cpu(), CPU_HALT);
     ck_assert_uint_eq(bp_count(), 0u);
     ck_assert(!system_state.bp_halted);
@@ -537,6 +592,7 @@ Suite* menu_session_fatal_suite(void) {
     TCase* const test = tcase_create("isolated");
     tcase_add_checked_fixture(test, setup, teardown);
     tcase_add_test(test, test_diag_config_preserves_mode_and_ignores_mounts);
+    tcase_add_test_raise_signal(test, test_diag_config_missing_rom_is_fatal, SIGABRT);
     tcase_add_loop_test(test, test_target_prepare_and_cycles, 0, 7);
     suite_add_tcase(suite, test);
     return suite;
