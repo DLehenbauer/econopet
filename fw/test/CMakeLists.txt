@@ -157,6 +157,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=pet_wait_for_storage_idle -Wl,--wrap=set_cpu
     -Wl,--wrap=menu_browser_abandon_scan -Wl,--wrap=ieee_drive_unmount_all
     -Wl,--wrap=diskimage_create_file -Wl,--wrap=ieee_drive_mount_scratch
+    -Wl,--wrap=menu_apply_diag_config
     -Wl,--wrap=diag_target_prepare_pet_prg -Wl,--wrap=ieee_drive_filename
     -Wl,--wrap=mkdir -Wl,--wrap=stat -Wl,--wrap=remove -Wl,--wrap=rmdir)
 # Preserve useful stack frames in Debug tests.

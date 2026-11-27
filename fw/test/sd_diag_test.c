@@ -362,13 +362,6 @@ START_TEST(test_short_multiblock_read) {
 }
 END_TEST
 
-/** Production optional open returns a missing-path error without entering fatal(). */
-START_TEST(test_try_open_returns_null_for_missing_file) {
-    ck_assert_ptr_null(sd_try_open("/missing-profile-rom.bin", "rb"));
-    ck_assert_uint_eq(sd_diag_mock_open_handles(), 0);
-}
-END_TEST
-
 /** A single-bit readback corruption is reported at the exact sector boundary. */
 START_TEST(test_corrupt_read) {
     fixture.fault = SD_FAULT_CORRUPT_READ;
@@ -437,7 +430,6 @@ Suite* sd_diag_suite(void) {
     tcase_add_test(cycles, test_two_complete_cycles);
     tcase_add_test(cycles, test_read_fault);
     tcase_add_test(cycles, test_short_multiblock_read);
-    tcase_add_test(cycles, test_try_open_returns_null_for_missing_file);
     tcase_add_test(cycles, test_corrupt_read);
     tcase_add_test(cycles, test_neighbor_bleed);
     tcase_add_test(cycles, test_mode_init_failure);

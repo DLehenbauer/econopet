@@ -14,6 +14,7 @@
 #include "ieee/diskimage.h"
 #include "ieee/diskimage_file.h"
 #include "ieee/ieee_drive.h"
+#include "menu/menu.h"
 #include "menu/menu_browser.h"
 #include "pet.h"
 #include "sd/sd.h"
@@ -41,6 +42,8 @@ static bool fixture_enabled;
 static bool unmount_succeeds;
 static bool scan_close_succeeds;
 static bool target_prepare_succeeds;
+static bool profile_exists;
+static bool profile_loaded;
 static bool create_tmp_file_after_rmdir;
 static bool tmp_path_is_file;
 static int fail_create_slot;
@@ -62,7 +65,8 @@ void __real_pet_wait_for_storage_idle(void);
 void __real_set_cpu(cpu_state_t state);
 bool __real_diskimage_create_file(const char* path, diskimage_type_t type);
 dos_media_result_t __real_ieee_drive_mount_scratch(unsigned int slot, const char* path);
-bool __real_diag_target_prepare_pet_prg(const char* config_id, const char* prg_path,
+bool __real_menu_apply_diag_config(const char* id);
+bool __real_diag_target_prepare_pet_prg(const char* prg_path,
                                         char* error_out, size_t error_size);
 const char* __real_ieee_drive_filename(unsigned int slot);
 int __real_mkdir(const char* path, mode_t mode);
@@ -79,6 +83,8 @@ static void setup(void) {
     unmount_succeeds = true;
     scan_close_succeeds = true;
     target_prepare_succeeds = true;
+    profile_exists = true;
+    profile_loaded = false;
     create_tmp_file_after_rmdir = false;
     tmp_path_is_file = false;
     fail_create_slot = -1;
@@ -157,6 +163,7 @@ bool __wrap_diskimage_create_file(const char* path, diskimage_type_t type) {
     if (!fixture_enabled) {
         return __real_diskimage_create_file(path, type);
     }
+    ck_assert(profile_loaded);
     ck_assert_uint_lt(create_calls, DT_SLOT_COUNT);
     const size_t slot = create_calls++;
     ck_assert_str_eq(path, scratch_paths[slot]);
@@ -184,14 +191,30 @@ dos_media_result_t __wrap_ieee_drive_mount_scratch(const unsigned int slot, cons
     return DOS_MEDIA_OK;
 }
 
-/** Verify target setup sees all intended scratch mounts before it loads the PRG. */
-bool __wrap_diag_target_prepare_pet_prg(const char* config_id, const char* prg_path,
+/** Require profile loading to precede any new scratch creation or mounting. */
+bool __wrap_menu_apply_diag_config(const char* id) {
+    if (!fixture_enabled) {
+        return __real_menu_apply_diag_config(id);
+    }
+    ck_assert_str_eq(id, "pet-80xx-60hz");
+    ck_assert_uint_eq(create_calls, 0);
+    ck_assert_uint_eq(mount_calls, 0);
+    for (size_t slot = 0; slot < count_of(mounted); ++slot) {
+        ck_assert(!mounted[slot]);
+        ck_assert(!scratch_files[slot].exists);
+    }
+    profile_loaded = profile_exists;
+    return profile_loaded;
+}
+
+/** Verify target reset/boot sees the profile and all intended scratch mounts. */
+bool __wrap_diag_target_prepare_pet_prg(const char* prg_path,
                                         char* error_out, size_t error_size) {
     if (!fixture_enabled) {
-        return __real_diag_target_prepare_pet_prg(config_id, prg_path, error_out, error_size);
+        return __real_diag_target_prepare_pet_prg(prg_path, error_out, error_size);
     }
     ++target_prepare_calls;
-    ck_assert_str_eq(config_id, "pet-80xx-60hz");
+    ck_assert(profile_loaded);
     ck_assert_str_eq(prg_path, "/test/drive-test.prg");
     target_prepare_saw_mounts = true;
     for (size_t slot = 0; slot < count_of(mounted); ++slot) {
@@ -206,7 +229,7 @@ bool __wrap_diag_target_prepare_pet_prg(const char* config_id, const char* prg_p
     return true;
 }
 
-/** Return the mounted path observed by drive_prepare's post-configuration invariant. */
+/** Return the mounted path observed by drive_prepare's post-boot invariant. */
 const char* __wrap_ieee_drive_filename(const unsigned int slot) {
     if (!fixture_enabled) {
         return __real_ieee_drive_filename(slot);
@@ -351,7 +374,22 @@ START_TEST(test_drive_prepare_creation_failure_cleans_partial_resources) {
 }
 END_TEST
 
-/** Remove all scratch resources when target configuration or PRG preparation fails. */
+/** A missing profile must prevent scratch allocation and target boot. */
+START_TEST(test_drive_prepare_missing_profile_creates_no_resources) {
+    char error[DIAG_MESSAGE_MAX] = "";
+    profile_exists = false;
+
+    ck_assert(!diag_plan_drive.prepare(error, sizeof(error)));
+    ck_assert_ptr_nonnull(strstr(error, "missing config"));
+    ck_assert_uint_eq(create_calls, 0);
+    ck_assert_uint_eq(mount_calls, 0);
+    ck_assert_uint_eq(target_prepare_calls, 0);
+    ck_assert(diag_plan_drive.cleanup(error, sizeof(error)));
+    ck_assert_uint_eq(successful_removes, 0);
+}
+END_TEST
+
+/** Remove all scratch resources when target boot or PRG preparation fails. */
 START_TEST(test_drive_prepare_target_failure_cleans_resources) {
     char error[DIAG_MESSAGE_MAX] = "";
     target_prepare_succeeds = false;
@@ -420,6 +458,7 @@ Suite* diag_drive_suite(void) {
     tcase_add_test(tests, test_drive_prepare_and_cleanup);
     tcase_add_test(tests, test_drive_prepare_creation_failure_cleans_partial_resources);
     tcase_add_test(tests, test_drive_prepare_failure_cleans_partial_resources);
+    tcase_add_test(tests, test_drive_prepare_missing_profile_creates_no_resources);
     tcase_add_test(tests, test_drive_prepare_target_failure_cleans_resources);
     tcase_add_test(tests, test_drive_cleanup_retains_files_on_unmount_failure);
     tcase_add_test(tests, test_drive_prepare_rejects_scan_close_failure);

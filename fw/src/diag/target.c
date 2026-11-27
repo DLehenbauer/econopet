@@ -8,6 +8,7 @@
 #include "diag/diag.h"
 #include "driver.h"
 #include "menu/menu.h"
+#include "pet.h"
 #include "tape.h"
 
 /** BASIC 2/4 memory ceiling and string-allocation top (little-endian zero-page pointers). */
@@ -95,13 +96,12 @@ bool diag_target_read_mailbox(diag_target_snapshot_t* const out) {
     return true;
 }
 
-/** Stage a PET diagnostic configuration and .prg in SRAM, halted at READY with "RUN\r" queued. */
-bool diag_target_prepare_pet_prg(const char* const config_id, const char* const prg_path,
+/** Reset and boot the loaded profile, then stage the PRG with the CPU halted and "RUN\r" queued. */
+bool diag_target_prepare_pet_prg(const char* const prg_path,
                                  char* const error_out, const size_t error_size) {
-    // Load the requested ROM/model configuration without user mounts or guest-mode takeover.
-    if (!menu_apply_diag_config(config_id, error_out, error_size)) {
-        return false;
-    }
+    // Reset only after profile loading and media mounting so enabled IEEE pins are parked.
+    pet_reset();
+    set_cpu(CPU_HALT);
 
     // Reject unknown ROMs before starting the CPU, then boot to this revision's READY entry.
     uint16_t ready;

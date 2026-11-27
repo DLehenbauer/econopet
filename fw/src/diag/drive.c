@@ -14,6 +14,7 @@
 #include "fatal.h"
 #include "ieee/diskimage_file.h"
 #include "ieee/ieee_drive.h"
+#include "menu/menu.h"
 #include "menu/menu_browser.h"
 #include "pet.h"
 
@@ -218,10 +219,18 @@ static bool drive_prepare(char* const error_out, const size_t error_size) {
         return false;
     }
 
-    // Recreate clean zero-filled scratch containers under /test/tmp.
+    // Remove stale scratch containers before loading the new profile.
     if (!remove_scratch_files(error_out, error_size)) {
         return false;
     }
+
+    // Required ROM errors are fatal, so load the profile before allocating scratch resources.
+    if (!menu_apply_diag_config(DRIVE_DIAG_CONFIG_ID)) {
+        snprintf(error_out, error_size, "missing config '%s' in /config.yaml", DRIVE_DIAG_CONFIG_ID);
+        return false;
+    }
+
+    // Create fresh scratch containers only after all profile actions have completed.
     if (!ensure_dir(DRIVE_DIAG_ROOT_DIR)) {
         snprintf(error_out, error_size, "could not create '%s' (errno %d)", DRIVE_DIAG_ROOT_DIR, errno);
         return false;
@@ -248,11 +257,11 @@ static bool drive_prepare(char* const error_out, const size_t error_size) {
     }
 
     // Boot the 8032 profile to BASIC READY, load /test/drive-test.prg, and arm RUN.
-    if (!diag_target_prepare_pet_prg(DRIVE_DIAG_CONFIG_ID, DRIVE_DIAG_PRG_PATH, error_out, error_size)) {
+    if (!diag_target_prepare_pet_prg(DRIVE_DIAG_PRG_PATH, error_out, error_size)) {
         return false;
     }
 
-    // Verify that loading the diagnostic configuration left all eight scratch mounts untouched.
+    // Verify that resetting and booting the target left all eight scratch mounts untouched.
     for (unsigned slot = 0; slot < DT_SLOT_COUNT; ++slot) {
         vet(strcmp(ieee_drive_filename(slot), scratch_paths[slot]) == 0, "diagnostic setup displaced scratch slot %u",
             slot);

@@ -52,3 +52,8 @@ Enter `help` to list all firmware command-line commands.
 
 Diagnostics take exclusive control of the board and halt on completion or
 failure. Reset or power-cycle the EconoPET to return to normal operation.
+
+The drive plan loads its configuration profile before creating or mounting
+scratch images. A missing required ROM is a fatal configuration error. After
+successful profile loading, the plan mounts its scratch images before resetting
+and booting the PET so the IEEE pins are parked correctly.

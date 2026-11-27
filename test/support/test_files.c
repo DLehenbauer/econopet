@@ -189,14 +189,18 @@ void test_clear_files(void) {
 FILE* __wrap_fopen(const char* path, const char* mode);
 
 // Opens tracked independent readers for registered configuration fixtures.
-FILE* sd_try_open(const char* path, const char* mode) {
+FILE* sd_open(const char* path, const char* mode) {
     vet_path_length(strlen(path));
     assert(path[0] == '/');
 
     mem_file_t* mem_file = find_mem_file(path);
     if (mem_file != NULL) {
         if (strcmp(mode, "r") == 0 || strcmp(mode, "rb") == 0) {
-            return __wrap_fopen(path, mode);
+            FILE* const file = __wrap_fopen(path, mode);
+            if (file == NULL) {
+                fatal("file not found '%s'", path);
+            }
+            return file;
         }
         fprintf(stderr, "FATAL: Write mode not supported for in-memory file '%s'\n", path);
         exit(EXIT_FAILURE);
@@ -205,16 +209,6 @@ FILE* sd_try_open(const char* path, const char* mode) {
     fprintf(stderr, "FATAL: File '%s' not registered in test file system.\n", path);
     fprintf(stderr, "Use test_register_file() to register files for testing.\n");
     exit(EXIT_FAILURE);
-}
-
-// Mirrors the production required-file opener for registered test fixtures.
-FILE* sd_open(const char* path, const char* mode) {
-    FILE* const file = sd_try_open(path, mode);
-    if (file == NULL) {
-        fprintf(stderr, "FATAL: file not found '%s'\n", path);
-        exit(EXIT_FAILURE);
-    }
-    return file;
 }
 
 // Reads a cookie-backed fixture and advances its per-handle offset.
