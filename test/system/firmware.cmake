@@ -93,15 +93,28 @@ target_link_libraries(econopet_drive_reference PRIVATE econopet_host_firmware)
 set_target_properties(econopet_drive_reference PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
 
+# Build the same PRG used for SD-card packaging for transport and tape-loader tests.
+add_subdirectory("${ECONOPET_ROOT}/prgs/drive-test"
+    "${CMAKE_CURRENT_BINARY_DIR}/drive-test-prg" EXCLUDE_FROM_ALL)
+
 # Isolate firmware globals and fopen wrapping from board-only and host-only tests.
 add_executable(econopet_firmware_tests
     econopet_top_smoke.cpp firmware_test.cpp waterloo_keyboard_test.cpp os9_keyboard_test.cpp ieee/drive_test.cpp
-    ieee/commodore_rom_test.cpp ieee/waterloo_rom_test.cpp framework/scheduler.cpp)
+    ieee/commodore_rom_test.cpp ieee/waterloo_rom_test.cpp ieee/drive_prg_transport_test.cpp
+    ieee/tape_callback_test.cpp framework/scheduler.cpp
+    "${ECONOPET_ROOT}/fw/src/global.c" "${ECONOPET_ROOT}/fw/src/system/state.c" "${ECONOPET_ROOT}/fw/src/tape.c"
+    "${ECONOPET_ROOT}/fw/src/tape_dir.c" "${ECONOPET_ROOT}/fw/src/cbm/petscii.c")
+add_dependencies(econopet_firmware_tests drive-test-prg)
 target_compile_features(econopet_firmware_tests PRIVATE cxx_std_23)
+target_include_directories(econopet_firmware_tests PRIVATE "${ECONOPET_ROOT}/prgs/include")
 target_compile_definitions(econopet_firmware_tests PRIVATE
-    ECONOPET_SDCARD_CONFIG="${ECONOPET_ROOT}/sdcard/config.yaml")
+    ECONOPET_SDCARD_CONFIG="${ECONOPET_ROOT}/sdcard/config.yaml"
+    ECONOPET_DRIVE_TEST_PRG="${CMAKE_CURRENT_BINARY_DIR}/drive-test-prg/bin/drive-test.prg"
+    ECONOPET_DRIVE_TEST_LABELS="${CMAKE_CURRENT_BINARY_DIR}/drive-test-prg/bin/drive-test.lbl")
 target_link_libraries(econopet_firmware_tests PRIVATE
-    econopet_host_firmware GTest::gtest_main GTest::gmock)
+    econopet_host_firmware GTest::gtest_main GTest::gmock yaml)
+target_link_options(econopet_firmware_tests PRIVATE
+    -Wl,--wrap=opendir -Wl,--wrap=readdir -Wl,--wrap=closedir)
 set_target_properties(econopet_firmware_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BOARD_RUNTIME_DIR}")
 gtest_discover_tests(econopet_firmware_tests
