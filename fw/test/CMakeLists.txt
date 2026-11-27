@@ -85,7 +85,6 @@ add_executable(${PROJECT_NAME}
     ${TEST_DIR}/crtc_test.c
     ${TEST_DIR}/display_test.c
     ${TEST_DIR}/diag_test.c
-    ${TEST_DIR}/diag_drive_test.c
     ${TEST_DIR}/diag_sd_stub.c
     ${TEST_DIR}/fatal_error_test.c
     ${TEST_DIR}/diskimage_test.c
@@ -153,13 +152,6 @@ target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=display_term_refresh)
 target_link_options(${PROJECT_NAME} PRIVATE
     -Wl,--wrap=opendir -Wl,--wrap=lstat -Wl,--wrap=readdir)
-target_link_options(${PROJECT_NAME} PRIVATE
-    -Wl,--wrap=pet_wait_for_storage_idle -Wl,--wrap=set_cpu
-    -Wl,--wrap=menu_browser_abandon_scan -Wl,--wrap=ieee_drive_unmount_all
-    -Wl,--wrap=diskimage_create_file -Wl,--wrap=ieee_drive_mount_scratch
-    -Wl,--wrap=menu_apply_diag_config
-    -Wl,--wrap=diag_target_prepare_pet_prg -Wl,--wrap=ieee_drive_filename
-    -Wl,--wrap=mkdir -Wl,--wrap=stat -Wl,--wrap=remove -Wl,--wrap=rmdir)
 # Preserve useful stack frames in Debug tests.
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-omit-frame-pointer)
 target_include_directories(${PROJECT_NAME} PRIVATE "${TEST_DIR}" "${TEST_SUPPORT_DIR}" "${PRGS_DIR}" "${PRGS_DIR}/include")
@@ -270,3 +262,36 @@ target_include_directories(sd-init-test PRIVATE
 target_link_options(sd-init-test PRIVATE -Wl,--wrap=filesystem_fat_create)
 target_link_libraries(sd-init-test PRIVATE ${CHECK_LIBRARIES} subunit m)
 add_test(NAME sd_init_tests COMMAND sd-init-test)
+
+# Exercise drive diagnostic scratch-tree and media setup against real FatFs.
+add_executable(diag-drive-test
+    diag_drive_test.c
+    sd_diag_mock.c
+    "${SRC_DIR}/diag/drive.c"
+    "${SRC_DIR}/ieee/diskimage.c"
+    "${SRC_DIR}/ieee/diskimage_file.c"
+    "${SRC_DIR}/global.c"
+    "${TEST_SUPPORT_DIR}/test_support.c"
+    "${TEST_SUPPORT_DIR}/test_fatal.c"
+    "${EXTERNAL_DIR}/pico-vfs/src/blockdevice/heap.c"
+    "${EXTERNAL_DIR}/pico-vfs/src/filesystem/fat.c"
+    "${FATFS_DIR}/ff.c"
+    "${FATFS_DIR}/ffsystem.c"
+    "${FATFS_DIR}/ffunicode.c")
+target_include_directories(diag-drive-test PRIVATE
+    "${TEST_DIR}/sd_diag_mocks"
+    "${TEST_SUPPORT_DIR}" "${TEST_DIR}" "${SRC_DIR}"
+    "${PRGS_DIR}" "${PRGS_DIR}/include"
+    "${FATFS_DIR}"
+    "${EXTERNAL_DIR}/pico-vfs/include"
+    "${EXTERNAL_DIR}/pico-vfs/include/filesystem/ChaN")
+target_compile_options(diag-drive-test PRIVATE -fno-omit-frame-pointer)
+target_link_options(diag-drive-test PRIVATE
+    -Wl,--wrap=calloc
+    -Wl,--wrap=diskimage_create_file
+    -Wl,--wrap=sd_blockdevice -Wl,--wrap=sd_fat_filesystem
+    -Wl,--wrap=sd_mount_root -Wl,--wrap=sd_unmount_root
+    -Wl,--wrap=stat -Wl,--wrap=mkdir -Wl,--wrap=rmdir
+    -Wl,--wrap=remove -Wl,--wrap=fopen)
+target_link_libraries(diag-drive-test PRIVATE ${CHECK_LIBRARIES} subunit m)
+add_test(NAME diag_drive_tests COMMAND diag-drive-test)

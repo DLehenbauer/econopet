@@ -19,14 +19,22 @@
 #define DIAG_BODY_FIRST_ROW 1u
 #define DIAG_BODY_LAST_ROW 19u
 #define DIAG_DIVIDER_ROW 20u
-#define DIAG_LOCATION_ROW 21u
-#define DIAG_DETAIL_ROW 22u
-#define DIAG_PROGRESS_ROW 23u
+#define DIAG_CYCLE_ROW 21u
+#define DIAG_SUITE_ROW 22u
+#define DIAG_CASE_ROW 23u
 #define DIAG_FOOTER_ROW 24u
 #define DIAG_NAME_COL 3u
 #define DIAG_RESULT_END 78u
-#define DIAG_PROGRESS_LABEL_COL 24u
-#define DIAG_PROGRESS_END 78u
+#define DIAG_STATUS_VALUE_COL 9u
+#define DIAG_PROGRESS_BAR_COL 52u
+#define DIAG_PROGRESS_BAR_WIDTH 20u
+#define DIAG_PROGRESS_PERCENT_COL 73u
+#define DIAG_PROGRESS_PERCENT_WIDTH 5u
+#define DIAG_PROGRESS_SCALE 1000u
+#define DIAG_TENTHS_PER_PERCENT 10u
+#define DIAG_FAILURE_WIDTH (DIAG_COLS - 2u)
+#define DIAG_FAILURE_ROWS (DIAG_CASE_ROW - DIAG_CYCLE_ROW + 1u)
+#define DIAG_FAILURE_PREFIX_MAX (sizeof("FAIL [Cycle 255 of 255, ]: ") - 1u)
 #define DIAG_US_PER_SECOND UINT64_C(1000000)
 #define DIAG_SECONDS_PER_MINUTE 60u
 #define DIAG_MINUTES_PER_HOUR 60u
@@ -37,6 +45,8 @@ static diag_session_t* active_session;
 
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_PLANE_CAPACITY, "diagnostic character plane too small");
 _Static_assert(DIAG_COLS* DIAG_ROWS <= VIDEO_COLOR_CAPACITY, "diagnostic color plane too small");
+_Static_assert(DIAG_FAILURE_WIDTH* DIAG_FAILURE_ROWS >= DIAG_MESSAGE_MAX - 1u + DIAG_FAILURE_PREFIX_MAX,
+               "diagnostic failure box too small");
 
 /** Return the static name for index from a table-backed suite, ignoring scratch storage. */
 const char* diag_table_case_name(const diag_suite_t* suite, size_t index, char* buf, size_t size) {
@@ -113,10 +123,10 @@ static void render_divider_row(const window_t* window, unsigned row, const char*
 }
 
 /** Draw one cycle divider at a backward-derived viewport row. */
-static void render_cycle_row(const window_t* window, unsigned row, uint64_t cycle_number) {
+static void render_cycle_row(const window_t* window, unsigned row, unsigned cycle_number) {
     // Format the 1-based cycle label and render it as a centered divider row.
     char cycle[DIAG_COLS + 1];
-    snprintf(cycle, sizeof(cycle), " Begin Cycle #%" PRIu64 " ", cycle_number);
+    snprintf(cycle, sizeof(cycle), " Begin Cycle #%u ", cycle_number);
     render_divider_row(window, row, cycle);
 }
 
@@ -130,7 +140,7 @@ static void render_body(const diag_session_t* session) {
         return;
     }
 
-    uint64_t cycle = session->iteration;
+    uint8_t cycle = session->iteration;
     size_t suite_index = session->active_suite_index;
     size_t case_index = session->active_case_index;
     bool is_active = true;
@@ -180,16 +190,36 @@ static void render_body(const diag_session_t* session) {
     }
 }
 
-/** Count complete cycles directly from the current active cursor. */
-static uint64_t completed_iterations(const diag_session_t* session) {
-    if (session->iteration == 0) {
-        return 0;
+/** Draw a completed-item percentage and its 20-character bar. */
+static void render_progress(const window_t* window, unsigned row, size_t completed, size_t total,
+                            display_color_t color) {
+    const unsigned tenths =
+        completed >= total ? DIAG_PROGRESS_SCALE : (unsigned)(completed * DIAG_PROGRESS_SCALE / total);
+    const unsigned filled = tenths * DIAG_PROGRESS_BAR_WIDTH / DIAG_PROGRESS_SCALE;
+    const window_t filled_win = window_with_attr(window, DISPLAY_ATTR(color, DISPLAY_COLOR_BLACK));
+    const window_t empty_win = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_MEDIUM_GRAY, DISPLAY_COLOR_BLACK));
+    window_hline_at(&filled_win, DIAG_PROGRESS_BAR_COL, row, filled, VROM_PROGRESS_FILLED);
+    window_hline_at(&empty_win, DIAG_PROGRESS_BAR_COL + filled, row, DIAG_PROGRESS_BAR_WIDTH - filled,
+                    VROM_PROGRESS_EMPTY);
+    if (tenths == DIAG_PROGRESS_SCALE) {
+        window_text(window, DIAG_PROGRESS_PERCENT_COL, row, DIAG_PROGRESS_PERCENT_WIDTH, " 100%");
+    } else {
+        window_printf(window, DIAG_PROGRESS_PERCENT_COL, row, DIAG_PROGRESS_PERCENT_WIDTH, "%2u.%u%%",
+                      tenths / DIAG_TENTHS_PER_PERCENT, tenths % DIAG_TENTHS_PER_PERCENT);
     }
-    const size_t last_suite = session->plan->suite_count - 1;
-    const bool at_final_case = session->active_suite_index == last_suite &&
-                               session->active_case_index == session->plan->suites[last_suite].case_count - 1 &&
-                               session->active_status == DIAG_STATUS_PASS;
-    return at_final_case ? session->iteration : session->iteration - 1;
+}
+
+/** Replace the status box with the complete failure detail and its suite or stage context. */
+static void render_failure(const window_t* window, const char* context, const char* detail) {
+    assert(strlen(detail) < DIAG_MESSAGE_MAX);
+    const window_t failure = window_with_attr(window, DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_RED, DISPLAY_COLOR_BLACK));
+    char message[DIAG_FAILURE_WIDTH * DIAG_FAILURE_ROWS + 1u];
+    const int context_width = (int)(sizeof(message) - 1u - strlen(detail) - (sizeof("FAIL []: ") - 1u));
+    snprintf(message, sizeof(message), "FAIL [%.*s]: %s", context_width, context, detail);
+    const size_t length = strlen(message);
+    for (unsigned row = 0; row < DIAG_FAILURE_ROWS && row * DIAG_FAILURE_WIDTH < length; ++row) {
+        window_text(&failure, 1, DIAG_CYCLE_ROW + row, DIAG_FAILURE_WIDTH, message + row * DIAG_FAILURE_WIDTH);
+    }
 }
 
 /** Refresh the fixed header and footer while preserving the scrolling event history. */
@@ -199,90 +229,84 @@ static void render(const diag_session_t* session) {
     const window_t suite_win = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_CYAN, DISPLAY_COLOR_BLACK));
     const bool cleanup_failed = session->cleanup_failed;
     const bool failed = session->active_status == DIAG_STATUS_FAIL || cleanup_failed;
-    const bool preparation_failed = session->active_status == DIAG_STATUS_FAIL && session->iteration == 0;
-    const bool stage_failed = preparation_failed || cleanup_failed;
-    const window_t case_win = window_with_attr(
-        normal, DISPLAY_ATTR(failed ? DISPLAY_COLOR_LIGHT_RED : DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK));
-    char elapsed[DIAG_ELAPSED_SIZE], progress[DIAG_COLS + 1];
+    const window_t case_win = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK));
+    char elapsed[DIAG_ELAPSED_SIZE], timer[DIAG_COLS + 1];
     diag_format_elapsed(time_us_64() - session->start_time_us, elapsed, sizeof(elapsed));
-    snprintf(progress, sizeof(progress), "|   Completed: %" PRIu64 " | Time: %s ", completed_iterations(session),
-             elapsed);
+    snprintf(timer, sizeof(timer), "| Time: %s ", elapsed);
     render_body(session);
 
-    // Bound the title by the right-aligned progress, including very long runtimes.
+    // Bound the title by the right-aligned timer, including very long runtimes.
     window_fill_row(normal, 0, VROM_SPACE);
-    const unsigned progress_col = DIAG_COLS - (unsigned)strlen(progress);
+    const unsigned timer_col = DIAG_COLS - (unsigned)strlen(timer);
     const char* const name = session->plan->name;
-    window_printf(normal, 0, 0, progress_col, " EconoPET %c%s Diagnostic",
+    window_printf(normal, 0, 0, timer_col, " EconoPET %c%s Diagnostic",
                   name[0] == '\0' ? ' ' : toupper((unsigned char)name[0]), name[0] == '\0' ? "" : name + 1);
-    window_text(normal, progress_col, 0, DIAG_COLS - progress_col, progress);
-    for (unsigned index = 0; progress[index] != '\0'; ++index) {
-        if (progress[index] == '|') {
-            window_put(normal, progress_col + index, 0, VROM_VLINE);
-        }
-    }
-    window_put(normal, progress_col + 2, 0, VROM_CHECKMARK);
+    window_text(normal, timer_col, 0, DIAG_COLS - timer_col, timer);
+    window_put(normal, timer_col, 0, VROM_VLINE);
     window_reverse_at(normal, 0, 0, DIAG_COLS);
 
     // Clear the interior first so the frame retains its vertical borders.
-    for (unsigned row = DIAG_LOCATION_ROW; row <= DIAG_PROGRESS_ROW; ++row) {
+    for (unsigned row = DIAG_CYCLE_ROW; row <= DIAG_CASE_ROW; ++row) {
         window_fill_row(normal, row, VROM_SPACE);
     }
     window_frame(&border, 0, DIAG_DIVIDER_ROW, DIAG_COLS, DIAG_FOOTER_ROW - DIAG_DIVIDER_ROW + 1, NULL);
     const diag_suite_t* const suite = &session->plan->suites[session->active_suite_index];
 
-    // Show the recorded failure detail on error, or resolve the active case's display label.
+    // Failures own the whole box so their complete detail and cycle context remain visible.
+    if (failed) {
+        char cycle_context[DIAG_FAILURE_WIDTH * DIAG_FAILURE_ROWS];
+        const char* context = "Cleanup";
+        if (!cleanup_failed) {
+            if (session->iteration == 0) {
+                context = "Preparation";
+            } else {
+                snprintf(cycle_context, sizeof(cycle_context), "Cycle %u of %u, %s", (unsigned)session->iteration,
+                         (unsigned)session->max_cycles, suite->name);
+                context = cycle_context;
+            }
+        }
+        render_failure(normal, context, session->failure_detail);
+        return;
+    }
+
+    // Show the cycle and current location alongside their completion indicators.
     char active_name_buf[DIAG_CASE_NAME_MAX];
     const char* const active_case_name =
-        failed ? session->failure_detail
-               : suite->case_name(suite, session->active_case_index, active_name_buf, sizeof(active_name_buf));
-    window_text(normal, 2, DIAG_LOCATION_ROW, 5, stage_failed ? "Stage" : "Suite");
-    window_text(&border, 7, DIAG_LOCATION_ROW, 1, ":");
-    window_text(&suite_win, 9, DIAG_LOCATION_ROW, DIAG_COLS - 10,
-                preparation_failed ? "Preparation" : cleanup_failed ? "Cleanup" : suite->name);
-    window_text(normal, 3, DIAG_DETAIL_ROW, 4, failed ? "FAIL" : "Case");
-    window_text(&border, 7, DIAG_DETAIL_ROW, 1, ":");
-    window_text(&case_win, 9, DIAG_DETAIL_ROW, DIAG_COLS - 10, active_case_name);
-    char cycle_number[DIAG_ELAPSED_SIZE];
-    snprintf(cycle_number, sizeof(cycle_number), "%" PRIu64, session->iteration);
-    const unsigned cycle_width = (unsigned)strlen(cycle_number);
-    const unsigned label_col =
-        9u + cycle_width + 1u > DIAG_PROGRESS_LABEL_COL ? 9u + cycle_width + 1u : DIAG_PROGRESS_LABEL_COL;
-    const unsigned bar_col = label_col + 10u;
-    const unsigned bar_width = DIAG_PROGRESS_END - bar_col;
-    window_text(normal, 2, DIAG_PROGRESS_ROW, 5, "Cycle");
-    window_text(&border, 7, DIAG_PROGRESS_ROW, 1, ":");
-    window_text(normal, 9, DIAG_PROGRESS_ROW, cycle_width, cycle_number);
-    window_text(normal, label_col, DIAG_PROGRESS_ROW, 8, "Progress");
-    window_text(&border, label_col + 8, DIAG_PROGRESS_ROW, 1, ":");
-    size_t total_items = 0;
-    size_t preceding_items = 0;
-    for (size_t index = 0; index < session->plan->suite_count; ++index) {
-        total_items += session->plan->suites[index].case_count;
-        if (index < session->active_suite_index) {
-            preceding_items += session->plan->suites[index].case_count;
-        } else if (index == session->active_suite_index) {
-            preceding_items += session->active_case_index;
-        }
-    }
-    const uint64_t done =
-        session->iteration == 0 ? 0 : (uint64_t)preceding_items * DIAG_PROGRESS_SCALE + session->case_progress;
-    const unsigned filled = (unsigned)((done * bar_width) / ((uint64_t)total_items * DIAG_PROGRESS_SCALE));
-    const window_t filled_win = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_LIGHT_BLUE, DISPLAY_COLOR_BLACK));
-    const window_t empty_win = window_with_attr(normal, DISPLAY_ATTR(DISPLAY_COLOR_BLUE, DISPLAY_COLOR_BLACK));
-    window_hline_at(&filled_win, bar_col, DIAG_PROGRESS_ROW, filled, VROM_REVERSE_SPACE);
-    window_hline_at(&empty_win, bar_col + filled, DIAG_PROGRESS_ROW, bar_width - filled, VROM_SHADE);
+        suite->case_name(suite, session->active_case_index, active_name_buf, sizeof(active_name_buf));
+    const unsigned value_width = DIAG_PROGRESS_BAR_COL - DIAG_STATUS_VALUE_COL - 1u;
+    window_text(normal, 2, DIAG_CYCLE_ROW, 5, "Cycle");
+    window_text(&border, 7, DIAG_CYCLE_ROW, 1, ":");
+    window_printf(normal, DIAG_STATUS_VALUE_COL, DIAG_CYCLE_ROW, value_width, "%u of %u", (unsigned)session->iteration,
+                  (unsigned)session->max_cycles);
+    window_text(normal, 2, DIAG_SUITE_ROW, 5, "Suite");
+    window_text(&border, 7, DIAG_SUITE_ROW, 1, ":");
+    window_text(&suite_win, DIAG_STATUS_VALUE_COL, DIAG_SUITE_ROW, value_width, suite->name);
+    window_text(normal, 3, DIAG_CASE_ROW, 4, "Case");
+    window_text(&border, 7, DIAG_CASE_ROW, 1, ":");
+    window_text(&case_win, DIAG_STATUS_VALUE_COL, DIAG_CASE_ROW, value_width, active_case_name);
+
+    // Count only completed items at each level, resetting suite and case progress each cycle.
+    const size_t cases_completed =
+        session->iteration == 0 ? 0 : session->active_case_index + (session->active_status == DIAG_STATUS_PASS);
+    const size_t suites_completed =
+        session->iteration == 0 ? 0 : session->active_suite_index + (cases_completed == suite->case_count);
+    const size_t cycles_completed =
+        session->iteration == 0 ? 0 : session->iteration - 1u + (suites_completed == session->plan->suite_count);
+    render_progress(normal, DIAG_CYCLE_ROW, cycles_completed, session->max_cycles, DISPLAY_COLOR_MAGENTA);
+    render_progress(normal, DIAG_SUITE_ROW, suites_completed, session->plan->suite_count, DISPLAY_COLOR_LIGHT_CYAN);
+    render_progress(normal, DIAG_CASE_ROW, cases_completed, suite->case_count, DISPLAY_COLOR_YELLOW);
 }
 
-void diag_session_init(diag_session_t* session, const diag_plan_t* plan) {
+void diag_session_init(diag_session_t* session, const diag_plan_t* plan, uint8_t max_cycles) {
     // Validate plan and suite callback invariants up front, checking static tables when used.
-    vet(session != NULL && plan != NULL && plan->name != NULL && plan->suites != NULL && plan->suite_count != 0,
+    vet(session != NULL && plan != NULL && plan->name != NULL && plan->suites != NULL && plan->suite_count != 0 &&
+            plan->suite_count <= SIZE_MAX / DIAG_PROGRESS_SCALE,
         "invalid diagnostic plan");
-    size_t items = 0;
+    vet(max_cycles != 0, "diagnostic cycle count must be non-zero");
     for (size_t s = 0; s < plan->suite_count; ++s) {
         const diag_suite_t* const suite = &plan->suites[s];
         vet(suite->name != NULL && suite->case_count != 0 && suite->case_name != NULL && suite->run_case != NULL &&
-                suite->case_count <= SIZE_MAX - items,
+                suite->case_count <= SIZE_MAX / DIAG_PROGRESS_SCALE,
             "invalid diagnostic suite");
         if (suite->case_name == diag_table_case_name || suite->run_case == diag_table_run_case) {
             vet(suite->cases != NULL, "missing diagnostic case table");
@@ -290,13 +314,12 @@ void diag_session_init(diag_session_t* session, const diag_plan_t* plan) {
                 vet(suite->cases[c].name != NULL && suite->cases[c].run != NULL, "invalid diagnostic case");
             }
         }
-        items += suite->case_count;
     }
 
-    // Reset session state to a single-cycle default and initialize the 80-column diagnostic viewport.
+    // Reset session state with the requested cycle budget and initialize the diagnostic viewport.
     memset(session, 0, sizeof(*session));
     session->plan = plan;
-    session->max_cycles = 1;
+    session->max_cycles = max_cycles;
     session->start_time_us = time_us_64();
     session->last_display_refresh_us = session->start_time_us;
     session->window =
@@ -311,14 +334,6 @@ void diag_refresh(void) {
         active_session->last_display_refresh_us = now;
         render(active_session);
     }
-}
-
-void diag_case_progress(size_t completed, size_t total) {
-    vet(active_session != NULL && active_session->jmp_armed, "diagnostic progress outside an active case");
-    diag_check(total != 0, "invalid diagnostic progress total");
-    const uint64_t bounded = completed > total ? total : completed;
-    active_session->case_progress = (uint16_t)(bounded * DIAG_PROGRESS_SCALE / total);
-    render(active_session);
 }
 
 /**
@@ -391,7 +406,7 @@ static bool report_iteration_failure(diag_session_t* session, const diag_suite_t
 
     // Format the terminal failure summary, update the HDMI screen, and emit the UART report.
     snprintf(session->failure_summary, sizeof(session->failure_summary),
-             "DIAG FAIL [%s] iter %" PRIu64 " (%s) %s / %s: %s", session->plan->name, session->iteration, elapsed,
+             "DIAG FAIL [%s] iter %u (%s) %s / %s: %s", session->plan->name, (unsigned)session->iteration, elapsed,
              suite->name, case_name, session->failure_detail);
     render(session);
     printf("%s\r\n", session->failure_summary);
@@ -416,6 +431,7 @@ bool diag_run_iteration(diag_session_t* session) {
     if (session->active_status == DIAG_STATUS_FAIL) {
         return false;
     }
+    vet(session->iteration < session->max_cycles, "diagnostic cycle budget exceeded");
 
     // Advance the cycle counter, prime the cursor at the first case, and run per-cycle setup.
     ++session->iteration;
@@ -423,11 +439,10 @@ bool diag_run_iteration(diag_session_t* session) {
     session->active_suite_index = 0;
     session->active_case_index = 0;
     session->active_status = DIAG_STATUS_RUN;
-    session->case_progress = 0;
     if (session->plan->begin_cycle != NULL) {
         render(session);
     }
-    if (!run_begin_cycle(session, (uint8_t)session->iteration)) {
+    if (!run_begin_cycle(session, session->iteration)) {
         return report_iteration_failure(session, &session->plan->suites[0], 0);
     }
 
@@ -438,13 +453,11 @@ bool diag_run_iteration(diag_session_t* session) {
             session->active_suite_index = s;
             session->active_case_index = c;
             session->active_status = DIAG_STATUS_RUN;
-            session->case_progress = 0;
             render(session);
             if (!run_case(session, suite, c)) {
                 return report_iteration_failure(session, suite, c);
             }
             session->active_status = DIAG_STATUS_PASS;
-            session->case_progress = DIAG_PROGRESS_SCALE;
             render(session);
         }
     }
@@ -452,7 +465,7 @@ bool diag_run_iteration(diag_session_t* session) {
     if (session->iteration == 1 || now - session->last_uart_summary_us >= DIAG_US_PER_SECOND) {
         char elapsed[DIAG_ELAPSED_SIZE];
         diag_format_elapsed(now - session->start_time_us, elapsed, sizeof(elapsed));
-        printf("DIAG PASS [%s] iter #%" PRIu64 " (%s)\r\n", session->plan->name, session->iteration, elapsed);
+        printf("DIAG PASS [%s] iter #%u (%s)\r\n", session->plan->name, (unsigned)session->iteration, elapsed);
         fflush(stdout);
         session->last_uart_summary_us = now;
     }
@@ -501,8 +514,8 @@ void diag_loop(diag_session_t* session) {
     render(session);
     char elapsed[DIAG_ELAPSED_SIZE];
     diag_format_elapsed(time_us_64() - session->start_time_us, elapsed, sizeof(elapsed));
-    printf("DIAG COMPLETE [%s] %" PRIu64 " cycle(s) passed (%s)\r\n",
-           session->plan->name, session->iteration, elapsed);
+    printf("DIAG COMPLETE [%s] %u cycle(s) passed (%s)\r\n",
+           session->plan->name, (unsigned)session->iteration, elapsed);
     fflush(stdout);
     diag_complete_halt();
 }
